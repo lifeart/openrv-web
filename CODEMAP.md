@@ -427,4 +427,4 @@ const annotations = dto.byProtocol('RVPaint');
 - [x] Audio playback (video volume control with mute)
 - [x] LUT support (.cube 3D LUT loading with intensity control)
 - [ ] Advanced color (CDL, curves)
-- [ ] Export capabilities
+- [x] Export capabilities (PNG/JPEG/WebP with annotations, clipboard copy)

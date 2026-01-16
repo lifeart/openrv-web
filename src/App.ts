@@ -7,6 +7,7 @@ import { PaintToolbar } from './ui/components/PaintToolbar';
 import { ColorControls } from './ui/components/ColorControls';
 import { WipeControl } from './ui/components/WipeControl';
 import { VolumeControl } from './ui/components/VolumeControl';
+import { ExportControl } from './ui/components/ExportControl';
 
 export class App {
   private container: HTMLElement | null = null;
@@ -19,6 +20,7 @@ export class App {
   private colorControls: ColorControls;
   private wipeControl: WipeControl;
   private volumeControl: VolumeControl;
+  private exportControl: ExportControl;
   private animationId: number | null = null;
 
   constructor() {
@@ -60,6 +62,15 @@ export class App {
     this.volumeControl.on('mutedChanged', (muted) => {
       this.session.muted = muted;
     });
+
+    // Initialize export control
+    this.exportControl = new ExportControl();
+    this.exportControl.on('exportRequested', ({ format, includeAnnotations, quality }) => {
+      this.viewer.exportFrame(format, includeAnnotations, quality);
+    });
+    this.exportControl.on('copyRequested', () => {
+      this.viewer.copyFrameToClipboard(true);
+    });
   }
 
   mount(selector: string): void {
@@ -91,12 +102,14 @@ export class App {
     const colorControlsEl = this.colorControls.render();
     const wipeControlEl = this.wipeControl.render();
     const volumeControlEl = this.volumeControl.render();
+    const exportControlEl = this.exportControl.render();
 
     toolbarRow.appendChild(toolbarEl);
     toolbarRow.appendChild(paintToolbarEl);
     toolbarRow.appendChild(colorControlsEl);
     toolbarRow.appendChild(wipeControlEl);
     toolbarRow.appendChild(volumeControlEl);
+    toolbarRow.appendChild(exportControlEl);
 
     const viewerEl = this.viewer.getElement();
     const timelineEl = this.timeline.render();
@@ -140,7 +153,7 @@ export class App {
       return;
     }
 
-    // Handle Ctrl+Z/Y for undo/redo
+    // Handle Ctrl+Z/Y for undo/redo, Ctrl+S for export, Ctrl+C for copy
     if (e.ctrlKey || e.metaKey) {
       if (e.key === 'z') {
         e.preventDefault();
@@ -149,6 +162,14 @@ export class App {
       } else if (e.key === 'y') {
         e.preventDefault();
         this.paintEngine.redo();
+        return;
+      } else if (e.key === 's') {
+        e.preventDefault();
+        this.exportControl.quickExport('png');
+        return;
+      } else if (e.key === 'c') {
+        e.preventDefault();
+        this.viewer.copyFrameToClipboard(true);
         return;
       }
     }
@@ -271,5 +292,6 @@ export class App {
     this.colorControls.dispose();
     this.wipeControl.dispose();
     this.volumeControl.dispose();
+    this.exportControl.dispose();
   }
 }

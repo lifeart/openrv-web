@@ -5,6 +5,7 @@ import { StrokePoint } from '../../paint/types';
 import { ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from './ColorControls';
 import { WipeState, WipeMode } from './WipeControl';
 import { LUT3D } from '../../color/LUTLoader';
+import { ExportFormat, exportCanvas as doExportCanvas, copyCanvasToClipboard } from '../../utils/FrameExporter';
 
 interface PointerState {
   pointerId: number;
@@ -1068,6 +1069,68 @@ export class Viewer {
     // Apply to canvas container (affects both image and paint layers)
     const filterString = filters.length > 0 ? filters.join(' ') : 'none';
     this.canvasContainer.style.filter = filterString;
+  }
+
+  // Export methods
+  exportFrame(
+    format: ExportFormat = 'png',
+    includeAnnotations = true,
+    quality = 0.92
+  ): void {
+    const canvas = this.createExportCanvas(includeAnnotations);
+    if (!canvas) return;
+
+    const source = this.session.currentSource;
+    const frame = this.session.currentFrame;
+    const name = source?.name?.replace(/\.[^.]+$/, '') || 'frame';
+    const filename = `${name}_frame${frame}.${format}`;
+
+    doExportCanvas(canvas, { format, quality, filename });
+  }
+
+  async copyFrameToClipboard(includeAnnotations = true): Promise<boolean> {
+    const canvas = this.createExportCanvas(includeAnnotations);
+    if (!canvas) return false;
+
+    return copyCanvasToClipboard(canvas);
+  }
+
+  private createExportCanvas(includeAnnotations: boolean): HTMLCanvasElement | null {
+    const source = this.session.currentSource;
+    if (!source?.element) return null;
+
+    // Create canvas at source resolution
+    const canvas = document.createElement('canvas');
+    canvas.width = source.width;
+    canvas.height = source.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    // Apply color filters
+    ctx.filter = this.getCanvasFilterString();
+
+    // Draw image
+    if (source.element instanceof HTMLImageElement || source.element instanceof HTMLVideoElement) {
+      ctx.drawImage(source.element, 0, 0, source.width, source.height);
+    }
+
+    // Reset filter for annotations
+    ctx.filter = 'none';
+
+    // Draw annotations if requested
+    if (includeAnnotations) {
+      const annotations = this.paintEngine.getAnnotationsWithGhost(this.session.currentFrame);
+      if (annotations.length > 0) {
+        // Render annotations at source resolution
+        this.paintRenderer.renderAnnotations(annotations, {
+          width: source.width,
+          height: source.height,
+        });
+        ctx.drawImage(this.paintRenderer.getCanvas(), 0, 0, source.width, source.height);
+      }
+    }
+
+    return canvas;
   }
 
   dispose(): void {

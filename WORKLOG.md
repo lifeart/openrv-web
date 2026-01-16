@@ -1,6 +1,6 @@
 # OpenRV Web - Work Log
 
-## Current Status: Phase 4 - Color Processing (In Progress)
+## Current Status: Phase 10 Complete - Core Features Done
 
 ---
 
@@ -100,6 +100,16 @@
 - [x] LUT indicator badge in viewer
 - [x] Clear LUT button
 
+### Phase 10: Frame Export ✅
+- [x] FrameExporter utility (`src/utils/FrameExporter.ts`)
+- [x] ExportControl component (`src/ui/components/ExportControl.ts`)
+- [x] PNG/JPEG/WebP export formats
+- [x] Export with color adjustments applied
+- [x] Export with/without annotations option
+- [x] Copy frame to clipboard
+- [x] Keyboard shortcuts (Ctrl+S, Ctrl+C)
+- [x] Export dropdown menu in toolbar
+
 ---
 
 ## Not Started
@@ -109,20 +119,11 @@
 - [ ] Crop node
 - [ ] Stack/composite nodes
 
-### Phase 8: Audio Support
-- [ ] Web Audio API integration
-- [ ] Audio sync with video
-- [ ] Waveform display
-
-### Phase 9: Advanced Features
-- [ ] LUT loading (.cube files)
-- [ ] LUT application shader
+### Future Enhancements
+- [ ] Sequence export (image sequence)
+- [ ] Waveform display for audio
 - [ ] Lens distortion correction
-
-### Phase 10: Polish & Export
-- [ ] Frame export (PNG/JPEG)
-- [ ] Sequence export
-- [ ] Full keyboard shortcut map
+- [ ] Full LUT application via WebGL shader
 
 ---
 
@@ -152,4 +153,11 @@
   - Created `LUTLoader.ts` with .cube file parser
   - Added LUT section to ColorControls with load/clear/intensity
   - LUT indicator badge in Viewer
+- **Completed Phase 10: Frame Export**
+  - Created `FrameExporter.ts` utility with export/copy functions
+  - Created `ExportControl.ts` dropdown menu component
+  - PNG/JPEG/WebP format support with quality settings
+  - Include/exclude annotations option
+  - Integrated into App.ts with keyboard shortcuts (Ctrl+S, Ctrl+C)
+  - Updated toolbar help dialog with export shortcuts
 - Updated CODEMAP.md feature checklist

@@ -252,7 +252,11 @@ Drag line - Adjust wipe position
 
 AUDIO (Video only)
 Hover vol - Show volume slider
-Click icon- Toggle mute`);
+Click icon- Toggle mute
+
+EXPORT
+Ctrl+S    - Quick export as PNG
+Ctrl+C    - Copy frame to clipboard`);
   }
 
   private bindEvents(): void {
