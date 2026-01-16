@@ -44,6 +44,7 @@ export interface SessionEvents extends EventMap {
   mutedChanged: boolean;
   graphLoaded: GTOParseResult;
   fpsChanged: number;
+  abSourceChanged: { current: 'A' | 'B'; sourceIndex: number };
 }
 
 export type LoopMode = 'once' | 'loop' | 'pingpong';
@@ -82,12 +83,44 @@ export class Session extends EventEmitter<SessionEvents> {
   private sources: MediaSource[] = [];
   private _currentSourceIndex = 0;
 
+  // A/B source comparison
+  private _sourceAIndex = 0;
+  private _sourceBIndex = -1; // -1 means no B source assigned
+  private _currentAB: 'A' | 'B' = 'A';
+  private _syncPlayhead = true;
+
   // Node graph from GTO file
   private _graph: Graph | null = null;
   private _graphParseResult: GTOParseResult | null = null;
 
   constructor() {
     super();
+  }
+
+  /**
+   * Add a source to the session and auto-configure A/B compare
+   * When the second source is added, it automatically becomes source B
+   */
+  private addSource(source: MediaSource): void {
+    this.sources.push(source);
+    this._currentSourceIndex = this.sources.length - 1;
+
+    // Auto-assign source B when second source is loaded
+    if (this.sources.length === 2 && this._sourceBIndex === -1) {
+      this._sourceBIndex = 1; // Second source becomes B
+      this._sourceAIndex = 0; // First source is A
+
+      // Keep showing source A (stay on first source) for consistent A/B compare UX
+      // Note: The newly loaded source's sourceLoaded event will still fire,
+      // but we set the index to A so toggling to B shows the new source
+      this._currentSourceIndex = this._sourceAIndex;
+
+      // Emit event so UI updates
+      this.emit('abSourceChanged', {
+        current: this._currentAB,
+        sourceIndex: this._sourceAIndex,
+      });
+    }
   }
 
   /**
@@ -837,8 +870,7 @@ export class Session extends EventEmitter<SessionEvents> {
           element: img,
         };
 
-        this.sources.push(source);
-        this._currentSourceIndex = this.sources.length - 1;
+        this.addSource(source);
         this._inPoint = 1;
         this._outPoint = 1;
         this._currentFrame = 1;
@@ -884,8 +916,7 @@ export class Session extends EventEmitter<SessionEvents> {
           element: video,
         };
 
-        this.sources.push(source);
-        this._currentSourceIndex = this.sources.length - 1;
+        this.addSource(source);
         this._inPoint = 1;
         this._outPoint = duration;
         this._currentFrame = 1;
@@ -928,8 +959,7 @@ export class Session extends EventEmitter<SessionEvents> {
       element: sequenceInfo.frames[0]?.image,
     };
 
-    this.sources.push(source);
-    this._currentSourceIndex = this.sources.length - 1;
+    this.addSource(source);
     this.fps = sequenceInfo.fps;
     this._inPoint = 1;
     this._outPoint = sequenceInfo.frames.length;
@@ -1009,6 +1039,160 @@ export class Session extends EventEmitter<SessionEvents> {
         this._currentFrame = 1;
         this.emit('durationChanged', newSource.duration);
       }
+    }
+  }
+
+  // A/B Source Compare methods
+
+  /**
+   * Get the current A/B state
+   */
+  get currentAB(): 'A' | 'B' {
+    return this._currentAB;
+  }
+
+  /**
+   * Get source A index
+   */
+  get sourceAIndex(): number {
+    return this._sourceAIndex;
+  }
+
+  /**
+   * Get source B index (-1 if not assigned)
+   */
+  get sourceBIndex(): number {
+    return this._sourceBIndex;
+  }
+
+  /**
+   * Get source A
+   */
+  get sourceA(): MediaSource | null {
+    return this.sources[this._sourceAIndex] ?? null;
+  }
+
+  /**
+   * Get source B
+   */
+  get sourceB(): MediaSource | null {
+    if (this._sourceBIndex < 0) return null;
+    return this.sources[this._sourceBIndex] ?? null;
+  }
+
+  /**
+   * Check if A/B compare is available (both sources assigned)
+   */
+  get abCompareAvailable(): boolean {
+    return this._sourceBIndex >= 0 && this._sourceBIndex < this.sources.length;
+  }
+
+  /**
+   * Get or set sync playhead mode
+   */
+  get syncPlayhead(): boolean {
+    return this._syncPlayhead;
+  }
+
+  set syncPlayhead(value: boolean) {
+    this._syncPlayhead = value;
+  }
+
+  /**
+   * Set source A by index
+   */
+  setSourceA(index: number): void {
+    if (index >= 0 && index < this.sources.length && index !== this._sourceAIndex) {
+      this._sourceAIndex = index;
+      if (this._currentAB === 'A') {
+        this.switchToSource(index);
+      }
+    }
+  }
+
+  /**
+   * Set source B by index
+   */
+  setSourceB(index: number): void {
+    if (index >= 0 && index < this.sources.length && index !== this._sourceBIndex) {
+      this._sourceBIndex = index;
+      if (this._currentAB === 'B') {
+        this.switchToSource(index);
+      }
+    }
+  }
+
+  /**
+   * Clear source B assignment
+   */
+  clearSourceB(): void {
+    this._sourceBIndex = -1;
+    if (this._currentAB === 'B') {
+      this._currentAB = 'A';
+      this.switchToSource(this._sourceAIndex);
+    }
+  }
+
+  /**
+   * Toggle between A and B sources
+   */
+  toggleAB(): void {
+    if (!this.abCompareAvailable) return;
+
+    const savedFrame = this._syncPlayhead ? this._currentFrame : null;
+
+    if (this._currentAB === 'A') {
+      this._currentAB = 'B';
+      this.switchToSource(this._sourceBIndex);
+    } else {
+      this._currentAB = 'A';
+      this.switchToSource(this._sourceAIndex);
+    }
+
+    // Restore frame position if sync is enabled
+    if (savedFrame !== null) {
+      const maxFrame = this.currentSource?.duration ?? 1;
+      this._currentFrame = Math.min(savedFrame, maxFrame);
+      this.syncVideoToFrame();
+      this.emit('frameChanged', this._currentFrame);
+    }
+
+    this.emit('abSourceChanged', {
+      current: this._currentAB,
+      sourceIndex: this._currentSourceIndex,
+    });
+  }
+
+  /**
+   * Set current A/B state directly
+   */
+  setCurrentAB(ab: 'A' | 'B'): void {
+    if (ab === this._currentAB) return;
+    if (ab === 'B' && !this.abCompareAvailable) return;
+
+    this.toggleAB();
+  }
+
+  /**
+   * Internal helper to switch to a source without resetting frame
+   */
+  private switchToSource(index: number): void {
+    if (index < 0 || index >= this.sources.length) return;
+
+    // Pause current video if playing
+    const currentSource = this.currentSource;
+    if (currentSource?.type === 'video' && currentSource.element instanceof HTMLVideoElement) {
+      currentSource.element.pause();
+    }
+
+    this._currentSourceIndex = index;
+
+    // Update duration but preserve frame if syncing
+    const newSource = this.currentSource;
+    if (newSource) {
+      this._outPoint = newSource.duration;
+      this._inPoint = 1;
+      this.emit('durationChanged', newSource.duration);
     }
   }
 

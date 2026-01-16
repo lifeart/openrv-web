@@ -583,19 +583,19 @@ test.describe('Viewer State', () => {
     expect(state.wipeMode).toBe('off');
 
     // Press W to cycle
-    await page.keyboard.press('w');
+    await page.keyboard.press('Shift+w');
     await page.waitForTimeout(100);
 
     state = await getViewerState(page);
     expect(state.wipeMode).toBe('horizontal');
 
-    await page.keyboard.press('w');
+    await page.keyboard.press('Shift+w');
     await page.waitForTimeout(100);
 
     state = await getViewerState(page);
     expect(state.wipeMode).toBe('vertical');
 
-    await page.keyboard.press('w');
+    await page.keyboard.press('Shift+w');
     await page.waitForTimeout(100);
 
     state = await getViewerState(page);
@@ -661,7 +661,7 @@ test.describe('End-to-End Workflows', () => {
 
     // 4. Enable wipe to compare
     await page.locator('button[title="Toggle color adjustments panel"]').click(); // Close panel
-    await page.keyboard.press('w');
+    await page.keyboard.press('Shift+w');
     await page.waitForTimeout(100);
 
     const viewerState = await getViewerState(page);

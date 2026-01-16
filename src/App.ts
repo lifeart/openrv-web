@@ -366,6 +366,71 @@ export class App {
       }
     });
 
+    viewContent.appendChild(ContextToolbar.createDivider());
+
+    // A/B Compare controls
+    const abLabel = document.createElement('span');
+    abLabel.textContent = 'A/B:';
+    abLabel.style.cssText = 'color: #888; font-size: 11px;';
+    viewContent.appendChild(abLabel);
+
+    const abButtonA = ContextToolbar.createButton('A', () => {
+      this.session.setCurrentAB('A');
+    }, { title: 'Show source A' });
+    abButtonA.style.minWidth = '28px';
+    abButtonA.dataset.testid = 'ab-button-a';
+    viewContent.appendChild(abButtonA);
+
+    const abButtonB = ContextToolbar.createButton('B', () => {
+      this.session.setCurrentAB('B');
+    }, { title: 'Show source B' });
+    abButtonB.style.minWidth = '28px';
+    abButtonB.dataset.testid = 'ab-button-b';
+    viewContent.appendChild(abButtonB);
+
+    const abToggleButton = ContextToolbar.createButton('⇄', () => {
+      this.session.toggleAB();
+    }, { title: 'Toggle A/B (`)' });
+    abToggleButton.dataset.testid = 'ab-toggle-button';
+    viewContent.appendChild(abToggleButton);
+
+    // Helper to update A/B button states
+    const updateABButtonStates = () => {
+      const current = this.session.currentAB;
+      const available = this.session.abCompareAvailable;
+
+      if (current === 'A') {
+        abButtonA.style.background = 'rgba(74, 158, 255, 0.15)';
+        abButtonA.style.borderColor = '#4a9eff';
+        abButtonB.style.background = '';
+        abButtonB.style.borderColor = '';
+      } else {
+        abButtonA.style.background = '';
+        abButtonA.style.borderColor = '';
+        abButtonB.style.background = 'rgba(74, 158, 255, 0.15)';
+        abButtonB.style.borderColor = '#4a9eff';
+      }
+
+      // Disable B button and toggle if B source not assigned
+      abButtonB.disabled = !available;
+      abToggleButton.disabled = !available;
+      abButtonB.style.opacity = available ? '1' : '0.5';
+      abToggleButton.style.opacity = available ? '1' : '0.5';
+    };
+
+    // Initial state
+    updateABButtonStates();
+
+    // Listen for A/B changes
+    this.session.on('abSourceChanged', () => {
+      updateABButtonStates();
+    });
+
+    // Listen for source changes that might affect A/B availability
+    this.session.on('sourceLoaded', () => {
+      updateABButtonStates();
+    });
+
     this.contextToolbar.setTabContent('view', viewContent);
 
     // === COLOR TAB ===
@@ -577,14 +642,18 @@ export class App {
         this.colorControls.toggle();
         break;
       case 'W':
-        // Cycle wipe mode (uppercase only)
+        // Cycle wipe mode (uppercase or Shift+w)
         this.wipeControl.cycleMode();
         break;
       case 'w':
-        // Toggle waveform (lowercase only)
-        this.waveform.toggle();
-        if (this.waveform.isVisible()) {
-          this.updateWaveform();
+        // Shift+w cycles wipe mode, plain w toggles waveform
+        if (e.shiftKey) {
+          this.wipeControl.cycleMode();
+        } else {
+          this.waveform.toggle();
+          if (this.waveform.isVisible()) {
+            this.updateWaveform();
+          }
         }
         break;
       case 'y':
@@ -628,6 +697,12 @@ export class App {
         // Go to next annotated frame
         e.preventDefault();
         this.goToNextAnnotation();
+        break;
+      case '`':
+      case '~':
+        // Toggle A/B source compare
+        e.preventDefault();
+        this.session.toggleAB();
         break;
     }
   }

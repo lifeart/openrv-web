@@ -193,20 +193,20 @@ test.describe('Keyboard Shortcuts', () => {
       let state = await getViewerState(page);
       expect(state.wipeMode).toBe('off');
 
-      await page.keyboard.press('w');
+      await page.keyboard.press('Shift+w');
       await page.waitForTimeout(100);
 
       state = await getViewerState(page);
       expect(state.wipeMode).toBe('horizontal');
 
-      await page.keyboard.press('w');
+      await page.keyboard.press('Shift+w');
       await page.waitForTimeout(100);
 
       state = await getViewerState(page);
       expect(state.wipeMode).toBe('vertical');
 
       // Cycle back to off (wipe cycles: off -> horizontal -> vertical -> off)
-      await page.keyboard.press('w');
+      await page.keyboard.press('Shift+w');
       await page.waitForTimeout(100);
 
       state = await getViewerState(page);

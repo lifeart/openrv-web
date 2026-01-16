@@ -602,6 +602,230 @@ describe('Session', () => {
     });
   });
 
+  describe('A/B source compare', () => {
+    // Helper to create a mock source
+    const createMockSource = (name: string): MediaSource => ({
+      type: 'image',
+      name,
+      url: `file://${name}`,
+      width: 100,
+      height: 100,
+      duration: 30,
+      fps: 24,
+    });
+
+    it('AB-001: initializes with A as current source', () => {
+      expect(session.currentAB).toBe('A');
+    });
+
+    it('AB-002: sourceAIndex defaults to 0', () => {
+      expect(session.sourceAIndex).toBe(0);
+    });
+
+    it('AB-003: sourceBIndex defaults to -1 (unassigned)', () => {
+      expect(session.sourceBIndex).toBe(-1);
+    });
+
+    it('AB-004: abCompareAvailable is false when no B source', () => {
+      expect(session.abCompareAvailable).toBe(false);
+    });
+
+    it('AB-005: syncPlayhead defaults to true', () => {
+      expect(session.syncPlayhead).toBe(true);
+    });
+
+    it('AB-006: setSourceB assigns B source', async () => {
+      const source1 = createMockSource('source1');
+      const source2 = createMockSource('source2');
+
+      // Need to add sources to session first (using internal method)
+      const sessionAny = session as any;
+      sessionAny.sources = [source1, source2];
+
+      session.setSourceB(1);
+      expect(session.sourceBIndex).toBe(1);
+      expect(session.abCompareAvailable).toBe(true);
+    });
+
+    it('AB-007: toggleAB switches between A and B', async () => {
+      const source1 = createMockSource('source1');
+      const source2 = createMockSource('source2');
+
+      const sessionAny = session as any;
+      sessionAny.sources = [source1, source2];
+      session.setSourceB(1);
+
+      expect(session.currentAB).toBe('A');
+      session.toggleAB();
+      expect(session.currentAB).toBe('B');
+      session.toggleAB();
+      expect(session.currentAB).toBe('A');
+    });
+
+    it('AB-008: toggleAB does nothing when B source not assigned', () => {
+      const source1 = createMockSource('source1');
+      const sessionAny = session as any;
+      sessionAny.sources = [source1];
+
+      expect(session.currentAB).toBe('A');
+      session.toggleAB();
+      expect(session.currentAB).toBe('A'); // No change
+    });
+
+    it('AB-009: toggleAB emits abSourceChanged event', async () => {
+      const source1 = createMockSource('source1');
+      const source2 = createMockSource('source2');
+
+      const sessionAny = session as any;
+      sessionAny.sources = [source1, source2];
+      session.setSourceB(1);
+
+      const callback = vi.fn();
+      session.on('abSourceChanged', callback);
+
+      session.toggleAB();
+      expect(callback).toHaveBeenCalledWith({
+        current: 'B',
+        sourceIndex: 1,
+      });
+    });
+
+    it('AB-010: setCurrentAB switches to specified source', async () => {
+      const source1 = createMockSource('source1');
+      const source2 = createMockSource('source2');
+
+      const sessionAny = session as any;
+      sessionAny.sources = [source1, source2];
+      session.setSourceB(1);
+
+      session.setCurrentAB('B');
+      expect(session.currentAB).toBe('B');
+
+      session.setCurrentAB('A');
+      expect(session.currentAB).toBe('A');
+    });
+
+    it('AB-011: setCurrentAB ignores invalid B when not available', () => {
+      const source1 = createMockSource('source1');
+      const sessionAny = session as any;
+      sessionAny.sources = [source1];
+
+      session.setCurrentAB('B');
+      expect(session.currentAB).toBe('A'); // Unchanged
+    });
+
+    it('AB-012: clearSourceB resets B source and switches to A', async () => {
+      const source1 = createMockSource('source1');
+      const source2 = createMockSource('source2');
+
+      const sessionAny = session as any;
+      sessionAny.sources = [source1, source2];
+      session.setSourceB(1);
+      session.toggleAB(); // Switch to B
+
+      expect(session.currentAB).toBe('B');
+      session.clearSourceB();
+
+      expect(session.sourceBIndex).toBe(-1);
+      expect(session.currentAB).toBe('A');
+      expect(session.abCompareAvailable).toBe(false);
+    });
+
+    it('AB-013: sourceA returns correct source', async () => {
+      const source1 = createMockSource('source1');
+      const source2 = createMockSource('source2');
+
+      const sessionAny = session as any;
+      sessionAny.sources = [source1, source2];
+
+      expect(session.sourceA).toBe(source1);
+    });
+
+    it('AB-014: sourceB returns correct source when assigned', async () => {
+      const source1 = createMockSource('source1');
+      const source2 = createMockSource('source2');
+
+      const sessionAny = session as any;
+      sessionAny.sources = [source1, source2];
+      session.setSourceB(1);
+
+      expect(session.sourceB).toBe(source2);
+    });
+
+    it('AB-015: sourceB returns null when not assigned', () => {
+      expect(session.sourceB).toBeNull();
+    });
+
+    it('AB-016: setSourceA changes A source', async () => {
+      const source1 = createMockSource('source1');
+      const source2 = createMockSource('source2');
+      const source3 = createMockSource('source3');
+
+      const sessionAny = session as any;
+      sessionAny.sources = [source1, source2, source3];
+
+      session.setSourceA(2);
+      expect(session.sourceAIndex).toBe(2);
+      expect(session.sourceA).toBe(source3);
+    });
+
+    it('AB-017: syncPlayhead can be set', () => {
+      session.syncPlayhead = false;
+      expect(session.syncPlayhead).toBe(false);
+      session.syncPlayhead = true;
+      expect(session.syncPlayhead).toBe(true);
+    });
+
+    it('AB-018: second source auto-assigns as source B', () => {
+      const source1 = createMockSource('source1');
+      const source2 = createMockSource('source2');
+
+      const sessionAny = session as any;
+
+      // Add first source using addSource
+      sessionAny.addSource(source1);
+      expect(session.sourceBIndex).toBe(-1); // B not yet assigned
+
+      // Add second source
+      sessionAny.addSource(source2);
+      expect(session.sourceBIndex).toBe(1); // B auto-assigned to second source
+      expect(session.sourceAIndex).toBe(0); // A remains first source
+      expect(session.abCompareAvailable).toBe(true);
+    });
+
+    it('AB-019: auto-assign emits abSourceChanged event', () => {
+      const source1 = createMockSource('source1');
+      const source2 = createMockSource('source2');
+
+      const sessionAny = session as any;
+      const callback = vi.fn();
+      session.on('abSourceChanged', callback);
+
+      sessionAny.addSource(source1);
+      expect(callback).not.toHaveBeenCalled(); // No event for first source
+
+      sessionAny.addSource(source2);
+      expect(callback).toHaveBeenCalledWith({
+        current: 'A',
+        sourceIndex: 0,
+      });
+    });
+
+    it('AB-020: third source does not change B assignment', () => {
+      const source1 = createMockSource('source1');
+      const source2 = createMockSource('source2');
+      const source3 = createMockSource('source3');
+
+      const sessionAny = session as any;
+      sessionAny.addSource(source1);
+      sessionAny.addSource(source2);
+      expect(session.sourceBIndex).toBe(1);
+
+      sessionAny.addSource(source3);
+      expect(session.sourceBIndex).toBe(1); // Still 1, not changed to 2
+    });
+  });
+
   describe('dispose', () => {
     it('clears sources on dispose', () => {
       session.dispose();

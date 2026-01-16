@@ -33,6 +33,12 @@ export interface SessionState {
   mediaType: string | null;
   mediaName: string | null;
   marks: number[];
+  // A/B Compare state
+  currentAB: 'A' | 'B';
+  sourceAIndex: number;
+  sourceBIndex: number;
+  abCompareAvailable: boolean;
+  syncPlayhead: boolean;
 }
 
 export interface ViewerState {
@@ -107,6 +113,12 @@ export function exposeForTesting(app: App): void {
         mediaType: source?.type ?? null,
         mediaName: source?.name ?? null,
         marks: Array.from(session.marks ?? []),
+        // A/B Compare state
+        currentAB: session.currentAB,
+        sourceAIndex: session.sourceAIndex,
+        sourceBIndex: session.sourceBIndex,
+        abCompareAvailable: session.abCompareAvailable,
+        syncPlayhead: session.syncPlayhead,
       };
     },
 

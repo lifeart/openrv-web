@@ -447,7 +447,7 @@ test.describe('State Verification - Wipe Mode', () => {
     const noWipeScreenshot = await captureViewerScreenshot(page);
 
     // Enable wipe mode (press W to cycle)
-    await page.keyboard.press('w');
+    await page.keyboard.press('Shift+w');
     await page.waitForTimeout(300);
 
     // Capture with wipe

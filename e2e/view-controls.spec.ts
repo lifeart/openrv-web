@@ -213,7 +213,7 @@ test.describe('View Controls', () => {
       expect(state.wipeMode).toBe('off');
 
       // Press W to enable horizontal wipe
-      await page.keyboard.press('w');
+      await page.keyboard.press('Shift+w');
       await page.waitForTimeout(200);
 
       state = await getViewerState(page);
@@ -223,7 +223,7 @@ test.describe('View Controls', () => {
       const horizontalScreenshot = await captureViewerScreenshot(page);
 
       // Press W to switch to vertical wipe
-      await page.keyboard.press('w');
+      await page.keyboard.press('Shift+w');
       await page.waitForTimeout(200);
 
       state = await getViewerState(page);
@@ -233,7 +233,7 @@ test.describe('View Controls', () => {
       expect(imagesAreDifferent(horizontalScreenshot, verticalScreenshot)).toBe(true);
 
       // Press W to turn off (cycles: off -> horizontal -> vertical -> off)
-      await page.keyboard.press('w');
+      await page.keyboard.press('Shift+w');
       await page.waitForTimeout(200);
 
       state = await getViewerState(page);
@@ -254,7 +254,7 @@ test.describe('View Controls', () => {
 
     test('VIEW-023: dragging in wipe mode should change wipe position', async ({ page }) => {
       // Enable wipe mode
-      await page.keyboard.press('w');
+      await page.keyboard.press('Shift+w');
       await page.waitForTimeout(200);
 
       let state = await getViewerState(page);
@@ -479,7 +479,7 @@ test.describe('View Controls', () => {
 
     test('VIEW-042: wipe mode should persist across frame changes', async ({ page }) => {
       // Enable horizontal wipe
-      await page.keyboard.press('w');
+      await page.keyboard.press('Shift+w');
       await page.waitForTimeout(100);
 
       let state = await getViewerState(page);

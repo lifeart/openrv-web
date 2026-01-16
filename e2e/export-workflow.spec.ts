@@ -400,7 +400,7 @@ test.describe('Full Workflow Tests', () => {
     expect(initialState?.wipeMode).toBe('off');
 
     // Enable wipe mode (horizontal)
-    await page.keyboard.press('w');
+    await page.keyboard.press('Shift+w');
     await page.waitForTimeout(200);
 
     // Verify wipe mode changed to horizontal
@@ -439,14 +439,14 @@ test.describe('Full Workflow Tests', () => {
     await expect(canvas).toBeVisible();
 
     // Cycle through wipe modes: horizontal -> vertical
-    await page.keyboard.press('w');
+    await page.keyboard.press('Shift+w');
     await page.waitForTimeout(100);
 
     const verticalState = await page.evaluate(() => window.__OPENRV_TEST__?.getViewerState());
     expect(verticalState?.wipeMode).toBe('vertical');
 
     // Disable wipe: vertical -> off
-    await page.keyboard.press('w');
+    await page.keyboard.press('Shift+w');
     await page.waitForTimeout(100);
 
     const offState = await page.evaluate(() => window.__OPENRV_TEST__?.getViewerState());

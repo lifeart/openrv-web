@@ -25,7 +25,13 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 ### Comparison & Composition
 - Wipe comparison (horizontal/vertical split view)
 - Multi-layer stack with blend modes
-- A/B source switching
+- A/B source switching with auto-assignment when loading multiple files
+- Quick toggle between sources with backtick key
+
+### Scopes & Analysis
+- Histogram (RGB/Luminance/Separate channels, log scale option)
+- Waveform monitor (Luma/RGB/Parade modes)
+- Vectorscope with zoom levels
 
 ### Annotations
 - Pen tool with pressure sensitivity
@@ -67,28 +73,83 @@ pnpm dev
 - Drag and drop files onto the viewer
 - Click the folder icon to open file picker
 - Load RV session files (.rv) directly
+- Load multiple files for A/B comparison (second file auto-assigns as source B)
 
 ### Keyboard Shortcuts
 
+#### Playback
 | Key | Action |
 |-----|--------|
 | `Space` | Play/Pause |
-| `Left/Right` | Step frame |
+| `Left/Right` | Step frame backward/forward |
+| `Up` | Toggle play direction |
 | `Home/End` | Go to start/end |
-| `I/O` | Set in/out points |
-| `L` | Toggle loop mode |
+| `I` or `[` | Set in point |
+| `O` or `]` | Set out point |
+| `R` | Reset in/out points |
+| `M` | Toggle mark at current frame |
+| `L` | Cycle loop mode (once/loop/ping-pong) |
+
+#### View & Navigation
+| Key | Action |
+|-----|--------|
 | `F` | Fit to window |
+| `=` / `-` | Zoom in/out |
+| `Shift+=` / `Shift+-` | Fine zoom in/out |
 | `1-5` | Switch tabs (View, Color, Effects, Transform, Annotate) |
+| `0` | Set zoom to 50% |
+
+#### A/B Compare
+| Key | Action |
+|-----|--------|
+| `` ` `` (backtick) | Toggle between A/B sources |
+| `~` (tilde) | Toggle between A/B sources |
+
+#### Scopes & Wipe
+| Key | Action |
+|-----|--------|
+| `Shift+W` | Cycle wipe modes (off/horizontal/vertical) |
+| `w` | Toggle waveform monitor |
+| `h` | Toggle histogram |
+| `y` | Toggle vectorscope |
+
+#### Channel View
+| Key | Action |
+|-----|--------|
+| `Shift+G` | Green channel |
+| `Shift+B` | Blue channel |
+| `Shift+A` | Alpha channel |
+| `Shift+L` | Luminance |
+| `Shift+N` | Normal (RGB) |
+
+#### Color & Effects
+| Key | Action |
+|-----|--------|
 | `C` | Toggle color panel |
 | `G` | Toggle filter panel |
 | `K` | Toggle crop mode |
-| `W` | Cycle wipe modes |
+
+#### Transform
+| Key | Action |
+|-----|--------|
+| `Shift+R` | Rotate left 90° |
+| `Alt+R` | Rotate right 90° |
+| `Shift+H` | Flip horizontal |
+| `Shift+V` | Flip vertical |
+
+#### Annotations
+| Key | Action |
+|-----|--------|
 | `P` | Toggle paint mode |
-| `Z` | Undo |
-| `Shift+Z` | Redo |
+| `Ctrl+Z` | Undo |
+| `Ctrl+Shift+Z` | Redo |
+| `< / >` | Jump to prev/next annotation |
+
+#### Export
+| Key | Action |
+|-----|--------|
 | `Ctrl+S` | Export frame |
 | `Ctrl+C` | Copy frame to clipboard |
-| `< / >` | Jump to prev/next annotation |
 
 ### Mouse Controls
 - **Scroll**: Zoom in/out

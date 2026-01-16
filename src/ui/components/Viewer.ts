@@ -86,6 +86,9 @@ export class Viewer {
   private lutIndicator: HTMLElement | null = null;
   private lutProcessor: WebGLLUTProcessor | null = null;
 
+  // A/B Compare indicator
+  private abIndicator: HTMLElement | null = null;
+
   // 2D Transform
   private transform: Transform2D = { ...DEFAULT_TRANSFORM };
 
@@ -210,6 +213,32 @@ export class Viewer {
     `;
     this.lutIndicator.textContent = 'LUT';
     this.container.appendChild(this.lutIndicator);
+
+    // Create A/B indicator badge
+    this.abIndicator = document.createElement('div');
+    this.abIndicator.className = 'ab-indicator';
+    this.abIndicator.dataset.testid = 'ab-indicator';
+    this.abIndicator.style.cssText = `
+      position: absolute;
+      top: 10px;
+      right: 60px;
+      background: rgba(255, 180, 50, 0.9);
+      color: #1a1a1a;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 700;
+      z-index: 60;
+      display: none;
+      pointer-events: none;
+    `;
+    this.abIndicator.textContent = 'A';
+    this.container.appendChild(this.abIndicator);
+
+    // Listen for A/B changes
+    this.session.on('abSourceChanged', ({ current }) => {
+      this.updateABIndicator(current);
+    });
 
     // Create drop overlay
     this.dropOverlay = document.createElement('div');
@@ -1178,6 +1207,31 @@ export class Viewer {
 
   getLUTIntensity(): number {
     return this.lutIntensity;
+  }
+
+  /**
+   * Update A/B indicator visibility and text
+   */
+  updateABIndicator(current?: 'A' | 'B'): void {
+    if (!this.abIndicator) return;
+
+    const ab = current ?? this.session.currentAB;
+    const available = this.session.abCompareAvailable;
+
+    if (available) {
+      this.abIndicator.style.display = 'block';
+      this.abIndicator.textContent = ab;
+      // Different colors for A and B
+      if (ab === 'A') {
+        this.abIndicator.style.background = 'rgba(74, 158, 255, 0.9)';
+        this.abIndicator.style.color = 'white';
+      } else {
+        this.abIndicator.style.background = 'rgba(255, 180, 50, 0.9)';
+        this.abIndicator.style.color = '#1a1a1a';
+      }
+    } else {
+      this.abIndicator.style.display = 'none';
+    }
   }
 
   /**

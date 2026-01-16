@@ -3,6 +3,7 @@ import path from 'path';
 
 // Sample file paths
 export const SAMPLE_VIDEO = 'sample/2d56d82687b78171f50c496bab002bc18d53149b.mp4';
+export const SAMPLE_IMAGE = 'sample/test_image.png';
 export const SAMPLE_RV_SESSION = 'sample/test_session.rv';
 
 // Types matching test-helper.ts
@@ -21,6 +22,12 @@ export interface SessionState {
   mediaType: string | null;
   mediaName: string | null;
   marks: number[];
+  // A/B Compare state
+  currentAB: 'A' | 'B';
+  sourceAIndex: number;
+  sourceBIndex: number;
+  abCompareAvailable: boolean;
+  syncPlayhead: boolean;
 }
 
 export interface ViewerState {
@@ -89,6 +96,11 @@ export async function getSessionState(page: Page): Promise<SessionState> {
       mediaType: null,
       mediaName: null,
       marks: [],
+      currentAB: 'A',
+      sourceAIndex: 0,
+      sourceBIndex: -1,
+      abCompareAvailable: false,
+      syncPlayhead: true,
     };
   });
 }
@@ -207,6 +219,17 @@ export async function loadVideoFile(page: Page): Promise<void> {
 
   // Wait for video to load and render
   await page.waitForTimeout(1000);
+}
+
+export async function loadImageFile(page: Page): Promise<void> {
+  const filePath = path.resolve(process.cwd(), SAMPLE_IMAGE);
+
+  // Get the file input
+  const fileInput = page.locator('input[type="file"]').first();
+  await fileInput.setInputFiles(filePath);
+
+  // Wait for image to load and render
+  await page.waitForTimeout(500);
 }
 
 export async function loadRvSession(page: Page): Promise<void> {

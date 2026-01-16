@@ -4,116 +4,96 @@ This document tracks features from [OpenRV](https://github.com/AcademySoftwareFo
 
 ---
 
+## Completed Features ✅
+
+### 1. Channel Select / Channel Map ✅
+
+**Status:** COMPLETED
+
+**Implementation:**
+- Channel select buttons in View tab (RGB / R / G / B / A / Luminance)
+- Real-time channel isolation via canvas rendering
+- Keyboard shortcuts: Shift+G (Green), Shift+B (Blue), Shift+A (Alpha), Shift+L (Luminance), Shift+N (Normal/RGB)
+- Rec.709 luminance calculation
+
+**Files:**
+- `src/ui/components/ChannelSelect.ts`
+- `src/ui/components/Viewer.ts`
+- `src/App.ts`
+
+---
+
+### 2. Histogram Display ✅
+
+**Status:** COMPLETED
+
+**Implementation:**
+- Real-time histogram computed from canvas ImageData
+- RGB mode (overlaid), Luminance mode, Separate channels mode
+- Logarithmic scale toggle
+- Draggable floating panel with mode cycling and close button
+- Keyboard shortcut: `h` to toggle
+
+**Files:**
+- `src/ui/components/Histogram.ts`
+- `src/App.ts`
+
+---
+
+### 3. Waveform Monitor ✅
+
+**Status:** COMPLETED
+
+**Implementation:**
+- Professional waveform scope plotting pixel values vs horizontal position
+- Luma, RGB, and Parade modes
+- Reference lines at 0% and 100%
+- Draggable floating panel with mode cycling
+- Keyboard shortcut: `w` to toggle
+
+**Files:**
+- `src/ui/components/Waveform.ts`
+- `src/App.ts`
+
+---
+
+### 4. Vectorscope ✅
+
+**Status:** COMPLETED
+
+**Implementation:**
+- Circular display showing color distribution (hue = angle, saturation = radius)
+- Rec.709 color targets (R, G, B, Cy, Mg, Yl)
+- Skin tone indicator line
+- Adjustable zoom levels (1x, 2x, 4x)
+- Draggable floating panel
+- Keyboard shortcut: `y` to toggle
+
+**Files:**
+- `src/ui/components/Vectorscope.ts`
+- `src/App.ts`
+
+---
+
+### 5. A/B Source Compare ✅
+
+**Status:** COMPLETED
+
+**Implementation:**
+- A/B buttons in View tab with visual state indication
+- Auto-assignment of source B when loading second file
+- Keyboard shortcut: backtick (`) or tilde (~) to toggle A/B
+- A/B indicator badge on viewer showing current source
+- Sync playhead option between sources
+
+**Files:**
+- `src/core/session/Session.ts` - A/B source management
+- `src/ui/components/Viewer.ts` - A/B indicator
+- `src/App.ts` - A/B buttons and keyboard shortcuts
+
+---
+
 ## High Priority - Core Features
-
-### 1. Channel Select / Channel Map
-
-**OpenRV Reference:** `src/lib/ip/IPBaseNodes/ChannelMapIPNode.cpp`
-**Plugin:** `src/plugins/rv-packages/channel_select`
-
-**Description:**
-Allow users to view individual color channels (Red, Green, Blue, Alpha) or computed channels (Luminance) in isolation. Essential for QC work to check for noise, artifacts, or alpha channel issues.
-
-**Requirements:**
-- [ ] Add channel select dropdown to View tab (R / G / B / A / RGB / Luminance)
-- [ ] Implement shader or canvas filter to isolate channels
-- [ ] Display selected channel as grayscale or with color tint
-- [ ] Keyboard shortcuts: Shift+R (Red), Shift+G (Green), Shift+B (Blue), Shift+A (Alpha)
-- [ ] Luminance calculation: `0.2126*R + 0.7152*G + 0.0722*B` (Rec.709)
-
-**Files to modify:**
-- `src/ui/components/Viewer.ts` - Add channel rendering mode
-- `src/ui/components/layout/ContextToolbar.ts` - Add channel select UI
-- `src/App.ts` - Add keyboard shortcuts
-
----
-
-### 2. Histogram Display
-
-**OpenRV Reference:** `src/lib/ip/IPBaseNodes/HistogramIPNode.cpp`
-**Plugin:** `src/plugins/rv-packages/data_display_indicators`
-
-**Description:**
-Real-time histogram showing distribution of pixel values across the image. Critical for exposure analysis and color grading decisions.
-
-**Requirements:**
-- [ ] Create `HistogramRenderer.ts` to compute histogram from canvas ImageData
-- [ ] Support RGB histogram (overlaid or separate)
-- [ ] Support Luminance histogram
-- [ ] Toggleable overlay on viewer or separate panel
-- [ ] 256 bins for 8-bit, logarithmic scale option
-- [ ] Show clipping warnings (crushed blacks, blown highlights)
-
-**Files to create:**
-- `src/analysis/HistogramRenderer.ts`
-- `src/ui/components/HistogramDisplay.ts`
-
-**Files to modify:**
-- `src/ui/components/Viewer.ts` - Add histogram overlay option
-- `src/ui/components/layout/ContextToolbar.ts` - Add histogram toggle
-
----
-
-### 3. Waveform Monitor
-
-**OpenRV Reference:** `src/lib/ip/IPBaseNodes/WaveformIPNode.cpp`
-
-**Description:**
-Professional video scope showing luminance or RGB values plotted against horizontal position. Industry standard for broadcast QC.
-
-**Requirements:**
-- [ ] Create `WaveformScope.ts` renderer
-- [ ] Plot pixel values (Y-axis) against horizontal position (X-axis)
-- [ ] Support Luma, RGB Parade, and YCbCr modes
-- [ ] Reference lines at 0%, 100%, and broadcast safe levels
-- [ ] Toggleable overlay or separate panel
-
-**Files to create:**
-- `src/analysis/WaveformScope.ts`
-- `src/ui/components/WaveformDisplay.ts`
-
----
-
-### 4. Vectorscope
-
-**OpenRV Reference:** `src/lib/ip/IPBaseNodes/VectorscopeIPNode.cpp`
-
-**Description:**
-Circular display showing color distribution in terms of hue and saturation. Essential for color correction and skin tone analysis.
-
-**Requirements:**
-- [ ] Create `Vectorscope.ts` renderer
-- [ ] Plot colors on circular graph (hue = angle, saturation = radius)
-- [ ] Show Rec.709 color targets (R, G, B, Cy, Mg, Yl)
-- [ ] Skin tone indicator line
-- [ ] Adjustable gain/zoom
-
-**Files to create:**
-- `src/analysis/Vectorscope.ts`
-- `src/ui/components/VectorscopeDisplay.ts`
-
----
-
-### 5. A/B Source Compare
-
-**OpenRV Reference:** `src/lib/ip/IPBaseNodes/SwitchIPNode.cpp`, `SwitchGroupIPNode.cpp`
-
-**Description:**
-Quick switching between two sources for comparison. Different from wipe - this is instant full-frame switching.
-
-**Requirements:**
-- [ ] A/B source selection in View tab
-- [ ] Keyboard shortcut: `~` or `Tab` to toggle A/B
-- [ ] Visual indicator showing current source (A or B)
-- [ ] Option to sync playhead between sources
-- [ ] Extend existing `SwitchGroupNode` for UI integration
-
-**Files to modify:**
-- `src/ui/components/layout/ContextToolbar.ts` - Add A/B selector
-- `src/core/session/Session.ts` - Add A/B source management
-- `src/App.ts` - Add keyboard shortcut
-
----
 
 ### 6. Color Curves
 
@@ -560,10 +540,11 @@ These features require native system access and cannot be implemented in a web b
 
 ```
 src/
-├── analysis/           # NEW: Histogram, waveform, vectorscope
-│   ├── HistogramRenderer.ts
-│   ├── WaveformScope.ts
-│   └── Vectorscope.ts
+├── ui/components/      # Scopes implemented here
+│   ├── Histogram.ts    # ✅ Implemented
+│   ├── Waveform.ts     # ✅ Implemented
+│   ├── Vectorscope.ts  # ✅ Implemented
+│   └── ChannelSelect.ts # ✅ Implemented
 ├── stereo/             # NEW: Stereo viewing modes
 │   └── StereoRenderer.ts
 ├── formats/            # NEW: Additional format loaders
