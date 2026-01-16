@@ -108,56 +108,56 @@
 
 ## Implementation Plan
 
-### Phase 1: Header Bar Consolidation
-- [ ] Create `HeaderBar.ts` component
-- [ ] Move file operations (Open, Export dropdown)
-- [ ] Move playback controls
-- [ ] Move volume control
-- [ ] Move help button
-- [ ] Style: 40px height, clean separation
+### Phase 1: Header Bar Consolidation ✅
+- [x] Create `HeaderBar.ts` component
+- [x] Move file operations (Open, Export dropdown)
+- [x] Move playback controls
+- [x] Move volume control
+- [x] Move help button
+- [x] Style: 40px height, clean separation
 
-### Phase 2: Tab System
-- [ ] Create `TabBar.ts` component
-- [ ] Create `ContextToolbar.ts` component
-- [ ] Implement tab switching logic
-- [ ] Store active tab in App state
-- [ ] Style: 36px tabs, active indicator
+### Phase 2: Tab System ✅
+- [x] Create `TabBar.ts` component
+- [x] Create `ContextToolbar.ts` component
+- [x] Implement tab switching logic
+- [x] Store active tab in App state
+- [x] Style: 36px tabs, active indicator
 
-### Phase 3: View Tab
-- [ ] Move zoom controls to context toolbar
-- [ ] Move wipe control
-- [ ] Add stack button (opens side panel)
-- [ ] Add resolution/fps display
+### Phase 3: View Tab ✅
+- [x] Move zoom controls to context toolbar
+- [x] Move wipe control
+- [x] Add stack button (opens side panel)
+- [x] Add resolution/fps display
 
-### Phase 4: Color Tab
-- [ ] Create inline exposure/contrast/saturation sliders
-- [ ] Consolidate CDL and LUT as panel toggles
-- [ ] Create "Advanced" panel for secondary adjustments
-- [ ] Add reset and before/after buttons
+### Phase 4: Color Tab ✅
+- [x] Create inline exposure/contrast/saturation sliders
+- [x] Consolidate CDL and LUT as panel toggles
+- [x] Create "Advanced" panel for secondary adjustments
+- [x] Add reset and before/after buttons
 
-### Phase 5: Effects Tab
-- [ ] Move blur/sharpen to inline sliders
-- [ ] Keep lens distortion as panel button
-- [ ] Add global reset
+### Phase 5: Effects Tab ✅
+- [x] Move blur/sharpen to inline sliders
+- [x] Keep lens distortion as panel button
+- [x] Add global reset
 
-### Phase 6: Transform Tab
-- [ ] Redesign rotation buttons with degrees
-- [ ] Improve flip button states
-- [ ] Integrate crop control inline
-- [ ] Add reset button
+### Phase 6: Transform Tab ✅
+- [x] Redesign rotation buttons with degrees
+- [x] Improve flip button states
+- [x] Integrate crop control inline
+- [x] Add reset button
 
-### Phase 7: Annotate Tab
-- [ ] Reorganize paint toolbar layout
-- [ ] Move ghost mode to context toolbar
-- [ ] Improve color picker UX
-- [ ] Add brush preview
+### Phase 7: Annotate Tab ✅
+- [x] Reorganize paint toolbar layout
+- [x] Move ghost mode to context toolbar
+- [x] Improve color picker UX
+- [x] Add brush preview
 
-### Phase 8: Polish & Consistency
-- [ ] Unify all button styles
-- [ ] Consistent panel shadows and borders
-- [ ] Smooth tab transitions
-- [ ] Keyboard navigation for tabs (1-5)
-- [ ] Update all keyboard shortcuts help
+### Phase 8: Polish & Consistency ✅
+- [x] Unify all button styles
+- [x] Consistent panel shadows and borders
+- [x] Smooth tab transitions
+- [x] Keyboard navigation for tabs (1-5)
+- [x] Update all keyboard shortcuts help
 
 ---
 
