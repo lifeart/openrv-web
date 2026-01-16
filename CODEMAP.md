@@ -432,3 +432,4 @@ const annotations = dto.byProtocol('RVPaint');
 - [x] Export capabilities (PNG/JPEG/WebP with annotations, clipboard copy)
 - [x] Sequence export (in/out range or all frames with progress)
 - [x] Lens distortion correction (barrel/pincushion, center offset, scale)
+- [x] WebGL LUT processing (GPU-accelerated 3D LUT with trilinear interpolation)

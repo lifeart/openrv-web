@@ -1,6 +1,6 @@
 # OpenRV Web - Work Log
 
-## Current Status: Stack/Composite Layers Complete
+## Current Status: WebGL LUT Processing Complete
 
 ---
 
@@ -218,12 +218,22 @@
 - [x] Viewer stack compositing integration
 - [x] Post-processing effects applied after compositing
 
+### Phase 21: WebGL LUT Processing ✅
+- [x] WebGLLUTProcessor class (`src/color/WebGLLUT.ts`)
+- [x] GLSL vertex and fragment shaders for 3D LUT
+- [x] WebGL2 3D texture for LUT data storage
+- [x] Hardware trilinear interpolation for smooth color grading
+- [x] LUT intensity/mix control (blend original with LUT-transformed)
+- [x] Automatic Y-axis flip for WebGL coordinate system
+- [x] Graceful fallback when WebGL2 not available
+- [x] Integration with Viewer rendering pipeline
+- [x] Proper resource cleanup on dispose
+
 ---
 
-## Not Started
+## All Features Complete
 
-### Future Enhancements
-- [ ] Full LUT application via WebGL shader
+The OpenRV Web viewer now has feature parity with the core OpenRV functionality for web-based playback and review.
 
 ---
 
@@ -319,3 +329,9 @@
   - Created `StackControl.ts` with layer management UI
   - Layer visibility, opacity, blend mode, and reordering controls
   - Integrated stack compositing into Viewer rendering pipeline
+- **Completed Phase 21: WebGL LUT Processing**
+  - Created `WebGLLUT.ts` with WebGL2-based 3D LUT processor
+  - GLSL shaders for GPU-accelerated trilinear interpolation
+  - 3D texture storage for LUT data
+  - Intensity control for blending original with graded image
+  - Integrated into Viewer with automatic fallback

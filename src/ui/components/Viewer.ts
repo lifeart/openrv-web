@@ -8,6 +8,7 @@ import { Transform2D, DEFAULT_TRANSFORM } from './TransformControl';
 import { FilterSettings, DEFAULT_FILTER_SETTINGS } from './FilterControl';
 import { CropState, CropRegion, DEFAULT_CROP_STATE, DEFAULT_CROP_REGION } from './CropControl';
 import { LUT3D } from '../../color/LUTLoader';
+import { WebGLLUTProcessor } from '../../color/WebGLLUT';
 import { CDLValues, DEFAULT_CDL, isDefaultCDL, applyCDLToImageData } from '../../color/CDL';
 import { LensDistortionParams, DEFAULT_LENS_PARAMS, isDefaultLensParams, applyLensDistortion } from '../../transform/LensDistortion';
 import { ExportFormat, exportCanvas as doExportCanvas, copyCanvasToClipboard } from '../../utils/FrameExporter';
@@ -80,6 +81,7 @@ export class Viewer {
   private currentLUT: LUT3D | null = null;
   private lutIntensity = 1.0;
   private lutIndicator: HTMLElement | null = null;
+  private lutProcessor: WebGLLUTProcessor | null = null;
 
   // 2D Transform
   private transform: Transform2D = { ...DEFAULT_TRANSFORM };
@@ -233,6 +235,14 @@ export class Viewer {
     this.bindEvents();
     this.initializeCanvas();
     this.updateCursor(this.paintEngine.tool);
+
+    // Initialize WebGL LUT processor
+    try {
+      this.lutProcessor = new WebGLLUTProcessor();
+    } catch (e) {
+      console.warn('WebGL LUT processor not available, falling back to CPU:', e);
+      this.lutProcessor = null;
+    }
   }
 
   private initializeCanvas(): void {
@@ -833,10 +843,15 @@ export class Viewer {
       }
     }
 
-    // Apply post-processing effects (lens, color, sharpen) regardless of stack mode
+    // Apply post-processing effects (lens, LUT, color, sharpen) regardless of stack mode
     // Apply lens distortion correction (geometric transform, applied first)
     if (!isDefaultLensParams(this.lensParams)) {
       this.applyLensDistortionToCtx(this.imageCtx, displayWidth, displayHeight);
+    }
+
+    // Apply 3D LUT (GPU-accelerated color grading)
+    if (this.currentLUT && this.lutIntensity > 0) {
+      this.applyLUTToCanvas(this.imageCtx, displayWidth, displayHeight);
     }
 
     // Apply CDL color correction (pixel-level operation)
@@ -1118,6 +1133,12 @@ export class Viewer {
   // LUT methods
   setLUT(lut: LUT3D | null): void {
     this.currentLUT = lut;
+
+    // Update WebGL LUT processor
+    if (this.lutProcessor) {
+      this.lutProcessor.setLUT(lut);
+    }
+
     if (this.lutIndicator) {
       this.lutIndicator.style.display = lut ? 'block' : 'none';
       this.lutIndicator.textContent = lut ? `LUT: ${lut.title}` : 'LUT';
@@ -1136,6 +1157,20 @@ export class Viewer {
 
   getLUTIntensity(): number {
     return this.lutIntensity;
+  }
+
+  /**
+   * Apply LUT using WebGL for GPU acceleration
+   */
+  private applyLUTToCanvas(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+    if (!this.currentLUT || this.lutIntensity === 0) return;
+
+    // Use WebGL processor if available for GPU acceleration
+    if (this.lutProcessor && this.lutProcessor.hasLUT()) {
+      this.lutProcessor.applyToCanvas(ctx, width, height, this.lutIntensity);
+    }
+    // Fallback: No CPU fallback implemented for performance reasons
+    // The WebGL path handles all LUT processing
   }
 
   // Wipe comparison methods
@@ -1684,5 +1719,11 @@ export class Viewer {
     this.container.removeEventListener('pointercancel', this.onPointerUp);
     this.container.removeEventListener('pointerleave', this.onPointerLeave);
     this.container.removeEventListener('wheel', this.onWheel);
+
+    // Cleanup WebGL LUT processor
+    if (this.lutProcessor) {
+      this.lutProcessor.dispose();
+      this.lutProcessor = null;
+    }
   }
 }
