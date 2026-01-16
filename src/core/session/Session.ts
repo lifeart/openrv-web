@@ -340,10 +340,31 @@ export class Session extends EventEmitter<SessionEvents> {
   async loadFromGTO(data: ArrayBuffer | string): Promise<void> {
     const reader = new SimpleReader();
 
-    if (typeof data === 'string') {
-      reader.open(data);
-    } else {
-      reader.open(new Uint8Array(data));
+    try {
+      if (typeof data === 'string') {
+        reader.open(data);
+      } else {
+        // Check if it's text format GTO (starts with "GTOa")
+        const bytes = new Uint8Array(data);
+        const isTextFormat =
+          bytes[0] === 0x47 && // 'G'
+          bytes[1] === 0x54 && // 'T'
+          bytes[2] === 0x4f && // 'O'
+          bytes[3] === 0x61;   // 'a'
+
+        if (isTextFormat) {
+          // Convert to string for text format parsing
+          const textContent = new TextDecoder('utf-8').decode(bytes);
+          reader.open(textContent);
+        } else {
+          // Binary format
+          reader.open(bytes);
+        }
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('GTO parsing error:', message);
+      throw new Error(`Failed to parse GTO file: ${message}`);
     }
 
     const dto = new GTODTO(reader.result);
