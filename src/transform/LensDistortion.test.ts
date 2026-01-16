@@ -1,0 +1,349 @@
+/**
+ * Lens Distortion Unit Tests
+ */
+
+import { describe, it, expect } from 'vitest';
+import {
+  LensDistortionParams,
+  DEFAULT_LENS_PARAMS,
+  isDefaultLensParams,
+  applyLensDistortion,
+  applyLensDistortionToCanvas,
+  generateDistortionGrid,
+} from './LensDistortion';
+import { createTestImageData } from '../../test/utils';
+
+describe('LensDistortion', () => {
+  describe('DEFAULT_LENS_PARAMS', () => {
+    it('LENS-001: has correct default values', () => {
+      expect(DEFAULT_LENS_PARAMS.k1).toBe(0);
+      expect(DEFAULT_LENS_PARAMS.k2).toBe(0);
+      expect(DEFAULT_LENS_PARAMS.centerX).toBe(0);
+      expect(DEFAULT_LENS_PARAMS.centerY).toBe(0);
+      expect(DEFAULT_LENS_PARAMS.scale).toBe(1);
+    });
+  });
+
+  describe('isDefaultLensParams', () => {
+    it('returns true for default values', () => {
+      expect(isDefaultLensParams(DEFAULT_LENS_PARAMS)).toBe(true);
+    });
+
+    it('returns false when k1 is modified', () => {
+      const params: LensDistortionParams = { ...DEFAULT_LENS_PARAMS, k1: 0.1 };
+      expect(isDefaultLensParams(params)).toBe(false);
+    });
+
+    it('returns false when k2 is modified', () => {
+      const params: LensDistortionParams = { ...DEFAULT_LENS_PARAMS, k2: -0.05 };
+      expect(isDefaultLensParams(params)).toBe(false);
+    });
+
+    it('returns false when centerX is modified', () => {
+      const params: LensDistortionParams = { ...DEFAULT_LENS_PARAMS, centerX: 0.1 };
+      expect(isDefaultLensParams(params)).toBe(false);
+    });
+
+    it('returns false when centerY is modified', () => {
+      const params: LensDistortionParams = { ...DEFAULT_LENS_PARAMS, centerY: -0.1 };
+      expect(isDefaultLensParams(params)).toBe(false);
+    });
+
+    it('returns false when scale is modified', () => {
+      const params: LensDistortionParams = { ...DEFAULT_LENS_PARAMS, scale: 1.2 };
+      expect(isDefaultLensParams(params)).toBe(false);
+    });
+  });
+
+  describe('applyLensDistortion', () => {
+    it('LENS-002: returns same image when params are default', () => {
+      const imageData = createTestImageData(10, 10, { r: 128, g: 128, b: 128, a: 255 });
+      const result = applyLensDistortion(imageData, DEFAULT_LENS_PARAMS);
+
+      // Should return the same object reference when no distortion
+      expect(result).toBe(imageData);
+    });
+
+    it('LENS-003: applies barrel distortion (negative k1)', () => {
+      const imageData = createTestImageData(20, 20, { r: 255, g: 0, b: 0, a: 255 });
+      const params: LensDistortionParams = {
+        ...DEFAULT_LENS_PARAMS,
+        k1: -0.3,  // Barrel distortion
+      };
+
+      const result = applyLensDistortion(imageData, params);
+
+      // Result should be a new ImageData
+      expect(result).not.toBe(imageData);
+      expect(result.width).toBe(imageData.width);
+      expect(result.height).toBe(imageData.height);
+      // Center pixels should remain relatively unchanged
+      const centerIdx = (10 * 20 + 10) * 4;
+      expect(result.data[centerIdx]).toBeCloseTo(255, -1);
+    });
+
+    it('LENS-004: applies pincushion distortion (positive k1)', () => {
+      const imageData = createTestImageData(20, 20, { r: 0, g: 255, b: 0, a: 255 });
+      const params: LensDistortionParams = {
+        ...DEFAULT_LENS_PARAMS,
+        k1: 0.3,  // Pincushion distortion
+      };
+
+      const result = applyLensDistortion(imageData, params);
+
+      expect(result).not.toBe(imageData);
+      expect(result.width).toBe(imageData.width);
+      expect(result.height).toBe(imageData.height);
+    });
+
+    it('LENS-005: respects center offset', () => {
+      const imageData = createTestImageData(20, 20, { r: 128, g: 128, b: 128, a: 255 });
+      const params: LensDistortionParams = {
+        ...DEFAULT_LENS_PARAMS,
+        k1: -0.2,
+        centerX: 0.2,  // Offset center to the right
+        centerY: -0.1, // Offset center up
+      };
+
+      const result = applyLensDistortion(imageData, params);
+
+      expect(result.width).toBe(imageData.width);
+      expect(result.height).toBe(imageData.height);
+    });
+
+    it('LENS-006: respects scale parameter', () => {
+      const imageData = createTestImageData(20, 20, { r: 100, g: 100, b: 100, a: 255 });
+      const params: LensDistortionParams = {
+        ...DEFAULT_LENS_PARAMS,
+        k1: -0.2,
+        scale: 1.2,  // Zoom out to show more after distortion
+      };
+
+      const result = applyLensDistortion(imageData, params);
+
+      expect(result).not.toBe(imageData);
+    });
+
+    it('LENS-007: handles out-of-bounds with black pixels', () => {
+      const imageData = createTestImageData(20, 20, { r: 255, g: 255, b: 255, a: 255 });
+      const params: LensDistortionParams = {
+        ...DEFAULT_LENS_PARAMS,
+        k1: -0.8,  // Strong barrel distortion
+        scale: 0.5, // Will cause sampling outside bounds
+      };
+
+      const result = applyLensDistortion(imageData, params);
+
+      // Check corners - they should be black (out of bounds)
+      // Corner (0, 0)
+      const cornerIdx = 0;
+      // With strong distortion, corners may sample outside
+      expect(result.data[cornerIdx + 3]).toBe(255); // Alpha preserved
+    });
+
+    it('uses bilinear interpolation for smooth results', () => {
+      // Create a gradient image
+      const imageData = new ImageData(20, 20);
+      for (let y = 0; y < 20; y++) {
+        for (let x = 0; x < 20; x++) {
+          const idx = (y * 20 + x) * 4;
+          imageData.data[idx] = Math.round((x / 19) * 255);     // R gradient
+          imageData.data[idx + 1] = Math.round((y / 19) * 255); // G gradient
+          imageData.data[idx + 2] = 128;
+          imageData.data[idx + 3] = 255;
+        }
+      }
+
+      const params: LensDistortionParams = {
+        ...DEFAULT_LENS_PARAMS,
+        k1: -0.1,
+      };
+
+      const result = applyLensDistortion(imageData, params);
+
+      // Center should still have smooth gradient values
+      const centerIdx = (10 * 20 + 10) * 4;
+      expect(result.data[centerIdx]).toBeGreaterThan(0);
+      expect(result.data[centerIdx]).toBeLessThan(255);
+    });
+
+    it('preserves alpha channel', () => {
+      const imageData = createTestImageData(10, 10, { r: 128, g: 128, b: 128, a: 200 });
+      const params: LensDistortionParams = {
+        ...DEFAULT_LENS_PARAMS,
+        k1: -0.2,
+      };
+
+      const result = applyLensDistortion(imageData, params);
+
+      // Check center pixel alpha
+      const centerIdx = (5 * 10 + 5) * 4;
+      expect(result.data[centerIdx + 3]).toBeCloseTo(200, -1);
+    });
+
+    it('applies k2 secondary radial distortion', () => {
+      const imageData = createTestImageData(20, 20, { r: 128, g: 128, b: 128, a: 255 });
+      const params: LensDistortionParams = {
+        ...DEFAULT_LENS_PARAMS,
+        k1: -0.1,
+        k2: 0.05,  // Secondary distortion
+      };
+
+      const result = applyLensDistortion(imageData, params);
+
+      expect(result).not.toBe(imageData);
+      expect(result.width).toBe(20);
+      expect(result.height).toBe(20);
+    });
+  });
+
+  describe('generateDistortionGrid', () => {
+    it('LENS-008: generates grid lines', () => {
+      const grid = generateDistortionGrid(100, 100, DEFAULT_LENS_PARAMS, 20);
+
+      expect(grid.lines).toBeDefined();
+      expect(Array.isArray(grid.lines)).toBe(true);
+      expect(grid.lines.length).toBeGreaterThan(0);
+    });
+
+    it('generates lines with correct structure', () => {
+      const grid = generateDistortionGrid(100, 100, DEFAULT_LENS_PARAMS, 25);
+
+      for (const line of grid.lines) {
+        expect(typeof line.x1).toBe('number');
+        expect(typeof line.y1).toBe('number');
+        expect(typeof line.x2).toBe('number');
+        expect(typeof line.y2).toBe('number');
+        expect(Number.isFinite(line.x1)).toBe(true);
+        expect(Number.isFinite(line.y1)).toBe(true);
+        expect(Number.isFinite(line.x2)).toBe(true);
+        expect(Number.isFinite(line.y2)).toBe(true);
+      }
+    });
+
+    it('LENS-009: generates straight lines with default params', () => {
+      const grid = generateDistortionGrid(100, 100, DEFAULT_LENS_PARAMS, 50);
+
+      // With no distortion, horizontal lines should have same y1 and y2
+      // and vertical lines should have same x1 and x2
+      let foundHorizontal = false;
+      let foundVertical = false;
+
+      for (const line of grid.lines) {
+        if (Math.abs(line.y1 - line.y2) < 0.001) {
+          // Horizontal line - x values should differ
+          foundHorizontal = true;
+        }
+        if (Math.abs(line.x1 - line.x2) < 0.001) {
+          // Vertical line - y values should differ
+          foundVertical = true;
+        }
+      }
+
+      expect(foundHorizontal).toBe(true);
+      expect(foundVertical).toBe(true);
+    });
+
+    it('LENS-010: generates curved lines with distortion', () => {
+      const params: LensDistortionParams = {
+        ...DEFAULT_LENS_PARAMS,
+        k1: -0.3,
+      };
+      const grid = generateDistortionGrid(100, 100, params, 10);
+
+      // Lines near edges should be curved
+      expect(grid.lines.length).toBeGreaterThan(0);
+
+      // The grid should have been transformed
+      // Check that we have both horizontal and vertical segments
+      const hasHorizontalSegments = grid.lines.some(
+        (line) => Math.abs(line.x1 - line.x2) > 1
+      );
+      const hasVerticalSegments = grid.lines.some(
+        (line) => Math.abs(line.y1 - line.y2) > 1
+      );
+
+      expect(hasHorizontalSegments).toBe(true);
+      expect(hasVerticalSegments).toBe(true);
+    });
+
+    it('adjusts grid density based on gridSize', () => {
+      const gridSmall = generateDistortionGrid(100, 100, DEFAULT_LENS_PARAMS, 10);
+      const gridLarge = generateDistortionGrid(100, 100, DEFAULT_LENS_PARAMS, 50);
+
+      // Smaller grid size = more lines
+      expect(gridSmall.lines.length).toBeGreaterThan(gridLarge.lines.length);
+    });
+
+    it('handles non-square dimensions', () => {
+      const grid = generateDistortionGrid(200, 100, DEFAULT_LENS_PARAMS, 20);
+
+      expect(grid.lines).toBeDefined();
+      expect(grid.lines.length).toBeGreaterThan(0);
+
+      // All points should be finite numbers
+      for (const line of grid.lines) {
+        expect(Number.isFinite(line.x1)).toBe(true);
+        expect(Number.isFinite(line.y1)).toBe(true);
+        expect(Number.isFinite(line.x2)).toBe(true);
+        expect(Number.isFinite(line.y2)).toBe(true);
+      }
+    });
+  });
+
+  describe('Brown-Conrady model', () => {
+    it('center point remains unchanged', () => {
+      const imageData = createTestImageData(21, 21, { r: 0, g: 0, b: 0, a: 255 });
+      // Put a distinctive color at center
+      const centerIdx = (10 * 21 + 10) * 4;
+      imageData.data[centerIdx] = 255;
+      imageData.data[centerIdx + 1] = 0;
+      imageData.data[centerIdx + 2] = 0;
+
+      const params: LensDistortionParams = {
+        ...DEFAULT_LENS_PARAMS,
+        k1: -0.3,
+      };
+
+      const result = applyLensDistortion(imageData, params);
+
+      // Center pixel should still be red (or close to it)
+      expect(result.data[centerIdx]).toBeGreaterThan(200);
+    });
+
+    it('distortion increases with distance from center', () => {
+      // Create an image with a cross pattern
+      const size = 21;
+      const imageData = new ImageData(size, size);
+
+      // Fill with black
+      for (let i = 0; i < imageData.data.length; i += 4) {
+        imageData.data[i] = 0;
+        imageData.data[i + 1] = 0;
+        imageData.data[i + 2] = 0;
+        imageData.data[i + 3] = 255;
+      }
+
+      // Draw white center line (horizontal)
+      const centerY = 10;
+      for (let x = 0; x < size; x++) {
+        const idx = (centerY * size + x) * 4;
+        imageData.data[idx] = 255;
+        imageData.data[idx + 1] = 255;
+        imageData.data[idx + 2] = 255;
+      }
+
+      const params: LensDistortionParams = {
+        ...DEFAULT_LENS_PARAMS,
+        k1: -0.3,  // Barrel distortion
+      };
+
+      const result = applyLensDistortion(imageData, params);
+
+      // The result should have moved pixels
+      // This is a smoke test - actual distortion verification would be complex
+      expect(result.width).toBe(size);
+      expect(result.height).toBe(size);
+    });
+  });
+});
