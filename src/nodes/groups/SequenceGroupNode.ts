@@ -71,6 +71,7 @@ export class SequenceGroupNode extends BaseGroupNode {
     // If no durations specified, fall back to simple 1-frame-per-input
     if (durations.length === 0) {
       const totalDuration = this.inputs.length;
+      if (totalDuration === 0) return 0;
       const frame = ((context.frame - 1) % totalDuration) + 1;
       return Math.min(frame - 1, this.inputs.length - 1);
     }
@@ -82,6 +83,7 @@ export class SequenceGroupNode extends BaseGroupNode {
 
     // Find which input contains the current frame
     const totalDuration = this.getTotalDuration();
+    if (totalDuration === 0) return 0;
     const frame = ((context.frame - 1) % totalDuration) + 1;
 
     for (let i = this.inputs.length - 1; i >= 0; i--) {
@@ -101,12 +103,12 @@ export class SequenceGroupNode extends BaseGroupNode {
     const activeIndex = this.getActiveInputIndex(context);
     const durations = this.properties.getValue('durations') as number[];
     const totalDuration = this.getTotalDuration();
-    const frame = ((context.frame - 1) % totalDuration) + 1;
 
-    if (this.frameOffsets.length === 0 || durations.length === 0) {
+    if (totalDuration === 0 || this.frameOffsets.length === 0 || durations.length === 0) {
       return 1;
     }
 
+    const frame = ((context.frame - 1) % totalDuration) + 1;
     const offset = this.frameOffsets[activeIndex] ?? 0;
     return frame - offset;
   }

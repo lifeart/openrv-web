@@ -15,6 +15,10 @@ export class Timeline {
   private width = 0;
   private height = 0;
 
+  // Bound event handlers for proper cleanup
+  private boundHandleResize: () => void;
+  private paintEngineSubscribed = false;
+
   private colors = {
     background: '#252525',
     track: '#333',
@@ -34,6 +38,10 @@ export class Timeline {
     this.session = session;
     this.paintEngine = paintEngine ?? null;
     this.waveformRenderer = new WaveformRenderer();
+    this.boundHandleResize = () => {
+      this.resize();
+      this.draw();
+    };
 
     // Create container
     this.container = document.createElement('div');
@@ -73,19 +81,23 @@ export class Timeline {
     this.session.on('playbackChanged', () => this.draw());
     this.session.on('durationChanged', () => this.draw());
     this.session.on('sourceLoaded', () => {
-      this.loadWaveform();
+      this.loadWaveform().catch((err) => console.warn('Failed to load waveform:', err));
       this.draw();
     });
     this.session.on('inOutChanged', () => this.draw());
     this.session.on('loopModeChanged', () => this.draw());
     this.session.on('marksChanged', () => this.draw());
 
-    // Listen to paint engine changes
-    if (this.paintEngine) {
-      this.paintEngine.on('annotationsChanged', () => this.draw());
-      this.paintEngine.on('strokeAdded', () => this.draw());
-      this.paintEngine.on('strokeRemoved', () => this.draw());
-    }
+    // Listen to paint engine changes (only once)
+    this.subscribeToPaintEngine();
+  }
+
+  private subscribeToPaintEngine(): void {
+    if (this.paintEngineSubscribed || !this.paintEngine) return;
+    this.paintEngine.on('annotationsChanged', () => this.draw());
+    this.paintEngine.on('strokeAdded', () => this.draw());
+    this.paintEngine.on('strokeRemoved', () => this.draw());
+    this.paintEngineSubscribed = true;
   }
 
   /**
@@ -93,9 +105,7 @@ export class Timeline {
    */
   setPaintEngine(paintEngine: PaintEngine): void {
     this.paintEngine = paintEngine;
-    this.paintEngine.on('annotationsChanged', () => this.draw());
-    this.paintEngine.on('strokeAdded', () => this.draw());
-    this.paintEngine.on('strokeRemoved', () => this.draw());
+    this.subscribeToPaintEngine();
     this.draw();
   }
 
@@ -111,17 +121,15 @@ export class Timeline {
       return;
     }
 
-    const videoElement = source.element as HTMLVideoElement;
-    if (!videoElement) return;
+    const element = source.element;
+    if (!(element instanceof HTMLVideoElement)) {
+      return;
+    }
 
-    try {
-      const success = await this.waveformRenderer.loadFromVideo(videoElement);
-      this.waveformLoaded = success;
-      if (success) {
-        this.draw();
-      }
-    } catch (err) {
-      console.warn('Failed to load waveform:', err);
+    const success = await this.waveformRenderer.loadFromVideo(element);
+    this.waveformLoaded = success;
+    if (success) {
+      this.draw();
     }
   }
 
@@ -194,10 +202,7 @@ export class Timeline {
       this.draw();
     });
 
-    window.addEventListener('resize', () => {
-      this.resize();
-      this.draw();
-    });
+    window.addEventListener('resize', this.boundHandleResize);
 
     return this.container;
   }
@@ -211,6 +216,9 @@ export class Timeline {
 
     this.canvas.width = rect.width * dpr;
     this.canvas.height = rect.height * dpr;
+
+    // Reset transform before applying new scale to prevent accumulation
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.ctx.scale(dpr, dpr);
   }
 
@@ -397,5 +405,8 @@ export class Timeline {
   dispose(): void {
     window.removeEventListener('mousemove', this.onMouseMove);
     window.removeEventListener('mouseup', this.onMouseUp);
+    window.removeEventListener('resize', this.boundHandleResize);
+    this.canvas.removeEventListener('mousedown', this.onMouseDown);
+    this.canvas.removeEventListener('dblclick', this.onDoubleClick);
   }
 }

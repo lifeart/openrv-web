@@ -767,9 +767,9 @@ export class Viewer {
         element = frameImage;
       } else {
         // Frame not loaded yet - trigger async load
-        this.session.getSequenceFrameImage().then(() => {
-          this.refresh();
-        });
+        this.session.getSequenceFrameImage()
+          .then(() => this.refresh())
+          .catch((err) => console.warn('Failed to load sequence frame:', err));
         // Use first frame as fallback if available
         element = source.element;
       }

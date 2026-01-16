@@ -37,8 +37,14 @@ export class App {
   private lensControl: LensControl;
   private stackControl: StackControl;
   private animationId: number | null = null;
+  private boundHandleKeydown: (e: KeyboardEvent) => void;
+  private boundHandleResize: () => void;
 
   constructor() {
+    // Bind event handlers for proper cleanup
+    this.boundHandleKeydown = (e: KeyboardEvent) => this.handleKeydown(e);
+    this.boundHandleResize = () => this.viewer.resize();
+
     this.session = new Session();
     this.paintEngine = new PaintEngine();
     this.viewer = new Viewer(this.session, this.paintEngine);
@@ -257,22 +263,17 @@ export class App {
     this.contextToolbar.setTabContent('annotate', annotateContent);
   }
 
-  private onTabChanged(tabId: TabId): void {
+  private onTabChanged(_tabId: TabId): void {
     // Handle tab-specific logic
     // For example, could show/hide certain viewer overlays based on tab
-    console.log(`Tab changed to: ${tabId}`);
   }
 
   private bindEvents(): void {
     // Handle window resize
-    window.addEventListener('resize', () => {
-      this.viewer.resize();
-    });
+    window.addEventListener('resize', this.boundHandleResize);
 
     // Keyboard shortcuts
-    document.addEventListener('keydown', (e) => {
-      this.handleKeydown(e);
-    });
+    document.addEventListener('keydown', this.boundHandleKeydown);
 
     // Load annotations from GTO files
     this.session.on('annotationsLoaded', ({ annotations, effects }) => {
@@ -811,6 +812,11 @@ Shift+V   - Flip vertical</pre>`;
     if (this.animationId !== null) {
       cancelAnimationFrame(this.animationId);
     }
+
+    // Remove global event listeners
+    window.removeEventListener('resize', this.boundHandleResize);
+    document.removeEventListener('keydown', this.boundHandleKeydown);
+
     this.viewer.dispose();
     this.timeline.dispose();
     this.headerBar.dispose();
