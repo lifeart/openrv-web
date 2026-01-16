@@ -1,0 +1,488 @@
+/**
+ * IPImage Unit Tests
+ */
+
+import { describe, it, expect } from 'vitest';
+import { IPImage } from './Image';
+import type { DataType } from './Image';
+
+describe('IPImage', () => {
+  describe('constructor', () => {
+    it('creates image with specified dimensions', () => {
+      const image = new IPImage({
+        width: 100,
+        height: 50,
+        channels: 4,
+        dataType: 'uint8',
+      });
+
+      expect(image.width).toBe(100);
+      expect(image.height).toBe(50);
+      expect(image.channels).toBe(4);
+      expect(image.dataType).toBe('uint8');
+    });
+
+    it('creates image with provided data', () => {
+      const data = new ArrayBuffer(400); // 10x10x4 bytes
+      const image = new IPImage({
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'uint8',
+        data,
+      });
+
+      expect(image.data).toBe(data);
+    });
+
+    it('allocates buffer when no data provided', () => {
+      const image = new IPImage({
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'uint8',
+      });
+
+      expect(image.data.byteLength).toBe(10 * 10 * 4 * 1); // width * height * channels * bytesPerComponent
+    });
+
+    it('stores metadata', () => {
+      const image = new IPImage({
+        width: 100,
+        height: 100,
+        channels: 4,
+        dataType: 'uint8',
+        metadata: {
+          colorSpace: 'sRGB',
+          frameNumber: 42,
+          sourcePath: '/path/to/file.exr',
+        },
+      });
+
+      expect(image.metadata.colorSpace).toBe('sRGB');
+      expect(image.metadata.frameNumber).toBe(42);
+      expect(image.metadata.sourcePath).toBe('/path/to/file.exr');
+    });
+
+    it('uses empty metadata when none provided', () => {
+      const image = new IPImage({
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'uint8',
+      });
+
+      expect(image.metadata).toEqual({});
+    });
+
+    it('initializes texture state', () => {
+      const image = new IPImage({
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'uint8',
+      });
+
+      expect(image.texture).toBeNull();
+      expect(image.textureNeedsUpdate).toBe(true);
+    });
+  });
+
+  describe('getBytesPerComponent', () => {
+    it('returns 1 for uint8', () => {
+      const image = new IPImage({
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'uint8',
+      });
+
+      expect(image.getBytesPerComponent()).toBe(1);
+    });
+
+    it('returns 2 for uint16', () => {
+      const image = new IPImage({
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'uint16',
+      });
+
+      expect(image.getBytesPerComponent()).toBe(2);
+    });
+
+    it('returns 4 for float32', () => {
+      const image = new IPImage({
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'float32',
+      });
+
+      expect(image.getBytesPerComponent()).toBe(4);
+    });
+  });
+
+  describe('getTypedArray', () => {
+    it('returns Uint8Array for uint8 data', () => {
+      const image = new IPImage({
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'uint8',
+      });
+
+      const arr = image.getTypedArray();
+      expect(arr).toBeInstanceOf(Uint8Array);
+      expect(arr.length).toBe(10 * 10 * 4);
+    });
+
+    it('returns Uint16Array for uint16 data', () => {
+      const image = new IPImage({
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'uint16',
+      });
+
+      const arr = image.getTypedArray();
+      expect(arr).toBeInstanceOf(Uint16Array);
+      expect(arr.length).toBe(10 * 10 * 4);
+    });
+
+    it('returns Float32Array for float32 data', () => {
+      const image = new IPImage({
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'float32',
+      });
+
+      const arr = image.getTypedArray();
+      expect(arr).toBeInstanceOf(Float32Array);
+      expect(arr.length).toBe(10 * 10 * 4);
+    });
+  });
+
+  describe('getPixel', () => {
+    it('returns pixel values at given coordinates', () => {
+      const data = new Uint8Array([
+        255, 0, 0, 255,   // (0,0) red
+        0, 255, 0, 255,   // (1,0) green
+        0, 0, 255, 255,   // (0,1) blue
+        255, 255, 0, 255, // (1,1) yellow
+      ]);
+
+      const image = new IPImage({
+        width: 2,
+        height: 2,
+        channels: 4,
+        dataType: 'uint8',
+        data: data.buffer,
+      });
+
+      expect(image.getPixel(0, 0)).toEqual([255, 0, 0, 255]);
+      expect(image.getPixel(1, 0)).toEqual([0, 255, 0, 255]);
+      expect(image.getPixel(0, 1)).toEqual([0, 0, 255, 255]);
+      expect(image.getPixel(1, 1)).toEqual([255, 255, 0, 255]);
+    });
+
+    it('handles different channel counts', () => {
+      const data = new Uint8Array([
+        100, 150, 200,  // (0,0)
+        50, 75, 100,    // (1,0)
+      ]);
+
+      const image = new IPImage({
+        width: 2,
+        height: 1,
+        channels: 3,
+        dataType: 'uint8',
+        data: data.buffer,
+      });
+
+      expect(image.getPixel(0, 0)).toEqual([100, 150, 200]);
+      expect(image.getPixel(1, 0)).toEqual([50, 75, 100]);
+    });
+
+    it('works with float32 data', () => {
+      const data = new Float32Array([
+        1.0, 0.5, 0.25, 1.0,
+      ]);
+
+      const image = new IPImage({
+        width: 1,
+        height: 1,
+        channels: 4,
+        dataType: 'float32',
+        data: data.buffer,
+      });
+
+      const pixel = image.getPixel(0, 0);
+      expect(pixel[0]).toBeCloseTo(1.0);
+      expect(pixel[1]).toBeCloseTo(0.5);
+      expect(pixel[2]).toBeCloseTo(0.25);
+      expect(pixel[3]).toBeCloseTo(1.0);
+    });
+  });
+
+  describe('setPixel', () => {
+    it('sets pixel values at given coordinates', () => {
+      const image = new IPImage({
+        width: 2,
+        height: 2,
+        channels: 4,
+        dataType: 'uint8',
+      });
+
+      image.setPixel(0, 0, [255, 128, 64, 255]);
+      image.setPixel(1, 1, [100, 200, 50, 128]);
+
+      expect(image.getPixel(0, 0)).toEqual([255, 128, 64, 255]);
+      expect(image.getPixel(1, 1)).toEqual([100, 200, 50, 128]);
+    });
+
+    it('marks texture as needing update', () => {
+      const image = new IPImage({
+        width: 2,
+        height: 2,
+        channels: 4,
+        dataType: 'uint8',
+      });
+
+      image.textureNeedsUpdate = false;
+      image.setPixel(0, 0, [255, 0, 0, 255]);
+
+      expect(image.textureNeedsUpdate).toBe(true);
+    });
+
+    it('handles partial channel values', () => {
+      const image = new IPImage({
+        width: 1,
+        height: 1,
+        channels: 4,
+        dataType: 'uint8',
+      });
+
+      // Set only RGB, leave alpha
+      image.setPixel(0, 0, [255, 128, 64]);
+
+      const pixel = image.getPixel(0, 0);
+      expect(pixel[0]).toBe(255);
+      expect(pixel[1]).toBe(128);
+      expect(pixel[2]).toBe(64);
+      // Alpha remains 0 (initial value)
+      expect(pixel[3]).toBe(0);
+    });
+
+    it('works with float32 data', () => {
+      const image = new IPImage({
+        width: 1,
+        height: 1,
+        channels: 4,
+        dataType: 'float32',
+      });
+
+      image.setPixel(0, 0, [1.5, 0.75, 0.25, 1.0]);
+
+      const pixel = image.getPixel(0, 0);
+      expect(pixel[0]).toBeCloseTo(1.5);
+      expect(pixel[1]).toBeCloseTo(0.75);
+      expect(pixel[2]).toBeCloseTo(0.25);
+      expect(pixel[3]).toBeCloseTo(1.0);
+    });
+  });
+
+  describe('clone', () => {
+    it('creates a deep copy of the image', () => {
+      const image = new IPImage({
+        width: 2,
+        height: 2,
+        channels: 4,
+        dataType: 'uint8',
+        metadata: { colorSpace: 'sRGB' },
+      });
+
+      image.setPixel(0, 0, [255, 0, 0, 255]);
+
+      const clone = image.clone();
+
+      expect(clone.width).toBe(image.width);
+      expect(clone.height).toBe(image.height);
+      expect(clone.channels).toBe(image.channels);
+      expect(clone.dataType).toBe(image.dataType);
+      expect(clone.metadata.colorSpace).toBe('sRGB');
+      expect(clone.getPixel(0, 0)).toEqual([255, 0, 0, 255]);
+    });
+
+    it('cloned data is independent', () => {
+      const image = new IPImage({
+        width: 2,
+        height: 2,
+        channels: 4,
+        dataType: 'uint8',
+      });
+
+      image.setPixel(0, 0, [255, 0, 0, 255]);
+
+      const clone = image.clone();
+      clone.setPixel(0, 0, [0, 255, 0, 255]);
+
+      // Original should be unchanged
+      expect(image.getPixel(0, 0)).toEqual([255, 0, 0, 255]);
+      expect(clone.getPixel(0, 0)).toEqual([0, 255, 0, 255]);
+    });
+
+    it('cloned metadata is independent', () => {
+      const image = new IPImage({
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'uint8',
+        metadata: { attributes: { key: 'value' } },
+      });
+
+      const clone = image.clone();
+      clone.metadata.colorSpace = 'ACEScg';
+
+      expect(image.metadata.colorSpace).toBeUndefined();
+      expect(clone.metadata.colorSpace).toBe('ACEScg');
+    });
+  });
+
+  describe('fromImageData', () => {
+    it('creates IPImage from ImageData', () => {
+      const imageData = new ImageData(100, 50);
+
+      const image = IPImage.fromImageData(imageData);
+
+      expect(image.width).toBe(100);
+      expect(image.height).toBe(50);
+      expect(image.channels).toBe(4);
+      expect(image.dataType).toBe('uint8');
+    });
+
+    it('preserves pixel data from ImageData', () => {
+      const imageData = new ImageData(2, 1);
+      imageData.data[0] = 255; // R
+      imageData.data[1] = 128; // G
+      imageData.data[2] = 64;  // B
+      imageData.data[3] = 255; // A
+
+      const image = IPImage.fromImageData(imageData);
+
+      expect(image.getPixel(0, 0)).toEqual([255, 128, 64, 255]);
+    });
+
+    it('creates independent copy of data', () => {
+      const imageData = new ImageData(1, 1);
+      imageData.data[0] = 255;
+
+      const image = IPImage.fromImageData(imageData);
+
+      // Modify original ImageData
+      imageData.data[0] = 0;
+
+      // IPImage should have original value
+      expect(image.getPixel(0, 0)[0]).toBe(255);
+    });
+  });
+
+  describe('createEmpty', () => {
+    it('creates empty image with default parameters', () => {
+      const image = IPImage.createEmpty(800, 600);
+
+      expect(image.width).toBe(800);
+      expect(image.height).toBe(600);
+      expect(image.channels).toBe(4);
+      expect(image.dataType).toBe('uint8');
+    });
+
+    it('creates empty image with custom channels', () => {
+      const image = IPImage.createEmpty(100, 100, 3);
+
+      expect(image.channels).toBe(3);
+    });
+
+    it('creates empty image with custom data type', () => {
+      const image = IPImage.createEmpty(100, 100, 4, 'float32');
+
+      expect(image.dataType).toBe('float32');
+      expect(image.data.byteLength).toBe(100 * 100 * 4 * 4); // 4 bytes per float32
+    });
+
+    it('initializes all pixels to zero', () => {
+      const image = IPImage.createEmpty(10, 10);
+
+      // All pixels should be zero
+      const arr = image.getTypedArray();
+      for (let i = 0; i < arr.length; i++) {
+        expect(arr[i]).toBe(0);
+      }
+    });
+  });
+
+  describe('data type memory allocation', () => {
+    const testCases: { dataType: DataType; bytesPerComponent: number }[] = [
+      { dataType: 'uint8', bytesPerComponent: 1 },
+      { dataType: 'uint16', bytesPerComponent: 2 },
+      { dataType: 'float32', bytesPerComponent: 4 },
+    ];
+
+    testCases.forEach(({ dataType, bytesPerComponent }) => {
+      it(`allocates correct buffer size for ${dataType}`, () => {
+        const width = 100;
+        const height = 50;
+        const channels = 4;
+
+        const image = new IPImage({
+          width,
+          height,
+          channels,
+          dataType,
+        });
+
+        const expectedSize = width * height * channels * bytesPerComponent;
+        expect(image.data.byteLength).toBe(expectedSize);
+      });
+    });
+  });
+
+  describe('edge cases', () => {
+    it('handles 1x1 image', () => {
+      const image = new IPImage({
+        width: 1,
+        height: 1,
+        channels: 4,
+        dataType: 'uint8',
+      });
+
+      image.setPixel(0, 0, [255, 255, 255, 255]);
+      expect(image.getPixel(0, 0)).toEqual([255, 255, 255, 255]);
+    });
+
+    it('handles grayscale image (1 channel)', () => {
+      const image = new IPImage({
+        width: 2,
+        height: 2,
+        channels: 1,
+        dataType: 'uint8',
+      });
+
+      image.setPixel(0, 0, [128]);
+      expect(image.getPixel(0, 0)).toEqual([128]);
+    });
+
+    it('handles very large dimensions', () => {
+      // 4K image
+      const image = new IPImage({
+        width: 3840,
+        height: 2160,
+        channels: 4,
+        dataType: 'uint8',
+      });
+
+      expect(image.data.byteLength).toBe(3840 * 2160 * 4);
+    });
+  });
+});

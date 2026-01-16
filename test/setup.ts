@@ -107,6 +107,29 @@ HTMLCanvasElement.prototype.getContext = vi.fn(function (
   return null;
 }) as typeof HTMLCanvasElement.prototype.getContext;
 
+// Mock HTMLCanvasElement.toDataURL since jsdom doesn't support it without canvas npm package
+HTMLCanvasElement.prototype.toDataURL = vi.fn(function (
+  this: HTMLCanvasElement,
+  type?: string,
+  _quality?: unknown
+) {
+  // Return a valid data URL for testing
+  const mimeType = type || 'image/png';
+  return `data:${mimeType};base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==`;
+}) as typeof HTMLCanvasElement.prototype.toDataURL;
+
+// Mock HTMLCanvasElement.toBlob
+HTMLCanvasElement.prototype.toBlob = vi.fn(function (
+  this: HTMLCanvasElement,
+  callback: BlobCallback,
+  type?: string,
+  _quality?: unknown
+) {
+  const mimeType = type || 'image/png';
+  const blob = new Blob(['mock-image-data'], { type: mimeType });
+  setTimeout(() => callback(blob), 0);
+}) as typeof HTMLCanvasElement.prototype.toBlob;
+
 // Mock URL.createObjectURL and revokeObjectURL
 global.URL.createObjectURL = vi.fn(() => 'blob:mock-url');
 global.URL.revokeObjectURL = vi.fn();
