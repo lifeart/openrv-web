@@ -247,6 +247,41 @@ The UI has been redesigned with a modern tab-based architecture matching profess
 
 ## Session Log
 
+### 2026-01-16 (continued - Design Consistency Pass)
+- **SVG Icon System Implementation**
+  - Replaced all emoji usage with proper SVG icons across the entire codebase
+  - Centralized icon system in `src/ui/components/shared/Icons.ts` with `getIconSvg(name, size)` function
+  - Icon sizes: sm (14px), md (16px), lg (20px) with consistent 24x24 viewBox
+  - Updated components:
+    - CDLControl.ts - film-slate icon
+    - LensControl.ts - aperture icon
+    - FilterControl.ts - sliders icon
+    - ColorControls.ts - palette icon
+    - StackControl.ts - layers, eye, eye-off, chevron-up, chevron-down, x icons
+    - VolumeControl.ts - volume-mute, volume-low, volume-high icons (state-based)
+    - Timeline.ts - replaced emojis with text labels ([VID], [IMG], > Playing, || Paused)
+    - Viewer.ts - folder-open icon for drop overlay
+    - TransformControl.ts - rotate-ccw, rotate-cw, flip-horizontal, flip-vertical, reset icons
+    - CropControl.ts - crop icon
+    - WipeControl.ts - columns, split-vertical, split-horizontal icons (state-based)
+
+- **Flat Design Consistency**
+  - Unified button styling across all components:
+    - Default: `background: transparent; border: 1px solid transparent; color: #999;`
+    - Hover: `background: #3a3a3a; border-color: #4a4a4a; color: #ccc;`
+    - Active: `background: rgba(74, 158, 255, 0.15); border-color: #4a9eff; color: #4a9eff;`
+  - Removed boxed container styling from PaintToolbar (was: background, border, border-radius)
+  - Removed border-left styling from TransformControl
+  - All containers now use simple flex layout without visible boxing
+
+- **Divider Standardization**
+  - Reduced PaintToolbar separators from 5 to 2 by logical grouping:
+    - Group 1: Tools (hand, pen, eraser, text)
+    - Group 2: Brush Settings (brush type, color picker, presets, width)
+    - Group 3: Actions (ghost, undo, redo, clear)
+  - Consistent 1-2 dividers per section based on logical grouping
+  - Divider style: `width: 1px; height: 18px; background: #3a3a3a; margin: 0 2px;`
+
 ### 2026-01-16 (continued)
 - **UI Fixes and Unification**
   - Fixed z-index issues for all dropdown panels (StackControl, ColorControls, CDLControl, FilterControl, LensControl, ExportControl)
