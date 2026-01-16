@@ -6,6 +6,7 @@ import { PaintEngine } from './paint/PaintEngine';
 import { PaintToolbar } from './ui/components/PaintToolbar';
 import { ColorControls } from './ui/components/ColorControls';
 import { WipeControl } from './ui/components/WipeControl';
+import { VolumeControl } from './ui/components/VolumeControl';
 
 export class App {
   private container: HTMLElement | null = null;
@@ -17,6 +18,7 @@ export class App {
   private paintToolbar: PaintToolbar;
   private colorControls: ColorControls;
   private wipeControl: WipeControl;
+  private volumeControl: VolumeControl;
   private animationId: number | null = null;
 
   constructor() {
@@ -37,9 +39,26 @@ export class App {
       this.viewer.setColorAdjustments(adjustments);
     });
 
+    // Connect LUT events
+    this.colorControls.on('lutLoaded', (lut) => {
+      this.viewer.setLUT(lut);
+    });
+    this.colorControls.on('lutIntensityChanged', (intensity) => {
+      this.viewer.setLUTIntensity(intensity);
+    });
+
     // Connect wipe control to viewer
     this.wipeControl.on('stateChanged', (state) => {
       this.viewer.setWipeState(state);
+    });
+
+    // Initialize volume control and connect to session
+    this.volumeControl = new VolumeControl();
+    this.volumeControl.on('volumeChanged', (volume) => {
+      this.session.volume = volume;
+    });
+    this.volumeControl.on('mutedChanged', (muted) => {
+      this.session.muted = muted;
     });
   }
 
@@ -71,11 +90,13 @@ export class App {
     const paintToolbarEl = this.paintToolbar.render();
     const colorControlsEl = this.colorControls.render();
     const wipeControlEl = this.wipeControl.render();
+    const volumeControlEl = this.volumeControl.render();
 
     toolbarRow.appendChild(toolbarEl);
     toolbarRow.appendChild(paintToolbarEl);
     toolbarRow.appendChild(colorControlsEl);
     toolbarRow.appendChild(wipeControlEl);
+    toolbarRow.appendChild(volumeControlEl);
 
     const viewerEl = this.viewer.getElement();
     const timelineEl = this.timeline.render();
@@ -249,5 +270,6 @@ export class App {
     this.paintToolbar.dispose();
     this.colorControls.dispose();
     this.wipeControl.dispose();
+    this.volumeControl.dispose();
   }
 }

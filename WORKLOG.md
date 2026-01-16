@@ -83,6 +83,23 @@
 - [x] Keyboard shortcut (W) to cycle wipe modes
 - [x] Integration with color adjustments (original vs adjusted comparison)
 
+### Phase 8: Audio Support ✅
+- [x] VolumeControl component (`src/ui/components/VolumeControl.ts`)
+- [x] Volume slider with hover reveal
+- [x] Mute toggle button with icon states (🔇🔈🔉🔊)
+- [x] Session volume/mute state management
+- [x] Video element volume sync
+- [x] Keyboard shortcuts help updated
+
+### Phase 9: LUT Support ✅
+- [x] LUT loader for .cube files (`src/color/LUTLoader.ts`)
+- [x] 3D LUT parsing with trilinear interpolation support
+- [x] LUT section in ColorControls panel
+- [x] LUT load button and file picker
+- [x] LUT intensity slider
+- [x] LUT indicator badge in viewer
+- [x] Clear LUT button
+
 ---
 
 ## Not Started
@@ -127,4 +144,12 @@
   - Added draggable wipe line overlay
   - Canvas clip-based split rendering (original vs color-adjusted)
   - Added keyboard shortcut (W) for wipe cycling
+- **Completed Phase 8: Audio Support**
+  - Created `VolumeControl.ts` with slider and mute button
+  - Added volume/mute state to Session class
+  - Connected volume control to video element
+- **Completed Phase 9: LUT Support**
+  - Created `LUTLoader.ts` with .cube file parser
+  - Added LUT section to ColorControls with load/clear/intensity
+  - LUT indicator badge in Viewer
 - Updated CODEMAP.md feature checklist

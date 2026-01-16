@@ -1,4 +1,5 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { LUT3D, parseCubeLUT } from '../../color/LUTLoader';
 
 export interface ColorAdjustments {
   exposure: number;      // -5 to +5 stops
@@ -23,6 +24,8 @@ export const DEFAULT_COLOR_ADJUSTMENTS: ColorAdjustments = {
 export interface ColorControlsEvents extends EventMap {
   adjustmentsChanged: ColorAdjustments;
   visibilityChanged: boolean;
+  lutLoaded: LUT3D | null;
+  lutIntensityChanged: number;
 }
 
 export class ColorControls extends EventEmitter<ColorControlsEvents> {
@@ -36,6 +39,12 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
   // Slider elements for updating values
   private sliders: Map<keyof ColorAdjustments, HTMLInputElement> = new Map();
   private valueLabels: Map<keyof ColorAdjustments, HTMLSpanElement> = new Map();
+
+  // LUT state
+  private currentLUT: LUT3D | null = null;
+  private lutIntensity = 1.0;
+  private lutNameLabel: HTMLSpanElement | null = null;
+  private lutIntensitySlider: HTMLInputElement | null = null;
 
   constructor() {
     super();
@@ -157,6 +166,209 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
       const row = this.createSliderRow(config);
       this.panel.appendChild(row);
     }
+
+    // Add LUT section
+    this.createLUTSection();
+  }
+
+  private createLUTSection(): void {
+    // Separator
+    const separator = document.createElement('div');
+    separator.style.cssText = `
+      height: 1px;
+      background: #444;
+      margin: 12px 0;
+    `;
+    this.panel.appendChild(separator);
+
+    // LUT header
+    const lutHeader = document.createElement('div');
+    lutHeader.style.cssText = `
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    `;
+
+    const lutTitle = document.createElement('span');
+    lutTitle.textContent = 'LUT';
+    lutTitle.style.cssText = 'font-weight: 600; color: #eee; font-size: 12px;';
+
+    // LUT load button
+    const lutLoadBtn = document.createElement('button');
+    lutLoadBtn.textContent = 'Load .cube';
+    lutLoadBtn.title = 'Load a .cube LUT file';
+    lutLoadBtn.style.cssText = `
+      background: #555;
+      border: 1px solid #666;
+      color: #ccc;
+      padding: 3px 8px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 11px;
+    `;
+
+    // Hidden file input
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.cube';
+    fileInput.style.display = 'none';
+    fileInput.addEventListener('change', (e) => this.handleLUTFile(e));
+
+    lutLoadBtn.addEventListener('click', () => fileInput.click());
+    lutLoadBtn.addEventListener('mouseenter', () => { lutLoadBtn.style.background = '#666'; });
+    lutLoadBtn.addEventListener('mouseleave', () => { lutLoadBtn.style.background = '#555'; });
+
+    lutHeader.appendChild(lutTitle);
+    lutHeader.appendChild(lutLoadBtn);
+    lutHeader.appendChild(fileInput);
+    this.panel.appendChild(lutHeader);
+
+    // LUT name display
+    const lutNameRow = document.createElement('div');
+    lutNameRow.style.cssText = `
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px;
+      gap: 8px;
+    `;
+
+    const lutLabel = document.createElement('label');
+    lutLabel.textContent = 'Active:';
+    lutLabel.style.cssText = `
+      color: #888;
+      font-size: 11px;
+      width: 50px;
+    `;
+
+    this.lutNameLabel = document.createElement('span');
+    this.lutNameLabel.textContent = 'None';
+    this.lutNameLabel.style.cssText = `
+      color: #aaa;
+      font-size: 11px;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    `;
+
+    // Clear LUT button
+    const clearBtn = document.createElement('button');
+    clearBtn.textContent = '✕';
+    clearBtn.title = 'Remove LUT';
+    clearBtn.style.cssText = `
+      background: transparent;
+      border: none;
+      color: #888;
+      padding: 2px 6px;
+      cursor: pointer;
+      font-size: 12px;
+      visibility: hidden;
+    `;
+    clearBtn.addEventListener('click', () => this.clearLUT());
+
+    lutNameRow.appendChild(lutLabel);
+    lutNameRow.appendChild(this.lutNameLabel);
+    lutNameRow.appendChild(clearBtn);
+    this.panel.appendChild(lutNameRow);
+
+    // Store reference to clear button for visibility toggle
+    (this.lutNameLabel as HTMLElement & { clearBtn?: HTMLButtonElement }).clearBtn = clearBtn;
+
+    // LUT intensity slider
+    const intensityRow = document.createElement('div');
+    intensityRow.style.cssText = `
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    `;
+
+    const intensityLabel = document.createElement('label');
+    intensityLabel.textContent = 'Intensity';
+    intensityLabel.style.cssText = `
+      color: #bbb;
+      font-size: 12px;
+      width: 80px;
+      flex-shrink: 0;
+    `;
+
+    this.lutIntensitySlider = document.createElement('input');
+    this.lutIntensitySlider.type = 'range';
+    this.lutIntensitySlider.min = '0';
+    this.lutIntensitySlider.max = '1';
+    this.lutIntensitySlider.step = '0.01';
+    this.lutIntensitySlider.value = '1';
+    this.lutIntensitySlider.style.cssText = `
+      flex: 1;
+      height: 4px;
+      cursor: pointer;
+      accent-color: #4a9eff;
+    `;
+
+    const intensityValue = document.createElement('span');
+    intensityValue.textContent = '100%';
+    intensityValue.style.cssText = `
+      color: #888;
+      font-size: 11px;
+      width: 50px;
+      text-align: right;
+      font-family: monospace;
+    `;
+
+    this.lutIntensitySlider.addEventListener('input', () => {
+      this.lutIntensity = parseFloat(this.lutIntensitySlider!.value);
+      intensityValue.textContent = `${Math.round(this.lutIntensity * 100)}%`;
+      this.emit('lutIntensityChanged', this.lutIntensity);
+    });
+
+    intensityRow.appendChild(intensityLabel);
+    intensityRow.appendChild(this.lutIntensitySlider);
+    intensityRow.appendChild(intensityValue);
+    this.panel.appendChild(intensityRow);
+  }
+
+  private async handleLUTFile(e: Event): Promise<void> {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    try {
+      const content = await file.text();
+      const lut = parseCubeLUT(content);
+      this.setLUT(lut);
+    } catch (err) {
+      console.error('Failed to load LUT:', err);
+      alert(`Failed to load LUT: ${err instanceof Error ? err.message : err}`);
+    }
+
+    // Reset input
+    input.value = '';
+  }
+
+  setLUT(lut: LUT3D | null): void {
+    this.currentLUT = lut;
+
+    if (this.lutNameLabel) {
+      this.lutNameLabel.textContent = lut ? lut.title : 'None';
+      const clearBtn = (this.lutNameLabel as HTMLElement & { clearBtn?: HTMLButtonElement }).clearBtn;
+      if (clearBtn) {
+        clearBtn.style.visibility = lut ? 'visible' : 'hidden';
+      }
+    }
+
+    this.emit('lutLoaded', lut);
+  }
+
+  clearLUT(): void {
+    this.setLUT(null);
+  }
+
+  getLUT(): LUT3D | null {
+    return this.currentLUT;
+  }
+
+  getLUTIntensity(): number {
+    return this.lutIntensity;
   }
 
   private createSliderRow(config: {

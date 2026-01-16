@@ -248,7 +248,11 @@ Dbl-click - Reset individual slider
 
 WIPE COMPARISON
 W         - Cycle wipe mode (off/horizontal/vertical)
-Drag line - Adjust wipe position`);
+Drag line - Adjust wipe position
+
+AUDIO (Video only)
+Hover vol - Show volume slider
+Click icon- Toggle mute`);
   }
 
   private bindEvents(): void {

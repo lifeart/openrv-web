@@ -424,7 +424,7 @@ const annotations = dto.byProtocol('RVPaint');
 - [ ] Filter effects
 
 ### Phase 4
-- [ ] Audio playback
-- [ ] LUT support
+- [x] Audio playback (video volume control with mute)
+- [x] LUT support (.cube 3D LUT loading with intensity control)
 - [ ] Advanced color (CDL, curves)
 - [ ] Export capabilities

@@ -4,6 +4,7 @@ import { PaintRenderer } from '../../paint/PaintRenderer';
 import { StrokePoint } from '../../paint/types';
 import { ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from './ColorControls';
 import { WipeState, WipeMode } from './WipeControl';
+import { LUT3D } from '../../color/LUTLoader';
 
 interface PointerState {
   pointerId: number;
@@ -65,6 +66,11 @@ export class Viewer {
   private wipeState: WipeState = { mode: 'off', position: 0.5, showOriginal: 'left' };
   private wipeLine: HTMLElement | null = null;
   private isDraggingWipe = false;
+
+  // LUT
+  private currentLUT: LUT3D | null = null;
+  private lutIntensity = 1.0;
+  private lutIndicator: HTMLElement | null = null;
 
   constructor(session: Session, paintEngine: PaintEngine) {
     this.session = session;
@@ -135,6 +141,26 @@ export class Viewer {
       box-shadow: 0 0 4px rgba(74, 158, 255, 0.5);
     `;
     this.container.appendChild(this.wipeLine);
+
+    // Create LUT indicator badge
+    this.lutIndicator = document.createElement('div');
+    this.lutIndicator.className = 'lut-indicator';
+    this.lutIndicator.style.cssText = `
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: rgba(74, 158, 255, 0.8);
+      color: white;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      z-index: 60;
+      display: none;
+      pointer-events: none;
+    `;
+    this.lutIndicator.textContent = 'LUT';
+    this.container.appendChild(this.lutIndicator);
 
     // Create drop overlay
     this.dropOverlay = document.createElement('div');
@@ -867,6 +893,29 @@ export class Viewer {
     this.colorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
     this.applyColorFilters();
     this.scheduleRender();
+  }
+
+  // LUT methods
+  setLUT(lut: LUT3D | null): void {
+    this.currentLUT = lut;
+    if (this.lutIndicator) {
+      this.lutIndicator.style.display = lut ? 'block' : 'none';
+      this.lutIndicator.textContent = lut ? `LUT: ${lut.title}` : 'LUT';
+    }
+    this.scheduleRender();
+  }
+
+  getLUT(): LUT3D | null {
+    return this.currentLUT;
+  }
+
+  setLUTIntensity(intensity: number): void {
+    this.lutIntensity = Math.max(0, Math.min(1, intensity));
+    this.scheduleRender();
+  }
+
+  getLUTIntensity(): number {
+    return this.lutIntensity;
   }
 
   // Wipe comparison methods

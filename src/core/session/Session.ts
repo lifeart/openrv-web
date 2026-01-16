@@ -28,6 +28,8 @@ export interface SessionEvents extends EventMap {
   playDirectionChanged: number;
   marksChanged: ReadonlySet<number>;
   annotationsLoaded: ParsedAnnotations;
+  volumeChanged: number;
+  mutedChanged: boolean;
 }
 
 export type LoopMode = 'once' | 'loop' | 'pingpong';
@@ -53,6 +55,8 @@ export class Session extends EventEmitter<SessionEvents> {
   private _playDirection = 1;
   private _loopMode: LoopMode = 'loop';
   private _marks = new Set<number>();
+  private _volume = 0.7;
+  private _muted = false;
 
   private lastFrameTime = 0;
   private frameAccumulator = 0;
@@ -117,6 +121,43 @@ export class Session extends EventEmitter<SessionEvents> {
 
   get marks(): ReadonlySet<number> {
     return this._marks;
+  }
+
+  get volume(): number {
+    return this._volume;
+  }
+
+  set volume(value: number) {
+    const clamped = Math.max(0, Math.min(1, value));
+    if (clamped !== this._volume) {
+      this._volume = clamped;
+      this.applyVolumeToVideo();
+      this.emit('volumeChanged', this._volume);
+    }
+  }
+
+  get muted(): boolean {
+    return this._muted;
+  }
+
+  set muted(value: boolean) {
+    if (value !== this._muted) {
+      this._muted = value;
+      this.applyVolumeToVideo();
+      this.emit('mutedChanged', this._muted);
+    }
+  }
+
+  toggleMute(): void {
+    this.muted = !this._muted;
+  }
+
+  private applyVolumeToVideo(): void {
+    const source = this.currentSource;
+    if (source?.type === 'video' && source.element instanceof HTMLVideoElement) {
+      source.element.volume = this._muted ? 0 : this._volume;
+      source.element.muted = this._muted;
+    }
   }
 
   get currentSource(): MediaSource | null {
@@ -711,7 +752,8 @@ export class Session extends EventEmitter<SessionEvents> {
       const video = document.createElement('video');
       video.crossOrigin = 'anonymous';
       video.preload = 'auto';
-      video.muted = false;
+      video.muted = this._muted;
+      video.volume = this._muted ? 0 : this._volume;
       video.loop = false;
       video.playsInline = true; // Required for iOS and some browsers
 
