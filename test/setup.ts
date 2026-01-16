@@ -156,6 +156,18 @@ Object.defineProperty(global.Image.prototype, 'src', {
   },
 });
 
+// Polyfill File.text() if not available
+if (typeof File.prototype.text !== 'function') {
+  File.prototype.text = function () {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(this);
+    });
+  };
+}
+
 // Console warning suppression for expected warnings in tests
 const originalWarn = console.warn;
 console.warn = (...args: unknown[]) => {
