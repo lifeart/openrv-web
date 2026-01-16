@@ -37,14 +37,12 @@ export class PaintToolbar {
 
     this.addSeparator();
 
-    // Brush type toggle
+    // Brush settings group: brush type, color, width
     this.brushButton = this.createIconButton('circle', 'Toggle soft/hard brush (B)', () => {
       this.paintEngine.brush = this.paintEngine.brush === BrushType.Circle
         ? BrushType.Gaussian
         : BrushType.Circle;
     });
-
-    this.addSeparator();
 
     // Color picker
     this.colorPicker = document.createElement('input');
@@ -59,6 +57,7 @@ export class PaintToolbar {
       padding: 2px;
       cursor: pointer;
       background: #2a2a2a;
+      margin-left: 4px;
     `;
     this.colorPicker.addEventListener('input', () => {
       this.paintEngine.color = this.hexToRgba(this.colorPicker.value);
@@ -93,12 +92,10 @@ export class PaintToolbar {
       this.container.appendChild(preset);
     }
 
-    this.addSeparator();
-
     // Width slider
     this.widthLabel = document.createElement('span');
     this.widthLabel.textContent = `${this.paintEngine.width}`;
-    this.widthLabel.style.cssText = 'color: #888; font-size: 10px; min-width: 20px; text-align: right;';
+    this.widthLabel.style.cssText = 'color: #888; font-size: 10px; min-width: 20px; text-align: right; margin-left: 8px;';
     this.container.appendChild(this.widthLabel);
 
     this.widthSlider = document.createElement('input');
@@ -121,19 +118,15 @@ export class PaintToolbar {
 
     this.addSeparator();
 
-    // Ghost mode toggle
+    // Actions group: ghost, undo, redo, clear
     this.ghostButton = this.createIconButton('ghost', 'Toggle ghost mode (G)', () => {
       const effects = this.paintEngine.effects;
       this.paintEngine.setGhostMode(!effects.ghost, effects.ghostBefore, effects.ghostAfter);
     });
 
-    this.addSeparator();
-
-    // Undo/Redo
     this.createIconButton('undo', 'Undo (Ctrl+Z)', () => this.paintEngine.undo());
     this.createIconButton('redo', 'Redo (Ctrl+Y)', () => this.paintEngine.redo());
 
-    // Clear frame
     this.createIconButton('trash', 'Clear frame annotations', async () => {
       const confirmed = await showConfirm('Clear all annotations on this frame?', {
         title: 'Clear Annotations',
