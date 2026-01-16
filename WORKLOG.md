@@ -1,6 +1,6 @@
 # OpenRV Web - Work Log
 
-## Current Status: Audio Waveform Display Complete
+## Current Status: ASC CDL Color Correction Complete
 
 ---
 
@@ -179,6 +179,16 @@
 - [x] Automatic loading when video is loaded
 - [x] Graceful fallback when audio extraction fails
 
+### Phase 18: ASC CDL Color Correction ✅
+- [x] CDL utility (`src/color/CDL.ts`) with types and transformation functions
+- [x] CDLControl component (`src/ui/components/CDLControl.ts`)
+- [x] Per-channel RGB sliders for Slope, Offset, Power
+- [x] Global Saturation slider
+- [x] Load/Save CDL files (.cdl XML format)
+- [x] Reset button to clear all adjustments
+- [x] Canvas-based CDL application with Rec. 709 luminance
+- [x] Button highlights when CDL is active
+
 ---
 
 ## Not Started
@@ -265,3 +275,8 @@
   - Peak data calculation for efficient rendering
   - Integrated waveform display into Timeline component
   - Automatic loading when video source is loaded
+- **Completed Phase 18: ASC CDL Color Correction**
+  - Created `CDL.ts` with ASC CDL types, formulas, and XML parsing
+  - Created `CDLControl.ts` with RGB channel sliders for Slope/Offset/Power
+  - Added Saturation slider and Load/Save CDL file support
+  - Applied CDL via canvas ImageData manipulation in Viewer

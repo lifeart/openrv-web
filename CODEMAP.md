@@ -428,6 +428,6 @@ const annotations = dto.byProtocol('RVPaint');
 - [x] Audio playback (video volume control with mute)
 - [x] Audio waveform display (timeline visualization for video audio)
 - [x] LUT support (.cube 3D LUT loading with intensity control)
-- [ ] Advanced color (CDL, curves)
+- [x] Advanced color (ASC CDL with slope/offset/power/saturation, .cdl file support)
 - [x] Export capabilities (PNG/JPEG/WebP with annotations, clipboard copy)
 - [x] Sequence export (in/out range or all frames with progress)

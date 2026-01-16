@@ -8,6 +8,7 @@ import { Transform2D, DEFAULT_TRANSFORM } from './TransformControl';
 import { FilterSettings, DEFAULT_FILTER_SETTINGS } from './FilterControl';
 import { CropState, CropRegion, DEFAULT_CROP_STATE, DEFAULT_CROP_REGION } from './CropControl';
 import { LUT3D } from '../../color/LUTLoader';
+import { CDLValues, DEFAULT_CDL, isDefaultCDL, applyCDLToImageData } from '../../color/CDL';
 import { ExportFormat, exportCanvas as doExportCanvas, copyCanvasToClipboard } from '../../utils/FrameExporter';
 import { filterImageFiles } from '../../utils/SequenceLoader';
 
@@ -87,6 +88,9 @@ export class Viewer {
   private cropState: CropState = { ...DEFAULT_CROP_STATE, region: { ...DEFAULT_CROP_REGION } };
   private cropOverlay: HTMLCanvasElement | null = null;
   private cropCtx: CanvasRenderingContext2D | null = null;
+
+  // CDL state
+  private cdlValues: CDLValues = JSON.parse(JSON.stringify(DEFAULT_CDL));
 
   constructor(session: Session, paintEngine: PaintEngine) {
     this.session = session;
@@ -810,7 +814,12 @@ export class Viewer {
         this.drawWithTransform(this.imageCtx, element, displayWidth, displayHeight);
       }
 
-      // Apply sharpen filter (pixel-level operation, applied after drawing)
+      // Apply CDL color correction (pixel-level operation)
+      if (!isDefaultCDL(this.cdlValues)) {
+        this.applyCDL(this.imageCtx, displayWidth, displayHeight);
+      }
+
+      // Apply sharpen filter (pixel-level operation, applied after CDL)
       if (this.filterSettings.sharpen > 0) {
         this.applySharpen(this.imageCtx, displayWidth, displayHeight);
       }
@@ -1173,6 +1182,32 @@ export class Viewer {
   setCropEnabled(enabled: boolean): void {
     this.cropState.enabled = enabled;
     this.scheduleRender();
+  }
+
+  // CDL methods
+  setCDL(cdl: CDLValues): void {
+    this.cdlValues = JSON.parse(JSON.stringify(cdl));
+    this.scheduleRender();
+  }
+
+  getCDL(): CDLValues {
+    return JSON.parse(JSON.stringify(this.cdlValues));
+  }
+
+  resetCDL(): void {
+    this.cdlValues = JSON.parse(JSON.stringify(DEFAULT_CDL));
+    this.scheduleRender();
+  }
+
+  /**
+   * Apply CDL color correction to the canvas
+   */
+  private applyCDL(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+    if (isDefaultCDL(this.cdlValues)) return;
+
+    const imageData = ctx.getImageData(0, 0, width, height);
+    applyCDLToImageData(imageData, this.cdlValues);
+    ctx.putImageData(imageData, 0, 0);
   }
 
   private renderCropOverlay(): void {

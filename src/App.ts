@@ -11,6 +11,7 @@ import { ExportControl } from './ui/components/ExportControl';
 import { TransformControl } from './ui/components/TransformControl';
 import { FilterControl } from './ui/components/FilterControl';
 import { CropControl } from './ui/components/CropControl';
+import { CDLControl } from './ui/components/CDLControl';
 import { exportSequence } from './utils/SequenceExporter';
 
 export class App {
@@ -28,6 +29,7 @@ export class App {
   private transformControl: TransformControl;
   private filterControl: FilterControl;
   private cropControl: CropControl;
+  private cdlControl: CDLControl;
   private animationId: number | null = null;
 
   constructor() {
@@ -102,6 +104,12 @@ export class App {
     this.cropControl.on('cropModeToggled', (enabled) => {
       this.viewer.setCropEnabled(enabled);
     });
+
+    // Initialize CDL control
+    this.cdlControl = new CDLControl();
+    this.cdlControl.on('cdlChanged', (cdl) => {
+      this.viewer.setCDL(cdl);
+    });
   }
 
   mount(selector: string): void {
@@ -131,6 +139,7 @@ export class App {
     toolbarEl.style.borderBottom = 'none';
     const paintToolbarEl = this.paintToolbar.render();
     const colorControlsEl = this.colorControls.render();
+    const cdlControlEl = this.cdlControl.render();
     const filterControlEl = this.filterControl.render();
     const cropControlEl = this.cropControl.render();
     const wipeControlEl = this.wipeControl.render();
@@ -141,6 +150,7 @@ export class App {
     toolbarRow.appendChild(toolbarEl);
     toolbarRow.appendChild(paintToolbarEl);
     toolbarRow.appendChild(colorControlsEl);
+    toolbarRow.appendChild(cdlControlEl);
     toolbarRow.appendChild(filterControlEl);
     toolbarRow.appendChild(cropControlEl);
     toolbarRow.appendChild(wipeControlEl);
@@ -572,6 +582,7 @@ export class App {
     this.transformControl.dispose();
     this.filterControl.dispose();
     this.cropControl.dispose();
+    this.cdlControl.dispose();
     this.volumeControl.dispose();
     this.exportControl.dispose();
   }
