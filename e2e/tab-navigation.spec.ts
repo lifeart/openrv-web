@@ -1,69 +1,109 @@
-import { test, expect, clickTab, loadVideoFile } from './fixtures';
+import { test, expect } from '@playwright/test';
+import {
+  loadVideoFile,
+  waitForTestHelper,
+  getSessionState,
+  getViewerState,
+  getPaintState,
+  getTransformState,
+  getColorState,
+  captureViewerScreenshot,
+  imagesAreDifferent,
+} from './fixtures';
+
+/**
+ * Tab Navigation Tests
+ *
+ * Each test verifies that tab switching actually changes toolbar content
+ * and that controls on each tab are functional.
+ */
 
 test.describe('Tab Navigation', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await page.waitForSelector('#app');
+    await waitForTestHelper(page);
   });
 
   test.describe('Mouse Navigation', () => {
-    test('TAB-001: should switch to View tab on click', async ({ page }) => {
-      await page.click('button:has-text("View")');
+    test('TAB-001: should switch to View tab and show zoom controls', async ({ page }) => {
+      await page.click('button[data-tab-id="view"]');
       await page.waitForTimeout(100);
 
-      const viewTab = page.locator('button:has-text("View")');
+      const viewTab = page.locator('button[data-tab-id="view"]');
       const className = await viewTab.getAttribute('class');
       expect(className).toContain('active');
+
+      // Verify zoom controls are visible
+      const fitButton = page.locator('button:has-text("Fit")');
+      await expect(fitButton).toBeVisible();
+
+      const zoom100 = page.locator('button:has-text("100%")');
+      await expect(zoom100).toBeVisible();
     });
 
-    test('TAB-002: should switch to Color tab on click', async ({ page }) => {
-      await page.click('button:has-text("Color")');
+    test('TAB-002: should switch to Color tab and show color controls', async ({ page }) => {
+      await page.click('button[data-tab-id="color"]');
       await page.waitForTimeout(100);
 
-      const colorTab = page.locator('button:has-text("Color")');
+      const colorTab = page.locator('button[data-tab-id="color"]');
       const className = await colorTab.getAttribute('class');
       expect(className).toContain('active');
+
+      // Color controls should be visible
+      const colorButton = page.locator('button[title*="color"], button[title*="Color"]').first();
+      await expect(colorButton).toBeVisible();
     });
 
-    test('TAB-003: should switch to Effects tab on click', async ({ page }) => {
-      await page.click('button:has-text("Effects")');
+    test('TAB-003: should switch to Effects tab and show filter controls', async ({ page }) => {
+      await page.click('button[data-tab-id="effects"]');
       await page.waitForTimeout(100);
 
-      const effectsTab = page.locator('button:has-text("Effects")');
+      const effectsTab = page.locator('button[data-tab-id="effects"]');
       const className = await effectsTab.getAttribute('class');
       expect(className).toContain('active');
+
+      // Effects controls should be visible
+      const filterButton = page.locator('button[title*="Filter"], button[title*="filter"]').first();
+      await expect(filterButton).toBeVisible();
     });
 
-    test('TAB-004: should switch to Transform tab on click', async ({ page }) => {
-      await page.click('button:has-text("Transform")');
+    test('TAB-004: should switch to Transform tab and show rotation/flip controls', async ({ page }) => {
+      await page.click('button[data-tab-id="transform"]');
       await page.waitForTimeout(100);
 
-      const transformTab = page.locator('button:has-text("Transform")');
+      const transformTab = page.locator('button[data-tab-id="transform"]');
       const className = await transformTab.getAttribute('class');
       expect(className).toContain('active');
+
+      // Transform controls should be visible
+      const rotateButton = page.locator('button[title*="Rotate"]').first();
+      await expect(rotateButton).toBeVisible();
     });
 
-    test('TAB-005: should switch to Annotate tab on click', async ({ page }) => {
-      await page.click('button:has-text("Annotate")');
+    test('TAB-005: should switch to Annotate tab and show paint tools', async ({ page }) => {
+      await page.click('button[data-tab-id="annotate"]');
       await page.waitForTimeout(100);
 
-      const annotateTab = page.locator('button:has-text("Annotate")');
+      const annotateTab = page.locator('button[data-tab-id="annotate"]');
       const className = await annotateTab.getAttribute('class');
       expect(className).toContain('active');
+
+      // Pen tool should be available
+      const state = await getPaintState(page);
+      expect(['pan', 'pen', 'eraser', 'text']).toContain(state.currentTool);
     });
   });
 
   test.describe('Keyboard Navigation', () => {
     test('TAB-010: should switch to View tab with 1 key', async ({ page }) => {
-      // First switch to another tab
-      await page.click('button:has-text("Color")');
+      await page.click('button[data-tab-id="color"]');
       await page.waitForTimeout(100);
 
-      // Press 1 for View tab
       await page.keyboard.press('1');
       await page.waitForTimeout(100);
 
-      const viewTab = page.locator('button:has-text("View")');
+      const viewTab = page.locator('button[data-tab-id="view"]');
       const className = await viewTab.getAttribute('class');
       expect(className).toContain('active');
     });
@@ -72,7 +112,7 @@ test.describe('Tab Navigation', () => {
       await page.keyboard.press('2');
       await page.waitForTimeout(100);
 
-      const colorTab = page.locator('button:has-text("Color")');
+      const colorTab = page.locator('button[data-tab-id="color"]');
       const className = await colorTab.getAttribute('class');
       expect(className).toContain('active');
     });
@@ -81,7 +121,7 @@ test.describe('Tab Navigation', () => {
       await page.keyboard.press('3');
       await page.waitForTimeout(100);
 
-      const effectsTab = page.locator('button:has-text("Effects")');
+      const effectsTab = page.locator('button[data-tab-id="effects"]');
       const className = await effectsTab.getAttribute('class');
       expect(className).toContain('active');
     });
@@ -90,7 +130,7 @@ test.describe('Tab Navigation', () => {
       await page.keyboard.press('4');
       await page.waitForTimeout(100);
 
-      const transformTab = page.locator('button:has-text("Transform")');
+      const transformTab = page.locator('button[data-tab-id="transform"]');
       const className = await transformTab.getAttribute('class');
       expect(className).toContain('active');
     });
@@ -99,109 +139,206 @@ test.describe('Tab Navigation', () => {
       await page.keyboard.press('5');
       await page.waitForTimeout(100);
 
-      const annotateTab = page.locator('button:has-text("Annotate")');
+      const annotateTab = page.locator('button[data-tab-id="annotate"]');
       const className = await annotateTab.getAttribute('class');
       expect(className).toContain('active');
     });
   });
 
-  test.describe('Context Toolbar Changes', () => {
-    test('TAB-020: View tab should show zoom and wipe controls', async ({ page }) => {
-      await page.click('button:has-text("View")');
+  test.describe('Context Toolbar Functionality', () => {
+    test('TAB-020: View tab zoom controls should update zoom state', async ({ page }) => {
+      await loadVideoFile(page);
+      await page.click('button[data-tab-id="view"]');
       await page.waitForTimeout(100);
 
-      // Should show Fit button for zoom
+      // Click 200% zoom
+      const zoom200 = page.locator('button:has-text("200%")');
+      await zoom200.click();
+      await page.waitForTimeout(100);
+
+      let state = await getViewerState(page);
+      expect(state.zoom).toBe(2);
+
+      // Click Fit
       const fitButton = page.locator('button:has-text("Fit")');
-      await expect(fitButton).toBeVisible();
+      await fitButton.click();
+      await page.waitForTimeout(100);
 
-      // Should show zoom percentage buttons
-      const zoom100 = page.locator('button:has-text("100%")');
-      await expect(zoom100).toBeVisible();
+      state = await getViewerState(page);
+      expect(state.zoom).toBeLessThan(2);
     });
 
-    test('TAB-021: Color tab should show color adjustment controls', async ({ page }) => {
-      await page.click('button:has-text("Color")');
+    test('TAB-021: Color tab controls should update color state', async ({ page }) => {
+      await loadVideoFile(page);
+      await page.click('button[data-tab-id="color"]');
+      await page.waitForTimeout(100);
+
+      // Open color panel
+      await page.keyboard.press('c');
       await page.waitForTimeout(200);
 
-      // Should have color-related controls or labels
-      // The exact selectors depend on implementation
-      const contextToolbar = page.locator('div').filter({ hasText: /Exposure|Color|CDL/ }).first();
-      await expect(contextToolbar).toBeVisible();
+      const colorPanel = page.locator('.color-controls-panel');
+      await expect(colorPanel).toBeVisible();
+
+      let state = await getColorState(page);
+      expect(state.exposure).toBe(0);
     });
 
-    test('TAB-022: Effects tab should show filter controls', async ({ page }) => {
-      await page.click('button:has-text("Effects")');
+    test('TAB-022: Effects tab filter panel should open', async ({ page }) => {
+      await loadVideoFile(page);
+      await page.click('button[data-tab-id="effects"]');
+      await page.waitForTimeout(100);
+
+      // Open filter panel
+      await page.keyboard.press('g');
       await page.waitForTimeout(200);
 
-      // Should have filter-related controls
-      const contextToolbar = page.locator('div').filter({ hasText: /Blur|Filter|Lens/ }).first();
-      await expect(contextToolbar).toBeVisible();
+      const filterPanel = page.locator('.filter-panel');
+      await expect(filterPanel).toBeVisible();
     });
 
-    test('TAB-023: Transform tab should show rotation and crop controls', async ({ page }) => {
-      await page.click('button:has-text("Transform")');
+    test('TAB-023: Transform tab rotation should update state', async ({ page }) => {
+      await loadVideoFile(page);
+      await page.click('button[data-tab-id="transform"]');
+      await page.waitForTimeout(100);
+
+      let state = await getTransformState(page);
+      expect(state.rotation).toBe(0);
+
+      const initialScreenshot = await captureViewerScreenshot(page);
+
+      // Click rotate button
+      const rotateRight = page.locator('button[title*="Rotate right"]').first();
+      await rotateRight.click();
       await page.waitForTimeout(200);
 
-      // Should have transform controls
-      const contextToolbar = page.locator('div').filter({ hasText: /Rotate|Flip|Crop/ }).first();
-      await expect(contextToolbar).toBeVisible();
+      state = await getTransformState(page);
+      expect(state.rotation).toBe(90);
+
+      // Canvas should visually change
+      const rotatedScreenshot = await captureViewerScreenshot(page);
+      expect(imagesAreDifferent(initialScreenshot, rotatedScreenshot)).toBe(true);
     });
 
-    test('TAB-024: Annotate tab should show paint tools', async ({ page }) => {
-      await page.click('button:has-text("Annotate")');
+    test('TAB-024: Annotate tab pen tool should enable drawing', async ({ page }) => {
+      await loadVideoFile(page);
+      await page.click('button[data-tab-id="annotate"]');
+      await page.waitForTimeout(100);
+
+      await page.keyboard.press('p');
+      await page.waitForTimeout(100);
+
+      let state = await getPaintState(page);
+      expect(state.currentTool).toBe('pen');
+
+      // Draw should add to annotatedFrames
+      const canvas = page.locator('canvas').first();
+      const box = await canvas.boundingBox();
+
+      const sessionState = await getSessionState(page);
+      const currentFrame = sessionState.currentFrame;
+
+      expect(state.annotatedFrames).not.toContain(currentFrame);
+
+      await page.mouse.move(box!.x + 100, box!.y + 100);
+      await page.mouse.down();
+      await page.mouse.move(box!.x + 200, box!.y + 200);
+      await page.mouse.up();
       await page.waitForTimeout(200);
 
-      // Should have paint tool selection
-      const contextToolbar = page.locator('div').filter({ hasText: /Pen|Eraser|Color/ }).first();
-      await expect(contextToolbar).toBeVisible();
+      state = await getPaintState(page);
+      expect(state.annotatedFrames).toContain(currentFrame);
+      expect(state.canUndo).toBe(true);
     });
   });
 
   test.describe('Tab State Persistence', () => {
-    test('TAB-030: should maintain controls state when switching tabs', async ({ page }) => {
+    test('TAB-030: zoom level should persist when switching tabs', async ({ page }) => {
       await loadVideoFile(page);
-      await page.waitForTimeout(500);
 
-      // Go to View tab and change zoom
-      await page.click('button:has-text("View")');
+      // Go to View tab and set zoom
+      await page.click('button[data-tab-id="view"]');
+      await page.locator('button:has-text("200%")').click();
       await page.waitForTimeout(100);
 
-      const zoom200 = page.locator('button:has-text("200%")');
-      if (await zoom200.isVisible()) {
-        await zoom200.click();
-        await page.waitForTimeout(100);
-      }
+      let state = await getViewerState(page);
+      expect(state.zoom).toBe(2);
 
       // Switch to Color tab
-      await page.click('button:has-text("Color")');
+      await page.click('button[data-tab-id="color"]');
       await page.waitForTimeout(100);
 
       // Switch back to View tab
-      await page.click('button:has-text("View")');
+      await page.click('button[data-tab-id="view"]');
       await page.waitForTimeout(100);
 
-      // Zoom level should be preserved (viewer state)
-      const canvas = page.locator('canvas').first();
-      await expect(canvas).toBeVisible();
+      // Zoom should be preserved
+      state = await getViewerState(page);
+      expect(state.zoom).toBe(2);
+    });
+
+    test('TAB-031: transform state should persist when switching tabs', async ({ page }) => {
+      await loadVideoFile(page);
+
+      // Go to Transform tab and rotate
+      await page.click('button[data-tab-id="transform"]');
+      await page.keyboard.press('Alt+r');
+      await page.waitForTimeout(200);
+
+      let state = await getTransformState(page);
+      expect(state.rotation).toBe(90);
+
+      // Switch to View tab
+      await page.click('button[data-tab-id="view"]');
+      await page.waitForTimeout(100);
+
+      // Rotation should be preserved
+      state = await getTransformState(page);
+      expect(state.rotation).toBe(90);
+    });
+
+    test('TAB-032: paint tool should persist when switching tabs', async ({ page }) => {
+      await loadVideoFile(page);
+
+      // Go to Annotate tab and select eraser
+      await page.click('button[data-tab-id="annotate"]');
+      await page.keyboard.press('e');
+      await page.waitForTimeout(100);
+
+      let state = await getPaintState(page);
+      expect(state.currentTool).toBe('eraser');
+
+      // Switch to View tab
+      await page.click('button[data-tab-id="view"]');
+      await page.waitForTimeout(100);
+
+      // Switch back to Annotate tab
+      await page.click('button[data-tab-id="annotate"]');
+      await page.waitForTimeout(100);
+
+      // Tool should be preserved
+      state = await getPaintState(page);
+      expect(state.currentTool).toBe('eraser');
     });
   });
 
   test.describe('Tab Visual Feedback', () => {
-    test('TAB-040: should highlight active tab', async ({ page }) => {
-      const tabs = ['View', 'Color', 'Effects', 'Transform', 'Annotate'];
+    test('TAB-040: only one tab should be active at a time', async ({ page }) => {
+      const tabs = ['view', 'color', 'effects', 'transform', 'annotate'];
 
       for (const tabName of tabs) {
-        await page.click(`button:has-text("${tabName}")`);
+        await page.click(`button[data-tab-id="${tabName}"]`);
         await page.waitForTimeout(100);
 
-        const tab = page.locator(`button:has-text("${tabName}")`);
-        const className = await tab.getAttribute('class');
+        // Check this tab is active
+        const activeTab = page.locator(`button[data-tab-id="${tabName}"]`);
+        const className = await activeTab.getAttribute('class');
         expect(className).toContain('active');
 
-        // Other tabs should not be active
+        // Check other tabs are not active
         for (const otherTab of tabs) {
           if (otherTab !== tabName) {
-            const other = page.locator(`button:has-text("${otherTab}")`);
+            const other = page.locator(`button[data-tab-id="${otherTab}"]`);
             const otherClass = await other.getAttribute('class');
             expect(otherClass).not.toContain('active');
           }
@@ -209,12 +346,12 @@ test.describe('Tab Navigation', () => {
       }
     });
 
-    test('TAB-041: should show hover state on tabs', async ({ page }) => {
-      const colorTab = page.locator('button:has-text("Color")');
+    test('TAB-041: tab should show hover feedback', async ({ page }) => {
+      const colorTab = page.locator('button[data-tab-id="color"]');
       await colorTab.hover();
       await page.waitForTimeout(100);
 
-      // Tab should show hover state (visual check - implementation dependent)
+      // Tab should be visible (hover state is visual - just verify no errors)
       await expect(colorTab).toBeVisible();
     });
   });

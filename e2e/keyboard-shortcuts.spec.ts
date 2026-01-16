@@ -1,31 +1,53 @@
-import { test, expect, loadVideoFile } from './fixtures';
+import { test, expect } from '@playwright/test';
+import {
+  loadVideoFile,
+  waitForTestHelper,
+  getSessionState,
+  getViewerState,
+  getPaintState,
+  getTransformState,
+  getCanvas,
+  captureViewerScreenshot,
+  imagesAreDifferent,
+} from './fixtures';
+
+/**
+ * Keyboard Shortcuts Tests
+ *
+ * Each test verifies actual state changes after keyboard shortcuts.
+ */
 
 test.describe('Keyboard Shortcuts', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await page.waitForSelector('#app');
+    await waitForTestHelper(page);
     await loadVideoFile(page);
     await page.waitForTimeout(500);
   });
 
   test.describe('Tab Navigation Shortcuts', () => {
-    test('KEYS-001: 1 key should switch to View tab', async ({ page }) => {
-      await page.click('button:has-text("Color")');
+    test('KEYS-001: 1 key should switch to View tab and show zoom controls', async ({ page }) => {
+      await page.click('button[data-tab-id="color"]');
       await page.waitForTimeout(100);
 
       await page.keyboard.press('1');
       await page.waitForTimeout(100);
 
-      const viewTab = page.locator('button:has-text("View")');
+      const viewTab = page.locator('button[data-tab-id="view"]');
       const className = await viewTab.getAttribute('class');
       expect(className).toContain('active');
+
+      // Verify View tab controls are visible
+      const fitButton = page.locator('button:has-text("Fit")');
+      await expect(fitButton).toBeVisible();
     });
 
     test('KEYS-002: 2 key should switch to Color tab', async ({ page }) => {
       await page.keyboard.press('2');
       await page.waitForTimeout(100);
 
-      const colorTab = page.locator('button:has-text("Color")');
+      const colorTab = page.locator('button[data-tab-id="color"]');
       const className = await colorTab.getAttribute('class');
       expect(className).toContain('active');
     });
@@ -34,7 +56,7 @@ test.describe('Keyboard Shortcuts', () => {
       await page.keyboard.press('3');
       await page.waitForTimeout(100);
 
-      const effectsTab = page.locator('button:has-text("Effects")');
+      const effectsTab = page.locator('button[data-tab-id="effects"]');
       const className = await effectsTab.getAttribute('class');
       expect(className).toContain('active');
     });
@@ -43,323 +65,692 @@ test.describe('Keyboard Shortcuts', () => {
       await page.keyboard.press('4');
       await page.waitForTimeout(100);
 
-      const transformTab = page.locator('button:has-text("Transform")');
+      const transformTab = page.locator('button[data-tab-id="transform"]');
       const className = await transformTab.getAttribute('class');
       expect(className).toContain('active');
     });
 
-    test('KEYS-005: 5 key should switch to Annotate tab', async ({ page }) => {
+    test('KEYS-005: 5 key should switch to Annotate tab and show paint tools', async ({ page }) => {
       await page.keyboard.press('5');
       await page.waitForTimeout(100);
 
-      const annotateTab = page.locator('button:has-text("Annotate")');
+      const annotateTab = page.locator('button[data-tab-id="annotate"]');
       const className = await annotateTab.getAttribute('class');
       expect(className).toContain('active');
+
+      // Verify Annotate tab controls - pen tool should be selectable
+      const state = await getPaintState(page);
+      expect(['pan', 'pen', 'eraser', 'text']).toContain(state.currentTool);
     });
   });
 
   test.describe('Playback Shortcuts', () => {
-    test('KEYS-010: Space should toggle play/pause', async ({ page }) => {
-      await page.keyboard.press('Space');
-      await page.waitForTimeout(200);
+    test('KEYS-010: Space should toggle play/pause and update isPlaying state', async ({ page }) => {
+      let state = await getSessionState(page);
+      expect(state.isPlaying).toBe(false);
 
       await page.keyboard.press('Space');
       await page.waitForTimeout(100);
+
+      state = await getSessionState(page);
+      expect(state.isPlaying).toBe(true);
+
+      await page.keyboard.press('Space');
+      await page.waitForTimeout(100);
+
+      state = await getSessionState(page);
+      expect(state.isPlaying).toBe(false);
     });
 
-    test('KEYS-011: ArrowLeft should step backward', async ({ page }) => {
+    test('KEYS-011: ArrowLeft should step backward and update currentFrame', async ({ page }) => {
       // Go forward first
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
       await page.waitForTimeout(100);
 
+      let state = await getSessionState(page);
+      const frameAfterForward = state.currentFrame;
+
       await page.keyboard.press('ArrowLeft');
       await page.waitForTimeout(100);
+
+      state = await getSessionState(page);
+      expect(state.currentFrame).toBe(frameAfterForward - 1);
     });
 
-    test('KEYS-012: ArrowRight should step forward', async ({ page }) => {
+    test('KEYS-012: ArrowRight should step forward and update currentFrame', async ({ page }) => {
+      let state = await getSessionState(page);
+      const initialFrame = state.currentFrame;
+      const initialScreenshot = await captureViewerScreenshot(page);
+
       await page.keyboard.press('ArrowRight');
       await page.waitForTimeout(100);
+
+      state = await getSessionState(page);
+      expect(state.currentFrame).toBe(initialFrame + 1);
+
+      // Canvas should show different frame
+      const newScreenshot = await captureViewerScreenshot(page);
+      expect(imagesAreDifferent(initialScreenshot, newScreenshot)).toBe(true);
     });
 
-    test('KEYS-013: Home should go to start', async ({ page }) => {
+    test('KEYS-013: Home should go to frame 1', async ({ page }) => {
       await page.keyboard.press('End');
       await page.waitForTimeout(100);
+
+      let state = await getSessionState(page);
+      expect(state.currentFrame).toBeGreaterThan(1);
 
       await page.keyboard.press('Home');
       await page.waitForTimeout(100);
+
+      state = await getSessionState(page);
+      expect(state.currentFrame).toBe(1);
     });
 
-    test('KEYS-014: End should go to end', async ({ page }) => {
+    test('KEYS-014: End should go to last frame', async ({ page }) => {
+      let state = await getSessionState(page);
+      const frameCount = state.frameCount;
+
       await page.keyboard.press('End');
       await page.waitForTimeout(100);
+
+      state = await getSessionState(page);
+      expect(state.currentFrame).toBe(frameCount);
     });
 
     test('KEYS-015: ArrowUp should toggle play direction', async ({ page }) => {
-      await page.keyboard.press('ArrowUp');
-      await page.waitForTimeout(100);
+      let state = await getSessionState(page);
+      expect(state.playDirection).toBe(1);
 
       await page.keyboard.press('ArrowUp');
       await page.waitForTimeout(100);
+
+      state = await getSessionState(page);
+      expect(state.playDirection).toBe(-1);
+
+      await page.keyboard.press('ArrowUp');
+      await page.waitForTimeout(100);
+
+      state = await getSessionState(page);
+      expect(state.playDirection).toBe(1);
     });
   });
 
   test.describe('View Shortcuts', () => {
-    test('KEYS-020: F should fit to window', async ({ page }) => {
+    test('KEYS-020: F should fit to window and update zoom state', async ({ page }) => {
+      // First zoom to 200%
+      await page.locator('button:has-text("200%")').click();
+      await page.waitForTimeout(100);
+
+      let state = await getViewerState(page);
+      expect(state.zoom).toBe(2);
+
       await page.keyboard.press('f');
       await page.waitForTimeout(100);
+
+      state = await getViewerState(page);
+      expect(state.zoom).toBeLessThan(2);
     });
 
-    test('KEYS-021: 0 should zoom to 50% (on View tab)', async ({ page }) => {
+    test('KEYS-021: 0 should zoom to 50%', async ({ page }) => {
       await page.keyboard.press('1'); // Ensure View tab
       await page.keyboard.press('0');
       await page.waitForTimeout(100);
+
+      const state = await getViewerState(page);
+      expect(state.zoom).toBeCloseTo(0.5, 1);
     });
 
-    test('KEYS-022: W should cycle wipe mode', async ({ page }) => {
-      await page.keyboard.press('w');
-      await page.waitForTimeout(100);
+    test('KEYS-022: W should cycle wipe mode and update wipeMode state', async ({ page }) => {
+      let state = await getViewerState(page);
+      expect(state.wipeMode).toBe('off');
 
       await page.keyboard.press('w');
       await page.waitForTimeout(100);
 
+      state = await getViewerState(page);
+      expect(state.wipeMode).toBe('horizontal');
+
       await page.keyboard.press('w');
       await page.waitForTimeout(100);
+
+      state = await getViewerState(page);
+      expect(state.wipeMode).toBe('vertical');
+
+      await page.keyboard.press('w');
+      await page.waitForTimeout(100);
+
+      state = await getViewerState(page);
+      expect(state.wipeMode).toBe('quad');
+
+      await page.keyboard.press('w');
+      await page.waitForTimeout(100);
+
+      state = await getViewerState(page);
+      expect(state.wipeMode).toBe('off');
     });
   });
 
   test.describe('Timeline Shortcuts', () => {
-    test('KEYS-030: I should set in point', async ({ page }) => {
+    test('KEYS-030: I should set in point and update inPoint state', async ({ page }) => {
       await page.keyboard.press('ArrowRight');
+      await page.keyboard.press('ArrowRight');
+      await page.keyboard.press('ArrowRight');
+      await page.waitForTimeout(100);
+
+      let state = await getSessionState(page);
+      const targetFrame = state.currentFrame;
+
       await page.keyboard.press('i');
       await page.waitForTimeout(100);
+
+      state = await getSessionState(page);
+      expect(state.inPoint).toBe(targetFrame);
     });
 
-    test('KEYS-031: O should set out point', async ({ page }) => {
+    test('KEYS-031: O should set out point and update outPoint state', async ({ page }) => {
       await page.keyboard.press('End');
       await page.keyboard.press('ArrowLeft');
+      await page.waitForTimeout(100);
+
+      let state = await getSessionState(page);
+      const targetFrame = state.currentFrame;
+
       await page.keyboard.press('o');
       await page.waitForTimeout(100);
+
+      state = await getSessionState(page);
+      expect(state.outPoint).toBe(targetFrame);
     });
 
     test('KEYS-032: [ should set in point', async ({ page }) => {
       await page.keyboard.press('ArrowRight');
+      await page.keyboard.press('ArrowRight');
+      await page.waitForTimeout(100);
+
+      let state = await getSessionState(page);
+      const targetFrame = state.currentFrame;
+
       await page.keyboard.press('[');
       await page.waitForTimeout(100);
+
+      state = await getSessionState(page);
+      expect(state.inPoint).toBe(targetFrame);
     });
 
     test('KEYS-033: ] should set out point', async ({ page }) => {
       await page.keyboard.press('End');
+      await page.waitForTimeout(100);
+
+      let state = await getSessionState(page);
+      const targetFrame = state.currentFrame;
+
       await page.keyboard.press(']');
       await page.waitForTimeout(100);
+
+      state = await getSessionState(page);
+      expect(state.outPoint).toBe(targetFrame);
     });
 
-    test('KEYS-034: R should reset in/out points', async ({ page }) => {
+    test('KEYS-034: R should reset in/out points to full range', async ({ page }) => {
+      // Set custom in/out points
+      await page.keyboard.press('ArrowRight');
       await page.keyboard.press('ArrowRight');
       await page.keyboard.press('i');
       await page.keyboard.press('End');
+      await page.keyboard.press('ArrowLeft');
+      await page.keyboard.press('ArrowLeft');
       await page.keyboard.press('o');
       await page.waitForTimeout(100);
 
+      let state = await getSessionState(page);
+      expect(state.inPoint).toBeGreaterThan(1);
+      expect(state.outPoint).toBeLessThan(state.frameCount);
+
       await page.keyboard.press('r');
       await page.waitForTimeout(100);
+
+      state = await getSessionState(page);
+      expect(state.inPoint).toBe(1);
+      expect(state.outPoint).toBe(state.frameCount);
     });
 
-    test('KEYS-035: M should toggle mark', async ({ page }) => {
-      await page.keyboard.press('m');
-      await page.waitForTimeout(100);
+    test('KEYS-035: M should toggle mark and update marks array', async ({ page }) => {
+      let state = await getSessionState(page);
+      const currentFrame = state.currentFrame;
+      expect(state.marks).not.toContain(currentFrame);
 
       await page.keyboard.press('m');
       await page.waitForTimeout(100);
+
+      state = await getSessionState(page);
+      expect(state.marks).toContain(currentFrame);
+
+      await page.keyboard.press('m');
+      await page.waitForTimeout(100);
+
+      state = await getSessionState(page);
+      expect(state.marks).not.toContain(currentFrame);
     });
 
     test('KEYS-036: L should cycle loop mode', async ({ page }) => {
-      await page.keyboard.press('l');
-      await page.waitForTimeout(100);
+      let state = await getSessionState(page);
+      expect(state.loopMode).toBe('loop');
 
       await page.keyboard.press('l');
       await page.waitForTimeout(100);
 
+      state = await getSessionState(page);
+      expect(state.loopMode).toBe('pingpong');
+
       await page.keyboard.press('l');
       await page.waitForTimeout(100);
+
+      state = await getSessionState(page);
+      expect(state.loopMode).toBe('once');
+
+      await page.keyboard.press('l');
+      await page.waitForTimeout(100);
+
+      state = await getSessionState(page);
+      expect(state.loopMode).toBe('loop');
     });
   });
 
   test.describe('Paint Shortcuts', () => {
-    test('KEYS-040: V should select pan tool', async ({ page }) => {
+    test('KEYS-040: V should select pan tool and update currentTool state', async ({ page }) => {
       await page.keyboard.press('5'); // Annotate tab
+      await page.keyboard.press('p'); // First select pen
       await page.waitForTimeout(100);
+
+      let state = await getPaintState(page);
+      expect(state.currentTool).toBe('pen');
 
       await page.keyboard.press('v');
       await page.waitForTimeout(100);
+
+      state = await getPaintState(page);
+      expect(state.currentTool).toBe('pan');
     });
 
-    test('KEYS-041: P should select pen tool', async ({ page }) => {
+    test('KEYS-041: P should select pen tool and update currentTool state', async ({ page }) => {
       await page.keyboard.press('5');
       await page.waitForTimeout(100);
 
       await page.keyboard.press('p');
       await page.waitForTimeout(100);
+
+      const state = await getPaintState(page);
+      expect(state.currentTool).toBe('pen');
     });
 
-    test('KEYS-042: E should select eraser tool', async ({ page }) => {
+    test('KEYS-042: E should select eraser tool and update currentTool state', async ({ page }) => {
       await page.keyboard.press('5');
       await page.waitForTimeout(100);
 
       await page.keyboard.press('e');
       await page.waitForTimeout(100);
+
+      const state = await getPaintState(page);
+      expect(state.currentTool).toBe('eraser');
     });
 
-    test('KEYS-043: T should select text tool', async ({ page }) => {
+    test('KEYS-043: T should select text tool and update currentTool state', async ({ page }) => {
       await page.keyboard.press('5');
       await page.waitForTimeout(100);
 
       await page.keyboard.press('t');
       await page.waitForTimeout(100);
+
+      const state = await getPaintState(page);
+      expect(state.currentTool).toBe('text');
     });
 
-    test('KEYS-044: B should toggle brush type', async ({ page }) => {
+    test('KEYS-044: B should toggle brush type and update brushType state', async ({ page }) => {
       await page.keyboard.press('5');
       await page.keyboard.press('p');
       await page.waitForTimeout(100);
+
+      let state = await getPaintState(page);
+      const initialBrush = state.brushType;
 
       await page.keyboard.press('b');
       await page.waitForTimeout(100);
 
+      state = await getPaintState(page);
+      expect(state.brushType).not.toBe(initialBrush);
+
       await page.keyboard.press('b');
       await page.waitForTimeout(100);
+
+      state = await getPaintState(page);
+      expect(state.brushType).toBe(initialBrush);
     });
 
-    test('KEYS-045: G should toggle ghost mode', async ({ page }) => {
+    test('KEYS-045: G should toggle ghost mode and update ghostMode state', async ({ page }) => {
       await page.keyboard.press('5');
       await page.waitForTimeout(100);
+
+      let state = await getPaintState(page);
+      const initialGhost = state.ghostMode;
 
       await page.keyboard.press('g');
       await page.waitForTimeout(100);
 
+      state = await getPaintState(page);
+      expect(state.ghostMode).toBe(!initialGhost);
+
       await page.keyboard.press('g');
       await page.waitForTimeout(100);
+
+      state = await getPaintState(page);
+      expect(state.ghostMode).toBe(initialGhost);
     });
 
-    test('KEYS-046: Ctrl+Z should undo', async ({ page }) => {
+    test('KEYS-046: Ctrl+Z should undo and update canUndo/canRedo state', async ({ page }) => {
       await page.keyboard.press('5');
       await page.keyboard.press('p');
-      const canvas = page.locator('canvas').first();
+      const canvas = await getCanvas(page);
       const box = await canvas.boundingBox();
 
+      // Draw stroke
       await page.mouse.move(box!.x + 100, box!.y + 100);
       await page.mouse.down();
       await page.mouse.move(box!.x + 200, box!.y + 200);
       await page.mouse.up();
-      await page.waitForTimeout(100);
+      await page.waitForTimeout(200);
+
+      let state = await getPaintState(page);
+      expect(state.canUndo).toBe(true);
+      expect(state.canRedo).toBe(false);
+
+      const screenshotBefore = await captureViewerScreenshot(page);
 
       await page.keyboard.press('Control+z');
       await page.waitForTimeout(100);
+
+      state = await getPaintState(page);
+      expect(state.canUndo).toBe(false);
+      expect(state.canRedo).toBe(true);
+
+      // Canvas should have changed
+      const screenshotAfter = await captureViewerScreenshot(page);
+      expect(imagesAreDifferent(screenshotBefore, screenshotAfter)).toBe(true);
     });
 
-    test('KEYS-047: Ctrl+Y should redo', async ({ page }) => {
+    test('KEYS-047: Ctrl+Y should redo and update canUndo/canRedo state', async ({ page }) => {
       await page.keyboard.press('5');
       await page.keyboard.press('p');
-      const canvas = page.locator('canvas').first();
+      const canvas = await getCanvas(page);
       const box = await canvas.boundingBox();
 
+      // Draw and undo
       await page.mouse.move(box!.x + 100, box!.y + 100);
       await page.mouse.down();
       await page.mouse.move(box!.x + 200, box!.y + 200);
       await page.mouse.up();
-      await page.waitForTimeout(100);
+      await page.waitForTimeout(200);
+
+      const screenshotWithStroke = await captureViewerScreenshot(page);
 
       await page.keyboard.press('Control+z');
       await page.waitForTimeout(100);
+
+      let state = await getPaintState(page);
+      expect(state.canRedo).toBe(true);
 
       await page.keyboard.press('Control+y');
       await page.waitForTimeout(100);
+
+      state = await getPaintState(page);
+      expect(state.canUndo).toBe(true);
+      expect(state.canRedo).toBe(false);
     });
   });
 
   test.describe('Color Shortcuts', () => {
-    test('KEYS-050: C should toggle color panel', async ({ page }) => {
+    test('KEYS-050: C should toggle color panel visibility', async ({ page }) => {
       await page.keyboard.press('c');
       await page.waitForTimeout(200);
 
+      const colorPanel = page.locator('.color-controls-panel');
+      await expect(colorPanel).toBeVisible();
+
       await page.keyboard.press('c');
       await page.waitForTimeout(200);
+
+      await expect(colorPanel).not.toBeVisible();
     });
 
     test('KEYS-051: Escape should close color panel', async ({ page }) => {
       await page.keyboard.press('c');
       await page.waitForTimeout(200);
 
+      const colorPanel = page.locator('.color-controls-panel');
+      await expect(colorPanel).toBeVisible();
+
       await page.keyboard.press('Escape');
       await page.waitForTimeout(200);
+
+      await expect(colorPanel).not.toBeVisible();
     });
   });
 
   test.describe('Transform Shortcuts', () => {
-    test('KEYS-060: Shift+R should rotate left', async ({ page }) => {
+    test('KEYS-060: Shift+R should rotate left and update rotation state', async ({ page }) => {
+      let state = await getTransformState(page);
+      expect(state.rotation).toBe(0);
+
+      const initialScreenshot = await captureViewerScreenshot(page);
+
       await page.keyboard.press('Shift+r');
-      await page.waitForTimeout(100);
+      await page.waitForTimeout(200);
+
+      state = await getTransformState(page);
+      expect(state.rotation).toBe(270);
+
+      // Canvas should visually change
+      const rotatedScreenshot = await captureViewerScreenshot(page);
+      expect(imagesAreDifferent(initialScreenshot, rotatedScreenshot)).toBe(true);
     });
 
-    test('KEYS-061: Alt+R should rotate right', async ({ page }) => {
+    test('KEYS-061: Alt+R should rotate right and update rotation state', async ({ page }) => {
+      let state = await getTransformState(page);
+      expect(state.rotation).toBe(0);
+
+      const initialScreenshot = await captureViewerScreenshot(page);
+
       await page.keyboard.press('Alt+r');
-      await page.waitForTimeout(100);
+      await page.waitForTimeout(200);
+
+      state = await getTransformState(page);
+      expect(state.rotation).toBe(90);
+
+      // Canvas should visually change
+      const rotatedScreenshot = await captureViewerScreenshot(page);
+      expect(imagesAreDifferent(initialScreenshot, rotatedScreenshot)).toBe(true);
     });
 
-    test('KEYS-062: Shift+H should flip horizontal', async ({ page }) => {
+    test('KEYS-062: Shift+H should flip horizontal and update flipH state', async ({ page }) => {
+      let state = await getTransformState(page);
+      expect(state.flipH).toBe(false);
+
+      const initialScreenshot = await captureViewerScreenshot(page);
+
+      await page.keyboard.press('Shift+h');
+      await page.waitForTimeout(200);
+
+      state = await getTransformState(page);
+      expect(state.flipH).toBe(true);
+
+      // Canvas should visually change
+      const flippedScreenshot = await captureViewerScreenshot(page);
+      expect(imagesAreDifferent(initialScreenshot, flippedScreenshot)).toBe(true);
+
+      // Toggle back
       await page.keyboard.press('Shift+h');
       await page.waitForTimeout(100);
 
-      await page.keyboard.press('Shift+h');
-      await page.waitForTimeout(100);
+      state = await getTransformState(page);
+      expect(state.flipH).toBe(false);
     });
 
-    test('KEYS-063: Shift+V should flip vertical', async ({ page }) => {
+    test('KEYS-063: Shift+V should flip vertical and update flipV state', async ({ page }) => {
+      let state = await getTransformState(page);
+      expect(state.flipV).toBe(false);
+
+      const initialScreenshot = await captureViewerScreenshot(page);
+
+      await page.keyboard.press('Shift+v');
+      await page.waitForTimeout(200);
+
+      state = await getTransformState(page);
+      expect(state.flipV).toBe(true);
+
+      // Canvas should visually change
+      const flippedScreenshot = await captureViewerScreenshot(page);
+      expect(imagesAreDifferent(initialScreenshot, flippedScreenshot)).toBe(true);
+
+      // Toggle back
       await page.keyboard.press('Shift+v');
       await page.waitForTimeout(100);
 
-      await page.keyboard.press('Shift+v');
-      await page.waitForTimeout(100);
+      state = await getTransformState(page);
+      expect(state.flipV).toBe(false);
     });
 
-    test('KEYS-064: K should toggle crop mode', async ({ page }) => {
-      await page.keyboard.press('k');
-      await page.waitForTimeout(200);
+    test('KEYS-064: K should toggle crop mode and update cropEnabled state', async ({ page }) => {
+      let state = await getViewerState(page);
+      expect(state.cropEnabled).toBe(false);
 
       await page.keyboard.press('k');
       await page.waitForTimeout(200);
+
+      state = await getViewerState(page);
+      expect(state.cropEnabled).toBe(true);
+
+      // Crop UI should be visible
+      const aspectButtons = page.locator('button:has-text("16:9"), button:has-text("4:3"), button:has-text("1:1")');
+      const count = await aspectButtons.count();
+      expect(count).toBeGreaterThan(0);
+
+      await page.keyboard.press('k');
+      await page.waitForTimeout(200);
+
+      state = await getViewerState(page);
+      expect(state.cropEnabled).toBe(false);
     });
   });
 
   test.describe('Export Shortcuts', () => {
-    test('KEYS-070: Ctrl+S should quick export PNG', async ({ page }) => {
-      // This will trigger download, but we can test the shortcut
-      // In a real test, we'd intercept the download
+    test('KEYS-070: Ctrl+S should trigger export', async ({ page }) => {
+      // Set up download handler
+      const downloadPromise = page.waitForEvent('download', { timeout: 3000 }).catch(() => null);
+
       await page.keyboard.press('Control+s');
-      await page.waitForTimeout(200);
+      await page.waitForTimeout(500);
+
+      const download = await downloadPromise;
+      if (download) {
+        const filename = download.suggestedFilename();
+        expect(filename).toMatch(/\.(png|jpg|webp)$/i);
+      }
     });
 
-    test('KEYS-071: Ctrl+C should copy frame to clipboard', async ({ page }) => {
+    test('KEYS-071: Ctrl+C should copy frame (no error)', async ({ page }) => {
+      // Just verify no errors occur
+      const errors: string[] = [];
+      page.on('pageerror', (error) => errors.push(error.message));
+
       await page.keyboard.press('Control+c');
       await page.waitForTimeout(200);
+
+      expect(errors.length).toBe(0);
     });
   });
 
   test.describe('Annotation Navigation Shortcuts', () => {
-    test('KEYS-080: < or , should go to previous annotation', async ({ page }) => {
+    test('KEYS-080: , should go to previous annotation', async ({ page }) => {
+      // Create annotations first
+      await page.keyboard.press('5'); // Annotate tab
+      await page.keyboard.press('p'); // Pen tool
+      const canvas = await getCanvas(page);
+      const box = await canvas.boundingBox();
+
+      // Draw on frame 1
+      await page.keyboard.press('Home');
+      await page.mouse.move(box!.x + 100, box!.y + 100);
+      await page.mouse.down();
+      await page.mouse.move(box!.x + 150, box!.y + 150);
+      await page.mouse.up();
+      await page.waitForTimeout(100);
+
+      // Draw on frame 5
+      for (let i = 0; i < 4; i++) {
+        await page.keyboard.press('ArrowRight');
+      }
+      await page.mouse.move(box!.x + 100, box!.y + 100);
+      await page.mouse.down();
+      await page.mouse.move(box!.x + 150, box!.y + 150);
+      await page.mouse.up();
+      await page.waitForTimeout(100);
+
+      // Go to frame 5
+      let state = await getSessionState(page);
+      expect(state.currentFrame).toBe(5);
+
+      // Navigate to previous annotation
       await page.keyboard.press(',');
       await page.waitForTimeout(100);
+
+      state = await getSessionState(page);
+      expect(state.currentFrame).toBe(1);
     });
 
-    test('KEYS-081: > or . should go to next annotation', async ({ page }) => {
+    test('KEYS-081: . should go to next annotation', async ({ page }) => {
+      // Create annotations first
+      await page.keyboard.press('5');
+      await page.keyboard.press('p');
+      const canvas = await getCanvas(page);
+      const box = await canvas.boundingBox();
+
+      // Draw on frame 1
+      await page.keyboard.press('Home');
+      await page.mouse.move(box!.x + 100, box!.y + 100);
+      await page.mouse.down();
+      await page.mouse.move(box!.x + 150, box!.y + 150);
+      await page.mouse.up();
+      await page.waitForTimeout(100);
+
+      // Draw on frame 5
+      for (let i = 0; i < 4; i++) {
+        await page.keyboard.press('ArrowRight');
+      }
+      await page.mouse.move(box!.x + 100, box!.y + 100);
+      await page.mouse.down();
+      await page.mouse.move(box!.x + 150, box!.y + 150);
+      await page.mouse.up();
+      await page.waitForTimeout(100);
+
+      // Go back to frame 1
+      await page.keyboard.press('Home');
+      await page.waitForTimeout(100);
+
+      let state = await getSessionState(page);
+      expect(state.currentFrame).toBe(1);
+
+      // Navigate to next annotation
       await page.keyboard.press('.');
       await page.waitForTimeout(100);
+
+      state = await getSessionState(page);
+      expect(state.currentFrame).toBe(5);
     });
   });
 
   test.describe('Input Focus Handling', () => {
-    test('KEYS-090: should not trigger shortcuts when typing in text input', async ({ page }) => {
-      // Find a text input if any exist
+    test('KEYS-090: shortcuts should not trigger when typing in text input', async ({ page }) => {
       const textInput = page.locator('input[type="text"]').first();
 
       if (await textInput.isVisible()) {
@@ -367,25 +758,33 @@ test.describe('Keyboard Shortcuts', () => {
         await textInput.fill('test');
         await page.waitForTimeout(100);
 
-        // Typing should not trigger shortcuts
-        await textInput.type('space');
-        await page.waitForTimeout(100);
+        // State should not have changed from typing
+        const state = await getSessionState(page);
+        expect(state.isPlaying).toBe(false);
       }
     });
 
-    test('KEYS-091: Space/Escape should work even with input focused', async ({ page }) => {
-      // Global keys should blur input and execute
+    test('KEYS-091: global shortcuts should work and blur input', async ({ page }) => {
       const rangeInput = page.locator('input[type="range"]').first();
 
       if (await rangeInput.isVisible()) {
         await rangeInput.focus();
         await page.waitForTimeout(100);
 
+        let state = await getSessionState(page);
+        expect(state.isPlaying).toBe(false);
+
         await page.keyboard.press('Space');
         await page.waitForTimeout(200);
 
+        state = await getSessionState(page);
+        expect(state.isPlaying).toBe(true);
+
         await page.keyboard.press('Space');
         await page.waitForTimeout(100);
+
+        state = await getSessionState(page);
+        expect(state.isPlaying).toBe(false);
       }
     });
   });

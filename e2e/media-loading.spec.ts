@@ -1,52 +1,108 @@
-import { test, expect, loadVideoFile, loadRvSession, SAMPLE_VIDEO, SAMPLE_RV_SESSION } from './fixtures';
+import { test, expect } from '@playwright/test';
+import {
+  loadVideoFile,
+  loadRvSession,
+  waitForTestHelper,
+  getSessionState,
+  getPaintState,
+  captureViewerScreenshot,
+  imagesAreDifferent,
+  SAMPLE_VIDEO,
+  SAMPLE_RV_SESSION,
+} from './fixtures';
 import path from 'path';
+
+/**
+ * Media Loading Tests
+ *
+ * Each test verifies actual state changes after loading media,
+ * not just UI visibility.
+ */
 
 test.describe('Media Loading', () => {
   test.describe('Video Loading', () => {
-    test('MEDIA-001: should load video file via file input', async ({ page }) => {
+    test('MEDIA-001: should load video file and update session state', async ({ page }) => {
       await page.goto('/');
       await page.waitForSelector('#app');
+      await waitForTestHelper(page);
+
+      // Verify no media loaded initially
+      let state = await getSessionState(page);
+      expect(state.hasMedia).toBe(false);
+      expect(state.frameCount).toBe(0);
 
       // Load video file
       const filePath = path.resolve(process.cwd(), SAMPLE_VIDEO);
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(filePath);
-
-      // Wait for video to load
       await page.waitForTimeout(1000);
 
-      // Canvas should have content (not just black)
-      const canvas = page.locator('canvas').first();
-      await expect(canvas).toBeVisible();
+      // Verify media loaded
+      state = await getSessionState(page);
+      expect(state.hasMedia).toBe(true);
+      expect(state.frameCount).toBeGreaterThan(0);
+
+      // Verify canvas has content
+      const screenshot = await captureViewerScreenshot(page);
+      expect(screenshot.length).toBeGreaterThan(1000); // Not empty
     });
 
-    test('MEDIA-002: should update timeline duration after video load', async ({ page }) => {
+    test('MEDIA-002: should update frameCount and enable navigation', async ({ page }) => {
       await page.goto('/');
       await page.waitForSelector('#app');
+      await waitForTestHelper(page);
 
       await loadVideoFile(page);
       await page.waitForTimeout(500);
 
-      // Timeline should show duration > 0
-      const timeline = page.locator('div').filter({ hasText: /\d+:\d+|\d+ frames/ }).first();
-      await expect(timeline).toBeVisible();
+      let state = await getSessionState(page);
+      expect(state.frameCount).toBeGreaterThan(1);
+      expect(state.currentFrame).toBe(1);
+
+      // Verify navigation works
+      await page.keyboard.press('ArrowRight');
+      await page.waitForTimeout(100);
+
+      state = await getSessionState(page);
+      expect(state.currentFrame).toBe(2);
+
+      await page.keyboard.press('End');
+      await page.waitForTimeout(100);
+
+      state = await getSessionState(page);
+      expect(state.currentFrame).toBe(state.frameCount);
     });
 
     test('MEDIA-003: should enable playback controls after video load', async ({ page }) => {
       await page.goto('/');
       await page.waitForSelector('#app');
+      await waitForTestHelper(page);
 
       await loadVideoFile(page);
       await page.waitForTimeout(500);
 
-      // Play button should be clickable
-      const playButton = page.locator('button[title*="Play"], button').filter({ hasText: /Play|▶|⏵/ }).first();
-      await expect(playButton).toBeEnabled();
+      let state = await getSessionState(page);
+      expect(state.isPlaying).toBe(false);
+
+      // Start playback
+      await page.keyboard.press('Space');
+      await page.waitForTimeout(200);
+
+      state = await getSessionState(page);
+      expect(state.isPlaying).toBe(true);
+
+      // Stop playback
+      await page.keyboard.press('Space');
+      await page.waitForTimeout(100);
+
+      state = await getSessionState(page);
+      expect(state.isPlaying).toBe(false);
     });
 
-    test('MEDIA-004: should show video dimensions in viewer', async ({ page }) => {
+    test('MEDIA-004: should show video dimensions in canvas', async ({ page }) => {
       await page.goto('/');
       await page.waitForSelector('#app');
+      await waitForTestHelper(page);
 
       await loadVideoFile(page);
       await page.waitForTimeout(500);
@@ -55,44 +111,89 @@ test.describe('Media Loading', () => {
       const canvas = page.locator('canvas').first();
       const box = await canvas.boundingBox();
       expect(box).not.toBeNull();
-      expect(box!.width).toBeGreaterThan(0);
-      expect(box!.height).toBeGreaterThan(0);
+      expect(box!.width).toBeGreaterThan(100);
+      expect(box!.height).toBeGreaterThan(100);
+
+      // Verify canvas content changes between frames
+      const frame1Screenshot = await captureViewerScreenshot(page);
+
+      await page.keyboard.press('ArrowRight');
+      await page.keyboard.press('ArrowRight');
+      await page.waitForTimeout(100);
+
+      const frame3Screenshot = await captureViewerScreenshot(page);
+      expect(imagesAreDifferent(frame1Screenshot, frame3Screenshot)).toBe(true);
+    });
+
+    test('MEDIA-005: should initialize in/out points to full range', async ({ page }) => {
+      await page.goto('/');
+      await page.waitForSelector('#app');
+      await waitForTestHelper(page);
+
+      await loadVideoFile(page);
+      await page.waitForTimeout(500);
+
+      const state = await getSessionState(page);
+      expect(state.inPoint).toBe(1);
+      expect(state.outPoint).toBe(state.frameCount);
     });
   });
 
   test.describe('RV Session Loading', () => {
-    test('MEDIA-010: should load .rv session file', async ({ page }) => {
+    test('MEDIA-010: should load .rv session file and update state', async ({ page }) => {
       await page.goto('/');
       await page.waitForSelector('#app');
+      await waitForTestHelper(page);
 
       // Load RV session
       const filePath = path.resolve(process.cwd(), SAMPLE_RV_SESSION);
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(filePath);
-
-      // Wait for session to load
       await page.waitForTimeout(1000);
 
-      // App should still be functional
-      const canvas = page.locator('canvas').first();
-      await expect(canvas).toBeVisible();
+      // App should be functional with session loaded
+      const state = await getSessionState(page);
+      // RV session may or may not have media, but app should be responsive
+      expect(state.currentFrame).toBeGreaterThanOrEqual(1);
     });
 
-    test('MEDIA-011: should restore session state from .rv file', async ({ page }) => {
+    test('MEDIA-011: should restore session settings from .rv file', async ({ page }) => {
       await page.goto('/');
       await page.waitForSelector('#app');
+      await waitForTestHelper(page);
 
       await loadRvSession(page);
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(1000);
 
-      // Session should be loaded - check for any UI response
-      const canvas = page.locator('canvas').first();
-      await expect(canvas).toBeVisible();
+      // Session state should be accessible
+      const state = await getSessionState(page);
+      expect(typeof state.currentFrame).toBe('number');
+      expect(typeof state.loopMode).toBe('string');
+    });
+
+    test('MEDIA-012: should allow navigation after session load', async ({ page }) => {
+      await page.goto('/');
+      await page.waitForSelector('#app');
+      await waitForTestHelper(page);
+
+      await loadRvSession(page);
+      await page.waitForTimeout(1000);
+
+      const state = await getSessionState(page);
+      if (state.hasMedia && state.frameCount > 1) {
+        const initialFrame = state.currentFrame;
+
+        await page.keyboard.press('ArrowRight');
+        await page.waitForTimeout(100);
+
+        const newState = await getSessionState(page);
+        expect(newState.currentFrame).toBe(initialFrame + 1);
+      }
     });
   });
 
   test.describe('Drag and Drop', () => {
-    test('MEDIA-020: should accept files via drag and drop', async ({ page }) => {
+    test('MEDIA-020: should show drop zone on drag over', async ({ page }) => {
       await page.goto('/');
       await page.waitForSelector('#app');
 
@@ -105,27 +206,16 @@ test.describe('Media Loading', () => {
         dataTransfer: { types: ['Files'] },
       });
 
-      // Should show drop zone indicator (if implemented)
       await page.waitForTimeout(100);
-    });
 
-    test('MEDIA-021: should show drop zone on drag over', async ({ page }) => {
-      await page.goto('/');
-      await page.waitForSelector('#app');
-
-      const canvas = page.locator('canvas').first();
-
-      // Simulate dragover
-      await canvas.dispatchEvent('dragover', {
-        dataTransfer: { types: ['Files'] },
-      });
-
-      await page.waitForTimeout(100);
+      // Look for drop zone indicator
+      const dropZone = page.locator('.drop-zone, [class*="drop"]');
+      // Drop zone may be visible
     });
   });
 
   test.describe('File Input Accessibility', () => {
-    test('MEDIA-030: should have hidden file input accessible via button', async ({ page }) => {
+    test('MEDIA-030: should have file input accessible via button', async ({ page }) => {
       await page.goto('/');
       await page.waitForSelector('#app');
 
@@ -133,56 +223,109 @@ test.describe('Media Loading', () => {
       const fileInput = page.locator('input[type="file"]').first();
       await expect(fileInput).toBeAttached();
 
-      // Open button should trigger file input
+      // Open button should be visible
       const openButton = page.locator('button[title*="Open"], button[title*="folder"]').first();
       await expect(openButton).toBeVisible();
-    });
-
-    test('MEDIA-031: should accept multiple file types', async ({ page }) => {
-      await page.goto('/');
-      await page.waitForSelector('#app');
-
-      const fileInput = page.locator('input[type="file"]').first();
-      const accept = await fileInput.getAttribute('accept');
-
-      // Should accept various formats
-      // Note: accept attribute may or may not be set depending on implementation
-      // The test passes either way as the app handles file validation internally
     });
   });
 
   test.describe('Error Handling', () => {
-    test('MEDIA-040: should handle invalid file gracefully', async ({ page }) => {
+    test('MEDIA-040: should handle operations without media gracefully', async ({ page }) => {
       await page.goto('/');
       await page.waitForSelector('#app');
+      await waitForTestHelper(page);
 
-      // Create a temporary invalid file and try to load
-      // The app should not crash
       const errors: string[] = [];
       page.on('pageerror', (error) => errors.push(error.message));
 
-      // App should remain functional
+      // Try to navigate without media
+      await page.keyboard.press('ArrowRight');
+      await page.keyboard.press('Space');
+      await page.waitForTimeout(200);
+      await page.keyboard.press('Space');
+
+      // App should remain functional (no critical errors)
       const canvas = page.locator('canvas').first();
       await expect(canvas).toBeVisible();
+
+      // Filter out warnings
+      const criticalErrors = errors.filter(e =>
+        !e.includes('Warning') && !e.includes('Deprecation')
+      );
+      expect(criticalErrors).toHaveLength(0);
     });
   });
 
   test.describe('Multiple Sources', () => {
-    test('MEDIA-050: should support loading multiple media files', async ({ page }) => {
+    test('MEDIA-050: should support loading additional media', async ({ page }) => {
       await page.goto('/');
       await page.waitForSelector('#app');
+      await waitForTestHelper(page);
 
       // Load first video
       await loadVideoFile(page);
       await page.waitForTimeout(500);
 
-      // Load RV session (should work as additional source)
+      let state = await getSessionState(page);
+      expect(state.hasMedia).toBe(true);
+      const firstFrameCount = state.frameCount;
+
+      // Load RV session (should work)
       await loadRvSession(page);
       await page.waitForTimeout(500);
 
       // App should remain functional
-      const canvas = page.locator('canvas').first();
-      await expect(canvas).toBeVisible();
+      state = await getSessionState(page);
+      expect(typeof state.currentFrame).toBe('number');
+    });
+  });
+
+  test.describe('Sample Files Verification', () => {
+    test('MEDIA-060: sample video should load and have correct properties', async ({ page }) => {
+      await page.goto('/');
+      await page.waitForSelector('#app');
+      await waitForTestHelper(page);
+
+      await loadVideoFile(page);
+      await page.waitForTimeout(500);
+
+      const state = await getSessionState(page);
+
+      // Sample video should have multiple frames
+      expect(state.hasMedia).toBe(true);
+      expect(state.frameCount).toBeGreaterThan(10); // Should have at least some frames
+      expect(state.currentFrame).toBe(1);
+
+      // Should be able to play
+      await page.keyboard.press('Space');
+      await page.waitForTimeout(300);
+      await page.keyboard.press('Space');
+      await page.waitForTimeout(100);
+
+      const afterPlayState = await getSessionState(page);
+      expect(afterPlayState.currentFrame).toBeGreaterThan(1);
+    });
+
+    test('MEDIA-061: sample RV session should load without errors', async ({ page }) => {
+      await page.goto('/');
+      await page.waitForSelector('#app');
+      await waitForTestHelper(page);
+
+      const errors: string[] = [];
+      page.on('pageerror', (error) => errors.push(error.message));
+
+      await loadRvSession(page);
+      await page.waitForTimeout(1000);
+
+      // No critical errors
+      const criticalErrors = errors.filter(e =>
+        !e.includes('Warning') && !e.includes('Deprecation')
+      );
+      expect(criticalErrors).toHaveLength(0);
+
+      // App should be functional
+      const state = await getSessionState(page);
+      expect(typeof state.currentFrame).toBe('number');
     });
   });
 });

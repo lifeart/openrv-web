@@ -129,7 +129,11 @@ test.describe('View Controls', () => {
 
   test.describe('Pan Controls', () => {
     test('VIEW-010: dragging canvas at high zoom should update pan position', async ({ page }) => {
-      // Zoom in first to enable panning
+      // Ensure pan mode is selected (V key selects pan/none tool)
+      await page.keyboard.press('v');
+      await page.waitForTimeout(100);
+
+      // Zoom in first to enable visible panning
       await page.locator('button:has-text("200%")').click();
       await page.waitForTimeout(200);
 
@@ -139,8 +143,21 @@ test.describe('View Controls', () => {
 
       const initialScreenshot = await captureViewerScreenshot(page);
 
-      // Pan the image
-      await dragOnCanvas(page, 100, 100, 200, 200);
+      // Get the viewer container (where pointer events are handled)
+      const viewerContainer = page.locator('.viewer-container').first();
+      const box = await viewerContainer.boundingBox();
+      expect(box).not.toBeNull();
+
+      // Pan the image using mouse drag - use center of container
+      const startX = box!.x + box!.width / 2;
+      const startY = box!.y + box!.height / 2;
+      const endX = startX + 100;
+      const endY = startY + 100;
+
+      await page.mouse.move(startX, startY);
+      await page.mouse.down({ button: 'left' });
+      await page.mouse.move(endX, endY, { steps: 10 });
+      await page.mouse.up({ button: 'left' });
       await page.waitForTimeout(200);
 
       state = await getViewerState(page);
@@ -152,9 +169,26 @@ test.describe('View Controls', () => {
     });
 
     test('VIEW-011: fit to window should reset pan position', async ({ page }) => {
-      // Zoom and pan
+      // Ensure pan mode is selected
+      await page.keyboard.press('v');
+      await page.waitForTimeout(100);
+
+      // Zoom in
       await page.locator('button:has-text("200%")').click();
-      await dragOnCanvas(page, 100, 100, 200, 200);
+      await page.waitForTimeout(100);
+
+      // Get the viewer container
+      const viewerContainer = page.locator('.viewer-container').first();
+      const box = await viewerContainer.boundingBox();
+      expect(box).not.toBeNull();
+
+      // Pan the image
+      const startX = box!.x + box!.width / 2;
+      const startY = box!.y + box!.height / 2;
+      await page.mouse.move(startX, startY);
+      await page.mouse.down({ button: 'left' });
+      await page.mouse.move(startX + 100, startY + 100, { steps: 10 });
+      await page.mouse.up({ button: 'left' });
       await page.waitForTimeout(100);
 
       // Fit should reset pan
@@ -170,7 +204,7 @@ test.describe('View Controls', () => {
 
   test.describe('Wipe Control', () => {
     test('VIEW-020: wipe button should be visible in View tab', async ({ page }) => {
-      const wipeButton = page.locator('button[title*="Wipe"]').first();
+      const wipeButton = page.locator('button[title*="wipe"]').first();
       await expect(wipeButton).toBeVisible();
     });
 
@@ -198,14 +232,7 @@ test.describe('View Controls', () => {
       const verticalScreenshot = await captureViewerScreenshot(page);
       expect(imagesAreDifferent(horizontalScreenshot, verticalScreenshot)).toBe(true);
 
-      // Press W to switch to quad wipe
-      await page.keyboard.press('w');
-      await page.waitForTimeout(200);
-
-      state = await getViewerState(page);
-      expect(state.wipeMode).toBe('quad');
-
-      // Press W to turn off
+      // Press W to turn off (cycles: off -> horizontal -> vertical -> off)
       await page.keyboard.press('w');
       await page.waitForTimeout(200);
 
@@ -217,7 +244,7 @@ test.describe('View Controls', () => {
       let state = await getViewerState(page);
       expect(state.wipeMode).toBe('off');
 
-      const wipeButton = page.locator('button[title*="Wipe"]').first();
+      const wipeButton = page.locator('button[title*="wipe"]').first();
       await wipeButton.click();
       await page.waitForTimeout(200);
 
@@ -256,7 +283,11 @@ test.describe('View Controls', () => {
   });
 
   test.describe('Crop Control', () => {
-    test('VIEW-030: pressing K key should enable crop mode and show crop UI', async ({ page }) => {
+    test('VIEW-030: pressing K key should enable crop mode and update state', async ({ page }) => {
+      // Switch to Transform tab where crop control is located
+      await page.click('button[data-tab-id="transform"]');
+      await page.waitForTimeout(100);
+
       let state = await getViewerState(page);
       expect(state.cropEnabled).toBe(false);
 
@@ -267,13 +298,19 @@ test.describe('View Controls', () => {
       state = await getViewerState(page);
       expect(state.cropEnabled).toBe(true);
 
-      // Crop UI should be visible - look for aspect ratio buttons
-      const aspectRatioButtons = page.locator('button:has-text("16:9"), button:has-text("4:3"), button:has-text("1:1")');
-      const buttonCount = await aspectRatioButtons.count();
-      expect(buttonCount).toBeGreaterThan(0);
+      // Click crop button to open panel with aspect ratio options
+      const cropButton = page.locator('button[title*="Crop"]').first();
+      await cropButton.click();
+      await page.waitForTimeout(200);
 
-      // Canvas should show crop overlay
-      const cropOverlay = await captureViewerScreenshot(page);
+      // Crop UI should now be visible - look for aspect ratio select dropdown
+      const aspectSelect = page.locator('select').first();
+      await expect(aspectSelect).toBeVisible();
+
+      // Verify options exist
+      const options = aspectSelect.locator('option');
+      const optionCount = await options.count();
+      expect(optionCount).toBeGreaterThan(1); // Should have Free, 16:9, 4:3, 1:1, etc.
 
       // Disable crop
       await page.keyboard.press('k');
@@ -283,56 +320,73 @@ test.describe('View Controls', () => {
       expect(state.cropEnabled).toBe(false);
     });
 
-    test('VIEW-031: clicking crop button should toggle crop mode', async ({ page }) => {
+    test('VIEW-031: clicking crop button should open panel and enable crop via toggle', async ({ page }) => {
+      // Switch to Transform tab where crop control is located
+      await page.click('button[data-tab-id="transform"]');
+      await page.waitForTimeout(100);
+
       let state = await getViewerState(page);
       expect(state.cropEnabled).toBe(false);
 
+      // Click crop button to open panel
       const cropButton = page.locator('button[title*="Crop"]').first();
-      if (await cropButton.isVisible()) {
-        await cropButton.click();
-        await page.waitForTimeout(200);
+      await cropButton.click();
+      await page.waitForTimeout(200);
 
-        state = await getViewerState(page);
-        expect(state.cropEnabled).toBe(true);
+      // Click the toggle switch inside the panel to enable crop
+      const toggleSwitch = page.locator('button:has-text("OFF")').first();
+      await toggleSwitch.click();
+      await page.waitForTimeout(200);
 
-        // Toggle off
-        await cropButton.click();
-        await page.waitForTimeout(200);
+      state = await getViewerState(page);
+      expect(state.cropEnabled).toBe(true);
 
-        state = await getViewerState(page);
-        expect(state.cropEnabled).toBe(false);
-      }
+      // Toggle off by clicking ON button
+      const toggleOn = page.locator('button:has-text("ON")').first();
+      await toggleOn.click();
+      await page.waitForTimeout(200);
+
+      state = await getViewerState(page);
+      expect(state.cropEnabled).toBe(false);
     });
 
-    test('VIEW-032: crop aspect ratio buttons should update crop region visually', async ({ page }) => {
+    test('VIEW-032: crop aspect ratio select should update crop region visually', async ({ page }) => {
+      // Switch to Transform tab where crop control is located
+      await page.click('button[data-tab-id="transform"]');
+      await page.waitForTimeout(100);
+
       // Enable crop
       await page.keyboard.press('k');
       await page.waitForTimeout(200);
 
+      // Click crop button to open panel
+      const cropButton = page.locator('button[title*="Crop"]').first();
+      await cropButton.click();
+      await page.waitForTimeout(200);
+
       const freeScreenshot = await captureViewerScreenshot(page);
 
-      // Click 16:9 aspect ratio
-      const aspect169 = page.locator('button:has-text("16:9")').first();
-      if (await aspect169.isVisible()) {
-        await aspect169.click();
-        await page.waitForTimeout(200);
+      // Select 16:9 aspect ratio from dropdown
+      const aspectSelect = page.locator('select').first();
+      await aspectSelect.selectOption('16:9');
+      await page.waitForTimeout(200);
 
-        const wideScreenshot = await captureViewerScreenshot(page);
-        expect(imagesAreDifferent(freeScreenshot, wideScreenshot)).toBe(true);
+      const wideScreenshot = await captureViewerScreenshot(page);
+      expect(imagesAreDifferent(freeScreenshot, wideScreenshot)).toBe(true);
 
-        // Click 1:1 aspect ratio
-        const aspect11 = page.locator('button:has-text("1:1")').first();
-        if (await aspect11.isVisible()) {
-          await aspect11.click();
-          await page.waitForTimeout(200);
+      // Select 1:1 aspect ratio
+      await aspectSelect.selectOption('1:1');
+      await page.waitForTimeout(200);
 
-          const squareScreenshot = await captureViewerScreenshot(page);
-          expect(imagesAreDifferent(wideScreenshot, squareScreenshot)).toBe(true);
-        }
-      }
+      const squareScreenshot = await captureViewerScreenshot(page);
+      expect(imagesAreDifferent(wideScreenshot, squareScreenshot)).toBe(true);
     });
 
     test('VIEW-033: dragging crop handles should resize crop region', async ({ page }) => {
+      // Switch to Transform tab where crop control is located
+      await page.click('button[data-tab-id="transform"]');
+      await page.waitForTimeout(100);
+
       // Enable crop
       await page.keyboard.press('k');
       await page.waitForTimeout(200);
@@ -374,9 +428,26 @@ test.describe('View Controls', () => {
     });
 
     test('VIEW-041: pan position should persist across frame changes', async ({ page }) => {
-      // Zoom and pan
+      // Ensure pan mode is selected
+      await page.keyboard.press('v');
+      await page.waitForTimeout(100);
+
+      // Zoom in
       await page.locator('button:has-text("200%")').click();
-      await dragOnCanvas(page, 100, 100, 200, 200);
+      await page.waitForTimeout(100);
+
+      // Get the viewer container
+      const viewerContainer = page.locator('.viewer-container').first();
+      const box = await viewerContainer.boundingBox();
+      expect(box).not.toBeNull();
+
+      // Pan the image
+      const startX = box!.x + box!.width / 2;
+      const startY = box!.y + box!.height / 2;
+      await page.mouse.move(startX, startY);
+      await page.mouse.down({ button: 'left' });
+      await page.mouse.move(startX + 100, startY + 100, { steps: 10 });
+      await page.mouse.up({ button: 'left' });
       await page.waitForTimeout(100);
 
       let state = await getViewerState(page);
