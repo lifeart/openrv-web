@@ -1,5 +1,6 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { CDLValues, DEFAULT_CDL, isDefaultCDL, parseCDLXML, exportCDLXML } from '../../color/CDL';
+import { showAlert } from './shared/Modal';
 
 export interface CDLControlEvents extends EventMap {
   cdlChanged: CDLValues;
@@ -54,34 +55,31 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
       }
     });
 
-    // Create panel
+    // Create panel (rendered at body level)
     this.panel = document.createElement('div');
     this.panel.className = 'cdl-panel';
     this.panel.style.cssText = `
-      position: absolute;
-      top: 100%;
-      right: 0;
+      position: fixed;
       background: #2a2a2a;
       border: 1px solid #444;
       border-radius: 6px;
       padding: 12px;
       min-width: 300px;
-      max-height: 400px;
+      max-height: 80vh;
       overflow-y: auto;
-      z-index: 1000;
+      z-index: 9999;
       display: none;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-      margin-top: 4px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
     `;
 
     this.createPanelContent();
 
     this.container.appendChild(this.cdlButton);
-    this.container.appendChild(this.panel);
+    // Panel will be appended to body when shown
 
     // Close panel on outside click
     document.addEventListener('click', (e) => {
-      if (!this.container.contains(e.target as Node)) {
+      if (this.isPanelOpen && !this.container.contains(e.target as Node) && !this.panel.contains(e.target as Node)) {
         this.hidePanel();
       }
     });
@@ -355,6 +353,16 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
   }
 
   showPanel(): void {
+    // Append to body if not already there
+    if (!document.body.contains(this.panel)) {
+      document.body.appendChild(this.panel);
+    }
+
+    // Position relative to button
+    const rect = this.cdlButton.getBoundingClientRect();
+    this.panel.style.top = `${rect.bottom + 4}px`;
+    this.panel.style.left = `${Math.max(8, rect.right - 320)}px`;
+
     this.isPanelOpen = true;
     this.panel.style.display = 'block';
     this.updateButtonState();
@@ -404,10 +412,10 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
         if (parsed) {
           this.setCDL(parsed);
         } else {
-          alert('Failed to parse CDL file');
+          showAlert('Failed to parse CDL file', { type: 'error', title: 'CDL Error' });
         }
       } catch (err) {
-        alert(`Error loading CDL: ${err}`);
+        showAlert(`Error loading CDL: ${err}`, { type: 'error', title: 'CDL Error' });
       }
     };
 

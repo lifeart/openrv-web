@@ -66,33 +66,30 @@ export class StackControl extends EventEmitter<StackControlEvents> {
       }
     });
 
-    // Create panel
+    // Create panel (rendered at body level to avoid z-index issues)
     this.panel = document.createElement('div');
     this.panel.className = 'stack-panel';
     this.panel.style.cssText = `
-      position: absolute;
-      top: 100%;
-      right: 0;
+      position: fixed;
       background: #2a2a2a;
       border: 1px solid #444;
       border-radius: 6px;
       padding: 12px;
       min-width: 280px;
       max-height: 400px;
-      z-index: 1000;
+      z-index: 9999;
       display: none;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-      margin-top: 4px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
     `;
 
     this.createPanelContent();
 
     this.container.appendChild(this.stackButton);
-    this.container.appendChild(this.panel);
+    // Panel will be appended to body when shown
 
     // Close panel on outside click
     document.addEventListener('click', (e) => {
-      if (!this.container.contains(e.target as Node)) {
+      if (!this.container.contains(e.target as Node) && !this.panel.contains(e.target as Node)) {
         this.hidePanel();
       }
     });
@@ -473,6 +470,17 @@ export class StackControl extends EventEmitter<StackControlEvents> {
 
   showPanel(): void {
     this.isPanelOpen = true;
+
+    // Append to body if not already there
+    if (!document.body.contains(this.panel)) {
+      document.body.appendChild(this.panel);
+    }
+
+    // Position relative to button
+    const rect = this.stackButton.getBoundingClientRect();
+    this.panel.style.top = `${rect.bottom + 4}px`;
+    this.panel.style.left = `${Math.max(8, rect.right - 280)}px`; // Align right edge, min 8px from left
+
     this.panel.style.display = 'block';
     this.updateButtonState();
   }
@@ -492,6 +500,9 @@ export class StackControl extends EventEmitter<StackControlEvents> {
   }
 
   dispose(): void {
-    // Cleanup if needed
+    // Remove panel from body if present
+    if (document.body.contains(this.panel)) {
+      document.body.removeChild(this.panel);
+    }
   }
 }

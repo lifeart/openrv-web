@@ -1,5 +1,6 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { LUT3D, parseCubeLUT } from '../../color/LUTLoader';
+import { showAlert } from './shared/Modal';
 
 export interface ColorAdjustments {
   exposure: number;      // -5 to +5 stops
@@ -86,26 +87,32 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     });
     this.container.appendChild(this.toggleButton);
 
-    // Create expandable panel
+    // Create expandable panel (rendered at body level)
     this.panel = document.createElement('div');
     this.panel.className = 'color-controls-panel';
     this.panel.style.cssText = `
-      position: absolute;
-      top: 100%;
-      left: 0;
+      position: fixed;
       background: #2a2a2a;
       border: 1px solid #444;
       border-radius: 6px;
       padding: 12px;
       min-width: 280px;
-      z-index: 1000;
+      max-height: 80vh;
+      overflow-y: auto;
+      z-index: 9999;
       display: none;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-      margin-top: 4px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
     `;
 
     this.createSliders();
-    this.container.appendChild(this.panel);
+    // Panel will be appended to body when shown
+
+    // Close on outside click
+    document.addEventListener('click', (e) => {
+      if (this.isExpanded && !this.container.contains(e.target as Node) && !this.panel.contains(e.target as Node)) {
+        this.hide();
+      }
+    });
   }
 
   private createSliders(): void {
@@ -338,7 +345,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
       this.setLUT(lut);
     } catch (err) {
       console.error('Failed to load LUT:', err);
-      alert(`Failed to load LUT: ${err instanceof Error ? err.message : err}`);
+      showAlert(`Failed to load LUT: ${err instanceof Error ? err.message : err}`, { type: 'error', title: 'LUT Error' });
     }
 
     // Reset input
@@ -451,23 +458,41 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
   }
 
   toggle(): void {
-    this.isExpanded = !this.isExpanded;
-    this.panel.style.display = this.isExpanded ? 'block' : 'none';
-    this.toggleButton.style.background = this.isExpanded ? '#555' : '#444';
-    this.toggleButton.style.borderColor = this.isExpanded ? '#4a9eff' : '#555';
-    this.emit('visibilityChanged', this.isExpanded);
+    if (this.isExpanded) {
+      this.hide();
+    } else {
+      this.show();
+    }
   }
 
   show(): void {
-    if (!this.isExpanded) {
-      this.toggle();
+    if (this.isExpanded) return;
+
+    // Append to body if not already there
+    if (!document.body.contains(this.panel)) {
+      document.body.appendChild(this.panel);
     }
+
+    // Position relative to button
+    const rect = this.toggleButton.getBoundingClientRect();
+    this.panel.style.top = `${rect.bottom + 4}px`;
+    this.panel.style.left = `${Math.min(rect.left, window.innerWidth - 300)}px`;
+
+    this.isExpanded = true;
+    this.panel.style.display = 'block';
+    this.toggleButton.style.background = '#555';
+    this.toggleButton.style.borderColor = '#4a9eff';
+    this.emit('visibilityChanged', true);
   }
 
   hide(): void {
-    if (this.isExpanded) {
-      this.toggle();
-    }
+    if (!this.isExpanded) return;
+
+    this.isExpanded = false;
+    this.panel.style.display = 'none';
+    this.toggleButton.style.background = '#444';
+    this.toggleButton.style.borderColor = '#555';
+    this.emit('visibilityChanged', false);
   }
 
   reset(): void {

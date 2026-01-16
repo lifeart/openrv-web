@@ -10,6 +10,7 @@ import { Session, LoopMode } from '../../../core/session/Session';
 import { filterImageFiles } from '../../../utils/SequenceLoader';
 import { VolumeControl } from '../VolumeControl';
 import { ExportControl } from '../ExportControl';
+import { showAlert } from '../shared/Modal';
 
 export interface HeaderBarEvents extends EventMap {
   showShortcuts: void;
@@ -296,7 +297,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
         return;
       } catch (err) {
         console.error('Failed to load sequence:', err);
-        alert(`Failed to load sequence: ${err}`);
+        showAlert(`Failed to load sequence: ${err}`, { type: 'error', title: 'Load Error' });
         input.value = '';
         return;
       }
@@ -314,7 +315,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
         this.emit('fileLoaded', undefined);
       } catch (err) {
         console.error('Failed to load file:', err);
-        alert(`Failed to load ${file.name}: ${err}`);
+        showAlert(`Failed to load ${file.name}: ${err}`, { type: 'error', title: 'Load Error' });
       }
     }
 

@@ -15,6 +15,7 @@ import { ExportFormat, exportCanvas as doExportCanvas, copyCanvasToClipboard } f
 import { filterImageFiles } from '../../utils/SequenceLoader';
 import { StackLayer } from './StackControl';
 import { compositeImageData, BlendMode } from '../../composite/BlendModes';
+import { showAlert } from './shared/Modal';
 
 interface PointerState {
   pointerId: number;
@@ -631,7 +632,7 @@ export class Viewer {
         return;
       } catch (err) {
         console.error('Failed to load sequence:', err);
-        alert(`Failed to load sequence: ${err}`);
+        showAlert(`Failed to load sequence: ${err}`, { type: 'error', title: 'Load Error' });
         return;
       }
     }
@@ -649,7 +650,7 @@ export class Viewer {
         }
       } catch (err) {
         console.error('Failed to load file:', err);
-        alert(`Failed to load ${file.name}: ${err}`);
+        showAlert(`Failed to load ${file.name}: ${err}`, { type: 'error', title: 'Load Error' });
       }
     }
   };

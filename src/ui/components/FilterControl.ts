@@ -62,32 +62,29 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
       }
     });
 
-    // Create panel
+    // Create panel (rendered at body level)
     this.panel = document.createElement('div');
     this.panel.className = 'filter-panel';
     this.panel.style.cssText = `
-      position: absolute;
-      top: 100%;
-      right: 0;
+      position: fixed;
       background: #2a2a2a;
       border: 1px solid #444;
       border-radius: 6px;
       padding: 12px;
       min-width: 220px;
-      z-index: 1000;
+      z-index: 9999;
       display: none;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-      margin-top: 4px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
     `;
 
     this.createPanelContent();
 
     this.container.appendChild(this.filterButton);
-    this.container.appendChild(this.panel);
+    // Panel will be appended to body when shown
 
     // Close panel on outside click
     document.addEventListener('click', (e) => {
-      if (!this.container.contains(e.target as Node)) {
+      if (this.isPanelOpen && !this.container.contains(e.target as Node) && !this.panel.contains(e.target as Node)) {
         this.hide();
       }
     });
@@ -256,6 +253,16 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
   }
 
   show(): void {
+    // Append to body if not already there
+    if (!document.body.contains(this.panel)) {
+      document.body.appendChild(this.panel);
+    }
+
+    // Position relative to button
+    const rect = this.filterButton.getBoundingClientRect();
+    this.panel.style.top = `${rect.bottom + 4}px`;
+    this.panel.style.left = `${Math.max(8, rect.right - 240)}px`;
+
     this.isPanelOpen = true;
     this.panel.style.display = 'block';
     this.filterButton.style.background = '#555';

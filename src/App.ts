@@ -15,6 +15,7 @@ import { CDLControl } from './ui/components/CDLControl';
 import { LensControl } from './ui/components/LensControl';
 import { StackControl } from './ui/components/StackControl';
 import { exportSequence } from './utils/SequenceExporter';
+import { showAlert, showModal } from './ui/components/shared/Modal';
 
 export class App {
   private container: HTMLElement | null = null;
@@ -514,7 +515,7 @@ export class App {
   }): Promise<void> {
     const source = this.session.currentSource;
     if (!source) {
-      alert('No media loaded to export');
+      showAlert('No media loaded to export', { type: 'warning', title: 'Export' });
       return;
     }
 
@@ -532,7 +533,7 @@ export class App {
 
     const totalFrames = endFrame - startFrame + 1;
     if (totalFrames <= 0) {
-      alert('Invalid frame range');
+      showAlert('Invalid frame range', { type: 'warning', title: 'Export' });
       return;
     }
 
@@ -642,11 +643,11 @@ export class App {
 
       // Show result
       if (result.success) {
-        alert(`Successfully exported ${result.exportedFrames} frames`);
+        showAlert(`Successfully exported ${result.exportedFrames} frames`, { type: 'success', title: 'Export Complete' });
       } else if (result.error?.includes('cancelled')) {
-        alert('Export cancelled');
+        showAlert('Export cancelled', { type: 'info', title: 'Export' });
       } else {
-        alert(`Export failed: ${result.error}`);
+        showAlert(`Export failed: ${result.error}`, { type: 'error', title: 'Export Error' });
       }
     } catch (err) {
       // Restore original frame
@@ -657,12 +658,19 @@ export class App {
         document.body.removeChild(progressDialog);
       }
 
-      alert(`Export error: ${err}`);
+      showAlert(`Export error: ${err}`, { type: 'error', title: 'Export Error' });
     }
   }
 
   private showShortcuts(): void {
-    alert(`Keyboard Shortcuts:
+    const content = document.createElement('div');
+    content.style.cssText = `
+      font-family: monospace;
+      font-size: 12px;
+      color: #ccc;
+      line-height: 1.6;
+    `;
+    content.innerHTML = `<pre style="margin: 0; white-space: pre-wrap;">Keyboard Shortcuts:
 
 TABS
 1         - View tab
@@ -723,10 +731,12 @@ ANNOTATIONS
 Dbl-click - Jump to nearest annotation (timeline)
 
 TRANSFORM
-Shift+R   - Rotate left 90\u00b0
-Alt+R     - Rotate right 90\u00b0
+Shift+R   - Rotate left 90°
+Alt+R     - Rotate right 90°
 Shift+H   - Flip horizontal
-Shift+V   - Flip vertical`);
+Shift+V   - Flip vertical</pre>`;
+
+    showModal(content, { title: 'Keyboard Shortcuts', width: '500px' });
   }
 
   dispose(): void {

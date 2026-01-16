@@ -68,32 +68,29 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
       }
     });
 
-    // Create dropdown menu
+    // Create dropdown menu (rendered at body level)
     this.dropdown = document.createElement('div');
     this.dropdown.className = 'export-dropdown';
     this.dropdown.style.cssText = `
-      position: absolute;
-      top: 100%;
-      right: 0;
+      position: fixed;
       background: #2a2a2a;
       border: 1px solid #444;
       border-radius: 6px;
       padding: 8px 0;
       min-width: 200px;
-      z-index: 1000;
+      z-index: 9999;
       display: none;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-      margin-top: 4px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
     `;
 
     this.createDropdownItems();
 
     this.container.appendChild(this.exportButton);
-    this.container.appendChild(this.dropdown);
+    // Dropdown will be appended to body when shown
 
     // Close dropdown on outside click
     document.addEventListener('click', (e) => {
-      if (!this.container.contains(e.target as Node)) {
+      if (this.isDropdownOpen && !this.container.contains(e.target as Node) && !this.dropdown.contains(e.target as Node)) {
         this.closeDropdown();
       }
     });
@@ -220,10 +217,28 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
   }
 
   private toggleDropdown(): void {
-    this.isDropdownOpen = !this.isDropdownOpen;
-    this.dropdown.style.display = this.isDropdownOpen ? 'block' : 'none';
-    this.exportButton.style.background = this.isDropdownOpen ? '#555' : '#444';
-    this.exportButton.style.borderColor = this.isDropdownOpen ? '#4a9eff' : '#555';
+    if (this.isDropdownOpen) {
+      this.closeDropdown();
+    } else {
+      this.openDropdown();
+    }
+  }
+
+  private openDropdown(): void {
+    // Append to body if not already there
+    if (!document.body.contains(this.dropdown)) {
+      document.body.appendChild(this.dropdown);
+    }
+
+    // Position relative to button
+    const rect = this.exportButton.getBoundingClientRect();
+    this.dropdown.style.top = `${rect.bottom + 4}px`;
+    this.dropdown.style.left = `${Math.max(8, rect.right - 220)}px`;
+
+    this.isDropdownOpen = true;
+    this.dropdown.style.display = 'block';
+    this.exportButton.style.background = '#555';
+    this.exportButton.style.borderColor = '#4a9eff';
   }
 
   private closeDropdown(): void {
