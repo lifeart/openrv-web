@@ -5,6 +5,7 @@ import { StrokePoint } from '../../paint/types';
 import { ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from './ColorControls';
 import { WipeState, WipeMode } from './WipeControl';
 import { Transform2D, DEFAULT_TRANSFORM } from './TransformControl';
+import { FilterSettings, DEFAULT_FILTER_SETTINGS } from './FilterControl';
 import { LUT3D } from '../../color/LUTLoader';
 import { ExportFormat, exportCanvas as doExportCanvas, copyCanvasToClipboard } from '../../utils/FrameExporter';
 import { filterImageFiles } from '../../utils/SequenceLoader';
@@ -77,6 +78,9 @@ export class Viewer {
 
   // 2D Transform
   private transform: Transform2D = { ...DEFAULT_TRANSFORM };
+
+  // Filter effects
+  private filterSettings: FilterSettings = { ...DEFAULT_FILTER_SETTINGS };
 
   constructor(session: Session, paintEngine: PaintEngine) {
     this.session = session;
@@ -780,6 +784,11 @@ export class Viewer {
         // Normal rendering with transforms
         this.drawWithTransform(this.imageCtx, element, displayWidth, displayHeight);
       }
+
+      // Apply sharpen filter (pixel-level operation, applied after drawing)
+      if (this.filterSettings.sharpen > 0) {
+        this.applySharpen(this.imageCtx, displayWidth, displayHeight);
+      }
     }
 
     this.updateCanvasPosition();
@@ -846,6 +855,58 @@ export class Viewer {
     ctx.drawImage(element, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
 
     ctx.restore();
+  }
+
+  /**
+   * Apply unsharp mask sharpening to the canvas
+   * Uses a simplified 3x3 kernel convolution for performance
+   */
+  private applySharpen(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+    if (this.filterSettings.sharpen <= 0) return;
+
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const data = imageData.data;
+    const amount = this.filterSettings.sharpen / 100;
+
+    // Create a copy for reading original values
+    const original = new Uint8ClampedArray(data);
+
+    // Sharpen kernel (3x3 unsharp mask approximation)
+    // Center weight is boosted, neighbors are subtracted
+    const kernel = [
+      0, -1, 0,
+      -1, 5, -1,
+      0, -1, 0
+    ];
+
+    // For performance, we'll use a simplified approach:
+    // Instead of full convolution, apply contrast-based sharpening with edge enhancement
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const idx = (y * width + x) * 4;
+
+        for (let c = 0; c < 3; c++) { // RGB channels only
+          let sum = 0;
+          let ki = 0;
+
+          // Apply 3x3 kernel
+          for (let ky = -1; ky <= 1; ky++) {
+            for (let kx = -1; kx <= 1; kx++) {
+              const pidx = ((y + ky) * width + (x + kx)) * 4 + c;
+              sum += original[pidx]! * kernel[ki]!;
+              ki++;
+            }
+          }
+
+          // Blend between original and sharpened based on amount
+          const originalValue = original[idx + c]!;
+          const sharpenedValue = Math.max(0, Math.min(255, sum));
+          data[idx + c] = Math.round(originalValue + (sharpenedValue - originalValue) * amount);
+        }
+      }
+    }
+
+    ctx.putImageData(imageData, 0, 0);
   }
 
   private renderWithWipe(
@@ -1052,6 +1113,23 @@ export class Viewer {
     return { ...this.transform };
   }
 
+  // Filter methods
+  setFilterSettings(settings: FilterSettings): void {
+    this.filterSettings = { ...settings };
+    this.applyColorFilters();
+    this.scheduleRender();
+  }
+
+  getFilterSettings(): FilterSettings {
+    return { ...this.filterSettings };
+  }
+
+  resetFilterSettings(): void {
+    this.filterSettings = { ...DEFAULT_FILTER_SETTINGS };
+    this.applyColorFilters();
+    this.scheduleRender();
+  }
+
   private updateWipeLine(): void {
     if (!this.wipeLine) return;
 
@@ -1174,6 +1252,11 @@ export class Viewer {
     if (this.colorAdjustments.tint !== 0) {
       const hue = this.colorAdjustments.tint * 0.5;
       filters.push(`hue-rotate(${hue.toFixed(1)}deg)`);
+    }
+
+    // Blur filter effect
+    if (this.filterSettings.blur > 0) {
+      filters.push(`blur(${this.filterSettings.blur.toFixed(1)}px)`);
     }
 
     // Apply to canvas container (affects both image and paint layers)

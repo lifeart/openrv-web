@@ -421,7 +421,7 @@ const annotations = dto.byProtocol('RVPaint');
 - [x] Annotations/paint
 - [x] Wipes for comparison (horizontal/vertical, original vs adjusted)
 - [ ] Multiple sources (stack)
-- [ ] Filter effects
+- [x] Filter effects (blur, sharpen with unsharp mask)
 
 ### Phase 4
 - [x] Audio playback (video volume control with mute)

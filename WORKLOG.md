@@ -1,6 +1,6 @@
 # OpenRV Web - Work Log
 
-## Current Status: Sequence Export Complete
+## Current Status: Filter Effects Complete
 
 ---
 
@@ -150,6 +150,16 @@
 - [x] Viewer.renderFrameToCanvas() for rendering specific frames
 - [x] App.handleSequenceExport() integrates everything
 
+### Phase 15: Filter Effects ✅
+- [x] FilterControl component (`src/ui/components/FilterControl.ts`)
+- [x] Blur filter (0-20px range) using CSS blur() filter
+- [x] Sharpen filter (0-100 amount) using canvas convolution kernel
+- [x] Unsharp mask algorithm with 3x3 kernel
+- [x] Double-click to reset individual sliders
+- [x] Reset all button
+- [x] Keyboard shortcut (G) to toggle filter panel
+- [x] Filter state indicator (highlighted button when active)
+
 ---
 
 ## Not Started
@@ -221,3 +231,10 @@
   - Progress dialog with cancel button and percentage
   - Added `renderFrameToCanvas()` to Viewer for specific frame rendering
   - App.handleSequenceExport() coordinates the export process
+- **Completed Phase 15: Filter Effects**
+  - Created `FilterControl.ts` with blur and sharpen sliders
+  - Blur uses CSS blur() filter (0-20px)
+  - Sharpen uses canvas convolution with 3x3 unsharp mask kernel
+  - Added Viewer.applySharpen() for pixel-level sharpening
+  - Keyboard shortcut: G to toggle filter panel
+  - Filter state highlighted in button when active

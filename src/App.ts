@@ -9,6 +9,7 @@ import { WipeControl } from './ui/components/WipeControl';
 import { VolumeControl } from './ui/components/VolumeControl';
 import { ExportControl } from './ui/components/ExportControl';
 import { TransformControl } from './ui/components/TransformControl';
+import { FilterControl } from './ui/components/FilterControl';
 import { exportSequence } from './utils/SequenceExporter';
 
 export class App {
@@ -24,6 +25,7 @@ export class App {
   private volumeControl: VolumeControl;
   private exportControl: ExportControl;
   private transformControl: TransformControl;
+  private filterControl: FilterControl;
   private animationId: number | null = null;
 
   constructor() {
@@ -83,6 +85,12 @@ export class App {
     this.transformControl.on('transformChanged', (transform) => {
       this.viewer.setTransform(transform);
     });
+
+    // Initialize filter control
+    this.filterControl = new FilterControl();
+    this.filterControl.on('filtersChanged', (settings) => {
+      this.viewer.setFilterSettings(settings);
+    });
   }
 
   mount(selector: string): void {
@@ -112,6 +120,7 @@ export class App {
     toolbarEl.style.borderBottom = 'none';
     const paintToolbarEl = this.paintToolbar.render();
     const colorControlsEl = this.colorControls.render();
+    const filterControlEl = this.filterControl.render();
     const wipeControlEl = this.wipeControl.render();
     const transformControlEl = this.transformControl.render();
     const volumeControlEl = this.volumeControl.render();
@@ -120,6 +129,7 @@ export class App {
     toolbarRow.appendChild(toolbarEl);
     toolbarRow.appendChild(paintToolbarEl);
     toolbarRow.appendChild(colorControlsEl);
+    toolbarRow.appendChild(filterControlEl);
     toolbarRow.appendChild(wipeControlEl);
     toolbarRow.appendChild(transformControlEl);
     toolbarRow.appendChild(volumeControlEl);
@@ -290,6 +300,11 @@ export class App {
       case 'W':
         // Cycle wipe mode
         this.wipeControl.cycleMode();
+        break;
+      case 'g':
+      case 'G':
+        // Toggle filter effects panel
+        this.filterControl.toggle();
         break;
       case 'Escape':
         // Reset color adjustments when Escape pressed while color panel is open
@@ -537,6 +552,7 @@ export class App {
     this.colorControls.dispose();
     this.wipeControl.dispose();
     this.transformControl.dispose();
+    this.filterControl.dispose();
     this.volumeControl.dispose();
     this.exportControl.dispose();
   }
