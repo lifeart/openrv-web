@@ -1774,4 +1774,34 @@ export class Viewer {
       this.lutProcessor = null;
     }
   }
+
+  /**
+   * Get ImageData from the current canvas for histogram analysis
+   */
+  getImageData(): ImageData | null {
+    const source = this.session.currentSource;
+    if (!source?.element) return null;
+
+    // Get the displayed dimensions
+    const displayWidth = this.imageCanvas.width;
+    const displayHeight = this.imageCanvas.height;
+
+    if (displayWidth === 0 || displayHeight === 0) return null;
+
+    return this.imageCtx.getImageData(0, 0, displayWidth, displayHeight);
+  }
+
+  /**
+   * Get the canvas container element for overlays
+   */
+  getCanvasContainer(): HTMLElement {
+    return this.canvasContainer;
+  }
+
+  /**
+   * Get the main viewer container element for overlays
+   */
+  getContainer(): HTMLElement {
+    return this.container;
+  }
 }

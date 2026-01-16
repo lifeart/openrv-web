@@ -15,6 +15,9 @@ import { CDLControl } from './ui/components/CDLControl';
 import { LensControl } from './ui/components/LensControl';
 import { StackControl } from './ui/components/StackControl';
 import { ChannelSelect } from './ui/components/ChannelSelect';
+import { Histogram } from './ui/components/Histogram';
+import { Waveform } from './ui/components/Waveform';
+import { Vectorscope } from './ui/components/Vectorscope';
 import { exportSequence } from './utils/SequenceExporter';
 import { showAlert, showModal } from './ui/components/shared/Modal';
 import { SessionSerializer } from './core/session/SessionSerializer';
@@ -38,6 +41,9 @@ export class App {
   private lensControl: LensControl;
   private stackControl: StackControl;
   private channelSelect: ChannelSelect;
+  private histogram: Histogram;
+  private waveform: Waveform;
+  private vectorscope: Vectorscope;
   private animationId: number | null = null;
   private boundHandleKeydown: (e: KeyboardEvent) => void;
   private boundHandleResize: () => void;
@@ -174,6 +180,15 @@ export class App {
     this.channelSelect.on('channelChanged', (channel) => {
       this.viewer.setChannelMode(channel);
     });
+
+    // Initialize histogram
+    this.histogram = new Histogram();
+
+    // Initialize waveform
+    this.waveform = new Waveform();
+
+    // Initialize vectorscope
+    this.vectorscope = new Vectorscope();
   }
 
   mount(selector: string): void {
@@ -210,6 +225,30 @@ export class App {
     this.container.appendChild(contextToolbarEl);
     this.container.appendChild(viewerEl);
     this.container.appendChild(timelineEl);
+
+    // Add histogram overlay to viewer container
+    this.viewer.getContainer().appendChild(this.histogram.render());
+
+    // Add waveform overlay to viewer container
+    this.viewer.getContainer().appendChild(this.waveform.render());
+
+    // Add vectorscope overlay to viewer container
+    this.viewer.getContainer().appendChild(this.vectorscope.render());
+
+    // Update histogram, waveform, and vectorscope when frame changes or media loads
+    this.session.on('frameChanged', () => {
+      this.updateHistogram();
+      this.updateWaveform();
+      this.updateVectorscope();
+    });
+    this.session.on('sourceChanged', () => {
+      // Small delay to allow canvas to render
+      setTimeout(() => {
+        this.updateHistogram();
+        this.updateWaveform();
+        this.updateVectorscope();
+      }, 100);
+    });
 
     // Handle clear frame event from paint toolbar
     const paintToolbarEl = this.paintToolbar.render();
@@ -249,6 +288,83 @@ export class App {
 
     // Stack control
     viewContent.appendChild(this.stackControl.render());
+
+    viewContent.appendChild(ContextToolbar.createDivider());
+
+    // Histogram toggle button
+    const histogramButton = ContextToolbar.createButton('Histogram', () => {
+      this.histogram.toggle();
+      if (this.histogram.isVisible()) {
+        this.updateHistogram();
+        histogramButton.style.background = 'rgba(74, 158, 255, 0.15)';
+        histogramButton.style.borderColor = '#4a9eff';
+      } else {
+        histogramButton.style.background = '';
+        histogramButton.style.borderColor = '';
+      }
+    }, { title: 'Toggle histogram display (H)' });
+    viewContent.appendChild(histogramButton);
+
+    // Update histogram button state when visibility changes
+    this.histogram.on('visibilityChanged', (visible) => {
+      if (visible) {
+        histogramButton.style.background = 'rgba(74, 158, 255, 0.15)';
+        histogramButton.style.borderColor = '#4a9eff';
+      } else {
+        histogramButton.style.background = '';
+        histogramButton.style.borderColor = '';
+      }
+    });
+
+    // Waveform toggle button
+    const waveformButton = ContextToolbar.createButton('Waveform', () => {
+      this.waveform.toggle();
+      if (this.waveform.isVisible()) {
+        this.updateWaveform();
+        waveformButton.style.background = 'rgba(74, 158, 255, 0.15)';
+        waveformButton.style.borderColor = '#4a9eff';
+      } else {
+        waveformButton.style.background = '';
+        waveformButton.style.borderColor = '';
+      }
+    }, { title: 'Toggle waveform display (W)' });
+    viewContent.appendChild(waveformButton);
+
+    // Update waveform button state when visibility changes
+    this.waveform.on('visibilityChanged', (visible) => {
+      if (visible) {
+        waveformButton.style.background = 'rgba(74, 158, 255, 0.15)';
+        waveformButton.style.borderColor = '#4a9eff';
+      } else {
+        waveformButton.style.background = '';
+        waveformButton.style.borderColor = '';
+      }
+    });
+
+    // Vectorscope toggle button
+    const vectorscopeButton = ContextToolbar.createButton('Vectorscope', () => {
+      this.vectorscope.toggle();
+      if (this.vectorscope.isVisible()) {
+        this.updateVectorscope();
+        vectorscopeButton.style.background = 'rgba(74, 158, 255, 0.15)';
+        vectorscopeButton.style.borderColor = '#4a9eff';
+      } else {
+        vectorscopeButton.style.background = '';
+        vectorscopeButton.style.borderColor = '';
+      }
+    }, { title: 'Toggle vectorscope display (Y)' });
+    viewContent.appendChild(vectorscopeButton);
+
+    // Update vectorscope button state when visibility changes
+    this.vectorscope.on('visibilityChanged', (visible) => {
+      if (visible) {
+        vectorscopeButton.style.background = 'rgba(74, 158, 255, 0.15)';
+        vectorscopeButton.style.borderColor = '#4a9eff';
+      } else {
+        vectorscopeButton.style.background = '';
+        vectorscopeButton.style.borderColor = '';
+      }
+    });
 
     this.contextToolbar.setTabContent('view', viewContent);
 
@@ -460,10 +576,30 @@ export class App {
         // Toggle color controls panel
         this.colorControls.toggle();
         break;
-      case 'w':
       case 'W':
-        // Cycle wipe mode
+        // Cycle wipe mode (uppercase only)
         this.wipeControl.cycleMode();
+        break;
+      case 'w':
+        // Toggle waveform (lowercase only)
+        this.waveform.toggle();
+        if (this.waveform.isVisible()) {
+          this.updateWaveform();
+        }
+        break;
+      case 'y':
+        // Toggle vectorscope (lowercase only)
+        this.vectorscope.toggle();
+        if (this.vectorscope.isVisible()) {
+          this.updateVectorscope();
+        }
+        break;
+      case 'h':
+        // Toggle histogram (lowercase only, Shift+H is for flip horizontal)
+        this.histogram.toggle();
+        if (this.histogram.isVisible()) {
+          this.updateHistogram();
+        }
         break;
       case 'g':
       case 'G':
@@ -710,6 +846,42 @@ export class App {
     }
   }
 
+  /**
+   * Update histogram with current frame data
+   */
+  private updateHistogram(): void {
+    if (!this.histogram.isVisible()) return;
+
+    const imageData = this.viewer.getImageData();
+    if (imageData) {
+      this.histogram.update(imageData);
+    }
+  }
+
+  /**
+   * Update waveform with current frame data
+   */
+  private updateWaveform(): void {
+    if (!this.waveform.isVisible()) return;
+
+    const imageData = this.viewer.getImageData();
+    if (imageData) {
+      this.waveform.update(imageData);
+    }
+  }
+
+  /**
+   * Update vectorscope with current frame data
+   */
+  private updateVectorscope(): void {
+    if (!this.vectorscope.isVisible()) return;
+
+    const imageData = this.viewer.getImageData();
+    if (imageData) {
+      this.vectorscope.update(imageData);
+    }
+  }
+
   private showShortcuts(): void {
     const content = document.createElement('div');
     content.style.cssText = `
@@ -745,6 +917,11 @@ Shift+B   - Blue channel
 Shift+A   - Alpha channel
 Shift+L   - Luminance
 Shift+N   - RGB (all channels)
+
+SCOPES
+H         - Toggle histogram display
+w         - Toggle waveform display
+y         - Toggle vectorscope display
 
 TIMELINE
 I / [     - Set in point
@@ -867,5 +1044,8 @@ Shift+V   - Flip vertical</pre>`;
     this.lensControl.dispose();
     this.stackControl.dispose();
     this.channelSelect.dispose();
+    this.histogram.dispose();
+    this.waveform.dispose();
+    this.vectorscope.dispose();
   }
 }

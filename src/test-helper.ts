@@ -43,6 +43,13 @@ export interface ViewerState {
   wipePosition: number;
   cropEnabled: boolean;
   channelMode: 'rgb' | 'red' | 'green' | 'blue' | 'alpha' | 'luminance';
+  histogramVisible: boolean;
+  histogramMode: 'rgb' | 'luminance' | 'separate';
+  histogramLogScale: boolean;
+  waveformVisible: boolean;
+  waveformMode: 'luma' | 'rgb' | 'parade';
+  vectorscopeVisible: boolean;
+  vectorscopeZoom: number;
 }
 
 export interface ColorState {
@@ -105,6 +112,9 @@ export function exposeForTesting(app: App): void {
 
     getViewerState: (): ViewerState => {
       const viewer = appAny.viewer;
+      const histogram = appAny.histogram;
+      const waveform = appAny.waveform;
+      const vectorscope = appAny.vectorscope;
       return {
         zoom: viewer.zoom ?? 1,
         panX: viewer.panX ?? 0,
@@ -113,6 +123,13 @@ export function exposeForTesting(app: App): void {
         wipePosition: viewer.wipeState?.position ?? 0.5,
         cropEnabled: viewer.cropState?.enabled ?? false,
         channelMode: viewer.channelMode ?? 'rgb',
+        histogramVisible: histogram?.isVisible?.() ?? false,
+        histogramMode: histogram?.getMode?.() ?? 'rgb',
+        histogramLogScale: histogram?.isLogScale?.() ?? false,
+        waveformVisible: waveform?.isVisible?.() ?? false,
+        waveformMode: waveform?.getMode?.() ?? 'luma',
+        vectorscopeVisible: vectorscope?.isVisible?.() ?? false,
+        vectorscopeZoom: vectorscope?.getZoom?.() ?? 1,
       };
     },
 

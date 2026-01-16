@@ -31,6 +31,13 @@ export interface ViewerState {
   wipePosition: number;
   cropEnabled: boolean;
   channelMode: 'rgb' | 'red' | 'green' | 'blue' | 'alpha' | 'luminance';
+  histogramVisible: boolean;
+  histogramMode: 'rgb' | 'luminance' | 'separate';
+  histogramLogScale: boolean;
+  waveformVisible: boolean;
+  waveformMode: 'luma' | 'rgb' | 'parade';
+  vectorscopeVisible: boolean;
+  vectorscopeZoom: number;
 }
 
 export interface ColorState {
@@ -99,6 +106,13 @@ export async function getViewerState(page: Page): Promise<ViewerState> {
       wipePosition: 0.5,
       cropEnabled: false,
       channelMode: 'rgb',
+      histogramVisible: false,
+      histogramMode: 'rgb',
+      histogramLogScale: false,
+      waveformVisible: false,
+      waveformMode: 'luma',
+      vectorscopeVisible: false,
+      vectorscopeZoom: 1,
     };
   });
 }
