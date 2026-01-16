@@ -10,6 +10,7 @@ import { VolumeControl } from './ui/components/VolumeControl';
 import { ExportControl } from './ui/components/ExportControl';
 import { TransformControl } from './ui/components/TransformControl';
 import { FilterControl } from './ui/components/FilterControl';
+import { CropControl } from './ui/components/CropControl';
 import { exportSequence } from './utils/SequenceExporter';
 
 export class App {
@@ -26,6 +27,7 @@ export class App {
   private exportControl: ExportControl;
   private transformControl: TransformControl;
   private filterControl: FilterControl;
+  private cropControl: CropControl;
   private animationId: number | null = null;
 
   constructor() {
@@ -91,6 +93,15 @@ export class App {
     this.filterControl.on('filtersChanged', (settings) => {
       this.viewer.setFilterSettings(settings);
     });
+
+    // Initialize crop control
+    this.cropControl = new CropControl();
+    this.cropControl.on('cropStateChanged', (state) => {
+      this.viewer.setCropState(state);
+    });
+    this.cropControl.on('cropModeToggled', (enabled) => {
+      this.viewer.setCropEnabled(enabled);
+    });
   }
 
   mount(selector: string): void {
@@ -121,6 +132,7 @@ export class App {
     const paintToolbarEl = this.paintToolbar.render();
     const colorControlsEl = this.colorControls.render();
     const filterControlEl = this.filterControl.render();
+    const cropControlEl = this.cropControl.render();
     const wipeControlEl = this.wipeControl.render();
     const transformControlEl = this.transformControl.render();
     const volumeControlEl = this.volumeControl.render();
@@ -130,6 +142,7 @@ export class App {
     toolbarRow.appendChild(paintToolbarEl);
     toolbarRow.appendChild(colorControlsEl);
     toolbarRow.appendChild(filterControlEl);
+    toolbarRow.appendChild(cropControlEl);
     toolbarRow.appendChild(wipeControlEl);
     toolbarRow.appendChild(transformControlEl);
     toolbarRow.appendChild(volumeControlEl);
@@ -305,6 +318,11 @@ export class App {
       case 'G':
         // Toggle filter effects panel
         this.filterControl.toggle();
+        break;
+      case 'k':
+      case 'K':
+        // Toggle crop mode
+        this.cropControl.toggle();
         break;
       case 'Escape':
         // Reset color adjustments when Escape pressed while color panel is open
@@ -553,6 +571,7 @@ export class App {
     this.wipeControl.dispose();
     this.transformControl.dispose();
     this.filterControl.dispose();
+    this.cropControl.dispose();
     this.volumeControl.dispose();
     this.exportControl.dispose();
   }

@@ -6,6 +6,7 @@ import { ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from './ColorControls';
 import { WipeState, WipeMode } from './WipeControl';
 import { Transform2D, DEFAULT_TRANSFORM } from './TransformControl';
 import { FilterSettings, DEFAULT_FILTER_SETTINGS } from './FilterControl';
+import { CropState, CropRegion, DEFAULT_CROP_STATE, DEFAULT_CROP_REGION } from './CropControl';
 import { LUT3D } from '../../color/LUTLoader';
 import { ExportFormat, exportCanvas as doExportCanvas, copyCanvasToClipboard } from '../../utils/FrameExporter';
 import { filterImageFiles } from '../../utils/SequenceLoader';
@@ -82,6 +83,11 @@ export class Viewer {
   // Filter effects
   private filterSettings: FilterSettings = { ...DEFAULT_FILTER_SETTINGS };
 
+  // Crop state
+  private cropState: CropState = { ...DEFAULT_CROP_STATE, region: { ...DEFAULT_CROP_REGION } };
+  private cropOverlay: HTMLCanvasElement | null = null;
+  private cropCtx: CanvasRenderingContext2D | null = null;
+
   constructor(session: Session, paintEngine: PaintEngine) {
     this.session = session;
     this.paintEngine = paintEngine;
@@ -130,6 +136,17 @@ export class Viewer {
       pointer-events: none;
     `;
     this.canvasContainer.appendChild(this.paintCanvas);
+
+    // Create crop overlay canvas
+    this.cropOverlay = document.createElement('canvas');
+    this.cropOverlay.style.cssText = `
+      position: absolute;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+    `;
+    this.canvasContainer.appendChild(this.cropOverlay);
+    this.cropCtx = this.cropOverlay.getContext('2d');
 
     const imageCtx = this.imageCanvas.getContext('2d', { alpha: false });
     if (!imageCtx) throw new Error('Failed to get image 2D context');
@@ -220,6 +237,11 @@ export class Viewer {
     this.imageCanvas.height = height;
     this.paintCanvas.width = width;
     this.paintCanvas.height = height;
+
+    if (this.cropOverlay) {
+      this.cropOverlay.width = width;
+      this.cropOverlay.height = height;
+    }
 
     this.updateCanvasPosition();
   }
@@ -698,6 +720,9 @@ export class Viewer {
     } else {
       this.renderPaint();
     }
+
+    // Render crop overlay if enabled
+    this.renderCropOverlay();
   }
 
   private renderImage(): void {
@@ -1128,6 +1153,92 @@ export class Viewer {
     this.filterSettings = { ...DEFAULT_FILTER_SETTINGS };
     this.applyColorFilters();
     this.scheduleRender();
+  }
+
+  // Crop methods
+  setCropState(state: CropState): void {
+    this.cropState = { ...state, region: { ...state.region } };
+    this.scheduleRender();
+  }
+
+  getCropState(): CropState {
+    return { ...this.cropState, region: { ...this.cropState.region } };
+  }
+
+  setCropRegion(region: CropRegion): void {
+    this.cropState.region = { ...region };
+    this.scheduleRender();
+  }
+
+  setCropEnabled(enabled: boolean): void {
+    this.cropState.enabled = enabled;
+    this.scheduleRender();
+  }
+
+  private renderCropOverlay(): void {
+    if (!this.cropOverlay || !this.cropCtx) return;
+
+    const ctx = this.cropCtx;
+    const w = this.displayWidth;
+    const h = this.displayHeight;
+
+    // Clear overlay
+    ctx.clearRect(0, 0, w, h);
+
+    if (!this.cropState.enabled) return;
+
+    const region = this.cropState.region;
+    const cropX = region.x * w;
+    const cropY = region.y * h;
+    const cropW = region.width * w;
+    const cropH = region.height * h;
+
+    // Draw darkened areas outside crop region
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+
+    // Top
+    ctx.fillRect(0, 0, w, cropY);
+    // Bottom
+    ctx.fillRect(0, cropY + cropH, w, h - cropY - cropH);
+    // Left
+    ctx.fillRect(0, cropY, cropX, cropH);
+    // Right
+    ctx.fillRect(cropX + cropW, cropY, w - cropX - cropW, cropH);
+
+    // Draw crop border
+    ctx.strokeStyle = '#4a9eff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(cropX, cropY, cropW, cropH);
+
+    // Draw corner handles
+    const handleSize = 8;
+    ctx.fillStyle = '#4a9eff';
+
+    // Top-left
+    ctx.fillRect(cropX - handleSize / 2, cropY - handleSize / 2, handleSize, handleSize);
+    // Top-right
+    ctx.fillRect(cropX + cropW - handleSize / 2, cropY - handleSize / 2, handleSize, handleSize);
+    // Bottom-left
+    ctx.fillRect(cropX - handleSize / 2, cropY + cropH - handleSize / 2, handleSize, handleSize);
+    // Bottom-right
+    ctx.fillRect(cropX + cropW - handleSize / 2, cropY + cropH - handleSize / 2, handleSize, handleSize);
+
+    // Draw rule of thirds guides
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.lineWidth = 1;
+
+    // Vertical lines
+    ctx.beginPath();
+    ctx.moveTo(cropX + cropW / 3, cropY);
+    ctx.lineTo(cropX + cropW / 3, cropY + cropH);
+    ctx.moveTo(cropX + (cropW * 2) / 3, cropY);
+    ctx.lineTo(cropX + (cropW * 2) / 3, cropY + cropH);
+    // Horizontal lines
+    ctx.moveTo(cropX, cropY + cropH / 3);
+    ctx.lineTo(cropX + cropW, cropY + cropH / 3);
+    ctx.moveTo(cropX, cropY + (cropH * 2) / 3);
+    ctx.lineTo(cropX + cropW, cropY + (cropH * 2) / 3);
+    ctx.stroke();
   }
 
   private updateWipeLine(): void {

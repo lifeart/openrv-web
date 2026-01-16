@@ -1,6 +1,6 @@
 # OpenRV Web - Work Log
 
-## Current Status: Filter Effects Complete
+## Current Status: Crop Tool Complete
 
 ---
 
@@ -160,12 +160,21 @@
 - [x] Keyboard shortcut (G) to toggle filter panel
 - [x] Filter state indicator (highlighted button when active)
 
+### Phase 16: Crop Tool ✅
+- [x] CropControl component (`src/ui/components/CropControl.ts`)
+- [x] Enable/disable crop mode toggle
+- [x] Preset aspect ratios (Free, 16:9, 4:3, 1:1, 9:16, 2.35:1)
+- [x] Crop overlay canvas with darkened areas outside crop region
+- [x] Blue border and corner handles for crop region
+- [x] Rule of thirds guides within crop area
+- [x] Keyboard shortcut (K) to toggle crop mode
+- [x] Crop state indicator (highlighted button when active)
+
 ---
 
 ## Not Started
 
 ### Future Enhancements
-- [ ] Crop node
 - [ ] Stack/composite nodes
 - [ ] Waveform display for audio
 - [ ] Lens distortion correction
@@ -238,3 +247,8 @@
   - Added Viewer.applySharpen() for pixel-level sharpening
   - Keyboard shortcut: G to toggle filter panel
   - Filter state highlighted in button when active
+- **Completed Phase 16: Crop Tool**
+  - Created `CropControl.ts` with enable toggle and aspect ratio presets
+  - Added crop overlay canvas to Viewer with darkened regions
+  - Blue border, corner handles, and rule of thirds guides
+  - Keyboard shortcut: K to toggle crop mode
