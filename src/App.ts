@@ -4,6 +4,8 @@ import { Timeline } from './ui/components/Timeline';
 import { Toolbar } from './ui/components/Toolbar';
 import { PaintEngine } from './paint/PaintEngine';
 import { PaintToolbar } from './ui/components/PaintToolbar';
+import { ColorControls } from './ui/components/ColorControls';
+import { WipeControl } from './ui/components/WipeControl';
 
 export class App {
   private container: HTMLElement | null = null;
@@ -13,6 +15,8 @@ export class App {
   private toolbar: Toolbar;
   private paintEngine: PaintEngine;
   private paintToolbar: PaintToolbar;
+  private colorControls: ColorControls;
+  private wipeControl: WipeControl;
   private animationId: number | null = null;
 
   constructor() {
@@ -25,6 +29,18 @@ export class App {
       setZoom: (level: number) => this.viewer.setZoom(level),
     });
     this.paintToolbar = new PaintToolbar(this.paintEngine);
+    this.colorControls = new ColorControls();
+    this.wipeControl = new WipeControl();
+
+    // Connect color controls to viewer
+    this.colorControls.on('adjustmentsChanged', (adjustments) => {
+      this.viewer.setColorAdjustments(adjustments);
+    });
+
+    // Connect wipe control to viewer
+    this.wipeControl.on('stateChanged', (state) => {
+      this.viewer.setWipeState(state);
+    });
   }
 
   mount(selector: string): void {
@@ -53,9 +69,13 @@ export class App {
     const toolbarEl = this.toolbar.render();
     toolbarEl.style.borderBottom = 'none';
     const paintToolbarEl = this.paintToolbar.render();
+    const colorControlsEl = this.colorControls.render();
+    const wipeControlEl = this.wipeControl.render();
 
     toolbarRow.appendChild(toolbarEl);
     toolbarRow.appendChild(paintToolbarEl);
+    toolbarRow.appendChild(colorControlsEl);
+    toolbarRow.appendChild(wipeControlEl);
 
     const viewerEl = this.viewer.getElement();
     const timelineEl = this.timeline.render();
@@ -183,6 +203,22 @@ export class App {
         // Reset in/out points to full duration
         this.session.resetInOutPoints();
         break;
+      case 'c':
+      case 'C':
+        // Toggle color controls panel
+        this.colorControls.toggle();
+        break;
+      case 'w':
+      case 'W':
+        // Cycle wipe mode
+        this.wipeControl.cycleMode();
+        break;
+      case 'Escape':
+        // Reset color adjustments when Escape pressed while color panel is open
+        if (this.colorControls) {
+          this.colorControls.hide();
+        }
+        break;
     }
   }
 
@@ -211,5 +247,7 @@ export class App {
     this.timeline.dispose();
     this.toolbar.dispose();
     this.paintToolbar.dispose();
+    this.colorControls.dispose();
+    this.wipeControl.dispose();
   }
 }

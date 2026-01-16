@@ -1,7 +1,10 @@
 import { IPImage, DataType } from '../core/image/Image';
 import { ShaderProgram } from './ShaderProgram';
+import { ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from '../ui/components/ColorControls';
 
 export class Renderer {
+  // Color adjustments state
+  private colorAdjustments: ColorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
   private gl: WebGL2RenderingContext | null = null;
   private canvas: HTMLCanvasElement | null = null;
 
@@ -68,12 +71,60 @@ export class Renderer {
       in vec2 v_texCoord;
       out vec4 fragColor;
       uniform sampler2D u_texture;
-      uniform float u_gamma;
+
+      // Color adjustments
+      uniform float u_exposure;      // -5 to +5 stops
+      uniform float u_gamma;         // 0.1 to 4.0
+      uniform float u_saturation;    // 0 to 2
+      uniform float u_contrast;      // 0 to 2
+      uniform float u_brightness;    // -1 to +1
+      uniform float u_temperature;   // -100 to +100
+      uniform float u_tint;          // -100 to +100
+
+      // Luminance coefficients (Rec. 709)
+      const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
+
+      // Temperature/tint adjustment (simplified Kelvin shift)
+      vec3 applyTemperature(vec3 color, float temp, float tint) {
+        // Temperature shifts blue-orange
+        // Tint shifts green-magenta
+        float t = temp / 100.0;
+        float g = tint / 100.0;
+
+        color.r += t * 0.1;
+        color.b -= t * 0.1;
+        color.g += g * 0.1;
+        color.r -= g * 0.05;
+        color.b -= g * 0.05;
+
+        return color;
+      }
 
       void main() {
         vec4 color = texture(u_texture, v_texCoord);
-        // Simple sRGB approximation
-        color.rgb = pow(color.rgb, vec3(1.0 / u_gamma));
+
+        // 1. Exposure (in stops, applied in linear space)
+        color.rgb *= pow(2.0, u_exposure);
+
+        // 2. Temperature and tint
+        color.rgb = applyTemperature(color.rgb, u_temperature, u_tint);
+
+        // 3. Brightness (simple offset)
+        color.rgb += u_brightness;
+
+        // 4. Contrast (pivot at 0.5)
+        color.rgb = (color.rgb - 0.5) * u_contrast + 0.5;
+
+        // 5. Saturation
+        float luma = dot(color.rgb, LUMA);
+        color.rgb = mix(vec3(luma), color.rgb, u_saturation);
+
+        // 6. Gamma correction (display transform)
+        color.rgb = pow(max(color.rgb, 0.0), vec3(1.0 / u_gamma));
+
+        // Clamp final output
+        color.rgb = clamp(color.rgb, 0.0, 1.0);
+
         fragColor = color;
       }
     `;
@@ -149,7 +200,15 @@ export class Renderer {
     this.displayShader.use();
     this.displayShader.setUniform('u_offset', [offsetX, offsetY]);
     this.displayShader.setUniform('u_scale', [scaleX, scaleY]);
-    this.displayShader.setUniform('u_gamma', 2.2);
+
+    // Set color adjustment uniforms
+    this.displayShader.setUniform('u_exposure', this.colorAdjustments.exposure);
+    this.displayShader.setUniform('u_gamma', this.colorAdjustments.gamma);
+    this.displayShader.setUniform('u_saturation', this.colorAdjustments.saturation);
+    this.displayShader.setUniform('u_contrast', this.colorAdjustments.contrast);
+    this.displayShader.setUniform('u_brightness', this.colorAdjustments.brightness);
+    this.displayShader.setUniform('u_temperature', this.colorAdjustments.temperature);
+    this.displayShader.setUniform('u_tint', this.colorAdjustments.tint);
     this.displayShader.setUniform('u_texture', 0);
 
     // Bind texture
@@ -287,6 +346,18 @@ export class Renderer {
 
   getContext(): WebGL2RenderingContext | null {
     return this.gl;
+  }
+
+  setColorAdjustments(adjustments: ColorAdjustments): void {
+    this.colorAdjustments = { ...adjustments };
+  }
+
+  getColorAdjustments(): ColorAdjustments {
+    return { ...this.colorAdjustments };
+  }
+
+  resetColorAdjustments(): void {
+    this.colorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
   }
 
   dispose(): void {

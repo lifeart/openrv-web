@@ -2,6 +2,8 @@ import { Session } from '../../core/session/Session';
 import { PaintEngine, PaintTool } from '../../paint/PaintEngine';
 import { PaintRenderer } from '../../paint/PaintRenderer';
 import { StrokePoint } from '../../paint/types';
+import { ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from './ColorControls';
+import { WipeState, WipeMode } from './WipeControl';
 
 interface PointerState {
   pointerId: number;
@@ -55,6 +57,14 @@ export class Viewer {
 
   // Animation frame for smooth rendering
   private pendingRender = false;
+
+  // Color adjustments
+  private colorAdjustments: ColorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
+
+  // Wipe comparison
+  private wipeState: WipeState = { mode: 'off', position: 0.5, showOriginal: 'left' };
+  private wipeLine: HTMLElement | null = null;
+  private isDraggingWipe = false;
 
   constructor(session: Session, paintEngine: PaintEngine) {
     this.session = session;
@@ -112,6 +122,19 @@ export class Viewer {
     const paintCtx = this.paintCanvas.getContext('2d');
     if (!paintCtx) throw new Error('Failed to get paint 2D context');
     this.paintCtx = paintCtx;
+
+    // Create wipe line
+    this.wipeLine = document.createElement('div');
+    this.wipeLine.className = 'wipe-line';
+    this.wipeLine.style.cssText = `
+      position: absolute;
+      background: #4a9eff;
+      cursor: ew-resize;
+      z-index: 50;
+      display: none;
+      box-shadow: 0 0 4px rgba(74, 158, 255, 0.5);
+    `;
+    this.container.appendChild(this.wipeLine);
 
     // Create drop overlay
     this.dropOverlay = document.createElement('div');
@@ -274,6 +297,11 @@ export class Viewer {
     // Capture pointer for tracking outside container
     this.container.setPointerCapture(e.pointerId);
 
+    // Check for wipe line dragging first
+    if (this.handleWipePointerDown(e)) {
+      return;
+    }
+
     this.activePointers.set(e.pointerId, {
       pointerId: e.pointerId,
       x: e.clientX,
@@ -317,6 +345,12 @@ export class Viewer {
   };
 
   private onPointerMove = (e: PointerEvent): void => {
+    // Handle wipe dragging
+    if (this.isDraggingWipe) {
+      this.handleWipePointerMove(e);
+      return;
+    }
+
     if (!this.activePointers.has(e.pointerId)) return;
 
     // Update pointer position
@@ -353,6 +387,13 @@ export class Viewer {
 
   private onPointerUp = (e: PointerEvent): void => {
     this.container.releasePointerCapture(e.pointerId);
+
+    // Handle wipe dragging end
+    if (this.isDraggingWipe) {
+      this.handleWipePointerUp();
+      return;
+    }
+
     this.activePointers.delete(e.pointerId);
 
     // Reset pinch zoom state
@@ -638,6 +679,7 @@ export class Viewer {
 
       this.drawPlaceholder();
       this.updateCanvasPosition();
+      this.updateWipeLine();
       return;
     }
 
@@ -662,14 +704,124 @@ export class Viewer {
       this.setCanvasSize(displayWidth, displayHeight);
     }
 
-    // Clear and draw image
+    // Clear canvas
     this.imageCtx.clearRect(0, 0, displayWidth, displayHeight);
 
     if (element instanceof HTMLImageElement || element instanceof HTMLVideoElement) {
-      this.imageCtx.drawImage(element, 0, 0, displayWidth, displayHeight);
+      // Handle wipe rendering
+      if (this.wipeState.mode !== 'off') {
+        this.renderWithWipe(element, displayWidth, displayHeight);
+      } else {
+        // Normal rendering
+        this.imageCtx.drawImage(element, 0, 0, displayWidth, displayHeight);
+      }
     }
 
     this.updateCanvasPosition();
+    this.updateWipeLine();
+  }
+
+  private renderWithWipe(
+    element: HTMLImageElement | HTMLVideoElement,
+    displayWidth: number,
+    displayHeight: number
+  ): void {
+    const ctx = this.imageCtx;
+    const pos = this.wipeState.position;
+
+    // For wipe, we need to render both with and without filters
+    // Since CSS filters apply to the whole container, we'll use canvas filter property
+
+    ctx.save();
+
+    if (this.wipeState.mode === 'horizontal') {
+      // Left side: original (no filter)
+      // Right side: with color adjustments
+      const splitX = Math.floor(displayWidth * pos);
+
+      // Draw original (left side)
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, splitX, displayHeight);
+      ctx.clip();
+      ctx.filter = 'none';
+      ctx.drawImage(element, 0, 0, displayWidth, displayHeight);
+      ctx.restore();
+
+      // Draw adjusted (right side)
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(splitX, 0, displayWidth - splitX, displayHeight);
+      ctx.clip();
+      ctx.filter = this.getCanvasFilterString();
+      ctx.drawImage(element, 0, 0, displayWidth, displayHeight);
+      ctx.restore();
+
+    } else if (this.wipeState.mode === 'vertical') {
+      // Top side: original (no filter)
+      // Bottom side: with color adjustments
+      const splitY = Math.floor(displayHeight * pos);
+
+      // Draw original (top side)
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, displayWidth, splitY);
+      ctx.clip();
+      ctx.filter = 'none';
+      ctx.drawImage(element, 0, 0, displayWidth, displayHeight);
+      ctx.restore();
+
+      // Draw adjusted (bottom side)
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, splitY, displayWidth, displayHeight - splitY);
+      ctx.clip();
+      ctx.filter = this.getCanvasFilterString();
+      ctx.drawImage(element, 0, 0, displayWidth, displayHeight);
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }
+
+  private getCanvasFilterString(): string {
+    const filters: string[] = [];
+
+    const brightness = 1 + this.colorAdjustments.brightness;
+    if (brightness !== 1) {
+      filters.push(`brightness(${brightness.toFixed(3)})`);
+    }
+
+    if (this.colorAdjustments.exposure !== 0) {
+      const exposureBrightness = Math.pow(2, this.colorAdjustments.exposure);
+      filters.push(`brightness(${exposureBrightness.toFixed(3)})`);
+    }
+
+    if (this.colorAdjustments.contrast !== 1) {
+      filters.push(`contrast(${this.colorAdjustments.contrast.toFixed(3)})`);
+    }
+
+    if (this.colorAdjustments.saturation !== 1) {
+      filters.push(`saturate(${this.colorAdjustments.saturation.toFixed(3)})`);
+    }
+
+    if (this.colorAdjustments.temperature !== 0) {
+      const temp = this.colorAdjustments.temperature;
+      if (temp > 0) {
+        const sepia = Math.min(temp / 200, 0.3);
+        filters.push(`sepia(${sepia.toFixed(3)})`);
+      } else {
+        const hue = temp * 0.3;
+        filters.push(`hue-rotate(${hue.toFixed(1)}deg)`);
+      }
+    }
+
+    if (this.colorAdjustments.tint !== 0) {
+      const hue = this.colorAdjustments.tint * 0.5;
+      filters.push(`hue-rotate(${hue.toFixed(1)}deg)`);
+    }
+
+    return filters.length > 0 ? filters.join(' ') : 'none';
   }
 
   private renderPaint(): void {
@@ -699,6 +851,174 @@ export class Viewer {
 
   getZoom(): number {
     return this.zoom;
+  }
+
+  setColorAdjustments(adjustments: ColorAdjustments): void {
+    this.colorAdjustments = { ...adjustments };
+    this.applyColorFilters();
+    this.scheduleRender();
+  }
+
+  getColorAdjustments(): ColorAdjustments {
+    return { ...this.colorAdjustments };
+  }
+
+  resetColorAdjustments(): void {
+    this.colorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
+    this.applyColorFilters();
+    this.scheduleRender();
+  }
+
+  // Wipe comparison methods
+  setWipeState(state: WipeState): void {
+    this.wipeState = { ...state };
+    this.updateWipeLine();
+    this.scheduleRender();
+  }
+
+  getWipeState(): WipeState {
+    return { ...this.wipeState };
+  }
+
+  setWipeMode(mode: WipeMode): void {
+    this.wipeState.mode = mode;
+    this.updateWipeLine();
+    this.scheduleRender();
+  }
+
+  setWipePosition(position: number): void {
+    this.wipeState.position = Math.max(0, Math.min(1, position));
+    this.updateWipeLine();
+    this.scheduleRender();
+  }
+
+  private updateWipeLine(): void {
+    if (!this.wipeLine) return;
+
+    if (this.wipeState.mode === 'off') {
+      this.wipeLine.style.display = 'none';
+      return;
+    }
+
+    this.wipeLine.style.display = 'block';
+
+    const containerRect = this.container.getBoundingClientRect();
+    const canvasRect = this.canvasContainer.getBoundingClientRect();
+
+    if (this.wipeState.mode === 'horizontal') {
+      // Vertical line for horizontal wipe
+      const x = canvasRect.left - containerRect.left + this.displayWidth * this.wipeState.position;
+      this.wipeLine.style.width = '3px';
+      this.wipeLine.style.height = `${this.displayHeight}px`;
+      this.wipeLine.style.left = `${x - 1}px`;
+      this.wipeLine.style.top = `${canvasRect.top - containerRect.top}px`;
+      this.wipeLine.style.cursor = 'ew-resize';
+    } else if (this.wipeState.mode === 'vertical') {
+      // Horizontal line for vertical wipe
+      const y = canvasRect.top - containerRect.top + this.displayHeight * this.wipeState.position;
+      this.wipeLine.style.width = `${this.displayWidth}px`;
+      this.wipeLine.style.height = '3px';
+      this.wipeLine.style.left = `${canvasRect.left - containerRect.left}px`;
+      this.wipeLine.style.top = `${y - 1}px`;
+      this.wipeLine.style.cursor = 'ns-resize';
+    }
+  }
+
+  private handleWipePointerDown(e: PointerEvent): boolean {
+    if (this.wipeState.mode === 'off' || !this.wipeLine) return false;
+
+    const wipeRect = this.wipeLine.getBoundingClientRect();
+    const tolerance = 10; // pixels
+
+    // Check if click is on or near the wipe line
+    if (this.wipeState.mode === 'horizontal') {
+      if (Math.abs(e.clientX - (wipeRect.left + wipeRect.width / 2)) <= tolerance) {
+        this.isDraggingWipe = true;
+        return true;
+      }
+    } else if (this.wipeState.mode === 'vertical') {
+      if (Math.abs(e.clientY - (wipeRect.top + wipeRect.height / 2)) <= tolerance) {
+        this.isDraggingWipe = true;
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private handleWipePointerMove(e: PointerEvent): void {
+    if (!this.isDraggingWipe) return;
+
+    const canvasRect = this.canvasContainer.getBoundingClientRect();
+
+    if (this.wipeState.mode === 'horizontal') {
+      const x = e.clientX - canvasRect.left;
+      this.wipeState.position = Math.max(0, Math.min(1, x / this.displayWidth));
+    } else if (this.wipeState.mode === 'vertical') {
+      const y = e.clientY - canvasRect.top;
+      this.wipeState.position = Math.max(0, Math.min(1, y / this.displayHeight));
+    }
+
+    this.updateWipeLine();
+    this.scheduleRender();
+  }
+
+  private handleWipePointerUp(): void {
+    this.isDraggingWipe = false;
+  }
+
+  private applyColorFilters(): void {
+    // Build CSS filter string from color adjustments
+    // CSS filters: brightness, contrast, saturate, hue-rotate, etc.
+    const filters: string[] = [];
+
+    // Brightness: CSS uses 1 = normal, we use -1 to +1 offset
+    // Convert: brightness = 1 + adjustment
+    const brightness = 1 + this.colorAdjustments.brightness;
+    if (brightness !== 1) {
+      filters.push(`brightness(${brightness.toFixed(3)})`);
+    }
+
+    // Exposure: simulate with brightness (2^exposure)
+    if (this.colorAdjustments.exposure !== 0) {
+      const exposureBrightness = Math.pow(2, this.colorAdjustments.exposure);
+      filters.push(`brightness(${exposureBrightness.toFixed(3)})`);
+    }
+
+    // Contrast: CSS uses 1 = normal
+    if (this.colorAdjustments.contrast !== 1) {
+      filters.push(`contrast(${this.colorAdjustments.contrast.toFixed(3)})`);
+    }
+
+    // Saturation: CSS uses 1 = normal
+    if (this.colorAdjustments.saturation !== 1) {
+      filters.push(`saturate(${this.colorAdjustments.saturation.toFixed(3)})`);
+    }
+
+    // Temperature: approximate with hue-rotate and sepia
+    // Warm = positive temperature, Cold = negative
+    if (this.colorAdjustments.temperature !== 0) {
+      const temp = this.colorAdjustments.temperature;
+      if (temp > 0) {
+        // Warm: add sepia and slight hue rotation
+        const sepia = Math.min(temp / 200, 0.3);
+        filters.push(`sepia(${sepia.toFixed(3)})`);
+      } else {
+        // Cold: use hue rotation towards blue
+        const hue = temp * 0.3;
+        filters.push(`hue-rotate(${hue.toFixed(1)}deg)`);
+      }
+    }
+
+    // Tint: approximate with hue-rotate
+    if (this.colorAdjustments.tint !== 0) {
+      const hue = this.colorAdjustments.tint * 0.5;
+      filters.push(`hue-rotate(${hue.toFixed(1)}deg)`);
+    }
+
+    // Apply to canvas container (affects both image and paint layers)
+    const filterString = filters.length > 0 ? filters.join(' ') : 'none';
+    this.canvasContainer.style.filter = filterString;
   }
 
   dispose(): void {

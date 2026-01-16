@@ -405,21 +405,21 @@ const annotations = dto.byProtocol('RVPaint');
 ## Feature Parity Checklist
 
 ### MVP (Minimum Viable Product)
-- [ ] Load RV session files
-- [ ] Display single images
-- [ ] Basic playback controls
-- [ ] Timeline with scrubbing
-- [ ] Pan/zoom viewer
+- [x] Load RV session files
+- [x] Display single images
+- [x] Basic playback controls
+- [x] Timeline with scrubbing
+- [x] Pan/zoom viewer
 
 ### Phase 2
 - [ ] Image sequences
-- [ ] Basic color correction (exposure, gamma, saturation)
+- [x] Basic color correction (exposure, gamma, saturation, contrast, temperature, tint)
 - [ ] 2D transforms
-- [ ] Keyboard shortcuts
+- [x] Keyboard shortcuts
 
 ### Phase 3
-- [ ] Annotations/paint
-- [ ] Wipes for comparison
+- [x] Annotations/paint
+- [x] Wipes for comparison (horizontal/vertical, original vs adjusted)
 - [ ] Multiple sources (stack)
 - [ ] Filter effects
 

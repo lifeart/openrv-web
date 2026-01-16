@@ -239,7 +239,16 @@ T         - Text tool
 B         - Toggle brush type
 G         - Toggle ghost mode
 Ctrl+Z    - Undo
-Ctrl+Y    - Redo`);
+Ctrl+Y    - Redo
+
+COLOR
+C         - Toggle color panel
+Esc       - Close color panel
+Dbl-click - Reset individual slider
+
+WIPE COMPARISON
+W         - Cycle wipe mode (off/horizontal/vertical)
+Drag line - Adjust wipe position`);
   }
 
   private bindEvents(): void {
