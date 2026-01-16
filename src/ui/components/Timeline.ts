@@ -1,5 +1,6 @@
 import { Session } from '../../core/session/Session';
 import { PaintEngine } from '../../paint/PaintEngine';
+import { WaveformRenderer } from '../../audio/WaveformRenderer';
 
 export class Timeline {
   private container: HTMLElement;
@@ -7,6 +8,8 @@ export class Timeline {
   private ctx: CanvasRenderingContext2D;
   private session: Session;
   private paintEngine: PaintEngine | null = null;
+  private waveformRenderer: WaveformRenderer;
+  private waveformLoaded = false;
 
   private isDragging = false;
   private width = 0;
@@ -21,6 +24,7 @@ export class Timeline {
     inOutRange: '#4a9eff22',
     mark: '#ff6b6b',
     annotation: '#ffcc00',  // Yellow/gold for annotations
+    waveform: 'rgba(100, 180, 255, 0.4)',  // Light blue for waveform
     text: '#ccc',
     textDim: '#666',
     border: '#444',
@@ -29,6 +33,7 @@ export class Timeline {
   constructor(session: Session, paintEngine?: PaintEngine) {
     this.session = session;
     this.paintEngine = paintEngine ?? null;
+    this.waveformRenderer = new WaveformRenderer();
 
     // Create container
     this.container = document.createElement('div');
@@ -67,7 +72,10 @@ export class Timeline {
     this.session.on('frameChanged', () => this.draw());
     this.session.on('playbackChanged', () => this.draw());
     this.session.on('durationChanged', () => this.draw());
-    this.session.on('sourceLoaded', () => this.draw());
+    this.session.on('sourceLoaded', () => {
+      this.loadWaveform();
+      this.draw();
+    });
     this.session.on('inOutChanged', () => this.draw());
     this.session.on('loopModeChanged', () => this.draw());
     this.session.on('marksChanged', () => this.draw());
@@ -89,6 +97,32 @@ export class Timeline {
     this.paintEngine.on('strokeAdded', () => this.draw());
     this.paintEngine.on('strokeRemoved', () => this.draw());
     this.draw();
+  }
+
+  /**
+   * Load waveform from current video source
+   */
+  private async loadWaveform(): Promise<void> {
+    this.waveformLoaded = false;
+    this.waveformRenderer.clear();
+
+    const source = this.session.currentSource;
+    if (!source || source.type !== 'video') {
+      return;
+    }
+
+    const videoElement = source.element as HTMLVideoElement;
+    if (!videoElement) return;
+
+    try {
+      const success = await this.waveformRenderer.loadFromVideo(videoElement);
+      this.waveformLoaded = success;
+      if (success) {
+        this.draw();
+      }
+    } catch (err) {
+      console.warn('Failed to load waveform:', err);
+    }
   }
 
   /**
@@ -209,6 +243,25 @@ export class Timeline {
     ctx.beginPath();
     ctx.roundRect(padding, trackY, trackWidth, trackHeight, 4);
     ctx.fill();
+
+    // Draw waveform if available (for video sources)
+    if (this.waveformLoaded && this.waveformRenderer.hasData()) {
+      const waveformData = this.waveformRenderer.getData();
+      if (waveformData) {
+        // Render waveform across the track
+        const audioDuration = waveformData.duration;
+        this.waveformRenderer.render(
+          ctx,
+          padding + 2,           // x: slight inset
+          trackY + 2,            // y: slight inset
+          trackWidth - 4,        // width: with margin
+          trackHeight - 4,       // height: with margin
+          0,                     // startTime
+          audioDuration,         // endTime
+          this.colors.waveform
+        );
+      }
+    }
 
     // Calculate positions based on full duration
     const frameToX = (frame: number) => padding + ((frame - 1) / Math.max(1, duration - 1)) * trackWidth;

@@ -1,6 +1,6 @@
 # OpenRV Web - Work Log
 
-## Current Status: Crop Tool Complete
+## Current Status: Audio Waveform Display Complete
 
 ---
 
@@ -170,13 +170,21 @@
 - [x] Keyboard shortcut (K) to toggle crop mode
 - [x] Crop state indicator (highlighted button when active)
 
+### Phase 17: Audio Waveform Display ✅
+- [x] WaveformRenderer utility (`src/audio/WaveformRenderer.ts`)
+- [x] Audio extraction from video using Web Audio API
+- [x] Peak data calculation for efficient visualization
+- [x] Waveform rendering in timeline track area
+- [x] Light blue waveform overlay on track background
+- [x] Automatic loading when video is loaded
+- [x] Graceful fallback when audio extraction fails
+
 ---
 
 ## Not Started
 
 ### Future Enhancements
 - [ ] Stack/composite nodes
-- [ ] Waveform display for audio
 - [ ] Lens distortion correction
 - [ ] Full LUT application via WebGL shader
 
@@ -252,3 +260,8 @@
   - Added crop overlay canvas to Viewer with darkened regions
   - Blue border, corner handles, and rule of thirds guides
   - Keyboard shortcut: K to toggle crop mode
+- **Completed Phase 17: Audio Waveform Display**
+  - Created `WaveformRenderer.ts` with Web Audio API audio extraction
+  - Peak data calculation for efficient rendering
+  - Integrated waveform display into Timeline component
+  - Automatic loading when video source is loaded

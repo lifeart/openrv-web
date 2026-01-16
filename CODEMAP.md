@@ -426,6 +426,7 @@ const annotations = dto.byProtocol('RVPaint');
 
 ### Phase 4
 - [x] Audio playback (video volume control with mute)
+- [x] Audio waveform display (timeline visualization for video audio)
 - [x] LUT support (.cube 3D LUT loading with intensity control)
 - [ ] Advanced color (CDL, curves)
 - [x] Export capabilities (PNG/JPEG/WebP with annotations, clipboard copy)
