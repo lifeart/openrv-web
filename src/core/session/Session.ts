@@ -20,6 +20,8 @@ import {
   TextOrigin,
   PaintEffects,
 } from '../../paint/types';
+import { Graph } from '../graph/Graph';
+import { loadGTOGraph, type GTOParseResult } from './GTOGraphLoader';
 
 export interface ParsedAnnotations {
   annotations: Annotation[];
@@ -39,6 +41,7 @@ export interface SessionEvents extends EventMap {
   annotationsLoaded: ParsedAnnotations;
   volumeChanged: number;
   mutedChanged: boolean;
+  graphLoaded: GTOParseResult;
 }
 
 export type LoopMode = 'once' | 'loop' | 'pingpong';
@@ -77,8 +80,26 @@ export class Session extends EventEmitter<SessionEvents> {
   private sources: MediaSource[] = [];
   private _currentSourceIndex = 0;
 
+  // Node graph from GTO file
+  private _graph: Graph | null = null;
+  private _graphParseResult: GTOParseResult | null = null;
+
   constructor() {
     super();
+  }
+
+  /**
+   * Get the node graph (if loaded from GTO)
+   */
+  get graph(): Graph | null {
+    return this._graph;
+  }
+
+  /**
+   * Get the full parse result including session info
+   */
+  get graphParseResult(): GTOParseResult | null {
+    return this._graphParseResult;
   }
 
   get currentFrame(): number {
@@ -434,6 +455,33 @@ export class Session extends EventEmitter<SessionEvents> {
 
     const dto = new GTODTO(reader.result);
     this.parseSession(dto);
+
+    // Parse the node graph from GTO
+    try {
+      const result = await loadGTOGraph(data);
+      this._graph = result.graph;
+      this._graphParseResult = result;
+
+      // Apply session info from GTO
+      if (result.sessionInfo.fps) {
+        this._fps = result.sessionInfo.fps;
+      }
+      if (result.sessionInfo.frame) {
+        this._currentFrame = result.sessionInfo.frame;
+      }
+
+      console.log('GTO Graph loaded:', {
+        nodeCount: result.nodes.size,
+        rootNode: result.rootNode?.name,
+        sessionInfo: result.sessionInfo,
+      });
+
+      this.emit('graphLoaded', result);
+    } catch (err) {
+      console.warn('Failed to load node graph from GTO:', err);
+      // Non-fatal - continue with session
+    }
+
     this.emit('sessionLoaded', undefined);
   }
 

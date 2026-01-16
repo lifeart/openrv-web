@@ -177,48 +177,41 @@ openrv-web/
 ├── src/
 │   ├── core/                    # Core infrastructure
 │   │   ├── graph/              # Node graph system
-│   │   │   ├── Node.ts         # Base node class
-│   │   │   ├── Graph.ts        # Graph management
-│   │   │   ├── Property.ts     # Property system
-│   │   │   └── Signal.ts       # Change propagation
+│   │   │   ├── Graph.ts        # DAG graph management
+│   │   │   ├── Property.ts     # Property container
+│   │   │   └── Signal.ts       # Event/signal system
 │   │   ├── image/              # Image handling
-│   │   │   ├── Image.ts        # Image data structure
-│   │   │   ├── FrameBuffer.ts  # WebGL framebuffer
-│   │   │   └── Loader.ts       # Image loading
+│   │   │   └── Image.ts        # IPImage data structure
 │   │   └── session/            # Session management
-│   │       ├── Session.ts      # Session state
-│   │       ├── Serializer.ts   # GTO integration
-│   │       └── Timeline.ts     # Timeline logic
+│   │       ├── Session.ts      # Session state + GTO loading
+│   │       ├── SessionState.ts # Serializable state types
+│   │       ├── SessionSerializer.ts # .orvproject save/load
+│   │       ├── GTOGraphLoader.ts # Node graph from GTO
+│   │       └── index.ts        # Module exports
 │   │
 │   ├── nodes/                   # Processing nodes
 │   │   ├── base/               # Base node types
-│   │   │   ├── IPNode.ts       # Abstract base
-│   │   │   └── NodeFactory.ts  # Node creation
-│   │   ├── source/             # Source nodes
-│   │   │   ├── FileSourceNode.ts
-│   │   │   ├── ImageSourceNode.ts
-│   │   │   └── SequenceNode.ts
-│   │   ├── color/              # Color nodes
-│   │   │   ├── ColorNode.ts
-│   │   │   ├── CDLNode.ts
-│   │   │   ├── CurveNode.ts
-│   │   │   ├── ExposureNode.ts
-│   │   │   └── ...
-│   │   ├── transform/          # Transform nodes
-│   │   │   ├── Transform2DNode.ts
-│   │   │   ├── CropNode.ts
-│   │   │   └── LensWarpNode.ts
-│   │   ├── filter/             # Filter nodes
-│   │   │   ├── GaussianBlurNode.ts
-│   │   │   ├── UnsharpMaskNode.ts
-│   │   │   └── NoiseReductionNode.ts
-│   │   ├── composite/          # Composite nodes
-│   │   │   ├── StackNode.ts
-│   │   │   ├── OverlayNode.ts
-│   │   │   └── SwitchNode.ts
-│   │   └── output/             # Output nodes
-│   │       ├── DisplayNode.ts
-│   │       └── ExportNode.ts
+│   │   │   ├── IPNode.ts       # Abstract base (inputs/outputs/properties)
+│   │   │   └── NodeFactory.ts  # Node registry + @RegisterNode decorator
+│   │   ├── sources/            # Source nodes (implemented)
+│   │   │   ├── BaseSourceNode.ts   # Abstract source base
+│   │   │   ├── FileSourceNode.ts   # Single image (RVFileSource)
+│   │   │   ├── VideoSourceNode.ts  # Video file (RVVideoSource)
+│   │   │   ├── SequenceSourceNode.ts # Image sequence (RVSequenceSource)
+│   │   │   └── index.ts            # Registration + exports
+│   │   ├── groups/             # Group/container nodes (implemented)
+│   │   │   ├── BaseGroupNode.ts    # Abstract group base
+│   │   │   ├── SequenceGroupNode.ts # Play inputs in sequence
+│   │   │   ├── StackGroupNode.ts   # Stack/composite with wipes
+│   │   │   ├── SwitchGroupNode.ts  # A/B switching
+│   │   │   ├── LayoutGroupNode.ts  # Tile/grid layout
+│   │   │   ├── FolderGroupNode.ts  # Organizational container
+│   │   │   ├── RetimeGroupNode.ts  # Speed/time remapping
+│   │   │   └── index.ts            # Registration + exports
+│   │   ├── color/              # Color nodes (future)
+│   │   ├── transform/          # Transform nodes (future)
+│   │   ├── filter/             # Filter nodes (future)
+│   │   └── output/             # Output nodes (future)
 │   │
 │   ├── render/                  # WebGL rendering
 │   │   ├── Renderer.ts         # Main renderer
@@ -433,3 +426,11 @@ const annotations = dto.byProtocol('RVPaint');
 - [x] Sequence export (in/out range or all frames with progress)
 - [x] Lens distortion correction (barrel/pincushion, center offset, scale)
 - [x] WebGL LUT processing (GPU-accelerated 3D LUT with trilinear interpolation)
+
+### Phase 5 (Node Graph Architecture)
+- [x] Session save/load (.orvproject JSON format with full state serialization)
+- [x] Source nodes (FileSourceNode, VideoSourceNode, SequenceSourceNode)
+- [x] Group nodes (SequenceGroup, StackGroup, SwitchGroup, LayoutGroup, FolderGroup, RetimeGroup)
+- [x] Node factory with @RegisterNode decorator pattern
+- [x] GTOGraphLoader for node graph reconstruction from GTO/RV files
+- [x] Graph integration with Session (graph loaded on GTO file open)

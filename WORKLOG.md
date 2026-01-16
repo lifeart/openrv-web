@@ -52,7 +52,7 @@
 - [x] Coordinate conversion (OpenRV coords → normalized)
 - [x] Image/video media loading
 - [x] Session saving/loading (.orvproject JSON format)
-- [ ] Full node graph reconstruction from GTO (future)
+- [x] Full node graph reconstruction from GTO (GTOGraphLoader)
 
 ---
 
@@ -249,6 +249,37 @@ The UI has been redesigned with a modern tab-based architecture matching profess
 ---
 
 ## Session Log
+
+### 2026-01-16 (continued - GTO Graph Reconstruction)
+- **Group Nodes Implementation**
+  - Created `src/nodes/groups/` directory
+  - `BaseGroupNode.ts` - Abstract base for container nodes
+  - `SequenceGroupNode.ts` - Plays inputs in sequence
+  - `StackGroupNode.ts` - Stacks/composites with wipe support
+  - `SwitchGroupNode.ts` - A/B input switching
+  - `LayoutGroupNode.ts` - Grid/tile layout of inputs
+  - `FolderGroupNode.ts` - Organizational container
+  - `RetimeGroupNode.ts` - Speed/time remapping
+  - All registered with NodeFactory via @RegisterNode decorator
+
+- **GTOGraphLoader**
+  - Created `src/core/session/GTOGraphLoader.ts`
+  - Parses GTO/RV session files into node graph
+  - Maps RV protocols to registered node types:
+    - RVFileSource → RVFileSource
+    - RVMovieSource → RVVideoSource
+    - RVSequenceSource → RVSequenceSource
+    - RVSequenceGroup, RVStackGroup, RVSwitchGroup, etc.
+  - Extracts node properties (color, CDL, transform, lens, etc.)
+  - Reconstructs connections between nodes
+  - Finds root/output node from session viewNode
+  - Integrated with Session.loadFromGTO() method
+  - Emits 'graphLoaded' event with parse result
+
+- **Session Integration**
+  - Added `graph` and `graphParseResult` getters to Session
+  - Session.loadFromGTO() now also loads node graph
+  - Session info (fps, frame) applied from GTO
 
 ### 2026-01-16 (continued - Session Save & Source Nodes)
 - **Session State Save/Load**

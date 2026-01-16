@@ -1,7 +1,8 @@
 import { App } from './App';
 
-// Register source nodes with NodeFactory
+// Register nodes with NodeFactory
 import './nodes/sources';
+import './nodes/groups';
 
 const app = new App();
 app.mount('#app');
