@@ -65,6 +65,7 @@ export class Timeline {
     this.session.on('sourceLoaded', () => this.draw());
     this.session.on('inOutChanged', () => this.draw());
     this.session.on('loopModeChanged', () => this.draw());
+    this.session.on('marksChanged', () => this.draw());
   }
 
   private onMouseDown = (e: MouseEvent): void => {

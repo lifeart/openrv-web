@@ -25,6 +25,8 @@ export interface SessionEvents extends EventMap {
   durationChanged: number;
   inOutChanged: { inPoint: number; outPoint: number };
   loopModeChanged: LoopMode;
+  playDirectionChanged: number;
+  marksChanged: ReadonlySet<number>;
   annotationsLoaded: ParsedAnnotations;
 }
 
@@ -166,6 +168,11 @@ export class Session extends EventEmitter<SessionEvents> {
 
   togglePlayDirection(): void {
     this._playDirection *= -1;
+    this.emit('playDirectionChanged', this._playDirection);
+  }
+
+  get playDirection(): number {
+    return this._playDirection;
   }
 
   stepForward(): void {
@@ -233,10 +240,12 @@ export class Session extends EventEmitter<SessionEvents> {
     } else {
       this._marks.add(f);
     }
+    this.emit('marksChanged', this._marks);
   }
 
   clearMarks(): void {
     this._marks.clear();
+    this.emit('marksChanged', this._marks);
   }
 
   // Update called each frame

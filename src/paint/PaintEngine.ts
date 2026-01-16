@@ -23,6 +23,7 @@ export interface PaintEngineEvents extends EventMap {
   annotationsChanged: number; // frame number
   effectsChanged: PaintEffects;
   toolChanged: PaintTool;
+  brushChanged: BrushType;
 }
 
 export type PaintTool = 'pen' | 'text' | 'eraser' | 'select' | 'none';
@@ -81,7 +82,10 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
   }
 
   set brush(value: BrushType) {
-    this._brush = value;
+    if (value !== this._brush) {
+      this._brush = value;
+      this.emit('brushChanged', value);
+    }
   }
 
   get user(): string {

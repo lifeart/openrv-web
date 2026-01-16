@@ -155,19 +155,14 @@ export class Toolbar {
     this.container.appendChild(sep);
   }
 
-  private playDirectionForward = true;
-
   private cycleLoopMode(): void {
     const modes: LoopMode[] = ['once', 'loop', 'pingpong'];
     const currentIndex = modes.indexOf(this.session.loopMode);
     this.session.loopMode = modes[(currentIndex + 1) % modes.length]!;
-    this.updateLoopButton();
   }
 
   private toggleDirection(): void {
     this.session.togglePlayDirection();
-    this.playDirectionForward = !this.playDirectionForward;
-    this.updateDirectionButton();
   }
 
   private updateLoopButton(): void {
@@ -180,8 +175,9 @@ export class Toolbar {
   }
 
   private updateDirectionButton(): void {
-    this.directionButton.textContent = this.playDirectionForward ? '→' : '←';
-    this.directionButton.title = this.playDirectionForward
+    const isForward = this.session.playDirection === 1;
+    this.directionButton.textContent = isForward ? '→' : '←';
+    this.directionButton.title = isForward
       ? 'Playing forward (↑ to reverse)'
       : 'Playing backward (↑ to reverse)';
   }
@@ -248,11 +244,14 @@ Ctrl+Y    - Redo`);
 
   private bindEvents(): void {
     this.session.on('playbackChanged', () => this.updatePlayButton());
+    this.session.on('loopModeChanged', () => this.updateLoopButton());
+    this.session.on('playDirectionChanged', () => this.updateDirectionButton());
   }
 
   render(): HTMLElement {
     this.updateLoopButton();
     this.updatePlayButton();
+    this.updateDirectionButton();
     return this.container;
   }
 

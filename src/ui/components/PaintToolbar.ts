@@ -8,6 +8,8 @@ export class PaintToolbar {
   private colorPicker!: HTMLInputElement;
   private widthSlider!: HTMLInputElement;
   private widthLabel!: HTMLSpanElement;
+  private brushButton!: HTMLButtonElement;
+  private ghostButton!: HTMLButtonElement;
 
   constructor(paintEngine: PaintEngine) {
     this.paintEngine = paintEngine;
@@ -44,14 +46,10 @@ export class PaintToolbar {
     this.addSeparator();
 
     // Brush type toggle
-    const brushBtn = this.createButton('⚫', 'Toggle soft/hard brush (B)', () => {
+    this.brushButton = this.createButton('⚫', 'Toggle soft/hard brush (B)', () => {
       this.paintEngine.brush = this.paintEngine.brush === BrushType.Circle
         ? BrushType.Gaussian
         : BrushType.Circle;
-      brushBtn.textContent = this.paintEngine.brush === BrushType.Gaussian ? '🔵' : '⚫';
-      brushBtn.title = this.paintEngine.brush === BrushType.Gaussian
-        ? 'Soft brush (click for hard)'
-        : 'Hard brush (click for soft)';
     });
 
     this.addSeparator();
@@ -120,10 +118,9 @@ export class PaintToolbar {
     this.addSeparator();
 
     // Ghost mode toggle
-    const ghostBtn = this.createButton('👻', 'Toggle ghost mode (G)', () => {
+    this.ghostButton = this.createButton('👻', 'Toggle ghost mode (G)', () => {
       const effects = this.paintEngine.effects;
       this.paintEngine.setGhostMode(!effects.ghost, effects.ghostBefore, effects.ghostAfter);
-      ghostBtn.style.opacity = effects.ghost ? '0.5' : '1';
     });
 
     // Undo/Redo
@@ -207,6 +204,24 @@ export class PaintToolbar {
 
   private bindEvents(): void {
     this.paintEngine.on('toolChanged', () => this.updateToolButtons());
+    this.paintEngine.on('brushChanged', () => this.updateBrushButton());
+    this.paintEngine.on('effectsChanged', () => this.updateGhostButton());
+  }
+
+  private updateBrushButton(): void {
+    const isGaussian = this.paintEngine.brush === BrushType.Gaussian;
+    this.brushButton.textContent = isGaussian ? '🔵' : '⚫';
+    this.brushButton.title = isGaussian
+      ? 'Soft brush (click for hard) (B)'
+      : 'Hard brush (click for soft) (B)';
+  }
+
+  private updateGhostButton(): void {
+    const effects = this.paintEngine.effects;
+    this.ghostButton.style.opacity = effects.ghost ? '1' : '0.5';
+    this.ghostButton.title = effects.ghost
+      ? 'Ghost mode ON (G)'
+      : 'Ghost mode OFF (G)';
   }
 
   private rgbaToHex(rgba: [number, number, number, number]): string {
@@ -224,6 +239,8 @@ export class PaintToolbar {
   }
 
   render(): HTMLElement {
+    this.updateBrushButton();
+    this.updateGhostButton();
     return this.container;
   }
 
