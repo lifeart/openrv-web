@@ -1,5 +1,6 @@
 import { PaintEngine, PaintTool } from '../../paint/PaintEngine';
 import { BrushType } from '../../paint/types';
+import { showConfirm } from './shared/Modal';
 
 export class PaintToolbar {
   private container: HTMLElement;
@@ -20,9 +21,10 @@ export class PaintToolbar {
       display: flex;
       align-items: center;
       gap: 6px;
-      padding: 0 8px;
-      background: #333;
-      border-left: 1px solid #444;
+      padding: 6px 12px;
+      background: #2a2a2a;
+      border: 1px solid #3a3a3a;
+      border-radius: 6px;
       margin-left: 8px;
     `;
 
@@ -62,8 +64,8 @@ export class PaintToolbar {
     this.colorPicker.style.cssText = `
       width: 28px;
       height: 24px;
-      border: 1px solid #555;
-      border-radius: 3px;
+      border: 1px solid #4a4a4a;
+      border-radius: 4px;
       padding: 0;
       cursor: pointer;
       background: transparent;
@@ -78,15 +80,24 @@ export class PaintToolbar {
     for (const color of presetColors) {
       const preset = document.createElement('button');
       preset.style.cssText = `
-        width: 18px;
-        height: 18px;
-        border: 1px solid #555;
-        border-radius: 2px;
+        width: 20px;
+        height: 20px;
+        border: 1px solid #4a4a4a;
+        border-radius: 4px;
         padding: 0;
         cursor: pointer;
         background: ${color};
+        transition: all 0.12s ease;
       `;
       preset.title = color;
+      preset.addEventListener('mouseenter', () => {
+        preset.style.borderColor = '#666';
+        preset.style.transform = 'scale(1.1)';
+      });
+      preset.addEventListener('mouseleave', () => {
+        preset.style.borderColor = '#4a4a4a';
+        preset.style.transform = 'scale(1)';
+      });
       preset.addEventListener('click', () => {
         this.colorPicker.value = color;
         this.paintEngine.color = this.hexToRgba(color);
@@ -129,8 +140,13 @@ export class PaintToolbar {
     this.createButton('↪️', 'Redo (Ctrl+Y)', () => this.paintEngine.redo());
 
     // Clear frame
-    this.createButton('🗑', 'Clear frame annotations', () => {
-      if (confirm('Clear all annotations on this frame?')) {
+    this.createButton('🗑', 'Clear frame annotations', async () => {
+      const confirmed = await showConfirm('Clear all annotations on this frame?', {
+        title: 'Clear Annotations',
+        confirmText: 'Clear',
+        confirmVariant: 'danger'
+      });
+      if (confirmed) {
         // We need access to session for this - handled in App
         this.container.dispatchEvent(new CustomEvent('clearFrame'));
       }
@@ -153,26 +169,34 @@ export class PaintToolbar {
     button.textContent = text;
     button.title = title;
     button.style.cssText = `
-      background: #444;
-      border: 1px solid #555;
-      color: #ddd;
+      background: #3a3a3a;
+      border: 1px solid #4a4a4a;
+      color: #ccc;
       padding: 4px 8px;
-      border-radius: 3px;
+      border-radius: 4px;
       cursor: pointer;
-      font-size: 12px;
-      min-width: 28px;
-      transition: all 0.15s ease;
+      font-size: 11px;
+      height: 24px;
+      min-width: 24px;
+      transition: all 0.12s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     `;
 
     button.addEventListener('mouseenter', () => {
       if (!button.classList.contains('active')) {
-        button.style.background = '#555';
+        button.style.background = '#444';
+        button.style.borderColor = '#555';
+        button.style.color = '#fff';
       }
     });
 
     button.addEventListener('mouseleave', () => {
       if (!button.classList.contains('active')) {
-        button.style.background = '#444';
+        button.style.background = '#3a3a3a';
+        button.style.borderColor = '#4a4a4a';
+        button.style.color = '#ccc';
       }
     });
 
@@ -191,12 +215,14 @@ export class PaintToolbar {
     const currentTool = this.paintEngine.tool;
     for (const [tool, btn] of this.buttons) {
       if (tool === currentTool) {
-        btn.style.background = '#4a9eff';
-        btn.style.borderColor = '#5aafff';
+        btn.style.background = 'rgba(74, 158, 255, 0.15)';
+        btn.style.borderColor = '#4a9eff';
+        btn.style.color = '#4a9eff';
         btn.classList.add('active');
       } else {
-        btn.style.background = '#444';
-        btn.style.borderColor = '#555';
+        btn.style.background = '#3a3a3a';
+        btn.style.borderColor = '#4a4a4a';
+        btn.style.color = '#ccc';
         btn.classList.remove('active');
       }
     }

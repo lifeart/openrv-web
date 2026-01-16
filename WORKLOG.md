@@ -247,6 +247,16 @@ The UI has been redesigned with a modern tab-based architecture matching profess
 
 ## Session Log
 
+### 2026-01-16 (continued)
+- **UI Fixes and Unification**
+  - Fixed z-index issues for all dropdown panels (StackControl, ColorControls, CDLControl, FilterControl, LensControl, ExportControl)
+  - Panels now render at body level with `position: fixed` and `z-index: 9999` to avoid stacking context issues
+  - Created unified shared components in `src/ui/components/shared/`:
+    - `Button.ts` - Unified button component with variants (default, primary, danger, ghost, icon) and sizes (sm, md, lg)
+    - `Modal.ts` - Native modal dialogs replacing browser alerts (`showAlert`, `showConfirm`, `showPrompt`, `showModal`)
+    - `Panel.ts` - Reusable dropdown panel utility
+  - Replaced all 14 `alert()` calls with proper modal dialogs across App.ts, Viewer.ts, HeaderBar.ts, CDLControl.ts, ColorControls.ts
+
 ### 2026-01-16
 - Reviewed codebase structure and PLAN.md
 - Created WORKLOG.md for progress tracking

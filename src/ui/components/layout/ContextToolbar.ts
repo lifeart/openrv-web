@@ -163,15 +163,15 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
     button.textContent = text;
     button.title = options.title || '';
     button.style.cssText = `
-      background: ${options.active ? 'rgba(74, 158, 255, 0.2)' : 'transparent'};
+      background: ${options.active ? 'rgba(74, 158, 255, 0.15)' : 'transparent'};
       border: 1px solid ${options.active ? '#4a9eff' : 'transparent'};
       color: ${options.active ? '#4a9eff' : '#bbb'};
-      padding: 4px 10px;
+      padding: 6px 12px;
       border-radius: 4px;
       cursor: pointer;
       font-size: 12px;
       transition: all 0.12s ease;
-      display: flex;
+      display: inline-flex;
       align-items: center;
       justify-content: center;
       height: 28px;

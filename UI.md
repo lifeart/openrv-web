@@ -410,6 +410,93 @@ src/ui/
 
 ---
 
+## Shared Components
+
+### Button Component (`src/ui/components/shared/Button.ts`)
+
+Unified button component for consistent styling across the application.
+
+```typescript
+import { createButton, createIconButton, setButtonActive } from './shared/Button';
+
+// Text button
+const btn = createButton('Save', () => handleSave(), {
+  variant: 'primary',  // 'default' | 'primary' | 'danger' | 'ghost' | 'icon'
+  size: 'md',          // 'sm' | 'md' | 'lg'
+  active: false,
+  disabled: false,
+  title: 'Save file',
+  minWidth: '80px'
+});
+
+// Icon button
+const iconBtn = createIconButton('<svg>...</svg>', () => handleClick(), {
+  variant: 'ghost',
+  size: 'sm',
+  title: 'Settings'
+});
+
+// Update active state
+setButtonActive(btn, true, 'default');
+```
+
+### Modal Component (`src/ui/components/shared/Modal.ts`)
+
+Native modal dialogs replacing browser alerts/confirms/prompts.
+
+```typescript
+import { showAlert, showConfirm, showPrompt, showModal, closeModal } from './shared/Modal';
+
+// Alert (replaces window.alert)
+await showAlert('Operation completed', {
+  title: 'Success',
+  type: 'success'  // 'info' | 'success' | 'warning' | 'error'
+});
+
+// Confirm (replaces window.confirm)
+const confirmed = await showConfirm('Delete this item?', {
+  title: 'Confirm Delete',
+  confirmText: 'Delete',
+  cancelText: 'Cancel',
+  confirmVariant: 'danger'
+});
+
+// Prompt (replaces window.prompt)
+const value = await showPrompt('Enter name:', {
+  title: 'Rename',
+  placeholder: 'New name',
+  defaultValue: 'Untitled'
+});
+
+// Custom modal
+const { close } = showModal(contentElement, {
+  title: 'Custom Dialog',
+  width: '500px',
+  closable: true
+});
+```
+
+### Panel Component (`src/ui/components/shared/Panel.ts`)
+
+Reusable dropdown panel utility for consistent panel styling.
+
+```typescript
+import { createPanel, createPanelHeader, createSliderRow } from './shared/Panel';
+
+const panel = createPanel({ width: '280px' });
+const header = createPanelHeader('Settings', () => panel.hide());
+const slider = createSliderRow('Volume', {
+  min: 0, max: 100, step: 1, value: 50,
+  onChange: (v) => setVolume(v)
+});
+
+panel.element.appendChild(header);
+panel.element.appendChild(slider.container);
+panel.show(anchorElement);
+```
+
+---
+
 ## Notes
 
 - Maintain backward compatibility during transition
