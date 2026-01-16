@@ -1,5 +1,6 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { ExportFormat } from '../../utils/FrameExporter';
+import { getIconSvg, IconName } from './shared/Icons';
 
 export interface ExportRequest {
   format: ExportFormat;
@@ -42,29 +43,35 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
 
     // Create export button
     this.exportButton = document.createElement('button');
-    this.exportButton.textContent = '📷 Export';
+    this.exportButton.innerHTML = `${getIconSvg('download', 'sm')}<span style="margin-left: 6px;">Export</span>`;
     this.exportButton.title = 'Export current frame (Ctrl+S)';
     this.exportButton.style.cssText = `
-      background: #444;
-      border: 1px solid #555;
-      color: #ddd;
-      padding: 6px 12px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: #999;
+      padding: 6px 10px;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 13px;
-      transition: all 0.15s ease;
-      display: flex;
+      font-size: 12px;
+      transition: all 0.12s ease;
+      display: inline-flex;
       align-items: center;
       justify-content: center;
     `;
 
     this.exportButton.addEventListener('click', () => this.toggleDropdown());
     this.exportButton.addEventListener('mouseenter', () => {
-      this.exportButton.style.background = '#555';
+      if (!this.isDropdownOpen) {
+        this.exportButton.style.background = '#3a3a3a';
+        this.exportButton.style.borderColor = '#4a4a4a';
+        this.exportButton.style.color = '#ccc';
+      }
     });
     this.exportButton.addEventListener('mouseleave', () => {
       if (!this.isDropdownOpen) {
-        this.exportButton.style.background = '#444';
+        this.exportButton.style.background = 'transparent';
+        this.exportButton.style.borderColor = 'transparent';
+        this.exportButton.style.color = '#999';
       }
     });
 
@@ -73,20 +80,19 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     this.dropdown.className = 'export-dropdown';
     this.dropdown.style.cssText = `
       position: fixed;
-      background: #2a2a2a;
-      border: 1px solid #444;
-      border-radius: 6px;
-      padding: 8px 0;
+      background: #252525;
+      border: 1px solid #3a3a3a;
+      border-radius: 4px;
+      padding: 4px 0;
       min-width: 200px;
       z-index: 9999;
       display: none;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
     `;
 
     this.createDropdownItems();
 
     this.container.appendChild(this.exportButton);
-    // Dropdown will be appended to body when shown
 
     // Close dropdown on outside click
     document.addEventListener('click', (e) => {
@@ -99,17 +105,17 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
   private createDropdownItems(): void {
     // Single frame export section
     this.addSectionHeader('Single Frame');
-    this.addMenuItem('🖼️', 'Save as PNG', () => this.exportAs('png'), 'Ctrl+S');
-    this.addMenuItem('📸', 'Save as JPEG', () => this.exportAs('jpeg'));
-    this.addMenuItem('🌐', 'Save as WebP', () => this.exportAs('webp'));
-    this.addMenuItem('📋', 'Copy to Clipboard', () => this.copyToClipboard(), 'Ctrl+C');
+    this.addMenuItem('image', 'Save as PNG', () => this.exportAs('png'), 'Ctrl+S');
+    this.addMenuItem('image', 'Save as JPEG', () => this.exportAs('jpeg'));
+    this.addMenuItem('image', 'Save as WebP', () => this.exportAs('webp'));
+    this.addMenuItem('clipboard', 'Copy to Clipboard', () => this.copyToClipboard(), 'Ctrl+C');
 
     this.addSeparator();
 
     // Sequence export section
     this.addSectionHeader('Sequence Export');
-    this.addMenuItem('🎬', 'Export In/Out Range', () => this.exportSequence(true));
-    this.addMenuItem('📽️', 'Export All Frames', () => this.exportSequence(false));
+    this.addMenuItem('film', 'Export In/Out Range', () => this.exportSequence(true));
+    this.addMenuItem('film', 'Export All Frames', () => this.exportSequence(false));
 
     this.addSeparator();
 
@@ -120,8 +126,8 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
   private addSectionHeader(text: string): void {
     const header = document.createElement('div');
     header.style.cssText = `
-      padding: 4px 12px;
-      color: #888;
+      padding: 6px 12px 4px;
+      color: #666;
       font-size: 10px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
@@ -131,7 +137,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
   }
 
   private addMenuItem(
-    iconText: string,
+    icon: IconName,
     labelText: string,
     action: () => void,
     shortcut?: string
@@ -140,34 +146,37 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     row.style.cssText = `
       display: flex;
       align-items: center;
-      padding: 8px 12px;
+      padding: 6px 12px;
       cursor: pointer;
       transition: background 0.1s ease;
       gap: 8px;
+      color: #999;
     `;
 
     row.addEventListener('mouseenter', () => {
       row.style.background = '#3a3a3a';
+      row.style.color = '#ccc';
     });
     row.addEventListener('mouseleave', () => {
       row.style.background = 'transparent';
+      row.style.color = '#999';
     });
 
-    const icon = document.createElement('span');
-    icon.textContent = iconText;
-    icon.style.fontSize = '14px';
+    const iconEl = document.createElement('span');
+    iconEl.innerHTML = getIconSvg(icon, 'sm');
+    iconEl.style.cssText = 'display: flex; align-items: center;';
 
     const label = document.createElement('span');
     label.textContent = labelText;
-    label.style.cssText = 'flex: 1; color: #ddd; font-size: 13px;';
+    label.style.cssText = 'flex: 1; font-size: 12px;';
 
-    row.appendChild(icon);
+    row.appendChild(iconEl);
     row.appendChild(label);
 
     if (shortcut) {
       const shortcutEl = document.createElement('span');
       shortcutEl.textContent = shortcut;
-      shortcutEl.style.cssText = 'color: #888; font-size: 11px;';
+      shortcutEl.style.cssText = 'color: #555; font-size: 10px;';
       row.appendChild(shortcutEl);
     }
 
@@ -183,8 +192,8 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     const separator = document.createElement('div');
     separator.style.cssText = `
       height: 1px;
-      background: #444;
-      margin: 8px 0;
+      background: #3a3a3a;
+      margin: 4px 0;
     `;
     this.dropdown.appendChild(separator);
   }
@@ -194,7 +203,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     row.style.cssText = `
       display: flex;
       align-items: center;
-      padding: 8px 12px;
+      padding: 6px 12px;
       gap: 8px;
     `;
 
@@ -202,12 +211,17 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     checkbox.type = 'checkbox';
     checkbox.id = 'export-annotations';
     checkbox.checked = true;
-    checkbox.style.accentColor = '#4a9eff';
+    checkbox.style.cssText = `
+      width: 14px;
+      height: 14px;
+      accent-color: #4a9eff;
+      cursor: pointer;
+    `;
 
     const label = document.createElement('label');
     label.htmlFor = 'export-annotations';
     label.textContent = 'Include annotations';
-    label.style.cssText = 'color: #aaa; font-size: 12px; cursor: pointer;';
+    label.style.cssText = 'color: #888; font-size: 11px; cursor: pointer;';
 
     row.appendChild(checkbox);
     row.appendChild(label);
@@ -225,27 +239,27 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
   }
 
   private openDropdown(): void {
-    // Append to body if not already there
     if (!document.body.contains(this.dropdown)) {
       document.body.appendChild(this.dropdown);
     }
 
-    // Position relative to button
     const rect = this.exportButton.getBoundingClientRect();
     this.dropdown.style.top = `${rect.bottom + 4}px`;
     this.dropdown.style.left = `${Math.max(8, rect.right - 220)}px`;
 
     this.isDropdownOpen = true;
     this.dropdown.style.display = 'block';
-    this.exportButton.style.background = '#555';
+    this.exportButton.style.background = 'rgba(74, 158, 255, 0.15)';
     this.exportButton.style.borderColor = '#4a9eff';
+    this.exportButton.style.color = '#4a9eff';
   }
 
   private closeDropdown(): void {
     this.isDropdownOpen = false;
     this.dropdown.style.display = 'none';
-    this.exportButton.style.background = '#444';
-    this.exportButton.style.borderColor = '#555';
+    this.exportButton.style.background = 'transparent';
+    this.exportButton.style.borderColor = 'transparent';
+    this.exportButton.style.color = '#999';
   }
 
   private getIncludeAnnotations(): boolean {
@@ -266,14 +280,13 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
 
   private exportSequence(useInOutRange: boolean): void {
     this.emit('sequenceExportRequested', {
-      format: 'png',  // Default to PNG for sequences
+      format: 'png',
       includeAnnotations: this.getIncludeAnnotations(),
       quality: 0.92,
       useInOutRange,
     });
   }
 
-  // Public method for keyboard shortcut
   quickExport(format: ExportFormat = 'png'): void {
     this.exportAs(format);
   }

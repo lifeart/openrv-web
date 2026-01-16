@@ -1,5 +1,6 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { BlendMode, BLEND_MODES, BLEND_MODE_LABELS } from '../../composite/BlendModes';
+import { getIconSvg } from './shared/Icons';
 
 export interface StackLayer {
   id: string;
@@ -43,26 +44,35 @@ export class StackControl extends EventEmitter<StackControlEvents> {
 
     // Create stack button
     this.stackButton = document.createElement('button');
-    this.stackButton.textContent = '📚 Stack';
+    this.stackButton.innerHTML = `${getIconSvg('layers', 'sm')}<span style="margin-left: 6px;">Stack</span>`;
     this.stackButton.title = 'Layer stack controls';
     this.stackButton.style.cssText = `
-      background: #444;
-      border: 1px solid #555;
-      color: #ddd;
-      padding: 6px 12px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: #999;
+      padding: 6px 10px;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 13px;
-      transition: all 0.15s ease;
+      font-size: 12px;
+      transition: all 0.12s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     `;
 
     this.stackButton.addEventListener('click', () => this.togglePanel());
     this.stackButton.addEventListener('mouseenter', () => {
-      this.stackButton.style.background = '#555';
+      if (!this.isPanelOpen) {
+        this.stackButton.style.background = '#3a3a3a';
+        this.stackButton.style.borderColor = '#4a4a4a';
+        this.stackButton.style.color = '#ccc';
+      }
     });
     this.stackButton.addEventListener('mouseleave', () => {
       if (!this.isPanelOpen && this.layers.length <= 1) {
-        this.stackButton.style.background = '#444';
+        this.stackButton.style.background = 'transparent';
+        this.stackButton.style.borderColor = 'transparent';
+        this.stackButton.style.color = '#999';
       }
     });
 
@@ -190,15 +200,16 @@ export class StackControl extends EventEmitter<StackControlEvents> {
 
     // Visibility toggle
     const visBtn = document.createElement('button');
-    visBtn.textContent = layer.visible ? '👁' : '👁‍🗨';
+    visBtn.innerHTML = getIconSvg(layer.visible ? 'eye' : 'eye-off', 'sm');
     visBtn.title = layer.visible ? 'Hide layer' : 'Show layer';
     visBtn.style.cssText = `
       background: none;
       border: none;
       cursor: pointer;
-      font-size: 14px;
       padding: 2px;
-      opacity: ${layer.visible ? 1 : 0.5};
+      color: ${layer.visible ? '#999' : '#555'};
+      display: flex;
+      align-items: center;
     `;
     visBtn.addEventListener('click', () => {
       layer.visible = !layer.visible;
@@ -226,16 +237,17 @@ export class StackControl extends EventEmitter<StackControlEvents> {
 
     // Move up/down buttons
     const moveUp = document.createElement('button');
-    moveUp.textContent = '▲';
+    moveUp.innerHTML = getIconSvg('chevron-up', 'sm');
     moveUp.title = 'Move up';
     moveUp.style.cssText = `
-      background: #444;
-      border: 1px solid #555;
-      color: #aaa;
-      padding: 2px 6px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: #999;
+      padding: 2px;
       border-radius: 2px;
       cursor: pointer;
-      font-size: 10px;
+      display: flex;
+      align-items: center;
     `;
     moveUp.disabled = index === this.layers.length - 1;
     moveUp.style.opacity = moveUp.disabled ? '0.3' : '1';
@@ -246,16 +258,17 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     });
 
     const moveDown = document.createElement('button');
-    moveDown.textContent = '▼';
+    moveDown.innerHTML = getIconSvg('chevron-down', 'sm');
     moveDown.title = 'Move down';
     moveDown.style.cssText = `
-      background: #444;
-      border: 1px solid #555;
-      color: #aaa;
-      padding: 2px 6px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: #999;
+      padding: 2px;
       border-radius: 2px;
       cursor: pointer;
-      font-size: 10px;
+      display: flex;
+      align-items: center;
     `;
     moveDown.disabled = index === 0;
     moveDown.style.opacity = moveDown.disabled ? '0.3' : '1';
@@ -267,16 +280,17 @@ export class StackControl extends EventEmitter<StackControlEvents> {
 
     // Delete button
     const deleteBtn = document.createElement('button');
-    deleteBtn.textContent = '✕';
+    deleteBtn.innerHTML = getIconSvg('x', 'sm');
     deleteBtn.title = 'Remove layer';
     deleteBtn.style.cssText = `
-      background: #553333;
-      border: 1px solid #664444;
+      background: transparent;
+      border: 1px solid transparent;
       color: #ff8888;
-      padding: 2px 6px;
+      padding: 2px;
       border-radius: 2px;
       cursor: pointer;
-      font-size: 10px;
+      display: flex;
+      align-items: center;
     `;
     deleteBtn.addEventListener('click', () => this.removeLayer(layer.id));
 
@@ -455,9 +469,15 @@ export class StackControl extends EventEmitter<StackControlEvents> {
 
   private updateButtonState(): void {
     const hasMultipleLayers = this.layers.length > 1;
-    this.stackButton.style.borderColor = hasMultipleLayers ? '#4a9eff' : '#555';
-    this.stackButton.style.color = hasMultipleLayers ? '#4a9eff' : '#ddd';
-    this.stackButton.style.background = hasMultipleLayers || this.isPanelOpen ? '#555' : '#444';
+    if (hasMultipleLayers || this.isPanelOpen) {
+      this.stackButton.style.background = 'rgba(74, 158, 255, 0.15)';
+      this.stackButton.style.borderColor = '#4a9eff';
+      this.stackButton.style.color = '#4a9eff';
+    } else {
+      this.stackButton.style.background = 'transparent';
+      this.stackButton.style.borderColor = 'transparent';
+      this.stackButton.style.color = '#999';
+    }
   }
 
   togglePanel(): void {

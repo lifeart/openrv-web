@@ -1,5 +1,6 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { LensDistortionParams, DEFAULT_LENS_PARAMS, isDefaultLensParams } from '../../transform/LensDistortion';
+import { getIconSvg } from './shared/Icons';
 
 export interface LensControlEvents extends EventMap {
   lensChanged: LensDistortionParams;
@@ -30,26 +31,35 @@ export class LensControl extends EventEmitter<LensControlEvents> {
 
     // Create lens button
     this.lensButton = document.createElement('button');
-    this.lensButton.textContent = '📷 Lens';
+    this.lensButton.innerHTML = `${getIconSvg('aperture', 'sm')}<span style="margin-left: 6px;">Lens</span>`;
     this.lensButton.title = 'Lens distortion correction';
     this.lensButton.style.cssText = `
-      background: #444;
-      border: 1px solid #555;
-      color: #ddd;
-      padding: 6px 12px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: #999;
+      padding: 6px 10px;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 13px;
-      transition: all 0.15s ease;
+      font-size: 12px;
+      transition: all 0.12s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     `;
 
     this.lensButton.addEventListener('click', () => this.togglePanel());
     this.lensButton.addEventListener('mouseenter', () => {
-      this.lensButton.style.background = '#555';
+      if (!this.isPanelOpen) {
+        this.lensButton.style.background = '#3a3a3a';
+        this.lensButton.style.borderColor = '#4a4a4a';
+        this.lensButton.style.color = '#ccc';
+      }
     });
     this.lensButton.addEventListener('mouseleave', () => {
       if (!this.isPanelOpen && isDefaultLensParams(this.params)) {
-        this.lensButton.style.background = '#444';
+        this.lensButton.style.background = 'transparent';
+        this.lensButton.style.borderColor = 'transparent';
+        this.lensButton.style.color = '#999';
       }
     });
 
@@ -302,9 +312,15 @@ export class LensControl extends EventEmitter<LensControlEvents> {
 
   private updateButtonState(): void {
     const isActive = !isDefaultLensParams(this.params);
-    this.lensButton.style.borderColor = isActive ? '#4a9eff' : '#555';
-    this.lensButton.style.color = isActive ? '#4a9eff' : '#ddd';
-    this.lensButton.style.background = isActive || this.isPanelOpen ? '#555' : '#444';
+    if (isActive || this.isPanelOpen) {
+      this.lensButton.style.background = 'rgba(74, 158, 255, 0.15)';
+      this.lensButton.style.borderColor = '#4a9eff';
+      this.lensButton.style.color = '#4a9eff';
+    } else {
+      this.lensButton.style.background = 'transparent';
+      this.lensButton.style.borderColor = 'transparent';
+      this.lensButton.style.color = '#999';
+    }
   }
 
   togglePanel(): void {

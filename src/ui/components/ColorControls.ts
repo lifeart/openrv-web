@@ -1,6 +1,7 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { LUT3D, parseCubeLUT } from '../../color/LUTLoader';
 import { showAlert } from './shared/Modal';
+import { getIconSvg } from './shared/Icons';
 
 export interface ColorAdjustments {
   exposure: number;      // -5 to +5 stops
@@ -61,28 +62,34 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
 
     // Create toggle button
     this.toggleButton = document.createElement('button');
-    this.toggleButton.textContent = '🎨 Color';
+    this.toggleButton.innerHTML = `${getIconSvg('palette', 'sm')}<span style="margin-left: 6px;">Color</span>`;
     this.toggleButton.title = 'Toggle color adjustments panel';
     this.toggleButton.style.cssText = `
-      background: #444;
-      border: 1px solid #555;
-      color: #ddd;
-      padding: 6px 12px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: #999;
+      padding: 6px 10px;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 13px;
-      transition: all 0.15s ease;
-      display: flex;
+      font-size: 12px;
+      transition: all 0.12s ease;
+      display: inline-flex;
       align-items: center;
       justify-content: center;
     `;
     this.toggleButton.addEventListener('click', () => this.toggle());
     this.toggleButton.addEventListener('mouseenter', () => {
-      this.toggleButton.style.background = '#555';
+      if (!this.isExpanded) {
+        this.toggleButton.style.background = '#3a3a3a';
+        this.toggleButton.style.borderColor = '#4a4a4a';
+        this.toggleButton.style.color = '#ccc';
+      }
     });
     this.toggleButton.addEventListener('mouseleave', () => {
       if (!this.isExpanded) {
-        this.toggleButton.style.background = '#444';
+        this.toggleButton.style.background = 'transparent';
+        this.toggleButton.style.borderColor = 'transparent';
+        this.toggleButton.style.color = '#999';
       }
     });
     this.container.appendChild(this.toggleButton);
@@ -480,8 +487,9 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
 
     this.isExpanded = true;
     this.panel.style.display = 'block';
-    this.toggleButton.style.background = '#555';
+    this.toggleButton.style.background = 'rgba(74, 158, 255, 0.15)';
     this.toggleButton.style.borderColor = '#4a9eff';
+    this.toggleButton.style.color = '#4a9eff';
     this.emit('visibilityChanged', true);
   }
 
@@ -490,8 +498,9 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
 
     this.isExpanded = false;
     this.panel.style.display = 'none';
-    this.toggleButton.style.background = '#444';
-    this.toggleButton.style.borderColor = '#555';
+    this.toggleButton.style.background = 'transparent';
+    this.toggleButton.style.borderColor = 'transparent';
+    this.toggleButton.style.color = '#999';
     this.emit('visibilityChanged', false);
   }
 

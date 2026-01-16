@@ -1,6 +1,7 @@
 import { PaintEngine, PaintTool } from '../../paint/PaintEngine';
 import { BrushType } from '../../paint/types';
 import { showConfirm } from './shared/Modal';
+import { getIconSvg, IconName } from './shared/Icons';
 
 export class PaintToolbar {
   private container: HTMLElement;
@@ -20,12 +21,7 @@ export class PaintToolbar {
     this.container.style.cssText = `
       display: flex;
       align-items: center;
-      gap: 6px;
-      padding: 6px 12px;
-      background: #2a2a2a;
-      border: 1px solid #3a3a3a;
-      border-radius: 6px;
-      margin-left: 8px;
+      gap: 4px;
     `;
 
     this.createControls();
@@ -33,22 +29,16 @@ export class PaintToolbar {
   }
 
   private createControls(): void {
-    // Label
-    const label = document.createElement('span');
-    label.textContent = 'Paint:';
-    label.style.cssText = 'color: #888; font-size: 11px; margin-right: 4px;';
-    this.container.appendChild(label);
-
     // Tool buttons
-    this.createToolButton('none', '🖐', 'Pan tool (V)');
-    this.createToolButton('pen', '✏️', 'Pen tool (P)');
-    this.createToolButton('eraser', '🧹', 'Eraser (E)');
-    this.createToolButton('text', 'T', 'Text tool (T)');
+    this.createToolButton('none', 'hand', 'Pan tool (V)');
+    this.createToolButton('pen', 'pencil', 'Pen tool (P)');
+    this.createToolButton('eraser', 'eraser', 'Eraser (E)');
+    this.createToolButton('text', 'type', 'Text tool (T)');
 
     this.addSeparator();
 
     // Brush type toggle
-    this.brushButton = this.createButton('⚫', 'Toggle soft/hard brush (B)', () => {
+    this.brushButton = this.createIconButton('circle', 'Toggle soft/hard brush (B)', () => {
       this.paintEngine.brush = this.paintEngine.brush === BrushType.Circle
         ? BrushType.Gaussian
         : BrushType.Circle;
@@ -62,13 +52,13 @@ export class PaintToolbar {
     this.colorPicker.value = this.rgbaToHex(this.paintEngine.color);
     this.colorPicker.title = 'Stroke color';
     this.colorPicker.style.cssText = `
-      width: 28px;
+      width: 24px;
       height: 24px;
-      border: 1px solid #4a4a4a;
+      border: 1px solid #3a3a3a;
       border-radius: 4px;
-      padding: 0;
+      padding: 2px;
       cursor: pointer;
-      background: transparent;
+      background: #2a2a2a;
     `;
     this.colorPicker.addEventListener('input', () => {
       this.paintEngine.color = this.hexToRgba(this.colorPicker.value);
@@ -80,10 +70,10 @@ export class PaintToolbar {
     for (const color of presetColors) {
       const preset = document.createElement('button');
       preset.style.cssText = `
-        width: 20px;
-        height: 20px;
-        border: 1px solid #4a4a4a;
-        border-radius: 4px;
+        width: 16px;
+        height: 16px;
+        border: 1px solid #3a3a3a;
+        border-radius: 3px;
         padding: 0;
         cursor: pointer;
         background: ${color};
@@ -91,12 +81,10 @@ export class PaintToolbar {
       `;
       preset.title = color;
       preset.addEventListener('mouseenter', () => {
-        preset.style.borderColor = '#666';
-        preset.style.transform = 'scale(1.1)';
+        preset.style.borderColor = '#555';
       });
       preset.addEventListener('mouseleave', () => {
-        preset.style.borderColor = '#4a4a4a';
-        preset.style.transform = 'scale(1)';
+        preset.style.borderColor = '#3a3a3a';
       });
       preset.addEventListener('click', () => {
         this.colorPicker.value = color;
@@ -109,8 +97,8 @@ export class PaintToolbar {
 
     // Width slider
     this.widthLabel = document.createElement('span');
-    this.widthLabel.textContent = `${this.paintEngine.width}px`;
-    this.widthLabel.style.cssText = 'color: #aaa; font-size: 11px; min-width: 32px;';
+    this.widthLabel.textContent = `${this.paintEngine.width}`;
+    this.widthLabel.style.cssText = 'color: #888; font-size: 10px; min-width: 20px; text-align: right;';
     this.container.appendChild(this.widthLabel);
 
     this.widthSlider = document.createElement('input');
@@ -119,35 +107,40 @@ export class PaintToolbar {
     this.widthSlider.max = '50';
     this.widthSlider.value = String(this.paintEngine.width);
     this.widthSlider.title = 'Stroke width';
-    this.widthSlider.style.cssText = 'width: 80px; cursor: pointer;';
+    this.widthSlider.style.cssText = `
+      width: 60px;
+      height: 4px;
+      cursor: pointer;
+      accent-color: #4a9eff;
+    `;
     this.widthSlider.addEventListener('input', () => {
       this.paintEngine.width = parseInt(this.widthSlider.value, 10);
-      this.widthLabel.textContent = `${this.paintEngine.width}px`;
+      this.widthLabel.textContent = `${this.paintEngine.width}`;
     });
     this.container.appendChild(this.widthSlider);
 
     this.addSeparator();
 
     // Ghost mode toggle
-    this.ghostButton = this.createButton('👻', 'Toggle ghost mode (G)', () => {
+    this.ghostButton = this.createIconButton('ghost', 'Toggle ghost mode (G)', () => {
       const effects = this.paintEngine.effects;
       this.paintEngine.setGhostMode(!effects.ghost, effects.ghostBefore, effects.ghostAfter);
     });
 
-    // Undo/Redo
     this.addSeparator();
-    this.createButton('↩️', 'Undo (Ctrl+Z)', () => this.paintEngine.undo());
-    this.createButton('↪️', 'Redo (Ctrl+Y)', () => this.paintEngine.redo());
+
+    // Undo/Redo
+    this.createIconButton('undo', 'Undo (Ctrl+Z)', () => this.paintEngine.undo());
+    this.createIconButton('redo', 'Redo (Ctrl+Y)', () => this.paintEngine.redo());
 
     // Clear frame
-    this.createButton('🗑', 'Clear frame annotations', async () => {
+    this.createIconButton('trash', 'Clear frame annotations', async () => {
       const confirmed = await showConfirm('Clear all annotations on this frame?', {
         title: 'Clear Annotations',
         confirmText: 'Clear',
         confirmVariant: 'danger'
       });
       if (confirmed) {
-        // We need access to session for this - handled in App
         this.container.dispatchEvent(new CustomEvent('clearFrame'));
       }
     });
@@ -156,28 +149,27 @@ export class PaintToolbar {
     this.updateToolButtons();
   }
 
-  private createToolButton(tool: PaintTool, icon: string, title: string): void {
-    const btn = this.createButton(icon, title, () => {
+  private createToolButton(tool: PaintTool, icon: IconName, title: string): void {
+    const btn = this.createIconButton(icon, title, () => {
       this.paintEngine.tool = tool;
       this.updateToolButtons();
     });
     this.buttons.set(tool, btn);
   }
 
-  private createButton(text: string, title: string, onClick: () => void): HTMLButtonElement {
+  private createIconButton(icon: IconName, title: string, onClick: () => void): HTMLButtonElement {
     const button = document.createElement('button');
-    button.textContent = text;
+    button.innerHTML = getIconSvg(icon, 'sm');
     button.title = title;
     button.style.cssText = `
-      background: #3a3a3a;
-      border: 1px solid #4a4a4a;
-      color: #ccc;
-      padding: 4px 8px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: #999;
+      padding: 4px;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 11px;
-      height: 24px;
-      min-width: 24px;
+      width: 26px;
+      height: 26px;
       transition: all 0.12s ease;
       display: inline-flex;
       align-items: center;
@@ -186,17 +178,17 @@ export class PaintToolbar {
 
     button.addEventListener('mouseenter', () => {
       if (!button.classList.contains('active')) {
-        button.style.background = '#444';
-        button.style.borderColor = '#555';
-        button.style.color = '#fff';
+        button.style.background = '#3a3a3a';
+        button.style.borderColor = '#4a4a4a';
+        button.style.color = '#ccc';
       }
     });
 
     button.addEventListener('mouseleave', () => {
       if (!button.classList.contains('active')) {
-        button.style.background = '#3a3a3a';
-        button.style.borderColor = '#4a4a4a';
-        button.style.color = '#ccc';
+        button.style.background = 'transparent';
+        button.style.borderColor = 'transparent';
+        button.style.color = '#999';
       }
     });
 
@@ -207,7 +199,7 @@ export class PaintToolbar {
 
   private addSeparator(): void {
     const sep = document.createElement('div');
-    sep.style.cssText = 'width: 1px; height: 20px; background: #444; margin: 0 4px;';
+    sep.style.cssText = 'width: 1px; height: 18px; background: #3a3a3a; margin: 0 2px;';
     this.container.appendChild(sep);
   }
 
@@ -220,9 +212,9 @@ export class PaintToolbar {
         btn.style.color = '#4a9eff';
         btn.classList.add('active');
       } else {
-        btn.style.background = '#3a3a3a';
-        btn.style.borderColor = '#4a4a4a';
-        btn.style.color = '#ccc';
+        btn.style.background = 'transparent';
+        btn.style.borderColor = 'transparent';
+        btn.style.color = '#999';
         btn.classList.remove('active');
       }
     }
@@ -236,7 +228,7 @@ export class PaintToolbar {
 
   private updateBrushButton(): void {
     const isGaussian = this.paintEngine.brush === BrushType.Gaussian;
-    this.brushButton.textContent = isGaussian ? '🔵' : '⚫';
+    this.brushButton.innerHTML = getIconSvg(isGaussian ? 'blur' : 'circle', 'sm');
     this.brushButton.title = isGaussian
       ? 'Soft brush (click for hard) (B)'
       : 'Hard brush (click for soft) (B)';
@@ -245,6 +237,7 @@ export class PaintToolbar {
   private updateGhostButton(): void {
     const effects = this.paintEngine.effects;
     this.ghostButton.style.opacity = effects.ghost ? '1' : '0.5';
+    this.ghostButton.style.color = effects.ghost ? '#4a9eff' : '#999';
     this.ghostButton.title = effects.ghost
       ? 'Ghost mode ON (G)'
       : 'Ghost mode OFF (G)';
@@ -270,7 +263,6 @@ export class PaintToolbar {
     return this.container;
   }
 
-  // Handle keyboard shortcuts
   handleKeyboard(key: string): boolean {
     switch (key.toLowerCase()) {
       case 'v':

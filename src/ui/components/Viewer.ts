@@ -16,6 +16,7 @@ import { filterImageFiles } from '../../utils/SequenceLoader';
 import { StackLayer } from './StackControl';
 import { compositeImageData, BlendMode } from '../../composite/BlendModes';
 import { showAlert } from './shared/Modal';
+import { getIconSvg } from './shared/Icons';
 
 interface PointerState {
   pointerId: number;
@@ -221,7 +222,7 @@ export class Viewer {
     `;
     this.dropOverlay.innerHTML = `
       <div style="text-align: center; color: #4a9eff; font-size: 18px;">
-        <div style="font-size: 48px; margin-bottom: 10px;">📁</div>
+        <div style="margin-bottom: 10px;">${getIconSvg('folder-open', 'lg')}</div>
         Drop files here
       </div>
     `;

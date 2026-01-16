@@ -1,4 +1,5 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { getIconSvg } from './shared/Icons';
 
 export interface FilterSettings {
   blur: number;      // 0-20 pixels
@@ -39,26 +40,38 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
 
     // Create filter button
     this.filterButton = document.createElement('button');
-    this.filterButton.textContent = '✨ Filters';
+    this.filterButton.innerHTML = `${getIconSvg('sliders', 'sm')}<span style="margin-left: 6px;">Filters</span>`;
     this.filterButton.title = 'Filter effects (G)';
     this.filterButton.style.cssText = `
-      background: #444;
-      border: 1px solid #555;
-      color: #ddd;
-      padding: 6px 12px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: #999;
+      padding: 6px 10px;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 13px;
-      transition: all 0.15s ease;
+      font-size: 12px;
+      transition: all 0.12s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     `;
 
     this.filterButton.addEventListener('click', () => this.toggle());
     this.filterButton.addEventListener('mouseenter', () => {
-      this.filterButton.style.background = '#555';
+      if (!this.isPanelOpen) {
+        this.filterButton.style.background = '#3a3a3a';
+        this.filterButton.style.borderColor = '#4a4a4a';
+        this.filterButton.style.color = '#ccc';
+      }
     });
     this.filterButton.addEventListener('mouseleave', () => {
       if (!this.isPanelOpen) {
-        this.filterButton.style.background = '#444';
+        const hasFilters = this.settings.blur > 0 || this.settings.sharpen > 0;
+        if (!hasFilters) {
+          this.filterButton.style.background = 'transparent';
+          this.filterButton.style.borderColor = 'transparent';
+          this.filterButton.style.color = '#999';
+        }
       }
     });
 
@@ -240,8 +253,15 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
 
   private updateButtonState(): void {
     const hasFilters = this.settings.blur > 0 || this.settings.sharpen > 0;
-    this.filterButton.style.borderColor = hasFilters ? '#4a9eff' : '#555';
-    this.filterButton.style.color = hasFilters ? '#4a9eff' : '#ddd';
+    if (hasFilters || this.isPanelOpen) {
+      this.filterButton.style.background = 'rgba(74, 158, 255, 0.15)';
+      this.filterButton.style.borderColor = '#4a9eff';
+      this.filterButton.style.color = '#4a9eff';
+    } else {
+      this.filterButton.style.background = 'transparent';
+      this.filterButton.style.borderColor = 'transparent';
+      this.filterButton.style.color = '#999';
+    }
   }
 
   toggle(): void {
@@ -265,13 +285,13 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
 
     this.isPanelOpen = true;
     this.panel.style.display = 'block';
-    this.filterButton.style.background = '#555';
+    this.updateButtonState();
   }
 
   hide(): void {
     this.isPanelOpen = false;
     this.panel.style.display = 'none';
-    this.filterButton.style.background = '#444';
+    this.updateButtonState();
   }
 
   reset(): void {

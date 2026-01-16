@@ -1,4 +1,5 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { getIconSvg } from './shared/Icons';
 
 export interface CropRegion {
   x: number;      // 0-1 normalized left position
@@ -64,26 +65,35 @@ export class CropControl extends EventEmitter<CropControlEvents> {
 
     // Create crop button
     this.cropButton = document.createElement('button');
-    this.cropButton.textContent = '⬚ Crop';
+    this.cropButton.innerHTML = `${getIconSvg('crop', 'sm')}<span style="margin-left: 6px;">Crop</span>`;
     this.cropButton.title = 'Crop image (K)';
     this.cropButton.style.cssText = `
-      background: #444;
-      border: 1px solid #555;
-      color: #ddd;
-      padding: 6px 12px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: #999;
+      padding: 6px 10px;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 13px;
-      transition: all 0.15s ease;
+      font-size: 12px;
+      transition: all 0.12s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     `;
 
     this.cropButton.addEventListener('click', () => this.togglePanel());
     this.cropButton.addEventListener('mouseenter', () => {
-      this.cropButton.style.background = '#555';
+      if (!this.isPanelOpen && !this.state.enabled) {
+        this.cropButton.style.background = '#3a3a3a';
+        this.cropButton.style.borderColor = '#4a4a4a';
+        this.cropButton.style.color = '#ccc';
+      }
     });
     this.cropButton.addEventListener('mouseleave', () => {
       if (!this.isPanelOpen && !this.state.enabled) {
-        this.cropButton.style.background = '#444';
+        this.cropButton.style.background = 'transparent';
+        this.cropButton.style.borderColor = 'transparent';
+        this.cropButton.style.color = '#999';
       }
     });
 
@@ -280,10 +290,16 @@ export class CropControl extends EventEmitter<CropControlEvents> {
   }
 
   private updateButtonState(): void {
-    const isActive = this.state.enabled;
-    this.cropButton.style.borderColor = isActive ? '#4a9eff' : '#555';
-    this.cropButton.style.color = isActive ? '#4a9eff' : '#ddd';
-    this.cropButton.style.background = isActive || this.isPanelOpen ? '#555' : '#444';
+    const isActive = this.state.enabled || this.isPanelOpen;
+    if (isActive) {
+      this.cropButton.style.background = 'rgba(74, 158, 255, 0.15)';
+      this.cropButton.style.borderColor = '#4a9eff';
+      this.cropButton.style.color = '#4a9eff';
+    } else {
+      this.cropButton.style.background = 'transparent';
+      this.cropButton.style.borderColor = 'transparent';
+      this.cropButton.style.color = '#999';
+    }
   }
 
   togglePanel(): void {

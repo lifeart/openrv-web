@@ -1,4 +1,5 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { getIconSvg } from './shared/Icons';
 
 export interface Transform2D {
   rotation: 0 | 90 | 180 | 270;  // Degrees clockwise
@@ -30,9 +31,6 @@ export class TransformControl extends EventEmitter<TransformControlEvents> {
       display: flex;
       align-items: center;
       gap: 4px;
-      margin-left: 8px;
-      padding: 0 8px;
-      border-left: 1px solid #444;
     `;
 
     this.createControls();
@@ -40,45 +38,48 @@ export class TransformControl extends EventEmitter<TransformControlEvents> {
 
   private createControls(): void {
     // Rotate left (counter-clockwise)
-    this.createButton('↺', () => this.rotateLeft(), 'Rotate left 90° (Shift+R)');
+    this.createButton('rotate-ccw', () => this.rotateLeft(), 'Rotate left 90° (Shift+R)');
 
     // Rotate right (clockwise)
-    this.createButton('↻', () => this.rotateRight(), 'Rotate right 90° (R)');
+    this.createButton('rotate-cw', () => this.rotateRight(), 'Rotate right 90° (R)');
 
     // Flip horizontal
-    const flipHBtn = this.createButton('⇆', () => this.toggleFlipH(), 'Flip horizontal (H)');
+    const flipHBtn = this.createButton('flip-horizontal', () => this.toggleFlipH(), 'Flip horizontal (H)');
     flipHBtn.dataset.action = 'flipH';
 
     // Flip vertical
-    const flipVBtn = this.createButton('⇅', () => this.toggleFlipV(), 'Flip vertical (V)');
+    const flipVBtn = this.createButton('flip-vertical', () => this.toggleFlipV(), 'Flip vertical (V)');
     flipVBtn.dataset.action = 'flipV';
 
     // Reset button
-    this.createButton('⟲', () => this.reset(), 'Reset transforms');
+    this.createButton('reset', () => this.reset(), 'Reset transforms');
   }
 
-  private createButton(text: string, onClick: () => void, title: string): HTMLButtonElement {
+  private createButton(icon: string, onClick: () => void, title: string): HTMLButtonElement {
     const btn = document.createElement('button');
-    btn.textContent = text;
+    btn.innerHTML = getIconSvg(icon as any, 'sm');
     btn.title = title;
     btn.style.cssText = `
-      background: #444;
-      border: 1px solid #555;
-      color: #ddd;
+      background: transparent;
+      border: 1px solid transparent;
+      color: #999;
       width: 28px;
       height: 28px;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 14px;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: all 0.15s ease;
+      transition: all 0.12s ease;
     `;
 
     btn.addEventListener('click', onClick);
     btn.addEventListener('mouseenter', () => {
-      btn.style.background = '#555';
+      if (!btn.classList.contains('active')) {
+        btn.style.background = '#3a3a3a';
+        btn.style.borderColor = '#4a4a4a';
+        btn.style.color = '#ccc';
+      }
     });
     btn.addEventListener('mouseleave', () => {
       this.updateButtonState(btn);
@@ -98,8 +99,17 @@ export class TransformControl extends EventEmitter<TransformControlEvents> {
       isActive = this.transform.flipV;
     }
 
-    btn.style.background = isActive ? '#4a9eff' : '#444';
-    btn.style.borderColor = isActive ? '#4a9eff' : '#555';
+    if (isActive) {
+      btn.style.background = 'rgba(74, 158, 255, 0.15)';
+      btn.style.borderColor = '#4a9eff';
+      btn.style.color = '#4a9eff';
+      btn.classList.add('active');
+    } else {
+      btn.style.background = 'transparent';
+      btn.style.borderColor = 'transparent';
+      btn.style.color = '#999';
+      btn.classList.remove('active');
+    }
   }
 
   private updateAllButtons(): void {

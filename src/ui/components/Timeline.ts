@@ -380,15 +380,14 @@ export class Timeline {
     // Source info
     if (source) {
       ctx.textAlign = 'left';
-      const typeIcon = source.type === 'video' ? '🎬' : '🖼';
-      ctx.fillText(`${typeIcon} ${source.name} (${source.width}×${source.height})`, padding, height - 12);
+      const typeLabel = source.type === 'video' ? '[VID]' : '[IMG]';
+      ctx.fillText(`${typeLabel} ${source.name} (${source.width}×${source.height})`, padding, height - 12);
     }
 
     // Playback info
     ctx.textAlign = 'right';
-    const status = this.session.isPlaying ? '▶ Playing' : '⏸ Paused';
-    const loopIcon = this.session.loopMode === 'loop' ? '🔁' : this.session.loopMode === 'pingpong' ? '🔀' : '➡';
-    ctx.fillText(`${status} | ${this.session.fps} fps | ${loopIcon} ${this.session.loopMode}`, width - padding, height - 12);
+    const status = this.session.isPlaying ? '> Playing' : '|| Paused';
+    ctx.fillText(`${status} | ${this.session.fps} fps | ${this.session.loopMode}`, width - padding, height - 12);
   }
 
   refresh(): void {

@@ -1,4 +1,5 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { getIconSvg } from './shared/Icons';
 
 export interface VolumeState {
   volume: number;  // 0-1
@@ -39,23 +40,29 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
     this.updateMuteButton();
     this.muteButton.title = 'Toggle mute (M in video mode)';
     this.muteButton.style.cssText = `
-      background: #444;
-      border: 1px solid #555;
-      color: #ddd;
-      padding: 6px 10px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: #999;
+      padding: 6px;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 13px;
-      transition: all 0.15s ease;
-      min-width: 36px;
+      transition: all 0.12s ease;
+      min-width: 28px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     `;
 
     this.muteButton.addEventListener('click', () => this.toggleMute());
     this.muteButton.addEventListener('mouseenter', () => {
-      this.muteButton.style.background = '#555';
+      this.muteButton.style.background = '#3a3a3a';
+      this.muteButton.style.borderColor = '#4a4a4a';
+      this.muteButton.style.color = '#ccc';
     });
     this.muteButton.addEventListener('mouseleave', () => {
-      this.muteButton.style.background = '#444';
+      this.muteButton.style.background = 'transparent';
+      this.muteButton.style.borderColor = 'transparent';
+      this.muteButton.style.color = '#999';
     });
 
     // Create volume slider container (shows on hover)
@@ -105,13 +112,11 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
 
   private updateMuteButton(): void {
     if (this._muted || this._volume === 0) {
-      this.muteButton.textContent = '🔇';
-    } else if (this._volume < 0.3) {
-      this.muteButton.textContent = '🔈';
-    } else if (this._volume < 0.7) {
-      this.muteButton.textContent = '🔉';
+      this.muteButton.innerHTML = getIconSvg('volume-mute', 'sm');
+    } else if (this._volume < 0.5) {
+      this.muteButton.innerHTML = getIconSvg('volume-low', 'sm');
     } else {
-      this.muteButton.textContent = '🔊';
+      this.muteButton.innerHTML = getIconSvg('volume-high', 'sm');
     }
   }
 

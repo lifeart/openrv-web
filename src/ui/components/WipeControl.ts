@@ -1,4 +1,5 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { getIconSvg } from './shared/Icons';
 
 export type WipeMode = 'off' | 'horizontal' | 'vertical' | 'quad';
 export type WipeSide = 'left' | 'right' | 'top' | 'bottom';
@@ -44,27 +45,33 @@ export class WipeControl extends EventEmitter<WipeControlEvents> {
     this.updateButtonLabel();
     this.toggleButton.title = 'Toggle wipe comparison (W)';
     this.toggleButton.style.cssText = `
-      background: #444;
-      border: 1px solid #555;
-      color: #ddd;
-      padding: 6px 12px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: #999;
+      padding: 6px 10px;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 13px;
-      transition: all 0.15s ease;
-      display: flex;
+      font-size: 12px;
+      transition: all 0.12s ease;
+      display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-width: 70px;
+      min-width: 80px;
     `;
 
     this.toggleButton.addEventListener('click', () => this.cycleMode());
     this.toggleButton.addEventListener('mouseenter', () => {
-      this.toggleButton.style.background = '#555';
+      if (this.state.mode === 'off') {
+        this.toggleButton.style.background = '#3a3a3a';
+        this.toggleButton.style.borderColor = '#4a4a4a';
+        this.toggleButton.style.color = '#ccc';
+      }
     });
     this.toggleButton.addEventListener('mouseleave', () => {
       if (this.state.mode === 'off') {
-        this.toggleButton.style.background = '#444';
+        this.toggleButton.style.background = 'transparent';
+        this.toggleButton.style.borderColor = 'transparent';
+        this.toggleButton.style.color = '#999';
       }
     });
 
@@ -72,21 +79,29 @@ export class WipeControl extends EventEmitter<WipeControlEvents> {
   }
 
   private updateButtonLabel(): void {
-    const labels: Record<WipeMode, string> = {
-      off: '⊞ Wipe',
-      horizontal: '⊟ H-Wipe',
-      vertical: '⊞ V-Wipe',
-      quad: '⊠ Quad',
+    const icons: Record<WipeMode, string> = {
+      off: 'columns',
+      horizontal: 'split-vertical',
+      vertical: 'split-horizontal',
+      quad: 'columns',
     };
-    this.toggleButton.textContent = labels[this.state.mode];
+    const labels: Record<WipeMode, string> = {
+      off: 'Wipe',
+      horizontal: 'H-Wipe',
+      vertical: 'V-Wipe',
+      quad: 'Quad',
+    };
+    this.toggleButton.innerHTML = `${getIconSvg(icons[this.state.mode] as any, 'sm')}<span style="margin-left: 6px;">${labels[this.state.mode]}</span>`;
 
     // Update button style based on active state
     if (this.state.mode !== 'off') {
-      this.toggleButton.style.background = '#555';
+      this.toggleButton.style.background = 'rgba(74, 158, 255, 0.15)';
       this.toggleButton.style.borderColor = '#4a9eff';
+      this.toggleButton.style.color = '#4a9eff';
     } else {
-      this.toggleButton.style.background = '#444';
-      this.toggleButton.style.borderColor = '#555';
+      this.toggleButton.style.background = 'transparent';
+      this.toggleButton.style.borderColor = 'transparent';
+      this.toggleButton.style.color = '#999';
     }
   }
 

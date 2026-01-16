@@ -1,6 +1,7 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { CDLValues, DEFAULT_CDL, isDefaultCDL, parseCDLXML, exportCDLXML } from '../../color/CDL';
 import { showAlert } from './shared/Modal';
+import { getIconSvg } from './shared/Icons';
 
 export interface CDLControlEvents extends EventMap {
   cdlChanged: CDLValues;
@@ -32,26 +33,35 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
 
     // Create CDL button
     this.cdlButton = document.createElement('button');
-    this.cdlButton.textContent = '🎬 CDL';
+    this.cdlButton.innerHTML = `${getIconSvg('film-slate', 'sm')}<span style="margin-left: 6px;">CDL</span>`;
     this.cdlButton.title = 'ASC CDL Color Correction';
     this.cdlButton.style.cssText = `
-      background: #444;
-      border: 1px solid #555;
-      color: #ddd;
-      padding: 6px 12px;
+      background: transparent;
+      border: 1px solid transparent;
+      color: #999;
+      padding: 6px 10px;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 13px;
-      transition: all 0.15s ease;
+      font-size: 12px;
+      transition: all 0.12s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     `;
 
     this.cdlButton.addEventListener('click', () => this.togglePanel());
     this.cdlButton.addEventListener('mouseenter', () => {
-      this.cdlButton.style.background = '#555';
+      if (!this.isPanelOpen) {
+        this.cdlButton.style.background = '#3a3a3a';
+        this.cdlButton.style.borderColor = '#4a4a4a';
+        this.cdlButton.style.color = '#ccc';
+      }
     });
     this.cdlButton.addEventListener('mouseleave', () => {
       if (!this.isPanelOpen && isDefaultCDL(this.cdl)) {
-        this.cdlButton.style.background = '#444';
+        this.cdlButton.style.background = 'transparent';
+        this.cdlButton.style.borderColor = 'transparent';
+        this.cdlButton.style.color = '#999';
       }
     });
 
@@ -339,9 +349,15 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
 
   private updateButtonState(): void {
     const isActive = !isDefaultCDL(this.cdl);
-    this.cdlButton.style.borderColor = isActive ? '#4a9eff' : '#555';
-    this.cdlButton.style.color = isActive ? '#4a9eff' : '#ddd';
-    this.cdlButton.style.background = isActive || this.isPanelOpen ? '#555' : '#444';
+    if (isActive || this.isPanelOpen) {
+      this.cdlButton.style.background = 'rgba(74, 158, 255, 0.15)';
+      this.cdlButton.style.borderColor = '#4a9eff';
+      this.cdlButton.style.color = '#4a9eff';
+    } else {
+      this.cdlButton.style.background = 'transparent';
+      this.cdlButton.style.borderColor = 'transparent';
+      this.cdlButton.style.color = '#999';
+    }
   }
 
   togglePanel(): void {
