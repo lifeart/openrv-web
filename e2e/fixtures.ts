@@ -30,6 +30,7 @@ export interface ViewerState {
   wipeMode: 'off' | 'horizontal' | 'vertical' | 'quad';
   wipePosition: number;
   cropEnabled: boolean;
+  channelMode: 'rgb' | 'red' | 'green' | 'blue' | 'alpha' | 'luminance';
 }
 
 export interface ColorState {
@@ -97,6 +98,7 @@ export async function getViewerState(page: Page): Promise<ViewerState> {
       wipeMode: 'off',
       wipePosition: 0.5,
       cropEnabled: false,
+      channelMode: 'rgb',
     };
   });
 }

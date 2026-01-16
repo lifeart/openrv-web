@@ -42,6 +42,7 @@ export interface ViewerState {
   wipeMode: 'off' | 'horizontal' | 'vertical' | 'quad';
   wipePosition: number;
   cropEnabled: boolean;
+  channelMode: 'rgb' | 'red' | 'green' | 'blue' | 'alpha' | 'luminance';
 }
 
 export interface ColorState {
@@ -111,6 +112,7 @@ export function exposeForTesting(app: App): void {
         wipeMode: viewer.wipeState?.mode ?? 'off',
         wipePosition: viewer.wipeState?.position ?? 0.5,
         cropEnabled: viewer.cropState?.enabled ?? false,
+        channelMode: viewer.channelMode ?? 'rgb',
       };
     },
 

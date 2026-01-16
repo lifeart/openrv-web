@@ -14,6 +14,7 @@ import { CropControl } from './ui/components/CropControl';
 import { CDLControl } from './ui/components/CDLControl';
 import { LensControl } from './ui/components/LensControl';
 import { StackControl } from './ui/components/StackControl';
+import { ChannelSelect } from './ui/components/ChannelSelect';
 import { exportSequence } from './utils/SequenceExporter';
 import { showAlert, showModal } from './ui/components/shared/Modal';
 import { SessionSerializer } from './core/session/SessionSerializer';
@@ -36,6 +37,7 @@ export class App {
   private cdlControl: CDLControl;
   private lensControl: LensControl;
   private stackControl: StackControl;
+  private channelSelect: ChannelSelect;
   private animationId: number | null = null;
   private boundHandleKeydown: (e: KeyboardEvent) => void;
   private boundHandleResize: () => void;
@@ -166,6 +168,12 @@ export class App {
     this.stackControl.on('layerReordered', () => {
       this.viewer.setStackLayers(this.stackControl.getLayers());
     });
+
+    // Initialize channel select control
+    this.channelSelect = new ChannelSelect();
+    this.channelSelect.on('channelChanged', (channel) => {
+      this.viewer.setChannelMode(channel);
+    });
   }
 
   mount(selector: string): void {
@@ -226,6 +234,11 @@ export class App {
     viewContent.appendChild(ContextToolbar.createButton('100%', () => this.viewer.setZoom(1), { title: 'Zoom 100% (1)' }));
     viewContent.appendChild(ContextToolbar.createButton('200%', () => this.viewer.setZoom(2), { title: 'Zoom 200% (2)' }));
     viewContent.appendChild(ContextToolbar.createButton('400%', () => this.viewer.setZoom(4), { title: 'Zoom 400% (4)' }));
+
+    viewContent.appendChild(ContextToolbar.createDivider());
+
+    // Channel select
+    viewContent.appendChild(this.channelSelect.render());
 
     viewContent.appendChild(ContextToolbar.createDivider());
 
@@ -356,6 +369,13 @@ export class App {
       } else if (key === 'v' && e.shiftKey) {
         e.preventDefault();
         this.transformControl.toggleFlipV();
+        return;
+      }
+
+      // Handle channel select shortcuts (Shift + G/B/A/L/N)
+      // Note: Shift+R is used for rotation, so Red channel must be selected via UI
+      if (e.shiftKey && this.channelSelect.handleKeyboard(e.key, e.shiftKey)) {
+        e.preventDefault();
         return;
       }
     }
@@ -719,6 +739,13 @@ F         - Fit to window
 Drag      - Pan image
 Scroll    - Zoom
 
+CHANNEL ISOLATION
+Shift+G   - Green channel
+Shift+B   - Blue channel
+Shift+A   - Alpha channel
+Shift+L   - Luminance
+Shift+N   - RGB (all channels)
+
 TIMELINE
 I / [     - Set in point
 O / ]     - Set out point
@@ -839,5 +866,6 @@ Shift+V   - Flip vertical</pre>`;
     this.cdlControl.dispose();
     this.lensControl.dispose();
     this.stackControl.dispose();
+    this.channelSelect.dispose();
   }
 }

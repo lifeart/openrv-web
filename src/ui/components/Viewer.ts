@@ -17,6 +17,7 @@ import { StackLayer } from './StackControl';
 import { compositeImageData, BlendMode } from '../../composite/BlendModes';
 import { showAlert } from './shared/Modal';
 import { getIconSvg } from './shared/Icons';
+import { ChannelMode, applyChannelIsolation } from './ChannelSelect';
 
 interface PointerState {
   pointerId: number;
@@ -105,6 +106,9 @@ export class Viewer {
   // Stack/composite state
   private stackLayers: StackLayer[] = [];
   private stackEnabled = false;
+
+  // Channel isolation state
+  private channelMode: ChannelMode = 'rgb';
 
   constructor(session: Session, paintEngine: PaintEngine) {
     this.session = session;
@@ -866,6 +870,11 @@ export class Viewer {
       this.applySharpen(this.imageCtx, displayWidth, displayHeight);
     }
 
+    // Apply channel isolation (display mode, applied last)
+    if (this.channelMode !== 'rgb') {
+      this.applyChannelIsolation(this.imageCtx, displayWidth, displayHeight);
+    }
+
     this.updateCanvasPosition();
     this.updateWipeLine();
   }
@@ -1305,6 +1314,33 @@ export class Viewer {
     const imageData = ctx.getImageData(0, 0, width, height);
     const correctedData = applyLensDistortion(imageData, this.lensParams);
     ctx.putImageData(correctedData, 0, 0);
+  }
+
+  // Channel isolation methods
+  setChannelMode(mode: ChannelMode): void {
+    if (this.channelMode === mode) return;
+    this.channelMode = mode;
+    this.scheduleRender();
+  }
+
+  getChannelMode(): ChannelMode {
+    return this.channelMode;
+  }
+
+  resetChannelMode(): void {
+    this.channelMode = 'rgb';
+    this.scheduleRender();
+  }
+
+  /**
+   * Apply channel isolation to the canvas
+   */
+  private applyChannelIsolation(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+    if (this.channelMode === 'rgb') return;
+
+    const imageData = ctx.getImageData(0, 0, width, height);
+    applyChannelIsolation(imageData, this.channelMode);
+    ctx.putImageData(imageData, 0, 0);
   }
 
   // Stack/composite methods
