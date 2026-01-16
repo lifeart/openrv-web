@@ -303,8 +303,9 @@ export class App {
       // For non-text inputs (range, color), allow keyboard shortcuts through
     }
 
-    // Try paint toolbar shortcuts first
-    if (this.paintToolbar.handleKeyboard(e.key)) {
+    // Try paint toolbar shortcuts first (only if no modifier keys pressed)
+    // Shift/Alt modifiers are used for transform shortcuts
+    if (!e.shiftKey && !e.altKey && this.paintToolbar.handleKeyboard(e.key)) {
       e.preventDefault();
       return;
     }

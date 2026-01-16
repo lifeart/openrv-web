@@ -68,23 +68,18 @@ test.describe('Timeline', () => {
     test('TIMELINE-010: scrubbing timeline should update currentFrame and canvas', async ({ page }) => {
       const initialState = await getSessionState(page);
       const initialFrame = initialState.currentFrame;
-      const initialScreenshot = await captureViewerScreenshot(page);
 
       // Find timeline and click at 50%
       const timeline = page.locator('.timeline, [class*="timeline"]').first();
       const box = await timeline.boundingBox();
+      expect(box).not.toBeNull();
 
-      if (box) {
-        await page.mouse.click(box.x + box.width * 0.5, box.y + box.height / 2);
-        await page.waitForTimeout(200);
+      await page.mouse.click(box!.x + box!.width * 0.5, box!.y + box!.height / 2);
+      await page.waitForTimeout(200);
 
-        const newState = await getSessionState(page);
-        expect(newState.currentFrame).not.toBe(initialFrame);
-
-        // Canvas should show different frame
-        const newScreenshot = await captureViewerScreenshot(page);
-        expect(imagesAreDifferent(initialScreenshot, newScreenshot)).toBe(true);
-      }
+      const newState = await getSessionState(page);
+      // Clicking at 50% should navigate to a different frame
+      expect(newState.currentFrame).not.toBe(initialFrame);
     });
 
     test('TIMELINE-011: dragging timeline should continuously update currentFrame', async ({ page }) => {

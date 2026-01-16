@@ -14,14 +14,19 @@ import {
  * and visual modifications to the canvas.
  */
 
+// Helper to get slider by label name
+async function getSliderByLabel(page: import('@playwright/test').Page, label: string) {
+  return page.locator('.color-controls-panel label').filter({ hasText: label }).locator('..').locator('input[type="range"]');
+}
+
 test.describe('Color Controls', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await page.waitForSelector('#app');
     await waitForTestHelper(page);
     await loadVideoFile(page);
-    // Switch to Color tab
-    await page.click('button[data-tab-id="color"]');
+    // Switch to Color tab (use text match instead of data attribute)
+    await page.locator('button:has-text("Color")').first().click();
     await page.waitForTimeout(200);
   });
 
@@ -75,21 +80,17 @@ test.describe('Color Controls', () => {
 
       const initialScreenshot = await captureViewerScreenshot(page);
 
-      // Find and adjust exposure slider (first slider after LUT intensity)
-      const exposureSlider = page.locator('.color-controls-panel input[type="range"]').nth(1);
-      if (await exposureSlider.isVisible()) {
-        await exposureSlider.evaluate((el: HTMLInputElement) => {
-          el.value = '2';
-          el.dispatchEvent(new Event('input', { bubbles: true }));
-        });
-        await page.waitForTimeout(200);
+      // Find exposure slider by label
+      const exposureSlider = await getSliderByLabel(page, 'Exposure');
+      await exposureSlider.fill('2');
+      await exposureSlider.dispatchEvent('input');
+      await page.waitForTimeout(200);
 
-        state = await getColorState(page);
-        expect(state.exposure).toBeCloseTo(2, 1);
+      state = await getColorState(page);
+      expect(state.exposure).toBeCloseTo(2, 1);
 
-        const adjustedScreenshot = await captureViewerScreenshot(page);
-        expect(imagesAreDifferent(initialScreenshot, adjustedScreenshot)).toBe(true);
-      }
+      const adjustedScreenshot = await captureViewerScreenshot(page);
+      expect(imagesAreDifferent(initialScreenshot, adjustedScreenshot)).toBe(true);
     });
 
     test('COLOR-011: increasing exposure should brighten the image', async ({ page }) => {
@@ -98,43 +99,35 @@ test.describe('Color Controls', () => {
 
       const initialScreenshot = await captureViewerScreenshot(page);
 
-      const exposureSlider = page.locator('.color-controls-panel input[type="range"]').nth(1);
-      if (await exposureSlider.isVisible()) {
-        // Set high exposure
-        await exposureSlider.evaluate((el: HTMLInputElement) => {
-          el.value = '3';
-          el.dispatchEvent(new Event('input', { bubbles: true }));
-        });
-        await page.waitForTimeout(200);
+      const exposureSlider = await getSliderByLabel(page, 'Exposure');
+      await exposureSlider.fill('3');
+      await exposureSlider.dispatchEvent('input');
+      await page.waitForTimeout(200);
 
-        const brightScreenshot = await captureViewerScreenshot(page);
-        expect(imagesAreDifferent(initialScreenshot, brightScreenshot)).toBe(true);
-      }
+      const brightScreenshot = await captureViewerScreenshot(page);
+      expect(imagesAreDifferent(initialScreenshot, brightScreenshot)).toBe(true);
     });
 
     test('COLOR-012: double-click on exposure slider should reset to default', async ({ page }) => {
       await page.keyboard.press('c');
       await page.waitForTimeout(200);
 
-      const exposureSlider = page.locator('.color-controls-panel input[type="range"]').nth(1);
-      if (await exposureSlider.isVisible()) {
-        // Set exposure
-        await exposureSlider.evaluate((el: HTMLInputElement) => {
-          el.value = '2';
-          el.dispatchEvent(new Event('input', { bubbles: true }));
-        });
-        await page.waitForTimeout(100);
+      const exposureSlider = await getSliderByLabel(page, 'Exposure');
 
-        let state = await getColorState(page);
-        expect(state.exposure).not.toBe(0);
+      // Set exposure
+      await exposureSlider.fill('2');
+      await exposureSlider.dispatchEvent('input');
+      await page.waitForTimeout(100);
 
-        // Double-click to reset
-        await exposureSlider.dblclick();
-        await page.waitForTimeout(200);
+      let state = await getColorState(page);
+      expect(state.exposure).toBeCloseTo(2, 1);
 
-        state = await getColorState(page);
-        expect(state.exposure).toBeCloseTo(0, 1);
-      }
+      // Double-click to reset
+      await exposureSlider.dblclick();
+      await page.waitForTimeout(200);
+
+      state = await getColorState(page);
+      expect(state.exposure).toBeCloseTo(0, 1);
     });
   });
 
@@ -148,21 +141,16 @@ test.describe('Color Controls', () => {
 
       const initialScreenshot = await captureViewerScreenshot(page);
 
-      // Gamma is usually third slider
-      const gammaSlider = page.locator('.color-controls-panel input[type="range"]').nth(2);
-      if (await gammaSlider.isVisible()) {
-        await gammaSlider.evaluate((el: HTMLInputElement) => {
-          el.value = '1.5';
-          el.dispatchEvent(new Event('input', { bubbles: true }));
-        });
-        await page.waitForTimeout(200);
+      const gammaSlider = await getSliderByLabel(page, 'Gamma');
+      await gammaSlider.fill('1.5');
+      await gammaSlider.dispatchEvent('input');
+      await page.waitForTimeout(200);
 
-        state = await getColorState(page);
-        expect(state.gamma).toBeCloseTo(1.5, 1);
+      state = await getColorState(page);
+      expect(state.gamma).toBeCloseTo(1.5, 1);
 
-        const adjustedScreenshot = await captureViewerScreenshot(page);
-        expect(imagesAreDifferent(initialScreenshot, adjustedScreenshot)).toBe(true);
-      }
+      const adjustedScreenshot = await captureViewerScreenshot(page);
+      expect(imagesAreDifferent(initialScreenshot, adjustedScreenshot)).toBe(true);
     });
   });
 
@@ -176,22 +164,16 @@ test.describe('Color Controls', () => {
 
       const initialScreenshot = await captureViewerScreenshot(page);
 
-      // Find saturation slider
-      const saturationSlider = page.locator('.color-controls-panel input[type="range"]').nth(3);
-      if (await saturationSlider.isVisible()) {
-        // Desaturate
-        await saturationSlider.evaluate((el: HTMLInputElement) => {
-          el.value = '0';
-          el.dispatchEvent(new Event('input', { bubbles: true }));
-        });
-        await page.waitForTimeout(200);
+      const saturationSlider = await getSliderByLabel(page, 'Saturation');
+      await saturationSlider.fill('0');
+      await saturationSlider.dispatchEvent('input');
+      await page.waitForTimeout(200);
 
-        state = await getColorState(page);
-        expect(state.saturation).toBeCloseTo(0, 1);
+      state = await getColorState(page);
+      expect(state.saturation).toBeCloseTo(0, 1);
 
-        const desaturatedScreenshot = await captureViewerScreenshot(page);
-        expect(imagesAreDifferent(initialScreenshot, desaturatedScreenshot)).toBe(true);
-      }
+      const desaturatedScreenshot = await captureViewerScreenshot(page);
+      expect(imagesAreDifferent(initialScreenshot, desaturatedScreenshot)).toBe(true);
     });
 
     test('COLOR-031: setting saturation to 0 should produce grayscale image', async ({ page }) => {
@@ -200,20 +182,16 @@ test.describe('Color Controls', () => {
 
       const colorScreenshot = await captureViewerScreenshot(page);
 
-      const saturationSlider = page.locator('.color-controls-panel input[type="range"]').nth(3);
-      if (await saturationSlider.isVisible()) {
-        await saturationSlider.evaluate((el: HTMLInputElement) => {
-          el.value = '0';
-          el.dispatchEvent(new Event('input', { bubbles: true }));
-        });
-        await page.waitForTimeout(200);
+      const saturationSlider = await getSliderByLabel(page, 'Saturation');
+      await saturationSlider.fill('0');
+      await saturationSlider.dispatchEvent('input');
+      await page.waitForTimeout(200);
 
-        const state = await getColorState(page);
-        expect(state.saturation).toBeCloseTo(0, 1);
+      const state = await getColorState(page);
+      expect(state.saturation).toBeCloseTo(0, 1);
 
-        const grayscaleScreenshot = await captureViewerScreenshot(page);
-        expect(imagesAreDifferent(colorScreenshot, grayscaleScreenshot)).toBe(true);
-      }
+      const grayscaleScreenshot = await captureViewerScreenshot(page);
+      expect(imagesAreDifferent(colorScreenshot, grayscaleScreenshot)).toBe(true);
     });
   });
 
@@ -227,22 +205,16 @@ test.describe('Color Controls', () => {
 
       const initialScreenshot = await captureViewerScreenshot(page);
 
-      // Find contrast slider
-      const contrastSlider = page.locator('.color-controls-panel input[type="range"]').nth(4);
-      if (await contrastSlider.isVisible()) {
-        // Increase contrast
-        await contrastSlider.evaluate((el: HTMLInputElement) => {
-          el.value = '1.5';
-          el.dispatchEvent(new Event('input', { bubbles: true }));
-        });
-        await page.waitForTimeout(200);
+      const contrastSlider = await getSliderByLabel(page, 'Contrast');
+      await contrastSlider.fill('1.5');
+      await contrastSlider.dispatchEvent('input');
+      await page.waitForTimeout(200);
 
-        state = await getColorState(page);
-        expect(state.contrast).toBeCloseTo(1.5, 1);
+      state = await getColorState(page);
+      expect(state.contrast).toBeCloseTo(1.5, 1);
 
-        const contrastScreenshot = await captureViewerScreenshot(page);
-        expect(imagesAreDifferent(initialScreenshot, contrastScreenshot)).toBe(true);
-      }
+      const contrastScreenshot = await captureViewerScreenshot(page);
+      expect(imagesAreDifferent(initialScreenshot, contrastScreenshot)).toBe(true);
     });
   });
 
@@ -256,22 +228,16 @@ test.describe('Color Controls', () => {
 
       const initialScreenshot = await captureViewerScreenshot(page);
 
-      // Find temperature slider
-      const tempSlider = page.locator('.color-controls-panel input[type="range"]').nth(5);
-      if (await tempSlider.isVisible()) {
-        // Make warmer
-        await tempSlider.evaluate((el: HTMLInputElement) => {
-          el.value = '50';
-          el.dispatchEvent(new Event('input', { bubbles: true }));
-        });
-        await page.waitForTimeout(200);
+      const tempSlider = await getSliderByLabel(page, 'Temperature');
+      await tempSlider.fill('50');
+      await tempSlider.dispatchEvent('input');
+      await page.waitForTimeout(200);
 
-        state = await getColorState(page);
-        expect(state.temperature).not.toBeCloseTo(0, 1);
+      state = await getColorState(page);
+      expect(state.temperature).toBeCloseTo(50, 0);
 
-        const warmScreenshot = await captureViewerScreenshot(page);
-        expect(imagesAreDifferent(initialScreenshot, warmScreenshot)).toBe(true);
-      }
+      const warmScreenshot = await captureViewerScreenshot(page);
+      expect(imagesAreDifferent(initialScreenshot, warmScreenshot)).toBe(true);
     });
 
     test('COLOR-051: adjusting tint should update state and change canvas', async ({ page }) => {
@@ -283,22 +249,16 @@ test.describe('Color Controls', () => {
 
       const initialScreenshot = await captureViewerScreenshot(page);
 
-      // Find tint slider
-      const tintSlider = page.locator('.color-controls-panel input[type="range"]').nth(6);
-      if (await tintSlider.isVisible()) {
-        // Adjust tint
-        await tintSlider.evaluate((el: HTMLInputElement) => {
-          el.value = '30';
-          el.dispatchEvent(new Event('input', { bubbles: true }));
-        });
-        await page.waitForTimeout(200);
+      const tintSlider = await getSliderByLabel(page, 'Tint');
+      await tintSlider.fill('30');
+      await tintSlider.dispatchEvent('input');
+      await page.waitForTimeout(200);
 
-        state = await getColorState(page);
-        expect(state.tint).not.toBeCloseTo(0, 1);
+      state = await getColorState(page);
+      expect(state.tint).toBeCloseTo(30, 0);
 
-        const tintedScreenshot = await captureViewerScreenshot(page);
-        expect(imagesAreDifferent(initialScreenshot, tintedScreenshot)).toBe(true);
-      }
+      const tintedScreenshot = await captureViewerScreenshot(page);
+      expect(imagesAreDifferent(initialScreenshot, tintedScreenshot)).toBe(true);
     });
   });
 
@@ -312,22 +272,16 @@ test.describe('Color Controls', () => {
 
       const initialScreenshot = await captureViewerScreenshot(page);
 
-      // Find brightness slider
-      const brightnessSlider = page.locator('.color-controls-panel input[type="range"]').nth(7);
-      if (await brightnessSlider.isVisible()) {
-        // Increase brightness
-        await brightnessSlider.evaluate((el: HTMLInputElement) => {
-          el.value = '0.3';
-          el.dispatchEvent(new Event('input', { bubbles: true }));
-        });
-        await page.waitForTimeout(200);
+      const brightnessSlider = await getSliderByLabel(page, 'Brightness');
+      await brightnessSlider.fill('0.3');
+      await brightnessSlider.dispatchEvent('input');
+      await page.waitForTimeout(200);
 
-        state = await getColorState(page);
-        expect(state.brightness).not.toBeCloseTo(0, 1);
+      state = await getColorState(page);
+      expect(state.brightness).toBeCloseTo(0.3, 1);
 
-        const brightScreenshot = await captureViewerScreenshot(page);
-        expect(imagesAreDifferent(initialScreenshot, brightScreenshot)).toBe(true);
-      }
+      const brightScreenshot = await captureViewerScreenshot(page);
+      expect(imagesAreDifferent(initialScreenshot, brightScreenshot)).toBe(true);
     });
   });
 
@@ -336,32 +290,27 @@ test.describe('Color Controls', () => {
       await page.keyboard.press('c');
       await page.waitForTimeout(200);
 
-      // Look for LUT button or label
-      const lutButton = page.locator('button[title*="LUT"]').first();
-      if (await lutButton.isVisible()) {
-        await expect(lutButton).toBeVisible();
-      }
+      // Look for LUT load button in panel
+      const lutButton = page.locator('.color-controls-panel button:has-text("Load .cube")');
+      await expect(lutButton).toBeVisible();
     });
 
     test('COLOR-071: LUT intensity slider should adjust LUT blend', async ({ page }) => {
       await page.keyboard.press('c');
       await page.waitForTimeout(200);
 
-      // LUT intensity is usually first slider
-      const lutSlider = page.locator('.color-controls-panel input[type="range"]').first();
-      if (await lutSlider.isVisible()) {
-        let state = await getColorState(page);
-        const initialIntensity = state.lutIntensity;
+      // LUT intensity slider is found by label "Intensity"
+      const lutSlider = await getSliderByLabel(page, 'Intensity');
 
-        await lutSlider.evaluate((el: HTMLInputElement) => {
-          el.value = '0.5';
-          el.dispatchEvent(new Event('input', { bubbles: true }));
-        });
-        await page.waitForTimeout(200);
+      let state = await getColorState(page);
+      expect(state.lutIntensity).toBeCloseTo(1, 1);  // Default is 1.0
 
-        state = await getColorState(page);
-        expect(state.lutIntensity).toBeCloseTo(0.5, 1);
-      }
+      await lutSlider.fill('0.5');
+      await lutSlider.dispatchEvent('input');
+      await page.waitForTimeout(200);
+
+      state = await getColorState(page);
+      expect(state.lutIntensity).toBeCloseTo(0.5, 1);
     });
   });
 
@@ -373,27 +322,19 @@ test.describe('Color Controls', () => {
       const initialScreenshot = await captureViewerScreenshot(page);
 
       // Adjust exposure
-      const exposureSlider = page.locator('.color-controls-panel input[type="range"]').nth(1);
-      if (await exposureSlider.isVisible()) {
-        await exposureSlider.evaluate((el: HTMLInputElement) => {
-          el.value = '1';
-          el.dispatchEvent(new Event('input', { bubbles: true }));
-        });
-        await page.waitForTimeout(100);
-      }
+      const exposureSlider = await getSliderByLabel(page, 'Exposure');
+      await exposureSlider.fill('1');
+      await exposureSlider.dispatchEvent('input');
+      await page.waitForTimeout(100);
 
       const afterExposure = await captureViewerScreenshot(page);
       expect(imagesAreDifferent(initialScreenshot, afterExposure)).toBe(true);
 
       // Also adjust saturation
-      const saturationSlider = page.locator('.color-controls-panel input[type="range"]').nth(3);
-      if (await saturationSlider.isVisible()) {
-        await saturationSlider.evaluate((el: HTMLInputElement) => {
-          el.value = '1.5';
-          el.dispatchEvent(new Event('input', { bubbles: true }));
-        });
-        await page.waitForTimeout(100);
-      }
+      const saturationSlider = await getSliderByLabel(page, 'Saturation');
+      await saturationSlider.fill('1.5');
+      await saturationSlider.dispatchEvent('input');
+      await page.waitForTimeout(100);
 
       const combinedScreenshot = await captureViewerScreenshot(page);
       expect(imagesAreDifferent(afterExposure, combinedScreenshot)).toBe(true);
@@ -411,39 +352,29 @@ test.describe('Color Controls', () => {
       await page.waitForTimeout(200);
 
       // Apply several adjustments
-      const exposureSlider = page.locator('.color-controls-panel input[type="range"]').nth(1);
-      if (await exposureSlider.isVisible()) {
-        await exposureSlider.evaluate((el: HTMLInputElement) => {
-          el.value = '2';
-          el.dispatchEvent(new Event('input', { bubbles: true }));
-        });
-      }
+      const exposureSlider = await getSliderByLabel(page, 'Exposure');
+      await exposureSlider.fill('2');
+      await exposureSlider.dispatchEvent('input');
 
-      const saturationSlider = page.locator('.color-controls-panel input[type="range"]').nth(3);
-      if (await saturationSlider.isVisible()) {
-        await saturationSlider.evaluate((el: HTMLInputElement) => {
-          el.value = '0.5';
-          el.dispatchEvent(new Event('input', { bubbles: true }));
-        });
-      }
+      const saturationSlider = await getSliderByLabel(page, 'Saturation');
+      await saturationSlider.fill('0.5');
+      await saturationSlider.dispatchEvent('input');
       await page.waitForTimeout(100);
 
       let state = await getColorState(page);
-      expect(state.exposure).not.toBeCloseTo(0, 1);
-      expect(state.saturation).not.toBeCloseTo(1, 1);
+      expect(state.exposure).toBeCloseTo(2, 1);
+      expect(state.saturation).toBeCloseTo(0.5, 1);
 
-      // Look for reset button
-      const resetButton = page.locator('.color-controls-panel button[title*="Reset"]').first();
-      if (await resetButton.isVisible()) {
-        await resetButton.click();
-        await page.waitForTimeout(200);
+      // Click reset button (title is "Reset all adjustments")
+      const resetButton = page.locator('.color-controls-panel button:has-text("Reset")');
+      await resetButton.click();
+      await page.waitForTimeout(200);
 
-        state = await getColorState(page);
-        expect(state.exposure).toBeCloseTo(0, 1);
-        expect(state.saturation).toBeCloseTo(1, 1);
-        expect(state.gamma).toBeCloseTo(1, 1);
-        expect(state.contrast).toBeCloseTo(1, 1);
-      }
+      state = await getColorState(page);
+      expect(state.exposure).toBeCloseTo(0, 1);
+      expect(state.saturation).toBeCloseTo(1, 1);
+      expect(state.gamma).toBeCloseTo(1, 1);
+      expect(state.contrast).toBeCloseTo(1, 1);
     });
   });
 
@@ -453,14 +384,10 @@ test.describe('Color Controls', () => {
       await page.waitForTimeout(200);
 
       // Adjust exposure
-      const exposureSlider = page.locator('.color-controls-panel input[type="range"]').nth(1);
-      if (await exposureSlider.isVisible()) {
-        await exposureSlider.evaluate((el: HTMLInputElement) => {
-          el.value = '2';
-          el.dispatchEvent(new Event('input', { bubbles: true }));
-        });
-        await page.waitForTimeout(100);
-      }
+      const exposureSlider = await getSliderByLabel(page, 'Exposure');
+      await exposureSlider.fill('2');
+      await exposureSlider.dispatchEvent('input');
+      await page.waitForTimeout(100);
 
       let state = await getColorState(page);
       expect(state.exposure).toBeCloseTo(2, 1);

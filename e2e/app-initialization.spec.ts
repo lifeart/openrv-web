@@ -128,7 +128,7 @@ test.describe('Application Initialization', () => {
 
     // Modal with shortcuts should appear
     await page.waitForTimeout(200);
-    const modal = page.locator('text=Keyboard Shortcuts');
+    const modal = page.getByRole('heading', { name: 'Keyboard Shortcuts' });
     await expect(modal).toBeVisible();
 
     // Should contain shortcuts info
@@ -140,8 +140,8 @@ test.describe('Application Initialization', () => {
     await page.goto('/');
     await page.waitForSelector('#app');
 
-    // Volume control container (check for volume-related element)
-    const volumeControl = page.locator('.volume-control, [title*="volume"], button[title*="Mute"]').first();
+    // Volume control container has class 'volume-control-container' with a mute button
+    const volumeControl = page.locator('.volume-control-container, button[title*="mute"]').first();
     await expect(volumeControl).toBeVisible();
   });
 

@@ -241,41 +241,47 @@ test.describe('Transform Controls', () => {
       expect(viewState.cropEnabled).toBe(false);
     });
 
-    test('TRANSFORM-021: crop button should toggle crop mode', async ({ page }) => {
+    test('TRANSFORM-021: crop panel enable toggle should toggle crop mode', async ({ page }) => {
       let viewState = await getViewerState(page);
       expect(viewState.cropEnabled).toBe(false);
 
-      const cropButton = page.locator('button[title*="Crop"]').first();
-      if (await cropButton.isVisible()) {
-        await cropButton.click();
-        await page.waitForTimeout(200);
+      // Click Crop button to open crop panel
+      const cropButton = page.locator('button:has-text("Crop")').first();
+      await cropButton.click();
+      await page.waitForTimeout(200);
 
-        viewState = await getViewerState(page);
-        expect(viewState.cropEnabled).toBe(true);
+      // Find the Enable Crop toggle (shows "OFF" initially)
+      const enableToggle = page.locator('button:has-text("OFF")');
+      await enableToggle.click();
+      await page.waitForTimeout(200);
 
-        // Toggle off
-        await cropButton.click();
-        await page.waitForTimeout(200);
+      viewState = await getViewerState(page);
+      expect(viewState.cropEnabled).toBe(true);
 
-        viewState = await getViewerState(page);
-        expect(viewState.cropEnabled).toBe(false);
-      }
+      // Toggle off (now shows "ON")
+      const disableToggle = page.locator('button:has-text("ON")');
+      await disableToggle.click();
+      await page.waitForTimeout(200);
+
+      viewState = await getViewerState(page);
+      expect(viewState.cropEnabled).toBe(false);
     });
 
     test('TRANSFORM-022: crop mode should show aspect ratio presets', async ({ page }) => {
-      await page.keyboard.press('k');
+      // Open crop panel
+      const cropButton = page.locator('button:has-text("Crop")').first();
+      await cropButton.click();
       await page.waitForTimeout(200);
 
-      // Look for aspect ratio options
-      const aspect169 = page.locator('button:has-text("16:9")');
-      const aspect43 = page.locator('button:has-text("4:3")');
-      const aspect11 = page.locator('button:has-text("1:1")');
+      // Look for aspect ratio dropdown (it's a select/combobox, not buttons)
+      const aspectSelect = page.locator('select, [role="combobox"]').first();
+      await expect(aspectSelect).toBeVisible();
 
-      expect(
-        await aspect169.isVisible() ||
-        await aspect43.isVisible() ||
-        await aspect11.isVisible()
-      ).toBe(true);
+      // Verify it contains the expected options
+      const options = await aspectSelect.locator('option').allTextContents();
+      expect(options).toContain('16:9');
+      expect(options).toContain('4:3');
+      expect(options).toContain('1:1');
     });
 
     test('TRANSFORM-023: selecting 16:9 aspect ratio should change crop region', async ({ page }) => {

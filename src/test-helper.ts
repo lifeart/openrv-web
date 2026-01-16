@@ -132,7 +132,7 @@ export function exposeForTesting(app: App): void {
 
     getTransformState: (): TransformState => {
       const transformControl = appAny.transformControl;
-      const transform = transformControl?.transform ?? {};
+      const transform = transformControl?.getTransform?.() ?? {};
       return {
         rotation: transform.rotation ?? 0,
         flipH: transform.flipH ?? false,
