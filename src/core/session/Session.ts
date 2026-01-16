@@ -634,8 +634,13 @@ export class Session extends EventEmitter<SessionEvents> {
       video.preload = 'auto';
       video.muted = false;
       video.loop = false;
+      video.playsInline = true; // Required for iOS and some browsers
 
-      video.onloadedmetadata = () => {
+      // Use canplay event to ensure video data is ready
+      video.oncanplay = () => {
+        // Prevent multiple triggers
+        video.oncanplay = null;
+
         const duration = Math.ceil(video.duration * this._fps);
 
         const source: MediaSource = {
@@ -660,11 +665,13 @@ export class Session extends EventEmitter<SessionEvents> {
         resolve();
       };
 
-      video.onerror = () => {
+      video.onerror = (e) => {
+        console.error('Video load error:', e);
         reject(new Error(`Failed to load video: ${url}`));
       };
 
       video.src = url;
+      video.load(); // Explicitly start loading
     });
   }
 

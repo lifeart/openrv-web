@@ -500,9 +500,17 @@ export class Viewer {
 
     for (const file of files) {
       try {
-        await this.session.loadFile(file);
+        if (file.name.endsWith('.rv') || file.name.endsWith('.gto')) {
+          // Load RV/GTO session files with annotations
+          const content = await file.arrayBuffer();
+          await this.session.loadFromGTO(content);
+        } else {
+          // Load image or video files
+          await this.session.loadFile(file);
+        }
       } catch (err) {
         console.error('Failed to load file:', err);
+        alert(`Failed to load ${file.name}: ${err}`);
       }
     }
   };
