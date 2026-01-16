@@ -12,6 +12,8 @@ import { CDLValues, DEFAULT_CDL, isDefaultCDL, applyCDLToImageData } from '../..
 import { LensDistortionParams, DEFAULT_LENS_PARAMS, isDefaultLensParams, applyLensDistortion } from '../../transform/LensDistortion';
 import { ExportFormat, exportCanvas as doExportCanvas, copyCanvasToClipboard } from '../../utils/FrameExporter';
 import { filterImageFiles } from '../../utils/SequenceLoader';
+import { StackLayer } from './StackControl';
+import { compositeImageData, BlendMode } from '../../composite/BlendModes';
 
 interface PointerState {
   pointerId: number;
@@ -95,6 +97,10 @@ export class Viewer {
 
   // Lens distortion state
   private lensParams: LensDistortionParams = { ...DEFAULT_LENS_PARAMS };
+
+  // Stack/composite state
+  private stackLayers: StackLayer[] = [];
+  private stackEnabled = false;
 
   constructor(session: Session, paintEngine: PaintEngine) {
     this.session = session;
@@ -809,7 +815,15 @@ export class Viewer {
     // Clear canvas
     this.imageCtx.clearRect(0, 0, displayWidth, displayHeight);
 
-    if (element instanceof HTMLImageElement || element instanceof HTMLVideoElement) {
+    // Check if we should render as a stack
+    if (this.isStackEnabled()) {
+      // Composite all stack layers
+      const compositedData = this.compositeStackLayers(displayWidth, displayHeight);
+      if (compositedData) {
+        this.imageCtx.putImageData(compositedData, 0, 0);
+      }
+    } else if (element instanceof HTMLImageElement || element instanceof HTMLVideoElement) {
+      // Single source rendering
       // Handle wipe rendering
       if (this.wipeState.mode !== 'off') {
         this.renderWithWipe(element, displayWidth, displayHeight);
@@ -817,21 +831,22 @@ export class Viewer {
         // Normal rendering with transforms
         this.drawWithTransform(this.imageCtx, element, displayWidth, displayHeight);
       }
+    }
 
-      // Apply lens distortion correction (geometric transform, applied first)
-      if (!isDefaultLensParams(this.lensParams)) {
-        this.applyLensDistortionToCtx(this.imageCtx, displayWidth, displayHeight);
-      }
+    // Apply post-processing effects (lens, color, sharpen) regardless of stack mode
+    // Apply lens distortion correction (geometric transform, applied first)
+    if (!isDefaultLensParams(this.lensParams)) {
+      this.applyLensDistortionToCtx(this.imageCtx, displayWidth, displayHeight);
+    }
 
-      // Apply CDL color correction (pixel-level operation)
-      if (!isDefaultCDL(this.cdlValues)) {
-        this.applyCDL(this.imageCtx, displayWidth, displayHeight);
-      }
+    // Apply CDL color correction (pixel-level operation)
+    if (!isDefaultCDL(this.cdlValues)) {
+      this.applyCDL(this.imageCtx, displayWidth, displayHeight);
+    }
 
-      // Apply sharpen filter (pixel-level operation, applied after CDL)
-      if (this.filterSettings.sharpen > 0) {
-        this.applySharpen(this.imageCtx, displayWidth, displayHeight);
-      }
+    // Apply sharpen filter (pixel-level operation, applied after CDL)
+    if (this.filterSettings.sharpen > 0) {
+      this.applySharpen(this.imageCtx, displayWidth, displayHeight);
     }
 
     this.updateCanvasPosition();
@@ -1243,6 +1258,75 @@ export class Viewer {
     const imageData = ctx.getImageData(0, 0, width, height);
     const correctedData = applyLensDistortion(imageData, this.lensParams);
     ctx.putImageData(correctedData, 0, 0);
+  }
+
+  // Stack/composite methods
+  setStackLayers(layers: StackLayer[]): void {
+    this.stackLayers = [...layers];
+    this.stackEnabled = layers.length > 1;
+    this.scheduleRender();
+  }
+
+  getStackLayers(): StackLayer[] {
+    return [...this.stackLayers];
+  }
+
+  setStackEnabled(enabled: boolean): void {
+    this.stackEnabled = enabled;
+    this.scheduleRender();
+  }
+
+  isStackEnabled(): boolean {
+    return this.stackEnabled && this.stackLayers.length > 1;
+  }
+
+  /**
+   * Render a single source to a canvas and return its ImageData
+   */
+  private renderSourceToImageData(
+    sourceIndex: number,
+    width: number,
+    height: number
+  ): ImageData | null {
+    const source = this.session.getSourceByIndex(sourceIndex);
+    if (!source?.element) return null;
+
+    // Create temp canvas
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = width;
+    tempCanvas.height = height;
+    const tempCtx = tempCanvas.getContext('2d');
+    if (!tempCtx) return null;
+
+    // Draw source element
+    if (source.element instanceof HTMLImageElement || source.element instanceof HTMLVideoElement) {
+      tempCtx.drawImage(source.element, 0, 0, width, height);
+    }
+
+    return tempCtx.getImageData(0, 0, width, height);
+  }
+
+  /**
+   * Composite multiple stack layers together
+   */
+  private compositeStackLayers(width: number, height: number): ImageData | null {
+    if (this.stackLayers.length === 0) return null;
+
+    // Start with transparent
+    let result = new ImageData(width, height);
+
+    // Composite each visible layer from bottom to top
+    for (const layer of this.stackLayers) {
+      if (!layer.visible || layer.opacity === 0) continue;
+
+      const layerData = this.renderSourceToImageData(layer.sourceIndex, width, height);
+      if (!layerData) continue;
+
+      // Composite this layer onto result
+      result = compositeImageData(result, layerData, layer.blendMode as BlendMode, layer.opacity);
+    }
+
+    return result;
   }
 
   private renderCropOverlay(): void {

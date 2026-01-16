@@ -180,6 +180,18 @@ export class Session extends EventEmitter<SessionEvents> {
     return this.sources;
   }
 
+  get sourceCount(): number {
+    return this.sources.length;
+  }
+
+  getSourceByIndex(index: number): MediaSource | null {
+    return this.sources[index] ?? null;
+  }
+
+  get currentSourceIndex(): number {
+    return this._currentSourceIndex;
+  }
+
   // Playback control
   play(): void {
     if (!this._isPlaying) {

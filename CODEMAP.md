@@ -421,7 +421,7 @@ const annotations = dto.byProtocol('RVPaint');
 ### Phase 3
 - [x] Annotations/paint
 - [x] Wipes for comparison (horizontal/vertical, original vs adjusted)
-- [ ] Multiple sources (stack)
+- [x] Multiple sources (stack with blend modes)
 - [x] Filter effects (blur, sharpen with unsharp mask)
 
 ### Phase 4

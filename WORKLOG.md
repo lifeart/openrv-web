@@ -1,6 +1,6 @@
 # OpenRV Web - Work Log
 
-## Current Status: Lens Distortion Correction Complete
+## Current Status: Stack/Composite Layers Complete
 
 ---
 
@@ -203,12 +203,26 @@
 - [x] Button highlights when lens correction is active
 - [x] Integration with Viewer rendering pipeline
 
+### Phase 20: Stack/Composite Layers ✅
+- [x] BlendModes utility (`src/composite/BlendModes.ts`)
+- [x] Blend modes: Normal, Add, Multiply, Screen, Overlay, Difference, Exclusion
+- [x] Alpha compositing with Porter-Duff "over" operation
+- [x] Per-layer opacity control
+- [x] Image resize for mismatched layer dimensions
+- [x] StackControl component (`src/ui/components/StackControl.ts`)
+- [x] Layer list with visibility toggles
+- [x] Reorder layers (move up/down)
+- [x] Per-layer blend mode and opacity controls
+- [x] Add/remove layers from current source
+- [x] Session multi-source support (getSourceByIndex, sourceCount)
+- [x] Viewer stack compositing integration
+- [x] Post-processing effects applied after compositing
+
 ---
 
 ## Not Started
 
 ### Future Enhancements
-- [ ] Stack/composite nodes
 - [ ] Full LUT application via WebGL shader
 
 ---
@@ -299,3 +313,9 @@
   - Bilinear interpolation for smooth image quality
   - Created `LensControl.ts` with sliders and preset buttons
   - Integrated into Viewer with automatic rendering pipeline
+- **Completed Phase 20: Stack/Composite Layers**
+  - Created `BlendModes.ts` with 7 blend modes (Normal, Add, Multiply, Screen, Overlay, Difference, Exclusion)
+  - Alpha compositing using Porter-Duff "over" operation
+  - Created `StackControl.ts` with layer management UI
+  - Layer visibility, opacity, blend mode, and reordering controls
+  - Integrated stack compositing into Viewer rendering pipeline

@@ -13,6 +13,7 @@ import { FilterControl } from './ui/components/FilterControl';
 import { CropControl } from './ui/components/CropControl';
 import { CDLControl } from './ui/components/CDLControl';
 import { LensControl } from './ui/components/LensControl';
+import { StackControl } from './ui/components/StackControl';
 import { exportSequence } from './utils/SequenceExporter';
 
 export class App {
@@ -32,6 +33,7 @@ export class App {
   private cropControl: CropControl;
   private cdlControl: CDLControl;
   private lensControl: LensControl;
+  private stackControl: StackControl;
   private animationId: number | null = null;
 
   constructor() {
@@ -118,6 +120,26 @@ export class App {
     this.lensControl.on('lensChanged', (params) => {
       this.viewer.setLensParams(params);
     });
+
+    // Initialize stack/composite control
+    this.stackControl = new StackControl();
+    this.stackControl.on('layerAdded', (layer) => {
+      // When adding a layer, use the current source index
+      layer.sourceIndex = this.session.currentSourceIndex;
+      layer.name = this.session.currentSource?.name ?? `Layer ${layer.sourceIndex + 1}`;
+      this.stackControl.updateLayerSource(layer.id, layer.sourceIndex);
+      this.stackControl.updateLayerName(layer.id, layer.name);
+      this.viewer.setStackLayers(this.stackControl.getLayers());
+    });
+    this.stackControl.on('layerChanged', () => {
+      this.viewer.setStackLayers(this.stackControl.getLayers());
+    });
+    this.stackControl.on('layerRemoved', () => {
+      this.viewer.setStackLayers(this.stackControl.getLayers());
+    });
+    this.stackControl.on('layerReordered', () => {
+      this.viewer.setStackLayers(this.stackControl.getLayers());
+    });
   }
 
   mount(selector: string): void {
@@ -151,6 +173,7 @@ export class App {
     const filterControlEl = this.filterControl.render();
     const cropControlEl = this.cropControl.render();
     const lensControlEl = this.lensControl.render();
+    const stackControlEl = this.stackControl.render();
     const wipeControlEl = this.wipeControl.render();
     const transformControlEl = this.transformControl.render();
     const volumeControlEl = this.volumeControl.render();
@@ -163,6 +186,7 @@ export class App {
     toolbarRow.appendChild(filterControlEl);
     toolbarRow.appendChild(cropControlEl);
     toolbarRow.appendChild(lensControlEl);
+    toolbarRow.appendChild(stackControlEl);
     toolbarRow.appendChild(wipeControlEl);
     toolbarRow.appendChild(transformControlEl);
     toolbarRow.appendChild(volumeControlEl);
@@ -594,6 +618,7 @@ export class App {
     this.cropControl.dispose();
     this.cdlControl.dispose();
     this.lensControl.dispose();
+    this.stackControl.dispose();
     this.volumeControl.dispose();
     this.exportControl.dispose();
   }
