@@ -12,6 +12,7 @@ import { TransformControl } from './ui/components/TransformControl';
 import { FilterControl } from './ui/components/FilterControl';
 import { CropControl } from './ui/components/CropControl';
 import { CDLControl } from './ui/components/CDLControl';
+import { LensControl } from './ui/components/LensControl';
 import { exportSequence } from './utils/SequenceExporter';
 
 export class App {
@@ -30,6 +31,7 @@ export class App {
   private filterControl: FilterControl;
   private cropControl: CropControl;
   private cdlControl: CDLControl;
+  private lensControl: LensControl;
   private animationId: number | null = null;
 
   constructor() {
@@ -110,6 +112,12 @@ export class App {
     this.cdlControl.on('cdlChanged', (cdl) => {
       this.viewer.setCDL(cdl);
     });
+
+    // Initialize lens distortion control
+    this.lensControl = new LensControl();
+    this.lensControl.on('lensChanged', (params) => {
+      this.viewer.setLensParams(params);
+    });
   }
 
   mount(selector: string): void {
@@ -142,6 +150,7 @@ export class App {
     const cdlControlEl = this.cdlControl.render();
     const filterControlEl = this.filterControl.render();
     const cropControlEl = this.cropControl.render();
+    const lensControlEl = this.lensControl.render();
     const wipeControlEl = this.wipeControl.render();
     const transformControlEl = this.transformControl.render();
     const volumeControlEl = this.volumeControl.render();
@@ -153,6 +162,7 @@ export class App {
     toolbarRow.appendChild(cdlControlEl);
     toolbarRow.appendChild(filterControlEl);
     toolbarRow.appendChild(cropControlEl);
+    toolbarRow.appendChild(lensControlEl);
     toolbarRow.appendChild(wipeControlEl);
     toolbarRow.appendChild(transformControlEl);
     toolbarRow.appendChild(volumeControlEl);
@@ -583,6 +593,7 @@ export class App {
     this.filterControl.dispose();
     this.cropControl.dispose();
     this.cdlControl.dispose();
+    this.lensControl.dispose();
     this.volumeControl.dispose();
     this.exportControl.dispose();
   }

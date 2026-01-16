@@ -9,6 +9,7 @@ import { FilterSettings, DEFAULT_FILTER_SETTINGS } from './FilterControl';
 import { CropState, CropRegion, DEFAULT_CROP_STATE, DEFAULT_CROP_REGION } from './CropControl';
 import { LUT3D } from '../../color/LUTLoader';
 import { CDLValues, DEFAULT_CDL, isDefaultCDL, applyCDLToImageData } from '../../color/CDL';
+import { LensDistortionParams, DEFAULT_LENS_PARAMS, isDefaultLensParams, applyLensDistortion } from '../../transform/LensDistortion';
 import { ExportFormat, exportCanvas as doExportCanvas, copyCanvasToClipboard } from '../../utils/FrameExporter';
 import { filterImageFiles } from '../../utils/SequenceLoader';
 
@@ -91,6 +92,9 @@ export class Viewer {
 
   // CDL state
   private cdlValues: CDLValues = JSON.parse(JSON.stringify(DEFAULT_CDL));
+
+  // Lens distortion state
+  private lensParams: LensDistortionParams = { ...DEFAULT_LENS_PARAMS };
 
   constructor(session: Session, paintEngine: PaintEngine) {
     this.session = session;
@@ -814,6 +818,11 @@ export class Viewer {
         this.drawWithTransform(this.imageCtx, element, displayWidth, displayHeight);
       }
 
+      // Apply lens distortion correction (geometric transform, applied first)
+      if (!isDefaultLensParams(this.lensParams)) {
+        this.applyLensDistortionToCtx(this.imageCtx, displayWidth, displayHeight);
+      }
+
       // Apply CDL color correction (pixel-level operation)
       if (!isDefaultCDL(this.cdlValues)) {
         this.applyCDL(this.imageCtx, displayWidth, displayHeight);
@@ -1208,6 +1217,32 @@ export class Viewer {
     const imageData = ctx.getImageData(0, 0, width, height);
     applyCDLToImageData(imageData, this.cdlValues);
     ctx.putImageData(imageData, 0, 0);
+  }
+
+  // Lens distortion methods
+  setLensParams(params: LensDistortionParams): void {
+    this.lensParams = { ...params };
+    this.scheduleRender();
+  }
+
+  getLensParams(): LensDistortionParams {
+    return { ...this.lensParams };
+  }
+
+  resetLensParams(): void {
+    this.lensParams = { ...DEFAULT_LENS_PARAMS };
+    this.scheduleRender();
+  }
+
+  /**
+   * Apply lens distortion correction to the canvas
+   */
+  private applyLensDistortionToCtx(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+    if (isDefaultLensParams(this.lensParams)) return;
+
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const correctedData = applyLensDistortion(imageData, this.lensParams);
+    ctx.putImageData(correctedData, 0, 0);
   }
 
   private renderCropOverlay(): void {

@@ -431,3 +431,4 @@ const annotations = dto.byProtocol('RVPaint');
 - [x] Advanced color (ASC CDL with slope/offset/power/saturation, .cdl file support)
 - [x] Export capabilities (PNG/JPEG/WebP with annotations, clipboard copy)
 - [x] Sequence export (in/out range or all frames with progress)
+- [x] Lens distortion correction (barrel/pincushion, center offset, scale)

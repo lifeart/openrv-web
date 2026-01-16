@@ -1,6 +1,6 @@
 # OpenRV Web - Work Log
 
-## Current Status: ASC CDL Color Correction Complete
+## Current Status: Lens Distortion Correction Complete
 
 ---
 
@@ -189,13 +189,26 @@
 - [x] Canvas-based CDL application with Rec. 709 luminance
 - [x] Button highlights when CDL is active
 
+### Phase 19: Lens Distortion Correction ✅
+- [x] LensDistortion utility (`src/transform/LensDistortion.ts`)
+- [x] Brown-Conrady distortion model implementation
+- [x] Radial distortion coefficients (k1, k2)
+- [x] Center offset adjustment (centerX, centerY)
+- [x] Scale control for distortion compensation
+- [x] Bilinear interpolation for smooth results
+- [x] LensControl component (`src/ui/components/LensControl.ts`)
+- [x] Sliders for all distortion parameters
+- [x] Presets (Barrel, None, Pincushion)
+- [x] Reset button and double-click slider reset
+- [x] Button highlights when lens correction is active
+- [x] Integration with Viewer rendering pipeline
+
 ---
 
 ## Not Started
 
 ### Future Enhancements
 - [ ] Stack/composite nodes
-- [ ] Lens distortion correction
 - [ ] Full LUT application via WebGL shader
 
 ---
@@ -280,3 +293,9 @@
   - Created `CDLControl.ts` with RGB channel sliders for Slope/Offset/Power
   - Added Saturation slider and Load/Save CDL file support
   - Applied CDL via canvas ImageData manipulation in Viewer
+- **Completed Phase 19: Lens Distortion Correction**
+  - Created `LensDistortion.ts` with Brown-Conrady distortion model
+  - Radial distortion (k1, k2), center offset, scale parameters
+  - Bilinear interpolation for smooth image quality
+  - Created `LensControl.ts` with sliders and preset buttons
+  - Integrated into Viewer with automatic rendering pipeline
