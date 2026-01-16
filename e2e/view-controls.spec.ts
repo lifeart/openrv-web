@@ -333,8 +333,16 @@ test.describe('View Controls', () => {
       await cropButton.click();
       await page.waitForTimeout(200);
 
-      // Click the toggle switch inside the panel to enable crop
-      const toggleSwitch = page.locator('button:has-text("OFF")').first();
+      // Verify crop panel is visible and properly positioned (not behind viewer)
+      const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
+      const panelBox = await cropPanel.boundingBox();
+      expect(panelBox).not.toBeNull();
+      expect(panelBox!.y).toBeGreaterThanOrEqual(0);
+
+      // Click the toggle switch inside the crop panel to enable crop
+      const toggleSwitch = cropPanel.locator('button:has-text("OFF")').first();
+      await expect(toggleSwitch).toBeVisible();
       await toggleSwitch.click();
       await page.waitForTimeout(200);
 
@@ -342,7 +350,7 @@ test.describe('View Controls', () => {
       expect(state.cropEnabled).toBe(true);
 
       // Toggle off by clicking ON button
-      const toggleOn = page.locator('button:has-text("ON")').first();
+      const toggleOn = cropPanel.locator('button:has-text("ON")').first();
       await toggleOn.click();
       await page.waitForTimeout(200);
 
@@ -364,10 +372,15 @@ test.describe('View Controls', () => {
       await cropButton.click();
       await page.waitForTimeout(200);
 
+      // Verify crop panel is visible
+      const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
+
       const freeScreenshot = await captureViewerScreenshot(page);
 
-      // Select 16:9 aspect ratio from dropdown
-      const aspectSelect = page.locator('select').first();
+      // Select 16:9 aspect ratio from dropdown inside crop panel
+      const aspectSelect = cropPanel.locator('select').first();
+      await expect(aspectSelect).toBeVisible();
       await aspectSelect.selectOption('16:9');
       await page.waitForTimeout(200);
 

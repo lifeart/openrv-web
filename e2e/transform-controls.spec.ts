@@ -250,8 +250,19 @@ test.describe('Transform Controls', () => {
       await cropButton.click();
       await page.waitForTimeout(200);
 
+      // Verify crop panel is visible and not obscured
+      const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
+
+      // Verify panel is positioned correctly (should be in viewport, not behind viewer)
+      const panelBox = await cropPanel.boundingBox();
+      expect(panelBox).not.toBeNull();
+      expect(panelBox!.x).toBeGreaterThanOrEqual(0);
+      expect(panelBox!.y).toBeGreaterThanOrEqual(0);
+
       // Find the Enable Crop toggle (shows "OFF" initially)
-      const enableToggle = page.locator('button:has-text("OFF")');
+      const enableToggle = page.locator('.crop-panel button:has-text("OFF")');
+      await expect(enableToggle).toBeVisible();
       await enableToggle.click();
       await page.waitForTimeout(200);
 
@@ -259,7 +270,7 @@ test.describe('Transform Controls', () => {
       expect(viewState.cropEnabled).toBe(true);
 
       // Toggle off (now shows "ON")
-      const disableToggle = page.locator('button:has-text("ON")');
+      const disableToggle = page.locator('.crop-panel button:has-text("ON")');
       await disableToggle.click();
       await page.waitForTimeout(200);
 
@@ -273,8 +284,12 @@ test.describe('Transform Controls', () => {
       await cropButton.click();
       await page.waitForTimeout(200);
 
-      // Look for aspect ratio dropdown (it's a select/combobox, not buttons)
-      const aspectSelect = page.locator('select, [role="combobox"]').first();
+      // Verify crop panel is visible and properly positioned
+      const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
+
+      // Look for aspect ratio dropdown (it's a select/combobox inside the crop panel)
+      const aspectSelect = cropPanel.locator('select').first();
       await expect(aspectSelect).toBeVisible();
 
       // Verify it contains the expected options

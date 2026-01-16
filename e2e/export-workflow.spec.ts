@@ -355,8 +355,12 @@ test.describe('Full Workflow Tests', () => {
     await cropButton.click();
     await page.waitForTimeout(200);
 
+    // Verify crop panel is visible and properly positioned
+    const cropPanel = page.locator('.crop-panel');
+    await expect(cropPanel).toBeVisible();
+
     // Enable crop using the toggle in the panel
-    const enableToggle = page.locator('button:has-text("OFF")');
+    const enableToggle = cropPanel.locator('button:has-text("OFF")');
     await enableToggle.click();
     await page.waitForTimeout(200);
 
@@ -364,14 +368,14 @@ test.describe('Full Workflow Tests', () => {
     const afterCropEnable = await page.evaluate(() => window.__OPENRV_TEST__?.getViewerState());
     expect(afterCropEnable?.cropEnabled).toBe(true);
 
-    // Select 16:9 aspect ratio from dropdown (now visible in crop panel)
-    const aspectSelect = page.locator('select').first();
+    // Select 16:9 aspect ratio from dropdown (inside crop panel)
+    const aspectSelect = cropPanel.locator('select').first();
     await expect(aspectSelect).toBeVisible();
     await aspectSelect.selectOption('16:9');
     await page.waitForTimeout(100);
 
     // Disable crop using toggle
-    const disableToggle = page.locator('button:has-text("ON")');
+    const disableToggle = cropPanel.locator('button:has-text("ON")');
     await disableToggle.click();
     await page.waitForTimeout(200);
 
