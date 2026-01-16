@@ -93,32 +93,34 @@ This document tracks features from [OpenRV](https://github.com/AcademySoftwareFo
 
 ---
 
-## High Priority - Core Features
+### 6. Color Curves ✅
 
-### 6. Color Curves
+**Status:** COMPLETED
 
 **OpenRV Reference:** `src/lib/ip/IPBaseNodes/ColorCurveIPNode.cpp`
 
 **Description:**
 Bezier curve-based color correction for RGB channels. Industry standard tool for precise tonal adjustments.
 
-**Requirements:**
-- [ ] Create curve editor UI component with draggable control points
-- [ ] Support Master (RGB), Red, Green, Blue curves
-- [ ] Cubic bezier interpolation between points
-- [ ] Preset curves (S-curve, lift shadows, etc.)
-- [ ] Real-time preview
-- [ ] Import/export curve presets
+**Implementation:**
+- Canvas-based interactive curve editor with draggable control points
+- Support for Master (RGB), Red, Green, Blue channels
+- Catmull-Rom spline interpolation for smooth curves
+- 8 preset curves (Linear, S-Curve Mild/Strong, Lift Shadows, Crush Blacks, Lower Highlights, Film Look, Cross Process)
+- Real-time preview with lookup table (LUT) generation
+- Import/export curve presets as JSON
+- Keyboard shortcut: `U` to toggle curves panel
 
-**Files to create:**
-- `src/color/ColorCurves.ts` - Curve evaluation logic
-- `src/ui/components/CurveEditor.ts` - Interactive curve UI
-- `src/ui/components/CurvesControl.ts` - Panel wrapper
-
-**Files to modify:**
-- `src/ui/components/Viewer.ts` - Apply curves in render pipeline
+**Files:**
+- `src/color/ColorCurves.ts` - Curve evaluation and LUT generation
+- `src/ui/components/CurveEditor.ts` - Interactive canvas-based curve UI
+- `src/ui/components/CurvesControl.ts` - Panel wrapper with presets
+- `src/ui/components/Viewer.ts` - Curves applied in render pipeline
+- `src/App.ts` - Integration and keyboard shortcuts
 
 ---
+
+## High Priority - Core Features
 
 ### 7. Stereo Viewing Modes
 
@@ -540,11 +542,15 @@ These features require native system access and cannot be implemented in a web b
 
 ```
 src/
-├── ui/components/      # Scopes implemented here
+├── ui/components/      # Scopes and controls implemented here
 │   ├── Histogram.ts    # ✅ Implemented
 │   ├── Waveform.ts     # ✅ Implemented
 │   ├── Vectorscope.ts  # ✅ Implemented
-│   └── ChannelSelect.ts # ✅ Implemented
+│   ├── ChannelSelect.ts # ✅ Implemented
+│   ├── CurveEditor.ts  # ✅ Implemented - Interactive curve UI
+│   └── CurvesControl.ts # ✅ Implemented - Curves panel wrapper
+├── color/              # Color processing
+│   └── ColorCurves.ts  # ✅ Implemented - Curve evaluation & LUT
 ├── stereo/             # NEW: Stereo viewing modes
 │   └── StereoRenderer.ts
 ├── formats/            # NEW: Additional format loaders
