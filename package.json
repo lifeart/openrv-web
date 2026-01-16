@@ -1,0 +1,28 @@
+{
+  "name": "openrv-web",
+  "version": "0.1.0",
+  "description": "Web-based VFX image/sequence viewer inspired by OpenRV",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "gto-js": "link:../gto-js",
+    "gl-matrix": "^3.4.3"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "vite": "^6.0.7"
+  },
+  "keywords": [
+    "vfx",
+    "image-viewer",
+    "openrv",
+    "gto",
+    "webgl"
+  ],
+  "license": "MIT"
+}
