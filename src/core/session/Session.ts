@@ -382,26 +382,39 @@ export class Session extends EventEmitter<SessionEvents> {
       console.warn('No RVSession found in file');
     }
 
-    // Parse file sources
+    // Parse file sources and get aspect ratio
+    let aspectRatio = 1;
     const sources = dto.byProtocol('RVFileSource');
     console.log('RVFileSource objects:', sources.length);
     for (const source of sources) {
+      // Get size from proxy component
+      const proxyComp = source.component('proxy');
+      if (proxyComp?.exists()) {
+        const sizeValue = proxyComp.property('size').value();
+        if (Array.isArray(sizeValue) && sizeValue.length >= 2) {
+          const width = sizeValue[0] as number;
+          const height = sizeValue[1] as number;
+          if (width > 0 && height > 0) {
+            aspectRatio = width / height;
+            console.log('Source size:', width, 'x', height, 'aspect:', aspectRatio);
+          }
+        }
+      }
+
       const mediaObj = source.component('media');
       if (mediaObj) {
-        const movieProp = mediaObj.prop('movie');
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const movie = (movieProp as any)?.data?.[0];
-        if (movie) {
-          console.log('Found source:', movie);
+        const movieProp = mediaObj.property('movie').value();
+        if (movieProp) {
+          console.log('Found source:', movieProp);
         }
       }
     }
 
-    // Parse paint annotations
-    this.parsePaintAnnotations(dto);
+    // Parse paint annotations with aspect ratio
+    this.parsePaintAnnotations(dto, aspectRatio);
   }
 
-  private parsePaintAnnotations(dto: GTODTO): void {
+  private parsePaintAnnotations(dto: GTODTO, aspectRatio: number): void {
     const paintObjects = dto.byProtocol('RVPaint');
     console.log('RVPaint objects:', paintObjects.length);
 
@@ -452,12 +465,12 @@ export class Session extends EventEmitter<SessionEvents> {
           if (!comp) continue;
 
           if (strokeId.startsWith('pen:')) {
-            const stroke = this.parsePenStroke(strokeId, frame, comp);
+            const stroke = this.parsePenStroke(strokeId, frame, comp, aspectRatio);
             if (stroke) {
               annotations.push(stroke);
             }
           } else if (strokeId.startsWith('text:')) {
-            const text = this.parseTextAnnotation(strokeId, frame, comp);
+            const text = this.parseTextAnnotation(strokeId, frame, comp, aspectRatio);
             if (text) {
               annotations.push(text);
             }
@@ -481,7 +494,7 @@ export class Session extends EventEmitter<SessionEvents> {
   // Parse a single pen stroke from RV GTO format
   // strokeId format: "pen:ID:FRAME:USER" e.g., "pen:1:15:User"
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private parsePenStroke(strokeId: string, frame: number, comp: any): PenStroke | null {
+  private parsePenStroke(strokeId: string, frame: number, comp: any, aspectRatio: number): PenStroke | null {
     // Parse user from strokeId (e.g., "pen:1:15:User" -> "User")
     const parts = strokeId.split(':');
     const user = parts[3] ?? 'unknown';
@@ -517,15 +530,17 @@ export class Session extends EventEmitter<SessionEvents> {
     const brushType = brushValue === 'gaussian' ? BrushType.Gaussian : BrushType.Circle;
 
     // Parse points - stored as float[2] pairs
+    // OpenRV coordinate system: X from -aspectRatio to +aspectRatio, Y from -1 to +1
     const points: Array<{ x: number; y: number; pressure?: number }> = [];
     if (pointsValue && Array.isArray(pointsValue)) {
       for (const point of pointsValue) {
         if (Array.isArray(point) && point.length >= 2) {
-          // Points are in normalized coordinates (-1 to 1 range typically)
-          // Convert to 0-1 range for our rendering
+          const rawX = point[0] as number;
+          const rawY = point[1] as number;
+          // Convert from OpenRV coords to normalized 0-1 coords
           points.push({
-            x: (point[0] as number + 1) / 2,
-            y: 1 - (point[1] as number + 1) / 2, // Flip Y coordinate
+            x: (rawX / aspectRatio + 1) / 2,
+            y: (rawY + 1) / 2,
           });
         }
       }
@@ -576,7 +591,7 @@ export class Session extends EventEmitter<SessionEvents> {
   // Parse a single text annotation from RV GTO format
   // textId format: "text:ID:FRAME:USER" e.g., "text:6:1:User"
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private parseTextAnnotation(textId: string, frame: number, comp: any): TextAnnotation | null {
+  private parseTextAnnotation(textId: string, frame: number, comp: any, aspectRatio: number): TextAnnotation | null {
     const parts = textId.split(':');
     const user = parts[3] ?? 'unknown';
     const id = parts[1] ?? '0';
@@ -591,12 +606,15 @@ export class Session extends EventEmitter<SessionEvents> {
     const fontValue = comp.property('font').value();
 
     // Parse position
+    // OpenRV coordinate system: X from -aspectRatio to +aspectRatio, Y from -1 to +1
     let x = 0.5, y = 0.5;
     if (positionValue && Array.isArray(positionValue) && positionValue.length >= 2) {
       const posData = positionValue[0];
       if (Array.isArray(posData) && posData.length >= 2) {
-        x = (posData[0] as number + 1) / 2;
-        y = 1 - (posData[1] as number + 1) / 2;
+        const rawX = posData[0] as number;
+        const rawY = posData[1] as number;
+        x = (rawX / aspectRatio + 1) / 2;
+        y = (rawY + 1) / 2;
       }
     }
 
