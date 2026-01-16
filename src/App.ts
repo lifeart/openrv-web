@@ -9,6 +9,7 @@ import { WipeControl } from './ui/components/WipeControl';
 import { VolumeControl } from './ui/components/VolumeControl';
 import { ExportControl } from './ui/components/ExportControl';
 import { TransformControl } from './ui/components/TransformControl';
+import { exportSequence } from './utils/SequenceExporter';
 
 export class App {
   private container: HTMLElement | null = null;
@@ -72,6 +73,9 @@ export class App {
     });
     this.exportControl.on('copyRequested', () => {
       this.viewer.copyFrameToClipboard(true);
+    });
+    this.exportControl.on('sequenceExportRequested', (request) => {
+      this.handleSequenceExport(request);
     });
 
     // Initialize transform control
@@ -366,6 +370,161 @@ export class App {
 
     this.animationId = requestAnimationFrame(this.tick);
   };
+
+  private async handleSequenceExport(request: {
+    format: 'png' | 'jpeg' | 'webp';
+    includeAnnotations: boolean;
+    quality: number;
+    useInOutRange: boolean;
+  }): Promise<void> {
+    const source = this.session.currentSource;
+    if (!source) {
+      alert('No media loaded to export');
+      return;
+    }
+
+    // Determine frame range
+    let startFrame: number;
+    let endFrame: number;
+
+    if (request.useInOutRange) {
+      startFrame = this.session.inPoint;
+      endFrame = this.session.outPoint;
+    } else {
+      startFrame = 0;
+      endFrame = this.session.frameCount - 1;
+    }
+
+    const totalFrames = endFrame - startFrame + 1;
+    if (totalFrames <= 0) {
+      alert('Invalid frame range');
+      return;
+    }
+
+    // Generate filename pattern based on source
+    const sourceName = source.name?.replace(/\.[^/.]+$/, '') || 'frame';
+    const padLength = String(endFrame).length < 4 ? 4 : String(endFrame).length;
+
+    // Create progress dialog
+    const progressDialog = document.createElement('div');
+    progressDialog.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #2a2a2a;
+      border: 1px solid #444;
+      border-radius: 8px;
+      padding: 24px;
+      z-index: 10000;
+      min-width: 300px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    `;
+
+    const progressText = document.createElement('div');
+    progressText.style.cssText = 'color: #ddd; margin-bottom: 12px; font-size: 14px;';
+    progressText.textContent = `Exporting frames 0/${totalFrames}...`;
+
+    const progressBar = document.createElement('div');
+    progressBar.style.cssText = `
+      height: 8px;
+      background: #444;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 16px;
+    `;
+
+    const progressFill = document.createElement('div');
+    progressFill.style.cssText = `
+      height: 100%;
+      background: #4a9eff;
+      width: 0%;
+      transition: width 0.1s ease;
+    `;
+    progressBar.appendChild(progressFill);
+
+    const cancelButton = document.createElement('button');
+    cancelButton.textContent = 'Cancel';
+    cancelButton.style.cssText = `
+      background: #555;
+      border: 1px solid #666;
+      color: #ddd;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      width: 100%;
+    `;
+
+    const cancellationToken = { cancelled: false };
+    cancelButton.addEventListener('click', () => {
+      cancellationToken.cancelled = true;
+      cancelButton.textContent = 'Cancelling...';
+      cancelButton.disabled = true;
+    });
+
+    progressDialog.appendChild(progressText);
+    progressDialog.appendChild(progressBar);
+    progressDialog.appendChild(cancelButton);
+    document.body.appendChild(progressDialog);
+
+    // Store current frame to restore later
+    const originalFrame = this.session.currentFrame;
+
+    try {
+      const result = await exportSequence(
+        {
+          format: request.format,
+          quality: request.quality,
+          startFrame,
+          endFrame,
+          includeAnnotations: request.includeAnnotations,
+          filenamePattern: `${sourceName}_####`,
+          padLength,
+        },
+        async (frame: number) => {
+          // Navigate to frame and render
+          this.session.goToFrame(frame);
+          // Small delay to allow frame to load
+          await new Promise(resolve => setTimeout(resolve, 50));
+          const canvas = await this.viewer.renderFrameToCanvas(frame, request.includeAnnotations);
+          if (!canvas) {
+            throw new Error(`Failed to render frame ${frame}`);
+          }
+          return canvas;
+        },
+        (progress) => {
+          progressText.textContent = `Exporting frames ${progress.currentFrame - startFrame + 1}/${totalFrames}...`;
+          progressFill.style.width = `${progress.percent}%`;
+        },
+        cancellationToken
+      );
+
+      // Restore original frame
+      this.session.goToFrame(originalFrame);
+
+      // Remove progress dialog
+      document.body.removeChild(progressDialog);
+
+      // Show result
+      if (result.success) {
+        alert(`Successfully exported ${result.exportedFrames} frames`);
+      } else if (result.error?.includes('cancelled')) {
+        alert('Export cancelled');
+      } else {
+        alert(`Export failed: ${result.error}`);
+      }
+    } catch (err) {
+      // Restore original frame
+      this.session.goToFrame(originalFrame);
+
+      // Remove progress dialog
+      if (document.body.contains(progressDialog)) {
+        document.body.removeChild(progressDialog);
+      }
+
+      alert(`Export error: ${err}`);
+    }
+  }
 
   dispose(): void {
     if (this.animationId !== null) {

@@ -428,3 +428,4 @@ const annotations = dto.byProtocol('RVPaint');
 - [x] LUT support (.cube 3D LUT loading with intensity control)
 - [ ] Advanced color (CDL, curves)
 - [x] Export capabilities (PNG/JPEG/WebP with annotations, clipboard copy)
+- [x] Sequence export (in/out range or all frames with progress)

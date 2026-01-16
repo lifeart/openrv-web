@@ -1243,6 +1243,91 @@ export class Viewer {
     return canvas;
   }
 
+  /**
+   * Render a specific frame to a canvas (for sequence export)
+   * Seeks to the frame, renders, and returns the canvas
+   */
+  async renderFrameToCanvas(frame: number, includeAnnotations: boolean): Promise<HTMLCanvasElement | null> {
+    const source = this.session.currentSource;
+    if (!source) return null;
+
+    // Save current frame
+    const originalFrame = this.session.currentFrame;
+
+    // Seek to target frame
+    this.session.currentFrame = frame;
+
+    // For sequences, wait for the frame to load
+    if (source.type === 'sequence') {
+      await this.session.getSequenceFrameImage(frame);
+    }
+
+    // For video, seek and wait
+    if (source.type === 'video' && source.element instanceof HTMLVideoElement) {
+      const video = source.element;
+      const targetTime = (frame - 1) / this.session.fps;
+      if (Math.abs(video.currentTime - targetTime) > 0.01) {
+        video.currentTime = targetTime;
+        await new Promise<void>((resolve) => {
+          const onSeeked = () => {
+            video.removeEventListener('seeked', onSeeked);
+            resolve();
+          };
+          video.addEventListener('seeked', onSeeked);
+        });
+      }
+    }
+
+    // Get the element to render
+    let element: HTMLImageElement | HTMLVideoElement | undefined;
+    if (source.type === 'sequence') {
+      element = this.session.getSequenceFrameSync(frame) ?? undefined;
+    } else {
+      element = source.element;
+    }
+
+    if (!element) {
+      this.session.currentFrame = originalFrame;
+      return null;
+    }
+
+    // Create canvas at source resolution
+    const canvas = document.createElement('canvas');
+    canvas.width = source.width;
+    canvas.height = source.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      this.session.currentFrame = originalFrame;
+      return null;
+    }
+
+    // Apply color filters
+    ctx.filter = this.getCanvasFilterString();
+
+    // Draw image with transforms
+    this.drawWithTransform(ctx, element, source.width, source.height);
+
+    // Reset filter for annotations
+    ctx.filter = 'none';
+
+    // Draw annotations if requested
+    if (includeAnnotations) {
+      const annotations = this.paintEngine.getAnnotationsWithGhost(frame);
+      if (annotations.length > 0) {
+        this.paintRenderer.renderAnnotations(annotations, {
+          width: source.width,
+          height: source.height,
+        });
+        ctx.drawImage(this.paintRenderer.getCanvas(), 0, 0, source.width, source.height);
+      }
+    }
+
+    // Restore original frame
+    this.session.currentFrame = originalFrame;
+
+    return canvas;
+  }
+
   dispose(): void {
     this.resizeObserver.disconnect();
     this.container.removeEventListener('pointerdown', this.onPointerDown);

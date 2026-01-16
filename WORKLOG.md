@@ -1,6 +1,6 @@
 # OpenRV Web - Work Log
 
-## Current Status: 2D Transforms Complete
+## Current Status: Sequence Export Complete
 
 ---
 
@@ -140,6 +140,16 @@
 - [x] Keyboard shortcuts: Shift+R (rotate left), Alt+R (rotate right), Shift+H (flip H), Shift+V (flip V)
 - [x] Transform state (rotation: 0/90/180/270, flipH, flipV)
 
+### Phase 14: Sequence Export ✅
+- [x] SequenceExporter utility (`src/utils/SequenceExporter.ts`)
+- [x] Frame-by-frame export with progress tracking
+- [x] Export In/Out range or all frames
+- [x] Filename pattern with zero-padded frame numbers (e.g., frame_0001.png)
+- [x] Progress dialog with cancel button
+- [x] ExportControl dropdown with sequence export options
+- [x] Viewer.renderFrameToCanvas() for rendering specific frames
+- [x] App.handleSequenceExport() integrates everything
+
 ---
 
 ## Not Started
@@ -147,7 +157,6 @@
 ### Future Enhancements
 - [ ] Crop node
 - [ ] Stack/composite nodes
-- [ ] Sequence export (image sequence)
 - [ ] Waveform display for audio
 - [ ] Lens distortion correction
 - [ ] Full LUT application via WebGL shader
@@ -205,3 +214,10 @@
   - Rotation (0°/90°/180°/270°) and flip (H/V) support
   - Keyboard shortcuts: Shift+R, Alt+R, Shift+H, Shift+V
 - Updated CODEMAP.md feature checklist
+- **Completed Phase 14: Sequence Export**
+  - Created `SequenceExporter.ts` with frame-by-frame download
+  - Added sequence export options to ExportControl dropdown
+  - Export In/Out range or all frames to PNG/JPEG/WebP
+  - Progress dialog with cancel button and percentage
+  - Added `renderFrameToCanvas()` to Viewer for specific frame rendering
+  - App.handleSequenceExport() coordinates the export process

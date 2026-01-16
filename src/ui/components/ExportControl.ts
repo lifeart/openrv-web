@@ -7,9 +7,17 @@ export interface ExportRequest {
   quality: number;
 }
 
+export interface SequenceExportRequest {
+  format: ExportFormat;
+  includeAnnotations: boolean;
+  quality: number;
+  useInOutRange: boolean;
+}
+
 export interface ExportControlEvents extends EventMap {
   exportRequested: ExportRequest;
   copyRequested: void;
+  sequenceExportRequested: SequenceExportRequest;
 }
 
 export class ExportControl extends EventEmitter<ExportControlEvents> {
@@ -17,6 +25,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
   private exportButton: HTMLButtonElement;
   private dropdown: HTMLElement;
   private isDropdownOpen = false;
+  private annotationsCheckbox: HTMLInputElement | null = null;
 
   constructor() {
     super();
@@ -70,7 +79,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
       border: 1px solid #444;
       border-radius: 6px;
       padding: 8px 0;
-      min-width: 180px;
+      min-width: 200px;
       z-index: 1000;
       display: none;
       box-shadow: 0 4px 12px rgba(0,0,0,0.4);
@@ -91,81 +100,89 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
   }
 
   private createDropdownItems(): void {
-    const items: Array<{
-      label: string;
-      icon: string;
-      action: () => void;
-      shortcut?: string;
-    }> = [
-      {
-        label: 'Save as PNG',
-        icon: '🖼️',
-        action: () => this.exportAs('png'),
-        shortcut: 'Ctrl+S',
-      },
-      {
-        label: 'Save as JPEG',
-        icon: '📸',
-        action: () => this.exportAs('jpeg'),
-      },
-      {
-        label: 'Save as WebP',
-        icon: '🌐',
-        action: () => this.exportAs('webp'),
-      },
-      {
-        label: 'Copy to Clipboard',
-        icon: '📋',
-        action: () => this.copyToClipboard(),
-        shortcut: 'Ctrl+C',
-      },
-    ];
+    // Single frame export section
+    this.addSectionHeader('Single Frame');
+    this.addMenuItem('🖼️', 'Save as PNG', () => this.exportAs('png'), 'Ctrl+S');
+    this.addMenuItem('📸', 'Save as JPEG', () => this.exportAs('jpeg'));
+    this.addMenuItem('🌐', 'Save as WebP', () => this.exportAs('webp'));
+    this.addMenuItem('📋', 'Copy to Clipboard', () => this.copyToClipboard(), 'Ctrl+C');
 
-    for (const item of items) {
-      const row = document.createElement('div');
-      row.style.cssText = `
-        display: flex;
-        align-items: center;
-        padding: 8px 12px;
-        cursor: pointer;
-        transition: background 0.1s ease;
-        gap: 8px;
-      `;
+    this.addSeparator();
 
-      row.addEventListener('mouseenter', () => {
-        row.style.background = '#3a3a3a';
-      });
-      row.addEventListener('mouseleave', () => {
-        row.style.background = 'transparent';
-      });
+    // Sequence export section
+    this.addSectionHeader('Sequence Export');
+    this.addMenuItem('🎬', 'Export In/Out Range', () => this.exportSequence(true));
+    this.addMenuItem('📽️', 'Export All Frames', () => this.exportSequence(false));
 
-      const icon = document.createElement('span');
-      icon.textContent = item.icon;
-      icon.style.fontSize = '14px';
+    this.addSeparator();
 
-      const label = document.createElement('span');
-      label.textContent = item.label;
-      label.style.cssText = 'flex: 1; color: #ddd; font-size: 13px;';
+    // Options section
+    this.addAnnotationsToggle();
+  }
 
-      row.appendChild(icon);
-      row.appendChild(label);
+  private addSectionHeader(text: string): void {
+    const header = document.createElement('div');
+    header.style.cssText = `
+      padding: 4px 12px;
+      color: #888;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    `;
+    header.textContent = text;
+    this.dropdown.appendChild(header);
+  }
 
-      if (item.shortcut) {
-        const shortcut = document.createElement('span');
-        shortcut.textContent = item.shortcut;
-        shortcut.style.cssText = 'color: #888; font-size: 11px;';
-        row.appendChild(shortcut);
-      }
+  private addMenuItem(
+    iconText: string,
+    labelText: string,
+    action: () => void,
+    shortcut?: string
+  ): void {
+    const row = document.createElement('div');
+    row.style.cssText = `
+      display: flex;
+      align-items: center;
+      padding: 8px 12px;
+      cursor: pointer;
+      transition: background 0.1s ease;
+      gap: 8px;
+    `;
 
-      row.addEventListener('click', () => {
-        item.action();
-        this.closeDropdown();
-      });
+    row.addEventListener('mouseenter', () => {
+      row.style.background = '#3a3a3a';
+    });
+    row.addEventListener('mouseleave', () => {
+      row.style.background = 'transparent';
+    });
 
-      this.dropdown.appendChild(row);
+    const icon = document.createElement('span');
+    icon.textContent = iconText;
+    icon.style.fontSize = '14px';
+
+    const label = document.createElement('span');
+    label.textContent = labelText;
+    label.style.cssText = 'flex: 1; color: #ddd; font-size: 13px;';
+
+    row.appendChild(icon);
+    row.appendChild(label);
+
+    if (shortcut) {
+      const shortcutEl = document.createElement('span');
+      shortcutEl.textContent = shortcut;
+      shortcutEl.style.cssText = 'color: #888; font-size: 11px;';
+      row.appendChild(shortcutEl);
     }
 
-    // Add separator
+    row.addEventListener('click', () => {
+      action();
+      this.closeDropdown();
+    });
+
+    this.dropdown.appendChild(row);
+  }
+
+  private addSeparator(): void {
     const separator = document.createElement('div');
     separator.style.cssText = `
       height: 1px;
@@ -173,10 +190,11 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
       margin: 8px 0;
     `;
     this.dropdown.appendChild(separator);
+  }
 
-    // Add annotations toggle
-    const annotationsRow = document.createElement('div');
-    annotationsRow.style.cssText = `
+  private addAnnotationsToggle(): void {
+    const row = document.createElement('div');
+    row.style.cssText = `
       display: flex;
       align-items: center;
       padding: 8px 12px;
@@ -189,17 +207,16 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     checkbox.checked = true;
     checkbox.style.accentColor = '#4a9eff';
 
-    const checkboxLabel = document.createElement('label');
-    checkboxLabel.htmlFor = 'export-annotations';
-    checkboxLabel.textContent = 'Include annotations';
-    checkboxLabel.style.cssText = 'color: #aaa; font-size: 12px; cursor: pointer;';
+    const label = document.createElement('label');
+    label.htmlFor = 'export-annotations';
+    label.textContent = 'Include annotations';
+    label.style.cssText = 'color: #aaa; font-size: 12px; cursor: pointer;';
 
-    annotationsRow.appendChild(checkbox);
-    annotationsRow.appendChild(checkboxLabel);
-    this.dropdown.appendChild(annotationsRow);
+    row.appendChild(checkbox);
+    row.appendChild(label);
+    this.dropdown.appendChild(row);
 
-    // Store checkbox reference
-    (this.dropdown as HTMLElement & { annotationsCheckbox?: HTMLInputElement }).annotationsCheckbox = checkbox;
+    this.annotationsCheckbox = checkbox;
   }
 
   private toggleDropdown(): void {
@@ -217,8 +234,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
   }
 
   private getIncludeAnnotations(): boolean {
-    const checkbox = (this.dropdown as HTMLElement & { annotationsCheckbox?: HTMLInputElement }).annotationsCheckbox;
-    return checkbox?.checked ?? true;
+    return this.annotationsCheckbox?.checked ?? true;
   }
 
   private exportAs(format: ExportFormat): void {
@@ -231,6 +247,15 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
 
   private copyToClipboard(): void {
     this.emit('copyRequested', undefined);
+  }
+
+  private exportSequence(useInOutRange: boolean): void {
+    this.emit('sequenceExportRequested', {
+      format: 'png',  // Default to PNG for sequences
+      includeAnnotations: this.getIncludeAnnotations(),
+      quality: 0.92,
+      useInOutRange,
+    });
   }
 
   // Public method for keyboard shortcut
