@@ -1,14 +1,52 @@
 # OpenRV Web - QA Test Plan
 
-This document describes all features in the application with their test cases for both unit testing (Jest) and integration/E2E testing (Playwright).
+This document describes all features in the application with their test cases for both unit testing (Vitest) and integration/E2E testing (Playwright).
+
+## Implementation Status
+
+| Category | Unit Tests | Status |
+|----------|------------|--------|
+| Session Management | `Session.test.ts` | ✅ Implemented (37 tests) |
+| ASC CDL | `CDL.test.ts` | ✅ Implemented (28 tests) |
+| 3D LUT Support | `LUTLoader.test.ts` | ✅ Implemented (20 tests) |
+| Blend Modes | `BlendModes.test.ts` | ✅ Implemented (26 tests) |
+| Lens Distortion | `LensDistortion.test.ts` | ✅ Implemented (24 tests) |
+| Paint Engine | `PaintEngine.test.ts` | ✅ Implemented (41 tests) |
+| Session Serializer | `SessionSerializer.test.ts` | ✅ Implemented (13 tests) |
+| Graph System | `Graph.test.ts` | ✅ Implemented (21 tests) |
+| Property System | `Property.test.ts` | ✅ Implemented (31 tests) |
+| Signal System | `Signal.test.ts` | ✅ Implemented (20 tests) |
+| FileSourceNode | `FileSourceNode.test.ts` | ✅ Implemented (14 tests) |
+| SequenceSourceNode | `SequenceSourceNode.test.ts` | ✅ Implemented (21 tests) |
+| VideoSourceNode | `VideoSourceNode.test.ts` | ✅ Implemented (13 tests) |
+| SequenceGroupNode | `SequenceGroupNode.test.ts` | ✅ Implemented (17 tests) |
+| SwitchGroupNode | `SwitchGroupNode.test.ts` | ✅ Implemented (14 tests) |
+| StackGroupNode | `StackGroupNode.test.ts` | ✅ Implemented (18 tests) |
+| EventEmitter | `EventEmitter.test.ts` | ✅ Implemented (21 tests) |
+| IPImage | `Image.test.ts` | ✅ Implemented (35 tests) |
+| FrameExporter | `FrameExporter.test.ts` | ✅ Implemented (22 tests) |
+| SequenceLoader | `SequenceLoader.test.ts` | ✅ Implemented (32 tests) |
+| GTOGraphLoader | `GTOGraphLoader.test.ts` | ✅ Implemented (20 tests) |
+| WaveformRenderer | `WaveformRenderer.test.ts` | ✅ Implemented (26 tests) |
+| Color Adjustments | `ColorControls.test.ts` | ✅ Implemented (28 tests) |
+| Crop Control | `CropControl.test.ts` | ✅ Implemented (24 tests) |
+| Transform Control | `TransformControl.test.ts` | ✅ Implemented (42 tests) |
+| Filters | `FilterControl.test.ts` | ✅ Implemented (17 tests) |
+| Wipe Control | `WipeControl.test.ts` | ✅ Implemented (39 tests) |
+| Paint Renderer | `PaintRenderer.test.ts` | ⏳ Not implemented |
+| Timeline | `Timeline.test.ts` | ⏳ Not implemented |
+| Viewer | `Viewer.test.ts` | ⏳ Not implemented |
+
+**Total: 661 tests passing across 27 test files**
 
 ---
 
 ## Test Environment Setup
 
-### Jest (Unit Tests)
+### Vitest (Unit Tests)
 ```bash
-npm install --save-dev jest @types/jest ts-jest jest-environment-jsdom
+pnpm install
+pnpm test
 ```
 
 ### Playwright (Integration/E2E Tests)
@@ -24,14 +62,14 @@ npx playwright install
 
 ---
 
-## 1. Session Management
+## 1. Session Management ✅
 
 ### Feature Description
 The `Session` class (`src/core/session/Session.ts`) manages media playback state including current frame, in/out points, loop modes, volume, and media sources.
 
-### Unit Tests (Jest)
+### Unit Tests (Vitest)
 
-#### File: `src/core/session/Session.test.ts`
+#### File: `src/core/session/Session.test.ts` ✅ IMPLEMENTED
 
 | Test ID | Test Case | Expected Result |
 |---------|-----------|-----------------|
@@ -64,7 +102,7 @@ The `Session` class (`src/core/session/Session.ts`) manages media playback state
 | SES-027 | Loop mode 'once' stops at outPoint | isPlaying = false at end |
 | SES-028 | `advanceFrame()` respects playDirection | Negative direction moves backward |
 
-### Integration Tests (Playwright)
+### Integration Tests (Playwright) ⏳
 
 #### File: `e2e/session.spec.ts`
 
@@ -79,14 +117,14 @@ The `Session` class (`src/core/session/Session.ts`) manages media playback state
 
 ---
 
-## 2. Color Adjustments
+## 2. Color Adjustments ✅
 
 ### Feature Description
 Color controls (`src/ui/components/ColorControls.ts`) provide exposure, gamma, saturation, contrast, brightness, and color temperature adjustments.
 
-### Unit Tests (Jest)
+### Unit Tests (Vitest)
 
-#### File: `src/color/ColorAdjustments.test.ts`
+#### File: `src/ui/components/ColorControls.test.ts` ✅ IMPLEMENTED
 
 | Test ID | Test Case | Expected Result |
 |---------|-----------|-----------------|
@@ -103,7 +141,7 @@ Color controls (`src/ui/components/ColorControls.ts`) provide exposure, gamma, s
 | COL-011 | Reset returns all values to defaults | All adjustments = neutral values |
 | COL-012 | Adjustments clamp output to 0-255 | No overflow or underflow |
 
-### Integration Tests (Playwright)
+### Integration Tests (Playwright) ⏳
 
 #### File: `e2e/color-controls.spec.ts`
 
@@ -115,14 +153,14 @@ Color controls (`src/ui/components/ColorControls.ts`) provide exposure, gamma, s
 
 ---
 
-## 3. ASC CDL (Color Decision List)
+## 3. ASC CDL (Color Decision List) ✅
 
 ### Feature Description
 CDL implementation (`src/color/CDL.ts`) provides industry-standard slope, offset, power, and saturation controls per RGB channel.
 
-### Unit Tests (Jest)
+### Unit Tests (Vitest)
 
-#### File: `src/color/CDL.test.ts`
+#### File: `src/color/CDL.test.ts` ✅ IMPLEMENTED
 
 | Test ID | Test Case | Expected Result |
 |---------|-----------|-----------------|
@@ -142,7 +180,7 @@ CDL implementation (`src/color/CDL.ts`) provides industry-standard slope, offset
 | CDL-014 | Negative values clamp to 0 before power | No NaN from negative^fractional |
 | CDL-015 | Rec.709 luminance weights used for saturation | Luma = 0.2126R + 0.7152G + 0.0722B |
 
-### Integration Tests (Playwright)
+### Integration Tests (Playwright) ⏳
 
 #### File: `e2e/cdl.spec.ts`
 
@@ -155,14 +193,14 @@ CDL implementation (`src/color/CDL.ts`) provides industry-standard slope, offset
 
 ---
 
-## 4. 3D LUT Support
+## 4. 3D LUT Support ✅
 
 ### Feature Description
 LUT loader (`src/color/LUTLoader.ts`) and WebGL processor (`src/color/WebGLLUT.ts`) apply .cube format 3D lookup tables.
 
-### Unit Tests (Jest)
+### Unit Tests (Vitest)
 
-#### File: `src/color/LUTLoader.test.ts`
+#### File: `src/color/LUTLoader.test.ts` ✅ IMPLEMENTED
 
 | Test ID | Test Case | Expected Result |
 |---------|-----------|-----------------|
@@ -179,7 +217,7 @@ LUT loader (`src/color/LUTLoader.ts`) and WebGL processor (`src/color/WebGLLUT.t
 | LUT-011 | Identity LUT produces no change | Output equals input |
 | LUT-012 | `createLUTTexture()` creates WebGL texture | Returns valid WebGLTexture |
 
-### Integration Tests (Playwright)
+### Integration Tests (Playwright) ⏳
 
 #### File: `e2e/lut.spec.ts`
 
@@ -191,14 +229,14 @@ LUT loader (`src/color/LUTLoader.ts`) and WebGL processor (`src/color/WebGLLUT.t
 
 ---
 
-## 5. Blend Modes & Compositing
+## 5. Blend Modes & Compositing ✅
 
 ### Feature Description
 Blend modes (`src/composite/BlendModes.ts`) implement standard compositing operations for layered images.
 
-### Unit Tests (Jest)
+### Unit Tests (Vitest)
 
-#### File: `src/composite/BlendModes.test.ts`
+#### File: `src/composite/BlendModes.test.ts` ✅ IMPLEMENTED
 
 | Test ID | Test Case | Expected Result |
 |---------|-----------|-----------------|
@@ -217,7 +255,7 @@ Blend modes (`src/composite/BlendModes.ts`) implement standard compositing opera
 | BLD-013 | Invisible layers skipped | visible=false has no effect |
 | BLD-014 | `resizeImageData()` scales correctly | Nearest-neighbor resize works |
 
-### Integration Tests (Playwright)
+### Integration Tests (Playwright) ⏳
 
 #### File: `e2e/blend-modes.spec.ts`
 
@@ -228,14 +266,14 @@ Blend modes (`src/composite/BlendModes.ts`) implement standard compositing opera
 
 ---
 
-## 6. Lens Distortion
+## 6. Lens Distortion ✅
 
 ### Feature Description
 Lens distortion correction (`src/transform/LensDistortion.ts`) implements Brown-Conrady model for barrel/pincushion correction.
 
-### Unit Tests (Jest)
+### Unit Tests (Vitest)
 
-#### File: `src/transform/LensDistortion.test.ts`
+#### File: `src/transform/LensDistortion.test.ts` ✅ IMPLEMENTED
 
 | Test ID | Test Case | Expected Result |
 |---------|-----------|-----------------|
@@ -250,7 +288,7 @@ Lens distortion correction (`src/transform/LensDistortion.ts`) implements Brown-
 | LNS-009 | `generateDistortionGrid()` creates preview lines | Lines array populated |
 | LNS-010 | `applyLensDistortionToCanvas()` modifies canvas | Canvas content changes |
 
-### Integration Tests (Playwright)
+### Integration Tests (Playwright) ⏳
 
 #### File: `e2e/lens-distortion.spec.ts`
 
@@ -262,14 +300,14 @@ Lens distortion correction (`src/transform/LensDistortion.ts`) implements Brown-
 
 ---
 
-## 7. Crop Tool
+## 7. Crop Tool ✅
 
 ### Feature Description
 Crop control (`src/ui/components/CropControl.ts`) provides region selection with aspect ratio constraints.
 
-### Unit Tests (Jest)
+### Unit Tests (Vitest)
 
-#### File: `src/ui/components/CropControl.test.ts`
+#### File: `src/ui/components/CropControl.test.ts` ✅ IMPLEMENTED
 
 | Test ID | Test Case | Expected Result |
 |---------|-----------|-----------------|
@@ -281,7 +319,7 @@ Crop control (`src/ui/components/CropControl.ts`) provides region selection with
 | CRP-006 | Crop enabled state toggles | enabled flag flips |
 | CRP-007 | Rule of thirds guide positions correct | Lines at 1/3 and 2/3 positions |
 
-### Integration Tests (Playwright)
+### Integration Tests (Playwright) ⏳
 
 #### File: `e2e/crop.spec.ts`
 
@@ -293,14 +331,14 @@ Crop control (`src/ui/components/CropControl.ts`) provides region selection with
 
 ---
 
-## 8. Transform (Rotation/Flip)
+## 8. Transform (Rotation/Flip) ✅
 
 ### Feature Description
 Transform control (`src/ui/components/TransformControl.ts`) provides rotation and flip operations.
 
-### Unit Tests (Jest)
+### Unit Tests (Vitest)
 
-#### File: `src/ui/components/TransformControl.test.ts`
+#### File: `src/ui/components/TransformControl.test.ts` ✅ IMPLEMENTED
 
 | Test ID | Test Case | Expected Result |
 |---------|-----------|-----------------|
@@ -313,7 +351,7 @@ Transform control (`src/ui/components/TransformControl.ts`) provides rotation an
 | TRN-007 | Combined rotation + flip applies both | Operations compose correctly |
 | TRN-008 | Reset clears all transforms | Rotation=0, flip=false |
 
-### Integration Tests (Playwright)
+### Integration Tests (Playwright) ⏳
 
 #### File: `e2e/transform.spec.ts`
 
@@ -325,14 +363,14 @@ Transform control (`src/ui/components/TransformControl.ts`) provides rotation an
 
 ---
 
-## 9. Filters (Blur/Sharpen)
+## 9. Filters (Blur/Sharpen) ✅
 
 ### Feature Description
 Filter control (`src/ui/components/FilterControl.ts`) provides blur and sharpen image filters.
 
-### Unit Tests (Jest)
+### Unit Tests (Vitest)
 
-#### File: `src/filters/Filters.test.ts`
+#### File: `src/ui/components/FilterControl.test.ts` ✅ IMPLEMENTED
 
 | Test ID | Test Case | Expected Result |
 |---------|-----------|-----------------|
@@ -343,7 +381,7 @@ Filter control (`src/ui/components/FilterControl.ts`) provides blur and sharpen 
 | FLT-005 | Over-sharpening creates halos | Expected artifact at extreme values |
 | FLT-006 | Blur preserves image dimensions | Output size equals input size |
 
-### Integration Tests (Playwright)
+### Integration Tests (Playwright) ⏳
 
 #### File: `e2e/filters.spec.ts`
 
@@ -354,14 +392,14 @@ Filter control (`src/ui/components/FilterControl.ts`) provides blur and sharpen 
 
 ---
 
-## 10. Wipe Comparison
+## 10. Wipe Comparison ✅
 
 ### Feature Description
 Wipe control (`src/ui/components/WipeControl.ts`) provides split-screen comparison between sources.
 
-### Unit Tests (Jest)
+### Unit Tests (Vitest)
 
-#### File: `src/ui/components/WipeControl.test.ts`
+#### File: `src/ui/components/WipeControl.test.ts` ✅ IMPLEMENTED
 
 | Test ID | Test Case | Expected Result |
 |---------|-----------|-----------------|
@@ -373,7 +411,7 @@ Wipe control (`src/ui/components/WipeControl.ts`) provides split-screen comparis
 | WPE-006 | Wipe position 1 shows only A side | Full first image |
 | WPE-007 | Swap A/B switches sources | Sources reversed |
 
-### Integration Tests (Playwright)
+### Integration Tests (Playwright) ⏳
 
 #### File: `e2e/wipe.spec.ts`
 
@@ -385,14 +423,14 @@ Wipe control (`src/ui/components/WipeControl.ts`) provides split-screen comparis
 
 ---
 
-## 11. Paint/Annotation System
+## 11. Paint/Annotation System ✅
 
 ### Feature Description
 Paint engine (`src/paint/PaintEngine.ts`) and renderer (`src/paint/PaintRenderer.ts`) provide frame-accurate drawing annotations.
 
-### Unit Tests (Jest)
+### Unit Tests (Vitest)
 
-#### File: `src/paint/PaintEngine.test.ts`
+#### File: `src/paint/PaintEngine.test.ts` ✅ IMPLEMENTED
 
 | Test ID | Test Case | Expected Result |
 |---------|-----------|-----------------|
@@ -417,7 +455,7 @@ Paint engine (`src/paint/PaintEngine.ts`) and renderer (`src/paint/PaintRenderer
 | PNT-019 | Color setter stores RGBA array | Color stored correctly |
 | PNT-020 | Width clamped between 1 and 100 | Bounds enforced |
 
-#### File: `src/paint/PaintRenderer.test.ts`
+#### File: `src/paint/PaintRenderer.test.ts` ⏳ NOT IMPLEMENTED
 
 | Test ID | Test Case | Expected Result |
 |---------|-----------|-----------------|
@@ -427,7 +465,7 @@ Paint engine (`src/paint/PaintEngine.ts`) and renderer (`src/paint/PaintRenderer
 | RND-004 | Pressure affects stroke width | Variable width along stroke |
 | RND-005 | Opacity affects stroke transparency | Alpha applied |
 
-### Integration Tests (Playwright)
+### Integration Tests (Playwright) ⏳
 
 #### File: `e2e/paint.spec.ts`
 
@@ -443,14 +481,14 @@ Paint engine (`src/paint/PaintEngine.ts`) and renderer (`src/paint/PaintRenderer
 
 ---
 
-## 12. Timeline
+## 12. Timeline ⏳
 
 ### Feature Description
 Timeline component (`src/ui/components/Timeline.ts`) displays frame position, in/out points, markers, and annotations.
 
-### Unit Tests (Jest)
+### Unit Tests (Vitest)
 
-#### File: `src/ui/components/Timeline.test.ts`
+#### File: `src/ui/components/Timeline.test.ts` ⏳ NOT IMPLEMENTED
 
 | Test ID | Test Case | Expected Result |
 |---------|-----------|-----------------|
@@ -463,7 +501,7 @@ Timeline component (`src/ui/components/Timeline.ts`) displays frame position, in
 | TML-007 | Resize updates canvas dimensions | Canvas scales with container |
 | TML-008 | DPR scaling applied correctly | High-DPI displays sharp |
 
-### Integration Tests (Playwright)
+### Integration Tests (Playwright) ⏳
 
 #### File: `e2e/timeline.spec.ts`
 
@@ -475,12 +513,12 @@ Timeline component (`src/ui/components/Timeline.ts`) displays frame position, in
 
 ---
 
-## 13. Keyboard Shortcuts
+## 13. Keyboard Shortcuts ⏳
 
 ### Feature Description
 Keyboard handling in `App.ts` provides shortcuts for all major functions.
 
-### Integration Tests (Playwright)
+### Integration Tests (Playwright) ⏳
 
 #### File: `e2e/keyboard.spec.ts`
 
@@ -504,12 +542,12 @@ Keyboard handling in `App.ts` provides shortcuts for all major functions.
 
 ---
 
-## 14. File Operations
+## 14. File Operations ⏳
 
 ### Feature Description
 File loading via drag-and-drop and file picker, supporting images, videos, and sequences.
 
-### Integration Tests (Playwright)
+### Integration Tests (Playwright) ⏳
 
 #### File: `e2e/file-operations.spec.ts`
 
@@ -524,14 +562,14 @@ File loading via drag-and-drop and file picker, supporting images, videos, and s
 
 ---
 
-## 15. Export Functions
+## 15. Export Functions ✅
 
 ### Feature Description
 Export controls (`src/ui/components/ExportControl.ts`) for frame and sequence export.
 
-### Unit Tests (Jest)
+### Unit Tests (Vitest)
 
-#### File: `src/utils/FrameExporter.test.ts`
+#### File: `src/utils/FrameExporter.test.ts` ✅ IMPLEMENTED
 
 | Test ID | Test Case | Expected Result |
 |---------|-----------|-----------------|
@@ -541,7 +579,7 @@ Export controls (`src/ui/components/ExportControl.ts`) for frame and sequence ex
 | EXP-004 | Quality setting affects file size | Higher quality = larger file |
 | EXP-005 | Include annotations burns in strokes | Strokes visible in export |
 
-### Integration Tests (Playwright)
+### Integration Tests (Playwright) ⏳
 
 #### File: `e2e/export.spec.ts`
 
@@ -553,14 +591,14 @@ Export controls (`src/ui/components/ExportControl.ts`) for frame and sequence ex
 
 ---
 
-## 16. Session Save/Load
+## 16. Session Save/Load ✅
 
 ### Feature Description
 Session serialization (`src/core/session/SessionSerializer.ts`) saves and loads .orvproject files.
 
-### Unit Tests (Jest)
+### Unit Tests (Vitest)
 
-#### File: `src/core/session/SessionSerializer.test.ts`
+#### File: `src/core/session/SessionSerializer.test.ts` ✅ IMPLEMENTED
 
 | Test ID | Test Case | Expected Result |
 |---------|-----------|-----------------|
@@ -571,7 +609,7 @@ Session serialization (`src/core/session/SessionSerializer.ts`) saves and loads 
 | SER-005 | Missing fields use defaults | Graceful degradation |
 | SER-006 | Version mismatch handled | Migration or warning |
 
-### Integration Tests (Playwright)
+### Integration Tests (Playwright) ⏳
 
 #### File: `e2e/session.spec.ts`
 
@@ -583,14 +621,14 @@ Session serialization (`src/core/session/SessionSerializer.ts`) saves and loads 
 
 ---
 
-## 17. GTO/RV Session Loading
+## 17. GTO/RV Session Loading ✅
 
 ### Feature Description
 GTO graph loader (`src/core/session/GTOGraphLoader.ts`) reconstructs node graphs from RV session files.
 
-### Unit Tests (Jest)
+### Unit Tests (Vitest)
 
-#### File: `src/core/session/GTOGraphLoader.test.ts`
+#### File: `src/core/session/GTOGraphLoader.test.ts` ✅ IMPLEMENTED
 
 | Test ID | Test Case | Expected Result |
 |---------|-----------|-----------------|
@@ -607,14 +645,14 @@ GTO graph loader (`src/core/session/GTOGraphLoader.ts`) reconstructs node graphs
 
 ---
 
-## 18. Node Graph System
+## 18. Node Graph System ✅
 
 ### Feature Description
 Core graph system (`src/core/graph/Graph.ts`) manages node connections and evaluation.
 
-### Unit Tests (Jest)
+### Unit Tests (Vitest)
 
-#### File: `src/core/graph/Graph.test.ts`
+#### File: `src/core/graph/Graph.test.ts` ✅ IMPLEMENTED
 
 | Test ID | Test Case | Expected Result |
 |---------|-----------|-----------------|
@@ -627,7 +665,7 @@ Core graph system (`src/core/graph/Graph.ts`) manages node connections and evalu
 | GRP-007 | Dirty propagation marks dependents | Downstream nodes dirty |
 | GRP-008 | `setOutputNode()` sets root | outputNode set |
 
-#### File: `src/core/graph/Property.test.ts`
+#### File: `src/core/graph/Property.test.ts` ✅ IMPLEMENTED
 
 | Test ID | Test Case | Expected Result |
 |---------|-----------|-----------------|
@@ -638,14 +676,14 @@ Core graph system (`src/core/graph/Graph.ts`) manages node connections and evalu
 
 ---
 
-## 19. Source Nodes
+## 19. Source Nodes ✅
 
 ### Feature Description
 Source nodes (`src/nodes/sources/`) load and provide media data.
 
-### Unit Tests (Jest)
+### Unit Tests (Vitest)
 
-#### File: `src/nodes/sources/FileSourceNode.test.ts`
+#### File: `src/nodes/sources/FileSourceNode.test.ts` ✅ IMPLEMENTED
 
 | Test ID | Test Case | Expected Result |
 |---------|-----------|-----------------|
@@ -656,7 +694,7 @@ Source nodes (`src/nodes/sources/`) load and provide media data.
 | FSN-005 | `dispose()` revokes blob URL | URL.revokeObjectURL called |
 | FSN-006 | Metadata populated correctly | width, height, name set |
 
-#### File: `src/nodes/sources/SequenceSourceNode.test.ts`
+#### File: `src/nodes/sources/SequenceSourceNode.test.ts` ✅ IMPLEMENTED
 
 | Test ID | Test Case | Expected Result |
 |---------|-----------|-----------------|
@@ -666,16 +704,25 @@ Source nodes (`src/nodes/sources/`) load and provide media data.
 | SSN-004 | Preloading loads adjacent frames | Nearby frames cached |
 | SSN-005 | `dispose()` releases all frames | Blob URLs revoked |
 
+#### File: `src/nodes/sources/VideoSourceNode.test.ts` ✅ IMPLEMENTED (Additional)
+
+| Test ID | Test Case | Expected Result |
+|---------|-----------|-----------------|
+| VSN-001 | `dispose()` handles no video | No errors thrown |
+| VSN-002 | `toJSON()` serializes state | Valid JSON returned |
+| VSN-003 | Does not accept inputs | inputs.length === 0 |
+| VSN-004 | `setFps()` updates property | fps property changes |
+
 ---
 
-## 20. Group Nodes
+## 20. Group Nodes ✅
 
 ### Feature Description
 Group nodes (`src/nodes/groups/`) organize and composite multiple inputs.
 
-### Unit Tests (Jest)
+### Unit Tests (Vitest)
 
-#### File: `src/nodes/groups/SequenceGroupNode.test.ts`
+#### File: `src/nodes/groups/SequenceGroupNode.test.ts` ✅ IMPLEMENTED
 
 | Test ID | Test Case | Expected Result |
 |---------|-----------|-----------------|
@@ -686,7 +733,7 @@ Group nodes (`src/nodes/groups/`) organize and composite multiple inputs.
 | SGN-005 | Frame wrapping at sequence end | Loops correctly |
 | SGN-006 | Division by zero handled | No NaN returned |
 
-#### File: `src/nodes/groups/SwitchGroupNode.test.ts`
+#### File: `src/nodes/groups/SwitchGroupNode.test.ts` ✅ IMPLEMENTED
 
 | Test ID | Test Case | Expected Result |
 |---------|-----------|-----------------|
@@ -696,7 +743,7 @@ Group nodes (`src/nodes/groups/`) organize and composite multiple inputs.
 | SWN-004 | `next()` advances index | Index increments |
 | SWN-005 | `previous()` decrements index | Index decrements |
 
-#### File: `src/nodes/groups/StackGroupNode.test.ts`
+#### File: `src/nodes/groups/StackGroupNode.test.ts` ✅ IMPLEMENTED
 
 | Test ID | Test Case | Expected Result |
 |---------|-----------|-----------------|
@@ -706,14 +753,14 @@ Group nodes (`src/nodes/groups/`) organize and composite multiple inputs.
 
 ---
 
-## 21. Audio/Waveform
+## 21. Audio/Waveform ✅
 
 ### Feature Description
 Waveform renderer (`src/audio/WaveformRenderer.ts`) displays audio visualization.
 
-### Unit Tests (Jest)
+### Unit Tests (Vitest)
 
-#### File: `src/audio/WaveformRenderer.test.ts`
+#### File: `src/audio/WaveformRenderer.test.ts` ✅ IMPLEMENTED
 
 | Test ID | Test Case | Expected Result |
 |---------|-----------|-----------------|
@@ -725,14 +772,14 @@ Waveform renderer (`src/audio/WaveformRenderer.ts`) displays audio visualization
 
 ---
 
-## 22. Viewer Component
+## 22. Viewer Component ⏳
 
 ### Feature Description
 Main viewer (`src/ui/components/Viewer.ts`) renders media with all effects applied.
 
-### Unit Tests (Jest)
+### Unit Tests (Vitest)
 
-#### File: `src/ui/components/Viewer.test.ts`
+#### File: `src/ui/components/Viewer.test.ts` ⏳ NOT IMPLEMENTED
 
 | Test ID | Test Case | Expected Result |
 |---------|-----------|-----------------|
@@ -748,7 +795,7 @@ Main viewer (`src/ui/components/Viewer.ts`) renders media with all effects appli
 | VWR-010 | Paint overlay rendered | Annotations visible |
 | VWR-011 | Wipe mode renders split | Both sources shown |
 
-### Integration Tests (Playwright)
+### Integration Tests (Playwright) ⏳
 
 #### File: `e2e/viewer.spec.ts`
 
@@ -757,6 +804,19 @@ Main viewer (`src/ui/components/Viewer.ts`) renders media with all effects appli
 | VWR-E01 | Scroll wheel zooms | 1. Load image 2. Scroll wheel | Zoom changes |
 | VWR-E02 | Drag pans image | 1. Zoom in 2. Drag image | Image pans |
 | VWR-E03 | Double-click fits to window | 1. Zoom in 2. Double-click | Zoom reset to fit |
+
+---
+
+## Additional Implemented Tests
+
+These tests were implemented but not originally in the test plan:
+
+| File | Tests | Description |
+|------|-------|-------------|
+| `src/core/graph/Signal.test.ts` | 20 | Signal and ComputedSignal reactive system |
+| `src/utils/EventEmitter.test.ts` | 21 | Event pub/sub system |
+| `src/core/image/Image.test.ts` | 35 | IPImage pixel manipulation and conversion |
+| `src/utils/SequenceLoader.test.ts` | 32 | Image sequence loading utilities |
 
 ---
 
@@ -827,15 +887,15 @@ jobs:
 
 ```bash
 # Run all unit tests
-npm run test:unit
+pnpm test
 
-# Run unit tests with coverage
-npm run test:unit -- --coverage
+# Run unit tests with watch mode
+pnpm test --watch
 
 # Run specific test file
-npm run test:unit -- src/color/CDL.test.ts
+pnpm test src/color/CDL.test.ts
 
-# Run E2E tests
+# Run E2E tests (not yet set up)
 npm run test:e2e
 
 # Run E2E tests with UI
