@@ -192,6 +192,7 @@ export class CropControl extends EventEmitter<CropControlEvents> {
     aspectLabel.style.cssText = 'color: #aaa; font-size: 12px; margin-bottom: 4px;';
 
     this.aspectSelect = document.createElement('select');
+    this.aspectSelect.dataset.testid = 'crop-aspect-select';
     this.aspectSelect.style.cssText = `
       width: 100%;
       background: #444;

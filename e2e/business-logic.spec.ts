@@ -406,8 +406,8 @@ test.describe('Transform State', () => {
     expect(state.rotation).toBe(90);
     expect(state.flipH).toBe(true);
 
-    // Reset
-    await page.locator('button[title*="Reset"]').click();
+    // Reset transforms
+    await page.locator('button[title="Reset transforms"]').click();
     await page.waitForTimeout(100);
 
     state = await getTransformState(page);

@@ -10,6 +10,7 @@ import { CropState, CropRegion, DEFAULT_CROP_STATE, DEFAULT_CROP_REGION } from '
 import { LUT3D } from '../../color/LUTLoader';
 import { WebGLLUTProcessor } from '../../color/WebGLLUT';
 import { CDLValues, DEFAULT_CDL, isDefaultCDL, applyCDLToImageData } from '../../color/CDL';
+import { ColorCurvesData, createDefaultCurvesData, isDefaultCurves, applyCurvesToImageData } from '../../color/ColorCurves';
 import { LensDistortionParams, DEFAULT_LENS_PARAMS, isDefaultLensParams, applyLensDistortion } from '../../transform/LensDistortion';
 import { ExportFormat, exportCanvas as doExportCanvas, copyCanvasToClipboard } from '../../utils/FrameExporter';
 import { filterImageFiles } from '../../utils/SequenceLoader';
@@ -102,6 +103,9 @@ export class Viewer {
 
   // CDL state
   private cdlValues: CDLValues = JSON.parse(JSON.stringify(DEFAULT_CDL));
+
+  // Color curves state
+  private curvesData: ColorCurvesData = createDefaultCurvesData();
 
   // Lens distortion state
   private lensParams: LensDistortionParams = { ...DEFAULT_LENS_PARAMS };
@@ -388,6 +392,23 @@ export class Viewer {
     }
   }
 
+  /**
+   * Check if an element is part of the viewer's own content (canvas, wipe line)
+   * and not an overlay UI element like curves control
+   */
+  private isViewerContentElement(element: HTMLElement): boolean {
+    // The element should be the container itself or one of its direct viewer elements
+    return (
+      element === this.container ||
+      element === this.imageCanvas ||
+      element === this.paintCanvas ||
+      element === this.cropOverlay ||
+      element === this.wipeLine ||
+      element === this.canvasContainer ||
+      this.canvasContainer.contains(element)
+    );
+  }
+
   private getCanvasPoint(clientX: number, clientY: number, pressure = 0.5): StrokePoint | null {
     if (this.displayWidth === 0 || this.displayHeight === 0) return null;
 
@@ -411,6 +432,13 @@ export class Viewer {
   }
 
   private onPointerDown = (e: PointerEvent): void => {
+    // Only handle events that target the viewer content directly
+    // Don't capture events from overlay UI elements (curves control, etc.)
+    const target = e.target as HTMLElement;
+    if (!this.isViewerContentElement(target)) {
+      return;
+    }
+
     // Capture pointer for tracking outside container
     this.container.setPointerCapture(e.pointerId);
 
@@ -894,6 +922,11 @@ export class Viewer {
       this.applyCDL(this.imageCtx, displayWidth, displayHeight);
     }
 
+    // Apply color curves (pixel-level operation, applied after CDL)
+    if (!isDefaultCurves(this.curvesData)) {
+      this.applyCurves(this.imageCtx, displayWidth, displayHeight);
+    }
+
     // Apply sharpen filter (pixel-level operation, applied after CDL)
     if (this.filterSettings.sharpen > 0) {
       this.applySharpen(this.imageCtx, displayWidth, displayHeight);
@@ -1341,6 +1374,42 @@ export class Viewer {
 
     const imageData = ctx.getImageData(0, 0, width, height);
     applyCDLToImageData(imageData, this.cdlValues);
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  // Color curves methods
+  setCurves(curves: ColorCurvesData): void {
+    this.curvesData = {
+      master: { ...curves.master, points: [...curves.master.points] },
+      red: { ...curves.red, points: [...curves.red.points] },
+      green: { ...curves.green, points: [...curves.green.points] },
+      blue: { ...curves.blue, points: [...curves.blue.points] },
+    };
+    this.scheduleRender();
+  }
+
+  getCurves(): ColorCurvesData {
+    return {
+      master: { ...this.curvesData.master, points: [...this.curvesData.master.points] },
+      red: { ...this.curvesData.red, points: [...this.curvesData.red.points] },
+      green: { ...this.curvesData.green, points: [...this.curvesData.green.points] },
+      blue: { ...this.curvesData.blue, points: [...this.curvesData.blue.points] },
+    };
+  }
+
+  resetCurves(): void {
+    this.curvesData = createDefaultCurvesData();
+    this.scheduleRender();
+  }
+
+  /**
+   * Apply color curves to the canvas
+   */
+  private applyCurves(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+    if (isDefaultCurves(this.curvesData)) return;
+
+    const imageData = ctx.getImageData(0, 0, width, height);
+    applyCurvesToImageData(imageData, this.curvesData);
     ctx.putImageData(imageData, 0, 0);
   }
 

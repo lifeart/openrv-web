@@ -304,7 +304,7 @@ test.describe('View Controls', () => {
       await page.waitForTimeout(200);
 
       // Crop UI should now be visible - look for aspect ratio select dropdown
-      const aspectSelect = page.locator('select').first();
+      const aspectSelect = page.locator('[data-testid="crop-aspect-select"]');
       await expect(aspectSelect).toBeVisible();
 
       // Verify options exist

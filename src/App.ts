@@ -12,6 +12,7 @@ import { TransformControl } from './ui/components/TransformControl';
 import { FilterControl } from './ui/components/FilterControl';
 import { CropControl } from './ui/components/CropControl';
 import { CDLControl } from './ui/components/CDLControl';
+import { CurvesControl } from './ui/components/CurvesControl';
 import { LensControl } from './ui/components/LensControl';
 import { StackControl } from './ui/components/StackControl';
 import { ChannelSelect } from './ui/components/ChannelSelect';
@@ -38,6 +39,7 @@ export class App {
   private filterControl: FilterControl;
   private cropControl: CropControl;
   private cdlControl: CDLControl;
+  private curvesControl: CurvesControl;
   private lensControl: LensControl;
   private stackControl: StackControl;
   private channelSelect: ChannelSelect;
@@ -149,6 +151,12 @@ export class App {
       this.viewer.setCDL(cdl);
     });
 
+    // Initialize curves control
+    this.curvesControl = new CurvesControl();
+    this.curvesControl.on('curvesChanged', (curves) => {
+      this.viewer.setCurves(curves);
+    });
+
     // Initialize lens distortion control
     this.lensControl = new LensControl();
     this.lensControl.on('lensChanged', (params) => {
@@ -231,6 +239,9 @@ export class App {
 
     // Add waveform overlay to viewer container
     this.viewer.getContainer().appendChild(this.waveform.render());
+
+    // Add curves control overlay to viewer container
+    this.viewer.getContainer().appendChild(this.curvesControl.render());
 
     // Add vectorscope overlay to viewer container
     this.viewer.getContainer().appendChild(this.vectorscope.render());
@@ -439,6 +450,33 @@ export class App {
     colorContent.appendChild(this.colorControls.render());
     colorContent.appendChild(ContextToolbar.createDivider());
     colorContent.appendChild(this.cdlControl.render());
+    colorContent.appendChild(ContextToolbar.createDivider());
+
+    // Curves toggle button
+    const curvesButton = ContextToolbar.createButton('Curves', () => {
+      this.curvesControl.toggle();
+      if (this.curvesControl.isVisible()) {
+        curvesButton.style.background = 'rgba(74, 158, 255, 0.15)';
+        curvesButton.style.borderColor = '#4a9eff';
+      } else {
+        curvesButton.style.background = '';
+        curvesButton.style.borderColor = '';
+      }
+    }, { title: 'Toggle color curves panel (U)' });
+    curvesButton.dataset.testid = 'curves-toggle-button';
+    colorContent.appendChild(curvesButton);
+
+    // Update button state when visibility changes
+    this.curvesControl.on('visibilityChanged', (visible) => {
+      if (visible) {
+        curvesButton.style.background = 'rgba(74, 158, 255, 0.15)';
+        curvesButton.style.borderColor = '#4a9eff';
+      } else {
+        curvesButton.style.background = '';
+        curvesButton.style.borderColor = '';
+      }
+    });
+
     this.contextToolbar.setTabContent('color', colorContent);
 
     // === EFFECTS TAB ===
@@ -674,6 +712,11 @@ export class App {
       case 'G':
         // Toggle filter effects panel
         this.filterControl.toggle();
+        break;
+      case 'u':
+      case 'U':
+        // Toggle curves panel
+        this.curvesControl.toggle();
         break;
       case 'k':
       case 'K':
@@ -1017,6 +1060,7 @@ Ctrl+Y    - Redo
 
 COLOR
 C         - Toggle color panel
+U         - Toggle curves panel
 Esc       - Close color panel
 Dbl-click - Reset individual slider
 
@@ -1116,6 +1160,7 @@ Shift+V   - Flip vertical</pre>`;
     this.filterControl.dispose();
     this.cropControl.dispose();
     this.cdlControl.dispose();
+    this.curvesControl.dispose();
     this.lensControl.dispose();
     this.stackControl.dispose();
     this.channelSelect.dispose();
