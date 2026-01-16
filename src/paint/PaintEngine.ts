@@ -242,6 +242,28 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
     this.redoStack = [];
   }
 
+  /**
+   * Get all frames that have annotations
+   * Returns a Set of frame numbers
+   */
+  getAnnotatedFrames(): Set<number> {
+    const frames = new Set<number>();
+    for (const [frame, annotations] of this.state.annotations) {
+      if (annotations.length > 0) {
+        frames.add(frame);
+      }
+    }
+    return frames;
+  }
+
+  /**
+   * Check if a specific frame has any annotations
+   */
+  hasAnnotationsOnFrame(frame: number): boolean {
+    const annotations = this.state.annotations.get(frame);
+    return annotations !== undefined && annotations.length > 0;
+  }
+
   // Get annotations for display
   getAnnotationsForFrame(frame: number): Annotation[] {
     if (!this.state.show) return [];
@@ -313,11 +335,6 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
 
     // Check duration
     return frame >= startFrame && frame < startFrame + duration;
-  }
-
-  // Get all frames that have annotations
-  getAnnotatedFrames(): number[] {
-    return Array.from(this.state.annotations.keys()).sort((a, b) => a - b);
   }
 
   // Undo/Redo

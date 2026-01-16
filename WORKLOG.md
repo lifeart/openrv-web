@@ -1,6 +1,6 @@
 # OpenRV Web - Work Log
 
-## Current Status: Image Sequences Complete - All Core Features Done
+## Current Status: 2D Transforms Complete
 
 ---
 
@@ -122,16 +122,31 @@
 - [x] Drag-and-drop multiple images as sequence
 - [x] Preloading adjacent frames for smooth playback
 
+### Phase 12: Timeline Annotation Markers ✅
+- [x] Yellow triangle markers below timeline for frames with annotations
+- [x] PaintEngine.getAnnotatedFrames() returns Set of annotated frame numbers
+- [x] PaintEngine.hasAnnotationsOnFrame() check for individual frames
+- [x] Timeline.setPaintEngine() for late binding
+- [x] Double-click timeline to jump to nearest annotated frame
+- [x] Keyboard shortcuts: < / , (previous), > / . (next) annotation
+- [x] Markers update when annotations are added/removed
+
+### Phase 13: 2D Transforms ✅
+- [x] TransformControl component (`src/ui/components/TransformControl.ts`)
+- [x] Rotate left/right 90° buttons
+- [x] Flip horizontal/vertical toggle buttons
+- [x] Reset transforms button
+- [x] Canvas context transforms in Viewer.drawWithTransform()
+- [x] Keyboard shortcuts: Shift+R (rotate left), Alt+R (rotate right), Shift+H (flip H), Shift+V (flip V)
+- [x] Transform state (rotation: 0/90/180/270, flipH, flipV)
+
 ---
 
 ## Not Started
 
-### Phase 5: Transform & Composition (Remaining)
-- [ ] Transform2D (pan, zoom, rotate)
+### Future Enhancements
 - [ ] Crop node
 - [ ] Stack/composite nodes
-
-### Future Enhancements
 - [ ] Sequence export (image sequence)
 - [ ] Waveform display for audio
 - [ ] Lens distortion correction
@@ -179,4 +194,14 @@
   - Multi-file selection detects image sequences automatically
   - Drag-and-drop multiple images loads as sequence
   - Memory management: preloads adjacent frames, releases distant ones
+- **Completed Phase 12: Timeline Annotation Markers**
+  - Added yellow triangle markers below timeline for annotated frames
+  - Double-click timeline to jump to nearest annotation
+  - Keyboard shortcuts: < / , and > / . for prev/next annotation
+  - Timeline redraws when annotations change
+- **Completed Phase 13: 2D Transforms**
+  - Created `TransformControl.ts` with rotate/flip buttons
+  - Added `drawWithTransform()` to Viewer for canvas transforms
+  - Rotation (0°/90°/180°/270°) and flip (H/V) support
+  - Keyboard shortcuts: Shift+R, Alt+R, Shift+H, Shift+V
 - Updated CODEMAP.md feature checklist

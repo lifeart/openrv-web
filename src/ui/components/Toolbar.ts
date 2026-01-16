@@ -275,7 +275,18 @@ Click icon- Toggle mute
 
 EXPORT
 Ctrl+S    - Quick export as PNG
-Ctrl+C    - Copy frame to clipboard`);
+Ctrl+C    - Copy frame to clipboard
+
+ANNOTATIONS
+< / ,     - Go to previous annotation
+> / .     - Go to next annotation
+Dbl-click - Jump to nearest annotation (timeline)
+
+TRANSFORM
+Shift+R   - Rotate left 90°
+Alt+R     - Rotate right 90°
+Shift+H   - Flip horizontal
+Shift+V   - Flip vertical`);
   }
 
   private bindEvents(): void {

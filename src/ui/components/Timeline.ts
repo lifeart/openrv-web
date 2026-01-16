@@ -1,10 +1,12 @@
 import { Session } from '../../core/session/Session';
+import { PaintEngine } from '../../paint/PaintEngine';
 
 export class Timeline {
   private container: HTMLElement;
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private session: Session;
+  private paintEngine: PaintEngine | null = null;
 
   private isDragging = false;
   private width = 0;
@@ -18,13 +20,15 @@ export class Timeline {
     playheadShadow: '#4a9eff44',
     inOutRange: '#4a9eff22',
     mark: '#ff6b6b',
+    annotation: '#ffcc00',  // Yellow/gold for annotations
     text: '#ccc',
     textDim: '#666',
     border: '#444',
   };
 
-  constructor(session: Session) {
+  constructor(session: Session, paintEngine?: PaintEngine) {
     this.session = session;
+    this.paintEngine = paintEngine ?? null;
 
     // Create container
     this.container = document.createElement('div');
@@ -55,6 +59,7 @@ export class Timeline {
 
   private bindEvents(): void {
     this.canvas.addEventListener('mousedown', this.onMouseDown);
+    this.canvas.addEventListener('dblclick', this.onDoubleClick);
     window.addEventListener('mousemove', this.onMouseMove);
     window.addEventListener('mouseup', this.onMouseUp);
 
@@ -66,6 +71,58 @@ export class Timeline {
     this.session.on('inOutChanged', () => this.draw());
     this.session.on('loopModeChanged', () => this.draw());
     this.session.on('marksChanged', () => this.draw());
+
+    // Listen to paint engine changes
+    if (this.paintEngine) {
+      this.paintEngine.on('annotationsChanged', () => this.draw());
+      this.paintEngine.on('strokeAdded', () => this.draw());
+      this.paintEngine.on('strokeRemoved', () => this.draw());
+    }
+  }
+
+  /**
+   * Set paint engine reference (for late binding from App)
+   */
+  setPaintEngine(paintEngine: PaintEngine): void {
+    this.paintEngine = paintEngine;
+    this.paintEngine.on('annotationsChanged', () => this.draw());
+    this.paintEngine.on('strokeAdded', () => this.draw());
+    this.paintEngine.on('strokeRemoved', () => this.draw());
+    this.draw();
+  }
+
+  /**
+   * Double-click to navigate to nearest annotated frame
+   */
+  private onDoubleClick = (e: MouseEvent): void => {
+    if (!this.paintEngine) return;
+
+    const rect = this.canvas.getBoundingClientRect();
+    const padding = 60;
+    const trackWidth = rect.width - padding * 2;
+    const x = e.clientX - rect.left - padding;
+    const progress = Math.max(0, Math.min(1, x / trackWidth));
+
+    const source = this.session.currentSource;
+    const duration = source?.duration ?? 1;
+    const clickedFrame = Math.round(1 + progress * (duration - 1));
+
+    // Find nearest annotated frame
+    const annotatedFrames = this.paintEngine.getAnnotatedFrames();
+    if (annotatedFrames.size === 0) return;
+
+    let nearestFrame = clickedFrame;
+    let minDistance = Infinity;
+
+    for (const frame of annotatedFrames) {
+      const distance = Math.abs(frame - clickedFrame);
+      if (distance < minDistance) {
+        minDistance = distance;
+        nearestFrame = frame;
+      }
+    }
+
+    this.session.goToFrame(nearestFrame);
   }
 
   private onMouseDown = (e: MouseEvent): void => {
@@ -194,6 +251,24 @@ export class Timeline {
         if (playedWidth > 0) {
           ctx.fillStyle = this.colors.played;
           ctx.fillRect(padding, trackY, playedWidth, trackHeight);
+        }
+      }
+    }
+
+    // Draw annotation markers (small triangles below track)
+    if (this.paintEngine) {
+      const annotatedFrames = this.paintEngine.getAnnotatedFrames();
+      ctx.fillStyle = this.colors.annotation;
+      for (const frame of annotatedFrames) {
+        if (frame >= 1 && frame <= duration) {
+          const annotX = frameToX(frame);
+          // Draw small triangle pointing up below track
+          ctx.beginPath();
+          ctx.moveTo(annotX, trackY + trackHeight + 8);
+          ctx.lineTo(annotX - 4, trackY + trackHeight + 14);
+          ctx.lineTo(annotX + 4, trackY + trackHeight + 14);
+          ctx.closePath();
+          ctx.fill();
         }
       }
     }

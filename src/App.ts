@@ -8,6 +8,7 @@ import { ColorControls } from './ui/components/ColorControls';
 import { WipeControl } from './ui/components/WipeControl';
 import { VolumeControl } from './ui/components/VolumeControl';
 import { ExportControl } from './ui/components/ExportControl';
+import { TransformControl } from './ui/components/TransformControl';
 
 export class App {
   private container: HTMLElement | null = null;
@@ -21,13 +22,14 @@ export class App {
   private wipeControl: WipeControl;
   private volumeControl: VolumeControl;
   private exportControl: ExportControl;
+  private transformControl: TransformControl;
   private animationId: number | null = null;
 
   constructor() {
     this.session = new Session();
     this.paintEngine = new PaintEngine();
     this.viewer = new Viewer(this.session, this.paintEngine);
-    this.timeline = new Timeline(this.session);
+    this.timeline = new Timeline(this.session, this.paintEngine);
     this.toolbar = new Toolbar(this.session, {
       fitToWindow: () => this.viewer.fitToWindow(),
       setZoom: (level: number) => this.viewer.setZoom(level),
@@ -71,6 +73,12 @@ export class App {
     this.exportControl.on('copyRequested', () => {
       this.viewer.copyFrameToClipboard(true);
     });
+
+    // Initialize transform control
+    this.transformControl = new TransformControl();
+    this.transformControl.on('transformChanged', (transform) => {
+      this.viewer.setTransform(transform);
+    });
   }
 
   mount(selector: string): void {
@@ -101,6 +109,7 @@ export class App {
     const paintToolbarEl = this.paintToolbar.render();
     const colorControlsEl = this.colorControls.render();
     const wipeControlEl = this.wipeControl.render();
+    const transformControlEl = this.transformControl.render();
     const volumeControlEl = this.volumeControl.render();
     const exportControlEl = this.exportControl.render();
 
@@ -108,6 +117,7 @@ export class App {
     toolbarRow.appendChild(paintToolbarEl);
     toolbarRow.appendChild(colorControlsEl);
     toolbarRow.appendChild(wipeControlEl);
+    toolbarRow.appendChild(transformControlEl);
     toolbarRow.appendChild(volumeControlEl);
     toolbarRow.appendChild(exportControlEl);
 
@@ -170,6 +180,28 @@ export class App {
       } else if (e.key === 'c') {
         e.preventDefault();
         this.viewer.copyFrameToClipboard(true);
+        return;
+      }
+    }
+
+    // Handle transform shortcuts (Shift/Alt + key)
+    if (e.shiftKey || e.altKey) {
+      const key = e.key.toLowerCase();
+      if (key === 'r') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          this.transformControl.rotateLeft();
+        } else {
+          this.transformControl.rotateRight();
+        }
+        return;
+      } else if (key === 'h' && e.shiftKey) {
+        e.preventDefault();
+        this.transformControl.toggleFlipH();
+        return;
+      } else if (key === 'v' && e.shiftKey) {
+        e.preventDefault();
+        this.transformControl.toggleFlipV();
         return;
       }
     }
@@ -261,6 +293,60 @@ export class App {
           this.colorControls.hide();
         }
         break;
+      case '<':
+      case ',':
+        // Go to previous annotated frame
+        e.preventDefault();
+        this.goToPreviousAnnotation();
+        break;
+      case '>':
+      case '.':
+        // Go to next annotated frame
+        e.preventDefault();
+        this.goToNextAnnotation();
+        break;
+    }
+  }
+
+  private goToNextAnnotation(): void {
+    const annotatedFrames = this.paintEngine.getAnnotatedFrames();
+    if (annotatedFrames.size === 0) return;
+
+    const currentFrame = this.session.currentFrame;
+    const sortedFrames = Array.from(annotatedFrames).sort((a, b) => a - b);
+
+    // Find next frame after current
+    for (const frame of sortedFrames) {
+      if (frame > currentFrame) {
+        this.session.goToFrame(frame);
+        return;
+      }
+    }
+
+    // Wrap to first annotated frame
+    if (sortedFrames[0] !== undefined) {
+      this.session.goToFrame(sortedFrames[0]);
+    }
+  }
+
+  private goToPreviousAnnotation(): void {
+    const annotatedFrames = this.paintEngine.getAnnotatedFrames();
+    if (annotatedFrames.size === 0) return;
+
+    const currentFrame = this.session.currentFrame;
+    const sortedFrames = Array.from(annotatedFrames).sort((a, b) => b - a); // Descending
+
+    // Find previous frame before current
+    for (const frame of sortedFrames) {
+      if (frame < currentFrame) {
+        this.session.goToFrame(frame);
+        return;
+      }
+    }
+
+    // Wrap to last annotated frame
+    if (sortedFrames[0] !== undefined) {
+      this.session.goToFrame(sortedFrames[0]);
     }
   }
 
@@ -291,6 +377,7 @@ export class App {
     this.paintToolbar.dispose();
     this.colorControls.dispose();
     this.wipeControl.dispose();
+    this.transformControl.dispose();
     this.volumeControl.dispose();
     this.exportControl.dispose();
   }

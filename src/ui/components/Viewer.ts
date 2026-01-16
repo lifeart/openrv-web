@@ -4,6 +4,7 @@ import { PaintRenderer } from '../../paint/PaintRenderer';
 import { StrokePoint } from '../../paint/types';
 import { ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from './ColorControls';
 import { WipeState, WipeMode } from './WipeControl';
+import { Transform2D, DEFAULT_TRANSFORM } from './TransformControl';
 import { LUT3D } from '../../color/LUTLoader';
 import { ExportFormat, exportCanvas as doExportCanvas, copyCanvasToClipboard } from '../../utils/FrameExporter';
 import { filterImageFiles } from '../../utils/SequenceLoader';
@@ -73,6 +74,9 @@ export class Viewer {
   private currentLUT: LUT3D | null = null;
   private lutIntensity = 1.0;
   private lutIndicator: HTMLElement | null = null;
+
+  // 2D Transform
+  private transform: Transform2D = { ...DEFAULT_TRANSFORM };
 
   constructor(session: Session, paintEngine: PaintEngine) {
     this.session = session;
@@ -773,13 +777,75 @@ export class Viewer {
       if (this.wipeState.mode !== 'off') {
         this.renderWithWipe(element, displayWidth, displayHeight);
       } else {
-        // Normal rendering
-        this.imageCtx.drawImage(element, 0, 0, displayWidth, displayHeight);
+        // Normal rendering with transforms
+        this.drawWithTransform(this.imageCtx, element, displayWidth, displayHeight);
       }
     }
 
     this.updateCanvasPosition();
     this.updateWipeLine();
+  }
+
+  /**
+   * Draw image/video with rotation and flip transforms applied
+   */
+  private drawWithTransform(
+    ctx: CanvasRenderingContext2D,
+    element: HTMLImageElement | HTMLVideoElement,
+    displayWidth: number,
+    displayHeight: number
+  ): void {
+    const { rotation, flipH, flipV } = this.transform;
+
+    // If no transforms, just draw normally
+    if (rotation === 0 && !flipH && !flipV) {
+      ctx.drawImage(element, 0, 0, displayWidth, displayHeight);
+      return;
+    }
+
+    ctx.save();
+
+    // Move to center for transformations
+    ctx.translate(displayWidth / 2, displayHeight / 2);
+
+    // Apply rotation
+    if (rotation !== 0) {
+      ctx.rotate((rotation * Math.PI) / 180);
+    }
+
+    // Apply flips
+    const scaleX = flipH ? -1 : 1;
+    const scaleY = flipV ? -1 : 1;
+    if (flipH || flipV) {
+      ctx.scale(scaleX, scaleY);
+    }
+
+    // For 90/270 rotation, we need to swap the draw dimensions
+    let drawWidth = displayWidth;
+    let drawHeight = displayHeight;
+    if (rotation === 90 || rotation === 270) {
+      // When rotated 90/270, the source needs to fill the rotated space
+      // We need to scale to fit the rotated dimensions
+      const sourceAspect = element instanceof HTMLVideoElement
+        ? element.videoWidth / element.videoHeight
+        : element.naturalWidth / element.naturalHeight;
+      const targetAspect = displayHeight / displayWidth; // Swapped for rotation
+
+      if (sourceAspect > targetAspect) {
+        drawHeight = displayWidth;
+        drawWidth = displayWidth * sourceAspect;
+      } else {
+        drawWidth = displayHeight;
+        drawHeight = displayHeight / sourceAspect;
+      }
+      // Swap for rotated coordinate system
+      [drawWidth, drawHeight] = [drawHeight, drawWidth];
+    }
+
+    // Draw centered
+    ctx.drawImage(element, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+
+    ctx.restore();
   }
 
   private renderWithWipe(
@@ -974,6 +1040,16 @@ export class Viewer {
     this.wipeState.position = Math.max(0, Math.min(1, position));
     this.updateWipeLine();
     this.scheduleRender();
+  }
+
+  // Transform methods
+  setTransform(transform: Transform2D): void {
+    this.transform = { ...transform };
+    this.scheduleRender();
+  }
+
+  getTransform(): Transform2D {
+    return { ...this.transform };
   }
 
   private updateWipeLine(): void {

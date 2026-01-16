@@ -414,7 +414,7 @@ const annotations = dto.byProtocol('RVPaint');
 ### Phase 2
 - [x] Image sequences (numbered files: frame_001.png, file.001.exr, etc.)
 - [x] Basic color correction (exposure, gamma, saturation, contrast, temperature, tint)
-- [ ] 2D transforms
+- [x] 2D transforms (rotation 90°/180°/270°, flip horizontal/vertical)
 - [x] Keyboard shortcuts
 
 ### Phase 3
