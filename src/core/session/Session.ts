@@ -21,7 +21,8 @@ import {
   PaintEffects,
 } from '../../paint/types';
 import { Graph } from '../graph/Graph';
-import { loadGTOGraph, type GTOParseResult } from './GTOGraphLoader';
+import { loadGTOGraph } from './GTOGraphLoader';
+import type { GTOParseResult } from './GTOGraphLoader';
 
 export interface ParsedAnnotations {
   annotations: Annotation[];
@@ -456,9 +457,9 @@ export class Session extends EventEmitter<SessionEvents> {
     const dto = new GTODTO(reader.result);
     this.parseSession(dto);
 
-    // Parse the node graph from GTO
+    // Parse the node graph from the already-parsed GTO (avoids double parsing)
     try {
-      const result = await loadGTOGraph(data);
+      const result = loadGTOGraph(dto);
       this._graph = result.graph;
       this._graphParseResult = result;
 
@@ -470,15 +471,18 @@ export class Session extends EventEmitter<SessionEvents> {
         this._currentFrame = result.sessionInfo.frame;
       }
 
-      console.log('GTO Graph loaded:', {
-        nodeCount: result.nodes.size,
-        rootNode: result.rootNode?.name,
-        sessionInfo: result.sessionInfo,
-      });
+      if (result.nodes.size > 0) {
+        console.debug('GTO Graph loaded:', {
+          nodeCount: result.nodes.size,
+          rootNode: result.rootNode?.name,
+          sessionInfo: result.sessionInfo,
+        });
+      }
 
       this.emit('graphLoaded', result);
     } catch (err) {
-      console.warn('Failed to load node graph from GTO:', err);
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn('Failed to load node graph from GTO:', message);
       // Non-fatal - continue with session
     }
 

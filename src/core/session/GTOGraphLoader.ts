@@ -5,7 +5,7 @@
  * node graph structure with proper connections.
  */
 
-import { SimpleReader, GTODTO } from 'gto-js';
+import type { GTODTO } from 'gto-js';
 import { Graph } from '../graph/Graph';
 import { NodeFactory } from '../../nodes/base/NodeFactory';
 import type { IPNode } from '../../nodes/base/IPNode';
@@ -39,6 +39,9 @@ export interface GTOParseResult {
 
 /**
  * Maps RV node protocols to our registered node types
+ *
+ * Note: Effect nodes (RVColor, RVTransform2D, etc.) are mapped but not yet
+ * implemented. They will be silently skipped during graph construction.
  */
 const PROTOCOL_TO_NODE_TYPE: Record<string, string> = {
   // Source nodes
@@ -55,46 +58,31 @@ const PROTOCOL_TO_NODE_TYPE: Record<string, string> = {
   RVFolderGroup: 'RVFolderGroup',
   RVRetimeGroup: 'RVRetimeGroup',
 
-  // Effect nodes
+  // Effect nodes (not yet implemented - will be skipped)
   RVColor: 'RVColor',
   RVTransform2D: 'RVTransform2D',
   RVLensWarp: 'RVLensWarp',
   RVCDL: 'RVCDL',
   RVLinearize: 'RVLinearize',
 
-  // View nodes
+  // View nodes (not yet implemented - will be skipped)
   RVDisplayColor: 'RVDisplayColor',
   RVDisplayStereo: 'RVDisplayStereo',
 };
 
 /**
- * Load and parse a GTO file into a node graph
+ * Load node graph from an already-parsed GTODTO
+ *
+ * @param dto - Pre-parsed GTODTO object
+ * @returns Parsed graph result with nodes and connections
  */
-export async function loadGTOGraph(data: ArrayBuffer | string): Promise<GTOParseResult> {
-  const reader = new SimpleReader();
-
-  // Parse the GTO data
-  if (typeof data === 'string') {
-    reader.open(data);
-  } else {
-    const bytes = new Uint8Array(data);
-    // Check for text format GTO (starts with "GTOa")
-    const isTextFormat =
-      bytes[0] === 0x47 && // 'G'
-      bytes[1] === 0x54 && // 'T'
-      bytes[2] === 0x4f && // 'O'
-      bytes[3] === 0x61; // 'a'
-
-    if (isTextFormat) {
-      const textContent = new TextDecoder('utf-8').decode(bytes);
-      reader.open(textContent);
-    } else {
-      reader.open(bytes);
-    }
+export function loadGTOGraph(dto: GTODTO): GTOParseResult {
+  try {
+    return parseGTOToGraph(dto);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to construct node graph from GTO: ${message}`);
   }
-
-  const dto = new GTODTO(reader.result);
-  return parseGTOToGraph(dto);
 }
 
 /**
@@ -129,14 +117,13 @@ function parseGTOToGraph(dto: GTODTO): GTOParseResult {
         sessionInfo.frame = frame;
       }
 
+      // Prefer 'realtime' (actual playback fps) over 'fps' if both exist
       const fps = sessionComp.property('fps').value() as number;
-      if (typeof fps === 'number') {
-        sessionInfo.fps = fps;
-      }
-
       const realtime = sessionComp.property('realtime').value() as number;
-      if (typeof realtime === 'number') {
+      if (typeof realtime === 'number' && realtime > 0) {
         sessionInfo.fps = realtime;
+      } else if (typeof fps === 'number' && fps > 0) {
+        sessionInfo.fps = fps;
       }
     }
   }
@@ -302,12 +289,12 @@ function parseGTOToGraph(dto: GTODTO): GTOParseResult {
   for (const [name, info] of nodeInfos) {
     const nodeType = PROTOCOL_TO_NODE_TYPE[info.protocol];
     if (!nodeType) {
-      console.log(`No mapping for protocol: ${info.protocol} (${name})`);
+      // Unknown protocol - skip silently (many RV internals aren't needed)
       continue;
     }
 
     if (!NodeFactory.isRegistered(nodeType)) {
-      console.log(`Node type not registered: ${nodeType} (${name})`);
+      // Node type mapped but not implemented yet - skip silently
       continue;
     }
 

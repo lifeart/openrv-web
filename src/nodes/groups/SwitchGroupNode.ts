@@ -24,6 +24,10 @@ export class SwitchGroupNode extends BaseGroupNode {
    * Set the active input index
    */
   setActiveInput(index: number): void {
+    if (this.inputs.length === 0) {
+      this.properties.setValue('outputIndex', 0);
+      return;
+    }
     const clamped = Math.max(0, Math.min(this.inputs.length - 1, index));
     this.properties.setValue('outputIndex', clamped);
     this.markDirty();
@@ -33,8 +37,9 @@ export class SwitchGroupNode extends BaseGroupNode {
    * Toggle between inputs
    */
   toggle(): void {
+    if (this.inputs.length === 0) return;
     const current = this.properties.getValue('outputIndex') as number;
-    const next = (current + 1) % Math.max(1, this.inputs.length);
+    const next = (current + 1) % this.inputs.length;
     this.setActiveInput(next);
   }
 }

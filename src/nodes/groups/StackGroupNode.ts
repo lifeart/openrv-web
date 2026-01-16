@@ -2,17 +2,17 @@
  * StackGroupNode - Stacks/composites multiple inputs
  *
  * Supports various blend modes and wipe effects between layers.
+ *
+ * Note: Currently implements basic wipe selection. Full implementation
+ * would composite/blend inputs based on mode settings.
  */
 
-import { IPNode } from '../base/IPNode';
-import { IPImage } from '../../core/image/Image';
+import { BaseGroupNode } from './BaseGroupNode';
 import { RegisterNode } from '../base/NodeFactory';
 import type { EvalContext } from '../../core/graph/Graph';
 
-export type CompositeMode = 'over' | 'add' | 'difference' | 'replace';
-
 @RegisterNode('RVStackGroup')
-export class StackGroupNode extends IPNode {
+export class StackGroupNode extends BaseGroupNode {
   constructor(name?: string) {
     super('RVStackGroup', name ?? 'Stack');
 
@@ -23,33 +23,37 @@ export class StackGroupNode extends IPNode {
     this.properties.add({ name: 'wipeAngle', defaultValue: 0 });
   }
 
-  protected process(_context: EvalContext, inputs: (IPImage | null)[]): IPImage | null {
-    if (inputs.length === 0) {
-      return null;
-    }
-
-    // For now, return the first valid input
-    // Full implementation would composite based on mode/wipe settings
+  getActiveInputIndex(_context: EvalContext): number {
     const mode = this.properties.getValue('mode') as string;
     const wipeX = this.properties.getValue('wipeX') as number;
 
-    if (mode === 'wipe' && inputs.length >= 2) {
-      // Simple horizontal wipe: return based on wipe position
-      // Full implementation would blend at the boundary
-      const index = wipeX < 0.5 ? 0 : 1;
-      return inputs[index] ?? inputs[0] ?? null;
+    if (mode === 'wipe' && this.inputs.length >= 2) {
+      // Simple horizontal wipe: select based on wipe position
+      return wipeX < 0.5 ? 0 : 1;
     }
 
-    return inputs[0] ?? null;
+    return 0;
   }
 
-  toJSON(): object {
+  /**
+   * Get wipe position (0-1)
+   */
+  getWipePosition(): { x: number; y: number; angle: number } {
     return {
-      type: this.type,
-      id: this.id,
-      name: this.name,
-      inputs: this.inputs.map((n) => n.id),
-      properties: this.properties.toJSON(),
+      x: this.properties.getValue('wipeX') as number,
+      y: this.properties.getValue('wipeY') as number,
+      angle: this.properties.getValue('wipeAngle') as number,
     };
+  }
+
+  /**
+   * Set wipe position
+   */
+  setWipePosition(x: number, y?: number): void {
+    this.properties.setValue('wipeX', Math.max(0, Math.min(1, x)));
+    if (y !== undefined) {
+      this.properties.setValue('wipeY', Math.max(0, Math.min(1, y)));
+    }
+    this.markDirty();
   }
 }
