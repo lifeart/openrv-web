@@ -16,6 +16,7 @@ import { LensControl } from './ui/components/LensControl';
 import { StackControl } from './ui/components/StackControl';
 import { exportSequence } from './utils/SequenceExporter';
 import { showAlert, showModal } from './ui/components/shared/Modal';
+import { SessionSerializer } from './core/session/SessionSerializer';
 
 export class App {
   private container: HTMLElement | null = null;
@@ -46,6 +47,8 @@ export class App {
     // Create HeaderBar (contains file ops, playback, volume, export, help)
     this.headerBar = new HeaderBar(this.session);
     this.headerBar.on('showShortcuts', () => this.showShortcuts());
+    this.headerBar.on('saveProject', () => this.saveProject());
+    this.headerBar.on('openProject', (file) => this.openProject(file));
 
     // Create TabBar and ContextToolbar
     this.tabBar = new TabBar();
@@ -737,6 +740,55 @@ Shift+H   - Flip horizontal
 Shift+V   - Flip vertical</pre>`;
 
     showModal(content, { title: 'Keyboard Shortcuts', width: '500px' });
+  }
+
+  private async saveProject(): Promise<void> {
+    try {
+      const state = SessionSerializer.toJSON(
+        {
+          session: this.session,
+          paintEngine: this.paintEngine,
+          viewer: this.viewer,
+        },
+        'project'
+      );
+      await SessionSerializer.saveToFile(state, 'project.orvproject');
+    } catch (err) {
+      showAlert(`Failed to save project: ${err}`, { type: 'error', title: 'Save Error' });
+    }
+  }
+
+  private async openProject(file: File): Promise<void> {
+    try {
+      const state = await SessionSerializer.loadFromFile(file);
+      const result = await SessionSerializer.fromJSON(
+        state,
+        {
+          session: this.session,
+          paintEngine: this.paintEngine,
+          viewer: this.viewer,
+        }
+      );
+
+      if (result.warnings.length > 0) {
+        showAlert(`Project loaded with warnings:\n${result.warnings.join('\n')}`, {
+          type: 'warning',
+          title: 'Project Loaded',
+        });
+      } else if (result.loadedMedia > 0) {
+        showAlert(`Project loaded successfully (${result.loadedMedia} media files)`, {
+          type: 'success',
+          title: 'Project Loaded',
+        });
+      } else {
+        showAlert('Project loaded (no media files - state only)', {
+          type: 'info',
+          title: 'Project Loaded',
+        });
+      }
+    } catch (err) {
+      showAlert(`Failed to load project: ${err}`, { type: 'error', title: 'Load Error' });
+    }
   }
 
   dispose(): void {

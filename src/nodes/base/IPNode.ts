@@ -139,4 +139,5 @@ export abstract class IPNode {
 }
 
 // Utility type for node constructor
-export type NodeConstructor<T extends IPNode = IPNode> = new (...args: unknown[]) => T;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type NodeConstructor<T extends IPNode = IPNode> = new (...args: any[]) => T;

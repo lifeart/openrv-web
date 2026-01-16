@@ -15,6 +15,8 @@ import { showAlert } from '../shared/Modal';
 export interface HeaderBarEvents extends EventMap {
   showShortcuts: void;
   fileLoaded: void;
+  saveProject: void;
+  openProject: File;
 }
 
 export class HeaderBar extends EventEmitter<HeaderBarEvents> {
@@ -27,6 +29,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private loopButton!: HTMLButtonElement;
   private directionButton!: HTMLButtonElement;
   private fileInput!: HTMLInputElement;
+  private projectInput!: HTMLInputElement;
 
   constructor(session: Session) {
     super();
@@ -57,7 +60,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // === FILE OPERATIONS GROUP ===
     const fileGroup = this.createGroup();
 
-    // Hidden file input
+    // Hidden file input for media
     this.fileInput = document.createElement('input');
     this.fileInput.type = 'file';
     this.fileInput.accept = 'image/*,video/*,.rv,.gto';
@@ -66,8 +69,22 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
     this.container.appendChild(this.fileInput);
 
-    // Open button
-    fileGroup.appendChild(this.createIconButton('folder', 'Open', () => this.fileInput.click(), 'Open file'));
+    // Hidden file input for project files
+    this.projectInput = document.createElement('input');
+    this.projectInput.type = 'file';
+    this.projectInput.accept = '.orvproject';
+    this.projectInput.style.display = 'none';
+    this.projectInput.addEventListener('change', (e) => this.handleProjectOpen(e));
+    this.container.appendChild(this.projectInput);
+
+    // Open button (media)
+    fileGroup.appendChild(this.createIconButton('folder', 'Open', () => this.fileInput.click(), 'Open media file'));
+
+    // Save Project button
+    fileGroup.appendChild(this.createIconButton('save', 'Save', () => this.emit('saveProject', undefined), 'Save project (Ctrl+Shift+S)'));
+
+    // Open Project button
+    fileGroup.appendChild(this.createIconButton('folder-open', 'Project', () => this.projectInput.click(), 'Open project'));
 
     // Export dropdown
     fileGroup.appendChild(this.exportControl.render());
@@ -237,6 +254,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private getIcon(name: string): string {
     const icons: Record<string, string> = {
       'folder': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
+      'folder-open': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 19a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2v1M3 13h18l-2 7H5l-2-7z"/></svg>',
+      'save': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>',
       'skip-back': '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="19,20 9,12 19,4"/><line x1="5" y1="4" x2="5" y2="20" stroke="currentColor" stroke-width="2"/></svg>',
       'step-back': '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="19,20 9,12 19,4"/></svg>',
       'play': '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>',
@@ -320,6 +339,15 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     }
 
     // Reset input so same file can be selected again
+    input.value = '';
+  }
+
+  private handleProjectOpen(e: Event): void {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (file) {
+      this.emit('openProject', file);
+    }
     input.value = '';
   }
 

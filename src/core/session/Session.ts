@@ -928,6 +928,64 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   /**
+   * Export playback state for serialization
+   */
+  getPlaybackState(): {
+    currentFrame: number;
+    inPoint: number;
+    outPoint: number;
+    fps: number;
+    loopMode: LoopMode;
+    volume: number;
+    muted: boolean;
+    marks: number[];
+    currentSourceIndex: number;
+  } {
+    return {
+      currentFrame: this._currentFrame,
+      inPoint: this._inPoint,
+      outPoint: this._outPoint,
+      fps: this._fps,
+      loopMode: this._loopMode,
+      volume: this._volume,
+      muted: this._muted,
+      marks: Array.from(this._marks),
+      currentSourceIndex: this._currentSourceIndex,
+    };
+  }
+
+  /**
+   * Restore playback state from serialization
+   */
+  setPlaybackState(state: Partial<{
+    currentFrame: number;
+    inPoint: number;
+    outPoint: number;
+    fps: number;
+    loopMode: LoopMode;
+    volume: number;
+    muted: boolean;
+    marks: number[];
+    currentSourceIndex: number;
+  }>): void {
+    if (state.fps !== undefined) this._fps = state.fps;
+    if (state.loopMode !== undefined) {
+      this._loopMode = state.loopMode;
+      this.emit('loopModeChanged', this._loopMode);
+    }
+    if (state.volume !== undefined) this.volume = state.volume;
+    if (state.muted !== undefined) this.muted = state.muted;
+    if (state.inPoint !== undefined) this.setInPoint(state.inPoint);
+    if (state.outPoint !== undefined) this.setOutPoint(state.outPoint);
+    if (state.currentFrame !== undefined) this.currentFrame = state.currentFrame;
+    if (state.marks) {
+      this._marks.clear();
+      state.marks.forEach(m => this._marks.add(m));
+      this.emit('marksChanged', this._marks);
+    }
+  }
+
+  /**
    * Dispose all session resources
    */
   dispose(): void {

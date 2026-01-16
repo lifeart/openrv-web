@@ -15,12 +15,15 @@
 - [x] ShaderProgram management (`src/render/ShaderProgram.ts`)
 - [x] Basic display shader (passthrough + gamma)
 
-### Phase 2: Node Graph System (Partial) ✅
+### Phase 2: Node Graph System ✅
 - [x] IPNode base class (`src/nodes/base/IPNode.ts`)
 - [x] Graph manager (`src/core/graph/Graph.ts`)
 - [x] NodeFactory (`src/nodes/base/NodeFactory.ts`)
 - [x] IPImage class (`src/core/image/Image.ts`)
-- [ ] Source nodes (FileSourceNode, SequenceNode) - using Session instead
+- [x] Source nodes (`src/nodes/sources/`):
+  - FileSourceNode - Single image source
+  - VideoSourceNode - Video file source
+  - SequenceSourceNode - Image sequence source
 
 ### Phase 3: Basic Viewer ✅
 - [x] Viewer component with Canvas2D (`src/ui/components/Viewer.ts`)
@@ -43,13 +46,13 @@
 - [x] Ghost mode (show nearby frame annotations)
 - [x] Undo/redo
 
-### Phase 7: Session Integration (Partial) ✅
+### Phase 7: Session Integration ✅
 - [x] GTO/RV file loading via gto-js
 - [x] RVPaint annotation parsing
 - [x] Coordinate conversion (OpenRV coords → normalized)
 - [x] Image/video media loading
-- [ ] Full node graph reconstruction from GTO
-- [ ] Session saving
+- [x] Session saving/loading (.orvproject JSON format)
+- [ ] Full node graph reconstruction from GTO (future)
 
 ---
 
@@ -246,6 +249,31 @@ The UI has been redesigned with a modern tab-based architecture matching profess
 ---
 
 ## Session Log
+
+### 2026-01-16 (continued - Session Save & Source Nodes)
+- **Session State Save/Load**
+  - Created `SessionState.ts` with comprehensive state interfaces
+  - Created `SessionSerializer.ts` with save/load logic
+  - Added `getPlaybackState()` / `setPlaybackState()` to Session class
+  - Added `getPan()` / `setPan()` to Viewer class
+  - Save Project / Open Project buttons in HeaderBar
+  - .orvproject JSON format includes:
+    - Media references (path, type, dimensions)
+    - Playback state (frame, in/out, fps, loop mode, volume)
+    - Annotations (frames, strokes, text)
+    - View state (zoom, pan)
+    - Color adjustments, CDL, LUT, filters
+    - Transform, crop, lens, wipe, stack layers
+  - Version migration support for future schema changes
+
+- **Source Nodes Implementation**
+  - Created `src/nodes/sources/` directory
+  - `BaseSourceNode.ts` - Abstract base class for source nodes
+  - `FileSourceNode.ts` - Single image source with @RegisterNode decorator
+  - `VideoSourceNode.ts` - Video file source with frame extraction
+  - `SequenceSourceNode.ts` - Image sequence with caching/preloading
+  - Registered with NodeFactory via imports in main.ts
+  - All nodes implement toJSON() for serialization
 
 ### 2026-01-16 (continued - Design Consistency Pass)
 - **SVG Icon System Implementation**

@@ -1116,6 +1116,16 @@ export class Viewer {
     return this.zoom;
   }
 
+  getPan(): { x: number; y: number } {
+    return { x: this.panX, y: this.panY };
+  }
+
+  setPan(x: number, y: number): void {
+    this.panX = x;
+    this.panY = y;
+    this.scheduleRender();
+  }
+
   setColorAdjustments(adjustments: ColorAdjustments): void {
     this.colorAdjustments = { ...adjustments };
     this.applyColorFilters();
