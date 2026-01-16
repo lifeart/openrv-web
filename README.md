@@ -15,6 +15,7 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 - Color temperature and tint
 - ASC CDL (slope, offset, power, saturation) with .cdl file support
 - 3D LUT support (.cube files) with GPU-accelerated processing
+- Color curves (Master/R/G/B channels) with presets and import/export
 
 ### Transform & Effects
 - Rotation (90°/180°/270°) and flip (H/V)
@@ -126,6 +127,7 @@ pnpm dev
 | Key | Action |
 |-----|--------|
 | `C` | Toggle color panel |
+| `U` | Toggle curves panel |
 | `G` | Toggle filter panel |
 | `K` | Toggle crop mode |
 
