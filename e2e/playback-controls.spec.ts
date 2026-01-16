@@ -256,8 +256,8 @@ test.describe('Playback Controls', () => {
       let state = await getSessionState(page);
       expect(state.playDirection).toBe(1);
 
-      // Find and click the direction button
-      const directionButton = page.locator('button[title*="Toggle direction"]');
+      // Find and click the direction button (title contains "Playing forward" or "Playing backward")
+      const directionButton = page.locator('button[title*="Playing forward"], button[title*="Playing backward"]').first();
       await expect(directionButton).toBeVisible();
       await directionButton.click();
       await page.waitForTimeout(100);
