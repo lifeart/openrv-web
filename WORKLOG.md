@@ -1,6 +1,6 @@
 # OpenRV Web - Work Log
 
-## Current Status: WebGL LUT Processing Complete
+## Current Status: UI Redesign Complete
 
 ---
 
@@ -235,6 +235,14 @@
 
 The OpenRV Web viewer now has feature parity with the core OpenRV functionality for web-based playback and review.
 
+### UI Redesign Complete
+
+The UI has been redesigned with a modern tab-based architecture matching professional CGI tools like DaVinci Resolve and Nuke:
+- **HeaderBar**: Compact top bar with file operations, playback controls, volume, and help
+- **TabBar**: 5 organized tabs (View, Color, Effects, Transform, Annotate)
+- **ContextToolbar**: Context-sensitive controls that change based on active tab
+- **Keyboard shortcuts**: 1-5 for quick tab navigation
+
 ---
 
 ## Session Log
@@ -335,3 +343,17 @@ The OpenRV Web viewer now has feature parity with the core OpenRV functionality 
   - 3D texture storage for LUT data
   - Intensity control for blending original with graded image
   - Integrated into Viewer with automatic fallback
+- **UI Redesign: Tab-Based Architecture**
+  - Created `UI.md` with comprehensive redesign plan
+  - Created `HeaderBar.ts` component (file ops, playback, volume, help)
+  - Created `TabBar.ts` component (View | Color | Effects | Transform | Annotate)
+  - Created `ContextToolbar.ts` component (context-sensitive toolbar per tab)
+  - Reorganized controls into logical tab groups:
+    - View tab: Zoom controls, Wipe comparison, Stack layers
+    - Color tab: Color adjustments, CDL controls
+    - Effects tab: Filter controls, Lens distortion
+    - Transform tab: Rotation/flip, Crop tool
+    - Annotate tab: Paint tools, brush settings
+  - Added keyboard shortcuts (1-5) for tab navigation
+  - Removed old single-row toolbar in favor of modern tab-based UI
+  - SVG icons for playback controls in HeaderBar

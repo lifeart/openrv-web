@@ -1,13 +1,13 @@
 import { Session } from './core/session/Session';
 import { Viewer } from './ui/components/Viewer';
 import { Timeline } from './ui/components/Timeline';
-import { Toolbar } from './ui/components/Toolbar';
+import { HeaderBar } from './ui/components/layout/HeaderBar';
+import { TabBar, TabId } from './ui/components/layout/TabBar';
+import { ContextToolbar } from './ui/components/layout/ContextToolbar';
 import { PaintEngine } from './paint/PaintEngine';
 import { PaintToolbar } from './ui/components/PaintToolbar';
 import { ColorControls } from './ui/components/ColorControls';
 import { WipeControl } from './ui/components/WipeControl';
-import { VolumeControl } from './ui/components/VolumeControl';
-import { ExportControl } from './ui/components/ExportControl';
 import { TransformControl } from './ui/components/TransformControl';
 import { FilterControl } from './ui/components/FilterControl';
 import { CropControl } from './ui/components/CropControl';
@@ -21,13 +21,13 @@ export class App {
   private session: Session;
   private viewer: Viewer;
   private timeline: Timeline;
-  private toolbar: Toolbar;
+  private headerBar: HeaderBar;
+  private tabBar: TabBar;
+  private contextToolbar: ContextToolbar;
   private paintEngine: PaintEngine;
   private paintToolbar: PaintToolbar;
   private colorControls: ColorControls;
   private wipeControl: WipeControl;
-  private volumeControl: VolumeControl;
-  private exportControl: ExportControl;
   private transformControl: TransformControl;
   private filterControl: FilterControl;
   private cropControl: CropControl;
@@ -41,10 +41,19 @@ export class App {
     this.paintEngine = new PaintEngine();
     this.viewer = new Viewer(this.session, this.paintEngine);
     this.timeline = new Timeline(this.session, this.paintEngine);
-    this.toolbar = new Toolbar(this.session, {
-      fitToWindow: () => this.viewer.fitToWindow(),
-      setZoom: (level: number) => this.viewer.setZoom(level),
+
+    // Create HeaderBar (contains file ops, playback, volume, export, help)
+    this.headerBar = new HeaderBar(this.session);
+    this.headerBar.on('showShortcuts', () => this.showShortcuts());
+
+    // Create TabBar and ContextToolbar
+    this.tabBar = new TabBar();
+    this.contextToolbar = new ContextToolbar();
+    this.tabBar.on('tabChanged', (tabId: TabId) => {
+      this.contextToolbar.setActiveTab(tabId);
+      this.onTabChanged(tabId);
     });
+
     this.paintToolbar = new PaintToolbar(this.paintEngine);
     this.colorControls = new ColorControls();
     this.wipeControl = new WipeControl();
@@ -67,24 +76,24 @@ export class App {
       this.viewer.setWipeState(state);
     });
 
-    // Initialize volume control and connect to session
-    this.volumeControl = new VolumeControl();
-    this.volumeControl.on('volumeChanged', (volume) => {
+    // Connect volume control (from HeaderBar) to session
+    const volumeControl = this.headerBar.getVolumeControl();
+    volumeControl.on('volumeChanged', (volume) => {
       this.session.volume = volume;
     });
-    this.volumeControl.on('mutedChanged', (muted) => {
+    volumeControl.on('mutedChanged', (muted) => {
       this.session.muted = muted;
     });
 
-    // Initialize export control
-    this.exportControl = new ExportControl();
-    this.exportControl.on('exportRequested', ({ format, includeAnnotations, quality }) => {
+    // Connect export control (from HeaderBar) to viewer
+    const exportControl = this.headerBar.getExportControl();
+    exportControl.on('exportRequested', ({ format, includeAnnotations, quality }) => {
       this.viewer.exportFrame(format, includeAnnotations, quality);
     });
-    this.exportControl.on('copyRequested', () => {
+    exportControl.on('copyRequested', () => {
       this.viewer.copyFrameToClipboard(true);
     });
-    this.exportControl.on('sequenceExportRequested', (request) => {
+    exportControl.on('sequenceExportRequested', (request) => {
       this.handleSequenceExport(request);
     });
 
@@ -156,53 +165,98 @@ export class App {
   private createLayout(): void {
     if (!this.container) return;
 
-    // Create toolbar row with main toolbar and paint toolbar
-    const toolbarRow = document.createElement('div');
-    toolbarRow.style.cssText = `
-      display: flex;
-      background: linear-gradient(180deg, #333 0%, #2a2a2a 100%);
-      border-bottom: 1px solid #444;
-      flex-shrink: 0;
-    `;
+    // === HEADER BAR (file ops, playback, volume, help) ===
+    const headerBarEl = this.headerBar.render();
 
-    const toolbarEl = this.toolbar.render();
-    toolbarEl.style.borderBottom = 'none';
-    const paintToolbarEl = this.paintToolbar.render();
-    const colorControlsEl = this.colorControls.render();
-    const cdlControlEl = this.cdlControl.render();
-    const filterControlEl = this.filterControl.render();
-    const cropControlEl = this.cropControl.render();
-    const lensControlEl = this.lensControl.render();
-    const stackControlEl = this.stackControl.render();
-    const wipeControlEl = this.wipeControl.render();
-    const transformControlEl = this.transformControl.render();
-    const volumeControlEl = this.volumeControl.render();
-    const exportControlEl = this.exportControl.render();
+    // === TAB BAR (View | Color | Effects | Transform | Annotate) ===
+    const tabBarEl = this.tabBar.render();
 
-    toolbarRow.appendChild(toolbarEl);
-    toolbarRow.appendChild(paintToolbarEl);
-    toolbarRow.appendChild(colorControlsEl);
-    toolbarRow.appendChild(cdlControlEl);
-    toolbarRow.appendChild(filterControlEl);
-    toolbarRow.appendChild(cropControlEl);
-    toolbarRow.appendChild(lensControlEl);
-    toolbarRow.appendChild(stackControlEl);
-    toolbarRow.appendChild(wipeControlEl);
-    toolbarRow.appendChild(transformControlEl);
-    toolbarRow.appendChild(volumeControlEl);
-    toolbarRow.appendChild(exportControlEl);
+    // === CONTEXT TOOLBAR (changes based on active tab) ===
+    const contextToolbarEl = this.contextToolbar.render();
+
+    // Setup tab contents
+    this.setupTabContents();
 
     const viewerEl = this.viewer.getElement();
     const timelineEl = this.timeline.render();
 
-    this.container.appendChild(toolbarRow);
+    this.container.appendChild(headerBarEl);
+    this.container.appendChild(tabBarEl);
+    this.container.appendChild(contextToolbarEl);
     this.container.appendChild(viewerEl);
     this.container.appendChild(timelineEl);
 
     // Handle clear frame event from paint toolbar
+    const paintToolbarEl = this.paintToolbar.render();
     paintToolbarEl.addEventListener('clearFrame', () => {
       this.paintEngine.clearFrame(this.session.currentFrame);
     });
+  }
+
+  private setupTabContents(): void {
+    // === VIEW TAB ===
+    const viewContent = document.createElement('div');
+    viewContent.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+
+    // Zoom controls
+    const zoomLabel = document.createElement('span');
+    zoomLabel.textContent = 'Zoom:';
+    zoomLabel.style.cssText = 'color: #888; font-size: 11px;';
+    viewContent.appendChild(zoomLabel);
+
+    viewContent.appendChild(ContextToolbar.createButton('Fit', () => this.viewer.fitToWindow(), { title: 'Fit to window (F)' }));
+    viewContent.appendChild(ContextToolbar.createButton('50%', () => this.viewer.setZoom(0.5), { title: 'Zoom 50% (0)' }));
+    viewContent.appendChild(ContextToolbar.createButton('100%', () => this.viewer.setZoom(1), { title: 'Zoom 100% (1)' }));
+    viewContent.appendChild(ContextToolbar.createButton('200%', () => this.viewer.setZoom(2), { title: 'Zoom 200% (2)' }));
+    viewContent.appendChild(ContextToolbar.createButton('400%', () => this.viewer.setZoom(4), { title: 'Zoom 400% (4)' }));
+
+    viewContent.appendChild(ContextToolbar.createDivider());
+
+    // Wipe control
+    viewContent.appendChild(this.wipeControl.render());
+
+    viewContent.appendChild(ContextToolbar.createDivider());
+
+    // Stack control
+    viewContent.appendChild(this.stackControl.render());
+
+    this.contextToolbar.setTabContent('view', viewContent);
+
+    // === COLOR TAB ===
+    const colorContent = document.createElement('div');
+    colorContent.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+    colorContent.appendChild(this.colorControls.render());
+    colorContent.appendChild(ContextToolbar.createDivider());
+    colorContent.appendChild(this.cdlControl.render());
+    this.contextToolbar.setTabContent('color', colorContent);
+
+    // === EFFECTS TAB ===
+    const effectsContent = document.createElement('div');
+    effectsContent.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+    effectsContent.appendChild(this.filterControl.render());
+    effectsContent.appendChild(ContextToolbar.createDivider());
+    effectsContent.appendChild(this.lensControl.render());
+    this.contextToolbar.setTabContent('effects', effectsContent);
+
+    // === TRANSFORM TAB ===
+    const transformContent = document.createElement('div');
+    transformContent.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+    transformContent.appendChild(this.transformControl.render());
+    transformContent.appendChild(ContextToolbar.createDivider());
+    transformContent.appendChild(this.cropControl.render());
+    this.contextToolbar.setTabContent('transform', transformContent);
+
+    // === ANNOTATE TAB ===
+    const annotateContent = document.createElement('div');
+    annotateContent.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+    annotateContent.appendChild(this.paintToolbar.render());
+    this.contextToolbar.setTabContent('annotate', annotateContent);
+  }
+
+  private onTabChanged(tabId: TabId): void {
+    // Handle tab-specific logic
+    // For example, could show/hide certain viewer overlays based on tab
+    console.log(`Tab changed to: ${tabId}`);
   }
 
   private bindEvents(): void {
@@ -246,7 +300,7 @@ export class App {
         return;
       } else if (e.key === 's') {
         e.preventDefault();
-        this.exportControl.quickExport('png');
+        this.headerBar.getExportControl().quickExport('png');
         return;
       } else if (e.key === 'c') {
         e.preventDefault();
@@ -307,16 +361,20 @@ export class App {
         this.viewer.fitToWindow();
         break;
       case '1':
-        this.viewer.setZoom(1);
-        break;
       case '2':
-        this.viewer.setZoom(2);
-        break;
+      case '3':
       case '4':
-        this.viewer.setZoom(4);
+      case '5':
+        // Tab navigation (1-5)
+        if (this.tabBar.handleKeyboard(e.key)) {
+          e.preventDefault();
+        }
         break;
       case '0':
-        this.viewer.setZoom(0.5);
+        // Zoom 50% when on View tab
+        if (this.tabBar.activeTab === 'view') {
+          this.viewer.setZoom(0.5);
+        }
         break;
       case '[':
         this.session.setInPoint();
@@ -603,13 +661,83 @@ export class App {
     }
   }
 
+  private showShortcuts(): void {
+    alert(`Keyboard Shortcuts:
+
+TABS
+1         - View tab
+2         - Color tab
+3         - Effects tab
+4         - Transform tab
+5         - Annotate tab
+
+PLAYBACK
+Space     - Play/Pause
+\u2190 / \u2192     - Step frame
+Home/End  - Go to start/end
+\u2191         - Toggle direction
+
+VIEW
+F         - Fit to window
+0         - Zoom 50%
+Drag      - Pan image
+Scroll    - Zoom
+
+TIMELINE
+I / [     - Set in point
+O / ]     - Set out point
+R         - Reset in/out points
+M         - Toggle mark
+L         - Cycle loop mode
+
+PAINT (Annotate tab)
+V         - Pan tool (no paint)
+P         - Pen tool
+E         - Eraser tool
+T         - Text tool
+B         - Toggle brush type
+G         - Toggle ghost mode
+Ctrl+Z    - Undo
+Ctrl+Y    - Redo
+
+COLOR
+C         - Toggle color panel
+Esc       - Close color panel
+Dbl-click - Reset individual slider
+
+WIPE COMPARISON
+W         - Cycle wipe mode (off/horizontal/vertical)
+Drag line - Adjust wipe position
+
+AUDIO (Video only)
+Hover vol - Show volume slider
+Click icon- Toggle mute
+
+EXPORT
+Ctrl+S    - Quick export as PNG
+Ctrl+C    - Copy frame to clipboard
+
+ANNOTATIONS
+< / ,     - Go to previous annotation
+> / .     - Go to next annotation
+Dbl-click - Jump to nearest annotation (timeline)
+
+TRANSFORM
+Shift+R   - Rotate left 90\u00b0
+Alt+R     - Rotate right 90\u00b0
+Shift+H   - Flip horizontal
+Shift+V   - Flip vertical`);
+  }
+
   dispose(): void {
     if (this.animationId !== null) {
       cancelAnimationFrame(this.animationId);
     }
     this.viewer.dispose();
     this.timeline.dispose();
-    this.toolbar.dispose();
+    this.headerBar.dispose();
+    this.tabBar.dispose();
+    this.contextToolbar.dispose();
     this.paintToolbar.dispose();
     this.colorControls.dispose();
     this.wipeControl.dispose();
@@ -619,7 +747,5 @@ export class App {
     this.cdlControl.dispose();
     this.lensControl.dispose();
     this.stackControl.dispose();
-    this.volumeControl.dispose();
-    this.exportControl.dispose();
   }
 }
