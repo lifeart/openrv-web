@@ -20,7 +20,10 @@ export class App {
     this.paintEngine = new PaintEngine();
     this.viewer = new Viewer(this.session, this.paintEngine);
     this.timeline = new Timeline(this.session);
-    this.toolbar = new Toolbar(this.session);
+    this.toolbar = new Toolbar(this.session, {
+      fitToWindow: () => this.viewer.fitToWindow(),
+      setZoom: (level: number) => this.viewer.setZoom(level),
+    });
     this.paintToolbar = new PaintToolbar(this.paintEngine);
   }
 
@@ -174,6 +177,11 @@ export class App {
         const modes: Array<'once' | 'loop' | 'pingpong'> = ['once', 'loop', 'pingpong'];
         const currentIndex = modes.indexOf(this.session.loopMode);
         this.session.loopMode = modes[(currentIndex + 1) % modes.length]!;
+        break;
+      case 'r':
+      case 'R':
+        // Reset in/out points to full duration
+        this.session.resetInOutPoints();
         break;
     }
   }

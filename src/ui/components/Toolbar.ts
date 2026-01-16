@@ -1,16 +1,23 @@
 import { Session, LoopMode } from '../../core/session/Session';
 
+export interface ViewCallbacks {
+  fitToWindow: () => void;
+  setZoom: (level: number) => void;
+}
+
 export class Toolbar {
   private container: HTMLElement;
   private session: Session;
+  private viewCallbacks?: ViewCallbacks;
 
   private playButton!: HTMLButtonElement;
   private loopButton!: HTMLButtonElement;
-  private sourceInfo!: HTMLSpanElement;
+  private directionButton!: HTMLButtonElement;
   private fileInput!: HTMLInputElement;
 
-  constructor(session: Session) {
+  constructor(session: Session, viewCallbacks?: ViewCallbacks) {
     this.session = session;
+    this.viewCallbacks = viewCallbacks;
 
     // Create container
     this.container = document.createElement('div');
@@ -57,6 +64,9 @@ export class Toolbar {
 
     this.addSeparator();
 
+    // Direction toggle
+    this.directionButton = this.createButton('→', () => this.toggleDirection(), 'Toggle play direction (↑)');
+
     // Loop mode
     this.loopButton = this.createButton('🔁 Loop', () => this.cycleLoopMode(), 'Cycle loop mode (L)');
     this.loopButton.style.minWidth = '90px';
@@ -66,25 +76,28 @@ export class Toolbar {
     // In/Out point buttons
     this.createButton('[', () => this.session.setInPoint(), 'Set in point (I)');
     this.createButton(']', () => this.session.setOutPoint(), 'Set out point (O)');
+    this.createButton('↔', () => this.session.resetInOutPoints(), 'Reset in/out points (R)');
 
     this.addSeparator();
 
     // Mark button
     this.createButton('🔖', () => this.session.toggleMark(), 'Toggle mark (M)');
 
+    this.addSeparator();
+
+    // View controls
+    if (this.viewCallbacks) {
+      this.createButton('⊡', () => this.viewCallbacks!.fitToWindow(), 'Fit to window (F)');
+      this.createButton('½', () => this.viewCallbacks!.setZoom(0.5), 'Zoom 50% (0)');
+      this.createButton('1:1', () => this.viewCallbacks!.setZoom(1), 'Zoom 100% (1)');
+      this.createButton('2×', () => this.viewCallbacks!.setZoom(2), 'Zoom 200% (2)');
+      this.createButton('4×', () => this.viewCallbacks!.setZoom(4), 'Zoom 400% (4)');
+    }
+
     // Spacer
     const spacer = document.createElement('div');
     spacer.style.flex = '1';
     this.container.appendChild(spacer);
-
-    // Source info
-    this.sourceInfo = document.createElement('span');
-    this.sourceInfo.style.cssText = `
-      color: #888;
-      font-size: 12px;
-      margin-right: 16px;
-    `;
-    this.container.appendChild(this.sourceInfo);
 
     // Keyboard shortcuts help
     this.createButton('⌨', () => this.showShortcuts(), 'Keyboard shortcuts');
@@ -142,11 +155,19 @@ export class Toolbar {
     this.container.appendChild(sep);
   }
 
+  private playDirectionForward = true;
+
   private cycleLoopMode(): void {
     const modes: LoopMode[] = ['once', 'loop', 'pingpong'];
     const currentIndex = modes.indexOf(this.session.loopMode);
     this.session.loopMode = modes[(currentIndex + 1) % modes.length]!;
     this.updateLoopButton();
+  }
+
+  private toggleDirection(): void {
+    this.session.togglePlayDirection();
+    this.playDirectionForward = !this.playDirectionForward;
+    this.updateDirectionButton();
   }
 
   private updateLoopButton(): void {
@@ -158,18 +179,15 @@ export class Toolbar {
     this.loopButton.textContent = labels[this.session.loopMode];
   }
 
-  private updatePlayButton(): void {
-    this.playButton.textContent = this.session.isPlaying ? '⏸' : '▶';
+  private updateDirectionButton(): void {
+    this.directionButton.textContent = this.playDirectionForward ? '→' : '←';
+    this.directionButton.title = this.playDirectionForward
+      ? 'Playing forward (↑ to reverse)'
+      : 'Playing backward (↑ to reverse)';
   }
 
-  private updateSourceInfo(): void {
-    const source = this.session.currentSource;
-    if (source) {
-      const type = source.type === 'video' ? '🎬' : '🖼';
-      this.sourceInfo.textContent = `${type} ${source.name}`;
-    } else {
-      this.sourceInfo.textContent = 'No source loaded';
-    }
+  private updatePlayButton(): void {
+    this.playButton.textContent = this.session.isPlaying ? '⏸' : '▶';
   }
 
   private async handleFileSelect(e: Event): Promise<void> {
@@ -213,6 +231,7 @@ Scroll    - Zoom
 TIMELINE
 I / [     - Set in point
 O / ]     - Set out point
+R         - Reset in/out points
 M         - Toggle mark
 L         - Cycle loop mode
 
@@ -229,13 +248,11 @@ Ctrl+Y    - Redo`);
 
   private bindEvents(): void {
     this.session.on('playbackChanged', () => this.updatePlayButton());
-    this.session.on('sourceLoaded', () => this.updateSourceInfo());
   }
 
   render(): HTMLElement {
     this.updateLoopButton();
     this.updatePlayButton();
-    this.updateSourceInfo();
     return this.container;
   }
 

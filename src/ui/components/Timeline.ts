@@ -64,6 +64,7 @@ export class Timeline {
     this.session.on('durationChanged', () => this.draw());
     this.session.on('sourceLoaded', () => this.draw());
     this.session.on('inOutChanged', () => this.draw());
+    this.session.on('loopModeChanged', () => this.draw());
   }
 
   private onMouseDown = (e: MouseEvent): void => {
@@ -87,9 +88,10 @@ export class Timeline {
     const x = clientX - rect.left - padding;
     const progress = Math.max(0, Math.min(1, x / trackWidth));
 
-    const inPoint = this.session.inPoint;
-    const outPoint = this.session.outPoint;
-    const frame = Math.round(inPoint + progress * (outPoint - inPoint));
+    // Seek within full source duration, not just in/out range
+    const source = this.session.currentSource;
+    const duration = source?.duration ?? 1;
+    const frame = Math.round(1 + progress * (duration - 1));
     this.session.goToFrame(frame);
   }
 
@@ -137,46 +139,75 @@ export class Timeline {
     const trackHeight = 24;
     const trackWidth = width - padding * 2;
 
-    // Draw track background
+    // Get source info for full duration
+    const source = this.session.currentSource;
+    const duration = source?.duration ?? 1;
+    const inPoint = this.session.inPoint;
+    const outPoint = this.session.outPoint;
+    const currentFrame = this.session.currentFrame;
+
+    // Draw track background (full duration)
     ctx.fillStyle = this.colors.track;
     ctx.beginPath();
     ctx.roundRect(padding, trackY, trackWidth, trackHeight, 4);
     ctx.fill();
 
-    const inPoint = this.session.inPoint;
-    const outPoint = this.session.outPoint;
-    const currentFrame = this.session.currentFrame;
-    const totalFrames = outPoint - inPoint;
+    // Calculate positions based on full duration
+    const frameToX = (frame: number) => padding + ((frame - 1) / Math.max(1, duration - 1)) * trackWidth;
 
-    if (totalFrames > 0) {
-      // Draw in/out range
-      ctx.fillStyle = this.colors.inOutRange;
-      ctx.beginPath();
-      ctx.roundRect(padding, trackY, trackWidth, trackHeight, 4);
-      ctx.fill();
+    // Check if custom in/out range is set
+    const hasCustomRange = inPoint !== 1 || outPoint !== duration;
 
-      // Draw played portion
-      const playedProgress = (currentFrame - inPoint) / totalFrames;
-      const playedWidth = Math.max(0, playedProgress * trackWidth);
-      ctx.fillStyle = this.colors.played;
-      ctx.beginPath();
-      ctx.roundRect(padding, trackY, playedWidth, trackHeight, 4);
-      ctx.fill();
+    if (duration > 1) {
+      if (hasCustomRange) {
+        const inX = frameToX(inPoint);
+        const outX = frameToX(outPoint);
+        const rangeWidth = outX - inX;
+
+        // Draw in/out range highlight
+        ctx.fillStyle = this.colors.inOutRange;
+        ctx.fillRect(inX, trackY, rangeWidth, trackHeight);
+
+        // Draw played portion within range (from in point to current frame)
+        if (currentFrame >= inPoint && currentFrame <= outPoint) {
+          const playedWidth = frameToX(currentFrame) - inX;
+          if (playedWidth > 0) {
+            ctx.fillStyle = this.colors.played;
+            ctx.fillRect(inX, trackY, playedWidth, trackHeight);
+          }
+        }
+
+        // Draw in point marker (left bracket)
+        ctx.fillStyle = '#4a9eff';
+        ctx.fillRect(inX - 2, trackY - 4, 4, trackHeight + 8);
+        ctx.fillRect(inX - 2, trackY - 4, 8, 3);
+        ctx.fillRect(inX - 2, trackY + trackHeight + 1, 8, 3);
+
+        // Draw out point marker (right bracket)
+        ctx.fillRect(outX - 2, trackY - 4, 4, trackHeight + 8);
+        ctx.fillRect(outX - 6, trackY - 4, 8, 3);
+        ctx.fillRect(outX - 6, trackY + trackHeight + 1, 8, 3);
+      } else {
+        // No custom range - draw played portion from start to current frame
+        const playedWidth = frameToX(currentFrame) - padding;
+        if (playedWidth > 0) {
+          ctx.fillStyle = this.colors.played;
+          ctx.fillRect(padding, trackY, playedWidth, trackHeight);
+        }
+      }
     }
 
-    // Draw marks
+    // Draw marks (within full duration)
     ctx.fillStyle = this.colors.mark;
     for (const mark of this.session.marks) {
-      if (mark >= inPoint && mark <= outPoint) {
-        const markProgress = (mark - inPoint) / Math.max(1, totalFrames);
-        const markX = padding + markProgress * trackWidth;
+      if (mark >= 1 && mark <= duration) {
+        const markX = frameToX(mark);
         ctx.fillRect(markX - 1, trackY, 2, trackHeight);
       }
     }
 
     // Draw playhead
-    const playheadProgress = totalFrames > 0 ? (currentFrame - inPoint) / totalFrames : 0;
-    const playheadX = padding + playheadProgress * trackWidth;
+    const playheadX = duration > 1 ? frameToX(currentFrame) : padding + trackWidth / 2;
 
     // Playhead glow
     ctx.fillStyle = this.colors.playheadShadow;
@@ -196,28 +227,28 @@ export class Timeline {
     // Frame numbers
     ctx.font = '12px -apple-system, BlinkMacSystemFont, monospace';
 
-    // Left frame number
+    // Left frame number (always 1)
     ctx.fillStyle = this.colors.textDim;
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
-    ctx.fillText(String(inPoint), padding - 10, trackY + trackHeight / 2);
+    ctx.fillText('1', padding - 10, trackY + trackHeight / 2);
 
-    // Right frame number
+    // Right frame number (full duration)
     ctx.textAlign = 'left';
-    ctx.fillText(String(outPoint), width - padding + 10, trackY + trackHeight / 2);
+    ctx.fillText(String(duration), width - padding + 10, trackY + trackHeight / 2);
 
-    // Current frame (top center)
+    // Current frame and in/out info (top center)
     ctx.fillStyle = this.colors.text;
     ctx.textAlign = 'center';
     ctx.font = 'bold 14px -apple-system, BlinkMacSystemFont, monospace';
-    ctx.fillText(`Frame ${currentFrame}`, width / 2, 18);
+    const inOutInfo = inPoint !== 1 || outPoint !== duration ? ` [${inPoint}-${outPoint}]` : '';
+    ctx.fillText(`Frame ${currentFrame}${inOutInfo}`, width / 2, 18);
 
     // Info text (bottom)
     ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = this.colors.textDim;
 
     // Source info
-    const source = this.session.currentSource;
     if (source) {
       ctx.textAlign = 'left';
       const typeIcon = source.type === 'video' ? '🎬' : '🖼';

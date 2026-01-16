@@ -24,6 +24,7 @@ export interface SessionEvents extends EventMap {
   sessionLoaded: void;
   durationChanged: number;
   inOutChanged: { inPoint: number; outPoint: number };
+  loopModeChanged: LoopMode;
   annotationsLoaded: ParsedAnnotations;
 }
 
@@ -67,7 +68,9 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   set currentFrame(frame: number) {
-    const clamped = Math.max(this._inPoint, Math.min(this._outPoint, Math.round(frame)));
+    // Allow seeking within full source duration, not just in/out range
+    const duration = this.currentSource?.duration ?? 1;
+    const clamped = Math.max(1, Math.min(duration, Math.round(frame)));
     if (clamped !== this._currentFrame) {
       this._currentFrame = clamped;
       this.syncVideoToFrame();
@@ -100,7 +103,10 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   set loopMode(mode: LoopMode) {
-    this._loopMode = mode;
+    if (mode !== this._loopMode) {
+      this._loopMode = mode;
+      this.emit('loopModeChanged', mode);
+    }
   }
 
   get frameCount(): number {
@@ -186,7 +192,8 @@ export class Session extends EventEmitter<SessionEvents> {
 
   // In/out points
   setInPoint(frame?: number): void {
-    const newInPoint = frame ?? this._currentFrame;
+    // Clamp to valid range: 1 to outPoint
+    const newInPoint = Math.max(1, Math.min(this._outPoint, frame ?? this._currentFrame));
     if (newInPoint !== this._inPoint) {
       this._inPoint = newInPoint;
       this.emit('inOutChanged', { inPoint: this._inPoint, outPoint: this._outPoint });
@@ -197,7 +204,9 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   setOutPoint(frame?: number): void {
-    const newOutPoint = frame ?? this._currentFrame;
+    const duration = this.currentSource?.duration ?? 1;
+    // Clamp to valid range: inPoint to duration
+    const newOutPoint = Math.max(this._inPoint, Math.min(duration, frame ?? this._currentFrame));
     if (newOutPoint !== this._outPoint) {
       this._outPoint = newOutPoint;
       this.emit('inOutChanged', { inPoint: this._inPoint, outPoint: this._outPoint });
@@ -208,9 +217,12 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   resetInOutPoints(): void {
+    const duration = this.currentSource?.duration ?? 1;
     this._inPoint = 1;
-    this._outPoint = this.currentSource?.duration ?? 1;
+    this._outPoint = duration;
     this.emit('inOutChanged', { inPoint: this._inPoint, outPoint: this._outPoint });
+    // Also reset playhead to start
+    this.currentFrame = 1;
   }
 
   // Marks
