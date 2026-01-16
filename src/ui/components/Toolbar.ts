@@ -1,4 +1,5 @@
 import { Session, LoopMode } from '../../core/session/Session';
+import { filterImageFiles } from '../../utils/SequenceLoader';
 
 export interface ViewCallbacks {
   fitToWindow: () => void;
@@ -189,9 +190,27 @@ export class Toolbar {
   private async handleFileSelect(e: Event): Promise<void> {
     const input = e.target as HTMLInputElement;
     const files = input.files;
-    if (!files) return;
+    if (!files || files.length === 0) return;
 
-    for (const file of files) {
+    const fileArray = Array.from(files);
+
+    // Check if multiple image files were selected - treat as sequence
+    const imageFiles = filterImageFiles(fileArray);
+    if (imageFiles.length > 1) {
+      try {
+        await this.session.loadSequence(imageFiles);
+        input.value = '';
+        return;
+      } catch (err) {
+        console.error('Failed to load sequence:', err);
+        alert(`Failed to load sequence: ${err}`);
+        input.value = '';
+        return;
+      }
+    }
+
+    // Single file or mixed files - load individually
+    for (const file of fileArray) {
       try {
         if (file.name.endsWith('.rv') || file.name.endsWith('.gto')) {
           const content = await file.arrayBuffer();

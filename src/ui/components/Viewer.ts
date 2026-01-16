@@ -6,6 +6,7 @@ import { ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from './ColorControls';
 import { WipeState, WipeMode } from './WipeControl';
 import { LUT3D } from '../../color/LUTLoader';
 import { ExportFormat, exportCanvas as doExportCanvas, copyCanvasToClipboard } from '../../utils/FrameExporter';
+import { filterImageFiles } from '../../utils/SequenceLoader';
 
 interface PointerState {
   pointerId: number;
@@ -566,7 +567,23 @@ export class Viewer {
     const files = e.dataTransfer?.files;
     if (!files || files.length === 0) return;
 
-    for (const file of files) {
+    const fileArray = Array.from(files);
+
+    // Check if multiple image files were dropped - treat as sequence
+    const imageFiles = filterImageFiles(fileArray);
+    if (imageFiles.length > 1) {
+      try {
+        await this.session.loadSequence(imageFiles);
+        return;
+      } catch (err) {
+        console.error('Failed to load sequence:', err);
+        alert(`Failed to load sequence: ${err}`);
+        return;
+      }
+    }
+
+    // Single file or mixed files - load individually
+    for (const file of fileArray) {
       try {
         if (file.name.endsWith('.rv') || file.name.endsWith('.gto')) {
           // Load RV/GTO session files with annotations
@@ -683,7 +700,25 @@ export class Viewer {
     const containerWidth = containerRect.width || 640;
     const containerHeight = containerRect.height || 360;
 
-    if (!source || !source.element) {
+    // For sequences, get the current frame image
+    let element: HTMLImageElement | HTMLVideoElement | undefined;
+    if (source?.type === 'sequence') {
+      const frameImage = this.session.getSequenceFrameSync();
+      if (frameImage) {
+        element = frameImage;
+      } else {
+        // Frame not loaded yet - trigger async load
+        this.session.getSequenceFrameImage().then(() => {
+          this.refresh();
+        });
+        // Use first frame as fallback if available
+        element = source.element;
+      }
+    } else {
+      element = source?.element;
+    }
+
+    if (!source || !element) {
       // Placeholder mode
       this.sourceWidth = 640;
       this.sourceHeight = 360;
@@ -710,7 +745,6 @@ export class Viewer {
       return;
     }
 
-    const element = source.element;
     this.sourceWidth = source.width;
     this.sourceHeight = source.height;
 

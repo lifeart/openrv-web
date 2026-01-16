@@ -1,6 +1,6 @@
 # OpenRV Web - Work Log
 
-## Current Status: Phase 10 Complete - Core Features Done
+## Current Status: Image Sequences Complete - All Core Features Done
 
 ---
 
@@ -110,6 +110,18 @@
 - [x] Keyboard shortcuts (Ctrl+S, Ctrl+C)
 - [x] Export dropdown menu in toolbar
 
+### Phase 11: Image Sequences ✅
+- [x] SequenceLoader utility (`src/utils/SequenceLoader.ts`)
+- [x] Frame number extraction from filenames (supports: frame_001.png, file.001.png, etc.)
+- [x] Automatic frame sorting by number
+- [x] Lazy frame loading with caching
+- [x] Memory management (releases distant frames)
+- [x] Session.loadSequence() method
+- [x] Viewer sequence frame rendering
+- [x] Multi-file selection in Open dialog
+- [x] Drag-and-drop multiple images as sequence
+- [x] Preloading adjacent frames for smooth playback
+
 ---
 
 ## Not Started
@@ -160,4 +172,11 @@
   - Include/exclude annotations option
   - Integrated into App.ts with keyboard shortcuts (Ctrl+S, Ctrl+C)
   - Updated toolbar help dialog with export shortcuts
+- **Completed Phase 11: Image Sequences**
+  - Created `SequenceLoader.ts` with frame number parsing and sorting
+  - Added `loadSequence()` method to Session.ts
+  - Updated Viewer.ts for sequence frame rendering with caching
+  - Multi-file selection detects image sequences automatically
+  - Drag-and-drop multiple images loads as sequence
+  - Memory management: preloads adjacent frames, releases distant ones
 - Updated CODEMAP.md feature checklist

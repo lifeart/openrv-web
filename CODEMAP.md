@@ -412,7 +412,7 @@ const annotations = dto.byProtocol('RVPaint');
 - [x] Pan/zoom viewer
 
 ### Phase 2
-- [ ] Image sequences
+- [x] Image sequences (numbered files: frame_001.png, file.001.exr, etc.)
 - [x] Basic color correction (exposure, gamma, saturation, contrast, temperature, tint)
 - [ ] 2D transforms
 - [x] Keyboard shortcuts

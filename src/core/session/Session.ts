@@ -1,6 +1,15 @@
 import { SimpleReader, GTODTO } from 'gto-js';
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import {
+  SequenceFrame,
+  SequenceInfo,
+  createSequenceInfo,
+  loadFrameImage,
+  preloadFrames,
+  releaseDistantFrames,
+  disposeSequence,
+} from '../../utils/SequenceLoader';
+import {
   Annotation,
   PenStroke,
   TextAnnotation,
@@ -44,6 +53,9 @@ export interface MediaSource {
   duration: number; // in frames
   fps: number;
   element?: HTMLImageElement | HTMLVideoElement;
+  // Sequence-specific data
+  sequenceInfo?: SequenceInfo;
+  sequenceFrames?: SequenceFrame[];
 }
 
 export class Session extends EventEmitter<SessionEvents> {
@@ -796,14 +808,101 @@ export class Session extends EventEmitter<SessionEvents> {
     });
   }
 
+  /**
+   * Load an image sequence from multiple files
+   */
+  async loadSequence(files: File[], fps?: number): Promise<void> {
+    const sequenceInfo = await createSequenceInfo(files, fps ?? this._fps);
+    if (!sequenceInfo) {
+      throw new Error('No valid image sequence found in the selected files');
+    }
+
+    const source: MediaSource = {
+      type: 'sequence',
+      name: sequenceInfo.name,
+      url: '', // Sequences don't have a single URL
+      width: sequenceInfo.width,
+      height: sequenceInfo.height,
+      duration: sequenceInfo.frames.length,
+      fps: sequenceInfo.fps,
+      sequenceInfo,
+      sequenceFrames: sequenceInfo.frames,
+      // Set element to first frame's image for initial display
+      element: sequenceInfo.frames[0]?.image,
+    };
+
+    this.sources.push(source);
+    this._currentSourceIndex = this.sources.length - 1;
+    this._fps = sequenceInfo.fps;
+    this._inPoint = 1;
+    this._outPoint = sequenceInfo.frames.length;
+    this._currentFrame = 1;
+
+    this.emit('sourceLoaded', source);
+    this.emit('durationChanged', sequenceInfo.frames.length);
+
+    // Preload adjacent frames
+    preloadFrames(sequenceInfo.frames, 0, 10);
+  }
+
+  /**
+   * Get the current frame image for a sequence
+   * Returns null if current source is not a sequence
+   */
+  async getSequenceFrameImage(frameIndex?: number): Promise<HTMLImageElement | null> {
+    const source = this.currentSource;
+    if (source?.type !== 'sequence' || !source.sequenceFrames) {
+      return null;
+    }
+
+    const idx = (frameIndex ?? this._currentFrame) - 1; // Convert 1-based to 0-based
+    const frame = source.sequenceFrames[idx];
+    if (!frame) return null;
+
+    // Load this frame if needed
+    const image = await loadFrameImage(frame);
+
+    // Preload adjacent frames
+    preloadFrames(source.sequenceFrames, idx, 5);
+
+    // Release distant frames to manage memory
+    releaseDistantFrames(source.sequenceFrames, idx, 20);
+
+    return image;
+  }
+
+  /**
+   * Get sequence frame synchronously (returns cached image or null)
+   */
+  getSequenceFrameSync(frameIndex?: number): HTMLImageElement | null {
+    const source = this.currentSource;
+    if (source?.type !== 'sequence' || !source.sequenceFrames) {
+      return null;
+    }
+
+    const idx = (frameIndex ?? this._currentFrame) - 1;
+    const frame = source.sequenceFrames[idx];
+    return frame?.image ?? null;
+  }
+
+  /**
+   * Cleanup sequence resources when switching sources or disposing
+   */
+  private disposeSequenceSource(source: MediaSource): void {
+    if (source.type === 'sequence' && source.sequenceFrames) {
+      disposeSequence(source.sequenceFrames);
+    }
+  }
+
   // Switch between sources
   setCurrentSource(index: number): void {
     if (index >= 0 && index < this.sources.length) {
-      // Pause current video if playing
+      // Cleanup current source
       const currentSource = this.currentSource;
       if (currentSource?.type === 'video' && currentSource.element instanceof HTMLVideoElement) {
         currentSource.element.pause();
       }
+      // Note: We don't dispose sequences here since user might switch back
 
       this._currentSourceIndex = index;
       const newSource = this.currentSource;
@@ -814,5 +913,16 @@ export class Session extends EventEmitter<SessionEvents> {
         this.emit('durationChanged', newSource.duration);
       }
     }
+  }
+
+  /**
+   * Dispose all session resources
+   */
+  dispose(): void {
+    // Cleanup all sequence sources
+    for (const source of this.sources) {
+      this.disposeSequenceSource(source);
+    }
+    this.sources = [];
   }
 }
