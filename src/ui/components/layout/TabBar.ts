@@ -6,22 +6,23 @@
  */
 
 import { EventEmitter, EventMap } from '../../../utils/EventEmitter';
+import { getIconSvg, IconName } from '../shared/Icons';
 
 export type TabId = 'view' | 'color' | 'effects' | 'transform' | 'annotate';
 
 export interface Tab {
   id: TabId;
   label: string;
-  icon: string;
+  icon: IconName;
   shortcut: string;
 }
 
 export const TABS: Tab[] = [
-  { id: 'view', label: 'View', icon: '\uD83D\uDDBC', shortcut: '1' },
-  { id: 'color', label: 'Color', icon: '\uD83C\uDFA8', shortcut: '2' },
-  { id: 'effects', label: 'Effects', icon: '\u2728', shortcut: '3' },
-  { id: 'transform', label: 'Transform', icon: '\uD83D\uDCD0', shortcut: '4' },
-  { id: 'annotate', label: 'Annotate', icon: '\u270F\uFE0F', shortcut: '5' },
+  { id: 'view', label: 'View', icon: 'eye', shortcut: '1' },
+  { id: 'color', label: 'Color', icon: 'palette', shortcut: '2' },
+  { id: 'effects', label: 'Effects', icon: 'sparkles', shortcut: '3' },
+  { id: 'transform', label: 'Transform', icon: 'move', shortcut: '4' },
+  { id: 'annotate', label: 'Annotate', icon: 'pencil', shortcut: '5' },
 ];
 
 export interface TabBarEvents extends EventMap {
@@ -103,8 +104,9 @@ export class TabBar extends EventEmitter<TabBarEvents> {
 
     // Icon
     const icon = document.createElement('span');
-    icon.textContent = tab.icon;
-    icon.style.fontSize = '14px';
+    icon.innerHTML = getIconSvg(tab.icon, 'sm');
+    icon.style.display = 'flex';
+    icon.style.alignItems = 'center';
 
     // Label
     const label = document.createElement('span');

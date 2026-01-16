@@ -11,6 +11,7 @@ import { filterImageFiles } from '../../../utils/SequenceLoader';
 import { VolumeControl } from '../VolumeControl';
 import { ExportControl } from '../ExportControl';
 import { showAlert } from '../shared/Modal';
+import { getIconSvg, IconName } from '../shared/Icons';
 
 export interface HeaderBarEvents extends EventMap {
   showShortcuts: void;
@@ -106,13 +107,13 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     playbackGroup.appendChild(this.createIconButton('skip-forward', '', () => this.session.goToEnd(), 'Go to end (End)'));
 
     // Loop mode button
-    this.loopButton = this.createCompactButton('\uD83D\uDD01', () => this.cycleLoopMode(), 'Cycle loop mode (L)');
-    this.loopButton.style.minWidth = '60px';
+    this.loopButton = this.createCompactButton('', () => this.cycleLoopMode(), 'Cycle loop mode (L)');
+    this.loopButton.style.minWidth = '70px';
     this.loopButton.style.marginLeft = '8px';
     playbackGroup.appendChild(this.loopButton);
 
     // Direction button
-    this.directionButton = this.createCompactButton('\u2192', () => this.toggleDirection(), 'Toggle direction (\u2191)');
+    this.directionButton = this.createCompactButton('', () => this.toggleDirection(), 'Toggle direction (Up)');
     this.directionButton.style.minWidth = '28px';
     playbackGroup.appendChild(this.directionButton);
 
@@ -278,20 +279,27 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   }
 
   private updateLoopButton(): void {
-    const labels: Record<LoopMode, string> = {
-      once: '\u27A1 Once',
-      loop: '\uD83D\uDD01 Loop',
-      pingpong: '\uD83D\uDD00 Ping',
+    const icons: Record<LoopMode, IconName> = {
+      once: 'repeat-once',
+      loop: 'repeat',
+      pingpong: 'shuffle',
     };
-    this.loopButton.textContent = labels[this.session.loopMode];
+    const labels: Record<LoopMode, string> = {
+      once: 'Once',
+      loop: 'Loop',
+      pingpong: 'Ping',
+    };
+    const iconName = icons[this.session.loopMode];
+    const label = labels[this.session.loopMode];
+    this.loopButton.innerHTML = `${getIconSvg(iconName, 'sm')}<span style="margin-left:4px">${label}</span>`;
   }
 
   private updateDirectionButton(): void {
     const isForward = this.session.playDirection === 1;
-    this.directionButton.textContent = isForward ? '\u2192' : '\u2190';
+    this.directionButton.innerHTML = getIconSvg(isForward ? 'arrow-right' : 'arrow-left', 'sm');
     this.directionButton.title = isForward
-      ? 'Playing forward (\u2191 to reverse)'
-      : 'Playing backward (\u2191 to reverse)';
+      ? 'Playing forward (Up to reverse)'
+      : 'Playing backward (Up to reverse)';
   }
 
   private updatePlayButton(): void {
