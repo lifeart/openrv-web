@@ -373,14 +373,18 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   private parseSession(dto: GTODTO): void {
+    // Debug: Log all available protocols
+    console.log('GTO Result:', dto);
+
     const sessions = dto.byProtocol('RVSession');
+    console.log('RVSession objects:', sessions.length);
     if (sessions.length === 0) {
       console.warn('No RVSession found in file');
-      return;
     }
 
     // Parse file sources
     const sources = dto.byProtocol('RVFileSource');
+    console.log('RVFileSource objects:', sources.length);
     for (const source of sources) {
       const mediaObj = source.component('media');
       if (mediaObj) {
@@ -399,192 +403,228 @@ export class Session extends EventEmitter<SessionEvents> {
 
   private parsePaintAnnotations(dto: GTODTO): void {
     const paintObjects = dto.byProtocol('RVPaint');
-    if (paintObjects.length === 0) return;
+    console.log('RVPaint objects:', paintObjects.length);
+
+    if (paintObjects.length === 0) {
+      return;
+    }
 
     const annotations: Annotation[] = [];
     let effects: Partial<PaintEffects> | undefined;
 
     for (const paintObj of paintObjects) {
-      // Parse pen strokes
-      const penComp = paintObj.component('pen');
-      if (penComp) {
-        const strokes = this.parsePenStrokes(penComp);
-        annotations.push(...strokes);
+      console.log('Paint object:', paintObj.name);
+
+      // Get all components from this paint object using the components() method
+      const allComponents = paintObj.components();
+      if (!allComponents || allComponents.length === 0) continue;
+
+      // Find frame components and stroke/text components
+      const frameOrders = new Map<number, string[]>();
+      const strokeData = new Map<string, unknown>();
+
+      for (const comp of allComponents) {
+        const compName = comp.name;
+
+        if (compName.startsWith('frame:')) {
+          // Parse frame order component like "frame:15"
+          const frameNum = parseInt(compName.split(':')[1] ?? '1', 10);
+          const orderProp = comp.property('order');
+          if (orderProp?.exists()) {
+            // Order can be a string or string array
+            const orderValue = orderProp.value();
+            const order = Array.isArray(orderValue) ? orderValue : [orderValue];
+            frameOrders.set(frameNum, order as string[]);
+          }
+        } else if (compName.startsWith('pen:') || compName.startsWith('text:')) {
+          // Store stroke/text data for later lookup
+          strokeData.set(compName, comp);
+        }
       }
 
-      // Parse text annotations
-      const textComp = paintObj.component('text');
-      if (textComp) {
-        const texts = this.parseTextAnnotations(textComp);
-        annotations.push(...texts);
+      console.log('Frame orders:', Object.fromEntries(frameOrders));
+      console.log('Stroke data keys:', Array.from(strokeData.keys()));
+
+      // Parse strokes and text for each frame
+      for (const [frame, order] of frameOrders) {
+        for (const strokeId of order) {
+          const comp = strokeData.get(strokeId);
+          if (!comp) continue;
+
+          if (strokeId.startsWith('pen:')) {
+            const stroke = this.parsePenStroke(strokeId, frame, comp);
+            if (stroke) {
+              annotations.push(stroke);
+            }
+          } else if (strokeId.startsWith('text:')) {
+            const text = this.parseTextAnnotation(strokeId, frame, comp);
+            if (text) {
+              annotations.push(text);
+            }
+          }
+        }
       }
 
-      // Parse effects/settings
-      const settingsComp = paintObj.component('settings');
-      if (settingsComp) {
-        effects = this.parsePaintSettings(settingsComp);
+      // Parse effects/settings from paint component
+      const paintComp = paintObj.component('paint');
+      if (paintComp?.exists()) {
+        // Could extract ghost settings here if needed
       }
     }
 
+    console.log('Total annotations parsed:', annotations.length);
     if (annotations.length > 0 || effects) {
       this.emit('annotationsLoaded', { annotations, effects });
     }
   }
 
+  // Parse a single pen stroke from RV GTO format
+  // strokeId format: "pen:ID:FRAME:USER" e.g., "pen:1:15:User"
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private parsePenStrokes(penComp: any): PenStroke[] {
-    const strokes: PenStroke[] = [];
+  private parsePenStroke(strokeId: string, frame: number, comp: any): PenStroke | null {
+    // Parse user from strokeId (e.g., "pen:1:15:User" -> "User")
+    const parts = strokeId.split(':');
+    const user = parts[3] ?? 'unknown';
+    const id = parts[1] ?? '0';
 
-    // Get stroke count
-    const orderProp = penComp.prop('order');
-    if (!orderProp?.data) return strokes;
+    // Get properties from component using the ComponentDTO API
+    const colorValue = comp.property('color').value();
+    const widthValue = comp.property('width').value();
+    const brushValue = comp.property('brush').value();
+    const pointsValue = comp.property('points').value();
+    const joinValue = comp.property('join').value();
+    const capValue = comp.property('cap').value();
+    const splatValue = comp.property('splat').value();
 
-    const order = orderProp.data as string[];
-
-    for (const strokeId of order) {
-      const strokeComp = penComp.prop(strokeId);
-      if (!strokeComp?.data) continue;
-
-      // Parse stroke properties
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = strokeComp.data as any;
-
-      const stroke: PenStroke = {
-        type: 'pen',
-        id: strokeId,
-        frame: data.frame ?? 1,
-        user: data.user ?? 'unknown',
-        color: this.parseColor(data.color) ?? [1, 0, 0, 1],
-        width: data.width ?? 3,
-        brush: data.brush === 0 ? BrushType.Gaussian : BrushType.Circle,
-        points: this.parsePoints(data.points),
-        join: (data.join as LineJoin) ?? LineJoin.Round,
-        cap: (data.cap as LineCap) ?? LineCap.Round,
-        splat: data.splat ?? false,
-        mode: data.mode === 1 ? StrokeMode.Erase : StrokeMode.Draw,
-        startFrame: data.startFrame ?? data.frame ?? 1,
-        duration: data.duration ?? -1,
-      };
-
-      strokes.push(stroke);
+    // Parse color - stored as float[4] in GTO
+    let color: [number, number, number, number] = [1, 0, 0, 1];
+    if (colorValue && Array.isArray(colorValue) && colorValue.length >= 4) {
+      color = [colorValue[0], colorValue[1], colorValue[2], colorValue[3]];
     }
 
-    return strokes;
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private parseTextAnnotations(textComp: any): TextAnnotation[] {
-    const texts: TextAnnotation[] = [];
-
-    const orderProp = textComp.prop('order');
-    if (!orderProp?.data) return texts;
-
-    const order = orderProp.data as string[];
-
-    for (const textId of order) {
-      const textProp = textComp.prop(textId);
-      if (!textProp?.data) continue;
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = textProp.data as any;
-
-      const text: TextAnnotation = {
-        type: 'text',
-        id: textId,
-        frame: data.frame ?? 1,
-        user: data.user ?? 'unknown',
-        position: {
-          x: data.position?.[0] ?? 0.5,
-          y: data.position?.[1] ?? 0.5,
-        },
-        color: this.parseColor(data.color) ?? [1, 1, 1, 1],
-        text: data.text ?? '',
-        size: data.size ?? 24,
-        scale: data.scale ?? 1,
-        rotation: data.rotation ?? 0,
-        spacing: data.spacing ?? 1,
-        font: data.font ?? 'sans-serif',
-        origin: (data.origin as TextOrigin) ?? TextOrigin.BottomLeft,
-        startFrame: data.startFrame ?? data.frame ?? 1,
-        duration: data.duration ?? -1,
-      };
-
-      texts.push(text);
+    // Parse width - can be a single value or array (per-point width)
+    let width = 3;
+    if (widthValue) {
+      if (Array.isArray(widthValue) && widthValue.length > 0) {
+        // Use the first width value, convert from normalized to pixel
+        width = (widthValue[0] as number) * 500; // Scale up from normalized
+      } else if (typeof widthValue === 'number') {
+        width = widthValue * 500;
+      }
     }
 
-    return texts;
-  }
+    // Parse brush type
+    const brushType = brushValue === 'gaussian' ? BrushType.Gaussian : BrushType.Circle;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private parsePaintSettings(settingsComp: any): Partial<PaintEffects> {
-    const effects: Partial<PaintEffects> = {};
-
-    const ghostProp = settingsComp.prop('ghost');
-    if (ghostProp?.data !== undefined) {
-      effects.ghost = Boolean(ghostProp.data);
-    }
-
-    const ghostBeforeProp = settingsComp.prop('ghostBefore');
-    if (ghostBeforeProp?.data !== undefined) {
-      effects.ghostBefore = Number(ghostBeforeProp.data);
-    }
-
-    const ghostAfterProp = settingsComp.prop('ghostAfter');
-    if (ghostAfterProp?.data !== undefined) {
-      effects.ghostAfter = Number(ghostAfterProp.data);
-    }
-
-    const holdProp = settingsComp.prop('hold');
-    if (holdProp?.data !== undefined) {
-      effects.hold = Boolean(holdProp.data);
-    }
-
-    return effects;
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private parseColor(colorData: any): [number, number, number, number] | null {
-    if (!colorData) return null;
-
-    if (Array.isArray(colorData) && colorData.length >= 3) {
-      return [
-        colorData[0] ?? 1,
-        colorData[1] ?? 0,
-        colorData[2] ?? 0,
-        colorData[3] ?? 1,
-      ];
-    }
-
-    return null;
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private parsePoints(pointsData: any): Array<{ x: number; y: number; pressure?: number }> {
-    if (!pointsData || !Array.isArray(pointsData)) return [];
-
+    // Parse points - stored as float[2] pairs
     const points: Array<{ x: number; y: number; pressure?: number }> = [];
-
-    // Points can be stored as flat array [x1, y1, x2, y2, ...] or as array of objects
-    if (typeof pointsData[0] === 'number') {
-      // Flat array format
-      for (let i = 0; i < pointsData.length; i += 2) {
-        points.push({
-          x: pointsData[i] ?? 0,
-          y: pointsData[i + 1] ?? 0,
-        });
-      }
-    } else {
-      // Array of objects format
-      for (const p of pointsData) {
-        points.push({
-          x: p.x ?? p[0] ?? 0,
-          y: p.y ?? p[1] ?? 0,
-          pressure: p.pressure ?? p[2],
-        });
+    if (pointsValue && Array.isArray(pointsValue)) {
+      for (const point of pointsValue) {
+        if (Array.isArray(point) && point.length >= 2) {
+          // Points are in normalized coordinates (-1 to 1 range typically)
+          // Convert to 0-1 range for our rendering
+          points.push({
+            x: (point[0] as number + 1) / 2,
+            y: 1 - (point[1] as number + 1) / 2, // Flip Y coordinate
+          });
+        }
       }
     }
 
-    return points;
+    if (points.length === 0) {
+      console.warn('Stroke has no points:', strokeId);
+      return null;
+    }
+
+    // Parse line join (0=miter, 1=round, 2=bevel - GTO uses different values)
+    let join = LineJoin.Round;
+    if (joinValue !== null && joinValue !== undefined) {
+      const joinVal = joinValue as number;
+      if (joinVal === 0) join = LineJoin.Miter;
+      else if (joinVal === 2) join = LineJoin.Bevel;
+      // 1 and 3 are round variants
+    }
+
+    // Parse line cap
+    let cap = LineCap.Round;
+    if (capValue !== null && capValue !== undefined) {
+      const capVal = capValue as number;
+      if (capVal === 0) cap = LineCap.NoCap;
+      else if (capVal === 2) cap = LineCap.Square;
+    }
+
+    const stroke: PenStroke = {
+      type: 'pen',
+      id,
+      frame,
+      user,
+      color,
+      width,
+      brush: brushType,
+      points,
+      join,
+      cap,
+      splat: splatValue === 1,
+      mode: StrokeMode.Draw,
+      startFrame: frame,
+      duration: 0, // Only visible on this specific frame
+    };
+
+    return stroke;
+  }
+
+  // Parse a single text annotation from RV GTO format
+  // textId format: "text:ID:FRAME:USER" e.g., "text:6:1:User"
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private parseTextAnnotation(textId: string, frame: number, comp: any): TextAnnotation | null {
+    const parts = textId.split(':');
+    const user = parts[3] ?? 'unknown';
+    const id = parts[1] ?? '0';
+
+    const positionValue = comp.property('position').value();
+    const colorValue = comp.property('color').value();
+    const textValue = comp.property('text').value();
+    const sizeValue = comp.property('size').value();
+    const scaleValue = comp.property('scale').value();
+    const rotationValue = comp.property('rotation').value();
+    const spacingValue = comp.property('spacing').value();
+    const fontValue = comp.property('font').value();
+
+    // Parse position
+    let x = 0.5, y = 0.5;
+    if (positionValue && Array.isArray(positionValue) && positionValue.length >= 2) {
+      const posData = positionValue[0];
+      if (Array.isArray(posData) && posData.length >= 2) {
+        x = (posData[0] as number + 1) / 2;
+        y = 1 - (posData[1] as number + 1) / 2;
+      }
+    }
+
+    // Parse color
+    let color: [number, number, number, number] = [1, 1, 1, 1];
+    if (colorValue && Array.isArray(colorValue) && colorValue.length >= 4) {
+      color = [colorValue[0], colorValue[1], colorValue[2], colorValue[3]];
+    }
+
+    const text: TextAnnotation = {
+      type: 'text',
+      id,
+      frame,
+      user,
+      position: { x, y },
+      color,
+      text: (textValue as string) ?? '',
+      size: ((sizeValue as number) ?? 0.01) * 2000, // Scale up from normalized
+      scale: (scaleValue as number) ?? 1,
+      rotation: (rotationValue as number) ?? 0,
+      spacing: (spacingValue as number) ?? 1,
+      font: (fontValue as string) || 'sans-serif',
+      origin: TextOrigin.BottomLeft,
+      startFrame: frame,
+      duration: 0, // Only visible on this specific frame
+    };
+
+    return text;
   }
 
   // File loading
