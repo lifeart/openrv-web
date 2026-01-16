@@ -281,9 +281,25 @@ export class App {
   }
 
   private handleKeydown(e: KeyboardEvent): void {
-    // Ignore if typing in an input
+    // For text inputs, only allow specific playback keys through
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-      return;
+      const input = e.target as HTMLInputElement;
+      // Allow playback keys for non-text inputs (range, color, etc.)
+      // For text inputs, block everything except specific global shortcuts
+      const isTextInput = input.type === 'text' || input.type === 'search' || input.type === 'password' ||
+                          input.type === 'email' || input.type === 'url' || input.type === 'tel' ||
+                          e.target instanceof HTMLTextAreaElement;
+
+      // Global playback keys that should always work (blur the input first)
+      const globalKeys = [' ', 'Escape', 'Home', 'End'];
+      if (globalKeys.includes(e.key)) {
+        (e.target as HTMLElement).blur();
+        // Continue to handle the key
+      } else if (isTextInput) {
+        // Block other keys for text inputs to allow typing
+        return;
+      }
+      // For non-text inputs (range, color), allow keyboard shortcuts through
     }
 
     // Try paint toolbar shortcuts first
