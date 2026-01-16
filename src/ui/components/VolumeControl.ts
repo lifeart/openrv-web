@@ -166,6 +166,30 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
     };
   }
 
+  /**
+   * Sync volume from external source (e.g., Session) without emitting events.
+   * Use this to update the UI when the Session's volume changes externally.
+   */
+  syncVolume(value: number): void {
+    this._volume = Math.max(0, Math.min(1, value));
+    if (this._volume > 0) {
+      this._previousVolume = this._volume;
+      this._muted = false;
+    }
+    this.volumeSlider.value = String(this._volume);
+    this.updateMuteButton();
+  }
+
+  /**
+   * Sync muted state from external source (e.g., Session) without emitting events.
+   * Use this to update the UI when the Session's muted state changes externally.
+   */
+  syncMuted(muted: boolean): void {
+    this._muted = muted;
+    this.volumeSlider.value = String(this._muted ? 0 : this._volume);
+    this.updateMuteButton();
+  }
+
   render(): HTMLElement {
     return this.container;
   }

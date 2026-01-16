@@ -86,13 +86,20 @@ export class App {
       this.viewer.setWipeState(state);
     });
 
-    // Connect volume control (from HeaderBar) to session
+    // Connect volume control (from HeaderBar) to session (bidirectional)
     const volumeControl = this.headerBar.getVolumeControl();
     volumeControl.on('volumeChanged', (volume) => {
       this.session.volume = volume;
     });
     volumeControl.on('mutedChanged', (muted) => {
       this.session.muted = muted;
+    });
+    // Sync back from Session to VolumeControl (for external changes)
+    this.session.on('volumeChanged', (volume) => {
+      volumeControl.syncVolume(volume);
+    });
+    this.session.on('mutedChanged', (muted) => {
+      volumeControl.syncMuted(muted);
     });
 
     // Connect export control (from HeaderBar) to viewer

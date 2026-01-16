@@ -227,6 +227,261 @@ describe('Session', () => {
     });
   });
 
+  describe('update() with playDirection', () => {
+    // Helper to access private members for testing
+    const setPrivateState = (s: Session, overrides: {
+      currentFrame?: number;
+      inPoint?: number;
+      outPoint?: number;
+    }) => {
+      const internal = s as unknown as {
+        _currentFrame: number;
+        _inPoint: number;
+        _outPoint: number;
+      };
+      if (overrides.currentFrame !== undefined) internal._currentFrame = overrides.currentFrame;
+      if (overrides.inPoint !== undefined) internal._inPoint = overrides.inPoint;
+      if (overrides.outPoint !== undefined) internal._outPoint = overrides.outPoint;
+    };
+
+    // Helper to add a mock source with specified duration
+    const addMockSource = (s: Session, duration: number) => {
+      const sources = (s as unknown as { sources: MediaSource[] }).sources;
+      sources.push({
+        type: 'image',
+        name: 'test',
+        url: 'test.png',
+        width: 100,
+        height: 100,
+        duration: duration,
+        fps: 10,
+      });
+    };
+
+    beforeEach(() => {
+      // Add a mock source with 100 frame duration
+      addMockSource(session, 100);
+      // Set up a session with enough frames to test
+      setPrivateState(session, { inPoint: 1, outPoint: 100 });
+      session.fps = 10; // 100ms per frame for easy testing
+    });
+
+    it('SES-025: forward playback advances frame forward for images', () => {
+      // Start at frame 50
+      setPrivateState(session, { currentFrame: 50 });
+
+      // Start playback (forward direction by default)
+      session.play();
+      expect(session.playDirection).toBe(1);
+
+      // Simulate time passing (enough for one frame at 10fps = 100ms)
+      const lastFrameTime = (session as unknown as { lastFrameTime: number }).lastFrameTime;
+      vi.spyOn(performance, 'now').mockReturnValue(lastFrameTime + 150); // 150ms elapsed
+
+      session.update();
+
+      // Frame should have advanced forward
+      expect(session.currentFrame).toBe(51);
+
+      vi.restoreAllMocks();
+    });
+
+    it('SES-026: reverse playback advances frame backward for images', () => {
+      // Start at frame 50
+      setPrivateState(session, { currentFrame: 50 });
+
+      // Set reverse direction
+      session.togglePlayDirection();
+      expect(session.playDirection).toBe(-1);
+
+      // Start playback
+      session.play();
+
+      // Simulate time passing (enough for one frame at 10fps = 100ms)
+      const lastFrameTime = (session as unknown as { lastFrameTime: number }).lastFrameTime;
+      vi.spyOn(performance, 'now').mockReturnValue(lastFrameTime + 150); // 150ms elapsed
+
+      session.update();
+
+      // Frame should have advanced backward
+      expect(session.currentFrame).toBe(49);
+
+      vi.restoreAllMocks();
+    });
+
+    it('SES-027: reverse playback decrements multiple frames over time', () => {
+      // Start at frame 50
+      setPrivateState(session, { currentFrame: 50 });
+
+      // Set reverse direction and start playback
+      session.togglePlayDirection();
+      session.play();
+
+      // Simulate time passing (enough for 3 frames at 10fps = 300ms)
+      const lastFrameTime = (session as unknown as { lastFrameTime: number }).lastFrameTime;
+      vi.spyOn(performance, 'now').mockReturnValue(lastFrameTime + 350); // 350ms elapsed
+
+      session.update();
+
+      // Frame should have gone back by 3
+      expect(session.currentFrame).toBe(47);
+
+      vi.restoreAllMocks();
+    });
+
+    it('SES-028: toggling direction while playing changes frame advancement', () => {
+      // Start at frame 50
+      setPrivateState(session, { currentFrame: 50 });
+
+      // Mock time
+      let mockTime = 0;
+      vi.spyOn(performance, 'now').mockImplementation(() => mockTime);
+
+      session.play();
+      const startFrame = session.currentFrame;
+
+      // Advance forward
+      mockTime = 150;
+      session.update();
+      const afterForward = session.currentFrame;
+      expect(afterForward).toBeGreaterThan(startFrame); // Frame increased (forward)
+
+      // Toggle to reverse
+      session.togglePlayDirection();
+      expect(session.playDirection).toBe(-1);
+
+      // Record current frame before reverse playback
+      const beforeReverse = session.currentFrame;
+
+      // Advance with reverse direction - update lastFrameTime first
+      (session as unknown as { lastFrameTime: number }).lastFrameTime = mockTime;
+      (session as unknown as { frameAccumulator: number }).frameAccumulator = 0;
+      mockTime = 300;
+      session.update();
+      const afterReverse = session.currentFrame;
+
+      // Verify frame decreased (reverse direction works)
+      expect(afterReverse).toBeLessThan(beforeReverse);
+
+      vi.restoreAllMocks();
+    });
+
+    it('SES-029: reverse playback stops at inPoint with loop mode once', () => {
+      // Start at frame 2
+      setPrivateState(session, { currentFrame: 2 });
+      session.loopMode = 'once';
+
+      // Set reverse direction and start playback
+      session.togglePlayDirection();
+      session.play();
+
+      // Simulate time passing (enough for 5 frames)
+      const lastFrameTime = (session as unknown as { lastFrameTime: number }).lastFrameTime;
+      vi.spyOn(performance, 'now').mockReturnValue(lastFrameTime + 550);
+
+      session.update();
+
+      // Should stop at inPoint (1) and pause
+      expect(session.currentFrame).toBe(1);
+      expect(session.isPlaying).toBe(false);
+
+      vi.restoreAllMocks();
+    });
+
+    it('SES-030: reverse playback wraps to outPoint with loop mode', () => {
+      // Start at frame 2
+      setPrivateState(session, { currentFrame: 2 });
+      session.loopMode = 'loop';
+
+      // Set reverse direction and start playback
+      session.togglePlayDirection();
+      session.play();
+
+      // Simulate time passing (enough for exactly 2 frames: 2 -> 1 -> wraps to 100)
+      const lastFrameTime = (session as unknown as { lastFrameTime: number }).lastFrameTime;
+      vi.spyOn(performance, 'now').mockReturnValue(lastFrameTime + 250);
+
+      session.update();
+
+      // Frame goes: 2 -> 1 -> 0 (wraps to outPoint 100)
+      expect(session.currentFrame).toBe(100);
+
+      vi.restoreAllMocks();
+    });
+
+    it('SES-031: pingpong mode emits playDirectionChanged when reversing at outPoint', () => {
+      // Start near the end
+      setPrivateState(session, { currentFrame: 99 });
+      session.loopMode = 'pingpong';
+      session.play();
+
+      const directionListener = vi.fn();
+      session.on('playDirectionChanged', directionListener);
+
+      // Advance past outPoint
+      const lastFrameTime = (session as unknown as { lastFrameTime: number }).lastFrameTime;
+      vi.spyOn(performance, 'now').mockReturnValue(lastFrameTime + 250);
+      session.update();
+
+      // Direction should have changed and event emitted
+      expect(session.playDirection).toBe(-1);
+      expect(directionListener).toHaveBeenCalledWith(-1);
+
+      vi.restoreAllMocks();
+    });
+
+    it('SES-032: pingpong mode emits playDirectionChanged when reversing at inPoint', () => {
+      // Start near the beginning with reverse direction
+      setPrivateState(session, { currentFrame: 2 });
+      session.loopMode = 'pingpong';
+      session.togglePlayDirection(); // Set to -1
+      session.play();
+
+      const directionListener = vi.fn();
+      session.on('playDirectionChanged', directionListener);
+
+      // Advance past inPoint (going backward)
+      const lastFrameTime = (session as unknown as { lastFrameTime: number }).lastFrameTime;
+      vi.spyOn(performance, 'now').mockReturnValue(lastFrameTime + 250);
+      session.update();
+
+      // Direction should have changed back to forward and event emitted
+      expect(session.playDirection).toBe(1);
+      expect(directionListener).toHaveBeenCalledWith(1);
+
+      vi.restoreAllMocks();
+    });
+  });
+
+  describe('fps events', () => {
+    it('SES-033: fps setter emits fpsChanged event', () => {
+      const listener = vi.fn();
+      session.on('fpsChanged', listener);
+
+      session.fps = 30;
+      expect(session.fps).toBe(30);
+      expect(listener).toHaveBeenCalledWith(30);
+    });
+
+    it('SES-034: fps setter does not emit if value unchanged', () => {
+      session.fps = 30;
+      const listener = vi.fn();
+      session.on('fpsChanged', listener);
+
+      session.fps = 30; // Same value
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it('SES-035: fps setter clamps and emits clamped value', () => {
+      const listener = vi.fn();
+      session.on('fpsChanged', listener);
+
+      session.fps = 150; // Above max (120)
+      expect(session.fps).toBe(120);
+      expect(listener).toHaveBeenCalledWith(120);
+    });
+  });
+
   describe('in/out points', () => {
     it('SES-018: setInPoint() updates inPoint', () => {
       const listener = vi.fn();

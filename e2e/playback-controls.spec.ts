@@ -250,6 +250,115 @@ test.describe('Playback Controls', () => {
       state = await getSessionState(page);
       expect(state.playDirection).toBe(1);
     });
+
+    test('PLAY-024: clicking direction button should toggle playDirection state', async ({ page }) => {
+      // Verify initial play direction is forward
+      let state = await getSessionState(page);
+      expect(state.playDirection).toBe(1);
+
+      // Find and click the direction button
+      const directionButton = page.locator('button[title*="Toggle direction"]');
+      await expect(directionButton).toBeVisible();
+      await directionButton.click();
+      await page.waitForTimeout(100);
+
+      state = await getSessionState(page);
+      expect(state.playDirection).toBe(-1);
+
+      // Click again to toggle back
+      await directionButton.click();
+      await page.waitForTimeout(100);
+
+      state = await getSessionState(page);
+      expect(state.playDirection).toBe(1);
+    });
+
+    test('PLAY-025: reverse playback should actually decrement frames during playback', async ({ page }) => {
+      // Go to a frame in the middle so we have room to go backward
+      await page.keyboard.press('End');
+      await page.waitForTimeout(100);
+
+      let state = await getSessionState(page);
+      const startFrame = state.currentFrame;
+      expect(startFrame).toBeGreaterThan(5); // Ensure we have room to go backward
+
+      // Set reverse direction
+      await page.keyboard.press('ArrowUp');
+      await page.waitForTimeout(100);
+
+      state = await getSessionState(page);
+      expect(state.playDirection).toBe(-1);
+
+      // Start playback
+      await page.keyboard.press('Space');
+      await page.waitForTimeout(500); // Play for a bit
+
+      // Stop playback
+      await page.keyboard.press('Space');
+      await page.waitForTimeout(100);
+
+      // Frame should have DECREASED (reverse playback)
+      state = await getSessionState(page);
+      expect(state.currentFrame).toBeLessThan(startFrame);
+    });
+
+    test('PLAY-026: direction button icon should update when direction changes', async ({ page }) => {
+      // The direction button has "Playing forward" or "Playing backward" in its title
+      const directionButton = page.locator('button[title*="Playing forward"], button[title*="Playing backward"]').first();
+      await expect(directionButton).toBeVisible();
+
+      // Check initial state (forward)
+      let title = await directionButton.getAttribute('title');
+      expect(title).toMatch(/Playing forward/i);
+
+      // Toggle to reverse
+      await page.keyboard.press('ArrowUp');
+      await page.waitForTimeout(100);
+
+      // Button should now indicate backward
+      title = await directionButton.getAttribute('title');
+      expect(title).toMatch(/Playing backward/i);
+
+      // Toggle back to forward
+      await page.keyboard.press('ArrowUp');
+      await page.waitForTimeout(100);
+
+      // Button should indicate forward again
+      title = await directionButton.getAttribute('title');
+      expect(title).toMatch(/Playing forward/i);
+    });
+
+    test('PLAY-027: toggling direction during playback should immediately change direction', async ({ page }) => {
+      // Go to middle of video
+      await page.keyboard.press('Home');
+      for (let i = 0; i < 10; i++) {
+        await page.keyboard.press('ArrowRight');
+      }
+      await page.waitForTimeout(100);
+
+      let state = await getSessionState(page);
+      const midFrame = state.currentFrame;
+
+      // Start forward playback
+      await page.keyboard.press('Space');
+      await page.waitForTimeout(300);
+
+      state = await getSessionState(page);
+      const frameAfterForward = state.currentFrame;
+      expect(frameAfterForward).toBeGreaterThan(midFrame); // Went forward
+
+      // Toggle to reverse while still playing
+      await page.keyboard.press('ArrowUp');
+      await page.waitForTimeout(300);
+
+      // Stop playback
+      await page.keyboard.press('Space');
+      await page.waitForTimeout(100);
+
+      // Frame should have decreased from the forward position
+      state = await getSessionState(page);
+      expect(state.currentFrame).toBeLessThan(frameAfterForward);
+    });
   });
 
   test.describe('Loop Modes', () => {
@@ -378,6 +487,51 @@ test.describe('Playback Controls', () => {
       state = await getSessionState(page);
       expect(state.currentFrame).toBeGreaterThanOrEqual(state.inPoint);
       expect(state.currentFrame).toBeLessThanOrEqual(state.outPoint);
+    });
+
+    test('PLAY-034: pingpong mode should update direction button when auto-reversing', async ({ page }) => {
+      // Set very short in/out range for quick reversal
+      await page.keyboard.press('Home');
+      await page.keyboard.press('ArrowRight');
+      await page.keyboard.press('i'); // in at frame 2
+      await page.keyboard.press('ArrowRight');
+      await page.keyboard.press('ArrowRight');
+      await page.keyboard.press('o'); // out at frame 4 (3 frame range)
+      await page.waitForTimeout(100);
+
+      // Set pingpong mode
+      await page.keyboard.press('l');
+      await page.waitForTimeout(100);
+
+      let state = await getSessionState(page);
+      expect(state.loopMode).toBe('pingpong');
+      expect(state.playDirection).toBe(1); // Initially forward
+
+      // Check direction button shows forward
+      const directionButton = page.locator('button[title*="Playing forward"], button[title*="Playing backward"]').first();
+      let title = await directionButton.getAttribute('title');
+      expect(title).toMatch(/Playing forward/i);
+
+      // Go to near the end of range
+      await page.keyboard.press('End'); // Go to out point
+      await page.keyboard.press('ArrowLeft'); // One frame before end
+      await page.waitForTimeout(100);
+
+      // Start playback - should hit boundary and reverse
+      await page.keyboard.press('Space');
+      await page.waitForTimeout(600); // Wait for reversal to happen
+      await page.keyboard.press('Space');
+      await page.waitForTimeout(100);
+
+      // After hitting boundary, direction should have changed
+      state = await getSessionState(page);
+      // Direction might be -1 or 1 depending on timing, but button should reflect current state
+      title = await directionButton.getAttribute('title');
+      if (state.playDirection === -1) {
+        expect(title).toMatch(/Playing backward/i);
+      } else {
+        expect(title).toMatch(/Playing forward/i);
+      }
     });
   });
 

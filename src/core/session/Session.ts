@@ -43,6 +43,7 @@ export interface SessionEvents extends EventMap {
   volumeChanged: number;
   mutedChanged: boolean;
   graphLoaded: GTOParseResult;
+  fpsChanged: number;
 }
 
 export type LoopMode = 'once' | 'loop' | 'pingpong';
@@ -131,7 +132,11 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   set fps(value: number) {
-    this._fps = Math.max(1, Math.min(120, value));
+    const clamped = Math.max(1, Math.min(120, value));
+    if (clamped !== this._fps) {
+      this._fps = clamped;
+      this.emit('fpsChanged', this._fps);
+    }
   }
 
   get isPlaying(): boolean {
@@ -221,10 +226,15 @@ export class Session extends EventEmitter<SessionEvents> {
       this.lastFrameTime = performance.now();
       this.frameAccumulator = 0;
 
-      // Start video playback if current source is video
+      // Start video playback if current source is video (only for forward playback)
       const source = this.currentSource;
       if (source?.type === 'video' && source.element instanceof HTMLVideoElement) {
-        source.element.play();
+        if (this._playDirection === 1) {
+          source.element.play();
+        } else {
+          // For reverse playback, keep video paused - we'll seek frame by frame
+          source.element.pause();
+        }
       }
 
       this.emit('playbackChanged', true);
@@ -255,6 +265,21 @@ export class Session extends EventEmitter<SessionEvents> {
 
   togglePlayDirection(): void {
     this._playDirection *= -1;
+
+    // Handle video playback mode switching while playing
+    const source = this.currentSource;
+    if (this._isPlaying && source?.type === 'video' && source.element instanceof HTMLVideoElement) {
+      if (this._playDirection === 1) {
+        // Switching to forward: start native video playback
+        source.element.play();
+      } else {
+        // Switching to reverse: pause video, will use frame-based seeking
+        source.element.pause();
+        this.lastFrameTime = performance.now();
+        this.frameAccumulator = 0;
+      }
+    }
+
     this.emit('playDirectionChanged', this._playDirection);
   }
 
@@ -341,8 +366,8 @@ export class Session extends EventEmitter<SessionEvents> {
 
     const source = this.currentSource;
 
-    // For video, sync frame from video time
-    if (source?.type === 'video' && source.element instanceof HTMLVideoElement) {
+    // For video with forward playback, sync frame from video time
+    if (source?.type === 'video' && source.element instanceof HTMLVideoElement && this._playDirection === 1) {
       const video = source.element;
       const currentTime = video.currentTime;
       const frame = Math.floor(currentTime * this._fps) + 1;
@@ -362,7 +387,7 @@ export class Session extends EventEmitter<SessionEvents> {
         }
       }
     } else {
-      // For images, use frame-based timing
+      // For images or video with reverse playback, use frame-based timing
       const now = performance.now();
       const delta = now - this.lastFrameTime;
       this.lastFrameTime = now;
@@ -373,6 +398,12 @@ export class Session extends EventEmitter<SessionEvents> {
       while (this.frameAccumulator >= frameDuration) {
         this.frameAccumulator -= frameDuration;
         this.advanceFrame(this._playDirection);
+      }
+
+      // For video reverse playback, seek to the current frame
+      if (source?.type === 'video' && source.element instanceof HTMLVideoElement) {
+        const targetTime = (this._currentFrame - 1) / this._fps;
+        source.element.currentTime = targetTime;
       }
     }
   }
@@ -391,6 +422,7 @@ export class Session extends EventEmitter<SessionEvents> {
           break;
         case 'pingpong':
           this._playDirection = -1;
+          this.emit('playDirectionChanged', this._playDirection);
           nextFrame = this._outPoint - 1;
           break;
       }
@@ -405,6 +437,7 @@ export class Session extends EventEmitter<SessionEvents> {
           break;
         case 'pingpong':
           this._playDirection = 1;
+          this.emit('playDirectionChanged', this._playDirection);
           nextFrame = this._inPoint + 1;
           break;
       }
@@ -465,7 +498,7 @@ export class Session extends EventEmitter<SessionEvents> {
 
       // Apply session info from GTO
       if (result.sessionInfo.fps) {
-        this._fps = result.sessionInfo.fps;
+        this.fps = result.sessionInfo.fps;
       }
       if (result.sessionInfo.frame) {
         this._currentFrame = result.sessionInfo.frame;
@@ -897,7 +930,7 @@ export class Session extends EventEmitter<SessionEvents> {
 
     this.sources.push(source);
     this._currentSourceIndex = this.sources.length - 1;
-    this._fps = sequenceInfo.fps;
+    this.fps = sequenceInfo.fps;
     this._inPoint = 1;
     this._outPoint = sequenceInfo.frames.length;
     this._currentFrame = 1;
@@ -1020,7 +1053,7 @@ export class Session extends EventEmitter<SessionEvents> {
     marks: number[];
     currentSourceIndex: number;
   }>): void {
-    if (state.fps !== undefined) this._fps = state.fps;
+    if (state.fps !== undefined) this.fps = state.fps;
     if (state.loopMode !== undefined) {
       this._loopMode = state.loopMode;
       this.emit('loopModeChanged', this._loopMode);
