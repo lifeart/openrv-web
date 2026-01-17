@@ -22,12 +22,13 @@ export class FileSourceNode extends BaseSourceNode {
     this.properties.add({ name: 'url', defaultValue: '' });
     this.properties.add({ name: 'width', defaultValue: 0 });
     this.properties.add({ name: 'height', defaultValue: 0 });
+    this.properties.add({ name: 'originalUrl', defaultValue: '' });
   }
 
   /**
    * Load image from URL
    */
-  async load(url: string, name?: string): Promise<void> {
+  async load(url: string, name?: string, originalUrl?: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.crossOrigin = 'anonymous';
@@ -44,6 +45,10 @@ export class FileSourceNode extends BaseSourceNode {
         };
 
         this.properties.setValue('url', url);
+        // store original url if provided (for file system path preservation)
+        if (originalUrl) {
+          this.properties.setValue('originalUrl', originalUrl);
+        }
         this.properties.setValue('width', img.naturalWidth);
         this.properties.setValue('height', img.naturalHeight);
 
@@ -62,6 +67,7 @@ export class FileSourceNode extends BaseSourceNode {
    */
   async loadFile(file: File): Promise<void> {
     const url = URL.createObjectURL(file);
+    // Use file.name as fallback, but ideally we don't have full path here
     await this.load(url, file.name);
   }
 
@@ -123,7 +129,8 @@ export class FileSourceNode extends BaseSourceNode {
       type: this.type,
       id: this.id,
       name: this.name,
-      url: this.url,
+      // Prefer originalUrl for export if available (preserves file system path)
+      url: this.properties.getValue<string>('originalUrl') || this.url,
       metadata: this.metadata,
       properties: this.properties.toJSON(),
     };

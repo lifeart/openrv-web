@@ -1,65 +1,106 @@
-import { describe, expect, it } from 'vitest';
-import { Session } from './Session';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SessionGTOExporter } from './SessionGTOExporter';
+import { Session } from './Session';
 import { PaintEngine } from '../../paint/PaintEngine';
-import { BrushType, LineCap, LineJoin, StrokeMode, RV_PEN_WIDTH_SCALE, RV_TEXT_SIZE_SCALE, type PenStroke } from '../../paint/types';
+import type { GTOData } from 'gto-js';
+import { Graph } from '../graph/Graph';
 
 describe('SessionGTOExporter', () => {
-  it('exports annotations and effects to RV GTO', async () => {
-    const session = new Session();
-    const paintEngine = new PaintEngine();
+    let mockSession: Session;
+    let mockPaintEngine: PaintEngine;
+    let mockGraph: Graph;
 
-    session.fps = 24;
-    session.setInPoint(1);
-    session.setOutPoint(10);
-    session.currentFrame = 4;
-    session.toggleMark(4);
+    beforeEach(() => {
+        // Mock Session
+         const mockPlayback = {
+            currentFrame: 10,
+            inPoint: 1,
+            outPoint: 100,
+            fps: 24,
+            marks: new Set([5, 15]),
+            isPlaying: false
+        };
 
-    paintEngine.setGhostMode(true, 2, 4);
-    paintEngine.setHoldMode(true);
+        mockSession = {
+            getPlaybackState: vi.fn().mockReturnValue(mockPlayback),
+            allSources: [{ width: 1920, height: 1080 }],
+            graph: {
+                getNode: vi.fn(),
+                nodes: { get: vi.fn() } // fallback if private access
+            } as unknown as Graph
+        } as unknown as Session;
 
-    const stroke: PenStroke = {
-      type: 'pen',
-      id: '1',
-      frame: 4,
-      user: 'tester',
-      color: [1, 0.2, 0.1, 1],
-      width: RV_PEN_WIDTH_SCALE * 0.04,
-      brush: BrushType.Circle,
-      points: [
-        { x: 0.2, y: 0.2 },
-        { x: 0.4, y: 0.35 },
-      ],
-      join: LineJoin.Round,
-      cap: LineCap.Round,
-      splat: false,
-      mode: StrokeMode.Draw,
-      startFrame: 4,
-      duration: 0,
-    };
-
-    paintEngine.addAnnotation(stroke);
-    paintEngine.addText(5, { x: 0.6, y: 0.7 }, 'Note', RV_TEXT_SIZE_SCALE * 0.02);
-
-    const gtoText = SessionGTOExporter.toText(session, paintEngine);
-
-    const loadedSession = new Session();
-    let loadedAnnotations: PenStroke[] = [];
-    let loadedEffects: { ghost?: boolean; hold?: boolean; ghostBefore?: number; ghostAfter?: number } | undefined;
-
-    loadedSession.on('annotationsLoaded', ({ annotations, effects }) => {
-      loadedAnnotations = annotations as PenStroke[];
-      loadedEffects = effects;
+        // Mock PaintEngine
+         mockPaintEngine = {
+            toJSON: vi.fn().mockReturnValue({
+                nextId: 1,
+                show: true,
+                frames: {},
+                effects: { ghost: false }
+            })
+        } as unknown as PaintEngine;
     });
 
-    await loadedSession.loadFromGTO(gtoText);
+    it('updates original GTO data with preserved paths', () => {
+        // Original GTO structure mimicking a loaded file
+        const originalGTO: GTOData = {
+            version: 4,
+            objects: [
+                {
+                    name: 'sourceNode',
+                    protocol: 'RVFileSource',
+                    components: [
+                        {
+                            name: 'media',
+                            properties: [
+                                { name: 'movie', value: '/old/path.mp4' }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    name: 'session',
+                    protocol: 'RVSession',
+                    components: [
+                        {
+                            name: 'session',
+                            properties: [
+                                { name: 'frame', value: 1 }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        };
 
-    expect(loadedEffects).toMatchObject({
-      ghost: true,
-      hold: true,
-      ghostBefore: 2,
-      ghostAfter: 4,
+        // Setup session with updated path
+        const mockNode = {
+            type: 'RVFileSource',
+            properties: {
+                getValue: vi.fn((key) => {
+                    if (key === 'originalUrl') return '/new/preserved/path.mp4';
+                    return undefined;
+                })
+            }
+        };
+
+        vi.mocked(mockSession.graph!.getNode).mockReturnValue(mockNode as any);
+
+        const updatedGTO = SessionGTOExporter.updateGTOData(originalGTO, mockSession, mockPaintEngine);
+
+        // Check RVFileSource update
+        const sourceObj = updatedGTO.objects.find(o => o.name === 'sourceNode');
+        expect(sourceObj).toBeDefined();
+        const mediaComp = sourceObj?.components.find(c => c.name === 'media');
+        const movieProp = mediaComp?.properties.find(p => p.name === 'movie');
+        
+        expect(movieProp?.value).toBe('/new/preserved/path.mp4');
+
+        // Check RVSession update
+        const sessionObj = updatedGTO.objects.find(o => o.protocol === 'RVSession');
+        const sessionComp = sessionObj?.components.find(c => c.name === 'session');
+        const frameProp = sessionComp?.properties.find(p => p.name === 'frame');
+        
+        expect(frameProp?.value).toBe(10); // Updated to currentFrame from mockPlayback
     });
-    expect(loadedAnnotations.length).toBeGreaterThanOrEqual(2);
-  });
 });

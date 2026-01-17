@@ -614,6 +614,52 @@ describe('GTOGraphLoader', () => {
 
       expect(result.sessionInfo.fps).toBe(30);
     });
+
+    it('uses matching local file for RVFileSource url if available', () => {
+      const mockNode = {
+        type: 'RVFileSource',
+        name: 'sourceNode',
+        properties: {
+          has: vi.fn((key: string) => ['url', 'originalUrl'].includes(key)),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      // Mock URL.createObjectURL
+      const originalCreateObjectURL = URL.createObjectURL;
+      URL.createObjectURL = vi.fn().mockReturnValue('blob:mock-url');
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'sourceNode',
+            protocol: 'RVFileSource',
+            components: {
+              media: { movie: '/path/to/myvideo.mp4' },
+            },
+          },
+        ],
+      });
+
+      const availableFiles = new Map<string, File>();
+      // @ts-ignore
+      const mockFile = { name: 'myvideo.mp4' } as File;
+      availableFiles.set('myvideo.mp4', mockFile);
+
+      loadGTOGraph(dto as never, availableFiles);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('url', 'blob:mock-url');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('originalUrl', '/path/to/myvideo.mp4');
+
+      // Cleanup
+      URL.createObjectURL = originalCreateObjectURL;
+    });
   });
 
   describe('getGraphSummary', () => {

@@ -114,9 +114,19 @@ export class SessionGTOExporter {
     options: { binary?: boolean } = {}
   ): Promise<void> {
     const isBinary = options.binary ?? filename.endsWith('.gto');
+    
+    let data: GTOData;
+    if (session.gtoData) {
+        console.log('Patching existing GTO data for export');
+        data = this.updateGTOData(session.gtoData, session, paintEngine);
+    } else {
+        console.log('Generating new GTO data for export');
+        data = this.toGTOData(session, paintEngine);
+    }
+
     const payload = isBinary
-      ? this.toBinary(session, paintEngine)
-      : this.toText(session, paintEngine);
+      ? SimpleWriter.write(data, { binary: true })
+      : SimpleWriter.write(data);
     const blob = new Blob([payload], { type: isBinary ? 'application/octet-stream' : 'text/plain' });
     const url = URL.createObjectURL(blob);
 
@@ -130,6 +140,83 @@ export class SessionGTOExporter {
     URL.revokeObjectURL(url);
   }
 
+  /**
+   * Update existing GTO data with current session state
+   * (Preserves original file structure and unsupported nodes)
+   */
+  static updateGTOData(originalData: GTOData, session: Session, paintEngine: PaintEngine): GTOData {
+    // Deep clone to avoid mutating original
+    const data: GTOData = JSON.parse(JSON.stringify(originalData));
+    
+    // Create new paint object using current state
+    const currentPaintObject = this.buildPaintObject(session, paintEngine, 'annotations');
+    
+    // Index objects by name/protocol for easier access
+    for (const obj of data.objects) {
+      // 1. Update RVSession info
+      if (obj.protocol === 'RVSession') {
+        const sessionComp = this.findOrAddComponent(obj, 'session');
+        const playback = session.getPlaybackState();
+        
+        this.updateProperty(sessionComp, 'frame', playback.currentFrame);
+        this.updateProperty(sessionComp, 'currentFrame', playback.currentFrame);
+        this.updateProperty(sessionComp, 'range', [playback.inPoint, playback.outPoint]);
+        this.updateProperty(sessionComp, 'region', [playback.inPoint, playback.outPoint]);
+        this.updateProperty(sessionComp, 'fps', playback.fps);
+        
+        if (playback.marks.length > 0) {
+           this.updateProperty(sessionComp, 'marks', Array.from(playback.marks));
+        } else {
+            // Remove marks property if empty? Or set to empty array?
+             this.updateProperty(sessionComp, 'marks', []);
+        }
+      }
+      
+      // 2. Update RVFileSource paths
+      if (obj.protocol === 'RVFileSource') {
+        const node = session.graph?.getNode(obj.name);
+        if (node && node.type === 'RVFileSource') {
+          const originalUrl = node.properties.getValue<string>('originalUrl');
+          if (originalUrl) {
+             const mediaComp = this.findOrAddComponent(obj, 'media');
+             this.updateProperty(mediaComp, 'movie', originalUrl);
+          }
+        }
+      }
+    }
+    
+    // 3. Replace RVPaint object
+    // Find index of existing paint object
+    const paintIndex = data.objects.findIndex(o => o.protocol === 'RVPaint');
+    if (paintIndex !== -1) {
+      data.objects[paintIndex] = currentPaintObject;
+    } else {
+      data.objects.push(currentPaintObject);
+    }
+
+    return data;
+  }
+
+  private static findOrAddComponent(obj: ObjectData, name: string) {
+    let comp = obj.components.find(c => c.name === name);
+    if (!comp) {
+        comp = { name, properties: [] };
+        obj.components.push(comp);
+    }
+    return comp;
+  }
+
+  private static updateProperty(comp: { name: string, properties: any[] }, name: string, value: any) {
+    const prop = comp.properties.find(p => p.name === name);
+    if (prop) {
+        prop.value = value;
+    } else {
+        // Simple type inference for new properties (limited support)
+        // Ideally we shouldn't be adding new properties to unknown components often
+        // But for RVSession we know the types
+        comp.properties.push({ name, value }); 
+    }
+  }
   private static getAspectRatio(session: Session): number {
     const source = session.allSources[0];
     if (!source || source.height === 0) {

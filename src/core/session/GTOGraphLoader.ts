@@ -77,9 +77,9 @@ const PROTOCOL_TO_NODE_TYPE: Record<string, string> = {
  * @param dto - Pre-parsed GTODTO object
  * @returns Parsed graph result with nodes and connections
  */
-export function loadGTOGraph(dto: GTODTO): GTOParseResult {
+export function loadGTOGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOParseResult {
   try {
-    return parseGTOToGraph(dto);
+    return parseGTOToGraph(dto, availableFiles);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     throw new Error(`Failed to construct node graph from GTO: ${message}`);
@@ -89,7 +89,7 @@ export function loadGTOGraph(dto: GTODTO): GTOParseResult {
 /**
  * Parse GTODTO into a Graph
  */
-function parseGTOToGraph(dto: GTODTO): GTOParseResult {
+function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOParseResult {
   const graph = new Graph();
   const nodes = new Map<string, IPNode>();
   let rootNode: IPNode | null = null;
@@ -222,6 +222,23 @@ function parseGTOToGraph(dto: GTODTO): GTOParseResult {
         const movie = mediaComp.property('movie').value() as string;
         if (movie) {
           nodeInfo.properties.url = movie;
+
+          // If we have available files (user selected), check for name match
+          if (availableFiles && availableFiles.size > 0) {
+            // Extract basename from movie path (e.g., /path/to/video.mp4 -> video.mp4)
+            const basename = movie.split(/[/\\]/).pop();
+            
+            if (basename && availableFiles.has(basename)) {
+              // Found a match! Use the blob URL for loading
+              const file = availableFiles.get(basename)!;
+              const blobUrl = URL.createObjectURL(file);
+              
+              nodeInfo.properties.url = blobUrl;
+              nodeInfo.properties.originalUrl = movie; // Store original path for preservation
+              
+              console.log(`Matched GTO file "${movie}" to local file "${file.name}"`);
+            }
+          }
         }
       }
 

@@ -521,7 +521,7 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   // Session loading
-  async loadFromGTO(data: ArrayBuffer | string): Promise<void> {
+  async loadFromGTO(data: ArrayBuffer | string, availableFiles?: Map<string, File>): Promise<void> {
     const reader = new SimpleReader();
 
     try {
@@ -557,7 +557,7 @@ export class Session extends EventEmitter<SessionEvents> {
 
     // Parse the node graph from the already-parsed GTO (avoids double parsing)
     try {
-      const result = loadGTOGraph(dto);
+      const result = loadGTOGraph(dto, availableFiles);
       this._graph = result.graph;
       this._graphParseResult = result;
 

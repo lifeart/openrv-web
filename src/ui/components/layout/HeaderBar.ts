@@ -314,6 +314,33 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
     const fileArray = Array.from(files);
 
+    // Check for .rv or .gto files in the selection
+    const sessionFile = fileArray.find(f => f.name.endsWith('.rv') || f.name.endsWith('.gto'));
+    
+    if (sessionFile) {
+      // If we have a session file, treat other files as potential media sources
+      const availableFiles = new Map<string, File>();
+      for (const file of fileArray) {
+        if (file !== sessionFile) {
+          availableFiles.set(file.name, file);
+        }
+      }
+
+      try {
+        const content = await sessionFile.arrayBuffer();
+        await this.session.loadFromGTO(content, availableFiles);
+        this.emit('fileLoaded', undefined);
+      } catch (err) {
+        console.error('Failed to load session file:', err);
+        showAlert(`Failed to load ${sessionFile.name}: ${err}`, { type: 'error', title: 'Load Error' });
+      }
+      
+      // Clear input
+      input.value = '';
+      return;
+    }
+
+    // Standard loading (sequence or individual files)
     // Check if multiple image files were selected - treat as sequence
     const imageFiles = filterImageFiles(fileArray);
     if (imageFiles.length > 1) {
@@ -333,12 +360,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Single file or mixed files - load individually
     for (const file of fileArray) {
       try {
-        if (file.name.endsWith('.rv') || file.name.endsWith('.gto')) {
-          const content = await file.arrayBuffer();
-          await this.session.loadFromGTO(content);
-        } else {
-          await this.session.loadFile(file);
-        }
+        await this.session.loadFile(file);
         this.emit('fileLoaded', undefined);
       } catch (err) {
         console.error('Failed to load file:', err);
