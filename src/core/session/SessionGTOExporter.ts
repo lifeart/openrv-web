@@ -80,7 +80,7 @@ export class SessionGTOExporter {
         if (annotation.type === 'pen') {
           this.writePenComponent(paintObject, componentName, annotation, aspectRatio);
         } else {
-          this.writeTextComponent(paintObject, componentName, annotation, aspectRatio);
+          this.writeTextComponent(paintObject, componentName, annotation as TextAnnotation, aspectRatio);
         }
       }
     }
@@ -238,8 +238,8 @@ export class SessionGTOExporter {
     aspectRatio: number
   ): void {
     const points = annotation.points.map((point) => [
-      (point.x * 2 - 1) * aspectRatio,
-      point.y * 2 - 1,
+      (point.x - 0.5) * aspectRatio,
+      point.y - 0.5,
     ]);
 
     const widths = Array.isArray(annotation.width)
@@ -266,8 +266,8 @@ export class SessionGTOExporter {
     aspectRatio: number
   ): void {
     const position: [number, number] = [
-      (annotation.position.x * 2 - 1) * aspectRatio,
-      annotation.position.y * 2 - 1,
+      (annotation.position.x - 0.5) * aspectRatio,
+      annotation.position.y - 0.5,
     ];
 
     paintObject

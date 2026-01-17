@@ -115,7 +115,7 @@ export class Session extends EventEmitter<SessionEvents> {
   private _syncPlayhead = true;
 
   // Node graph from GTO file
-  private _graph: Graph = new Graph();
+  private _graph: Graph | null = null;
   private _graphParseResult: GTOParseResult | null = null;
   private _gtoData: GTOData | null = null;
 
@@ -1370,9 +1370,10 @@ export class Session extends EventEmitter<SessionEvents> {
           const rawX = point[0] as number;
           const rawY = point[1] as number;
           // Convert from OpenRV coords to normalized 0-1 coords
+          // OpenRV Coords are height-normalized (Y: -0.5 to 0.5)
           points.push({
-            x: (rawX / aspectRatio + 1) / 2,
-            y: (rawY + 1) / 2,
+            x: rawX / aspectRatio + 0.5,
+            y: rawY + 0.5,
           });
         }
       }
@@ -1445,8 +1446,9 @@ export class Session extends EventEmitter<SessionEvents> {
       if (Array.isArray(posData) && posData.length >= 2) {
         const rawX = posData[0] as number;
         const rawY = posData[1] as number;
-        x = (rawX / aspectRatio + 1) / 2;
-        y = (rawY + 1) / 2;
+        // OpenRV Coords are height-normalized (Y: -0.5 to 0.5)
+        x = rawX / aspectRatio + 0.5;
+        y = rawY + 0.5;
       }
     }
 
