@@ -130,7 +130,7 @@ describe('Timeline', () => {
 
     it('TML-009: responds to inOutChanged event', () => {
       timeline.drawCount = 0;
-      session.emit('inOutChanged', 5, 50);
+      session.emit('inOutChanged', { inPoint: 5, outPoint: 50 });
       expect(timeline.drawCount).toBeGreaterThan(0);
     });
 

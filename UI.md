@@ -268,6 +268,25 @@
 
 ## Keyboard Shortcuts (Updated)
 
+### Keyboard Management System
+
+The application uses a centralized `KeyboardManager` class for all keyboard shortcuts:
+
+- **Centralized Registration**: All shortcuts registered through a single manager instance
+- **Flexible Configuration**: Shortcuts defined in `KeyBindings.ts` with descriptions
+- **Cross-Platform Compatibility**: Meta key (Cmd) treated as Ctrl automatically
+- **Input Field Handling**: Shortcuts disabled in text inputs (except global keys)
+- **Runtime Reconfiguration**: Shortcuts can be changed without code changes
+
+**Modal Exceptions**: Modal dialogs have local keyboard handling for Escape/Enter keys, as they are focused, temporary UI elements requiring immediate response.
+
+```typescript
+// Example usage in App.ts
+this.keyboardManager.register(DEFAULT_KEY_BINDINGS['playback.toggle'], () => {
+  this.session.togglePlayback();
+});
+```
+
 ### Tab Navigation
 - `1` - View tab
 - `2` - Color tab

@@ -27,6 +27,8 @@ import { showAlert, showModal } from './ui/components/shared/Modal';
 import { SessionSerializer } from './core/session/SessionSerializer';
 import { SessionGTOExporter } from './core/session/SessionGTOExporter';
 import { SessionGTOStore } from './core/session/SessionGTOStore';
+import { KeyboardManager } from './utils/KeyboardManager';
+import { DEFAULT_KEY_BINDINGS } from './utils/KeyBindings';
 
 export class App {
   private container: HTMLElement | null = null;
@@ -56,12 +58,11 @@ export class App {
   private scopesControl: ScopesControl;
   private compareControl: CompareControl;
   private animationId: number | null = null;
-  private boundHandleKeydown: (e: KeyboardEvent) => void;
   private boundHandleResize: () => void;
+  private keyboardManager: KeyboardManager;
 
   constructor() {
     // Bind event handlers for proper cleanup
-    this.boundHandleKeydown = (e: KeyboardEvent) => this.handleKeydown(e);
     this.boundHandleResize = () => this.viewer.resize();
 
     this.session = new Session();
@@ -276,6 +277,10 @@ export class App {
 
     // Initialize vectorscope
     this.vectorscope = new Vectorscope();
+
+    // Initialize keyboard manager
+    this.keyboardManager = new KeyboardManager();
+    this.setupKeyboardShortcuts();
   }
 
   mount(selector: string): void {
@@ -465,8 +470,8 @@ export class App {
     // Handle window resize
     window.addEventListener('resize', this.boundHandleResize);
 
-    // Keyboard shortcuts
-    document.addEventListener('keydown', this.boundHandleKeydown);
+    // Initialize keyboard shortcuts
+    this.keyboardManager.attach();
 
     // Load annotations from GTO files
     this.session.on('annotationsLoaded', ({ annotations, effects }) => {
@@ -557,231 +562,249 @@ export class App {
     });
   }
 
-  private handleKeydown(e: KeyboardEvent): void {
-    // For text inputs, only allow specific playback keys through
-    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-      const input = e.target as HTMLInputElement;
-      // Allow playback keys for non-text inputs (range, color, etc.)
-      // For text inputs, block everything except specific global shortcuts
-      const isTextInput = input.type === 'text' || input.type === 'search' || input.type === 'password' ||
-                          input.type === 'email' || input.type === 'url' || input.type === 'tel' ||
-                          e.target instanceof HTMLTextAreaElement;
+  private setupKeyboardShortcuts(): void {
+    // Playback controls
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['playback.toggle']!, () => {
+      this.session.togglePlayback();
+    });
 
-      // Global playback keys that should always work (blur the input first)
-      const globalKeys = [' ', 'Escape', 'Home', 'End'];
-      if (globalKeys.includes(e.key)) {
-        (e.target as HTMLElement).blur();
-        // Continue to handle the key
-      } else if (isTextInput) {
-        // Block other keys for text inputs to allow typing
-        return;
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['playback.stepForward']!, () => {
+      this.session.stepForward();
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['playback.stepBackward']!, () => {
+      this.session.stepBackward();
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['playback.toggleDirection']!, () => {
+      this.session.togglePlayDirection();
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['playback.goToStart']!, () => {
+      this.session.goToStart();
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['playback.goToEnd']!, () => {
+      this.session.goToEnd();
+    });
+
+    // Timeline controls
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['timeline.setInPoint']!, () => {
+      this.session.setInPoint();
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['timeline.setInPointAlt']!, () => {
+      this.session.setInPoint();
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['timeline.setOutPoint']!, () => {
+      this.session.setOutPoint();
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['timeline.setOutPointAlt']!, () => {
+      this.session.setOutPoint();
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['timeline.toggleMark']!, () => {
+      this.session.toggleMark();
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['timeline.resetInOut']!, () => {
+      this.session.resetInOutPoints();
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['timeline.cycleLoopMode']!, () => {
+      const modes: Array<'once' | 'loop' | 'pingpong'> = ['once', 'loop', 'pingpong'];
+      const currentIndex = modes.indexOf(this.session.loopMode);
+      this.session.loopMode = modes[(currentIndex + 1) % modes.length]!;
+    });
+
+    // View controls
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['view.fitToWindow']!, () => {
+      this.viewer.fitToWindow();
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['view.fitToWindowAlt']!, () => {
+      this.viewer.fitToWindow();
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['view.zoom50']!, () => {
+      if (this.tabBar.activeTab === 'view') {
+        this.viewer.setZoom(0.5);
       }
-      // For non-text inputs (range, color), allow keyboard shortcuts through
-    }
+    });
 
-    // Try paint toolbar shortcuts first (only if no modifier keys pressed)
-    // Shift/Alt modifiers are used for transform shortcuts
-    if (!e.shiftKey && !e.altKey && this.paintToolbar.handleKeyboard(e.key)) {
-      e.preventDefault();
-      return;
-    }
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['view.cycleWipeMode']!, () => {
+      this.compareControl.cycleWipeMode();
+    });
 
-    // Handle Ctrl+Z/Y for undo/redo, Ctrl+S for export, Ctrl+C for copy
-    if (e.ctrlKey || e.metaKey) {
-      if (e.key === 'z') {
-        e.preventDefault();
-        this.paintEngine.undo();
-        return;
-      } else if (e.key === 'y') {
-        e.preventDefault();
-        this.paintEngine.redo();
-        return;
-      } else if (e.key === 's') {
-        e.preventDefault();
-        this.headerBar.getExportControl().quickExport('png');
-        return;
-      } else if (e.key === 'c') {
-        e.preventDefault();
-        this.viewer.copyFrameToClipboard(true);
-        return;
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['view.toggleWaveform']!, () => {
+      this.scopesControl.toggleScope('waveform');
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['view.toggleAB']!, () => {
+      this.session.toggleAB();
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['view.toggleABAlt']!, () => {
+      this.session.toggleAB();
+    });
+
+    // Panel toggles
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['panel.color']!, () => {
+      this.colorControls.toggle();
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['panel.effects']!, () => {
+      this.filterControl.toggle();
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['panel.curves']!, () => {
+      this.curvesControl.toggle();
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['panel.crop']!, () => {
+      this.cropControl.toggle();
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['panel.waveform']!, () => {
+      this.scopesControl.toggleScope('waveform');
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['panel.vectorscope']!, () => {
+      this.scopesControl.toggleScope('vectorscope');
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['panel.histogram']!, () => {
+      this.scopesControl.toggleScope('histogram');
+    });
+
+    // Transform controls
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['transform.rotateLeft']!, () => {
+      this.transformControl.rotateLeft();
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['transform.rotateRight']!, () => {
+      this.transformControl.rotateRight();
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['transform.flipHorizontal']!, () => {
+      this.transformControl.toggleFlipH();
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['transform.flipVertical']!, () => {
+      this.transformControl.toggleFlipV();
+    });
+
+    // Export controls
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['export.quickExport']!, () => {
+      this.headerBar.getExportControl().quickExport('png');
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['export.copyFrame']!, () => {
+      this.viewer.copyFrameToClipboard(true);
+    });
+
+    // Undo/Redo
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['edit.undo']!, () => {
+      this.paintEngine.undo();
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['edit.redo']!, () => {
+      this.paintEngine.redo();
+    });
+
+    // Annotation navigation
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['annotation.previous']!, () => {
+      this.goToPreviousAnnotation();
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['annotation.next']!, () => {
+      this.goToNextAnnotation();
+    });
+
+    // Tab navigation
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['tab.view']!, () => {
+      this.tabBar.handleKeyboard('1');
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['tab.color']!, () => {
+      this.tabBar.handleKeyboard('2');
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['tab.effects']!, () => {
+      this.tabBar.handleKeyboard('3');
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['tab.transform']!, () => {
+      this.tabBar.handleKeyboard('4');
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['tab.annotate']!, () => {
+      this.tabBar.handleKeyboard('5');
+    });
+
+    // Paint tools - delegate to paint toolbar
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['paint.pan']!, () => {
+      this.paintToolbar.handleKeyboard('v');
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['paint.pen']!, () => {
+      this.paintToolbar.handleKeyboard('p');
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['paint.eraser']!, () => {
+      this.paintToolbar.handleKeyboard('e');
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['paint.text']!, () => {
+      this.paintToolbar.handleKeyboard('t');
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['paint.toggleBrush']!, () => {
+      this.paintToolbar.handleKeyboard('b');
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['paint.toggleGhost']!, () => {
+      this.paintToolbar.handleKeyboard('g');
+    });
+
+    // Channel selection - delegate to channel select
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['channel.red']!, () => {
+      this.channelSelect.handleKeyboard('R', true);
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['channel.green']!, () => {
+      this.channelSelect.handleKeyboard('G', true);
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['channel.blue']!, () => {
+      this.channelSelect.handleKeyboard('B', true);
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['channel.alpha']!, () => {
+      this.channelSelect.handleKeyboard('A', true);
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['channel.luminance']!, () => {
+      this.channelSelect.handleKeyboard('L', true);
+    });
+
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['channel.none']!, () => {
+      this.channelSelect.handleKeyboard('N', true);
+    });
+
+    // Stereo controls - delegate to stereo control
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['stereo.toggle']!, () => {
+      this.stereoControl.handleKeyboard('3', true);
+    });
+
+    // Panel close
+    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['panel.close']!, () => {
+      if (this.colorControls) {
+        this.colorControls.hide();
       }
-    }
-
-    // Handle transform shortcuts (Shift/Alt + key)
-    if (e.shiftKey || e.altKey) {
-      const key = e.key.toLowerCase();
-      if (key === 'r') {
-        e.preventDefault();
-        if (e.shiftKey) {
-          this.transformControl.rotateLeft();
-        } else {
-          this.transformControl.rotateRight();
-        }
-        return;
-      } else if (key === 'h' && e.shiftKey) {
-        e.preventDefault();
-        this.transformControl.toggleFlipH();
-        return;
-      } else if (key === 'v' && e.shiftKey) {
-        e.preventDefault();
-        this.transformControl.toggleFlipV();
-        return;
-      }
-
-      // Handle channel select shortcuts (Shift + G/B/A/L/N)
-      // Note: Shift+R is used for rotation, so Red channel must be selected via UI
-      if (e.shiftKey && this.channelSelect.handleKeyboard(e.key, e.shiftKey)) {
-        e.preventDefault();
-        return;
-      }
-
-      // Handle stereo control shortcuts (Shift + 3)
-      if (e.shiftKey && this.stereoControl.handleKeyboard(e.key, e.shiftKey)) {
-        e.preventDefault();
-        return;
-      }
-    }
-
-    switch (e.key) {
-      case ' ':
-        e.preventDefault();
-        this.session.togglePlayback();
-        break;
-      case 'ArrowLeft':
-        e.preventDefault();
-        this.session.stepBackward();
-        break;
-      case 'ArrowRight':
-        e.preventDefault();
-        this.session.stepForward();
-        break;
-      case 'ArrowUp':
-        e.preventDefault();
-        this.session.togglePlayDirection();
-        break;
-      case 'Home':
-        e.preventDefault();
-        this.session.goToStart();
-        break;
-      case 'End':
-        e.preventDefault();
-        this.session.goToEnd();
-        break;
-      case 'f':
-      case 'F':
-        this.viewer.fitToWindow();
-        break;
-      case '1':
-      case '2':
-      case '3':
-      case '4':
-      case '5':
-        // Tab navigation (1-5)
-        if (this.tabBar.handleKeyboard(e.key)) {
-          e.preventDefault();
-        }
-        break;
-      case '0':
-        // Zoom 50% when on View tab
-        if (this.tabBar.activeTab === 'view') {
-          this.viewer.setZoom(0.5);
-        }
-        break;
-      case '[':
-        this.session.setInPoint();
-        break;
-      case ']':
-        this.session.setOutPoint();
-        break;
-      case 'i':
-      case 'I':
-        this.session.setInPoint();
-        break;
-      case 'o':
-      case 'O':
-        this.session.setOutPoint();
-        break;
-      case 'm':
-      case 'M':
-        this.session.toggleMark();
-        break;
-      case 'l':
-      case 'L':
-        // Cycle loop mode
-        const modes: Array<'once' | 'loop' | 'pingpong'> = ['once', 'loop', 'pingpong'];
-        const currentIndex = modes.indexOf(this.session.loopMode);
-        this.session.loopMode = modes[(currentIndex + 1) % modes.length]!;
-        break;
-      case 'r':
-      case 'R':
-        // Reset in/out points to full duration
-        this.session.resetInOutPoints();
-        break;
-      case 'c':
-      case 'C':
-        // Toggle color controls panel
-        this.colorControls.toggle();
-        break;
-      case 'W':
-        // Cycle wipe mode (uppercase or Shift+w)
-        this.compareControl.cycleWipeMode();
-        break;
-      case 'w':
-        // Shift+w cycles wipe mode, plain w toggles waveform
-        if (e.shiftKey) {
-          this.compareControl.cycleWipeMode();
-        } else {
-          this.scopesControl.toggleScope('waveform');
-        }
-        break;
-      case 'y':
-        // Toggle vectorscope (lowercase only)
-        this.scopesControl.toggleScope('vectorscope');
-        break;
-      case 'h':
-        // Toggle histogram (lowercase only, Shift+H is for flip horizontal)
-        this.scopesControl.toggleScope('histogram');
-        break;
-      case 'g':
-      case 'G':
-        // Toggle filter effects panel
-        this.filterControl.toggle();
-        break;
-      case 'u':
-      case 'U':
-        // Toggle curves panel
-        this.curvesControl.toggle();
-        break;
-      case 'k':
-      case 'K':
-        // Toggle crop mode
-        this.cropControl.toggle();
-        break;
-      case 'Escape':
-        // Reset color adjustments when Escape pressed while color panel is open
-        if (this.colorControls) {
-          this.colorControls.hide();
-        }
-        break;
-      case '<':
-      case ',':
-        // Go to previous annotated frame
-        e.preventDefault();
-        this.goToPreviousAnnotation();
-        break;
-      case '>':
-      case '.':
-        // Go to next annotated frame
-        e.preventDefault();
-        this.goToNextAnnotation();
-        break;
-      case '`':
-      case '~':
-        // Toggle A/B source compare
-        e.preventDefault();
-        this.session.toggleAB();
-        break;
-    }
+    });
   }
 
   private goToNextAnnotation(): void {
@@ -1206,7 +1229,6 @@ Shift+V   - Flip vertical</pre>`;
 
     // Remove global event listeners
     window.removeEventListener('resize', this.boundHandleResize);
-    document.removeEventListener('keydown', this.boundHandleKeydown);
 
     this.viewer.dispose();
     this.timeline.dispose();

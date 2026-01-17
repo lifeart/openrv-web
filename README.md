@@ -200,6 +200,34 @@ src/
 └── utils/              # EventEmitter, FrameExporter, SequenceLoader
 ```
 
+### Keyboard Management
+
+The application uses a centralized `KeyboardManager` for all keyboard shortcuts, providing:
+
+- **Flexible Registration**: Register shortcuts with key combinations, handlers, and descriptions
+- **Cross-Platform Support**: Automatically treats Meta (Cmd) as Ctrl for compatibility
+- **Input Field Awareness**: Skips shortcuts when typing in text inputs (except global keys like Escape)
+- **Configurable Bindings**: All shortcuts defined in `KeyBindings.ts` for easy customization
+
+**Modal Exceptions**: Modal dialogs (`showAlert`, `showConfirm`, `showPrompt`) have their own local keyboard handling for Escape/Enter keys. This is intentional as modals are focused, temporary UI elements that require immediate keyboard response and proper cleanup.
+
+```typescript
+// Register a shortcut
+keyboardManager.register('Ctrl+S', () => exportFrame(), 'Export frame');
+
+// Register with object notation
+keyboardManager.register({
+  key: 's',
+  ctrl: true
+}, () => exportFrame(), 'Export frame');
+
+// Check if a shortcut is registered
+if (keyboardManager.isRegistered('Ctrl+S')) { ... }
+
+// Get all bindings for UI display
+const bindings = keyboardManager.getBindings();
+```
+
 ### Node Graph
 
 The application uses a directed acyclic graph (DAG) for media processing:
