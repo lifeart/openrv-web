@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { SessionSerializer } from './SessionSerializer';
+import { SessionSerializer, SessionComponents } from './SessionSerializer';
 import type { SessionState } from './SessionState';
 import { SESSION_STATE_VERSION } from './SessionState';
 
@@ -203,17 +203,157 @@ describe('SessionSerializer', () => {
           muted: false,
           marks: [],
           currentSourceIndex: 0,
-        },
-        // Missing many other fields
+        } as any,
       };
 
-      const json = JSON.stringify(minimalState);
-      const file = new File([json], 'minimal.orvproject');
-      const loaded = await SessionSerializer.loadFromFile(file);
+      // migrate is private, but testing via fromJSON (which calls migrate)
+      const components = createMockComponents();
+      const state = minimalState as SessionState;
+      const result = await SessionSerializer.fromJSON(state, components);
+      
+      expect(result.loadedMedia).toBe(0);
+      expect(components.viewer.setZoom).toHaveBeenCalled();
+    });
 
-      // Should parse without error
-      expect(loaded.version).toBe(1);
-      expect(loaded.name).toBe('Minimal');
+    it('SER-010: handles older version migration', async () => {
+      const components = createMockComponents();
+      const oldState = SessionSerializer.createEmpty();
+      (oldState as any).version = 0; // Older than current
+
+      await SessionSerializer.fromJSON(oldState, components);
+    });
+  });
+
+  describe('toJSON', () => {
+    it('SER-006: serializes all components correctly', () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.toJSON(components, 'TestProject');
+
+      expect(state.name).toBe('TestProject');
+      expect(state.view.zoom).toBe(1.5);
+      expect(state.media.length).toBe(1);
+      expect(state.media[0]?.path).toBe('test.mp4');
+    });
+
+    it('SER-007: serializes sequence info', () => {
+      const components = createMockComponents();
+      (components.session as any).allSources = [{
+        url: 'frame.%04d.jpg',
+        name: 'seq',
+        type: 'sequence',
+        width: 100,
+        height: 100,
+        duration: 10,
+        fps: 24,
+        sequenceInfo: {
+            pattern: 'frame.%04d.jpg',
+            startFrame: 1,
+            endFrame: 10
+        }
+      }];
+
+      const state = SessionSerializer.toJSON(components);
+      expect(state.media[0]?.sequencePattern).toBe('frame.%04d.jpg');
+      expect(state.media[0]?.frameRange?.start).toBe(1);
+    });
+
+    it('SER-012: serializes LUT path', () => {
+        const components = createMockComponents();
+        (components.viewer.getLUT as any).mockReturnValue({ title: 'test.cube' });
+
+        const state = SessionSerializer.toJSON(components);
+        expect(state.lutPath).toBe('test.cube');
+    });
+  });
+
+  describe('fromJSON', () => {
+    it('SER-008: restores state correctly', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty('TestProject');
+      state.media = [
+        { name: 'video', path: 'video.mp4', type: 'video', width: 1920, height: 1080, duration: 100, fps: 24 },
+        { name: 'img', path: 'image.jpg', type: 'image', width: 100, height: 100, duration: 1, fps: 1 },
+        { name: 'blob', path: 'blob:xxx', type: 'image', width: 100, height: 100, duration: 1, fps: 1 },
+        { name: 'seq', path: 'seq.jpg', type: 'sequence', width: 100, height: 100, duration: 10, fps: 24 }
+      ];
+
+      const result = await SessionSerializer.fromJSON(state, components);
+
+      expect(result.loadedMedia).toBe(2); // video + img (blob and sequence skipped/warned)
+      expect(result.warnings.length).toBe(2); // blob + sequence
+      expect(components.session.loadVideo).toHaveBeenCalledWith('video', 'video.mp4');
+      expect(components.session.loadImage).toHaveBeenCalledWith('img', 'image.jpg');
+      expect(components.viewer.setZoom).toHaveBeenCalled();
+      expect(components.paintEngine.loadFromAnnotations).toHaveBeenCalled();
+    });
+
+    it('SER-009: handles load failures', async () => {
+        const components = createMockComponents();
+        (components.session.loadVideo as any).mockRejectedValue(new Error('Fail'));
+
+        const state = SessionSerializer.createEmpty();
+        state.media = [{ name: 'video', path: 'video.mp4', type: 'video', width: 1920, height: 1080, duration: 100, fps: 24 }];
+
+        const result = await SessionSerializer.fromJSON(state, components);
+        expect(result.loadedMedia).toBe(0);
+        expect(result.warnings[0]).toContain('Failed to load');
+    });
+
+    it('SER-011: warns about LUT path', async () => {
+        const components = createMockComponents();
+        const state = SessionSerializer.createEmpty();
+        state.lutPath = 'my.cube';
+
+        const result = await SessionSerializer.fromJSON(state, components);
+        expect(result.warnings).toContain('LUT "my.cube" requires manual loading');
     });
   });
 });
+
+function createMockComponents(): SessionComponents {
+  return {
+    session: {
+      allSources: [
+        { url: 'test.mp4', name: 'test', type: 'video', width: 1920, height: 1080, duration: 10, fps: 24 }
+      ],
+      getPlaybackState: vi.fn().mockReturnValue({ currentFrame: 1, fps: 24, loopMode: 'loop' }),
+      setPlaybackState: vi.fn(),
+      loadImage: vi.fn().mockResolvedValue(undefined),
+      loadVideo: vi.fn().mockResolvedValue(undefined),
+    },
+    paintEngine: {
+      toJSON: vi.fn().mockReturnValue({
+        nextId: 1,
+        show: true,
+        frames: {},
+        effects: {}
+      }),
+      loadFromAnnotations: vi.fn()
+    },
+    viewer: {
+      getPan: vi.fn().mockReturnValue({ x: 0, y: 0 }),
+      getZoom: vi.fn().mockReturnValue(1.5),
+      getColorAdjustments: vi.fn().mockReturnValue({}),
+      getCDL: vi.fn().mockReturnValue({}),
+      getFilterSettings: vi.fn().mockReturnValue({}),
+      getTransform: vi.fn().mockReturnValue({}),
+      getCropState: vi.fn().mockReturnValue({}),
+      getLensParams: vi.fn().mockReturnValue({}),
+      getWipeState: vi.fn().mockReturnValue({}),
+      getStackLayers: vi.fn().mockReturnValue([]),
+      getLUT: vi.fn().mockReturnValue(undefined),
+      getLUTIntensity: vi.fn().mockReturnValue(1.0),
+      setColorAdjustments: vi.fn(),
+      setCDL: vi.fn(),
+      setFilterSettings: vi.fn(),
+      setTransform: vi.fn(),
+      setCropState: vi.fn(),
+      setLensParams: vi.fn(),
+      setWipeState: vi.fn(),
+      setStackLayers: vi.fn(),
+      setLUTIntensity: vi.fn(),
+      setZoom: vi.fn(),
+      setPan: vi.fn()
+    }
+  } as any;
+}

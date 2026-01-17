@@ -34,12 +34,23 @@ describe('FilterControl', () => {
     });
   });
 
-  describe('getSettings', () => {
+  describe('getSettings / setSettings', () => {
     it('FLT-004: returns copy of settings', () => {
       const settings1 = control.getSettings();
       const settings2 = control.getSettings();
       expect(settings1).not.toBe(settings2);
       expect(settings1).toEqual(settings2);
+    });
+
+    it('FLT-018: setSettings updates internal state and emits event', () => {
+      const handler = vi.fn();
+      control.on('filtersChanged', handler);
+
+      const newSettings = { blur: 10, sharpen: 50 };
+      control.setSettings(newSettings);
+
+      expect(control.getSettings()).toEqual(newSettings);
+      expect(handler).toHaveBeenCalledWith(newSettings);
     });
   });
 

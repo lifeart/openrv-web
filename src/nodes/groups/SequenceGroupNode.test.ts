@@ -220,5 +220,23 @@ describe('SequenceGroupNode', () => {
       // Frame 6 wraps to frame 1
       expect(sequenceNode.getActiveInputIndex({ frame: 6, width: 1920, height: 1080, quality: 'full' })).toBe(0);
     });
+
+    it('SGN-007: triggers internal offset recalculation when inputs change', () => {
+      const input1 = new MockInputNode('Input1');
+      sequenceNode.connectInput(input1);
+      
+      // Set some durations manually
+      sequenceNode.setInputDurations([10]);
+      expect(sequenceNode.getTotalDuration()).toBe(10);
+      
+      // Add another input WITHOUT setting durations again
+      const input2 = new MockInputNode('Input2');
+      sequenceNode.connectInput(input2);
+      
+      // This should trigger the internal recalculateOffsets on next call
+      // Total duration should now be 10 + 1 (default for new input) = 11
+      expect(sequenceNode.getTotalDuration()).toBe(11);
+      expect(sequenceNode.getActiveInputIndex({ frame: 11, width: 1920, height: 1080, quality: 'full' })).toBe(1);
+    });
   });
 });

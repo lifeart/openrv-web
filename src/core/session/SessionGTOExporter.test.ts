@@ -4,6 +4,7 @@ import { Session } from './Session';
 import { PaintEngine } from '../../paint/PaintEngine';
 import type { GTOData } from 'gto-js';
 import { Graph } from '../graph/Graph';
+import { LineJoin, LineCap, BrushType, StrokeMode, type PenStroke } from '../../paint/types';
 
 class TestSession extends Session {
     public setMockGraph(g: Graph) {
@@ -103,5 +104,43 @@ describe('SessionGTOExporter', () => {
         const frameProp = sessionComp?.properties?.find((p: GTOProperty) => p.name === 'frame');
         
         expect(frameProp?.value).toBe(10); // Updated to currentFrame from session
+    });
+
+    it('exports pen stroke with specific join and cap styles', () => {
+        const stroke: PenStroke = {
+            type: 'pen',
+            id: 'test-stroke',
+            frame: 10,
+            user: 'test-user',
+            color: [1, 1, 1, 1],
+            width: 5,
+            brush: BrushType.Circle,
+            points: [{ x: 0.1, y: 0.1 }],
+            join: LineJoin.Bevel,
+            cap: LineCap.Square,
+            splat: false,
+            mode: StrokeMode.Draw,
+            startFrame: -1,
+            duration: -1
+        };
+        paintEngine.addAnnotation(stroke);
+
+        const gto = SessionGTOExporter.updateGTOData({ version: 4, objects: [] } as any, session, paintEngine);
+        
+        const paintObj = gto.objects.find(o => o.name === 'annotations');
+        expect(paintObj).toBeDefined();
+
+        const components = paintObj?.components as any;
+        const penComp = components?.['pen:test-stroke:10:test-user'];
+        expect(penComp).toBeDefined();
+
+        const joinProp = penComp.properties.join;
+        const capProp = penComp.properties.cap;
+
+        // Based on SessionGTOExporter.ts mappings:
+        // Bevel (1) -> 2
+        // Square (1) -> 2
+        expect(joinProp.data).toEqual([2]);
+        expect(capProp.data).toEqual([2]);
     });
 });

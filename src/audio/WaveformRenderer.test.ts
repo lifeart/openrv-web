@@ -2,11 +2,13 @@
  * WaveformRenderer Unit Tests
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   WaveformRenderer,
   renderWaveform,
   renderWaveformRegion,
+  extractAudioFromVideo,
+  extractAudioFromBlob,
 } from './WaveformRenderer';
 import type { WaveformData } from './WaveformRenderer';
 
@@ -78,6 +80,10 @@ describe('WaveformRenderer', () => {
     describe('loadFromBlob', () => {
       it('WAV-007: returns false when already loading', async () => {
         const blob = new Blob(['test']);
+        // Mock blob.arrayBuffer if it doesn't exist in environment
+        if (!blob.arrayBuffer) {
+           (blob as any).arrayBuffer = async () => new ArrayBuffer(0);
+        }
 
         // Start first load
         const promise1 = renderer.loadFromBlob(blob);
@@ -91,6 +97,78 @@ describe('WaveformRenderer', () => {
         // Wait for first to complete
         await promise1;
       });
+    });
+  });
+
+  describe('Audio extraction', () => {
+    const mockAudioBuffer = {
+      getChannelData: vi.fn().mockReturnValue(new Float32Array(1000)),
+      duration: 1,
+      sampleRate: 44100,
+    };
+
+    const mockAudioContext = {
+      decodeAudioData: vi.fn().mockResolvedValue(mockAudioBuffer),
+      close: vi.fn().mockResolvedValue(undefined),
+    };
+
+    beforeEach(() => {
+      vi.stubGlobal('AudioContext', vi.fn().mockImplementation(() => mockAudioContext));
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1024)),
+      }));
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('EXT-001: extractAudioFromVideo handles success', async () => {
+      const video = document.createElement('video');
+      video.src = 'test.mp4';
+      
+      const result = await extractAudioFromVideo(video);
+      expect(result).not.toBeNull();
+      expect(result?.duration).toBe(1);
+      expect(mockAudioContext.close).toHaveBeenCalled();
+    });
+
+    it('EXT-002: extractAudioFromVideo handles fetch error', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+      }));
+      
+      const video = document.createElement('video');
+      video.src = 'test.mp4';
+      
+      const result = await extractAudioFromVideo(video);
+      expect(result).toBeNull();
+    });
+
+    it('EXT-003: extractAudioFromBlob handles success', async () => {
+      const blob = new Blob(['test']);
+      if (!blob.arrayBuffer) {
+        blob.arrayBuffer = async () => new ArrayBuffer(0);
+      }
+      
+      const result = await extractAudioFromBlob(blob);
+      expect(result).not.toBeNull();
+      expect(mockAudioContext.close).toHaveBeenCalled();
+    });
+
+    it('EXT-004: extractAudioFromBlob handles decode error', async () => {
+      mockAudioContext.decodeAudioData.mockRejectedValueOnce(new Error('Decode failed'));
+      
+      const blob = new Blob(['test']);
+      if (!blob.arrayBuffer) {
+        blob.arrayBuffer = async () => new ArrayBuffer(0);
+      }
+      
+      const result = await extractAudioFromBlob(blob);
+      expect(result).toBeNull();
     });
   });
 
@@ -210,6 +288,12 @@ describe('WaveformRenderer', () => {
       renderWaveform(ctx, mockData, {}, 5, 2);
 
       // Should handle gracefully (return early)
+    });
+
+    it('RND-011: uses data.duration if endTime is not provided', () => {
+      const fillRectSpy = vi.spyOn(ctx, 'fillRect');
+      renderWaveform(ctx, mockData, {}, 0); // No endTime
+      expect(fillRectSpy).toHaveBeenCalled();
     });
   });
 
