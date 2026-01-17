@@ -4,9 +4,12 @@
  * Allows users to view individual color channels (Red, Green, Blue, Alpha)
  * or computed channels (Luminance) in isolation. Essential for QC work to
  * check for noise, artifacts, or alpha channel issues.
+ *
+ * Now uses a compact dropdown instead of 6 separate buttons.
  */
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { getIconSvg } from './shared/Icons';
 
 export type ChannelMode = 'rgb' | 'red' | 'green' | 'blue' | 'alpha' | 'luminance';
 
@@ -16,11 +19,20 @@ export interface ChannelSelectEvents extends EventMap {
 
 export const CHANNEL_LABELS: Record<ChannelMode, string> = {
   rgb: 'RGB',
+  red: 'Red',
+  green: 'Green',
+  blue: 'Blue',
+  alpha: 'Alpha',
+  luminance: 'Luma',
+};
+
+export const CHANNEL_SHORT_LABELS: Record<ChannelMode, string> = {
+  rgb: 'RGB',
   red: 'R',
   green: 'G',
   blue: 'B',
   alpha: 'A',
-  luminance: 'Luma',
+  luminance: 'L',
 };
 
 export const CHANNEL_SHORTCUTS: Record<string, ChannelMode> = {
@@ -30,6 +42,15 @@ export const CHANNEL_SHORTCUTS: Record<string, ChannelMode> = {
   'A': 'alpha',
   'L': 'luminance',
   'N': 'rgb', // N for "normal" or neutral
+};
+
+const CHANNEL_COLORS: Record<ChannelMode, string> = {
+  rgb: '#ccc',
+  red: '#ff6b6b',
+  green: '#6bff6b',
+  blue: '#6b9fff',
+  alpha: '#999',
+  luminance: '#ddd',
 };
 
 /**
@@ -43,105 +64,238 @@ export const LUMINANCE_COEFFICIENTS = {
 
 export class ChannelSelect extends EventEmitter<ChannelSelectEvents> {
   private container: HTMLElement;
+  private button!: HTMLButtonElement;
+  private dropdown!: HTMLElement;
   private currentChannel: ChannelMode = 'rgb';
-  private buttons: Map<ChannelMode, HTMLButtonElement> = new Map();
+  private isOpen = false;
+  private boundHandleOutsideClick: (e: MouseEvent) => void;
+  private boundHandleReposition: () => void;
 
   constructor() {
     super();
 
+    this.boundHandleOutsideClick = (e: MouseEvent) => this.handleOutsideClick(e);
+    this.boundHandleReposition = () => this.positionDropdown();
+
     this.container = document.createElement('div');
     this.container.className = 'channel-select';
+    this.container.dataset.testid = 'channel-select';
     this.container.style.cssText = `
       display: flex;
       align-items: center;
-      gap: 4px;
+      position: relative;
     `;
 
     this.createUI();
   }
 
   private createUI(): void {
-    // Label
-    const label = document.createElement('span');
-    label.textContent = 'Ch:';
-    label.style.cssText = `
-      color: #888;
-      font-size: 11px;
-      margin-right: 4px;
+    // Create button
+    this.button = document.createElement('button');
+    this.button.dataset.testid = 'channel-select-button';
+    this.button.title = 'Channel isolation (Shift+R/G/B/A/L/N)';
+    this.button.style.cssText = `
+      background: transparent;
+      border: 1px solid transparent;
+      color: #999;
+      padding: 6px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.12s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 60px;
+      gap: 4px;
     `;
-    this.container.appendChild(label);
+    this.updateButtonLabel();
 
-    // Channel buttons
+    this.button.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggleDropdown();
+    });
+    this.button.addEventListener('mouseenter', () => {
+      if (!this.isOpen && this.currentChannel === 'rgb') {
+        this.button.style.background = '#3a3a3a';
+        this.button.style.borderColor = '#4a4a4a';
+        this.button.style.color = '#ccc';
+      }
+    });
+    this.button.addEventListener('mouseleave', () => {
+      if (!this.isOpen && this.currentChannel === 'rgb') {
+        this.button.style.background = 'transparent';
+        this.button.style.borderColor = 'transparent';
+        this.button.style.color = '#999';
+      }
+    });
+
+    // Create dropdown
+    this.dropdown = document.createElement('div');
+    this.dropdown.className = 'channel-dropdown';
+    this.dropdown.dataset.testid = 'channel-dropdown';
+    this.dropdown.style.cssText = `
+      position: fixed;
+      background: #2a2a2a;
+      border: 1px solid #4a4a4a;
+      border-radius: 4px;
+      padding: 4px;
+      z-index: 9999;
+      display: none;
+      flex-direction: column;
+      min-width: 120px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    `;
+
+    this.populateDropdown();
+    this.container.appendChild(this.button);
+  }
+
+  private populateDropdown(): void {
+    this.dropdown.innerHTML = '';
+
     const channels: ChannelMode[] = ['rgb', 'red', 'green', 'blue', 'alpha', 'luminance'];
 
     for (const channel of channels) {
-      const button = this.createButton(channel);
-      this.buttons.set(channel, button);
-      this.container.appendChild(button);
+      const option = document.createElement('button');
+      option.dataset.channel = channel;
+      option.style.cssText = `
+        background: transparent;
+        border: none;
+        color: #ccc;
+        padding: 6px 10px;
+        text-align: left;
+        cursor: pointer;
+        font-size: 12px;
+        border-radius: 3px;
+        transition: background 0.12s ease;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      `;
+
+      const leftPart = document.createElement('span');
+      leftPart.style.cssText = 'display: flex; align-items: center; gap: 6px;';
+
+      // Color indicator
+      const colorDot = document.createElement('span');
+      colorDot.style.cssText = `
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: ${CHANNEL_COLORS[channel]};
+      `;
+      leftPart.appendChild(colorDot);
+
+      const labelSpan = document.createElement('span');
+      labelSpan.textContent = CHANNEL_LABELS[channel];
+      leftPart.appendChild(labelSpan);
+
+      const shortcutHint = document.createElement('span');
+      shortcutHint.textContent = channel === 'rgb' ? 'N' : CHANNEL_SHORT_LABELS[channel];
+      shortcutHint.style.cssText = 'color: #666; font-size: 10px;';
+
+      option.appendChild(leftPart);
+      option.appendChild(shortcutHint);
+
+      option.addEventListener('mouseenter', () => {
+        option.style.background = '#3a3a3a';
+      });
+      option.addEventListener('mouseleave', () => {
+        this.updateOptionStyle(option, channel);
+      });
+      option.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.setChannel(channel);
+        this.closeDropdown();
+      });
+      this.dropdown.appendChild(option);
     }
 
-    // Set initial state
-    this.updateButtonStates();
+    this.updateDropdownStates();
   }
 
-  private createButton(channel: ChannelMode): HTMLButtonElement {
-    const button = document.createElement('button');
-    button.textContent = CHANNEL_LABELS[channel];
-    button.title = this.getButtonTitle(channel);
-    button.setAttribute('data-channel', channel);
-    button.style.cssText = `
-      background: transparent;
-      border: 1px solid transparent;
-      color: #bbb;
-      padding: 4px 8px;
-      border-radius: 3px;
-      cursor: pointer;
-      font-size: 11px;
-      font-weight: 500;
-      min-width: 32px;
-      transition: all 0.12s ease;
-    `;
+  private updateButtonLabel(): void {
+    const label = this.currentChannel === 'rgb' ? 'Ch' : CHANNEL_SHORT_LABELS[this.currentChannel];
+    const color = CHANNEL_COLORS[this.currentChannel];
+    this.button.innerHTML = `${getIconSvg('eye', 'sm')}<span style="color: ${this.currentChannel !== 'rgb' ? color : 'inherit'}">${label}</span><span style="font-size: 8px;">&#9660;</span>`;
 
-    button.addEventListener('mouseenter', () => {
-      if (this.currentChannel !== channel) {
-        button.style.background = 'rgba(255,255,255,0.08)';
-        button.style.borderColor = 'rgba(255,255,255,0.1)';
-      }
-    });
-
-    button.addEventListener('mouseleave', () => {
-      if (this.currentChannel !== channel) {
-        button.style.background = 'transparent';
-        button.style.borderColor = 'transparent';
-      }
-    });
-
-    button.addEventListener('click', () => {
-      this.setChannel(channel);
-    });
-
-    return button;
-  }
-
-  private getButtonTitle(channel: ChannelMode): string {
-    const shortcuts: Record<ChannelMode, string> = {
-      rgb: 'Show all channels (Shift+N)',
-      red: 'Show red channel (Shift+R)',
-      green: 'Show green channel (Shift+G)',
-      blue: 'Show blue channel (Shift+B)',
-      alpha: 'Show alpha channel (Shift+A)',
-      luminance: 'Show luminance (Shift+L)',
-    };
-    return shortcuts[channel];
-  }
-
-  private updateButtonStates(): void {
-    for (const [channel, button] of this.buttons) {
-      const isActive = channel === this.currentChannel;
-      button.style.background = isActive ? 'rgba(74, 158, 255, 0.15)' : 'transparent';
-      button.style.borderColor = isActive ? '#4a9eff' : 'transparent';
-      button.style.color = isActive ? '#4a9eff' : '#bbb';
+    // Update button style based on active state
+    if (this.currentChannel !== 'rgb') {
+      this.button.style.background = 'rgba(74, 158, 255, 0.15)';
+      this.button.style.borderColor = '#4a9eff';
+      this.button.style.color = '#4a9eff';
+    } else if (!this.isOpen) {
+      this.button.style.background = 'transparent';
+      this.button.style.borderColor = 'transparent';
+      this.button.style.color = '#999';
     }
+  }
+
+  private updateOptionStyle(option: HTMLButtonElement, channel: ChannelMode): void {
+    const isActive = this.currentChannel === channel;
+    option.style.background = isActive ? 'rgba(74, 158, 255, 0.15)' : 'transparent';
+    option.style.color = isActive ? '#4a9eff' : '#ccc';
+  }
+
+  private updateDropdownStates(): void {
+    const options = this.dropdown.querySelectorAll('button');
+    options.forEach((option) => {
+      const channel = (option as HTMLElement).dataset.channel as ChannelMode;
+      this.updateOptionStyle(option as HTMLButtonElement, channel);
+    });
+  }
+
+  private handleOutsideClick(e: MouseEvent): void {
+    if (
+      this.isOpen &&
+      !this.button.contains(e.target as Node) &&
+      !this.dropdown.contains(e.target as Node)
+    ) {
+      this.closeDropdown();
+    }
+  }
+
+  private positionDropdown(): void {
+    if (!this.isOpen) return;
+    const rect = this.button.getBoundingClientRect();
+    this.dropdown.style.top = `${rect.bottom + 4}px`;
+    this.dropdown.style.left = `${rect.left}px`;
+  }
+
+  private toggleDropdown(): void {
+    if (this.isOpen) {
+      this.closeDropdown();
+    } else {
+      this.openDropdown();
+    }
+  }
+
+  private openDropdown(): void {
+    if (!document.body.contains(this.dropdown)) {
+      document.body.appendChild(this.dropdown);
+    }
+
+    this.isOpen = true;
+    this.positionDropdown();
+    this.dropdown.style.display = 'flex';
+    this.button.style.background = '#3a3a3a';
+    this.button.style.borderColor = '#4a4a4a';
+
+    document.addEventListener('click', this.boundHandleOutsideClick);
+    window.addEventListener('scroll', this.boundHandleReposition, true);
+    window.addEventListener('resize', this.boundHandleReposition);
+  }
+
+  private closeDropdown(): void {
+    this.isOpen = false;
+    this.dropdown.style.display = 'none';
+    this.updateButtonLabel();
+
+    document.removeEventListener('click', this.boundHandleOutsideClick);
+    window.removeEventListener('scroll', this.boundHandleReposition, true);
+    window.removeEventListener('resize', this.boundHandleReposition);
   }
 
   /**
@@ -151,7 +305,8 @@ export class ChannelSelect extends EventEmitter<ChannelSelectEvents> {
     if (this.currentChannel === channel) return;
 
     this.currentChannel = channel;
-    this.updateButtonStates();
+    this.updateButtonLabel();
+    this.updateDropdownStates();
     this.emit('channelChanged', channel);
   }
 
@@ -202,7 +357,10 @@ export class ChannelSelect extends EventEmitter<ChannelSelectEvents> {
   }
 
   dispose(): void {
-    this.buttons.clear();
+    this.closeDropdown();
+    if (document.body.contains(this.dropdown)) {
+      document.body.removeChild(this.dropdown);
+    }
   }
 }
 

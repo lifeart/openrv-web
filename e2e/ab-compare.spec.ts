@@ -313,27 +313,23 @@ test.describe('A/B Screenshot Comparison', () => {
     await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(200);
 
-    // Take a screenshot of just the A/B button area
+    // Get the A/B buttons
     const buttonA = page.locator('[data-testid="ab-button-a"]');
     const toggleButton = page.locator('[data-testid="ab-toggle-button"]');
 
-    // Get bounding boxes
-    const boxA = await buttonA.boundingBox();
-    const boxToggle = await toggleButton.boundingBox();
+    // Scroll the A/B buttons into view (they may be off-screen on narrow viewports)
+    await buttonA.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(100);
 
-    if (boxA && boxToggle) {
-      // Capture the A/B control region
-      const screenshot = await page.screenshot({
-        clip: {
-          x: boxA.x - 50, // Include label
-          y: boxA.y - 5,
-          width: (boxToggle.x + boxToggle.width) - boxA.x + 55,
-          height: Math.max(boxA.height, boxToggle.height) + 10,
-        },
-      });
+    // Take a screenshot of the element directly
+    const screenshot = await buttonA.screenshot();
 
-      // Just verify we got a screenshot
-      expect(screenshot.length).toBeGreaterThan(100);
-    }
+    // Verify we got a meaningful screenshot (not empty)
+    expect(screenshot.length).toBeGreaterThan(100);
+
+    // Verify button is visible and has correct text
+    await expect(buttonA).toBeVisible();
+    await expect(buttonA).toHaveText('A');
+    await expect(toggleButton).toBeVisible();
   });
 });

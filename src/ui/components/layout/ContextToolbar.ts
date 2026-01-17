@@ -46,7 +46,6 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
       display: flex;
       align-items: center;
       gap: 8px;
-      flex: 1;
       height: 100%;
     `;
     this.container.appendChild(this.contentContainer);
@@ -65,7 +64,6 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
         display: none;
         align-items: center;
         gap: 8px;
-        flex: 1;
         height: 100%;
       `;
       this.tabContents.set(tabId, content);

@@ -14,9 +14,10 @@
 ### Current Toolbar Order (Left to Right)
 ```
 [Toolbar] [PaintToolbar] [ColorControls] [CDLControl] [FilterControl]
-[CropControl] [LensControl] [StackControl] [WipeControl] [TransformControl]
+[CropControl] [LensControl] [StackControl] [CompareControl] [TransformControl]
 [VolumeControl] [ExportControl]
 ```
+*Note: WipeControl has been merged into CompareControl along with A/B comparison.*
 
 ---
 
@@ -58,11 +59,15 @@
 ### Tab 1: 🖼 View (Default)
 **Purpose**: Navigation and comparison tools
 
-**Context Toolbar Contents**:
-- Zoom controls: [Fit] [50%] [100%] [200%] [400%]
-- Wipe toggle: [Off] [H-Wipe] [V-Wipe]
-- Stack/Layers button (opens side panel)
-- Display info: Resolution, Frame rate
+**Context Toolbar Contents** (Reorganized with dropdown menus):
+- **Zoom dropdown**: Fit, 25%, 50%, 100%, 200%, 400%
+- **Channel dropdown**: RGB, Red, Green, Blue, Alpha, Luma
+- **Compare dropdown**: Wipe (Off/H-Wipe/V-Wipe), A/B source toggle
+- **Stereo dropdown**: Off, Side-by-Side, Over-Under, Mirror, Anaglyph, etc.
+- **Scopes dropdown**: Histogram, Waveform, Vectorscope toggles
+- **Stack button**: Opens layer panel
+
+**Reduction**: From ~23 visible elements to 6 compact dropdowns
 
 ### Tab 2: 🎨 Color
 **Purpose**: All color grading tools
@@ -281,8 +286,14 @@
 - `Ctrl+Z/Y` - Undo/Redo
 
 ### View Tab
-- `W` - Cycle wipe mode
-- `0-4` - Zoom levels
+- `F` - Fit to window
+- `W` - Cycle wipe mode (off → horizontal → vertical)
+- `H` - Toggle histogram
+- `w` - Toggle waveform (lowercase)
+- `y` - Toggle vectorscope
+- `\`` - Toggle A/B source
+- `Shift+R/G/B/A/L/N` - Channel isolation (Red/Green/Blue/Alpha/Luma/Normal)
+- `Shift+3` - Cycle stereo mode
 
 ### Color Tab
 - `C` - Toggle color panel
@@ -371,12 +382,12 @@ src/ui/
 │   │   ├── TabBar.ts           # Tab navigation
 │   │   ├── ContextToolbar.ts   # Base context toolbar
 │   │   └── SidePanel.ts        # Slide-out panel container
-│   ├── tabs/
-│   │   ├── ViewTab.ts          # View tab context toolbar
-│   │   ├── ColorTab.ts         # Color tab context toolbar
-│   │   ├── EffectsTab.ts       # Effects tab context toolbar
-│   │   ├── TransformTab.ts     # Transform tab context toolbar
-│   │   └── AnnotateTab.ts      # Annotate tab context toolbar
+│   ├── ZoomControl.ts          # Zoom level dropdown (View tab)
+│   ├── ChannelSelect.ts        # Channel isolation dropdown (View tab)
+│   ├── CompareControl.ts       # Wipe + A/B comparison dropdown (View tab)
+│   ├── ScopesControl.ts        # Histogram/Waveform/Vectorscope dropdown (View tab)
+│   ├── StereoControl.ts        # Stereo viewing mode dropdown (View tab)
+│   ├── StackControl.ts         # Layer stack panel button (View tab)
 │   ├── panels/
 │   │   ├── CDLPanel.ts         # CDL controls (refactored)
 │   │   ├── LUTPanel.ts         # LUT controls (extracted)
@@ -692,6 +703,40 @@ separator.style.cssText = 'width: 1px; height: 18px; background: #3a3a3a; margin
 
 ---
 
+## View Tab Dropdown Controls
+
+The View tab uses a grouped dropdown pattern to reduce visual clutter. Instead of showing all controls as individual buttons, related controls are grouped into dropdown menus.
+
+### Before (23+ elements with scroll issues):
+```
+[Zoom:] [Fit] [50%] [100%] [200%] [400%] | [Ch:] [RGB] [R] [G] [B] [A] [Luma] |
+[Wipe] | [Stereo ▾] | [Stack] | [Histogram] [Waveform] [Vectorscope] |
+[A/B:] [A] [B] [⇄]
+```
+
+### After (6 compact dropdowns):
+```
+[Zoom ▾] | [Ch ▾] | [Compare ▾] | [Stereo ▾] | [Scopes ▾] | [Stack]
+```
+
+### Dropdown Components:
+
+| Component | Controls | Description |
+|-----------|----------|-------------|
+| `ZoomControl` | Fit, 25%, 50%, 100%, 200%, 400% | Shows current zoom level |
+| `ChannelSelect` | RGB, R, G, B, A, Luma | Channel isolation with color dots |
+| `CompareControl` | Wipe modes, A/B source | Comparison tools grouped |
+| `StereoControl` | Stereo viewing modes | Existing dropdown (unchanged) |
+| `ScopesControl` | Histogram, Waveform, Vectorscope | Scope visibility toggles |
+| `StackControl` | Opens layer panel | Panel button (unchanged) |
+
+### Active State Indicators:
+- Dropdowns show active state (highlighted) when any non-default option is selected
+- `ScopesControl` shows count: "Scopes (2)" when 2 scopes are visible
+- `CompareControl` shows active modes: "H-Wipe + B"
+
+---
+
 ## Notes
 
 - Maintain backward compatibility during transition
@@ -706,7 +751,7 @@ separator.style.cssText = 'width: 1px; height: 18px; background: #3a3a3a; margin
 
 ### Creating a New Control Component
 
-Follow this pattern when creating new UI control components (e.g., StereoControl, WipeControl):
+Follow this pattern when creating new UI control components (e.g., StereoControl, CompareControl):
 
 ```typescript
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';

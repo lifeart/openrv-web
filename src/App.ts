@@ -7,7 +7,6 @@ import { ContextToolbar } from './ui/components/layout/ContextToolbar';
 import { PaintEngine } from './paint/PaintEngine';
 import { PaintToolbar } from './ui/components/PaintToolbar';
 import { ColorControls } from './ui/components/ColorControls';
-import { WipeControl } from './ui/components/WipeControl';
 import { TransformControl } from './ui/components/TransformControl';
 import { FilterControl } from './ui/components/FilterControl';
 import { CropControl } from './ui/components/CropControl';
@@ -20,6 +19,9 @@ import { StereoControl } from './ui/components/StereoControl';
 import { Histogram } from './ui/components/Histogram';
 import { Waveform } from './ui/components/Waveform';
 import { Vectorscope } from './ui/components/Vectorscope';
+import { ZoomControl } from './ui/components/ZoomControl';
+import { ScopesControl } from './ui/components/ScopesControl';
+import { CompareControl } from './ui/components/CompareControl';
 import { exportSequence } from './utils/SequenceExporter';
 import { showAlert, showModal } from './ui/components/shared/Modal';
 import { SessionSerializer } from './core/session/SessionSerializer';
@@ -35,7 +37,6 @@ export class App {
   private paintEngine: PaintEngine;
   private paintToolbar: PaintToolbar;
   private colorControls: ColorControls;
-  private wipeControl: WipeControl;
   private transformControl: TransformControl;
   private filterControl: FilterControl;
   private cropControl: CropControl;
@@ -48,6 +49,9 @@ export class App {
   private histogram: Histogram;
   private waveform: Waveform;
   private vectorscope: Vectorscope;
+  private zoomControl: ZoomControl;
+  private scopesControl: ScopesControl;
+  private compareControl: CompareControl;
   private animationId: number | null = null;
   private boundHandleKeydown: (e: KeyboardEvent) => void;
   private boundHandleResize: () => void;
@@ -78,7 +82,6 @@ export class App {
 
     this.paintToolbar = new PaintToolbar(this.paintEngine);
     this.colorControls = new ColorControls();
-    this.wipeControl = new WipeControl();
 
     // Connect color controls to viewer
     this.colorControls.on('adjustmentsChanged', (adjustments) => {
@@ -93,9 +96,63 @@ export class App {
       this.viewer.setLUTIntensity(intensity);
     });
 
-    // Connect wipe control to viewer
-    this.wipeControl.on('stateChanged', (state) => {
-      this.viewer.setWipeState(state);
+    // Initialize new grouped View tab controls
+    this.zoomControl = new ZoomControl();
+    this.zoomControl.on('zoomChanged', (zoom) => {
+      if (zoom === 'fit') {
+        this.viewer.fitToWindow();
+      } else {
+        this.viewer.setZoom(zoom);
+      }
+    });
+
+    this.scopesControl = new ScopesControl();
+    this.scopesControl.on('scopeToggled', ({ scope, visible }) => {
+      if (scope === 'histogram') {
+        if (visible) {
+          this.histogram.show();
+          this.updateHistogram();
+        } else {
+          this.histogram.hide();
+        }
+      } else if (scope === 'waveform') {
+        if (visible) {
+          this.waveform.show();
+          this.updateWaveform();
+        } else {
+          this.waveform.hide();
+        }
+      } else if (scope === 'vectorscope') {
+        if (visible) {
+          this.vectorscope.show();
+          this.updateVectorscope();
+        } else {
+          this.vectorscope.hide();
+        }
+      }
+    });
+
+    this.compareControl = new CompareControl();
+    this.compareControl.on('wipeModeChanged', (mode) => {
+      this.viewer.setWipeState({
+        mode,
+        position: this.compareControl.getWipePosition(),
+        showOriginal: mode === 'horizontal' ? 'left' : 'top',
+      });
+    });
+    this.compareControl.on('wipePositionChanged', (position) => {
+      const mode = this.compareControl.getWipeMode();
+      this.viewer.setWipeState({
+        mode,
+        position,
+        showOriginal: mode === 'horizontal' ? 'left' : 'top',
+      });
+    });
+    this.compareControl.on('abSourceChanged', (source) => {
+      this.session.setCurrentAB(source);
+    });
+    this.compareControl.on('abToggled', () => {
+      this.session.toggleAB();
     });
 
     // Connect volume control (from HeaderBar) to session (bidirectional)
@@ -278,181 +335,58 @@ export class App {
 
   private setupTabContents(): void {
     // === VIEW TAB ===
+    // Reorganized into grouped dropdowns to reduce button count and scroll issues
     const viewContent = document.createElement('div');
-    viewContent.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+    viewContent.style.cssText = 'display: flex; align-items: center; gap: 8px; flex-shrink: 0;';
 
-    // Zoom controls
-    const zoomLabel = document.createElement('span');
-    zoomLabel.textContent = 'Zoom:';
-    zoomLabel.style.cssText = 'color: #888; font-size: 11px;';
-    viewContent.appendChild(zoomLabel);
-
-    viewContent.appendChild(ContextToolbar.createButton('Fit', () => this.viewer.fitToWindow(), { title: 'Fit to window (F)' }));
-    viewContent.appendChild(ContextToolbar.createButton('50%', () => this.viewer.setZoom(0.5), { title: 'Zoom 50% (0)' }));
-    viewContent.appendChild(ContextToolbar.createButton('100%', () => this.viewer.setZoom(1), { title: 'Zoom 100% (1)' }));
-    viewContent.appendChild(ContextToolbar.createButton('200%', () => this.viewer.setZoom(2), { title: 'Zoom 200% (2)' }));
-    viewContent.appendChild(ContextToolbar.createButton('400%', () => this.viewer.setZoom(4), { title: 'Zoom 400% (4)' }));
+    // Zoom dropdown (replaces 5 separate buttons)
+    viewContent.appendChild(this.zoomControl.render());
 
     viewContent.appendChild(ContextToolbar.createDivider());
 
-    // Channel select
+    // Channel select dropdown
     viewContent.appendChild(this.channelSelect.render());
 
     viewContent.appendChild(ContextToolbar.createDivider());
 
-    // Wipe control
-    viewContent.appendChild(this.wipeControl.render());
+    // Compare dropdown (Wipe + A/B)
+    viewContent.appendChild(this.compareControl.render());
 
     viewContent.appendChild(ContextToolbar.createDivider());
 
-    // Stereo control
+    // Stereo control (already a dropdown)
     viewContent.appendChild(this.stereoControl.render());
 
     viewContent.appendChild(ContextToolbar.createDivider());
 
-    // Stack control
+    // Scopes dropdown (Histogram + Waveform + Vectorscope)
+    viewContent.appendChild(this.scopesControl.render());
+
+    viewContent.appendChild(ContextToolbar.createDivider());
+
+    // Stack control (opens panel)
     viewContent.appendChild(this.stackControl.render());
 
-    viewContent.appendChild(ContextToolbar.createDivider());
-
-    // Histogram toggle button
-    const histogramButton = ContextToolbar.createButton('Histogram', () => {
-      this.histogram.toggle();
-      if (this.histogram.isVisible()) {
-        this.updateHistogram();
-        histogramButton.style.background = 'rgba(74, 158, 255, 0.15)';
-        histogramButton.style.borderColor = '#4a9eff';
-      } else {
-        histogramButton.style.background = '';
-        histogramButton.style.borderColor = '';
-      }
-    }, { title: 'Toggle histogram display (H)', icon: 'histogram' });
-    viewContent.appendChild(histogramButton);
-
-    // Update histogram button state when visibility changes
+    // Sync scope visibility with ScopesControl
     this.histogram.on('visibilityChanged', (visible) => {
-      if (visible) {
-        histogramButton.style.background = 'rgba(74, 158, 255, 0.15)';
-        histogramButton.style.borderColor = '#4a9eff';
-      } else {
-        histogramButton.style.background = '';
-        histogramButton.style.borderColor = '';
-      }
+      this.scopesControl.setScopeVisible('histogram', visible);
     });
-
-    // Waveform toggle button
-    const waveformButton = ContextToolbar.createButton('Waveform', () => {
-      this.waveform.toggle();
-      if (this.waveform.isVisible()) {
-        this.updateWaveform();
-        waveformButton.style.background = 'rgba(74, 158, 255, 0.15)';
-        waveformButton.style.borderColor = '#4a9eff';
-      } else {
-        waveformButton.style.background = '';
-        waveformButton.style.borderColor = '';
-      }
-    }, { title: 'Toggle waveform display (W)', icon: 'waveform' });
-    viewContent.appendChild(waveformButton);
-
-    // Update waveform button state when visibility changes
     this.waveform.on('visibilityChanged', (visible) => {
-      if (visible) {
-        waveformButton.style.background = 'rgba(74, 158, 255, 0.15)';
-        waveformButton.style.borderColor = '#4a9eff';
-      } else {
-        waveformButton.style.background = '';
-        waveformButton.style.borderColor = '';
-      }
+      this.scopesControl.setScopeVisible('waveform', visible);
     });
-
-    // Vectorscope toggle button
-    const vectorscopeButton = ContextToolbar.createButton('Vectorscope', () => {
-      this.vectorscope.toggle();
-      if (this.vectorscope.isVisible()) {
-        this.updateVectorscope();
-        vectorscopeButton.style.background = 'rgba(74, 158, 255, 0.15)';
-        vectorscopeButton.style.borderColor = '#4a9eff';
-      } else {
-        vectorscopeButton.style.background = '';
-        vectorscopeButton.style.borderColor = '';
-      }
-    }, { title: 'Toggle vectorscope display (Y)', icon: 'vectorscope' });
-    viewContent.appendChild(vectorscopeButton);
-
-    // Update vectorscope button state when visibility changes
     this.vectorscope.on('visibilityChanged', (visible) => {
-      if (visible) {
-        vectorscopeButton.style.background = 'rgba(74, 158, 255, 0.15)';
-        vectorscopeButton.style.borderColor = '#4a9eff';
-      } else {
-        vectorscopeButton.style.background = '';
-        vectorscopeButton.style.borderColor = '';
-      }
+      this.scopesControl.setScopeVisible('vectorscope', visible);
     });
 
-    viewContent.appendChild(ContextToolbar.createDivider());
-
-    // A/B Compare controls
-    const abLabel = document.createElement('span');
-    abLabel.textContent = 'A/B:';
-    abLabel.style.cssText = 'color: #888; font-size: 11px;';
-    viewContent.appendChild(abLabel);
-
-    const abButtonA = ContextToolbar.createButton('A', () => {
-      this.session.setCurrentAB('A');
-    }, { title: 'Show source A' });
-    abButtonA.style.minWidth = '28px';
-    abButtonA.dataset.testid = 'ab-button-a';
-    viewContent.appendChild(abButtonA);
-
-    const abButtonB = ContextToolbar.createButton('B', () => {
-      this.session.setCurrentAB('B');
-    }, { title: 'Show source B' });
-    abButtonB.style.minWidth = '28px';
-    abButtonB.dataset.testid = 'ab-button-b';
-    viewContent.appendChild(abButtonB);
-
-    const abToggleButton = ContextToolbar.createButton('⇄', () => {
-      this.session.toggleAB();
-    }, { title: 'Toggle A/B (`)' });
-    abToggleButton.dataset.testid = 'ab-toggle-button';
-    viewContent.appendChild(abToggleButton);
-
-    // Helper to update A/B button states
-    const updateABButtonStates = () => {
-      const current = this.session.currentAB;
-      const available = this.session.abCompareAvailable;
-
-      if (current === 'A') {
-        abButtonA.style.background = 'rgba(74, 158, 255, 0.15)';
-        abButtonA.style.borderColor = '#4a9eff';
-        abButtonB.style.background = '';
-        abButtonB.style.borderColor = '';
-      } else {
-        abButtonA.style.background = '';
-        abButtonA.style.borderColor = '';
-        abButtonB.style.background = 'rgba(74, 158, 255, 0.15)';
-        abButtonB.style.borderColor = '#4a9eff';
-      }
-
-      // Disable B button and toggle if B source not assigned
-      abButtonB.disabled = !available;
-      abToggleButton.disabled = !available;
-      abButtonB.style.opacity = available ? '1' : '0.5';
-      abToggleButton.style.opacity = available ? '1' : '0.5';
+    // Sync A/B availability with CompareControl
+    const updateABAvailability = () => {
+      this.compareControl.setABAvailable(this.session.abCompareAvailable);
     };
-
-    // Initial state
-    updateABButtonStates();
-
-    // Listen for A/B changes
+    updateABAvailability();
+    this.session.on('sourceLoaded', updateABAvailability);
     this.session.on('abSourceChanged', () => {
-      updateABButtonStates();
-    });
-
-    // Listen for source changes that might affect A/B availability
-    this.session.on('sourceLoaded', () => {
-      updateABButtonStates();
+      const current = this.session.currentAB;
+      this.compareControl.setABSource(current);
     });
 
     this.contextToolbar.setTabContent('view', viewContent);
@@ -693,32 +627,23 @@ export class App {
         break;
       case 'W':
         // Cycle wipe mode (uppercase or Shift+w)
-        this.wipeControl.cycleMode();
+        this.compareControl.cycleWipeMode();
         break;
       case 'w':
         // Shift+w cycles wipe mode, plain w toggles waveform
         if (e.shiftKey) {
-          this.wipeControl.cycleMode();
+          this.compareControl.cycleWipeMode();
         } else {
-          this.waveform.toggle();
-          if (this.waveform.isVisible()) {
-            this.updateWaveform();
-          }
+          this.scopesControl.toggleScope('waveform');
         }
         break;
       case 'y':
         // Toggle vectorscope (lowercase only)
-        this.vectorscope.toggle();
-        if (this.vectorscope.isVisible()) {
-          this.updateVectorscope();
-        }
+        this.scopesControl.toggleScope('vectorscope');
         break;
       case 'h':
         // Toggle histogram (lowercase only, Shift+H is for flip horizontal)
-        this.histogram.toggle();
-        if (this.histogram.isVisible()) {
-          this.updateHistogram();
-        }
+        this.scopesControl.toggleScope('histogram');
         break;
       case 'g':
       case 'G':
@@ -1167,7 +1092,9 @@ Shift+V   - Flip vertical</pre>`;
     this.contextToolbar.dispose();
     this.paintToolbar.dispose();
     this.colorControls.dispose();
-    this.wipeControl.dispose();
+    this.zoomControl.dispose();
+    this.scopesControl.dispose();
+    this.compareControl.dispose();
     this.transformControl.dispose();
     this.filterControl.dispose();
     this.cropControl.dispose();
