@@ -19,6 +19,7 @@ import { compositeImageData, BlendMode } from '../../composite/BlendModes';
 import { showAlert } from './shared/Modal';
 import { getIconSvg } from './shared/Icons';
 import { ChannelMode, applyChannelIsolation } from './ChannelSelect';
+import { StereoState, DEFAULT_STEREO_STATE, isDefaultStereoState, applyStereoMode } from '../../stereo/StereoRenderer';
 
 interface PointerState {
   pointerId: number;
@@ -116,6 +117,9 @@ export class Viewer {
 
   // Channel isolation state
   private channelMode: ChannelMode = 'rgb';
+
+  // Stereo viewing state
+  private stereoState: StereoState = { ...DEFAULT_STEREO_STATE };
 
   constructor(session: Session, paintEngine: PaintEngine) {
     this.session = session;
@@ -906,7 +910,12 @@ export class Viewer {
       }
     }
 
-    // Apply post-processing effects (lens, LUT, color, sharpen) regardless of stack mode
+    // Apply post-processing effects (stereo, lens, LUT, color, sharpen) regardless of stack mode
+    // Apply stereo viewing mode (transforms layout for 3D viewing)
+    if (!isDefaultStereoState(this.stereoState)) {
+      this.applyStereoMode(this.imageCtx, displayWidth, displayHeight);
+    }
+
     // Apply lens distortion correction (geometric transform, applied first)
     if (!isDefaultLensParams(this.lensParams)) {
       this.applyLensDistortionToCtx(this.imageCtx, displayWidth, displayHeight);
@@ -1453,6 +1462,32 @@ export class Viewer {
   resetChannelMode(): void {
     this.channelMode = 'rgb';
     this.scheduleRender();
+  }
+
+  // Stereo viewing methods
+  setStereoState(state: StereoState): void {
+    this.stereoState = { ...state };
+    this.scheduleRender();
+  }
+
+  getStereoState(): StereoState {
+    return { ...this.stereoState };
+  }
+
+  resetStereoState(): void {
+    this.stereoState = { ...DEFAULT_STEREO_STATE };
+    this.scheduleRender();
+  }
+
+  /**
+   * Apply stereo viewing mode to the canvas
+   */
+  private applyStereoMode(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+    if (isDefaultStereoState(this.stereoState)) return;
+
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const processedData = applyStereoMode(imageData, this.stereoState);
+    ctx.putImageData(processedData, 0, 0);
   }
 
   /**

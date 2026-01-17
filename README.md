@@ -29,6 +29,16 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 - A/B source switching with auto-assignment when loading multiple files
 - Quick toggle between sources with backtick key
 
+### Stereo 3D Viewing
+- Side-by-side and over/under stereo modes
+- Mirror mode (side-by-side with flipped right eye)
+- Anaglyph mode (red/cyan 3D glasses)
+- Luminance anaglyph for reduced color fringing
+- Checkerboard mode (for DLP projectors with shutter glasses)
+- Scanline interleaved mode (for line-blanking displays)
+- Eye swap control (swap left/right eyes)
+- Convergence offset adjustment
+
 ### Scopes & Analysis
 - Histogram (RGB/Luminance/Separate channels, log scale option)
 - Waveform monitor (Luma/RGB/Parade modes)
@@ -114,6 +124,11 @@ pnpm dev
 | `h` | Toggle histogram |
 | `y` | Toggle vectorscope |
 
+#### Stereo 3D
+| Key | Action |
+|-----|--------|
+| `Shift+3` | Cycle stereo modes (off/side-by-side/over-under/mirror/anaglyph/etc.) |
+
 #### Channel View
 | Key | Action |
 |-----|--------|
@@ -178,6 +193,7 @@ src/
 ├── paint/              # Annotation engine
 ├── audio/              # Waveform renderer
 ├── color/              # CDL, LUT loader, WebGL LUT processor
+├── stereo/             # Stereoscopic 3D viewing modes
 ├── transform/          # Lens distortion
 ├── composite/          # Blend modes
 └── utils/              # EventEmitter, FrameExporter, SequenceLoader

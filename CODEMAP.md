@@ -231,7 +231,13 @@ openrv-web/
 │   │   │   ├── Toolbar.ts      # Toolbars
 │   │   │   ├── Inspector.ts    # Property inspector
 │   │   │   ├── PixelInfo.ts    # Pixel inspector
-│   │   │   └── Wipe.ts         # Wipe controls
+│   │   │   ├── Wipe.ts         # Wipe controls
+│   │   │   ├── StereoControl.ts # Stereo 3D mode controls
+│   │   │   ├── ChannelSelect.ts # Channel isolation (R/G/B/A/Luma)
+│   │   │   ├── Histogram.ts    # Histogram display
+│   │   │   ├── Waveform.ts     # Waveform monitor
+│   │   │   ├── Vectorscope.ts  # Vectorscope display
+│   │   │   └── CurvesControl.ts # Color curves editor
 │   │   ├── controls/           # Input handling
 │   │   │   ├── PanZoom.ts      # Pan/zoom control
 │   │   │   ├── Keyboard.ts     # Keyboard shortcuts
@@ -246,6 +252,10 @@ openrv-web/
 │   │   ├── Brush.ts            # Brush types
 │   │   ├── Stroke.ts           # Stroke data
 │   │   └── PaintRenderer.ts    # Paint rendering
+│   │
+│   ├── stereo/                  # Stereoscopic 3D viewing
+│   │   ├── StereoRenderer.ts   # Stereo mode rendering (8 modes)
+│   │   └── StereoRenderer.test.ts # Unit tests
 │   │
 │   ├── audio/                   # Audio handling
 │   │   ├── AudioEngine.ts      # Web Audio API
@@ -295,8 +305,12 @@ openrv-web/
 | `ColorIPNode` | `src/nodes/color/ColorNode.ts` | Color operations |
 | `Transform2DIPNode` | `src/nodes/transform/Transform2DNode.ts` | 2D transforms |
 | `PaintIPNode` | `src/paint/PaintEngine.ts` | Canvas-based annotations |
+| `StereoIPNode` | `src/stereo/StereoRenderer.ts` | 8 stereo viewing modes |
 | Timeline UI | `src/ui/components/Timeline.ts` | Custom canvas timeline |
 | Viewer | `src/ui/components/Viewer.ts` | WebGL canvas viewer |
+| Histogram | `src/ui/components/Histogram.ts` | Real-time histogram |
+| Waveform | `src/ui/components/Waveform.ts` | Waveform monitor |
+| Vectorscope | `src/ui/components/Vectorscope.ts` | Color vectorscope |
 
 ### Shader Mapping
 
@@ -434,3 +448,13 @@ const annotations = dto.byProtocol('RVPaint');
 - [x] Node factory with @RegisterNode decorator pattern
 - [x] GTOGraphLoader for node graph reconstruction from GTO/RV files
 - [x] Graph integration with Session (graph loaded on GTO file open)
+
+### Phase 6 (Professional Viewing Tools)
+- [x] Channel isolation (RGB/R/G/B/Alpha/Luminance with keyboard shortcuts)
+- [x] Histogram display (RGB/Luminance/Separate modes, log scale)
+- [x] Waveform monitor (Luma/RGB/Parade modes)
+- [x] Vectorscope (color targets, skin tone indicator, zoom levels)
+- [x] A/B source compare (auto-assignment, keyboard toggle)
+- [x] Color curves (Bezier curve editor, channel presets, import/export)
+- [x] Stereo viewing modes (side-by-side, over-under, mirror, anaglyph, checkerboard, scanline)
+- [x] Eye swap and convergence offset controls

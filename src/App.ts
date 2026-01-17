@@ -16,6 +16,7 @@ import { CurvesControl } from './ui/components/CurvesControl';
 import { LensControl } from './ui/components/LensControl';
 import { StackControl } from './ui/components/StackControl';
 import { ChannelSelect } from './ui/components/ChannelSelect';
+import { StereoControl } from './ui/components/StereoControl';
 import { Histogram } from './ui/components/Histogram';
 import { Waveform } from './ui/components/Waveform';
 import { Vectorscope } from './ui/components/Vectorscope';
@@ -43,6 +44,7 @@ export class App {
   private lensControl: LensControl;
   private stackControl: StackControl;
   private channelSelect: ChannelSelect;
+  private stereoControl: StereoControl;
   private histogram: Histogram;
   private waveform: Waveform;
   private vectorscope: Vectorscope;
@@ -189,6 +191,12 @@ export class App {
       this.viewer.setChannelMode(channel);
     });
 
+    // Initialize stereo control
+    this.stereoControl = new StereoControl();
+    this.stereoControl.on('stateChanged', (state) => {
+      this.viewer.setStereoState(state);
+    });
+
     // Initialize histogram
     this.histogram = new Histogram();
 
@@ -294,6 +302,11 @@ export class App {
 
     // Wipe control
     viewContent.appendChild(this.wipeControl.render());
+
+    viewContent.appendChild(ContextToolbar.createDivider());
+
+    // Stereo control
+    viewContent.appendChild(this.stereoControl.render());
 
     viewContent.appendChild(ContextToolbar.createDivider());
 
@@ -587,6 +600,12 @@ export class App {
       // Handle channel select shortcuts (Shift + G/B/A/L/N)
       // Note: Shift+R is used for rotation, so Red channel must be selected via UI
       if (e.shiftKey && this.channelSelect.handleKeyboard(e.key, e.shiftKey)) {
+        e.preventDefault();
+        return;
+      }
+
+      // Handle stereo control shortcuts (Shift + 3)
+      if (e.shiftKey && this.stereoControl.handleKeyboard(e.key, e.shiftKey)) {
         e.preventDefault();
         return;
       }
@@ -1157,6 +1176,7 @@ Shift+V   - Flip vertical</pre>`;
     this.lensControl.dispose();
     this.stackControl.dispose();
     this.channelSelect.dispose();
+    this.stereoControl.dispose();
     this.histogram.dispose();
     this.waveform.dispose();
     this.vectorscope.dispose();

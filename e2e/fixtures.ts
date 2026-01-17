@@ -38,6 +38,9 @@ export interface ViewerState {
   wipePosition: number;
   cropEnabled: boolean;
   channelMode: 'rgb' | 'red' | 'green' | 'blue' | 'alpha' | 'luminance';
+  stereoMode: 'off' | 'side-by-side' | 'over-under' | 'mirror' | 'anaglyph' | 'anaglyph-luminance' | 'checkerboard' | 'scanline';
+  stereoEyeSwap: boolean;
+  stereoOffset: number;
   histogramVisible: boolean;
   histogramMode: 'rgb' | 'luminance' | 'separate';
   histogramLogScale: boolean;
@@ -118,6 +121,9 @@ export async function getViewerState(page: Page): Promise<ViewerState> {
       wipePosition: 0.5,
       cropEnabled: false,
       channelMode: 'rgb',
+      stereoMode: 'off',
+      stereoEyeSwap: false,
+      stereoOffset: 0,
       histogramVisible: false,
       histogramMode: 'rgb',
       histogramLogScale: false,

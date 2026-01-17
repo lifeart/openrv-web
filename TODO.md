@@ -120,33 +120,42 @@ Bezier curve-based color correction for RGB channels. Industry standard tool for
 
 ---
 
-## High Priority - Core Features
+### 7. Stereo Viewing Modes ✅
 
-### 7. Stereo Viewing Modes
+**Status:** COMPLETED
 
-**OpenRV Reference:** `src/plugins/rv-packages/stereo_autoload`, `stereo_disassembly`
-**Nodes:** `StereoIPNode.cpp`
+**OpenRV Reference:** `src/plugins/rv-packages/stereo_autoload`, `stereo_disassembly`, `StereoIPNode.cpp`
 
 **Description:**
 Support for stereoscopic 3D content viewing with multiple display modes.
 
-**Requirements:**
-- [ ] Side-by-side mode (left/right)
-- [ ] Over/under mode (top/bottom)
-- [ ] Anaglyph mode (red/cyan glasses)
-- [ ] Checkerboard mode
-- [ ] Mirror mode (flip one eye)
-- [ ] Eye swap option
-- [ ] Stereo convergence adjustment
+**Implementation:**
+- Side-by-side mode (left/right eyes horizontally adjacent)
+- Over/under mode (left eye top, right eye bottom)
+- Mirror mode (side-by-side with right eye horizontally flipped)
+- Anaglyph mode (red channel from left eye, cyan from right eye)
+- Luminance anaglyph mode (grayscale anaglyph for reduced color fringing)
+- Checkerboard mode (alternating pixels for DLP projectors with shutter glasses)
+- Scanline mode (alternating lines for line-blanking displays)
+- Eye swap control (swap left/right eyes)
+- Convergence offset adjustment (-20 to +20 range)
+- Keyboard shortcut: `Shift+3` to cycle modes
+- Dropdown UI with all modes in View tab
+- Proper handling of odd dimensions (no black stripes)
 
-**Files to create:**
-- `src/stereo/StereoRenderer.ts`
-- `src/ui/components/StereoControl.ts`
-
-**Files to modify:**
-- `src/ui/components/Viewer.ts` - Add stereo rendering modes
+**Files:**
+- `src/stereo/StereoRenderer.ts` - Core stereo rendering logic with all modes
+- `src/stereo/StereoRenderer.test.ts` - Unit tests (17 tests)
+- `src/ui/components/StereoControl.ts` - UI component with dropdown, eye swap, offset slider
+- `src/ui/components/Viewer.ts` - Integrated into render pipeline
+- `src/App.ts` - Control wiring and keyboard shortcuts
+- `src/test-helper.ts` - Test state exposure
+- `e2e/fixtures.ts` - E2E test fixtures
+- `e2e/stereo-viewing.spec.ts` - E2E tests (23 tests)
 
 ---
+
+## High Priority - Core Features
 
 ## Medium Priority - Professional Features
 
@@ -548,11 +557,13 @@ src/
 │   ├── Vectorscope.ts  # ✅ Implemented
 │   ├── ChannelSelect.ts # ✅ Implemented
 │   ├── CurveEditor.ts  # ✅ Implemented - Interactive curve UI
-│   └── CurvesControl.ts # ✅ Implemented - Curves panel wrapper
+│   ├── CurvesControl.ts # ✅ Implemented - Curves panel wrapper
+│   └── StereoControl.ts # ✅ Implemented - Stereo mode UI
 ├── color/              # Color processing
 │   └── ColorCurves.ts  # ✅ Implemented - Curve evaluation & LUT
-├── stereo/             # NEW: Stereo viewing modes
-│   └── StereoRenderer.ts
+├── stereo/             # ✅ Stereo viewing modes
+│   ├── StereoRenderer.ts    # ✅ Implemented - All stereo modes
+│   └── StereoRenderer.test.ts # ✅ Implemented - Unit tests
 ├── formats/            # NEW: Additional format loaders
 │   ├── OTIOLoader.ts
 │   └── EXRLoader.ts

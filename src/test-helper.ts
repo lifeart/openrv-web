@@ -49,6 +49,9 @@ export interface ViewerState {
   wipePosition: number;
   cropEnabled: boolean;
   channelMode: 'rgb' | 'red' | 'green' | 'blue' | 'alpha' | 'luminance';
+  stereoMode: 'off' | 'side-by-side' | 'over-under' | 'mirror' | 'anaglyph' | 'anaglyph-luminance' | 'checkerboard' | 'scanline';
+  stereoEyeSwap: boolean;
+  stereoOffset: number;
   histogramVisible: boolean;
   histogramMode: 'rgb' | 'luminance' | 'separate';
   histogramLogScale: boolean;
@@ -135,6 +138,9 @@ export function exposeForTesting(app: App): void {
         wipePosition: viewer.wipeState?.position ?? 0.5,
         cropEnabled: viewer.cropState?.enabled ?? false,
         channelMode: viewer.channelMode ?? 'rgb',
+        stereoMode: viewer.stereoState?.mode ?? 'off',
+        stereoEyeSwap: viewer.stereoState?.eyeSwap ?? false,
+        stereoOffset: viewer.stereoState?.offset ?? 0,
         histogramVisible: histogram?.isVisible?.() ?? false,
         histogramMode: histogram?.getMode?.() ?? 'rgb',
         histogramLogScale: histogram?.isLogScale?.() ?? false,
