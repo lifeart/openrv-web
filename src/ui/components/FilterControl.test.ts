@@ -5,7 +5,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   FilterControl,
-  FilterSettings,
   DEFAULT_FILTER_SETTINGS,
 } from './FilterControl';
 
@@ -64,35 +63,39 @@ describe('FilterControl', () => {
 
   describe('toggle/show/hide', () => {
     it('FLT-007: toggle shows panel when hidden', () => {
+      expect(control.isOpen).toBe(false);
       control.toggle(); // Show
-      // Should not throw
+      expect(control.isOpen).toBe(true);
     });
 
     it('FLT-008: toggle hides panel when visible', () => {
-      control.toggle(); // Show
+      control.show();
+      expect(control.isOpen).toBe(true);
       control.toggle(); // Hide
-      // Should not throw
+      expect(control.isOpen).toBe(false);
     });
 
     it('FLT-009: show opens panel', () => {
       control.show();
-      // Should not throw
+      expect(control.isOpen).toBe(true);
     });
 
     it('FLT-010: hide closes panel', () => {
       control.show();
       control.hide();
-      // Should not throw
+      expect(control.isOpen).toBe(false);
     });
 
     it('FLT-011: show is idempotent', () => {
       control.show();
-      control.show(); // Second show should not throw
+      control.show();
+      expect(control.isOpen).toBe(true);
     });
 
     it('FLT-012: hide is idempotent', () => {
       control.hide();
-      control.hide(); // Second hide should not throw
+      control.hide();
+      expect(control.isOpen).toBe(false);
     });
   });
 

@@ -11,6 +11,7 @@ import {
   LineCap,
   StrokeMode,
   TextOrigin,
+  PaintSnapshot,
   DEFAULT_STROKE_COLOR,
   DEFAULT_STROKE_WIDTH,
   DEFAULT_BRUSH_TYPE,
@@ -178,11 +179,11 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
       size,
       scale: 1,
       rotation: 0,
-      spacing: 1,
+      spacing: 0,
       font: 'sans-serif',
-      origin: TextOrigin.BottomLeft,
+      origin: TextOrigin.Center,
       startFrame: frame,
-      duration: 0, // Visible only on the frame it was added
+      duration: 1,
     };
 
     this.addAnnotation(annotation);
@@ -374,7 +375,7 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
   }
 
   // Serialization for GTO
-  toJSON(): object {
+  toJSON(): PaintSnapshot {
     const frames: Record<number, Annotation[]> = {};
     for (const [frame, annotations] of this.state.annotations) {
       frames[frame] = annotations;

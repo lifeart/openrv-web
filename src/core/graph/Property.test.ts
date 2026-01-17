@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { Property, PropertyContainer, PropertyInfo } from './Property';
+import { Property, PropertyContainer } from './Property';
 
 describe('Property', () => {
   describe('initialization', () => {
@@ -259,8 +259,7 @@ describe('PropertyContainer', () => {
     });
 
     it('does nothing for non-existent property', () => {
-      // Should not throw
-      container.setValue('nonexistent', 100);
+      expect(() => container.setValue('nonexistent', 100)).not.toThrow();
     });
   });
 

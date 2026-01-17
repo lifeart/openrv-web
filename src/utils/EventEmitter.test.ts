@@ -92,14 +92,12 @@ describe('EventEmitter', () => {
 
     it('handles removing non-existent listener', () => {
       const listener = vi.fn();
-      // Should not throw
-      emitter.off('message', listener);
+      expect(() => emitter.off('message', listener)).not.toThrow();
     });
 
     it('handles removing from non-existent event', () => {
       const listener = vi.fn();
-      // Should not throw
-      emitter.off('count', listener);
+      expect(() => emitter.off('count', listener)).not.toThrow();
     });
   });
 
@@ -116,8 +114,7 @@ describe('EventEmitter', () => {
     });
 
     it('does not throw for event with no listeners', () => {
-      // Should not throw
-      emitter.emit('message', 'no one listening');
+      expect(() => emitter.emit('message', 'no one listening')).not.toThrow();
     });
 
     it('EVT-005: handles listener errors gracefully', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { Waveform, WaveformMode } from './Waveform';
+import { Waveform } from './Waveform';
 
 describe('Waveform', () => {
   let waveform: Waveform;

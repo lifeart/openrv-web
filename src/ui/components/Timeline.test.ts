@@ -6,6 +6,21 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Timeline } from './Timeline';
 import { Session } from '../../core/session/Session';
 import { PaintEngine } from '../../paint/PaintEngine';
+import type { Annotation } from '../../paint/types';
+
+class TestTimeline extends Timeline {
+  public drawCount = 0;
+  
+  public setSize(w: number, h: number) {
+    this.width = w;
+    this.height = h;
+  }
+
+  protected override draw() {
+    super.draw();
+    this.drawCount++;
+  }
+}
 
 // Mock WaveformRenderer
 vi.mock('../../audio/WaveformRenderer', () => ({
@@ -21,12 +36,40 @@ vi.mock('../../audio/WaveformRenderer', () => ({
 describe('Timeline', () => {
   let session: Session;
   let paintEngine: PaintEngine;
-  let timeline: Timeline;
+  let timeline: TestTimeline;
 
   beforeEach(() => {
     session = new Session();
+    // Use type cast since we are in test environment and want to access protected method
+    (session as any).addSource({
+      id: 'test-source',
+      name: 'test.mp4',
+      type: 'video',
+      duration: 100,
+      fps: 24,
+      width: 1920,
+      height: 1080,
+      element: document.createElement('video'),
+    });
+
     paintEngine = new PaintEngine();
-    timeline = new Timeline(session, paintEngine);
+    timeline = new TestTimeline(session, paintEngine);
+    
+    // Mock getBoundingClientRect
+    const container = timeline.render();
+    vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({
+      width: 1000,
+      height: 100,
+      top: 0,
+      left: 0,
+      bottom: 100,
+      right: 1000,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    } as DOMRect);
+    
+    timeline.setSize(1000, 100);
   });
 
   afterEach(() => {
@@ -68,33 +111,27 @@ describe('Timeline', () => {
 
   describe('session events', () => {
     it('TML-006: responds to frameChanged event', () => {
-      timeline.render();
-      expect(() => {
-        session.currentFrame = 10;
-      }).not.toThrow();
+      timeline.drawCount = 0;
+      session.currentFrame = 10;
+      expect(timeline.drawCount).toBeGreaterThan(0);
     });
 
     it('TML-007: responds to playbackChanged event', () => {
-      timeline.render();
-      expect(() => {
-        session.play();
-        session.pause();
-      }).not.toThrow();
+      timeline.drawCount = 0;
+      session.play();
+      expect(timeline.drawCount).toBeGreaterThan(0);
     });
 
     it('TML-008: responds to durationChanged event', () => {
-      timeline.render();
-      expect(() => {
-        session.emit('durationChanged', 100);
-      }).not.toThrow();
+      timeline.drawCount = 0;
+      session.emit('durationChanged', 100);
+      expect(timeline.drawCount).toBeGreaterThan(0);
     });
 
     it('TML-009: responds to inOutChanged event', () => {
-      timeline.render();
-      expect(() => {
-        session.setInPoint(5);
-        session.setOutPoint(50);
-      }).not.toThrow();
+      timeline.drawCount = 0;
+      session.emit('inOutChanged', 5, 50);
+      expect(timeline.drawCount).toBeGreaterThan(0);
     });
 
     it('TML-010: responds to marksChanged event', () => {
@@ -156,21 +193,21 @@ describe('Timeline', () => {
     it('TML-016: responds to annotationsChanged event', () => {
       timeline.render();
       expect(() => {
-        paintEngine.emit('annotationsChanged');
+        paintEngine.emit('annotationsChanged', 0);
       }).not.toThrow();
     });
 
     it('TML-017: responds to strokeAdded event', () => {
       timeline.render();
       expect(() => {
-        paintEngine.emit('strokeAdded', null);
+        paintEngine.emit('strokeAdded', { id: 'test-id' } as Annotation);
       }).not.toThrow();
     });
 
     it('TML-018: responds to strokeRemoved event', () => {
       timeline.render();
       expect(() => {
-        paintEngine.emit('strokeRemoved', 'test-id');
+        paintEngine.emit('strokeRemoved', { id: 'test-id' } as Annotation);
       }).not.toThrow();
     });
   });

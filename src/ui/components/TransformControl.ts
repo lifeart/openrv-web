@@ -1,5 +1,5 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import { getIconSvg } from './shared/Icons';
+import { getIconSvg, type IconName } from './shared/Icons';
 
 export interface Transform2D {
   rotation: 0 | 90 | 180 | 270;  // Degrees clockwise
@@ -55,9 +55,9 @@ export class TransformControl extends EventEmitter<TransformControlEvents> {
     this.createButton('reset', () => this.reset(), 'Reset transforms');
   }
 
-  private createButton(icon: string, onClick: () => void, title: string): HTMLButtonElement {
+  private createButton(icon: IconName, onClick: () => void, title: string): HTMLButtonElement {
     const btn = document.createElement('button');
-    btn.innerHTML = getIconSvg(icon as any, 'sm');
+    btn.innerHTML = getIconSvg(icon, 'sm');
     btn.title = title;
     btn.style.cssText = `
       background: transparent;

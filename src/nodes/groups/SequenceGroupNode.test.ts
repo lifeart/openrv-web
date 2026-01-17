@@ -6,7 +6,6 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { SequenceGroupNode } from './SequenceGroupNode';
 import { IPNode } from '../base/IPNode';
 import { IPImage } from '../../core/image/Image';
-import type { EvalContext } from '../../core/graph/Graph';
 
 // Simple mock node for testing
 class MockInputNode extends IPNode {
@@ -21,11 +20,9 @@ class MockInputNode extends IPNode {
 
 describe('SequenceGroupNode', () => {
   let sequenceNode: SequenceGroupNode;
-  let mockContext: EvalContext;
 
   beforeEach(() => {
     sequenceNode = new SequenceGroupNode('TestSequence');
-    mockContext = { frame: 1 };
   });
 
   describe('initialization', () => {
@@ -58,9 +55,9 @@ describe('SequenceGroupNode', () => {
       sequenceNode.connectInput(input3);
 
       // Without durations set, each input defaults to 1 frame
-      expect(sequenceNode.getActiveInputIndex({ frame: 1 })).toBe(0);
-      expect(sequenceNode.getActiveInputIndex({ frame: 2 })).toBe(1);
-      expect(sequenceNode.getActiveInputIndex({ frame: 3 })).toBe(2);
+      expect(sequenceNode.getActiveInputIndex({ frame: 1, width: 1920, height: 1080, quality: 'full' })).toBe(0);
+      expect(sequenceNode.getActiveInputIndex({ frame: 2, width: 1920, height: 1080, quality: 'full' })).toBe(1);
+      expect(sequenceNode.getActiveInputIndex({ frame: 3, width: 1920, height: 1080, quality: 'full' })).toBe(2);
     });
 
     it('SGN-003: defaults duration to 1 if not set', () => {
@@ -82,13 +79,13 @@ describe('SequenceGroupNode', () => {
       sequenceNode.connectInput(input2);
 
       // Frame 3 should wrap to input 0 (frame 1 position)
-      expect(sequenceNode.getActiveInputIndex({ frame: 3 })).toBe(0);
-      expect(sequenceNode.getActiveInputIndex({ frame: 4 })).toBe(1);
+      expect(sequenceNode.getActiveInputIndex({ frame: 3, width: 1920, height: 1080, quality: 'full' })).toBe(0);
+      expect(sequenceNode.getActiveInputIndex({ frame: 4, width: 1920, height: 1080, quality: 'full' })).toBe(1);
     });
 
     it('returns 0 for empty inputs', () => {
-      expect(sequenceNode.getActiveInputIndex({ frame: 1 })).toBe(0);
-      expect(sequenceNode.getActiveInputIndex({ frame: 100 })).toBe(0);
+      expect(sequenceNode.getActiveInputIndex({ frame: 1, width: 1920, height: 1080, quality: 'full' })).toBe(0);
+      expect(sequenceNode.getActiveInputIndex({ frame: 100, width: 1920, height: 1080, quality: 'full' })).toBe(0);
     });
   });
 
@@ -154,9 +151,9 @@ describe('SequenceGroupNode', () => {
       // Frame 1-10: input 0
       // Frame 11-30: input 1
       // Frame 31-60: input 2
-      expect(sequenceNode.getActiveInputIndex({ frame: 5 })).toBe(0);
-      expect(sequenceNode.getActiveInputIndex({ frame: 15 })).toBe(1);
-      expect(sequenceNode.getActiveInputIndex({ frame: 40 })).toBe(2);
+      expect(sequenceNode.getActiveInputIndex({ frame: 5, width: 1920, height: 1080, quality: 'full' })).toBe(0);
+      expect(sequenceNode.getActiveInputIndex({ frame: 15, width: 1920, height: 1080, quality: 'full' })).toBe(1);
+      expect(sequenceNode.getActiveInputIndex({ frame: 40, width: 1920, height: 1080, quality: 'full' })).toBe(2);
     });
   });
 
@@ -171,32 +168,32 @@ describe('SequenceGroupNode', () => {
       sequenceNode.setInputDurations([10, 20]);
 
       // Frame 1 is local frame 1 in input 0
-      expect(sequenceNode.getLocalFrame({ frame: 1 })).toBe(1);
+      expect(sequenceNode.getLocalFrame({ frame: 1, width: 1920, height: 1080, quality: 'full' })).toBe(1);
 
       // Frame 10 is local frame 10 in input 0
-      expect(sequenceNode.getLocalFrame({ frame: 10 })).toBe(10);
+      expect(sequenceNode.getLocalFrame({ frame: 10, width: 1920, height: 1080, quality: 'full' })).toBe(10);
 
       // Frame 11 is local frame 1 in input 1
-      expect(sequenceNode.getLocalFrame({ frame: 11 })).toBe(1);
+      expect(sequenceNode.getLocalFrame({ frame: 11, width: 1920, height: 1080, quality: 'full' })).toBe(1);
 
       // Frame 20 is local frame 10 in input 1
-      expect(sequenceNode.getLocalFrame({ frame: 20 })).toBe(10);
+      expect(sequenceNode.getLocalFrame({ frame: 20, width: 1920, height: 1080, quality: 'full' })).toBe(10);
     });
 
     it('returns 1 when no durations set', () => {
-      expect(sequenceNode.getLocalFrame({ frame: 5 })).toBe(1);
+      expect(sequenceNode.getLocalFrame({ frame: 5, width: 1920, height: 1080, quality: 'full' })).toBe(1);
     });
 
     it('SGN-006: handles division by zero gracefully', () => {
       // Empty inputs should not cause issues
-      expect(sequenceNode.getLocalFrame({ frame: 1 })).toBe(1);
+      expect(sequenceNode.getLocalFrame({ frame: 1, width: 1920, height: 1080, quality: 'full' })).toBe(1);
 
       const input = new MockInputNode('Input');
       sequenceNode.connectInput(input);
       sequenceNode.setInputDurations([0]); // Zero duration
 
       // Should handle gracefully
-      const result = sequenceNode.getLocalFrame({ frame: 1 });
+      const result = sequenceNode.getLocalFrame({ frame: 1, width: 1920, height: 1080, quality: 'full' });
       expect(Number.isFinite(result)).toBe(true);
     });
   });
@@ -214,14 +211,14 @@ describe('SequenceGroupNode', () => {
       // Frames 1-2: input 0
       // Frames 3-5: input 1
 
-      expect(sequenceNode.getActiveInputIndex({ frame: 1 })).toBe(0);
-      expect(sequenceNode.getActiveInputIndex({ frame: 2 })).toBe(0);
-      expect(sequenceNode.getActiveInputIndex({ frame: 3 })).toBe(1);
-      expect(sequenceNode.getActiveInputIndex({ frame: 4 })).toBe(1);
-      expect(sequenceNode.getActiveInputIndex({ frame: 5 })).toBe(1);
+      expect(sequenceNode.getActiveInputIndex({ frame: 1, width: 1920, height: 1080, quality: 'full' })).toBe(0);
+      expect(sequenceNode.getActiveInputIndex({ frame: 2, width: 1920, height: 1080, quality: 'full' })).toBe(0);
+      expect(sequenceNode.getActiveInputIndex({ frame: 3, width: 1920, height: 1080, quality: 'full' })).toBe(1);
+      expect(sequenceNode.getActiveInputIndex({ frame: 4, width: 1920, height: 1080, quality: 'full' })).toBe(1);
+      expect(sequenceNode.getActiveInputIndex({ frame: 5, width: 1920, height: 1080, quality: 'full' })).toBe(1);
 
       // Frame 6 wraps to frame 1
-      expect(sequenceNode.getActiveInputIndex({ frame: 6 })).toBe(0);
+      expect(sequenceNode.getActiveInputIndex({ frame: 6, width: 1920, height: 1080, quality: 'full' })).toBe(0);
     });
   });
 });

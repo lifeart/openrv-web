@@ -261,7 +261,7 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
     container.appendChild(slider);
 
     // Expose slider for external access
-    (container as any).slider = slider;
+    Object.defineProperty(container, 'slider', { value: slider });
 
     return container;
   }

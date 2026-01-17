@@ -2,13 +2,13 @@
  * WaveformRenderer Unit Tests
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   WaveformRenderer,
   renderWaveform,
   renderWaveformRegion,
 } from './WaveformRenderer';
-import type { WaveformData, WaveformRenderOptions } from './WaveformRenderer';
+import type { WaveformData } from './WaveformRenderer';
 
 describe('WaveformRenderer', () => {
   describe('WaveformRenderer class', () => {
@@ -152,14 +152,10 @@ describe('WaveformRenderer', () => {
     });
 
     it('RND-004: does not draw center line when disabled', () => {
-      const beginPathSpy = vi.spyOn(ctx, 'beginPath');
-
+      const strokeSpy = vi.spyOn(ctx, 'stroke');
       renderWaveform(ctx, mockData, { centerLine: false });
 
-      // beginPath might still be called for other reasons, but stroke should not be for the center line
-      // Since we're only testing centerLine, we check the combination
-      const fillRectCalls = vi.spyOn(ctx, 'fillRect').mock.calls;
-      // Center line uses stroke, not fillRect
+      expect(strokeSpy).not.toHaveBeenCalled();
     });
 
     it('RND-005: draws waveform bars', () => {

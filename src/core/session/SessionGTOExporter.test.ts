@@ -1,44 +1,40 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { SessionGTOExporter } from './SessionGTOExporter';
+import { SessionGTOExporter, type GTOProperty, type GTOComponent } from './SessionGTOExporter';
 import { Session } from './Session';
 import { PaintEngine } from '../../paint/PaintEngine';
 import type { GTOData } from 'gto-js';
 import { Graph } from '../graph/Graph';
 
+class TestSession extends Session {
+    public setMockGraph(g: Graph) {
+        this._graph = g;
+    }
+    public setSources(s: any[]) {
+        this.sources = s;
+    }
+}
+
 describe('SessionGTOExporter', () => {
-    let mockSession: Session;
-    let mockPaintEngine: PaintEngine;
-    let mockGraph: Graph;
+    let session: TestSession;
+    let paintEngine: PaintEngine;
 
     beforeEach(() => {
-        // Mock Session
-         const mockPlayback = {
-            currentFrame: 10,
-            inPoint: 1,
-            outPoint: 100,
+        session = new TestSession();
+        session.setSources([{ 
+            width: 1920, 
+            height: 1080, 
+            duration: 100, 
             fps: 24,
-            marks: new Set([5, 15]),
-            isPlaying: false
-        };
-
-        mockSession = {
-            getPlaybackState: vi.fn().mockReturnValue(mockPlayback),
-            allSources: [{ width: 1920, height: 1080 }],
-            graph: {
-                getNode: vi.fn(),
-                nodes: { get: vi.fn() } // fallback if private access
-            } as unknown as Graph
-        } as unknown as Session;
-
-        // Mock PaintEngine
-         mockPaintEngine = {
-            toJSON: vi.fn().mockReturnValue({
-                nextId: 1,
-                show: true,
-                frames: {},
-                effects: { ghost: false }
-            })
-        } as unknown as PaintEngine;
+            type: 'image',
+            name: 'test',
+            url: 'test.png'
+        }]);
+        session.fps = 24;
+        session.toggleMark(5);
+        session.toggleMark(15);
+        session.goToFrame(10);
+        
+        paintEngine = new PaintEngine();
     });
 
     it('updates original GTO data with preserved paths', () => {
@@ -49,31 +45,32 @@ describe('SessionGTOExporter', () => {
                 {
                     name: 'sourceNode',
                     protocol: 'RVFileSource',
-                    components: [
-                        {
+                    components: {
+                        'media': {
                             name: 'media',
                             properties: [
-                                { name: 'movie', value: '/old/path.mp4' }
+                                { name: 'movie', value: '/old/path.mp4' } as any
                             ]
                         }
-                    ]
+                    }
                 },
                 {
                     name: 'session',
                     protocol: 'RVSession',
-                    components: [
-                        {
+                    components: {
+                        'session': {
                             name: 'session',
                             properties: [
-                                { name: 'frame', value: 1 }
+                                { name: 'frame', value: 1 } as any
                             ]
                         }
-                    ]
+                    }
                 }
             ]
-        };
+        } as any;
 
-        // Setup session with updated path
+        // Since Graph is hard to fully instantiate without DOM or complex mocks, 
+        // we'll cast it safely or use a mock that implements the needed parts.
         const mockNode = {
             type: 'RVFileSource',
             properties: {
@@ -82,25 +79,29 @@ describe('SessionGTOExporter', () => {
                     return undefined;
                 })
             }
-        };
+        } as any; // Still using any here because we are mocking a node property
 
-        vi.mocked(mockSession.graph!.getNode).mockReturnValue(mockNode as any);
+        session.setMockGraph({
+            getNode: vi.fn().mockReturnValue(mockNode),
+            nodes: new Map()
+        } as unknown as Graph);
 
-        const updatedGTO = SessionGTOExporter.updateGTOData(originalGTO, mockSession, mockPaintEngine);
+        const updatedGTO = SessionGTOExporter.updateGTOData(originalGTO, session, paintEngine);
 
         // Check RVFileSource update
         const sourceObj = updatedGTO.objects.find(o => o.name === 'sourceNode');
         expect(sourceObj).toBeDefined();
-        const mediaComp = sourceObj?.components.find(c => c.name === 'media');
-        const movieProp = mediaComp?.properties.find(p => p.name === 'movie');
+        const components = (sourceObj?.components as unknown) as Record<string, any>;
+        const mediaComp = components['media'];
+        const movieProp = mediaComp?.properties.find((p: any) => p.name === 'movie');
         
         expect(movieProp?.value).toBe('/new/preserved/path.mp4');
 
         // Check RVSession update
         const sessionObj = updatedGTO.objects.find(o => o.protocol === 'RVSession');
-        const sessionComp = sessionObj?.components.find(c => c.name === 'session');
-        const frameProp = sessionComp?.properties.find(p => p.name === 'frame');
+        const sessionComp = sessionObj?.components?.['session'] as unknown as GTOComponent;
+        const frameProp = sessionComp?.properties?.find((p: GTOProperty) => p.name === 'frame');
         
-        expect(frameProp?.value).toBe(10); // Updated to currentFrame from mockPlayback
+        expect(frameProp?.value).toBe(10); // Updated to currentFrame from session
     });
 });

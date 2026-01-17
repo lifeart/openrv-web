@@ -36,6 +36,12 @@ import { Graph } from '../graph/Graph';
 import { loadGTOGraph } from './GTOGraphLoader';
 import type { GTOParseResult } from './GTOGraphLoader';
 
+export interface GTOComponentDTO {
+  property(name: string): {
+    value(): unknown;
+  };
+}
+
 export interface ParsedAnnotations {
   annotations: Annotation[];
   effects?: Partial<PaintEffects>;
@@ -105,7 +111,7 @@ export class Session extends EventEmitter<SessionEvents> {
   private frameAccumulator = 0;
 
   // Media sources
-  private sources: MediaSource[] = [];
+  protected sources: MediaSource[] = [];
   private _currentSourceIndex = 0;
 
   // A/B source comparison
@@ -115,7 +121,7 @@ export class Session extends EventEmitter<SessionEvents> {
   private _syncPlayhead = true;
 
   // Node graph from GTO file
-  private _graph: Graph | null = null;
+  protected _graph: Graph | null = null;
   private _graphParseResult: GTOParseResult | null = null;
   private _gtoData: GTOData | null = null;
 
@@ -128,7 +134,7 @@ export class Session extends EventEmitter<SessionEvents> {
    * Add a source to the session and auto-configure A/B compare
    * When the second source is added, it automatically becomes source B
    */
-  private addSource(source: MediaSource): void {
+  protected addSource(source: MediaSource): void {
     this.sources.push(source);
     this._currentSourceIndex = this.sources.length - 1;
 
@@ -1143,7 +1149,7 @@ export class Session extends EventEmitter<SessionEvents> {
 
       // Find frame components and stroke/text components
       const frameOrders = new Map<number, string[]>();
-      const strokeData = new Map<string, unknown>();
+      const strokeData = new Map<string, GTOComponentDTO>();
 
       for (const comp of allComponents) {
         const compName = comp.name;
@@ -1324,8 +1330,7 @@ export class Session extends EventEmitter<SessionEvents> {
 
   // Parse a single pen stroke from RV GTO format
   // strokeId format: "pen:ID:FRAME:USER" e.g., "pen:1:15:User"
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private parsePenStroke(strokeId: string, frame: number, comp: any, aspectRatio: number): PenStroke | null {
+  protected parsePenStroke(strokeId: string, frame: number, comp: GTOComponentDTO, aspectRatio: number): PenStroke | null {
     // Parse user from strokeId (e.g., "pen:1:15:User" -> "User")
     const parts = strokeId.split(':');
     const user = parts[3] ?? 'unknown';
@@ -1439,8 +1444,7 @@ export class Session extends EventEmitter<SessionEvents> {
 
   // Parse a single text annotation from RV GTO format
   // textId format: "text:ID:FRAME:USER" e.g., "text:6:1:User"
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private parseTextAnnotation(textId: string, frame: number, comp: any, aspectRatio: number): TextAnnotation | null {
+  protected parseTextAnnotation(textId: string, frame: number, comp: GTOComponentDTO, aspectRatio: number): TextAnnotation | null {
     const parts = textId.split(':');
     const user = parts[3] ?? 'unknown';
     const id = parts[1] ?? '0';

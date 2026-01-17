@@ -4,7 +4,6 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SequenceSourceNode } from './SequenceSourceNode';
-import type { EvalContext } from '../../core/graph/Graph';
 
 // Mock the SequenceLoader module
 vi.mock('../../utils/SequenceLoader', () => ({

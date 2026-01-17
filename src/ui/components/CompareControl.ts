@@ -6,7 +6,7 @@
  */
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import { getIconSvg } from './shared/Icons';
+import { getIconSvg, type IconName } from './shared/Icons';
 
 export type WipeMode = 'off' | 'horizontal' | 'vertical';
 export type ABSource = 'A' | 'B';
@@ -26,7 +26,7 @@ export interface CompareControlEvents extends EventMap {
   stateChanged: CompareState;
 }
 
-const WIPE_MODES: { mode: WipeMode; label: string; icon: string }[] = [
+const WIPE_MODES: { mode: WipeMode; label: string; icon: IconName }[] = [
   { mode: 'off', label: 'Wipe Off', icon: 'columns' },
   { mode: 'horizontal', label: 'H-Wipe', icon: 'split-vertical' },
   { mode: 'vertical', label: 'V-Wipe', icon: 'split-horizontal' },
@@ -152,7 +152,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
         align-items: center;
         gap: 6px;
       `;
-      option.innerHTML = `${getIconSvg(icon as any, 'sm')}<span>${label}</span>`;
+      option.innerHTML = `${getIconSvg(icon, 'sm')}<span>${label}</span>`;
 
       option.addEventListener('mouseenter', () => {
         option.style.background = '#3a3a3a';

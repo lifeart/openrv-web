@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { PaintEngine, PaintTool } from './PaintEngine';
+import { PaintEngine } from './PaintEngine';
 import {
   BrushType,
   StrokeMode,
@@ -304,12 +304,12 @@ describe('PaintEngine', () => {
       // Check frame before
       const before = engine.getAnnotationsWithGhost(6);
       expect(before.length).toBe(1);
-      expect(before[0].opacity).toBeLessThan(1);
+      expect(before[0]!.opacity).toBeLessThan(1);
 
       // Check frame after (annotation appears from future)
       const after = engine.getAnnotationsWithGhost(4);
       expect(after.length).toBe(1);
-      expect(after[0].opacity).toBeLessThan(1);
+      expect(after[0]!.opacity).toBeLessThan(1);
     });
 
     it('returns full opacity for direct frame', () => {
@@ -321,7 +321,7 @@ describe('PaintEngine', () => {
       const annotations = engine.getAnnotationsWithGhost(5);
 
       expect(annotations.length).toBe(1);
-      expect(annotations[0].opacity).toBe(1);
+      expect(annotations[0]!.opacity).toBe(1);
     });
   });
 
@@ -415,7 +415,7 @@ describe('PaintEngine', () => {
       engine.endStroke();
       engine.addText(5, { x: 0.5, y: 0.5 }, 'Test');
 
-      const json = engine.toJSON() as Record<string, unknown>;
+      const json = engine.toJSON() as unknown as Record<string, unknown>;
 
       expect(json.nextId).toBeDefined();
       expect(json.show).toBe(true);

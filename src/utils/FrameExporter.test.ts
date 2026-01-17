@@ -261,7 +261,7 @@ describe('FrameExporter', () => {
       });
 
       // Mock ClipboardItem
-      (global as { ClipboardItem?: unknown }).ClipboardItem = vi.fn();
+      (globalThis as { ClipboardItem?: unknown }).ClipboardItem = vi.fn();
 
       const result = await copyCanvasToClipboard(canvas);
 

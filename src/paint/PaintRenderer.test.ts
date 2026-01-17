@@ -2,7 +2,7 @@
  * PaintRenderer Unit Tests
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { PaintRenderer, RenderOptions } from './PaintRenderer';
 import { PenStroke, TextAnnotation, BrushType, StrokeMode, TextOrigin, LineCap, LineJoin } from './types';
 
@@ -92,7 +92,7 @@ describe('PaintRenderer', () => {
         user: 'test',
         color: [1, 0, 0, 1], // Red
         width: 5,
-        brush: BrushType.Hard,
+        brush: BrushType.Circle,
         points: [
           { x: 0.1, y: 0.1, pressure: 0.5 },
           { x: 0.5, y: 0.5, pressure: 0.5 },
@@ -125,6 +125,7 @@ describe('PaintRenderer', () => {
         scale: 1,
         origin: TextOrigin.Center,
         rotation: 0,
+        spacing: 0,
         startFrame: 1,
         duration: 1,
       };
@@ -142,7 +143,7 @@ describe('PaintRenderer', () => {
         user: 'test',
         color: [1, 0, 0, 1],
         width: 5,
-        brush: BrushType.Hard,
+        brush: BrushType.Circle,
         points: [{ x: 0.5, y: 0.5, pressure: 0.5 }],
         join: LineJoin.Round,
         cap: LineCap.Round,
@@ -165,7 +166,7 @@ describe('PaintRenderer', () => {
         user: 'test',
         color: [1, 0, 0, 1],
         width: 5,
-        brush: BrushType.Hard,
+        brush: BrushType.Circle,
         points: [{ x: 0.5, y: 0.5, pressure: 0.5 }],
         join: LineJoin.Round,
         cap: LineCap.Round,
@@ -198,7 +199,7 @@ describe('PaintRenderer', () => {
         user: 'test',
         color: [1, 0, 0, 1],
         width: 5,
-        brush: BrushType.Hard,
+        brush: BrushType.Circle,
         points: [],
         join: LineJoin.Round,
         cap: LineCap.Round,
@@ -221,7 +222,7 @@ describe('PaintRenderer', () => {
         user: 'test',
         color: [0, 1, 0, 1],
         width: 10,
-        brush: BrushType.Hard,
+        brush: BrushType.Circle,
         points: [{ x: 0.5, y: 0.5, pressure: 1 }],
         join: LineJoin.Round,
         cap: LineCap.Round,
@@ -245,7 +246,7 @@ describe('PaintRenderer', () => {
         user: 'test',
         color: [0, 0, 1, 1],
         width: 3,
-        brush: BrushType.Hard,
+        brush: BrushType.Circle,
         points: [
           { x: 0.1, y: 0.5, pressure: 0.5 },
           { x: 0.3, y: 0.3, pressure: 0.6 },
@@ -275,7 +276,7 @@ describe('PaintRenderer', () => {
         user: 'test',
         color: [1, 1, 1, 1],
         width: 20,
-        brush: BrushType.Hard,
+        brush: BrushType.Circle,
         points: [
           { x: 0.2, y: 0.5, pressure: 1 },
           { x: 0.8, y: 0.5, pressure: 1 },
@@ -302,7 +303,7 @@ describe('PaintRenderer', () => {
         user: 'test',
         color: [1, 0, 1, 1],
         width: [2, 5, 10, 5, 2], // Variable width array
-        brush: BrushType.Hard,
+        brush: BrushType.Circle,
         points: [
           { x: 0.1, y: 0.5, pressure: 0.2 },
           { x: 0.3, y: 0.5, pressure: 0.5 },
@@ -353,7 +354,7 @@ describe('PaintRenderer', () => {
     });
 
     it('RND-020: respects different line caps', () => {
-      const caps = [LineCap.Butt, LineCap.Square, LineCap.Round];
+      const caps = [LineCap.NoCap, LineCap.Square, LineCap.Round];
 
       for (const cap of caps) {
         const stroke: PenStroke = {
@@ -363,7 +364,7 @@ describe('PaintRenderer', () => {
           user: 'test',
           color: [1, 1, 1, 1],
           width: 10,
-          brush: BrushType.Hard,
+          brush: BrushType.Circle,
           points: [
             { x: 0.2, y: 0.5, pressure: 1 },
             { x: 0.8, y: 0.5, pressure: 1 },
@@ -394,7 +395,7 @@ describe('PaintRenderer', () => {
           user: 'test',
           color: [1, 1, 1, 1],
           width: 10,
-          brush: BrushType.Hard,
+          brush: BrushType.Circle,
           points: [
             { x: 0.2, y: 0.2, pressure: 1 },
             { x: 0.5, y: 0.8, pressure: 1 },
@@ -436,6 +437,7 @@ describe('PaintRenderer', () => {
         scale: 1,
         origin: TextOrigin.Center,
         rotation: 0,
+        spacing: 0,
         startFrame: 1,
         duration: 1,
       };
@@ -473,6 +475,7 @@ describe('PaintRenderer', () => {
           scale: 1,
           origin,
           rotation: 0,
+          spacing: 0,
           startFrame: 1,
           duration: 1,
         };
@@ -498,6 +501,7 @@ describe('PaintRenderer', () => {
         scale: 1,
         origin: TextOrigin.Center,
         rotation: 45,
+        spacing: 0,
         startFrame: 1,
         duration: 1,
       };
@@ -522,6 +526,7 @@ describe('PaintRenderer', () => {
         scale: 2.5,
         origin: TextOrigin.Center,
         rotation: 0,
+        spacing: 0,
         startFrame: 1,
         duration: 1,
       };
@@ -541,7 +546,7 @@ describe('PaintRenderer', () => {
 
     it('RND-026: renders empty points without error', () => {
       expect(() => {
-        renderer.renderLiveStroke([], [1, 0, 0, 1], 5, BrushType.Hard, false, defaultOptions);
+        renderer.renderLiveStroke([], [1, 0, 0, 1], 5, BrushType.Circle, false, defaultOptions);
       }).not.toThrow();
     });
 
@@ -554,7 +559,7 @@ describe('PaintRenderer', () => {
 
       renderer.resize(800, 600);
       expect(() => {
-        renderer.renderLiveStroke(points, [0, 1, 0, 1], 8, BrushType.Hard, false, defaultOptions);
+        renderer.renderLiveStroke(points, [0, 1, 0, 1], 8, BrushType.Circle, false, defaultOptions);
       }).not.toThrow();
     });
 
@@ -566,7 +571,7 @@ describe('PaintRenderer', () => {
 
       renderer.resize(800, 600);
       expect(() => {
-        renderer.renderLiveStroke(points, [1, 1, 1, 1], 20, BrushType.Hard, true, defaultOptions);
+        renderer.renderLiveStroke(points, [1, 1, 1, 1], 20, BrushType.Circle, true, defaultOptions);
       }).not.toThrow();
     });
 
@@ -578,7 +583,7 @@ describe('PaintRenderer', () => {
         [{ x: 0.5, y: 0.5, pressure: 0.5 }],
         [1, 0, 0, 1],
         5,
-        BrushType.Hard,
+        BrushType.Circle,
         false,
         newOptions
       );
@@ -616,7 +621,7 @@ describe('PaintRenderer', () => {
         user: 'test',
         color: [1, 0, 0, 1], // Fully opaque red
         width: 5,
-        brush: BrushType.Hard,
+        brush: BrushType.Circle,
         points: [{ x: 0.5, y: 0.5, pressure: 1 }],
         join: LineJoin.Round,
         cap: LineCap.Round,
@@ -640,7 +645,7 @@ describe('PaintRenderer', () => {
         user: 'test',
         color: [0, 1, 0, 0.5], // 50% transparent green
         width: 10,
-        brush: BrushType.Hard,
+        brush: BrushType.Circle,
         points: [
           { x: 0.3, y: 0.5, pressure: 1 },
           { x: 0.7, y: 0.5, pressure: 1 },
@@ -667,7 +672,7 @@ describe('PaintRenderer', () => {
         user: 'test',
         color: [0, 0, 1, 0], // Fully transparent blue
         width: 5,
-        brush: BrushType.Hard,
+        brush: BrushType.Circle,
         points: [{ x: 0.5, y: 0.5, pressure: 1 }],
         join: LineJoin.Round,
         cap: LineCap.Round,

@@ -9,9 +9,11 @@ import { PaintEngine } from '../../paint/PaintEngine';
 import { DEFAULT_COLOR_ADJUSTMENTS } from './ColorControls';
 import { DEFAULT_TRANSFORM } from './TransformControl';
 import { DEFAULT_FILTER_SETTINGS } from './FilterControl';
-import { DEFAULT_CROP_STATE, DEFAULT_CROP_REGION } from './CropControl';
 import { DEFAULT_CDL } from '../../color/CDL';
 import { DEFAULT_LENS_PARAMS } from '../../transform/LensDistortion';
+import type { LUT3D } from '../../color/LUTLoader';
+import type { StackLayer } from './StackControl';
+import type { MediaSource } from '../../core/session/Session';
 
 // Mock WebGLLUTProcessor
 vi.mock('../../color/WebGLLUT', () => ({
@@ -178,13 +180,25 @@ describe('Viewer', () => {
 
   describe('LUT handling', () => {
     it('VWR-021: setLUT stores LUT', () => {
-      const mockLUT = { title: 'Test', size: 17, data: new Float32Array(17 * 17 * 17 * 3) };
+      const mockLUT: LUT3D = { 
+        title: 'Test', 
+        size: 17, 
+        data: new Float32Array(17 * 17 * 17 * 3),
+        domainMin: [0, 0, 0],
+        domainMax: [1, 1, 1]
+      };
       viewer.setLUT(mockLUT);
       expect(viewer.getLUT()).toBe(mockLUT);
     });
 
     it('VWR-022: setLUT accepts null', () => {
-      const mockLUT = { title: 'Test', size: 17, data: new Float32Array(17 * 17 * 17 * 3) };
+      const mockLUT: LUT3D = { 
+        title: 'Test', 
+        size: 17, 
+        data: new Float32Array(17 * 17 * 17 * 3),
+        domainMin: [0, 0, 0],
+        domainMax: [1, 1, 1]
+      };
       viewer.setLUT(mockLUT);
       viewer.setLUT(null);
       expect(viewer.getLUT()).toBeNull();
@@ -364,9 +378,9 @@ describe('Viewer', () => {
 
   describe('stack layers', () => {
     it('VWR-044: setStackLayers updates layers', () => {
-      const layers = [
-        { sourceIndex: 0, blendMode: 'normal', opacity: 1, visible: true },
-        { sourceIndex: 1, blendMode: 'multiply', opacity: 0.5, visible: true },
+      const layers: StackLayer[] = [
+        { id: '1', name: 'L1', sourceIndex: 0, blendMode: 'normal', opacity: 1, visible: true },
+        { id: '2', name: 'L2', sourceIndex: 1, blendMode: 'multiply', opacity: 0.5, visible: true },
       ];
       viewer.setStackLayers(layers);
       const result = viewer.getStackLayers();
@@ -374,7 +388,7 @@ describe('Viewer', () => {
     });
 
     it('VWR-045: getStackLayers returns copy', () => {
-      const layers = [{ sourceIndex: 0, blendMode: 'normal', opacity: 1, visible: true }];
+      const layers: StackLayer[] = [{ id: '1', name: 'L1', sourceIndex: 0, blendMode: 'normal', opacity: 1, visible: true }];
       viewer.setStackLayers(layers);
       const l1 = viewer.getStackLayers();
       const l2 = viewer.getStackLayers();
@@ -387,8 +401,8 @@ describe('Viewer', () => {
       expect(viewer.isStackEnabled()).toBe(false); // No layers yet
 
       viewer.setStackLayers([
-        { sourceIndex: 0, blendMode: 'normal', opacity: 1, visible: true },
-        { sourceIndex: 1, blendMode: 'normal', opacity: 1, visible: true },
+        { id: '1', name: 'L1', sourceIndex: 0, blendMode: 'normal', opacity: 1, visible: true },
+        { id: '2', name: 'L2', sourceIndex: 1, blendMode: 'normal', opacity: 1, visible: true },
       ]);
       viewer.setStackEnabled(true);
       expect(viewer.isStackEnabled()).toBe(true);
@@ -396,7 +410,7 @@ describe('Viewer', () => {
 
     it('VWR-047: isStackEnabled requires multiple layers', () => {
       viewer.setStackEnabled(true);
-      viewer.setStackLayers([{ sourceIndex: 0, blendMode: 'normal', opacity: 1, visible: true }]);
+      viewer.setStackLayers([{ id: '1', name: 'L1', sourceIndex: 0, blendMode: 'normal', opacity: 1, visible: true }]);
       expect(viewer.isStackEnabled()).toBe(false); // Only 1 layer
     });
   });
@@ -425,7 +439,7 @@ describe('Viewer', () => {
   describe('session events', () => {
     it('VWR-051: responds to sourceLoaded event', () => {
       expect(() => {
-        session.emit('sourceLoaded');
+        session.emit('sourceLoaded', {} as MediaSource);
       }).not.toThrow();
     });
 
@@ -439,7 +453,7 @@ describe('Viewer', () => {
   describe('paint events', () => {
     it('VWR-053: responds to annotationsChanged event', () => {
       expect(() => {
-        paintEngine.emit('annotationsChanged');
+        paintEngine.emit('annotationsChanged', 0);
       }).not.toThrow();
     });
 

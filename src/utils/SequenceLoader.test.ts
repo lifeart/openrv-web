@@ -205,7 +205,7 @@ describe('SequenceLoader', () => {
   });
 
   describe('releaseDistantFrames', () => {
-    let revokeObjectURLSpy: ReturnType<typeof vi.spyOn>;
+    let revokeObjectURLSpy: any;
 
     beforeEach(() => {
       revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
@@ -272,7 +272,7 @@ describe('SequenceLoader', () => {
   });
 
   describe('disposeSequence', () => {
-    let revokeObjectURLSpy: ReturnType<typeof vi.spyOn>;
+    let revokeObjectURLSpy: any;
 
     beforeEach(() => {
       revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});

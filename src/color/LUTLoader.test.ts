@@ -4,7 +4,6 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  LUT3D,
   isLUT3D,
   parseCubeLUT,
   applyLUT3D,
@@ -219,7 +218,7 @@ LUT_3D_SIZE 2
       const lut = parseCubeLUT(content);
 
       // Test several values
-      const testValues = [
+      const testValues: [number, number, number][] = [
         [0, 0, 0],
         [1, 1, 1],
         [0.25, 0.5, 0.75],

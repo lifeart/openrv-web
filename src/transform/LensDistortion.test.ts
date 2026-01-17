@@ -8,7 +8,6 @@ import {
   DEFAULT_LENS_PARAMS,
   isDefaultLensParams,
   applyLensDistortion,
-  applyLensDistortionToCanvas,
   generateDistortionGrid,
 } from './LensDistortion';
 import { createTestImageData } from '../../test/utils';
@@ -256,15 +255,15 @@ describe('LensDistortion', () => {
 
       // The grid should have been transformed
       // Check that we have both horizontal and vertical segments
-      const hasHorizontalSegments = grid.lines.some(
-        (line) => Math.abs(line.x1 - line.x2) > 1
+      const horizontalLines = grid.lines.filter(
+        (line: { x1: number; y1: number; x2: number; y2: number }) => Math.abs(line.x1 - line.x2) > 1
       );
-      const hasVerticalSegments = grid.lines.some(
-        (line) => Math.abs(line.y1 - line.y2) > 1
+      const verticalLines = grid.lines.filter(
+        (line: { x1: number; y1: number; x2: number; y2: number }) => Math.abs(line.y1 - line.y2) > 1
       );
 
-      expect(hasHorizontalSegments).toBe(true);
-      expect(hasVerticalSegments).toBe(true);
+      expect(horizontalLines.length).toBeGreaterThan(0);
+      expect(verticalLines.length).toBeGreaterThan(0);
     });
 
     it('adjusts grid density based on gridSize', () => {

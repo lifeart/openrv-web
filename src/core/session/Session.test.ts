@@ -3,13 +3,19 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { Session, LoopMode, MediaSource } from './Session';
+import { Session, MediaSource } from './Session';
+
+class TestSession extends Session {
+  public setSources(s: MediaSource[]) {
+    this.sources = s;
+  }
+}
 
 describe('Session', () => {
-  let session: Session;
+  let session: TestSession;
 
   beforeEach(() => {
-    session = new Session();
+    session = new TestSession();
   });
 
   describe('initialization', () => {
@@ -639,8 +645,7 @@ describe('Session', () => {
       const source2 = createMockSource('source2');
 
       // Need to add sources to session first (using internal method)
-      const sessionAny = session as any;
-      sessionAny.sources = [source1, source2];
+      session.setSources([source1, source2]);
 
       session.setSourceB(1);
       expect(session.sourceBIndex).toBe(1);
@@ -651,8 +656,7 @@ describe('Session', () => {
       const source1 = createMockSource('source1');
       const source2 = createMockSource('source2');
 
-      const sessionAny = session as any;
-      sessionAny.sources = [source1, source2];
+      session.setSources([source1, source2]);
       session.setSourceB(1);
 
       expect(session.currentAB).toBe('A');
@@ -664,8 +668,7 @@ describe('Session', () => {
 
     it('AB-008: toggleAB does nothing when B source not assigned', () => {
       const source1 = createMockSource('source1');
-      const sessionAny = session as any;
-      sessionAny.sources = [source1];
+      session.setSources([source1]);
 
       expect(session.currentAB).toBe('A');
       session.toggleAB();
@@ -676,8 +679,7 @@ describe('Session', () => {
       const source1 = createMockSource('source1');
       const source2 = createMockSource('source2');
 
-      const sessionAny = session as any;
-      sessionAny.sources = [source1, source2];
+      session.setSources([source1, source2]);
       session.setSourceB(1);
 
       const callback = vi.fn();
@@ -694,8 +696,7 @@ describe('Session', () => {
       const source1 = createMockSource('source1');
       const source2 = createMockSource('source2');
 
-      const sessionAny = session as any;
-      sessionAny.sources = [source1, source2];
+      session.setSources([source1, source2]);
       session.setSourceB(1);
 
       session.setCurrentAB('B');
@@ -707,8 +708,8 @@ describe('Session', () => {
 
     it('AB-011: setCurrentAB ignores invalid B when not available', () => {
       const source1 = createMockSource('source1');
-      const sessionAny = session as any;
-      sessionAny.sources = [source1];
+      const sessionInternal = session as unknown as { sources: MediaSource[] };
+      sessionInternal.sources = [source1];
 
       session.setCurrentAB('B');
       expect(session.currentAB).toBe('A'); // Unchanged
@@ -718,8 +719,8 @@ describe('Session', () => {
       const source1 = createMockSource('source1');
       const source2 = createMockSource('source2');
 
-      const sessionAny = session as any;
-      sessionAny.sources = [source1, source2];
+      const sessionInternal = session as unknown as { sources: MediaSource[] };
+      sessionInternal.sources = [source1, source2];
       session.setSourceB(1);
       session.toggleAB(); // Switch to B
 
@@ -735,8 +736,8 @@ describe('Session', () => {
       const source1 = createMockSource('source1');
       const source2 = createMockSource('source2');
 
-      const sessionAny = session as any;
-      sessionAny.sources = [source1, source2];
+      const sessionInternal = session as unknown as { sources: MediaSource[] };
+      sessionInternal.sources = [source1, source2];
 
       expect(session.sourceA).toBe(source1);
     });
@@ -745,8 +746,8 @@ describe('Session', () => {
       const source1 = createMockSource('source1');
       const source2 = createMockSource('source2');
 
-      const sessionAny = session as any;
-      sessionAny.sources = [source1, source2];
+      const sessionInternal = session as unknown as { sources: MediaSource[] };
+      sessionInternal.sources = [source1, source2];
       session.setSourceB(1);
 
       expect(session.sourceB).toBe(source2);
@@ -761,8 +762,8 @@ describe('Session', () => {
       const source2 = createMockSource('source2');
       const source3 = createMockSource('source3');
 
-      const sessionAny = session as any;
-      sessionAny.sources = [source1, source2, source3];
+      const sessionInternal = session as unknown as { sources: MediaSource[] };
+      sessionInternal.sources = [source1, source2, source3];
 
       session.setSourceA(2);
       expect(session.sourceAIndex).toBe(2);
@@ -780,14 +781,14 @@ describe('Session', () => {
       const source1 = createMockSource('source1');
       const source2 = createMockSource('source2');
 
-      const sessionAny = session as any;
+      const sessionInternal = session as unknown as { sources: MediaSource[], addSource: (s: MediaSource) => void };
 
       // Add first source using addSource
-      sessionAny.addSource(source1);
+      sessionInternal.addSource(source1);
       expect(session.sourceBIndex).toBe(-1); // B not yet assigned
 
       // Add second source
-      sessionAny.addSource(source2);
+      sessionInternal.addSource(source2);
       expect(session.sourceBIndex).toBe(1); // B auto-assigned to second source
       expect(session.sourceAIndex).toBe(0); // A remains first source
       expect(session.abCompareAvailable).toBe(true);
@@ -797,14 +798,14 @@ describe('Session', () => {
       const source1 = createMockSource('source1');
       const source2 = createMockSource('source2');
 
-      const sessionAny = session as any;
+      const sessionInternal = session as unknown as { addSource: (s: MediaSource) => void };
       const callback = vi.fn();
       session.on('abSourceChanged', callback);
 
-      sessionAny.addSource(source1);
+      sessionInternal.addSource(source1);
       expect(callback).not.toHaveBeenCalled(); // No event for first source
 
-      sessionAny.addSource(source2);
+      sessionInternal.addSource(source2);
       expect(callback).toHaveBeenCalledWith({
         current: 'A',
         sourceIndex: 0,
@@ -816,12 +817,12 @@ describe('Session', () => {
       const source2 = createMockSource('source2');
       const source3 = createMockSource('source3');
 
-      const sessionAny = session as any;
-      sessionAny.addSource(source1);
-      sessionAny.addSource(source2);
+      const sessionInternal = session as unknown as { addSource: (s: MediaSource) => void };
+      sessionInternal.addSource(source1);
+      sessionInternal.addSource(source2);
       expect(session.sourceBIndex).toBe(1);
 
-      sessionAny.addSource(source3);
+      sessionInternal.addSource(source3);
       expect(session.sourceBIndex).toBe(1); // Still 1, not changed to 2
     });
   });

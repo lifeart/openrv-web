@@ -97,6 +97,12 @@ export interface PaintState {
   annotations: Map<number, Annotation[]>; // frame -> annotations
   effects: PaintEffects;
 }
+export interface PaintSnapshot {
+  nextId: number;
+  show: boolean;
+  frames: Record<number, Annotation[]>;
+  effects: PaintEffects;
+}
 
 // Default values
 export const DEFAULT_STROKE_COLOR: [number, number, number, number] = [1, 0.3, 0.3, 1]; // Red

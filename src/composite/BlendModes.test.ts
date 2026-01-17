@@ -4,7 +4,6 @@
 
 import { describe, it, expect } from 'vitest';
 import {
-  BlendMode,
   BLEND_MODES,
   BLEND_MODE_LABELS,
   compositeImageData,

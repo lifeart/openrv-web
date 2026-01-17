@@ -6,7 +6,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   CropControl,
   CropRegion,
-  CropState,
   DEFAULT_CROP_REGION,
   DEFAULT_CROP_STATE,
 } from './CropControl';

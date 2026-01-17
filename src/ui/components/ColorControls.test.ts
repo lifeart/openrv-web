@@ -5,9 +5,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   ColorControls,
-  ColorAdjustments,
   DEFAULT_COLOR_ADJUSTMENTS,
 } from './ColorControls';
+import type { LUT3D } from '../../color/LUTLoader';
 
 describe('ColorControls', () => {
   let controls: ColorControls;
@@ -195,14 +195,26 @@ describe('ColorControls', () => {
       const handler = vi.fn();
       controls.on('lutLoaded', handler);
 
-      const mockLUT = { title: 'Test LUT', size: 17, data: new Float32Array(17 * 17 * 17 * 3) };
+      const mockLUT: LUT3D = {
+        title: 'Test LUT',
+        size: 17,
+        data: new Float32Array(17 * 17 * 17 * 3),
+        domainMin: [0, 0, 0] as [number, number, number],
+        domainMax: [1, 1, 1] as [number, number, number]
+      };
       controls.setLUT(mockLUT);
 
       expect(handler).toHaveBeenCalledWith(mockLUT);
     });
 
     it('COL-024: clearLUT sets LUT to null', () => {
-      const mockLUT = { title: 'Test LUT', size: 17, data: new Float32Array(17 * 17 * 17 * 3) };
+      const mockLUT: LUT3D = {
+        title: 'Test LUT',
+        size: 17,
+        data: new Float32Array(17 * 17 * 17 * 3),
+        domainMin: [0, 0, 0] as [number, number, number],
+        domainMax: [1, 1, 1] as [number, number, number]
+      };
       controls.setLUT(mockLUT);
       expect(controls.getLUT()).not.toBeNull();
 
@@ -212,7 +224,13 @@ describe('ColorControls', () => {
 
     it('COL-025: clearLUT emits lutLoaded with null', () => {
       const handler = vi.fn();
-      const mockLUT = { title: 'Test LUT', size: 17, data: new Float32Array(17 * 17 * 17 * 3) };
+      const mockLUT: LUT3D = {
+        title: 'Test LUT',
+        size: 17,
+        data: new Float32Array(17 * 17 * 17 * 3),
+        domainMin: [0, 0, 0] as [number, number, number],
+        domainMax: [1, 1, 1] as [number, number, number]
+      };
       controls.setLUT(mockLUT);
       controls.on('lutLoaded', handler);
 

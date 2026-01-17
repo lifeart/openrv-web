@@ -12,6 +12,22 @@ interface PaintSnapshot {
   effects: PaintEffects;
 }
 
+export interface GTOComponentDTO {
+  property(name: string): {
+    value(): unknown;
+  };
+}
+
+export interface GTOProperty {
+  name: string;
+  value: unknown;
+}
+
+export interface GTOComponent {
+  name: string;
+  properties: GTOProperty[];
+}
+
 export class SessionGTOExporter {
   static toGTOData(session: Session, paintEngine: PaintEngine): GTOData {
     const sessionObject = this.buildSessionObject(session, 'rv', 'defaultSequence');
@@ -197,29 +213,28 @@ export class SessionGTOExporter {
     return data;
   }
 
-  private static findOrAddComponent(obj: ObjectData, name: string) {
+  protected static findOrAddComponent(obj: ObjectData, name: string): GTOComponent {
     if (!obj.components) {
-        // @ts-ignore
-        obj.components = [];
+      obj.components = {};
     }
-    const components = (obj.components as unknown) as any[];
-    let comp = components.find((c: any) => c.name === name);
+    const components = (obj.components as unknown) as Record<string, GTOComponent>;
+    let comp = components[name];
     if (!comp) {
-        comp = { name, properties: [] };
-        components.push(comp);
+      comp = { name, properties: [] };
+      components[name] = comp;
     }
     return comp;
   }
 
-  private static updateProperty(comp: { name: string, properties: any[] }, name: string, value: any) {
+  protected static updateProperty(comp: GTOComponent, name: string, value: unknown): void {
     const prop = comp.properties.find(p => p.name === name);
     if (prop) {
-        prop.value = value;
+      prop.value = value;
     } else {
-        // Simple type inference for new properties (limited support)
-        // Ideally we shouldn't be adding new properties to unknown components often
-        // But for RVSession we know the types
-        comp.properties.push({ name, value }); 
+      // Simple type inference for new properties (limited support)
+      // Ideally we shouldn't be adding new properties to unknown components often
+      // But for RVSession we know the types
+      comp.properties.push({ name, value }); 
     }
   }
   private static getAspectRatio(session: Session): number {
@@ -236,7 +251,7 @@ export class SessionGTOExporter {
     return `${prefix}:${annotation.id}:${frame}:${user}`;
   }
 
-  private static writePenComponent(
+  protected static writePenComponent(
     paintObject: ReturnType<GTOBuilder['object']>,
     componentName: string,
     annotation: PenStroke,
@@ -264,7 +279,7 @@ export class SessionGTOExporter {
       .end();
   }
 
-  private static writeTextComponent(
+  protected static writeTextComponent(
     paintObject: ReturnType<GTOBuilder['object']>,
     componentName: string,
     annotation: TextAnnotation,

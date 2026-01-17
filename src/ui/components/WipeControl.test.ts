@@ -5,8 +5,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   WipeControl,
-  WipeMode,
-  WipeState,
   DEFAULT_WIPE_STATE,
 } from './WipeControl';
 

@@ -38,12 +38,12 @@ export class ComputedSignal<T> {
 
   constructor(
     private compute: () => T,
-    deps: Signal<unknown>[] = []
+    dependencies: Signal<any>[] = []
   ) {
     this.cachedValue = compute();
 
     // Subscribe to dependencies
-    for (const dep of deps) {
+    for (const dep of dependencies) {
       dep.connect(() => {
         this.dirty = true;
         const oldValue = this.cachedValue;

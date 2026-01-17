@@ -14,7 +14,7 @@ import {
   parseCDLXML,
   exportCDLXML,
 } from './CDL';
-import { createTestImageData, createSampleCDL, isGrayscale } from '../../test/utils';
+import { createTestImageData, createSampleCDL } from '../../test/utils';
 
 describe('CDL', () => {
   describe('DEFAULT_CDL', () => {

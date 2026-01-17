@@ -1,5 +1,5 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import { getIconSvg } from './shared/Icons';
+import { getIconSvg, type IconName } from './shared/Icons';
 
 export type WipeMode = 'off' | 'horizontal' | 'vertical' | 'quad';
 export type WipeSide = 'left' | 'right' | 'top' | 'bottom';
@@ -79,7 +79,7 @@ export class WipeControl extends EventEmitter<WipeControlEvents> {
   }
 
   private updateButtonLabel(): void {
-    const icons: Record<WipeMode, string> = {
+    const icons: Record<WipeMode, IconName> = {
       off: 'columns',
       horizontal: 'split-vertical',
       vertical: 'split-horizontal',
@@ -91,7 +91,7 @@ export class WipeControl extends EventEmitter<WipeControlEvents> {
       vertical: 'V-Wipe',
       quad: 'Quad',
     };
-    this.toggleButton.innerHTML = `${getIconSvg(icons[this.state.mode] as any, 'sm')}<span style="margin-left: 6px;">${labels[this.state.mode]}</span>`;
+    this.toggleButton.innerHTML = `${getIconSvg(icons[this.state.mode], 'sm')}<span style="margin-left: 6px;">${labels[this.state.mode]}</span>`;
 
     // Update button style based on active state
     if (this.state.mode !== 'off') {

@@ -98,10 +98,19 @@ export abstract class IPNode {
   // Mark node as needing re-evaluation
   markDirty(): void {
     this.dirty = true;
-    // Propagate dirty state to outputs
+    // Notify outputs they might be dirty too
     for (const output of this._outputs) {
       output.markDirty();
     }
+  }
+
+  // Clear dirty flag (usually after successful evaluation)
+  clearDirty(): void {
+    this.dirty = false;
+  }
+
+  get isDirty(): boolean {
+    return this.dirty;
   }
 
   // Evaluate the node

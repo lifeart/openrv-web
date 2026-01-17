@@ -11,9 +11,9 @@ export class Timeline {
   private waveformRenderer: WaveformRenderer;
   private waveformLoaded = false;
 
-  private isDragging = false;
-  private width = 0;
-  private height = 0;
+  protected isDragging = false;
+  protected width = 0;
+  protected height = 0;
 
   // Bound event handlers for proper cleanup
   private boundHandleResize: () => void;
@@ -222,7 +222,7 @@ export class Timeline {
     this.ctx.scale(dpr, dpr);
   }
 
-  private draw(): void {
+  protected draw(): void {
     const ctx = this.ctx;
     const width = this.width;
     const height = this.height;

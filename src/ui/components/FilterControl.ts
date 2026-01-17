@@ -316,6 +316,10 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
     return { ...this.settings };
   }
 
+  get isOpen(): boolean {
+    return this.isPanelOpen;
+  }
+
   setSettings(settings: FilterSettings): void {
     this.settings = { ...settings };
 

@@ -25,7 +25,7 @@ describe('SwitchGroupNode', () => {
 
   beforeEach(() => {
     switchNode = new SwitchGroupNode('TestSwitch');
-    mockContext = { frame: 1 };
+    mockContext = { frame: 1, width: 1920, height: 1080, quality: 'full' };
   });
 
   describe('initialization', () => {
@@ -94,10 +94,10 @@ describe('SwitchGroupNode', () => {
     it('marks node as dirty', () => {
       const input = new MockInputNode('Input');
       switchNode.connectInput(input);
+      switchNode.clearDirty();
 
-      // Would need to spy on markDirty, but we can verify behavior
       switchNode.setActiveInput(0);
-      // Node should be marked dirty internally
+      expect(switchNode.isDirty).toBe(true);
     });
   });
 

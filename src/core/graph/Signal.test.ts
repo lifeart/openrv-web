@@ -109,8 +109,7 @@ describe('Signal', () => {
     });
 
     it('does nothing with no subscribers', () => {
-      // Should not throw
-      signal.emit(1, 0);
+      expect(() => signal.emit(1, 0)).not.toThrow();
     });
   });
 

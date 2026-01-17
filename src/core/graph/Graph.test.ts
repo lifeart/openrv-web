@@ -77,8 +77,7 @@ describe('Graph', () => {
     });
 
     it('does nothing for non-existent node', () => {
-      // Should not throw
-      graph.removeNode('non-existent');
+      expect(() => graph.removeNode('non-existent')).not.toThrow();
     });
 
     it('disconnects all connections when removing', () => {
