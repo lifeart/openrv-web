@@ -1441,7 +1441,7 @@ export class Session extends EventEmitter<SessionEvents> {
     // Parse position
     // OpenRV coordinate system: X from -aspectRatio to +aspectRatio, Y from -1 to +1
     let x = 0.5, y = 0.5;
-    if (positionValue && Array.isArray(positionValue) && positionValue.length >= 2) {
+    if (positionValue && Array.isArray(positionValue) && positionValue.length >= 1) {
       const posData = positionValue[0];
       if (Array.isArray(posData) && posData.length >= 2) {
         const rawX = posData[0] as number;
