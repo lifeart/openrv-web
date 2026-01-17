@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import {
   loadVideoFile,
   getViewerState,
@@ -15,6 +16,19 @@ import {
  * visual changes to the canvas.
  */
 
+async function openChannelSelect(page: Page): Promise<void> {
+  await page.click('button[data-tab-id="view"]');
+  await page.waitForTimeout(100);
+  await page.click('[data-testid="channel-select-button"]');
+  await page.waitForTimeout(100);
+}
+
+async function selectChannel(page: Page, channel: string): Promise<void> {
+  await openChannelSelect(page);
+  await page.click(`button[data-channel="${channel}"]`);
+  await page.waitForTimeout(100);
+}
+
 test.describe('Channel Select', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
@@ -29,76 +43,47 @@ test.describe('Channel Select', () => {
   });
 
   test('CS-002: clicking R button selects red channel', async ({ page }) => {
-    // Go to View tab where channel select is
-    await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(100);
-
-    // Click the R channel button
-    await page.click('button[data-channel="red"]');
-    await page.waitForTimeout(100);
+    await selectChannel(page, 'red');
 
     const state = await getViewerState(page);
     expect(state.channelMode).toBe('red');
   });
 
   test('CS-003: clicking G button selects green channel', async ({ page }) => {
-    await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(100);
-
-    await page.click('button[data-channel="green"]');
-    await page.waitForTimeout(100);
+    await selectChannel(page, 'green');
 
     const state = await getViewerState(page);
     expect(state.channelMode).toBe('green');
   });
 
   test('CS-004: clicking B button selects blue channel', async ({ page }) => {
-    await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(100);
-
-    await page.click('button[data-channel="blue"]');
-    await page.waitForTimeout(100);
+    await selectChannel(page, 'blue');
 
     const state = await getViewerState(page);
     expect(state.channelMode).toBe('blue');
   });
 
   test('CS-005: clicking A button selects alpha channel', async ({ page }) => {
-    await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(100);
-
-    await page.click('button[data-channel="alpha"]');
-    await page.waitForTimeout(100);
+    await selectChannel(page, 'alpha');
 
     const state = await getViewerState(page);
     expect(state.channelMode).toBe('alpha');
   });
 
   test('CS-006: clicking Luma button selects luminance channel', async ({ page }) => {
-    await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(100);
-
-    await page.click('button[data-channel="luminance"]');
-    await page.waitForTimeout(100);
+    await selectChannel(page, 'luminance');
 
     const state = await getViewerState(page);
     expect(state.channelMode).toBe('luminance');
   });
 
   test('CS-007: clicking RGB button returns to all channels', async ({ page }) => {
-    await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(100);
-
-    // First select a different channel
-    await page.click('button[data-channel="red"]');
-    await page.waitForTimeout(100);
+    await selectChannel(page, 'red');
 
     let state = await getViewerState(page);
     expect(state.channelMode).toBe('red');
 
-    // Then click RGB to return to normal
-    await page.click('button[data-channel="rgb"]');
-    await page.waitForTimeout(100);
+    await selectChannel(page, 'rgb');
 
     state = await getViewerState(page);
     expect(state.channelMode).toBe('rgb');
@@ -185,10 +170,8 @@ test.describe('Channel Select Visual Changes', () => {
     const rgbScreenshot = await captureViewerScreenshot(page);
 
     // Select red channel
-    await page.click('button[data-tab-id="view"]');
+    await selectChannel(page, 'red');
     await page.waitForTimeout(100);
-    await page.click('button[data-channel="red"]');
-    await page.waitForTimeout(200);
 
     // Capture red channel screenshot
     const redScreenshot = await captureViewerScreenshot(page);
@@ -247,19 +230,16 @@ test.describe('Channel Select Visual Changes', () => {
   });
 
   test('CS-025: each channel produces a unique grayscale image', async ({ page }) => {
-    await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(100);
-
     // Capture each channel
-    await page.click('button[data-channel="red"]');
+    await selectChannel(page, 'red');
     await page.waitForTimeout(200);
     const redScreenshot = await captureViewerScreenshot(page);
 
-    await page.click('button[data-channel="green"]');
+    await selectChannel(page, 'green');
     await page.waitForTimeout(200);
     const greenScreenshot = await captureViewerScreenshot(page);
 
-    await page.click('button[data-channel="blue"]');
+    await selectChannel(page, 'blue');
     await page.waitForTimeout(200);
     const blueScreenshot = await captureViewerScreenshot(page);
 

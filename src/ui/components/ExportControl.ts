@@ -19,6 +19,7 @@ export interface ExportControlEvents extends EventMap {
   exportRequested: ExportRequest;
   copyRequested: void;
   sequenceExportRequested: SequenceExportRequest;
+  rvSessionExportRequested: { format: 'rv' | 'gto' };
 }
 
 export class ExportControl extends EventEmitter<ExportControlEvents> {
@@ -116,6 +117,13 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     this.addSectionHeader('Sequence Export');
     this.addMenuItem('film', 'Export In/Out Range', () => this.exportSequence(true));
     this.addMenuItem('film', 'Export All Frames', () => this.exportSequence(false));
+
+    this.addSeparator();
+
+    // Session export section
+    this.addSectionHeader('Session');
+    this.addMenuItem('download', 'Save RV Session (.rv)', () => this.exportRvSession('rv'));
+    this.addMenuItem('download', 'Save RV Session (.gto)', () => this.exportRvSession('gto'));
 
     this.addSeparator();
 
@@ -281,11 +289,16 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
   private exportSequence(useInOutRange: boolean): void {
     this.emit('sequenceExportRequested', {
       format: 'png',
-      includeAnnotations: this.getIncludeAnnotations(),
-      quality: 0.92,
+      includeAnnotations: this.annotationsCheckbox?.checked ?? true,
+      quality: 0.95,
       useInOutRange,
     });
   }
+
+  private exportRvSession(format: 'rv' | 'gto'): void {
+    this.emit('rvSessionExportRequested', { format });
+  }
+
 
   quickExport(format: ExportFormat = 'png'): void {
     this.exportAs(format);

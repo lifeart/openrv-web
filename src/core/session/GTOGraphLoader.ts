@@ -34,6 +34,7 @@ export interface GTOParseResult {
     fps?: number;
     inPoint?: number;
     outPoint?: number;
+    marks?: number[];
   };
 }
 
@@ -113,8 +114,58 @@ function parseGTOToGraph(dto: GTODTO): GTOParseResult {
       }
 
       const frame = sessionComp.property('frame').value() as number;
+      const currentFrame = sessionComp.property('currentFrame').value() as number;
       if (typeof frame === 'number') {
         sessionInfo.frame = frame;
+      } else if (typeof currentFrame === 'number') {
+        sessionInfo.frame = currentFrame;
+      }
+
+      const region = sessionComp.property('region').value();
+      const range = sessionComp.property('range').value();
+      const resolveRange = (value: unknown): [number, number] | undefined => {
+        if (!Array.isArray(value) || value.length === 0) {
+          return undefined;
+        }
+
+        if (value.length >= 2) {
+          const start = value[0];
+          const end = value[1];
+          if (typeof start === 'number' && typeof end === 'number') {
+            return [start, end];
+          }
+          if (Array.isArray(start) && start.length >= 2) {
+            const startValue = start[0];
+            const endValue = start[1];
+            if (typeof startValue === 'number' && typeof endValue === 'number') {
+              return [startValue, endValue];
+            }
+          }
+        }
+
+        if (value.length === 1 && Array.isArray(value[0]) && value[0].length >= 2) {
+          const startValue = value[0][0];
+          const endValue = value[0][1];
+          if (typeof startValue === 'number' && typeof endValue === 'number') {
+            return [startValue, endValue];
+          }
+        }
+
+        return undefined;
+      };
+
+      const resolvedRegion = resolveRange(region) ?? resolveRange(range);
+      if (resolvedRegion) {
+        sessionInfo.inPoint = resolvedRegion[0];
+        sessionInfo.outPoint = resolvedRegion[1];
+      }
+
+      const marksValue = sessionComp.property('marks').value();
+      if (Array.isArray(marksValue)) {
+        const marks = marksValue.filter((value): value is number => typeof value === 'number');
+        if (marks.length > 0) {
+          sessionInfo.marks = marks;
+        }
       }
 
       // Prefer 'realtime' (actual playback fps) over 'fps' if both exist
@@ -176,7 +227,10 @@ function parseGTOToGraph(dto: GTODTO): GTOParseResult {
 
       const proxyComp = obj.component('proxy');
       if (proxyComp?.exists()) {
-        const size = proxyComp.property('size').value() as number[];
+        const sizeValue = proxyComp.property('size').value();
+        const size = Array.isArray(sizeValue)
+          ? (Array.isArray(sizeValue[0]) ? sizeValue[0] : sizeValue)
+          : null;
         if (Array.isArray(size) && size.length >= 2) {
           nodeInfo.properties.width = size[0];
           nodeInfo.properties.height = size[1];

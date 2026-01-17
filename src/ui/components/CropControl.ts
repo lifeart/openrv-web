@@ -49,6 +49,7 @@ export class CropControl extends EventEmitter<CropControlEvents> {
   private state: CropState = { ...DEFAULT_CROP_STATE };
 
   private aspectSelect: HTMLSelectElement | null = null;
+  private toggleSwitch: HTMLButtonElement | null = null;
 
   constructor() {
     super();
@@ -158,6 +159,7 @@ export class CropControl extends EventEmitter<CropControlEvents> {
     toggleLabel.style.cssText = 'color: #aaa; font-size: 12px;';
 
     const toggleSwitch = document.createElement('button');
+    this.toggleSwitch = toggleSwitch;
     toggleSwitch.textContent = this.state.enabled ? 'ON' : 'OFF';
     toggleSwitch.style.cssText = `
       background: ${this.state.enabled ? '#4a9eff' : '#555'};
@@ -356,6 +358,27 @@ export class CropControl extends EventEmitter<CropControlEvents> {
   setCropRegion(region: CropRegion): void {
     this.state.region = { ...region };
     this.emitChange();
+  }
+
+  setState(state: CropState): void {
+    const previousEnabled = this.state.enabled;
+    this.state = { ...state, region: { ...state.region } };
+
+    if (this.toggleSwitch) {
+      this.toggleSwitch.textContent = this.state.enabled ? 'ON' : 'OFF';
+      this.toggleSwitch.style.background = this.state.enabled ? '#4a9eff' : '#555';
+    }
+
+    if (this.aspectSelect) {
+      this.aspectSelect.value = this.state.aspectRatio ?? '';
+    }
+
+    this.updateButtonState();
+    this.emitChange();
+
+    if (previousEnabled !== this.state.enabled) {
+      this.emit('cropModeToggled', this.state.enabled);
+    }
   }
 
   getCropState(): CropState {

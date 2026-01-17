@@ -21,8 +21,12 @@ function createMockDTO(config: {
     name: string;
     viewNode?: string;
     frame?: number;
+    currentFrame?: number;
     fps?: number;
     realtime?: number;
+    range?: number[] | number[][];
+    region?: number[] | number[][];
+    marks?: number[];
   }>;
   objects?: Array<{
     name: string;
@@ -58,8 +62,12 @@ function createMockDTO(config: {
             value: () => {
               if (propName === 'viewNode') return s.viewNode;
               if (propName === 'frame') return s.frame;
+              if (propName === 'currentFrame') return s.currentFrame;
               if (propName === 'fps') return s.fps;
               if (propName === 'realtime') return s.realtime;
+              if (propName === 'range') return s.range;
+              if (propName === 'region') return s.region;
+              if (propName === 'marks') return s.marks;
               return undefined;
             },
           }),
@@ -132,9 +140,11 @@ describe('GTOGraphLoader', () => {
           {
             name: 'MySession',
             viewNode: 'defaultSequence',
-            frame: 42,
+            currentFrame: 42,
             fps: 30,
             realtime: 24,
+            region: [[10, 20]],
+            marks: [12, 18],
           },
         ],
         objects: [],
@@ -145,6 +155,9 @@ describe('GTOGraphLoader', () => {
       expect(result.sessionInfo.name).toBe('MySession');
       expect(result.sessionInfo.viewNode).toBe('defaultSequence');
       expect(result.sessionInfo.frame).toBe(42);
+      expect(result.sessionInfo.inPoint).toBe(10);
+      expect(result.sessionInfo.outPoint).toBe(20);
+      expect(result.sessionInfo.marks).toEqual([12, 18]);
       // Should prefer realtime over fps
       expect(result.sessionInfo.fps).toBe(24);
     });
@@ -397,7 +410,7 @@ describe('GTOGraphLoader', () => {
         ],
       });
 
-      const result = loadGTOGraph(dto as never);
+      loadGTOGraph(dto as never);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('rotate', 90);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('flip', true);
@@ -443,7 +456,7 @@ describe('GTOGraphLoader', () => {
         ],
       });
 
-      const result = loadGTOGraph(dto as never);
+      loadGTOGraph(dto as never);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('composite', 'over');
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('mode', 'wipe');
@@ -480,7 +493,7 @@ describe('GTOGraphLoader', () => {
         ],
       });
 
-      const result = loadGTOGraph(dto as never);
+      loadGTOGraph(dto as never);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('outputIndex', 2);
     });
@@ -513,7 +526,7 @@ describe('GTOGraphLoader', () => {
         ],
       });
 
-      const result = loadGTOGraph(dto as never);
+      loadGTOGraph(dto as never);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('k1', 0.1);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('k2', 0.05);
@@ -554,7 +567,7 @@ describe('GTOGraphLoader', () => {
         ],
       });
 
-      const result = loadGTOGraph(dto as never);
+      loadGTOGraph(dto as never);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('exposure', 1.5);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('gamma', 2.2);

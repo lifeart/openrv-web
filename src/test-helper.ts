@@ -85,6 +85,9 @@ export interface PaintState {
   strokeWidth: number;
   brushType: 'circle' | 'gaussian';
   ghostMode: boolean;
+  holdMode: boolean;
+  ghostBefore: number;
+  ghostAfter: number;
   annotatedFrames: number[];
   canUndo: boolean;
   canRedo: boolean;
@@ -206,6 +209,9 @@ export function exposeForTesting(app: App): void {
         strokeWidth: paintEngine?.width ?? 4,
         brushType: brushTypeMap[brush] ?? 'circle',
         ghostMode: paintEngine?.effects?.ghost ?? false,
+        holdMode: paintEngine?.effects?.hold ?? false,
+        ghostBefore: paintEngine?.effects?.ghostBefore ?? 3,
+        ghostAfter: paintEngine?.effects?.ghostAfter ?? 3,
         annotatedFrames: Array.from(paintEngine?.getAnnotatedFrames?.() ?? []),
         canUndo: undoStack.length > 0,
         canRedo: redoStack.length > 0,

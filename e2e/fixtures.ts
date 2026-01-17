@@ -74,6 +74,9 @@ export interface PaintState {
   strokeWidth: number;
   brushType: 'circle' | 'gaussian';
   ghostMode: boolean;
+  holdMode: boolean;
+  ghostBefore: number;
+  ghostAfter: number;
   annotatedFrames: number[];
   canUndo: boolean;
   canRedo: boolean;
@@ -178,6 +181,9 @@ export async function getPaintState(page: Page): Promise<PaintState> {
       strokeWidth: 4,
       brushType: 'circle',
       ghostMode: false,
+      holdMode: false,
+      ghostBefore: 3,
+      ghostAfter: 3,
       annotatedFrames: [],
       canUndo: false,
       canRedo: false,

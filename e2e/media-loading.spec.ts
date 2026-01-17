@@ -4,6 +4,7 @@ import {
   loadRvSession,
   waitForTestHelper,
   getSessionState,
+  getViewerState,
   getPaintState,
   captureViewerScreenshot,
   imagesAreDifferent,
@@ -170,6 +171,38 @@ test.describe('Media Loading', () => {
       const state = await getSessionState(page);
       expect(typeof state.currentFrame).toBe('number');
       expect(typeof state.loopMode).toBe('string');
+    });
+
+    test('MEDIA-013: should apply channel select and playback range from session', async ({ page }) => {
+      await page.goto('/');
+      await page.waitForSelector('#app');
+      await waitForTestHelper(page);
+
+      await loadRvSession(page);
+      await page.waitForTimeout(1000);
+
+      const state = await getSessionState(page);
+      expect(state.inPoint).toBe(1);
+      expect(state.outPoint).toBe(28);
+      expect(state.currentFrame).toBe(1);
+
+      const viewerState = await getViewerState(page);
+      expect(viewerState.channelMode).toBe('green');
+    });
+
+    test('MEDIA-014: should apply paint effects from session', async ({ page }) => {
+      await page.goto('/');
+      await page.waitForSelector('#app');
+      await waitForTestHelper(page);
+
+      await loadRvSession(page);
+      await page.waitForTimeout(1000);
+
+      const paintState = await getPaintState(page);
+      expect(paintState.ghostMode).toBe(true);
+      expect(paintState.holdMode).toBe(true);
+      expect(paintState.ghostBefore).toBe(2);
+      expect(paintState.ghostAfter).toBe(4);
     });
 
     test('MEDIA-012: should allow navigation after session load', async ({ page }) => {

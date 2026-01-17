@@ -1,4 +1,13 @@
-import { test, expect, loadVideoFile, loadRvSession } from './fixtures';
+import {
+  test,
+  expect,
+  loadVideoFile,
+  loadRvSession,
+  waitForTestHelper,
+  drawStroke,
+  getPaintState,
+  getViewerState,
+} from './fixtures';
 
 test.describe('Export Functionality', () => {
   test.beforeEach(async ({ page }) => {
@@ -103,6 +112,104 @@ test.describe('Export Functionality', () => {
     test('EXPORT-031: should show progress for sequence export', async ({ page }) => {
       // Sequence export should show progress dialog
       // This is a complex operation that may take time
+    });
+  });
+
+  test.describe('Session Export', () => {
+    test('EXPORT-040: should save and reload RV session with ghost effects', async ({ page }) => {
+      await waitForTestHelper(page);
+
+      await page.click('button[data-tab-id="annotate"]');
+      await page.waitForTimeout(200);
+      await page.keyboard.press('p');
+      await page.waitForTimeout(100);
+
+      await drawStroke(page, [
+        { x: 120, y: 120 },
+        { x: 260, y: 180 },
+      ]);
+      await page.waitForTimeout(200);
+
+      await page.keyboard.press('g');
+      await page.waitForTimeout(200);
+
+      const paintState = await getPaintState(page);
+      expect(paintState.ghostMode).toBe(true);
+      expect(paintState.annotatedFrames.length).toBeGreaterThan(0);
+
+      const exportButton = page.locator('button[title*="Export"], button:has-text("Export")').first();
+      const downloadPromise = page.waitForEvent('download', { timeout: 10000 });
+      await exportButton.click();
+      await page.waitForTimeout(200);
+      await page.click('text=Save RV Session (.rv)');
+
+      const download = await downloadPromise;
+      const outputPath = test.info().outputPath('session-export.rv');
+      await download.saveAs(outputPath);
+
+      await page.reload();
+      await page.waitForSelector('#app');
+      await waitForTestHelper(page);
+
+      const fileInput = page.locator('input[type="file"]').first();
+      await fileInput.setInputFiles(outputPath);
+      await page.waitForTimeout(1000);
+
+      const restoredPaint = await getPaintState(page);
+      expect(restoredPaint.ghostMode).toBe(true);
+      expect(restoredPaint.annotatedFrames.length).toBeGreaterThan(0);
+    });
+
+    test('EXPORT-041: re-export loaded RV session with edits', async ({ page }) => {
+      await waitForTestHelper(page);
+      await loadRvSession(page);
+      await page.waitForTimeout(1000);
+
+      await page.click('button[data-tab-id="annotate"]');
+      await page.waitForTimeout(200);
+      await page.keyboard.press('p');
+      await page.waitForTimeout(100);
+
+      await drawStroke(page, [
+        { x: 140, y: 140 },
+        { x: 220, y: 200 },
+      ]);
+      await page.waitForTimeout(200);
+
+      await page.keyboard.press('g');
+      await page.waitForTimeout(200);
+
+      let paintState = await getPaintState(page);
+      if (!paintState.ghostMode) {
+        await page.keyboard.press('g');
+        await page.waitForTimeout(200);
+        paintState = await getPaintState(page);
+      }
+
+      const exportButton = page.locator('button[title*="Export"], button:has-text("Export")').first();
+      const downloadPromise = page.waitForEvent('download', { timeout: 10000 });
+      await exportButton.click();
+      await page.waitForTimeout(200);
+      await page.click('text=Save RV Session (.rv)');
+
+      const download = await downloadPromise;
+      const outputPath = test.info().outputPath('session-export-updated.rv');
+      await download.saveAs(outputPath);
+
+      await page.reload();
+      await page.waitForSelector('#app');
+      await waitForTestHelper(page);
+
+      const fileInput = page.locator('input[type="file"]').first();
+      await fileInput.setInputFiles(outputPath);
+      await page.waitForTimeout(1000);
+
+      const restoredPaint = await getPaintState(page);
+      expect(restoredPaint.ghostMode).toBe(true);
+      expect(restoredPaint.annotatedFrames.length).toBeGreaterThan(0);
+
+      const viewerState = await getViewerState(page);
+      expect(viewerState.channelMode).toBe('green');
     });
   });
 });

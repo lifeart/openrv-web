@@ -49,6 +49,7 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 - Text annotations
 - Eraser and brush types
 - Ghost mode (show nearby frame annotations)
+- Hold mode (persist annotations across frames)
 - Per-frame annotation storage
 
 ### Playback
@@ -220,7 +221,7 @@ export class FileSourceNode extends BaseSourceNode { ... }
 
 ### GTO/RV Session Loading
 
-RV session files are parsed using `gto-js` and reconstructed into the node graph:
+RV session files are parsed using `gto-js` and reconstructed into the node graph, restoring key session settings such as playback ranges, channel selection, scopes, and paint effects. Exporting `.rv`/`.gto` sessions currently preserves playback and annotation data (not the full media graph), and re-exports loaded sessions with UI changes applied.
 
 ```typescript
 // Session loads GTO and builds graph

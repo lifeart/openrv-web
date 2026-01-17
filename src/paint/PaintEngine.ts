@@ -406,6 +406,7 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
 
     if (effects) {
       this.state.effects = { ...this.state.effects, ...effects };
+      this.emit('effectsChanged', this.state.effects);
     }
   }
 }

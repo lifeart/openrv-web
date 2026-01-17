@@ -39,6 +39,19 @@ connections : connection (2)
     }
 }
 
+channelSelect : ChannelSelect (2)
+{
+    node
+    {
+        int active = 1
+    }
+
+    parameters
+    {
+        int channel = 1
+    }
+}
+
 defaultLayout : RVLayoutGroup (1)
 {
     ui
@@ -67,6 +80,10 @@ defaultLayout_paint : RVPaint (3)
         int nextId = 0
         int nextAnnotationId = 0
         int show = 1
+        int ghost = 1
+        int hold = 1
+        int ghostBefore = 2
+        int ghostAfter = 4
         string exclude = [ ]
         string include = [ ]
     }

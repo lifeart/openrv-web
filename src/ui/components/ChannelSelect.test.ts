@@ -35,10 +35,26 @@ describe('ChannelSelect', () => {
       expect(element.className).toBe('channel-select');
     });
 
-    it('CH-003: creates buttons for all channels', () => {
+    it('CH-003: creates dropdown options for all channels', () => {
       const element = control.render();
-      const buttons = element.querySelectorAll('button');
-      expect(buttons.length).toBe(6); // rgb, red, green, blue, alpha, luminance
+      const trigger = element.querySelector('[data-testid="channel-select-button"]') as HTMLButtonElement;
+      expect(trigger).toBeInstanceOf(HTMLButtonElement);
+
+      trigger.click();
+
+      const dropdown = document.querySelector('[data-testid="channel-dropdown"]') as HTMLElement;
+      expect(dropdown).toBeInstanceOf(HTMLElement);
+
+      const options = dropdown.querySelectorAll('button');
+      expect(options.length).toBe(6); // rgb, red, green, blue, alpha, luminance
+
+      const channels = Array.from(options).map((option) => (option as HTMLElement).dataset.channel);
+      expect(channels).toEqual(['rgb', 'red', 'green', 'blue', 'alpha', 'luminance']);
+
+      options.forEach((option) => {
+        const channel = (option as HTMLElement).dataset.channel as ChannelMode;
+        expect(option.textContent).toContain(CHANNEL_LABELS[channel]);
+      });
     });
   });
 
@@ -167,10 +183,10 @@ describe('ChannelSelect', () => {
 describe('CHANNEL_LABELS', () => {
   it('CH-020: has labels for all channels', () => {
     expect(CHANNEL_LABELS.rgb).toBe('RGB');
-    expect(CHANNEL_LABELS.red).toBe('R');
-    expect(CHANNEL_LABELS.green).toBe('G');
-    expect(CHANNEL_LABELS.blue).toBe('B');
-    expect(CHANNEL_LABELS.alpha).toBe('A');
+    expect(CHANNEL_LABELS.red).toBe('Red');
+    expect(CHANNEL_LABELS.green).toBe('Green');
+    expect(CHANNEL_LABELS.blue).toBe('Blue');
+    expect(CHANNEL_LABELS.alpha).toBe('Alpha');
     expect(CHANNEL_LABELS.luminance).toBe('Luma');
   });
 });

@@ -25,6 +25,8 @@ import { CompareControl } from './ui/components/CompareControl';
 import { exportSequence } from './utils/SequenceExporter';
 import { showAlert, showModal } from './ui/components/shared/Modal';
 import { SessionSerializer } from './core/session/SessionSerializer';
+import { SessionGTOExporter } from './core/session/SessionGTOExporter';
+import { SessionGTOStore } from './core/session/SessionGTOStore';
 
 export class App {
   private container: HTMLElement | null = null;
@@ -37,6 +39,7 @@ export class App {
   private paintEngine: PaintEngine;
   private paintToolbar: PaintToolbar;
   private colorControls: ColorControls;
+  private gtoStore: SessionGTOStore | null = null;
   private transformControl: TransformControl;
   private filterControl: FilterControl;
   private cropControl: CropControl;
@@ -86,6 +89,7 @@ export class App {
     // Connect color controls to viewer
     this.colorControls.on('adjustmentsChanged', (adjustments) => {
       this.viewer.setColorAdjustments(adjustments);
+      this.syncGTOStore();
     });
 
     // Connect LUT events
@@ -130,6 +134,7 @@ export class App {
           this.vectorscope.hide();
         }
       }
+      this.syncGTOStore();
     });
 
     this.compareControl = new CompareControl();
@@ -182,23 +187,29 @@ export class App {
     exportControl.on('sequenceExportRequested', (request) => {
       this.handleSequenceExport(request);
     });
+    exportControl.on('rvSessionExportRequested', ({ format }) => {
+      this.saveRvSession(format);
+    });
 
     // Initialize transform control
     this.transformControl = new TransformControl();
     this.transformControl.on('transformChanged', (transform) => {
       this.viewer.setTransform(transform);
+      this.syncGTOStore();
     });
 
     // Initialize filter control
     this.filterControl = new FilterControl();
     this.filterControl.on('filtersChanged', (settings) => {
       this.viewer.setFilterSettings(settings);
+      this.syncGTOStore();
     });
 
     // Initialize crop control
     this.cropControl = new CropControl();
     this.cropControl.on('cropStateChanged', (state) => {
       this.viewer.setCropState(state);
+      this.syncGTOStore();
     });
     this.cropControl.on('cropModeToggled', (enabled) => {
       this.viewer.setCropEnabled(enabled);
@@ -220,6 +231,7 @@ export class App {
     this.lensControl = new LensControl();
     this.lensControl.on('lensChanged', (params) => {
       this.viewer.setLensParams(params);
+      this.syncGTOStore();
     });
 
     // Initialize stack/composite control
@@ -246,12 +258,14 @@ export class App {
     this.channelSelect = new ChannelSelect();
     this.channelSelect.on('channelChanged', (channel) => {
       this.viewer.setChannelMode(channel);
+      this.syncGTOStore();
     });
 
     // Initialize stereo control
     this.stereoControl = new StereoControl();
     this.stereoControl.on('stateChanged', (state) => {
       this.viewer.setStereoState(state);
+      this.syncGTOStore();
     });
 
     // Initialize histogram
@@ -457,6 +471,89 @@ export class App {
     // Load annotations from GTO files
     this.session.on('annotationsLoaded', ({ annotations, effects }) => {
       this.paintEngine.loadFromAnnotations(annotations, effects);
+      this.syncGTOStore();
+    });
+
+    this.session.on('sessionLoaded', () => {
+      if (this.session.gtoData) {
+        this.gtoStore = new SessionGTOStore(this.session.gtoData);
+        this.syncGTOStore();
+      }
+    });
+
+    this.session.on('sourceLoaded', () => {
+      if (!this.session.gtoData) {
+        this.gtoStore = null;
+      }
+    });
+
+    this.session.on('frameChanged', () => this.syncGTOStore());
+    this.session.on('inOutChanged', () => this.syncGTOStore());
+    this.session.on('marksChanged', () => this.syncGTOStore());
+    this.session.on('fpsChanged', () => this.syncGTOStore());
+
+    this.paintEngine.on('annotationsChanged', () => this.syncGTOStore());
+    this.paintEngine.on('effectsChanged', () => this.syncGTOStore());
+
+    this.session.on('settingsLoaded', (settings) => {
+      if (settings.colorAdjustments) {
+        this.colorControls.setAdjustments(settings.colorAdjustments);
+      }
+      if (settings.filterSettings) {
+        this.filterControl.setSettings(settings.filterSettings);
+      }
+      if (settings.cdl) {
+        this.cdlControl.setCDL(settings.cdl);
+      }
+      if (settings.transform) {
+        this.transformControl.setTransform(settings.transform);
+        this.viewer.setTransform(settings.transform);
+      }
+      if (settings.lens) {
+        this.lensControl.setParams(settings.lens);
+      }
+      if (settings.crop) {
+        this.cropControl.setState(settings.crop);
+      }
+      if (settings.channelMode) {
+        this.channelSelect.setChannel(settings.channelMode);
+      }
+      if (settings.stereo) {
+        this.stereoControl.setState(settings.stereo);
+      }
+      if (settings.scopes) {
+        const applyScope = (scope: 'histogram' | 'waveform' | 'vectorscope', visible: boolean): void => {
+          if (scope === 'histogram') {
+            if (visible) {
+              this.histogram.show();
+              this.updateHistogram();
+            } else {
+              this.histogram.hide();
+            }
+          } else if (scope === 'waveform') {
+            if (visible) {
+              this.waveform.show();
+              this.updateWaveform();
+            } else {
+              this.waveform.hide();
+            }
+          } else if (scope === 'vectorscope') {
+            if (visible) {
+              this.vectorscope.show();
+              this.updateVectorscope();
+            } else {
+              this.vectorscope.hide();
+            }
+          }
+          this.scopesControl.setScopeVisible(scope, visible);
+        };
+
+        applyScope('histogram', settings.scopes.histogram);
+        applyScope('waveform', settings.scopes.waveform);
+        applyScope('vectorscope', settings.scopes.vectorscope);
+      }
+
+      this.syncGTOStore();
     });
   }
 
@@ -1027,6 +1124,16 @@ Shift+V   - Flip vertical</pre>`;
     showModal(content, { title: 'Keyboard Shortcuts', width: '500px' });
   }
 
+  private syncGTOStore(): void {
+    if (!this.gtoStore) return;
+    this.gtoStore.updateFromState({
+      session: this.session,
+      viewer: this.viewer,
+      paintEngine: this.paintEngine,
+      scopesState: this.scopesControl.getState(),
+    });
+  }
+
   private async saveProject(): Promise<void> {
     try {
       const state = SessionSerializer.toJSON(
@@ -1040,6 +1147,22 @@ Shift+V   - Flip vertical</pre>`;
       await SessionSerializer.saveToFile(state, 'project.orvproject');
     } catch (err) {
       showAlert(`Failed to save project: ${err}`, { type: 'error', title: 'Save Error' });
+    }
+  }
+
+  private async saveRvSession(format: 'rv' | 'gto'): Promise<void> {
+    try {
+      const sourceName = this.session.currentSource?.name;
+      const base = sourceName ? sourceName : 'session';
+      const filename = `${base}.${format}`;
+
+      if (this.gtoStore) {
+        await this.gtoStore.saveToFile(filename, { binary: format === 'gto' });
+      } else {
+        await SessionGTOExporter.saveToFile(this.session, this.paintEngine, filename, { binary: format === 'gto' });
+      }
+    } catch (err) {
+      showAlert(`Failed to save RV session: ${err}`, { type: 'error', title: 'Save Error' });
     }
   }
 

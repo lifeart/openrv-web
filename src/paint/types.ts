@@ -35,6 +35,9 @@ export enum TextOrigin {
   BottomRight = 8,
 }
 
+export const RV_PEN_WIDTH_SCALE = 500;
+export const RV_TEXT_SIZE_SCALE = 2000;
+
 export interface Point {
   x: number; // Normalized 0-1 (0 = left)
   y: number; // Normalized 0-1 (0 = bottom, OpenGL convention)

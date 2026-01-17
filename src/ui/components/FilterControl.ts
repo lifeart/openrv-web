@@ -316,6 +316,24 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
     return { ...this.settings };
   }
 
+  setSettings(settings: FilterSettings): void {
+    this.settings = { ...settings };
+
+    if (this.blurSlider) {
+      this.blurSlider.value = String(this.settings.blur);
+      const valueEl = this.blurSlider.parentElement?.querySelector('span:last-child');
+      if (valueEl) valueEl.textContent = `${this.settings.blur}px`;
+    }
+
+    if (this.sharpenSlider) {
+      this.sharpenSlider.value = String(this.settings.sharpen);
+      const valueEl = this.sharpenSlider.parentElement?.querySelector('span:last-child');
+      if (valueEl) valueEl.textContent = String(this.settings.sharpen);
+    }
+
+    this.emitChange();
+  }
+
   render(): HTMLElement {
     return this.container;
   }
