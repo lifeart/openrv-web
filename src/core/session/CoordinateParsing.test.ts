@@ -1,17 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { Session } from './Session';
-import { GTODTO } from './GTODTO';
-
-// Mock Partial GTODTO structure
-const mockGTO = (points: number[][], aspectRatio: number) => {
-    // We need to construct a DTO that parsePaintAnnotations will accept
-    // This is tricky because parsePaintAnnotations iterates 'RVPaint' objects
-    // and components. 
-    // Instead of mocking the entire DTO complexity, we can unit test 'parsePenStroke' 
-    // by exposing it or using a test-subclass if it was protected.
-    // Since it's private, we might need to test via public API 'loadFromGTO' or 
-    // cast to any.
-};
 
 describe('Coordinate Parsing', () => {
     class TestSession extends Session {
@@ -49,8 +37,11 @@ describe('Coordinate Parsing', () => {
         // x = 1.0 / 2.0 + 0.5 = 1.0
         // y = 0.5 + 0.5 = 1.0
         
-        expect(result?.points[0].x).toBe(1.0);
-        expect(result?.points[0].y).toBe(1.0); 
+        expect(result).toBeDefined();
+        if (result) {
+            expect(result.points[0].x).toBe(1.0);
+            expect(result.points[0].y).toBe(1.0); 
+        }
     });
 
     it('correctly maps text annotation coordinates with unit height assumption', () => {
@@ -71,8 +62,11 @@ describe('Coordinate Parsing', () => {
         const result = session.testParseTextAnnotation('text:1:1:user', 1, mockComp, aspectRatio);
         
         // Math matches pen stroke logic:
-        expect(result?.position.x).toBe(1.0);
-        expect(result?.position.y).toBe(1.0); 
+        expect(result).toBeDefined();
+        if (result) {
+            expect(result.position.x).toBe(1.0);
+            expect(result.position.y).toBe(1.0); 
+        }
     });
 
     it('validates round-trip serialization logic (Import -> Export -> Import)', () => {

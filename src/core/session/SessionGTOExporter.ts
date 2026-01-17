@@ -198,10 +198,15 @@ export class SessionGTOExporter {
   }
 
   private static findOrAddComponent(obj: ObjectData, name: string) {
-    let comp = obj.components.find(c => c.name === name);
+    if (!obj.components) {
+        // @ts-ignore
+        obj.components = [];
+    }
+    const components = (obj.components as unknown) as any[];
+    let comp = components.find((c: any) => c.name === name);
     if (!comp) {
         comp = { name, properties: [] };
-        obj.components.push(comp);
+        components.push(comp);
     }
     return comp;
   }

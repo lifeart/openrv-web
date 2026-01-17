@@ -1361,20 +1361,36 @@ export class Session extends EventEmitter<SessionEvents> {
     // Parse brush type
     const brushType = brushValue === 'gaussian' ? BrushType.Gaussian : BrushType.Circle;
 
-    // Parse points - stored as float[2] pairs
-    // OpenRV coordinate system: X from -aspectRatio to +aspectRatio, Y from -1 to +1
+    // Parse points - stored as float[2] array (flat: [x1, y1, x2, y2, ...])
+    // OpenRV coordinate system: X from -aspectRatio to +aspectRatio, Y from -0.5 to +0.5
     const points: Array<{ x: number; y: number; pressure?: number }> = [];
     if (pointsValue && Array.isArray(pointsValue)) {
-      for (const point of pointsValue) {
-        if (Array.isArray(point) && point.length >= 2) {
-          const rawX = point[0] as number;
-          const rawY = point[1] as number;
-          // Convert from OpenRV coords to normalized 0-1 coords
-          // OpenRV Coords are height-normalized (Y: -0.5 to 0.5)
-          points.push({
-            x: rawX / aspectRatio + 0.5,
-            y: rawY + 0.5,
-          });
+      // Check if it's a nested array [[x,y], [x,y]] or flat [x, y, x, y]
+      const isNested = pointsValue.length > 0 && Array.isArray(pointsValue[0]);
+      
+      if (isNested) {
+        // Nested format: [[x,y], [x,y]]
+        for (const point of pointsValue) {
+          if (Array.isArray(point) && point.length >= 2) {
+            const rawX = point[0] as number;
+            const rawY = point[1] as number;
+            points.push({
+              x: rawX / aspectRatio + 0.5,
+              y: rawY + 0.5,
+            });
+          }
+        }
+      } else {
+        // Flat format: [x, y, x, y] - chunk into pairs
+        for (let i = 0; i < pointsValue.length; i += 2) {
+          if (i + 1 < pointsValue.length) {
+            const rawX = pointsValue[i] as number;
+            const rawY = pointsValue[i + 1] as number;
+            points.push({
+              x: rawX / aspectRatio + 0.5,
+              y: rawY + 0.5,
+            });
+          }
         }
       }
     }
@@ -1439,11 +1455,19 @@ export class Session extends EventEmitter<SessionEvents> {
     const fontValue = comp.property('font').value();
 
     // Parse position
-    // OpenRV coordinate system: X from -aspectRatio to +aspectRatio, Y from -1 to +1
+    // OpenRV coordinate system: X from -aspectRatio to +aspectRatio, Y from -0.5 to +0.5
     let x = 0.5, y = 0.5;
-    if (positionValue && Array.isArray(positionValue) && positionValue.length >= 1) {
-      const posData = positionValue[0];
-      if (Array.isArray(posData) && posData.length >= 2) {
+    if (positionValue && Array.isArray(positionValue)) {
+      // Check if it's a double-wrapped array [[[x,y]]] or [[x,y]] or flat [x,y]
+      let posData = positionValue;
+      
+      // Unwrap if nested
+      while (posData.length > 0 && Array.isArray(posData[0]) && posData[0].length === 2) {
+        posData = posData[0];
+      }
+      
+      // Now posData should be [x, y]
+      if (posData.length >= 2 && typeof posData[0] === 'number') {
         const rawX = posData[0] as number;
         const rawY = posData[1] as number;
         // OpenRV Coords are height-normalized (Y: -0.5 to 0.5)
