@@ -7,6 +7,7 @@
 
 import { EventEmitter, EventMap } from '../../../utils/EventEmitter';
 import { TabId } from './TabBar';
+import { getIconSvg, IconName } from '../shared/Icons';
 
 export interface ContextToolbarEvents extends EventMap {
   // Events will be added as tabs are implemented
@@ -157,10 +158,15 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
       title?: string;
       active?: boolean;
       minWidth?: string;
+      icon?: IconName;
     } = {}
   ): HTMLButtonElement {
     const button = document.createElement('button');
-    button.textContent = text;
+    if (options.icon) {
+      button.innerHTML = `${getIconSvg(options.icon, 'sm')}<span style="margin-left: 6px;">${text}</span>`;
+    } else {
+      button.textContent = text;
+    }
     button.title = options.title || '';
     button.style.cssText = `
       background: ${options.active ? 'rgba(74, 158, 255, 0.15)' : 'transparent'};

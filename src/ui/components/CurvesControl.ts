@@ -14,6 +14,8 @@ import {
   importCurvesJSON,
   isDefaultCurves,
 } from '../../color/ColorCurves';
+import { getIconSvg } from './shared/Icons';
+import { createButton } from './shared/Button';
 
 interface CurvesControlEvents extends EventMap {
   curvesChanged: ColorCurvesData;
@@ -32,21 +34,22 @@ export class CurvesControl extends EventEmitter<CurvesControlEvents> {
 
     // Create container
     this.container = document.createElement('div');
-    this.container.className = 'curves-control';
+    this.container.className = 'curves-control-container';
     this.container.dataset.testid = 'curves-control';
     this.container.style.cssText = `
       display: none;
       flex-direction: column;
       gap: 8px;
       padding: 12px;
-      background: #1a1a1a;
-      border-radius: 8px;
+      background: #2a2a2a;
+      border: 1px solid #444;
+      border-radius: 6px;
       min-width: 220px;
       position: absolute;
       top: 10px;
       left: 10px;
       z-index: 100;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
     `;
 
     // Create header
@@ -55,44 +58,24 @@ export class CurvesControl extends EventEmitter<CurvesControlEvents> {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 4px;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #444;
     `;
 
     const title = document.createElement('span');
-    title.textContent = 'Curves';
-    title.style.cssText = `
-      font-size: 12px;
-      font-weight: 600;
-      color: #ffffff;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    `;
+    title.textContent = 'Color Curves';
+    title.style.cssText = 'color: #ddd; font-size: 13px; font-weight: 500;';
     header.appendChild(title);
 
     // Reset button
-    const resetBtn = document.createElement('button');
-    resetBtn.textContent = 'Reset';
-    resetBtn.title = 'Reset all curves to default';
+    const resetBtn = createButton('Reset', () => this.resetAll(), {
+      variant: 'ghost',
+      size: 'sm',
+      title: 'Reset all curves to default',
+      icon: getIconSvg('reset', 'sm'),
+    });
     resetBtn.dataset.testid = 'curves-reset';
-    resetBtn.style.cssText = `
-      padding: 2px 8px;
-      border: 1px solid #3a3a3a;
-      border-radius: 3px;
-      background: transparent;
-      color: #888;
-      cursor: pointer;
-      font-size: 10px;
-      transition: all 0.15s ease;
-    `;
-    resetBtn.addEventListener('click', () => this.resetAll());
-    resetBtn.addEventListener('mouseenter', () => {
-      resetBtn.style.background = '#2a2a2a';
-      resetBtn.style.color = '#fff';
-    });
-    resetBtn.addEventListener('mouseleave', () => {
-      resetBtn.style.background = 'transparent';
-      resetBtn.style.color = '#888';
-    });
     header.appendChild(resetBtn);
 
     this.container.appendChild(header);
@@ -166,56 +149,24 @@ export class CurvesControl extends EventEmitter<CurvesControlEvents> {
       margin-top: 4px;
     `;
 
-    const importBtn = document.createElement('button');
-    importBtn.textContent = 'Import';
-    importBtn.title = 'Import curves from JSON file';
+    const importBtn = createButton('Import', () => this.importCurves(), {
+      variant: 'ghost',
+      size: 'sm',
+      title: 'Import curves from JSON file',
+      icon: getIconSvg('upload', 'sm'),
+    });
     importBtn.dataset.testid = 'curves-import';
-    importBtn.style.cssText = `
-      flex: 1;
-      padding: 4px 8px;
-      border: 1px solid #3a3a3a;
-      border-radius: 3px;
-      background: transparent;
-      color: #888;
-      cursor: pointer;
-      font-size: 10px;
-      transition: all 0.15s ease;
-    `;
-    importBtn.addEventListener('click', () => this.importCurves());
-    importBtn.addEventListener('mouseenter', () => {
-      importBtn.style.background = '#2a2a2a';
-      importBtn.style.color = '#fff';
-    });
-    importBtn.addEventListener('mouseleave', () => {
-      importBtn.style.background = 'transparent';
-      importBtn.style.color = '#888';
-    });
+    importBtn.style.flex = '1';
     ioRow.appendChild(importBtn);
 
-    const exportBtn = document.createElement('button');
-    exportBtn.textContent = 'Export';
-    exportBtn.title = 'Export curves to JSON file';
+    const exportBtn = createButton('Export', () => this.exportCurves(), {
+      variant: 'ghost',
+      size: 'sm',
+      title: 'Export curves to JSON file',
+      icon: getIconSvg('download', 'sm'),
+    });
     exportBtn.dataset.testid = 'curves-export';
-    exportBtn.style.cssText = `
-      flex: 1;
-      padding: 4px 8px;
-      border: 1px solid #3a3a3a;
-      border-radius: 3px;
-      background: transparent;
-      color: #888;
-      cursor: pointer;
-      font-size: 10px;
-      transition: all 0.15s ease;
-    `;
-    exportBtn.addEventListener('click', () => this.exportCurves());
-    exportBtn.addEventListener('mouseenter', () => {
-      exportBtn.style.background = '#2a2a2a';
-      exportBtn.style.color = '#fff';
-    });
-    exportBtn.addEventListener('mouseleave', () => {
-      exportBtn.style.background = 'transparent';
-      exportBtn.style.color = '#888';
-    });
+    exportBtn.style.flex = '1';
     ioRow.appendChild(exportBtn);
 
     this.container.appendChild(ioRow);

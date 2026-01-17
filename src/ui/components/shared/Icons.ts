@@ -160,6 +160,12 @@ const ICONS = {
   // CDL/Color grading
   'film-slate': '<path d="M4 20h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z"/><path d="M2 8h20"/><path d="m7 4 3 4"/><path d="m14 4 3 4"/>',
   'activity': '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+  'curves': '<path d="M3 20c4-8 6-16 18-16"/><circle cx="6" cy="17" r="2"/><circle cx="18" cy="7" r="2"/>',
+
+  // Scopes
+  'histogram': '<rect x="3" y="12" width="4" height="9"/><rect x="10" y="6" width="4" height="15"/><rect x="17" y="9" width="4" height="12"/>',
+  'waveform': '<path d="M2 12h2l2-6 3 12 3-8 2 4 2-2h6"/>',
+  'vectorscope': '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/><line x1="12" y1="3" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="21"/><line x1="3" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="21" y2="12"/>',
 
   // Navigation
   'chevron-left': '<polyline points="15 18 9 12 15 6"/>',

@@ -313,7 +313,7 @@ export class App {
         histogramButton.style.background = '';
         histogramButton.style.borderColor = '';
       }
-    }, { title: 'Toggle histogram display (H)' });
+    }, { title: 'Toggle histogram display (H)', icon: 'histogram' });
     viewContent.appendChild(histogramButton);
 
     // Update histogram button state when visibility changes
@@ -338,7 +338,7 @@ export class App {
         waveformButton.style.background = '';
         waveformButton.style.borderColor = '';
       }
-    }, { title: 'Toggle waveform display (W)' });
+    }, { title: 'Toggle waveform display (W)', icon: 'waveform' });
     viewContent.appendChild(waveformButton);
 
     // Update waveform button state when visibility changes
@@ -363,7 +363,7 @@ export class App {
         vectorscopeButton.style.background = '';
         vectorscopeButton.style.borderColor = '';
       }
-    }, { title: 'Toggle vectorscope display (Y)' });
+    }, { title: 'Toggle vectorscope display (Y)', icon: 'vectorscope' });
     viewContent.appendChild(vectorscopeButton);
 
     // Update vectorscope button state when visibility changes
@@ -455,14 +455,7 @@ export class App {
     // Curves toggle button
     const curvesButton = ContextToolbar.createButton('Curves', () => {
       this.curvesControl.toggle();
-      if (this.curvesControl.isVisible()) {
-        curvesButton.style.background = 'rgba(74, 158, 255, 0.15)';
-        curvesButton.style.borderColor = '#4a9eff';
-      } else {
-        curvesButton.style.background = '';
-        curvesButton.style.borderColor = '';
-      }
-    }, { title: 'Toggle color curves panel (U)' });
+    }, { title: 'Toggle color curves panel (U)', icon: 'curves' });
     curvesButton.dataset.testid = 'curves-toggle-button';
     colorContent.appendChild(curvesButton);
 
