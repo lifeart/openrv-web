@@ -209,6 +209,9 @@ export class KeyboardManager {
    * Convert a KeyCombination to a unique string ID
    */
   private comboToId(combo: KeyCombination): string {
+    if (!combo.code) {
+      throw new Error('KeyCombination must have a code property');
+    }
     const parts = [];
     if (combo.ctrl) parts.push('ctrl');
     if (combo.shift) parts.push('shift');

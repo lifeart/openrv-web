@@ -232,10 +232,11 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
               // Found a match! Use the blob URL for loading
               const file = availableFiles.get(basename)!;
               const blobUrl = URL.createObjectURL(file);
-              
+
               nodeInfo.properties.url = blobUrl;
               nodeInfo.properties.originalUrl = movie; // Store original path for preservation
-              
+              nodeInfo.properties.file = file; // Store file for mediabunny initialization
+
               console.log(`Matched GTO file "${movie}" to local file "${file.name}"`);
             }
           }

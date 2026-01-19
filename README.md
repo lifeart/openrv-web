@@ -215,9 +215,9 @@ The application uses a centralized `KeyboardManager` for all keyboard shortcuts,
 // Register a shortcut
 keyboardManager.register('Ctrl+S', () => exportFrame(), 'Export frame');
 
-// Register with object notation
+// Register with object notation (uses KeyboardEvent.code)
 keyboardManager.register({
-  key: 's',
+  code: 'KeyS',
   ctrl: true
 }, () => exportFrame(), 'Export frame');
 
@@ -266,6 +266,13 @@ const rootNode = session.graphParseResult?.rootNode;
 # Type check
 pnpm typecheck
 
+# Run unit tests
+pnpm test
+
+# Run e2e tests (requires dev server running)
+pnpm dev  # in one terminal
+npx playwright test  # in another terminal
+
 # Build for production
 pnpm build
 
@@ -302,7 +309,10 @@ export class MyGroupNode extends BaseGroupNode {
 
 - **TypeScript** - Type-safe development
 - **Vite** - Fast bundler with HMR
+- **Vitest** - Unit testing framework
+- **Playwright** - End-to-end testing
 - **WebGL2** - GPU-accelerated rendering
+- **WebCodecs API** - Frame-accurate video decoding via [mediabunny](https://github.com/user/mediabunny)
 - **Web Audio API** - Audio playback and waveforms
 - **gto-js** - RV/GTO file parsing
 - **gl-matrix** - Matrix/vector math

@@ -123,13 +123,23 @@ export class CustomKeyBindingsManager {
         return;
       }
 
+      let needsSave = false;
       for (const item of data) {
-        // Validate each item has required fields
-        if (!this.isValidBindingData(item)) {
+        // Try to migrate old format (with 'key' instead of 'code')
+        const migrated = this.migrateBindingData(item);
+        if (!migrated) {
           console.warn('Skipping invalid custom key binding:', item);
           continue;
         }
-        this.customBindings.set(item.action, item);
+        if (migrated !== item) {
+          needsSave = true;
+        }
+        this.customBindings.set(migrated.action, migrated);
+      }
+
+      // Save migrated data back to storage
+      if (needsSave) {
+        this.saveToStorage();
       }
     } catch (err) {
       console.warn('Failed to load custom key bindings:', err);
@@ -137,40 +147,88 @@ export class CustomKeyBindingsManager {
   }
 
   /**
-   * Validate that an item from localStorage has the required structure
+   * Migrate old binding format to new format
    */
-  private isValidBindingData(item: unknown): item is CustomKeyBinding {
-    if (typeof item !== 'object' || item === null) return false;
+  private migrateBindingData(item: unknown): CustomKeyBinding | null {
+    if (typeof item !== 'object' || item === null) return null;
     const obj = item as Record<string, unknown>;
 
-    // Check required fields exist and have correct types
-    if (typeof obj.action !== 'string') return false;
-    if (!this.isValidKeyCombination(obj.originalCombo)) return false;
-    if (!this.isValidKeyCombination(obj.customCombo)) return false;
+    // Check required fields exist
+    if (typeof obj.action !== 'string') return null;
+    if (!(obj.action in DEFAULT_KEY_BINDINGS)) return null;
 
-    // Check that the action exists in default bindings
-    if (!(obj.action in DEFAULT_KEY_BINDINGS)) return false;
+    // Migrate originalCombo
+    const originalCombo = this.migrateKeyCombination(obj.originalCombo);
+    if (!originalCombo) return null;
 
-    return true;
+    // Migrate customCombo
+    const customCombo = this.migrateKeyCombination(obj.customCombo);
+    if (!customCombo) return null;
+
+    return {
+      action: obj.action,
+      originalCombo,
+      customCombo
+    };
   }
 
   /**
-   * Validate that an object is a valid KeyCombination
+   * Migrate a KeyCombination, handling old formats with 'key' instead of 'code'
    */
-  private isValidKeyCombination(combo: unknown): combo is KeyCombination {
-    if (typeof combo !== 'object' || combo === null) return false;
+  private migrateKeyCombination(combo: unknown): KeyCombination | null {
+    if (typeof combo !== 'object' || combo === null) return null;
     const obj = combo as Record<string, unknown>;
 
-    // Must have a code property that is a string
-    if (typeof obj.code !== 'string' && typeof obj.key !== 'string') return false;
+    // Get code from either 'code' or 'key' property
+    let code: string | undefined;
+    if (typeof obj.code === 'string' && obj.code) {
+      code = obj.code;
+    } else if (typeof obj.key === 'string' && obj.key) {
+      // Migrate old 'key' format to 'code'
+      code = this.keyToCode(obj.key);
+    }
 
-    // Optional modifier fields must be booleans if present
-    if (obj.ctrl !== undefined && typeof obj.ctrl !== 'boolean') return false;
-    if (obj.shift !== undefined && typeof obj.shift !== 'boolean') return false;
-    if (obj.alt !== undefined && typeof obj.alt !== 'boolean') return false;
-    if (obj.meta !== undefined && typeof obj.meta !== 'boolean') return false;
+    if (!code) return null;
 
-    return true;
+    const result: KeyCombination = { code };
+
+    // Copy modifiers if they are valid booleans
+    if (typeof obj.ctrl === 'boolean') result.ctrl = obj.ctrl;
+    if (typeof obj.shift === 'boolean') result.shift = obj.shift;
+    if (typeof obj.alt === 'boolean') result.alt = obj.alt;
+    if (typeof obj.meta === 'boolean') result.meta = obj.meta;
+
+    return result;
+  }
+
+  /**
+   * Convert a key character to a code (for migration)
+   */
+  private keyToCode(key: string): string {
+    switch (key) {
+      case ' ': return 'Space';
+      case 'ArrowUp': return 'ArrowUp';
+      case 'ArrowDown': return 'ArrowDown';
+      case 'ArrowLeft': return 'ArrowLeft';
+      case 'ArrowRight': return 'ArrowRight';
+      case 'Home': return 'Home';
+      case 'End': return 'End';
+      case 'Escape': return 'Escape';
+      case '[': return 'BracketLeft';
+      case ']': return 'BracketRight';
+      case ',': return 'Comma';
+      case '.': return 'Period';
+      case '`': return 'Backquote';
+      default:
+        if (key.length === 1) {
+          if (/[a-zA-Z]/.test(key)) {
+            return 'Key' + key.toUpperCase();
+          } else if (/[0-9]/.test(key)) {
+            return 'Digit' + key;
+          }
+        }
+        return key;
+    }
   }
 
   /**

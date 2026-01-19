@@ -205,8 +205,10 @@ describe('GTOGraphLoader', () => {
         type: 'RVFileSource',
         name: 'source1',
         properties: { has: vi.fn().mockReturnValue(false), setValue: vi.fn() },
-        inputs: [],
+        inputs: [] as unknown[],
         outputs: [],
+        connectInput: vi.fn(),
+        disconnectInput: vi.fn(),
       };
 
       const sequenceNode = {
@@ -214,8 +216,10 @@ describe('GTOGraphLoader', () => {
         type: 'RVSequenceGroup',
         name: 'sequence',
         properties: { has: vi.fn().mockReturnValue(false), setValue: vi.fn() },
-        inputs: [],
+        inputs: [] as unknown[],
         outputs: [],
+        connectInput: vi.fn(),
+        disconnectInput: vi.fn(),
       };
 
       vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
@@ -255,8 +259,10 @@ describe('GTOGraphLoader', () => {
         type: 'RVFileSource',
         name: 'input1',
         properties: { has: vi.fn().mockReturnValue(false), setValue: vi.fn() },
-        inputs: [],
+        inputs: [] as unknown[],
         outputs: [],
+        connectInput: vi.fn(),
+        disconnectInput: vi.fn(),
       };
 
       const node2 = {
@@ -264,8 +270,10 @@ describe('GTOGraphLoader', () => {
         type: 'RVStackGroup',
         name: 'stack',
         properties: { has: vi.fn().mockReturnValue(false), setValue: vi.fn() },
-        inputs: [],
+        inputs: [] as unknown[],
         outputs: [],
+        connectInput: vi.fn(),
+        disconnectInput: vi.fn(),
       };
 
       vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);

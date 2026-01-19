@@ -674,3 +674,45 @@ export async function isButtonActive(page: Page, buttonText: string): Promise<bo
 
 // Export type for page with loaded media
 export type AppPageWithMedia = Page;
+
+/**
+ * Check if mediabunny is being used for the current video source
+ */
+export async function isUsingMediabunny(page: Page): Promise<boolean> {
+  return page.evaluate(() => {
+    return window.__OPENRV_TEST__?.isUsingMediabunny?.() ?? false;
+  });
+}
+
+/**
+ * Get extended session info including mediabunny status
+ */
+export async function getExtendedSessionState(page: Page): Promise<SessionState & { isUsingMediabunny: boolean }> {
+  return page.evaluate(() => {
+    const baseState = window.__OPENRV_TEST__?.getSessionState() ?? {
+      currentFrame: 0,
+      frameCount: 0,
+      inPoint: 0,
+      outPoint: 0,
+      isPlaying: false,
+      loopMode: 'loop',
+      playDirection: 1,
+      volume: 0.7,
+      muted: false,
+      fps: 24,
+      hasMedia: false,
+      mediaType: null,
+      mediaName: null,
+      marks: [],
+      currentAB: 'A',
+      sourceAIndex: 0,
+      sourceBIndex: -1,
+      abCompareAvailable: false,
+      syncPlayhead: true,
+    };
+    return {
+      ...baseState,
+      isUsingMediabunny: window.__OPENRV_TEST__?.isUsingMediabunny?.() ?? false,
+    };
+  });
+}

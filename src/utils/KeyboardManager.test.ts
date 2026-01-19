@@ -425,4 +425,233 @@ describe('KeyboardManager', () => {
       expect(keyboardManager.isRegistered({ code: 'KeyC', ctrl: true })).toBe(false);
     });
   });
+
+  describe('playback keyboard controls', () => {
+    it('KBM-038: Space key triggers playback toggle', () => {
+      const toggleHandler = vi.fn();
+      keyboardManager.register({ code: 'Space' }, toggleHandler, 'Toggle playback');
+
+      const mockEvent = {
+        code: 'Space',
+        key: ' ',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: document.body
+      } as any;
+
+      keyboardManager['handleKeydown'](mockEvent);
+
+      expect(toggleHandler).toHaveBeenCalledTimes(1);
+      expect(mockEvent.preventDefault).toHaveBeenCalled();
+    });
+
+    it('KBM-039: Arrow keys trigger step navigation', () => {
+      const stepForward = vi.fn();
+      const stepBackward = vi.fn();
+
+      keyboardManager.register({ code: 'ArrowRight' }, stepForward, 'Step forward');
+      keyboardManager.register({ code: 'ArrowLeft' }, stepBackward, 'Step backward');
+
+      const rightEvent = {
+        code: 'ArrowRight',
+        key: 'ArrowRight',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: document.body
+      } as any;
+
+      const leftEvent = {
+        code: 'ArrowLeft',
+        key: 'ArrowLeft',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: document.body
+      } as any;
+
+      keyboardManager['handleKeydown'](rightEvent);
+      keyboardManager['handleKeydown'](leftEvent);
+
+      expect(stepForward).toHaveBeenCalledTimes(1);
+      expect(stepBackward).toHaveBeenCalledTimes(1);
+    });
+
+    it('KBM-040: Home and End keys trigger go to start/end', () => {
+      const goToStart = vi.fn();
+      const goToEnd = vi.fn();
+
+      keyboardManager.register({ code: 'Home' }, goToStart, 'Go to start');
+      keyboardManager.register({ code: 'End' }, goToEnd, 'Go to end');
+
+      const homeEvent = {
+        code: 'Home',
+        key: 'Home',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: document.body
+      } as any;
+
+      const endEvent = {
+        code: 'End',
+        key: 'End',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: document.body
+      } as any;
+
+      keyboardManager['handleKeydown'](homeEvent);
+      keyboardManager['handleKeydown'](endEvent);
+
+      expect(goToStart).toHaveBeenCalledTimes(1);
+      expect(goToEnd).toHaveBeenCalledTimes(1);
+    });
+
+    it('KBM-041: playback controls work when disabled then re-enabled', () => {
+      const toggleHandler = vi.fn();
+      keyboardManager.register({ code: 'Space' }, toggleHandler, 'Toggle playback');
+
+      // Disable keyboard
+      keyboardManager.setEnabled(false);
+
+      const mockEvent1 = {
+        code: 'Space',
+        key: ' ',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: document.body
+      } as any;
+
+      keyboardManager['handleKeydown'](mockEvent1);
+      expect(toggleHandler).not.toHaveBeenCalled();
+
+      // Re-enable keyboard
+      keyboardManager.setEnabled(true);
+
+      const mockEvent2 = {
+        code: 'Space',
+        key: ' ',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: document.body
+      } as any;
+
+      keyboardManager['handleKeydown'](mockEvent2);
+      expect(toggleHandler).toHaveBeenCalledTimes(1);
+    });
+
+    it('KBM-042: global playback keys work even in input fields', () => {
+      const toggleHandler = vi.fn();
+      const goToStart = vi.fn();
+      const goToEnd = vi.fn();
+
+      keyboardManager.register({ code: 'Space' }, toggleHandler, 'Toggle playback');
+      keyboardManager.register({ code: 'Home' }, goToStart, 'Go to start');
+      keyboardManager.register({ code: 'End' }, goToEnd, 'Go to end');
+
+      const mockInput = document.createElement('input');
+      mockInput.type = 'text';
+
+      // Space should work in input (it's a global key)
+      const spaceEvent = {
+        code: 'Space',
+        key: ' ',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: mockInput
+      } as any;
+
+      // Home should work in input (it's a global key)
+      const homeEvent = {
+        code: 'Home',
+        key: 'Home',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: mockInput
+      } as any;
+
+      // End should work in input (it's a global key)
+      const endEvent = {
+        code: 'End',
+        key: 'End',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: mockInput
+      } as any;
+
+      keyboardManager['handleKeydown'](spaceEvent);
+      keyboardManager['handleKeydown'](homeEvent);
+      keyboardManager['handleKeydown'](endEvent);
+
+      expect(toggleHandler).toHaveBeenCalledTimes(1);
+      expect(goToStart).toHaveBeenCalledTimes(1);
+      expect(goToEnd).toHaveBeenCalledTimes(1);
+    });
+
+    it('KBM-043: ArrowUp toggles play direction', () => {
+      const toggleDirection = vi.fn();
+      keyboardManager.register({ code: 'ArrowUp' }, toggleDirection, 'Toggle direction');
+
+      const mockEvent = {
+        code: 'ArrowUp',
+        key: 'ArrowUp',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: document.body
+      } as any;
+
+      keyboardManager['handleKeydown'](mockEvent);
+
+      expect(toggleDirection).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('error handling', () => {
+    it('KBM-044: comboToId throws error for undefined code', () => {
+      const invalidCombo = { code: undefined } as any;
+
+      expect(() => {
+        keyboardManager['comboToId'](invalidCombo);
+      }).toThrow('KeyCombination must have a code property');
+    });
+
+    it('KBM-045: comboToId throws error for empty code', () => {
+      const invalidCombo = { code: '' } as any;
+
+      expect(() => {
+        keyboardManager['comboToId'](invalidCombo);
+      }).toThrow('KeyCombination must have a code property');
+    });
+  });
 });

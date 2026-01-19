@@ -1060,7 +1060,8 @@ describe('Session', () => {
     it('loadFile handles image and video', async () => {
       vi.stubGlobal('URL', { createObjectURL: vi.fn(() => 'blob:123'), revokeObjectURL: vi.fn() });
       const imgLoadSpy = vi.spyOn(session, 'loadImage').mockResolvedValue();
-      const vidLoadSpy = vi.spyOn(session, 'loadVideo').mockResolvedValue();
+      // loadFile now uses loadVideoFile for mediabunny support
+      const vidLoadSpy = vi.spyOn(session, 'loadVideoFile').mockResolvedValue();
 
       await session.loadFile(new File([], 'test.png', { type: 'image/png' }));
       expect(imgLoadSpy).toHaveBeenCalled();
@@ -1805,6 +1806,209 @@ describe('Session', () => {
         (session as any).advanceFrame(1);
         expect(session.playDirection).toBe(-1);
         expect(session.currentFrame).toBe(14);
+    });
+  });
+
+  describe('loadVideoSourcesFromGraph', () => {
+    // Helper to create mock canvas
+    const createMockCanvas = () => ({
+      width: 0,
+      height: 0,
+      getContext: vi.fn(() => ({
+        drawImage: vi.fn(),
+        getImageData: vi.fn(() => ({ data: new Uint8ClampedArray(4), width: 1, height: 1 })),
+        putImageData: vi.fn(),
+        clearRect: vi.fn(),
+      })),
+    });
+
+    // Helper to mock document.createElement for both video and canvas
+    const setupElementMocks = (mockVideo: ReturnType<typeof createMockVideo>) => {
+      const originalCreateElement = document.createElement.bind(document);
+      vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
+        if (tagName === 'video') {
+          return mockVideo as any;
+        }
+        if (tagName === 'canvas') {
+          return createMockCanvas() as any;
+        }
+        return originalCreateElement(tagName);
+      });
+    };
+
+    it('loads video source with File object and calls loadFile', async () => {
+      const mockFile = new File(['video content'], 'test.mp4', { type: 'video/mp4' });
+
+      // Setup mocks before creating VideoSourceNode
+      const mockVideo = createMockVideo(1920, 1080);
+      Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
+      setupElementMocks(mockVideo);
+
+      // Mock URL.createObjectURL
+      vi.stubGlobal('URL', {
+        createObjectURL: vi.fn(() => 'blob:loaded'),
+        revokeObjectURL: vi.fn()
+      });
+
+      // Create a mock VideoSourceNode
+      const { VideoSourceNode } = await import('../../nodes/sources/VideoSourceNode');
+      const videoNode = new VideoSourceNode('Test Video');
+      videoNode.properties.setValue('file', mockFile);
+      videoNode.properties.setValue('url', 'blob:test');
+
+      // Mock loadFile to avoid actual video loading
+      const loadFileSpy = vi.spyOn(videoNode, 'loadFile').mockResolvedValue();
+      vi.spyOn(videoNode, 'getMetadata').mockReturnValue({
+        name: 'test.mp4',
+        width: 1920,
+        height: 1080,
+        duration: 100,
+        fps: 24,
+      });
+      vi.spyOn(videoNode, 'isUsingMediabunny').mockReturnValue(true);
+      vi.spyOn(videoNode, 'preloadFrames').mockResolvedValue();
+
+      // Trigger oncanplay immediately
+      setTimeout(() => {
+        (mockVideo as any).oncanplay?.();
+      }, 0);
+
+      const { Graph } = await import('../graph/Graph');
+      const mockResult = {
+        graph: new Graph(),
+        rootNode: null,
+        nodes: new Map([['video1', videoNode]]),
+        sessionInfo: { name: 'Test Session' },
+      };
+
+      await (session as any).loadVideoSourcesFromGraph(mockResult);
+
+      // Verify loadFile was called with the File object
+      expect(loadFileSpy).toHaveBeenCalledWith(mockFile, session.fps);
+
+      // Verify source was added (use any cast to access protected property)
+      const sources = (session as any).sources;
+      expect(sources.length).toBe(1);
+      expect(sources[0]?.type).toBe('video');
+      expect(sources[0]?.videoSourceNode).toBe(videoNode);
+    });
+
+    it('loads video source from URL when no File available', async () => {
+      // Setup mocks before creating VideoSourceNode
+      const mockVideo = createMockVideo(1920, 1080);
+      Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
+      setupElementMocks(mockVideo);
+
+      // Create a mock VideoSourceNode
+      const { VideoSourceNode } = await import('../../nodes/sources/VideoSourceNode');
+      const videoNode = new VideoSourceNode('Test Video');
+      videoNode.properties.setValue('url', 'https://example.com/video.mp4');
+      // No file property set
+
+      // Mock load to avoid actual video loading
+      const loadSpy = vi.spyOn(videoNode, 'load').mockResolvedValue();
+      vi.spyOn(videoNode, 'getMetadata').mockReturnValue({
+        name: 'video.mp4',
+        width: 1920,
+        height: 1080,
+        duration: 100,
+        fps: 24,
+      });
+      vi.spyOn(videoNode, 'isUsingMediabunny').mockReturnValue(false);
+
+      // Trigger oncanplay immediately
+      setTimeout(() => {
+        (mockVideo as any).oncanplay?.();
+      }, 0);
+
+      const { Graph } = await import('../graph/Graph');
+      const mockResult = {
+        graph: new Graph(),
+        rootNode: null,
+        nodes: new Map([['video1', videoNode]]),
+        sessionInfo: { name: 'Test Session' },
+      };
+
+      await (session as any).loadVideoSourcesFromGraph(mockResult);
+
+      // Verify load was called with URL (not loadFile)
+      expect(loadSpy).toHaveBeenCalledWith('https://example.com/video.mp4', 'Test Video', session.fps);
+
+      // Verify source was added without mediabunny
+      const sources = (session as any).sources;
+      expect(sources.length).toBe(1);
+      expect(sources[0]?.type).toBe('video');
+    });
+
+    it('skips non-VideoSourceNode nodes', async () => {
+      const { Graph } = await import('../graph/Graph');
+      const { FileSourceNode } = await import('../../nodes/sources/FileSourceNode');
+
+      const imageNode = new FileSourceNode('Test Image');
+
+      const mockResult = {
+        graph: new Graph(),
+        rootNode: null,
+        nodes: new Map([['image1', imageNode]]),
+        sessionInfo: { name: 'Test Session' },
+      };
+
+      await (session as any).loadVideoSourcesFromGraph(mockResult);
+
+      // No sources should be added for non-video nodes
+      const sources = (session as any).sources;
+      expect(sources.length).toBe(0);
+    });
+
+    it('emits sourceLoaded and durationChanged events', async () => {
+      const mockFile = new File(['video content'], 'test.mp4', { type: 'video/mp4' });
+
+      // Setup mocks before creating VideoSourceNode
+      const mockVideo = createMockVideo(1920, 1080);
+      Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
+      setupElementMocks(mockVideo);
+
+      vi.stubGlobal('URL', {
+        createObjectURL: vi.fn(() => 'blob:loaded'),
+        revokeObjectURL: vi.fn()
+      });
+
+      const { VideoSourceNode } = await import('../../nodes/sources/VideoSourceNode');
+      const videoNode = new VideoSourceNode('Test Video');
+      videoNode.properties.setValue('file', mockFile);
+      videoNode.properties.setValue('url', 'blob:test');
+
+      vi.spyOn(videoNode, 'loadFile').mockResolvedValue();
+      vi.spyOn(videoNode, 'getMetadata').mockReturnValue({
+        name: 'test.mp4',
+        width: 1920,
+        height: 1080,
+        duration: 100,
+        fps: 24,
+      });
+      vi.spyOn(videoNode, 'isUsingMediabunny').mockReturnValue(false);
+
+      setTimeout(() => {
+        (mockVideo as any).oncanplay?.();
+      }, 0);
+
+      const sourceLoadedSpy = vi.fn();
+      const durationChangedSpy = vi.fn();
+      session.on('sourceLoaded', sourceLoadedSpy);
+      session.on('durationChanged', durationChangedSpy);
+
+      const { Graph } = await import('../graph/Graph');
+      const mockResult = {
+        graph: new Graph(),
+        rootNode: null,
+        nodes: new Map([['video1', videoNode]]),
+        sessionInfo: { name: 'Test Session' },
+      };
+
+      await (session as any).loadVideoSourcesFromGraph(mockResult);
+
+      expect(sourceLoadedSpy).toHaveBeenCalled();
+      expect(durationChangedSpy).toHaveBeenCalledWith(100);
     });
   });
 });

@@ -14,6 +14,7 @@ declare global {
       getColorState: () => ColorState;
       getTransformState: () => TransformState;
       getPaintState: () => PaintState;
+      isUsingMediabunny: () => boolean;
     };
   }
 }
@@ -216,6 +217,11 @@ export function exposeForTesting(app: App): void {
         canUndo: undoStack.length > 0,
         canRedo: redoStack.length > 0,
       };
+    },
+
+    isUsingMediabunny: (): boolean => {
+      const session = appAny.session;
+      return session?.isUsingMediabunny?.() ?? false;
     },
   };
 }

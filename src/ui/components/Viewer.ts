@@ -74,6 +74,13 @@ export class Viewer {
   // Animation frame for smooth rendering
   private pendingRender = false;
 
+  // Pending video frame fetch tracking
+  private pendingVideoFrameFetch: Promise<void> | null = null;
+  private pendingVideoFrameNumber: number = 0; // Which frame is being fetched
+
+  // Track if we've ever displayed a mediabunny frame (for fallback logic)
+  private hasDisplayedMediabunnyFrame = false;
+
   // Color adjustments
   private colorAdjustments: ColorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
 
@@ -372,7 +379,12 @@ export class Viewer {
     });
 
     // Session events
-    this.session.on('sourceLoaded', () => this.scheduleRender());
+    this.session.on('sourceLoaded', () => {
+      this.hasDisplayedMediabunnyFrame = false;
+      this.pendingVideoFrameFetch = null;
+      this.pendingVideoFrameNumber = 0;
+      this.scheduleRender();
+    });
     this.session.on('frameChanged', () => this.scheduleRender());
 
     // Paint events
@@ -824,8 +836,8 @@ export class Viewer {
     const containerWidth = containerRect.width || 640;
     const containerHeight = containerRect.height || 360;
 
-    // For sequences, get the current frame image
-    let element: HTMLImageElement | HTMLVideoElement | undefined;
+    // For sequences and videos with mediabunny, get the current frame
+    let element: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | undefined;
     if (source?.type === 'sequence') {
       const frameImage = this.session.getSequenceFrameSync();
       if (frameImage) {
@@ -838,7 +850,55 @@ export class Viewer {
         // Use first frame as fallback if available
         element = source.element;
       }
+    } else if (source?.type === 'video' && this.session.isUsingMediabunny()) {
+      // Try to use mediabunny cached frame canvas for accurate playback
+      const currentFrame = this.session.currentFrame;
+      const frameCanvas = this.session.getVideoFrameCanvas(currentFrame);
+      if (frameCanvas) {
+        element = frameCanvas;
+        this.hasDisplayedMediabunnyFrame = true;
+        this.pendingVideoFrameFetch = null;
+        this.pendingVideoFrameNumber = 0;
+      } else {
+        // Frame not cached - fetch it asynchronously
+        // Start a new fetch if:
+        // 1. No fetch is pending, OR
+        // 2. The pending fetch is for a different frame (user navigated)
+        if (!this.pendingVideoFrameFetch || this.pendingVideoFrameNumber !== currentFrame) {
+          // Cancel tracking of old fetch (it will complete but we'll ignore its refresh)
+          this.pendingVideoFrameNumber = currentFrame;
+          const frameToFetch = currentFrame;
+
+          this.pendingVideoFrameFetch = this.session.fetchCurrentVideoFrame(frameToFetch)
+            .then(() => {
+              // Only refresh if this fetch is still relevant (user hasn't navigated away)
+              if (this.pendingVideoFrameNumber === frameToFetch) {
+                this.pendingVideoFrameFetch = null;
+                this.pendingVideoFrameNumber = 0;
+                this.refresh();
+              }
+            })
+            .catch(() => {
+              if (this.pendingVideoFrameNumber === frameToFetch) {
+                this.pendingVideoFrameFetch = null;
+                this.pendingVideoFrameNumber = 0;
+              }
+            });
+        }
+
+        // Only use HTMLVideoElement fallback on first render (before any mediabunny frame shown)
+        // After that, keep previous frame to ensure frame-accurate stepping
+        if (!this.hasDisplayedMediabunnyFrame) {
+          element = source.element;
+        } else {
+          // Keep canvas as-is until correct frame loads
+          this.updateCanvasPosition();
+          this.updateWipeLine();
+          return;
+        }
+      }
     } else {
+      // Fallback: use HTMLVideoElement directly (no mediabunny)
       element = source?.element;
     }
 
@@ -899,14 +959,20 @@ export class Viewer {
       if (compositedData) {
         this.imageCtx.putImageData(compositedData, 0, 0);
       }
-    } else if (element instanceof HTMLImageElement || element instanceof HTMLVideoElement) {
-      // Single source rendering
+    } else if (
+      element instanceof HTMLImageElement ||
+      element instanceof HTMLVideoElement ||
+      element instanceof HTMLCanvasElement ||
+      (typeof OffscreenCanvas !== 'undefined' && element instanceof OffscreenCanvas)
+    ) {
+      // Single source rendering (supports images, videos, and canvas elements from mediabunny)
       // Handle wipe rendering
-      if (this.wipeState.mode !== 'off') {
-        this.renderWithWipe(element, displayWidth, displayHeight);
+      if (this.wipeState.mode !== 'off' && !(element instanceof HTMLCanvasElement) && !(typeof OffscreenCanvas !== 'undefined' && element instanceof OffscreenCanvas)) {
+        // Wipe only works with HTMLImageElement/HTMLVideoElement
+        this.renderWithWipe(element as HTMLImageElement | HTMLVideoElement, displayWidth, displayHeight);
       } else {
         // Normal rendering with transforms
-        this.drawWithTransform(this.imageCtx, element, displayWidth, displayHeight);
+        this.drawWithTransform(this.imageCtx, element as CanvasImageSource, displayWidth, displayHeight);
       }
     }
 
@@ -955,7 +1021,7 @@ export class Viewer {
    */
   private drawWithTransform(
     ctx: CanvasRenderingContext2D,
-    element: HTMLImageElement | HTMLVideoElement,
+    element: CanvasImageSource,
     displayWidth: number,
     displayHeight: number
   ): void {
@@ -990,9 +1056,16 @@ export class Viewer {
     if (rotation === 90 || rotation === 270) {
       // When rotated 90/270, the source needs to fill the rotated space
       // We need to scale to fit the rotated dimensions
-      const sourceAspect = element instanceof HTMLVideoElement
-        ? element.videoWidth / element.videoHeight
-        : element.naturalWidth / element.naturalHeight;
+      let sourceAspect: number;
+      if (element instanceof HTMLVideoElement) {
+        sourceAspect = element.videoWidth / element.videoHeight;
+      } else if (element instanceof HTMLImageElement) {
+        sourceAspect = element.naturalWidth / element.naturalHeight;
+      } else if (element instanceof HTMLCanvasElement || (typeof OffscreenCanvas !== 'undefined' && element instanceof OffscreenCanvas)) {
+        sourceAspect = element.width / element.height;
+      } else {
+        sourceAspect = displayWidth / displayHeight; // Fallback
+      }
       const targetAspect = displayHeight / displayWidth; // Swapped for rotation
 
       if (sourceAspect > targetAspect) {

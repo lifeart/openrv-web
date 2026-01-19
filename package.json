@@ -16,8 +16,9 @@
     "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
+    "gl-matrix": "^3.4.3",
     "gto-js": "link:../gto-js",
-    "gl-matrix": "^3.4.3"
+    "mediabunny": "^1.28.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.40.0",

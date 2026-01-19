@@ -8,7 +8,7 @@ import { DEFAULT_KEY_BINDINGS } from './KeyBindings';
 
 describe('CustomKeyBindingsManager', () => {
   let manager: CustomKeyBindingsManager;
-  let onBindingsChanged: vi.MockedFunction<() => void>;
+  let onBindingsChanged: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     // Clear localStorage before each test
@@ -63,7 +63,7 @@ describe('CustomKeyBindingsManager', () => {
 
       manager.removeCustomBinding('playback.toggle');
       expect(manager.hasCustomBinding('playback.toggle')).toBe(false);
-      const defaultBinding = DEFAULT_KEY_BINDINGS['playback.toggle'];
+      const defaultBinding = DEFAULT_KEY_BINDINGS['playback.toggle']!;
       const { description: _, ...expectedCombo } = defaultBinding;
       expect(manager.getEffectiveCombo('playback.toggle')).toEqual(expectedCombo);
     });

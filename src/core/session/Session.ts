@@ -10,6 +10,7 @@ import {
   releaseDistantFrames,
   disposeSequence,
 } from '../../utils/SequenceLoader';
+import { VideoSourceNode } from '../../nodes/sources/VideoSourceNode';
 import {
   Annotation,
   PenStroke,
@@ -93,6 +94,8 @@ export interface MediaSource {
   // Sequence-specific data
   sequenceInfo?: SequenceInfo;
   sequenceFrames?: SequenceFrame[];
+  // Video source node for mediabunny frame extraction
+  videoSourceNode?: VideoSourceNode;
 }
 
 export class Session extends EventEmitter<SessionEvents> {
@@ -296,9 +299,20 @@ export class Session extends EventEmitter<SessionEvents> {
       this.lastFrameTime = performance.now();
       this.frameAccumulator = 0;
 
-      // Start video playback if current source is video (only for forward playback)
       const source = this.currentSource;
-      if (source?.type === 'video' && source.element instanceof HTMLVideoElement) {
+
+      // Check if we should use mediabunny for smooth playback
+      if (source?.type === 'video' && source.videoSourceNode?.isUsingMediabunny()) {
+        // Use frame-based playback with mediabunny for both forward and reverse
+        source.videoSourceNode.setPlaybackDirection(this._playDirection);
+        source.videoSourceNode.startPlaybackPreload(this._currentFrame, this._playDirection);
+
+        // Pause video element - we'll use mediabunny for frames
+        if (source.element instanceof HTMLVideoElement) {
+          source.element.pause();
+        }
+      } else if (source?.type === 'video' && source.element instanceof HTMLVideoElement) {
+        // Fallback to native video playback (only for forward)
         if (this._playDirection === 1) {
           source.element.play();
         } else {
@@ -336,17 +350,27 @@ export class Session extends EventEmitter<SessionEvents> {
   togglePlayDirection(): void {
     this._playDirection *= -1;
 
-    // Handle video playback mode switching while playing
     const source = this.currentSource;
-    if (this._isPlaying && source?.type === 'video' && source.element instanceof HTMLVideoElement) {
-      if (this._playDirection === 1) {
-        // Switching to forward: start native video playback
-        source.element.play();
-      } else {
-        // Switching to reverse: pause video, will use frame-based seeking
-        source.element.pause();
+
+    // Handle video playback mode switching while playing
+    if (this._isPlaying && source?.type === 'video') {
+      // If using mediabunny, update direction and restart preloading
+      if (source.videoSourceNode?.isUsingMediabunny()) {
+        source.videoSourceNode.setPlaybackDirection(this._playDirection);
+        source.videoSourceNode.startPlaybackPreload(this._currentFrame, this._playDirection);
         this.lastFrameTime = performance.now();
         this.frameAccumulator = 0;
+      } else if (source.element instanceof HTMLVideoElement) {
+        // Fallback behavior
+        if (this._playDirection === 1) {
+          // Switching to forward: start native video playback
+          source.element.play();
+        } else {
+          // Switching to reverse: pause video, will use frame-based seeking
+          source.element.pause();
+          this.lastFrameTime = performance.now();
+          this.frameAccumulator = 0;
+        }
       }
     }
 
@@ -436,8 +460,49 @@ export class Session extends EventEmitter<SessionEvents> {
 
     const source = this.currentSource;
 
-    // For video with forward playback, sync frame from video time
-    if (source?.type === 'video' && source.element instanceof HTMLVideoElement && this._playDirection === 1) {
+    // Check if using mediabunny for smooth frame-accurate playback
+    if (source?.type === 'video' && source.videoSourceNode?.isUsingMediabunny()) {
+      // Use frame-based timing for both forward and reverse
+      const now = performance.now();
+      const delta = now - this.lastFrameTime;
+      this.lastFrameTime = now;
+
+      const frameDuration = 1000 / this._fps;
+      this.frameAccumulator += delta;
+
+      // Only advance if next frame is cached (frame-gated playback)
+      // This ensures we always display the correct frame from mediabunny
+      while (this.frameAccumulator >= frameDuration) {
+        // Compute actual next frame accounting for loop boundaries
+        const nextFrame = this.computeNextFrame(this._playDirection);
+
+        // Check if next frame is cached and ready
+        if (source.videoSourceNode.hasFrameCached(nextFrame)) {
+          this.frameAccumulator -= frameDuration;
+          this.advanceFrame(this._playDirection);
+        } else {
+          // Frame not ready - trigger fetch and wait
+          // Cap accumulator to prevent huge jumps when frame becomes available
+          this.frameAccumulator = Math.min(this.frameAccumulator, frameDuration * 2);
+
+          // Trigger preload for the needed frame (centered on next frame)
+          source.videoSourceNode.preloadForPlayback(nextFrame, this._playDirection).catch(err => {
+            console.warn('Frame preload error:', err);
+          });
+          break;
+        }
+      }
+
+      // Sync HTMLVideoElement for audio (but not for frame display)
+      if (source.element instanceof HTMLVideoElement) {
+        const targetTime = (this._currentFrame - 1) / this._fps;
+        // Only sync if significantly out of sync (for audio purposes)
+        if (Math.abs(source.element.currentTime - targetTime) > 0.5) {
+          source.element.currentTime = targetTime;
+        }
+      }
+    } else if (source?.type === 'video' && source.element instanceof HTMLVideoElement && this._playDirection === 1) {
+      // Fallback: For video with forward playback, sync frame from video time
       const video = source.element;
       const currentTime = video.currentTime;
       const frame = Math.floor(currentTime * this._fps) + 1;
@@ -457,7 +522,7 @@ export class Session extends EventEmitter<SessionEvents> {
         }
       }
     } else {
-      // For images or video with reverse playback, use frame-based timing
+      // For images or video with reverse playback (no mediabunny), use frame-based timing
       const now = performance.now();
       const delta = now - this.lastFrameTime;
       this.lastFrameTime = now;
@@ -470,12 +535,42 @@ export class Session extends EventEmitter<SessionEvents> {
         this.advanceFrame(this._playDirection);
       }
 
-      // For video reverse playback, seek to the current frame
+      // For video reverse playback without mediabunny, seek to the current frame
       if (source?.type === 'video' && source.element instanceof HTMLVideoElement) {
         const targetTime = (this._currentFrame - 1) / this._fps;
         source.element.currentTime = targetTime;
       }
     }
+  }
+
+  /**
+   * Compute the next frame without side effects (for cache checking)
+   * Returns the frame number that would be displayed after advancing
+   */
+  private computeNextFrame(direction: number): number {
+    let nextFrame = this._currentFrame + direction;
+
+    if (nextFrame > this._outPoint) {
+      switch (this._loopMode) {
+        case 'once':
+          return this._outPoint;
+        case 'loop':
+          return this._inPoint;
+        case 'pingpong':
+          return this._outPoint - 1;
+      }
+    } else if (nextFrame < this._inPoint) {
+      switch (this._loopMode) {
+        case 'once':
+          return this._inPoint;
+        case 'loop':
+          return this._outPoint;
+        case 'pingpong':
+          return this._inPoint + 1;
+      }
+    }
+
+    return nextFrame;
   }
 
   private advanceFrame(direction: number): void {
@@ -518,10 +613,21 @@ export class Session extends EventEmitter<SessionEvents> {
 
   private syncVideoToFrame(): void {
     const source = this.currentSource;
-    if (source?.type === 'video' && source.element instanceof HTMLVideoElement) {
-      const targetTime = (this._currentFrame - 1) / this._fps;
-      if (Math.abs(source.element.currentTime - targetTime) > 0.1) {
-        source.element.currentTime = targetTime;
+    if (source?.type === 'video') {
+      // If using mediabunny, preload frames around current position for scrubbing
+      if (source.videoSourceNode?.isUsingMediabunny()) {
+        // preloadFrames fetches current frame and surrounding frames
+        source.videoSourceNode.preloadFrames(this._currentFrame, 5).catch(err => {
+          console.warn('Frame preload error:', err);
+        });
+      }
+
+      // Sync HTMLVideoElement for audio purposes
+      if (source.element instanceof HTMLVideoElement) {
+        const targetTime = (this._currentFrame - 1) / this._fps;
+        if (Math.abs(source.element.currentTime - targetTime) > 0.1) {
+          source.element.currentTime = targetTime;
+        }
       }
     }
   }
@@ -593,6 +699,9 @@ export class Session extends EventEmitter<SessionEvents> {
       }
 
       this.emit('graphLoaded', result);
+
+      // Load video sources from graph nodes that have file data
+      await this.loadVideoSourcesFromGraph(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.warn('Failed to load node graph from GTO:', message);
@@ -600,6 +709,135 @@ export class Session extends EventEmitter<SessionEvents> {
     }
 
     this.emit('sessionLoaded', undefined);
+  }
+
+  /**
+   * Load video sources from the graph nodes that have file data
+   * This enables mediabunny frame-accurate extraction for videos loaded from GTO
+   */
+  private async loadVideoSourcesFromGraph(result: GTOParseResult): Promise<void> {
+    for (const [, node] of result.nodes) {
+      if (node instanceof VideoSourceNode) {
+        // Check if this node has a file property (set by GTOGraphLoader when matching files)
+        const file = node.properties.getValue('file') as File | undefined;
+        const url = node.properties.getValue('url') as string | undefined;
+
+        if (file) {
+          console.log(`Loading video source "${node.name}" from file: ${file.name}`);
+
+          // Load the video using the file - this initializes mediabunny
+          await node.loadFile(file, this._fps);
+
+          const metadata = node.getMetadata();
+          const duration = metadata.duration;
+
+          // Also create HTMLVideoElement for audio playback
+          const blobUrl = URL.createObjectURL(file);
+          const video = document.createElement('video');
+          video.crossOrigin = 'anonymous';
+          video.preload = 'auto';
+          video.muted = this._muted;
+          video.volume = this._muted ? 0 : this._volume;
+          video.loop = false;
+          video.playsInline = true;
+
+          await new Promise<void>((resolve, reject) => {
+            video.oncanplay = () => {
+              video.oncanplay = null;
+              resolve();
+            };
+            video.onerror = () => reject(new Error('Failed to load video element'));
+            video.src = blobUrl;
+            video.load();
+          });
+
+          const source: MediaSource = {
+            type: 'video',
+            name: node.name,
+            url: blobUrl,
+            width: metadata.width,
+            height: metadata.height,
+            duration,
+            fps: this._fps,
+            element: video,
+            videoSourceNode: node,
+          };
+
+          // Pre-fetch initial frames for immediate display
+          if (node.isUsingMediabunny()) {
+            node.preloadFrames(1, 10).catch(err => {
+              console.warn('Initial frame preload error:', err);
+            });
+          }
+
+          this.addSource(source);
+
+          // Update session duration to match the first video source
+          if (this._outPoint === 0 || this._outPoint < duration) {
+            this._inPoint = 1;
+            this._outPoint = duration;
+          }
+
+          // Detect actual FPS and frame count from video
+          if (node.isUsingMediabunny()) {
+            this.detectVideoFpsAndDuration(source, node);
+          }
+
+          this.emit('sourceLoaded', source);
+          this.emit('durationChanged', duration);
+        } else if (url) {
+          // Fallback: load from URL only (no mediabunny - File object not available)
+          console.log(`Loading video source "${node.name}" from URL (no mediabunny): ${url}`);
+
+          await node.load(url, node.name, this._fps);
+
+          const metadata = node.getMetadata();
+          const duration = metadata.duration;
+
+          // Create HTMLVideoElement
+          const video = document.createElement('video');
+          video.crossOrigin = 'anonymous';
+          video.preload = 'auto';
+          video.muted = this._muted;
+          video.volume = this._muted ? 0 : this._volume;
+          video.loop = false;
+          video.playsInline = true;
+
+          await new Promise<void>((resolve, reject) => {
+            video.oncanplay = () => {
+              video.oncanplay = null;
+              resolve();
+            };
+            video.onerror = () => reject(new Error('Failed to load video element'));
+            video.src = url;
+            video.load();
+          });
+
+          const source: MediaSource = {
+            type: 'video',
+            name: node.name,
+            url,
+            width: metadata.width,
+            height: metadata.height,
+            duration,
+            fps: this._fps,
+            element: video,
+            videoSourceNode: node,
+          };
+
+          this.addSource(source);
+
+          // Update session duration
+          if (this._outPoint === 0 || this._outPoint < duration) {
+            this._inPoint = 1;
+            this._outPoint = duration;
+          }
+
+          this.emit('sourceLoaded', source);
+          this.emit('durationChanged', duration);
+        }
+      }
+    }
   }
 
   private parseSession(dto: GTODTO): void {
@@ -1510,17 +1748,22 @@ export class Session extends EventEmitter<SessionEvents> {
   // File loading
   async loadFile(file: File): Promise<void> {
     this._gtoData = null;
-    const url = URL.createObjectURL(file);
     const type = this.getMediaType(file);
 
     try {
       if (type === 'video') {
-        await this.loadVideo(file.name, url);
+        // Use loadVideoFile for mediabunny support (frame-accurate extraction)
+        await this.loadVideoFile(file);
       } else if (type === 'image') {
-        await this.loadImage(file.name, url);
+        const url = URL.createObjectURL(file);
+        try {
+          await this.loadImage(file.name, url);
+        } catch (err) {
+          URL.revokeObjectURL(url);
+          throw err;
+        }
       }
     } catch (err) {
-      URL.revokeObjectURL(url);
       throw err;
     }
   }
@@ -1619,6 +1862,124 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   /**
+   * Load a video file with mediabunny support for smooth frame-accurate playback.
+   * This method provides better performance for scrubbing and reverse playback.
+   */
+  async loadVideoFile(file: File): Promise<void> {
+    this._gtoData = null;
+
+    // Create VideoSourceNode for frame-accurate extraction
+    const videoSourceNode = new VideoSourceNode(file.name);
+    await videoSourceNode.loadFile(file, this._fps);
+
+    const metadata = videoSourceNode.getMetadata();
+    const duration = metadata.duration;
+
+    // Also create HTMLVideoElement for audio playback
+    const url = URL.createObjectURL(file);
+    const video = document.createElement('video');
+    video.crossOrigin = 'anonymous';
+    video.preload = 'auto';
+    video.muted = this._muted;
+    video.volume = this._muted ? 0 : this._volume;
+    video.loop = false;
+    video.playsInline = true;
+
+    await new Promise<void>((resolve, reject) => {
+      video.oncanplay = () => {
+        video.oncanplay = null;
+        resolve();
+      };
+      video.onerror = () => reject(new Error('Failed to load video element'));
+      video.src = url;
+      video.load();
+    });
+
+    const source: MediaSource = {
+      type: 'video',
+      name: file.name,
+      url,
+      width: metadata.width,
+      height: metadata.height,
+      duration,
+      fps: this._fps,
+      element: video,
+      videoSourceNode, // Include VideoSourceNode for mediabunny extraction
+    };
+
+    // Pre-fetch initial frames for immediate display
+    if (videoSourceNode.isUsingMediabunny()) {
+      videoSourceNode.preloadFrames(1, 10).catch(err => {
+        console.warn('Initial frame preload error:', err);
+      });
+    }
+
+    this.addSource(source);
+    this._inPoint = 1;
+    this._outPoint = duration;
+    this._currentFrame = 1;
+
+    // Pre-load initial frames for immediate playback
+    if (videoSourceNode.isUsingMediabunny()) {
+      videoSourceNode.preloadFrames(1, 10).catch(err => {
+        console.warn('Initial frame preload error:', err);
+      });
+
+      // Detect actual FPS and frame count from video (async, updates when ready)
+      // The current session fps (from .rv file or default) is used until detection completes
+      this.detectVideoFpsAndDuration(source, videoSourceNode);
+    }
+
+    this.emit('sourceLoaded', source);
+    this.emit('durationChanged', duration);
+  }
+
+  /**
+   * Detect actual FPS and frame count from video using mediabunny
+   * This runs asynchronously after video load to update session with accurate values
+   */
+  private async detectVideoFpsAndDuration(source: MediaSource, videoSourceNode: VideoSourceNode): Promise<void> {
+    try {
+      // Get detected FPS from actual video frames (this builds the frame index)
+      const [detectedFps, actualFrameCount] = await Promise.all([
+        videoSourceNode.getDetectedFps(),
+        videoSourceNode.getActualFrameCount(),
+      ]);
+
+      // Update source metadata with actual values
+      if (detectedFps !== null) {
+        source.fps = detectedFps;
+        console.log(`Video FPS detected: ${detectedFps}`);
+      }
+
+      if (actualFrameCount > 0) {
+        source.duration = actualFrameCount;
+        console.log(`Video frame count: ${actualFrameCount}`);
+      }
+
+      // Only update session if this source is still the current one
+      const isCurrentSource = this.currentSource === source;
+
+      if (isCurrentSource) {
+        // Update session FPS if detected
+        if (detectedFps !== null && detectedFps !== this._fps) {
+          this._fps = detectedFps;
+          this.emit('fpsChanged', this._fps);
+        }
+
+        // Update duration and out point if frame count changed
+        if (actualFrameCount > 0 && actualFrameCount !== this._outPoint) {
+          this._outPoint = actualFrameCount;
+          this.emit('durationChanged', actualFrameCount);
+          this.emit('inOutChanged', { inPoint: this._inPoint, outPoint: this._outPoint });
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to detect video FPS/duration:', err);
+    }
+  }
+
+  /**
    * Load an image sequence from multiple files
    */
   async loadSequence(files: File[], fps?: number): Promise<void> {
@@ -1696,11 +2057,92 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   /**
+   * Get video frame canvas from mediabunny (for direct rendering)
+   * Returns null if mediabunny is not available or frame is not cached
+   */
+  getVideoFrameCanvas(frameIndex?: number): HTMLCanvasElement | OffscreenCanvas | null {
+    const source = this.currentSource;
+    if (source?.type !== 'video' || !source.videoSourceNode?.isUsingMediabunny()) {
+      return null;
+    }
+
+    const frame = frameIndex ?? this._currentFrame;
+    return source.videoSourceNode.getCachedFrameCanvas(frame);
+  }
+
+  /**
+   * Check if video frame is cached and ready for immediate display
+   */
+  hasVideoFrameCached(frameIndex?: number): boolean {
+    const source = this.currentSource;
+    if (source?.type !== 'video' || !source.videoSourceNode?.isUsingMediabunny()) {
+      return false;
+    }
+
+    const frame = frameIndex ?? this._currentFrame;
+    return source.videoSourceNode.hasFrameCached(frame);
+  }
+
+  /**
+   * Check if current source is using mediabunny for frame extraction
+   */
+  isUsingMediabunny(): boolean {
+    const source = this.currentSource;
+    return source?.type === 'video' && source.videoSourceNode?.isUsingMediabunny() === true;
+  }
+
+  /**
+   * Preload video frames around the current position
+   * Call this when scrubbing or seeking to prepare frames
+   */
+  preloadVideoFrames(centerFrame?: number, windowSize: number = 10): void {
+    const source = this.currentSource;
+    if (source?.type !== 'video' || !source.videoSourceNode?.isUsingMediabunny()) {
+      return;
+    }
+
+    const frame = centerFrame ?? this._currentFrame;
+    source.videoSourceNode.preloadFrames(frame, windowSize).catch(err => {
+      console.warn('Video frame preload error:', err);
+    });
+  }
+
+  /**
+   * Fetch the current video frame using mediabunny
+   * Returns a promise that resolves when the frame is cached and ready
+   */
+  async fetchCurrentVideoFrame(frameIndex?: number): Promise<void> {
+    const source = this.currentSource;
+    if (source?.type !== 'video' || !source.videoSourceNode?.isUsingMediabunny()) {
+      return;
+    }
+
+    const frame = frameIndex ?? this._currentFrame;
+
+    // Check if already cached
+    if (source.videoSourceNode.hasFrameCached(frame)) {
+      return;
+    }
+
+    // Fetch the frame
+    await source.videoSourceNode.getFrameAsync(frame);
+  }
+
+  /**
    * Cleanup sequence resources when switching sources or disposing
    */
   private disposeSequenceSource(source: MediaSource): void {
     if (source.type === 'sequence' && source.sequenceFrames) {
       disposeSequence(source.sequenceFrames);
+    }
+  }
+
+  /**
+   * Cleanup video source resources
+   */
+  private disposeVideoSource(source: MediaSource): void {
+    if (source.type === 'video' && source.videoSourceNode) {
+      source.videoSourceNode.dispose();
     }
   }
 
@@ -1941,9 +2383,10 @@ export class Session extends EventEmitter<SessionEvents> {
    * Dispose all session resources
    */
   dispose(): void {
-    // Cleanup all sequence sources
+    // Cleanup all sources
     for (const source of this.sources) {
       this.disposeSequenceSource(source);
+      this.disposeVideoSource(source);
     }
     this.sources = [];
   }
