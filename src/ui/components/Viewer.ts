@@ -21,6 +21,10 @@ import { getIconSvg } from './shared/Icons';
 import { ChannelMode, applyChannelIsolation } from './ChannelSelect';
 import { StereoState, DEFAULT_STEREO_STATE, isDefaultStereoState, applyStereoMode } from '../../stereo/StereoRenderer';
 import { WebGLSharpenProcessor } from '../../filters/WebGLSharpen';
+import { SafeAreasOverlay } from './SafeAreasOverlay';
+import { PixelProbe } from './PixelProbe';
+import { FalseColor } from './FalseColor';
+import { TimecodeOverlay } from './TimecodeOverlay';
 
 interface PointerState {
   pointerId: number;
@@ -115,6 +119,18 @@ export class Viewer {
   private cropOverlay: HTMLCanvasElement | null = null;
   private cropCtx: CanvasRenderingContext2D | null = null;
 
+  // Safe areas overlay
+  private safeAreasOverlay: SafeAreasOverlay;
+
+  // Timecode overlay
+  private timecodeOverlay: TimecodeOverlay;
+
+  // Pixel probe
+  private pixelProbe: PixelProbe;
+
+  // False color display
+  private falseColor: FalseColor;
+
   // CDL state
   private cdlValues: CDLValues = JSON.parse(JSON.stringify(DEFAULT_CDL));
 
@@ -194,6 +210,25 @@ export class Viewer {
     `;
     this.canvasContainer.appendChild(this.cropOverlay);
     this.cropCtx = this.cropOverlay.getContext('2d');
+
+    // Create safe areas overlay
+    this.safeAreasOverlay = new SafeAreasOverlay();
+    this.canvasContainer.appendChild(this.safeAreasOverlay.getElement());
+
+    // Create timecode overlay
+    this.timecodeOverlay = new TimecodeOverlay(session);
+    this.canvasContainer.appendChild(this.timecodeOverlay.getElement());
+
+    // Create pixel probe
+    this.pixelProbe = new PixelProbe();
+
+    // Update cursor when pixel probe state changes
+    this.pixelProbe.on('stateChanged', (state) => {
+      this.updateCursorForProbe(state.enabled);
+    });
+
+    // Create false color display
+    this.falseColor = new FalseColor();
 
     const imageCtx = this.imageCanvas.getContext('2d', { alpha: false });
     if (!imageCtx) throw new Error('Failed to get image 2D context');
@@ -332,6 +367,16 @@ export class Viewer {
       this.cropOverlay.height = height;
     }
 
+    // Update safe areas overlay dimensions
+    this.safeAreasOverlay.setViewerDimensions(
+      width,
+      height,
+      0,
+      0,
+      width,
+      height
+    );
+
     this.updateCanvasPosition();
   }
 
@@ -405,9 +450,56 @@ export class Viewer {
     // Paint events
     this.paintEngine.on('annotationsChanged', () => this.renderPaint());
     this.paintEngine.on('toolChanged', (tool) => this.updateCursor(tool));
+
+    // Pixel probe events - track mouse movement for color sampling
+    this.container.addEventListener('mousemove', this.onMouseMoveForProbe);
+    this.container.addEventListener('click', this.onClickForProbe);
   }
 
+  private onMouseMoveForProbe = (e: MouseEvent): void => {
+    if (!this.pixelProbe.isEnabled()) return;
+
+    // Get canvas-relative coordinates
+    const canvasRect = this.imageCanvas.getBoundingClientRect();
+    const x = e.clientX - canvasRect.left;
+    const y = e.clientY - canvasRect.top;
+
+    // Check if within canvas bounds
+    if (x < 0 || y < 0 || x > canvasRect.width || y > canvasRect.height) {
+      return;
+    }
+
+    // Scale to canvas pixel coordinates
+    const scaleX = this.displayWidth / canvasRect.width;
+    const scaleY = this.displayHeight / canvasRect.height;
+    const canvasX = x * scaleX;
+    const canvasY = y * scaleY;
+
+    // Get image data for pixel value
+    const imageData = this.getImageData();
+
+    // Update pixel probe
+    this.pixelProbe.updateFromCanvas(canvasX, canvasY, imageData, this.displayWidth, this.displayHeight);
+    this.pixelProbe.setOverlayPosition(e.clientX, e.clientY);
+  };
+
+  private onClickForProbe = (e: MouseEvent): void => {
+    if (!this.pixelProbe.isEnabled()) return;
+
+    // Only toggle lock if clicking on the canvas area (not on UI elements)
+    const target = e.target as HTMLElement;
+    if (this.isViewerContentElement(target)) {
+      this.pixelProbe.toggleLock();
+    }
+  };
+
   private updateCursor(tool: PaintTool): void {
+    // Pixel probe takes priority over other tools
+    if (this.pixelProbe.isEnabled()) {
+      this.container.style.cursor = 'crosshair';
+      return;
+    }
+
     switch (tool) {
       case 'pen':
         this.container.style.cursor = 'crosshair';
@@ -420,6 +512,18 @@ export class Viewer {
         break;
       default:
         this.container.style.cursor = 'grab';
+    }
+  }
+
+  /**
+   * Update cursor when pixel probe state changes
+   */
+  private updateCursorForProbe(enabled: boolean): void {
+    if (enabled) {
+      this.container.style.cursor = 'crosshair';
+    } else {
+      // Restore cursor based on current paint tool
+      this.updateCursor(this.paintEngine.tool);
     }
   }
 
@@ -1451,14 +1555,22 @@ export class Viewer {
     const hasCurves = !isDefaultCurves(this.curvesData);
     const hasSharpen = this.filterSettings.sharpen > 0;
     const hasChannel = this.channelMode !== 'rgb';
+    const hasHighlightsShadows = this.colorAdjustments.highlights !== 0 || this.colorAdjustments.shadows !== 0 ||
+                                 this.colorAdjustments.whites !== 0 || this.colorAdjustments.blacks !== 0;
+    const hasFalseColor = this.falseColor.isEnabled();
 
     // Early return if no pixel effects are active
-    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel) {
+    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasFalseColor) {
       return;
     }
 
     // Single getImageData call
     const imageData = ctx.getImageData(0, 0, width, height);
+
+    // Apply highlight/shadow recovery (before other adjustments for best results)
+    if (hasHighlightsShadows) {
+      this.applyHighlightsShadows(imageData);
+    }
 
     // Apply CDL color correction
     if (hasCDL) {
@@ -1475,13 +1587,120 @@ export class Viewer {
       this.applySharpenToImageData(imageData, width, height);
     }
 
-    // Apply channel isolation
+    // Apply channel isolation (before false color so we can see individual channel exposure)
     if (hasChannel) {
       applyChannelIsolation(imageData, this.channelMode);
     }
 
+    // Apply false color display (LAST - replaces all color information for exposure analysis)
+    if (hasFalseColor) {
+      this.falseColor.apply(imageData);
+    }
+
     // Single putImageData call
     ctx.putImageData(imageData, 0, 0);
+  }
+
+  /**
+   * Apply highlight/shadow recovery and whites/blacks clipping to ImageData.
+   * Uses luminance-based masking with soft knee compression.
+   *
+   * Highlights: Negative values compress/recover highlights, positive values boost
+   * Shadows: Negative values crush shadows, positive values lift/recover
+   * Whites: Positive values lower the white clipping point, negative extends it
+   * Blacks: Positive values raise the black clipping point, negative extends it
+   */
+  private applyHighlightsShadows(imageData: ImageData): void {
+    const data = imageData.data;
+    const highlights = this.colorAdjustments.highlights / 100; // -1 to +1
+    const shadows = this.colorAdjustments.shadows / 100; // -1 to +1
+    const whites = this.colorAdjustments.whites / 100; // -1 to +1
+    const blacks = this.colorAdjustments.blacks / 100; // -1 to +1
+
+    // Pre-compute LUT for performance (256 entries for each channel)
+    // This avoids per-pixel math for the soft knee functions
+    const highlightLUT = new Float32Array(256);
+    const shadowLUT = new Float32Array(256);
+
+    for (let i = 0; i < 256; i++) {
+      const normalized = i / 255;
+
+      // Highlight mask: smooth transition starting around 0.5, full effect at 1.0
+      // Using smoothstep-like curve for natural falloff
+      const highlightMask = this.smoothstep(0.5, 1.0, normalized);
+
+      // Shadow mask: smooth transition starting around 0.5, full effect at 0.0
+      const shadowMask = 1.0 - this.smoothstep(0.0, 0.5, normalized);
+
+      // Store the adjustment multipliers
+      highlightLUT[i] = highlightMask;
+      shadowLUT[i] = shadowMask;
+    }
+
+    // Calculate white and black clipping points
+    // Whites: at 0, white point is 255; at +100, it clips at ~200; at -100, it extends beyond
+    // Blacks: at 0, black point is 0; at +100, it lifts to ~55; at -100, it extends beyond
+    const whitePoint = 255 - whites * 55; // Range: 200-310 (255 at default)
+    const blackPoint = blacks * 55; // Range: -55 to 55 (0 at default)
+
+    const len = data.length;
+    for (let i = 0; i < len; i += 4) {
+      let r = data[i]!;
+      let g = data[i + 1]!;
+      let b = data[i + 2]!;
+
+      // Apply whites/blacks clipping first (affects the entire range)
+      if (whites !== 0 || blacks !== 0) {
+        // Remap values from [blackPoint, whitePoint] to [0, 255]
+        const range = whitePoint - blackPoint;
+        if (range > 0) {
+          r = Math.max(0, Math.min(255, ((r - blackPoint) / range) * 255));
+          g = Math.max(0, Math.min(255, ((g - blackPoint) / range) * 255));
+          b = Math.max(0, Math.min(255, ((b - blackPoint) / range) * 255));
+        }
+      }
+
+      // Calculate luminance (Rec. 709) after whites/blacks adjustment
+      const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      const lumIndex = Math.min(255, Math.max(0, Math.round(lum)));
+
+      // Get masks from LUTs
+      const highlightMask = highlightLUT[lumIndex]!;
+      const shadowMask = shadowLUT[lumIndex]!;
+
+      // Apply highlights/shadows adjustments
+      if (highlights !== 0) {
+        // For highlights recovery (negative): compress towards midtones
+        // For highlights boost (positive): push brighter
+        const highlightAdjust = highlights * highlightMask * 128;
+        r = Math.max(0, Math.min(255, r - highlightAdjust));
+        g = Math.max(0, Math.min(255, g - highlightAdjust));
+        b = Math.max(0, Math.min(255, b - highlightAdjust));
+      }
+
+      if (shadows !== 0) {
+        // For shadow recovery (positive): lift shadows
+        // For shadow crush (negative): push darker
+        const shadowAdjust = shadows * shadowMask * 128;
+        r = Math.max(0, Math.min(255, r + shadowAdjust));
+        g = Math.max(0, Math.min(255, g + shadowAdjust));
+        b = Math.max(0, Math.min(255, b + shadowAdjust));
+      }
+
+      data[i] = r;
+      data[i + 1] = g;
+      data[i + 2] = b;
+      // Alpha unchanged
+    }
+  }
+
+  /**
+   * Smoothstep function for soft transitions
+   * Returns 0 when x <= edge0, 1 when x >= edge1, smooth interpolation between
+   */
+  private smoothstep(edge0: number, edge1: number, x: number): number {
+    const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+    return t * t * (3 - 2 * t);
   }
 
   /**
@@ -2077,5 +2296,33 @@ export class Viewer {
    */
   getContainer(): HTMLElement {
     return this.container;
+  }
+
+  /**
+   * Get the safe areas overlay instance
+   */
+  getSafeAreasOverlay(): SafeAreasOverlay {
+    return this.safeAreasOverlay;
+  }
+
+  /**
+   * Get the timecode overlay instance
+   */
+  getTimecodeOverlay(): TimecodeOverlay {
+    return this.timecodeOverlay;
+  }
+
+  /**
+   * Get the pixel probe instance
+   */
+  getPixelProbe(): PixelProbe {
+    return this.pixelProbe;
+  }
+
+  /**
+   * Get the false color display instance
+   */
+  getFalseColor(): FalseColor {
+    return this.falseColor;
   }
 }

@@ -14,6 +14,10 @@ declare global {
       getColorState: () => ColorState;
       getTransformState: () => TransformState;
       getPaintState: () => PaintState;
+      getPixelProbeState: () => PixelProbeState;
+      getFalseColorState: () => FalseColorState;
+      getSafeAreasState: () => SafeAreasState;
+      getTimecodeOverlayState: () => TimecodeOverlayState;
       isUsingMediabunny: () => boolean;
     };
   }
@@ -70,8 +74,42 @@ export interface ColorState {
   temperature: number;
   tint: number;
   brightness: number;
+  highlights: number;
+  shadows: number;
+  whites: number;
+  blacks: number;
   hasLUT: boolean;
   lutIntensity: number;
+}
+
+export interface PixelProbeState {
+  enabled: boolean;
+  locked: boolean;
+  x: number;
+  y: number;
+  rgb: { r: number; g: number; b: number };
+  ire: number;
+}
+
+export interface FalseColorState {
+  enabled: boolean;
+  preset: 'standard' | 'arri' | 'red' | 'custom';
+}
+
+export interface SafeAreasState {
+  enabled: boolean;
+  titleSafe: boolean;
+  actionSafe: boolean;
+  centerCrosshair: boolean;
+  ruleOfThirds: boolean;
+  aspectRatio: string | null;
+}
+
+export interface TimecodeOverlayState {
+  enabled: boolean;
+  position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  fontSize: 'small' | 'medium' | 'large';
+  showFrameCounter: boolean;
 }
 
 export interface TransformState {
@@ -166,8 +204,62 @@ export function exposeForTesting(app: App): void {
         temperature: adjustments.temperature ?? 0,
         tint: adjustments.tint ?? 0,
         brightness: adjustments.brightness ?? 0,
+        highlights: adjustments.highlights ?? 0,
+        shadows: adjustments.shadows ?? 0,
+        whites: adjustments.whites ?? 0,
+        blacks: adjustments.blacks ?? 0,
         hasLUT: !!colorControls?.currentLUT,
         lutIntensity: colorControls?.lutIntensity ?? 1,
+      };
+    },
+
+    getPixelProbeState: (): PixelProbeState => {
+      const viewer = appAny.viewer;
+      const pixelProbe = viewer?.getPixelProbe?.();
+      const state = pixelProbe?.getState?.() ?? {};
+      return {
+        enabled: state.enabled ?? false,
+        locked: state.locked ?? false,
+        x: state.x ?? 0,
+        y: state.y ?? 0,
+        rgb: state.rgb ?? { r: 0, g: 0, b: 0 },
+        ire: state.ire ?? 0,
+      };
+    },
+
+    getFalseColorState: (): FalseColorState => {
+      const viewer = appAny.viewer;
+      const falseColor = viewer?.getFalseColor?.();
+      const state = falseColor?.getState?.() ?? {};
+      return {
+        enabled: state.enabled ?? false,
+        preset: state.preset ?? 'standard',
+      };
+    },
+
+    getSafeAreasState: (): SafeAreasState => {
+      const viewer = appAny.viewer;
+      const safeAreas = viewer?.getSafeAreasOverlay?.();
+      const state = safeAreas?.getState?.() ?? {};
+      return {
+        enabled: state.enabled ?? false,
+        titleSafe: state.titleSafe ?? true,
+        actionSafe: state.actionSafe ?? true,
+        centerCrosshair: state.centerCrosshair ?? false,
+        ruleOfThirds: state.ruleOfThirds ?? false,
+        aspectRatio: state.aspectRatio ?? null,
+      };
+    },
+
+    getTimecodeOverlayState: (): TimecodeOverlayState => {
+      const viewer = appAny.viewer;
+      const timecodeOverlay = viewer?.getTimecodeOverlay?.();
+      const state = timecodeOverlay?.getState?.() ?? {};
+      return {
+        enabled: state.enabled ?? false,
+        position: state.position ?? 'top-left',
+        fontSize: state.fontSize ?? 'medium',
+        showFrameCounter: state.showFrameCounter ?? true,
       };
     },
 

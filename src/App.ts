@@ -22,6 +22,8 @@ import { Vectorscope } from './ui/components/Vectorscope';
 import { ZoomControl } from './ui/components/ZoomControl';
 import { ScopesControl } from './ui/components/ScopesControl';
 import { CompareControl } from './ui/components/CompareControl';
+import { SafeAreasControl } from './ui/components/SafeAreasControl';
+import { FalseColorControl } from './ui/components/FalseColorControl';
 import { exportSequence } from './utils/SequenceExporter';
 import { showAlert, showModal, closeModal } from './ui/components/shared/Modal';
 import { SessionSerializer } from './core/session/SessionSerializer';
@@ -58,6 +60,8 @@ export class App {
   private zoomControl: ZoomControl;
   private scopesControl: ScopesControl;
   private compareControl: CompareControl;
+  private safeAreasControl: SafeAreasControl;
+  private falseColorControl: FalseColorControl;
   private animationId: number | null = null;
   private boundHandleResize: () => void;
   private keyboardManager: KeyboardManager;
@@ -166,6 +170,10 @@ export class App {
     this.compareControl.on('abToggled', () => {
       this.session.toggleAB();
     });
+
+    // Safe Areas control
+    this.safeAreasControl = new SafeAreasControl(this.viewer.getSafeAreasOverlay());
+    this.falseColorControl = new FalseColorControl(this.viewer.getFalseColor());
 
     // Connect volume control (from HeaderBar) to session (bidirectional)
     const volumeControl = this.headerBar.getVolumeControl();
@@ -437,6 +445,43 @@ export class App {
     // Stack control (opens panel)
     viewContent.appendChild(this.stackControl.render());
 
+    viewContent.appendChild(ContextToolbar.createDivider());
+
+    // Safe Areas / Guides control
+    viewContent.appendChild(this.safeAreasControl.render());
+
+    viewContent.appendChild(ContextToolbar.createDivider());
+
+    // Pixel Probe / Color Sampler toggle
+    const pixelProbeButton = ContextToolbar.createButton('Probe', () => {
+      this.viewer.getPixelProbe().toggle();
+    }, { title: 'Toggle pixel color probe (Shift+I)', icon: 'eyedropper' });
+    pixelProbeButton.dataset.testid = 'pixel-probe-toggle';
+    viewContent.appendChild(pixelProbeButton);
+
+    // Update pixel probe button state
+    this.viewer.getPixelProbe().on('stateChanged', (state) => {
+      if (state.enabled) {
+        pixelProbeButton.style.background = 'rgba(74, 158, 255, 0.15)';
+        pixelProbeButton.style.borderColor = '#4a9eff';
+        pixelProbeButton.style.color = '#4a9eff';
+      } else {
+        pixelProbeButton.style.background = 'transparent';
+        pixelProbeButton.style.borderColor = 'transparent';
+        pixelProbeButton.style.color = '#999';
+      }
+    });
+
+    viewContent.appendChild(ContextToolbar.createDivider());
+
+    // False Color control (with preset selector and legend)
+    viewContent.appendChild(this.falseColorControl.render());
+
+    // Trigger re-render when false color state changes
+    this.viewer.getFalseColor().on('stateChanged', () => {
+      this.viewer.refresh();
+    });
+
     // Sync scope visibility with ScopesControl
     this.histogram.on('visibilityChanged', (visible) => {
       this.scopesControl.setScopeVisible('histogram', visible);
@@ -690,6 +735,10 @@ export class App {
       'channel.luminance': () => this.channelSelect.handleKeyboard('L', true),
       'channel.none': () => this.channelSelect.handleKeyboard('N', true),
       'stereo.toggle': () => this.stereoControl.handleKeyboard('3', true),
+      'view.toggleGuides': () => this.safeAreasControl.getOverlay().toggle(),
+      'view.togglePixelProbe': () => this.viewer.getPixelProbe().toggle(),
+      'view.toggleFalseColor': () => this.viewer.getFalseColor().toggle(),
+      'view.toggleTimecodeOverlay': () => this.viewer.getTimecodeOverlay().toggle(),
       'panel.close': () => {
         if (this.colorControls) {
           this.colorControls.hide();

@@ -274,9 +274,40 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyS',
     description: 'Toggle stereo viewing mode'
   },
+
+  // Safe areas / guides
+  'view.toggleGuides': {
+    code: 'KeyG',
+    shift: true,
+    description: 'Toggle safe areas and guides overlay'
+  },
+
   'panel.close': {
     code: 'Escape',
     description: 'Close open panels'
+  },
+
+  // Pixel probe
+  'view.togglePixelProbe': {
+    code: 'KeyI',
+    shift: true,
+    description: 'Toggle pixel color probe'
+  },
+
+  // False color display
+  'view.toggleFalseColor': {
+    code: 'KeyF',
+    shift: true,
+    alt: true,
+    description: 'Toggle false color exposure display'
+  },
+
+  // Timecode overlay
+  'view.toggleTimecodeOverlay': {
+    code: 'KeyT',
+    shift: true,
+    alt: true,
+    description: 'Toggle timecode overlay on viewer'
   },
 };
 /**

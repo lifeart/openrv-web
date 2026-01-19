@@ -11,6 +11,10 @@ export interface ColorAdjustments {
   temperature: number;   // -100 to +100 (kelvin shift)
   tint: number;          // -100 to +100 (green/magenta)
   brightness: number;    // -1 to +1
+  highlights: number;    // -100 to +100 (recover/boost highlights)
+  shadows: number;       // -100 to +100 (crush/recover shadows)
+  whites: number;        // -100 to +100 (white point adjustment)
+  blacks: number;        // -100 to +100 (black point adjustment)
 }
 
 export const DEFAULT_COLOR_ADJUSTMENTS: ColorAdjustments = {
@@ -21,6 +25,10 @@ export const DEFAULT_COLOR_ADJUSTMENTS: ColorAdjustments = {
   temperature: 0,
   tint: 0,
   brightness: 0,
+  highlights: 0,
+  shadows: 0,
+  whites: 0,
+  blacks: 0,
 };
 
 export interface ColorControlsEvents extends EventMap {
@@ -138,6 +146,10 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
       { key: 'saturation', label: 'Saturation', min: 0, max: 2, step: 0.01, format: (v) => `${(v * 100).toFixed(0)}%` },
       { key: 'temperature', label: 'Temperature', min: -100, max: 100, step: 1, format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}` },
       { key: 'tint', label: 'Tint', min: -100, max: 100, step: 1, format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}` },
+      { key: 'highlights', label: 'Highlights', min: -100, max: 100, step: 1, format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}` },
+      { key: 'shadows', label: 'Shadows', min: -100, max: 100, step: 1, format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}` },
+      { key: 'whites', label: 'Whites', min: -100, max: 100, step: 1, format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}` },
+      { key: 'blacks', label: 'Blacks', min: -100, max: 100, step: 1, format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}` },
     ];
 
     // Header with reset button
@@ -520,6 +532,10 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
       saturation: (v) => `${(v * 100).toFixed(0)}%`,
       temperature: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
       tint: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
+      highlights: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
+      shadows: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
+      whites: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
+      blacks: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
     };
 
     for (const [key, label] of this.valueLabels) {

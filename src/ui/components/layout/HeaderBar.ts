@@ -1,7 +1,7 @@
 /**
  * HeaderBar - Top bar with file operations, playback controls, and utilities
  *
- * Layout: [File Ops] | [Playback Controls] | [Volume] [Help]
+ * Layout: [File Ops] | [Playback Controls] | [Timecode Display] | [Volume] [Help]
  * Height: 40px
  */
 
@@ -10,6 +10,7 @@ import { Session, LoopMode } from '../../../core/session/Session';
 import { filterImageFiles } from '../../../utils/SequenceLoader';
 import { VolumeControl } from '../VolumeControl';
 import { ExportControl } from '../ExportControl';
+import { TimecodeDisplay } from '../TimecodeDisplay';
 import { showAlert } from '../shared/Modal';
 import { getIconSvg, IconName } from '../shared/Icons';
 
@@ -26,6 +27,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private session: Session;
   private volumeControl: VolumeControl;
   private exportControl: ExportControl;
+  private timecodeDisplay: TimecodeDisplay;
 
   private playButton!: HTMLButtonElement;
   private loopButton!: HTMLButtonElement;
@@ -38,6 +40,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.session = session;
     this.volumeControl = new VolumeControl();
     this.exportControl = new ExportControl();
+    this.timecodeDisplay = new TimecodeDisplay(session);
 
     // Create container
     this.container = document.createElement('div');
@@ -119,6 +122,10 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     playbackGroup.appendChild(this.directionButton);
 
     this.container.appendChild(playbackGroup);
+    this.addDivider();
+
+    // === TIMECODE DISPLAY ===
+    this.container.appendChild(this.timecodeDisplay.render());
 
     // === SPACER ===
     const spacer = document.createElement('div');
@@ -413,5 +420,10 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   dispose(): void {
     this.volumeControl.dispose();
     this.exportControl.dispose();
+    this.timecodeDisplay.dispose();
+  }
+
+  getTimecodeDisplay(): TimecodeDisplay {
+    return this.timecodeDisplay;
   }
 }

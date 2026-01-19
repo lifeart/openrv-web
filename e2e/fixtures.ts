@@ -59,8 +59,35 @@ export interface ColorState {
   temperature: number;
   tint: number;
   brightness: number;
+  highlights: number;
+  shadows: number;
+  whites: number;
+  blacks: number;
   hasLUT: boolean;
   lutIntensity: number;
+}
+
+export interface PixelProbeState {
+  enabled: boolean;
+  locked: boolean;
+  x: number;
+  y: number;
+  rgb: { r: number; g: number; b: number };
+  ire: number;
+}
+
+export interface FalseColorState {
+  enabled: boolean;
+  preset: 'standard' | 'arri' | 'red' | 'custom';
+}
+
+export interface SafeAreasState {
+  enabled: boolean;
+  titleSafe: boolean;
+  actionSafe: boolean;
+  centerCrosshair: boolean;
+  ruleOfThirds: boolean;
+  aspectRatio: string | null;
 }
 
 export interface TransformState {
@@ -152,8 +179,56 @@ export async function getColorState(page: Page): Promise<ColorState> {
       temperature: 0,
       tint: 0,
       brightness: 0,
+      highlights: 0,
+      shadows: 0,
+      whites: 0,
+      blacks: 0,
       hasLUT: false,
       lutIntensity: 1,
+    };
+  });
+}
+
+/**
+ * Get pixel probe state from the app
+ */
+export async function getPixelProbeState(page: Page): Promise<PixelProbeState> {
+  return page.evaluate(() => {
+    return window.__OPENRV_TEST__?.getPixelProbeState() ?? {
+      enabled: false,
+      locked: false,
+      x: 0,
+      y: 0,
+      rgb: { r: 0, g: 0, b: 0 },
+      ire: 0,
+    };
+  });
+}
+
+/**
+ * Get false color state from the app
+ */
+export async function getFalseColorState(page: Page): Promise<FalseColorState> {
+  return page.evaluate(() => {
+    return window.__OPENRV_TEST__?.getFalseColorState() ?? {
+      enabled: false,
+      preset: 'standard',
+    };
+  });
+}
+
+/**
+ * Get safe areas overlay state from the app
+ */
+export async function getSafeAreasState(page: Page): Promise<SafeAreasState> {
+  return page.evaluate(() => {
+    return window.__OPENRV_TEST__?.getSafeAreasState() ?? {
+      enabled: false,
+      titleSafe: true,
+      actionSafe: true,
+      centerCrosshair: false,
+      ruleOfThirds: false,
+      aspectRatio: null,
     };
   });
 }
