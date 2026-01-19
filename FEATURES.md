@@ -1,0 +1,1811 @@
+# OpenRV Web - Feature Roadmap
+
+Professional feature proposals for video playback, color grading, and review workflows.
+
+---
+
+## Table of Contents
+
+1. [Color Grading](#1-color-grading)
+2. [Scopes & Analysis](#2-scopes--analysis)
+3. [Comparison Tools](#3-comparison-tools)
+4. [Timeline & Playback](#4-timeline--playback)
+5. [Annotation & Review](#5-annotation--review)
+6. [Transform & Correction](#6-transform--correction)
+7. [File Format Support](#7-file-format-support)
+8. [Performance & Technical](#8-performance--technical)
+9. [UI/UX Improvements](#9-uiux-improvements)
+
+---
+
+## 1. Color Grading
+
+### 1.1 Lift/Gamma/Gain Color Wheels
+
+**Priority:** HIGH
+**Complexity:** Medium
+**Reference:** DaVinci Resolve Primary Wheels, Baselight Base Grade
+
+#### Description
+Three-way color correction using intuitive circular wheels for shadows (Lift), midtones (Gamma), and highlights (Gain). Industry standard for primary color correction.
+
+#### Requirements
+- Three circular wheel controls with center point for color balance
+- Vertical slider on each wheel for luminance adjustment
+- Master wheel affecting all tones simultaneously
+- Numeric input fields for precise values
+- Reset button per wheel and global reset
+- Link/unlink wheels option for gang adjustments
+
+#### UI/UX Specifications
+- Wheel diameter: 120px minimum
+- Center point drag for color shift (x = red/cyan, y = green/magenta)
+- Visual indicator showing offset from center
+- Color preview ring around wheel showing current bias
+- Luminance slider: -1.0 to +1.0 range
+- Color range: circular coordinates mapped to -1.0 to +1.0 per channel
+
+#### Technical Notes
+- Formula: `output = (input * gain) + offset` applied per luminance zone
+- Luminance zones defined by smooth falloff curves (not hard boundaries)
+- Zone definitions:
+  - Lift: affects pixels where luma < 0.33 (soft falloff to 0.5)
+  - Gamma: affects pixels where 0.25 < luma < 0.75 (bell curve)
+  - Gain: affects pixels where luma > 0.67 (soft falloff from 0.5)
+
+#### Test Cases
+- [ ] WHEEL-001: Dragging wheel center shifts color balance
+- [ ] WHEEL-002: Luminance slider adjusts brightness in target zone
+- [ ] WHEEL-003: Reset returns wheel to neutral
+- [ ] WHEEL-004: Numeric input matches wheel position
+- [ ] WHEEL-005: Changes reflect in real-time on viewer
+- [ ] WHEEL-006: Scopes update when wheels adjusted
+- [ ] WHEEL-007: Undo/redo works for wheel changes
+- [ ] WHEEL-008: Wheel state saves/loads with session
+
+#### Corner Cases
+- Very dark images (lift has minimal effect)
+- Very bright images (gain causes clipping)
+- High contrast images (zone overlap visible)
+- Grayscale images (color shift still applies)
+
+---
+
+### 1.2 Highlight/Shadow Recovery
+
+**Priority:** HIGH
+**Complexity:** Low-Medium
+**Reference:** Lightroom Highlights/Shadows, DaVinci Resolve HDR Wheels
+
+#### Description
+Dedicated controls for recovering detail in blown highlights and crushed shadows without affecting midtones.
+
+#### Requirements
+- Highlights slider: -100 to +100 (negative = recover, positive = boost)
+- Shadows slider: -100 to +100 (negative = crush, positive = recover)
+- Whites slider: sets white point clipping level
+- Blacks slider: sets black point clipping level
+- Soft knee options for highlight/shadow rolloff
+
+#### UI/UX Specifications
+- Horizontal sliders with center detent at 0
+- Real-time histogram showing clipping zones
+- Visual highlight/shadow clipping warnings (zebras)
+- Slider width: 200px minimum
+- Numeric input with 0.1 precision
+
+#### Technical Notes
+- Highlight recovery: compress values above threshold using soft knee
+- Shadow recovery: expand values below threshold with toe curve
+- Use luminance-based masking to isolate zones
+- Preserve color ratios during recovery (maintain hue)
+- Formula approach:
+  ```
+  highlight_mask = smoothstep(0.7, 1.0, luma)
+  recovered = mix(original, compressed, highlight_mask * amount)
+  ```
+
+#### Test Cases
+- [ ] HL-001: Highlight slider recovers blown-out areas
+- [ ] HL-002: Shadow slider reveals shadow detail
+- [ ] HL-003: Whites slider clips white point
+- [ ] HL-004: Blacks slider clips black point
+- [ ] HL-005: Recovery preserves color hue
+- [ ] HL-006: Works correctly with HDR content
+- [ ] HL-007: Scopes reflect highlight/shadow changes
+
+#### Corner Cases
+- Already clipped source (no data to recover)
+- 8-bit vs 10-bit vs float source differences
+- Log-encoded footage (different luminance distribution)
+- HDR content with values > 1.0
+
+---
+
+### 1.3 Vibrance Control
+
+**Priority:** MEDIUM
+**Complexity:** Low
+**Reference:** Photoshop/Lightroom Vibrance
+
+#### Description
+Intelligent saturation that boosts less-saturated colors more than already-saturated ones, protecting skin tones.
+
+#### Requirements
+- Vibrance slider: -100 to +100
+- Skin tone protection option (on by default)
+- Affects less-saturated pixels more than saturated ones
+- Prevents clipping of already-saturated colors
+
+#### UI/UX Specifications
+- Single horizontal slider
+- Toggle for skin protection mode
+- Visual indicator when skin protection active
+
+#### Technical Notes
+- Calculate per-pixel saturation
+- Apply variable saturation boost inversely proportional to existing saturation
+- Skin tone detection: hue range ~20-50 degrees (orange-yellow), low saturation
+- Formula:
+  ```
+  sat_factor = 1.0 - (current_saturation * 0.5)
+  new_saturation = current_saturation + (vibrance * sat_factor)
+  ```
+
+#### Test Cases
+- [ ] VIB-001: Vibrance boosts low-saturation areas more
+- [ ] VIB-002: High-saturation areas less affected
+- [ ] VIB-003: Skin tones protected when enabled
+- [ ] VIB-004: Negative vibrance desaturates uniformly
+- [ ] VIB-005: Works with existing saturation control
+
+#### Corner Cases
+- Already fully saturated image
+- Monochrome/grayscale image
+- Skin tones at edge of detection range
+- Mixed lighting (warm/cool areas)
+
+---
+
+### 1.4 Clarity/Local Contrast
+
+**Priority:** MEDIUM
+**Complexity:** Medium
+**Reference:** Lightroom Clarity, DaVinci Resolve Midtone Detail
+
+#### Description
+Enhances local contrast in midtones without affecting global contrast, adding punch and definition.
+
+#### Requirements
+- Clarity slider: -100 to +100
+- Affects midtone frequencies primarily
+- Does not clip highlights or shadows
+- Radius control for effect size (optional advanced)
+
+#### UI/UX Specifications
+- Horizontal slider with center at 0
+- Optional advanced panel with radius control
+- Preview toggle to see before/after
+
+#### Technical Notes
+- Implementation: high-pass filter blended with midtone mask
+- Steps:
+  1. Apply Gaussian blur to create low-frequency layer
+  2. Subtract low-frequency from original = high-frequency
+  3. Create midtone mask from luminance
+  4. Add masked high-frequency back scaled by clarity amount
+- Radius affects Gaussian blur size (larger = more global effect)
+
+#### Test Cases
+- [ ] CLAR-001: Positive clarity enhances edge definition
+- [ ] CLAR-002: Negative clarity softens midtone detail
+- [ ] CLAR-003: Highlights and shadows preserved
+- [ ] CLAR-004: No halo artifacts at reasonable settings
+- [ ] CLAR-005: Works with other color corrections
+
+#### Corner Cases
+- High contrast edges (may produce halos)
+- Noise in shadows (clarity can amplify noise)
+- Large smooth gradients (banding risk)
+- Very soft/blurry source images
+
+---
+
+### 1.5 HSL Qualifier / Secondary Color Correction
+
+**Priority:** HIGH
+**Complexity:** High
+**Reference:** DaVinci Resolve Qualifier, Baselight Inside/Outside
+
+#### Description
+Select specific colors by Hue, Saturation, and Luminance ranges, then apply corrections only to selected regions.
+
+#### Requirements
+- HSL range sliders with soft falloff
+- Hue: 0-360 degrees with wrap-around support
+- Saturation: 0-100% range selection
+- Luminance: 0-100% range selection
+- Softness/falloff control for each parameter
+- Matte preview mode (show selection as grayscale mask)
+- Invert selection option
+- Apply any color correction to selected region only
+
+#### UI/UX Specifications
+- Color wheel for quick hue selection
+- Range sliders with min/max handles and softness control
+- Matte view toggle button
+- Visual preview of selected color in small swatch
+- Eyedropper tool to sample color from image
+
+#### Technical Notes
+- Convert RGB to HSL for qualification
+- Create soft matte from HSL distance
+- Handle hue wrap-around (red spans 350-10 degrees)
+- Falloff formula:
+  ```
+  distance = abs(pixel_hue - center_hue)
+  if distance > 180: distance = 360 - distance
+  matte = smoothstep(outer_range, inner_range, distance)
+  ```
+
+#### Test Cases
+- [ ] HSL-001: Hue selection isolates specific color
+- [ ] HSL-002: Saturation range filters by color intensity
+- [ ] HSL-003: Luminance range filters by brightness
+- [ ] HSL-004: Soft falloff creates smooth matte edges
+- [ ] HSL-005: Matte preview shows selection accurately
+- [ ] HSL-006: Invert selection works correctly
+- [ ] HSL-007: Corrections apply only to selected region
+- [ ] HSL-008: Hue wrap-around handles red correctly
+
+#### Corner Cases
+- Selecting red (hue wraps around 0/360)
+- Very narrow selection (noisy matte)
+- Selecting near-black or near-white (HSL conversion issues)
+- Multiple distinct color ranges needed
+
+---
+
+### 1.6 Color Space Conversion
+
+**Priority:** MEDIUM
+**Complexity:** Medium
+**Reference:** DaVinci Resolve Color Management, ACES
+
+#### Description
+Convert between color spaces and gamma curves for proper handling of different camera sources.
+
+#### Requirements
+- Input color space selection (sRGB, Rec.709, Rec.2020, DCI-P3, ACES)
+- Input gamma/transfer function (Linear, sRGB, Rec.709, Log variants)
+- Output color space selection
+- Output gamma selection
+- Working space option for internal processing
+
+#### UI/UX Specifications
+- Dropdown menus for input/output selection
+- Common presets (e.g., "ARRI LogC to Rec.709")
+- Visual gamut diagram showing conversion
+- Warning when gamut clipping may occur
+
+#### Technical Notes
+- Use 3x3 matrix for primaries conversion
+- 1D LUT or formula for transfer function
+- Common matrices available in ITU standards
+- ACES requires specific transforms (IDT/ODT)
+- Linear working space recommended for accurate compositing
+
+#### Test Cases
+- [ ] CS-001: sRGB to Rec.709 conversion accurate
+- [ ] CS-002: Log to linear conversion correct
+- [ ] CS-003: Wide gamut (P3) clips to Rec.709 properly
+- [ ] CS-004: Round-trip conversion preserves values
+- [ ] CS-005: Scopes display in output color space
+
+#### Corner Cases
+- Out-of-gamut colors (negative RGB values)
+- HDR content (values > 1.0)
+- Mixed sources with different color spaces
+- Log footage with incorrect input setting
+
+---
+
+### 1.7 Film Emulation / Print Film LUT
+
+**Priority:** LOW
+**Complexity:** Low
+**Reference:** FilmConvert, VSCO
+
+#### Description
+Built-in film stock emulation presets mimicking classic film stocks.
+
+#### Requirements
+- Preset library of film stocks (Kodak, Fuji, etc.)
+- Film grain overlay option
+- Print/projection simulation
+- Intensity control per preset
+
+#### UI/UX Specifications
+- Visual preset browser with thumbnails
+- Intensity slider (0-100%)
+- Grain on/off toggle
+- Favorite/recent presets section
+
+#### Technical Notes
+- Implement as 3D LUTs with grain texture overlay
+- Grain should be frame-varying (animated)
+- Include color shift, contrast curve, and saturation changes
+
+#### Test Cases
+- [ ] FILM-001: Preset applies characteristic look
+- [ ] FILM-002: Intensity scales effect properly
+- [ ] FILM-003: Grain animates over frames
+- [ ] FILM-004: Multiple presets can be compared
+
+#### Corner Cases
+- Grain on static images (no animation)
+- Very dark scenes (grain more visible)
+- Already graded footage (double-processing)
+
+---
+
+## 2. Scopes & Analysis
+
+### 2.1 Parade Scope (RGB Parade)
+
+**Priority:** HIGH
+**Complexity:** Medium
+**Reference:** DaVinci Resolve RGB Parade
+
+#### Description
+Side-by-side waveform display of Red, Green, and Blue channels for easy color balance analysis.
+
+#### Requirements
+- Three separate waveforms (R, G, B) arranged horizontally
+- Each channel in its respective color
+- Synchronized horizontal position across all three
+- 0-100 IRE scale with reference lines
+- Optional YCbCr mode (Y, Cb, Cr channels)
+
+#### UI/UX Specifications
+- Equal width for each channel (1/3 of scope width)
+- Subtle separator lines between channels
+- Channel labels (R, G, B) at top
+- Same vertical scale as standard waveform
+- Toggle between RGB and YCbCr modes
+
+#### Technical Notes
+- Similar to waveform but plot each channel separately
+- X position divided into three regions
+- Each pixel's x-position mapped to corresponding region
+- GPU acceleration essential for performance
+
+#### Test Cases
+- [ ] PARADE-001: RGB channels display separately
+- [ ] PARADE-002: Horizontal position corresponds to image
+- [ ] PARADE-003: Channel colors are correct
+- [ ] PARADE-004: Scale matches 0-100 IRE
+- [ ] PARADE-005: Updates in real-time during playback
+- [ ] PARADE-006: YCbCr mode shows correct channels
+
+#### Corner Cases
+- Monochrome image (all channels identical)
+- Extreme color cast (one channel clipped)
+- HDR content (values > 100%)
+
+---
+
+### 2.2 RGB Overlay Waveform
+
+**Priority:** MEDIUM
+**Complexity:** Low
+**Reference:** Standard RGB Waveform overlay
+
+#### Description
+Single waveform with all RGB channels overlaid, showing where colors align (white) and diverge.
+
+#### Requirements
+- Red, Green, Blue traces overlaid on same graph
+- White/gray where all channels align
+- Distinct colors where channels differ
+- Additive blending mode
+
+#### UI/UX Specifications
+- Already partially implemented - enhance with better blending
+- Option to toggle individual channels on/off
+- Brightness control for trace intensity
+
+#### Technical Notes
+- Use additive blending: R+G=Yellow, G+B=Cyan, R+B=Magenta, R+G+B=White
+- Adjustable trace intensity to prevent washout
+
+#### Test Cases
+- [ ] RGBW-001: Overlapping channels show combined color
+- [ ] RGBW-002: Individual channels distinguishable
+- [ ] RGBW-003: Toggle channels on/off works
+
+---
+
+### 2.3 False Color Display
+
+**Priority:** HIGH
+**Complexity:** Medium
+**Reference:** ARRI False Color, Camera false color modes
+
+#### Description
+Map luminance values to a rainbow color scale for quick exposure evaluation.
+
+#### Requirements
+- Map IRE levels to specific colors:
+  - 0-5 IRE: Purple (black crush warning)
+  - 5-20 IRE: Blue (shadows)
+  - 20-40 IRE: Cyan/Teal (lower midtones)
+  - 40-50 IRE: Green (18% gray target)
+  - 50-60 IRE: Light green (midtones)
+  - 60-70 IRE: Yellow (upper midtones)
+  - 70-85 IRE: Orange (highlights)
+  - 85-95 IRE: Pink (near clipping)
+  - 95-100+ IRE: Red (clipping warning)
+- Optional skin tone indicator overlay
+- Toggle on/off easily
+
+#### UI/UX Specifications
+- Apply as full-screen overlay on viewer
+- Legend showing color-to-IRE mapping
+- Keyboard shortcut for quick toggle
+- Option to show skin tone band (around 70 IRE)
+
+#### Technical Notes
+- Calculate luminance: Y = 0.2126R + 0.7152G + 0.0722B
+- Map Y to color lookup table
+- Apply as post-process (after all color corrections)
+- Can be implemented as 1D LUT application
+
+#### Test Cases
+- [ ] FC-001: Black areas show purple
+- [ ] FC-002: Midtones show green/yellow
+- [ ] FC-003: Highlights show orange/red
+- [ ] FC-004: Clipped areas clearly red
+- [ ] FC-005: Toggle enables/disables overlay
+- [ ] FC-006: Legend displays correctly
+
+#### Corner Cases
+- Log-encoded footage (different IRE mapping)
+- HDR content (values above 100 IRE)
+- Already color-graded footage
+
+---
+
+### 2.4 Zebra Stripes (Exposure Warning)
+
+**Priority:** MEDIUM
+**Complexity:** Low
+**Reference:** Camera zebra patterns
+
+#### Description
+Animated diagonal stripes overlaid on areas exceeding or below threshold IRE levels.
+
+#### Requirements
+- High zebra: areas above configurable threshold (default 95%)
+- Low zebra: areas below configurable threshold (default 5%)
+- Different stripe patterns for high/low
+- Adjustable threshold values
+- Animated stripes (diagonal movement)
+
+#### UI/UX Specifications
+- High zebras: right-leaning stripes, red tinted
+- Low zebras: left-leaning stripes, blue tinted
+- Threshold sliders in settings
+- Quick toggle button
+
+#### Technical Notes
+- Generate stripe pattern using fragment shader
+- Animate using time uniform
+- Mask by luminance threshold
+- Stripe formula: `(x + y + time) mod period < width`
+
+#### Test Cases
+- [ ] ZEB-001: High zebras appear on bright areas
+- [ ] ZEB-002: Low zebras appear on dark areas
+- [ ] ZEB-003: Threshold adjustment works
+- [ ] ZEB-004: Stripes animate smoothly
+- [ ] ZEB-005: Toggle enables/disables
+
+#### Corner Cases
+- Full-screen bright/dark areas
+- Rapidly changing exposure
+- Thin bright/dark lines
+
+---
+
+### 2.5 Pixel Probe / Color Sampler
+
+**Priority:** HIGH
+**Complexity:** Low
+**Reference:** Photoshop color sampler, DaVinci Resolve Picker
+
+#### Description
+Click anywhere on image to see RGB/HSL values at that pixel, with optional persistent sample points.
+
+#### Requirements
+- Click to sample single pixel
+- Display RGB values (0-255 and 0.0-1.0)
+- Display HSL values
+- Display luminance (IRE)
+- Optional: place up to 4 persistent sample points
+- Sample point values update in real-time during grading
+
+#### UI/UX Specifications
+- Crosshair cursor when probe active
+- Info panel showing sampled values
+- Persistent points shown as small numbered markers
+- Values update live as image changes
+
+#### Technical Notes
+- Read pixel from rendered canvas
+- Convert RGB to HSL for display
+- Calculate luminance using Rec.709 coefficients
+- Store persistent point coordinates (normalized 0-1)
+
+#### Test Cases
+- [ ] PROBE-001: Click shows pixel RGB values
+- [ ] PROBE-002: HSL values calculated correctly
+- [ ] PROBE-003: IRE value displayed
+- [ ] PROBE-004: Persistent points remain across frames
+- [ ] PROBE-005: Values update during color correction
+- [ ] PROBE-006: Probe works at all zoom levels
+
+#### Corner Cases
+- Clicking outside image bounds
+- Transparent pixels (alpha < 1)
+- Zoomed in/out view
+- During playback (moving target)
+
+---
+
+### 2.6 Histogram Clipping Indicators
+
+**Priority:** LOW
+**Complexity:** Low
+**Reference:** Lightroom histogram warnings
+
+#### Description
+Visual indicators on histogram showing percentage of pixels clipped in shadows and highlights.
+
+#### Requirements
+- Highlight clipping indicator (pixels at 255/1.0)
+- Shadow clipping indicator (pixels at 0)
+- Show percentage or pixel count
+- Optional colored overlay on image showing clipped areas
+
+#### UI/UX Specifications
+- Small triangular indicators at histogram ends
+- Click to toggle clipping overlay on viewer
+- Percentage display in corner of histogram
+
+#### Technical Notes
+- Count pixels at 0 and 255 during histogram calculation
+- Store as percentage of total pixels
+- Clipping overlay: red for highlights, blue for shadows
+
+#### Test Cases
+- [ ] CLIP-001: Highlight indicator shows clipped percentage
+- [ ] CLIP-002: Shadow indicator shows crushed percentage
+- [ ] CLIP-003: Click toggles overlay on viewer
+- [ ] CLIP-004: Overlay updates during grading
+
+---
+
+## 3. Comparison Tools
+
+### 3.1 Split Screen Compare
+
+**Priority:** MEDIUM
+**Complexity:** Medium
+**Reference:** DaVinci Resolve Split Screen
+
+#### Description
+Display multiple versions/grades side-by-side in a grid for comparison.
+
+#### Requirements
+- 2x1, 1x2, 2x2, 3x2 grid layouts
+- Each cell can show different grade version
+- Sync playback across all cells
+- Option to show same frame or sequential frames
+- Labels for each cell
+
+#### UI/UX Specifications
+- Layout selector dropdown
+- Drag-and-drop versions to cells
+- Click cell to make it "active" for editing
+- Sync/unsync playhead option
+- Version labels with customizable names
+
+#### Technical Notes
+- Render each version to separate viewport region
+- Share frame data, apply different color pipelines
+- Optional: render to single canvas with viewport scissoring
+
+#### Test Cases
+- [ ] SPLIT-001: 2x2 grid displays correctly
+- [ ] SPLIT-002: Each cell shows different grade
+- [ ] SPLIT-003: Playback syncs across cells
+- [ ] SPLIT-004: Clicking cell activates it
+- [ ] SPLIT-005: Labels display correctly
+
+#### Corner Cases
+- Different aspect ratios per version
+- Odd window sizes (cell sizing)
+- Very wide/tall images
+
+---
+
+### 3.2 Onion Skin / Ghost Frames
+
+**Priority:** MEDIUM
+**Complexity:** Medium
+**Reference:** Animation onion skinning
+
+#### Description
+Overlay previous/next frames with adjustable opacity for motion analysis and animation reference.
+
+#### Requirements
+- Show N frames before current (configurable, 1-5)
+- Show N frames after current (configurable, 1-5)
+- Adjustable opacity per ghost frame
+- Color tinting for before (red) and after (green) frames
+- Frame step interval (every frame, every 2nd, etc.)
+
+#### UI/UX Specifications
+- Enable/disable toggle
+- Slider for number of ghost frames
+- Opacity control
+- Color tint toggles
+- Frame step selector
+
+#### Technical Notes
+- Render additional frames to textures
+- Composite with decreasing opacity
+- Tint using multiply blend
+- Cache ghost frames for performance
+
+#### Test Cases
+- [ ] GHOST-001: Previous frames visible with opacity
+- [ ] GHOST-002: Next frames visible with opacity
+- [ ] GHOST-003: Color tinting distinguishes before/after
+- [ ] GHOST-004: Frame count adjustable
+- [ ] GHOST-005: Works during playback (performance)
+
+#### Corner Cases
+- First/last frames (fewer ghosts available)
+- Missing frames in sequence
+- High frame count (memory pressure)
+
+---
+
+### 3.3 Difference Matte
+
+**Priority:** LOW
+**Complexity:** Low
+**Reference:** After Effects Difference blend mode
+
+#### Description
+Show absolute difference between two versions, highlighting changes.
+
+#### Requirements
+- Select two versions to compare
+- Display pixel difference as grayscale
+- Option to amplify difference (gain)
+- Option to show difference as heatmap
+
+#### UI/UX Specifications
+- A/B source selector
+- Difference mode toggle
+- Gain slider (1x to 10x)
+- Heatmap toggle
+
+#### Technical Notes
+- `diff = abs(A - B)` per channel
+- Grayscale: average of RGB differences
+- Heatmap: map difference magnitude to color ramp
+- Gain: multiply difference before display
+
+#### Test Cases
+- [ ] DIFF-001: Identical images show black
+- [ ] DIFF-002: Different images show white where changed
+- [ ] DIFF-003: Gain amplifies small differences
+- [ ] DIFF-004: Heatmap colors differences
+
+#### Corner Cases
+- Very similar images (need gain to see difference)
+- Different resolutions (need alignment)
+- Alpha channel differences
+
+---
+
+## 4. Timeline & Playback
+
+### 4.1 Timecode Display
+
+**Priority:** HIGH
+**Complexity:** Low
+**Reference:** Standard timecode overlay
+
+#### Description
+Display current timecode (HH:MM:SS:FF) based on frame rate and optional start timecode.
+
+#### Requirements
+- Calculate timecode from frame number and FPS
+- Support drop-frame timecode (29.97, 59.94 fps)
+- Configurable start timecode
+- Display in timeline and overlay options
+- Support for various frame rates (23.976, 24, 25, 29.97, 30, 50, 59.94, 60)
+
+#### UI/UX Specifications
+- Timecode display in header bar
+- Optional overlay position (corner selection)
+- Font size options for overlay
+- Background opacity for readability
+
+#### Technical Notes
+- Non-drop-frame: `frame / fps = seconds`
+- Drop-frame (29.97): skip frame numbers 0,1 at each minute except every 10th minute
+- Start timecode offset added to calculated value
+
+#### Test Cases
+- [ ] TC-001: Timecode calculates correctly for 24fps
+- [ ] TC-002: Drop-frame timecode correct for 29.97fps
+- [ ] TC-003: Start timecode offset works
+- [ ] TC-004: Display updates during playback
+- [ ] TC-005: Overlay position configurable
+
+#### Corner Cases
+- Frame rates with decimals (23.976)
+- Very long sequences (hours of footage)
+- Negative start timecode
+
+---
+
+### 4.2 Timeline Thumbnails
+
+**Priority:** MEDIUM
+**Complexity:** Medium
+**Reference:** Premiere Pro timeline thumbnails
+
+#### Description
+Show frame thumbnails along timeline for visual navigation.
+
+#### Requirements
+- Generate thumbnails at regular intervals
+- Display in timeline track
+- Update on scroll/zoom
+- Configurable thumbnail density
+- Async generation (non-blocking)
+
+#### UI/UX Specifications
+- Thumbnails sized to fit timeline height
+- Smooth loading (fade in as generated)
+- Click thumbnail to jump to frame
+- Hover shows larger preview
+
+#### Technical Notes
+- Generate thumbnails in web worker
+- Cache generated thumbnails
+- Dynamic resolution based on timeline zoom
+- Use canvas thumbnailing for efficiency
+
+#### Test Cases
+- [ ] THUMB-001: Thumbnails generate for sequence
+- [ ] THUMB-002: Click thumbnail navigates to frame
+- [ ] THUMB-003: Thumbnails update on zoom
+- [ ] THUMB-004: Generation doesn't block playback
+- [ ] THUMB-005: Memory usage reasonable for long sequences
+
+#### Corner Cases
+- Very long sequences (thousands of frames)
+- Sequence with missing frames
+- Rapid timeline scrolling
+
+---
+
+### 4.3 Markers with Notes
+
+**Priority:** MEDIUM
+**Complexity:** Low
+**Reference:** DaVinci Resolve markers, RV annotations
+
+#### Description
+Enhanced markers with attached text notes and colors.
+
+#### Requirements
+- Add marker at current frame
+- Attach text note to marker
+- Color coding for marker types
+- Duration markers (span multiple frames)
+- Marker list panel for navigation
+- Import/export markers
+
+#### UI/UX Specifications
+- Click marker to edit note
+- Right-click for marker options
+- Color palette for marker types
+- List view showing all markers with notes
+- Double-click in list to navigate
+
+#### Technical Notes
+- Store: frame, color, note text, duration
+- Export as JSON or EDL comments
+- Import from common formats
+
+#### Test Cases
+- [ ] MARK-001: Create marker with note
+- [ ] MARK-002: Edit existing marker note
+- [ ] MARK-003: Change marker color
+- [ ] MARK-004: Duration marker spans frames
+- [ ] MARK-005: List view shows all markers
+- [ ] MARK-006: Export/import markers works
+
+#### Corner Cases
+- Very long notes (truncation display)
+- Many markers (performance)
+- Overlapping duration markers
+
+---
+
+### 4.4 Playback Speed Control
+
+**Priority:** MEDIUM
+**Complexity:** Low
+**Reference:** VLC speed control
+
+#### Description
+Variable playback speed from slow motion to fast forward.
+
+#### Requirements
+- Speed range: 0.1x to 4x (or higher)
+- Common presets: 0.25x, 0.5x, 1x, 2x, 4x
+- Audio pitch correction at different speeds (optional)
+- Frame blending for slow motion (optional)
+
+#### UI/UX Specifications
+- Speed dropdown or slider
+- Display current speed
+- Keyboard shortcuts: J (slower), K (pause), L (faster)
+- Double-tap L for faster, J for slower
+
+#### Technical Notes
+- Adjust frame interval: `interval = (1000/fps) / speed`
+- Audio playback rate modification
+- For slow motion below 0.5x, consider frame interpolation
+
+#### Test Cases
+- [ ] SPEED-001: 2x playback runs double speed
+- [ ] SPEED-002: 0.5x playback runs half speed
+- [ ] SPEED-003: Audio pitch maintained (if enabled)
+- [ ] SPEED-004: Speed persists during session
+- [ ] SPEED-005: JKL shortcuts work
+
+#### Corner Cases
+- Very slow speeds (frame timing precision)
+- Very fast speeds (frame skipping)
+- Audio sync at non-1x speeds
+
+---
+
+### 4.5 Frame Caching Visualization
+
+**Priority:** LOW
+**Complexity:** Low
+**Reference:** RV cache indicator
+
+#### Description
+Visual indicator showing which frames are cached in memory for smooth playback.
+
+#### Requirements
+- Timeline bar showing cached frame ranges
+- Color coding: cached (green), loading (yellow), uncached (gray)
+- Cache size display (MB/GB used)
+- Manual cache clear option
+
+#### UI/UX Specifications
+- Thin bar above or below timeline
+- Real-time update as frames cache
+- Cache status in info panel
+
+#### Technical Notes
+- Track frame cache state
+- Update visualization on cache changes
+- Respect memory limits
+
+#### Test Cases
+- [ ] CACHE-001: Cached frames show green
+- [ ] CACHE-002: Loading frames show yellow
+- [ ] CACHE-003: Cache size displays correctly
+- [ ] CACHE-004: Clear cache button works
+
+---
+
+## 5. Annotation & Review
+
+### 5.1 Shape Tools
+
+**Priority:** HIGH
+**Complexity:** Medium
+**Reference:** FrameIO annotations, SyncSketch
+
+#### Description
+Add geometric shapes (rectangles, circles, arrows, lines) for clear review feedback.
+
+#### Requirements
+- Rectangle tool (with optional rounded corners)
+- Ellipse/Circle tool
+- Line tool
+- Arrow tool (with arrowhead)
+- Polygon tool (click to add points)
+- Fill and stroke color options
+- Stroke width control
+
+#### UI/UX Specifications
+- Tool palette in annotation toolbar
+- Click-drag to create shape
+- Handles for resizing after creation
+- Color picker for fill/stroke
+- Fill opacity control
+
+#### Technical Notes
+- Store as vector data (coordinates, colors, style)
+- Render using Canvas2D paths
+- Support rotation handles
+- Export coordinates normalized (0-1)
+
+#### Test Cases
+- [ ] SHAPE-001: Rectangle draws correctly
+- [ ] SHAPE-002: Circle/ellipse draws correctly
+- [ ] SHAPE-003: Arrow shows arrowhead
+- [ ] SHAPE-004: Shapes can be resized
+- [ ] SHAPE-005: Colors apply to shapes
+- [ ] SHAPE-006: Shapes export with frames
+
+#### Corner Cases
+- Very small shapes (minimum size)
+- Shapes extending beyond frame
+- Many shapes (performance)
+- Shape selection overlap
+
+---
+
+### 5.2 Spotlight / Focus Tool
+
+**Priority:** MEDIUM
+**Complexity:** Low
+**Reference:** Presentation spotlight tools
+
+#### Description
+Dim everything except a highlighted region to draw attention.
+
+#### Requirements
+- Circular or rectangular spotlight
+- Adjustable size
+- Adjustable dim amount (how dark the rest)
+- Feathered edge option
+- Can be animated/keyframed per frame
+
+#### UI/UX Specifications
+- Click and drag to position
+- Handles to resize
+- Slider for dimness level
+- Toggle feathered edge
+
+#### Technical Notes
+- Render dimming layer with cutout
+- Use mask/composite for spotlight effect
+- Feather using gradient at edges
+
+#### Test Cases
+- [ ] SPOT-001: Spotlight highlights clicked area
+- [ ] SPOT-002: Rest of image dims
+- [ ] SPOT-003: Feathered edge smooth
+- [ ] SPOT-004: Size adjustable
+- [ ] SPOT-005: Multiple spotlights supported
+
+---
+
+### 5.3 Text Annotations Enhancement
+
+**Priority:** MEDIUM
+**Complexity:** Low
+**Reference:** Professional annotation tools
+
+#### Description
+Enhance existing text tool with more formatting options.
+
+#### Requirements
+- Font selection (system fonts or web-safe set)
+- Bold, italic, underline styles
+- Text background/highlight option
+- Auto-sizing text boxes
+- Callout style (text with leader line to point)
+- Numbered/bulleted lists
+
+#### UI/UX Specifications
+- Text formatting toolbar when text selected
+- Font family dropdown
+- Style buttons (B, I, U)
+- Background color toggle
+- Callout mode button
+
+#### Technical Notes
+- Use Canvas2D text rendering with styling
+- Store formatting per text annotation
+- Callout stores text position + point position
+
+#### Test Cases
+- [ ] TEXT-001: Font selection works
+- [ ] TEXT-002: Bold/italic/underline apply
+- [ ] TEXT-003: Background color shows behind text
+- [ ] TEXT-004: Callout draws leader line
+- [ ] TEXT-005: Text exports correctly
+
+---
+
+### 5.4 Comparison Annotations
+
+**Priority:** LOW
+**Complexity:** Medium
+**Reference:** Review collaboration tools
+
+#### Description
+Annotations that reference two different states (before/after, A/B).
+
+#### Requirements
+- Link annotation to specific grade version
+- Show/hide annotations per version
+- "Applies to all versions" option
+- Visual indicator of version-specific annotations
+
+#### UI/UX Specifications
+- Version badge on each annotation
+- Filter annotations by version
+- Toggle "show all" vs "show current version only"
+
+#### Technical Notes
+- Store version ID with annotation
+- Filter display based on active version
+- Support wildcard "all versions" flag
+
+#### Test Cases
+- [ ] COMP-001: Annotation attached to specific version
+- [ ] COMP-002: Switching versions shows/hides annotations
+- [ ] COMP-003: "All versions" annotation always visible
+- [ ] COMP-004: Filter by version works
+
+---
+
+## 6. Transform & Correction
+
+### 6.1 Perspective Correction
+
+**Priority:** MEDIUM
+**Complexity:** High
+**Reference:** Photoshop Perspective Warp, DaVinci Resolve Perspective
+
+#### Description
+Correct or adjust perspective distortion using four corner points.
+
+#### Requirements
+- Four corner point handles
+- Adjust each corner independently
+- Grid overlay option for alignment
+- Numeric input for precise values
+- Bilinear/bicubic interpolation quality option
+
+#### UI/UX Specifications
+- Enable perspective mode
+- Drag corners to adjust
+- Grid overlay toggle
+- Reset button
+
+#### Technical Notes
+- Compute perspective transform matrix from 4 points
+- Use WebGL for GPU-accelerated warping
+- Perspective matrix: 3x3 homography
+- Inverse mapping for correct interpolation
+
+#### Test Cases
+- [ ] PERSP-001: Dragging corner warps image
+- [ ] PERSP-002: Grid overlay aligns with edges
+- [ ] PERSP-003: Reset returns to original
+- [ ] PERSP-004: Numeric input precise values
+- [ ] PERSP-005: Quality options affect output
+
+#### Corner Cases
+- Extreme perspective (nearly degenerate)
+- Non-convex resulting shape
+- Very wide angle (large warp)
+
+---
+
+### 6.2 Stabilization Preview
+
+**Priority:** LOW
+**Complexity:** High
+**Reference:** After Effects Warp Stabilizer
+
+#### Description
+Basic 2D motion stabilization for shaky footage analysis.
+
+#### Requirements
+- Track motion between frames
+- Apply inverse transform to stabilize
+- Crop to remove black edges
+- Smoothing amount control
+- Preview only (not for production stabilization)
+
+#### UI/UX Specifications
+- Analyze button to track motion
+- Progress indicator during analysis
+- Smoothing slider
+- Crop toggle
+- Reset button
+
+#### Technical Notes
+- Use optical flow or feature tracking
+- Calculate frame-to-frame motion vectors
+- Apply smoothed inverse transforms
+- This is a preview tool, not production stabilizer
+
+#### Test Cases
+- [ ] STAB-001: Analysis completes on sequence
+- [ ] STAB-002: Stabilized preview reduces shake
+- [ ] STAB-003: Smoothing affects result
+- [ ] STAB-004: Crop removes edges
+
+#### Corner Cases
+- Very shaky footage
+- Motion blur (tracking difficulty)
+- Scene cuts (reset tracking)
+
+---
+
+### 6.3 Safe Areas / Guides
+
+**Priority:** HIGH
+**Complexity:** Low
+**Reference:** Broadcast safe area guides
+
+#### Description
+Overlay guide lines for title safe, action safe, and custom aspect ratios.
+
+#### Requirements
+- Title safe (80% center)
+- Action safe (90% center)
+- Custom aspect ratio overlays (16:9, 2.39:1, 4:3, 1:1)
+- Center crosshair
+- Rule of thirds grid
+- Custom guide lines
+
+#### UI/UX Specifications
+- Toggle each overlay type
+- Opacity control for guides
+- Color selection for guides
+- Quick presets (broadcast, cinema, social)
+
+#### Technical Notes
+- Render as overlay layer
+- Calculate positions based on current frame size
+- Store guide preferences in session
+
+#### Test Cases
+- [ ] SAFE-001: Title safe area 80% of frame
+- [ ] SAFE-002: Action safe area 90% of frame
+- [ ] SAFE-003: Aspect ratio shows letterbox
+- [ ] SAFE-004: Guides toggle on/off
+- [ ] SAFE-005: Colors customizable
+
+#### Corner Cases
+- Non-standard aspect ratios
+- Very small viewer size
+- Guides overlapping
+
+---
+
+### 6.4 Deinterlace Preview
+
+**Priority:** LOW
+**Complexity:** Medium
+**Reference:** Interlaced footage handling
+
+#### Description
+Preview deinterlacing for interlaced sources.
+
+#### Requirements
+- Auto-detect interlaced content
+- Deinterlace methods: bob, weave, blend
+- Field order selection (upper first, lower first)
+- Preview toggle
+
+#### UI/UX Specifications
+- Auto-detect indicator
+- Method dropdown
+- Field order toggle
+- Enable/disable preview
+
+#### Technical Notes
+- Bob: double frame rate, each field becomes frame
+- Weave: combine fields (for still frames)
+- Blend: interpolate between fields
+- GPU shader for field separation
+
+#### Test Cases
+- [ ] DEINT-001: Bob creates smooth motion
+- [ ] DEINT-002: Weave combines fields
+- [ ] DEINT-003: Field order selection works
+- [ ] DEINT-004: Auto-detect identifies interlaced
+
+#### Corner Cases
+- Progressive content misdetected
+- Mixed interlaced/progressive
+- Telecined content (3:2 pulldown)
+
+---
+
+## 7. File Format Support
+
+### 7.1 EXR Support
+
+**Priority:** HIGH
+**Complexity:** High
+**Reference:** OpenEXR standard
+
+#### Description
+Full support for OpenEXR format including multi-layer and HDR.
+
+#### Requirements
+- Load single-layer EXR files
+- Load multi-layer EXR (access individual layers)
+- Support half-float and full-float
+- Display HDR content with tone mapping
+- Access EXR metadata (camera, lens, etc.)
+- Support common compression (ZIP, PIZ, DWAA)
+
+#### UI/UX Specifications
+- Layer selector for multi-layer files
+- HDR exposure control
+- Tone mapping curve selection
+- Metadata panel
+
+#### Technical Notes
+- Use WebAssembly EXR decoder (e.g., OpenEXR.js)
+- Convert half-float to float for processing
+- Implement basic tone mapping operators
+- Layer names from EXR headers
+
+#### Test Cases
+- [ ] EXR-001: Single layer EXR loads correctly
+- [ ] EXR-002: Multi-layer shows layer selector
+- [ ] EXR-003: Half-float values preserved
+- [ ] EXR-004: HDR content tone-mapped for display
+- [ ] EXR-005: Metadata accessible
+- [ ] EXR-006: All compression types supported
+
+#### Corner Cases
+- Deep EXR (not supported initially)
+- Tiled EXR (vs scanline)
+- Very large EXR files (memory)
+- Unusual channel configurations
+
+---
+
+### 7.2 DPX Support
+
+**Priority:** MEDIUM
+**Complexity:** Medium
+**Reference:** SMPTE DPX standard
+
+#### Description
+Support for DPX (Digital Picture Exchange) format common in film post.
+
+#### Requirements
+- Load 10-bit DPX files
+- Support various bit depths (8, 10, 12, 16)
+- Handle log-encoded DPX (Cineon log)
+- Read DPX metadata (film info, timecode)
+- Support RGB and YCbCr formats
+
+#### UI/UX Specifications
+- Auto-detect log encoding
+- Gamma/log conversion options
+- Metadata display
+
+#### Technical Notes
+- Parse DPX header structure
+- Handle bit packing (10-bit in 32-bit words)
+- Apply log-to-linear conversion if needed
+
+#### Test Cases
+- [ ] DPX-001: 10-bit DPX loads correctly
+- [ ] DPX-002: Various bit depths supported
+- [ ] DPX-003: Log encoding detected
+- [ ] DPX-004: Metadata readable
+- [ ] DPX-005: RGB and YCbCr handled
+
+#### Corner Cases
+- Non-standard DPX variations
+- Big-endian vs little-endian
+- Unusual image orientations
+
+---
+
+### 7.3 RAW Image Preview
+
+**Priority:** LOW
+**Complexity:** High
+**Reference:** Camera RAW formats
+
+#### Description
+Basic preview support for camera RAW formats (CR2, NEF, ARW, etc.)
+
+#### Requirements
+- Extract embedded preview/thumbnail
+- Display preview (not full RAW processing)
+- Show EXIF metadata
+- Support common RAW formats
+
+#### UI/UX Specifications
+- Auto-detect RAW files
+- Show "preview only" indicator
+- Display camera info from EXIF
+
+#### Technical Notes
+- Use library like LibRaw via WebAssembly
+- Extract embedded JPEG preview initially
+- Full RAW decode as advanced feature
+
+#### Test Cases
+- [ ] RAW-001: Preview extracts from CR2
+- [ ] RAW-002: EXIF metadata displayed
+- [ ] RAW-003: Preview indicator visible
+- [ ] RAW-004: Multiple RAW formats supported
+
+#### Corner Cases
+- RAW files without embedded preview
+- Proprietary/new RAW formats
+- Very large RAW files
+
+---
+
+### 7.4 OpenTimelineIO Import
+
+**Priority:** MEDIUM
+**Complexity:** Medium
+**Reference:** OTIO standard
+
+#### Description
+Import timeline/edit data from OpenTimelineIO format.
+
+#### Requirements
+- Parse OTIO JSON format
+- Import clips with timing
+- Import markers and annotations
+- Support basic effects references
+- Handle offline media gracefully
+
+#### UI/UX Specifications
+- Open OTIO file dialog
+- Display timeline structure
+- Offline media indicators
+- Relink media option
+
+#### Technical Notes
+- Parse OTIO JSON schema
+- Map OTIO clips to internal timeline
+- Handle nested timelines
+- Support OTIO adapters for other formats
+
+#### Test Cases
+- [ ] OTIO-001: Basic timeline imports
+- [ ] OTIO-002: Clip timing correct
+- [ ] OTIO-003: Markers import
+- [ ] OTIO-004: Offline media indicated
+- [ ] OTIO-005: Nested timelines handled
+
+#### Corner Cases
+- Complex nested structures
+- Non-standard OTIO extensions
+- Missing referenced media
+
+---
+
+## 8. Performance & Technical
+
+### 8.1 Web Worker Frame Decoding
+
+**Priority:** HIGH
+**Complexity:** Medium
+**Reference:** Efficient video processing
+
+#### Description
+Decode video frames in Web Workers to prevent UI blocking.
+
+#### Requirements
+- Dedicated worker(s) for frame decoding
+- Queue system for frame requests
+- Memory management for decoded frames
+- Cancellation support for seek operations
+- Multiple worker pool for parallel decoding
+
+#### UI/UX Specifications
+- Invisible to user (background improvement)
+- Loading indicator if decode behind playback
+- Memory usage indicator (optional)
+
+#### Technical Notes
+- Use transferable objects for frame data
+- Implement producer-consumer queue
+- Worker pool size based on hardware
+- Priority queue for visible frames
+
+#### Test Cases
+- [ ] WORKER-001: Frames decode in worker
+- [ ] WORKER-002: Main thread remains responsive
+- [ ] WORKER-003: Seek cancels pending decodes
+- [ ] WORKER-004: Memory stays bounded
+- [ ] WORKER-005: Multiple workers parallelize
+
+#### Corner Cases
+- Worker crashes (graceful recovery)
+- Very high frame rate playback
+- Low memory situations
+- Single-threaded environments
+
+---
+
+### 8.2 GPU Texture Caching
+
+**Priority:** MEDIUM
+**Complexity:** Medium
+**Reference:** GPU-accelerated playback
+
+#### Description
+Cache decoded frames as GPU textures for faster rendering.
+
+#### Requirements
+- Upload decoded frames to GPU textures
+- LRU cache for texture management
+- Configurable cache size
+- Texture reuse to avoid allocation
+
+#### UI/UX Specifications
+- Cache size setting in preferences
+- GPU memory usage display (optional)
+
+#### Technical Notes
+- Use WebGL texture objects
+- Texture pool with reuse
+- LRU eviction when full
+- Handle context loss gracefully
+
+#### Test Cases
+- [ ] GPU-001: Frames cached as textures
+- [ ] GPU-002: LRU eviction works
+- [ ] GPU-003: Texture reuse reduces allocation
+- [ ] GPU-004: Context loss recovers cache
+- [ ] GPU-005: Cache size respected
+
+#### Corner Cases
+- GPU memory limits
+- Context loss during playback
+- Very large frames (4K+)
+
+---
+
+### 8.3 Lazy Loading for Long Sequences
+
+**Priority:** MEDIUM
+**Complexity:** Medium
+**Reference:** Efficient sequence handling
+
+#### Description
+Load frames on-demand for very long sequences instead of all at once.
+
+#### Requirements
+- Only load frames near current position
+- Preload frames in playback direction
+- Unload distant frames to save memory
+- Background loading with priority queue
+
+#### UI/UX Specifications
+- Invisible to user (seamless playback)
+- Loading indicator for distant jumps
+- Cache status in timeline (optional)
+
+#### Technical Notes
+- Define "active range" around playhead
+- Preload window size configurable
+- Priority: current > soon > far
+- Cancel loads outside active range on seek
+
+#### Test Cases
+- [ ] LAZY-001: Only nearby frames in memory
+- [ ] LAZY-002: Preloading in play direction
+- [ ] LAZY-003: Distant frames unloaded
+- [ ] LAZY-004: Seek cancels irrelevant loads
+- [ ] LAZY-005: Memory usage bounded
+
+#### Corner Cases
+- Very fast seeking
+- Slow storage/network
+- Random access patterns
+
+---
+
+## 9. UI/UX Improvements
+
+### 9.1 Customizable Layout
+
+**Priority:** MEDIUM
+**Complexity:** High
+**Reference:** Dockable panels (DaVinci, Nuke)
+
+#### Description
+Allow users to arrange panels and create custom workspace layouts.
+
+#### Requirements
+- Panels can be docked, floated, or tabbed
+- Save/load workspace layouts
+- Preset workspaces (Color, Review, Editorial)
+- Resize panel boundaries
+
+#### UI/UX Specifications
+- Drag panel headers to rearrange
+- Drop zones highlight when dragging
+- Tab groups for multiple panels in same area
+- Layout menu for presets
+
+#### Technical Notes
+- Panel state: docked position, size, visibility
+- Serialize layout to JSON
+- Handle window resize gracefully
+- Support multiple monitors (future)
+
+#### Test Cases
+- [ ] LAYOUT-001: Panels dock to edges
+- [ ] LAYOUT-002: Tab groups work
+- [ ] LAYOUT-003: Layouts save/load
+- [ ] LAYOUT-004: Presets switch layout
+- [ ] LAYOUT-005: Window resize adjusts panels
+
+#### Corner Cases
+- Very small window (minimum sizes)
+- Missing panels on load
+- Corrupted layout data
+
+---
+
+### 9.2 Dark/Light Theme Options
+
+**Priority:** LOW
+**Complexity:** Low
+**Reference:** System theme support
+
+#### Description
+Support for dark and light color themes with system preference detection.
+
+#### Requirements
+- Dark theme (current default)
+- Light theme option
+- Follow system preference option
+- Consistent styling across all components
+
+#### UI/UX Specifications
+- Theme selector in settings
+- "Auto" option for system preference
+- Smooth transition between themes
+- Consistent contrast ratios
+
+#### Technical Notes
+- CSS custom properties for theme colors
+- Detect prefers-color-scheme
+- Store preference in localStorage
+- Update all component colors
+
+#### Test Cases
+- [ ] THEME-001: Dark theme applies
+- [ ] THEME-002: Light theme applies
+- [ ] THEME-003: Auto follows system
+- [ ] THEME-004: All components themed
+
+#### Corner Cases
+- System preference changes during session
+- Components with inline styles
+- Images/icons in wrong theme
+
+---
+
+### 9.3 Full Keyboard Navigation
+
+**Priority:** MEDIUM
+**Complexity:** Medium
+**Reference:** Accessibility standards
+
+#### Description
+Full keyboard navigation support for all UI elements.
+
+#### Requirements
+- Tab navigation between controls
+- Arrow keys within control groups
+- Enter/Space to activate
+- Escape to close/cancel
+- Focus indicators visible
+
+#### UI/UX Specifications
+- Clear focus outlines
+- Logical tab order
+- Skip links for main areas
+- Screen reader labels
+
+#### Technical Notes
+- tabindex on interactive elements
+- aria-label for non-text controls
+- Focus management for modals
+- Keyboard trap prevention
+
+#### Test Cases
+- [ ] KEY-001: Tab moves through controls
+- [ ] KEY-002: Enter activates buttons
+- [ ] KEY-003: Escape closes modals
+- [ ] KEY-004: Focus visible at all times
+- [ ] KEY-005: Screen reader accessible
+
+#### Corner Cases
+- Custom controls (sliders, wheels)
+- Canvas-based UI elements
+- Dynamic content updates
+
+---
+
+### 9.4 Undo/Redo History Panel
+
+**Priority:** MEDIUM
+**Complexity:** Low
+**Reference:** Photoshop History panel
+
+#### Description
+Visual panel showing undo/redo history with ability to jump to any state.
+
+#### Requirements
+- List of all actions with timestamps
+- Click to revert to any state
+- Current state highlighted
+- Clear history option
+- Branch handling (optional)
+
+#### UI/UX Specifications
+- Collapsible panel
+- Action names (e.g., "Adjust Exposure")
+- Time since action
+- Current state marker
+- Dimmed future states
+
+#### Technical Notes
+- Hook into existing undo system
+- Store action descriptions
+- Snapshot or command pattern
+- Limit history length to prevent memory issues
+
+#### Test Cases
+- [ ] HIST-001: Actions appear in list
+- [ ] HIST-002: Click reverts to state
+- [ ] HIST-003: Current state highlighted
+- [ ] HIST-004: Clear history works
+- [ ] HIST-005: History length limited
+
+#### Corner Cases
+- Very long editing sessions
+- Actions that can't be undone
+- Memory pressure from snapshots
+
+---
+
+### 9.5 Floating Info Panel
+
+**Priority:** LOW
+**Complexity:** Low
+**Reference:** Metadata overlays
+
+#### Description
+Configurable info overlay showing file metadata, frame info, and color values.
+
+#### Requirements
+- Display filename, resolution, bit depth
+- Frame number, timecode, duration
+- Color values at cursor position
+- Configurable fields
+- Multiple positions (corners)
+
+#### UI/UX Specifications
+- Semi-transparent background
+- Configurable position
+- Toggle visibility
+- Choose which fields to show
+
+#### Technical Notes
+- Render as overlay on viewer
+- Update on frame change
+- Cursor position tracking for color values
+
+#### Test Cases
+- [ ] INFO-001: File info displays
+- [ ] INFO-002: Frame info updates
+- [ ] INFO-003: Color values track cursor
+- [ ] INFO-004: Position configurable
+- [ ] INFO-005: Fields toggleable
+
+---
+
+## Implementation Priority Summary
+
+### Phase 1 - High Priority (Foundation)
+1. Lift/Gamma/Gain Color Wheels (1.1)
+2. Highlight/Shadow Recovery (1.2)
+3. HSL Qualifier (1.5)
+4. False Color Display (2.3)
+5. Pixel Probe (2.5)
+6. Shape Tools (5.1)
+7. Safe Areas / Guides (6.3)
+8. Timecode Display (4.1)
+9. EXR Support (7.1)
+10. Web Worker Frame Decoding (8.1)
+
+### Phase 2 - Medium Priority (Enhancement)
+1. Vibrance Control (1.3)
+2. Clarity/Local Contrast (1.4)
+3. Color Space Conversion (1.6)
+4. Parade Scope (2.1)
+5. Zebra Stripes (2.4)
+6. Split Screen Compare (3.1)
+7. Onion Skin (3.2)
+8. Timeline Thumbnails (4.2)
+9. Markers with Notes (4.3)
+10. Playback Speed Control (4.4)
+11. Perspective Correction (6.1)
+12. DPX Support (7.2)
+13. OTIO Import (7.4)
+14. GPU Texture Caching (8.2)
+15. Lazy Loading (8.3)
+16. Customizable Layout (9.1)
+17. Full Keyboard Navigation (9.3)
+18. Undo/Redo History Panel (9.4)
+
+### Phase 3 - Lower Priority (Polish)
+1. Film Emulation (1.7)
+2. RGB Overlay Waveform (2.2)
+3. Histogram Clipping Indicators (2.6)
+4. Difference Matte (3.3)
+5. Frame Caching Visualization (4.5)
+6. Spotlight Tool (5.2)
+7. Text Annotations Enhancement (5.3)
+8. Comparison Annotations (5.4)
+9. Stabilization Preview (6.2)
+10. Deinterlace Preview (6.4)
+11. RAW Image Preview (7.3)
+12. Dark/Light Theme (9.2)
+13. Floating Info Panel (9.5)
+
+---
+
+## Contributing
+
+When implementing features from this list:
+
+1. **Create a branch** named `feature/{feature-id}` (e.g., `feature/color-wheels`)
+2. **Follow existing patterns** in the codebase
+3. **Add unit tests** for core logic
+4. **Add e2e tests** following the test cases listed
+5. **Update documentation** including this file
+6. **Consider accessibility** for all UI components
+7. **Optimize for performance** especially for real-time features
+
+---
+
+*Last updated: 2026-01-19*
