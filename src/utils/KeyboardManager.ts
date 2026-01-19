@@ -6,7 +6,7 @@
  */
 
 export interface KeyCombination {
-  key: string;
+  code: string;
   ctrl?: boolean;
   shift?: boolean;
   alt?: boolean;
@@ -92,6 +92,13 @@ export class KeyboardManager {
   }
 
   /**
+   * Clear all registered bindings
+   */
+  clearAll(): void {
+    this.bindings.clear();
+  }
+
+  /**
    * Start listening for keyboard events on the given element (defaults to document)
    */
   attach(element: EventTarget = document): void {
@@ -115,7 +122,7 @@ export class KeyboardManager {
     if (this.shouldSkipEvent(e)) return;
 
     const combo: KeyCombination = {
-      key: e.key,
+      code: e.code,
       ctrl: e.ctrlKey || e.metaKey, // Treat meta as ctrl for cross-platform
       shift: e.shiftKey,
       alt: e.altKey,
@@ -168,9 +175,9 @@ export class KeyboardManager {
     if (parts.length === 0) {
       throw new Error('Invalid key string');
     }
-    const combo: KeyCombination = { key: parts[parts.length - 1]!.length === 1 ? parts[parts.length - 1]!.toLowerCase() : parts[parts.length - 1]! };
+    const combo: KeyCombination = { code: this.keyToCode(parts[parts.length - 1]!) };
 
-    if (!combo.key) {
+    if (!combo.code) {
       throw new Error('Invalid key string');
     }
 
@@ -207,7 +214,40 @@ export class KeyboardManager {
     if (combo.shift) parts.push('shift');
     if (combo.alt) parts.push('alt');
     if (combo.meta && !combo.ctrl) parts.push('meta'); // Don't include meta if ctrl is set (cross-platform compatibility)
-    parts.push(combo.key.toLowerCase());
+    parts.push(combo.code.toLowerCase());
     return parts.join('+');
+  }
+
+  /**
+   * Convert an English key character to its corresponding code
+   */
+  private keyToCode(key: string): string {
+    // Handle special keys
+    switch (key) {
+      case ' ': return 'Space';
+      case 'ArrowUp': return 'ArrowUp';
+      case 'ArrowDown': return 'ArrowDown';
+      case 'ArrowLeft': return 'ArrowLeft';
+      case 'ArrowRight': return 'ArrowRight';
+      case 'Home': return 'Home';
+      case 'End': return 'End';
+      case 'Escape': return 'Escape';
+      case '[': return 'BracketLeft';
+      case ']': return 'BracketRight';
+      case ',': return 'Comma';
+      case '.': return 'Period';
+      case '`': return 'Backquote';
+      case '~': return 'Backquote'; // Shift+Backquote
+      default:
+        // For letters and digits, convert to KeyX or DigitX format
+        if (key.length === 1) {
+          if (/[a-zA-Z]/.test(key)) {
+            return 'Key' + key.toUpperCase();
+          } else if (/[0-9]/.test(key)) {
+            return 'Digit' + key;
+          }
+        }
+        return key;
+    }
   }
 }

@@ -15,6 +15,7 @@ import { getIconSvg, IconName } from '../shared/Icons';
 
 export interface HeaderBarEvents extends EventMap {
   showShortcuts: void;
+  showCustomKeyBindings: void;
   fileLoaded: void;
   saveProject: void;
   openProject: File;
@@ -134,6 +135,11 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     const helpButton = this.createIconButton('help', '', () => this.emit('showShortcuts', undefined), 'Keyboard shortcuts');
     helpButton.style.marginLeft = '8px';
     utilityGroup.appendChild(helpButton);
+
+    // Custom key binding button
+    const keyBindingButton = this.createIconButton('keyboard', '', () => this.emit('showCustomKeyBindings', undefined), 'Custom key bindings');
+    keyBindingButton.style.marginLeft = '4px';
+    utilityGroup.appendChild(keyBindingButton);
 
     this.container.appendChild(utilityGroup);
   }
@@ -264,6 +270,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       'step-forward': '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,4 15,12 5,20"/></svg>',
       'skip-forward': '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,4 15,12 5,20"/><line x1="19" y1="4" x2="19" y2="20" stroke="currentColor" stroke-width="2"/></svg>',
       'help': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+      'keyboard': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"/><path d="m6 8h.01"/><path d="m10 8h.01"/><path d="m14 8h.01"/><path d="m18 8h.01"/><path d="m8 12h.01"/><path d="m12 12h.01"/><path d="m16 12h.01"/><path d="m7 16h10"/></svg>',
     };
     return icons[name] || '';
   }

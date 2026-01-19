@@ -23,12 +23,13 @@ import { ZoomControl } from './ui/components/ZoomControl';
 import { ScopesControl } from './ui/components/ScopesControl';
 import { CompareControl } from './ui/components/CompareControl';
 import { exportSequence } from './utils/SequenceExporter';
-import { showAlert, showModal } from './ui/components/shared/Modal';
+import { showAlert, showModal, closeModal } from './ui/components/shared/Modal';
 import { SessionSerializer } from './core/session/SessionSerializer';
 import { SessionGTOExporter } from './core/session/SessionGTOExporter';
 import { SessionGTOStore } from './core/session/SessionGTOStore';
-import { KeyboardManager } from './utils/KeyboardManager';
-import { DEFAULT_KEY_BINDINGS } from './utils/KeyBindings';
+import { KeyboardManager, KeyCombination } from './utils/KeyboardManager';
+import { DEFAULT_KEY_BINDINGS, describeKeyCombo } from './utils/KeyBindings';
+import { CustomKeyBindingsManager } from './utils/CustomKeyBindingsManager';
 
 export class App {
   private container: HTMLElement | null = null;
@@ -60,6 +61,7 @@ export class App {
   private animationId: number | null = null;
   private boundHandleResize: () => void;
   private keyboardManager: KeyboardManager;
+  private customKeyBindingsManager: CustomKeyBindingsManager;
 
   constructor() {
     // Bind event handlers for proper cleanup
@@ -73,6 +75,7 @@ export class App {
     // Create HeaderBar (contains file ops, playback, volume, export, help)
     this.headerBar = new HeaderBar(this.session);
     this.headerBar.on('showShortcuts', () => this.showShortcuts());
+    this.headerBar.on('showCustomKeyBindings', () => this.showCustomKeyBindings());
     this.headerBar.on('saveProject', () => this.saveProject());
     this.headerBar.on('openProject', (file) => this.openProject(file));
 
@@ -281,6 +284,14 @@ export class App {
     // Initialize keyboard manager
     this.keyboardManager = new KeyboardManager();
     this.setupKeyboardShortcuts();
+
+    // Initialize custom key bindings manager
+    this.customKeyBindingsManager = new CustomKeyBindingsManager(() => {
+      this.refreshKeyboardShortcuts();
+    });
+
+    // Apply any stored custom bindings to the keyboard shortcuts
+    this.refreshKeyboardShortcuts();
   }
 
   mount(selector: string): void {
@@ -563,248 +574,104 @@ export class App {
   }
 
   private setupKeyboardShortcuts(): void {
-    // Playback controls
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['playback.toggle']!, () => {
-      this.session.togglePlayback();
-    });
+    this.registerKeyboardShortcuts();
+  }
 
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['playback.stepForward']!, () => {
-      this.session.stepForward();
-    });
+  private refreshKeyboardShortcuts(): void {
+    // Clear existing bindings to prevent duplicates and memory leaks
+    this.keyboardManager.clearAll();
+    // Re-register all shortcuts with updated combos
+    this.registerKeyboardShortcuts();
+  }
 
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['playback.stepBackward']!, () => {
-      this.session.stepBackward();
-    });
+  private registerKeyboardShortcuts(): void {
+    // Create a map of action names to handler functions
+    const actionHandlers: Record<string, () => void> = {
+      'playback.toggle': () => this.session.togglePlayback(),
+      'playback.stepForward': () => this.session.stepForward(),
+      'playback.stepBackward': () => this.session.stepBackward(),
+      'playback.toggleDirection': () => this.session.togglePlayDirection(),
+      'playback.goToStart': () => this.session.goToStart(),
+      'playback.goToEnd': () => this.session.goToEnd(),
+      'timeline.setInPoint': () => this.session.setInPoint(),
+      'timeline.setInPointAlt': () => this.session.setInPoint(),
+      'timeline.setOutPoint': () => this.session.setOutPoint(),
+      'timeline.setOutPointAlt': () => this.session.setOutPoint(),
+      'timeline.toggleMark': () => this.session.toggleMark(),
+      'timeline.resetInOut': () => this.session.resetInOutPoints(),
+      'timeline.cycleLoopMode': () => {
+        const modes: Array<'once' | 'loop' | 'pingpong'> = ['once', 'loop', 'pingpong'];
+        const currentIndex = modes.indexOf(this.session.loopMode);
+        this.session.loopMode = modes[(currentIndex + 1) % modes.length]!;
+      },
+      'view.fitToWindow': () => this.viewer.fitToWindow(),
+      'view.fitToWindowAlt': () => this.viewer.fitToWindow(),
+      'view.zoom50': () => {
+        if (this.tabBar.activeTab === 'view') {
+          this.viewer.setZoom(0.5);
+        }
+      },
+      'view.cycleWipeMode': () => this.compareControl.cycleWipeMode(),
+      'view.toggleWaveform': () => this.scopesControl.toggleScope('waveform'),
+      'view.toggleAB': () => this.session.toggleAB(),
+      'view.toggleABAlt': () => this.session.toggleAB(),
+      'panel.color': () => this.colorControls.toggle(),
+      'panel.effects': () => this.filterControl.toggle(),
+      'panel.curves': () => this.curvesControl.toggle(),
+      'panel.crop': () => this.cropControl.toggle(),
+      'panel.waveform': () => this.scopesControl.toggleScope('waveform'),
+      'panel.vectorscope': () => this.scopesControl.toggleScope('vectorscope'),
+      'panel.histogram': () => this.scopesControl.toggleScope('histogram'),
+      'transform.rotateLeft': () => this.transformControl.rotateLeft(),
+      'transform.rotateRight': () => this.transformControl.rotateRight(),
+      'transform.flipHorizontal': () => this.transformControl.toggleFlipH(),
+      'transform.flipVertical': () => this.transformControl.toggleFlipV(),
+      'export.quickExport': () => this.headerBar.getExportControl().quickExport('png'),
+      'export.copyFrame': () => this.viewer.copyFrameToClipboard(true),
+      'edit.undo': () => this.paintEngine.undo(),
+      'edit.redo': () => this.paintEngine.redo(),
+      'annotation.previous': () => this.goToPreviousAnnotation(),
+      'annotation.next': () => this.goToNextAnnotation(),
+      'tab.view': () => this.tabBar.handleKeyboard('1'),
+      'tab.color': () => this.tabBar.handleKeyboard('2'),
+      'tab.effects': () => this.tabBar.handleKeyboard('3'),
+      'tab.transform': () => this.tabBar.handleKeyboard('4'),
+      'tab.annotate': () => this.tabBar.handleKeyboard('5'),
+      'paint.pan': () => this.paintToolbar.handleKeyboard('v'),
+      'paint.pen': () => this.paintToolbar.handleKeyboard('p'),
+      'paint.eraser': () => this.paintToolbar.handleKeyboard('e'),
+      'paint.text': () => this.paintToolbar.handleKeyboard('t'),
+      'paint.toggleBrush': () => this.paintToolbar.handleKeyboard('b'),
+      'paint.toggleGhost': () => this.paintToolbar.handleKeyboard('g'),
+      'channel.red': () => this.channelSelect.handleKeyboard('R', true),
+      'channel.green': () => this.channelSelect.handleKeyboard('G', true),
+      'channel.blue': () => this.channelSelect.handleKeyboard('B', true),
+      'channel.alpha': () => this.channelSelect.handleKeyboard('A', true),
+      'channel.luminance': () => this.channelSelect.handleKeyboard('L', true),
+      'channel.none': () => this.channelSelect.handleKeyboard('N', true),
+      'stereo.toggle': () => this.stereoControl.handleKeyboard('3', true),
+      'panel.close': () => {
+        if (this.colorControls) {
+          this.colorControls.hide();
+        }
+      },
+    };
 
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['playback.toggleDirection']!, () => {
-      this.session.togglePlayDirection();
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['playback.goToStart']!, () => {
-      this.session.goToStart();
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['playback.goToEnd']!, () => {
-      this.session.goToEnd();
-    });
-
-    // Timeline controls
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['timeline.setInPoint']!, () => {
-      this.session.setInPoint();
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['timeline.setInPointAlt']!, () => {
-      this.session.setInPoint();
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['timeline.setOutPoint']!, () => {
-      this.session.setOutPoint();
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['timeline.setOutPointAlt']!, () => {
-      this.session.setOutPoint();
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['timeline.toggleMark']!, () => {
-      this.session.toggleMark();
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['timeline.resetInOut']!, () => {
-      this.session.resetInOutPoints();
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['timeline.cycleLoopMode']!, () => {
-      const modes: Array<'once' | 'loop' | 'pingpong'> = ['once', 'loop', 'pingpong'];
-      const currentIndex = modes.indexOf(this.session.loopMode);
-      this.session.loopMode = modes[(currentIndex + 1) % modes.length]!;
-    });
-
-    // View controls
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['view.fitToWindow']!, () => {
-      this.viewer.fitToWindow();
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['view.fitToWindowAlt']!, () => {
-      this.viewer.fitToWindow();
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['view.zoom50']!, () => {
-      if (this.tabBar.activeTab === 'view') {
-        this.viewer.setZoom(0.5);
+    // Register all keyboard shortcuts using effective combos (custom or default)
+    for (const [action, defaultBinding] of Object.entries(DEFAULT_KEY_BINDINGS)) {
+      const handler = actionHandlers[action];
+      if (handler) {
+        // Use effective combo if custom key bindings manager is available, otherwise use default
+        const effectiveCombo = this.customKeyBindingsManager
+          ? this.customKeyBindingsManager.getEffectiveCombo(action)
+          : (() => {
+              // Extract KeyCombination from default binding (remove description)
+              const { description: _, ...combo } = defaultBinding;
+              return combo as KeyCombination;
+            })();
+        this.keyboardManager.register(effectiveCombo, handler, defaultBinding.description);
       }
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['view.cycleWipeMode']!, () => {
-      this.compareControl.cycleWipeMode();
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['view.toggleWaveform']!, () => {
-      this.scopesControl.toggleScope('waveform');
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['view.toggleAB']!, () => {
-      this.session.toggleAB();
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['view.toggleABAlt']!, () => {
-      this.session.toggleAB();
-    });
-
-    // Panel toggles
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['panel.color']!, () => {
-      this.colorControls.toggle();
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['panel.effects']!, () => {
-      this.filterControl.toggle();
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['panel.curves']!, () => {
-      this.curvesControl.toggle();
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['panel.crop']!, () => {
-      this.cropControl.toggle();
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['panel.waveform']!, () => {
-      this.scopesControl.toggleScope('waveform');
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['panel.vectorscope']!, () => {
-      this.scopesControl.toggleScope('vectorscope');
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['panel.histogram']!, () => {
-      this.scopesControl.toggleScope('histogram');
-    });
-
-    // Transform controls
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['transform.rotateLeft']!, () => {
-      this.transformControl.rotateLeft();
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['transform.rotateRight']!, () => {
-      this.transformControl.rotateRight();
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['transform.flipHorizontal']!, () => {
-      this.transformControl.toggleFlipH();
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['transform.flipVertical']!, () => {
-      this.transformControl.toggleFlipV();
-    });
-
-    // Export controls
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['export.quickExport']!, () => {
-      this.headerBar.getExportControl().quickExport('png');
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['export.copyFrame']!, () => {
-      this.viewer.copyFrameToClipboard(true);
-    });
-
-    // Undo/Redo
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['edit.undo']!, () => {
-      this.paintEngine.undo();
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['edit.redo']!, () => {
-      this.paintEngine.redo();
-    });
-
-    // Annotation navigation
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['annotation.previous']!, () => {
-      this.goToPreviousAnnotation();
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['annotation.next']!, () => {
-      this.goToNextAnnotation();
-    });
-
-    // Tab navigation
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['tab.view']!, () => {
-      this.tabBar.handleKeyboard('1');
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['tab.color']!, () => {
-      this.tabBar.handleKeyboard('2');
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['tab.effects']!, () => {
-      this.tabBar.handleKeyboard('3');
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['tab.transform']!, () => {
-      this.tabBar.handleKeyboard('4');
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['tab.annotate']!, () => {
-      this.tabBar.handleKeyboard('5');
-    });
-
-    // Paint tools - delegate to paint toolbar
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['paint.pan']!, () => {
-      this.paintToolbar.handleKeyboard('v');
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['paint.pen']!, () => {
-      this.paintToolbar.handleKeyboard('p');
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['paint.eraser']!, () => {
-      this.paintToolbar.handleKeyboard('e');
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['paint.text']!, () => {
-      this.paintToolbar.handleKeyboard('t');
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['paint.toggleBrush']!, () => {
-      this.paintToolbar.handleKeyboard('b');
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['paint.toggleGhost']!, () => {
-      this.paintToolbar.handleKeyboard('g');
-    });
-
-    // Channel selection - delegate to channel select
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['channel.red']!, () => {
-      this.channelSelect.handleKeyboard('R', true);
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['channel.green']!, () => {
-      this.channelSelect.handleKeyboard('G', true);
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['channel.blue']!, () => {
-      this.channelSelect.handleKeyboard('B', true);
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['channel.alpha']!, () => {
-      this.channelSelect.handleKeyboard('A', true);
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['channel.luminance']!, () => {
-      this.channelSelect.handleKeyboard('L', true);
-    });
-
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['channel.none']!, () => {
-      this.channelSelect.handleKeyboard('N', true);
-    });
-
-    // Stereo controls - delegate to stereo control
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['stereo.toggle']!, () => {
-      this.stereoControl.handleKeyboard('3', true);
-    });
-
-    // Panel close
-    this.keyboardManager.register(DEFAULT_KEY_BINDINGS['panel.close']!, () => {
-      if (this.colorControls) {
-        this.colorControls.hide();
-      }
-    });
+    }
   }
 
   private goToNextAnnotation(): void {
@@ -1060,91 +927,475 @@ export class App {
   private showShortcuts(): void {
     const content = document.createElement('div');
     content.style.cssText = `
+      max-height: 70vh;
+      overflow-y: auto;
+      padding: 8px;
       font-family: monospace;
       font-size: 12px;
       color: #ccc;
       line-height: 1.6;
     `;
-    content.innerHTML = `<pre style="margin: 0; white-space: pre-wrap;">Keyboard Shortcuts:
 
-TABS
-1         - View tab
-2         - Color tab
-3         - Effects tab
-4         - Transform tab
-5         - Annotate tab
+    // Group shortcuts by category
+    const categories = {
+      'TABS': ['tab.view', 'tab.color', 'tab.effects', 'tab.transform', 'tab.annotate'],
+      'PLAYBACK': ['playback.toggle', 'playback.stepBackward', 'playback.stepForward', 'playback.goToStart', 'playback.goToEnd', 'playback.toggleDirection'],
+      'VIEW': ['view.fitToWindow', 'view.fitToWindowAlt', 'view.zoom50', 'view.toggleAB', 'view.toggleABAlt'],
+      'MOUSE CONTROLS': [], // Special case - not in DEFAULT_KEY_BINDINGS
+      'CHANNEL ISOLATION': ['channel.red', 'channel.green', 'channel.blue', 'channel.alpha', 'channel.luminance', 'channel.none'],
+      'SCOPES': ['panel.histogram', 'panel.waveform', 'panel.vectorscope'],
+      'TIMELINE': ['timeline.setInPoint', 'timeline.setInPointAlt', 'timeline.setOutPoint', 'timeline.setOutPointAlt', 'timeline.resetInOut', 'timeline.toggleMark', 'timeline.cycleLoopMode'],
+      'PAINT (Annotate tab)': ['paint.pan', 'paint.pen', 'paint.eraser', 'paint.text', 'paint.toggleBrush', 'paint.toggleGhost', 'edit.undo', 'edit.redo'],
+      'COLOR': ['panel.color', 'panel.curves'],
+      'WIPE COMPARISON': ['view.cycleWipeMode'],
+      'AUDIO (Video only)': [], // Special case - not in DEFAULT_KEY_BINDINGS
+      'EXPORT': ['export.quickExport', 'export.copyFrame'],
+      'ANNOTATIONS': ['annotation.previous', 'annotation.next'],
+      'TRANSFORM': ['transform.rotateLeft', 'transform.rotateRight', 'transform.flipHorizontal', 'transform.flipVertical'],
+      'PANELS': ['panel.effects', 'panel.crop', 'panel.close'],
+      'STEREO': ['stereo.toggle']
+    };
 
-PLAYBACK
-Space     - Play/Pause
-\u2190 / \u2192     - Step frame
-Home/End  - Go to start/end
-\u2191         - Toggle direction
+    // Add special audio shortcuts
+    const audioShortcuts = [
+      { key: 'Hover vol', desc: 'Show volume slider' },
+      { key: 'Click icon', desc: 'Toggle mute' }
+    ];
 
-VIEW
-F         - Fit to window
-0         - Zoom 50%
-Drag      - Pan image
-Scroll    - Zoom
+    // Generate content for each category
+    for (const [categoryName, actionKeys] of Object.entries(categories)) {
+      if (actionKeys.length === 0 && categoryName !== 'AUDIO (Video only)') continue;
 
-CHANNEL ISOLATION
-Shift+G   - Green channel
-Shift+B   - Blue channel
-Shift+A   - Alpha channel
-Shift+L   - Luminance
-Shift+N   - RGB (all channels)
+      const categoryDiv = document.createElement('div');
+      categoryDiv.style.cssText = 'margin-bottom: 16px;';
 
-SCOPES
-H         - Toggle histogram display
-w         - Toggle waveform display
-y         - Toggle vectorscope display
+      const categoryHeader = document.createElement('div');
+      categoryHeader.style.cssText = 'font-weight: bold; color: #4a9eff; margin-bottom: 4px;';
+      categoryHeader.textContent = categoryName;
+      categoryDiv.appendChild(categoryHeader);
 
-TIMELINE
-I / [     - Set in point
-O / ]     - Set out point
-R         - Reset in/out points
-M         - Toggle mark
-L         - Cycle loop mode
+      // Special handling for audio category
+      if (categoryName === 'AUDIO (Video only)') {
+        for (const shortcut of audioShortcuts) {
+          const shortcutDiv = document.createElement('div');
+          shortcutDiv.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;';
 
-PAINT (Annotate tab)
-V         - Pan tool (no paint)
-P         - Pen tool
-E         - Eraser tool
-T         - Text tool
-B         - Toggle brush type
-G         - Toggle ghost mode
-Ctrl+Z    - Undo
-Ctrl+Y    - Redo
+          const keySpan = document.createElement('span');
+          keySpan.textContent = shortcut.key;
+          keySpan.style.cssText = 'color: #888; min-width: 120px;';
 
-COLOR
-C         - Toggle color panel
-U         - Toggle curves panel
-Esc       - Close color panel
-Dbl-click - Reset individual slider
+          const descSpan = document.createElement('span');
+          descSpan.textContent = shortcut.desc;
+          descSpan.style.cssText = 'color: #ccc; flex: 1;';
 
-WIPE COMPARISON
-W         - Cycle wipe mode (off/horizontal/vertical)
-Drag line - Adjust wipe position
+          shortcutDiv.appendChild(keySpan);
+          shortcutDiv.appendChild(descSpan);
+          categoryDiv.appendChild(shortcutDiv);
+        }
+      } else if (categoryName === 'MOUSE CONTROLS') {
+        const mouseShortcuts = [
+          { key: 'Drag', desc: 'Pan image' },
+          { key: 'Scroll', desc: 'Zoom in/out' },
+          { key: 'Dbl-click', desc: 'Reset individual slider (color panel)' },
+          { key: 'Dbl-click', desc: 'Jump to nearest annotation (timeline)' },
+          { key: 'Drag line', desc: 'Adjust wipe position' }
+        ];
 
-AUDIO (Video only)
-Hover vol - Show volume slider
-Click icon- Toggle mute
+        for (const shortcut of mouseShortcuts) {
+          const shortcutDiv = document.createElement('div');
+          shortcutDiv.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;';
 
-EXPORT
-Ctrl+S    - Quick export as PNG
-Ctrl+C    - Copy frame to clipboard
+          const keySpan = document.createElement('span');
+          keySpan.textContent = shortcut.key;
+          keySpan.style.cssText = 'color: #888; min-width: 120px;';
 
-ANNOTATIONS
-< / ,     - Go to previous annotation
-> / .     - Go to next annotation
-Dbl-click - Jump to nearest annotation (timeline)
+          const descSpan = document.createElement('span');
+          descSpan.textContent = shortcut.desc;
+          descSpan.style.cssText = 'color: #ccc; flex: 1;';
 
-TRANSFORM
-Shift+R   - Rotate left 90°
-Alt+R     - Rotate right 90°
-Shift+H   - Flip horizontal
-Shift+V   - Flip vertical</pre>`;
+          shortcutDiv.appendChild(keySpan);
+          shortcutDiv.appendChild(descSpan);
+          categoryDiv.appendChild(shortcutDiv);
+        }
+      } else {
+        // Regular shortcuts from DEFAULT_KEY_BINDINGS
+        for (const actionKey of actionKeys) {
+          const defaultBinding = DEFAULT_KEY_BINDINGS[actionKey as keyof typeof DEFAULT_KEY_BINDINGS];
+          if (!defaultBinding) continue;
 
-    showModal(content, { title: 'Keyboard Shortcuts', width: '500px' });
+          const effectiveCombo = this.customKeyBindingsManager.getEffectiveCombo(actionKey);
+          const isCustom = this.customKeyBindingsManager.hasCustomBinding(actionKey);
+
+          const shortcutDiv = document.createElement('div');
+          shortcutDiv.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;';
+
+          const keySpan = document.createElement('span');
+          keySpan.textContent = describeKeyCombo(effectiveCombo);
+          keySpan.style.cssText = `min-width: 120px; ${isCustom ? 'color: #4a9eff; font-weight: bold;' : 'color: #888;'}`;
+
+          const descSpan = document.createElement('span');
+          descSpan.textContent = defaultBinding.description;
+          descSpan.style.cssText = 'color: #ccc; flex: 1;';
+
+          const actionsDiv = document.createElement('div');
+          actionsDiv.style.cssText = 'display: flex; gap: 4px;';
+
+          // Reset button (only show if custom binding exists)
+          if (isCustom) {
+            const resetButton = document.createElement('button');
+            resetButton.textContent = 'Reset';
+            resetButton.style.cssText = `
+              background: #666;
+              border: none;
+              color: white;
+              padding: 2px 6px;
+              border-radius: 3px;
+              cursor: pointer;
+              font-size: 10px;
+            `;
+            resetButton.onclick = () => {
+              this.customKeyBindingsManager.removeCustomBinding(actionKey);
+              this.refreshKeyboardShortcuts();
+              this.showShortcuts(); // Refresh the display
+            };
+            actionsDiv.appendChild(resetButton);
+          }
+
+          shortcutDiv.appendChild(keySpan);
+          shortcutDiv.appendChild(descSpan);
+          shortcutDiv.appendChild(actionsDiv);
+          categoryDiv.appendChild(shortcutDiv);
+        }
+      }
+
+      content.appendChild(categoryDiv);
+    }
+
+    // Reset all button at bottom
+    const resetAllContainer = document.createElement('div');
+    resetAllContainer.style.cssText = `
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid #444;
+      text-align: center;
+    `;
+
+    const resetAllButton = document.createElement('button');
+    resetAllButton.textContent = 'Reset All Shortcuts to Defaults';
+    resetAllButton.style.cssText = `
+      background: #d9534f;
+      border: none;
+      color: white;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    `;
+    resetAllButton.onclick = () => {
+      if (confirm('Reset all keyboard shortcuts to defaults?')) {
+        this.customKeyBindingsManager.resetAll();
+        this.refreshKeyboardShortcuts();
+        this.showShortcuts(); // Refresh the display
+      }
+    };
+    resetAllContainer.appendChild(resetAllButton);
+    content.appendChild(resetAllContainer);
+
+    showModal(content, { title: 'Keyboard Shortcuts', width: '700px' });
+  }
+
+  private showCustomKeyBindings(): void {
+    const content = document.createElement('div');
+    content.style.cssText = `
+      max-height: 70vh;
+      overflow-y: auto;
+      padding: 8px;
+    `;
+
+    const actions = this.customKeyBindingsManager.getAvailableActions();
+
+    // Create table header
+    const header = document.createElement('div');
+    header.style.cssText = `
+      display: grid;
+      grid-template-columns: 1fr 120px 80px;
+      gap: 8px;
+      padding: 8px 0;
+      border-bottom: 1px solid #444;
+      font-weight: bold;
+      color: #ccc;
+      font-size: 12px;
+    `;
+    header.innerHTML = `
+      <div>Action</div>
+      <div>Current Key</div>
+      <div>Actions</div>
+    `;
+    content.appendChild(header);
+
+    // Create rows for each action
+    for (const action of actions) {
+      const row = document.createElement('div');
+      row.style.cssText = `
+        display: grid;
+        grid-template-columns: 1fr 120px 80px;
+        gap: 8px;
+        padding: 8px 0;
+        border-bottom: 1px solid #333;
+        align-items: center;
+      `;
+
+      // Action description
+      const descCell = document.createElement('div');
+      descCell.style.cssText = `
+        color: #eee;
+        font-size: 13px;
+      `;
+      descCell.textContent = action.description;
+      row.appendChild(descCell);
+
+      // Current key combination
+      const keyCell = document.createElement('div');
+      keyCell.style.cssText = `
+        background: #333;
+        border: 1px solid #555;
+        border-radius: 4px;
+        padding: 4px 8px;
+        color: #ccc;
+        font-family: monospace;
+        font-size: 12px;
+        text-align: center;
+      `;
+      keyCell.textContent = this.formatKeyCombo(action.currentCombo);
+      row.appendChild(keyCell);
+
+      // Action buttons
+      const buttonCell = document.createElement('div');
+      buttonCell.style.cssText = `
+        display: flex;
+        gap: 4px;
+      `;
+
+      // Set custom binding button
+      const setButton = document.createElement('button');
+      setButton.textContent = 'Set';
+      setButton.style.cssText = `
+        background: #4a9eff;
+        border: none;
+        color: white;
+        padding: 4px 8px;
+        border-radius: 3px;
+        cursor: pointer;
+        font-size: 11px;
+      `;
+      setButton.onclick = () => this.promptForKeyBinding(action.action, keyCell);
+      buttonCell.appendChild(setButton);
+
+      // Reset to default button (only if custom binding exists)
+      if (this.customKeyBindingsManager.hasCustomBinding(action.action)) {
+        const resetButton = document.createElement('button');
+        resetButton.textContent = 'Reset';
+        resetButton.style.cssText = `
+          background: #666;
+          border: none;
+          color: white;
+          padding: 4px 6px;
+          border-radius: 3px;
+          cursor: pointer;
+          font-size: 11px;
+        `;
+        resetButton.onclick = () => {
+          this.customKeyBindingsManager.removeCustomBinding(action.action);
+          keyCell.textContent = this.formatKeyCombo(this.customKeyBindingsManager.getEffectiveCombo(action.action));
+          this.refreshKeyboardShortcuts(); // Update keyboard shortcuts immediately
+          resetButton.remove(); // Remove reset button after resetting
+        };
+        buttonCell.appendChild(resetButton);
+      }
+
+      row.appendChild(buttonCell);
+      content.appendChild(row);
+    }
+
+    // Reset all button at bottom
+    const resetAllContainer = document.createElement('div');
+    resetAllContainer.style.cssText = `
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid #444;
+      text-align: center;
+    `;
+
+    const resetAllButton = document.createElement('button');
+    resetAllButton.textContent = 'Reset All to Defaults';
+    resetAllButton.style.cssText = `
+      background: #d9534f;
+      border: none;
+      color: white;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    `;
+    resetAllButton.onclick = () => {
+      if (confirm('Reset all custom key bindings to defaults?')) {
+        this.customKeyBindingsManager.resetAll();
+        this.refreshKeyboardShortcuts(); // Update keyboard shortcuts immediately
+        // Close and reopen modal to refresh the list
+        closeModal();
+        setTimeout(() => this.showCustomKeyBindings(), 100);
+      }
+    };
+    resetAllContainer.appendChild(resetAllButton);
+    content.appendChild(resetAllContainer);
+
+    showModal(content, { title: 'Custom Key Bindings', width: '700px' });
+  }
+
+  private formatKeyCombo(combo: KeyCombination): string {
+    return describeKeyCombo(combo);
+  }
+
+  private promptForKeyBinding(action: string, keyCell: HTMLElement): void {
+    const promptContent = document.createElement('div');
+    promptContent.style.cssText = `
+      text-align: center;
+      padding: 20px;
+    `;
+
+    const instruction = document.createElement('div');
+    instruction.style.cssText = `
+      color: #ccc;
+      margin-bottom: 16px;
+      font-size: 14px;
+    `;
+    instruction.textContent = 'Press the key combination you want to use for this action:';
+    promptContent.appendChild(instruction);
+
+    const keyDisplay = document.createElement('div');
+    keyDisplay.style.cssText = `
+      background: #333;
+      border: 2px solid #4a9eff;
+      border-radius: 8px;
+      padding: 16px;
+      color: #4a9eff;
+      font-family: monospace;
+      font-size: 18px;
+      font-weight: bold;
+      margin: 16px 0;
+      min-height: 24px;
+    `;
+    keyDisplay.textContent = 'Waiting for key press...';
+    promptContent.appendChild(keyDisplay);
+
+    const cancelButton = document.createElement('button');
+    cancelButton.textContent = 'Cancel';
+    cancelButton.style.cssText = `
+      background: #666;
+      border: none;
+      color: white;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-top: 16px;
+    `;
+    // Show the prompt modal
+    const { close } = showModal(promptContent, { title: 'Set Key Binding', width: '400px' });
+
+    // Listen for key presses
+    let listening = true;
+
+    // Cleanup function to ensure event listener is always removed
+    const cleanup = () => {
+      listening = false;
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+
+    // Set up cancel button to properly clean up
+    cancelButton.onclick = () => {
+      cleanup();
+      close();
+    };
+    promptContent.appendChild(cancelButton);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!listening) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      // Ignore modifier-only presses
+      if (e.key === 'Control' || e.key === 'Shift' || e.key === 'Alt' || e.key === 'Meta') {
+        return;
+      }
+
+      // Create key combination
+      const combo: KeyCombination = {
+        code: e.code,
+        ctrl: e.ctrlKey || e.metaKey,
+        shift: e.shiftKey,
+        alt: e.altKey,
+        meta: e.metaKey && !e.ctrlKey
+      };
+
+      // Display the combination
+      keyDisplay.textContent = this.formatKeyCombo(combo);
+
+      // Confirm button
+      const confirmButton = document.createElement('button');
+      confirmButton.textContent = 'Confirm';
+      confirmButton.style.cssText = `
+        background: #4a9eff;
+        border: none;
+        color: white;
+        padding: 8px 16px;
+        border-radius: 4px;
+        cursor: pointer;
+        margin-left: 8px;
+      `;
+      confirmButton.onclick = () => {
+        try {
+          this.customKeyBindingsManager.setCustomBinding(action, combo);
+          keyCell.textContent = this.formatKeyCombo(combo);
+          this.refreshKeyboardShortcuts(); // Update keyboard shortcuts immediately
+          cleanup();
+          close();
+        } catch (err) {
+          alert(`Error setting key binding: ${err}`);
+        }
+      };
+
+      // Replace cancel button with confirm + cancel
+      const buttonContainer = document.createElement('div');
+      buttonContainer.style.cssText = `
+        margin-top: 16px;
+        display: flex;
+        justify-content: center;
+        gap: 8px;
+      `;
+      buttonContainer.appendChild(confirmButton);
+
+      const newCancelButton = document.createElement('button');
+      newCancelButton.textContent = 'Cancel';
+      newCancelButton.style.cssText = `
+        background: #666;
+        border: none;
+        color: white;
+        padding: 8px 16px;
+        border-radius: 4px;
+        cursor: pointer;
+      `;
+      newCancelButton.onclick = () => {
+        cleanup();
+        close();
+      };
+      buttonContainer.appendChild(newCancelButton);
+
+      // Replace the old cancel button
+      cancelButton.replaceWith(buttonContainer);
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
   }
 
   private syncGTOStore(): void {

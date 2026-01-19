@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loadVideoFile, waitForTestHelper } from './fixtures';
+import { loadVideoFile, loadTwoVideoFiles, waitForTestHelper } from './fixtures';
 
 /**
  * A/B Source Compare Feature Tests
@@ -16,38 +16,52 @@ test.describe('A/B Compare UI Elements', () => {
     await loadVideoFile(page);
   });
 
-  test('AB-E001: View tab shows A/B control section', async ({ page }) => {
+  test('AB-E001: View tab shows Compare control button', async ({ page }) => {
     // Click View tab
     await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
 
-    // Should see A/B label
-    await expect(page.locator('text=A/B:')).toBeVisible();
+    // Should see Compare control button
+    const compareButton = page.locator('[data-testid="compare-control-button"]');
+    await expect(compareButton).toBeVisible();
+    await expect(compareButton).toContainText('Compare');
   });
 
-  test('AB-E002: A button is visible and has correct label', async ({ page }) => {
+  test('AB-E002: A button is visible in dropdown and has correct label', async ({ page }) => {
     await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
 
-    const buttonA = page.locator('[data-testid="ab-button-a"]');
-    await expect(buttonA).toBeVisible();
-    await expect(buttonA).toHaveText('A');
+    // Open the compare dropdown
+    await page.click('[data-testid="compare-control-button"]');
+    await page.waitForTimeout(100);
+
+    const aButton = page.locator('[data-testid="compare-ab-a"]');
+    await expect(aButton).toBeVisible();
+    await expect(aButton).toHaveText('A');
   });
 
-  test('AB-E003: B button is visible and has correct label', async ({ page }) => {
+  test('AB-E003: B button is visible in dropdown and has correct label', async ({ page }) => {
     await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
 
-    const buttonB = page.locator('[data-testid="ab-button-b"]');
-    await expect(buttonB).toBeVisible();
-    await expect(buttonB).toHaveText('B');
+    // Open the compare dropdown
+    await page.click('[data-testid="compare-control-button"]');
+    await page.waitForTimeout(100);
+
+    const bButton = page.locator('[data-testid="compare-ab-b"]');
+    await expect(bButton).toBeVisible();
+    await expect(bButton).toHaveText('B');
   });
 
-  test('AB-E004: Toggle button is visible with swap icon', async ({ page }) => {
+  test('AB-E004: Toggle button is visible in dropdown with swap icon', async ({ page }) => {
     await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
 
-    const toggleButton = page.locator('[data-testid="ab-toggle-button"]');
+    // Open the compare dropdown
+    await page.click('[data-testid="compare-control-button"]');
+    await page.waitForTimeout(100);
+
+    const toggleButton = page.locator('[data-testid="compare-ab-toggle"]');
     await expect(toggleButton).toBeVisible();
     await expect(toggleButton).toHaveText('⇄');
   });
@@ -56,7 +70,11 @@ test.describe('A/B Compare UI Elements', () => {
     await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
 
-    const buttonA = page.locator('[data-testid="ab-button-a"]');
+    // Open the compare dropdown
+    await page.click('[data-testid="compare-control-button"]');
+    await page.waitForTimeout(100);
+
+    const buttonA = page.locator('[data-testid="compare-ab-a"]');
 
     // A button should have active styling (blue background)
     const bgColor = await buttonA.evaluate(el => getComputedStyle(el).backgroundColor);
@@ -67,7 +85,11 @@ test.describe('A/B Compare UI Elements', () => {
     await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
 
-    const buttonB = page.locator('[data-testid="ab-button-b"]');
+    // Open the compare dropdown
+    await page.click('[data-testid="compare-control-button"]');
+    await page.waitForTimeout(100);
+
+    const buttonB = page.locator('[data-testid="compare-ab-b"]');
 
     // B button should be visually dimmed (opacity 0.5)
     const opacity = await buttonB.evaluate(el => getComputedStyle(el).opacity);
@@ -78,7 +100,11 @@ test.describe('A/B Compare UI Elements', () => {
     await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
 
-    const toggleButton = page.locator('[data-testid="ab-toggle-button"]');
+    // Open the compare dropdown
+    await page.click('[data-testid="compare-control-button"]');
+    await page.waitForTimeout(100);
+
+    const toggleButton = page.locator('[data-testid="compare-ab-toggle"]');
 
     // Toggle should be visually dimmed
     const opacity = await toggleButton.evaluate(el => getComputedStyle(el).opacity);
@@ -89,7 +115,11 @@ test.describe('A/B Compare UI Elements', () => {
     await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
 
-    const buttonA = page.locator('[data-testid="ab-button-a"]');
+    // Open the compare dropdown
+    await page.click('[data-testid="compare-control-button"]');
+    await page.waitForTimeout(100);
+
+    const buttonA = page.locator('[data-testid="compare-ab-a"]');
     const title = await buttonA.getAttribute('title');
     expect(title).toContain('source A');
   });
@@ -98,7 +128,11 @@ test.describe('A/B Compare UI Elements', () => {
     await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
 
-    const buttonB = page.locator('[data-testid="ab-button-b"]');
+    // Open the compare dropdown
+    await page.click('[data-testid="compare-control-button"]');
+    await page.waitForTimeout(100);
+
+    const buttonB = page.locator('[data-testid="compare-ab-b"]');
     const title = await buttonB.getAttribute('title');
     expect(title).toContain('source B');
   });
@@ -107,7 +141,11 @@ test.describe('A/B Compare UI Elements', () => {
     await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
 
-    const toggleButton = page.locator('[data-testid="ab-toggle-button"]');
+    // Open the compare dropdown
+    await page.click('[data-testid="compare-control-button"]');
+    await page.waitForTimeout(100);
+
+    const toggleButton = page.locator('[data-testid="compare-ab-toggle"]');
     const title = await toggleButton.getAttribute('title');
     expect(title).toContain('`');
   });
@@ -121,9 +159,9 @@ test.describe('A/B Indicator Display', () => {
     await loadVideoFile(page);
   });
 
-  test('AB-E020: A/B indicator is hidden with single source', async ({ page }) => {
-    const indicator = page.locator('[data-testid="ab-indicator"]');
-    await expect(indicator).toBeHidden();
+  test('AB-E020: Compare button shows no B indicator with single source', async ({ page }) => {
+    const compareButton = page.locator('[data-testid="compare-control-button"]');
+    await expect(compareButton).not.toContainText('B');
   });
 
   test('AB-E021: Viewer area does not show A/B badge initially', async ({ page }) => {
@@ -157,9 +195,9 @@ test.describe('A/B Keyboard Shortcuts', () => {
     const viewerAfter = await page.locator('.viewer-container').first().screenshot();
 
     // Visual should be the same (nothing changed)
-    // A/B indicator should still be hidden
-    const indicator = page.locator('[data-testid="ab-indicator"]');
-    await expect(indicator).toBeHidden();
+    // Compare button should not show B indicator
+    const compareButton = page.locator('[data-testid="compare-control-button"]');
+    await expect(compareButton).not.toContainText('B');
   });
 
   test('AB-E031: Tilde key does nothing with single source', async ({ page }) => {
@@ -167,9 +205,9 @@ test.describe('A/B Keyboard Shortcuts', () => {
     await page.keyboard.press('~');
     await page.waitForTimeout(200);
 
-    // A/B indicator should still be hidden
-    const indicator = page.locator('[data-testid="ab-indicator"]');
-    await expect(indicator).toBeHidden();
+    // Compare button should not show B indicator
+    const compareButton = page.locator('[data-testid="compare-control-button"]');
+    await expect(compareButton).not.toContainText('B');
   });
 });
 
@@ -185,7 +223,11 @@ test.describe('A/B Button Interactions', () => {
     await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
 
-    const buttonA = page.locator('[data-testid="ab-button-a"]');
+    // Open the compare dropdown
+    await page.click('[data-testid="compare-control-button"]');
+    await page.waitForTimeout(100);
+
+    const buttonA = page.locator('[data-testid="compare-ab-a"]');
     await buttonA.click();
     await page.waitForTimeout(100);
 
@@ -203,40 +245,95 @@ test.describe('A/B Button Interactions', () => {
     await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
 
-    const buttonA = page.locator('[data-testid="ab-button-a"]');
-    const buttonB = page.locator('[data-testid="ab-button-b"]');
+    // Open the compare dropdown
+    await page.click('[data-testid="compare-control-button"]');
+    await page.waitForTimeout(100);
+
+    const buttonA = page.locator('[data-testid="compare-ab-a"]');
+    const buttonB = page.locator('[data-testid="compare-ab-b"]');
 
     // Force click on disabled button
     await buttonB.click({ force: true });
     await page.waitForTimeout(100);
 
-    // A should still be highlighted (nothing changed)
-    const bgColorA = await buttonA.evaluate(el => getComputedStyle(el).backgroundColor);
-    expect(bgColorA).toContain('74');
+    // A should still be highlighted, B should not
+    const aBorderColor = await buttonA.evaluate(el => getComputedStyle(el).borderColor);
+    const bBorderColor = await buttonB.evaluate(el => getComputedStyle(el).borderColor);
+    expect(aBorderColor).toMatch(/74|158|255/); // rgb(74, 158, 255)
+    expect(bBorderColor).not.toMatch(/74|158|255/);
+  });
+});
 
-    // B should still be dimmed
-    const opacityB = await buttonB.evaluate(el => getComputedStyle(el).opacity);
-    expect(parseFloat(opacityB)).toBeLessThan(1);
+test.describe('A/B Button Interactions (Two Sources)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+    await loadTwoVideoFiles(page);
   });
 
-  test('AB-E042: A/B controls remain visible when switching tabs', async ({ page }) => {
-    // Go to View tab, verify controls
-    await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(100);
-    await expect(page.locator('[data-testid="ab-button-a"]')).toBeVisible();
-
-    // Switch to Color tab
-    await page.click('button[data-tab-id="color"]');
-    await page.waitForTimeout(100);
-
-    // Switch back to View tab
+  test('AB-E042: Clicking B button switches to B', async ({ page }) => {
     await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
 
-    // A/B controls should still be there
-    await expect(page.locator('[data-testid="ab-button-a"]')).toBeVisible();
-    await expect(page.locator('[data-testid="ab-button-b"]')).toBeVisible();
-    await expect(page.locator('[data-testid="ab-toggle-button"]')).toBeVisible();
+    // Open the compare dropdown
+    await page.click('[data-testid="compare-control-button"]');
+    await page.waitForTimeout(100);
+
+    const buttonA = page.locator('[data-testid="compare-ab-a"]');
+    const buttonB = page.locator('[data-testid="compare-ab-b"]');
+
+    // Click A first to enable B
+    await buttonA.click();
+    await page.waitForTimeout(100);
+
+    // Now click B
+    await buttonB.click();
+    await page.waitForTimeout(100);
+
+    // Move mouse away to clear hover state
+    await page.mouse.move(0, 0);
+    await page.waitForTimeout(100);
+
+    // B should be highlighted, A should not
+    const aBorderColor = await buttonA.evaluate(el => getComputedStyle(el).borderColor);
+    const bBorderColor = await buttonB.evaluate(el => getComputedStyle(el).borderColor);
+    expect(bBorderColor).toMatch(/74|158|255/); // rgb(74, 158, 255)
+    expect(aBorderColor).not.toMatch(/74|158|255/);
+  });
+
+  test('AB-E043: Clicking A button switches back to A', async ({ page }) => {
+    await page.click('button[data-tab-id="view"]');
+    await page.waitForTimeout(100);
+
+    // Open the compare dropdown
+    await page.click('[data-testid="compare-control-button"]');
+    await page.waitForTimeout(100);
+
+    const buttonA = page.locator('[data-testid="compare-ab-a"]');
+    const buttonB = page.locator('[data-testid="compare-ab-b"]');
+
+    // Click A first to enable B
+    await buttonA.click();
+    await page.waitForTimeout(100);
+
+    // Click B
+    await buttonB.click();
+    await page.waitForTimeout(100);
+
+    // Click A again
+    await buttonA.click();
+    await page.waitForTimeout(100);
+
+    // Move mouse away to clear hover state
+    await page.mouse.move(0, 0);
+    await page.waitForTimeout(100);
+
+    // A should be highlighted, B should not
+    const aBorderColor = await buttonA.evaluate(el => getComputedStyle(el).borderColor);
+    const bBorderColor = await buttonB.evaluate(el => getComputedStyle(el).borderColor);
+    expect(aBorderColor).toMatch(/74|158|255/); // rgb(74, 158, 255)
+    expect(bBorderColor).not.toMatch(/74|158|255/);
   });
 });
 
@@ -252,8 +349,12 @@ test.describe('A/B Visual Layout', () => {
     await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
 
-    const buttonA = page.locator('[data-testid="ab-button-a"]');
-    const buttonB = page.locator('[data-testid="ab-button-b"]');
+    // Open the compare dropdown
+    await page.click('[data-testid="compare-control-button"]');
+    await page.waitForTimeout(100);
+
+    const buttonA = page.locator('[data-testid="compare-ab-a"]');
+    const buttonB = page.locator('[data-testid="compare-ab-b"]');
 
     const boxA = await buttonA.boundingBox();
     const boxB = await buttonB.boundingBox();
@@ -271,8 +372,12 @@ test.describe('A/B Visual Layout', () => {
     await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
 
-    const buttonB = page.locator('[data-testid="ab-button-b"]');
-    const toggleButton = page.locator('[data-testid="ab-toggle-button"]');
+    // Open the compare dropdown
+    await page.click('[data-testid="compare-control-button"]');
+    await page.waitForTimeout(100);
+
+    const buttonB = page.locator('[data-testid="compare-ab-b"]');
+    const toggleButton = page.locator('[data-testid="compare-ab-toggle"]');
 
     const boxB = await buttonB.boundingBox();
     const boxToggle = await toggleButton.boundingBox();
@@ -288,16 +393,21 @@ test.describe('A/B Visual Layout', () => {
     await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
 
-    // Find the A/B label text
-    const label = page.locator('span:has-text("A/B:")');
+    // Open the compare dropdown
+    await page.click('[data-testid="compare-control-button"]');
+    await page.waitForTimeout(100);
+
+    // Find the A/B label text within the dropdown
+    const dropdown = page.locator('[data-testid="compare-dropdown"]');
+    const label = dropdown.locator('div:has-text("A/B Compare")').nth(1);
     await expect(label).toBeVisible();
 
-    const buttonA = page.locator('[data-testid="ab-button-a"]');
+    const buttonA = page.locator('[data-testid="compare-ab-a"]');
     const labelBox = await label.boundingBox();
     const buttonBox = await buttonA.boundingBox();
 
-    // Label should be to the left of buttons
-    expect(labelBox!.x).toBeLessThan(buttonBox!.x);
+    // Label should be above the buttons
+    expect(labelBox!.y).toBeLessThan(buttonBox!.y);
   });
 });
 
@@ -313,9 +423,13 @@ test.describe('A/B Screenshot Comparison', () => {
     await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(200);
 
+    // Open the compare dropdown
+    await page.click('[data-testid="compare-control-button"]');
+    await page.waitForTimeout(100);
+
     // Get the A/B buttons
-    const buttonA = page.locator('[data-testid="ab-button-a"]');
-    const toggleButton = page.locator('[data-testid="ab-toggle-button"]');
+    const buttonA = page.locator('[data-testid="compare-ab-a"]');
+    const toggleButton = page.locator('[data-testid="compare-ab-toggle"]');
 
     // Scroll the A/B buttons into view (they may be off-screen on narrow viewports)
     await buttonA.scrollIntoViewIfNeeded();

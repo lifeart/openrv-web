@@ -3,6 +3,7 @@ import path from 'path';
 
 // Sample file paths
 export const SAMPLE_VIDEO = 'sample/2d56d82687b78171f50c496bab002bc18d53149b.mp4';
+export const SAMPLE_VIDEO2 = 'sample/3ef76c68a6da876ad221431399e0cfe434fbaee5.mp4';
 export const SAMPLE_IMAGE = 'sample/test_image.png';
 export const SAMPLE_RV_SESSION = 'sample/test_session.rv';
 
@@ -230,6 +231,18 @@ export async function loadVideoFile(page: Page): Promise<void> {
   await fileInput.setInputFiles(filePath);
 
   // Wait for video to load and render
+  await page.waitForTimeout(1000);
+}
+
+export async function loadTwoVideoFiles(page: Page): Promise<void> {
+  const filePath1 = path.resolve(process.cwd(), SAMPLE_VIDEO);
+  const filePath2 = path.resolve(process.cwd(), SAMPLE_VIDEO2);
+
+  // Get the file input
+  const fileInput = page.locator('input[type="file"]').first();
+  await fileInput.setInputFiles([filePath1, filePath2]);
+
+  // Wait for videos to load and render
   await page.waitForTimeout(1000);
 }
 

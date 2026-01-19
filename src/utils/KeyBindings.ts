@@ -16,263 +16,266 @@ export type KeyBindingKeys = keyof typeof DEFAULT_KEY_BINDINGS;
 export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   // Playback controls
   'playback.toggle': {
-    key: ' ',
+    code: 'Space',
     description: 'Toggle play/pause'
   },
   'playback.stepForward': {
-    key: 'ArrowRight',
+    code: 'ArrowRight',
     description: 'Step forward one frame'
   },
   'playback.stepBackward': {
-    key: 'ArrowLeft',
+    code: 'ArrowLeft',
     description: 'Step backward one frame'
   },
   'playback.toggleDirection': {
-    key: 'ArrowUp',
+    code: 'ArrowUp',
     description: 'Toggle play direction'
   },
   'playback.goToStart': {
-    key: 'Home',
+    code: 'Home',
     description: 'Go to first frame'
   },
   'playback.goToEnd': {
-    key: 'End',
+    code: 'End',
     description: 'Go to last frame'
   },
 
   // Timeline controls
   'timeline.setInPoint': {
-    key: 'i',
+    code: 'KeyI',
     description: 'Set in point'
   },
   'timeline.setInPointAlt': {
-    key: '[',
+    code: 'BracketLeft',
     description: 'Set in point (alternative)'
   },
   'timeline.setOutPoint': {
-    key: 'o',
+    code: 'KeyO',
     description: 'Set out point'
   },
   'timeline.setOutPointAlt': {
-    key: ']',
+    code: 'BracketRight',
     description: 'Set out point (alternative)'
   },
   'timeline.toggleMark': {
-    key: 'm',
+    code: 'KeyM',
     description: 'Toggle mark at current frame'
   },
   'timeline.resetInOut': {
-    key: 'r',
+    code: 'KeyR',
     description: 'Reset in/out points to full range'
   },
   'timeline.cycleLoopMode': {
-    key: 'l',
+    code: 'KeyL',
     description: 'Cycle loop mode'
   },
 
   // View controls
   'view.fitToWindow': {
-    key: 'f',
+    code: 'KeyF',
     description: 'Fit image to window'
   },
   'view.fitToWindowAlt': {
-    key: 'F',
+    code: 'KeyF',
+    shift: true,
     description: 'Fit image to window (alternative)'
   },
   'view.zoom50': {
-    key: '0',
+    code: 'Digit0',
     description: 'Zoom to 50% (when on View tab)'
   },
   'view.cycleWipeMode': {
-    key: 'W',
+    code: 'KeyW',
+    shift: true,
     description: 'Cycle wipe mode'
   },
   'view.toggleWaveform': {
-    key: 'w',
+    code: 'KeyW',
     description: 'Toggle waveform scope'
   },
   'view.toggleAB': {
-    key: '`',
+    code: 'Backquote',
     description: 'Toggle A/B source compare'
   },
   'view.toggleABAlt': {
-    key: '~',
+    code: 'Backquote',
+    shift: true,
     description: 'Toggle A/B source compare (alternative)'
   },
 
   // Panel toggles
   'panel.color': {
-    key: 'c',
+    code: 'KeyC',
     description: 'Toggle color controls panel'
   },
   'panel.effects': {
-    key: 'g',
+    code: 'KeyG',
     description: 'Toggle effects panel'
   },
   'panel.curves': {
-    key: 'u',
+    code: 'KeyU',
     description: 'Toggle curves panel'
   },
   'panel.crop': {
-    key: 'k',
+    code: 'KeyK',
     description: 'Toggle crop mode'
   },
   'panel.waveform': {
-    key: 'w',
+    code: 'KeyW',
     description: 'Toggle waveform scope'
   },
   'panel.vectorscope': {
-    key: 'y',
+    code: 'KeyY',
     description: 'Toggle vectorscope'
   },
   'panel.histogram': {
-    key: 'h',
+    code: 'KeyH',
     description: 'Toggle histogram'
   },
 
   // Transform controls
   'transform.rotateLeft': {
-    key: 'r',
+    code: 'KeyR',
     shift: true,
     description: 'Rotate left 90 degrees'
   },
   'transform.rotateRight': {
-    key: 'r',
+    code: 'KeyR',
     alt: true,
     description: 'Rotate right 90 degrees'
   },
   'transform.flipHorizontal': {
-    key: 'h',
+    code: 'KeyH',
     shift: true,
     description: 'Flip horizontal'
   },
   'transform.flipVertical': {
-    key: 'v',
+    code: 'KeyV',
     shift: true,
     description: 'Flip vertical'
   },
 
   // Export controls
   'export.quickExport': {
-    key: 's',
+    code: 'KeyS',
     ctrl: true,
     description: 'Quick export current frame'
   },
   'export.copyFrame': {
-    key: 'c',
+    code: 'KeyC',
     ctrl: true,
     description: 'Copy current frame to clipboard'
   },
 
   // Undo/Redo
   'edit.undo': {
-    key: 'z',
+    code: 'KeyZ',
     ctrl: true,
     description: 'Undo last action'
   },
   'edit.redo': {
-    key: 'y',
+    code: 'KeyY',
     ctrl: true,
     description: 'Redo last action'
   },
 
   // Annotation navigation
   'annotation.previous': {
-    key: ',',
+    code: 'Comma',
     description: 'Go to previous annotated frame'
   },
   'annotation.next': {
-    key: '.',
+    code: 'Period',
     description: 'Go to next annotated frame'
   },
 
   // Tab navigation
   'tab.view': {
-    key: '1',
+    code: 'Digit1',
     description: 'Switch to View tab'
   },
   'tab.color': {
-    key: '2',
+    code: 'Digit2',
     description: 'Switch to Color tab'
   },
   'tab.effects': {
-    key: '3',
+    code: 'Digit3',
     description: 'Switch to Effects tab'
   },
   'tab.transform': {
-    key: '4',
+    code: 'Digit4',
     description: 'Switch to Transform tab'
   },
   'tab.annotate': {
-    key: '5',
+    code: 'Digit5',
     description: 'Switch to Annotate tab'
   },
 
   // Paint tools (handled by PaintToolbar component)
   'paint.pan': {
-    key: 'v',
+    code: 'KeyV',
     description: 'Select pan tool'
   },
   'paint.pen': {
-    key: 'p',
+    code: 'KeyP',
     description: 'Select pen tool'
   },
   'paint.eraser': {
-    key: 'e',
+    code: 'KeyE',
     description: 'Select eraser tool'
   },
   'paint.text': {
-    key: 't',
+    code: 'KeyT',
     description: 'Select text tool'
   },
   'paint.toggleBrush': {
-    key: 'b',
+    code: 'KeyB',
     description: 'Toggle brush type'
   },
   'paint.toggleGhost': {
-    key: 'g',
+    code: 'KeyG',
     description: 'Toggle ghost mode'
   },
 
   // Channel selection (handled by ChannelSelect component)
   'channel.red': {
-    key: 'R',
+    code: 'KeyR',
     shift: true,
     description: 'Select red channel'
   },
   'channel.green': {
-    key: 'G',
+    code: 'KeyG',
     shift: true,
     description: 'Select green channel'
   },
   'channel.blue': {
-    key: 'B',
+    code: 'KeyB',
     shift: true,
     description: 'Select blue channel'
   },
   'channel.alpha': {
-    key: 'A',
+    code: 'KeyA',
     shift: true,
     description: 'Select alpha channel'
   },
   'channel.luminance': {
-    key: 'L',
+    code: 'KeyL',
     shift: true,
     description: 'Select luminance channel'
   },
   'channel.none': {
-    key: 'N',
+    code: 'KeyN',
     shift: true,
     description: 'Select no channel'
   },
 
   // Stereo controls (handled by StereoControl component)
   'stereo.toggle': {
-    key: 's',
+    code: 'KeyS',
     description: 'Toggle stereo viewing mode'
   },
   'panel.close': {
-    key: 'Escape',
+    code: 'Escape',
     description: 'Close open panels'
   },
 };
@@ -285,6 +288,38 @@ export function describeKeyCombo(combo: KeyCombination): string {
   if (combo.shift) parts.push('Shift');
   if (combo.alt) parts.push('Alt');
   if (combo.meta) parts.push('Cmd');
-  parts.push(combo.key === ' ' ? 'Space' : combo.key);
+  parts.push(codeToKey(combo.code));
   return parts.join('+');
+}
+
+/**
+ * Convert a code back to its English key representation for display
+ */
+function codeToKey(code: string): string {
+  // Handle special keys
+  switch (code) {
+    case 'Space': return 'Space';
+    case 'ArrowUp': return '↑';
+    case 'ArrowDown': return '↓';
+    case 'ArrowLeft': return '←';
+    case 'ArrowRight': return '→';
+    case 'Home': return 'Home';
+    case 'End': return 'End';
+    case 'Escape': return 'Esc';
+    case 'BracketLeft': return '[';
+    case 'BracketRight': return ']';
+    case 'Comma': return ',';
+    case 'Period': return '.';
+    case 'Backquote': return '`';
+    default:
+      // For KeyX format, extract the X
+      if (code.startsWith('Key')) {
+        return code.slice(3);
+      }
+      // For DigitX format, extract the X
+      if (code.startsWith('Digit')) {
+        return code.slice(5);
+      }
+      return code;
+  }
 }
