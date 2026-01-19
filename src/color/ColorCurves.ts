@@ -180,11 +180,19 @@ export function applyCurvesToPixel(
 
 /**
  * Apply curves to ImageData (in-place modification)
+ * Note: This rebuilds LUTs every call. For better performance, use CurveLUTCache.
  */
 export function applyCurvesToImageData(imageData: ImageData, curves: ColorCurvesData): void {
   if (isDefaultCurves(curves)) return;
 
   const luts = buildAllCurveLUTs(curves);
+  applyLUTsToImageData(imageData, luts);
+}
+
+/**
+ * Apply pre-built LUTs to ImageData (in-place modification)
+ */
+export function applyLUTsToImageData(imageData: ImageData, luts: CurveLUTs): void {
   const data = imageData.data;
   const len = data.length;
 
@@ -194,6 +202,50 @@ export function applyCurvesToImageData(imageData: ImageData, curves: ColorCurves
     data[i + 1] = result.g;
     data[i + 2] = result.b;
     // Alpha unchanged
+  }
+}
+
+/**
+ * Cache for curve LUTs to avoid rebuilding every frame
+ * Only rebuilds when curves actually change
+ */
+export class CurveLUTCache {
+  private cachedLUTs: CurveLUTs | null = null;
+  private cachedCurvesJSON: string | null = null;
+
+  /**
+   * Get LUTs for the given curves, rebuilding only if curves changed
+   */
+  getLUTs(curves: ColorCurvesData): CurveLUTs {
+    const curvesJSON = JSON.stringify(curves);
+
+    if (this.cachedLUTs && this.cachedCurvesJSON === curvesJSON) {
+      return this.cachedLUTs;
+    }
+
+    // Curves changed, rebuild LUTs
+    this.cachedLUTs = buildAllCurveLUTs(curves);
+    this.cachedCurvesJSON = curvesJSON;
+
+    return this.cachedLUTs;
+  }
+
+  /**
+   * Apply curves to ImageData using cached LUTs
+   */
+  apply(imageData: ImageData, curves: ColorCurvesData): void {
+    if (isDefaultCurves(curves)) return;
+
+    const luts = this.getLUTs(curves);
+    applyLUTsToImageData(imageData, luts);
+  }
+
+  /**
+   * Clear the cache
+   */
+  clear(): void {
+    this.cachedLUTs = null;
+    this.cachedCurvesJSON = null;
   }
 }
 

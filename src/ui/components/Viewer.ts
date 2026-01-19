@@ -10,7 +10,7 @@ import { CropState, CropRegion, DEFAULT_CROP_STATE, DEFAULT_CROP_REGION } from '
 import { LUT3D } from '../../color/LUTLoader';
 import { WebGLLUTProcessor } from '../../color/WebGLLUT';
 import { CDLValues, DEFAULT_CDL, isDefaultCDL, applyCDLToImageData } from '../../color/CDL';
-import { ColorCurvesData, createDefaultCurvesData, isDefaultCurves, applyCurvesToImageData } from '../../color/ColorCurves';
+import { ColorCurvesData, createDefaultCurvesData, isDefaultCurves, CurveLUTCache } from '../../color/ColorCurves';
 import { LensDistortionParams, DEFAULT_LENS_PARAMS, isDefaultLensParams, applyLensDistortion } from '../../transform/LensDistortion';
 import { ExportFormat, exportCanvas as doExportCanvas, copyCanvasToClipboard } from '../../utils/FrameExporter';
 import { filterImageFiles } from '../../utils/SequenceLoader';
@@ -84,6 +84,10 @@ export class Viewer {
   // Color adjustments
   private colorAdjustments: ColorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
 
+  // Cached filter string for performance (avoid rebuilding every frame)
+  private cachedFilterString: string | null = null;
+  private cachedFilterAdjustments: ColorAdjustments | null = null;
+
   // Wipe comparison
   private wipeState: WipeState = { mode: 'off', position: 0.5, showOriginal: 'left' };
   private wipeLine: HTMLElement | null = null;
@@ -114,6 +118,7 @@ export class Viewer {
 
   // Color curves state
   private curvesData: ColorCurvesData = createDefaultCurvesData();
+  private curveLUTCache = new CurveLUTCache();
 
   // Lens distortion state
   private lensParams: LensDistortionParams = { ...DEFAULT_LENS_PARAMS };
@@ -992,25 +997,9 @@ export class Viewer {
       this.applyLUTToCanvas(this.imageCtx, displayWidth, displayHeight);
     }
 
-    // Apply CDL color correction (pixel-level operation)
-    if (!isDefaultCDL(this.cdlValues)) {
-      this.applyCDL(this.imageCtx, displayWidth, displayHeight);
-    }
-
-    // Apply color curves (pixel-level operation, applied after CDL)
-    if (!isDefaultCurves(this.curvesData)) {
-      this.applyCurves(this.imageCtx, displayWidth, displayHeight);
-    }
-
-    // Apply sharpen filter (pixel-level operation, applied after CDL)
-    if (this.filterSettings.sharpen > 0) {
-      this.applySharpen(this.imageCtx, displayWidth, displayHeight);
-    }
-
-    // Apply channel isolation (display mode, applied last)
-    if (this.channelMode !== 'rgb') {
-      this.applyChannelIsolation(this.imageCtx, displayWidth, displayHeight);
-    }
+    // Apply batched pixel-level effects (CDL, curves, sharpen, channel isolation)
+    // This uses a single getImageData/putImageData pair for better performance
+    this.applyBatchedPixelEffects(this.imageCtx, displayWidth, displayHeight);
 
     this.updateCanvasPosition();
     this.updateWipeLine();
@@ -1085,58 +1074,6 @@ export class Viewer {
     ctx.restore();
   }
 
-  /**
-   * Apply unsharp mask sharpening to the canvas
-   * Uses a simplified 3x3 kernel convolution for performance
-   */
-  private applySharpen(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-    if (this.filterSettings.sharpen <= 0) return;
-
-    const imageData = ctx.getImageData(0, 0, width, height);
-    const data = imageData.data;
-    const amount = this.filterSettings.sharpen / 100;
-
-    // Create a copy for reading original values
-    const original = new Uint8ClampedArray(data);
-
-    // Sharpen kernel (3x3 unsharp mask approximation)
-    // Center weight is boosted, neighbors are subtracted
-    const kernel = [
-      0, -1, 0,
-      -1, 5, -1,
-      0, -1, 0
-    ];
-
-    // For performance, we'll use a simplified approach:
-    // Instead of full convolution, apply contrast-based sharpening with edge enhancement
-    for (let y = 1; y < height - 1; y++) {
-      for (let x = 1; x < width - 1; x++) {
-        const idx = (y * width + x) * 4;
-
-        for (let c = 0; c < 3; c++) { // RGB channels only
-          let sum = 0;
-          let ki = 0;
-
-          // Apply 3x3 kernel
-          for (let ky = -1; ky <= 1; ky++) {
-            for (let kx = -1; kx <= 1; kx++) {
-              const pidx = ((y + ky) * width + (x + kx)) * 4 + c;
-              sum += original[pidx]! * kernel[ki]!;
-              ki++;
-            }
-          }
-
-          // Blend between original and sharpened based on amount
-          const originalValue = original[idx + c]!;
-          const sharpenedValue = Math.max(0, Math.min(255, sum));
-          data[idx + c] = Math.round(originalValue + (sharpenedValue - originalValue) * amount);
-        }
-      }
-    }
-
-    ctx.putImageData(imageData, 0, 0);
-  }
-
   private renderWithWipe(
     element: HTMLImageElement | HTMLVideoElement,
     displayWidth: number,
@@ -1201,6 +1138,23 @@ export class Viewer {
   }
 
   private getCanvasFilterString(): string {
+    // Check if cached filter is still valid
+    if (this.cachedFilterString !== null && this.cachedFilterAdjustments !== null) {
+      const adj = this.colorAdjustments;
+      const cached = this.cachedFilterAdjustments;
+      if (
+        adj.brightness === cached.brightness &&
+        adj.exposure === cached.exposure &&
+        adj.contrast === cached.contrast &&
+        adj.saturation === cached.saturation &&
+        adj.temperature === cached.temperature &&
+        adj.tint === cached.tint
+      ) {
+        return this.cachedFilterString;
+      }
+    }
+
+    // Build new filter string
     const filters: string[] = [];
 
     const brightness = 1 + this.colorAdjustments.brightness;
@@ -1237,7 +1191,11 @@ export class Viewer {
       filters.push(`hue-rotate(${hue.toFixed(1)}deg)`);
     }
 
-    return filters.length > 0 ? filters.join(' ') : 'none';
+    // Cache the result
+    this.cachedFilterString = filters.length > 0 ? filters.join(' ') : 'none';
+    this.cachedFilterAdjustments = { ...this.colorAdjustments };
+
+    return this.cachedFilterString;
   }
 
   private renderPaint(): void {
@@ -1448,17 +1406,6 @@ export class Viewer {
     this.scheduleRender();
   }
 
-  /**
-   * Apply CDL color correction to the canvas
-   */
-  private applyCDL(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-    if (isDefaultCDL(this.cdlValues)) return;
-
-    const imageData = ctx.getImageData(0, 0, width, height);
-    applyCDLToImageData(imageData, this.cdlValues);
-    ctx.putImageData(imageData, 0, 0);
-  }
-
   // Color curves methods
   setCurves(curves: ColorCurvesData): void {
     this.curvesData = {
@@ -1485,14 +1432,90 @@ export class Viewer {
   }
 
   /**
-   * Apply color curves to the canvas
+   * Apply batched pixel-level effects to the canvas.
+   * Uses a single getImageData/putImageData pair for CDL, curves, sharpen, and channel isolation.
+   * This reduces GPU↔CPU transfers from 4 to 1.
    */
-  private applyCurves(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-    if (isDefaultCurves(this.curvesData)) return;
+  private applyBatchedPixelEffects(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+    const hasCDL = !isDefaultCDL(this.cdlValues);
+    const hasCurves = !isDefaultCurves(this.curvesData);
+    const hasSharpen = this.filterSettings.sharpen > 0;
+    const hasChannel = this.channelMode !== 'rgb';
 
+    // Early return if no pixel effects are active
+    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel) {
+      return;
+    }
+
+    // Single getImageData call
     const imageData = ctx.getImageData(0, 0, width, height);
-    applyCurvesToImageData(imageData, this.curvesData);
+
+    // Apply CDL color correction
+    if (hasCDL) {
+      applyCDLToImageData(imageData, this.cdlValues);
+    }
+
+    // Apply color curves
+    if (hasCurves) {
+      this.curveLUTCache.apply(imageData, this.curvesData);
+    }
+
+    // Apply sharpen filter
+    if (hasSharpen) {
+      this.applySharpenToImageData(imageData, width, height);
+    }
+
+    // Apply channel isolation
+    if (hasChannel) {
+      applyChannelIsolation(imageData, this.channelMode);
+    }
+
+    // Single putImageData call
     ctx.putImageData(imageData, 0, 0);
+  }
+
+  /**
+   * Apply sharpen filter to ImageData in-place.
+   * Uses a 3x3 unsharp mask kernel convolution.
+   */
+  private applySharpenToImageData(imageData: ImageData, width: number, height: number): void {
+    const data = imageData.data;
+    const amount = this.filterSettings.sharpen / 100;
+
+    // Create a copy for reading original values
+    const original = new Uint8ClampedArray(data);
+
+    // Sharpen kernel (3x3 unsharp mask approximation)
+    const kernel = [
+      0, -1, 0,
+      -1, 5, -1,
+      0, -1, 0
+    ];
+
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const idx = (y * width + x) * 4;
+
+        for (let c = 0; c < 3; c++) { // RGB channels only
+          let sum = 0;
+          let ki = 0;
+
+          // Apply 3x3 kernel
+          for (let ky = -1; ky <= 1; ky++) {
+            for (let kx = -1; kx <= 1; kx++) {
+              const pidx = ((y + ky) * width + (x + kx)) * 4 + c;
+              sum += original[pidx]! * kernel[ki]!;
+              ki++;
+            }
+          }
+
+          // Blend between original and sharpened based on amount
+          const originalValue = original[idx + c]!;
+          const sharpenedValue = Math.max(0, Math.min(255, sum));
+          data[idx + c] = Math.round(originalValue + (sharpenedValue - originalValue) * amount);
+        }
+      }
+    }
   }
 
   // Lens distortion methods
@@ -1561,17 +1584,6 @@ export class Viewer {
     const imageData = ctx.getImageData(0, 0, width, height);
     const processedData = applyStereoMode(imageData, this.stereoState);
     ctx.putImageData(processedData, 0, 0);
-  }
-
-  /**
-   * Apply channel isolation to the canvas
-   */
-  private applyChannelIsolation(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-    if (this.channelMode === 'rgb') return;
-
-    const imageData = ctx.getImageData(0, 0, width, height);
-    applyChannelIsolation(imageData, this.channelMode);
-    ctx.putImageData(imageData, 0, 0);
   }
 
   // Stack/composite methods

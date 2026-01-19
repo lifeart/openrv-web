@@ -88,7 +88,7 @@ export class WebGLLUTProcessor {
     this.canvas = document.createElement('canvas');
     const gl = this.canvas.getContext('webgl2', {
       premultipliedAlpha: false,
-      preserveDrawingBuffer: true,
+      preserveDrawingBuffer: false, // Performance: allows optimized backbuffer swaps
     });
 
     if (!gl) {
