@@ -20,6 +20,7 @@ import { showAlert } from './shared/Modal';
 import { getIconSvg } from './shared/Icons';
 import { ChannelMode, applyChannelIsolation } from './ChannelSelect';
 import { StereoState, DEFAULT_STEREO_STATE, isDefaultStereoState, applyStereoMode } from '../../stereo/StereoRenderer';
+import { WebGLSharpenProcessor } from '../../filters/WebGLSharpen';
 
 interface PointerState {
   pointerId: number;
@@ -107,6 +108,7 @@ export class Viewer {
 
   // Filter effects
   private filterSettings: FilterSettings = { ...DEFAULT_FILTER_SETTINGS };
+  private sharpenProcessor: WebGLSharpenProcessor | null = null;
 
   // Crop state
   private cropState: CropState = { ...DEFAULT_CROP_STATE, region: { ...DEFAULT_CROP_REGION } };
@@ -297,6 +299,14 @@ export class Viewer {
     } catch (e) {
       console.warn('WebGL LUT processor not available, falling back to CPU:', e);
       this.lutProcessor = null;
+    }
+
+    // Initialize WebGL sharpen processor
+    try {
+      this.sharpenProcessor = new WebGLSharpenProcessor();
+    } catch (e) {
+      console.warn('WebGL sharpen processor not available, falling back to CPU:', e);
+      this.sharpenProcessor = null;
     }
   }
 
@@ -1476,11 +1486,26 @@ export class Viewer {
 
   /**
    * Apply sharpen filter to ImageData in-place.
-   * Uses a 3x3 unsharp mask kernel convolution.
+   * Uses GPU acceleration when available, falls back to CPU.
    */
   private applySharpenToImageData(imageData: ImageData, width: number, height: number): void {
+    const amount = this.filterSettings.sharpen;
+
+    // Try GPU sharpen first (much faster for large images)
+    if (this.sharpenProcessor && this.sharpenProcessor.isReady()) {
+      this.sharpenProcessor.applyInPlace(imageData, amount);
+      return;
+    }
+
+    // CPU fallback: 3x3 unsharp mask kernel convolution
+    this.applySharpenCPU(imageData, width, height, amount / 100);
+  }
+
+  /**
+   * CPU-based sharpen filter (fallback when GPU is unavailable)
+   */
+  private applySharpenCPU(imageData: ImageData, width: number, height: number, amount: number): void {
     const data = imageData.data;
-    const amount = this.filterSettings.sharpen / 100;
 
     // Create a copy for reading original values
     const original = new Uint8ClampedArray(data);
@@ -2015,6 +2040,12 @@ export class Viewer {
     if (this.lutProcessor) {
       this.lutProcessor.dispose();
       this.lutProcessor = null;
+    }
+
+    // Cleanup WebGL sharpen processor
+    if (this.sharpenProcessor) {
+      this.sharpenProcessor.dispose();
+      this.sharpenProcessor = null;
     }
   }
 
