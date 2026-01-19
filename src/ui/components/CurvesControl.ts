@@ -1,8 +1,9 @@
 /**
- * CurvesControl - Panel wrapper for curve editing
+ * CurvesControl - Draggable panel wrapper for curve editing
  *
  * Provides a complete curve editing interface with presets,
  * reset functionality, and import/export capabilities.
+ * Now uses DraggableContainer for consistent draggable behavior.
  */
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
@@ -16,6 +17,11 @@ import {
 } from '../../color/ColorCurves';
 import { getIconSvg } from './shared/Icons';
 import { createButton } from './shared/Button';
+import {
+  createDraggableContainer,
+  createControlButton,
+  DraggableContainer,
+} from './shared/DraggableContainer';
 
 interface CurvesControlEvents extends EventMap {
   curvesChanged: ColorCurvesData;
@@ -23,7 +29,7 @@ interface CurvesControlEvents extends EventMap {
 }
 
 export class CurvesControl extends EventEmitter<CurvesControlEvents> {
-  private container: HTMLElement;
+  private draggableContainer: DraggableContainer;
   private editor: CurveEditor;
   private presetSelect: HTMLSelectElement;
   private visible = false;
@@ -32,53 +38,32 @@ export class CurvesControl extends EventEmitter<CurvesControlEvents> {
   constructor(initialCurves?: ColorCurvesData) {
     super();
 
-    // Create container
-    this.container = document.createElement('div');
-    this.container.className = 'curves-control-container';
-    this.container.dataset.testid = 'curves-control';
-    this.container.style.cssText = `
-      display: none;
-      flex-direction: column;
-      gap: 8px;
-      padding: 12px;
-      background: #2a2a2a;
-      border: 1px solid #444;
-      border-radius: 6px;
+    // Create draggable container
+    this.draggableContainer = createDraggableContainer({
+      id: 'curves-control',
+      title: 'Color Curves',
+      initialPosition: { top: '10px', left: '10px' },
+      zIndex: 100,
+      onClose: () => this.hide(),
+      testId: 'curves-control', // Maintain backward compatibility with existing tests
+    });
+
+    // Style the container for curves panel
+    this.draggableContainer.element.style.cssText += `
       min-width: 220px;
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      z-index: 100;
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
     `;
 
-    // Create header
-    const header = document.createElement('div');
-    header.style.cssText = `
+    // Add reset button to controls
+    this.createHeaderControls();
+
+    // Create inner content wrapper
+    const contentWrapper = document.createElement('div');
+    contentWrapper.style.cssText = `
       display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 12px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid #444;
+      flex-direction: column;
+      gap: 8px;
     `;
-
-    const title = document.createElement('span');
-    title.textContent = 'Color Curves';
-    title.style.cssText = 'color: #ddd; font-size: 13px; font-weight: 500;';
-    header.appendChild(title);
-
-    // Reset button
-    const resetBtn = createButton('Reset', () => this.resetAll(), {
-      variant: 'ghost',
-      size: 'sm',
-      title: 'Reset all curves to default',
-      icon: getIconSvg('reset', 'sm'),
-    });
-    resetBtn.dataset.testid = 'curves-reset';
-    header.appendChild(resetBtn);
-
-    this.container.appendChild(header);
 
     // Create preset selector
     const presetRow = document.createElement('div');
@@ -127,11 +112,11 @@ export class CurvesControl extends EventEmitter<CurvesControlEvents> {
     });
 
     presetRow.appendChild(this.presetSelect);
-    this.container.appendChild(presetRow);
+    contentWrapper.appendChild(presetRow);
 
     // Create curve editor
     this.editor = new CurveEditor(initialCurves);
-    this.container.appendChild(this.editor.render_element());
+    contentWrapper.appendChild(this.editor.render_element());
 
     // Listen for curve changes
     this.editor.on('curveChanged', () => {
@@ -169,7 +154,23 @@ export class CurvesControl extends EventEmitter<CurvesControlEvents> {
     exportBtn.style.flex = '1';
     ioRow.appendChild(exportBtn);
 
-    this.container.appendChild(ioRow);
+    contentWrapper.appendChild(ioRow);
+
+    // Add content wrapper to draggable container
+    this.draggableContainer.content.appendChild(contentWrapper);
+  }
+
+  private createHeaderControls(): void {
+    const controls = this.draggableContainer.controls;
+
+    // Reset button
+    const resetBtn = createControlButton('Reset', 'Reset all curves to default');
+    resetBtn.dataset.testid = 'curves-reset';
+    resetBtn.addEventListener('click', () => this.resetAll());
+
+    // Insert reset button before close button
+    const closeButton = controls.querySelector('[data-testid="curves-control-close-button"]');
+    controls.insertBefore(resetBtn, closeButton);
   }
 
   private updatePresetSelection(): void {
@@ -283,31 +284,31 @@ export class CurvesControl extends EventEmitter<CurvesControlEvents> {
    * Toggle visibility
    */
   toggle(): void {
-    this.visible = !this.visible;
-    this.container.style.display = this.visible ? 'flex' : 'none';
-    this.emit('visibilityChanged', this.visible);
+    if (this.visible) {
+      this.hide();
+    } else {
+      this.show();
+    }
   }
 
   /**
    * Show the panel
    */
   show(): void {
-    if (!this.visible) {
-      this.visible = true;
-      this.container.style.display = 'flex';
-      this.emit('visibilityChanged', true);
-    }
+    if (this.visible) return;
+    this.visible = true;
+    this.draggableContainer.show();
+    this.emit('visibilityChanged', true);
   }
 
   /**
    * Hide the panel
    */
   hide(): void {
-    if (this.visible) {
-      this.visible = false;
-      this.container.style.display = 'none';
-      this.emit('visibilityChanged', false);
-    }
+    if (!this.visible) return;
+    this.visible = false;
+    this.draggableContainer.hide();
+    this.emit('visibilityChanged', false);
   }
 
   /**
@@ -325,13 +326,35 @@ export class CurvesControl extends EventEmitter<CurvesControlEvents> {
   }
 
   /**
+   * Get current position
+   */
+  getPosition(): { x: number; y: number } {
+    return this.draggableContainer.getPosition();
+  }
+
+  /**
+   * Set position
+   */
+  setPosition(x: number, y: number): void {
+    this.draggableContainer.setPosition(x, y);
+  }
+
+  /**
+   * Reset position to initial
+   */
+  resetPosition(): void {
+    this.draggableContainer.resetPosition();
+  }
+
+  /**
    * Render the component
    */
   render(): HTMLElement {
-    return this.container;
+    return this.draggableContainer.element;
   }
 
   dispose(): void {
     this.editor.dispose();
+    this.draggableContainer.dispose();
   }
 }

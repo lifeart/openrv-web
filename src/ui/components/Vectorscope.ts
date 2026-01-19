@@ -5,7 +5,8 @@
  * - Circular display of color hue and saturation
  * - Standard graticule with color targets (R, Mg, B, Cy, G, Yl)
  * - Skin tone line reference
- * - Zoom control for detailed analysis
+ * - Zoom control for detailed analysis (1x/2x/4x/Auto)
+ * - Auto-fit zoom that adapts to content
  * - Draggable overlay display
  */
 
@@ -19,7 +20,7 @@ import {
 
 export interface VectorscopeEvents extends EventMap {
   visibilityChanged: boolean;
-  zoomChanged: number;
+  zoomChanged: number | 'auto';
 }
 
 const VECTORSCOPE_SIZE = 200;
@@ -38,12 +39,15 @@ const COLOR_TARGETS = {
 // Skin tone line angle (approximately 123 degrees in standard vectorscope)
 const SKIN_TONE_ANGLE = (123 * Math.PI) / 180;
 
+export type VectorscopeZoom = 1 | 2 | 4 | 'auto';
+
 export class Vectorscope extends EventEmitter<VectorscopeEvents> {
   private draggableContainer: DraggableContainer;
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private visible = false;
-  private zoom = 1;
+  private zoomMode: VectorscopeZoom = 'auto';
+  private effectiveZoom = 1; // Actual zoom used for rendering (calculated in auto mode)
   private zoomButton: HTMLButtonElement | null = null;
   private lastImageData: ImageData | null = null;
   private isPlaybackMode = false;
@@ -83,7 +87,7 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
     const controls = this.draggableContainer.controls;
 
     // Zoom toggle button
-    this.zoomButton = createControlButton('1x', 'Toggle zoom (1x/2x/4x)');
+    this.zoomButton = createControlButton('Auto', 'Toggle zoom (1x/2x/4x/Auto)');
     this.zoomButton.dataset.testid = 'vectorscope-zoom-button';
     this.zoomButton.addEventListener('click', () => this.cycleZoom());
 
@@ -170,11 +174,67 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
   }
 
   /**
+   * Calculate the optimal zoom level based on the color distribution in the image.
+   * Analyzes the maximum chrominance extent and returns the best zoom level.
+   */
+  private calculateAutoZoom(imageData: ImageData): number {
+    const { data, width, height } = imageData;
+
+    // Sample pixels to find maximum chrominance distance
+    const sampleStep = Math.max(1, Math.floor(Math.sqrt(width * height / 5000)));
+    let maxDistance = 0;
+
+    for (let srcY = 0; srcY < height; srcY += sampleStep) {
+      for (let srcX = 0; srcX < width; srcX += sampleStep) {
+        const i = (srcY * width + srcX) * 4;
+        const r = data[i]! / 255;
+        const g = data[i + 1]! / 255;
+        const b = data[i + 2]! / 255;
+
+        // Convert RGB to YCbCr (ITU-R BT.601)
+        const cb = -0.169 * r - 0.331 * g + 0.5 * b;
+        const cr = 0.5 * r - 0.419 * g - 0.081 * b;
+
+        // Calculate distance from center (chrominance magnitude)
+        const distance = Math.sqrt(cb * cb + cr * cr);
+        if (distance > maxDistance) {
+          maxDistance = distance;
+        }
+      }
+    }
+
+    // Maximum possible chrominance distance is ~0.5 (at color targets)
+    // Choose zoom level that fits 95% of points with some margin
+    // At zoom 1x: full range displayed (radius covers 0.5 distance)
+    // At zoom 2x: half range displayed (radius covers 0.25 distance)
+    // At zoom 4x: quarter range displayed (radius covers 0.125 distance)
+
+    if (maxDistance < 0.10) {
+      // Very low saturation content - zoom in to 4x
+      return 4;
+    } else if (maxDistance < 0.20) {
+      // Low saturation content - zoom to 2x
+      return 2;
+    } else {
+      // Normal/high saturation content - keep at 1x
+      return 1;
+    }
+  }
+
+  /**
    * Update vectorscope from ImageData
    * Uses GPU acceleration when available for better playback performance
    */
   update(imageData: ImageData): void {
     this.lastImageData = imageData;
+
+    // Calculate effective zoom for auto mode
+    if (this.zoomMode === 'auto') {
+      this.effectiveZoom = this.calculateAutoZoom(imageData);
+      this.updateZoomButtonText();
+    } else {
+      this.effectiveZoom = this.zoomMode;
+    }
 
     // Try GPU rendering first for better performance during playback
     const gpuProcessor = getSharedScopesProcessor();
@@ -184,7 +244,7 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
       this.drawGraticule();
       // Then GPU vectorscope overlay
       gpuProcessor.setImage(imageData);
-      gpuProcessor.renderVectorscope(this.canvas, this.zoom);
+      gpuProcessor.renderVectorscope(this.canvas, this.effectiveZoom);
       return;
     }
 
@@ -209,7 +269,7 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
     const { data, width, height } = imageData;
     const centerX = canvas.width / 2;
     const centerY = canvas.height / 2;
-    const radius = GRATICULE_RADIUS * this.zoom;
+    const radius = GRATICULE_RADIUS * this.effectiveZoom;
 
     // Redraw graticule
     this.drawGraticule();
@@ -255,6 +315,19 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
   }
 
   /**
+   * Update the zoom button text
+   */
+  private updateZoomButtonText(): void {
+    if (this.zoomButton) {
+      if (this.zoomMode === 'auto') {
+        this.zoomButton.textContent = `A:${this.effectiveZoom}x`;
+      } else {
+        this.zoomButton.textContent = `${this.zoomMode}x`;
+      }
+    }
+  }
+
+  /**
    * Toggle visibility
    */
   toggle(): void {
@@ -293,49 +366,67 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
   }
 
   /**
-   * Cycle through zoom levels
+   * Cycle through zoom levels (1x → 2x → 4x → Auto → 1x)
    */
   cycleZoom(): void {
-    const zoomLevels = [1, 2, 4];
-    const currentIndex = zoomLevels.indexOf(this.zoom);
-    this.zoom = zoomLevels[(currentIndex + 1) % zoomLevels.length]!;
+    const zoomLevels: VectorscopeZoom[] = [1, 2, 4, 'auto'];
+    const currentIndex = zoomLevels.indexOf(this.zoomMode);
+    this.zoomMode = zoomLevels[(currentIndex + 1) % zoomLevels.length]!;
 
-    if (this.zoomButton) {
-      this.zoomButton.textContent = `${this.zoom}x`;
+    if (this.zoomMode !== 'auto') {
+      this.effectiveZoom = this.zoomMode;
     }
+
+    this.updateZoomButtonText();
 
     // Redraw with new zoom if we have image data
     if (this.lastImageData) {
       this.update(this.lastImageData);
     }
 
-    this.emit('zoomChanged', this.zoom);
+    this.emit('zoomChanged', this.zoomMode);
   }
 
   /**
    * Set zoom level
    */
-  setZoom(level: 1 | 2 | 4): void {
-    if (this.zoom === level) return;
-    this.zoom = level;
+  setZoom(level: VectorscopeZoom): void {
+    if (this.zoomMode === level) return;
+    this.zoomMode = level;
 
-    if (this.zoomButton) {
-      this.zoomButton.textContent = `${this.zoom}x`;
+    if (this.zoomMode !== 'auto') {
+      this.effectiveZoom = this.zoomMode;
     }
+
+    this.updateZoomButtonText();
 
     // Redraw with new zoom if we have image data
     if (this.lastImageData) {
       this.update(this.lastImageData);
     }
 
-    this.emit('zoomChanged', this.zoom);
+    this.emit('zoomChanged', this.zoomMode);
   }
 
   /**
-   * Get current zoom level
+   * Get current zoom mode
    */
-  getZoom(): number {
-    return this.zoom;
+  getZoom(): VectorscopeZoom {
+    return this.zoomMode;
+  }
+
+  /**
+   * Get effective zoom (actual zoom value used for rendering)
+   */
+  getEffectiveZoom(): number {
+    return this.effectiveZoom;
+  }
+
+  /**
+   * Check if auto-fit zoom is enabled
+   */
+  isAutoZoom(): boolean {
+    return this.zoomMode === 'auto';
   }
 
   /**

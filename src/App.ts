@@ -93,15 +93,18 @@ export class App {
     // Connect color controls to viewer
     this.colorControls.on('adjustmentsChanged', (adjustments) => {
       this.viewer.setColorAdjustments(adjustments);
+      this.scheduleUpdateScopes();
       this.syncGTOStore();
     });
 
     // Connect LUT events
     this.colorControls.on('lutLoaded', (lut) => {
       this.viewer.setLUT(lut);
+      this.scheduleUpdateScopes();
     });
     this.colorControls.on('lutIntensityChanged', (intensity) => {
       this.viewer.setLUTIntensity(intensity);
+      this.scheduleUpdateScopes();
     });
 
     // Initialize new grouped View tab controls
@@ -206,6 +209,7 @@ export class App {
     this.filterControl = new FilterControl();
     this.filterControl.on('filtersChanged', (settings) => {
       this.viewer.setFilterSettings(settings);
+      this.scheduleUpdateScopes();
       this.syncGTOStore();
     });
 
@@ -223,18 +227,21 @@ export class App {
     this.cdlControl = new CDLControl();
     this.cdlControl.on('cdlChanged', (cdl) => {
       this.viewer.setCDL(cdl);
+      this.scheduleUpdateScopes();
     });
 
     // Initialize curves control
     this.curvesControl = new CurvesControl();
     this.curvesControl.on('curvesChanged', (curves) => {
       this.viewer.setCurves(curves);
+      this.scheduleUpdateScopes();
     });
 
     // Initialize lens distortion control
     this.lensControl = new LensControl();
     this.lensControl.on('lensChanged', (params) => {
       this.viewer.setLensParams(params);
+      this.scheduleUpdateScopes();
       this.syncGTOStore();
     });
 
@@ -247,21 +254,26 @@ export class App {
       this.stackControl.updateLayerSource(layer.id, layer.sourceIndex);
       this.stackControl.updateLayerName(layer.id, layer.name);
       this.viewer.setStackLayers(this.stackControl.getLayers());
+      this.scheduleUpdateScopes();
     });
     this.stackControl.on('layerChanged', () => {
       this.viewer.setStackLayers(this.stackControl.getLayers());
+      this.scheduleUpdateScopes();
     });
     this.stackControl.on('layerRemoved', () => {
       this.viewer.setStackLayers(this.stackControl.getLayers());
+      this.scheduleUpdateScopes();
     });
     this.stackControl.on('layerReordered', () => {
       this.viewer.setStackLayers(this.stackControl.getLayers());
+      this.scheduleUpdateScopes();
     });
 
     // Initialize channel select control
     this.channelSelect = new ChannelSelect();
     this.channelSelect.on('channelChanged', (channel) => {
       this.viewer.setChannelMode(channel);
+      this.scheduleUpdateScopes();
       this.syncGTOStore();
     });
 
@@ -269,6 +281,7 @@ export class App {
     this.stereoControl = new StereoControl();
     this.stereoControl.on('stateChanged', (state) => {
       this.viewer.setStereoState(state);
+      this.scheduleUpdateScopes();
       this.syncGTOStore();
     });
 
@@ -913,6 +926,27 @@ export class App {
 
       showAlert(`Export error: ${err}`, { type: 'error', title: 'Export Error' });
     }
+  }
+
+  /**
+   * Schedule scope updates after the viewer has rendered.
+   * Uses requestAnimationFrame to ensure updates happen after the render cycle.
+   */
+  private pendingScopeUpdate = false;
+  private scheduleUpdateScopes(): void {
+    if (this.pendingScopeUpdate) return;
+    this.pendingScopeUpdate = true;
+
+    // Use double requestAnimationFrame to ensure we run after the viewer's render
+    // First RAF puts us in the same frame as the render, second RAF ensures render completed
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        this.pendingScopeUpdate = false;
+        this.updateHistogram();
+        this.updateWaveform();
+        this.updateVectorscope();
+      });
+    });
   }
 
   /**

@@ -605,6 +605,29 @@ container.dispose();
 - `z-index: 100` (or custom)
 - Cursor changes to `grab` on header, `grabbing` while dragging
 
+**Components using DraggableContainer:**
+- `Histogram` (`src/ui/components/Histogram.ts`) - Real-time histogram display
+- `Waveform` (`src/ui/components/Waveform.ts`) - Waveform monitor
+- `Vectorscope` (`src/ui/components/Vectorscope.ts`) - Color vectorscope with auto-fit zoom
+- `CurvesControl` (`src/ui/components/CurvesControl.ts`) - Color curves editor panel
+
+All these components support:
+- Dragging by header to reposition
+- Position management: `getPosition()`, `setPosition(x, y)`, `resetPosition()`
+- Close button in header
+- Show/hide with `show()`, `hide()`, `toggle()`, `isVisible()`
+
+**Vectorscope Auto-Fit Zoom:**
+The vectorscope includes an auto-fit zoom feature that analyzes the chrominance distribution and automatically selects the optimal zoom level (1x, 2x, or 4x). This is the default mode.
+
+- **Auto mode (default)**: Analyzes image saturation and selects appropriate zoom
+  - 4x for very low saturation content (< 0.10 chrominance)
+  - 2x for low saturation content (< 0.20 chrominance)
+  - 1x for normal/high saturation content
+- **Manual modes**: 1x, 2x, 4x fixed zoom levels
+- **Cycle order**: Auto → 1x → 2x → 4x → Auto
+- **Button display**: Shows "A:Nx" in auto mode (e.g., "A:2x"), "Nx" in manual mode
+
 ---
 
 ## No Emojis Policy
