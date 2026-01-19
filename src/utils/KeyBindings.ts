@@ -309,6 +309,22 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     alt: true,
     description: 'Toggle timecode overlay on viewer'
   },
+
+  // Zebra stripes
+  'view.toggleZebraStripes': {
+    code: 'KeyZ',
+    shift: true,
+    alt: true,
+    description: 'Toggle zebra stripes exposure warning'
+  },
+
+  // Color wheels
+  'color.toggleColorWheels': {
+    code: 'KeyW',
+    shift: true,
+    alt: true,
+    description: 'Toggle Lift/Gamma/Gain color wheels'
+  },
 };
 /**
  * Get a human-readable description of a key combination

@@ -24,6 +24,7 @@ import { ScopesControl } from './ui/components/ScopesControl';
 import { CompareControl } from './ui/components/CompareControl';
 import { SafeAreasControl } from './ui/components/SafeAreasControl';
 import { FalseColorControl } from './ui/components/FalseColorControl';
+import { ZebraControl } from './ui/components/ZebraControl';
 import { exportSequence } from './utils/SequenceExporter';
 import { showAlert, showModal, closeModal } from './ui/components/shared/Modal';
 import { SessionSerializer } from './core/session/SessionSerializer';
@@ -62,6 +63,7 @@ export class App {
   private compareControl: CompareControl;
   private safeAreasControl: SafeAreasControl;
   private falseColorControl: FalseColorControl;
+  private zebraControl: ZebraControl;
   private animationId: number | null = null;
   private boundHandleResize: () => void;
   private keyboardManager: KeyboardManager;
@@ -174,6 +176,7 @@ export class App {
     // Safe Areas control
     this.safeAreasControl = new SafeAreasControl(this.viewer.getSafeAreasOverlay());
     this.falseColorControl = new FalseColorControl(this.viewer.getFalseColor());
+    this.zebraControl = new ZebraControl(this.viewer.getZebraStripes());
 
     // Connect volume control (from HeaderBar) to session (bidirectional)
     const volumeControl = this.headerBar.getVolumeControl();
@@ -482,6 +485,11 @@ export class App {
       this.viewer.refresh();
     });
 
+    viewContent.appendChild(ContextToolbar.createDivider());
+
+    // Zebra Stripes control
+    viewContent.appendChild(this.zebraControl.render());
+
     // Sync scope visibility with ScopesControl
     this.histogram.on('visibilityChanged', (visible) => {
       this.scopesControl.setScopeVisible('histogram', visible);
@@ -529,6 +537,25 @@ export class App {
       } else {
         curvesButton.style.background = '';
         curvesButton.style.borderColor = '';
+      }
+    });
+
+    // Color Wheels toggle button
+    const colorWheels = this.viewer.getColorWheels();
+    const colorWheelsButton = ContextToolbar.createButton('Wheels', () => {
+      colorWheels.toggle();
+    }, { title: 'Toggle Lift/Gamma/Gain color wheels (Shift+Alt+W)', icon: 'palette' });
+    colorWheelsButton.dataset.testid = 'color-wheels-toggle-button';
+    colorContent.appendChild(colorWheelsButton);
+
+    // Update button state when visibility changes
+    colorWheels.on('visibilityChanged', (visible) => {
+      if (visible) {
+        colorWheelsButton.style.background = 'rgba(74, 158, 255, 0.15)';
+        colorWheelsButton.style.borderColor = '#4a9eff';
+      } else {
+        colorWheelsButton.style.background = '';
+        colorWheelsButton.style.borderColor = '';
       }
     });
 
@@ -739,6 +766,14 @@ export class App {
       'view.togglePixelProbe': () => this.viewer.getPixelProbe().toggle(),
       'view.toggleFalseColor': () => this.viewer.getFalseColor().toggle(),
       'view.toggleTimecodeOverlay': () => this.viewer.getTimecodeOverlay().toggle(),
+      'view.toggleZebraStripes': () => {
+        const zebras = this.viewer.getZebraStripes();
+        zebras.toggle();
+        this.viewer.refresh();
+      },
+      'color.toggleColorWheels': () => {
+        this.viewer.getColorWheels().toggle();
+      },
       'panel.close': () => {
         if (this.colorControls) {
           this.colorControls.hide();

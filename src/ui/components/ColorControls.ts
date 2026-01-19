@@ -7,6 +7,8 @@ export interface ColorAdjustments {
   exposure: number;      // -5 to +5 stops
   gamma: number;         // 0.1 to 4.0
   saturation: number;    // 0 to 2 (1 = normal)
+  vibrance: number;      // -100 to +100 (intelligent saturation)
+  vibranceSkinProtection: boolean;  // Protect skin tones from vibrance (default: true)
   contrast: number;      // 0 to 2 (1 = normal)
   temperature: number;   // -100 to +100 (kelvin shift)
   tint: number;          // -100 to +100 (green/magenta)
@@ -21,6 +23,8 @@ export const DEFAULT_COLOR_ADJUSTMENTS: ColorAdjustments = {
   exposure: 0,
   gamma: 1,
   saturation: 1,
+  vibrance: 0,
+  vibranceSkinProtection: true,
   contrast: 1,
   temperature: 0,
   tint: 0,
@@ -30,6 +34,9 @@ export const DEFAULT_COLOR_ADJUSTMENTS: ColorAdjustments = {
   whites: 0,
   blacks: 0,
 };
+
+// Type for numeric-only adjustment keys (excludes boolean vibranceSkinProtection)
+export type NumericAdjustmentKey = Exclude<keyof ColorAdjustments, 'vibranceSkinProtection'>;
 
 export interface ColorControlsEvents extends EventMap {
   adjustmentsChanged: ColorAdjustments;
@@ -46,9 +53,9 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
 
   private adjustments: ColorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
 
-  // Slider elements for updating values
-  private sliders: Map<keyof ColorAdjustments, HTMLInputElement> = new Map();
-  private valueLabels: Map<keyof ColorAdjustments, HTMLSpanElement> = new Map();
+  // Slider elements for updating values (numeric adjustments only)
+  private sliders: Map<NumericAdjustmentKey, HTMLInputElement> = new Map();
+  private valueLabels: Map<NumericAdjustmentKey, HTMLSpanElement> = new Map();
 
   // LUT state
   private currentLUT: LUT3D | null = null;
@@ -132,7 +139,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
 
   private createSliders(): void {
     const sliderConfigs: Array<{
-      key: keyof ColorAdjustments;
+      key: NumericAdjustmentKey;
       label: string;
       min: number;
       max: number;
@@ -144,6 +151,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
       { key: 'contrast', label: 'Contrast', min: 0, max: 2, step: 0.01, format: (v) => `${(v * 100).toFixed(0)}%` },
       { key: 'gamma', label: 'Gamma', min: 0.1, max: 4, step: 0.01, format: (v) => v.toFixed(2) },
       { key: 'saturation', label: 'Saturation', min: 0, max: 2, step: 0.01, format: (v) => `${(v * 100).toFixed(0)}%` },
+      { key: 'vibrance', label: 'Vibrance', min: -100, max: 100, step: 1, format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}` },
       { key: 'temperature', label: 'Temperature', min: -100, max: 100, step: 1, format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}` },
       { key: 'tint', label: 'Tint', min: -100, max: 100, step: 1, format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}` },
       { key: 'highlights', label: 'Highlights', min: -100, max: 100, step: 1, format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}` },
@@ -191,6 +199,12 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     for (const config of sliderConfigs) {
       const row = this.createSliderRow(config);
       this.panel.appendChild(row);
+
+      // Add skin protection toggle after vibrance slider
+      if (config.key === 'vibrance') {
+        const skinProtectionRow = this.createSkinProtectionRow();
+        this.panel.appendChild(skinProtectionRow);
+      }
     }
 
     // Add LUT section
@@ -398,7 +412,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
   }
 
   private createSliderRow(config: {
-    key: keyof ColorAdjustments;
+    key: NumericAdjustmentKey;
     label: string;
     min: number;
     max: number;
@@ -455,8 +469,12 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     // Event handling
     slider.addEventListener('input', () => {
       const value = parseFloat(slider.value);
-      this.adjustments[config.key] = value;
+      this.adjustments[config.key] = value as never;
       valueLabel.textContent = config.format(value);
+      // Update skin protection indicator when vibrance changes
+      if (config.key === 'vibrance') {
+        this.updateSkinProtectionIndicator();
+      }
       this.emit('adjustmentsChanged', { ...this.adjustments });
     });
 
@@ -474,6 +492,78 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     row.appendChild(valueLabel);
 
     return row;
+  }
+
+  private skinProtectionCheckbox: HTMLInputElement | null = null;
+  private skinProtectionIndicator: HTMLSpanElement | null = null;
+
+  private createSkinProtectionRow(): HTMLElement {
+    const row = document.createElement('div');
+    row.style.cssText = `
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px;
+      margin-left: 88px;
+      gap: 6px;
+    `;
+
+    // Checkbox
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = this.adjustments.vibranceSkinProtection;
+    checkbox.id = 'vibrance-skin-protection';
+    checkbox.style.cssText = `
+      accent-color: #4a9eff;
+      cursor: pointer;
+      width: 14px;
+      height: 14px;
+    `;
+    this.skinProtectionCheckbox = checkbox;
+
+    // Label
+    const label = document.createElement('label');
+    label.htmlFor = 'vibrance-skin-protection';
+    label.textContent = 'Protect Skin Tones';
+    label.style.cssText = `
+      color: #888;
+      font-size: 11px;
+      cursor: pointer;
+    `;
+
+    // Active indicator
+    const indicator = document.createElement('span');
+    indicator.textContent = '';
+    indicator.style.cssText = `
+      color: #66cc66;
+      font-size: 10px;
+      margin-left: 4px;
+    `;
+    this.skinProtectionIndicator = indicator;
+    this.updateSkinProtectionIndicator();
+
+    // Event handling
+    checkbox.addEventListener('change', () => {
+      this.adjustments.vibranceSkinProtection = checkbox.checked;
+      this.updateSkinProtectionIndicator();
+      this.emit('adjustmentsChanged', { ...this.adjustments });
+    });
+
+    row.appendChild(checkbox);
+    row.appendChild(label);
+    row.appendChild(indicator);
+
+    return row;
+  }
+
+  private updateSkinProtectionIndicator(): void {
+    if (this.skinProtectionIndicator && this.skinProtectionCheckbox) {
+      // Show indicator when protection is active AND vibrance is non-zero
+      if (this.skinProtectionCheckbox.checked && this.adjustments.vibrance !== 0) {
+        this.skinProtectionIndicator.textContent = '(active)';
+      } else {
+        this.skinProtectionIndicator.textContent = '';
+      }
+    }
   }
 
   toggle(): void {
@@ -524,12 +614,13 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
       slider.value = String(this.adjustments[key]);
     }
 
-    const formats: Record<keyof ColorAdjustments, (v: number) => string> = {
+    const formats: Record<NumericAdjustmentKey, (v: number) => string> = {
       exposure: (v) => `${v > 0 ? '+' : ''}${v.toFixed(1)}`,
       brightness: (v) => `${v > 0 ? '+' : ''}${(v * 100).toFixed(0)}%`,
       contrast: (v) => `${(v * 100).toFixed(0)}%`,
       gamma: (v) => v.toFixed(2),
       saturation: (v) => `${(v * 100).toFixed(0)}%`,
+      vibrance: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
       temperature: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
       tint: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
       highlights: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
@@ -552,10 +643,10 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
   setAdjustments(adjustments: Partial<ColorAdjustments>): void {
     this.adjustments = { ...this.adjustments, ...adjustments };
 
-    // Update sliders
+    // Update sliders (only for numeric adjustments)
     for (const [key, value] of Object.entries(adjustments)) {
-      const slider = this.sliders.get(key as keyof ColorAdjustments);
-      if (slider) {
+      const slider = this.sliders.get(key as NumericAdjustmentKey);
+      if (slider && typeof value === 'number') {
         slider.value = String(value);
       }
     }

@@ -55,6 +55,8 @@ export interface ColorState {
   exposure: number;
   gamma: number;
   saturation: number;
+  vibrance: number;
+  vibranceSkinProtection: boolean;
   contrast: number;
   temperature: number;
   tint: number;
@@ -88,6 +90,25 @@ export interface SafeAreasState {
   centerCrosshair: boolean;
   ruleOfThirds: boolean;
   aspectRatio: string | null;
+}
+
+export interface ZebraStripesState {
+  enabled: boolean;
+  highEnabled: boolean;
+  lowEnabled: boolean;
+  highThreshold: number;
+  lowThreshold: number;
+}
+
+export interface ColorWheelsState {
+  lift: { r: number; g: number; b: number; y: number };
+  gamma: { r: number; g: number; b: number; y: number };
+  gain: { r: number; g: number; b: number; y: number };
+  master: { r: number; g: number; b: number; y: number };
+  linked: boolean;
+  visible: boolean;
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
 export interface TransformState {
@@ -175,6 +196,8 @@ export async function getColorState(page: Page): Promise<ColorState> {
       exposure: 0,
       gamma: 1,
       saturation: 1,
+      vibrance: 0,
+      vibranceSkinProtection: true,
       contrast: 1,
       temperature: 0,
       tint: 0,
@@ -229,6 +252,39 @@ export async function getSafeAreasState(page: Page): Promise<SafeAreasState> {
       centerCrosshair: false,
       ruleOfThirds: false,
       aspectRatio: null,
+    };
+  });
+}
+
+/**
+ * Get zebra stripes state from the app
+ */
+export async function getZebraStripesState(page: Page): Promise<ZebraStripesState> {
+  return page.evaluate(() => {
+    return window.__OPENRV_TEST__?.getZebraStripesState() ?? {
+      enabled: false,
+      highEnabled: true,
+      lowEnabled: false,
+      highThreshold: 95,
+      lowThreshold: 5,
+    };
+  });
+}
+
+/**
+ * Get color wheels state from the app
+ */
+export async function getColorWheelsState(page: Page): Promise<ColorWheelsState> {
+  return page.evaluate(() => {
+    return window.__OPENRV_TEST__?.getColorWheelsState() ?? {
+      lift: { r: 0, g: 0, b: 0, y: 0 },
+      gamma: { r: 0, g: 0, b: 0, y: 0 },
+      gain: { r: 0, g: 0, b: 0, y: 0 },
+      master: { r: 0, g: 0, b: 0, y: 0 },
+      linked: false,
+      visible: false,
+      canUndo: false,
+      canRedo: false,
     };
   });
 }

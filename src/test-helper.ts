@@ -18,6 +18,8 @@ declare global {
       getFalseColorState: () => FalseColorState;
       getSafeAreasState: () => SafeAreasState;
       getTimecodeOverlayState: () => TimecodeOverlayState;
+      getZebraStripesState: () => ZebraStripesState;
+      getColorWheelsState: () => ColorWheelsState;
       isUsingMediabunny: () => boolean;
     };
   }
@@ -70,6 +72,8 @@ export interface ColorState {
   exposure: number;
   gamma: number;
   saturation: number;
+  vibrance: number;
+  vibranceSkinProtection: boolean;
   contrast: number;
   temperature: number;
   tint: number;
@@ -110,6 +114,25 @@ export interface TimecodeOverlayState {
   position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
   fontSize: 'small' | 'medium' | 'large';
   showFrameCounter: boolean;
+}
+
+export interface ZebraStripesState {
+  enabled: boolean;
+  highEnabled: boolean;
+  lowEnabled: boolean;
+  highThreshold: number;
+  lowThreshold: number;
+}
+
+export interface ColorWheelsState {
+  lift: { r: number; g: number; b: number; y: number };
+  gamma: { r: number; g: number; b: number; y: number };
+  gain: { r: number; g: number; b: number; y: number };
+  master: { r: number; g: number; b: number; y: number };
+  linked: boolean;
+  visible: boolean;
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
 export interface TransformState {
@@ -200,6 +223,8 @@ export function exposeForTesting(app: App): void {
         exposure: adjustments.exposure ?? 0,
         gamma: adjustments.gamma ?? 1,
         saturation: adjustments.saturation ?? 1,
+        vibrance: adjustments.vibrance ?? 0,
+        vibranceSkinProtection: adjustments.vibranceSkinProtection ?? true,
         contrast: adjustments.contrast ?? 1,
         temperature: adjustments.temperature ?? 0,
         tint: adjustments.tint ?? 0,
@@ -260,6 +285,35 @@ export function exposeForTesting(app: App): void {
         position: state.position ?? 'top-left',
         fontSize: state.fontSize ?? 'medium',
         showFrameCounter: state.showFrameCounter ?? true,
+      };
+    },
+
+    getZebraStripesState: (): ZebraStripesState => {
+      const viewer = appAny.viewer;
+      const zebraStripes = viewer?.getZebraStripes?.();
+      const state = zebraStripes?.getState?.() ?? {};
+      return {
+        enabled: state.enabled ?? false,
+        highEnabled: state.highEnabled ?? true,
+        lowEnabled: state.lowEnabled ?? false,
+        highThreshold: state.highThreshold ?? 95,
+        lowThreshold: state.lowThreshold ?? 5,
+      };
+    },
+
+    getColorWheelsState: (): ColorWheelsState => {
+      const viewer = appAny.viewer;
+      const colorWheels = viewer?.getColorWheels?.();
+      const state = colorWheels?.getState?.() ?? {};
+      return {
+        lift: state.lift ?? { r: 0, g: 0, b: 0, y: 0 },
+        gamma: state.gamma ?? { r: 0, g: 0, b: 0, y: 0 },
+        gain: state.gain ?? { r: 0, g: 0, b: 0, y: 0 },
+        master: state.master ?? { r: 0, g: 0, b: 0, y: 0 },
+        linked: state.linked ?? false,
+        visible: colorWheels?.isVisible?.() ?? false,
+        canUndo: colorWheels?.canUndo?.() ?? false,
+        canRedo: colorWheels?.canRedo?.() ?? false,
       };
     },
 

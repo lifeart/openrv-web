@@ -25,6 +25,8 @@ import { SafeAreasOverlay } from './SafeAreasOverlay';
 import { PixelProbe } from './PixelProbe';
 import { FalseColor } from './FalseColor';
 import { TimecodeOverlay } from './TimecodeOverlay';
+import { ZebraStripes } from './ZebraStripes';
+import { ColorWheels } from './ColorWheels';
 
 interface PointerState {
   pointerId: number;
@@ -131,6 +133,12 @@ export class Viewer {
   // False color display
   private falseColor: FalseColor;
 
+  // Zebra stripes overlay
+  private zebraStripes: ZebraStripes;
+
+  // Lift/Gamma/Gain color wheels
+  private colorWheels: ColorWheels;
+
   // CDL state
   private cdlValues: CDLValues = JSON.parse(JSON.stringify(DEFAULT_CDL));
 
@@ -229,6 +237,23 @@ export class Viewer {
 
     // Create false color display
     this.falseColor = new FalseColor();
+
+    // Create zebra stripes overlay
+    this.zebraStripes = new ZebraStripes();
+    this.zebraStripes.on('stateChanged', (state) => {
+      if (state.enabled && (state.highEnabled || state.lowEnabled)) {
+        this.zebraStripes.startAnimation(() => this.refresh());
+      } else {
+        this.zebraStripes.stopAnimation();
+      }
+      this.refresh();
+    });
+
+    // Create color wheels
+    this.colorWheels = new ColorWheels(this.container);
+    this.colorWheels.on('stateChanged', () => {
+      this.refresh();
+    });
 
     const imageCtx = this.imageCanvas.getContext('2d', { alpha: false });
     if (!imageCtx) throw new Error('Failed to get image 2D context');
@@ -1557,10 +1582,13 @@ export class Viewer {
     const hasChannel = this.channelMode !== 'rgb';
     const hasHighlightsShadows = this.colorAdjustments.highlights !== 0 || this.colorAdjustments.shadows !== 0 ||
                                  this.colorAdjustments.whites !== 0 || this.colorAdjustments.blacks !== 0;
+    const hasVibrance = this.colorAdjustments.vibrance !== 0;
+    const hasColorWheels = this.colorWheels.hasAdjustments();
     const hasFalseColor = this.falseColor.isEnabled();
+    const hasZebras = this.zebraStripes.isEnabled();
 
     // Early return if no pixel effects are active
-    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasFalseColor) {
+    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasColorWheels && !hasFalseColor && !hasZebras) {
       return;
     }
 
@@ -1570,6 +1598,16 @@ export class Viewer {
     // Apply highlight/shadow recovery (before other adjustments for best results)
     if (hasHighlightsShadows) {
       this.applyHighlightsShadows(imageData);
+    }
+
+    // Apply vibrance (intelligent saturation - before CDL/curves for natural results)
+    if (hasVibrance) {
+      this.applyVibrance(imageData);
+    }
+
+    // Apply color wheels (Lift/Gamma/Gain - after basic adjustments, before CDL)
+    if (hasColorWheels) {
+      this.colorWheels.apply(imageData);
     }
 
     // Apply CDL color correction
@@ -1592,9 +1630,16 @@ export class Viewer {
       applyChannelIsolation(imageData, this.channelMode);
     }
 
-    // Apply false color display (LAST - replaces all color information for exposure analysis)
+    // Apply false color display (replaces all color information for exposure analysis)
     if (hasFalseColor) {
       this.falseColor.apply(imageData);
+    }
+
+    // Apply zebra stripes (LAST - overlay on top of other effects for exposure warnings)
+    // Note: Zebras work on original image luminance, so they're applied after false color
+    // (typically you'd use one or the other, not both)
+    if (hasZebras && !hasFalseColor) {
+      this.zebraStripes.apply(imageData);
     }
 
     // Single putImageData call
@@ -1701,6 +1746,109 @@ export class Viewer {
   private smoothstep(edge0: number, edge1: number, x: number): number {
     const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
     return t * t * (3 - 2 * t);
+  }
+
+  /**
+   * Apply vibrance effect to ImageData.
+   * Vibrance is intelligent saturation that:
+   * - Boosts less-saturated colors more than already-saturated ones
+   * - Protects skin tones (hue range ~20-50 degrees in orange-yellow)
+   * - Prevents clipping of already-saturated colors
+   *
+   * Formula: sat_factor = 1.0 - (current_saturation * 0.5)
+   *          new_saturation = current_saturation + (vibrance * sat_factor)
+   */
+  private applyVibrance(imageData: ImageData): void {
+    const data = imageData.data;
+    const vibrance = this.colorAdjustments.vibrance / 100; // -1 to +1
+    const len = data.length;
+
+    for (let i = 0; i < len; i += 4) {
+      const r = data[i]! / 255;
+      const g = data[i + 1]! / 255;
+      const b = data[i + 2]! / 255;
+
+      // Calculate max, min for HSL conversion
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const delta = max - min;
+
+      // Calculate saturation (HSL)
+      const l = (max + min) / 2;
+      let s = 0;
+      if (delta !== 0) {
+        s = l > 0.5 ? delta / (2 - max - min) : delta / (max + min);
+      }
+
+      // Calculate hue for skin tone detection
+      let h = 0;
+      if (delta !== 0) {
+        if (max === r) {
+          h = ((g - b) / delta) % 6;
+        } else if (max === g) {
+          h = (b - r) / delta + 2;
+        } else {
+          h = (r - g) / delta + 4;
+        }
+        h = h * 60;
+        if (h < 0) h += 360;
+      }
+
+      // Skin tone protection: reduce effect for hue range 20-50 degrees (orange-yellow skin tones)
+      // Also check for low saturation which is typical of skin
+      // Only apply if vibranceSkinProtection is enabled
+      let skinProtection = 1.0;
+      if (this.colorAdjustments.vibranceSkinProtection && h >= 20 && h <= 50 && s < 0.6 && l > 0.2 && l < 0.8) {
+        // Gradual protection based on how "skin-like" the color is
+        const hueCenter = 35; // Center of skin tone range (20-50)
+        const hueDistance = Math.abs(h - hueCenter) / 15; // Normalize to 0-1 (max distance from center is 15)
+        skinProtection = 0.3 + (hueDistance * 0.7); // 30% effect at center, up to 100% at edges
+      }
+
+      // Calculate vibrance adjustment factor
+      // Less saturated colors get more boost
+      const satFactor = 1.0 - (s * 0.5);
+      const adjustment = vibrance * satFactor * skinProtection;
+
+      // Calculate new saturation
+      let newS = s + adjustment;
+      newS = Math.max(0, Math.min(1, newS));
+
+      // If saturation didn't change, skip conversion back
+      if (Math.abs(newS - s) < 0.001) continue;
+
+      // Convert back to RGB (HSL to RGB)
+      let newR: number, newG: number, newB: number;
+
+      if (newS === 0) {
+        newR = newG = newB = l;
+      } else {
+        const q = l < 0.5 ? l * (1 + newS) : l + newS - l * newS;
+        const p = 2 * l - q;
+        const hNorm = h / 360;
+
+        newR = this.hueToRgb(p, q, hNorm + 1/3);
+        newG = this.hueToRgb(p, q, hNorm);
+        newB = this.hueToRgb(p, q, hNorm - 1/3);
+      }
+
+      data[i] = Math.round(newR * 255);
+      data[i + 1] = Math.round(newG * 255);
+      data[i + 2] = Math.round(newB * 255);
+      // Alpha unchanged
+    }
+  }
+
+  /**
+   * Helper function to convert hue to RGB component
+   */
+  private hueToRgb(p: number, q: number, t: number): number {
+    if (t < 0) t += 1;
+    if (t > 1) t -= 1;
+    if (t < 1/6) return p + (q - p) * 6 * t;
+    if (t < 1/2) return q;
+    if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+    return p;
   }
 
   /**
@@ -2324,5 +2472,19 @@ export class Viewer {
    */
   getFalseColor(): FalseColor {
     return this.falseColor;
+  }
+
+  /**
+   * Get the zebra stripes instance
+   */
+  getZebraStripes(): ZebraStripes {
+    return this.zebraStripes;
+  }
+
+  /**
+   * Get the color wheels instance
+   */
+  getColorWheels(): ColorWheels {
+    return this.colorWheels;
   }
 }

@@ -13,6 +13,14 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 ### Color Tools
 - Exposure, gamma, saturation, contrast, brightness
 - Color temperature and tint
+- **Vibrance** with skin tone protection (hue 20-50° protected)
+- **Highlight/Shadow recovery** - recover detail in blown highlights and crushed shadows
+- Whites/Blacks controls for clipping adjustment
+- **Lift/Gamma/Gain Color Wheels** - three-way color correction for shadows, midtones, and highlights
+  - 120px wheels with color preview ring
+  - Master wheel for overall adjustments
+  - Undo/redo support
+  - Link option for gang adjustments
 - ASC CDL (slope, offset, power, saturation) with .cdl file support
 - 3D LUT support (.cube files) with GPU-accelerated processing
 - Color curves (Master/R/G/B channels) with presets and import/export
@@ -43,6 +51,18 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 - Histogram (RGB/Luminance/Separate channels, log scale option)
 - Waveform monitor (Luma/RGB/Parade modes)
 - Vectorscope with zoom levels
+- **Pixel Probe / Color Sampler** - click to sample RGB/HSL/IRE values at any pixel
+- **False Color Display** - exposure visualization with ARRI, RED, and custom presets
+- **Zebra Stripes** - animated diagonal stripes for exposure warnings
+  - High zebras (>95% IRE) - right-leaning red stripes
+  - Low zebras (<5% IRE) - left-leaning blue stripes
+  - Adjustable thresholds
+- **Safe Areas / Guides Overlay** - broadcast safe zones and composition guides
+  - Title Safe and Action Safe zones
+  - Rule of Thirds grid
+  - Center crosshair
+  - Aspect ratio overlays (16:9, 2.39:1, etc.)
+- **Timecode Overlay** - on-screen SMPTE timecode display
 
 ### Annotations
 - Pen tool with pressure sensitivity
@@ -125,6 +145,16 @@ pnpm dev
 | `h` | Toggle histogram |
 | `y` | Toggle vectorscope |
 
+#### Exposure & Analysis
+| Key | Action |
+|-----|--------|
+| `Shift+I` | Toggle pixel probe |
+| `Shift+Alt+F` | Toggle false color display |
+| `Shift+Alt+Z` | Toggle zebra stripes |
+| `Shift+G` | Toggle safe areas overlay |
+| `Shift+Alt+T` | Toggle timecode overlay |
+| `Shift+Alt+W` | Toggle color wheels panel |
+
 #### Stereo 3D
 | Key | Action |
 |-----|--------|
@@ -133,7 +163,6 @@ pnpm dev
 #### Channel View
 | Key | Action |
 |-----|--------|
-| `Shift+G` | Green channel |
 | `Shift+B` | Blue channel |
 | `Shift+A` | Alpha channel |
 | `Shift+L` | Luminance |
