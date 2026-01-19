@@ -8,6 +8,20 @@ import {
   calculateHistogram,
 } from './Histogram';
 
+// Mock WebGLScopes module
+vi.mock('../../scopes/WebGLScopes', () => {
+  const mockProcessor = {
+    isReady: vi.fn(() => true),
+    setPlaybackMode: vi.fn(),
+    setImage: vi.fn(),
+    renderHistogram: vi.fn(),
+  };
+  return {
+    getSharedScopesProcessor: vi.fn(() => mockProcessor),
+    __mockProcessor: mockProcessor,
+  };
+});
+
 describe('Histogram', () => {
   let histogram: Histogram;
 
@@ -364,5 +378,113 @@ describe('Histogram stats', () => {
     const stats = histogram.getStats();
     expect(stats!.min).toBe(50);
     expect(stats!.max).toBe(200);
+  });
+});
+
+describe('Histogram GPU rendering', () => {
+  let histogram: Histogram;
+
+  function createTestImageData(width: number, height: number, fill?: { r: number; g: number; b: number; a: number }): ImageData {
+    const data = new Uint8ClampedArray(width * height * 4);
+    if (fill) {
+      for (let i = 0; i < data.length; i += 4) {
+        data[i] = fill.r;
+        data[i + 1] = fill.g;
+        data[i + 2] = fill.b;
+        data[i + 3] = fill.a;
+      }
+    }
+    return new ImageData(data, width, height);
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    histogram = new Histogram();
+  });
+
+  afterEach(() => {
+    histogram.dispose();
+  });
+
+  it('HG-070: update uses GPU rendering when available', async () => {
+    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
+    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)();
+
+    const imageData = createTestImageData(10, 10, { r: 128, g: 128, b: 128, a: 255 });
+    histogram.update(imageData);
+
+    expect(mockProcessor.renderHistogram).toHaveBeenCalled();
+  });
+
+  it('HG-071: GPU rendering receives correct histogram data', async () => {
+    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
+    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)();
+
+    const imageData = createTestImageData(10, 10, { r: 128, g: 128, b: 128, a: 255 });
+    histogram.update(imageData);
+
+    const call = mockProcessor.renderHistogram.mock.calls[0];
+    expect(call).toBeDefined();
+    // Second argument should be histogram data object
+    const histData = call[1];
+    expect(histData).toHaveProperty('red');
+    expect(histData).toHaveProperty('green');
+    expect(histData).toHaveProperty('blue');
+    expect(histData).toHaveProperty('luminance');
+    expect(histData).toHaveProperty('maxValue');
+  });
+
+  it('HG-072: GPU rendering uses current mode', async () => {
+    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
+    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)();
+
+    histogram.setMode('luminance');
+    const imageData = createTestImageData(10, 10, { r: 128, g: 128, b: 128, a: 255 });
+    histogram.update(imageData);
+
+    const call = mockProcessor.renderHistogram.mock.calls[0];
+    expect(call[2]).toBe('luminance'); // mode parameter
+  });
+
+  it('HG-073: GPU rendering uses logScale setting', async () => {
+    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
+    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)();
+
+    histogram.setLogScale(true);
+    const imageData = createTestImageData(10, 10, { r: 128, g: 128, b: 128, a: 255 });
+    histogram.update(imageData);
+
+    const call = mockProcessor.renderHistogram.mock.calls[0];
+    expect(call[3]).toBe(true); // logScale parameter
+  });
+
+  it('HG-074: falls back to CPU for separate mode', async () => {
+    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
+    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)();
+
+    histogram.setMode('separate');
+    const imageData = createTestImageData(10, 10, { r: 128, g: 128, b: 128, a: 255 });
+    histogram.update(imageData);
+
+    // GPU rendering should NOT be called for separate mode
+    expect(mockProcessor.renderHistogram).not.toHaveBeenCalled();
+  });
+
+  it('HG-075: setPlaybackMode calls GPU processor for consistency', async () => {
+    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
+    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)();
+
+    histogram.setPlaybackMode(true);
+
+    expect(mockProcessor.setPlaybackMode).toHaveBeenCalledWith(true);
+  });
+
+  it('HG-076: setPlaybackMode(false) calls GPU processor', async () => {
+    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
+    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)();
+
+    histogram.setPlaybackMode(false);
+
+    expect(mockProcessor.setPlaybackMode).toHaveBeenCalledWith(false);
   });
 });

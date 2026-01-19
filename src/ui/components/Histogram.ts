@@ -11,6 +11,7 @@
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { LUMINANCE_COEFFICIENTS } from './ChannelSelect';
+import { getSharedScopesProcessor } from '../../scopes/WebGLScopes';
 
 export type HistogramMode = 'rgb' | 'luminance' | 'separate';
 
@@ -213,10 +214,39 @@ export class Histogram extends EventEmitter<HistogramEvents> {
 
   /**
    * Update histogram from ImageData and redraw
+   * Uses GPU acceleration when available for bar rendering
    */
   update(imageData: ImageData): void {
+    // Always calculate histogram data on CPU (fast, required for stats)
     this.calculate(imageData);
+
+    // Try GPU rendering for bar display (uses CPU-computed histogram data)
+    const gpuProcessor = getSharedScopesProcessor();
+    if (gpuProcessor && gpuProcessor.isReady() && this.mode !== 'separate' && this.data) {
+      // Clear canvas with dark background before GPU overlay
+      this.ctx.fillStyle = '#111';
+      this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+      gpuProcessor.renderHistogram(this.canvas, this.data, this.mode, this.logScale);
+      return;
+    }
+
+    // Fall back to CPU rendering
     this.draw();
+  }
+
+  /**
+   * Set playback mode for performance optimization.
+   * Histogram calculation is always done on CPU, but we track playback state
+   * for consistency with other scopes and potential future optimizations.
+   */
+  setPlaybackMode(isPlaying: boolean): void {
+    // Track playback state for consistency with Waveform/Vectorscope
+    // GPU processor uses this for downscaling quality decisions
+    const gpuProcessor = getSharedScopesProcessor();
+    if (gpuProcessor) {
+      gpuProcessor.setPlaybackMode(isPlaying);
+    }
   }
 
   /**

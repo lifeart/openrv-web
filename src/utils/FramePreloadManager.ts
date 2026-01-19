@@ -40,13 +40,18 @@ type FrameDisposer<T> = (frame: number, data: T) => void;
 export class FramePreloadManager<T> {
   private config: PreloadConfig;
   private cache: Map<number, T> = new Map();
-  private accessOrder: number[] = []; // LRU tracking
+  // LRU tracking using Map which maintains insertion order (O(1) operations)
+  private accessOrder: Map<number, true> = new Map();
   private pendingRequests: Map<number, PreloadRequest<T>> = new Map();
   private activeRequests: Set<number> = new Set();
 
-  private currentFrame: number = 1;
   private playbackDirection: number = 1; // 1 = forward, -1 = reverse
   private isPlaying: boolean = false;
+
+  // Statistics for debugging and monitoring
+  private cacheHits: number = 0;
+  private cacheMisses: number = 0;
+  private evictionCount: number = 0;
 
   private loader: FrameLoader<T>;
   private disposer: FrameDisposer<T> | null;
@@ -73,14 +78,14 @@ export class FramePreloadManager<T> {
       return null;
     }
 
-    // Update current position
-    this.currentFrame = frame;
-
     // Check cache first
     if (this.cache.has(frame)) {
+      this.cacheHits++;
       this.updateAccessOrder(frame);
       return this.cache.get(frame)!;
     }
+
+    this.cacheMisses++;
 
     // Check if already loading (reuse existing request)
     const pending = this.pendingRequests.get(frame);
@@ -126,9 +131,11 @@ export class FramePreloadManager<T> {
 
   /**
    * Get frame from cache only (no loading)
+   * Returns null if frame is not cached (does not trigger loading)
    */
   getCachedFrame(frame: number): T | null {
     if (this.cache.has(frame)) {
+      this.cacheHits++;
       this.updateAccessOrder(frame);
       return this.cache.get(frame)!;
     }
@@ -148,8 +155,6 @@ export class FramePreloadManager<T> {
    * Uses different strategies for playing vs scrubbing
    */
   preloadAround(centerFrame: number): void {
-    this.currentFrame = centerFrame;
-
     // Cancel requests for frames far from current position
     this.cancelDistantRequests(centerFrame);
 
@@ -326,23 +331,35 @@ export class FramePreloadManager<T> {
   }
 
   /**
-   * Update LRU access order
+   * Update LRU access order (O(1) using Map's insertion order)
    */
   private updateAccessOrder(frame: number): void {
-    const idx = this.accessOrder.indexOf(frame);
-    if (idx !== -1) {
-      this.accessOrder.splice(idx, 1);
-    }
-    this.accessOrder.push(frame);
+    // Delete and re-add to move to end (most recently used)
+    this.accessOrder.delete(frame);
+    this.accessOrder.set(frame, true);
   }
 
   /**
    * Enforce max cache size using LRU eviction
+   * Uses single iterator pass to avoid repeated iterator creation
    */
   private enforceMaxCacheSize(): void {
-    while (this.cache.size > this.config.maxCacheSize && this.accessOrder.length > 0) {
-      const oldestFrame = this.accessOrder.shift()!;
-      this.evictFrame(oldestFrame);
+    const evictionCount = this.cache.size - this.config.maxCacheSize;
+    if (evictionCount <= 0) {
+      return;
+    }
+
+    // Collect frames to evict in single iterator pass (oldest first from LRU order)
+    // We collect first to avoid iterator invalidation during eviction
+    const framesToEvict: number[] = [];
+    for (const frame of this.accessOrder.keys()) {
+      if (framesToEvict.length >= evictionCount) break;
+      framesToEvict.push(frame);
+    }
+
+    // Evict collected frames
+    for (const frame of framesToEvict) {
+      this.evictFrame(frame);
     }
   }
 
@@ -372,30 +389,47 @@ export class FramePreloadManager<T> {
    */
   private evictFrame(frame: number): void {
     const data = this.cache.get(frame);
-    if (data && this.disposer) {
-      this.disposer(frame, data);
-    }
-    this.cache.delete(frame);
-
-    const idx = this.accessOrder.indexOf(frame);
-    if (idx !== -1) {
-      this.accessOrder.splice(idx, 1);
+    if (data !== undefined) {
+      if (this.disposer) {
+        this.disposer(frame, data);
+      }
+      this.cache.delete(frame);
+      this.accessOrder.delete(frame);
+      this.evictionCount++;
     }
   }
 
   /**
-   * Get current cache statistics
+   * Get current cache statistics for debugging and monitoring
    */
   getStats(): {
     cacheSize: number;
     pendingRequests: number;
     activeRequests: number;
+    cacheHits: number;
+    cacheMisses: number;
+    evictionCount: number;
+    hitRate: number;
   } {
+    const totalRequests = this.cacheHits + this.cacheMisses;
     return {
       cacheSize: this.cache.size,
       pendingRequests: this.pendingRequests.size,
       activeRequests: this.activeRequests.size,
+      cacheHits: this.cacheHits,
+      cacheMisses: this.cacheMisses,
+      evictionCount: this.evictionCount,
+      hitRate: totalRequests > 0 ? this.cacheHits / totalRequests : 0,
     };
+  }
+
+  /**
+   * Reset statistics counters (useful for benchmarking)
+   */
+  resetStats(): void {
+    this.cacheHits = 0;
+    this.cacheMisses = 0;
+    this.evictionCount = 0;
   }
 
   /**
@@ -422,7 +456,7 @@ export class FramePreloadManager<T> {
       }
     }
     this.cache.clear();
-    this.accessOrder = [];
+    this.accessOrder.clear();
   }
 
   /**

@@ -1,5 +1,19 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Waveform } from './Waveform';
+
+// Mock WebGLScopes module
+vi.mock('../../scopes/WebGLScopes', () => {
+  const mockProcessor = {
+    isReady: vi.fn(() => true),
+    setPlaybackMode: vi.fn(),
+    setImage: vi.fn(),
+    renderWaveform: vi.fn(),
+  };
+  return {
+    getSharedScopesProcessor: vi.fn(() => mockProcessor),
+    __mockProcessor: mockProcessor,
+  };
+});
 
 describe('Waveform', () => {
   let waveform: Waveform;
@@ -346,5 +360,80 @@ describe('Waveform', () => {
       // Container should have event listeners (tested through e2e tests)
       expect(el).toBeInstanceOf(HTMLElement);
     });
+  });
+});
+
+describe('Waveform GPU rendering', () => {
+  let waveform: Waveform;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    waveform = new Waveform();
+  });
+
+  afterEach(() => {
+    waveform.dispose();
+  });
+
+  it('WF-050: update uses GPU rendering when available', async () => {
+    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
+    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)();
+
+    const imageData = new ImageData(10, 10);
+    waveform.update(imageData);
+
+    expect(mockProcessor.setImage).toHaveBeenCalledWith(imageData);
+    expect(mockProcessor.renderWaveform).toHaveBeenCalled();
+  });
+
+  it('WF-051: GPU rendering uses current mode', async () => {
+    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
+    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)();
+
+    waveform.setMode('rgb');
+    const imageData = new ImageData(10, 10);
+    waveform.update(imageData);
+
+    const call = mockProcessor.renderWaveform.mock.calls[0];
+    expect(call[1]).toBe('rgb'); // mode parameter
+  });
+
+  it('WF-052: GPU rendering respects parade mode', async () => {
+    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
+    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)();
+
+    waveform.setMode('parade');
+    const imageData = new ImageData(10, 10);
+    waveform.update(imageData);
+
+    const call = mockProcessor.renderWaveform.mock.calls[0];
+    expect(call[1]).toBe('parade');
+  });
+
+  it('WF-053: setPlaybackMode updates GPU processor', async () => {
+    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
+    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)();
+
+    waveform.setPlaybackMode(true);
+    const imageData = new ImageData(10, 10);
+    waveform.update(imageData);
+
+    expect(mockProcessor.setPlaybackMode).toHaveBeenCalledWith(true);
+  });
+
+  it('WF-054: setPlaybackMode(false) updates GPU processor', async () => {
+    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
+    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)();
+
+    waveform.setPlaybackMode(false);
+    const imageData = new ImageData(10, 10);
+    waveform.update(imageData);
+
+    expect(mockProcessor.setPlaybackMode).toHaveBeenCalledWith(false);
+  });
+
+  it('WF-055: setPlaybackMode is callable without update', () => {
+    expect(() => waveform.setPlaybackMode(true)).not.toThrow();
+    expect(() => waveform.setPlaybackMode(false)).not.toThrow();
   });
 });

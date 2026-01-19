@@ -14,6 +14,7 @@ import {
   MediabunnyFrameExtractor,
   type FrameResult,
 } from '../../utils/MediabunnyFrameExtractor';
+import { FramePreloadManager, type PreloadConfig } from '../../utils/FramePreloadManager';
 
 /** Frame extraction mode */
 export type FrameExtractionMode = 'mediabunny' | 'html-video' | 'auto';
@@ -31,17 +32,13 @@ export class VideoSourceNode extends BaseSourceNode {
   private useMediabunny: boolean = false;
   private extractionMode: FrameExtractionMode = 'auto';
 
-  // Frame cache for mediabunny extraction
-  private frameCache: Map<number, FrameResult> = new Map();
-  private frameCacheMaxSize: number = 60; // Larger cache for smooth playback
-  private lastRequestedFrame: number = 0;
+  // Frame preload manager for intelligent caching and preloading
+  private preloadManager: FramePreloadManager<FrameResult> | null = null;
   private pendingFrameRequest: Promise<FrameResult | null> | null = null;
 
-  // Playback buffer management
+  // Playback state
   private playbackDirection: number = 1;
-  private isPreloading: boolean = false;
-  private preloadAheadFrames: number = 15; // Frames to preload ahead of playhead
-  private preloadBehindFrames: number = 5; // Frames to keep behind playhead
+  private isPlaybackActive: boolean = false;
 
   constructor(name?: string) {
     super('RVVideoSource', name ?? 'Video Source');
@@ -164,6 +161,9 @@ export class VideoSourceNode extends BaseSourceNode {
       this.metadata.duration = metadata.frameCount;
       this.properties.setValue('duration', metadata.frameCount);
 
+      // Initialize preload manager with optimized config for video playback
+      this.initPreloadManager(metadata.frameCount);
+
       return true;
     } catch (error) {
       console.warn(
@@ -172,10 +172,49 @@ export class VideoSourceNode extends BaseSourceNode {
       );
       this.frameExtractor?.dispose();
       this.frameExtractor = null;
+      this.preloadManager?.dispose();
+      this.preloadManager = null;
       this.useMediabunny = false;
       this.properties.setValue('useMediabunny', false);
       return false;
     }
+  }
+
+  /**
+   * Initialize the frame preload manager
+   */
+  private initPreloadManager(totalFrames: number, config?: Partial<PreloadConfig>): void {
+    // Dispose existing manager if any
+    this.preloadManager?.dispose();
+
+    // Create loader function that uses frameExtractor
+    const loader = async (frame: number): Promise<FrameResult> => {
+      if (!this.frameExtractor) {
+        throw new Error('Frame extractor not available');
+      }
+      const result = await this.frameExtractor.getFrame(frame);
+      if (!result) {
+        throw new Error(`Failed to extract frame ${frame}`);
+      }
+      return result;
+    };
+
+    // Default config optimized for video playback
+    const defaultConfig: Partial<PreloadConfig> = {
+      maxCacheSize: 60,
+      preloadAhead: 15,
+      preloadBehind: 5,
+      scrubWindow: 10,
+      maxConcurrent: 4,
+      ...config,
+    };
+
+    this.preloadManager = new FramePreloadManager<FrameResult>(
+      totalFrames,
+      loader,
+      undefined, // No special disposer needed for FrameResult
+      defaultConfig
+    );
   }
 
   /**
@@ -280,46 +319,14 @@ export class VideoSourceNode extends BaseSourceNode {
 
   /**
    * Get frame using mediabunny (async, accurate)
+   * Uses FramePreloadManager for intelligent caching and request coalescing
    */
   async getFrameAsync(frame: number): Promise<FrameResult | null> {
-    if (!this.frameExtractor || !this.useMediabunny) {
+    if (!this.frameExtractor || !this.useMediabunny || !this.preloadManager) {
       return null;
     }
 
-    // Check cache first
-    const cached = this.frameCache.get(frame);
-    if (cached) {
-      return cached;
-    }
-
-    // Request frame from extractor
-    const result = await this.frameExtractor.getFrame(frame);
-    if (result) {
-      this.cacheMediabunnyFrame(frame, result);
-    }
-
-    return result;
-  }
-
-  /**
-   * Cache a mediabunny frame result
-   */
-  private cacheMediabunnyFrame(frame: number, result: FrameResult): void {
-    // Evict oldest frames if cache is full
-    if (this.frameCache.size >= this.frameCacheMaxSize) {
-      // Find frames furthest from current
-      const framesToRemove: number[] = [];
-      for (const cachedFrame of this.frameCache.keys()) {
-        if (Math.abs(cachedFrame - this.lastRequestedFrame) > this.frameCacheMaxSize / 2) {
-          framesToRemove.push(cachedFrame);
-        }
-      }
-      for (const f of framesToRemove) {
-        this.frameCache.delete(f);
-      }
-    }
-
-    this.frameCache.set(frame, result);
+    return this.preloadManager.getFrame(frame);
   }
 
   /**
@@ -328,6 +335,10 @@ export class VideoSourceNode extends BaseSourceNode {
    */
   setPlaybackDirection(direction: number): void {
     this.playbackDirection = direction >= 0 ? 1 : -1;
+    // Update manager direction if playback is active
+    if (this.isPlaybackActive && this.preloadManager) {
+      this.preloadManager.setPlaybackState(true, this.playbackDirection);
+    }
   }
 
   /**
@@ -338,10 +349,27 @@ export class VideoSourceNode extends BaseSourceNode {
   }
 
   /**
+   * Set playback active state
+   * When active, preloading prioritizes frames ahead in playback direction
+   * When inactive (scrubbing), preloading uses symmetric window
+   */
+  setPlaybackActive(isActive: boolean): void {
+    this.isPlaybackActive = isActive;
+    this.preloadManager?.setPlaybackState(isActive, this.playbackDirection);
+  }
+
+  /**
+   * Check if playback mode is active
+   */
+  isPlaybackModeActive(): boolean {
+    return this.isPlaybackActive;
+  }
+
+  /**
    * Check if a frame is cached and ready for immediate playback
    */
   hasFrameCached(frame: number): boolean {
-    return this.frameCache.has(frame);
+    return this.preloadManager?.hasFrame(frame) ?? false;
   }
 
   /**
@@ -349,95 +377,39 @@ export class VideoSourceNode extends BaseSourceNode {
    * Returns null if frame is not cached
    */
   getCachedFrameCanvas(frame: number): HTMLCanvasElement | OffscreenCanvas | null {
-    const cached = this.frameCache.get(frame);
+    const cached = this.preloadManager?.getCachedFrame(frame);
     return cached?.canvas ?? null;
   }
 
   /**
    * Preload frames around the current frame
+   * Uses FramePreloadManager for intelligent priority-based preloading
+   * Respects current playback state (playback vs scrub mode)
    */
-  async preloadFrames(centerFrame: number, windowSize: number = 5): Promise<void> {
-    if (!this.frameExtractor || !this.useMediabunny) {
+  async preloadFrames(centerFrame: number): Promise<void> {
+    if (!this.frameExtractor || !this.useMediabunny || !this.preloadManager) {
       return;
     }
 
-    const frames: number[] = [];
-    for (let i = -windowSize; i <= windowSize; i++) {
-      const frame = centerFrame + i;
-      if (frame >= 1 && frame <= this.metadata.duration && !this.frameCache.has(frame)) {
-        frames.push(frame);
-      }
-    }
-
-    if (frames.length === 0) return;
-
-    // Use batch extraction for efficiency
-    for await (const result of this.frameExtractor.getFrames(frames)) {
-      if (result) {
-        this.cacheMediabunnyFrame(result.frameNumber, result);
-      }
-    }
+    // Preload using current playback state (manager already knows the state)
+    this.preloadManager.preloadAround(centerFrame);
   }
 
   /**
    * Direction-aware preloading for smooth playback
-   * Preloads more frames ahead in the playback direction
+   * Uses FramePreloadManager with playback mode for optimized ahead/behind preloading
    */
   async preloadForPlayback(currentFrame: number, direction: number = 1): Promise<void> {
-    if (!this.frameExtractor || !this.useMediabunny || this.isPreloading) {
+    if (!this.frameExtractor || !this.useMediabunny || !this.preloadManager) {
       return;
     }
 
-    this.isPreloading = true;
-    this.playbackDirection = direction;
+    this.playbackDirection = direction >= 0 ? 1 : -1;
+    this.isPlaybackActive = true;
 
-    try {
-      const frames: number[] = [];
-      const ahead = this.preloadAheadFrames;
-      const behind = this.preloadBehindFrames;
-
-      if (direction >= 0) {
-        // Forward playback: preload ahead, keep some behind
-        for (let i = -behind; i <= ahead; i++) {
-          const frame = currentFrame + i;
-          if (frame >= 1 && frame <= this.metadata.duration && !this.frameCache.has(frame)) {
-            frames.push(frame);
-          }
-        }
-      } else {
-        // Reverse playback: preload behind (which is ahead in reverse), keep some ahead
-        for (let i = -ahead; i <= behind; i++) {
-          const frame = currentFrame + i;
-          if (frame >= 1 && frame <= this.metadata.duration && !this.frameCache.has(frame)) {
-            frames.push(frame);
-          }
-        }
-      }
-
-      if (frames.length === 0) {
-        this.isPreloading = false;
-        return;
-      }
-
-      // Sort frames by distance from current in playback direction for priority
-      frames.sort((a, b) => {
-        const distA = (a - currentFrame) * direction;
-        const distB = (b - currentFrame) * direction;
-        // Prefer frames ahead in playback direction
-        if (distA >= 0 && distB < 0) return -1;
-        if (distA < 0 && distB >= 0) return 1;
-        return distA - distB;
-      });
-
-      // Use batch extraction for efficiency
-      for await (const result of this.frameExtractor.getFrames(frames)) {
-        if (result) {
-          this.cacheMediabunnyFrame(result.frameNumber, result);
-        }
-      }
-    } finally {
-      this.isPreloading = false;
-    }
+    // Set playback mode for direction-aware preloading (more frames ahead)
+    this.preloadManager.setPlaybackState(true, this.playbackDirection);
+    this.preloadManager.preloadAround(currentFrame);
   }
 
   /**
@@ -445,77 +417,52 @@ export class VideoSourceNode extends BaseSourceNode {
    * Call this when playback starts
    */
   startPlaybackPreload(startFrame: number, direction: number = 1): void {
-    if (!this.useMediabunny) return;
+    if (!this.useMediabunny || !this.preloadManager) return;
 
-    this.playbackDirection = direction;
-    // Start preloading in the background
-    this.preloadForPlayback(startFrame, direction).catch(err => {
-      console.warn('Playback preload error:', err);
-    });
+    this.playbackDirection = direction >= 0 ? 1 : -1;
+    this.isPlaybackActive = true;
+
+    // Set playback mode and trigger preloading
+    this.preloadManager.setPlaybackState(true, this.playbackDirection);
+    this.preloadManager.preloadAround(startFrame);
+  }
+
+  /**
+   * Stop playback preloading mode
+   * Call this when playback stops to switch back to scrub mode
+   */
+  stopPlaybackPreload(): void {
+    this.isPlaybackActive = false;
+    this.preloadManager?.setPlaybackState(false, this.playbackDirection);
   }
 
   /**
    * Update preload buffer during playback
    * Call this periodically during playback to maintain buffer
+   * FramePreloadManager handles buffer management internally
    */
   updatePlaybackBuffer(currentFrame: number): void {
-    if (!this.useMediabunny || this.isPreloading) return;
+    if (!this.useMediabunny || !this.preloadManager) return;
 
-    // Check if we need more frames ahead
-    const direction = this.playbackDirection;
-
-    // Count cached frames ahead
-    let cachedAhead = 0;
-    for (let i = 1; i <= this.preloadAheadFrames; i++) {
-      const frame = currentFrame + (i * direction);
-      if (frame >= 1 && frame <= this.metadata.duration && this.frameCache.has(frame)) {
-        cachedAhead++;
-      }
-    }
-
-    // If buffer is running low (less than half), trigger preload
-    if (cachedAhead < this.preloadAheadFrames / 2) {
-      this.preloadForPlayback(currentFrame, direction).catch(err => {
-        console.warn('Buffer update preload error:', err);
-      });
-    }
-
-    // Clean up frames too far behind
-    this.evictDistantFrames(currentFrame);
-  }
-
-  /**
-   * Evict frames that are too far from current playhead
-   */
-  private evictDistantFrames(currentFrame: number): void {
-    const keepRange = this.preloadAheadFrames + this.preloadBehindFrames + 10;
-    const framesToRemove: number[] = [];
-
-    for (const cachedFrame of this.frameCache.keys()) {
-      const distance = Math.abs(cachedFrame - currentFrame);
-      if (distance > keepRange) {
-        framesToRemove.push(cachedFrame);
-      }
-    }
-
-    for (const frame of framesToRemove) {
-      this.frameCache.delete(frame);
-    }
+    // FramePreloadManager handles:
+    // - Checking if more frames are needed
+    // - Priority-based preloading
+    // - Evicting distant frames
+    // - Request coalescing
+    this.preloadManager.preloadAround(currentFrame);
   }
 
   /**
    * Clear frame cache
    */
   clearFrameCache(): void {
-    this.frameCache.clear();
+    this.preloadManager?.clear();
   }
 
   protected process(context: EvalContext, _inputs: (IPImage | null)[]): IPImage | null {
-    this.lastRequestedFrame = context.frame;
-
     // If using mediabunny, try to get from cache first
-    if (this.useMediabunny && this.frameExtractor) {
-      const cached = this.frameCache.get(context.frame);
+    if (this.useMediabunny && this.frameExtractor && this.preloadManager) {
+      const cached = this.preloadManager.getCachedFrame(context.frame);
       if (cached) {
         return this.frameResultToIPImage(cached, context.frame);
       }
@@ -667,14 +614,17 @@ export class VideoSourceNode extends BaseSourceNode {
   }
 
   override dispose(): void {
+    // Dispose preload manager
+    if (this.preloadManager) {
+      this.preloadManager.dispose();
+      this.preloadManager = null;
+    }
+
     // Dispose mediabunny extractor
     if (this.frameExtractor) {
       this.frameExtractor.dispose();
       this.frameExtractor = null;
     }
-
-    // Clear frame cache
-    this.frameCache.clear();
 
     // Clean up video element
     if (this.video) {

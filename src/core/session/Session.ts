@@ -113,6 +113,11 @@ export class Session extends EventEmitter<SessionEvents> {
   private lastFrameTime = 0;
   private frameAccumulator = 0;
 
+  // Effective FPS tracking
+  private fpsFrameCount = 0;
+  private fpsLastTime = 0;
+  private _effectiveFps = 0;
+
   // Media sources
   protected sources: MediaSource[] = [];
   private _currentSourceIndex = 0;
@@ -299,6 +304,11 @@ export class Session extends EventEmitter<SessionEvents> {
       this.lastFrameTime = performance.now();
       this.frameAccumulator = 0;
 
+      // Reset FPS tracking
+      this.fpsFrameCount = 0;
+      this.fpsLastTime = performance.now();
+      this._effectiveFps = 0;
+
       const source = this.currentSource;
 
       // Check if we should use mediabunny for smooth playback
@@ -379,6 +389,14 @@ export class Session extends EventEmitter<SessionEvents> {
 
   get playDirection(): number {
     return this._playDirection;
+  }
+
+  /**
+   * Get effective FPS (actual frames rendered per second during playback)
+   * Returns 0 when not playing
+   */
+  get effectiveFps(): number {
+    return this._isPlaying ? this._effectiveFps : 0;
   }
 
   stepForward(): void {
@@ -485,9 +503,18 @@ export class Session extends EventEmitter<SessionEvents> {
           // Cap accumulator to prevent huge jumps when frame becomes available
           this.frameAccumulator = Math.min(this.frameAccumulator, frameDuration * 2);
 
-          // Trigger preload for the needed frame (centered on next frame)
-          source.videoSourceNode.preloadForPlayback(nextFrame, this._playDirection).catch(err => {
-            console.warn('Frame preload error:', err);
+          // Request the frame and trigger surrounding preload via preloadManager
+          // getFrameAsync internally uses preloadManager which handles:
+          // - Request coalescing (no duplicate requests)
+          // - Priority-based loading (requested frame gets priority 0)
+          // - Surrounding frame preloading via preloadAround
+          source.videoSourceNode.getFrameAsync(nextFrame).then(() => {
+            // After frame loads, trigger preloading around it for smooth playback
+            // Use optional chaining because source may be disposed/changed during async load
+            // (this is intentional - if disposed, we simply skip the buffer update)
+            source.videoSourceNode?.updatePlaybackBuffer(nextFrame);
+          }).catch(err => {
+            console.warn('Frame fetch error:', err);
           });
           break;
         }
@@ -574,6 +601,18 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   private advanceFrame(direction: number): void {
+    // Track effective FPS
+    this.fpsFrameCount++;
+    const now = performance.now();
+    const elapsed = now - this.fpsLastTime;
+
+    // Update FPS calculation every 500ms for smooth display
+    if (elapsed >= 500) {
+      this._effectiveFps = Math.round((this.fpsFrameCount / elapsed) * 1000 * 10) / 10;
+      this.fpsFrameCount = 0;
+      this.fpsLastTime = now;
+    }
+
     let nextFrame = this._currentFrame + direction;
 
     if (nextFrame > this._outPoint) {

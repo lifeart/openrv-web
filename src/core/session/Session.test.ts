@@ -1809,6 +1809,358 @@ describe('Session', () => {
     });
   });
 
+  describe('effective FPS tracking', () => {
+    it('SES-038: effectiveFps returns 0 when not playing', () => {
+      expect(session.isPlaying).toBe(false);
+      expect(session.effectiveFps).toBe(0);
+    });
+
+    it('SES-039: effectiveFps resets when play() is called', () => {
+      // Set up a source
+      session.setSources([{
+        type: 'image', name: 'i', url: 'i.jpg', width: 100, height: 100, duration: 100, fps: 24
+      }]);
+      session.setOutPoint(100);
+
+      // Access internal state
+      const internal = session as any;
+
+      // Manually set some FPS tracking state
+      internal._effectiveFps = 30;
+      internal.fpsFrameCount = 10;
+
+      // Play should reset FPS tracking
+      session.play();
+
+      expect(internal.fpsFrameCount).toBe(0);
+      expect(internal._effectiveFps).toBe(0);
+    });
+
+    it('SES-040: effectiveFps is calculated during frame advancement', () => {
+      session.setSources([{
+        type: 'image', name: 'i', url: 'i.jpg', width: 100, height: 100, duration: 100, fps: 24
+      }]);
+      session.setOutPoint(100);
+
+      const internal = session as any;
+
+      // Mock performance.now to control timing
+      let mockTime = 0;
+      vi.spyOn(performance, 'now').mockImplementation(() => mockTime);
+
+      session.play();
+      internal._currentFrame = 10;
+
+      // Set up the conditions for FPS calculation:
+      // - Start with 11 frames already counted
+      // - Set fpsLastTime to 0
+      // - Then call advanceFrame with mockTime = 500
+      // This will make fpsFrameCount = 12, elapsed = 500, FPS = 12/500*1000 = 24
+      internal.fpsFrameCount = 11;
+      internal.fpsLastTime = 0;
+      mockTime = 500;
+
+      // One more advanceFrame triggers the FPS calculation
+      internal.advanceFrame(1);
+
+      // FPS should be calculated: 12 frames / 500ms * 1000 = 24 fps
+      expect(internal._effectiveFps).toBeCloseTo(24, 0);
+
+      vi.restoreAllMocks();
+    });
+
+    it('SES-041: effectiveFps updates every 500ms', () => {
+      session.setSources([{
+        type: 'image', name: 'i', url: 'i.jpg', width: 100, height: 100, duration: 100, fps: 24
+      }]);
+      session.setOutPoint(100);
+
+      const internal = session as any;
+
+      let mockTime = 0;
+      vi.spyOn(performance, 'now').mockImplementation(() => mockTime);
+
+      session.play();
+      internal._currentFrame = 10;
+
+      // Advance a few frames but less than 500ms - should not update FPS yet
+      mockTime = 200;
+      internal.fpsLastTime = 0;
+
+      internal.advanceFrame(1);
+      internal.advanceFrame(1);
+      internal.advanceFrame(1);
+
+      // FPS should still be 0 (not enough time elapsed)
+      expect(internal._effectiveFps).toBe(0);
+
+      // Now advance past 500ms
+      mockTime = 600;
+      internal.advanceFrame(1);
+
+      // Now FPS should be calculated: 4 frames / 600ms * 1000 ≈ 6.67 fps
+      expect(internal._effectiveFps).toBeGreaterThan(0);
+
+      vi.restoreAllMocks();
+    });
+
+    it('SES-042: effectiveFps returns 0 after pause', () => {
+      session.setSources([{
+        type: 'image', name: 'i', url: 'i.jpg', width: 100, height: 100, duration: 100, fps: 24
+      }]);
+      session.setOutPoint(100);
+
+      const internal = session as any;
+
+      session.play();
+      internal._effectiveFps = 24; // Simulate measured FPS
+
+      // While playing, effectiveFps should return the value
+      expect(session.effectiveFps).toBe(24);
+
+      // After pause, effectiveFps should return 0
+      session.pause();
+      expect(session.effectiveFps).toBe(0);
+    });
+  });
+
+  describe('mediabunny playback frame fetching', () => {
+    // Helper to create mock VideoSourceNode with minimal interface
+    const createMockVideoSourceNode = (hasFrameCachedFn: (frame: number) => boolean = () => false) => ({
+      isUsingMediabunny: vi.fn(() => true),
+      hasFrameCached: vi.fn(hasFrameCachedFn),
+      getFrameAsync: vi.fn().mockResolvedValue(null),
+      preloadForPlayback: vi.fn().mockResolvedValue(undefined),
+      preloadFrames: vi.fn().mockResolvedValue(undefined),
+      setPlaybackDirection: vi.fn(),
+      startPlaybackPreload: vi.fn(),
+      stopPlaybackPreload: vi.fn(),
+    });
+
+    it('SES-043: playback waits when next frame is not cached', () => {
+      // Frame NOT cached - playback should wait (not advance)
+      const mockVideoNode = createMockVideoSourceNode(() => false);
+      const mockVideo = createMockVideo(100, 0);
+      Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
+
+      session.setSources([{
+        type: 'video',
+        name: 'v',
+        url: 'v.mp4',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 24,
+        element: mockVideo,
+        videoSourceNode: mockVideoNode as any,
+      }]);
+      session.setOutPoint(100);
+
+      const internal = session as any;
+
+      let mockTime = 0;
+      vi.spyOn(performance, 'now').mockImplementation(() => mockTime);
+
+      session.play();
+      internal._currentFrame = 10;
+      const startFrame = session.currentFrame;
+
+      // Advance time enough for multiple frames at 24fps
+      mockTime = 100;
+      internal.lastFrameTime = 0;
+      internal.frameAccumulator = 0;
+
+      session.update();
+
+      // Observable behavior: frame should NOT advance when not cached
+      expect(session.currentFrame).toBe(startFrame);
+
+      vi.restoreAllMocks();
+    });
+
+    it('SES-044: playback advances when next frame is cached', () => {
+      // Frame IS cached - playback should advance
+      const mockVideoNode = createMockVideoSourceNode(() => true);
+      const mockVideo = createMockVideo(100, 0);
+      Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
+
+      session.setSources([{
+        type: 'video',
+        name: 'v',
+        url: 'v.mp4',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 24,
+        element: mockVideo,
+        videoSourceNode: mockVideoNode as any,
+      }]);
+      session.setOutPoint(100);
+
+      const internal = session as any;
+
+      let mockTime = 0;
+      vi.spyOn(performance, 'now').mockImplementation(() => mockTime);
+
+      session.play();
+      internal._currentFrame = 10;
+      const startFrame = session.currentFrame;
+
+      // Advance time enough for frames at 24fps (~41ms per frame)
+      mockTime = 100;
+      internal.lastFrameTime = 0;
+      internal.frameAccumulator = 0;
+
+      session.update();
+
+      // Observable behavior: frame should advance when cached
+      expect(session.currentFrame).toBeGreaterThan(startFrame);
+
+      vi.restoreAllMocks();
+    });
+
+    it('SES-045: playback resumes after cached frame becomes available', () => {
+      // Simulate frame becoming cached after initial wait
+      let frameAvailable = false;
+      const mockVideoNode = createMockVideoSourceNode(() => frameAvailable);
+      const mockVideo = createMockVideo(100, 0);
+      Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
+
+      session.setSources([{
+        type: 'video',
+        name: 'v',
+        url: 'v.mp4',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 24,
+        element: mockVideo,
+        videoSourceNode: mockVideoNode as any,
+      }]);
+      session.setOutPoint(100);
+
+      const internal = session as any;
+
+      let mockTime = 0;
+      vi.spyOn(performance, 'now').mockImplementation(() => mockTime);
+
+      session.play();
+      internal._currentFrame = 10;
+
+      mockTime = 50;
+      internal.lastFrameTime = 0;
+      internal.frameAccumulator = 0;
+
+      // First update - frame not available, should wait
+      session.update();
+      expect(session.currentFrame).toBe(10);
+
+      // Frame becomes available
+      frameAvailable = true;
+      mockTime = 100;
+
+      // Second update - frame now available, should advance
+      session.update();
+      expect(session.currentFrame).toBeGreaterThan(10);
+
+      vi.restoreAllMocks();
+    });
+
+    it('SES-046: loop correctly waits for frame 1 when not cached', () => {
+      // At outPoint, looping back to frame 1 which is NOT cached
+      const mockVideoNode = createMockVideoSourceNode((frame: number) => frame !== 1);
+      const mockVideo = createMockVideo(100, 0);
+      Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
+
+      session.setSources([{
+        type: 'video',
+        name: 'v',
+        url: 'v.mp4',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 24,
+        element: mockVideo,
+        videoSourceNode: mockVideoNode as any,
+      }]);
+      session.setOutPoint(100);
+      session.loopMode = 'loop';
+
+      const internal = session as any;
+
+      let mockTime = 0;
+      vi.spyOn(performance, 'now').mockImplementation(() => mockTime);
+
+      session.play();
+      internal._currentFrame = 100; // At outPoint
+
+      mockTime = 100;
+      internal.lastFrameTime = 0;
+      internal.frameAccumulator = 0;
+
+      session.update();
+
+      // Observable behavior: should stay at frame 100 waiting for frame 1 to be fetched
+      // The loop target (frame 1) is not cached, so playback waits
+      expect(session.currentFrame).toBe(100);
+
+      vi.restoreAllMocks();
+    });
+
+    it('SES-047: loop successfully transitions when frame 1 becomes cached', () => {
+      // At outPoint, looping back to frame 1 - initially not cached, then cached
+      let frame1Cached = false;
+      const mockVideoNode = createMockVideoSourceNode((frame: number) => {
+        if (frame === 1) return frame1Cached;
+        return true; // Other frames cached
+      });
+      const mockVideo = createMockVideo(100, 0);
+      Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
+
+      session.setSources([{
+        type: 'video',
+        name: 'v',
+        url: 'v.mp4',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 24,
+        element: mockVideo,
+        videoSourceNode: mockVideoNode as any,
+      }]);
+      session.setOutPoint(100);
+      session.loopMode = 'loop';
+
+      const internal = session as any;
+
+      let mockTime = 0;
+      vi.spyOn(performance, 'now').mockImplementation(() => mockTime);
+
+      session.play();
+      internal._currentFrame = 100; // At outPoint
+
+      mockTime = 50;
+      internal.lastFrameTime = 0;
+      internal.frameAccumulator = 0;
+
+      // First update - frame 1 not cached, waits at frame 100
+      session.update();
+      expect(session.currentFrame).toBe(100);
+
+      // Frame 1 becomes cached
+      frame1Cached = true;
+      mockTime = 100;
+
+      // Second update - frame 1 now available, loop happens
+      // Observable: we're no longer stuck at 100, playback resumed from beginning
+      session.update();
+      expect(session.currentFrame).toBeLessThan(100); // Looped back to beginning
+      expect(session.currentFrame).toBeGreaterThanOrEqual(1); // At or past frame 1
+
+      vi.restoreAllMocks();
+    });
+  });
+
   describe('loadVideoSourcesFromGraph', () => {
     // Helper to create mock canvas
     const createMockCanvas = () => ({

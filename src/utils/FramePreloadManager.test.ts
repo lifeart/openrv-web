@@ -1,13 +1,18 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
 import {
   FramePreloadManager,
   PreloadConfig,
   DEFAULT_PRELOAD_CONFIG,
 } from './FramePreloadManager';
 
+interface TestFrame {
+  frame: number;
+  data: string;
+}
+
 describe('FramePreloadManager', () => {
-  let loader: ReturnType<typeof vi.fn>;
-  let disposer: ReturnType<typeof vi.fn>;
+  let loader: Mock<[frame: number], Promise<TestFrame>>;
+  let disposer: Mock<[frame: number, data: TestFrame], void>;
 
   beforeEach(() => {
     loader = vi.fn((frame: number) => Promise.resolve({ frame, data: `frame-${frame}` }));
@@ -335,14 +340,14 @@ describe('FramePreloadManager', () => {
         maxActive = Math.max(maxActive, activeCount);
         await new Promise(resolve => setTimeout(resolve, 20));
         activeCount--;
-        return { frame };
+        return { frame, data: `frame-${frame}` };
       });
 
       const config: Partial<PreloadConfig> = {
         scrubWindow: 10,
         maxConcurrent: 3,
       };
-      const manager = new FramePreloadManager(100, slowLoader, disposer, config);
+      const manager = new FramePreloadManager<TestFrame>(100, slowLoader, disposer, config);
 
       manager.preloadAround(50);
 
@@ -356,10 +361,10 @@ describe('FramePreloadManager', () => {
       const slowLoader = vi.fn(async (frame: number) => {
         loadCount++;
         await new Promise(resolve => setTimeout(resolve, 50));
-        return { frame };
+        return { frame, data: `frame-${frame}` };
       });
 
-      const manager = new FramePreloadManager(100, slowLoader);
+      const manager = new FramePreloadManager<TestFrame>(100, slowLoader);
 
       // Request same frame twice concurrently
       const promise1 = manager.getFrame(5);
@@ -379,6 +384,405 @@ describe('FramePreloadManager', () => {
       expect(DEFAULT_PRELOAD_CONFIG.preloadBehind).toBeGreaterThan(0);
       expect(DEFAULT_PRELOAD_CONFIG.scrubWindow).toBeGreaterThan(0);
       expect(DEFAULT_PRELOAD_CONFIG.maxConcurrent).toBeGreaterThan(0);
+    });
+  });
+
+  describe('LRU optimization', () => {
+    it('FPM-028: LRU updates are O(1) with Map-based tracking', async () => {
+      const config: Partial<PreloadConfig> = {
+        maxCacheSize: 100,
+        scrubWindow: 0,
+      };
+      const manager = new FramePreloadManager(1000, loader, disposer, config);
+
+      // Load many frames
+      for (let i = 1; i <= 50; i++) {
+        await manager.getFrame(i);
+      }
+
+      // Access frames in random order - should be fast
+      const start = performance.now();
+      for (let i = 0; i < 1000; i++) {
+        const frame = (i % 50) + 1;
+        manager.getCachedFrame(frame);
+      }
+      const elapsed = performance.now() - start;
+
+      // Should complete in reasonable time (Map operations are O(1))
+      expect(elapsed).toBeLessThan(100);
+    });
+
+    it('FPM-029: eviction maintains correct LRU order after multiple accesses', async () => {
+      const config: Partial<PreloadConfig> = {
+        maxCacheSize: 3,
+        scrubWindow: 0,
+      };
+      const manager = new FramePreloadManager(100, loader, disposer, config);
+
+      // Load frames 1, 2, 3
+      await manager.getFrame(1);
+      await manager.getFrame(2);
+      await manager.getFrame(3);
+
+      // Access in order: 3, 1, 2 (making 2 most recent, then 1, then 3 least recent)
+      manager.getCachedFrame(3);
+      manager.getCachedFrame(1);
+      manager.getCachedFrame(2);
+
+      // Load frame 4 and 5 - should evict 3 then 1
+      await manager.getFrame(4);
+      await manager.getFrame(5);
+
+      expect(manager.hasFrame(2)).toBe(true); // Most recent
+      expect(manager.hasFrame(4)).toBe(true);
+      expect(manager.hasFrame(5)).toBe(true);
+      expect(manager.hasFrame(1)).toBe(false); // Evicted
+      expect(manager.hasFrame(3)).toBe(false); // Evicted first
+    });
+  });
+
+  describe('request coalescing edge cases', () => {
+    it('FPM-030: multiple concurrent requests to different frames load independently', async () => {
+      let loadCount = 0;
+      const slowLoader = vi.fn(async (frame: number) => {
+        loadCount++;
+        await new Promise(resolve => setTimeout(resolve, 10));
+        return { frame, data: `frame-${frame}` };
+      });
+
+      const manager = new FramePreloadManager<TestFrame>(100, slowLoader);
+
+      // Request different frames concurrently
+      const promises = [
+        manager.getFrame(1),
+        manager.getFrame(2),
+        manager.getFrame(3),
+        manager.getFrame(4),
+      ];
+
+      await Promise.all(promises);
+
+      // Each frame should load once
+      expect(loadCount).toBe(4);
+    });
+
+    it('FPM-031: request during pending load returns same promise result', async () => {
+      const slowLoader = vi.fn(async (frame: number) => {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        return { frame, data: `frame-${frame}` };
+      });
+
+      const manager = new FramePreloadManager<TestFrame>(100, slowLoader);
+
+      // Start a load
+      const promise1 = manager.getFrame(5);
+
+      // Wait a bit, then request same frame while still loading
+      await new Promise(resolve => setTimeout(resolve, 10));
+      const promise2 = manager.getFrame(5);
+
+      const [result1, result2] = await Promise.all([promise1, promise2]);
+
+      // Both should return the same result
+      expect(result1).toEqual(result2);
+      expect(result1).toEqual({ frame: 5, data: 'frame-5' });
+      expect(slowLoader).toHaveBeenCalledTimes(1);
+    });
+
+    it('FPM-032: cancelled requests do not add to cache when not yet started', async () => {
+      const slowLoader = vi.fn(async (frame: number) => {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        return { frame, data: `frame-${frame}` };
+      });
+
+      const config: Partial<PreloadConfig> = {
+        maxCacheSize: 100,
+        scrubWindow: 20, // Large window to create many pending requests
+        maxConcurrent: 2, // Low concurrency so most requests stay pending
+      };
+      const manager = new FramePreloadManager<TestFrame>(100, slowLoader, disposer, config);
+
+      // Start preloading around frame 50 - will queue frames 30-70
+      manager.preloadAround(50);
+
+      // Immediately jump far away - should cancel pending (not-started) requests
+      // Frames far from position 1 should be cancelled
+      manager.preloadAround(1);
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // Frames very far from position 1 should not be cached
+      // (they were cancelled before starting due to low concurrency)
+      expect(manager.hasFrame(70)).toBe(false);
+    });
+  });
+
+  describe('playback direction preloading', () => {
+    it('FPM-033: reverse playback preloads more frames behind', async () => {
+      const config: Partial<PreloadConfig> = {
+        preloadAhead: 5,
+        preloadBehind: 2,
+        maxConcurrent: 10,
+      };
+      const manager = new FramePreloadManager(100, loader, disposer, config);
+
+      manager.setPlaybackState(true, -1); // Reverse playback
+      manager.preloadAround(50);
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // In reverse, "ahead" means lower frame numbers
+      expect(manager.hasFrame(49)).toBe(true); // Ahead in reverse
+      expect(manager.hasFrame(45)).toBe(true); // More ahead
+    });
+
+    it('FPM-034: switching from playback to scrub changes preload pattern', async () => {
+      const config: Partial<PreloadConfig> = {
+        preloadAhead: 5,
+        preloadBehind: 1,
+        scrubWindow: 3,
+        maxConcurrent: 10,
+      };
+      const manager = new FramePreloadManager(100, loader, disposer, config);
+
+      // Start in playback mode
+      manager.setPlaybackState(true, 1);
+      manager.preloadAround(50);
+      await new Promise(resolve => setTimeout(resolve, 30));
+
+      // Switch to scrub mode
+      manager.setPlaybackState(false);
+      loader.mockClear();
+      manager.clear();
+
+      // Preload in scrub mode
+      manager.preloadAround(50);
+      await new Promise(resolve => setTimeout(resolve, 30));
+
+      // Scrub mode should have symmetric preloading
+      expect(manager.hasFrame(49)).toBe(true);
+      expect(manager.hasFrame(51)).toBe(true);
+    });
+  });
+
+  describe('cache statistics', () => {
+    it('FPM-035: tracks cache hits correctly', async () => {
+      const manager = new FramePreloadManager(100, loader, disposer);
+
+      // Load frame 1
+      await manager.getFrame(1);
+
+      // Access same frame multiple times
+      await manager.getFrame(1);
+      await manager.getFrame(1);
+      manager.getCachedFrame(1);
+
+      const stats = manager.getStats();
+      // First getFrame is a miss (1), subsequent calls are hits (3)
+      expect(stats.cacheHits).toBe(3);
+      expect(stats.cacheMisses).toBe(1);
+    });
+
+    it('FPM-036: tracks cache misses correctly', async () => {
+      const manager = new FramePreloadManager(100, loader, disposer);
+
+      // Request different frames (all misses, then cached)
+      await manager.getFrame(1);
+      await manager.getFrame(2);
+      await manager.getFrame(3);
+
+      const stats = manager.getStats();
+      expect(stats.cacheMisses).toBe(3);
+      expect(stats.cacheHits).toBe(0);
+    });
+
+    it('FPM-037: calculates hit rate correctly', async () => {
+      const manager = new FramePreloadManager(100, loader, disposer);
+
+      // 1 miss + 3 hits = 75% hit rate
+      await manager.getFrame(1); // miss
+      await manager.getFrame(1); // hit
+      await manager.getFrame(1); // hit
+      await manager.getFrame(1); // hit
+
+      const stats = manager.getStats();
+      expect(stats.hitRate).toBeCloseTo(0.75, 2);
+    });
+
+    it('FPM-038: tracks evictions correctly', async () => {
+      const config: Partial<PreloadConfig> = {
+        maxCacheSize: 3,
+        scrubWindow: 0,
+      };
+      const manager = new FramePreloadManager(100, loader, disposer, config);
+
+      // Fill cache
+      await manager.getFrame(1);
+      await manager.getFrame(2);
+      await manager.getFrame(3);
+
+      // Trigger evictions
+      await manager.getFrame(4); // evicts 1
+      await manager.getFrame(5); // evicts 2
+
+      const stats = manager.getStats();
+      expect(stats.evictionCount).toBe(2);
+    });
+
+    it('FPM-039: resetStats clears all counters', async () => {
+      const manager = new FramePreloadManager(100, loader, disposer);
+
+      await manager.getFrame(1); // miss
+      await manager.getFrame(1); // hit
+
+      manager.resetStats();
+      const stats = manager.getStats();
+
+      expect(stats.cacheHits).toBe(0);
+      expect(stats.cacheMisses).toBe(0);
+      expect(stats.evictionCount).toBe(0);
+      expect(stats.hitRate).toBe(0);
+    });
+
+    it('FPM-040: getStats returns all expected fields', async () => {
+      const manager = new FramePreloadManager(100, loader, disposer);
+      await manager.getFrame(1);
+
+      const stats = manager.getStats();
+
+      expect(stats).toHaveProperty('cacheSize');
+      expect(stats).toHaveProperty('pendingRequests');
+      expect(stats).toHaveProperty('activeRequests');
+      expect(stats).toHaveProperty('cacheHits');
+      expect(stats).toHaveProperty('cacheMisses');
+      expect(stats).toHaveProperty('evictionCount');
+      expect(stats).toHaveProperty('hitRate');
+    });
+  });
+
+  describe('batch eviction efficiency', () => {
+    it('FPM-041: batch eviction handles multiple evictions efficiently', async () => {
+      const config: Partial<PreloadConfig> = {
+        maxCacheSize: 5,
+        scrubWindow: 0,
+      };
+      const manager = new FramePreloadManager(100, loader, disposer, config);
+
+      // Fill cache with 5 frames
+      for (let i = 1; i <= 5; i++) {
+        await manager.getFrame(i);
+      }
+
+      // Add 3 more frames, triggering 3 evictions
+      await manager.getFrame(6);
+      await manager.getFrame(7);
+      await manager.getFrame(8);
+
+      const stats = manager.getStats();
+      expect(stats.cacheSize).toBe(5);
+      expect(stats.evictionCount).toBe(3);
+
+      // Oldest frames should be evicted (1, 2, 3)
+      expect(manager.hasFrame(1)).toBe(false);
+      expect(manager.hasFrame(2)).toBe(false);
+      expect(manager.hasFrame(3)).toBe(false);
+
+      // Newer frames should remain
+      expect(manager.hasFrame(4)).toBe(true);
+      expect(manager.hasFrame(5)).toBe(true);
+      expect(manager.hasFrame(6)).toBe(true);
+      expect(manager.hasFrame(7)).toBe(true);
+      expect(manager.hasFrame(8)).toBe(true);
+    });
+
+    it('FPM-042: eviction respects LRU order after access', async () => {
+      const config: Partial<PreloadConfig> = {
+        maxCacheSize: 3,
+        scrubWindow: 0,
+      };
+      const manager = new FramePreloadManager(100, loader, disposer, config);
+
+      // Load frames 1, 2, 3
+      await manager.getFrame(1);
+      await manager.getFrame(2);
+      await manager.getFrame(3);
+
+      // Access frame 1 to make it most recent
+      manager.getCachedFrame(1);
+
+      // Add frame 4 - should evict frame 2 (oldest unused)
+      await manager.getFrame(4);
+
+      expect(manager.hasFrame(1)).toBe(true); // recently accessed
+      expect(manager.hasFrame(2)).toBe(false); // evicted
+      expect(manager.hasFrame(3)).toBe(true);
+      expect(manager.hasFrame(4)).toBe(true);
+    });
+
+    it('FPM-043: large batch eviction does not cause performance issues', async () => {
+      const config: Partial<PreloadConfig> = {
+        maxCacheSize: 10,
+        scrubWindow: 0,
+      };
+      const manager = new FramePreloadManager(1000, loader, disposer, config);
+
+      // Fill cache with 10 frames
+      for (let i = 1; i <= 10; i++) {
+        await manager.getFrame(i);
+      }
+
+      const start = performance.now();
+
+      // Trigger eviction of all 10 frames by loading 10 new ones
+      for (let i = 11; i <= 20; i++) {
+        await manager.getFrame(i);
+      }
+
+      const elapsed = performance.now() - start;
+
+      // Should complete quickly (batch eviction is efficient)
+      expect(elapsed).toBeLessThan(500);
+      expect(manager.getStats().evictionCount).toBe(10);
+    });
+  });
+
+  describe('edge cases', () => {
+    it('FPM-044: getCachedFrame returns null without tracking miss', async () => {
+      const manager = new FramePreloadManager(100, loader, disposer);
+
+      // getCachedFrame for non-existent frame should not track as miss
+      const result = manager.getCachedFrame(999);
+
+      expect(result).toBeNull();
+      // getCachedFrame does not track misses (it's just a cache lookup)
+      const stats = manager.getStats();
+      expect(stats.cacheMisses).toBe(0);
+    });
+
+    it('FPM-045: out-of-range frames do not affect statistics', async () => {
+      const manager = new FramePreloadManager(100, loader, disposer);
+
+      await manager.getFrame(0); // out of range
+      await manager.getFrame(101); // out of range
+
+      const stats = manager.getStats();
+      expect(stats.cacheMisses).toBe(0);
+      expect(stats.cacheHits).toBe(0);
+    });
+
+    it('FPM-046: disposer called exactly once per eviction', async () => {
+      const config: Partial<PreloadConfig> = {
+        maxCacheSize: 2,
+        scrubWindow: 0,
+      };
+      const manager = new FramePreloadManager<TestFrame>(100, loader, disposer, config);
+
+      await manager.getFrame(1);
+      await manager.getFrame(2);
+      await manager.getFrame(3); // evicts 1
+
+      expect(disposer).toHaveBeenCalledTimes(1);
+      expect(disposer).toHaveBeenCalledWith(1, { frame: 1, data: 'frame-1' });
     });
   });
 });

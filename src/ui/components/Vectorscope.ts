@@ -9,6 +9,7 @@
  */
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { getSharedScopesProcessor } from '../../scopes/WebGLScopes';
 
 export interface VectorscopeEvents extends EventMap {
   visibilityChanged: boolean;
@@ -39,6 +40,7 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
   private zoom = 1;
   private zoomButton: HTMLButtonElement | null = null;
   private lastImageData: ImageData | null = null;
+  private isPlaybackMode = false;
 
   constructor() {
     super();
@@ -223,9 +225,40 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
 
   /**
    * Update vectorscope from ImageData
+   * Uses GPU acceleration when available for better playback performance
    */
   update(imageData: ImageData): void {
     this.lastImageData = imageData;
+
+    // Try GPU rendering first for better performance during playback
+    const gpuProcessor = getSharedScopesProcessor();
+    if (gpuProcessor && gpuProcessor.isReady()) {
+      gpuProcessor.setPlaybackMode(this.isPlaybackMode);
+      // Draw graticule first (CPU)
+      this.drawGraticule();
+      // Then GPU vectorscope overlay
+      gpuProcessor.setImage(imageData);
+      gpuProcessor.renderVectorscope(this.canvas, this.zoom);
+      return;
+    }
+
+    // Fall back to CPU rendering
+    this.drawCPU(imageData);
+  }
+
+  /**
+   * Set playback mode for performance optimization.
+   * During playback, uses aggressive subsampling.
+   * When paused, uses full quality rendering.
+   */
+  setPlaybackMode(isPlaying: boolean): void {
+    this.isPlaybackMode = isPlaying;
+  }
+
+  /**
+   * CPU-based vectorscope rendering (fallback)
+   */
+  private drawCPU(imageData: ImageData): void {
     const { ctx, canvas } = this;
     const { data, width, height } = imageData;
     const centerX = canvas.width / 2;

@@ -356,6 +356,33 @@ export class App {
       }, 100);
     });
 
+    // Optimize scopes for playback: use aggressive subsampling during playback,
+    // full quality when paused
+    this.session.on('playbackChanged', (isPlaying) => {
+      this.histogram.setPlaybackMode(isPlaying);
+      this.waveform.setPlaybackMode(isPlaying);
+      this.vectorscope.setPlaybackMode(isPlaying);
+
+      // Playback preload state management:
+      // - START: Handled in Session.play() which calls videoSourceNode.startPlaybackPreload()
+      //   This is done there because Session has immediate access to playback direction and
+      //   needs to initiate preloading before the first update() call for seamless playback.
+      // - STOP: Handled here via the event because App needs to coordinate with scope updates.
+      //   When playback stops, we switch to scrub mode (symmetric preloading) and refresh
+      //   scopes at full quality - both actions are App-level concerns.
+      const source = this.session.currentSource;
+      if (!isPlaying && source?.videoSourceNode) {
+        source.videoSourceNode.stopPlaybackPreload();
+      }
+
+      // When playback stops, update scopes with full quality
+      if (!isPlaying) {
+        this.updateHistogram();
+        this.updateWaveform();
+        this.updateVectorscope();
+      }
+    });
+
     // Handle clear frame event from paint toolbar
     const paintToolbarEl = this.paintToolbar.render();
     paintToolbarEl.addEventListener('clearFrame', () => {

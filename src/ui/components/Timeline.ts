@@ -394,8 +394,12 @@ export class Timeline {
 
     // Playback info
     ctx.textAlign = 'right';
-    const status = this.session.isPlaying ? '> Playing' : '|| Paused';
-    ctx.fillText(`${status} | ${this.session.fps} fps | ${this.session.loopMode}`, width - padding, height - 12);
+    const status = this.session.isPlaying ? '▶ Playing' : '❚❚ Paused';
+    const effectiveFps = this.session.effectiveFps;
+    const fpsDisplay = this.session.isPlaying && effectiveFps > 0
+      ? `${effectiveFps.toFixed(1)}/${this.session.fps} fps`
+      : `${this.session.fps} fps`;
+    ctx.fillText(`${status} | ${fpsDisplay} | ${this.session.loopMode}`, width - padding, height - 12);
   }
 
   refresh(): void {

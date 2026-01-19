@@ -11,6 +11,7 @@
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { LUMINANCE_COEFFICIENTS } from './ChannelSelect';
+import { getSharedScopesProcessor, WaveformMode as GPUWaveformMode } from '../../scopes/WebGLScopes';
 
 export type WaveformMode = 'luma' | 'rgb' | 'parade';
 
@@ -31,6 +32,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
   private mode: WaveformMode = 'luma';
   private modeButton: HTMLButtonElement | null = null;
   private lastImageData: ImageData | null = null;
+  private isPlaybackMode = false;
 
   constructor() {
     super();
@@ -154,10 +156,36 @@ export class Waveform extends EventEmitter<WaveformEvents> {
 
   /**
    * Update waveform from ImageData and redraw
+   * Uses GPU acceleration when available for better playback performance
    */
   update(imageData: ImageData): void {
     this.lastImageData = imageData;
+
+    // Try GPU rendering first for better performance during playback
+    const gpuProcessor = getSharedScopesProcessor();
+    if (gpuProcessor && gpuProcessor.isReady()) {
+      gpuProcessor.setPlaybackMode(this.isPlaybackMode);
+      gpuProcessor.setImage(imageData);
+      // Draw background and grid first (CPU)
+      this.ctx.fillStyle = '#111';
+      this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+      this.drawGrid();
+      // Then GPU waveform overlay
+      gpuProcessor.renderWaveform(this.canvas, this.mode as GPUWaveformMode);
+      return;
+    }
+
+    // Fall back to CPU rendering
     this.draw(imageData);
+  }
+
+  /**
+   * Set playback mode for performance optimization.
+   * During playback, uses aggressive subsampling.
+   * When paused, uses full quality rendering.
+   */
+  setPlaybackMode(isPlaying: boolean): void {
+    this.isPlaybackMode = isPlaying;
   }
 
   /**
