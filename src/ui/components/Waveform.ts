@@ -7,11 +7,17 @@
  * - RGB overlay mode with superimposed channels
  * - Horizontal position mapped to image columns
  * - Vertical axis shows signal level (0-255)
+ * - Draggable overlay display
  */
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { LUMINANCE_COEFFICIENTS } from './ChannelSelect';
 import { getSharedScopesProcessor, WaveformMode as GPUWaveformMode } from '../../scopes/WebGLScopes';
+import {
+  createDraggableContainer,
+  createControlButton,
+  DraggableContainer,
+} from './shared/DraggableContainer';
 
 export type WaveformMode = 'luma' | 'rgb' | 'parade';
 
@@ -25,7 +31,7 @@ const WAVEFORM_HEIGHT = 128;
 const PARADE_SECTION_WIDTH = Math.floor(WAVEFORM_WIDTH / 3);
 
 export class Waveform extends EventEmitter<WaveformEvents> {
-  private container: HTMLElement;
+  private draggableContainer: DraggableContainer;
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private visible = false;
@@ -37,25 +43,15 @@ export class Waveform extends EventEmitter<WaveformEvents> {
   constructor() {
     super();
 
-    this.container = document.createElement('div');
-    this.container.className = 'waveform-container';
-    this.container.style.cssText = `
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      background: rgba(0, 0, 0, 0.8);
-      border: 1px solid #333;
-      border-radius: 4px;
-      padding: 8px;
-      display: none;
-      z-index: 100;
-      user-select: none;
-    `;
-    // Prevent viewer from capturing pointer events when interacting with waveform
-    this.container.addEventListener('pointerdown', (e) => e.stopPropagation());
-    this.container.addEventListener('pointermove', (e) => e.stopPropagation());
-    this.container.addEventListener('pointerup', (e) => e.stopPropagation());
+    // Create draggable container
+    this.draggableContainer = createDraggableContainer({
+      id: 'waveform',
+      title: 'Waveform',
+      initialPosition: { top: '10px', left: '10px' },
+      onClose: () => this.hide(),
+    });
 
+    // Create canvas
     this.canvas = document.createElement('canvas');
     this.canvas.width = WAVEFORM_WIDTH;
     this.canvas.height = WAVEFORM_HEIGHT;
@@ -67,53 +63,28 @@ export class Waveform extends EventEmitter<WaveformEvents> {
 
     this.ctx = this.canvas.getContext('2d')!;
 
-    this.createUI();
+    // Add controls and canvas
+    this.createControls();
+    this.draggableContainer.content.appendChild(this.canvas);
+
+    // Add footer
+    this.createFooter();
   }
 
-  private createUI(): void {
-    // Header with title and controls
-    const header = document.createElement('div');
-    header.style.cssText = `
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 6px;
-    `;
-
-    const title = document.createElement('span');
-    title.textContent = 'Waveform';
-    title.style.cssText = `
-      color: #888;
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-    `;
-
-    const controls = document.createElement('div');
-    controls.style.cssText = `
-      display: flex;
-      gap: 4px;
-    `;
+  private createControls(): void {
+    const controls = this.draggableContainer.controls;
 
     // Mode toggle button
-    this.modeButton = this.createControlButton('Luma', 'Toggle waveform mode (Luma/RGB/Parade)');
+    this.modeButton = createControlButton('Luma', 'Toggle waveform mode (Luma/RGB/Parade)');
     this.modeButton.dataset.testid = 'waveform-mode-button';
     this.modeButton.addEventListener('click', () => this.cycleMode());
-    controls.appendChild(this.modeButton);
 
-    // Close button
-    const closeButton = this.createControlButton('\u00d7', 'Close waveform');
-    closeButton.dataset.testid = 'waveform-close-button';
-    closeButton.style.fontSize = '14px';
-    closeButton.addEventListener('click', () => this.hide());
-    controls.appendChild(closeButton);
+    // Insert button before close button
+    const closeButton = controls.querySelector('[data-testid="waveform-close-button"]');
+    controls.insertBefore(this.modeButton, closeButton);
+  }
 
-    header.appendChild(title);
-    header.appendChild(controls);
-    this.container.appendChild(header);
-    this.container.appendChild(this.canvas);
-
-    // Scale footer
+  private createFooter(): void {
     const footer = document.createElement('div');
     footer.className = 'waveform-footer';
     footer.style.cssText = `
@@ -128,30 +99,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
       <span>128</span>
       <span>255</span>
     `;
-    this.container.appendChild(footer);
-  }
-
-  private createControlButton(text: string, title: string): HTMLButtonElement {
-    const button = document.createElement('button');
-    button.textContent = text;
-    button.title = title;
-    button.style.cssText = `
-      background: rgba(255, 255, 255, 0.1);
-      border: none;
-      border-radius: 2px;
-      color: #aaa;
-      padding: 2px 6px;
-      font-size: 9px;
-      cursor: pointer;
-      transition: background 0.1s;
-    `;
-    button.addEventListener('mouseenter', () => {
-      button.style.background = 'rgba(255, 255, 255, 0.2)';
-    });
-    button.addEventListener('mouseleave', () => {
-      button.style.background = 'rgba(255, 255, 255, 0.1)';
-    });
-    return button;
+    this.draggableContainer.setFooter(footer);
   }
 
   /**
@@ -365,7 +313,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
   show(): void {
     if (this.visible) return;
     this.visible = true;
-    this.container.style.display = 'block';
+    this.draggableContainer.show();
     this.emit('visibilityChanged', true);
   }
 
@@ -375,7 +323,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
   hide(): void {
     if (!this.visible) return;
     this.visible = false;
-    this.container.style.display = 'none';
+    this.draggableContainer.hide();
     this.emit('visibilityChanged', false);
   }
 
@@ -442,11 +390,33 @@ export class Waveform extends EventEmitter<WaveformEvents> {
     return this.mode;
   }
 
+  /**
+   * Get current position
+   */
+  getPosition(): { x: number; y: number } {
+    return this.draggableContainer.getPosition();
+  }
+
+  /**
+   * Set position
+   */
+  setPosition(x: number, y: number): void {
+    this.draggableContainer.setPosition(x, y);
+  }
+
+  /**
+   * Reset position to initial
+   */
+  resetPosition(): void {
+    this.draggableContainer.resetPosition();
+  }
+
   render(): HTMLElement {
-    return this.container;
+    return this.draggableContainer.element;
   }
 
   dispose(): void {
     this.modeButton = null;
+    this.draggableContainer.dispose();
   }
 }

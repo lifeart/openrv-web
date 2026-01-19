@@ -531,6 +531,80 @@ panel.element.appendChild(slider.container);
 panel.show(anchorElement);
 ```
 
+### DraggableContainer Component (`src/ui/components/shared/DraggableContainer.ts`)
+
+Unified draggable overlay container for scopes and floating panels. Used by Histogram, Waveform, and Vectorscope.
+
+**Features:**
+- Draggable by header (click and drag to reposition)
+- Consistent styling for all scope overlays
+- Position management with bounds checking
+- Close button integration
+- Configurable controls slot for custom buttons
+
+```typescript
+import {
+  createDraggableContainer,
+  createControlButton,
+  DraggableContainer
+} from './shared/DraggableContainer';
+
+// Create a draggable container
+const container = createDraggableContainer({
+  id: 'my-scope',              // Used for class names and test IDs
+  title: 'My Scope',           // Displayed in header
+  initialPosition: {           // Starting position (CSS values)
+    top: '10px',
+    right: '10px'
+  },
+  zIndex: 100,                 // Optional, defaults to 100
+  onClose: () => hide(),       // Called when close button clicked
+});
+
+// Add custom control buttons
+const modeButton = createControlButton('RGB', 'Toggle mode');
+modeButton.addEventListener('click', () => cycleMode());
+const closeButton = container.controls.querySelector('[data-testid="my-scope-close-button"]');
+container.controls.insertBefore(modeButton, closeButton);
+
+// Add content (e.g., canvas)
+const canvas = document.createElement('canvas');
+container.content.appendChild(canvas);
+
+// Add optional footer
+const footer = document.createElement('div');
+footer.innerHTML = '<span>0</span><span>128</span><span>255</span>';
+container.setFooter(footer);
+
+// Show/hide
+container.show();
+container.hide();
+
+// Position management
+const pos = container.getPosition();  // { x: number, y: number }
+container.setPosition(100, 50);       // Move to specific position
+container.resetPosition();            // Reset to initial position
+
+// Render to DOM
+viewerElement.appendChild(container.element);
+
+// Cleanup
+container.dispose();
+```
+
+**Test IDs Generated:**
+- `{id}-container` - Main container element
+- `{id}-header` - Draggable header element
+- `{id}-close-button` - Close button
+
+**Styling:**
+- Semi-transparent black background (`rgba(0, 0, 0, 0.8)`)
+- 1px border (`#333`)
+- 4px border radius
+- 8px padding
+- `z-index: 100` (or custom)
+- Cursor changes to `grab` on header, `grabbing` while dragging
+
 ---
 
 ## No Emojis Policy

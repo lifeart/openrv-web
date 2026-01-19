@@ -6,10 +6,16 @@
  * - Standard graticule with color targets (R, Mg, B, Cy, G, Yl)
  * - Skin tone line reference
  * - Zoom control for detailed analysis
+ * - Draggable overlay display
  */
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getSharedScopesProcessor } from '../../scopes/WebGLScopes';
+import {
+  createDraggableContainer,
+  createControlButton,
+  DraggableContainer,
+} from './shared/DraggableContainer';
 
 export interface VectorscopeEvents extends EventMap {
   visibilityChanged: boolean;
@@ -33,7 +39,7 @@ const COLOR_TARGETS = {
 const SKIN_TONE_ANGLE = (123 * Math.PI) / 180;
 
 export class Vectorscope extends EventEmitter<VectorscopeEvents> {
-  private container: HTMLElement;
+  private draggableContainer: DraggableContainer;
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private visible = false;
@@ -45,25 +51,15 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
   constructor() {
     super();
 
-    this.container = document.createElement('div');
-    this.container.className = 'vectorscope-container';
-    this.container.style.cssText = `
-      position: absolute;
-      bottom: 10px;
-      left: 10px;
-      background: rgba(0, 0, 0, 0.8);
-      border: 1px solid #333;
-      border-radius: 4px;
-      padding: 8px;
-      display: none;
-      z-index: 100;
-      user-select: none;
-    `;
-    // Prevent viewer from capturing pointer events
-    this.container.addEventListener('pointerdown', (e) => e.stopPropagation());
-    this.container.addEventListener('pointermove', (e) => e.stopPropagation());
-    this.container.addEventListener('pointerup', (e) => e.stopPropagation());
+    // Create draggable container
+    this.draggableContainer = createDraggableContainer({
+      id: 'vectorscope',
+      title: 'Vectorscope',
+      initialPosition: { bottom: '10px', left: '10px' },
+      onClose: () => this.hide(),
+    });
 
+    // Create canvas
     this.canvas = document.createElement('canvas');
     this.canvas.width = VECTORSCOPE_SIZE;
     this.canvas.height = VECTORSCOPE_SIZE;
@@ -75,75 +71,25 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
 
     this.ctx = this.canvas.getContext('2d')!;
 
-    this.createUI();
+    // Add controls and canvas
+    this.createControls();
+    this.draggableContainer.content.appendChild(this.canvas);
+
+    // Draw initial graticule
     this.drawGraticule();
   }
 
-  private createUI(): void {
-    // Header with title and controls
-    const header = document.createElement('div');
-    header.style.cssText = `
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 6px;
-    `;
-
-    const title = document.createElement('span');
-    title.textContent = 'Vectorscope';
-    title.style.cssText = `
-      color: #888;
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-    `;
-
-    const controls = document.createElement('div');
-    controls.style.cssText = `
-      display: flex;
-      gap: 4px;
-    `;
+  private createControls(): void {
+    const controls = this.draggableContainer.controls;
 
     // Zoom toggle button
-    this.zoomButton = this.createControlButton('1x', 'Toggle zoom (1x/2x/4x)');
+    this.zoomButton = createControlButton('1x', 'Toggle zoom (1x/2x/4x)');
     this.zoomButton.dataset.testid = 'vectorscope-zoom-button';
     this.zoomButton.addEventListener('click', () => this.cycleZoom());
-    controls.appendChild(this.zoomButton);
 
-    // Close button
-    const closeButton = this.createControlButton('\u00d7', 'Close vectorscope');
-    closeButton.dataset.testid = 'vectorscope-close-button';
-    closeButton.style.fontSize = '14px';
-    closeButton.addEventListener('click', () => this.hide());
-    controls.appendChild(closeButton);
-
-    header.appendChild(title);
-    header.appendChild(controls);
-    this.container.appendChild(header);
-    this.container.appendChild(this.canvas);
-  }
-
-  private createControlButton(text: string, title: string): HTMLButtonElement {
-    const button = document.createElement('button');
-    button.textContent = text;
-    button.title = title;
-    button.style.cssText = `
-      background: rgba(255, 255, 255, 0.1);
-      border: none;
-      border-radius: 2px;
-      color: #aaa;
-      padding: 2px 6px;
-      font-size: 9px;
-      cursor: pointer;
-      transition: background 0.1s;
-    `;
-    button.addEventListener('mouseenter', () => {
-      button.style.background = 'rgba(255, 255, 255, 0.2)';
-    });
-    button.addEventListener('mouseleave', () => {
-      button.style.background = 'rgba(255, 255, 255, 0.1)';
-    });
-    return button;
+    // Insert button before close button
+    const closeButton = controls.querySelector('[data-testid="vectorscope-close-button"]');
+    controls.insertBefore(this.zoomButton, closeButton);
   }
 
   /**
@@ -325,7 +271,7 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
   show(): void {
     if (this.visible) return;
     this.visible = true;
-    this.container.style.display = 'block';
+    this.draggableContainer.show();
     this.emit('visibilityChanged', true);
   }
 
@@ -335,7 +281,7 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
   hide(): void {
     if (!this.visible) return;
     this.visible = false;
-    this.container.style.display = 'none';
+    this.draggableContainer.hide();
     this.emit('visibilityChanged', false);
   }
 
@@ -392,11 +338,33 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
     return this.zoom;
   }
 
+  /**
+   * Get current position
+   */
+  getPosition(): { x: number; y: number } {
+    return this.draggableContainer.getPosition();
+  }
+
+  /**
+   * Set position
+   */
+  setPosition(x: number, y: number): void {
+    this.draggableContainer.setPosition(x, y);
+  }
+
+  /**
+   * Reset position to initial
+   */
+  resetPosition(): void {
+    this.draggableContainer.resetPosition();
+  }
+
   render(): HTMLElement {
-    return this.container;
+    return this.draggableContainer.element;
   }
 
   dispose(): void {
     this.zoomButton = null;
+    this.draggableContainer.dispose();
   }
 }

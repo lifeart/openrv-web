@@ -6,12 +6,17 @@
  * - Luminance histogram using Rec.709 coefficients
  * - Logarithmic scale option for HDR content
  * - Real-time updates on frame changes
- * - Collapsible overlay display
+ * - Draggable overlay display
  */
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { LUMINANCE_COEFFICIENTS } from './ChannelSelect';
 import { getSharedScopesProcessor } from '../../scopes/WebGLScopes';
+import {
+  createDraggableContainer,
+  createControlButton,
+  DraggableContainer,
+} from './shared/DraggableContainer';
 
 export type HistogramMode = 'rgb' | 'luminance' | 'separate';
 
@@ -35,7 +40,7 @@ const HISTOGRAM_WIDTH = 256;
 const HISTOGRAM_HEIGHT = 100;
 
 export class Histogram extends EventEmitter<HistogramEvents> {
-  private container: HTMLElement;
+  private draggableContainer: DraggableContainer;
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private visible = false;
@@ -48,25 +53,15 @@ export class Histogram extends EventEmitter<HistogramEvents> {
   constructor() {
     super();
 
-    this.container = document.createElement('div');
-    this.container.className = 'histogram-container';
-    this.container.style.cssText = `
-      position: absolute;
-      top: 10px;
-      right: 10px;
-      background: rgba(0, 0, 0, 0.8);
-      border: 1px solid #333;
-      border-radius: 4px;
-      padding: 8px;
-      display: none;
-      z-index: 100;
-      user-select: none;
-    `;
-    // Prevent viewer from capturing pointer events when interacting with histogram
-    this.container.addEventListener('pointerdown', (e) => e.stopPropagation());
-    this.container.addEventListener('pointermove', (e) => e.stopPropagation());
-    this.container.addEventListener('pointerup', (e) => e.stopPropagation());
+    // Create draggable container
+    this.draggableContainer = createDraggableContainer({
+      id: 'histogram',
+      title: 'Histogram',
+      initialPosition: { top: '10px', right: '10px' },
+      onClose: () => this.hide(),
+    });
 
+    // Create canvas
     this.canvas = document.createElement('canvas');
     this.canvas.width = HISTOGRAM_WIDTH;
     this.canvas.height = HISTOGRAM_HEIGHT;
@@ -78,59 +73,34 @@ export class Histogram extends EventEmitter<HistogramEvents> {
 
     this.ctx = this.canvas.getContext('2d')!;
 
-    this.createUI();
+    // Add controls and canvas
+    this.createControls();
+    this.draggableContainer.content.appendChild(this.canvas);
+
+    // Add footer
+    this.createFooter();
   }
 
-  private createUI(): void {
-    // Header with title and controls
-    const header = document.createElement('div');
-    header.style.cssText = `
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 6px;
-    `;
-
-    const title = document.createElement('span');
-    title.textContent = 'Histogram';
-    title.style.cssText = `
-      color: #888;
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-    `;
-
-    const controls = document.createElement('div');
-    controls.style.cssText = `
-      display: flex;
-      gap: 4px;
-    `;
+  private createControls(): void {
+    const controls = this.draggableContainer.controls;
 
     // Mode toggle button
-    this.modeButton = this.createControlButton('RGB', 'Toggle histogram mode (RGB/Luma/Separate)');
+    this.modeButton = createControlButton('RGB', 'Toggle histogram mode (RGB/Luma/Separate)');
     this.modeButton.dataset.testid = 'histogram-mode-button';
     this.modeButton.addEventListener('click', () => this.cycleMode());
-    controls.appendChild(this.modeButton);
 
     // Log scale toggle button
-    this.logButton = this.createControlButton('Lin', 'Toggle logarithmic scale');
+    this.logButton = createControlButton('Lin', 'Toggle logarithmic scale');
     this.logButton.dataset.testid = 'histogram-log-button';
     this.logButton.addEventListener('click', () => this.toggleLogScale());
-    controls.appendChild(this.logButton);
 
-    // Close button
-    const closeButton = this.createControlButton('\u00d7', 'Close histogram');
-    closeButton.dataset.testid = 'histogram-close-button';
-    closeButton.style.fontSize = '14px';
-    closeButton.addEventListener('click', () => this.hide());
-    controls.appendChild(closeButton);
+    // Insert buttons before close button
+    const closeButton = controls.querySelector('[data-testid="histogram-close-button"]');
+    controls.insertBefore(this.modeButton, closeButton);
+    controls.insertBefore(this.logButton, closeButton);
+  }
 
-    header.appendChild(title);
-    header.appendChild(controls);
-    this.container.appendChild(header);
-    this.container.appendChild(this.canvas);
-
-    // Stats footer
+  private createFooter(): void {
     const footer = document.createElement('div');
     footer.className = 'histogram-footer';
     footer.style.cssText = `
@@ -145,30 +115,7 @@ export class Histogram extends EventEmitter<HistogramEvents> {
       <span>128</span>
       <span>255</span>
     `;
-    this.container.appendChild(footer);
-  }
-
-  private createControlButton(text: string, title: string): HTMLButtonElement {
-    const button = document.createElement('button');
-    button.textContent = text;
-    button.title = title;
-    button.style.cssText = `
-      background: rgba(255, 255, 255, 0.1);
-      border: none;
-      border-radius: 2px;
-      color: #aaa;
-      padding: 2px 6px;
-      font-size: 9px;
-      cursor: pointer;
-      transition: background 0.1s;
-    `;
-    button.addEventListener('mouseenter', () => {
-      button.style.background = 'rgba(255, 255, 255, 0.2)';
-    });
-    button.addEventListener('mouseleave', () => {
-      button.style.background = 'rgba(255, 255, 255, 0.1)';
-    });
-    return button;
+    this.draggableContainer.setFooter(footer);
   }
 
   /**
@@ -353,7 +300,7 @@ export class Histogram extends EventEmitter<HistogramEvents> {
   show(): void {
     if (this.visible) return;
     this.visible = true;
-    this.container.style.display = 'block';
+    this.draggableContainer.show();
     this.emit('visibilityChanged', true);
   }
 
@@ -363,7 +310,7 @@ export class Histogram extends EventEmitter<HistogramEvents> {
   hide(): void {
     if (!this.visible) return;
     this.visible = false;
-    this.container.style.display = 'none';
+    this.draggableContainer.hide();
     this.emit('visibilityChanged', false);
   }
 
@@ -505,14 +452,36 @@ export class Histogram extends EventEmitter<HistogramEvents> {
     return { min, max, mean, median };
   }
 
+  /**
+   * Get current position
+   */
+  getPosition(): { x: number; y: number } {
+    return this.draggableContainer.getPosition();
+  }
+
+  /**
+   * Set position
+   */
+  setPosition(x: number, y: number): void {
+    this.draggableContainer.setPosition(x, y);
+  }
+
+  /**
+   * Reset position to initial
+   */
+  resetPosition(): void {
+    this.draggableContainer.resetPosition();
+  }
+
   render(): HTMLElement {
-    return this.container;
+    return this.draggableContainer.element;
   }
 
   dispose(): void {
     this.data = null;
     this.modeButton = null;
     this.logButton = null;
+    this.draggableContainer.dispose();
   }
 }
 
