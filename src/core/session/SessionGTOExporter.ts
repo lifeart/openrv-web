@@ -1,6 +1,6 @@
 import { GTOBuilder, SimpleWriter } from 'gto-js';
 import type { GTOData, ObjectData } from 'gto-js';
-import type { Session } from './Session';
+import type { Session, MediaSource } from './Session';
 import type { PaintEngine } from '../../paint/PaintEngine';
 import type { Annotation, PaintEffects, PenStroke, TextAnnotation } from '../../paint/types';
 import { BrushType, LineCap, LineJoin, RV_PEN_WIDTH_SCALE, RV_TEXT_SIZE_SCALE } from '../../paint/types';
@@ -10,6 +10,25 @@ interface PaintSnapshot {
   show: boolean;
   frames: Record<number, Annotation[]>;
   effects: PaintEffects;
+}
+
+/**
+ * Options for session export
+ */
+export interface SessionExportOptions {
+  /** Session name (defaults to 'rv') */
+  name?: string;
+  /** Session comment/notes */
+  comment?: string;
+  /** Whether to include source groups (default: true) */
+  includeSources?: boolean;
+}
+
+/**
+ * Generates a zero-padded source group name (e.g., 'sourceGroup000000')
+ */
+export function generateSourceGroupName(index: number): string {
+  return `sourceGroup${index.toString().padStart(6, '0')}`;
 }
 
 export interface GTOComponentDTO {
@@ -29,22 +48,204 @@ export interface GTOComponent {
 }
 
 export class SessionGTOExporter {
-  static toGTOData(session: Session, paintEngine: PaintEngine): GTOData {
-    const sessionObject = this.buildSessionObject(session, 'rv', 'defaultSequence');
+  /**
+   * Generate complete GTO data for a new session export
+   * Creates RVSession, source groups, sequence, connections, and paint objects
+   */
+  static toGTOData(
+    session: Session,
+    paintEngine: PaintEngine,
+    options: SessionExportOptions = {}
+  ): GTOData {
+    const { name = 'rv', comment = '', includeSources = true } = options;
+    const viewNode = 'defaultSequence';
+
+    const objects: ObjectData[] = [];
+    const sourceGroupNames: string[] = [];
+
+    // 1. Build RVSession object
+    const sessionObject = this.buildSessionObject(session, name, viewNode, comment);
+    objects.push(sessionObject);
+
+    // 2. Build source groups for each media source
+    if (includeSources && session.allSources.length > 0) {
+      for (let i = 0; i < session.allSources.length; i++) {
+        const source = session.allSources[i];
+        if (!source) continue;
+
+        const groupName = generateSourceGroupName(i);
+        sourceGroupNames.push(groupName);
+
+        const sourceObjects = this.buildSourceGroupObjects(source, groupName);
+        objects.push(...sourceObjects);
+      }
+    }
+
+    // 3. Build default sequence group
+    const sequenceObjects = this.buildSequenceGroupObjects('defaultSequence', session);
+    objects.push(...sequenceObjects);
+
+    // 4. Build connection object
+    const connectionObject = this.buildConnectionObject(sourceGroupNames, viewNode);
+    objects.push(connectionObject);
+
+    // 5. Build paint/annotations object
     const paintObject = this.buildPaintObject(session, paintEngine, 'annotations');
+    objects.push(paintObject);
 
     return {
       version: 4,
-      objects: [sessionObject, paintObject],
+      objects,
     };
   }
 
-  static buildSessionObject(session: Session, name: string, viewNode: string): ObjectData {
+  /**
+   * Build the connection object that defines graph topology
+   * Connects sources -> sequence and lists top-level viewable nodes
+   */
+  static buildConnectionObject(sourceGroupNames: string[], viewNode: string): ObjectData {
+    const builder = new GTOBuilder();
+
+    builder
+      .object('connections', 'connection', 1)
+      .component('evaluation')
+      // lhs -> rhs: each source connects to the sequence
+      .string('lhs', sourceGroupNames)
+      .string('rhs', sourceGroupNames.map(() => viewNode))
+      .end()
+      .component('top')
+      .string('nodes', [viewNode])
+      .end()
+      .end();
+
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build source group objects (RVSourceGroup + RVFileSource)
+   * Returns array of objects for a single source
+   */
+  static buildSourceGroupObjects(source: MediaSource, groupName: string): ObjectData[] {
+    const objects: ObjectData[] = [];
+    const sourceName = `${groupName}_source`;
+
+    // 1. RVSourceGroup container
+    const groupBuilder = new GTOBuilder();
+    groupBuilder
+      .object(groupName, 'RVSourceGroup', 1)
+      .component('ui')
+      .string('name', source.name || groupName)
+      .end()
+      .end();
+    objects.push(groupBuilder.build().objects[0]!);
+
+    // 2. RVFileSource (or RVImageSource based on type)
+    const protocol = source.type === 'image' ? 'RVImageSource' : 'RVFileSource';
+    const sourceBuilder = new GTOBuilder();
+
+    // Build the source object - chain must be continuous
+    const sourceObject = sourceBuilder.object(sourceName, protocol, 1);
+
+    sourceObject
+      .component('media')
+      .string('movie', source.url)
+      .string('name', source.name || '')
+      .end();
+
+    sourceObject
+      .component('group')
+      .float('fps', source.fps || 24.0)
+      .float('volume', 1.0)
+      .float('audioOffset', 0.0)
+      .float('balance', 0.0)
+      .float('crossover', 0.0)
+      .int('noMovieAudio', 0)
+      .int('rangeOffset', 0)
+      .end();
+
+    sourceObject
+      .component('cut')
+      // Use MIN_INT/MAX_INT to indicate full media range
+      .int('in', -2147483648)
+      .int('out', 2147483647)
+      .end();
+
+    sourceObject
+      .component('request')
+      .int('readAllChannels', 0)
+      .end();
+
+    // Add proxy/image dimensions if available
+    if (source.width > 0 && source.height > 0) {
+      sourceObject
+        .component('proxy')
+        .int2('size', [[source.width, source.height]])
+        .end();
+    }
+
+    sourceObject.end();
+    objects.push(sourceBuilder.build().objects[0]!);
+
+    return objects;
+  }
+
+  /**
+   * Build sequence group objects (RVSequenceGroup + RVSequence)
+   */
+  static buildSequenceGroupObjects(groupName: string, session: Session): ObjectData[] {
+    const objects: ObjectData[] = [];
+    const sequenceName = `${groupName}_sequence`;
+
+    // 1. RVSequenceGroup container
+    const groupBuilder = new GTOBuilder();
+    groupBuilder
+      .object(groupName, 'RVSequenceGroup', 1)
+      .component('ui')
+      .string('name', 'Default Sequence')
+      .end()
+      .end();
+    objects.push(groupBuilder.build().objects[0]!);
+
+    // 2. RVSequence node
+    const sequenceBuilder = new GTOBuilder();
+    const playback = session.getPlaybackState();
+
+    sequenceBuilder
+      .object(sequenceName, 'RVSequence', 1)
+      .component('output')
+      .float('fps', playback.fps || 24.0)
+      .int('autoSize', 1)
+      .int('interactiveSize', 1)
+      .end()
+      .component('mode')
+      .int('autoEDL', 1)
+      .int('useCutInfo', 1)
+      .int('supportReversedOrderBlending', 1)
+      .end()
+      .end();
+    objects.push(sequenceBuilder.build().objects[0]!);
+
+    return objects;
+  }
+
+  /**
+   * Build the RVSession object with all session properties
+   * @param session - Session instance
+   * @param name - Object name (typically 'rv' or session name)
+   * @param viewNode - Name of the default view node
+   * @param comment - Optional session comment/notes
+   */
+  static buildSessionObject(
+    session: Session,
+    name: string,
+    viewNode: string,
+    comment = ''
+  ): ObjectData {
     const builder = new GTOBuilder();
     const playback = session.getPlaybackState();
 
     builder
-      .object(name, 'RVSession', 4)
+      .object(name, 'RVSession', 1)
       .component('session')
       .string('viewNode', viewNode)
       .int2('range', [[playback.inPoint, playback.outPoint]])
@@ -56,6 +257,23 @@ export class SessionGTOExporter {
       .int('currentFrame', playback.currentFrame)
       .int('marks', playback.marks.map(m => m.frame))
       .int('version', 2)
+      .end()
+      .component('root')
+      .string('name', name)
+      .string('comment', comment)
+      .end()
+      .component('matte')
+      .int('show', 0)
+      .float('aspect', 1.78)
+      .float('opacity', 0.66)
+      .float('heightVisible', -1.0)
+      .float2('centerPoint', [[0, 0]])
+      .end()
+      .component('paintEffects')
+      .int('hold', 0)
+      .int('ghost', 0)
+      .int('ghostBefore', 5)
+      .int('ghostAfter', 5)
       .end()
       .end();
 
@@ -113,13 +331,21 @@ export class SessionGTOExporter {
     return builder.build().objects[0]!;
   }
 
-  static toText(session: Session, paintEngine: PaintEngine): string {
-    const data = this.toGTOData(session, paintEngine);
+  static toText(
+    session: Session,
+    paintEngine: PaintEngine,
+    options: SessionExportOptions = {}
+  ): string {
+    const data = this.toGTOData(session, paintEngine, options);
     return SimpleWriter.write(data) as string;
   }
 
-  static toBinary(session: Session, paintEngine: PaintEngine): ArrayBuffer {
-    const data = this.toGTOData(session, paintEngine);
+  static toBinary(
+    session: Session,
+    paintEngine: PaintEngine,
+    options: SessionExportOptions = {}
+  ): ArrayBuffer {
+    const data = this.toGTOData(session, paintEngine, options);
     return SimpleWriter.write(data, { binary: true }) as ArrayBuffer;
   }
 

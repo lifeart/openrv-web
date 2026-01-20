@@ -668,6 +668,258 @@ describe('GTOGraphLoader', () => {
       // Cleanup
       URL.createObjectURL = originalCreateObjectURL;
     });
+
+    it('parses range as flat array [start, end]', () => {
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
+
+      const dto = createMockDTO({
+        sessions: [
+          {
+            name: 'Test',
+            range: [1, 100],
+          },
+        ],
+        objects: [],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.sessionInfo.inPoint).toBe(1);
+      expect(result.sessionInfo.outPoint).toBe(100);
+    });
+
+    it('parses range as nested array [[start, end]]', () => {
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
+
+      const dto = createMockDTO({
+        sessions: [
+          {
+            name: 'Test',
+            range: [[5, 50]],
+          },
+        ],
+        objects: [],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.sessionInfo.inPoint).toBe(5);
+      expect(result.sessionInfo.outPoint).toBe(50);
+    });
+
+    it('uses frame property when currentFrame is not available', () => {
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
+
+      const dto = createMockDTO({
+        sessions: [
+          {
+            name: 'Test',
+            frame: 25,
+          },
+        ],
+        objects: [],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.sessionInfo.frame).toBe(25);
+    });
+
+    it('prefers frame over currentFrame property', () => {
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
+
+      const dto = createMockDTO({
+        sessions: [
+          {
+            name: 'Test',
+            frame: 10,
+            currentFrame: 25,
+          },
+        ],
+        objects: [],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      // According to the code logic, frame is checked first
+      expect(result.sessionInfo.frame).toBe(10);
+    });
+
+    it('creates RVImageSource nodes correctly', () => {
+      const mockNode = {
+        type: 'RVFileSource',
+        name: 'imageSource',
+        properties: {
+          has: vi.fn((key: string) => ['url'].includes(key)),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'imageSource',
+            protocol: 'RVImageSource',
+            components: {
+              media: { movie: '/path/to/image.exr' },
+            },
+          },
+        ],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.nodes.size).toBe(1);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('url', '/path/to/image.exr');
+    });
+
+    it('handles nested size array format [[width, height]]', () => {
+      const mockNode = {
+        type: 'RVFileSource',
+        name: 'sourceNode',
+        properties: {
+          has: vi.fn((key: string) => ['url', 'width', 'height'].includes(key)),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'sourceNode',
+            protocol: 'RVFileSource',
+            components: {
+              media: { movie: '/path/to/file.mov' },
+              proxy: { size: [[1920, 1080]] },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('width', 1920);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('height', 1080);
+    });
+
+    it('finds leaf node as root when viewNode not specified', () => {
+      let nodeIdCounter = 0;
+
+      const sourceNode = {
+        id: `source-${nodeIdCounter++}`,
+        type: 'RVFileSource',
+        name: 'source',
+        properties: { has: vi.fn().mockReturnValue(false), setValue: vi.fn() },
+        inputs: [],
+        outputs: [{ name: 'sequence' }], // Has outputs, not a leaf
+      };
+
+      const leafNode = {
+        id: `sequence-${nodeIdCounter++}`,
+        type: 'RVSequenceGroup',
+        name: 'sequence',
+        properties: { has: vi.fn().mockReturnValue(false), setValue: vi.fn() },
+        inputs: [],
+        outputs: [], // No outputs, is a leaf
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockImplementation((type: string) => {
+        if (type === 'RVFileSource') return { ...sourceNode, id: `source-${Date.now()}` } as never;
+        if (type === 'RVSequenceGroup') return { ...leafNode, id: `sequence-${Date.now()}` } as never;
+        return null;
+      });
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }], // No viewNode specified
+        objects: [
+          { name: 'source', protocol: 'RVFileSource', components: {} },
+          { name: 'sequence', protocol: 'RVSequenceGroup', components: {} },
+        ],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      // Should find a leaf node (no outputs) as root
+      expect(result.rootNode).not.toBeNull();
+      expect(result.nodes.size).toBe(2);
+    });
+
+    it('skips RVSession protocol in objects iteration', () => {
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          { name: 'session', protocol: 'RVSession', components: {} },
+        ],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      // RVSession should be skipped, no nodes created
+      expect(result.nodes.size).toBe(0);
+    });
+
+    it('handles connection failures gracefully', () => {
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockImplementation((type: string) => {
+        const id = `${type}-${Date.now()}-${Math.random()}`;
+        if (type === 'RVFileSource') {
+          return {
+            id,
+            type: 'RVFileSource',
+            name: 'input1',
+            properties: { has: vi.fn().mockReturnValue(false), setValue: vi.fn() },
+            inputs: [],
+            outputs: [],
+          } as never;
+        }
+        if (type === 'RVStackGroup') {
+          return {
+            id,
+            type: 'RVStackGroup',
+            name: 'stack',
+            properties: { has: vi.fn().mockReturnValue(false), setValue: vi.fn() },
+            inputs: [],
+            outputs: [],
+          } as never;
+        }
+        return null;
+      });
+
+      // Create DTO where stack references a non-existent node
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          { name: 'input1', protocol: 'RVFileSource', components: {} },
+          {
+            name: 'stack',
+            protocol: 'RVStackGroup',
+            components: {
+              mode: { inputs: ['nonExistentNode'] }, // This node doesn't exist
+            },
+          },
+        ],
+      });
+
+      // Should not throw, just skip the connection
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.nodes.size).toBe(2);
+    });
   });
 
   describe('getGraphSummary', () => {
