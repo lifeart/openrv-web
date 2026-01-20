@@ -341,6 +341,83 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
         if (typeof y === 'number') nodeInfo.properties.wipeY = y;
         if (typeof angle === 'number') nodeInfo.properties.wipeAngle = angle;
       }
+
+      // Parse per-layer composite settings
+      const compositeComp = obj.component('composite');
+      if (compositeComp?.exists()) {
+        const types = compositeComp.property('type').value() as string[];
+        if (Array.isArray(types)) {
+          nodeInfo.properties.layerBlendModes = types;
+        }
+      }
+
+      // Parse per-layer opacities from output component
+      const outputComp = obj.component('output');
+      if (outputComp?.exists()) {
+        const opacities = outputComp.property('opacity').value() as number[];
+        if (Array.isArray(opacities)) {
+          nodeInfo.properties.layerOpacities = opacities;
+        }
+        const chosenAudio = outputComp.property('chosenAudioInput').value() as number;
+        if (typeof chosenAudio === 'number') {
+          nodeInfo.properties.chosenAudioInput = chosenAudio;
+        }
+        const policy = outputComp.property('outOfRangePolicy').value() as string;
+        if (policy) {
+          nodeInfo.properties.outOfRangePolicy = policy;
+        }
+      }
+
+      // Parse mode settings
+      const modeComp = obj.component('mode');
+      if (modeComp?.exists()) {
+        const alignStart = modeComp.property('alignStartFrames').value() as boolean;
+        const strictRanges = modeComp.property('strictFrameRanges').value() as boolean;
+        if (typeof alignStart === 'boolean') {
+          nodeInfo.properties.alignStartFrames = alignStart;
+        }
+        if (typeof strictRanges === 'boolean') {
+          nodeInfo.properties.strictFrameRanges = strictRanges;
+        }
+      }
+    }
+
+    // Parse RVSequenceGroup EDL properties
+    if (protocol === 'RVSequenceGroup') {
+      const edlComp = obj.component('edl');
+      if (edlComp?.exists()) {
+        const frames = edlComp.property('frame').value() as number[];
+        const sources = edlComp.property('source').value() as number[];
+        const inPoints = edlComp.property('in').value() as number[];
+        const outPoints = edlComp.property('out').value() as number[];
+
+        if (Array.isArray(frames)) nodeInfo.properties.edlFrames = frames;
+        if (Array.isArray(sources)) nodeInfo.properties.edlSources = sources;
+        if (Array.isArray(inPoints)) nodeInfo.properties.edlIn = inPoints;
+        if (Array.isArray(outPoints)) nodeInfo.properties.edlOut = outPoints;
+      }
+
+      // Parse sequence output settings
+      const outputComp = obj.component('output');
+      if (outputComp?.exists()) {
+        const autoSize = outputComp.property('autoSize').value() as boolean;
+        if (typeof autoSize === 'boolean') {
+          nodeInfo.properties.autoSize = autoSize;
+        }
+      }
+
+      // Parse sequence mode settings
+      const modeComp = obj.component('mode');
+      if (modeComp?.exists()) {
+        const autoEDL = modeComp.property('autoEDL').value() as boolean;
+        const useCutInfo = modeComp.property('useCutInfo').value() as boolean;
+        if (typeof autoEDL === 'boolean') {
+          nodeInfo.properties.autoEDL = autoEDL;
+        }
+        if (typeof useCutInfo === 'boolean') {
+          nodeInfo.properties.useCutInfo = useCutInfo;
+        }
+      }
     }
 
     // Parse switch properties

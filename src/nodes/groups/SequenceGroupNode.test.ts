@@ -224,19 +224,114 @@ describe('SequenceGroupNode', () => {
     it('SGN-007: triggers internal offset recalculation when inputs change', () => {
       const input1 = new MockInputNode('Input1');
       sequenceNode.connectInput(input1);
-      
+
       // Set some durations manually
       sequenceNode.setInputDurations([10]);
       expect(sequenceNode.getTotalDuration()).toBe(10);
-      
+
       // Add another input WITHOUT setting durations again
       const input2 = new MockInputNode('Input2');
       sequenceNode.connectInput(input2);
-      
+
       // This should trigger the internal recalculateOffsets on next call
       // Total duration should now be 10 + 1 (default for new input) = 11
       expect(sequenceNode.getTotalDuration()).toBe(11);
       expect(sequenceNode.getActiveInputIndex({ frame: 11, width: 1920, height: 1080, quality: 'full' })).toBe(1);
+    });
+  });
+
+  describe('EDL (Edit Decision List)', () => {
+    it('hasEDL returns false by default', () => {
+      expect(sequenceNode.hasEDL()).toBe(false);
+    });
+
+    it('hasEDL returns true when EDL data is set', () => {
+      sequenceNode.setEDLArrays([1, 25], [0, 1], [1, 1], [24, 48]);
+      expect(sequenceNode.hasEDL()).toBe(true);
+    });
+
+    it('getEDL returns empty array by default', () => {
+      expect(sequenceNode.getEDL()).toEqual([]);
+    });
+
+    it('getEDL returns structured EDL entries', () => {
+      sequenceNode.setEDLArrays([1, 25, 73], [0, 1, 0], [1, 1, 25], [24, 48, 48]);
+
+      const edl = sequenceNode.getEDL();
+      expect(edl).toHaveLength(3);
+
+      expect(edl[0]).toEqual({ frame: 1, source: 0, inPoint: 1, outPoint: 24 });
+      expect(edl[1]).toEqual({ frame: 25, source: 1, inPoint: 1, outPoint: 48 });
+      expect(edl[2]).toEqual({ frame: 73, source: 0, inPoint: 25, outPoint: 48 });
+    });
+
+    it('setEDL sets EDL from structured entries', () => {
+      const entries = [
+        { frame: 1, source: 0, inPoint: 1, outPoint: 100 },
+        { frame: 101, source: 1, inPoint: 50, outPoint: 150 },
+      ];
+
+      sequenceNode.setEDL(entries);
+
+      expect(sequenceNode.properties.getValue('edlFrames')).toEqual([1, 101]);
+      expect(sequenceNode.properties.getValue('edlSources')).toEqual([0, 1]);
+      expect(sequenceNode.properties.getValue('edlIn')).toEqual([1, 50]);
+      expect(sequenceNode.properties.getValue('edlOut')).toEqual([100, 150]);
+    });
+
+    it('getActiveInputIndex uses EDL data when available', () => {
+      const input1 = new MockInputNode('Input1');
+      const input2 = new MockInputNode('Input2');
+      sequenceNode.connectInput(input1);
+      sequenceNode.connectInput(input2);
+
+      // EDL: frames 1-24 from source 0, frames 25-72 from source 1, frames 73+ from source 0
+      sequenceNode.setEDLArrays([1, 25, 73], [0, 1, 0], [1, 1, 25], [24, 48, 48]);
+
+      expect(sequenceNode.getActiveInputIndex({ frame: 1, width: 1920, height: 1080, quality: 'full' })).toBe(0);
+      expect(sequenceNode.getActiveInputIndex({ frame: 24, width: 1920, height: 1080, quality: 'full' })).toBe(0);
+      expect(sequenceNode.getActiveInputIndex({ frame: 25, width: 1920, height: 1080, quality: 'full' })).toBe(1);
+      expect(sequenceNode.getActiveInputIndex({ frame: 50, width: 1920, height: 1080, quality: 'full' })).toBe(1);
+      expect(sequenceNode.getActiveInputIndex({ frame: 73, width: 1920, height: 1080, quality: 'full' })).toBe(0);
+      expect(sequenceNode.getActiveInputIndex({ frame: 100, width: 1920, height: 1080, quality: 'full' })).toBe(0);
+    });
+
+    it('getLocalFrame uses EDL data for source frame mapping', () => {
+      const input1 = new MockInputNode('Input1');
+      const input2 = new MockInputNode('Input2');
+      sequenceNode.connectInput(input1);
+      sequenceNode.connectInput(input2);
+
+      // EDL: frames 1-24 from source 0 (frames 1-24), frames 25-72 from source 1 (frames 1-48)
+      sequenceNode.setEDLArrays([1, 25], [0, 1], [1, 1], [24, 48]);
+
+      // Global frame 1 -> source frame 1 (inPoint + offset)
+      expect(sequenceNode.getLocalFrame({ frame: 1, width: 1920, height: 1080, quality: 'full' })).toBe(1);
+
+      // Global frame 12 -> source frame 12 (offset = 11, inPoint = 1)
+      expect(sequenceNode.getLocalFrame({ frame: 12, width: 1920, height: 1080, quality: 'full' })).toBe(12);
+
+      // Global frame 25 -> source 1, frame 1 (offset = 0, inPoint = 1)
+      expect(sequenceNode.getLocalFrame({ frame: 25, width: 1920, height: 1080, quality: 'full' })).toBe(1);
+
+      // Global frame 35 -> source 1, frame 11 (offset = 10, inPoint = 1)
+      expect(sequenceNode.getLocalFrame({ frame: 35, width: 1920, height: 1080, quality: 'full' })).toBe(11);
+    });
+
+    it('getTotalDurationFromEDL calculates correct duration', () => {
+      // EDL: 24 frames from source 0, 48 frames from source 1 = 72 total
+      sequenceNode.setEDLArrays([1, 25], [0, 1], [1, 1], [24, 48]);
+
+      expect(sequenceNode.getTotalDurationFromEDL()).toBe(72); // (24-1+1) + (48-1+1) = 24 + 48 = 72
+    });
+
+    it('EDL properties have correct defaults', () => {
+      expect(sequenceNode.properties.getValue('edlFrames')).toEqual([]);
+      expect(sequenceNode.properties.getValue('edlSources')).toEqual([]);
+      expect(sequenceNode.properties.getValue('edlIn')).toEqual([]);
+      expect(sequenceNode.properties.getValue('edlOut')).toEqual([]);
+      expect(sequenceNode.properties.getValue('autoEDL')).toBe(true);
+      expect(sequenceNode.properties.getValue('useCutInfo')).toBe(true);
     });
   });
 });

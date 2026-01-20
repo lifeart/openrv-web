@@ -31,6 +31,48 @@ export function generateSourceGroupName(index: number): string {
   return `sourceGroup${index.toString().padStart(6, '0')}`;
 }
 
+/**
+ * EDL (Edit Decision List) data for sequence export
+ */
+export interface EDLData {
+  /** Global frame numbers where each cut starts */
+  frames: number[];
+  /** Source index for each cut */
+  sources: number[];
+  /** Source in-points for each cut */
+  inPoints: number[];
+  /** Source out-points for each cut */
+  outPoints: number[];
+}
+
+/**
+ * Stack group settings for export
+ */
+export interface StackGroupSettings {
+  /** Global composite type (replace, over, add, etc.) */
+  compositeType?: string;
+  /** Stack mode (replace, wipe, etc.) */
+  mode?: string;
+  /** Wipe X position (0-1) */
+  wipeX?: number;
+  /** Wipe Y position (0-1) */
+  wipeY?: number;
+  /** Wipe angle in degrees */
+  wipeAngle?: number;
+  /** Index of input to use for audio */
+  chosenAudioInput?: number;
+  /** Policy when frame is out of range: 'hold', 'black', 'error' */
+  outOfRangePolicy?: string;
+  /** Whether to align start frames of all inputs */
+  alignStartFrames?: boolean;
+  /** Whether to use strict frame range checking */
+  strictFrameRanges?: boolean;
+  /** Per-layer blend modes (indexed by input) */
+  layerBlendModes?: string[];
+  /** Per-layer opacities (indexed by input, 0-1) */
+  layerOpacities?: number[];
+}
+
 export interface GTOComponentDTO {
   property(name: string): {
     value(): unknown;
@@ -191,8 +233,15 @@ export class SessionGTOExporter {
 
   /**
    * Build sequence group objects (RVSequenceGroup + RVSequence)
+   * @param groupName - Name for the sequence group
+   * @param session - Session instance
+   * @param edl - Optional EDL data (if not using auto-EDL)
    */
-  static buildSequenceGroupObjects(groupName: string, session: Session): ObjectData[] {
+  static buildSequenceGroupObjects(
+    groupName: string,
+    session: Session,
+    edl?: EDLData
+  ): ObjectData[] {
     const objects: ObjectData[] = [];
     const sequenceName = `${groupName}_sequence`;
 
@@ -210,20 +259,111 @@ export class SessionGTOExporter {
     const sequenceBuilder = new GTOBuilder();
     const playback = session.getPlaybackState();
 
-    sequenceBuilder
-      .object(sequenceName, 'RVSequence', 1)
+    const sequenceObject = sequenceBuilder.object(sequenceName, 'RVSequence', 1);
+
+    sequenceObject
       .component('output')
       .float('fps', playback.fps || 24.0)
       .int('autoSize', 1)
       .int('interactiveSize', 1)
-      .end()
+      .end();
+
+    sequenceObject
       .component('mode')
-      .int('autoEDL', 1)
+      .int('autoEDL', edl ? 0 : 1)
       .int('useCutInfo', 1)
       .int('supportReversedOrderBlending', 1)
+      .end();
+
+    // Add EDL component if provided
+    if (edl && edl.frames.length > 0) {
+      sequenceObject
+        .component('edl')
+        .int('frame', edl.frames)
+        .int('source', edl.sources)
+        .int('in', edl.inPoints)
+        .int('out', edl.outPoints)
+        .end();
+    }
+
+    sequenceObject.end();
+    objects.push(sequenceBuilder.build().objects[0]!);
+
+    return objects;
+  }
+
+  /**
+   * Build stack group objects (RVStackGroup + RVStack)
+   * @param groupName - Name for the stack group
+   * @param settings - Optional per-layer compositing settings
+   */
+  static buildStackGroupObjects(
+    groupName: string,
+    settings?: StackGroupSettings
+  ): ObjectData[] {
+    const objects: ObjectData[] = [];
+    const stackName = `${groupName}_stack`;
+
+    // 1. RVStackGroup container
+    const groupBuilder = new GTOBuilder();
+    groupBuilder
+      .object(groupName, 'RVStackGroup', 1)
+      .component('ui')
+      .string('name', 'Stack')
       .end()
       .end();
-    objects.push(sequenceBuilder.build().objects[0]!);
+    objects.push(groupBuilder.build().objects[0]!);
+
+    // 2. RVStack node with compositing settings
+    const stackBuilder = new GTOBuilder();
+    const stackObject = stackBuilder.object(stackName, 'RVStack', 1);
+
+    // Stack component (global composite mode)
+    stackObject
+      .component('stack')
+      .string('composite', settings?.compositeType ?? 'replace')
+      .string('mode', settings?.mode ?? 'replace')
+      .end();
+
+    // Wipe component
+    stackObject
+      .component('wipe')
+      .float('x', settings?.wipeX ?? 0.5)
+      .float('y', settings?.wipeY ?? 0.5)
+      .float('angle', settings?.wipeAngle ?? 0)
+      .end();
+
+    // Output component
+    stackObject
+      .component('output')
+      .int('chosenAudioInput', settings?.chosenAudioInput ?? 0)
+      .string('outOfRangePolicy', settings?.outOfRangePolicy ?? 'hold')
+      .end();
+
+    // Mode component
+    stackObject
+      .component('mode')
+      .int('alignStartFrames', settings?.alignStartFrames ? 1 : 0)
+      .int('strictFrameRanges', settings?.strictFrameRanges ? 1 : 0)
+      .end();
+
+    // Per-layer composite settings (if provided)
+    if (settings?.layerBlendModes && settings.layerBlendModes.length > 0) {
+      stackObject
+        .component('composite')
+        .string('type', settings.layerBlendModes)
+        .end();
+    }
+
+    if (settings?.layerOpacities && settings.layerOpacities.length > 0) {
+      // Add opacities to output component - need to rebuild
+      // For simplicity, we add it as a separate property
+      const outputComp = stackObject.component('layerOutput');
+      outputComp.float('opacity', settings.layerOpacities).end();
+    }
+
+    stackObject.end();
+    objects.push(stackBuilder.build().objects[0]!);
 
     return objects;
   }

@@ -452,6 +452,165 @@ describe('SessionGTOExporter.buildSessionObject', () => {
     });
 });
 
+describe('SessionGTOExporter.buildStackGroupObjects', () => {
+    it('creates RVStackGroup and RVStack objects', () => {
+        const objects = SessionGTOExporter.buildStackGroupObjects('myStack');
+
+        expect(objects).toHaveLength(2);
+        expect(objects[0]?.protocol).toBe('RVStackGroup');
+        expect(objects[1]?.protocol).toBe('RVStack');
+    });
+
+    it('creates RVStackGroup with correct name', () => {
+        const objects = SessionGTOExporter.buildStackGroupObjects('myStack');
+        const group = objects[0]!;
+
+        expect(group.name).toBe('myStack');
+        expect(group.protocolVersion).toBe(1);
+    });
+
+    it('creates RVStack with default composite settings', () => {
+        const objects = SessionGTOExporter.buildStackGroupObjects('myStack');
+        const stack = objects[1]!;
+
+        expect(stack.name).toBe('myStack_stack');
+
+        const components = stack.components as Record<string, any>;
+        const stackComp = components['stack'];
+
+        expect(stackComp.properties.composite.data).toEqual(['replace']);
+        expect(stackComp.properties.mode.data).toEqual(['replace']);
+    });
+
+    it('creates RVStack with custom settings', () => {
+        const objects = SessionGTOExporter.buildStackGroupObjects('myStack', {
+            compositeType: 'over',
+            mode: 'wipe',
+            wipeX: 0.3,
+            wipeY: 0.7,
+            wipeAngle: 45,
+        });
+        const stack = objects[1]!;
+        const components = stack.components as Record<string, any>;
+
+        const stackComp = components['stack'];
+        expect(stackComp.properties.composite.data).toEqual(['over']);
+        expect(stackComp.properties.mode.data).toEqual(['wipe']);
+
+        const wipeComp = components['wipe'];
+        expect(wipeComp.properties.x.data).toEqual([0.3]);
+        expect(wipeComp.properties.y.data).toEqual([0.7]);
+        expect(wipeComp.properties.angle.data).toEqual([45]);
+    });
+
+    it('creates RVStack with per-layer blend modes', () => {
+        const objects = SessionGTOExporter.buildStackGroupObjects('myStack', {
+            layerBlendModes: ['normal', 'multiply', 'screen'],
+        });
+        const stack = objects[1]!;
+        const components = stack.components as Record<string, any>;
+
+        const compositeComp = components['composite'];
+        expect(compositeComp.properties.type.data).toEqual(['normal', 'multiply', 'screen']);
+    });
+
+    it('creates RVStack with output settings', () => {
+        const objects = SessionGTOExporter.buildStackGroupObjects('myStack', {
+            chosenAudioInput: 1,
+            outOfRangePolicy: 'black',
+        });
+        const stack = objects[1]!;
+        const components = stack.components as Record<string, any>;
+
+        const outputComp = components['output'];
+        expect(outputComp.properties.chosenAudioInput.data).toEqual([1]);
+        expect(outputComp.properties.outOfRangePolicy.data).toEqual(['black']);
+    });
+
+    it('creates RVStack with mode settings', () => {
+        const objects = SessionGTOExporter.buildStackGroupObjects('myStack', {
+            alignStartFrames: true,
+            strictFrameRanges: true,
+        });
+        const stack = objects[1]!;
+        const components = stack.components as Record<string, any>;
+
+        const modeComp = components['mode'];
+        expect(modeComp.properties.alignStartFrames.data).toEqual([1]);
+        expect(modeComp.properties.strictFrameRanges.data).toEqual([1]);
+    });
+});
+
+describe('SessionGTOExporter.buildSequenceGroupObjects with EDL', () => {
+    let session: TestSession;
+
+    beforeEach(() => {
+        session = new TestSession();
+        session.setSources([{
+            type: 'video' as const,
+            name: 'test',
+            url: 'test.mp4',
+            width: 1920,
+            height: 1080,
+            duration: 100,
+            fps: 24
+        }]);
+        session.fps = 24;
+    });
+
+    it('creates sequence without EDL by default (autoEDL=1)', () => {
+        const objects = SessionGTOExporter.buildSequenceGroupObjects('defaultSequence', session);
+        const sequence = objects[1]!;
+        const components = sequence.components as Record<string, any>;
+
+        const modeComp = components['mode'];
+        expect(modeComp.properties.autoEDL.data).toEqual([1]);
+
+        // Should not have EDL component
+        expect(components['edl']).toBeUndefined();
+    });
+
+    it('creates sequence with EDL data when provided', () => {
+        const edl = {
+            frames: [1, 25, 73],
+            sources: [0, 1, 0],
+            inPoints: [1, 1, 25],
+            outPoints: [24, 48, 48],
+        };
+
+        const objects = SessionGTOExporter.buildSequenceGroupObjects('defaultSequence', session, edl);
+        const sequence = objects[1]!;
+        const components = sequence.components as Record<string, any>;
+
+        // autoEDL should be 0 when explicit EDL is provided
+        const modeComp = components['mode'];
+        expect(modeComp.properties.autoEDL.data).toEqual([0]);
+
+        // Should have EDL component
+        const edlComp = components['edl'];
+        expect(edlComp).toBeDefined();
+        expect(edlComp.properties.frame.data).toEqual([1, 25, 73]);
+        expect(edlComp.properties.source.data).toEqual([0, 1, 0]);
+        expect(edlComp.properties.in.data).toEqual([1, 1, 25]);
+        expect(edlComp.properties.out.data).toEqual([24, 48, 48]);
+    });
+
+    it('does not create EDL component when EDL data is empty', () => {
+        const edl = {
+            frames: [],
+            sources: [],
+            inPoints: [],
+            outPoints: [],
+        };
+
+        const objects = SessionGTOExporter.buildSequenceGroupObjects('defaultSequence', session, edl);
+        const sequence = objects[1]!;
+        const components = sequence.components as Record<string, any>;
+
+        expect(components['edl']).toBeUndefined();
+    });
+});
+
 describe('SessionGTOExporter.toGTOData (complete export)', () => {
     let session: TestSession;
     let paintEngine: PaintEngine;
