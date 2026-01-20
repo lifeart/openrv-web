@@ -314,4 +314,100 @@ describe('WebGLSharpenProcessor', () => {
       expect(processor1).not.toBe(processor2);
     });
   });
+
+  describe('image orientation', () => {
+    it('WGS-020: preserves vertical orientation (top row stays at top)', () => {
+      // Create a mock that returns a vertically asymmetric pattern
+      // Top row: red, Bottom row: blue
+      let capturedImageData: ImageData | null = null;
+
+      mockGl.texImage2D = vi.fn((_target, _level, _internalformat, _format, _type, imageData) => {
+        capturedImageData = imageData as ImageData;
+      });
+
+      mockGl.readPixels = vi.fn((_x, _y, _width, _height, _format, _type, pixels) => {
+        // Simulate WebGL: copy the input data to output
+        // In correct implementation, no flip should occur
+        if (capturedImageData) {
+          for (let i = 0; i < pixels.length && i < capturedImageData.data.length; i++) {
+            pixels[i] = capturedImageData.data[i];
+          }
+        }
+      });
+
+      const processor = new WebGLSharpenProcessor();
+
+      // Create 2x2 test image with distinct top and bottom rows
+      // Top row (y=0): red pixels
+      // Bottom row (y=1): blue pixels
+      const imageData = new ImageData(2, 2);
+      // Top-left (0,0): Red
+      imageData.data[0] = 255;   // R
+      imageData.data[1] = 0;     // G
+      imageData.data[2] = 0;     // B
+      imageData.data[3] = 255;   // A
+      // Top-right (1,0): Red
+      imageData.data[4] = 255;
+      imageData.data[5] = 0;
+      imageData.data[6] = 0;
+      imageData.data[7] = 255;
+      // Bottom-left (0,1): Blue
+      imageData.data[8] = 0;
+      imageData.data[9] = 0;
+      imageData.data[10] = 255;
+      imageData.data[11] = 255;
+      // Bottom-right (1,1): Blue
+      imageData.data[12] = 0;
+      imageData.data[13] = 0;
+      imageData.data[14] = 255;
+      imageData.data[15] = 255;
+
+      const result = processor.apply(imageData, 50);
+
+      // Verify top row is still red (not flipped)
+      expect(result.data[0]).toBe(255);  // R at top-left
+      expect(result.data[2]).toBe(0);    // B at top-left
+
+      // Verify bottom row is still blue (not flipped)
+      expect(result.data[8]).toBe(0);    // R at bottom-left
+      expect(result.data[10]).toBe(255); // B at bottom-left
+    });
+
+    it('WGS-021: preserves orientation when using applyInPlace', () => {
+      let capturedImageData: ImageData | null = null;
+
+      mockGl.texImage2D = vi.fn((_target, _level, _internalformat, _format, _type, imageData) => {
+        capturedImageData = imageData as ImageData;
+      });
+
+      mockGl.readPixels = vi.fn((_x, _y, _width, _height, _format, _type, pixels) => {
+        if (capturedImageData) {
+          for (let i = 0; i < pixels.length && i < capturedImageData.data.length; i++) {
+            pixels[i] = capturedImageData.data[i];
+          }
+        }
+      });
+
+      const processor = new WebGLSharpenProcessor();
+
+      // Create vertically asymmetric image: green at top, yellow at bottom
+      const imageData = new ImageData(2, 2);
+      // Top row: green
+      imageData.data[0] = 0; imageData.data[1] = 255; imageData.data[2] = 0; imageData.data[3] = 255;
+      imageData.data[4] = 0; imageData.data[5] = 255; imageData.data[6] = 0; imageData.data[7] = 255;
+      // Bottom row: yellow
+      imageData.data[8] = 255; imageData.data[9] = 255; imageData.data[10] = 0; imageData.data[11] = 255;
+      imageData.data[12] = 255; imageData.data[13] = 255; imageData.data[14] = 0; imageData.data[15] = 255;
+
+      processor.applyInPlace(imageData, 50);
+
+      // Top row should still be green
+      expect(imageData.data[0]).toBe(0);   // R at top
+      expect(imageData.data[1]).toBe(255); // G at top
+
+      // Bottom row should still be yellow
+      expect(imageData.data[8]).toBe(255);  // R at bottom
+      expect(imageData.data[9]).toBe(255);  // G at bottom
+    });
+  });
 });

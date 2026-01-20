@@ -272,9 +272,6 @@ export class WebGLLUTProcessor {
     const output = new ImageData(width, height);
     gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, output.data);
 
-    // WebGL renders with Y-flipped, need to flip back
-    this.flipImageDataY(output);
-
     return output;
   }
 
@@ -289,25 +286,6 @@ export class WebGLLUTProcessor {
     const imageData = ctx.getImageData(0, 0, width, height);
     const result = this.apply(imageData, intensity);
     ctx.putImageData(result, 0, 0);
-  }
-
-  /**
-   * Flip ImageData vertically (WebGL Y-axis is inverted)
-   */
-  private flipImageDataY(imageData: ImageData): void {
-    const { width, height, data } = imageData;
-    const bytesPerRow = width * 4;
-    const temp = new Uint8ClampedArray(bytesPerRow);
-
-    for (let y = 0; y < height / 2; y++) {
-      const topOffset = y * bytesPerRow;
-      const bottomOffset = (height - 1 - y) * bytesPerRow;
-
-      // Swap rows
-      temp.set(data.subarray(topOffset, topOffset + bytesPerRow));
-      data.copyWithin(topOffset, bottomOffset, bottomOffset + bytesPerRow);
-      data.set(temp, bottomOffset);
-    }
   }
 
   /**

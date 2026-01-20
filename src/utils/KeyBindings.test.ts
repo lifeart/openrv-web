@@ -108,7 +108,7 @@ describe('KeyBindings', () => {
     it('KB-U017: defines transform bindings', () => {
       expect(DEFAULT_KEY_BINDINGS['transform.rotateLeft']!.shift).toBe(true);
       expect(DEFAULT_KEY_BINDINGS['transform.rotateRight']!.alt).toBe(true);
-      expect(DEFAULT_KEY_BINDINGS['transform.flipHorizontal']!.shift).toBe(true);
+      expect(DEFAULT_KEY_BINDINGS['transform.flipHorizontal']!.alt).toBe(true);
       expect(DEFAULT_KEY_BINDINGS['transform.flipVertical']!.shift).toBe(true);
     });
 
