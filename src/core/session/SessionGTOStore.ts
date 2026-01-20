@@ -115,15 +115,32 @@ export class SessionGTOStore {
     this.setProperty(cdlComponent, 'saturation', 'float', 1, values.saturation);
   }
 
-  private updateTransform(transform: { rotation: 0 | 90 | 180 | 270; flipH: boolean; flipV: boolean }): void {
+  private updateTransform(transform: {
+    rotation: 0 | 90 | 180 | 270;
+    flipH: boolean;
+    flipV: boolean;
+    scale: { x: number; y: number };
+    translate: { x: number; y: number };
+  }): void {
     const target = this.ensureObject('RVTransform2D', 'rvTransform');
     const component = this.ensureComponent(target, 'transform');
-    const isDefault = transform.rotation === DEFAULT_TRANSFORM.rotation && transform.flipH === DEFAULT_TRANSFORM.flipH && transform.flipV === DEFAULT_TRANSFORM.flipV;
+
+    // Check if transform is at default values
+    const isDefault =
+      transform.rotation === DEFAULT_TRANSFORM.rotation &&
+      transform.flipH === DEFAULT_TRANSFORM.flipH &&
+      transform.flipV === DEFAULT_TRANSFORM.flipV &&
+      transform.scale.x === DEFAULT_TRANSFORM.scale.x &&
+      transform.scale.y === DEFAULT_TRANSFORM.scale.y &&
+      transform.translate.x === DEFAULT_TRANSFORM.translate.x &&
+      transform.translate.y === DEFAULT_TRANSFORM.translate.y;
 
     this.setProperty(component, 'active', 'int', 1, isDefault ? 0 : 1);
     this.setProperty(component, 'rotate', 'float', 1, transform.rotation);
     this.setProperty(component, 'flip', 'int', 1, transform.flipV ? 1 : 0);
     this.setProperty(component, 'flop', 'int', 1, transform.flipH ? 1 : 0);
+    this.setProperty(component, 'scale', 'float', 2, [[transform.scale.x, transform.scale.y]]);
+    this.setProperty(component, 'translate', 'float', 2, [[transform.translate.x, transform.translate.y]]);
   }
 
   private updateLens(params: { k1: number; k2: number; centerX: number; centerY: number; scale: number }): void {
@@ -217,6 +234,75 @@ export class SessionGTOStore {
       const target = this.findObject(protocol)?.obj ?? this.ensureObject(protocol, name);
       const nodeComponent = this.ensureComponent(target, 'node');
       this.setProperty(nodeComponent, 'active', 'int', 1, 1);
+    }
+  }
+
+  /**
+   * Update linearization settings in the GTO data
+   */
+  updateLinearize(settings: {
+    active?: boolean;
+    sRGB2linear?: boolean;
+    rec709ToLinear?: boolean;
+    logtype?: number;
+    fileGamma?: number;
+    alphaType?: number;
+    yuv?: boolean;
+    invert?: boolean;
+    ignoreChromaticities?: boolean;
+    cineon?: {
+      whiteCodeValue?: number;
+      blackCodeValue?: number;
+      breakPointValue?: number;
+    };
+  }): void {
+    const target = this.ensureObject('RVLinearize', 'rvLinearize');
+
+    // Node component
+    const nodeComponent = this.ensureComponent(target, 'node');
+    this.setProperty(nodeComponent, 'active', 'int', 1, settings.active !== false ? 1 : 0);
+
+    // Color component
+    const colorComponent = this.ensureComponent(target, 'color');
+    this.setProperty(colorComponent, 'active', 'int', 1, 1);
+
+    if (settings.sRGB2linear !== undefined) {
+      this.setProperty(colorComponent, 'sRGB2linear', 'int', 1, settings.sRGB2linear ? 1 : 0);
+    }
+    if (settings.rec709ToLinear !== undefined) {
+      this.setProperty(colorComponent, 'Rec709ToLinear', 'int', 1, settings.rec709ToLinear ? 1 : 0);
+    }
+    if (settings.logtype !== undefined) {
+      this.setProperty(colorComponent, 'logtype', 'int', 1, settings.logtype);
+    }
+    if (settings.fileGamma !== undefined) {
+      this.setProperty(colorComponent, 'fileGamma', 'float', 1, settings.fileGamma);
+    }
+    if (settings.alphaType !== undefined) {
+      this.setProperty(colorComponent, 'alphaType', 'int', 1, settings.alphaType);
+    }
+    if (settings.yuv !== undefined) {
+      this.setProperty(colorComponent, 'YUV', 'int', 1, settings.yuv ? 1 : 0);
+    }
+    if (settings.invert !== undefined) {
+      this.setProperty(colorComponent, 'invert', 'int', 1, settings.invert ? 1 : 0);
+    }
+    if (settings.ignoreChromaticities !== undefined) {
+      this.setProperty(colorComponent, 'ignoreChromaticities', 'int', 1, settings.ignoreChromaticities ? 1 : 0);
+    }
+
+    // Cineon component
+    if (settings.cineon) {
+      const cineonComponent = this.ensureComponent(target, 'cineon');
+      if (settings.cineon.whiteCodeValue !== undefined) {
+        this.setProperty(cineonComponent, 'whiteCodeValue', 'int', 1, settings.cineon.whiteCodeValue);
+      }
+      if (settings.cineon.blackCodeValue !== undefined) {
+        this.setProperty(cineonComponent, 'blackCodeValue', 'int', 1, settings.cineon.blackCodeValue);
+      }
+      if (settings.cineon.breakPointValue !== undefined) {
+        this.setProperty(cineonComponent, 'breakPointValue', 'int', 1, settings.cineon.breakPointValue);
+      }
     }
   }
 

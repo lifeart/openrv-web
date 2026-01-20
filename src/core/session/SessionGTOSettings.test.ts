@@ -220,7 +220,13 @@ describe('Session GTO settings round-trip', () => {
       power: { r: 1.05, g: 1.1, b: 1.15 },
       saturation: 0.9,
     });
-    expect(viewer.getTransform()).toEqual({ rotation: 90, flipH: true, flipV: true });
+    expect(viewer.getTransform()).toEqual({
+      rotation: 90,
+      flipH: true,
+      flipV: true,
+      scale: { x: 1, y: 1 },
+      translate: { x: 0, y: 0 },
+    });
     const lensParams = viewer.getLensParams();
     expect(lensParams.k1).toBeCloseTo(0.1, 6);
     expect(lensParams.k2).toBeCloseTo(-0.05, 6);

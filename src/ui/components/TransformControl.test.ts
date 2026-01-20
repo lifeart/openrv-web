@@ -50,19 +50,33 @@ describe('TransformControl', () => {
 
   describe('setTransform', () => {
     it('TRN-006: sets transform', () => {
-      const transform: Transform2D = { rotation: 90, flipH: true, flipV: false };
+      const transform: Transform2D = {
+        rotation: 90,
+        flipH: true,
+        flipV: false,
+        scale: { x: 2, y: 2 },
+        translate: { x: 0.1, y: 0.2 },
+      };
       control.setTransform(transform);
 
       expect(control.getTransform()).toEqual(transform);
     });
 
     it('TRN-007: stores copy of transform', () => {
-      const transform: Transform2D = { rotation: 90, flipH: true, flipV: false };
+      const transform: Transform2D = {
+        rotation: 90,
+        flipH: true,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      };
       control.setTransform(transform);
 
       transform.rotation = 180; // Modify original
+      transform.scale.x = 3; // Modify nested object
 
       expect(control.getTransform().rotation).toBe(90); // Should not be modified
+      expect(control.getTransform().scale.x).toBe(1); // Nested object should not be modified
     });
   });
 
@@ -281,6 +295,8 @@ describe('TransformControl', () => {
       expect(DEFAULT_TRANSFORM.rotation).toBe(0);
       expect(DEFAULT_TRANSFORM.flipH).toBe(false);
       expect(DEFAULT_TRANSFORM.flipV).toBe(false);
+      expect(DEFAULT_TRANSFORM.scale).toEqual({ x: 1, y: 1 });
+      expect(DEFAULT_TRANSFORM.translate).toEqual({ x: 0, y: 0 });
     });
   });
 
@@ -318,6 +334,107 @@ describe('TransformControl', () => {
       control.rotateLeft();
 
       expect(control.getTransform().rotation).toBe(0);
+    });
+  });
+
+  describe('scale', () => {
+    it('TRN-043: default scale is 1,1', () => {
+      const transform = control.getTransform();
+      expect(transform.scale).toEqual({ x: 1, y: 1 });
+    });
+
+    it('TRN-044: setScale sets both x and y when only x provided', () => {
+      control.setScale(2);
+      const transform = control.getTransform();
+      expect(transform.scale).toEqual({ x: 2, y: 2 });
+    });
+
+    it('TRN-045: setScale sets x and y independently', () => {
+      control.setScale(1.5, 2.5);
+      const transform = control.getTransform();
+      expect(transform.scale).toEqual({ x: 1.5, y: 2.5 });
+    });
+
+    it('TRN-046: setScale clamps to minimum 0.01', () => {
+      control.setScale(-1, 0);
+      const transform = control.getTransform();
+      expect(transform.scale.x).toBe(0.01);
+      expect(transform.scale.y).toBe(0.01);
+    });
+
+    it('TRN-047: setScale emits transformChanged event', () => {
+      const handler = vi.fn();
+      control.on('transformChanged', handler);
+
+      control.setScale(2, 3);
+
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({ scale: { x: 2, y: 3 } })
+      );
+    });
+  });
+
+  describe('translate', () => {
+    it('TRN-048: default translate is 0,0', () => {
+      const transform = control.getTransform();
+      expect(transform.translate).toEqual({ x: 0, y: 0 });
+    });
+
+    it('TRN-049: setTranslate sets x and y', () => {
+      control.setTranslate(0.5, -0.3);
+      const transform = control.getTransform();
+      expect(transform.translate).toEqual({ x: 0.5, y: -0.3 });
+    });
+
+    it('TRN-050: setTranslate emits transformChanged event', () => {
+      const handler = vi.fn();
+      control.on('transformChanged', handler);
+
+      control.setTranslate(0.1, 0.2);
+
+      expect(handler).toHaveBeenCalledWith(
+        expect.objectContaining({ translate: { x: 0.1, y: 0.2 } })
+      );
+    });
+  });
+
+  describe('hasScaleOrTranslate', () => {
+    it('TRN-051: returns false for default transform', () => {
+      expect(control.hasScaleOrTranslate()).toBe(false);
+    });
+
+    it('TRN-052: returns true when scale is not 1,1', () => {
+      control.setScale(2);
+      expect(control.hasScaleOrTranslate()).toBe(true);
+    });
+
+    it('TRN-053: returns true when translate is not 0,0', () => {
+      control.setTranslate(0.1, 0);
+      expect(control.hasScaleOrTranslate()).toBe(true);
+    });
+
+    it('TRN-054: returns true when only scale.y differs', () => {
+      control.setScale(1, 2);
+      expect(control.hasScaleOrTranslate()).toBe(true);
+    });
+
+    it('TRN-055: returns true when only translate.y differs', () => {
+      control.setTranslate(0, 0.5);
+      expect(control.hasScaleOrTranslate()).toBe(true);
+    });
+  });
+
+  describe('reset with scale and translate', () => {
+    it('TRN-056: reset returns scale to 1,1', () => {
+      control.setScale(2, 3);
+      control.reset();
+      expect(control.getTransform().scale).toEqual({ x: 1, y: 1 });
+    });
+
+    it('TRN-057: reset returns translate to 0,0', () => {
+      control.setTranslate(0.5, 0.5);
+      control.reset();
+      expect(control.getTransform().translate).toEqual({ x: 0, y: 0 });
     });
   });
 });

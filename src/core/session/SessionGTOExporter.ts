@@ -73,6 +73,77 @@ export interface StackGroupSettings {
   layerOpacities?: number[];
 }
 
+/**
+ * Cineon log settings
+ */
+export interface CineonSettings {
+  /** White code value (default: 685) */
+  whiteCodeValue?: number;
+  /** Black code value (default: 95) */
+  blackCodeValue?: number;
+  /** Soft clip break point (default: 685) */
+  breakPointValue?: number;
+}
+
+/**
+ * LUT settings for linearization
+ */
+export interface LinearizeLUTSettings {
+  /** LUT is active */
+  active?: boolean;
+  /** LUT file path */
+  file?: string;
+  /** LUT name */
+  name?: string;
+  /** LUT type (Luminance, RGB, etc.) */
+  type?: string;
+  /** Scale factor */
+  scale?: number;
+  /** Offset value */
+  offset?: number;
+  /** LUT dimensions [x, y, z] */
+  size?: number[];
+  /** Input transformation matrix (4x4) */
+  inMatrix?: number[][];
+  /** Output transformation matrix (4x4) */
+  outMatrix?: number[][];
+}
+
+/**
+ * Linearization settings for RVLinearize export
+ */
+export interface LinearizeSettings {
+  /** Node is active */
+  active?: boolean;
+
+  // Color component settings
+  /** Color processing active */
+  colorActive?: boolean;
+  /** LUT selection string */
+  lut?: string;
+  /** Alpha handling mode (0=none, 1=premult, 2=unpremult) */
+  alphaType?: number;
+  /** Log curve type (0=none, 1=cineon, 2=viper, etc.) */
+  logtype?: number;
+  /** YUV conversion enabled */
+  yuv?: boolean;
+  /** Invert linearization */
+  invert?: boolean;
+  /** Apply sRGB to linear conversion */
+  sRGB2linear?: boolean;
+  /** Apply Rec709 to linear conversion */
+  rec709ToLinear?: boolean;
+  /** File gamma value */
+  fileGamma?: number;
+  /** Ignore file chromaticities */
+  ignoreChromaticities?: boolean;
+
+  /** Cineon settings */
+  cineon?: CineonSettings;
+  /** LUT settings */
+  lutSettings?: LinearizeLUTSettings;
+}
+
 export interface GTOComponentDTO {
   property(name: string): {
     value(): unknown;
@@ -366,6 +437,73 @@ export class SessionGTOExporter {
     objects.push(stackBuilder.build().objects[0]!);
 
     return objects;
+  }
+
+  /**
+   * Build an RVLinearize object for color space conversion
+   * @param name - Object name (e.g., 'sourceGroup000000_RVLinearize')
+   * @param settings - Linearization settings
+   */
+  static buildLinearizeObject(name: string, settings: LinearizeSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const linearizeObject = builder.object(name, 'RVLinearize', 1);
+
+    // Node component (active state)
+    linearizeObject
+      .component('node')
+      .int('active', settings.active !== false ? 1 : 0)
+      .end();
+
+    // Color component (transfer functions)
+    linearizeObject
+      .component('color')
+      .int('active', settings.colorActive !== false ? 1 : 0)
+      .string('lut', settings.lut ?? '')
+      .int('alphaType', settings.alphaType ?? 0)
+      .int('logtype', settings.logtype ?? 0)
+      .int('YUV', settings.yuv ? 1 : 0)
+      .int('invert', settings.invert ? 1 : 0)
+      .int('sRGB2linear', settings.sRGB2linear ? 1 : 0)
+      .int('Rec709ToLinear', settings.rec709ToLinear ? 1 : 0)
+      .float('fileGamma', settings.fileGamma ?? 1.0)
+      .int('ignoreChromaticities', settings.ignoreChromaticities ? 1 : 0)
+      .end();
+
+    // Cineon component (if provided or use defaults)
+    const cineon = settings.cineon ?? {};
+    linearizeObject
+      .component('cineon')
+      .int('whiteCodeValue', cineon.whiteCodeValue ?? 685)
+      .int('blackCodeValue', cineon.blackCodeValue ?? 95)
+      .int('breakPointValue', cineon.breakPointValue ?? 685)
+      .end();
+
+    // LUT component (if settings provided)
+    const lut = settings.lutSettings ?? {};
+    linearizeObject
+      .component('lut')
+      .int('active', lut.active ? 1 : 0)
+      .string('file', lut.file ?? '')
+      .string('name', lut.name ?? '')
+      .string('type', lut.type ?? 'Luminance')
+      .float('scale', lut.scale ?? 1.0)
+      .float('offset', lut.offset ?? 0.0)
+      .int('size', lut.size ?? [0, 0, 0])
+      .end();
+
+    // Add matrices if provided
+    if (lut.inMatrix) {
+      const lutComp = linearizeObject.component('lut');
+      lutComp.float('inMatrix', lut.inMatrix).end();
+    }
+    if (lut.outMatrix) {
+      const lutComp = linearizeObject.component('lut');
+      lutComp.float('outMatrix', lut.outMatrix).end();
+    }
+
+    linearizeObject.end();
+    return builder.build().objects[0]!;
   }
 
   /**

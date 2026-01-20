@@ -956,4 +956,259 @@ describe('GTOGraphLoader', () => {
       expect(summary).toContain('Root: none');
     });
   });
+
+  describe('RVLinearize parsing', () => {
+    it('parses RVLinearize node component active state', () => {
+      const mockNode = {
+        type: 'RVLinearize',
+        name: 'linearize',
+        properties: {
+          has: vi.fn(() => true),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'rv' }],
+        objects: [
+          {
+            name: 'linearize',
+            protocol: 'RVLinearize',
+            components: {
+              node: { active: 1 },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('linearizeActive', true);
+    });
+
+    it('parses RVLinearize color component transfer functions', () => {
+      const mockNode = {
+        type: 'RVLinearize',
+        name: 'linearize',
+        properties: {
+          has: vi.fn(() => true),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'rv' }],
+        objects: [
+          {
+            name: 'linearize',
+            protocol: 'RVLinearize',
+            components: {
+              node: { active: 1 },
+              color: {
+                active: 1,
+                sRGB2linear: 1,
+                Rec709ToLinear: 0,
+                logtype: 1,
+                fileGamma: 2.2,
+                alphaType: 1,
+                YUV: 1,
+                invert: 0,
+                lut: 'MyLUT',
+                ignoreChromaticities: 1,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('linearizeColorActive', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('sRGB2linear', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('rec709ToLinear', false);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('logtype', 1);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('fileGamma', 2.2);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('alphaType', 1);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('yuv', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('linearizeInvert', false);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('linearizeLut', 'MyLUT');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('ignoreChromaticities', true);
+    });
+
+    it('parses RVLinearize cineon component', () => {
+      const mockNode = {
+        type: 'RVLinearize',
+        name: 'linearize',
+        properties: {
+          has: vi.fn(() => true),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'rv' }],
+        objects: [
+          {
+            name: 'linearize',
+            protocol: 'RVLinearize',
+            components: {
+              node: { active: 1 },
+              cineon: {
+                whiteCodeValue: 700,
+                blackCodeValue: 100,
+                breakPointValue: 680,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('cineonWhiteCode', 700);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('cineonBlackCode', 100);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('cineonBreakPoint', 680);
+    });
+
+    it('parses RVLinearize LUT component', () => {
+      const mockNode = {
+        type: 'RVLinearize',
+        name: 'linearize',
+        properties: {
+          has: vi.fn(() => true),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'rv' }],
+        objects: [
+          {
+            name: 'linearize',
+            protocol: 'RVLinearize',
+            components: {
+              node: { active: 1 },
+              lut: {
+                active: 1,
+                file: '/path/to/lut.cube',
+                name: 'TestLUT',
+                type: 'RGB',
+                scale: 1.5,
+                offset: 0.1,
+                size: [32, 32, 32],
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('lutActive', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('lutFile', '/path/to/lut.cube');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('lutName', 'TestLUT');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('lutType', 'RGB');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('lutScale', 1.5);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('lutOffset', 0.1);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('lutSize', [32, 32, 32]);
+    });
+  });
+
+  describe('RVTransform2D parsing with scale and translate', () => {
+    it('parses scale property', () => {
+      const mockNode = {
+        type: 'RVTransform2D',
+        name: 'transform',
+        properties: {
+          has: vi.fn(() => true),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'rv' }],
+        objects: [
+          {
+            name: 'transform',
+            protocol: 'RVTransform2D',
+            components: {
+              transform: {
+                rotate: 90,
+                flip: true,
+                flop: false,
+                scale: [2.0, 1.5],
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('scale', [2.0, 1.5]);
+    });
+
+    it('parses translate property', () => {
+      const mockNode = {
+        type: 'RVTransform2D',
+        name: 'transform',
+        properties: {
+          has: vi.fn(() => true),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'rv' }],
+        objects: [
+          {
+            name: 'transform',
+            protocol: 'RVTransform2D',
+            components: {
+              transform: {
+                rotate: 0,
+                flip: false,
+                flop: false,
+                translate: [0.1, -0.2],
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('translate', [0.1, -0.2]);
+    });
+  });
 });

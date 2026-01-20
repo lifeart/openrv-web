@@ -119,7 +119,11 @@ export class Viewer {
   private abIndicator: HTMLElement | null = null;
 
   // 2D Transform
-  private transform: Transform2D = { ...DEFAULT_TRANSFORM };
+  private transform: Transform2D = {
+    ...DEFAULT_TRANSFORM,
+    scale: { ...DEFAULT_TRANSFORM.scale },
+    translate: { ...DEFAULT_TRANSFORM.translate },
+  };
 
   // Filter effects
   private filterSettings: FilterSettings = { ...DEFAULT_FILTER_SETTINGS };
@@ -1712,12 +1716,20 @@ export class Viewer {
 
   // Transform methods
   setTransform(transform: Transform2D): void {
-    this.transform = { ...transform };
+    this.transform = {
+      ...transform,
+      scale: { ...DEFAULT_TRANSFORM.scale, ...transform.scale },
+      translate: { ...DEFAULT_TRANSFORM.translate, ...transform.translate },
+    };
     this.scheduleRender();
   }
 
   getTransform(): Transform2D {
-    return { ...this.transform };
+    return {
+      ...this.transform,
+      scale: { ...this.transform.scale },
+      translate: { ...this.transform.translate },
+    };
   }
 
   // Filter methods

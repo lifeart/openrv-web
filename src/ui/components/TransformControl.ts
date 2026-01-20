@@ -5,12 +5,16 @@ export interface Transform2D {
   rotation: 0 | 90 | 180 | 270;  // Degrees clockwise
   flipH: boolean;                 // Horizontal flip
   flipV: boolean;                 // Vertical flip
+  scale: { x: number; y: number }; // Scale factors (1.0 = no scale)
+  translate: { x: number; y: number }; // Translation in normalized coordinates
 }
 
 export const DEFAULT_TRANSFORM: Transform2D = {
   rotation: 0,
   flipH: false,
   flipV: false,
+  scale: { x: 1, y: 1 },
+  translate: { x: 0, y: 0 },
 };
 
 export interface TransformControlEvents extends EventMap {
@@ -19,7 +23,11 @@ export interface TransformControlEvents extends EventMap {
 
 export class TransformControl extends EventEmitter<TransformControlEvents> {
   private container: HTMLElement;
-  private transform: Transform2D = { ...DEFAULT_TRANSFORM };
+  private transform: Transform2D = {
+    ...DEFAULT_TRANSFORM,
+    scale: { ...DEFAULT_TRANSFORM.scale },
+    translate: { ...DEFAULT_TRANSFORM.translate },
+  };
 
   constructor() {
     super();
@@ -144,22 +152,70 @@ export class TransformControl extends EventEmitter<TransformControlEvents> {
   }
 
   reset(): void {
-    this.transform = { ...DEFAULT_TRANSFORM };
+    this.transform = {
+      ...DEFAULT_TRANSFORM,
+      scale: { ...DEFAULT_TRANSFORM.scale },
+      translate: { ...DEFAULT_TRANSFORM.translate },
+    };
     this.updateAllButtons();
     this.emitChange();
   }
 
   private emitChange(): void {
-    this.emit('transformChanged', { ...this.transform });
+    this.emit('transformChanged', {
+      ...this.transform,
+      scale: { ...this.transform.scale },
+      translate: { ...this.transform.translate },
+    });
   }
 
   getTransform(): Transform2D {
-    return { ...this.transform };
+    return {
+      ...this.transform,
+      scale: { ...this.transform.scale },
+      translate: { ...this.transform.translate },
+    };
   }
 
   setTransform(transform: Transform2D): void {
-    this.transform = { ...transform };
+    this.transform = {
+      ...transform,
+      scale: { ...DEFAULT_TRANSFORM.scale, ...transform.scale },
+      translate: { ...DEFAULT_TRANSFORM.translate, ...transform.translate },
+    };
     this.updateAllButtons();
+  }
+
+  /**
+   * Set scale values
+   */
+  setScale(x: number, y?: number): void {
+    this.transform.scale = {
+      x: Math.max(0.01, x), // Prevent zero or negative scale
+      y: Math.max(0.01, y ?? x),
+    };
+    this.emitChange();
+  }
+
+  /**
+   * Set translation values (in normalized 0-1 coordinates)
+   */
+  setTranslate(x: number, y: number): void {
+    this.transform.translate = { x, y };
+    this.emitChange();
+  }
+
+  /**
+   * Check if transform has scale/translate applied
+   */
+  hasScaleOrTranslate(): boolean {
+    const { scale, translate } = this.transform;
+    return (
+      scale.x !== 1 ||
+      scale.y !== 1 ||
+      translate.x !== 0 ||
+      translate.y !== 0
+    );
   }
 
   /**

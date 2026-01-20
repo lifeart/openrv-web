@@ -715,3 +715,113 @@ describe('SessionGTOExporter.toGTOData (complete export)', () => {
         expect(components['root'].properties.comment.data).toEqual(['Review session for shot 001']);
     });
 });
+
+describe('SessionGTOExporter.buildLinearizeObject', () => {
+    it('creates RVLinearize object with default settings', () => {
+        const result = SessionGTOExporter.buildLinearizeObject('sourceGroup000000_RVLinearize');
+
+        expect(result.name).toBe('sourceGroup000000_RVLinearize');
+        expect(result.protocol).toBe('RVLinearize');
+        expect(result.protocolVersion).toBe(1);
+    });
+
+    it('creates node component with active state', () => {
+        const result = SessionGTOExporter.buildLinearizeObject('linearize', { active: true });
+        const components = result.components as Record<string, any>;
+
+        expect(components['node'].properties.active.data).toEqual([1]);
+    });
+
+    it('creates node component with inactive state', () => {
+        const result = SessionGTOExporter.buildLinearizeObject('linearize', { active: false });
+        const components = result.components as Record<string, any>;
+
+        expect(components['node'].properties.active.data).toEqual([0]);
+    });
+
+    it('creates color component with transfer functions', () => {
+        const result = SessionGTOExporter.buildLinearizeObject('linearize', {
+            sRGB2linear: true,
+            rec709ToLinear: false,
+            fileGamma: 2.2,
+        });
+        const components = result.components as Record<string, any>;
+        const colorComp = components['color'];
+
+        expect(colorComp.properties.sRGB2linear.data).toEqual([1]);
+        expect(colorComp.properties.Rec709ToLinear.data).toEqual([0]);
+        expect(colorComp.properties.fileGamma.data).toEqual([2.2]);
+    });
+
+    it('creates color component with log type and alpha settings', () => {
+        const result = SessionGTOExporter.buildLinearizeObject('linearize', {
+            logtype: 1, // cineon
+            alphaType: 1, // premult
+            yuv: true,
+            invert: true,
+        });
+        const components = result.components as Record<string, any>;
+        const colorComp = components['color'];
+
+        expect(colorComp.properties.logtype.data).toEqual([1]);
+        expect(colorComp.properties.alphaType.data).toEqual([1]);
+        expect(colorComp.properties.YUV.data).toEqual([1]);
+        expect(colorComp.properties.invert.data).toEqual([1]);
+    });
+
+    it('creates cineon component with default values', () => {
+        const result = SessionGTOExporter.buildLinearizeObject('linearize');
+        const components = result.components as Record<string, any>;
+        const cineonComp = components['cineon'];
+
+        expect(cineonComp.properties.whiteCodeValue.data).toEqual([685]);
+        expect(cineonComp.properties.blackCodeValue.data).toEqual([95]);
+        expect(cineonComp.properties.breakPointValue.data).toEqual([685]);
+    });
+
+    it('creates cineon component with custom values', () => {
+        const result = SessionGTOExporter.buildLinearizeObject('linearize', {
+            cineon: {
+                whiteCodeValue: 700,
+                blackCodeValue: 100,
+                breakPointValue: 680,
+            },
+        });
+        const components = result.components as Record<string, any>;
+        const cineonComp = components['cineon'];
+
+        expect(cineonComp.properties.whiteCodeValue.data).toEqual([700]);
+        expect(cineonComp.properties.blackCodeValue.data).toEqual([100]);
+        expect(cineonComp.properties.breakPointValue.data).toEqual([680]);
+    });
+
+    it('creates LUT component with settings', () => {
+        const result = SessionGTOExporter.buildLinearizeObject('linearize', {
+            lutSettings: {
+                active: true,
+                file: '/path/to/lut.cube',
+                name: 'MyLUT',
+                type: 'RGB',
+                scale: 1.5,
+                offset: 0.1,
+            },
+        });
+        const components = result.components as Record<string, any>;
+        const lutComp = components['lut'];
+
+        expect(lutComp.properties.active.data).toEqual([1]);
+        expect(lutComp.properties.file.data).toEqual(['/path/to/lut.cube']);
+        expect(lutComp.properties.name.data).toEqual(['MyLUT']);
+        expect(lutComp.properties.type.data).toEqual(['RGB']);
+        expect(lutComp.properties.scale.data).toEqual([1.5]);
+        expect(lutComp.properties.offset.data).toEqual([0.1]);
+    });
+
+    it('creates LUT component with inactive state by default', () => {
+        const result = SessionGTOExporter.buildLinearizeObject('linearize');
+        const components = result.components as Record<string, any>;
+        const lutComp = components['lut'];
+
+        expect(lutComp.properties.active.data).toEqual([0]);
+    });
+});

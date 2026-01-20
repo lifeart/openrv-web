@@ -298,11 +298,13 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
         const flip = transformComp.property('flip').value() as boolean;
         const flop = transformComp.property('flop').value() as boolean;
         const scale = transformComp.property('scale').value() as number[];
+        const translate = transformComp.property('translate').value() as number[];
 
         if (typeof rotate === 'number') nodeInfo.properties.rotate = rotate;
         if (typeof flip === 'boolean') nodeInfo.properties.flip = flip;
         if (typeof flop === 'boolean') nodeInfo.properties.flop = flop;
         if (Array.isArray(scale)) nodeInfo.properties.scale = scale;
+        if (Array.isArray(translate)) nodeInfo.properties.translate = translate;
       }
     }
 
@@ -317,6 +319,78 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
         if (typeof k1 === 'number') nodeInfo.properties.k1 = k1;
         if (typeof k2 === 'number') nodeInfo.properties.k2 = k2;
         if (typeof k3 === 'number') nodeInfo.properties.k3 = k3;
+      }
+    }
+
+    // Parse linearize properties
+    if (protocol === 'RVLinearize') {
+      // Parse node component (active state)
+      const nodeComp = obj.component('node');
+      if (nodeComp?.exists()) {
+        const active = nodeComp.property('active').value() as number;
+        if (typeof active === 'number') nodeInfo.properties.linearizeActive = active !== 0;
+      }
+
+      // Parse color component (transfer functions)
+      const colorComp = obj.component('color');
+      if (colorComp?.exists()) {
+        const colorActive = colorComp.property('active').value() as number;
+        const lut = colorComp.property('lut').value() as string;
+        const alphaType = colorComp.property('alphaType').value() as number;
+        const logtype = colorComp.property('logtype').value() as number;
+        const yuv = colorComp.property('YUV').value() as number;
+        const invert = colorComp.property('invert').value() as number;
+        const sRGB2linear = colorComp.property('sRGB2linear').value() as number;
+        const rec709ToLinear = colorComp.property('Rec709ToLinear').value() as number;
+        const fileGamma = colorComp.property('fileGamma').value() as number;
+        const ignoreChromaticities = colorComp.property('ignoreChromaticities').value() as number;
+
+        if (typeof colorActive === 'number') nodeInfo.properties.linearizeColorActive = colorActive !== 0;
+        if (typeof lut === 'string') nodeInfo.properties.linearizeLut = lut;
+        if (typeof alphaType === 'number') nodeInfo.properties.alphaType = alphaType;
+        if (typeof logtype === 'number') nodeInfo.properties.logtype = logtype;
+        if (typeof yuv === 'number') nodeInfo.properties.yuv = yuv !== 0;
+        if (typeof invert === 'number') nodeInfo.properties.linearizeInvert = invert !== 0;
+        if (typeof sRGB2linear === 'number') nodeInfo.properties.sRGB2linear = sRGB2linear !== 0;
+        if (typeof rec709ToLinear === 'number') nodeInfo.properties.rec709ToLinear = rec709ToLinear !== 0;
+        if (typeof fileGamma === 'number') nodeInfo.properties.fileGamma = fileGamma;
+        if (typeof ignoreChromaticities === 'number') nodeInfo.properties.ignoreChromaticities = ignoreChromaticities !== 0;
+      }
+
+      // Parse cineon component
+      const cineonComp = obj.component('cineon');
+      if (cineonComp?.exists()) {
+        const whiteCodeValue = cineonComp.property('whiteCodeValue').value() as number;
+        const blackCodeValue = cineonComp.property('blackCodeValue').value() as number;
+        const breakPointValue = cineonComp.property('breakPointValue').value() as number;
+
+        if (typeof whiteCodeValue === 'number') nodeInfo.properties.cineonWhiteCode = whiteCodeValue;
+        if (typeof blackCodeValue === 'number') nodeInfo.properties.cineonBlackCode = blackCodeValue;
+        if (typeof breakPointValue === 'number') nodeInfo.properties.cineonBreakPoint = breakPointValue;
+      }
+
+      // Parse LUT component
+      const lutComp = obj.component('lut');
+      if (lutComp?.exists()) {
+        const lutActive = lutComp.property('active').value() as number;
+        const lutFile = lutComp.property('file').value() as string;
+        const lutName = lutComp.property('name').value() as string;
+        const lutType = lutComp.property('type').value() as string;
+        const lutScale = lutComp.property('scale').value() as number;
+        const lutOffset = lutComp.property('offset').value() as number;
+        const lutSize = lutComp.property('size').value() as number[];
+        const inMatrix = lutComp.property('inMatrix').value() as number[][];
+        const outMatrix = lutComp.property('outMatrix').value() as number[][];
+
+        if (typeof lutActive === 'number') nodeInfo.properties.lutActive = lutActive !== 0;
+        if (typeof lutFile === 'string') nodeInfo.properties.lutFile = lutFile;
+        if (typeof lutName === 'string') nodeInfo.properties.lutName = lutName;
+        if (typeof lutType === 'string') nodeInfo.properties.lutType = lutType;
+        if (typeof lutScale === 'number') nodeInfo.properties.lutScale = lutScale;
+        if (typeof lutOffset === 'number') nodeInfo.properties.lutOffset = lutOffset;
+        if (Array.isArray(lutSize)) nodeInfo.properties.lutSize = lutSize;
+        if (Array.isArray(inMatrix)) nodeInfo.properties.lutInMatrix = inMatrix;
+        if (Array.isArray(outMatrix)) nodeInfo.properties.lutOutMatrix = outMatrix;
       }
     }
 
