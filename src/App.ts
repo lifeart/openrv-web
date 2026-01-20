@@ -33,6 +33,12 @@ import { SessionGTOStore } from './core/session/SessionGTOStore';
 import { KeyboardManager, KeyCombination } from './utils/KeyboardManager';
 import { DEFAULT_KEY_BINDINGS, describeKeyCombo } from './utils/KeyBindings';
 import { CustomKeyBindingsManager } from './utils/CustomKeyBindingsManager';
+import { getGlobalHistoryManager } from './utils/HistoryManager';
+import { getThemeManager } from './utils/ThemeManager';
+import { HistoryPanel } from './ui/components/HistoryPanel';
+import { InfoPanel } from './ui/components/InfoPanel';
+import { CacheIndicator } from './ui/components/CacheIndicator';
+import { TextFormattingToolbar } from './ui/components/TextFormattingToolbar';
 
 export class App {
   private container: HTMLElement | null = null;
@@ -68,6 +74,10 @@ export class App {
   private boundHandleResize: () => void;
   private keyboardManager: KeyboardManager;
   private customKeyBindingsManager: CustomKeyBindingsManager;
+  private historyPanel: HistoryPanel;
+  private infoPanel: InfoPanel;
+  private cacheIndicator: CacheIndicator;
+  private textFormattingToolbar: TextFormattingToolbar;
 
   constructor() {
     // Bind event handlers for proper cleanup
@@ -77,6 +87,7 @@ export class App {
     this.paintEngine = new PaintEngine();
     this.viewer = new Viewer(this.session, this.paintEngine);
     this.timeline = new Timeline(this.session, this.paintEngine);
+    this.cacheIndicator = new CacheIndicator(this.session);
 
     // Create HeaderBar (contains file ops, playback, volume, export, help)
     this.headerBar = new HeaderBar(this.session);
@@ -171,6 +182,9 @@ export class App {
     });
     this.compareControl.on('abToggled', () => {
       this.session.toggleAB();
+    });
+    this.compareControl.on('differenceMatteChanged', (state) => {
+      this.viewer.setDifferenceMatteState(state);
     });
 
     // Safe Areas control
@@ -316,6 +330,18 @@ export class App {
 
     // Apply any stored custom bindings to the keyboard shortcuts
     this.refreshKeyboardShortcuts();
+
+    // Initialize history panel with global history manager
+    this.historyPanel = new HistoryPanel(getGlobalHistoryManager());
+
+    // Initialize info panel
+    this.infoPanel = new InfoPanel();
+
+    // Initialize text formatting toolbar
+    this.textFormattingToolbar = new TextFormattingToolbar(
+      this.paintEngine,
+      () => this.session.currentFrame
+    );
   }
 
   mount(selector: string): void {
@@ -346,11 +372,13 @@ export class App {
 
     const viewerEl = this.viewer.getElement();
     const timelineEl = this.timeline.render();
+    const cacheIndicatorEl = this.cacheIndicator.getElement();
 
     this.container.appendChild(headerBarEl);
     this.container.appendChild(tabBarEl);
     this.container.appendChild(contextToolbarEl);
     this.container.appendChild(viewerEl);
+    this.container.appendChild(cacheIndicatorEl);
     this.container.appendChild(timelineEl);
 
     // Add histogram overlay to viewer container
@@ -365,13 +393,31 @@ export class App {
     // Add vectorscope overlay to viewer container
     this.viewer.getContainer().appendChild(this.vectorscope.render());
 
+    // Add history panel to viewer container
+    this.viewer.getContainer().appendChild(this.historyPanel.getElement());
+
+    // Add info panel to viewer container
+    this.viewer.getContainer().appendChild(this.infoPanel.getElement());
+
+    // Wire up cursor color updates from viewer to info panel
+    this.viewer.onCursorColorChange((color, position) => {
+      if (this.infoPanel.isEnabled()) {
+        this.infoPanel.update({
+          colorAtCursor: color,
+          cursorPosition: position,
+        });
+      }
+    });
+
     // Update histogram, waveform, and vectorscope when frame changes or media loads
     this.session.on('frameChanged', () => {
       this.updateHistogram();
       this.updateWaveform();
       this.updateVectorscope();
+      this.updateInfoPanel();
     });
     this.session.on('sourceChanged', () => {
+      this.updateInfoPanel();
       // Small delay to allow canvas to render
       setTimeout(() => {
         this.updateHistogram();
@@ -490,6 +536,51 @@ export class App {
     // Zebra Stripes control
     viewContent.appendChild(this.zebraControl.render());
 
+    viewContent.appendChild(ContextToolbar.createDivider());
+
+    // Spotlight Tool toggle button
+    const spotlightButton = ContextToolbar.createButton('Spotlight', () => {
+      this.viewer.getSpotlightOverlay().toggle();
+    }, { title: 'Toggle spotlight overlay (Shift+Q)', icon: 'eye' });
+    spotlightButton.dataset.testid = 'spotlight-toggle-btn';
+    viewContent.appendChild(spotlightButton);
+
+    // Update spotlight button state when visibility changes
+    this.viewer.getSpotlightOverlay().on('stateChanged', (state) => {
+      if (state.enabled) {
+        spotlightButton.style.background = 'rgba(74, 158, 255, 0.15)';
+        spotlightButton.style.borderColor = '#4a9eff';
+        spotlightButton.style.color = '#4a9eff';
+      } else {
+        spotlightButton.style.background = 'transparent';
+        spotlightButton.style.borderColor = 'transparent';
+        spotlightButton.style.color = '#999';
+      }
+    });
+
+    viewContent.appendChild(ContextToolbar.createDivider());
+
+    // Info Panel toggle button
+    const infoPanelButton = ContextToolbar.createButton('Info', () => {
+      this.infoPanel.toggle();
+      if (this.infoPanel.isEnabled()) {
+        this.updateInfoPanel();
+      }
+    }, { title: 'Toggle info panel overlay (Shift+Alt+I)', icon: 'info' });
+    infoPanelButton.dataset.testid = 'info-panel-toggle';
+    viewContent.appendChild(infoPanelButton);
+
+    // Update button state when visibility changes
+    this.infoPanel.on('visibilityChanged', (visible) => {
+      if (visible) {
+        infoPanelButton.style.background = 'rgba(74, 158, 255, 0.15)';
+        infoPanelButton.style.borderColor = '#4a9eff';
+      } else {
+        infoPanelButton.style.background = '';
+        infoPanelButton.style.borderColor = '';
+      }
+    });
+
     // Sync scope visibility with ScopesControl
     this.histogram.on('visibilityChanged', (visible) => {
       this.scopesControl.setScopeVisible('histogram', visible);
@@ -581,6 +672,32 @@ export class App {
     const annotateContent = document.createElement('div');
     annotateContent.style.cssText = 'display: flex; align-items: center; gap: 8px;';
     annotateContent.appendChild(this.paintToolbar.render());
+
+    annotateContent.appendChild(ContextToolbar.createDivider());
+
+    // Text formatting toolbar (B/I/U buttons) - visible when text tool is selected
+    annotateContent.appendChild(this.textFormattingToolbar.render());
+
+    annotateContent.appendChild(ContextToolbar.createDivider());
+
+    // History panel toggle button
+    const historyButton = ContextToolbar.createButton('History', () => {
+      this.historyPanel.toggle();
+    }, { title: 'Toggle history panel (Shift+Alt+H)', icon: 'undo' });
+    historyButton.dataset.testid = 'history-toggle-button';
+    annotateContent.appendChild(historyButton);
+
+    // Update button state when visibility changes
+    this.historyPanel.on('visibilityChanged', (visible) => {
+      if (visible) {
+        historyButton.style.background = 'rgba(74, 158, 255, 0.15)';
+        historyButton.style.borderColor = '#4a9eff';
+      } else {
+        historyButton.style.background = '';
+        historyButton.style.borderColor = '';
+      }
+    });
+
     this.contextToolbar.setTabContent('annotate', annotateContent);
   }
 
@@ -705,6 +822,9 @@ export class App {
       'playback.toggleDirection': () => this.session.togglePlayDirection(),
       'playback.goToStart': () => this.session.goToStart(),
       'playback.goToEnd': () => this.session.goToEnd(),
+      'playback.slower': () => this.session.decreaseSpeed(),
+      'playback.stop': () => this.session.pause(),
+      'playback.faster': () => this.session.increaseSpeed(),
       'timeline.setInPoint': () => this.session.setInPoint(),
       'timeline.setInPointAlt': () => this.session.setInPoint(),
       'timeline.setOutPoint': () => this.session.setOutPoint(),
@@ -727,6 +847,7 @@ export class App {
       'view.toggleWaveform': () => this.scopesControl.toggleScope('waveform'),
       'view.toggleAB': () => this.session.toggleAB(),
       'view.toggleABAlt': () => this.session.toggleAB(),
+      'view.toggleDifferenceMatte': () => this.compareControl.toggleDifferenceMatte(),
       'panel.color': () => this.colorControls.toggle(),
       'panel.effects': () => this.filterControl.toggle(),
       'panel.curves': () => this.curvesControl.toggle(),
@@ -773,6 +894,21 @@ export class App {
       },
       'color.toggleColorWheels': () => {
         this.viewer.getColorWheels().toggle();
+      },
+      'view.toggleSpotlight': () => {
+        this.viewer.getSpotlightOverlay().toggle();
+      },
+      'panel.history': () => {
+        this.historyPanel.toggle();
+      },
+      'view.toggleInfoPanel': () => {
+        this.infoPanel.toggle();
+        if (this.infoPanel.isEnabled()) {
+          this.updateInfoPanel();
+        }
+      },
+      'theme.cycle': () => {
+        getThemeManager().cycleMode();
       },
       'panel.close': () => {
         if (this.colorControls) {
@@ -1069,6 +1205,68 @@ export class App {
     }
   }
 
+  /**
+   * Update info panel with current session data
+   */
+  private updateInfoPanel(): void {
+    const source = this.session.currentSource;
+    const fps = this.session.fps;
+    const currentFrame = this.session.currentFrame;
+    const totalFrames = source?.duration ?? 0;
+
+    // Calculate timecode
+    const timecode = this.formatTimecode(currentFrame, fps);
+
+    // Calculate duration
+    const durationSeconds = totalFrames / fps;
+    const duration = this.formatDuration(durationSeconds);
+
+    this.infoPanel.update({
+      filename: source?.name ?? undefined,
+      width: source?.width ?? undefined,
+      height: source?.height ?? undefined,
+      currentFrame,
+      totalFrames,
+      timecode,
+      duration,
+      fps,
+    });
+  }
+
+  /**
+   * Format frame number as timecode (HH:MM:SS:FF)
+   */
+  private formatTimecode(frame: number, fps: number): string {
+    if (fps <= 0) return '00:00:00:00';
+
+    const totalSeconds = frame / fps;
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = Math.floor(totalSeconds % 60);
+    const frames = Math.floor(frame % fps);
+
+    return [
+      hours.toString().padStart(2, '0'),
+      minutes.toString().padStart(2, '0'),
+      seconds.toString().padStart(2, '0'),
+      frames.toString().padStart(2, '0'),
+    ].join(':');
+  }
+
+  /**
+   * Format duration as HH:MM:SS
+   */
+  private formatDuration(seconds: number): string {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+  }
+
   private showShortcuts(): void {
     const content = document.createElement('div');
     content.style.cssText = `
@@ -1084,8 +1282,8 @@ export class App {
     // Group shortcuts by category
     const categories = {
       'TABS': ['tab.view', 'tab.color', 'tab.effects', 'tab.transform', 'tab.annotate'],
-      'PLAYBACK': ['playback.toggle', 'playback.stepBackward', 'playback.stepForward', 'playback.goToStart', 'playback.goToEnd', 'playback.toggleDirection'],
-      'VIEW': ['view.fitToWindow', 'view.fitToWindowAlt', 'view.zoom50', 'view.toggleAB', 'view.toggleABAlt'],
+      'PLAYBACK': ['playback.toggle', 'playback.stepBackward', 'playback.stepForward', 'playback.goToStart', 'playback.goToEnd', 'playback.toggleDirection', 'playback.slower', 'playback.stop', 'playback.faster'],
+      'VIEW': ['view.fitToWindow', 'view.fitToWindowAlt', 'view.zoom50', 'view.toggleAB', 'view.toggleABAlt', 'view.toggleSpotlight'],
       'MOUSE CONTROLS': [], // Special case - not in DEFAULT_KEY_BINDINGS
       'CHANNEL ISOLATION': ['channel.red', 'channel.green', 'channel.blue', 'channel.alpha', 'channel.luminance', 'channel.none'],
       'SCOPES': ['panel.histogram', 'panel.waveform', 'panel.vectorscope'],
@@ -1628,6 +1826,7 @@ export class App {
 
     this.viewer.dispose();
     this.timeline.dispose();
+    this.cacheIndicator.dispose();
     this.headerBar.dispose();
     this.tabBar.dispose();
     this.contextToolbar.dispose();
@@ -1648,5 +1847,6 @@ export class App {
     this.histogram.dispose();
     this.waveform.dispose();
     this.vectorscope.dispose();
+    this.textFormattingToolbar.dispose();
   }
 }

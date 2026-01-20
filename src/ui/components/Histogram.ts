@@ -27,6 +27,13 @@ export interface HistogramData {
   luminance: Uint32Array;
   maxValue: number;
   pixelCount: number;
+  // Clipping statistics
+  clipping: {
+    shadows: number;      // Pixels at 0 (black)
+    highlights: number;   // Pixels at 255 (white)
+    shadowsPercent: number;
+    highlightsPercent: number;
+  };
 }
 
 export interface HistogramEvents extends EventMap {
@@ -155,7 +162,17 @@ export class Histogram extends EventEmitter<HistogramEvents> {
       maxValue = Math.max(maxValue, red[i]!, green[i]!, blue[i]!, luminance[i]!);
     }
 
-    this.data = { red, green, blue, luminance, maxValue, pixelCount };
+    // Calculate clipping statistics
+    const shadows = luminance[0] ?? 0;
+    const highlights = luminance[255] ?? 0;
+    const clipping = {
+      shadows,
+      highlights,
+      shadowsPercent: pixelCount > 0 ? (shadows / pixelCount) * 100 : 0,
+      highlightsPercent: pixelCount > 0 ? (highlights / pixelCount) * 100 : 0,
+    };
+
+    this.data = { red, green, blue, luminance, maxValue, pixelCount, clipping };
     return this.data;
   }
 
@@ -520,5 +537,15 @@ export function calculateHistogram(imageData: ImageData): HistogramData {
     maxValue = Math.max(maxValue, red[i]!, green[i]!, blue[i]!, luminance[i]!);
   }
 
-  return { red, green, blue, luminance, maxValue, pixelCount };
+  // Calculate clipping statistics
+  const shadows = luminance[0] ?? 0;
+  const highlights = luminance[255] ?? 0;
+  const clipping = {
+    shadows,
+    highlights,
+    shadowsPercent: pixelCount > 0 ? (shadows / pixelCount) * 100 : 0,
+    highlightsPercent: pixelCount > 0 ? (highlights / pixelCount) * 100 : 0,
+  };
+
+  return { red, green, blue, luminance, maxValue, pixelCount, clipping };
 }

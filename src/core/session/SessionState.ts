@@ -14,7 +14,7 @@ import type { LensDistortionParams } from '../../transform/LensDistortion';
 import type { WipeState } from '../../ui/components/WipeControl';
 import type { StackLayer } from '../../ui/components/StackControl';
 import type { Annotation, PaintEffects } from '../../paint/types';
-import type { LoopMode, MediaType } from './Session';
+import type { LoopMode, MediaType, Marker } from './Session';
 
 /** Schema version for migration support */
 export const SESSION_STATE_VERSION = 1;
@@ -50,7 +50,7 @@ export interface PlaybackState {
   loopMode: LoopMode;
   volume: number;
   muted: boolean;
-  marks: number[];
+  marks: Marker[] | number[]; // Support both old format (number[]) and new format (Marker[])
   currentSourceIndex: number;
 }
 

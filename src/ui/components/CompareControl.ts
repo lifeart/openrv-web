@@ -1,12 +1,13 @@
 /**
- * CompareControl - Dropdown for comparison tools (Wipe + A/B)
+ * CompareControl - Dropdown for comparison tools (Wipe + A/B + Difference Matte)
  *
- * Combines Wipe mode controls and A/B source comparison into a single dropdown.
- * Shows active indicator when wipe is enabled or B source is selected.
+ * Combines Wipe mode controls, A/B source comparison, and difference matte into a single dropdown.
+ * Shows active indicator when wipe is enabled, B source is selected, or difference matte is on.
  */
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg, type IconName } from './shared/Icons';
+import { DifferenceMatteState, DEFAULT_DIFFERENCE_MATTE_STATE } from './DifferenceMatteControl';
 
 export type WipeMode = 'off' | 'horizontal' | 'vertical';
 export type ABSource = 'A' | 'B';
@@ -16,6 +17,7 @@ export interface CompareState {
   wipePosition: number;
   currentAB: ABSource;
   abAvailable: boolean;
+  differenceMatte: DifferenceMatteState;
 }
 
 export interface CompareControlEvents extends EventMap {
@@ -23,6 +25,7 @@ export interface CompareControlEvents extends EventMap {
   wipePositionChanged: number;
   abSourceChanged: ABSource;
   abToggled: void;
+  differenceMatteChanged: DifferenceMatteState;
   stateChanged: CompareState;
 }
 
@@ -41,6 +44,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     wipePosition: 0.5,
     currentAB: 'A',
     abAvailable: false,
+    differenceMatte: { ...DEFAULT_DIFFERENCE_MATTE_STATE },
   };
   private isOpen = false;
   private boundHandleOutsideClick: (e: MouseEvent) => void;
@@ -258,13 +262,125 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
 
     this.dropdown.appendChild(abSection);
 
+    // Divider
+    const divider2 = document.createElement('div');
+    divider2.style.cssText = 'height: 1px; background: #444; margin: 4px 0;';
+    this.dropdown.appendChild(divider2);
+
+    // Difference Matte section
+    const diffSection = document.createElement('div');
+    diffSection.className = 'diff-matte-section';
+    diffSection.style.cssText = 'display: flex; flex-direction: column; gap: 2px;';
+
+    const diffHeader = document.createElement('div');
+    diffHeader.textContent = 'Difference Matte';
+    diffHeader.style.cssText = 'color: #888; font-size: 10px; text-transform: uppercase; padding: 4px 6px;';
+    diffSection.appendChild(diffHeader);
+
+    // Enable toggle
+    const diffToggle = document.createElement('button');
+    diffToggle.dataset.testid = 'diff-matte-toggle';
+    diffToggle.style.cssText = `
+      background: transparent;
+      border: none;
+      color: #ccc;
+      padding: 6px 10px;
+      text-align: left;
+      cursor: pointer;
+      font-size: 12px;
+      border-radius: 3px;
+      transition: background 0.12s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    `;
+    diffToggle.innerHTML = `${getIconSvg('eye', 'sm')}<span>Show Difference</span>`;
+    diffToggle.addEventListener('mouseenter', () => {
+      diffToggle.style.background = '#3a3a3a';
+    });
+    diffToggle.addEventListener('mouseleave', () => {
+      this.updateDiffToggleStyle(diffToggle);
+    });
+    diffToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggleDifferenceMatte();
+    });
+    diffSection.appendChild(diffToggle);
+
+    // Gain slider row
+    const gainRow = document.createElement('div');
+    gainRow.className = 'diff-gain-row';
+    gainRow.style.cssText = 'display: flex; align-items: center; gap: 6px; padding: 4px 10px;';
+
+    const gainLabel = document.createElement('span');
+    gainLabel.textContent = 'Gain:';
+    gainLabel.style.cssText = 'font-size: 11px; color: #888; min-width: 35px;';
+
+    const gainSlider = document.createElement('input');
+    gainSlider.type = 'range';
+    gainSlider.min = '1';
+    gainSlider.max = '10';
+    gainSlider.step = '0.5';
+    gainSlider.value = String(this.state.differenceMatte.gain);
+    gainSlider.dataset.testid = 'diff-matte-gain';
+    gainSlider.style.cssText = 'flex: 1; height: 4px; cursor: pointer;';
+    gainSlider.addEventListener('input', (e) => {
+      const value = parseFloat((e.target as HTMLInputElement).value);
+      this.setDifferenceMatteGain(value);
+      gainValue.textContent = `${value.toFixed(1)}x`;
+    });
+
+    const gainValue = document.createElement('span');
+    gainValue.className = 'diff-gain-value';
+    gainValue.textContent = `${this.state.differenceMatte.gain.toFixed(1)}x`;
+    gainValue.style.cssText = 'font-size: 11px; color: #aaa; min-width: 30px; text-align: right;';
+
+    gainRow.appendChild(gainLabel);
+    gainRow.appendChild(gainSlider);
+    gainRow.appendChild(gainValue);
+    diffSection.appendChild(gainRow);
+
+    // Heatmap toggle
+    const heatmapToggle = document.createElement('button');
+    heatmapToggle.dataset.testid = 'diff-matte-heatmap';
+    heatmapToggle.style.cssText = `
+      background: transparent;
+      border: none;
+      color: #ccc;
+      padding: 6px 10px;
+      text-align: left;
+      cursor: pointer;
+      font-size: 12px;
+      border-radius: 3px;
+      transition: background 0.12s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    `;
+    heatmapToggle.innerHTML = `${getIconSvg('palette', 'sm')}<span>Heatmap Mode</span>`;
+    heatmapToggle.addEventListener('mouseenter', () => {
+      heatmapToggle.style.background = '#3a3a3a';
+    });
+    heatmapToggle.addEventListener('mouseleave', () => {
+      this.updateHeatmapToggleStyle(heatmapToggle);
+    });
+    heatmapToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggleDifferenceMatteHeatmap();
+    });
+    diffSection.appendChild(heatmapToggle);
+
+    this.dropdown.appendChild(diffSection);
+
     this.updateDropdownStates();
   }
 
   private updateButtonLabel(): void {
     const parts: string[] = [];
 
-    if (this.state.wipeMode !== 'off') {
+    if (this.state.differenceMatte.enabled) {
+      parts.push('Diff');
+    } else if (this.state.wipeMode !== 'off') {
       parts.push(this.state.wipeMode === 'horizontal' ? 'H-Wipe' : 'V-Wipe');
     }
     if (this.state.currentAB === 'B' && this.state.abAvailable) {
@@ -328,10 +444,58 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
         toggleButton.style.opacity = this.state.abAvailable ? '1' : '0.5';
       }
     }
+
+    // Update difference matte controls
+    const diffSection = this.dropdown.querySelector('.diff-matte-section');
+    if (diffSection) {
+      const diffToggle = diffSection.querySelector('[data-testid="diff-matte-toggle"]') as HTMLButtonElement;
+      const heatmapToggle = diffSection.querySelector('[data-testid="diff-matte-heatmap"]') as HTMLButtonElement;
+      const gainSlider = diffSection.querySelector('[data-testid="diff-matte-gain"]') as HTMLInputElement;
+      const gainValue = diffSection.querySelector('.diff-gain-value') as HTMLSpanElement;
+
+      if (diffToggle) {
+        this.updateDiffToggleStyle(diffToggle);
+        // Disable if A/B not available
+        diffToggle.disabled = !this.state.abAvailable;
+        diffToggle.style.opacity = this.state.abAvailable ? '1' : '0.5';
+      }
+
+      if (heatmapToggle) {
+        this.updateHeatmapToggleStyle(heatmapToggle);
+        // Disable if difference matte not enabled
+        heatmapToggle.disabled = !this.state.differenceMatte.enabled;
+        heatmapToggle.style.opacity = this.state.differenceMatte.enabled ? '1' : '0.5';
+      }
+
+      if (gainSlider) {
+        gainSlider.value = String(this.state.differenceMatte.gain);
+        gainSlider.disabled = !this.state.differenceMatte.enabled;
+        gainSlider.style.opacity = this.state.differenceMatte.enabled ? '1' : '0.5';
+      }
+
+      if (gainValue) {
+        gainValue.textContent = `${this.state.differenceMatte.gain.toFixed(1)}x`;
+        gainValue.style.opacity = this.state.differenceMatte.enabled ? '1' : '0.5';
+      }
+    }
   }
 
   private isActive(): boolean {
-    return this.state.wipeMode !== 'off' || (this.state.currentAB === 'B' && this.state.abAvailable);
+    return this.state.wipeMode !== 'off' ||
+           (this.state.currentAB === 'B' && this.state.abAvailable) ||
+           this.state.differenceMatte.enabled;
+  }
+
+  private updateDiffToggleStyle(toggle: HTMLButtonElement): void {
+    const isActive = this.state.differenceMatte.enabled;
+    toggle.style.background = isActive ? 'rgba(74, 158, 255, 0.15)' : 'transparent';
+    toggle.style.color = isActive ? '#4a9eff' : '#ccc';
+  }
+
+  private updateHeatmapToggleStyle(toggle: HTMLButtonElement): void {
+    const isActive = this.state.differenceMatte.heatmap;
+    toggle.style.background = isActive ? 'rgba(74, 158, 255, 0.15)' : 'transparent';
+    toggle.style.color = isActive ? '#4a9eff' : '#ccc';
   }
 
   private handleOutsideClick(e: MouseEvent): void {
@@ -453,6 +617,67 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
 
   isABAvailable(): boolean {
     return this.state.abAvailable;
+  }
+
+  // Difference Matte methods
+  toggleDifferenceMatte(): void {
+    this.state.differenceMatte.enabled = !this.state.differenceMatte.enabled;
+    // When enabling difference matte, disable wipe mode to avoid conflicts
+    if (this.state.differenceMatte.enabled) {
+      this.state.wipeMode = 'off';
+    }
+    this.updateButtonLabel();
+    this.updateDropdownStates();
+    this.emit('differenceMatteChanged', { ...this.state.differenceMatte });
+    this.emit('stateChanged', { ...this.state });
+  }
+
+  setDifferenceMatteEnabled(enabled: boolean): void {
+    if (this.state.differenceMatte.enabled !== enabled) {
+      this.state.differenceMatte.enabled = enabled;
+      // When enabling difference matte, disable wipe mode to avoid conflicts
+      if (enabled) {
+        this.state.wipeMode = 'off';
+      }
+      this.updateButtonLabel();
+      this.updateDropdownStates();
+      this.emit('differenceMatteChanged', { ...this.state.differenceMatte });
+      this.emit('stateChanged', { ...this.state });
+    }
+  }
+
+  setDifferenceMatteGain(gain: number): void {
+    const clamped = Math.max(1.0, Math.min(10.0, gain));
+    if (clamped !== this.state.differenceMatte.gain) {
+      this.state.differenceMatte.gain = clamped;
+      this.updateDropdownStates();
+      this.emit('differenceMatteChanged', { ...this.state.differenceMatte });
+      this.emit('stateChanged', { ...this.state });
+    }
+  }
+
+  toggleDifferenceMatteHeatmap(): void {
+    this.state.differenceMatte.heatmap = !this.state.differenceMatte.heatmap;
+    this.updateDropdownStates();
+    this.emit('differenceMatteChanged', { ...this.state.differenceMatte });
+    this.emit('stateChanged', { ...this.state });
+  }
+
+  setDifferenceMatteHeatmap(enabled: boolean): void {
+    if (this.state.differenceMatte.heatmap !== enabled) {
+      this.state.differenceMatte.heatmap = enabled;
+      this.updateDropdownStates();
+      this.emit('differenceMatteChanged', { ...this.state.differenceMatte });
+      this.emit('stateChanged', { ...this.state });
+    }
+  }
+
+  getDifferenceMatteState(): DifferenceMatteState {
+    return { ...this.state.differenceMatte };
+  }
+
+  isDifferenceMatteEnabled(): boolean {
+    return this.state.differenceMatte.enabled;
   }
 
   getState(): CompareState {

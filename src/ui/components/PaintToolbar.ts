@@ -37,6 +37,14 @@ export class PaintToolbar {
 
     this.addSeparator();
 
+    // Shape tool buttons
+    this.createToolButton('rectangle', 'box', 'Rectangle shape');
+    this.createToolButton('ellipse', 'circle', 'Ellipse shape');
+    this.createToolButton('line', 'minus', 'Line shape');
+    this.createToolButton('arrow', 'arrow-right', 'Arrow shape');
+
+    this.addSeparator();
+
     // Brush settings group: brush type, color, width
     this.brushButton = this.createIconButton('circle', 'Toggle soft/hard brush (B)', () => {
       this.paintEngine.brush = this.paintEngine.brush === BrushType.Circle
@@ -147,6 +155,7 @@ export class PaintToolbar {
       this.paintEngine.tool = tool;
       this.updateToolButtons();
     });
+    btn.dataset.testid = `paint-tool-${tool}`;
     this.buttons.set(tool, btn);
   }
 

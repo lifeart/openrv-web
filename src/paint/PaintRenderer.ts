@@ -2,6 +2,8 @@ import {
   Annotation,
   PenStroke,
   TextAnnotation,
+  ShapeAnnotation,
+  ShapeType,
   BrushType,
   StrokeMode,
   TextOrigin,
@@ -57,6 +59,8 @@ export class PaintRenderer {
         this.renderStroke(annotation, options, effectiveOpacity);
       } else if (annotation.type === 'text') {
         this.renderText(annotation, options, effectiveOpacity);
+      } else if (annotation.type === 'shape') {
+        this.renderShape(annotation, options, effectiveOpacity);
       }
     }
   }
@@ -195,8 +199,11 @@ export class PaintRenderer {
     const [r, g, b, a] = text.color;
     ctx.fillStyle = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${a})`;
 
+    // Build font string with bold/italic
     const fontSize = text.size * text.scale;
-    ctx.font = `${fontSize}px ${text.font}`;
+    const fontStyle = text.italic ? 'italic ' : '';
+    const fontWeight = text.bold ? 'bold ' : '';
+    ctx.font = `${fontStyle}${fontWeight}${fontSize}px ${text.font}`;
 
     // Handle text alignment based on origin
     switch (text.origin) {
@@ -235,16 +242,315 @@ export class PaintRenderer {
         break;
     }
 
-    // Apply rotation
+    // Measure text for background and underline
+    const metrics = ctx.measureText(text.text);
+    const textWidth = metrics.width;
+    const textHeight = fontSize; // Approximate text height
+
+    // Calculate text bounds for background/underline based on alignment
+    let textX = x;
+    let textY = y;
+    if (text.rotation !== 0) {
+      textX = 0;
+      textY = 0;
+    }
+
+    // Get text bounds offset based on alignment
+    let bgX = textX;
+    let bgY = textY;
+
+    // Horizontal offset
+    if (ctx.textAlign === 'center') {
+      bgX -= textWidth / 2;
+    } else if (ctx.textAlign === 'right') {
+      bgX -= textWidth;
+    }
+
+    // Vertical offset
+    if (ctx.textBaseline === 'top') {
+      // bgY is at top
+    } else if (ctx.textBaseline === 'middle') {
+      bgY -= textHeight / 2;
+    } else {
+      bgY -= textHeight;
+    }
+
+    // Apply rotation transform if needed
     if (text.rotation !== 0) {
       ctx.translate(x, y);
       ctx.rotate((text.rotation * Math.PI) / 180);
-      ctx.fillText(text.text, 0, 0);
-    } else {
-      ctx.fillText(text.text, x, y);
+    }
+
+    // Draw callout leader line first (behind text)
+    if (text.calloutPoint) {
+      this.renderCalloutLine(text, options, opacity);
+    }
+
+    // Draw background if specified
+    if (text.backgroundColor) {
+      const [br, bg, bb, ba] = text.backgroundColor;
+      const padding = 4;
+      ctx.fillStyle = `rgba(${Math.round(br * 255)}, ${Math.round(bg * 255)}, ${Math.round(bb * 255)}, ${ba})`;
+      ctx.fillRect(
+        bgX - padding,
+        bgY - padding,
+        textWidth + padding * 2,
+        textHeight + padding * 2
+      );
+      // Restore text color
+      ctx.fillStyle = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${a})`;
+    }
+
+    // Draw text
+    ctx.fillText(text.text, textX, textY);
+
+    // Draw underline if specified
+    if (text.underline) {
+      const underlineY = bgY + textHeight + 2;
+      ctx.strokeStyle = ctx.fillStyle;
+      ctx.lineWidth = Math.max(1, fontSize / 12);
+      ctx.beginPath();
+      ctx.moveTo(bgX, underlineY);
+      ctx.lineTo(bgX + textWidth, underlineY);
+      ctx.stroke();
     }
 
     ctx.restore();
+  }
+
+  // Render callout leader line from text to callout point
+  private renderCalloutLine(text: TextAnnotation, options: RenderOptions, opacity: number): void {
+    if (!text.calloutPoint) return;
+
+    const ctx = this.ctx;
+    const { width, height } = options;
+
+    // Save current state and reset transform for callout line
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform
+    ctx.globalAlpha = opacity;
+
+    // Convert positions to canvas coordinates
+    const startX = text.position.x * width;
+    const startY = (1 - text.position.y) * height;
+    const endX = text.calloutPoint.x * width;
+    const endY = (1 - text.calloutPoint.y) * height;
+
+    // Set line style
+    const [r, g, b, a] = text.color;
+    ctx.strokeStyle = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${a})`;
+    ctx.lineWidth = Math.max(1, text.size * text.scale / 12);
+    ctx.lineCap = 'round';
+
+    // Draw leader line
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    ctx.lineTo(endX, endY);
+    ctx.stroke();
+
+    // Draw arrowhead at the end
+    const arrowSize = Math.max(6, text.size * text.scale / 4);
+    const angle = Math.atan2(endY - startY, endX - startX);
+
+    ctx.beginPath();
+    ctx.moveTo(endX, endY);
+    ctx.lineTo(
+      endX - arrowSize * Math.cos(angle - Math.PI / 6),
+      endY - arrowSize * Math.sin(angle - Math.PI / 6)
+    );
+    ctx.moveTo(endX, endY);
+    ctx.lineTo(
+      endX - arrowSize * Math.cos(angle + Math.PI / 6),
+      endY - arrowSize * Math.sin(angle + Math.PI / 6)
+    );
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  // Render a shape annotation
+  renderShape(shape: ShapeAnnotation, options: RenderOptions, opacity = 1): void {
+    const ctx = this.ctx;
+    const { width, height } = options;
+
+    ctx.save();
+    ctx.globalAlpha = opacity;
+
+    // Convert normalized coordinates to canvas pixels
+    const x1 = shape.startPoint.x * width;
+    const y1 = (1 - shape.startPoint.y) * height; // Flip Y
+    const x2 = shape.endPoint.x * width;
+    const y2 = (1 - shape.endPoint.y) * height; // Flip Y
+
+    // Set stroke style
+    const [sr, sg, sb, sa] = shape.strokeColor;
+    ctx.strokeStyle = `rgba(${Math.round(sr * 255)}, ${Math.round(sg * 255)}, ${Math.round(sb * 255)}, ${sa})`;
+    ctx.lineWidth = shape.strokeWidth;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    // Set fill style if fill color is specified
+    if (shape.fillColor) {
+      const [fr, fg, fb, fa] = shape.fillColor;
+      ctx.fillStyle = `rgba(${Math.round(fr * 255)}, ${Math.round(fg * 255)}, ${Math.round(fb * 255)}, ${fa})`;
+    }
+
+    // Calculate center and dimensions for rotation
+    const centerX = (x1 + x2) / 2;
+    const centerY = (y1 + y2) / 2;
+
+    // Apply rotation around center if needed
+    if (shape.rotation !== 0) {
+      ctx.translate(centerX, centerY);
+      ctx.rotate((shape.rotation * Math.PI) / 180);
+      ctx.translate(-centerX, -centerY);
+    }
+
+    switch (shape.shapeType) {
+      case ShapeType.Rectangle:
+        this.renderRectangle(ctx, x1, y1, x2, y2, shape);
+        break;
+      case ShapeType.Ellipse:
+        this.renderEllipse(ctx, x1, y1, x2, y2, shape);
+        break;
+      case ShapeType.Line:
+        this.renderLine(ctx, x1, y1, x2, y2);
+        break;
+      case ShapeType.Arrow:
+        this.renderArrow(ctx, x1, y1, x2, y2, shape);
+        break;
+      case ShapeType.Polygon:
+        this.renderPolygon(ctx, shape, options);
+        break;
+    }
+
+    ctx.restore();
+  }
+
+  private renderRectangle(
+    ctx: CanvasRenderingContext2D,
+    x1: number, y1: number, x2: number, y2: number,
+    shape: ShapeAnnotation
+  ): void {
+    const left = Math.min(x1, x2);
+    const top = Math.min(y1, y2);
+    const rectWidth = Math.abs(x2 - x1);
+    const rectHeight = Math.abs(y2 - y1);
+
+    const cornerRadius = shape.cornerRadius ?? 0;
+    const radius = cornerRadius * Math.min(rectWidth, rectHeight) / 2;
+
+    if (radius > 0) {
+      // Rounded rectangle
+      ctx.beginPath();
+      ctx.moveTo(left + radius, top);
+      ctx.lineTo(left + rectWidth - radius, top);
+      ctx.arcTo(left + rectWidth, top, left + rectWidth, top + radius, radius);
+      ctx.lineTo(left + rectWidth, top + rectHeight - radius);
+      ctx.arcTo(left + rectWidth, top + rectHeight, left + rectWidth - radius, top + rectHeight, radius);
+      ctx.lineTo(left + radius, top + rectHeight);
+      ctx.arcTo(left, top + rectHeight, left, top + rectHeight - radius, radius);
+      ctx.lineTo(left, top + radius);
+      ctx.arcTo(left, top, left + radius, top, radius);
+      ctx.closePath();
+    } else {
+      // Regular rectangle
+      ctx.beginPath();
+      ctx.rect(left, top, rectWidth, rectHeight);
+    }
+
+    if (shape.fillColor) {
+      ctx.fill();
+    }
+    ctx.stroke();
+  }
+
+  private renderEllipse(
+    ctx: CanvasRenderingContext2D,
+    x1: number, y1: number, x2: number, y2: number,
+    shape: ShapeAnnotation
+  ): void {
+    const centerX = (x1 + x2) / 2;
+    const centerY = (y1 + y2) / 2;
+    const radiusX = Math.abs(x2 - x1) / 2;
+    const radiusY = Math.abs(y2 - y1) / 2;
+
+    ctx.beginPath();
+    ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, Math.PI * 2);
+
+    if (shape.fillColor) {
+      ctx.fill();
+    }
+    ctx.stroke();
+  }
+
+  private renderLine(
+    ctx: CanvasRenderingContext2D,
+    x1: number, y1: number, x2: number, y2: number
+  ): void {
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  }
+
+  private renderArrow(
+    ctx: CanvasRenderingContext2D,
+    x1: number, y1: number, x2: number, y2: number,
+    shape: ShapeAnnotation
+  ): void {
+    // Draw the line
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+
+    // Draw arrowhead at end point
+    const arrowSize = shape.arrowheadSize ?? 12;
+    const angle = Math.atan2(y2 - y1, x2 - x1);
+
+    ctx.beginPath();
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(
+      x2 - arrowSize * Math.cos(angle - Math.PI / 6),
+      y2 - arrowSize * Math.sin(angle - Math.PI / 6)
+    );
+    ctx.moveTo(x2, y2);
+    ctx.lineTo(
+      x2 - arrowSize * Math.cos(angle + Math.PI / 6),
+      y2 - arrowSize * Math.sin(angle + Math.PI / 6)
+    );
+    ctx.stroke();
+  }
+
+  private renderPolygon(
+    ctx: CanvasRenderingContext2D,
+    shape: ShapeAnnotation,
+    options: RenderOptions
+  ): void {
+    const points = shape.points;
+    if (!points || points.length < 2) return;
+
+    const { width, height } = options;
+
+    // Convert normalized coordinates to canvas pixels
+    const toCanvasX = (x: number) => x * width;
+    const toCanvasY = (y: number) => (1 - y) * height; // Flip Y
+
+    ctx.beginPath();
+    ctx.moveTo(toCanvasX(points[0]!.x), toCanvasY(points[0]!.y));
+
+    for (let i = 1; i < points.length; i++) {
+      ctx.lineTo(toCanvasX(points[i]!.x), toCanvasY(points[i]!.y));
+    }
+
+    // Close the polygon path
+    ctx.closePath();
+
+    if (shape.fillColor) {
+      ctx.fill();
+    }
+    ctx.stroke();
   }
 
   // Render live stroke being drawn (before it's finalized)

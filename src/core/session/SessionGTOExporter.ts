@@ -54,7 +54,7 @@ export class SessionGTOExporter {
       .int('inc', 1)
       .int('frame', playback.currentFrame)
       .int('currentFrame', playback.currentFrame)
-      .int('marks', playback.marks)
+      .int('marks', playback.marks.map(m => m.frame))
       .int('version', 2)
       .end()
       .end();
@@ -181,7 +181,7 @@ export class SessionGTOExporter {
         this.updateProperty(sessionComp, 'fps', playback.fps);
         
         if (playback.marks.length > 0) {
-           this.updateProperty(sessionComp, 'marks', Array.from(playback.marks));
+           this.updateProperty(sessionComp, 'marks', playback.marks.map(m => m.frame));
         } else {
             // Remove marks property if empty? Or set to empty array?
              this.updateProperty(sessionComp, 'marks', []);

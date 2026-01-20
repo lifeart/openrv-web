@@ -20,6 +20,7 @@ import { showAlert } from './shared/Modal';
 import { getIconSvg } from './shared/Icons';
 import { ChannelMode, applyChannelIsolation } from './ChannelSelect';
 import { StereoState, DEFAULT_STEREO_STATE, isDefaultStereoState, applyStereoMode } from '../../stereo/StereoRenderer';
+import { DifferenceMatteState, DEFAULT_DIFFERENCE_MATTE_STATE, applyDifferenceMatte } from './DifferenceMatteControl';
 import { WebGLSharpenProcessor } from '../../filters/WebGLSharpen';
 import { SafeAreasOverlay } from './SafeAreasOverlay';
 import { PixelProbe } from './PixelProbe';
@@ -27,6 +28,7 @@ import { FalseColor } from './FalseColor';
 import { TimecodeOverlay } from './TimecodeOverlay';
 import { ZebraStripes } from './ZebraStripes';
 import { ColorWheels } from './ColorWheels';
+import { SpotlightOverlay } from './SpotlightOverlay';
 
 interface PointerState {
   pointerId: number;
@@ -139,6 +141,9 @@ export class Viewer {
   // Lift/Gamma/Gain color wheels
   private colorWheels: ColorWheels;
 
+  // Spotlight overlay
+  private spotlightOverlay: SpotlightOverlay;
+
   // CDL state
   private cdlValues: CDLValues = JSON.parse(JSON.stringify(DEFAULT_CDL));
 
@@ -158,6 +163,13 @@ export class Viewer {
 
   // Stereo viewing state
   private stereoState: StereoState = { ...DEFAULT_STEREO_STATE };
+
+  // Difference matte state
+  private differenceMatteState: DifferenceMatteState = { ...DEFAULT_DIFFERENCE_MATTE_STATE };
+
+  // Cursor color callback for InfoPanel
+  private cursorColorCallback: ((color: { r: number; g: number; b: number } | null, position: { x: number; y: number } | null) => void) | null = null;
+  private lastCursorColorUpdate = 0;
 
   constructor(session: Session, paintEngine: PaintEngine) {
     this.session = session;
@@ -254,6 +266,10 @@ export class Viewer {
     this.colorWheels.on('stateChanged', () => {
       this.refresh();
     });
+
+    // Create spotlight overlay
+    this.spotlightOverlay = new SpotlightOverlay();
+    this.canvasContainer.appendChild(this.spotlightOverlay.getElement());
 
     const imageCtx = this.imageCanvas.getContext('2d', { alpha: false });
     if (!imageCtx) throw new Error('Failed to get image 2D context');
@@ -402,6 +418,16 @@ export class Viewer {
       height
     );
 
+    // Update spotlight overlay dimensions
+    this.spotlightOverlay.setViewerDimensions(
+      width,
+      height,
+      0,
+      0,
+      width,
+      height
+    );
+
     this.updateCanvasPosition();
   }
 
@@ -478,6 +504,8 @@ export class Viewer {
 
     // Pixel probe events - track mouse movement for color sampling
     this.container.addEventListener('mousemove', this.onMouseMoveForProbe);
+    this.container.addEventListener('mousemove', this.onMouseMoveForCursorColor);
+    this.container.addEventListener('mouseleave', this.onMouseLeaveForCursorColor);
     this.container.addEventListener('click', this.onClickForProbe);
   }
 
@@ -506,6 +534,70 @@ export class Viewer {
     // Update pixel probe
     this.pixelProbe.updateFromCanvas(canvasX, canvasY, imageData, this.displayWidth, this.displayHeight);
     this.pixelProbe.setOverlayPosition(e.clientX, e.clientY);
+  };
+
+  /**
+   * Handle mouse move for cursor color callback (InfoPanel integration)
+   * Throttled to ~60fps for performance
+   */
+  private onMouseMoveForCursorColor = (e: MouseEvent): void => {
+    if (!this.cursorColorCallback) return;
+
+    // Throttle updates to ~60fps (16ms)
+    const now = Date.now();
+    if (now - this.lastCursorColorUpdate < 16) {
+      return;
+    }
+    this.lastCursorColorUpdate = now;
+
+    // Get canvas-relative coordinates
+    const canvasRect = this.imageCanvas.getBoundingClientRect();
+    const x = e.clientX - canvasRect.left;
+    const y = e.clientY - canvasRect.top;
+
+    // Check if within canvas bounds
+    if (x < 0 || y < 0 || x > canvasRect.width || y > canvasRect.height) {
+      this.cursorColorCallback(null, null);
+      return;
+    }
+
+    // Scale to canvas pixel coordinates
+    const scaleX = this.displayWidth / canvasRect.width;
+    const scaleY = this.displayHeight / canvasRect.height;
+    const canvasX = Math.floor(x * scaleX);
+    const canvasY = Math.floor(y * scaleY);
+
+    // Get pixel color from canvas
+    const imageData = this.getImageData();
+    if (!imageData) {
+      this.cursorColorCallback(null, null);
+      return;
+    }
+
+    // Calculate pixel index
+    const pixelIndex = (canvasY * imageData.width + canvasX) * 4;
+    if (pixelIndex < 0 || pixelIndex >= imageData.data.length - 3) {
+      this.cursorColorCallback(null, null);
+      return;
+    }
+
+    const r = imageData.data[pixelIndex]!;
+    const g = imageData.data[pixelIndex + 1]!;
+    const b = imageData.data[pixelIndex + 2]!;
+
+    this.cursorColorCallback(
+      { r, g, b },
+      { x: canvasX, y: canvasY }
+    );
+  };
+
+  /**
+   * Handle mouse leave - clear cursor color
+   */
+  private onMouseLeaveForCursorColor = (): void => {
+    if (this.cursorColorCallback) {
+      this.cursorColorCallback(null, null);
+    }
   };
 
   private onClickForProbe = (e: MouseEvent): void => {
@@ -1096,8 +1188,14 @@ export class Viewer {
     // Clear canvas
     this.imageCtx.clearRect(0, 0, displayWidth, displayHeight);
 
-    // Check if we should render as a stack
-    if (this.isStackEnabled()) {
+    // Check if difference matte mode is enabled
+    if (this.differenceMatteState.enabled && this.session.abCompareAvailable) {
+      // Render difference between A and B sources
+      const diffData = this.renderDifferenceMatte(displayWidth, displayHeight);
+      if (diffData) {
+        this.imageCtx.putImageData(diffData, 0, 0);
+      }
+    } else if (this.isStackEnabled()) {
       // Composite all stack layers
       const compositedData = this.compositeStackLayers(displayWidth, displayHeight);
       if (compositedData) {
@@ -1583,12 +1681,13 @@ export class Viewer {
     const hasHighlightsShadows = this.colorAdjustments.highlights !== 0 || this.colorAdjustments.shadows !== 0 ||
                                  this.colorAdjustments.whites !== 0 || this.colorAdjustments.blacks !== 0;
     const hasVibrance = this.colorAdjustments.vibrance !== 0;
+    const hasClarity = this.colorAdjustments.clarity !== 0;
     const hasColorWheels = this.colorWheels.hasAdjustments();
     const hasFalseColor = this.falseColor.isEnabled();
     const hasZebras = this.zebraStripes.isEnabled();
 
     // Early return if no pixel effects are active
-    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasColorWheels && !hasFalseColor && !hasZebras) {
+    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasColorWheels && !hasFalseColor && !hasZebras) {
       return;
     }
 
@@ -1603,6 +1702,11 @@ export class Viewer {
     // Apply vibrance (intelligent saturation - before CDL/curves for natural results)
     if (hasVibrance) {
       this.applyVibrance(imageData);
+    }
+
+    // Apply clarity (local contrast enhancement in midtones)
+    if (hasClarity) {
+      this.applyClarity(imageData, width, height);
     }
 
     // Apply color wheels (Lift/Gamma/Gain - after basic adjustments, before CDL)
@@ -1852,6 +1956,134 @@ export class Viewer {
   }
 
   /**
+   * Apply clarity (local contrast) effect to ImageData.
+   * Clarity enhances midtone contrast using a high-pass filter approach:
+   * 1. Apply Gaussian blur to create low-frequency layer
+   * 2. Subtract low-frequency from original = high-frequency detail
+   * 3. Create midtone mask from luminance (full effect in midtones, fades at extremes)
+   * 4. Add masked high-frequency back scaled by clarity amount
+   *
+   * Positive clarity adds punch and definition to midtones.
+   * Negative clarity softens/smooths midtone detail.
+   */
+  private applyClarity(imageData: ImageData, width: number, height: number): void {
+    const data = imageData.data;
+    const clarity = this.colorAdjustments.clarity / 100; // -1 to +1
+    const len = data.length;
+
+    // Create a copy for the blur operation
+    const original = new Uint8ClampedArray(data);
+
+    // Apply 5x5 Gaussian blur to create low-frequency layer
+    // Using separable filter for performance (horizontal then vertical pass)
+    const blurred = this.applyGaussianBlur5x5(original, width, height);
+
+    // Pre-compute midtone mask LUT
+    // Full effect (1.0) at midtones (128), fading to 0 at extremes
+    const midtoneMask = new Float32Array(256);
+    for (let i = 0; i < 256; i++) {
+      // Bell curve centered at 128, with wider range for natural look
+      const normalized = i / 255;
+      // Use smooth bell curve: 1 at center, 0 at edges
+      // f(x) = 1 - (2x - 1)^2 gives a parabola from 0 to 1 to 0
+      const deviation = Math.abs(normalized - 0.5) * 2; // 0 at center, 1 at edges
+      midtoneMask[i] = 1.0 - deviation * deviation; // Quadratic falloff
+    }
+
+    // Scale factor for the effect (reduced to avoid harsh artifacts)
+    const effectScale = clarity * 0.7;
+
+    for (let i = 0; i < len; i += 4) {
+      const r = original[i]!;
+      const g = original[i + 1]!;
+      const b = original[i + 2]!;
+
+      const blurredR = blurred[i]!;
+      const blurredG = blurred[i + 1]!;
+      const blurredB = blurred[i + 2]!;
+
+      // Calculate luminance for midtone mask (Rec. 709)
+      const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      const lumIndex = Math.min(255, Math.max(0, Math.round(lum)));
+      const mask = midtoneMask[lumIndex]!;
+
+      // Calculate high-frequency detail (original - blurred)
+      const highR = r - blurredR;
+      const highG = g - blurredG;
+      const highB = b - blurredB;
+
+      // Add masked high-frequency detail back, scaled by clarity
+      // Positive clarity: add detail; Negative clarity: subtract detail (softens)
+      const adjustedMask = mask * effectScale;
+      data[i] = Math.max(0, Math.min(255, r + highR * adjustedMask));
+      data[i + 1] = Math.max(0, Math.min(255, g + highG * adjustedMask));
+      data[i + 2] = Math.max(0, Math.min(255, b + highB * adjustedMask));
+      // Alpha unchanged
+    }
+  }
+
+  /**
+   * Apply 5x5 Gaussian blur to image data.
+   * Uses separable convolution (horizontal + vertical) for O(n*k) instead of O(n*k^2).
+   * Kernel: [1, 4, 6, 4, 1] / 16 (approximation of Gaussian)
+   */
+  private applyGaussianBlur5x5(data: Uint8ClampedArray, width: number, height: number): Uint8ClampedArray {
+    const result = new Uint8ClampedArray(data.length);
+    const temp = new Uint8ClampedArray(data.length);
+
+    // Gaussian kernel: [1, 4, 6, 4, 1] / 16
+    const kernel = [1, 4, 6, 4, 1];
+
+    // Horizontal pass
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = (y * width + x) * 4;
+
+        for (let c = 0; c < 3; c++) {
+          let sum = 0;
+          let weightSum = 0;
+
+          for (let k = -2; k <= 2; k++) {
+            const nx = Math.min(width - 1, Math.max(0, x + k));
+            const nidx = (y * width + nx) * 4 + c;
+            const weight = kernel[k + 2]!;
+            sum += data[nidx]! * weight;
+            weightSum += weight;
+          }
+
+          temp[idx + c] = sum / weightSum;
+        }
+        temp[idx + 3] = data[idx + 3]!; // Copy alpha
+      }
+    }
+
+    // Vertical pass
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = (y * width + x) * 4;
+
+        for (let c = 0; c < 3; c++) {
+          let sum = 0;
+          let weightSum = 0;
+
+          for (let k = -2; k <= 2; k++) {
+            const ny = Math.min(height - 1, Math.max(0, y + k));
+            const nidx = (ny * width + x) * 4 + c;
+            const weight = kernel[k + 2]!;
+            sum += temp[nidx]! * weight;
+            weightSum += weight;
+          }
+
+          result[idx + c] = sum / weightSum;
+        }
+        result[idx + 3] = temp[idx + 3]!; // Copy alpha
+      }
+    }
+
+    return result;
+  }
+
+  /**
    * Apply sharpen filter to ImageData in-place.
    * Uses GPU acceleration when available, falls back to CPU.
    */
@@ -1978,6 +2210,28 @@ export class Viewer {
     ctx.putImageData(processedData, 0, 0);
   }
 
+  // Difference matte methods
+  setDifferenceMatteState(state: DifferenceMatteState): void {
+    this.differenceMatteState = { ...state };
+    this.scheduleRender();
+  }
+
+  getDifferenceMatteState(): DifferenceMatteState {
+    return { ...this.differenceMatteState };
+  }
+
+  resetDifferenceMatteState(): void {
+    this.differenceMatteState = { ...DEFAULT_DIFFERENCE_MATTE_STATE };
+    this.scheduleRender();
+  }
+
+  /**
+   * Check if difference matte is enabled
+   */
+  isDifferenceMatteEnabled(): boolean {
+    return this.differenceMatteState.enabled;
+  }
+
   // Stack/composite methods
   setStackLayers(layers: StackLayer[]): void {
     this.stackLayers = [...layers];
@@ -2022,6 +2276,31 @@ export class Viewer {
     }
 
     return tempCtx.getImageData(0, 0, width, height);
+  }
+
+  /**
+   * Render difference matte between A and B sources
+   * Shows absolute pixel difference, optionally as heatmap
+   */
+  private renderDifferenceMatte(width: number, height: number): ImageData | null {
+    const sourceA = this.session.sourceA;
+    const sourceB = this.session.sourceB;
+
+    if (!sourceA?.element || !sourceB?.element) return null;
+
+    // Render both sources to ImageData
+    const dataA = this.renderSourceToImageData(this.session.sourceAIndex, width, height);
+    const dataB = this.renderSourceToImageData(this.session.sourceBIndex, width, height);
+
+    if (!dataA || !dataB) return null;
+
+    // Apply difference matte algorithm
+    return applyDifferenceMatte(
+      dataA,
+      dataB,
+      this.differenceMatteState.gain,
+      this.differenceMatteState.heatmap
+    );
   }
 
   /**
@@ -2402,6 +2681,11 @@ export class Viewer {
     this.container.removeEventListener('pointercancel', this.onPointerUp);
     this.container.removeEventListener('pointerleave', this.onPointerLeave);
     this.container.removeEventListener('wheel', this.onWheel);
+    this.container.removeEventListener('mousemove', this.onMouseMoveForCursorColor);
+    this.container.removeEventListener('mouseleave', this.onMouseLeaveForCursorColor);
+
+    // Clear cursor color callback
+    this.cursorColorCallback = null;
 
     // Cleanup WebGL LUT processor
     if (this.lutProcessor) {
@@ -2486,5 +2770,22 @@ export class Viewer {
    */
   getColorWheels(): ColorWheels {
     return this.colorWheels;
+  }
+
+  /**
+   * Get the spotlight overlay instance
+   */
+  getSpotlightOverlay(): SpotlightOverlay {
+    return this.spotlightOverlay;
+  }
+
+  /**
+   * Register a callback for cursor color updates (for InfoPanel integration)
+   * The callback is called with the RGB color and position when the mouse moves over the canvas.
+   * When the mouse leaves the canvas or is outside bounds, null values are passed.
+   * @param callback The callback function, or null to unregister
+   */
+  onCursorColorChange(callback: ((color: { r: number; g: number; b: number } | null, position: { x: number; y: number } | null) => void) | null): void {
+    this.cursorColorCallback = callback;
   }
 }

@@ -60,6 +60,31 @@ export interface GTOViewSettings {
   scopes?: ScopesState;
 }
 
+/**
+ * Marker data structure with optional note and color
+ */
+export interface Marker {
+  frame: number;
+  note: string;
+  color: string; // Hex color like '#ff0000'
+}
+
+/**
+ * Default marker colors palette
+ */
+export const MARKER_COLORS = [
+  '#ff4444', // Red
+  '#44ff44', // Green
+  '#4444ff', // Blue
+  '#ffff44', // Yellow
+  '#ff44ff', // Magenta
+  '#44ffff', // Cyan
+  '#ff8844', // Orange
+  '#8844ff', // Purple
+] as const;
+
+export type MarkerColor = typeof MARKER_COLORS[number];
+
 export interface SessionEvents extends EventMap {
   frameChanged: number;
   playbackChanged: boolean;
@@ -69,7 +94,8 @@ export interface SessionEvents extends EventMap {
   inOutChanged: { inPoint: number; outPoint: number };
   loopModeChanged: LoopMode;
   playDirectionChanged: number;
-  marksChanged: ReadonlySet<number>;
+  playbackSpeedChanged: number;
+  marksChanged: ReadonlyMap<number, Marker>;
   annotationsLoaded: ParsedAnnotations;
   settingsLoaded: GTOViewSettings;
   volumeChanged: number;
@@ -98,6 +124,10 @@ export interface MediaSource {
   videoSourceNode?: VideoSourceNode;
 }
 
+// Common playback speed presets
+export const PLAYBACK_SPEED_PRESETS = [0.1, 0.25, 0.5, 1, 2, 4, 8] as const;
+export type PlaybackSpeedPreset = typeof PLAYBACK_SPEED_PRESETS[number];
+
 export class Session extends EventEmitter<SessionEvents> {
   private _currentFrame = 1;
   private _inPoint = 1;
@@ -105,8 +135,9 @@ export class Session extends EventEmitter<SessionEvents> {
   private _fps = 24;
   private _isPlaying = false;
   private _playDirection = 1;
+  private _playbackSpeed = 1;
   private _loopMode: LoopMode = 'loop';
-  private _marks = new Set<number>();
+  private _marks = new Map<number, Marker>();
   private _volume = 0.7;
   private _muted = false;
 
@@ -217,6 +248,68 @@ export class Session extends EventEmitter<SessionEvents> {
     }
   }
 
+  get playbackSpeed(): number {
+    return this._playbackSpeed;
+  }
+
+  set playbackSpeed(value: number) {
+    const clamped = Math.max(0.1, Math.min(8, value));
+    if (clamped !== this._playbackSpeed) {
+      this._playbackSpeed = clamped;
+      this.emit('playbackSpeedChanged', this._playbackSpeed);
+      // Update video playback rate if playing a video natively
+      const source = this.currentSource;
+      if (source?.element && source.type === 'video') {
+        (source.element as HTMLVideoElement).playbackRate = this._playbackSpeed;
+      }
+    }
+  }
+
+  /**
+   * Increase playback speed to the next preset level
+   */
+  increaseSpeed(): void {
+    const currentIndex = PLAYBACK_SPEED_PRESETS.indexOf(this._playbackSpeed as PlaybackSpeedPreset);
+    if (currentIndex >= 0 && currentIndex < PLAYBACK_SPEED_PRESETS.length - 1) {
+      const nextSpeed = PLAYBACK_SPEED_PRESETS[currentIndex + 1];
+      if (nextSpeed !== undefined) {
+        this.playbackSpeed = nextSpeed;
+      }
+    } else if (currentIndex === -1) {
+      // Find next higher preset
+      const nextPreset = PLAYBACK_SPEED_PRESETS.find(p => p > this._playbackSpeed);
+      if (nextPreset !== undefined) {
+        this.playbackSpeed = nextPreset;
+      }
+    }
+  }
+
+  /**
+   * Decrease playback speed to the previous preset level
+   */
+  decreaseSpeed(): void {
+    const currentIndex = PLAYBACK_SPEED_PRESETS.indexOf(this._playbackSpeed as PlaybackSpeedPreset);
+    if (currentIndex > 0) {
+      const prevSpeed = PLAYBACK_SPEED_PRESETS[currentIndex - 1];
+      if (prevSpeed !== undefined) {
+        this.playbackSpeed = prevSpeed;
+      }
+    } else if (currentIndex === -1) {
+      // Find previous lower preset
+      const prevPreset = [...PLAYBACK_SPEED_PRESETS].reverse().find(p => p < this._playbackSpeed);
+      if (prevPreset !== undefined) {
+        this.playbackSpeed = prevPreset;
+      }
+    }
+  }
+
+  /**
+   * Reset playback speed to 1x
+   */
+  resetSpeed(): void {
+    this.playbackSpeed = 1;
+  }
+
   get isPlaying(): boolean {
     return this._isPlaying;
   }
@@ -236,8 +329,29 @@ export class Session extends EventEmitter<SessionEvents> {
     return this._outPoint - this._inPoint + 1;
   }
 
-  get marks(): ReadonlySet<number> {
+  get marks(): ReadonlyMap<number, Marker> {
     return this._marks;
+  }
+
+  /**
+   * Get all marked frame numbers (for backward compatibility)
+   */
+  get markedFrames(): number[] {
+    return Array.from(this._marks.keys());
+  }
+
+  /**
+   * Get marker at a specific frame
+   */
+  getMarker(frame: number): Marker | undefined {
+    return this._marks.get(frame);
+  }
+
+  /**
+   * Check if a frame has a marker
+   */
+  hasMarker(frame: number): boolean {
+    return this._marks.has(frame);
   }
 
   get volume(): number {
@@ -457,19 +571,116 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   // Marks
+  /**
+   * Toggle a mark at the specified frame
+   * If the frame has a marker, it removes it; otherwise, it creates a new marker with default color
+   */
   toggleMark(frame?: number): void {
     const f = frame ?? this._currentFrame;
     if (this._marks.has(f)) {
       this._marks.delete(f);
     } else {
-      this._marks.add(f);
+      // Create a new marker with default values
+      this._marks.set(f, {
+        frame: f,
+        note: '',
+        color: MARKER_COLORS[0], // Default red
+      });
     }
     this.emit('marksChanged', this._marks);
   }
 
+  /**
+   * Add or update a marker at the specified frame
+   */
+  setMarker(frame: number, note: string = '', color: string = MARKER_COLORS[0]): void {
+    this._marks.set(frame, {
+      frame,
+      note,
+      color,
+    });
+    this.emit('marksChanged', this._marks);
+  }
+
+  /**
+   * Update the note for an existing marker
+   */
+  setMarkerNote(frame: number, note: string): void {
+    const marker = this._marks.get(frame);
+    if (marker) {
+      marker.note = note;
+      this.emit('marksChanged', this._marks);
+    }
+  }
+
+  /**
+   * Update the color for an existing marker
+   */
+  setMarkerColor(frame: number, color: string): void {
+    const marker = this._marks.get(frame);
+    if (marker) {
+      marker.color = color;
+      this.emit('marksChanged', this._marks);
+    }
+  }
+
+  /**
+   * Remove a marker at the specified frame
+   */
+  removeMark(frame: number): void {
+    if (this._marks.delete(frame)) {
+      this.emit('marksChanged', this._marks);
+    }
+  }
+
+  /**
+   * Clear all markers
+   */
   clearMarks(): void {
     this._marks.clear();
     this.emit('marksChanged', this._marks);
+  }
+
+  /**
+   * Navigate to the next marker from current frame
+   * Returns the frame number of the next marker, or null if none
+   */
+  goToNextMarker(): number | null {
+    const frames = this.markedFrames.sort((a, b) => a - b);
+    for (const frame of frames) {
+      if (frame > this._currentFrame) {
+        this.currentFrame = frame;
+        return frame;
+      }
+    }
+    // Wrap around to first marker if none found after current frame
+    const firstFrame = frames[0];
+    if (firstFrame !== undefined && firstFrame !== this._currentFrame) {
+      this.currentFrame = firstFrame;
+      return firstFrame;
+    }
+    return null;
+  }
+
+  /**
+   * Navigate to the previous marker from current frame
+   * Returns the frame number of the previous marker, or null if none
+   */
+  goToPreviousMarker(): number | null {
+    const frames = this.markedFrames.sort((a, b) => b - a); // Descending
+    for (const frame of frames) {
+      if (frame < this._currentFrame) {
+        this.currentFrame = frame;
+        return frame;
+      }
+    }
+    // Wrap around to last marker if none found before current frame
+    const lastFrame = frames[0];
+    if (lastFrame !== undefined && lastFrame !== this._currentFrame) {
+      this.currentFrame = lastFrame;
+      return lastFrame;
+    }
+    return null;
   }
 
   // Update called each frame
@@ -485,7 +696,7 @@ export class Session extends EventEmitter<SessionEvents> {
       const delta = now - this.lastFrameTime;
       this.lastFrameTime = now;
 
-      const frameDuration = 1000 / this._fps;
+      const frameDuration = (1000 / this._fps) / this._playbackSpeed;
       this.frameAccumulator += delta;
 
       // Only advance if next frame is cached (frame-gated playback)
@@ -554,7 +765,7 @@ export class Session extends EventEmitter<SessionEvents> {
       const delta = now - this.lastFrameTime;
       this.lastFrameTime = now;
 
-      const frameDuration = 1000 / this._fps;
+      const frameDuration = (1000 / this._fps) / this._playbackSpeed;
       this.frameAccumulator += delta;
 
       while (this.frameAccumulator >= frameDuration) {
@@ -656,7 +867,7 @@ export class Session extends EventEmitter<SessionEvents> {
       // If using mediabunny, preload frames around current position for scrubbing
       if (source.videoSourceNode?.isUsingMediabunny()) {
         // preloadFrames fetches current frame and surrounding frames
-        source.videoSourceNode.preloadFrames(this._currentFrame, 5).catch(err => {
+        source.videoSourceNode.preloadFrames(this._currentFrame).catch(err => {
           console.warn('Frame preload error:', err);
         });
       }
@@ -725,7 +936,14 @@ export class Session extends EventEmitter<SessionEvents> {
         this.emit('inOutChanged', { inPoint: this._inPoint, outPoint: this._outPoint });
       }
       if (result.sessionInfo.marks && result.sessionInfo.marks.length > 0) {
-        this._marks = new Set(result.sessionInfo.marks);
+        this._marks = new Map();
+        for (const frame of result.sessionInfo.marks) {
+          this._marks.set(frame, {
+            frame,
+            note: '',
+            color: MARKER_COLORS[0],
+          });
+        }
         this.emit('marksChanged', this._marks);
       }
 
@@ -804,7 +1022,7 @@ export class Session extends EventEmitter<SessionEvents> {
 
           // Pre-fetch initial frames for immediate display
           if (node.isUsingMediabunny()) {
-            node.preloadFrames(1, 10).catch(err => {
+            node.preloadFrames(1).catch(err => {
               console.warn('Initial frame preload error:', err);
             });
           }
@@ -947,7 +1165,14 @@ export class Session extends EventEmitter<SessionEvents> {
         if (Array.isArray(marksValue)) {
           const marks = marksValue.filter((value): value is number => typeof value === 'number');
           if (marks.length > 0) {
-            this._marks = new Set(marks);
+            this._marks = new Map();
+            for (const frame of marks) {
+              this._marks.set(frame, {
+                frame,
+                note: '',
+                color: MARKER_COLORS[0],
+              });
+            }
             this.emit('marksChanged', this._marks);
           }
         }
@@ -1948,7 +2173,7 @@ export class Session extends EventEmitter<SessionEvents> {
 
     // Pre-fetch initial frames for immediate display
     if (videoSourceNode.isUsingMediabunny()) {
-      videoSourceNode.preloadFrames(1, 10).catch(err => {
+      videoSourceNode.preloadFrames(1).catch(err => {
         console.warn('Initial frame preload error:', err);
       });
     }
@@ -1960,7 +2185,7 @@ export class Session extends EventEmitter<SessionEvents> {
 
     // Pre-load initial frames for immediate playback
     if (videoSourceNode.isUsingMediabunny()) {
-      videoSourceNode.preloadFrames(1, 10).catch(err => {
+      videoSourceNode.preloadFrames(1).catch(err => {
         console.warn('Initial frame preload error:', err);
       });
 
@@ -2134,14 +2359,14 @@ export class Session extends EventEmitter<SessionEvents> {
    * Preload video frames around the current position
    * Call this when scrubbing or seeking to prepare frames
    */
-  preloadVideoFrames(centerFrame?: number, windowSize: number = 10): void {
+  preloadVideoFrames(centerFrame?: number): void {
     const source = this.currentSource;
     if (source?.type !== 'video' || !source.videoSourceNode?.isUsingMediabunny()) {
       return;
     }
 
     const frame = centerFrame ?? this._currentFrame;
-    source.videoSourceNode.preloadFrames(frame, windowSize).catch(err => {
+    source.videoSourceNode.preloadFrames(frame).catch(err => {
       console.warn('Video frame preload error:', err);
     });
   }
@@ -2165,6 +2390,57 @@ export class Session extends EventEmitter<SessionEvents> {
 
     // Fetch the frame
     await source.videoSourceNode.getFrameAsync(frame);
+  }
+
+  /**
+   * Get the set of cached frame numbers
+   * Returns empty set if mediabunny is not active
+   */
+  getCachedFrames(): Set<number> {
+    const source = this.currentSource;
+    if (source?.type !== 'video' || !source.videoSourceNode?.isUsingMediabunny()) {
+      return new Set();
+    }
+    return source.videoSourceNode.getCachedFrames();
+  }
+
+  /**
+   * Get the set of pending (loading) frame numbers
+   * Returns empty set if mediabunny is not active
+   */
+  getPendingFrames(): Set<number> {
+    const source = this.currentSource;
+    if (source?.type !== 'video' || !source.videoSourceNode?.isUsingMediabunny()) {
+      return new Set();
+    }
+    return source.videoSourceNode.getPendingFrames();
+  }
+
+  /**
+   * Get cache statistics
+   * Returns null if mediabunny is not active
+   */
+  getCacheStats(): {
+    cachedCount: number;
+    pendingCount: number;
+    totalFrames: number;
+    maxCacheSize: number;
+  } | null {
+    const source = this.currentSource;
+    if (source?.type !== 'video' || !source.videoSourceNode?.isUsingMediabunny()) {
+      return null;
+    }
+    return source.videoSourceNode.getCacheStats();
+  }
+
+  /**
+   * Clear the video frame cache
+   */
+  clearVideoCache(): void {
+    const source = this.currentSource;
+    if (source?.type === 'video' && source.videoSourceNode?.isUsingMediabunny()) {
+      source.videoSourceNode.clearCache();
+    }
   }
 
   /**
@@ -2371,7 +2647,7 @@ export class Session extends EventEmitter<SessionEvents> {
     loopMode: LoopMode;
     volume: number;
     muted: boolean;
-    marks: number[];
+    marks: Marker[];
     currentSourceIndex: number;
   } {
     return {
@@ -2382,7 +2658,7 @@ export class Session extends EventEmitter<SessionEvents> {
       loopMode: this._loopMode,
       volume: this._volume,
       muted: this._muted,
-      marks: Array.from(this._marks),
+      marks: Array.from(this._marks.values()),
       currentSourceIndex: this._currentSourceIndex,
     };
   }
@@ -2398,7 +2674,7 @@ export class Session extends EventEmitter<SessionEvents> {
     loopMode: LoopMode;
     volume: number;
     muted: boolean;
-    marks: number[];
+    marks: Marker[] | number[]; // Support both old and new format
     currentSourceIndex: number;
   }>): void {
     if (state.fps !== undefined) this.fps = state.fps;
@@ -2413,7 +2689,14 @@ export class Session extends EventEmitter<SessionEvents> {
     if (state.currentFrame !== undefined) this.currentFrame = state.currentFrame;
     if (state.marks) {
       this._marks.clear();
-      state.marks.forEach(m => this._marks.add(m));
+      for (const m of state.marks) {
+        // Support both old format (number[]) and new format (Marker[])
+        if (typeof m === 'number') {
+          this._marks.set(m, { frame: m, note: '', color: MARKER_COLORS[0] });
+        } else {
+          this._marks.set(m.frame, m);
+        }
+      }
       this.emit('marksChanged', this._marks);
     }
   }

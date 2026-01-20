@@ -3,6 +3,9 @@ import {
   Annotation,
   PenStroke,
   TextAnnotation,
+  ShapeAnnotation,
+  ShapeType,
+  Point,
   PaintState,
   PaintEffects,
   StrokePoint,
@@ -27,7 +30,7 @@ export interface PaintEngineEvents extends EventMap {
   brushChanged: BrushType;
 }
 
-export type PaintTool = 'pen' | 'text' | 'eraser' | 'select' | 'none';
+export type PaintTool = 'pen' | 'text' | 'eraser' | 'select' | 'none' | 'rectangle' | 'ellipse' | 'line' | 'arrow';
 
 export class PaintEngine extends EventEmitter<PaintEngineEvents> {
   private state: PaintState;
@@ -167,7 +170,7 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
   }
 
   // Text operations
-  addText(frame: number, position: StrokePoint, text: string, size = 24): TextAnnotation {
+  addText(frame: number, position: StrokePoint, text: string, size = 24, options?: Partial<TextAnnotation>): TextAnnotation {
     const annotation: TextAnnotation = {
       type: 'text',
       id: String(this.state.nextId++),
@@ -184,10 +187,200 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
       origin: TextOrigin.Center,
       startFrame: frame,
       duration: 1,
+      // Apply optional styling
+      bold: options?.bold,
+      italic: options?.italic,
+      underline: options?.underline,
+      backgroundColor: options?.backgroundColor,
+      calloutPoint: options?.calloutPoint,
+      ...options,
     };
 
     this.addAnnotation(annotation);
     return annotation;
+  }
+
+  /**
+   * Update text annotation properties
+   */
+  updateTextAnnotation(frame: number, id: string, updates: Partial<TextAnnotation>): boolean {
+    const annotations = this.state.annotations.get(frame);
+    if (!annotations) return false;
+
+    const annotation = annotations.find(a => a.id === id && a.type === 'text') as TextAnnotation | undefined;
+    if (!annotation) return false;
+
+    // Apply updates
+    if (updates.text !== undefined) annotation.text = updates.text;
+    if (updates.size !== undefined) annotation.size = updates.size;
+    if (updates.font !== undefined) annotation.font = updates.font;
+    if (updates.bold !== undefined) annotation.bold = updates.bold;
+    if (updates.italic !== undefined) annotation.italic = updates.italic;
+    if (updates.underline !== undefined) annotation.underline = updates.underline;
+    if (updates.backgroundColor !== undefined) annotation.backgroundColor = updates.backgroundColor;
+    if (updates.calloutPoint !== undefined) annotation.calloutPoint = updates.calloutPoint;
+    if (updates.color !== undefined) annotation.color = [...updates.color];
+    if (updates.rotation !== undefined) annotation.rotation = updates.rotation;
+    if (updates.scale !== undefined) annotation.scale = updates.scale;
+    if (updates.origin !== undefined) annotation.origin = updates.origin;
+
+    this.emit('annotationsChanged', frame);
+    return true;
+  }
+
+  // Shape operations
+  /**
+   * Add a shape annotation
+   */
+  addShape(
+    frame: number,
+    shapeType: ShapeType,
+    startPoint: Point,
+    endPoint: Point,
+    options?: Partial<ShapeAnnotation>
+  ): ShapeAnnotation {
+    const annotation: ShapeAnnotation = {
+      type: 'shape',
+      id: String(this.state.nextId++),
+      frame,
+      user: this._user,
+      shapeType,
+      startPoint: { x: startPoint.x, y: startPoint.y },
+      endPoint: { x: endPoint.x, y: endPoint.y },
+      strokeColor: options?.strokeColor ?? [...this._color],
+      strokeWidth: options?.strokeWidth ?? this._width,
+      fillColor: options?.fillColor,
+      rotation: options?.rotation ?? 0,
+      cornerRadius: options?.cornerRadius,
+      arrowheadSize: options?.arrowheadSize ?? 12,
+      startFrame: frame,
+      duration: options?.duration ?? 1,
+    };
+
+    this.addAnnotation(annotation);
+    return annotation;
+  }
+
+  /**
+   * Add a rectangle shape
+   */
+  addRectangle(
+    frame: number,
+    startPoint: Point,
+    endPoint: Point,
+    options?: Partial<ShapeAnnotation>
+  ): ShapeAnnotation {
+    return this.addShape(frame, ShapeType.Rectangle, startPoint, endPoint, options);
+  }
+
+  /**
+   * Add an ellipse shape
+   */
+  addEllipse(
+    frame: number,
+    startPoint: Point,
+    endPoint: Point,
+    options?: Partial<ShapeAnnotation>
+  ): ShapeAnnotation {
+    return this.addShape(frame, ShapeType.Ellipse, startPoint, endPoint, options);
+  }
+
+  /**
+   * Add a line shape
+   */
+  addLine(
+    frame: number,
+    startPoint: Point,
+    endPoint: Point,
+    options?: Partial<ShapeAnnotation>
+  ): ShapeAnnotation {
+    return this.addShape(frame, ShapeType.Line, startPoint, endPoint, options);
+  }
+
+  /**
+   * Add an arrow shape
+   */
+  addArrow(
+    frame: number,
+    startPoint: Point,
+    endPoint: Point,
+    options?: Partial<ShapeAnnotation>
+  ): ShapeAnnotation {
+    return this.addShape(frame, ShapeType.Arrow, startPoint, endPoint, options);
+  }
+
+  /**
+   * Add a polygon shape
+   * @param frame - The frame number to add the polygon to
+   * @param points - Array of polygon vertices (normalized 0-1 coordinates)
+   * @param options - Optional styling and properties
+   */
+  addPolygon(
+    frame: number,
+    points: Array<{ x: number; y: number }>,
+    options?: Partial<ShapeAnnotation>
+  ): ShapeAnnotation {
+    // Calculate bounding box from points for startPoint/endPoint
+    if (points.length === 0) {
+      throw new Error('Polygon requires at least one point');
+    }
+
+    let minX = points[0]!.x;
+    let maxX = points[0]!.x;
+    let minY = points[0]!.y;
+    let maxY = points[0]!.y;
+
+    for (const point of points) {
+      minX = Math.min(minX, point.x);
+      maxX = Math.max(maxX, point.x);
+      minY = Math.min(minY, point.y);
+      maxY = Math.max(maxY, point.y);
+    }
+
+    const annotation: ShapeAnnotation = {
+      type: 'shape',
+      id: String(this.state.nextId++),
+      frame,
+      user: this._user,
+      shapeType: ShapeType.Polygon,
+      startPoint: { x: minX, y: minY },
+      endPoint: { x: maxX, y: maxY },
+      strokeColor: options?.strokeColor ?? [...this._color],
+      strokeWidth: options?.strokeWidth ?? this._width,
+      fillColor: options?.fillColor,
+      rotation: options?.rotation ?? 0,
+      points: points.map(p => ({ x: p.x, y: p.y })),
+      startFrame: frame,
+      duration: options?.duration ?? 1,
+    };
+
+    this.addAnnotation(annotation);
+    return annotation;
+  }
+
+  /**
+   * Update shape annotation properties
+   */
+  updateShapeAnnotation(frame: number, id: string, updates: Partial<ShapeAnnotation>): boolean {
+    const annotations = this.state.annotations.get(frame);
+    if (!annotations) return false;
+
+    const annotation = annotations.find(a => a.id === id && a.type === 'shape') as ShapeAnnotation | undefined;
+    if (!annotation) return false;
+
+    // Apply updates
+    if (updates.startPoint !== undefined) annotation.startPoint = { ...updates.startPoint };
+    if (updates.endPoint !== undefined) annotation.endPoint = { ...updates.endPoint };
+    if (updates.strokeColor !== undefined) annotation.strokeColor = [...updates.strokeColor];
+    if (updates.strokeWidth !== undefined) annotation.strokeWidth = updates.strokeWidth;
+    if (updates.fillColor !== undefined) annotation.fillColor = updates.fillColor ? [...updates.fillColor] : undefined;
+    if (updates.rotation !== undefined) annotation.rotation = updates.rotation;
+    if (updates.cornerRadius !== undefined) annotation.cornerRadius = updates.cornerRadius;
+    if (updates.arrowheadSize !== undefined) annotation.arrowheadSize = updates.arrowheadSize;
+    if (updates.points !== undefined) annotation.points = updates.points.map(p => ({ x: p.x, y: p.y }));
+
+    this.emit('annotationsChanged', frame);
+    return true;
   }
 
   // Annotation management

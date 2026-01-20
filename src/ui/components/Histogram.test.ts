@@ -2,15 +2,23 @@
  * Histogram Unit Tests
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
 import {
   Histogram,
   calculateHistogram,
 } from './Histogram';
 
+// Type for mock processor
+interface MockScopesProcessor {
+  isReady: Mock;
+  setPlaybackMode: Mock;
+  setImage: Mock;
+  renderHistogram: Mock;
+}
+
 // Mock WebGLScopes module
 vi.mock('../../scopes/WebGLScopes', () => {
-  const mockProcessor = {
+  const mockProcessor: MockScopesProcessor = {
     isReady: vi.fn(() => true),
     setPlaybackMode: vi.fn(),
     setImage: vi.fn(),
@@ -53,7 +61,7 @@ describe('Histogram', () => {
     it('HG-005: renders container element', () => {
       const element = histogram.render();
       expect(element).toBeInstanceOf(HTMLElement);
-      expect(element.className).toBe('histogram-container');
+      expect(element.className).toContain('histogram-container');
     });
   });
 
@@ -408,7 +416,7 @@ describe('Histogram GPU rendering', () => {
 
   it('HG-070: update uses GPU rendering when available', async () => {
     const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
-    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)();
+    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
 
     const imageData = createTestImageData(10, 10, { r: 128, g: 128, b: 128, a: 255 });
     histogram.update(imageData);
@@ -418,7 +426,7 @@ describe('Histogram GPU rendering', () => {
 
   it('HG-071: GPU rendering receives correct histogram data', async () => {
     const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
-    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)();
+    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
 
     const imageData = createTestImageData(10, 10, { r: 128, g: 128, b: 128, a: 255 });
     histogram.update(imageData);
@@ -436,7 +444,7 @@ describe('Histogram GPU rendering', () => {
 
   it('HG-072: GPU rendering uses current mode', async () => {
     const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
-    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)();
+    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
 
     histogram.setMode('luminance');
     const imageData = createTestImageData(10, 10, { r: 128, g: 128, b: 128, a: 255 });
@@ -448,7 +456,7 @@ describe('Histogram GPU rendering', () => {
 
   it('HG-073: GPU rendering uses logScale setting', async () => {
     const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
-    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)();
+    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
 
     histogram.setLogScale(true);
     const imageData = createTestImageData(10, 10, { r: 128, g: 128, b: 128, a: 255 });
@@ -460,7 +468,7 @@ describe('Histogram GPU rendering', () => {
 
   it('HG-074: falls back to CPU for separate mode', async () => {
     const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
-    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)();
+    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
 
     histogram.setMode('separate');
     const imageData = createTestImageData(10, 10, { r: 128, g: 128, b: 128, a: 255 });
@@ -472,7 +480,7 @@ describe('Histogram GPU rendering', () => {
 
   it('HG-075: setPlaybackMode calls GPU processor for consistency', async () => {
     const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
-    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)();
+    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
 
     histogram.setPlaybackMode(true);
 
@@ -481,7 +489,7 @@ describe('Histogram GPU rendering', () => {
 
   it('HG-076: setPlaybackMode(false) calls GPU processor', async () => {
     const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
-    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)();
+    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
 
     histogram.setPlaybackMode(false);
 

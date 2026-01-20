@@ -1,7 +1,9 @@
 import { test, expect } from '@playwright/test';
 import {
   loadVideoFile,
+  loadTwoVideoFiles,
   waitForTestHelper,
+  getSessionState,
   getColorState,
   getViewerState,
   captureViewerScreenshot,
@@ -11,6 +13,11 @@ import {
   getSafeAreasState,
   getZebraStripesState,
   getColorWheelsState,
+  getSpotlightState,
+  getHistoryPanelState,
+  getInfoPanelState,
+  getCacheIndicatorState,
+  getThemeState,
 } from './fixtures';
 
 /**
@@ -1494,3 +1501,2126 @@ test.describe('Color Wheels', () => {
     expect(state.linked).toBe(true);
   });
 });
+
+// =============================================================================
+// CLARITY / LOCAL CONTRAST TESTS
+// =============================================================================
+test.describe('Clarity / Local Contrast', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+    await loadVideoFile(page);
+  });
+
+  test('CLAR-001: default clarity value should be 0', async ({ page }) => {
+    const state = await getColorState(page);
+    expect(state.clarity).toBe(0);
+  });
+
+  test('CLAR-002: clarity slider should be visible in Color tab', async ({ page }) => {
+    // Open Color tab
+    await page.click('button[data-tab-id="color"]');
+    await page.waitForTimeout(200);
+
+    // Open Color controls panel (the second "Color" button in the context toolbar)
+    const colorButtons = page.locator('button:has-text("Color")');
+    await colorButtons.nth(1).click(); // Click the second one (context toolbar button)
+    await page.waitForTimeout(300);
+
+    // Check if clarity slider exists
+    const clarityLabel = page.locator('.color-controls-panel label:has-text("Clarity")');
+    await expect(clarityLabel).toBeVisible();
+  });
+
+  test('CLAR-003: adjusting clarity slider should change state value', async ({ page }) => {
+    // Open Color controls panel
+    await page.click('button[data-tab-id="color"]');
+    await page.waitForTimeout(200);
+    const colorButtons = page.locator('button:has-text("Color")');
+    await colorButtons.nth(1).click();
+    await page.waitForTimeout(300);
+
+    // Find and adjust the clarity slider
+    // The slider is the one after "Clarity" label in the panel
+    const clarityRow = page.locator('.color-controls-panel').locator('div:has(> label:has-text("Clarity"))');
+    const claritySlider = clarityRow.locator('input[type="range"]');
+
+    // Set clarity to 50
+    await claritySlider.fill('50');
+    await claritySlider.dispatchEvent('input');
+    await page.waitForTimeout(200);
+
+    // Verify state changed
+    const state = await getColorState(page);
+    expect(state.clarity).toBe(50);
+  });
+
+  test('CLAR-004: positive clarity should enhance edge definition', async ({ page }) => {
+    // Capture before screenshot
+    const beforeScreenshot = await captureViewerScreenshot(page);
+
+    // Open Color controls and adjust clarity
+    await page.click('button[data-tab-id="color"]');
+    await page.waitForTimeout(200);
+    const colorButtons = page.locator('button:has-text("Color")');
+    await colorButtons.nth(1).click();
+    await page.waitForTimeout(300);
+
+    const clarityRow = page.locator('.color-controls-panel').locator('div:has(> label:has-text("Clarity"))');
+    const claritySlider = clarityRow.locator('input[type="range"]');
+
+    // Set high positive clarity
+    await claritySlider.fill('75');
+    await claritySlider.dispatchEvent('input');
+    await page.waitForTimeout(500);
+
+    // Capture after screenshot
+    const afterScreenshot = await captureViewerScreenshot(page);
+
+    // Verify visual change
+    expect(imagesAreDifferent(beforeScreenshot, afterScreenshot)).toBe(true);
+  });
+
+  test('CLAR-005: negative clarity should soften midtone detail', async ({ page }) => {
+    // Capture before screenshot
+    const beforeScreenshot = await captureViewerScreenshot(page);
+
+    // Open Color controls and adjust clarity
+    await page.click('button[data-tab-id="color"]');
+    await page.waitForTimeout(200);
+    const colorButtons = page.locator('button:has-text("Color")');
+    await colorButtons.nth(1).click();
+    await page.waitForTimeout(300);
+
+    const clarityRow = page.locator('.color-controls-panel').locator('div:has(> label:has-text("Clarity"))');
+    const claritySlider = clarityRow.locator('input[type="range"]');
+
+    // Set negative clarity
+    await claritySlider.fill('-50');
+    await claritySlider.dispatchEvent('input');
+    await page.waitForTimeout(500);
+
+    // Capture after screenshot
+    const afterScreenshot = await captureViewerScreenshot(page);
+
+    // Verify visual change
+    expect(imagesAreDifferent(beforeScreenshot, afterScreenshot)).toBe(true);
+  });
+
+  test('CLAR-006: clarity should work with other color corrections', async ({ page }) => {
+    // Open Color controls
+    await page.click('button[data-tab-id="color"]');
+    await page.waitForTimeout(200);
+    const colorButtons = page.locator('button:has-text("Color")');
+    await colorButtons.nth(1).click();
+    await page.waitForTimeout(300);
+
+    // Adjust multiple controls
+    const contrastRow = page.locator('.color-controls-panel').locator('div:has(> label:has-text("Contrast"))');
+    const contrastSlider = contrastRow.locator('input[type="range"]');
+    await contrastSlider.fill('1.3');
+    await contrastSlider.dispatchEvent('input');
+    await page.waitForTimeout(100);
+
+    const clarityRow = page.locator('.color-controls-panel').locator('div:has(> label:has-text("Clarity"))');
+    const claritySlider = clarityRow.locator('input[type="range"]');
+    await claritySlider.fill('40');
+    await claritySlider.dispatchEvent('input');
+    await page.waitForTimeout(300);
+
+    // Verify both are applied
+    const state = await getColorState(page);
+    expect(state.contrast).toBeCloseTo(1.3, 1);
+    expect(state.clarity).toBe(40);
+  });
+
+  test('CLAR-007: reset should return clarity to 0', async ({ page }) => {
+    // Open Color controls and adjust clarity
+    await page.click('button[data-tab-id="color"]');
+    await page.waitForTimeout(200);
+    const colorButtons = page.locator('button:has-text("Color")');
+    await colorButtons.nth(1).click();
+    await page.waitForTimeout(300);
+
+    const clarityRow = page.locator('.color-controls-panel').locator('div:has(> label:has-text("Clarity"))');
+    const claritySlider = clarityRow.locator('input[type="range"]');
+    await claritySlider.fill('60');
+    await claritySlider.dispatchEvent('input');
+    await page.waitForTimeout(200);
+
+    let state = await getColorState(page);
+    expect(state.clarity).toBe(60);
+
+    // Click reset button
+    const resetButton = page.locator('.color-controls-panel button:has-text("Reset")');
+    await resetButton.click();
+    await page.waitForTimeout(200);
+
+    state = await getColorState(page);
+    expect(state.clarity).toBe(0);
+  });
+});
+
+// =============================================================================
+// PLAYBACK SPEED CONTROL TESTS
+// =============================================================================
+test.describe('Playback Speed Control', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+    await loadVideoFile(page);
+  });
+
+  test('SPEED-001: default playback speed should be 1x', async ({ page }) => {
+    const state = await getSessionState(page);
+    expect(state.playbackSpeed).toBe(1);
+  });
+
+  test('SPEED-002: speed button should be visible in header bar', async ({ page }) => {
+    const speedButton = page.locator('[data-testid="playback-speed-button"]');
+    await expect(speedButton).toBeVisible();
+    await expect(speedButton).toHaveText('1x');
+  });
+
+  test('SPEED-003: clicking speed button should cycle through speeds', async ({ page }) => {
+    const speedButton = page.locator('[data-testid="playback-speed-button"]');
+
+    // Click to go from 1x to 2x
+    await speedButton.click();
+    await page.waitForTimeout(100);
+    let state = await getSessionState(page);
+    expect(state.playbackSpeed).toBe(2);
+    await expect(speedButton).toHaveText('2x');
+
+    // Click to go from 2x to 4x
+    await speedButton.click();
+    await page.waitForTimeout(100);
+    state = await getSessionState(page);
+    expect(state.playbackSpeed).toBe(4);
+
+    // Click to go from 4x to 8x
+    await speedButton.click();
+    await page.waitForTimeout(100);
+    state = await getSessionState(page);
+    expect(state.playbackSpeed).toBe(8);
+
+    // Click to cycle back to 1x
+    await speedButton.click();
+    await page.waitForTimeout(100);
+    state = await getSessionState(page);
+    expect(state.playbackSpeed).toBe(1);
+  });
+
+  test('SPEED-004: J key should decrease playback speed', async ({ page }) => {
+    // First increase speed so we have room to decrease
+    const speedButton = page.locator('[data-testid="playback-speed-button"]');
+    await speedButton.click(); // Go to 2x
+    await page.waitForTimeout(100);
+
+    let state = await getSessionState(page);
+    expect(state.playbackSpeed).toBe(2);
+
+    // Press J to decrease
+    await page.keyboard.press('j');
+    await page.waitForTimeout(100);
+
+    state = await getSessionState(page);
+    expect(state.playbackSpeed).toBe(1);
+  });
+
+  test('SPEED-005: L key should increase playback speed', async ({ page }) => {
+    let state = await getSessionState(page);
+    expect(state.playbackSpeed).toBe(1);
+
+    // Press L to increase
+    await page.keyboard.press('l');
+    await page.waitForTimeout(100);
+
+    state = await getSessionState(page);
+    expect(state.playbackSpeed).toBe(2);
+  });
+
+  test('SPEED-006: K key should stop playback', async ({ page }) => {
+    // Start playback
+    await page.keyboard.press('Space');
+    await page.waitForTimeout(200);
+
+    let state = await getSessionState(page);
+    expect(state.isPlaying).toBe(true);
+
+    // Press K to stop
+    await page.keyboard.press('k');
+    await page.waitForTimeout(100);
+
+    state = await getSessionState(page);
+    expect(state.isPlaying).toBe(false);
+  });
+
+  test('SPEED-007: speed button should highlight when not at 1x', async ({ page }) => {
+    const speedButton = page.locator('[data-testid="playback-speed-button"]');
+
+    // At 1x, should not have highlighted style
+    let backgroundColor = await speedButton.evaluate(el => getComputedStyle(el).backgroundColor);
+    expect(backgroundColor).toBe('rgba(0, 0, 0, 0)'); // transparent
+
+    // Change to 2x
+    await speedButton.click();
+    await page.waitForTimeout(100);
+
+    // Now should have highlighted style
+    backgroundColor = await speedButton.evaluate(el => getComputedStyle(el).backgroundColor);
+    expect(backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+  });
+});
+
+/**
+ * Markers with Notes Tests (FEATURES.md 4.3)
+ */
+test.describe('Markers with Notes', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+    await loadVideoFile(page);
+  });
+
+  test('MARK-001: default marker should have red color', async ({ page }) => {
+    // Add a marker at current frame using M key
+    await page.keyboard.press('m');
+    await page.waitForTimeout(100);
+
+    const state = await getSessionState(page);
+    expect(state.markers.length).toBe(1);
+    expect(state.markers[0].color).toBe('#ff4444'); // Default red color
+  });
+
+  test('MARK-002: markers should store frame, note, and color data', async ({ page }) => {
+    // Add a marker
+    await page.keyboard.press('m');
+    await page.waitForTimeout(100);
+
+    const state = await getSessionState(page);
+    expect(state.markers.length).toBe(1);
+
+    const marker = state.markers[0];
+    expect(marker).toHaveProperty('frame');
+    expect(marker).toHaveProperty('note');
+    expect(marker).toHaveProperty('color');
+    expect(typeof marker.frame).toBe('number');
+    expect(typeof marker.note).toBe('string');
+    expect(typeof marker.color).toBe('string');
+  });
+
+  test('MARK-003: toggleMark should toggle marker on and off', async ({ page }) => {
+    // Get current frame
+    let state = await getSessionState(page);
+    const initialFrame = state.currentFrame;
+
+    // Add marker
+    await page.keyboard.press('m');
+    await page.waitForTimeout(100);
+
+    state = await getSessionState(page);
+    expect(state.markers.length).toBe(1);
+    expect(state.markers[0].frame).toBe(initialFrame);
+
+    // Toggle off
+    await page.keyboard.press('m');
+    await page.waitForTimeout(100);
+
+    state = await getSessionState(page);
+    expect(state.markers.length).toBe(0);
+  });
+
+  test('MARK-004: markers array should match marked frames', async ({ page }) => {
+    // Add markers at different frames
+    await page.keyboard.press('m');
+    await page.waitForTimeout(50);
+
+    // Move to frame 5
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('ArrowRight');
+    await page.waitForTimeout(50);
+    await page.keyboard.press('m');
+    await page.waitForTimeout(50);
+
+    const state = await getSessionState(page);
+
+    // Should have 2 markers
+    expect(state.markers.length).toBe(2);
+
+    // marks array should contain the frame numbers
+    expect(state.marks.length).toBe(2);
+    expect(state.marks).toContain(state.markers[0].frame);
+    expect(state.marks).toContain(state.markers[1].frame);
+  });
+
+  test('MARK-005: setMarker should create marker with note and color via API', async ({ page }) => {
+    // Use the API to create a marker with note and color
+    await page.evaluate(() => {
+      const session = (window as any).__OPENRV_TEST__?.app?.session;
+      if (session) {
+        session.setMarker(10, 'Test note', '#44ff44');
+      }
+    });
+    await page.waitForTimeout(100);
+
+    const state = await getSessionState(page);
+    expect(state.markers.length).toBe(1);
+    expect(state.markers[0].frame).toBe(10);
+    expect(state.markers[0].note).toBe('Test note');
+    expect(state.markers[0].color).toBe('#44ff44');
+  });
+
+  test('MARK-006: setMarkerNote should update marker note via API', async ({ page }) => {
+    // Create a marker first
+    await page.keyboard.press('m');
+    await page.waitForTimeout(100);
+
+    let state = await getSessionState(page);
+    const frame = state.markers[0].frame;
+    expect(state.markers[0].note).toBe('');
+
+    // Update the note via API
+    await page.evaluate((f) => {
+      const session = (window as any).__OPENRV_TEST__?.app?.session;
+      if (session) {
+        session.setMarkerNote(f, 'Updated note');
+      }
+    }, frame);
+    await page.waitForTimeout(100);
+
+    state = await getSessionState(page);
+    expect(state.markers[0].note).toBe('Updated note');
+  });
+
+  test('MARK-007: setMarkerColor should update marker color via API', async ({ page }) => {
+    // Create a marker first
+    await page.keyboard.press('m');
+    await page.waitForTimeout(100);
+
+    let state = await getSessionState(page);
+    const frame = state.markers[0].frame;
+    expect(state.markers[0].color).toBe('#ff4444'); // Default red
+
+    // Update the color via API
+    await page.evaluate((f) => {
+      const session = (window as any).__OPENRV_TEST__?.app?.session;
+      if (session) {
+        session.setMarkerColor(f, '#4444ff');
+      }
+    }, frame);
+    await page.waitForTimeout(100);
+
+    state = await getSessionState(page);
+    expect(state.markers[0].color).toBe('#4444ff');
+  });
+});
+
+/**
+ * Spotlight / Focus Tool Tests
+ *
+ * Tests for:
+ * - Toggle spotlight on/off via keyboard shortcut (Shift+Q)
+ * - Default spotlight state (circle, centered)
+ * - Spotlight dims surrounding area
+ * - API methods: setShape, setPosition, setSize, setDimAmount, setFeather
+ */
+test.describe('Spotlight / Focus Tool', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+    await loadVideoFile(page);
+    // Switch to View tab
+    await page.locator('button:has-text("View")').first().click();
+    await page.waitForTimeout(200);
+  });
+
+  test('SPOT-001: spotlight should be disabled by default', async ({ page }) => {
+    const state = await getSpotlightState(page);
+    expect(state.enabled).toBe(false);
+  });
+
+  test('SPOT-002: Shift+Q should toggle spotlight on/off', async ({ page }) => {
+    let state = await getSpotlightState(page);
+    expect(state.enabled).toBe(false);
+
+    // Toggle on
+    await page.keyboard.press('Shift+q');
+    await page.waitForTimeout(100);
+
+    state = await getSpotlightState(page);
+    expect(state.enabled).toBe(true);
+
+    // Toggle off
+    await page.keyboard.press('Shift+q');
+    await page.waitForTimeout(100);
+
+    state = await getSpotlightState(page);
+    expect(state.enabled).toBe(false);
+  });
+
+  test('SPOT-003: spotlight should have default values when enabled', async ({ page }) => {
+    await page.keyboard.press('Shift+q');
+    await page.waitForTimeout(100);
+
+    const state = await getSpotlightState(page);
+    expect(state.enabled).toBe(true);
+    expect(state.shape).toBe('circle');
+    expect(state.x).toBe(0.5);
+    expect(state.y).toBe(0.5);
+    expect(state.width).toBe(0.2);
+    expect(state.height).toBe(0.2);
+    expect(state.dimAmount).toBe(0.7);
+    expect(state.feather).toBe(0.05);
+  });
+
+  test('SPOT-004: enabling spotlight should visually change canvas', async ({ page }) => {
+    const initialScreenshot = await captureViewerScreenshot(page);
+
+    await page.keyboard.press('Shift+q');
+    await page.waitForTimeout(200);
+
+    const spotlightScreenshot = await captureViewerScreenshot(page);
+    expect(imagesAreDifferent(initialScreenshot, spotlightScreenshot)).toBe(true);
+  });
+
+  test('SPOT-005: spotlight shape can be changed via API', async ({ page }) => {
+    await page.keyboard.press('Shift+q');
+    await page.waitForTimeout(100);
+
+    let state = await getSpotlightState(page);
+    expect(state.shape).toBe('circle');
+
+    // Change to rectangle via API
+    await page.evaluate(() => {
+      const viewer = (window as any).__OPENRV_TEST__?.app?.viewer;
+      const spotlight = viewer?.getSpotlightOverlay?.();
+      if (spotlight) {
+        spotlight.setShape('rectangle');
+      }
+    });
+    await page.waitForTimeout(100);
+
+    state = await getSpotlightState(page);
+    expect(state.shape).toBe('rectangle');
+  });
+
+  test('SPOT-006: spotlight position can be changed via API', async ({ page }) => {
+    await page.keyboard.press('Shift+q');
+    await page.waitForTimeout(100);
+
+    // Move spotlight via API
+    await page.evaluate(() => {
+      const viewer = (window as any).__OPENRV_TEST__?.app?.viewer;
+      const spotlight = viewer?.getSpotlightOverlay?.();
+      if (spotlight) {
+        spotlight.setPosition(0.25, 0.75);
+      }
+    });
+    await page.waitForTimeout(100);
+
+    const state = await getSpotlightState(page);
+    expect(state.x).toBeCloseTo(0.25, 2);
+    expect(state.y).toBeCloseTo(0.75, 2);
+  });
+
+  test('SPOT-007: spotlight size can be changed via API', async ({ page }) => {
+    await page.keyboard.press('Shift+q');
+    await page.waitForTimeout(100);
+
+    // Resize spotlight via API
+    await page.evaluate(() => {
+      const viewer = (window as any).__OPENRV_TEST__?.app?.viewer;
+      const spotlight = viewer?.getSpotlightOverlay?.();
+      if (spotlight) {
+        spotlight.setSize(0.3, 0.4);
+      }
+    });
+    await page.waitForTimeout(100);
+
+    const state = await getSpotlightState(page);
+    expect(state.width).toBeCloseTo(0.3, 2);
+    expect(state.height).toBeCloseTo(0.4, 2);
+  });
+
+  test('SPOT-008: spotlight dim amount can be changed via API', async ({ page }) => {
+    await page.keyboard.press('Shift+q');
+    await page.waitForTimeout(100);
+
+    // Change dim amount via API
+    await page.evaluate(() => {
+      const viewer = (window as any).__OPENRV_TEST__?.app?.viewer;
+      const spotlight = viewer?.getSpotlightOverlay?.();
+      if (spotlight) {
+        spotlight.setDimAmount(0.9);
+      }
+    });
+    await page.waitForTimeout(100);
+
+    const state = await getSpotlightState(page);
+    expect(state.dimAmount).toBeCloseTo(0.9, 2);
+  });
+
+  test('SPOT-009: spotlight feather can be changed via API', async ({ page }) => {
+    await page.keyboard.press('Shift+q');
+    await page.waitForTimeout(100);
+
+    // Change feather via API
+    await page.evaluate(() => {
+      const viewer = (window as any).__OPENRV_TEST__?.app?.viewer;
+      const spotlight = viewer?.getSpotlightOverlay?.();
+      if (spotlight) {
+        spotlight.setFeather(0.15);
+      }
+    });
+    await page.waitForTimeout(100);
+
+    const state = await getSpotlightState(page);
+    expect(state.feather).toBeCloseTo(0.15, 2);
+  });
+
+  test('SPOT-010: changing spotlight parameters should visually update canvas', async ({ page }) => {
+    await page.keyboard.press('Shift+q');
+    await page.waitForTimeout(200);
+
+    const initialScreenshot = await captureViewerScreenshot(page);
+
+    // Move spotlight to corner
+    await page.evaluate(() => {
+      const viewer = (window as any).__OPENRV_TEST__?.app?.viewer;
+      const spotlight = viewer?.getSpotlightOverlay?.();
+      if (spotlight) {
+        spotlight.setPosition(0.2, 0.2);
+      }
+    });
+    await page.waitForTimeout(200);
+
+    const movedScreenshot = await captureViewerScreenshot(page);
+    expect(imagesAreDifferent(initialScreenshot, movedScreenshot)).toBe(true);
+  });
+});
+
+/**
+ * Text Annotations Enhancement Tests
+ *
+ * Tests for:
+ * - Bold, italic, underline text styles
+ * - Text background/highlight color
+ * - Callout style with leader line
+ */
+test.describe('Text Annotations Enhancement', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+    await loadVideoFile(page);
+    // Switch to Annotate tab
+    await page.locator('button:has-text("Annotate")').first().click();
+    await page.waitForTimeout(200);
+  });
+
+  test('TEXT-001: can create text annotation with bold style via API', async ({ page }) => {
+    const initialScreenshot = await captureViewerScreenshot(page);
+
+    // Create bold text annotation via API
+    const result = await page.evaluate(() => {
+      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      if (paintEngine) {
+        const annotation = paintEngine.addText(1, { x: 0.5, y: 0.5 }, 'Bold Text', 32, { bold: true });
+        return { id: annotation.id, bold: annotation.bold };
+      }
+      return null;
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.bold).toBe(true);
+
+    await page.waitForTimeout(200);
+    const afterScreenshot = await captureViewerScreenshot(page);
+    expect(imagesAreDifferent(initialScreenshot, afterScreenshot)).toBe(true);
+  });
+
+  test('TEXT-002: can create text annotation with italic style via API', async ({ page }) => {
+    const result = await page.evaluate(() => {
+      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      if (paintEngine) {
+        const annotation = paintEngine.addText(1, { x: 0.5, y: 0.5 }, 'Italic Text', 32, { italic: true });
+        return { id: annotation.id, italic: annotation.italic };
+      }
+      return null;
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.italic).toBe(true);
+  });
+
+  test('TEXT-003: can create text annotation with underline style via API', async ({ page }) => {
+    const initialScreenshot = await captureViewerScreenshot(page);
+
+    const result = await page.evaluate(() => {
+      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      if (paintEngine) {
+        const annotation = paintEngine.addText(1, { x: 0.5, y: 0.5 }, 'Underlined Text', 32, { underline: true });
+        return { id: annotation.id, underline: annotation.underline };
+      }
+      return null;
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.underline).toBe(true);
+
+    await page.waitForTimeout(200);
+    const afterScreenshot = await captureViewerScreenshot(page);
+    expect(imagesAreDifferent(initialScreenshot, afterScreenshot)).toBe(true);
+  });
+
+  test('TEXT-004: can create text annotation with background color via API', async ({ page }) => {
+    const initialScreenshot = await captureViewerScreenshot(page);
+
+    const result = await page.evaluate(() => {
+      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      if (paintEngine) {
+        const annotation = paintEngine.addText(1, { x: 0.5, y: 0.5 }, 'Highlighted Text', 32, {
+          backgroundColor: [1, 1, 0, 0.8] // Yellow highlight
+        });
+        return {
+          id: annotation.id,
+          hasBackground: !!annotation.backgroundColor,
+          bgColor: annotation.backgroundColor
+        };
+      }
+      return null;
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.hasBackground).toBe(true);
+    expect(result?.bgColor).toEqual([1, 1, 0, 0.8]);
+
+    await page.waitForTimeout(200);
+    const afterScreenshot = await captureViewerScreenshot(page);
+    expect(imagesAreDifferent(initialScreenshot, afterScreenshot)).toBe(true);
+  });
+
+  test('TEXT-005: can create callout annotation with leader line via API', async ({ page }) => {
+    const initialScreenshot = await captureViewerScreenshot(page);
+
+    const result = await page.evaluate(() => {
+      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      if (paintEngine) {
+        const annotation = paintEngine.addText(1, { x: 0.3, y: 0.7 }, 'Callout Text', 24, {
+          calloutPoint: { x: 0.6, y: 0.3 } // Arrow points to this location
+        });
+        return {
+          id: annotation.id,
+          hasCallout: !!annotation.calloutPoint,
+          calloutPoint: annotation.calloutPoint
+        };
+      }
+      return null;
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.hasCallout).toBe(true);
+    expect(result?.calloutPoint).toEqual({ x: 0.6, y: 0.3 });
+
+    await page.waitForTimeout(200);
+    const afterScreenshot = await captureViewerScreenshot(page);
+    expect(imagesAreDifferent(initialScreenshot, afterScreenshot)).toBe(true);
+  });
+
+  test('TEXT-006: can update text annotation with multiple styles via API', async ({ page }) => {
+    // Create basic text first
+    const created = await page.evaluate(() => {
+      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      if (paintEngine) {
+        const annotation = paintEngine.addText(1, { x: 0.5, y: 0.5 }, 'Styled Text', 28);
+        return { id: annotation.id, frame: annotation.frame };
+      }
+      return null;
+    });
+
+    expect(created).not.toBeNull();
+
+    // Update with multiple styles
+    const updated = await page.evaluate((data) => {
+      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      if (paintEngine && data) {
+        const success = paintEngine.updateTextAnnotation(data.frame, data.id, {
+          bold: true,
+          italic: true,
+          underline: true,
+          backgroundColor: [0, 0.5, 1, 0.5]
+        });
+
+        // Get the annotation to verify using getAnnotationsForFrame
+        const annotations = paintEngine.getAnnotationsForFrame(data.frame);
+        const updated = annotations?.find((a: any) => a.id === data.id);
+
+        return {
+          success,
+          bold: updated?.bold,
+          italic: updated?.italic,
+          underline: updated?.underline,
+          hasBackground: !!updated?.backgroundColor
+        };
+      }
+      return null;
+    }, created);
+
+    expect(updated?.success).toBe(true);
+    expect(updated?.bold).toBe(true);
+    expect(updated?.italic).toBe(true);
+    expect(updated?.underline).toBe(true);
+    expect(updated?.hasBackground).toBe(true);
+  });
+
+  test('TEXT-007: can set different font family via API', async ({ page }) => {
+    const result = await page.evaluate(() => {
+      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      if (paintEngine) {
+        const annotation = paintEngine.addText(1, { x: 0.5, y: 0.5 }, 'Monospace Text', 24, {
+          font: 'monospace'
+        });
+        return { id: annotation.id, font: annotation.font };
+      }
+      return null;
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.font).toBe('monospace');
+  });
+
+  test('TEXT-008: combined bold italic underline with callout renders correctly', async ({ page }) => {
+    const initialScreenshot = await captureViewerScreenshot(page);
+
+    await page.evaluate(() => {
+      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      if (paintEngine) {
+        paintEngine.addText(1, { x: 0.2, y: 0.8 }, 'Important Note', 28, {
+          bold: true,
+          italic: true,
+          underline: true,
+          backgroundColor: [1, 0.9, 0.7, 0.9],
+          calloutPoint: { x: 0.7, y: 0.4 }
+        });
+      }
+    });
+
+    await page.waitForTimeout(200);
+    const afterScreenshot = await captureViewerScreenshot(page);
+    expect(imagesAreDifferent(initialScreenshot, afterScreenshot)).toBe(true);
+  });
+});
+
+/**
+ * Shape Tools Tests
+ *
+ * Tests for:
+ * - Rectangle, ellipse, line, arrow shapes
+ * - Fill and stroke colors
+ * - Shape sizing and positioning
+ */
+test.describe('Shape Tools', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+    await loadVideoFile(page);
+    // Switch to Annotate tab
+    await page.locator('button:has-text("Annotate")').first().click();
+    await page.waitForTimeout(200);
+  });
+
+  test('SHAPE-001: can create rectangle shape via API', async ({ page }) => {
+    const initialScreenshot = await captureViewerScreenshot(page);
+
+    const result = await page.evaluate(() => {
+      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      if (paintEngine) {
+        const shape = paintEngine.addRectangle(
+          1,
+          { x: 0.2, y: 0.3 },
+          { x: 0.6, y: 0.7 }
+        );
+        return {
+          id: shape.id,
+          type: shape.type,
+          shapeType: shape.shapeType
+        };
+      }
+      return null;
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.type).toBe('shape');
+    expect(result?.shapeType).toBe('rectangle');
+
+    await page.waitForTimeout(200);
+    const afterScreenshot = await captureViewerScreenshot(page);
+    expect(imagesAreDifferent(initialScreenshot, afterScreenshot)).toBe(true);
+  });
+
+  test('SHAPE-002: can create ellipse shape via API', async ({ page }) => {
+    const initialScreenshot = await captureViewerScreenshot(page);
+
+    const result = await page.evaluate(() => {
+      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      if (paintEngine) {
+        const shape = paintEngine.addEllipse(
+          1,
+          { x: 0.3, y: 0.3 },
+          { x: 0.7, y: 0.7 }
+        );
+        return {
+          id: shape.id,
+          type: shape.type,
+          shapeType: shape.shapeType
+        };
+      }
+      return null;
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.type).toBe('shape');
+    expect(result?.shapeType).toBe('ellipse');
+
+    await page.waitForTimeout(200);
+    const afterScreenshot = await captureViewerScreenshot(page);
+    expect(imagesAreDifferent(initialScreenshot, afterScreenshot)).toBe(true);
+  });
+
+  test('SHAPE-003: can create arrow shape via API', async ({ page }) => {
+    const initialScreenshot = await captureViewerScreenshot(page);
+
+    const result = await page.evaluate(() => {
+      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      if (paintEngine) {
+        const shape = paintEngine.addArrow(
+          1,
+          { x: 0.2, y: 0.5 },
+          { x: 0.8, y: 0.5 }
+        );
+        return {
+          id: shape.id,
+          type: shape.type,
+          shapeType: shape.shapeType,
+          arrowheadSize: shape.arrowheadSize
+        };
+      }
+      return null;
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.type).toBe('shape');
+    expect(result?.shapeType).toBe('arrow');
+    expect(result?.arrowheadSize).toBe(12); // default
+
+    await page.waitForTimeout(200);
+    const afterScreenshot = await captureViewerScreenshot(page);
+    expect(imagesAreDifferent(initialScreenshot, afterScreenshot)).toBe(true);
+  });
+
+  test('SHAPE-004: can create line shape via API', async ({ page }) => {
+    const result = await page.evaluate(() => {
+      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      if (paintEngine) {
+        const shape = paintEngine.addLine(
+          1,
+          { x: 0.1, y: 0.1 },
+          { x: 0.9, y: 0.9 }
+        );
+        return {
+          id: shape.id,
+          type: shape.type,
+          shapeType: shape.shapeType
+        };
+      }
+      return null;
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.type).toBe('shape');
+    expect(result?.shapeType).toBe('line');
+  });
+
+  test('SHAPE-005: rectangle with fill color renders correctly', async ({ page }) => {
+    const initialScreenshot = await captureViewerScreenshot(page);
+
+    await page.evaluate(() => {
+      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      if (paintEngine) {
+        paintEngine.addRectangle(
+          1,
+          { x: 0.3, y: 0.3 },
+          { x: 0.7, y: 0.7 },
+          {
+            strokeColor: [1, 0, 0, 1],
+            fillColor: [1, 1, 0, 0.5],
+            strokeWidth: 3
+          }
+        );
+      }
+    });
+
+    await page.waitForTimeout(200);
+    const afterScreenshot = await captureViewerScreenshot(page);
+    expect(imagesAreDifferent(initialScreenshot, afterScreenshot)).toBe(true);
+  });
+
+  test('SHAPE-006: rounded rectangle renders correctly', async ({ page }) => {
+    const initialScreenshot = await captureViewerScreenshot(page);
+
+    const result = await page.evaluate(() => {
+      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      if (paintEngine) {
+        const shape = paintEngine.addRectangle(
+          1,
+          { x: 0.2, y: 0.3 },
+          { x: 0.8, y: 0.7 },
+          {
+            strokeColor: [0, 0.5, 1, 1],
+            cornerRadius: 0.3,
+            strokeWidth: 4
+          }
+        );
+        return { id: shape.id, cornerRadius: shape.cornerRadius };
+      }
+      return null;
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.cornerRadius).toBe(0.3);
+
+    await page.waitForTimeout(200);
+    const afterScreenshot = await captureViewerScreenshot(page);
+    expect(imagesAreDifferent(initialScreenshot, afterScreenshot)).toBe(true);
+  });
+
+  test('SHAPE-007: can update shape properties via API', async ({ page }) => {
+    // Create a shape first
+    const created = await page.evaluate(() => {
+      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      if (paintEngine) {
+        const shape = paintEngine.addRectangle(
+          1,
+          { x: 0.2, y: 0.2 },
+          { x: 0.4, y: 0.4 }
+        );
+        return { id: shape.id, frame: shape.frame };
+      }
+      return null;
+    });
+
+    expect(created).not.toBeNull();
+
+    // Update the shape
+    const updated = await page.evaluate((data) => {
+      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      if (paintEngine && data) {
+        const success = paintEngine.updateShapeAnnotation(data.frame, data.id, {
+          endPoint: { x: 0.8, y: 0.8 },
+          strokeColor: [0, 1, 0, 1],
+          fillColor: [0, 1, 0, 0.3]
+        });
+
+        const annotations = paintEngine.getAnnotationsForFrame(data.frame);
+        const shape = annotations?.find((a: any) => a.id === data.id);
+
+        return {
+          success,
+          endPointX: shape?.endPoint?.x,
+          hasFill: !!shape?.fillColor
+        };
+      }
+      return null;
+    }, created);
+
+    expect(updated?.success).toBe(true);
+    expect(updated?.endPointX).toBe(0.8);
+    expect(updated?.hasFill).toBe(true);
+  });
+
+  test('SHAPE-008: ellipse with fill renders correctly', async ({ page }) => {
+    const initialScreenshot = await captureViewerScreenshot(page);
+
+    await page.evaluate(() => {
+      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      if (paintEngine) {
+        paintEngine.addEllipse(
+          1,
+          { x: 0.25, y: 0.25 },
+          { x: 0.75, y: 0.75 },
+          {
+            strokeColor: [1, 0, 1, 1],
+            fillColor: [1, 0, 1, 0.3],
+            strokeWidth: 2
+          }
+        );
+      }
+    });
+
+    await page.waitForTimeout(200);
+    const afterScreenshot = await captureViewerScreenshot(page);
+    expect(imagesAreDifferent(initialScreenshot, afterScreenshot)).toBe(true);
+  });
+
+  test('SHAPE-009: multiple shapes on same frame', async ({ page }) => {
+    const initialScreenshot = await captureViewerScreenshot(page);
+
+    const count = await page.evaluate(() => {
+      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      if (paintEngine) {
+        // Add multiple shapes
+        paintEngine.addRectangle(1, { x: 0.1, y: 0.1 }, { x: 0.3, y: 0.3 });
+        paintEngine.addEllipse(1, { x: 0.4, y: 0.4 }, { x: 0.6, y: 0.6 });
+        paintEngine.addArrow(1, { x: 0.7, y: 0.2 }, { x: 0.9, y: 0.8 });
+        paintEngine.addLine(1, { x: 0.1, y: 0.9 }, { x: 0.3, y: 0.7 });
+
+        const annotations = paintEngine.getAnnotationsForFrame(1);
+        return annotations?.filter((a: any) => a.type === 'shape').length;
+      }
+      return 0;
+    });
+
+    expect(count).toBe(4);
+
+    await page.waitForTimeout(200);
+    const afterScreenshot = await captureViewerScreenshot(page);
+    expect(imagesAreDifferent(initialScreenshot, afterScreenshot)).toBe(true);
+  });
+
+  test('SHAPE-010: arrow with custom arrowhead size', async ({ page }) => {
+    const result = await page.evaluate(() => {
+      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      if (paintEngine) {
+        const shape = paintEngine.addArrow(
+          1,
+          { x: 0.2, y: 0.5 },
+          { x: 0.8, y: 0.5 },
+          { arrowheadSize: 20 }
+        );
+        return { arrowheadSize: shape.arrowheadSize };
+      }
+      return null;
+    });
+
+    expect(result?.arrowheadSize).toBe(20);
+  });
+
+  test('SHAPE-011: polygon tool creates polygon with multiple points', async ({ page }) => {
+    const result = await page.evaluate(() => {
+      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      if (paintEngine) {
+        const shape = paintEngine.addPolygon(
+          1,
+          [
+            { x: 0.5, y: 0.2 },
+            { x: 0.8, y: 0.5 },
+            { x: 0.6, y: 0.8 },
+            { x: 0.4, y: 0.8 },
+            { x: 0.2, y: 0.5 }
+          ],
+          { strokeColor: [0, 1, 0, 1], strokeWidth: 3 }
+        );
+        return {
+          type: shape.type,
+          shapeType: shape.shapeType,
+          pointsCount: shape.points?.length
+        };
+      }
+      return null;
+    });
+
+    expect(result?.type).toBe('shape');
+    expect(result?.shapeType).toBe('polygon');
+    expect(result?.pointsCount).toBe(5);
+  });
+
+  test('SHAPE-012: polygon renders on canvas', async ({ page }) => {
+    const initialScreenshot = await captureViewerScreenshot(page);
+
+    await page.evaluate(() => {
+      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      if (paintEngine) {
+        paintEngine.addPolygon(
+          1,
+          [
+            { x: 0.3, y: 0.2 },
+            { x: 0.7, y: 0.2 },
+            { x: 0.8, y: 0.5 },
+            { x: 0.5, y: 0.8 },
+            { x: 0.2, y: 0.5 }
+          ],
+          {
+            strokeColor: [1, 0, 0, 1],
+            fillColor: [1, 0, 0, 0.3],
+            strokeWidth: 2
+          }
+        );
+      }
+    });
+
+    await page.waitForTimeout(200);
+    const afterScreenshot = await captureViewerScreenshot(page);
+    expect(imagesAreDifferent(initialScreenshot, afterScreenshot)).toBe(true);
+  });
+
+  test('SHAPE-013: polygon with fill color', async ({ page }) => {
+    const result = await page.evaluate(() => {
+      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      if (paintEngine) {
+        const shape = paintEngine.addPolygon(
+          1,
+          [
+            { x: 0.2, y: 0.2 },
+            { x: 0.8, y: 0.2 },
+            { x: 0.5, y: 0.8 }
+          ],
+          {
+            strokeColor: [0, 0, 1, 1],
+            fillColor: [0, 0, 1, 0.5],
+            strokeWidth: 2
+          }
+        );
+        return {
+          hasFillColor: !!shape.fillColor,
+          fillColorAlpha: shape.fillColor?.[3]
+        };
+      }
+      return null;
+    });
+
+    expect(result?.hasFillColor).toBe(true);
+    expect(result?.fillColorAlpha).toBe(0.5);
+  });
+
+  test('SHAPE-014: rectangle tool button exists and is clickable', async ({ page }) => {
+    const rectButton = page.locator('[data-testid="paint-tool-rectangle"]');
+    await expect(rectButton).toBeVisible();
+    await rectButton.click();
+
+    const activeTool = await page.evaluate(() => {
+      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      return paintEngine?.tool;
+    });
+
+    expect(activeTool).toBe('rectangle');
+  });
+
+  test('SHAPE-015: ellipse tool button exists and is clickable', async ({ page }) => {
+    const ellipseButton = page.locator('[data-testid="paint-tool-ellipse"]');
+    await expect(ellipseButton).toBeVisible();
+    await ellipseButton.click();
+
+    const activeTool = await page.evaluate(() => {
+      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      return paintEngine?.tool;
+    });
+
+    expect(activeTool).toBe('ellipse');
+  });
+
+  test('SHAPE-016: line tool button exists and is clickable', async ({ page }) => {
+    const lineButton = page.locator('[data-testid="paint-tool-line"]');
+    await expect(lineButton).toBeVisible();
+    await lineButton.click();
+
+    const activeTool = await page.evaluate(() => {
+      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      return paintEngine?.tool;
+    });
+
+    expect(activeTool).toBe('line');
+  });
+
+  test('SHAPE-017: arrow tool button exists and is clickable', async ({ page }) => {
+    const arrowButton = page.locator('[data-testid="paint-tool-arrow"]');
+    await expect(arrowButton).toBeVisible();
+    await arrowButton.click();
+
+    const activeTool = await page.evaluate(() => {
+      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      return paintEngine?.tool;
+    });
+
+    expect(activeTool).toBe('arrow');
+  });
+
+  test('SHAPE-018: shape tool buttons switch correctly', async ({ page }) => {
+    // Click rectangle, verify it's active
+    await page.locator('[data-testid="paint-tool-rectangle"]').click();
+    let tool = await page.evaluate(() => (window as any).__OPENRV_TEST__?.app?.paintEngine?.tool);
+    expect(tool).toBe('rectangle');
+
+    // Click ellipse, verify rectangle is no longer active
+    await page.locator('[data-testid="paint-tool-ellipse"]').click();
+    tool = await page.evaluate(() => (window as any).__OPENRV_TEST__?.app?.paintEngine?.tool);
+    expect(tool).toBe('ellipse');
+
+    // Click arrow, verify ellipse is no longer active
+    await page.locator('[data-testid="paint-tool-arrow"]').click();
+    tool = await page.evaluate(() => (window as any).__OPENRV_TEST__?.app?.paintEngine?.tool);
+    expect(tool).toBe('arrow');
+
+    // Click line, verify arrow is no longer active
+    await page.locator('[data-testid="paint-tool-line"]').click();
+    tool = await page.evaluate(() => (window as any).__OPENRV_TEST__?.app?.paintEngine?.tool);
+    expect(tool).toBe('line');
+  });
+});
+
+/**
+ * History Panel Tests (Feature 9.4)
+ *
+ * Tests for:
+ * - Panel visibility toggle
+ * - History entries display
+ * - Undo/redo via history
+ * - Clear history
+ * - Jump to history entry
+ */
+test.describe('History Panel', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+    await loadVideoFile(page);
+    // Switch to Annotate tab where the history button is
+    await page.locator('button:has-text("Annotate")').first().click();
+    await page.waitForTimeout(200);
+  });
+
+  test('HIST-001: history panel should be hidden by default', async ({ page }) => {
+    const state = await getHistoryPanelState(page);
+    expect(state.visible).toBe(false);
+  });
+
+  test('HIST-002: history toggle button should show/hide panel', async ({ page }) => {
+    // Initially hidden
+    let state = await getHistoryPanelState(page);
+    expect(state.visible).toBe(false);
+
+    // Click toggle button
+    const historyButton = page.locator('[data-testid="history-toggle-button"]');
+    await historyButton.click();
+    await page.waitForTimeout(100);
+
+    // Now visible
+    state = await getHistoryPanelState(page);
+    expect(state.visible).toBe(true);
+
+    // Click again to hide
+    await historyButton.click();
+    await page.waitForTimeout(100);
+
+    state = await getHistoryPanelState(page);
+    expect(state.visible).toBe(false);
+  });
+
+  test('HIST-003: keyboard shortcut should toggle history panel', async ({ page }) => {
+    let state = await getHistoryPanelState(page);
+    expect(state.visible).toBe(false);
+
+    // Use keyboard shortcut (Shift+Alt+H)
+    await page.keyboard.press('Shift+Alt+KeyH');
+    await page.waitForTimeout(100);
+
+    state = await getHistoryPanelState(page);
+    expect(state.visible).toBe(true);
+  });
+
+  test('HIST-004: history panel should show entries after drawing', async ({ page }) => {
+    // Open history panel
+    const historyButton = page.locator('[data-testid="history-toggle-button"]');
+    await historyButton.click();
+    await page.waitForTimeout(100);
+
+    // Initially no entries
+    let state = await getHistoryPanelState(page);
+    expect(state.entryCount).toBe(0);
+
+    // Add a stroke via API (simulating drawing)
+    await page.evaluate(() => {
+      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      const historyManager = (window as any).__OPENRV_TEST__?.app?.historyPanel?.historyManager;
+      if (paintEngine && historyManager) {
+        // Record an action in history manager
+        historyManager.recordAction('Test stroke', 'paint', () => {}, () => {});
+      }
+    });
+    await page.waitForTimeout(100);
+
+    state = await getHistoryPanelState(page);
+    expect(state.entryCount).toBe(1);
+  });
+
+  test('HIST-005: clear history should remove all entries', async ({ page }) => {
+    // Open history panel
+    const historyButton = page.locator('[data-testid="history-toggle-button"]');
+    await historyButton.click();
+    await page.waitForTimeout(100);
+
+    // Add some history entries
+    await page.evaluate(() => {
+      const historyManager = (window as any).__OPENRV_TEST__?.app?.historyPanel?.historyManager;
+      if (historyManager) {
+        historyManager.recordAction('Action 1', 'paint', () => {}, () => {});
+        historyManager.recordAction('Action 2', 'paint', () => {}, () => {});
+        historyManager.recordAction('Action 3', 'paint', () => {}, () => {});
+      }
+    });
+    await page.waitForTimeout(100);
+
+    let state = await getHistoryPanelState(page);
+    expect(state.entryCount).toBe(3);
+
+    // Click clear button
+    const clearButton = page.locator('[data-testid="history-clear-btn"]');
+    await clearButton.click();
+    await page.waitForTimeout(100);
+
+    state = await getHistoryPanelState(page);
+    expect(state.entryCount).toBe(0);
+  });
+
+  test('HIST-006: close button should hide panel', async ({ page }) => {
+    // Open history panel
+    const historyButton = page.locator('[data-testid="history-toggle-button"]');
+    await historyButton.click();
+    await page.waitForTimeout(100);
+
+    let state = await getHistoryPanelState(page);
+    expect(state.visible).toBe(true);
+
+    // Find and click close button
+    const closeButton = page.locator('.history-panel button:has-text("×")');
+    await closeButton.click();
+    await page.waitForTimeout(100);
+
+    state = await getHistoryPanelState(page);
+    expect(state.visible).toBe(false);
+  });
+
+  test('HIST-007: history manager undo should update current index', async ({ page }) => {
+    // Add some history entries
+    await page.evaluate(() => {
+      const historyManager = (window as any).__OPENRV_TEST__?.app?.historyPanel?.historyManager;
+      if (historyManager) {
+        historyManager.recordAction('Action 1', 'paint', () => {}, () => {});
+        historyManager.recordAction('Action 2', 'paint', () => {}, () => {});
+      }
+    });
+    await page.waitForTimeout(100);
+
+    let state = await getHistoryPanelState(page);
+    expect(state.currentIndex).toBe(1); // At latest entry
+
+    // Undo
+    await page.evaluate(() => {
+      const historyManager = (window as any).__OPENRV_TEST__?.app?.historyPanel?.historyManager;
+      if (historyManager) {
+        historyManager.undo();
+      }
+    });
+    await page.waitForTimeout(100);
+
+    state = await getHistoryPanelState(page);
+    expect(state.currentIndex).toBe(0); // Back one step
+    expect(state.canUndo).toBe(true);
+    expect(state.canRedo).toBe(true);
+  });
+
+  test('HIST-008: history manager jump should navigate to specific entry', async ({ page }) => {
+    // Add multiple history entries
+    await page.evaluate(() => {
+      const historyManager = (window as any).__OPENRV_TEST__?.app?.historyPanel?.historyManager;
+      if (historyManager) {
+        historyManager.recordAction('Action 1', 'paint', () => {}, () => {});
+        historyManager.recordAction('Action 2', 'paint', () => {}, () => {});
+        historyManager.recordAction('Action 3', 'paint', () => {}, () => {});
+      }
+    });
+    await page.waitForTimeout(100);
+
+    let state = await getHistoryPanelState(page);
+    expect(state.currentIndex).toBe(2); // At entry index 2
+
+    // Jump to first entry
+    await page.evaluate(() => {
+      const historyManager = (window as any).__OPENRV_TEST__?.app?.historyPanel?.historyManager;
+      if (historyManager) {
+        historyManager.jumpTo(0);
+      }
+    });
+    await page.waitForTimeout(100);
+
+    state = await getHistoryPanelState(page);
+    expect(state.currentIndex).toBe(0);
+  });
+});
+
+/**
+ * Info Panel Tests (Feature 9.5)
+ *
+ * Tests for:
+ * - Panel visibility toggle
+ * - File info display
+ * - Frame info display
+ * - Position configuration
+ */
+test.describe('Info Panel', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+    await loadVideoFile(page);
+    // Switch to View tab where the info button is
+    await page.locator('button:has-text("View")').first().click();
+    await page.waitForTimeout(200);
+  });
+
+  test('INFO-001: info panel should be disabled by default', async ({ page }) => {
+    const state = await getInfoPanelState(page);
+    expect(state.enabled).toBe(false);
+  });
+
+  test('INFO-002: info toggle button should show/hide panel', async ({ page }) => {
+    // Initially disabled
+    let state = await getInfoPanelState(page);
+    expect(state.enabled).toBe(false);
+
+    // Click toggle button
+    const infoButton = page.locator('[data-testid="info-panel-toggle"]');
+    await infoButton.click();
+    await page.waitForTimeout(100);
+
+    // Now enabled
+    state = await getInfoPanelState(page);
+    expect(state.enabled).toBe(true);
+
+    // Click again to disable
+    await infoButton.click();
+    await page.waitForTimeout(100);
+
+    state = await getInfoPanelState(page);
+    expect(state.enabled).toBe(false);
+  });
+
+  test('INFO-003: keyboard shortcut should toggle info panel', async ({ page }) => {
+    let state = await getInfoPanelState(page);
+    expect(state.enabled).toBe(false);
+
+    // Use keyboard shortcut (Shift+Alt+I)
+    await page.keyboard.press('Shift+Alt+KeyI');
+    await page.waitForTimeout(100);
+
+    state = await getInfoPanelState(page);
+    expect(state.enabled).toBe(true);
+  });
+
+  test('INFO-004: info panel should show filename when enabled', async ({ page }) => {
+    // Enable panel
+    const infoButton = page.locator('[data-testid="info-panel-toggle"]');
+    await infoButton.click();
+    await page.waitForTimeout(100);
+
+    const state = await getInfoPanelState(page);
+    expect(state.enabled).toBe(true);
+    expect(state.filename).not.toBeNull();
+  });
+
+  test('INFO-005: info panel should show resolution when enabled', async ({ page }) => {
+    // Enable panel
+    const infoButton = page.locator('[data-testid="info-panel-toggle"]');
+    await infoButton.click();
+    await page.waitForTimeout(100);
+
+    const state = await getInfoPanelState(page);
+    expect(state.enabled).toBe(true);
+    expect(state.resolution).not.toBeNull();
+    expect(state.resolution).toMatch(/\d+x\d+/);
+  });
+
+  test('INFO-006: info panel should show frame info when enabled', async ({ page }) => {
+    // Enable panel
+    const infoButton = page.locator('[data-testid="info-panel-toggle"]');
+    await infoButton.click();
+    await page.waitForTimeout(100);
+
+    const state = await getInfoPanelState(page);
+    expect(state.enabled).toBe(true);
+    expect(state.currentFrame).toBeGreaterThanOrEqual(0);
+    expect(state.totalFrames).toBeGreaterThan(0);
+  });
+
+  test('INFO-007: info panel should show FPS when enabled', async ({ page }) => {
+    // Enable panel
+    const infoButton = page.locator('[data-testid="info-panel-toggle"]');
+    await infoButton.click();
+    await page.waitForTimeout(100);
+
+    const state = await getInfoPanelState(page);
+    expect(state.enabled).toBe(true);
+    expect(state.fps).toBeGreaterThan(0);
+  });
+
+  test('INFO-008: info panel should update on frame change', async ({ page }) => {
+    // Enable panel
+    const infoButton = page.locator('[data-testid="info-panel-toggle"]');
+    await infoButton.click();
+    await page.waitForTimeout(100);
+
+    let state = await getInfoPanelState(page);
+    const initialFrame = state.currentFrame;
+
+    // Step forward
+    await page.keyboard.press('ArrowRight');
+    await page.waitForTimeout(100);
+
+    state = await getInfoPanelState(page);
+    expect(state.currentFrame).toBe(initialFrame + 1);
+  });
+
+  test('INFO-009: info panel DOM element should be visible when enabled', async ({ page }) => {
+    // Enable panel
+    const infoButton = page.locator('[data-testid="info-panel-toggle"]');
+    await infoButton.click();
+    await page.waitForTimeout(100);
+
+    const panel = page.locator('[data-testid="info-panel"]');
+    await expect(panel).toBeVisible();
+  });
+
+  test('INFO-010: info panel should have default position top-left', async ({ page }) => {
+    // Enable panel
+    const infoButton = page.locator('[data-testid="info-panel-toggle"]');
+    await infoButton.click();
+    await page.waitForTimeout(100);
+
+    const state = await getInfoPanelState(page);
+    expect(state.position).toBe('top-left');
+  });
+
+  test('INFO-011: info panel should show cursor color when hovering over viewer', async ({ page }) => {
+    // Enable panel
+    const infoButton = page.locator('[data-testid="info-panel-toggle"]');
+    await infoButton.click();
+    await page.waitForTimeout(100);
+
+    // Get viewer canvas and hover over center
+    const viewerCanvas = page.locator('[data-testid="viewer-canvas"]');
+    await expect(viewerCanvas).toBeVisible();
+
+    const box = await viewerCanvas.boundingBox();
+    if (box) {
+      // Move cursor to center of viewer
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.waitForTimeout(200);
+
+      // Check that colorAtCursor data is populated
+      const state = await getInfoPanelState(page);
+      // The colorAtCursor should have RGB values when hovering over the video
+      expect(state.colorAtCursor).toBeDefined();
+    }
+  });
+
+  test('INFO-012: cursor color updates when mouse moves over viewer', async ({ page }) => {
+    // Enable panel
+    const infoButton = page.locator('[data-testid="info-panel-toggle"]');
+    await infoButton.click();
+    await page.waitForTimeout(100);
+
+    // Get viewer canvas
+    const viewerCanvas = page.locator('[data-testid="viewer-canvas"]');
+    const box = await viewerCanvas.boundingBox();
+
+    if (box) {
+      // Move to one position
+      await page.mouse.move(box.x + 50, box.y + 50);
+      await page.waitForTimeout(100);
+
+      const state1 = await getInfoPanelState(page);
+
+      // Move to a different position
+      await page.mouse.move(box.x + box.width - 50, box.y + box.height - 50);
+      await page.waitForTimeout(100);
+
+      const state2 = await getInfoPanelState(page);
+
+      // Both should have cursor position data
+      expect(state1.colorAtCursor).toBeDefined();
+      expect(state2.colorAtCursor).toBeDefined();
+    }
+  });
+
+  test('INFO-013: cursor color clears when mouse leaves viewer', async ({ page }) => {
+    // Enable panel
+    const infoButton = page.locator('[data-testid="info-panel-toggle"]');
+    await infoButton.click();
+    await page.waitForTimeout(100);
+
+    // Get viewer canvas and hover over center first
+    const viewerCanvas = page.locator('[data-testid="viewer-canvas"]');
+    const box = await viewerCanvas.boundingBox();
+
+    if (box) {
+      // Move cursor into viewer
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.waitForTimeout(100);
+
+      // Move cursor outside viewer
+      await page.mouse.move(0, 0);
+      await page.waitForTimeout(200);
+
+      // The color display should show "--" or null when not hovering
+      const state = await getInfoPanelState(page);
+      expect(state.colorAtCursor).toBeNull();
+    }
+  });
+});
+
+// =====================================================
+// Difference Matte Tests
+// =====================================================
+test.describe('Difference Matte', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+    // Load two files to enable A/B comparison
+    await loadTwoVideoFiles(page);
+    // Switch to View tab
+    await page.click('button[data-tab-id="view"]');
+    await page.waitForTimeout(200);
+  });
+
+  test('DIFF-001: difference matte should be disabled by default', async ({ page }) => {
+    const state = await getViewerState(page);
+    expect(state.differenceMatteEnabled).toBe(false);
+  });
+
+  test('DIFF-002: toggle button should be visible in Compare dropdown', async ({ page }) => {
+    // Open compare dropdown
+    const compareButton = page.locator('[data-testid="compare-control-button"]');
+    await compareButton.click();
+    await page.waitForTimeout(100);
+
+    const diffToggle = page.locator('[data-testid="diff-matte-toggle"]');
+    await expect(diffToggle).toBeVisible();
+  });
+
+  test('DIFF-003: clicking toggle should enable difference matte mode', async ({ page }) => {
+    // Open compare dropdown
+    const compareButton = page.locator('[data-testid="compare-control-button"]');
+    await compareButton.click();
+    await page.waitForTimeout(100);
+
+    // Enable difference matte
+    const diffToggle = page.locator('[data-testid="diff-matte-toggle"]');
+    await diffToggle.click();
+    await page.waitForTimeout(200);
+
+    const state = await getViewerState(page);
+    expect(state.differenceMatteEnabled).toBe(true);
+  });
+
+  test('DIFF-004: enabling difference matte should change canvas appearance', async ({ page }) => {
+    const before = await captureViewerScreenshot(page);
+
+    // Open compare dropdown and enable difference matte
+    const compareButton = page.locator('[data-testid="compare-control-button"]');
+    await compareButton.click();
+    await page.waitForTimeout(100);
+
+    const diffToggle = page.locator('[data-testid="diff-matte-toggle"]');
+    await diffToggle.click();
+    await page.waitForTimeout(300);
+
+    const after = await captureViewerScreenshot(page);
+    expect(imagesAreDifferent(before, after)).toBe(true);
+  });
+
+  test('DIFF-005: gain slider should change gain value', async ({ page }) => {
+    // Open compare dropdown
+    const compareButton = page.locator('[data-testid="compare-control-button"]');
+    await compareButton.click();
+    await page.waitForTimeout(100);
+
+    // Enable difference matte first
+    const diffToggle = page.locator('[data-testid="diff-matte-toggle"]');
+    await diffToggle.click();
+    await page.waitForTimeout(100);
+
+    let state = await getViewerState(page);
+    expect(state.differenceMatteGain).toBe(1);
+
+    // Adjust gain slider
+    const gainSlider = page.locator('[data-testid="diff-matte-gain"]');
+    await gainSlider.fill('5');
+    await page.waitForTimeout(200);
+
+    state = await getViewerState(page);
+    expect(state.differenceMatteGain).toBe(5);
+  });
+
+  test('DIFF-006: heatmap toggle should enable heatmap mode', async ({ page }) => {
+    // Open compare dropdown
+    const compareButton = page.locator('[data-testid="compare-control-button"]');
+    await compareButton.click();
+    await page.waitForTimeout(100);
+
+    // Enable difference matte first
+    const diffToggle = page.locator('[data-testid="diff-matte-toggle"]');
+    await diffToggle.click();
+    await page.waitForTimeout(100);
+
+    let state = await getViewerState(page);
+    expect(state.differenceMatteHeatmap).toBe(false);
+
+    // Enable heatmap
+    const heatmapToggle = page.locator('[data-testid="diff-matte-heatmap"]');
+    await heatmapToggle.click();
+    await page.waitForTimeout(200);
+
+    state = await getViewerState(page);
+    expect(state.differenceMatteHeatmap).toBe(true);
+  });
+
+  test('DIFF-007: keyboard shortcut Shift+D should toggle difference matte', async ({ page }) => {
+    let state = await getViewerState(page);
+    expect(state.differenceMatteEnabled).toBe(false);
+
+    await page.keyboard.press('Shift+d');
+    await page.waitForTimeout(200);
+
+    state = await getViewerState(page);
+    expect(state.differenceMatteEnabled).toBe(true);
+
+    await page.keyboard.press('Shift+d');
+    await page.waitForTimeout(200);
+
+    state = await getViewerState(page);
+    expect(state.differenceMatteEnabled).toBe(false);
+  });
+
+  test('DIFF-008: heatmap mode should visually change canvas appearance', async ({ page }) => {
+    // Enable difference matte
+    await page.keyboard.press('Shift+d');
+    await page.waitForTimeout(200);
+
+    const grayscale = await captureViewerScreenshot(page);
+
+    // Open compare dropdown and enable heatmap
+    const compareButton = page.locator('[data-testid="compare-control-button"]');
+    await compareButton.click();
+    await page.waitForTimeout(100);
+
+    const heatmapToggle = page.locator('[data-testid="diff-matte-heatmap"]');
+    await heatmapToggle.click();
+    await page.waitForTimeout(300);
+
+    const heatmap = await captureViewerScreenshot(page);
+    expect(imagesAreDifferent(grayscale, heatmap)).toBe(true);
+  });
+});
+
+// =====================================================
+// Frame Caching Visualization Tests
+// =====================================================
+test.describe('Frame Caching Visualization', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+    await loadVideoFile(page);
+    await page.waitForTimeout(500); // Wait for caching to start
+  });
+
+  test('CACHE-001: cache indicator should be visible for video files with mediabunny', async ({ page }) => {
+    const state = await getCacheIndicatorState(page);
+    // Cache indicator is visible when using mediabunny
+    if (state.isUsingMediabunny) {
+      expect(state.visible).toBe(true);
+    }
+  });
+
+  test('CACHE-002: cache indicator should show cached frames count', async ({ page }) => {
+    const state = await getCacheIndicatorState(page);
+    if (state.isUsingMediabunny) {
+      // After loading, some frames should be cached
+      expect(state.cachedCount).toBeGreaterThanOrEqual(0);
+      expect(state.totalFrames).toBeGreaterThan(0);
+    }
+  });
+
+  test('CACHE-003: cache indicator DOM element should be present', async ({ page }) => {
+    const indicator = page.locator('[data-testid="cache-indicator"]');
+    const isUsingMediabunny = await page.evaluate(() => {
+      return window.__OPENRV_TEST__?.isUsingMediabunny() ?? false;
+    });
+
+    if (isUsingMediabunny) {
+      await expect(indicator).toBeVisible();
+    }
+  });
+
+  test('CACHE-004: clear cache button should exist', async ({ page }) => {
+    const isUsingMediabunny = await page.evaluate(() => {
+      return window.__OPENRV_TEST__?.isUsingMediabunny() ?? false;
+    });
+
+    if (isUsingMediabunny) {
+      const clearButton = page.locator('[data-testid="cache-indicator-clear"]');
+      await expect(clearButton).toBeVisible();
+    }
+  });
+
+  test('CACHE-005: clicking clear button should clear cache', async ({ page }) => {
+    const isUsingMediabunny = await page.evaluate(() => {
+      return window.__OPENRV_TEST__?.isUsingMediabunny() ?? false;
+    });
+
+    if (isUsingMediabunny) {
+      // Wait for some caching
+      await page.waitForTimeout(500);
+
+      let state = await getCacheIndicatorState(page);
+      const initialCachedCount = state.cachedCount;
+
+      // Click clear button
+      const clearButton = page.locator('[data-testid="cache-indicator-clear"]');
+      await clearButton.click();
+      await page.waitForTimeout(200);
+
+      // Cache should be cleared (or significantly reduced)
+      state = await getCacheIndicatorState(page);
+      expect(state.cachedCount).toBeLessThan(initialCachedCount || 1);
+    }
+  });
+
+  test('CACHE-006: cache stats display should be present', async ({ page }) => {
+    const isUsingMediabunny = await page.evaluate(() => {
+      return window.__OPENRV_TEST__?.isUsingMediabunny() ?? false;
+    });
+
+    if (isUsingMediabunny) {
+      const statsElement = page.locator('[data-testid="cache-indicator-stats"]');
+      await expect(statsElement).toBeVisible();
+
+      const text = await statsElement.textContent();
+      expect(text).toContain('Cache:');
+      expect(text).toContain('frames');
+    }
+  });
+});
+
+
+// =====================================================
+// Theme Control Tests
+// =====================================================
+test.describe('Theme Control', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+    await loadVideoFile(page);
+    await page.waitForTimeout(200);
+  });
+
+  test('THEME-001: theme control button should be visible in header bar', async ({ page }) => {
+    const themeButton = page.locator('[data-testid="theme-control-button"]');
+    await expect(themeButton).toBeVisible();
+  });
+
+  test('THEME-002: clicking theme button should open dropdown', async ({ page }) => {
+    const dropdown = page.locator('[data-testid="theme-dropdown"]');
+    await expect(dropdown).not.toBeVisible();
+
+    const themeButton = page.locator('[data-testid="theme-control-button"]');
+    await themeButton.click();
+    await page.waitForTimeout(200);
+
+    await expect(dropdown).toBeVisible();
+  });
+
+  test('THEME-003: theme dropdown should have auto, dark, and light options', async ({ page }) => {
+    const themeButton = page.locator('[data-testid="theme-control-button"]');
+    await themeButton.click();
+    await page.waitForTimeout(200);
+
+    const autoOption = page.locator('[data-testid="theme-option-auto"]');
+    const darkOption = page.locator('[data-testid="theme-option-dark"]');
+    const lightOption = page.locator('[data-testid="theme-option-light"]');
+
+    await expect(autoOption).toBeVisible();
+    await expect(darkOption).toBeVisible();
+    await expect(lightOption).toBeVisible();
+  });
+
+  test('THEME-004: selecting light theme should change resolved theme', async ({ page }) => {
+    // Default should be auto (resolves to dark in most test environments)
+    let state = await getThemeState(page);
+    expect(state.mode).toBe('auto');
+
+    // Open dropdown and select light theme
+    const themeButton = page.locator('[data-testid="theme-control-button"]');
+    await themeButton.click();
+    await page.waitForTimeout(200);
+
+    const lightOption = page.locator('[data-testid="theme-option-light"]');
+    await lightOption.click();
+    await page.waitForTimeout(200);
+
+    // Verify state changed
+    state = await getThemeState(page);
+    expect(state.mode).toBe('light');
+    expect(state.resolvedTheme).toBe('light');
+  });
+
+  test('THEME-005: selecting dark theme should change resolved theme', async ({ page }) => {
+    // First set to light
+    const themeButton = page.locator('[data-testid="theme-control-button"]');
+    await themeButton.click();
+    await page.waitForTimeout(200);
+
+    const lightOption = page.locator('[data-testid="theme-option-light"]');
+    await lightOption.click();
+    await page.waitForTimeout(200);
+
+    let state = await getThemeState(page);
+    expect(state.mode).toBe('light');
+
+    // Now switch to dark
+    await themeButton.click();
+    await page.waitForTimeout(200);
+
+    const darkOption = page.locator('[data-testid="theme-option-dark"]');
+    await darkOption.click();
+    await page.waitForTimeout(200);
+
+    state = await getThemeState(page);
+    expect(state.mode).toBe('dark');
+    expect(state.resolvedTheme).toBe('dark');
+  });
+
+  test('THEME-006: theme CSS custom properties should update on theme change', async ({ page }) => {
+    const themeButton = page.locator('[data-testid="theme-control-button"]');
+
+    // First set to dark theme to ensure consistent starting point
+    await themeButton.click();
+    await page.waitForTimeout(200);
+    const darkOption = page.locator('[data-testid="theme-option-dark"]');
+    await darkOption.click();
+    await page.waitForTimeout(300);
+
+    // Get dark theme background color
+    const darkBg = await page.evaluate(() => {
+      return getComputedStyle(document.documentElement).getPropertyValue('--bg-primary');
+    });
+
+    // Change to light theme
+    await themeButton.click();
+    await page.waitForTimeout(200);
+    const lightOption = page.locator('[data-testid="theme-option-light"]');
+    await lightOption.click();
+    await page.waitForTimeout(300);
+
+    // Get light theme background color
+    const lightBg = await page.evaluate(() => {
+      return getComputedStyle(document.documentElement).getPropertyValue('--bg-primary');
+    });
+
+    // Background should be different (light theme has brighter background)
+    expect(lightBg.trim()).not.toBe(darkBg.trim());
+  });
+
+  test('THEME-007: closing dropdown by clicking outside should work', async ({ page }) => {
+    const themeButton = page.locator('[data-testid="theme-control-button"]');
+    await themeButton.click();
+    await page.waitForTimeout(200);
+
+    const dropdown = page.locator('[data-testid="theme-dropdown"]');
+    await expect(dropdown).toBeVisible();
+
+    // Click outside the dropdown (on the header bar area)
+    await page.mouse.click(100, 20);
+    await page.waitForTimeout(200);
+
+    await expect(dropdown).not.toBeVisible();
+  });
+
+  test('THEME-008: theme selection should persist button label', async ({ page }) => {
+    const themeButton = page.locator('[data-testid="theme-control-button"]');
+
+    // Initial label should show Auto or Dark (depending on initial state)
+    let buttonText = await themeButton.textContent();
+    expect(buttonText).toMatch(/Auto|Dark/);
+
+    // Change to Light
+    await themeButton.click();
+    await page.waitForTimeout(200);
+
+    const lightOption = page.locator('[data-testid="theme-option-light"]');
+    await lightOption.click();
+    await page.waitForTimeout(200);
+
+    // Button should now show Light
+    buttonText = await themeButton.textContent();
+    expect(buttonText).toContain('Light');
+  });
+
+  test('THEME-009: Shift+T keyboard shortcut cycles theme', async ({ page }) => {
+    // Get initial theme state
+    const initialState = await getThemeState(page);
+    const initialMode = initialState.mode;
+
+    // Press Shift+T to cycle theme
+    await page.keyboard.press('Shift+T');
+    await page.waitForTimeout(200);
+
+    // Get new theme state
+    const newState = await getThemeState(page);
+
+    // Theme should have changed (auto -> dark -> light -> auto)
+    expect(newState.mode).not.toBe(initialMode);
+  });
+
+  test('THEME-010: Shift+T cycles through all theme modes', async ({ page }) => {
+    // First, set to auto mode
+    const themeButton = page.locator('[data-testid="theme-control-button"]');
+    await themeButton.click();
+    await page.waitForTimeout(200);
+    const autoOption = page.locator('[data-testid="theme-option-auto"]');
+    await autoOption.click();
+    await page.waitForTimeout(200);
+
+    // Verify we're in auto mode
+    let state = await getThemeState(page);
+    expect(state.mode).toBe('auto');
+
+    // Press Shift+T - should go to dark
+    await page.keyboard.press('Shift+T');
+    await page.waitForTimeout(200);
+    state = await getThemeState(page);
+    expect(state.mode).toBe('dark');
+
+    // Press Shift+T - should go to light
+    await page.keyboard.press('Shift+T');
+    await page.waitForTimeout(200);
+    state = await getThemeState(page);
+    expect(state.mode).toBe('light');
+
+    // Press Shift+T - should go back to auto
+    await page.keyboard.press('Shift+T');
+    await page.waitForTimeout(200);
+    state = await getThemeState(page);
+    expect(state.mode).toBe('auto');
+  });
+});
+

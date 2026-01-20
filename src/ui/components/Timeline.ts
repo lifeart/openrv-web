@@ -56,6 +56,7 @@ export class Timeline {
 
     // Create canvas
     this.canvas = document.createElement('canvas');
+    this.canvas.dataset.testid = 'timeline-canvas';
     this.canvas.style.cssText = `
       width: 100%;
       height: 100%;
@@ -334,12 +335,20 @@ export class Timeline {
       }
     }
 
-    // Draw marks (within full duration)
-    ctx.fillStyle = this.colors.mark;
-    for (const mark of this.session.marks) {
-      if (mark >= 1 && mark <= duration) {
-        const markX = frameToX(mark);
+    // Draw marks (within full duration) - with custom colors from Marker data
+    for (const marker of this.session.marks.values()) {
+      if (marker.frame >= 1 && marker.frame <= duration) {
+        const markX = frameToX(marker.frame);
+        // Use marker's color if set, otherwise default to mark color
+        ctx.fillStyle = marker.color || this.colors.mark;
         ctx.fillRect(markX - 1, trackY, 2, trackHeight);
+
+        // If marker has a note, draw a small indicator dot above
+        if (marker.note) {
+          ctx.beginPath();
+          ctx.arc(markX, trackY - 8, 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
     }
 

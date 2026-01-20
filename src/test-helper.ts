@@ -4,6 +4,7 @@
  */
 
 import type { App } from './App';
+import { getThemeManager } from './utils/ThemeManager';
 
 declare global {
   interface Window {
@@ -20,9 +21,20 @@ declare global {
       getTimecodeOverlayState: () => TimecodeOverlayState;
       getZebraStripesState: () => ZebraStripesState;
       getColorWheelsState: () => ColorWheelsState;
+      getSpotlightState: () => SpotlightState;
+      getHistoryPanelState: () => HistoryPanelState;
+      getInfoPanelState: () => InfoPanelState;
+      getCacheIndicatorState: () => CacheIndicatorState;
+      getThemeState: () => ThemeState;
       isUsingMediabunny: () => boolean;
     };
   }
+}
+
+export interface MarkerData {
+  frame: number;
+  note: string;
+  color: string;
 }
 
 export interface SessionState {
@@ -33,13 +45,15 @@ export interface SessionState {
   isPlaying: boolean;
   loopMode: 'once' | 'loop' | 'pingpong';
   playDirection: number;
+  playbackSpeed: number;
   volume: number;
   muted: boolean;
   fps: number;
   hasMedia: boolean;
   mediaType: string | null;
   mediaName: string | null;
-  marks: number[];
+  marks: number[]; // Legacy: just frame numbers
+  markers: MarkerData[]; // Full marker data with notes and colors
   // A/B Compare state
   currentAB: 'A' | 'B';
   sourceAIndex: number;
@@ -66,6 +80,10 @@ export interface ViewerState {
   waveformMode: 'luma' | 'rgb' | 'parade';
   vectorscopeVisible: boolean;
   vectorscopeZoom: number;
+  // Difference matte state
+  differenceMatteEnabled: boolean;
+  differenceMatteGain: number;
+  differenceMatteHeatmap: boolean;
 }
 
 export interface ColorState {
@@ -75,6 +93,7 @@ export interface ColorState {
   vibrance: number;
   vibranceSkinProtection: boolean;
   contrast: number;
+  clarity: number;
   temperature: number;
   tint: number;
   brightness: number;
@@ -135,6 +154,36 @@ export interface ColorWheelsState {
   canRedo: boolean;
 }
 
+export interface SpotlightState {
+  enabled: boolean;
+  shape: 'circle' | 'rectangle';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  dimAmount: number;
+  feather: number;
+}
+
+export interface HistoryPanelState {
+  visible: boolean;
+  entryCount: number;
+  currentIndex: number;
+  canUndo: boolean;
+  canRedo: boolean;
+}
+
+export interface InfoPanelState {
+  enabled: boolean;
+  position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  filename: string | null;
+  resolution: string | null;
+  currentFrame: number;
+  totalFrames: number;
+  fps: number;
+  colorAtCursor: { r: number; g: number; b: number } | null;
+}
+
 export interface TransformState {
   rotation: 0 | 90 | 180 | 270;
   flipH: boolean;
@@ -153,6 +202,19 @@ export interface PaintState {
   annotatedFrames: number[];
   canUndo: boolean;
   canRedo: boolean;
+}
+
+export interface CacheIndicatorState {
+  visible: boolean;
+  cachedCount: number;
+  pendingCount: number;
+  totalFrames: number;
+  isUsingMediabunny: boolean;
+}
+
+export interface ThemeState {
+  mode: 'dark' | 'light' | 'auto';
+  resolvedTheme: 'dark' | 'light';
 }
 
 export function exposeForTesting(app: App): void {
@@ -174,13 +236,22 @@ export function exposeForTesting(app: App): void {
         isPlaying: session.isPlaying,
         loopMode: session.loopMode,
         playDirection: session.playDirection,
+        playbackSpeed: session.playbackSpeed,
         volume: session.volume,
         muted: session.muted,
         fps: session.fps,
         hasMedia: !!source,
         mediaType: source?.type ?? null,
         mediaName: source?.name ?? null,
-        marks: Array.from(session.marks ?? []),
+        marks: session.markedFrames ?? [],
+        markers: Array.from(session.marks?.values?.() ?? []).map((m: unknown) => {
+          const marker = m as { frame: number; note: string; color: string };
+          return {
+            frame: marker.frame,
+            note: marker.note,
+            color: marker.color,
+          };
+        }),
         // A/B Compare state
         currentAB: session.currentAB,
         sourceAIndex: session.sourceAIndex,
@@ -213,6 +284,10 @@ export function exposeForTesting(app: App): void {
         waveformMode: waveform?.getMode?.() ?? 'luma',
         vectorscopeVisible: vectorscope?.isVisible?.() ?? false,
         vectorscopeZoom: vectorscope?.getZoom?.() ?? 1,
+        // Difference matte state
+        differenceMatteEnabled: viewer.differenceMatteState?.enabled ?? false,
+        differenceMatteGain: viewer.differenceMatteState?.gain ?? 1,
+        differenceMatteHeatmap: viewer.differenceMatteState?.heatmap ?? false,
       };
     },
 
@@ -226,6 +301,7 @@ export function exposeForTesting(app: App): void {
         vibrance: adjustments.vibrance ?? 0,
         vibranceSkinProtection: adjustments.vibranceSkinProtection ?? true,
         contrast: adjustments.contrast ?? 1,
+        clarity: adjustments.clarity ?? 0,
         temperature: adjustments.temperature ?? 0,
         tint: adjustments.tint ?? 0,
         brightness: adjustments.brightness ?? 0,
@@ -317,6 +393,54 @@ export function exposeForTesting(app: App): void {
       };
     },
 
+    getSpotlightState: (): SpotlightState => {
+      const viewer = appAny.viewer;
+      const spotlight = viewer?.getSpotlightOverlay?.();
+      const state = spotlight?.getState?.() ?? {};
+      return {
+        enabled: state.enabled ?? false,
+        shape: state.shape ?? 'circle',
+        x: state.x ?? 0.5,
+        y: state.y ?? 0.5,
+        width: state.width ?? 0.2,
+        height: state.height ?? 0.2,
+        dimAmount: state.dimAmount ?? 0.7,
+        feather: state.feather ?? 0.05,
+      };
+    },
+
+    getHistoryPanelState: (): HistoryPanelState => {
+      const historyPanel = appAny.historyPanel;
+      const panelState = historyPanel?.getState?.() ?? {};
+      const historyManager = historyPanel?.historyManager;
+      const historyState = historyManager?.getState?.() ?? {};
+      return {
+        visible: panelState.visible ?? false,
+        entryCount: panelState.entryCount ?? 0,
+        currentIndex: panelState.currentIndex ?? -1,
+        canUndo: historyState.canUndo ?? false,
+        canRedo: historyState.canRedo ?? false,
+      };
+    },
+
+    getInfoPanelState: (): InfoPanelState => {
+      const infoPanel = appAny.infoPanel;
+      const session = appAny.session;
+      const source = session?.currentSource;
+      const state = infoPanel?.getState?.() ?? {};
+      const currentData = (infoPanel as any)?.currentData ?? {};
+      return {
+        enabled: state.enabled ?? false,
+        position: state.position ?? 'top-left',
+        filename: currentData.filename ?? source?.name ?? null,
+        resolution: source?.width && source?.height ? `${source.width}x${source.height}` : null,
+        currentFrame: session?.currentFrame ?? 0,
+        totalFrames: source?.duration ?? 0,
+        fps: session?.fps ?? 0,
+        colorAtCursor: currentData.colorAtCursor ?? null,
+      };
+    },
+
     getTransformState: (): TransformState => {
       const transformControl = appAny.transformControl;
       const transform = transformControl?.getTransform?.() ?? {};
@@ -362,6 +486,28 @@ export function exposeForTesting(app: App): void {
         annotatedFrames: Array.from(paintEngine?.getAnnotatedFrames?.() ?? []),
         canUndo: undoStack.length > 0,
         canRedo: redoStack.length > 0,
+      };
+    },
+
+    getCacheIndicatorState: (): CacheIndicatorState => {
+      const session = appAny.session;
+      const cacheIndicator = appAny.cacheIndicator;
+      const state = cacheIndicator?.getState?.() ?? {};
+      const isUsingMediabunny = session?.isUsingMediabunny?.() ?? false;
+      return {
+        visible: state.visible ?? false,
+        cachedCount: state.cachedCount ?? 0,
+        pendingCount: state.pendingCount ?? 0,
+        totalFrames: state.totalFrames ?? 0,
+        isUsingMediabunny,
+      };
+    },
+
+    getThemeState: (): ThemeState => {
+      const themeManager = getThemeManager();
+      return {
+        mode: themeManager.getMode(),
+        resolvedTheme: themeManager.getResolvedTheme(),
       };
     },
 

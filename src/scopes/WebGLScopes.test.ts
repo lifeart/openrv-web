@@ -67,7 +67,7 @@ function createMockWebGL2Context() {
     disable: vi.fn(),
     blendFunc: vi.fn(),
     drawArrays: vi.fn(),
-    getExtension: vi.fn(() => ({ loseContext: vi.fn() })),
+    getExtension: vi.fn(() => ({ loseContext: vi.fn() })) as ReturnType<typeof vi.fn<[], { loseContext: ReturnType<typeof vi.fn> } | null>>,
   };
 }
 
@@ -555,7 +555,8 @@ describe('WebGLScopesProcessor', () => {
 
     it('WGS-035: dispose loses WebGL context', () => {
       const mockLoseContext = { loseContext: vi.fn() };
-      mockGl.getExtension = vi.fn(() => mockLoseContext);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (mockGl as any).getExtension = vi.fn(() => mockLoseContext);
 
       const processor = new WebGLScopesProcessor();
       processor.dispose();
@@ -565,7 +566,8 @@ describe('WebGLScopesProcessor', () => {
     });
 
     it('WGS-036: dispose handles missing WEBGL_lose_context extension', () => {
-      mockGl.getExtension = vi.fn(() => null);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (mockGl as any).getExtension = vi.fn(() => null);
 
       const processor = new WebGLScopesProcessor();
 

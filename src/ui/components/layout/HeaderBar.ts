@@ -6,11 +6,12 @@
  */
 
 import { EventEmitter, EventMap } from '../../../utils/EventEmitter';
-import { Session, LoopMode } from '../../../core/session/Session';
+import { Session, LoopMode, PLAYBACK_SPEED_PRESETS } from '../../../core/session/Session';
 import { filterImageFiles } from '../../../utils/SequenceLoader';
 import { VolumeControl } from '../VolumeControl';
 import { ExportControl } from '../ExportControl';
 import { TimecodeDisplay } from '../TimecodeDisplay';
+import { ThemeControl } from '../ThemeControl';
 import { showAlert } from '../shared/Modal';
 import { getIconSvg, IconName } from '../shared/Icons';
 
@@ -28,10 +29,12 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private volumeControl: VolumeControl;
   private exportControl: ExportControl;
   private timecodeDisplay: TimecodeDisplay;
+  private themeControl: ThemeControl;
 
   private playButton!: HTMLButtonElement;
   private loopButton!: HTMLButtonElement;
   private directionButton!: HTMLButtonElement;
+  private speedButton!: HTMLButtonElement;
   private fileInput!: HTMLInputElement;
   private projectInput!: HTMLInputElement;
 
@@ -41,6 +44,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.volumeControl = new VolumeControl();
     this.exportControl = new ExportControl();
     this.timecodeDisplay = new TimecodeDisplay(session);
+    this.themeControl = new ThemeControl();
 
     // Create container
     this.container = document.createElement('div');
@@ -121,6 +125,10 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.directionButton.style.minWidth = '28px';
     playbackGroup.appendChild(this.directionButton);
 
+    // Speed button
+    this.speedButton = this.createSpeedButton();
+    playbackGroup.appendChild(this.speedButton);
+
     this.container.appendChild(playbackGroup);
     this.addDivider();
 
@@ -137,6 +145,11 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
     // Volume control
     utilityGroup.appendChild(this.volumeControl.render());
+
+    // Theme control
+    const themeElement = this.themeControl.render();
+    themeElement.style.marginLeft = '8px';
+    utilityGroup.appendChild(themeElement);
 
     // Help button
     const helpButton = this.createIconButton('help', '', () => this.emit('showShortcuts', undefined), 'Keyboard shortcuts');
@@ -292,6 +305,88 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.session.togglePlayDirection();
   }
 
+  private createSpeedButton(): HTMLButtonElement {
+    const button = document.createElement('button');
+    button.dataset.testid = 'playback-speed-button';
+    button.title = 'Playback speed (J/K/L keys)';
+    button.style.cssText = `
+      background: transparent;
+      border: 1px solid transparent;
+      color: #bbb;
+      padding: 6px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      font-family: monospace;
+      transition: all 0.12s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 28px;
+      min-width: 42px;
+      margin-left: 4px;
+    `;
+
+    button.addEventListener('mouseenter', () => {
+      button.style.background = 'rgba(255,255,255,0.08)';
+      button.style.borderColor = 'rgba(255,255,255,0.1)';
+      button.style.color = '#fff';
+    });
+
+    button.addEventListener('mouseleave', () => {
+      const speed = this.session.playbackSpeed;
+      if (speed !== 1) {
+        button.style.background = 'rgba(74, 158, 255, 0.15)';
+        button.style.borderColor = '#4a9eff';
+        button.style.color = '#4a9eff';
+      } else {
+        button.style.background = 'transparent';
+        button.style.borderColor = 'transparent';
+        button.style.color = '#bbb';
+      }
+    });
+
+    button.addEventListener('click', () => this.cycleSpeed());
+
+    // Initial state
+    this.updateSpeedButtonText(button);
+    return button;
+  }
+
+  private cycleSpeed(): void {
+    const currentSpeed = this.session.playbackSpeed;
+    const currentIndex = PLAYBACK_SPEED_PRESETS.indexOf(currentSpeed as typeof PLAYBACK_SPEED_PRESETS[number]);
+    if (currentIndex >= 0 && currentIndex < PLAYBACK_SPEED_PRESETS.length - 1) {
+      const nextSpeed = PLAYBACK_SPEED_PRESETS[currentIndex + 1];
+      if (nextSpeed !== undefined) {
+        this.session.playbackSpeed = nextSpeed;
+        return;
+      }
+    }
+    // Reset to 1x when at max or not a preset
+    this.session.playbackSpeed = 1;
+  }
+
+  private updateSpeedButton(): void {
+    this.updateSpeedButtonText(this.speedButton);
+  }
+
+  private updateSpeedButtonText(button: HTMLButtonElement): void {
+    const speed = this.session.playbackSpeed;
+    button.textContent = `${speed}x`;
+
+    // Highlight when not at 1x
+    if (speed !== 1) {
+      button.style.background = 'rgba(74, 158, 255, 0.15)';
+      button.style.borderColor = '#4a9eff';
+      button.style.color = '#4a9eff';
+    } else {
+      button.style.background = 'transparent';
+      button.style.borderColor = 'transparent';
+      button.style.color = '#bbb';
+    }
+  }
+
   private updateLoopButton(): void {
     const icons: Record<LoopMode, IconName> = {
       once: 'repeat-once',
@@ -399,6 +494,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.session.on('playbackChanged', () => this.updatePlayButton());
     this.session.on('loopModeChanged', () => this.updateLoopButton());
     this.session.on('playDirectionChanged', () => this.updateDirectionButton());
+    this.session.on('playbackSpeedChanged', () => this.updateSpeedButton());
   }
 
   // Public accessors for child controls
@@ -414,6 +510,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.updateLoopButton();
     this.updatePlayButton();
     this.updateDirectionButton();
+    this.updateSpeedButton();
     return this.container;
   }
 
@@ -421,6 +518,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.volumeControl.dispose();
     this.exportControl.dispose();
     this.timecodeDisplay.dispose();
+    this.themeControl.dispose();
   }
 
   getTimecodeDisplay(): TimecodeDisplay {

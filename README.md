@@ -14,6 +14,7 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 - Exposure, gamma, saturation, contrast, brightness
 - Color temperature and tint
 - **Vibrance** with skin tone protection (hue 20-50° protected)
+- **Clarity/Local Contrast** - enhance midtone detail without affecting highlights/shadows
 - **Highlight/Shadow recovery** - recover detail in blown highlights and crushed shadows
 - Whites/Blacks controls for clipping adjustment
 - **Lift/Gamma/Gain Color Wheels** - three-way color correction for shadows, midtones, and highlights
@@ -33,6 +34,7 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 
 ### Comparison & Composition
 - Wipe comparison (horizontal/vertical split view)
+- **Difference Matte** - show pixel differences between A/B with gain and heatmap modes
 - Multi-layer stack with blend modes
 - A/B source switching with auto-assignment when loading multiple files
 - Quick toggle between sources with backtick key
@@ -66,7 +68,9 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 
 ### Annotations
 - Pen tool with pressure sensitivity
-- Text annotations
+- Text annotations with formatting (bold, italic, underline, background color, callouts)
+- **Shape Tools** - Rectangle, ellipse, line, arrow, and polygon with fill/stroke options
+- **Spotlight Tool** - Dim everything except highlighted region (circle or rectangle)
 - Eraser and brush types
 - Ghost mode (show nearby frame annotations)
 - Hold mode (persist annotations across frames)
@@ -74,10 +78,17 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 
 ### Playback
 - Frame-accurate timeline with scrubbing
-- In/out points and markers
+- In/out points and **markers with notes** (color-coded, with text annotations)
 - Loop modes (once, loop, ping-pong)
+- **Playback speed control** (0.1x to 8x) with J/K/L shortcuts
+- **Cache indicator** showing cached frames and memory usage
 - Audio waveform display
 - Volume control with mute
+
+### UI/UX
+- **Dark/Light Theme** with auto (system) mode and Shift+T shortcut
+- **History Panel** - visual undo/redo with jump to any state
+- **Floating Info Panel** - filename, resolution, frame, FPS, and cursor color readout
 
 ### Export
 - Frame export (PNG/JPEG/WebP)
@@ -121,6 +132,9 @@ pnpm dev
 | `R` | Reset in/out points |
 | `M` | Toggle mark at current frame |
 | `L` | Cycle loop mode (once/loop/ping-pong) |
+| `J` | Decrease playback speed |
+| `K` | Pause playback |
+| `L` | Increase playback speed |
 
 #### View & Navigation
 | Key | Action |
@@ -136,6 +150,7 @@ pnpm dev
 |-----|--------|
 | `` ` `` (backtick) | Toggle between A/B sources |
 | `~` (tilde) | Toggle between A/B sources |
+| `Shift+D` | Toggle difference matte |
 
 #### Scopes & Wipe
 | Key | Action |
@@ -188,9 +203,17 @@ pnpm dev
 | Key | Action |
 |-----|--------|
 | `P` | Toggle paint mode |
+| `Shift+Q` | Toggle spotlight |
 | `Ctrl+Z` | Undo |
 | `Ctrl+Shift+Z` | Redo |
 | `< / >` | Jump to prev/next annotation |
+
+#### UI Panels
+| Key | Action |
+|-----|--------|
+| `Shift+T` | Cycle theme (auto/dark/light) |
+| `Shift+Alt+H` | Toggle history panel |
+| `Shift+Alt+I` | Toggle info panel |
 
 #### Export
 | Key | Action |

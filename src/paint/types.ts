@@ -35,6 +35,14 @@ export enum TextOrigin {
   BottomRight = 8,
 }
 
+export enum ShapeType {
+  Rectangle = 'rectangle',
+  Ellipse = 'ellipse',
+  Line = 'line',
+  Arrow = 'arrow',
+  Polygon = 'polygon',
+}
+
 export const RV_PEN_WIDTH_SCALE = 500;
 export const RV_TEXT_SIZE_SCALE = 2000;
 
@@ -80,9 +88,40 @@ export interface TextAnnotation {
   origin: TextOrigin;
   startFrame: number;
   duration: number;
+  // Enhanced text styling properties
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  backgroundColor?: [number, number, number, number]; // RGBA 0-1 for text background/highlight
+  // Callout support - endpoint of leader line from text position
+  calloutPoint?: Point;
 }
 
-export type Annotation = PenStroke | TextAnnotation;
+export interface ShapeAnnotation {
+  type: 'shape';
+  id: string;
+  frame: number;
+  user: string;
+  shapeType: ShapeType;
+  // Bounding points (normalized 0-1)
+  startPoint: Point; // First corner or start of line
+  endPoint: Point;   // Opposite corner or end of line
+  // Styling
+  strokeColor: [number, number, number, number]; // RGBA 0-1
+  strokeWidth: number;
+  fillColor?: [number, number, number, number]; // RGBA 0-1, undefined = no fill
+  // Transform
+  rotation: number; // Degrees
+  // Shape-specific options
+  cornerRadius?: number; // For rounded rectangles (0-1, fraction of smaller dimension)
+  arrowheadSize?: number; // For arrows, size of arrowhead
+  points?: Point[]; // For polygons, array of vertices (normalized 0-1)
+  // Visibility
+  startFrame: number;
+  duration: number;
+}
+
+export type Annotation = PenStroke | TextAnnotation | ShapeAnnotation;
 
 export interface PaintEffects {
   hold: boolean;

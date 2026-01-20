@@ -8,6 +8,12 @@ export const SAMPLE_IMAGE = 'sample/test_image.png';
 export const SAMPLE_RV_SESSION = 'sample/test_session.rv';
 
 // Types matching test-helper.ts
+export interface MarkerData {
+  frame: number;
+  note: string;
+  color: string;
+}
+
 export interface SessionState {
   currentFrame: number;
   frameCount: number;
@@ -16,13 +22,15 @@ export interface SessionState {
   isPlaying: boolean;
   loopMode: 'once' | 'loop' | 'pingpong';
   playDirection: number;
+  playbackSpeed: number;
   volume: number;
   muted: boolean;
   fps: number;
   hasMedia: boolean;
   mediaType: string | null;
   mediaName: string | null;
-  marks: number[];
+  marks: number[]; // Legacy: just frame numbers
+  markers: MarkerData[]; // Full marker data with notes and colors
   // A/B Compare state
   currentAB: 'A' | 'B';
   sourceAIndex: number;
@@ -49,6 +57,10 @@ export interface ViewerState {
   waveformMode: 'luma' | 'rgb' | 'parade';
   vectorscopeVisible: boolean;
   vectorscopeZoom: number;
+  // Difference matte state
+  differenceMatteEnabled: boolean;
+  differenceMatteGain: number;
+  differenceMatteHeatmap: boolean;
 }
 
 export interface ColorState {
@@ -58,6 +70,7 @@ export interface ColorState {
   vibrance: number;
   vibranceSkinProtection: boolean;
   contrast: number;
+  clarity: number;
   temperature: number;
   tint: number;
   brightness: number;
@@ -111,6 +124,36 @@ export interface ColorWheelsState {
   canRedo: boolean;
 }
 
+export interface SpotlightState {
+  enabled: boolean;
+  shape: 'circle' | 'rectangle';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  dimAmount: number;
+  feather: number;
+}
+
+export interface HistoryPanelState {
+  visible: boolean;
+  entryCount: number;
+  currentIndex: number;
+  canUndo: boolean;
+  canRedo: boolean;
+}
+
+export interface InfoPanelState {
+  enabled: boolean;
+  position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  filename: string | null;
+  resolution: string | null;
+  currentFrame: number;
+  totalFrames: number;
+  fps: number;
+  colorAtCursor: { r: number; g: number; b: number } | null;
+}
+
 export interface TransformState {
   rotation: 0 | 90 | 180 | 270;
   flipH: boolean;
@@ -131,6 +174,19 @@ export interface PaintState {
   canRedo: boolean;
 }
 
+export interface CacheIndicatorState {
+  visible: boolean;
+  cachedCount: number;
+  pendingCount: number;
+  totalFrames: number;
+  isUsingMediabunny: boolean;
+}
+
+export interface ThemeState {
+  mode: 'dark' | 'light' | 'auto';
+  resolvedTheme: 'dark' | 'light';
+}
+
 /**
  * Get session state from the app
  */
@@ -144,6 +200,7 @@ export async function getSessionState(page: Page): Promise<SessionState> {
       isPlaying: false,
       loopMode: 'loop',
       playDirection: 1,
+      playbackSpeed: 1,
       volume: 0.7,
       muted: false,
       fps: 24,
@@ -151,6 +208,7 @@ export async function getSessionState(page: Page): Promise<SessionState> {
       mediaType: null,
       mediaName: null,
       marks: [],
+      markers: [],
       currentAB: 'A',
       sourceAIndex: 0,
       sourceBIndex: -1,
@@ -183,6 +241,9 @@ export async function getViewerState(page: Page): Promise<ViewerState> {
       waveformMode: 'luma',
       vectorscopeVisible: false,
       vectorscopeZoom: 1,
+      differenceMatteEnabled: false,
+      differenceMatteGain: 1,
+      differenceMatteHeatmap: false,
     };
   });
 }
@@ -285,6 +346,84 @@ export async function getColorWheelsState(page: Page): Promise<ColorWheelsState>
       visible: false,
       canUndo: false,
       canRedo: false,
+    };
+  });
+}
+
+/**
+ * Get spotlight state from the app
+ */
+export async function getSpotlightState(page: Page): Promise<SpotlightState> {
+  return page.evaluate(() => {
+    return window.__OPENRV_TEST__?.getSpotlightState() ?? {
+      enabled: false,
+      shape: 'circle',
+      x: 0.5,
+      y: 0.5,
+      width: 0.2,
+      height: 0.2,
+      dimAmount: 0.7,
+      feather: 0.05,
+    };
+  });
+}
+
+/**
+ * Get history panel state from the app
+ */
+export async function getHistoryPanelState(page: Page): Promise<HistoryPanelState> {
+  return page.evaluate(() => {
+    return window.__OPENRV_TEST__?.getHistoryPanelState() ?? {
+      visible: false,
+      entryCount: 0,
+      currentIndex: -1,
+      canUndo: false,
+      canRedo: false,
+    };
+  });
+}
+
+/**
+ * Get info panel state from the app
+ */
+export async function getInfoPanelState(page: Page): Promise<InfoPanelState> {
+  return page.evaluate(() => {
+    return window.__OPENRV_TEST__?.getInfoPanelState() ?? {
+      enabled: false,
+      position: 'top-left',
+      filename: null,
+      resolution: null,
+      currentFrame: 0,
+      totalFrames: 0,
+      fps: 0,
+      colorAtCursor: null,
+    };
+  });
+}
+
+/**
+ * Get cache indicator state from the app
+ */
+export async function getCacheIndicatorState(page: Page): Promise<CacheIndicatorState> {
+  return page.evaluate(() => {
+    return window.__OPENRV_TEST__?.getCacheIndicatorState() ?? {
+      visible: false,
+      cachedCount: 0,
+      pendingCount: 0,
+      totalFrames: 0,
+      isUsingMediabunny: false,
+    };
+  });
+}
+
+/**
+ * Get theme state from the app
+ */
+export async function getThemeState(page: Page): Promise<ThemeState> {
+  return page.evaluate(() => {
+    return window.__OPENRV_TEST__?.getThemeState() ?? {
+      mode: 'auto',
+      resolvedTheme: 'dark',
     };
   });
 }
@@ -828,6 +967,7 @@ export async function getExtendedSessionState(page: Page): Promise<SessionState 
       isPlaying: false,
       loopMode: 'loop',
       playDirection: 1,
+      playbackSpeed: 1,
       volume: 0.7,
       muted: false,
       fps: 24,
@@ -835,6 +975,7 @@ export async function getExtendedSessionState(page: Page): Promise<SessionState 
       mediaType: null,
       mediaName: null,
       marks: [],
+      markers: [],
       currentAB: 'A',
       sourceAIndex: 0,
       sourceBIndex: -1,

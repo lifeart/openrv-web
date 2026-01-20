@@ -424,6 +424,34 @@ export class FramePreloadManager<T> {
   }
 
   /**
+   * Get the set of cached frame numbers
+   */
+  getCachedFrames(): Set<number> {
+    return new Set(this.cache.keys());
+  }
+
+  /**
+   * Get the set of pending (loading) frame numbers
+   */
+  getPendingFrames(): Set<number> {
+    return new Set(this.pendingRequests.keys());
+  }
+
+  /**
+   * Get total frames count
+   */
+  getTotalFrames(): number {
+    return this.totalFrames;
+  }
+
+  /**
+   * Get max cache size
+   */
+  getMaxCacheSize(): number {
+    return this.config.maxCacheSize;
+  }
+
+  /**
    * Reset statistics counters (useful for benchmarking)
    */
   resetStats(): void {

@@ -10,6 +10,7 @@ export interface ColorAdjustments {
   vibrance: number;      // -100 to +100 (intelligent saturation)
   vibranceSkinProtection: boolean;  // Protect skin tones from vibrance (default: true)
   contrast: number;      // 0 to 2 (1 = normal)
+  clarity: number;       // -100 to +100 (local contrast / midtone detail)
   temperature: number;   // -100 to +100 (kelvin shift)
   tint: number;          // -100 to +100 (green/magenta)
   brightness: number;    // -1 to +1
@@ -26,6 +27,7 @@ export const DEFAULT_COLOR_ADJUSTMENTS: ColorAdjustments = {
   vibrance: 0,
   vibranceSkinProtection: true,
   contrast: 1,
+  clarity: 0,
   temperature: 0,
   tint: 0,
   brightness: 0,
@@ -149,6 +151,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
       { key: 'exposure', label: 'Exposure', min: -5, max: 5, step: 0.1, format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(1)}` },
       { key: 'brightness', label: 'Brightness', min: -1, max: 1, step: 0.01, format: (v) => `${v > 0 ? '+' : ''}${(v * 100).toFixed(0)}%` },
       { key: 'contrast', label: 'Contrast', min: 0, max: 2, step: 0.01, format: (v) => `${(v * 100).toFixed(0)}%` },
+      { key: 'clarity', label: 'Clarity', min: -100, max: 100, step: 1, format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}` },
       { key: 'gamma', label: 'Gamma', min: 0.1, max: 4, step: 0.01, format: (v) => v.toFixed(2) },
       { key: 'saturation', label: 'Saturation', min: 0, max: 2, step: 0.01, format: (v) => `${(v * 100).toFixed(0)}%` },
       { key: 'vibrance', label: 'Vibrance', min: -100, max: 100, step: 1, format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}` },
@@ -444,6 +447,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     slider.max = String(config.max);
     slider.step = String(config.step);
     slider.value = String(this.adjustments[config.key]);
+    slider.dataset.testid = `slider-${config.key}`;
     slider.style.cssText = `
       flex: 1;
       height: 4px;
@@ -618,6 +622,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
       exposure: (v) => `${v > 0 ? '+' : ''}${v.toFixed(1)}`,
       brightness: (v) => `${v > 0 ? '+' : ''}${(v * 100).toFixed(0)}%`,
       contrast: (v) => `${(v * 100).toFixed(0)}%`,
+      clarity: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
       gamma: (v) => v.toFixed(2),
       saturation: (v) => `${(v * 100).toFixed(0)}%`,
       vibrance: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,

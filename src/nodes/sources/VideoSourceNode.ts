@@ -382,6 +382,46 @@ export class VideoSourceNode extends BaseSourceNode {
   }
 
   /**
+   * Get the set of cached frame numbers
+   */
+  getCachedFrames(): Set<number> {
+    return this.preloadManager?.getCachedFrames() ?? new Set();
+  }
+
+  /**
+   * Get the set of pending (loading) frame numbers
+   */
+  getPendingFrames(): Set<number> {
+    return this.preloadManager?.getPendingFrames() ?? new Set();
+  }
+
+  /**
+   * Get cache statistics
+   */
+  getCacheStats(): {
+    cachedCount: number;
+    pendingCount: number;
+    totalFrames: number;
+    maxCacheSize: number;
+  } | null {
+    if (!this.preloadManager) return null;
+    const stats = this.preloadManager.getStats();
+    return {
+      cachedCount: stats.cacheSize,
+      pendingCount: stats.pendingRequests,
+      totalFrames: this.preloadManager.getTotalFrames(),
+      maxCacheSize: this.preloadManager.getMaxCacheSize(),
+    };
+  }
+
+  /**
+   * Clear the frame cache
+   */
+  clearCache(): void {
+    this.preloadManager?.clear();
+  }
+
+  /**
    * Preload frames around the current frame
    * Uses FramePreloadManager for intelligent priority-based preloading
    * Respects current playback state (playback vs scrub mode)

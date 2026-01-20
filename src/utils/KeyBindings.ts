@@ -40,6 +40,20 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     description: 'Go to last frame'
   },
 
+  // Speed controls (JKL system)
+  'playback.slower': {
+    code: 'KeyJ',
+    description: 'Decrease playback speed'
+  },
+  'playback.stop': {
+    code: 'KeyK',
+    description: 'Stop playback'
+  },
+  'playback.faster': {
+    code: 'KeyL',
+    description: 'Increase playback speed'
+  },
+
   // Timeline controls
   'timeline.setInPoint': {
     code: 'KeyI',
@@ -67,6 +81,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   },
   'timeline.cycleLoopMode': {
     code: 'KeyL',
+    ctrl: true,
     description: 'Cycle loop mode'
   },
 
@@ -102,6 +117,11 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     shift: true,
     description: 'Toggle A/B source compare (alternative)'
   },
+  'view.toggleDifferenceMatte': {
+    code: 'KeyD',
+    shift: true,
+    description: 'Toggle difference matte mode'
+  },
 
   // Panel toggles
   'panel.color': {
@@ -118,6 +138,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   },
   'panel.crop': {
     code: 'KeyK',
+    shift: true,
     description: 'Toggle crop mode'
   },
   'panel.waveform': {
@@ -324,6 +345,36 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     shift: true,
     alt: true,
     description: 'Toggle Lift/Gamma/Gain color wheels'
+  },
+
+  // Spotlight / Focus tool
+  'view.toggleSpotlight': {
+    code: 'KeyQ',
+    shift: true,
+    description: 'Toggle spotlight focus tool'
+  },
+
+  // History panel
+  'panel.history': {
+    code: 'KeyH',
+    shift: true,
+    alt: true,
+    description: 'Toggle undo/redo history panel'
+  },
+
+  // Info panel
+  'view.toggleInfoPanel': {
+    code: 'KeyI',
+    shift: true,
+    alt: true,
+    description: 'Toggle info panel overlay'
+  },
+
+  // Theme control
+  'theme.cycle': {
+    code: 'KeyT',
+    shift: true,
+    description: 'Cycle theme'
   },
 };
 /**
