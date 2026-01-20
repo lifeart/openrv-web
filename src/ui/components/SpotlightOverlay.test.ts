@@ -8,6 +8,110 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SpotlightOverlay, DEFAULT_SPOTLIGHT_STATE, SpotlightShape } from './SpotlightOverlay';
 
+describe('SpotlightOverlay hi-DPI support', () => {
+  let spotlight: SpotlightOverlay;
+  let originalDevicePixelRatio: number;
+
+  const setDevicePixelRatio = (value: number) => {
+    Object.defineProperty(window, 'devicePixelRatio', {
+      value,
+      writable: true,
+      configurable: true,
+    });
+  };
+
+  beforeEach(() => {
+    originalDevicePixelRatio = window.devicePixelRatio;
+  });
+
+  afterEach(() => {
+    if (spotlight) {
+      spotlight.dispose();
+    }
+    Object.defineProperty(window, 'devicePixelRatio', {
+      value: originalDevicePixelRatio,
+      writable: true,
+      configurable: true,
+    });
+  });
+
+  it('SPOT-U130: canvas physical dimensions scale with DPR after setViewerDimensions', () => {
+    setDevicePixelRatio(2);
+    spotlight = new SpotlightOverlay();
+    const canvas = spotlight.getElement();
+
+    spotlight.setViewerDimensions(800, 600, 0, 0, 800, 600);
+
+    // Physical dimensions should be 2x logical (800x600 -> 1600x1200)
+    expect(canvas.width).toBe(1600);
+    expect(canvas.height).toBe(1200);
+  });
+
+  it('SPOT-U131: canvas renders correctly at 3x DPR', () => {
+    setDevicePixelRatio(3);
+    spotlight = new SpotlightOverlay();
+    const canvas = spotlight.getElement();
+
+    spotlight.setViewerDimensions(800, 600, 0, 0, 800, 600);
+
+    expect(canvas.width).toBe(2400);
+    expect(canvas.height).toBe(1800);
+  });
+
+  it('SPOT-U132: render works correctly at high DPR', () => {
+    setDevicePixelRatio(2);
+    spotlight = new SpotlightOverlay();
+
+    spotlight.setState({
+      enabled: true,
+      shape: 'circle',
+      x: 0.5,
+      y: 0.5,
+      width: 0.3,
+      height: 0.3,
+      dimAmount: 0.7,
+      feather: 0.1,
+    });
+    spotlight.setViewerDimensions(800, 600, 0, 0, 800, 600);
+
+    expect(() => spotlight.render()).not.toThrow();
+  });
+
+  it('SPOT-U133: all shapes render at high DPR', () => {
+    setDevicePixelRatio(2);
+    spotlight = new SpotlightOverlay();
+
+    spotlight.enable();
+    spotlight.setViewerDimensions(800, 600, 0, 0, 800, 600);
+
+    // Both shapes should render without error at high DPR
+    expect(() => {
+      spotlight.setShape('circle');
+      spotlight.render();
+      spotlight.setShape('rectangle');
+      spotlight.render();
+    }).not.toThrow();
+  });
+
+  it('SPOT-U134: position and size changes work at high DPR', () => {
+    setDevicePixelRatio(2);
+    spotlight = new SpotlightOverlay();
+
+    spotlight.enable();
+    spotlight.setViewerDimensions(800, 600, 0, 0, 800, 600);
+
+    expect(() => {
+      spotlight.setPosition(0.25, 0.75);
+      spotlight.setSize(0.4, 0.3);
+      spotlight.setFeather(0.15);
+      spotlight.setDimAmount(0.8);
+    }).not.toThrow();
+
+    expect(spotlight.getState().x).toBe(0.25);
+    expect(spotlight.getState().width).toBe(0.4);
+  });
+});
+
 describe('SpotlightOverlay', () => {
   let spotlight: SpotlightOverlay;
 

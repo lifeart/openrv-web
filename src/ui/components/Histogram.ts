@@ -17,6 +17,7 @@ import {
   createControlButton,
   DraggableContainer,
 } from './shared/DraggableContainer';
+import { setupHiDPICanvas } from '../../utils/HiDPICanvas';
 
 export type HistogramMode = 'rgb' | 'luminance' | 'separate';
 
@@ -73,10 +74,8 @@ export class Histogram extends EventEmitter<HistogramEvents> {
       onClose: () => this.hide(),
     });
 
-    // Create canvas
+    // Create canvas with hi-DPI support
     this.canvas = document.createElement('canvas');
-    this.canvas.width = HISTOGRAM_WIDTH;
-    this.canvas.height = HISTOGRAM_HEIGHT;
     this.canvas.style.cssText = `
       display: block;
       background: #111;
@@ -84,6 +83,14 @@ export class Histogram extends EventEmitter<HistogramEvents> {
     `;
 
     this.ctx = this.canvas.getContext('2d')!;
+
+    // Setup hi-DPI canvas scaling
+    setupHiDPICanvas({
+      canvas: this.canvas,
+      ctx: this.ctx,
+      width: HISTOGRAM_WIDTH,
+      height: HISTOGRAM_HEIGHT,
+    });
 
     // Add controls and canvas
     this.createControls();
@@ -318,9 +325,9 @@ export class Histogram extends EventEmitter<HistogramEvents> {
     // Try GPU rendering for bar display (uses CPU-computed histogram data)
     const gpuProcessor = getSharedScopesProcessor();
     if (gpuProcessor && gpuProcessor.isReady() && this.mode !== 'separate' && this.data) {
-      // Clear canvas with dark background before GPU overlay
+      // Clear canvas with dark background before GPU overlay (use logical dimensions)
       this.ctx.fillStyle = '#111';
-      this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+      this.ctx.fillRect(0, 0, HISTOGRAM_WIDTH, HISTOGRAM_HEIGHT);
 
       gpuProcessor.renderHistogram(this.canvas, this.data, this.mode, this.logScale);
       return;
@@ -350,14 +357,16 @@ export class Histogram extends EventEmitter<HistogramEvents> {
   draw(): void {
     if (!this.data) return;
 
-    const { ctx, canvas } = this;
+    const { ctx } = this;
     const { red, green, blue, luminance, maxValue } = this.data;
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Use logical dimensions for drawing (hi-DPI context is scaled)
+    const width = HISTOGRAM_WIDTH;
+    const height = HISTOGRAM_HEIGHT;
+
+    ctx.clearRect(0, 0, width, height);
 
     if (maxValue === 0) return;
-
-    const height = canvas.height;
     const normalize = this.logScale
       ? (v: number) => (v > 0 ? Math.log(v + 1) / Math.log(maxValue + 1) : 0)
       : (v: number) => v / maxValue;
@@ -424,9 +433,9 @@ export class Histogram extends EventEmitter<HistogramEvents> {
       ctx.strokeStyle = 'rgba(100, 100, 100, 0.5)';
       ctx.beginPath();
       ctx.moveTo(0, sectionHeight);
-      ctx.lineTo(canvas.width, sectionHeight);
+      ctx.lineTo(width, sectionHeight);
       ctx.moveTo(0, sectionHeight * 2);
-      ctx.lineTo(canvas.width, sectionHeight * 2);
+      ctx.lineTo(width, sectionHeight * 2);
       ctx.stroke();
     }
   }

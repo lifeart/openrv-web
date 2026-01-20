@@ -17,6 +17,7 @@ import {
   createControlButton,
   DraggableContainer,
 } from './shared/DraggableContainer';
+import { setupHiDPICanvas } from '../../utils/HiDPICanvas';
 
 export interface VectorscopeEvents extends EventMap {
   visibilityChanged: boolean;
@@ -51,6 +52,7 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
   private zoomButton: HTMLButtonElement | null = null;
   private lastImageData: ImageData | null = null;
   private isPlaybackMode = false;
+  private dpr = 1;
 
   constructor() {
     super();
@@ -63,10 +65,8 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
       onClose: () => this.hide(),
     });
 
-    // Create canvas
+    // Create canvas with hi-DPI support
     this.canvas = document.createElement('canvas');
-    this.canvas.width = VECTORSCOPE_SIZE;
-    this.canvas.height = VECTORSCOPE_SIZE;
     this.canvas.style.cssText = `
       display: block;
       background: #111;
@@ -74,6 +74,15 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
     `;
 
     this.ctx = this.canvas.getContext('2d')!;
+
+    // Setup hi-DPI canvas scaling
+    const result = setupHiDPICanvas({
+      canvas: this.canvas,
+      ctx: this.ctx,
+      width: VECTORSCOPE_SIZE,
+      height: VECTORSCOPE_SIZE,
+    });
+    this.dpr = result.dpr;
 
     // Add controls and canvas
     this.createControls();
@@ -100,14 +109,16 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
    * Draw the graticule (grid and color targets)
    */
   private drawGraticule(): void {
-    const { ctx, canvas } = this;
-    const centerX = canvas.width / 2;
-    const centerY = canvas.height / 2;
+    const { ctx } = this;
+    // Use logical dimensions for drawing (hi-DPI context is scaled)
+    const size = VECTORSCOPE_SIZE;
+    const centerX = size / 2;
+    const centerY = size / 2;
     const radius = GRATICULE_RADIUS;
 
     // Clear canvas
     ctx.fillStyle = '#111';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, size, size);
 
     // Draw circular grid
     ctx.strokeStyle = 'rgba(100, 100, 100, 0.3)';
@@ -265,20 +276,25 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
    * CPU-based vectorscope rendering (fallback)
    */
   private drawCPU(imageData: ImageData): void {
-    const { ctx, canvas } = this;
+    const { ctx, canvas, dpr } = this;
     const { data, width, height } = imageData;
-    const centerX = canvas.width / 2;
-    const centerY = canvas.height / 2;
-    const radius = GRATICULE_RADIUS * this.effectiveZoom;
 
-    // Redraw graticule
+    // Redraw graticule (uses logical coordinates via scaled context)
     this.drawGraticule();
+
+    // For getImageData/putImageData, we work in physical pixel coordinates
+    // because these operations bypass the context transform
+    const physicalWidth = canvas.width;
+    const physicalHeight = canvas.height;
+    const centerX = physicalWidth / 2;
+    const centerY = physicalHeight / 2;
+    const radius = GRATICULE_RADIUS * this.effectiveZoom * dpr;
 
     // Sample pixels and plot on vectorscope
     const sampleStep = Math.max(1, Math.floor(Math.sqrt(width * height / 10000)));
 
-    // Use a data image for efficient point plotting
-    const plotData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    // Use a data image for efficient point plotting (physical pixels)
+    const plotData = ctx.getImageData(0, 0, physicalWidth, physicalHeight);
     const pixels = plotData.data;
 
     for (let srcY = 0; srcY < height; srcY += sampleStep) {
@@ -295,13 +311,13 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
         const cb = -0.169 * r - 0.331 * g + 0.5 * b;
         const cr = 0.5 * r - 0.419 * g - 0.081 * b;
 
-        // Convert to canvas coordinates (Cb horizontal, Cr vertical)
+        // Convert to canvas coordinates (Cb horizontal, Cr vertical) in physical pixels
         const plotX = Math.floor(centerX + cb * radius * 2);
         const plotY = Math.floor(centerY - cr * radius * 2);
 
         // Check bounds
-        if (plotX >= 0 && plotX < canvas.width && plotY >= 0 && plotY < canvas.height) {
-          const pIdx = (plotY * canvas.width + plotX) * 4;
+        if (plotX >= 0 && plotX < physicalWidth && plotY >= 0 && plotY < physicalHeight) {
+          const pIdx = (plotY * physicalWidth + plotX) * 4;
           // Add to existing color with some transparency
           pixels[pIdx] = Math.min(255, (pixels[pIdx] || 0) + 50);
           pixels[pIdx + 1] = Math.min(255, (pixels[pIdx + 1] || 0) + 50);

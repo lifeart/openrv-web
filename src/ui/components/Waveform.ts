@@ -18,6 +18,7 @@ import {
   createControlButton,
   DraggableContainer,
 } from './shared/DraggableContainer';
+import { setupHiDPICanvas } from '../../utils/HiDPICanvas';
 
 export type WaveformMode = 'luma' | 'rgb' | 'parade';
 
@@ -51,10 +52,8 @@ export class Waveform extends EventEmitter<WaveformEvents> {
       onClose: () => this.hide(),
     });
 
-    // Create canvas
+    // Create canvas with hi-DPI support
     this.canvas = document.createElement('canvas');
-    this.canvas.width = WAVEFORM_WIDTH;
-    this.canvas.height = WAVEFORM_HEIGHT;
     this.canvas.style.cssText = `
       display: block;
       background: #111;
@@ -62,6 +61,14 @@ export class Waveform extends EventEmitter<WaveformEvents> {
     `;
 
     this.ctx = this.canvas.getContext('2d')!;
+
+    // Setup hi-DPI canvas scaling
+    setupHiDPICanvas({
+      canvas: this.canvas,
+      ctx: this.ctx,
+      width: WAVEFORM_WIDTH,
+      height: WAVEFORM_HEIGHT,
+    });
 
     // Add controls and canvas
     this.createControls();
@@ -114,9 +121,9 @@ export class Waveform extends EventEmitter<WaveformEvents> {
     if (gpuProcessor && gpuProcessor.isReady()) {
       gpuProcessor.setPlaybackMode(this.isPlaybackMode);
       gpuProcessor.setImage(imageData);
-      // Draw background and grid first (CPU)
+      // Draw background and grid first (CPU) - use logical dimensions
       this.ctx.fillStyle = '#111';
-      this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+      this.ctx.fillRect(0, 0, WAVEFORM_WIDTH, WAVEFORM_HEIGHT);
       this.drawGrid();
       // Then GPU waveform overlay
       gpuProcessor.renderWaveform(this.canvas, this.mode as GPUWaveformMode);
@@ -140,10 +147,11 @@ export class Waveform extends EventEmitter<WaveformEvents> {
    * Draw waveform to canvas
    */
   private draw(imageData: ImageData): void {
-    const { ctx, canvas } = this;
+    const { ctx } = this;
     const { data, width, height } = imageData;
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Use logical dimensions for drawing (hi-DPI context is scaled)
+    ctx.clearRect(0, 0, WAVEFORM_WIDTH, WAVEFORM_HEIGHT);
 
     // Draw grid lines
     this.drawGrid();
@@ -158,26 +166,27 @@ export class Waveform extends EventEmitter<WaveformEvents> {
   }
 
   private drawGrid(): void {
-    const { ctx, canvas } = this;
+    const { ctx } = this;
 
     ctx.strokeStyle = 'rgba(100, 100, 100, 0.3)';
     ctx.lineWidth = 1;
 
-    // Horizontal lines at 25%, 50%, 75%
+    // Horizontal lines at 25%, 50%, 75% - use logical dimensions
     const levels = [0.25, 0.5, 0.75];
     for (const level of levels) {
-      const y = Math.floor(canvas.height * (1 - level));
+      const y = Math.floor(WAVEFORM_HEIGHT * (1 - level));
       ctx.beginPath();
       ctx.moveTo(0, y);
-      ctx.lineTo(canvas.width, y);
+      ctx.lineTo(WAVEFORM_WIDTH, y);
       ctx.stroke();
     }
   }
 
   private drawLumaWaveform(data: Uint8ClampedArray, srcWidth: number, srcHeight: number): void {
-    const { ctx, canvas } = this;
-    const canvasWidth = canvas.width;
-    const canvasHeight = canvas.height;
+    const { ctx } = this;
+    // Use logical dimensions for drawing
+    const canvasWidth = WAVEFORM_WIDTH;
+    const canvasHeight = WAVEFORM_HEIGHT;
 
     // Sample every Nth column to fit canvas width
     const sampleStep = Math.max(1, Math.floor(srcWidth / canvasWidth));
@@ -211,9 +220,10 @@ export class Waveform extends EventEmitter<WaveformEvents> {
   }
 
   private drawRGBOverlayWaveform(data: Uint8ClampedArray, srcWidth: number, srcHeight: number): void {
-    const { ctx, canvas } = this;
-    const canvasWidth = canvas.width;
-    const canvasHeight = canvas.height;
+    const { ctx } = this;
+    // Use logical dimensions for drawing
+    const canvasWidth = WAVEFORM_WIDTH;
+    const canvasHeight = WAVEFORM_HEIGHT;
 
     const sampleStep = Math.max(1, Math.floor(srcWidth / canvasWidth));
     const pixelsPerColumn = Math.ceil(srcWidth / canvasWidth);
@@ -253,8 +263,9 @@ export class Waveform extends EventEmitter<WaveformEvents> {
   }
 
   private drawParadeWaveform(data: Uint8ClampedArray, srcWidth: number, srcHeight: number): void {
-    const { ctx, canvas } = this;
-    const canvasHeight = canvas.height;
+    const { ctx } = this;
+    // Use logical dimensions for drawing
+    const canvasHeight = WAVEFORM_HEIGHT;
 
     const sectionWidth = PARADE_SECTION_WIDTH;
     const sampleStep = Math.max(1, Math.floor(srcWidth / sectionWidth));

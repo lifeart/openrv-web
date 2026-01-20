@@ -96,6 +96,7 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 - **Dark/Light Theme** with auto (system) mode and Shift+T shortcut
 - **History Panel** - visual undo/redo with jump to any state
 - **Floating Info Panel** - filename, resolution, frame, FPS, and cursor color readout
+- **Hi-DPI/Retina Display Support** - crisp rendering on high-density displays (2x, 3x DPR)
 
 ### Export
 - Frame export (PNG/JPEG/WebP)
@@ -257,7 +258,8 @@ src/
 ├── stereo/             # Stereoscopic 3D viewing modes
 ├── transform/          # Lens distortion
 ├── composite/          # Blend modes
-└── utils/              # EventEmitter, FrameExporter, SequenceLoader
+├── scopes/             # GPU-accelerated scopes (Histogram, Waveform, Vectorscope)
+└── utils/              # EventEmitter, FrameExporter, SequenceLoader, HiDPICanvas
 ```
 
 ### Keyboard Management
@@ -344,11 +346,60 @@ pnpm preview
 
 The codebase includes comprehensive test coverage with **3200+ unit tests** across 90+ test files:
 
-- **Color Tools**: ColorWheels (33 tests), FalseColor (30 tests), HSLQualifier (57 tests), Curves, CDL
-- **Analysis**: ZebraStripes (49 tests), PixelProbe (45 tests), ClippingOverlay (48 tests), Waveform, Histogram, Vectorscope
-- **Overlays**: TimecodeOverlay (50 tests), SafeAreasOverlay (38 tests)
-- **UI Components**: ThemeControl, HistoryPanel, InfoPanel, Modal, Button
+- **Color Tools**: ColorWheels (46 tests), FalseColor (30 tests), HSLQualifier (57 tests), Curves, CDL
+- **Analysis**: ZebraStripes (49 tests), PixelProbe (45 tests), ClippingOverlay (48 tests), Waveform (50 tests), Histogram (45 tests), Vectorscope (49 tests)
+- **Overlays**: TimecodeOverlay (50 tests), SafeAreasOverlay (46 tests), SpotlightOverlay (62 tests)
+- **UI Components**: ThemeControl, HistoryPanel, InfoPanel, Modal, Button, CurveEditor (33 tests)
 - **Core**: Session, Graph, GTO loading/export, SequenceLoader
+- **Utilities**: HiDPICanvas (32 tests) - hi-DPI display support with coordinate conversion
+
+### Hi-DPI Canvas Support
+
+All canvas-based components support hi-DPI/Retina displays using the `HiDPICanvas` utility:
+
+```typescript
+import { setupHiDPICanvas, clientToCanvasCoordinates } from '../../utils/HiDPICanvas';
+
+// Setup canvas for hi-DPI rendering
+const canvas = document.createElement('canvas');
+const ctx = canvas.getContext('2d')!;
+
+const result = setupHiDPICanvas({
+  canvas,
+  ctx,
+  width: 256,   // Logical width (CSS pixels)
+  height: 100,  // Logical height (CSS pixels)
+});
+
+// Result contains: { dpr, physicalWidth, physicalHeight, logicalWidth, logicalHeight }
+// At 2x DPR: canvas.width = 512, canvas.style.width = '256px'
+
+// Draw using logical coordinates - context is automatically scaled
+ctx.fillRect(0, 0, 256, 100);  // Fills the entire canvas
+
+// For mouse events, convert client coords to logical canvas coords
+canvas.addEventListener('click', (e) => {
+  const { x, y } = clientToCanvasCoordinates(canvas, e.clientX, e.clientY, 256, 100);
+  // x, y are in logical coordinates (0-256, 0-100 range)
+});
+```
+
+**Key functions:**
+- `setupHiDPICanvas()` - Configure canvas for hi-DPI with physical/CSS dimensions and scaled context
+- `resizeHiDPICanvas()` - Resize an existing hi-DPI canvas (alias for setup)
+- `createHiDPICanvas()` - Create a new canvas with hi-DPI support
+- `clientToCanvasCoordinates()` - Convert mouse event coords to logical canvas coords
+- `logicalToPhysical()` / `physicalToLogical()` - Coordinate conversion helpers
+
+**Important notes for pixel buffer operations:**
+When using `getImageData`/`putImageData`, work in physical pixel coordinates (these bypass the context transform):
+
+```typescript
+// For direct pixel manipulation, use physical dimensions
+const physicalWidth = canvas.width;   // Not logical width
+const physicalHeight = canvas.height;
+const imageData = ctx.getImageData(0, 0, physicalWidth, physicalHeight);
+```
 
 ### Adding a New Node Type
 
@@ -394,6 +445,8 @@ Requires WebGL2 support:
 - Firefox 51+
 - Safari 15+
 - Edge 79+
+
+**Hi-DPI/Retina displays** are fully supported with automatic detection of `devicePixelRatio`. All canvas-based UI components (scopes, color wheels, curve editor, overlays) render at native resolution for crisp display on 2x, 3x, and fractional DPR screens.
 
 ## License
 

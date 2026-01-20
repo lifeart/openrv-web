@@ -14,6 +14,7 @@ import {
   removePointFromCurve,
   updatePointInCurve,
 } from '../../color/ColorCurves';
+import { setupHiDPICanvas, clientToCanvasCoordinates } from '../../utils/HiDPICanvas';
 
 export type CurveChannelType = 'master' | 'red' | 'green' | 'blue';
 
@@ -113,10 +114,8 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
     });
     this.container.appendChild(channelBar);
 
-    // Create canvas
+    // Create canvas with hi-DPI support
     this.canvas = document.createElement('canvas');
-    this.canvas.width = this.size;
-    this.canvas.height = this.size;
     this.canvas.dataset.testid = 'curve-canvas';
     this.canvas.style.cssText = `
       background: #0a0a0a;
@@ -126,6 +125,14 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
     this.container.appendChild(this.canvas);
 
     this.ctx = this.canvas.getContext('2d')!;
+
+    // Setup hi-DPI canvas scaling
+    setupHiDPICanvas({
+      canvas: this.canvas,
+      ctx: this.ctx,
+      width: this.size,
+      height: this.size,
+    });
 
     // Bind events
     this.canvas.addEventListener('mousedown', this.handleMouseDown.bind(this));
@@ -193,9 +200,14 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
   }
 
   private handleMouseDown(e: MouseEvent): void {
-    const rect = this.canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    // Convert client coordinates to logical canvas coordinates (handles hi-DPI correctly)
+    const { x, y } = clientToCanvasCoordinates(
+      this.canvas,
+      e.clientX,
+      e.clientY,
+      this.size,
+      this.size
+    );
 
     const pointIndex = this.findPointNear(x, y);
     if (pointIndex !== null) {
@@ -205,9 +217,14 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
   }
 
   private handleMouseMove(e: MouseEvent): void {
-    const rect = this.canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    // Convert client coordinates to logical canvas coordinates (handles hi-DPI correctly)
+    const { x, y } = clientToCanvasCoordinates(
+      this.canvas,
+      e.clientX,
+      e.clientY,
+      this.size,
+      this.size
+    );
 
     if (this.draggingPointIndex !== null) {
       const norm = this.canvasToNormalized(x, y);
@@ -244,9 +261,14 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
   }
 
   private handleDoubleClick(e: MouseEvent): void {
-    const rect = this.canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    // Convert client coordinates to logical canvas coordinates (handles hi-DPI correctly)
+    const { x, y } = clientToCanvasCoordinates(
+      this.canvas,
+      e.clientX,
+      e.clientY,
+      this.size,
+      this.size
+    );
 
     const norm = this.canvasToNormalized(x, y);
 
@@ -267,9 +289,14 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
 
   private handleContextMenu(e: MouseEvent): void {
     e.preventDefault();
-    const rect = this.canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    // Convert client coordinates to logical canvas coordinates (handles hi-DPI correctly)
+    const { x, y } = clientToCanvasCoordinates(
+      this.canvas,
+      e.clientX,
+      e.clientY,
+      this.size,
+      this.size
+    );
 
     const pointIndex = this.findPointNear(x, y);
     if (pointIndex !== null && pointIndex > 0 && pointIndex < this.getActiveCurve().points.length - 1) {

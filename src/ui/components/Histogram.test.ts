@@ -389,6 +389,102 @@ describe('Histogram stats', () => {
   });
 });
 
+describe('Histogram hi-DPI support', () => {
+  let histogram: Histogram;
+  let originalDevicePixelRatio: number;
+
+  const setDevicePixelRatio = (value: number) => {
+    Object.defineProperty(window, 'devicePixelRatio', {
+      value,
+      writable: true,
+      configurable: true,
+    });
+  };
+
+  beforeEach(() => {
+    originalDevicePixelRatio = window.devicePixelRatio;
+  });
+
+  afterEach(() => {
+    if (histogram) {
+      histogram.dispose();
+    }
+    Object.defineProperty(window, 'devicePixelRatio', {
+      value: originalDevicePixelRatio,
+      writable: true,
+      configurable: true,
+    });
+  });
+
+  it('HG-080: canvas physical dimensions scale with DPR', () => {
+    setDevicePixelRatio(2);
+    histogram = new Histogram();
+    const el = histogram.render();
+    const canvas = el.querySelector('canvas') as HTMLCanvasElement;
+
+    // Physical dimensions should be 2x logical (256x100 -> 512x200)
+    expect(canvas.width).toBe(512);
+    expect(canvas.height).toBe(200);
+  });
+
+  it('HG-081: canvas CSS dimensions remain at logical size', () => {
+    setDevicePixelRatio(2);
+    histogram = new Histogram();
+    const el = histogram.render();
+    const canvas = el.querySelector('canvas') as HTMLCanvasElement;
+
+    // CSS dimensions should remain at logical size
+    expect(canvas.style.width).toBe('256px');
+    expect(canvas.style.height).toBe('100px');
+  });
+
+  it('HG-082: canvas renders correctly at 3x DPR', () => {
+    setDevicePixelRatio(3);
+    histogram = new Histogram();
+    const el = histogram.render();
+    const canvas = el.querySelector('canvas') as HTMLCanvasElement;
+
+    expect(canvas.width).toBe(768);
+    expect(canvas.height).toBe(300);
+  });
+
+  it('HG-083: update works correctly at high DPR', () => {
+    setDevicePixelRatio(2);
+    histogram = new Histogram();
+
+    const imageData = new ImageData(10, 10);
+    for (let i = 0; i < imageData.data.length; i += 4) {
+      imageData.data[i] = 128;
+      imageData.data[i + 1] = 128;
+      imageData.data[i + 2] = 128;
+      imageData.data[i + 3] = 255;
+    }
+
+    // Should not throw at high DPR
+    expect(() => histogram.update(imageData)).not.toThrow();
+  });
+
+  it('HG-084: histogram calculation is independent of DPR', () => {
+    setDevicePixelRatio(2);
+    histogram = new Histogram();
+
+    const imageData = new ImageData(10, 10);
+    for (let i = 0; i < imageData.data.length; i += 4) {
+      imageData.data[i] = 128;
+      imageData.data[i + 1] = 128;
+      imageData.data[i + 2] = 128;
+      imageData.data[i + 3] = 255;
+    }
+
+    const data = histogram.calculate(imageData);
+
+    // Calculation should be the same regardless of DPR
+    expect(data.red[128]).toBe(100);
+    expect(data.green[128]).toBe(100);
+    expect(data.blue[128]).toBe(100);
+  });
+});
+
 describe('Histogram GPU rendering', () => {
   let histogram: Histogram;
 

@@ -351,6 +351,115 @@ describe('Vectorscope', () => {
   });
 });
 
+describe('Vectorscope hi-DPI support', () => {
+  let vectorscope: Vectorscope;
+  let originalDevicePixelRatio: number;
+
+  const setDevicePixelRatio = (value: number) => {
+    Object.defineProperty(window, 'devicePixelRatio', {
+      value,
+      writable: true,
+      configurable: true,
+    });
+  };
+
+  beforeEach(() => {
+    originalDevicePixelRatio = window.devicePixelRatio;
+  });
+
+  afterEach(() => {
+    if (vectorscope) {
+      vectorscope.dispose();
+    }
+    Object.defineProperty(window, 'devicePixelRatio', {
+      value: originalDevicePixelRatio,
+      writable: true,
+      configurable: true,
+    });
+  });
+
+  it('VS-060: canvas physical dimensions scale with DPR', () => {
+    setDevicePixelRatio(2);
+    vectorscope = new Vectorscope();
+    const el = vectorscope.render();
+    const canvas = el.querySelector('canvas') as HTMLCanvasElement;
+
+    // Physical dimensions should be 2x logical (200x200 -> 400x400)
+    expect(canvas.width).toBe(400);
+    expect(canvas.height).toBe(400);
+  });
+
+  it('VS-061: canvas CSS dimensions remain at logical size', () => {
+    setDevicePixelRatio(2);
+    vectorscope = new Vectorscope();
+    const el = vectorscope.render();
+    const canvas = el.querySelector('canvas') as HTMLCanvasElement;
+
+    // CSS dimensions should remain at logical size
+    expect(canvas.style.width).toBe('200px');
+    expect(canvas.style.height).toBe('200px');
+  });
+
+  it('VS-062: canvas renders correctly at 3x DPR', () => {
+    setDevicePixelRatio(3);
+    vectorscope = new Vectorscope();
+    const el = vectorscope.render();
+    const canvas = el.querySelector('canvas') as HTMLCanvasElement;
+
+    expect(canvas.width).toBe(600);
+    expect(canvas.height).toBe(600);
+  });
+
+  it('VS-063: update works correctly at high DPR', () => {
+    setDevicePixelRatio(2);
+    vectorscope = new Vectorscope();
+
+    const imageData = new ImageData(100, 100);
+    for (let i = 0; i < imageData.data.length; i += 4) {
+      imageData.data[i] = 128;
+      imageData.data[i + 1] = 64;
+      imageData.data[i + 2] = 192;
+      imageData.data[i + 3] = 255;
+    }
+
+    // Should not throw at high DPR
+    expect(() => vectorscope.update(imageData)).not.toThrow();
+  });
+
+  it('VS-064: zoom cycling works at high DPR', () => {
+    setDevicePixelRatio(2);
+    vectorscope = new Vectorscope();
+
+    const imageData = new ImageData(100, 100);
+    vectorscope.update(imageData);
+
+    // Cycle through zoom levels at high DPR
+    expect(() => {
+      vectorscope.setZoom(1);
+      vectorscope.setZoom(2);
+      vectorscope.setZoom(4);
+      vectorscope.setZoom('auto');
+    }).not.toThrow();
+  });
+
+  it('VS-065: DPR is stored for pixel buffer operations', () => {
+    setDevicePixelRatio(2);
+    vectorscope = new Vectorscope();
+
+    // The vectorscope stores DPR for use in CPU rendering
+    // Verify it renders without errors (DPR used for getImageData/putImageData)
+    const imageData = new ImageData(50, 50);
+    for (let i = 0; i < imageData.data.length; i += 4) {
+      imageData.data[i] = 255;
+      imageData.data[i + 1] = 0;
+      imageData.data[i + 2] = 0;
+      imageData.data[i + 3] = 255;
+    }
+
+    expect(() => vectorscope.update(imageData)).not.toThrow();
+  });
+});
+
 describe('Vectorscope GPU rendering', () => {
   let vectorscope: Vectorscope;
 

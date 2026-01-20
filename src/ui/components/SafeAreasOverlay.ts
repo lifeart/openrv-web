@@ -11,6 +11,7 @@
  */
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { setupHiDPICanvas } from '../../utils/HiDPICanvas';
 
 export interface SafeAreasEvents extends EventMap {
   stateChanged: SafeAreasState;
@@ -73,6 +74,8 @@ export class SafeAreasOverlay extends EventEmitter<SafeAreasEvents> {
   private offsetX = 0;
   private offsetY = 0;
   private customAspectRatio = 1;
+  private canvasWidth = 0;
+  private canvasHeight = 0;
 
   constructor() {
     super();
@@ -95,6 +98,7 @@ export class SafeAreasOverlay extends EventEmitter<SafeAreasEvents> {
 
   /**
    * Update canvas size and position to match viewer
+   * canvasWidth/canvasHeight are logical (CSS) dimensions
    */
   setViewerDimensions(
     canvasWidth: number,
@@ -104,12 +108,22 @@ export class SafeAreasOverlay extends EventEmitter<SafeAreasEvents> {
     displayWidth: number,
     displayHeight: number
   ): void {
-    this.canvas.width = canvasWidth;
-    this.canvas.height = canvasHeight;
+    // Store logical dimensions
+    this.canvasWidth = canvasWidth;
+    this.canvasHeight = canvasHeight;
     this.displayWidth = displayWidth;
     this.displayHeight = displayHeight;
     this.offsetX = offsetX;
     this.offsetY = offsetY;
+
+    // Setup hi-DPI canvas with logical dimensions
+    setupHiDPICanvas({
+      canvas: this.canvas,
+      ctx: this.ctx,
+      width: canvasWidth,
+      height: canvasHeight,
+      setStyle: false, // CSS positioning is handled by parent
+    });
 
     if (this.state.enabled) {
       this.render();
@@ -216,10 +230,10 @@ export class SafeAreasOverlay extends EventEmitter<SafeAreasEvents> {
    * Render all enabled guides
    */
   render(): void {
-    const { ctx, canvas } = this;
+    const { ctx, canvasWidth, canvasHeight } = this;
 
-    // Clear canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Clear canvas using logical dimensions (hi-DPI context is scaled)
+    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
     if (!this.state.enabled || this.displayWidth === 0 || this.displayHeight === 0) {
       return;

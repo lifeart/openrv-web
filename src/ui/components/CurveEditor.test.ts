@@ -281,6 +281,92 @@ describe('CurveEditor channels', () => {
   });
 });
 
+describe('CurveEditor hi-DPI support', () => {
+  let editor: CurveEditor;
+  let originalDevicePixelRatio: number;
+
+  const setDevicePixelRatio = (value: number) => {
+    Object.defineProperty(window, 'devicePixelRatio', {
+      value,
+      writable: true,
+      configurable: true,
+    });
+  };
+
+  beforeEach(() => {
+    originalDevicePixelRatio = window.devicePixelRatio;
+  });
+
+  afterEach(() => {
+    if (editor) {
+      editor.dispose();
+    }
+    Object.defineProperty(window, 'devicePixelRatio', {
+      value: originalDevicePixelRatio,
+      writable: true,
+      configurable: true,
+    });
+  });
+
+  it('CURVE-U110: canvas physical dimensions scale with DPR', () => {
+    setDevicePixelRatio(2);
+    editor = new CurveEditor();
+    const el = editor.render_element();
+    const canvas = el.querySelector('[data-testid="curve-canvas"]') as HTMLCanvasElement;
+
+    // Physical dimensions should be 2x logical (200x200 -> 400x400)
+    expect(canvas.width).toBe(400);
+    expect(canvas.height).toBe(400);
+  });
+
+  it('CURVE-U111: canvas CSS dimensions remain at logical size', () => {
+    setDevicePixelRatio(2);
+    editor = new CurveEditor();
+    const el = editor.render_element();
+    const canvas = el.querySelector('[data-testid="curve-canvas"]') as HTMLCanvasElement;
+
+    // CSS dimensions should remain at logical size
+    expect(canvas.style.width).toBe('200px');
+    expect(canvas.style.height).toBe('200px');
+  });
+
+  it('CURVE-U112: canvas renders correctly at 3x DPR', () => {
+    setDevicePixelRatio(3);
+    editor = new CurveEditor();
+    const el = editor.render_element();
+    const canvas = el.querySelector('[data-testid="curve-canvas"]') as HTMLCanvasElement;
+
+    expect(canvas.width).toBe(600);
+    expect(canvas.height).toBe(600);
+  });
+
+  it('CURVE-U113: curve editing works at high DPR', () => {
+    setDevicePixelRatio(2);
+    editor = new CurveEditor();
+
+    // Should be able to modify curves at high DPR
+    const newCurves = {
+      master: { enabled: true, points: [{ x: 0, y: 0 }, { x: 0.5, y: 0.7 }, { x: 1, y: 1 }] },
+      red: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+      green: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+      blue: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+    };
+
+    expect(() => editor.setCurves(newCurves)).not.toThrow();
+    expect(editor.getCurves().master.points.length).toBe(3);
+  });
+
+  it('CURVE-U114: channel switching works at high DPR', () => {
+    setDevicePixelRatio(2);
+    editor = new CurveEditor();
+    const el = editor.render_element();
+
+    const redBtn = el.querySelector('[data-testid="curve-channel-red"]') as HTMLButtonElement;
+    expect(() => redBtn.click()).not.toThrow();
+    expect(editor.getActiveChannel()).toBe('red');
+  });
+});
+
 describe('CurveEditor curve modifications', () => {
   let editor: CurveEditor;
 

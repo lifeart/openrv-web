@@ -371,6 +371,97 @@ describe('Waveform', () => {
   });
 });
 
+describe('Waveform hi-DPI support', () => {
+  let waveform: Waveform;
+  let originalDevicePixelRatio: number;
+
+  const setDevicePixelRatio = (value: number) => {
+    Object.defineProperty(window, 'devicePixelRatio', {
+      value,
+      writable: true,
+      configurable: true,
+    });
+  };
+
+  beforeEach(() => {
+    originalDevicePixelRatio = window.devicePixelRatio;
+  });
+
+  afterEach(() => {
+    if (waveform) {
+      waveform.dispose();
+    }
+    Object.defineProperty(window, 'devicePixelRatio', {
+      value: originalDevicePixelRatio,
+      writable: true,
+      configurable: true,
+    });
+  });
+
+  it('WF-060: canvas physical dimensions scale with DPR', () => {
+    setDevicePixelRatio(2);
+    waveform = new Waveform();
+    const el = waveform.render();
+    const canvas = el.querySelector('canvas') as HTMLCanvasElement;
+
+    // Physical dimensions should be 2x logical (256x128 -> 512x256)
+    expect(canvas.width).toBe(512);
+    expect(canvas.height).toBe(256);
+  });
+
+  it('WF-061: canvas CSS dimensions remain at logical size', () => {
+    setDevicePixelRatio(2);
+    waveform = new Waveform();
+    const el = waveform.render();
+    const canvas = el.querySelector('canvas') as HTMLCanvasElement;
+
+    // CSS dimensions should remain at logical size
+    expect(canvas.style.width).toBe('256px');
+    expect(canvas.style.height).toBe('128px');
+  });
+
+  it('WF-062: canvas renders correctly at 3x DPR', () => {
+    setDevicePixelRatio(3);
+    waveform = new Waveform();
+    const el = waveform.render();
+    const canvas = el.querySelector('canvas') as HTMLCanvasElement;
+
+    expect(canvas.width).toBe(768);
+    expect(canvas.height).toBe(384);
+  });
+
+  it('WF-063: update works correctly at high DPR', () => {
+    setDevicePixelRatio(2);
+    waveform = new Waveform();
+
+    const imageData = new ImageData(100, 100);
+    for (let i = 0; i < imageData.data.length; i += 4) {
+      imageData.data[i] = 128;
+      imageData.data[i + 1] = 128;
+      imageData.data[i + 2] = 128;
+      imageData.data[i + 3] = 255;
+    }
+
+    // Should not throw at high DPR
+    expect(() => waveform.update(imageData)).not.toThrow();
+  });
+
+  it('WF-064: mode cycling works at high DPR', () => {
+    setDevicePixelRatio(2);
+    waveform = new Waveform();
+
+    const imageData = new ImageData(100, 100);
+    waveform.update(imageData);
+
+    // Cycle through all modes at high DPR
+    expect(() => {
+      waveform.setMode('luma');
+      waveform.setMode('rgb');
+      waveform.setMode('parade');
+    }).not.toThrow();
+  });
+});
+
 describe('Waveform GPU rendering', () => {
   let waveform: Waveform;
 

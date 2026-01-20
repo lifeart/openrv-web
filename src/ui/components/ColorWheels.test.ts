@@ -36,6 +36,101 @@ function createTestImageData(width: number, height: number, fill?: { r: number; 
   return new ImageData(data, width, height);
 }
 
+describe('ColorWheels hi-DPI support', () => {
+  let colorWheels: ColorWheels;
+  let parent: HTMLElement;
+  let originalDevicePixelRatio: number;
+
+  const setDevicePixelRatio = (value: number) => {
+    Object.defineProperty(window, 'devicePixelRatio', {
+      value,
+      writable: true,
+      configurable: true,
+    });
+  };
+
+  beforeEach(() => {
+    originalDevicePixelRatio = window.devicePixelRatio;
+    parent = createMockParent();
+  });
+
+  afterEach(() => {
+    if (colorWheels) {
+      colorWheels.dispose();
+    }
+    parent.remove();
+    Object.defineProperty(window, 'devicePixelRatio', {
+      value: originalDevicePixelRatio,
+      writable: true,
+      configurable: true,
+    });
+  });
+
+  it('WHEEL-100: wheel canvas physical dimensions scale with DPR', () => {
+    setDevicePixelRatio(2);
+    colorWheels = new ColorWheels(parent);
+
+    // Find the first wheel canvas (wheel size is 140x140 logical = 280x280 physical at 2x)
+    const canvases = parent.querySelectorAll('canvas');
+    expect(canvases.length).toBeGreaterThan(0);
+
+    const canvas = canvases[0] as HTMLCanvasElement;
+    // WHEEL_CANVAS_SIZE = 140 (120 + 20), so at 2x DPR = 280
+    expect(canvas.width).toBe(280);
+    expect(canvas.height).toBe(280);
+  });
+
+  it('WHEEL-101: wheel canvas CSS dimensions remain at logical size', () => {
+    setDevicePixelRatio(2);
+    colorWheels = new ColorWheels(parent);
+
+    const canvases = parent.querySelectorAll('canvas');
+    const canvas = canvases[0] as HTMLCanvasElement;
+
+    expect(canvas.style.width).toBe('140px');
+    expect(canvas.style.height).toBe('140px');
+  });
+
+  it('WHEEL-102: wheel rendering works at 3x DPR', () => {
+    setDevicePixelRatio(3);
+    colorWheels = new ColorWheels(parent);
+
+    const canvases = parent.querySelectorAll('canvas');
+    const canvas = canvases[0] as HTMLCanvasElement;
+
+    // 140 * 3 = 420
+    expect(canvas.width).toBe(420);
+    expect(canvas.height).toBe(420);
+  });
+
+  it('WHEEL-103: state changes work at high DPR', () => {
+    setDevicePixelRatio(2);
+    colorWheels = new ColorWheels(parent);
+
+    expect(() => {
+      colorWheels.setState({
+        lift: { r: 0.5, g: -0.3, b: 0.2, y: 0.1 },
+      });
+    }).not.toThrow();
+
+    expect(colorWheels.getState().lift.r).toBe(0.5);
+  });
+
+  it('WHEEL-104: apply works at high DPR', () => {
+    setDevicePixelRatio(2);
+    colorWheels = new ColorWheels(parent);
+
+    colorWheels.setState({
+      lift: { r: 0.3, g: 0, b: 0, y: 0 },
+    });
+
+    const imageData = createTestImageData(10, 10, { r: 30, g: 30, b: 30, a: 255 });
+
+    expect(() => colorWheels.apply(imageData)).not.toThrow();
+    expect(imageData.data[0]).toBeGreaterThan(30);
+  });
+});
+
 describe('ColorWheels', () => {
   let colorWheels: ColorWheels;
   let parent: HTMLElement;

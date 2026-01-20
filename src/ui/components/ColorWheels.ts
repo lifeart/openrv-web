@@ -14,6 +14,7 @@
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { createDraggableContainer, createControlButton, DraggableContainer } from './shared/DraggableContainer';
+import { setupHiDPICanvas, clientToCanvasCoordinates } from '../../utils/HiDPICanvas';
 
 export interface WheelValues {
   r: number;  // Red offset: -1.0 to +1.0
@@ -44,6 +45,10 @@ export const DEFAULT_COLOR_WHEELS_STATE: ColorWheelsState = {
   master: { ...DEFAULT_WHEEL_VALUES },
   linked: false,
 };
+
+// Canvas size constants for wheel rendering
+const WHEEL_SIZE = 120;
+const WHEEL_CANVAS_SIZE = WHEEL_SIZE + 20; // Extra space for indicator
 
 export interface ColorWheelsEvents extends EventMap {
   stateChanged: ColorWheelsState;
@@ -155,16 +160,19 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
     row.style.cssText = 'display: flex; align-items: center; gap: 8px;';
 
     // Wheel canvas - spec requires 120px minimum
-    const wheelSize = 120;
-    const canvasSize = wheelSize + 20; // Extra space for indicator
     const canvas = document.createElement('canvas');
-    canvas.width = canvasSize;
-    canvas.height = canvasSize;
     canvas.style.cssText = `
-      width: ${canvasSize}px;
-      height: ${canvasSize}px;
       cursor: crosshair;
     `;
+
+    // Setup hi-DPI canvas with logical dimensions
+    const ctx = canvas.getContext('2d')!;
+    setupHiDPICanvas({
+      canvas,
+      ctx,
+      width: WHEEL_CANVAS_SIZE,
+      height: WHEEL_CANVAS_SIZE,
+    });
 
     // Draw initial wheel
     this.drawWheel(canvas, key);
@@ -172,14 +180,22 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
     // Wheel interaction
     let isDragging = false;
     const handleWheelInteraction = (e: MouseEvent | PointerEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      const centerX = rect.width / 2;
-      const centerY = rect.height / 2;
-      const radius = wheelSize / 2;
+      const centerX = WHEEL_CANVAS_SIZE / 2;
+      const centerY = WHEEL_CANVAS_SIZE / 2;
+      const radius = WHEEL_SIZE / 2;
 
-      // Calculate position relative to center
-      const x = (e.clientX - rect.left - centerX) / radius;
-      const y = (e.clientY - rect.top - centerY) / radius;
+      // Convert client coordinates to logical canvas coordinates (handles hi-DPI correctly)
+      const canvasCoords = clientToCanvasCoordinates(
+        canvas,
+        e.clientX,
+        e.clientY,
+        WHEEL_CANVAS_SIZE,
+        WHEEL_CANVAS_SIZE
+      );
+
+      // Calculate position relative to center (normalized to -1..1 range)
+      const x = (canvasCoords.x - centerX) / radius;
+      const y = (canvasCoords.y - centerY) / radius;
 
       // Clamp to circle
       const distance = Math.sqrt(x * x + y * y);
@@ -357,9 +373,10 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const size = canvas.width;
+    // Use logical dimensions for drawing (hi-DPI context is scaled)
+    const size = WHEEL_CANVAS_SIZE;
     const center = size / 2;
-    const wheelRadius = (size - 20) / 2;
+    const wheelRadius = WHEEL_SIZE / 2;
 
     // Clear
     ctx.clearRect(0, 0, size, size);

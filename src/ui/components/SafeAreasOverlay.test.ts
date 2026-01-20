@@ -15,6 +15,91 @@ import {
 
 // Canvas mocks are provided by test/setup.ts
 
+describe('SafeAreasOverlay hi-DPI support', () => {
+  let safeAreas: SafeAreasOverlay;
+  let originalDevicePixelRatio: number;
+
+  const setDevicePixelRatio = (value: number) => {
+    Object.defineProperty(window, 'devicePixelRatio', {
+      value,
+      writable: true,
+      configurable: true,
+    });
+  };
+
+  beforeEach(() => {
+    originalDevicePixelRatio = window.devicePixelRatio;
+  });
+
+  afterEach(() => {
+    if (safeAreas) {
+      safeAreas.dispose();
+    }
+    Object.defineProperty(window, 'devicePixelRatio', {
+      value: originalDevicePixelRatio,
+      writable: true,
+      configurable: true,
+    });
+  });
+
+  it('SAFE-130: canvas physical dimensions scale with DPR after setViewerDimensions', () => {
+    setDevicePixelRatio(2);
+    safeAreas = new SafeAreasOverlay();
+    const canvas = safeAreas.getElement();
+
+    safeAreas.setViewerDimensions(800, 600, 0, 0, 800, 600);
+
+    // Physical dimensions should be 2x logical (800x600 -> 1600x1200)
+    expect(canvas.width).toBe(1600);
+    expect(canvas.height).toBe(1200);
+  });
+
+  it('SAFE-131: canvas renders correctly at 3x DPR', () => {
+    setDevicePixelRatio(3);
+    safeAreas = new SafeAreasOverlay();
+    const canvas = safeAreas.getElement();
+
+    safeAreas.setViewerDimensions(800, 600, 0, 0, 800, 600);
+
+    expect(canvas.width).toBe(2400);
+    expect(canvas.height).toBe(1800);
+  });
+
+  it('SAFE-132: render works correctly at high DPR', () => {
+    setDevicePixelRatio(2);
+    safeAreas = new SafeAreasOverlay();
+
+    safeAreas.setState({
+      enabled: true,
+      titleSafe: true,
+      actionSafe: true,
+      centerCrosshair: true,
+      ruleOfThirds: true,
+      aspectRatio: '16:9',
+    });
+    safeAreas.setViewerDimensions(800, 600, 0, 0, 800, 600);
+
+    expect(() => safeAreas.render()).not.toThrow();
+  });
+
+  it('SAFE-133: guide drawing works at high DPR', () => {
+    setDevicePixelRatio(2);
+    safeAreas = new SafeAreasOverlay();
+
+    safeAreas.enable();
+    safeAreas.setViewerDimensions(1920, 1080, 0, 0, 1920, 1080);
+
+    // All guide options should render without error at high DPR
+    expect(() => {
+      safeAreas.toggleTitleSafe();
+      safeAreas.toggleActionSafe();
+      safeAreas.toggleCenterCrosshair();
+      safeAreas.toggleRuleOfThirds();
+      safeAreas.setAspectRatio('2.39:1');
+    }).not.toThrow();
+  });
+});
+
 describe('SafeAreasOverlay', () => {
   let safeAreas: SafeAreasOverlay;
 
