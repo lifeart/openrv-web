@@ -1164,6 +1164,290 @@ describe('GTOGraphLoader', () => {
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('rightEyeTranslate', [10, 20]);
     });
 
+    it('parses RVOverlay overlay and matte components', () => {
+      const mockNode = {
+        type: 'RVOverlay',
+        name: 'overlayNode',
+        properties: {
+          has: vi.fn((key: string) =>
+            ['overlayShow', 'overlayNextRectId', 'overlayNextTextId', 'matteShow', 'matteOpacity', 'matteAspect'].includes(key)
+          ),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'overlayNode',
+            protocol: 'RVOverlay',
+            components: {
+              overlay: {
+                show: 1,
+                nextRectId: 3,
+                nextTextId: 2,
+              },
+              matte: {
+                show: 1,
+                opacity: 0.8,
+                aspect: 2.35,
+                heightVisible: 0.9,
+                centerPoint: [0.5, 0.6],
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('overlayShow', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('overlayNextRectId', 3);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('overlayNextTextId', 2);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('matteShow', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('matteOpacity', 0.8);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('matteAspect', 2.35);
+    });
+
+    it('parses RVOverlay rectangle overlays', () => {
+      const mockNode = {
+        type: 'RVOverlay',
+        name: 'overlayNode',
+        properties: {
+          has: vi.fn((key: string) => key === 'overlayRectangles'),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'overlayNode',
+            protocol: 'RVOverlay',
+            components: {
+              overlay: { show: 1 },
+              'rect:0': {
+                width: 0.2,
+                height: 0.1,
+                color: [1, 0, 0, 1],
+                position: [0.1, 0.2],
+                eye: 0,
+                active: 1,
+              },
+              'rect:1': {
+                width: 0.3,
+                height: 0.15,
+                color: [0, 1, 0, 0.5],
+                position: [0.5, 0.5],
+                active: 0,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('overlayRectangles', [
+        { id: 0, width: 0.2, height: 0.1, color: [1, 0, 0, 1], position: [0.1, 0.2], eye: 0, active: true },
+        { id: 1, width: 0.3, height: 0.15, color: [0, 1, 0, 0.5], position: [0.5, 0.5], active: false },
+      ]);
+    });
+
+    it('parses RVOverlay text overlays', () => {
+      const mockNode = {
+        type: 'RVOverlay',
+        name: 'overlayNode',
+        properties: {
+          has: vi.fn((key: string) => key === 'overlayTexts'),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'overlayNode',
+            protocol: 'RVOverlay',
+            components: {
+              overlay: { show: 1 },
+              'text:0': {
+                position: [0.1, 0.9],
+                color: [1, 1, 1, 1],
+                size: 32,
+                text: 'Hello World',
+                font: 'Arial',
+                active: 1,
+                scale: 1.0,
+                rotation: 0,
+                spacing: 0,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('overlayTexts', [
+        expect.objectContaining({
+          id: 0,
+          size: 32,
+          text: 'Hello World',
+          font: 'Arial',
+          active: true,
+        }),
+      ]);
+    });
+
+    it('parses RVOverlay window overlays', () => {
+      const mockNode = {
+        type: 'RVOverlay',
+        name: 'overlayNode',
+        properties: {
+          has: vi.fn((key: string) => key === 'overlayWindows'),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'overlayNode',
+            protocol: 'RVOverlay',
+            components: {
+              overlay: { show: 1 },
+              'window:0': {
+                eye: 0,
+                windowActive: 1,
+                outlineActive: 1,
+                outlineWidth: 2.0,
+                outlineColor: [1, 1, 0, 1],
+                windowColor: [0, 0, 0, 0.3],
+                windowULx: 0.1,
+                windowULy: 0.1,
+                windowURx: 0.9,
+                windowURy: 0.1,
+                windowLLx: 0.1,
+                windowLLy: 0.9,
+                windowLRx: 0.9,
+                windowLRy: 0.9,
+                antialias: 1,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('overlayWindows', [
+        expect.objectContaining({
+          id: 0,
+          windowActive: true,
+          outlineActive: true,
+          outlineWidth: 2.0,
+          upperLeft: [0.1, 0.1],
+          lowerRight: [0.9, 0.9],
+          antialias: true,
+        }),
+      ]);
+    });
+
+    it('parses RVChannelMap format component', () => {
+      const mockNode = {
+        type: 'RVChannelMap',
+        name: 'channelMapNode',
+        properties: {
+          has: vi.fn((key: string) => key === 'channelMapChannels'),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'channelMapNode',
+            protocol: 'RVChannelMap',
+            components: {
+              format: {
+                channels: ['R', 'G', 'B', 'A'],
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('channelMapChannels', ['R', 'G', 'B', 'A']);
+    });
+
+    it('parses RVFormat format component', () => {
+      const mockNode = {
+        type: 'RVFormat',
+        name: 'formatNode',
+        properties: {
+          has: vi.fn((key: string) => key === 'formatChannels'),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'formatNode',
+            protocol: 'RVFormat',
+            components: {
+              format: {
+                channels: ['luminance', 'alpha'],
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('formatChannels', ['luminance', 'alpha']);
+    });
+
     it('uses default session name when none provided', () => {
       vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
 

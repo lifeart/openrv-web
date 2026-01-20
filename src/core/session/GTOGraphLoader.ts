@@ -73,6 +73,11 @@ const PROTOCOL_TO_NODE_TYPE: Record<string, string> = {
   RVDisplayColor: 'RVDisplayColor',
   RVDisplayStereo: 'RVDisplayStereo',
   RVSourceStereo: 'RVSourceStereo',
+
+  // Overlay/Utility nodes
+  RVOverlay: 'RVOverlay',
+  RVFormat: 'RVFormat',
+  RVChannelMap: 'RVChannelMap',
 };
 
 /**
@@ -804,6 +809,168 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
         if (typeof flop === 'number') nodeInfo.properties.rightEyeFlop = flop !== 0;
         if (typeof rotate === 'number') nodeInfo.properties.rightEyeRotate = rotate;
         if (Array.isArray(translate)) nodeInfo.properties.rightEyeTranslate = translate;
+      }
+    }
+
+    // Parse RVOverlay properties
+    if (protocol === 'RVOverlay') {
+      // Overlay metadata component
+      const overlayComp = obj.component('overlay');
+      if (overlayComp?.exists()) {
+        const show = overlayComp.property('show').value() as number;
+        const nextRectId = overlayComp.property('nextRectId').value() as number;
+        const nextTextId = overlayComp.property('nextTextId').value() as number;
+
+        if (typeof show === 'number') nodeInfo.properties.overlayShow = show !== 0;
+        if (typeof nextRectId === 'number') nodeInfo.properties.overlayNextRectId = nextRectId;
+        if (typeof nextTextId === 'number') nodeInfo.properties.overlayNextTextId = nextTextId;
+      }
+
+      // Matte component
+      const matteComp = obj.component('matte');
+      if (matteComp?.exists()) {
+        const show = matteComp.property('show').value() as number;
+        const opacity = matteComp.property('opacity').value() as number;
+        const aspect = matteComp.property('aspect').value() as number;
+        const heightVisible = matteComp.property('heightVisible').value() as number;
+        const centerPoint = matteComp.property('centerPoint').value() as number[];
+
+        if (typeof show === 'number') nodeInfo.properties.matteShow = show !== 0;
+        if (typeof opacity === 'number') nodeInfo.properties.matteOpacity = opacity;
+        if (typeof aspect === 'number') nodeInfo.properties.matteAspect = aspect;
+        if (typeof heightVisible === 'number') nodeInfo.properties.matteHeightVisible = heightVisible;
+        if (Array.isArray(centerPoint)) nodeInfo.properties.matteCenterPoint = centerPoint;
+      }
+
+      // Parse dynamic rect components (rect:0, rect:1, etc.)
+      const rectangles: Array<Record<string, unknown>> = [];
+      for (let i = 0; i < 100; i++) {
+        const rectComp = obj.component(`rect:${i}`);
+        if (!rectComp?.exists()) break;
+
+        const rect: Record<string, unknown> = { id: i };
+        const width = rectComp.property('width').value() as number;
+        const height = rectComp.property('height').value() as number;
+        const color = rectComp.property('color').value() as number[];
+        const position = rectComp.property('position').value() as number[];
+        const eye = rectComp.property('eye').value() as number;
+        const active = rectComp.property('active').value() as number;
+
+        if (typeof width === 'number') rect.width = width;
+        if (typeof height === 'number') rect.height = height;
+        if (Array.isArray(color)) rect.color = color;
+        if (Array.isArray(position)) rect.position = position;
+        if (typeof eye === 'number') rect.eye = eye;
+        if (typeof active === 'number') rect.active = active !== 0;
+
+        rectangles.push(rect);
+      }
+      if (rectangles.length > 0) nodeInfo.properties.overlayRectangles = rectangles;
+
+      // Parse dynamic text components (text:0, text:1, etc.)
+      const texts: Array<Record<string, unknown>> = [];
+      for (let i = 0; i < 100; i++) {
+        const textComp = obj.component(`text:${i}`);
+        if (!textComp?.exists()) break;
+
+        const text: Record<string, unknown> = { id: i };
+        const position = textComp.property('position').value() as number[];
+        const color = textComp.property('color').value() as number[];
+        const size = textComp.property('size').value() as number;
+        const scale = textComp.property('scale').value() as number;
+        const rotation = textComp.property('rotation').value() as number;
+        const spacing = textComp.property('spacing').value() as number;
+        const font = textComp.property('font').value() as string;
+        const textContent = textComp.property('text').value() as string;
+        const origin = textComp.property('origin').value() as string;
+        const debug = textComp.property('debug').value() as number;
+        const eye = textComp.property('eye').value() as number;
+        const active = textComp.property('active').value() as number;
+        const pixelScale = textComp.property('pixelScale').value() as number;
+        const firstFrame = textComp.property('firstFrame').value() as number;
+
+        if (Array.isArray(position)) text.position = position;
+        if (Array.isArray(color)) text.color = color;
+        if (typeof size === 'number') text.size = size;
+        if (typeof scale === 'number') text.scale = scale;
+        if (typeof rotation === 'number') text.rotation = rotation;
+        if (typeof spacing === 'number') text.spacing = spacing;
+        if (typeof font === 'string') text.font = font;
+        if (typeof textContent === 'string') text.text = textContent;
+        if (typeof origin === 'string') text.origin = origin;
+        if (typeof debug === 'number') text.debug = debug !== 0;
+        if (typeof eye === 'number') text.eye = eye;
+        if (typeof active === 'number') text.active = active !== 0;
+        if (typeof pixelScale === 'number') text.pixelScale = pixelScale;
+        if (typeof firstFrame === 'number') text.firstFrame = firstFrame;
+
+        texts.push(text);
+      }
+      if (texts.length > 0) nodeInfo.properties.overlayTexts = texts;
+
+      // Parse dynamic window components (window:0, window:1, etc.)
+      const windows: Array<Record<string, unknown>> = [];
+      for (let i = 0; i < 100; i++) {
+        const winComp = obj.component(`window:${i}`);
+        if (!winComp?.exists()) break;
+
+        const win: Record<string, unknown> = { id: i };
+        const eye = winComp.property('eye').value() as number;
+        const windowActive = winComp.property('windowActive').value() as number;
+        const outlineActive = winComp.property('outlineActive').value() as number;
+        const outlineWidth = winComp.property('outlineWidth').value() as number;
+        const outlineColor = winComp.property('outlineColor').value() as number[];
+        const outlineBrush = winComp.property('outlineBrush').value() as string;
+        const windowColor = winComp.property('windowColor').value() as number[];
+        const imageAspect = winComp.property('imageAspect').value() as number;
+        const pixelScale = winComp.property('pixelScale').value() as number;
+        const firstFrame = winComp.property('firstFrame').value() as number;
+        const windowULx = winComp.property('windowULx').value() as number;
+        const windowULy = winComp.property('windowULy').value() as number;
+        const windowURx = winComp.property('windowURx').value() as number;
+        const windowURy = winComp.property('windowURy').value() as number;
+        const windowLLx = winComp.property('windowLLx').value() as number;
+        const windowLLy = winComp.property('windowLLy').value() as number;
+        const windowLRx = winComp.property('windowLRx').value() as number;
+        const windowLRy = winComp.property('windowLRy').value() as number;
+        const antialias = winComp.property('antialias').value() as number;
+
+        if (typeof eye === 'number') win.eye = eye;
+        if (typeof windowActive === 'number') win.windowActive = windowActive !== 0;
+        if (typeof outlineActive === 'number') win.outlineActive = outlineActive !== 0;
+        if (typeof outlineWidth === 'number') win.outlineWidth = outlineWidth;
+        if (Array.isArray(outlineColor)) win.outlineColor = outlineColor;
+        if (typeof outlineBrush === 'string') win.outlineBrush = outlineBrush;
+        if (Array.isArray(windowColor)) win.windowColor = windowColor;
+        if (typeof imageAspect === 'number') win.imageAspect = imageAspect;
+        if (typeof pixelScale === 'number') win.pixelScale = pixelScale;
+        if (typeof firstFrame === 'number') win.firstFrame = firstFrame;
+        if (typeof windowULx === 'number') win.upperLeft = [windowULx, windowULy];
+        if (typeof windowURx === 'number') win.upperRight = [windowURx, windowURy];
+        if (typeof windowLLx === 'number') win.lowerLeft = [windowLLx, windowLLy];
+        if (typeof windowLRx === 'number') win.lowerRight = [windowLRx, windowLRy];
+        if (typeof antialias === 'number') win.antialias = antialias !== 0;
+
+        windows.push(win);
+      }
+      if (windows.length > 0) nodeInfo.properties.overlayWindows = windows;
+    }
+
+    // Parse RVChannelMap properties
+    if (protocol === 'RVChannelMap') {
+      const formatComp = obj.component('format');
+      if (formatComp?.exists()) {
+        const channels = formatComp.property('channels').value() as string[];
+        if (Array.isArray(channels)) nodeInfo.properties.channelMapChannels = channels;
+      }
+    }
+
+    // Parse RVFormat properties (format component, different from crop)
+    if (protocol === 'RVFormat') {
+      const formatComp = obj.component('format');
+      if (formatComp?.exists()) {
+        const channels = formatComp.property('channels').value() as string[];
+        if (Array.isArray(channels)) nodeInfo.properties.formatChannels = channels;
       }
     }
 

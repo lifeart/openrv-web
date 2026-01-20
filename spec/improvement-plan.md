@@ -33,6 +33,7 @@ Based on analysis of the GTO specification (`spec.md`), usage guide (`usage.md`)
 | RVDisplayColor | ✅ | ✅ | ✅ |
 | RVDisplayStereo | ✅ | ✅ | ✅ |
 | RVSourceStereo | ✅ | ✅ | ✅ |
+| RVFormat (crop, channels) | ✅ | ✅ | ✅ |
 
 ### Gaps Identified
 
@@ -96,9 +97,9 @@ The following node types are defined in the spec but not fully implemented:
 |------|-------|--------|--------|----------|
 | RVRetime | ✅ | ✅ | ✅ | ~~Medium~~ Done |
 | RVRotateCanvas | ❌ | ❌ | ❌ | Low |
-| RVChannelMap | ⚠️ Partial | ❌ | ❌ | Low |
-| RVFormat | ✅ | ❌ | ✅ | Medium |
-| RVOverlay | ⚠️ Partial | ❌ | ❌ | Medium |
+| RVChannelMap | ✅ | ✅ | ❌ | Low |
+| RVFormat | ✅ | ✅ | ✅ | ~~Medium~~ Done |
+| RVOverlay | ✅ | ✅ | ❌ | Medium |
 | RVResize | ❌ | ❌ | ❌ | Low |
 | RVHistogram | ✅ | ❌ | ✅ | Low |
 | RVCache | ❌ | ❌ | ❌ | Low |

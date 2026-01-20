@@ -1268,3 +1268,291 @@ describe('SessionGTOExporter.buildSourceStereoObject', () => {
         expect(stereoComp.properties.rightOffset.data).toEqual([0.0]);
     });
 });
+
+describe('SessionGTOExporter.buildFormatObject', () => {
+    it('creates RVFormat object with default settings', () => {
+        const result = SessionGTOExporter.buildFormatObject('sourceGroup000000_RVFormat');
+
+        expect(result.name).toBe('sourceGroup000000_RVFormat');
+        expect(result.protocol).toBe('RVFormat');
+        expect(result.protocolVersion).toBe(1);
+    });
+
+    it('creates crop component with all settings', () => {
+        const result = SessionGTOExporter.buildFormatObject('formatNode', {
+            crop: {
+                active: true,
+                xmin: 10,
+                ymin: 20,
+                xmax: 100,
+                ymax: 80,
+            },
+        });
+        const components = result.components as Record<string, any>;
+        const cropComp = components['crop'];
+
+        expect(cropComp).toBeDefined();
+        expect(cropComp.properties.active.data).toEqual([1]);
+        expect(cropComp.properties.xmin.data).toEqual([10]);
+        expect(cropComp.properties.ymin.data).toEqual([20]);
+        expect(cropComp.properties.xmax.data).toEqual([100]);
+        expect(cropComp.properties.ymax.data).toEqual([80]);
+    });
+
+    it('creates crop component with disabled crop', () => {
+        const result = SessionGTOExporter.buildFormatObject('formatNode', {
+            crop: {
+                active: false,
+                xmin: 0,
+                ymin: 0,
+                xmax: 1920,
+                ymax: 1080,
+            },
+        });
+        const components = result.components as Record<string, any>;
+        const cropComp = components['crop'];
+
+        expect(cropComp.properties.active.data).toEqual([0]);
+    });
+
+    it('creates format component with channel mapping', () => {
+        const result = SessionGTOExporter.buildFormatObject('formatNode', {
+            channels: ['R', 'G', 'B', 'A'],
+        });
+        const components = result.components as Record<string, any>;
+        const formatComp = components['format'];
+
+        expect(formatComp).toBeDefined();
+        expect(formatComp.properties.channels.data).toEqual(['R', 'G', 'B', 'A']);
+    });
+
+    it('creates both crop and format components', () => {
+        const result = SessionGTOExporter.buildFormatObject('formatNode', {
+            crop: {
+                active: true,
+                xmin: 50,
+                ymin: 50,
+                xmax: 1870,
+                ymax: 1030,
+            },
+            channels: ['R', 'G', 'B'],
+        });
+        const components = result.components as Record<string, any>;
+
+        expect(components['crop']).toBeDefined();
+        expect(components['format']).toBeDefined();
+        expect(components['crop'].properties.xmin.data).toEqual([50]);
+        expect(components['format'].properties.channels.data).toEqual(['R', 'G', 'B']);
+    });
+
+    it('does not create crop component when not provided', () => {
+        const result = SessionGTOExporter.buildFormatObject('formatNode');
+        const components = result.components as Record<string, any>;
+
+        expect(components['crop']).toBeUndefined();
+    });
+
+    it('does not create format component when channels not provided', () => {
+        const result = SessionGTOExporter.buildFormatObject('formatNode', {
+            crop: { active: true },
+        });
+        const components = result.components as Record<string, any>;
+
+        expect(components['format']).toBeUndefined();
+    });
+
+    it('does not create format component when channels array is empty', () => {
+        const result = SessionGTOExporter.buildFormatObject('formatNode', {
+            channels: [],
+        });
+        const components = result.components as Record<string, any>;
+
+        expect(components['format']).toBeUndefined();
+    });
+});
+
+describe('SessionGTOExporter.buildOverlayObject', () => {
+    it('creates RVOverlay object with default settings', () => {
+        const result = SessionGTOExporter.buildOverlayObject('overlayNode');
+
+        expect(result.name).toBe('overlayNode');
+        expect(result.protocol).toBe('RVOverlay');
+        expect(result.protocolVersion).toBe(1);
+    });
+
+    it('creates overlay component with metadata', () => {
+        const result = SessionGTOExporter.buildOverlayObject('overlayNode', {
+            show: true,
+        });
+        const components = result.components as Record<string, any>;
+        const overlayComp = components['overlay'];
+
+        expect(overlayComp).toBeDefined();
+        expect(overlayComp.properties.nextRectId.data).toEqual([0]);
+        expect(overlayComp.properties.nextTextId.data).toEqual([0]);
+        expect(overlayComp.properties.show.data).toEqual([1]);
+    });
+
+    it('creates matte component when provided', () => {
+        const result = SessionGTOExporter.buildOverlayObject('overlayNode', {
+            matte: {
+                show: true,
+                opacity: 0.8,
+                aspect: 2.35,
+                heightVisible: 0.9,
+                centerPoint: [0.5, 0.6],
+            },
+        });
+        const components = result.components as Record<string, any>;
+        const matteComp = components['matte'];
+
+        expect(matteComp).toBeDefined();
+        expect(matteComp.properties.show.data).toEqual([1]);
+        expect(matteComp.properties.opacity.data).toEqual([0.8]);
+        expect(matteComp.properties.aspect.data).toEqual([2.35]);
+        expect(matteComp.properties.heightVisible.data).toEqual([0.9]);
+    });
+
+    it('creates rectangle overlays', () => {
+        const result = SessionGTOExporter.buildOverlayObject('overlayNode', {
+            rectangles: [
+                { id: 0, width: 0.2, height: 0.1, color: [1, 0, 0, 1], position: [0.1, 0.2], active: true },
+                { id: 1, width: 0.3, height: 0.15, color: [0, 1, 0, 0.5], position: [0.5, 0.5] },
+            ],
+        });
+        const components = result.components as Record<string, any>;
+
+        const rect0 = components['rect:0'];
+        expect(rect0).toBeDefined();
+        expect(rect0.properties.width.data).toEqual([0.2]);
+        expect(rect0.properties.height.data).toEqual([0.1]);
+        expect(rect0.properties.active.data).toEqual([1]);
+
+        const rect1 = components['rect:1'];
+        expect(rect1).toBeDefined();
+        expect(rect1.properties.width.data).toEqual([0.3]);
+        expect(rect1.properties.height.data).toEqual([0.15]);
+    });
+
+    it('creates text overlays', () => {
+        const result = SessionGTOExporter.buildOverlayObject('overlayNode', {
+            texts: [
+                {
+                    id: 0,
+                    position: [0.1, 0.9],
+                    color: [1, 1, 1, 1],
+                    size: 32,
+                    text: 'Hello World',
+                    font: 'Arial',
+                    active: true,
+                },
+            ],
+        });
+        const components = result.components as Record<string, any>;
+
+        const text0 = components['text:0'];
+        expect(text0).toBeDefined();
+        expect(text0.properties.size.data).toEqual([32]);
+        expect(text0.properties.text.data).toEqual(['Hello World']);
+        expect(text0.properties.font.data).toEqual(['Arial']);
+        expect(text0.properties.active.data).toEqual([1]);
+    });
+
+    it('creates window overlays', () => {
+        const result = SessionGTOExporter.buildOverlayObject('overlayNode', {
+            windows: [
+                {
+                    id: 0,
+                    windowActive: true,
+                    outlineActive: true,
+                    outlineWidth: 2.0,
+                    outlineColor: [1, 1, 0, 1],
+                    windowColor: [0, 0, 0, 0.3],
+                    upperLeft: [0.1, 0.1],
+                    upperRight: [0.9, 0.1],
+                    lowerLeft: [0.1, 0.9],
+                    lowerRight: [0.9, 0.9],
+                },
+            ],
+        });
+        const components = result.components as Record<string, any>;
+
+        const win0 = components['window:0'];
+        expect(win0).toBeDefined();
+        expect(win0.properties.windowActive.data).toEqual([1]);
+        expect(win0.properties.outlineActive.data).toEqual([1]);
+        expect(win0.properties.outlineWidth.data).toEqual([2.0]);
+        expect(win0.properties.windowULx.data).toEqual([0.1]);
+        expect(win0.properties.windowULy.data).toEqual([0.1]);
+        expect(win0.properties.windowLRx.data).toEqual([0.9]);
+        expect(win0.properties.windowLRy.data).toEqual([0.9]);
+    });
+
+    it('updates nextRectId and nextTextId based on elements', () => {
+        const result = SessionGTOExporter.buildOverlayObject('overlayNode', {
+            rectangles: [{ id: 0 }, { id: 1 }, { id: 2 }],
+            texts: [{ id: 0 }, { id: 1 }],
+        });
+        const components = result.components as Record<string, any>;
+        const overlayComp = components['overlay'];
+
+        expect(overlayComp.properties.nextRectId.data).toEqual([3]);
+        expect(overlayComp.properties.nextTextId.data).toEqual([2]);
+    });
+
+    it('creates overlay with show disabled', () => {
+        const result = SessionGTOExporter.buildOverlayObject('overlayNode', {
+            show: false,
+        });
+        const components = result.components as Record<string, any>;
+
+        expect(components['overlay'].properties.show.data).toEqual([0]);
+    });
+});
+
+describe('SessionGTOExporter.buildChannelMapObject', () => {
+    it('creates RVChannelMap object with default settings', () => {
+        const result = SessionGTOExporter.buildChannelMapObject('channelMapNode');
+
+        expect(result.name).toBe('channelMapNode');
+        expect(result.protocol).toBe('RVChannelMap');
+        expect(result.protocolVersion).toBe(1);
+    });
+
+    it('creates format component with channel mapping', () => {
+        const result = SessionGTOExporter.buildChannelMapObject('channelMapNode', {
+            channels: ['R', 'G', 'B', 'A'],
+        });
+        const components = result.components as Record<string, any>;
+        const formatComp = components['format'];
+
+        expect(formatComp).toBeDefined();
+        expect(formatComp.properties.channels.data).toEqual(['R', 'G', 'B', 'A']);
+    });
+
+    it('creates format component with remapped channels', () => {
+        const result = SessionGTOExporter.buildChannelMapObject('channelMapNode', {
+            channels: ['G', 'R', 'B'],
+        });
+        const components = result.components as Record<string, any>;
+        const formatComp = components['format'];
+
+        expect(formatComp.properties.channels.data).toEqual(['G', 'R', 'B']);
+    });
+
+    it('does not create format component when channels not provided', () => {
+        const result = SessionGTOExporter.buildChannelMapObject('channelMapNode');
+        const components = result.components as Record<string, any>;
+
+        expect(components['format']).toBeUndefined();
+    });
+
+    it('does not create format component when channels array is empty', () => {
+        const result = SessionGTOExporter.buildChannelMapObject('channelMapNode', {
+            channels: [],
+        });
+        const components = result.components as Record<string, any>;
+
+        expect(components['format']).toBeUndefined();
+    });
+});
