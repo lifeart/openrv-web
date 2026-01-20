@@ -59,7 +59,7 @@ const PROTOCOL_TO_NODE_TYPE: Record<string, string> = {
   RVFolderGroup: 'RVFolderGroup',
   RVRetimeGroup: 'RVRetimeGroup',
 
-  // Effect nodes (not yet implemented - will be skipped)
+  // Effect nodes
   RVColor: 'RVColor',
   RVTransform2D: 'RVTransform2D',
   RVLensWarp: 'RVLensWarp',
@@ -67,6 +67,7 @@ const PROTOCOL_TO_NODE_TYPE: Record<string, string> = {
   RVLinearize: 'RVLinearize',
   RVLookLUT: 'RVLookLUT',
   RVCacheLUT: 'RVCacheLUT',
+  RVRetime: 'RVRetime',
 
   // View nodes (not yet implemented - will be skipped)
   RVDisplayColor: 'RVDisplayColor',
@@ -362,15 +363,58 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
 
     // Parse lens warp properties
     if (protocol === 'RVLensWarp') {
+      // Parse node component for active state
+      const nodeComp = obj.component('node');
+      if (nodeComp?.exists()) {
+        const active = nodeComp.property('active').value() as number;
+        if (typeof active === 'number') nodeInfo.properties.lensWarpActive = active !== 0;
+      }
+
       const warpComp = obj.component('warp');
       if (warpComp?.exists()) {
+        // Radial distortion coefficients
         const k1 = warpComp.property('k1').value() as number;
         const k2 = warpComp.property('k2').value() as number;
         const k3 = warpComp.property('k3').value() as number;
+        // Tangential distortion
+        const p1 = warpComp.property('p1').value() as number;
+        const p2 = warpComp.property('p2').value() as number;
+        // Distortion model
+        const model = warpComp.property('model').value() as string;
+        // Distortion scale
+        const d = warpComp.property('d').value() as number;
+        // Center point
+        const center = warpComp.property('center').value() as number[];
+        const offset = warpComp.property('offset').value() as number[];
+        // Pixel aspect ratio
+        const pixelAspectRatio = warpComp.property('pixelAspectRatio').value() as number;
+        // Focal length
+        const fx = warpComp.property('fx').value() as number;
+        const fy = warpComp.property('fy').value() as number;
+        // Crop ratios
+        const cropRatioX = warpComp.property('cropRatioX').value() as number;
+        const cropRatioY = warpComp.property('cropRatioY').value() as number;
 
         if (typeof k1 === 'number') nodeInfo.properties.k1 = k1;
         if (typeof k2 === 'number') nodeInfo.properties.k2 = k2;
         if (typeof k3 === 'number') nodeInfo.properties.k3 = k3;
+        if (typeof p1 === 'number') nodeInfo.properties.p1 = p1;
+        if (typeof p2 === 'number') nodeInfo.properties.p2 = p2;
+        if (typeof model === 'string') nodeInfo.properties.lensModel = model;
+        if (typeof d === 'number') nodeInfo.properties.distortionScale = d;
+        if (Array.isArray(center) && center.length >= 2) {
+          nodeInfo.properties.centerX = center[0]! - 0.5;
+          nodeInfo.properties.centerY = center[1]! - 0.5;
+        }
+        if (Array.isArray(offset) && offset.length >= 2) {
+          nodeInfo.properties.offsetX = offset[0];
+          nodeInfo.properties.offsetY = offset[1];
+        }
+        if (typeof pixelAspectRatio === 'number') nodeInfo.properties.pixelAspectRatio = pixelAspectRatio;
+        if (typeof fx === 'number') nodeInfo.properties.fx = fx;
+        if (typeof fy === 'number') nodeInfo.properties.fy = fy;
+        if (typeof cropRatioX === 'number') nodeInfo.properties.cropRatioX = cropRatioX;
+        if (typeof cropRatioY === 'number') nodeInfo.properties.cropRatioY = cropRatioY;
       }
     }
 
@@ -495,6 +539,63 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
         if (typeof outputType === 'string') nodeInfo.properties.lookLutOutputType = outputType;
         if (Array.isArray(outputLut)) nodeInfo.properties.lookLutOutputData = outputLut;
         if (Array.isArray(outputPrelut)) nodeInfo.properties.lookLutOutputPrelut = outputPrelut;
+      }
+    }
+
+    // Parse retime properties
+    if (protocol === 'RVRetime') {
+      // Parse visual component (video time scaling)
+      const visualComp = obj.component('visual');
+      if (visualComp?.exists()) {
+        const visualScale = visualComp.property('scale').value() as number;
+        const visualOffset = visualComp.property('offset').value() as number;
+
+        if (typeof visualScale === 'number') nodeInfo.properties.visualScale = visualScale;
+        if (typeof visualOffset === 'number') nodeInfo.properties.visualOffset = visualOffset;
+      }
+
+      // Parse audio component (audio time scaling)
+      const audioComp = obj.component('audio');
+      if (audioComp?.exists()) {
+        const audioScale = audioComp.property('scale').value() as number;
+        const audioOffset = audioComp.property('offset').value() as number;
+
+        if (typeof audioScale === 'number') nodeInfo.properties.audioScale = audioScale;
+        if (typeof audioOffset === 'number') nodeInfo.properties.audioOffset = audioOffset;
+      }
+
+      // Parse output component
+      const outputComp = obj.component('output');
+      if (outputComp?.exists()) {
+        const outputFps = outputComp.property('fps').value() as number;
+
+        if (typeof outputFps === 'number') nodeInfo.properties.retimeOutputFps = outputFps;
+      }
+
+      // Parse warp component (variable speed)
+      const warpComp = obj.component('warp');
+      if (warpComp?.exists()) {
+        const warpActive = warpComp.property('active').value() as number;
+        const warpStyle = warpComp.property('style').value() as number;
+        const keyFrames = warpComp.property('keyFrames').value() as number[];
+        const keyRates = warpComp.property('keyRates').value() as number[];
+
+        if (typeof warpActive === 'number') nodeInfo.properties.warpActive = warpActive !== 0;
+        if (typeof warpStyle === 'number') nodeInfo.properties.warpStyle = warpStyle;
+        if (Array.isArray(keyFrames)) nodeInfo.properties.warpKeyFrames = keyFrames;
+        if (Array.isArray(keyRates)) nodeInfo.properties.warpKeyRates = keyRates;
+      }
+
+      // Parse explicit component (explicit frame mapping)
+      const explicitComp = obj.component('explicit');
+      if (explicitComp?.exists()) {
+        const explicitActive = explicitComp.property('active').value() as number;
+        const firstOutputFrame = explicitComp.property('firstOutputFrame').value() as number;
+        const inputFrames = explicitComp.property('inputFrames').value() as number[];
+
+        if (typeof explicitActive === 'number') nodeInfo.properties.explicitActive = explicitActive !== 0;
+        if (typeof firstOutputFrame === 'number') nodeInfo.properties.explicitFirstOutputFrame = firstOutputFrame;
+        if (Array.isArray(inputFrames)) nodeInfo.properties.explicitInputFrames = inputFrames;
       }
     }
 

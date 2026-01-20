@@ -1023,3 +1023,189 @@ describe('SessionGTOExporter.buildLookLUTObject', () => {
         expect(lutComp.properties.preLUTSize.data).toEqual([0]);
     });
 });
+
+describe('SessionGTOExporter.buildRetimeObject', () => {
+    it('creates RVRetime object with default settings', () => {
+        const result = SessionGTOExporter.buildRetimeObject('sourceGroup000000_RVRetime');
+
+        expect(result.name).toBe('sourceGroup000000_RVRetime');
+        expect(result.protocol).toBe('RVRetime');
+        expect(result.protocolVersion).toBe(1);
+    });
+
+    it('creates visual and audio components with scale and offset', () => {
+        const result = SessionGTOExporter.buildRetimeObject('retimeNode', {
+            visualScale: 2.0,
+            visualOffset: 10,
+            audioScale: 1.5,
+            audioOffset: 5,
+        });
+        const components = result.components as Record<string, any>;
+
+        expect(components['visual'].properties.scale.data).toEqual([2.0]);
+        expect(components['visual'].properties.offset.data).toEqual([10]);
+        expect(components['audio'].properties.scale.data).toEqual([1.5]);
+        expect(components['audio'].properties.offset.data).toEqual([5]);
+    });
+
+    it('creates output component with fps', () => {
+        const result = SessionGTOExporter.buildRetimeObject('retimeNode', {
+            outputFps: 30,
+        });
+        const components = result.components as Record<string, any>;
+
+        expect(components['output'].properties.fps.data).toEqual([30]);
+    });
+
+    it('creates warp component when warp settings provided', () => {
+        const result = SessionGTOExporter.buildRetimeObject('retimeNode', {
+            warp: {
+                active: true,
+                style: 1,
+                keyFrames: [1, 50, 100],
+                keyRates: [1.0, 2.0, 0.5],
+            },
+        });
+        const components = result.components as Record<string, any>;
+        const warpComp = components['warp'];
+
+        expect(warpComp).toBeDefined();
+        expect(warpComp.properties.active.data).toEqual([1]);
+        expect(warpComp.properties.style.data).toEqual([1]);
+        expect(warpComp.properties.keyFrames.data).toEqual([1, 50, 100]);
+        expect(warpComp.properties.keyRates.data).toEqual([1.0, 2.0, 0.5]);
+    });
+
+    it('creates explicit component when explicit settings provided', () => {
+        const result = SessionGTOExporter.buildRetimeObject('retimeNode', {
+            explicit: {
+                active: true,
+                firstOutputFrame: 10,
+                inputFrames: [5, 10, 15, 20, 25],
+            },
+        });
+        const components = result.components as Record<string, any>;
+        const explicitComp = components['explicit'];
+
+        expect(explicitComp).toBeDefined();
+        expect(explicitComp.properties.active.data).toEqual([1]);
+        expect(explicitComp.properties.firstOutputFrame.data).toEqual([10]);
+        expect(explicitComp.properties.inputFrames.data).toEqual([5, 10, 15, 20, 25]);
+    });
+
+    it('does not create warp component when not provided', () => {
+        const result = SessionGTOExporter.buildRetimeObject('retimeNode');
+        const components = result.components as Record<string, any>;
+
+        expect(components['warp']).toBeUndefined();
+    });
+
+    it('does not create explicit component when not provided', () => {
+        const result = SessionGTOExporter.buildRetimeObject('retimeNode');
+        const components = result.components as Record<string, any>;
+
+        expect(components['explicit']).toBeUndefined();
+    });
+});
+
+describe('SessionGTOExporter.buildDisplayColorObject', () => {
+    it('creates RVDisplayColor object with default settings', () => {
+        const result = SessionGTOExporter.buildDisplayColorObject('displayColorNode');
+
+        expect(result.name).toBe('displayColorNode');
+        expect(result.protocol).toBe('RVDisplayColor');
+        expect(result.protocolVersion).toBe(1);
+    });
+
+    it('creates color component with all settings', () => {
+        const result = SessionGTOExporter.buildDisplayColorObject('displayColorNode', {
+            active: true,
+            channelOrder: 'BGRA',
+            channelFlood: 1,
+            premult: true,
+            gamma: 2.4,
+            sRGB: true,
+            Rec709: false,
+            brightness: 0.5,
+            outOfRange: 1,
+            dither: 1,
+            ditherLast: false,
+        });
+        const components = result.components as Record<string, any>;
+        const colorComp = components['color'];
+
+        expect(colorComp.properties.active.data).toEqual([1]);
+        expect(colorComp.properties.channelOrder.data).toEqual(['BGRA']);
+        expect(colorComp.properties.channelFlood.data).toEqual([1]);
+        expect(colorComp.properties.premult.data).toEqual([1]);
+        expect(colorComp.properties.gamma.data).toEqual([2.4]);
+        expect(colorComp.properties.sRGB.data).toEqual([1]);
+        expect(colorComp.properties.Rec709.data).toEqual([0]);
+        expect(colorComp.properties.brightness.data).toEqual([0.5]);
+        expect(colorComp.properties.outOfRange.data).toEqual([1]);
+        expect(colorComp.properties.dither.data).toEqual([1]);
+        expect(colorComp.properties.ditherLast.data).toEqual([0]);
+    });
+
+    it('creates chromaticities component when settings provided', () => {
+        const result = SessionGTOExporter.buildDisplayColorObject('displayColorNode', {
+            chromaticities: {
+                active: true,
+                adoptedNeutral: true,
+                white: [0.3127, 0.329],
+                red: [0.64, 0.33],
+                green: [0.3, 0.6],
+                blue: [0.15, 0.06],
+                neutral: [0.3127, 0.329],
+            },
+        });
+        const components = result.components as Record<string, any>;
+        const chromComp = components['chromaticities'];
+
+        expect(chromComp).toBeDefined();
+        expect(chromComp.properties.active.data).toEqual([1]);
+        expect(chromComp.properties.adoptedNeutral.data).toEqual([1]);
+    });
+
+    it('does not create chromaticities component when not provided', () => {
+        const result = SessionGTOExporter.buildDisplayColorObject('displayColorNode');
+        const components = result.components as Record<string, any>;
+
+        expect(components['chromaticities']).toBeUndefined();
+    });
+});
+
+describe('SessionGTOExporter.buildDisplayStereoObject', () => {
+    it('creates RVDisplayStereo object with default settings', () => {
+        const result = SessionGTOExporter.buildDisplayStereoObject('displayStereoNode');
+
+        expect(result.name).toBe('displayStereoNode');
+        expect(result.protocol).toBe('RVDisplayStereo');
+        expect(result.protocolVersion).toBe(1);
+    });
+
+    it('creates stereo component with settings', () => {
+        const result = SessionGTOExporter.buildDisplayStereoObject('displayStereoNode', {
+            type: 'pair',
+            swap: true,
+            relativeOffset: 0.05,
+            rightOffset: [10, 0],
+        });
+        const components = result.components as Record<string, any>;
+        const stereoComp = components['stereo'];
+
+        expect(stereoComp.properties.type.data).toEqual(['pair']);
+        expect(stereoComp.properties.swap.data).toEqual([1]);
+        expect(stereoComp.properties.relativeOffset.data).toEqual([0.05]);
+    });
+
+    it('creates stereo component with default values', () => {
+        const result = SessionGTOExporter.buildDisplayStereoObject('displayStereoNode');
+        const components = result.components as Record<string, any>;
+        const stereoComp = components['stereo'];
+
+        expect(stereoComp.properties.type.data).toEqual(['off']);
+        expect(stereoComp.properties.swap.data).toEqual([0]);
+        expect(stereoComp.properties.relativeOffset.data).toEqual([0.0]);
+    });
+});

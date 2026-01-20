@@ -143,16 +143,65 @@ export class SessionGTOStore {
     this.setProperty(component, 'translate', 'float', 2, [[transform.translate.x, transform.translate.y]]);
   }
 
-  private updateLens(params: { k1: number; k2: number; centerX: number; centerY: number; scale: number }): void {
+  private updateLens(params: {
+    k1: number;
+    k2: number;
+    k3?: number;
+    p1?: number;
+    p2?: number;
+    centerX: number;
+    centerY: number;
+    scale: number;
+    model?: string;
+    pixelAspectRatio?: number;
+    fx?: number;
+    fy?: number;
+    cropRatioX?: number;
+    cropRatioY?: number;
+  }): void {
     const target = this.ensureObject('RVLensWarp', 'rvLensWarp');
     const nodeComponent = this.ensureComponent(target, 'node');
     const warpComponent = this.ensureComponent(target, 'warp');
     const isDefault = isDefaultLensParams(params);
 
     this.setProperty(nodeComponent, 'active', 'int', 1, isDefault ? 0 : 1);
+    // Radial distortion
     this.setProperty(warpComponent, 'k1', 'float', 1, params.k1);
     this.setProperty(warpComponent, 'k2', 'float', 1, params.k2);
+    if (params.k3 !== undefined) {
+      this.setProperty(warpComponent, 'k3', 'float', 1, params.k3);
+    }
+    // Tangential distortion
+    if (params.p1 !== undefined) {
+      this.setProperty(warpComponent, 'p1', 'float', 1, params.p1);
+    }
+    if (params.p2 !== undefined) {
+      this.setProperty(warpComponent, 'p2', 'float', 1, params.p2);
+    }
+    // Center point
     this.setProperty(warpComponent, 'center', 'float', 2, [[params.centerX + 0.5, params.centerY + 0.5]]);
+    // Model
+    if (params.model !== undefined) {
+      this.setProperty(warpComponent, 'model', 'string', 1, params.model);
+    }
+    // Pixel aspect ratio
+    if (params.pixelAspectRatio !== undefined) {
+      this.setProperty(warpComponent, 'pixelAspectRatio', 'float', 1, params.pixelAspectRatio);
+    }
+    // Focal length
+    if (params.fx !== undefined) {
+      this.setProperty(warpComponent, 'fx', 'float', 1, params.fx);
+    }
+    if (params.fy !== undefined) {
+      this.setProperty(warpComponent, 'fy', 'float', 1, params.fy);
+    }
+    // Crop ratios
+    if (params.cropRatioX !== undefined) {
+      this.setProperty(warpComponent, 'cropRatioX', 'float', 1, params.cropRatioX);
+    }
+    if (params.cropRatioY !== undefined) {
+      this.setProperty(warpComponent, 'cropRatioY', 'float', 1, params.cropRatioY);
+    }
   }
 
   private updateCrop(session: Session, crop: { enabled: boolean; region: { x: number; y: number; width: number; height: number } }): void {

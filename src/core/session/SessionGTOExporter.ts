@@ -245,6 +245,98 @@ export interface LookLUTSettings {
   prelutData?: number[];
 }
 
+/**
+ * RVDisplayColor settings for display output color processing
+ */
+export interface DisplayColorSettings {
+  /** Node is active */
+  active?: boolean;
+  /** Channel reordering (e.g., 'RGBA', 'BGRA') */
+  channelOrder?: string;
+  /** Channel flood mode */
+  channelFlood?: number;
+  /** Premultiplication */
+  premult?: boolean;
+  /** Display gamma */
+  gamma?: number;
+  /** sRGB output conversion */
+  sRGB?: boolean;
+  /** Rec709 output conversion */
+  Rec709?: boolean;
+  /** Brightness adjustment */
+  brightness?: number;
+  /** Out-of-range handling */
+  outOfRange?: number;
+  /** Dithering mode */
+  dither?: number;
+  /** Dither application order */
+  ditherLast?: boolean;
+  /** Custom matrix (4x4) */
+  matrix?: number[][];
+  /** Override colorspace */
+  overrideColorspace?: string;
+  /** Chromaticity settings */
+  chromaticities?: {
+    active?: boolean;
+    adoptedNeutral?: boolean;
+    white?: [number, number];
+    red?: [number, number];
+    green?: [number, number];
+    blue?: [number, number];
+    neutral?: [number, number];
+  };
+}
+
+/**
+ * RVDisplayStereo settings for stereo display mode
+ */
+export interface DisplayStereoSettings {
+  /** Stereo display mode (off, left, right, pair, mirror, etc.) */
+  type?: string;
+  /** Swap left/right eyes */
+  swap?: boolean;
+  /** Relative offset between eyes */
+  relativeOffset?: number;
+  /** Right eye offset */
+  rightOffset?: [number, number];
+}
+
+/**
+ * RVRetime settings for time remapping
+ */
+export interface RetimeSettings {
+  /** Visual scale (speed factor) */
+  visualScale?: number;
+  /** Visual offset (frame shift) */
+  visualOffset?: number;
+  /** Audio scale (speed factor) */
+  audioScale?: number;
+  /** Audio offset (frame shift) */
+  audioOffset?: number;
+  /** Output FPS */
+  outputFps?: number;
+  /** Warp mode settings */
+  warp?: {
+    /** Warp is active */
+    active?: boolean;
+    /** Interpolation style (0=linear, 1=smooth) */
+    style?: number;
+    /** Keyframe positions */
+    keyFrames?: number[];
+    /** Rate at each keyframe */
+    keyRates?: number[];
+  };
+  /** Explicit frame mapping */
+  explicit?: {
+    /** Explicit mapping is active */
+    active?: boolean;
+    /** First output frame */
+    firstOutputFrame?: number;
+    /** Input frame for each output frame */
+    inputFrames?: number[];
+  };
+}
+
 export interface GTOComponentDTO {
   property(name: string): {
     value(): unknown;
@@ -731,6 +823,140 @@ export class SessionGTOExporter {
     }
 
     colorObject.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVRetime object for time remapping
+   * @param name - Object name (e.g., 'sourceGroup000000_RVRetime')
+   * @param settings - Retime settings
+   */
+  static buildRetimeObject(name: string, settings: RetimeSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const retimeObject = builder.object(name, 'RVRetime', 1);
+
+    // Visual component (video time scaling)
+    retimeObject
+      .component('visual')
+      .float('scale', settings.visualScale ?? 1.0)
+      .float('offset', settings.visualOffset ?? 0.0)
+      .end();
+
+    // Audio component (audio time scaling)
+    retimeObject
+      .component('audio')
+      .float('scale', settings.audioScale ?? 1.0)
+      .float('offset', settings.audioOffset ?? 0.0)
+      .end();
+
+    // Output component
+    if (settings.outputFps !== undefined) {
+      retimeObject
+        .component('output')
+        .float('fps', settings.outputFps)
+        .end();
+    }
+
+    // Warp component (variable speed)
+    if (settings.warp) {
+      const warp = settings.warp;
+      retimeObject
+        .component('warp')
+        .int('active', warp.active ? 1 : 0)
+        .int('style', warp.style ?? 0)
+        .int('keyFrames', warp.keyFrames ?? [])
+        .float('keyRates', warp.keyRates ?? [])
+        .end();
+    }
+
+    // Explicit component (explicit frame mapping)
+    if (settings.explicit) {
+      const explicit = settings.explicit;
+      retimeObject
+        .component('explicit')
+        .int('active', explicit.active ? 1 : 0)
+        .int('firstOutputFrame', explicit.firstOutputFrame ?? 1)
+        .int('inputFrames', explicit.inputFrames ?? [])
+        .end();
+    }
+
+    retimeObject.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVDisplayColor object for display output color processing
+   * @param name - Object name (e.g., 'displayColorNode')
+   * @param settings - Display color settings
+   */
+  static buildDisplayColorObject(name: string, settings: DisplayColorSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const displayColorObject = builder.object(name, 'RVDisplayColor', 1);
+
+    // Color component
+    const colorComp = displayColorObject.component('color');
+    colorComp
+      .int('active', settings.active !== false ? 1 : 0)
+      .string('channelOrder', settings.channelOrder ?? 'RGBA')
+      .int('channelFlood', settings.channelFlood ?? 0)
+      .int('premult', settings.premult ? 1 : 0)
+      .float('gamma', settings.gamma ?? 1.0)
+      .int('sRGB', settings.sRGB ? 1 : 0)
+      .int('Rec709', settings.Rec709 ? 1 : 0)
+      .float('brightness', settings.brightness ?? 0.0)
+      .int('outOfRange', settings.outOfRange ?? 0)
+      .int('dither', settings.dither ?? 0)
+      .int('ditherLast', settings.ditherLast !== false ? 1 : 0);
+
+    if (settings.matrix) {
+      colorComp.float44('matrix', settings.matrix);
+    }
+    if (settings.overrideColorspace) {
+      colorComp.string('overrideColorspace', settings.overrideColorspace);
+    }
+    colorComp.end();
+
+    // Chromaticities component (if settings provided)
+    if (settings.chromaticities) {
+      const chrom = settings.chromaticities;
+      displayColorObject
+        .component('chromaticities')
+        .int('active', chrom.active ? 1 : 0)
+        .int('adoptedNeutral', chrom.adoptedNeutral !== false ? 1 : 0)
+        .float2('white', [chrom.white ?? [0.3127, 0.329]])
+        .float2('red', [chrom.red ?? [0.64, 0.33]])
+        .float2('green', [chrom.green ?? [0.3, 0.6]])
+        .float2('blue', [chrom.blue ?? [0.15, 0.06]])
+        .float2('neutral', [chrom.neutral ?? [0.3127, 0.329]])
+        .end();
+    }
+
+    displayColorObject.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVDisplayStereo object for stereo display configuration
+   * @param name - Object name (e.g., 'displayStereoNode')
+   * @param settings - Display stereo settings
+   */
+  static buildDisplayStereoObject(name: string, settings: DisplayStereoSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const displayStereoObject = builder.object(name, 'RVDisplayStereo', 1);
+
+    // Stereo component
+    displayStereoObject
+      .component('stereo')
+      .string('type', settings.type ?? 'off')
+      .int('swap', settings.swap ? 1 : 0)
+      .float('relativeOffset', settings.relativeOffset ?? 0.0)
+      .float2('rightOffset', [settings.rightOffset ?? [0, 0]])
+      .end();
+
+    displayStereoObject.end();
     return builder.build().objects[0]!;
   }
 

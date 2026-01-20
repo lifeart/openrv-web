@@ -541,6 +541,75 @@ describe('GTOGraphLoader', () => {
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('k3', 0.01);
     });
 
+    it('parses extended RVLensWarp properties (tangential, model, center)', () => {
+      const mockNode = {
+        type: 'RVLensWarp',
+        name: 'lensNode',
+        properties: {
+          has: vi.fn((key: string) =>
+            [
+              'k1', 'k2', 'k3', 'p1', 'p2', 'lensModel', 'distortionScale',
+              'centerX', 'centerY', 'pixelAspectRatio', 'fx', 'fy',
+              'cropRatioX', 'cropRatioY', 'lensWarpActive',
+            ].includes(key)
+          ),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'lensNode',
+            protocol: 'RVLensWarp',
+            components: {
+              node: { active: 1 },
+              warp: {
+                k1: 0.1,
+                k2: 0.05,
+                k3: 0.01,
+                p1: 0.001,
+                p2: 0.002,
+                model: 'brown',
+                d: 1.1,
+                center: [0.55, 0.45],
+                pixelAspectRatio: 1.0,
+                fx: 1.5,
+                fy: 1.5,
+                cropRatioX: 0.9,
+                cropRatioY: 0.9,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('lensWarpActive', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('k1', 0.1);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('k2', 0.05);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('k3', 0.01);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('p1', 0.001);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('p2', 0.002);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('lensModel', 'brown');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('distortionScale', 1.1);
+      // Use expect.closeTo for floating point precision (center[0] - 0.5 = 0.55 - 0.5 = 0.05)
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('centerX', expect.closeTo(0.05, 5));
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('centerY', expect.closeTo(-0.05, 5));
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('pixelAspectRatio', 1.0);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('fx', 1.5);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('fy', 1.5);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('cropRatioX', 0.9);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('cropRatioY', 0.9);
+    });
+
     it('parses color properties', () => {
       const mockNode = {
         type: 'RVColor',
@@ -725,6 +794,131 @@ describe('GTOGraphLoader', () => {
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('luminanceLutMax', 2.0);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('luminanceLutSize', 256);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('luminanceLutName', 'TestLumLUT');
+    });
+
+    it('parses RVRetime visual and audio properties', () => {
+      const mockNode = {
+        type: 'RVRetime',
+        name: 'retimeNode',
+        properties: {
+          has: vi.fn((key: string) =>
+            ['visualScale', 'visualOffset', 'audioScale', 'audioOffset', 'retimeOutputFps'].includes(key)
+          ),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'retimeNode',
+            protocol: 'RVRetime',
+            components: {
+              visual: { scale: 2.0, offset: 10 },
+              audio: { scale: 1.5, offset: 5 },
+              output: { fps: 30 },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('visualScale', 2.0);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('visualOffset', 10);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('audioScale', 1.5);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('audioOffset', 5);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('retimeOutputFps', 30);
+    });
+
+    it('parses RVRetime warp component', () => {
+      const mockNode = {
+        type: 'RVRetime',
+        name: 'retimeNode',
+        properties: {
+          has: vi.fn((key: string) =>
+            ['warpActive', 'warpStyle', 'warpKeyFrames', 'warpKeyRates'].includes(key)
+          ),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'retimeNode',
+            protocol: 'RVRetime',
+            components: {
+              warp: {
+                active: 1,
+                style: 1,
+                keyFrames: [1, 50, 100],
+                keyRates: [1.0, 2.0, 0.5],
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('warpActive', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('warpStyle', 1);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('warpKeyFrames', [1, 50, 100]);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('warpKeyRates', [1.0, 2.0, 0.5]);
+    });
+
+    it('parses RVRetime explicit component', () => {
+      const mockNode = {
+        type: 'RVRetime',
+        name: 'retimeNode',
+        properties: {
+          has: vi.fn((key: string) =>
+            ['explicitActive', 'explicitFirstOutputFrame', 'explicitInputFrames'].includes(key)
+          ),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'retimeNode',
+            protocol: 'RVRetime',
+            components: {
+              explicit: {
+                active: 1,
+                firstOutputFrame: 10,
+                inputFrames: [5, 10, 15, 20, 25],
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('explicitActive', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('explicitFirstOutputFrame', 10);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('explicitInputFrames', [5, 10, 15, 20, 25]);
     });
 
     it('uses default session name when none provided', () => {

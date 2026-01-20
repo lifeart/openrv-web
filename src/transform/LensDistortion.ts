@@ -12,53 +12,88 @@ export interface LensDistortionParams {
   // Radial distortion coefficients
   k1: number;  // Primary radial (-1 to 1, negative = barrel, positive = pincushion)
   k2: number;  // Secondary radial (-1 to 1)
+  k3: number;  // Tertiary radial distortion
+  // Tangential distortion coefficients (decentering)
+  p1: number;  // Tangential X
+  p2: number;  // Tangential Y
   // Center offset (normalized, 0 = center)
   centerX: number;  // -0.5 to 0.5
   centerY: number;  // -0.5 to 0.5
   // Scale to compensate for distortion cropping
   scale: number;  // 0.5 to 2.0
+  // Distortion model type
+  model: 'brown' | 'opencv' | 'pfbarrel' | '3de4_radial_standard' | '3de4_anamorphic';
+  // Pixel aspect ratio
+  pixelAspectRatio: number;
+  // Focal length (normalized)
+  fx: number;
+  fy: number;
+  // Crop ratios for output
+  cropRatioX: number;
+  cropRatioY: number;
 }
 
 export const DEFAULT_LENS_PARAMS: LensDistortionParams = {
   k1: 0,
   k2: 0,
+  k3: 0,
+  p1: 0,
+  p2: 0,
   centerX: 0,
   centerY: 0,
   scale: 1,
+  model: 'brown',
+  pixelAspectRatio: 1,
+  fx: 1,
+  fy: 1,
+  cropRatioX: 1,
+  cropRatioY: 1,
 };
 
 /**
  * Check if lens parameters are at defaults (no correction)
  */
-export function isDefaultLensParams(params: LensDistortionParams): boolean {
+export function isDefaultLensParams(params: Partial<LensDistortionParams>): boolean {
   return (
-    params.k1 === 0 &&
-    params.k2 === 0 &&
-    params.centerX === 0 &&
-    params.centerY === 0 &&
-    params.scale === 1
+    (params.k1 ?? 0) === 0 &&
+    (params.k2 ?? 0) === 0 &&
+    (params.k3 ?? 0) === 0 &&
+    (params.p1 ?? 0) === 0 &&
+    (params.p2 ?? 0) === 0 &&
+    (params.centerX ?? 0) === 0 &&
+    (params.centerY ?? 0) === 0 &&
+    (params.scale ?? 1) === 1
   );
 }
 
 /**
  * Apply inverse radial distortion to get source coordinates
  * Given a destination point, find where it came from in the source
+ * Includes tangential (decentering) distortion support
  */
 function undistortPoint(
   dx: number,  // Destination x (normalized -1 to 1)
   dy: number,  // Destination y (normalized -1 to 1)
   k1: number,
-  k2: number
+  k2: number,
+  k3 = 0,
+  p1 = 0,
+  p2 = 0
 ): { x: number; y: number } {
   const r2 = dx * dx + dy * dy;
   const r4 = r2 * r2;
+  const r6 = r4 * r2;
 
-  // Radial distortion factor
-  const radialFactor = 1 + k1 * r2 + k2 * r4;
+  // Radial distortion factor (Brown-Conrady model)
+  const radialFactor = 1 + k1 * r2 + k2 * r4 + k3 * r6;
+
+  // Tangential (decentering) distortion
+  const tangentialX = 2 * p1 * dx * dy + p2 * (r2 + 2 * dx * dx);
+  const tangentialY = p1 * (r2 + 2 * dy * dy) + 2 * p2 * dx * dy;
 
   return {
-    x: dx * radialFactor,
-    y: dy * radialFactor,
+    x: dx * radialFactor + tangentialX,
+    y: dy * radialFactor + tangentialY,
   };
 }
 
@@ -74,7 +109,7 @@ export function applyLensDistortion(
     return sourceData;
   }
 
-  const { k1, k2, centerX, centerY, scale } = params;
+  const { k1, k2, k3, p1, p2, centerX, centerY, scale, pixelAspectRatio } = params;
   const width = sourceData.width;
   const height = sourceData.height;
   const src = sourceData.data;
@@ -93,12 +128,15 @@ export function applyLensDistortion(
   // Process each destination pixel
   for (let dy = 0; dy < height; dy++) {
     for (let dx = 0; dx < width; dx++) {
-      // Normalize coordinates to -1 to 1 range (accounting for aspect ratio)
+      // Normalize coordinates to -1 to 1 range (accounting for aspect ratio and pixel aspect ratio)
       let nx = ((dx - cx) / maxDim) * 2 * scale;
-      let ny = ((dy - cy) / maxDim) * 2 * scale;
+      let ny = ((dy - cy) / maxDim) * 2 * scale * pixelAspectRatio;
 
       // Apply inverse distortion to find source coordinates
-      const undistorted = undistortPoint(nx, ny, k1, k2);
+      const undistorted = undistortPoint(nx, ny, k1, k2, k3, p1, p2);
+
+      // Compensate for pixel aspect ratio in output
+      undistorted.y /= pixelAspectRatio;
 
       // Convert back to pixel coordinates
       const sx = undistorted.x * maxDim / 2 + cx;
@@ -173,7 +211,7 @@ export function generateDistortionGrid(
   gridSize = 20
 ): { lines: Array<{ x1: number; y1: number; x2: number; y2: number }> } {
   const lines: Array<{ x1: number; y1: number; x2: number; y2: number }> = [];
-  const { k1, k2, centerX, centerY, scale } = params;
+  const { k1, k2, k3, p1, p2, centerX, centerY, scale, pixelAspectRatio } = params;
 
   const cx = width / 2 + centerX * width;
   const cy = height / 2 + centerY * height;
@@ -182,11 +220,11 @@ export function generateDistortionGrid(
   // Helper to transform a point
   const transformPoint = (px: number, py: number): { x: number; y: number } => {
     let nx = ((px - cx) / maxDim) * 2 * scale;
-    let ny = ((py - cy) / maxDim) * 2 * scale;
-    const undist = undistortPoint(nx, ny, k1, k2);
+    let ny = ((py - cy) / maxDim) * 2 * scale * pixelAspectRatio;
+    const undist = undistortPoint(nx, ny, k1, k2, k3, p1, p2);
     return {
       x: undist.x * maxDim / 2 + cx,
-      y: undist.y * maxDim / 2 + cy,
+      y: (undist.y / pixelAspectRatio) * maxDim / 2 + cy,
     };
   };
 
