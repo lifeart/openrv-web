@@ -79,6 +79,12 @@ const PROTOCOL_TO_NODE_TYPE: Record<string, string> = {
   RVFormat: 'RVFormat',
   RVChannelMap: 'RVChannelMap',
   RVLayout: 'RVLayout',
+  RVSwitch: 'RVSwitch',
+
+  // View nodes
+  RVViewGroup: 'RVViewGroup',
+  RVSoundTrack: 'RVSoundTrack',
+  Waveform: 'Waveform',
 };
 
 /**
@@ -994,6 +1000,62 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
       if (timingComp?.exists()) {
         const retimeInputs = timingComp.property('retimeInputs').value() as number;
         if (typeof retimeInputs === 'number') nodeInfo.properties.layoutRetimeInputs = retimeInputs !== 0;
+      }
+    }
+
+    // Parse RVSwitch properties
+    if (protocol === 'RVSwitch') {
+      const outputComp = obj.component('output');
+      if (outputComp?.exists()) {
+        const fps = outputComp.property('fps').value() as number;
+        const size = outputComp.property('size').value() as number[];
+        const input = outputComp.property('input').value() as string;
+        const autoSize = outputComp.property('autoSize').value() as number;
+
+        if (typeof fps === 'number') nodeInfo.properties.switchFps = fps;
+        if (Array.isArray(size)) nodeInfo.properties.switchSize = size;
+        if (typeof input === 'string') nodeInfo.properties.switchInput = input;
+        if (typeof autoSize === 'number') nodeInfo.properties.switchAutoSize = autoSize !== 0;
+      }
+
+      const modeComp = obj.component('mode');
+      if (modeComp?.exists()) {
+        const useCutInfo = modeComp.property('useCutInfo').value() as number;
+        const autoEDL = modeComp.property('autoEDL').value() as number;
+        const alignStartFrames = modeComp.property('alignStartFrames').value() as number;
+
+        if (typeof useCutInfo === 'number') nodeInfo.properties.switchUseCutInfo = useCutInfo !== 0;
+        if (typeof autoEDL === 'number') nodeInfo.properties.switchAutoEDL = autoEDL !== 0;
+        if (typeof alignStartFrames === 'number') nodeInfo.properties.switchAlignStartFrames = alignStartFrames !== 0;
+      }
+    }
+
+    // Parse RVSoundTrack properties
+    if (protocol === 'RVSoundTrack') {
+      const audioComp = obj.component('audio');
+      if (audioComp?.exists()) {
+        const volume = audioComp.property('volume').value() as number;
+        const balance = audioComp.property('balance').value() as number;
+        const offset = audioComp.property('offset').value() as number;
+        const internalOffset = audioComp.property('internalOffset').value() as number;
+        const mute = audioComp.property('mute').value() as number;
+        const softClamp = audioComp.property('softClamp').value() as number;
+
+        if (typeof volume === 'number') nodeInfo.properties.audioVolume = volume;
+        if (typeof balance === 'number') nodeInfo.properties.audioBalance = balance;
+        if (typeof offset === 'number') nodeInfo.properties.audioOffset = offset;
+        if (typeof internalOffset === 'number') nodeInfo.properties.audioInternalOffset = internalOffset;
+        if (typeof mute === 'number') nodeInfo.properties.audioMute = mute !== 0;
+        if (typeof softClamp === 'number') nodeInfo.properties.audioSoftClamp = softClamp !== 0;
+      }
+
+      const visualComp = obj.component('visual');
+      if (visualComp?.exists()) {
+        const width = visualComp.property('width').value() as number;
+        const height = visualComp.property('height').value() as number;
+
+        if (typeof width === 'number') nodeInfo.properties.waveformWidth = width;
+        if (typeof height === 'number') nodeInfo.properties.waveformHeight = height;
       }
     }
 

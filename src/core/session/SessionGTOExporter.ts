@@ -110,6 +110,68 @@ export interface RetimeGroupSettings {
 }
 
 /**
+ * Switch group settings for single input selection
+ */
+export interface SwitchGroupSettings {
+  /** Display name */
+  name?: string;
+  /** Output FPS (0 = use source fps) */
+  fps?: number;
+  /** Output dimensions [width, height] */
+  size?: [number, number];
+  /** Selected input node name */
+  input?: string;
+  /** Auto-calculate size */
+  autoSize?: boolean;
+  /** Use source cut points */
+  useCutInfo?: boolean;
+  /** Auto-generate EDL */
+  autoEDL?: boolean;
+  /** Align start frames */
+  alignStartFrames?: boolean;
+}
+
+/**
+ * Folder group settings for multi-purpose collection
+ */
+export interface FolderGroupSettings {
+  /** Display name */
+  name?: string;
+  /** View mode type: 'switch', 'layout', 'stack', 'sequence' */
+  viewType?: string;
+}
+
+/**
+ * Sound track settings for audio handling
+ */
+export interface SoundTrackSettings {
+  /** Audio volume (0-1) */
+  volume?: number;
+  /** Stereo balance (-1 to 1) */
+  balance?: number;
+  /** Audio offset in seconds */
+  offset?: number;
+  /** Internal offset */
+  internalOffset?: number;
+  /** Mute audio */
+  mute?: boolean;
+  /** Enable soft clamp */
+  softClamp?: boolean;
+  /** Waveform width */
+  waveformWidth?: number;
+  /** Waveform height */
+  waveformHeight?: number;
+}
+
+/**
+ * Waveform settings for audio visualization
+ */
+export interface WaveformSettings {
+  /** Active state */
+  active?: boolean;
+}
+
+/**
  * Cineon log settings
  */
 export interface CineonSettings {
@@ -943,6 +1005,91 @@ export class SessionGTOExporter {
   }
 
   /**
+   * Build switch group objects (RVSwitchGroup + RVSwitch)
+   * @param groupName - Name for the switch group
+   * @param settings - Optional switch settings
+   */
+  static buildSwitchGroupObjects(
+    groupName: string,
+    settings?: SwitchGroupSettings
+  ): ObjectData[] {
+    const objects: ObjectData[] = [];
+    const switchName = `${groupName}_switch`;
+
+    // 1. RVSwitchGroup container
+    const groupBuilder = new GTOBuilder();
+    groupBuilder
+      .object(groupName, 'RVSwitchGroup', 1)
+      .component('ui')
+      .string('name', settings?.name ?? 'Switch')
+      .end()
+      .end();
+    objects.push(groupBuilder.build().objects[0]!);
+
+    // 2. RVSwitch node with settings
+    const switchBuilder = new GTOBuilder();
+    const switchObject = switchBuilder.object(switchName, 'RVSwitch', 1);
+
+    // Output component
+    const outputComp = switchObject.component('output');
+    outputComp
+      .float('fps', settings?.fps ?? 0.0)
+      .int('autoSize', settings?.autoSize !== false ? 1 : 0);
+
+    if (settings?.size) {
+      outputComp.int2('size', [settings.size]);
+    }
+    if (settings?.input) {
+      outputComp.string('input', settings.input);
+    }
+    outputComp.end();
+
+    // Mode component
+    switchObject
+      .component('mode')
+      .int('useCutInfo', settings?.useCutInfo !== false ? 1 : 0)
+      .int('autoEDL', settings?.autoEDL !== false ? 1 : 0)
+      .int('alignStartFrames', settings?.alignStartFrames ? 1 : 0)
+      .end();
+
+    switchObject.end();
+    objects.push(switchBuilder.build().objects[0]!);
+
+    return objects;
+  }
+
+  /**
+   * Build folder group objects (RVFolderGroup)
+   * @param groupName - Name for the folder group
+   * @param settings - Optional folder settings
+   */
+  static buildFolderGroupObjects(
+    groupName: string,
+    settings?: FolderGroupSettings
+  ): ObjectData[] {
+    const objects: ObjectData[] = [];
+
+    // RVFolderGroup container
+    const groupBuilder = new GTOBuilder();
+    const folderObject = groupBuilder.object(groupName, 'RVFolderGroup', 1);
+
+    folderObject
+      .component('ui')
+      .string('name', settings?.name ?? 'Folder')
+      .end();
+
+    folderObject
+      .component('mode')
+      .string('viewType', settings?.viewType ?? 'switch')
+      .end();
+
+    folderObject.end();
+    objects.push(groupBuilder.build().objects[0]!);
+
+    return objects;
+  }
+
+  /**
    * Build a display group object (RVDisplayGroup)
    * @param groupName - Name for the display group (typically 'displayGroup')
    * @param displayName - Display name for UI
@@ -978,6 +1125,77 @@ export class SessionGTOExporter {
       .end()
       .end();
 
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build a Waveform object for audio waveform display
+   * @param name - Object name
+   * @param active - Whether waveform display is active
+   */
+  static buildWaveformObject(name: string, active: boolean = false): ObjectData {
+    const builder = new GTOBuilder();
+
+    builder
+      .object(name, 'Waveform', 1)
+      .component('node')
+      .int('active', active ? 1 : 0)
+      .end()
+      .end();
+
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVViewGroup object (view transformation hub)
+   * @param groupName - Name for the view group (typically 'viewGroup')
+   * @param displayName - Display name for UI
+   */
+  static buildViewGroupObject(
+    groupName: string = 'viewGroup',
+    displayName: string = 'View'
+  ): ObjectData {
+    const builder = new GTOBuilder();
+
+    builder
+      .object(groupName, 'RVViewGroup', 1)
+      .component('ui')
+      .string('name', displayName)
+      .end()
+      .end();
+
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVSoundTrack object for audio handling
+   * @param name - Object name
+   * @param settings - Sound track settings
+   */
+  static buildSoundTrackObject(name: string, settings: SoundTrackSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const soundTrackObject = builder.object(name, 'RVSoundTrack', 1);
+
+    // Audio component
+    soundTrackObject
+      .component('audio')
+      .float('volume', settings.volume ?? 1.0)
+      .float('balance', settings.balance ?? 0.0)
+      .float('offset', settings.offset ?? 0.0)
+      .float('internalOffset', settings.internalOffset ?? 0.0)
+      .int('mute', settings.mute ? 1 : 0)
+      .int('softClamp', settings.softClamp ? 1 : 0)
+      .end();
+
+    // Visual component (waveform display)
+    soundTrackObject
+      .component('visual')
+      .int('width', settings.waveformWidth ?? 0)
+      .int('height', settings.waveformHeight ?? 0)
+      .end();
+
+    soundTrackObject.end();
     return builder.build().objects[0]!;
   }
 

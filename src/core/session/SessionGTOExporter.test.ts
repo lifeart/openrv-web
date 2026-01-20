@@ -1731,3 +1731,218 @@ describe('SessionGTOExporter.buildHistogramObject', () => {
         expect(components['node'].properties.active.data).toEqual([0]);
     });
 });
+
+describe('SessionGTOExporter.buildSwitchGroupObjects', () => {
+    it('creates RVSwitchGroup and RVSwitch objects', () => {
+        const result = SessionGTOExporter.buildSwitchGroupObjects('switchGroup');
+
+        expect(result).toHaveLength(2);
+        expect(result[0].name).toBe('switchGroup');
+        expect(result[0].protocol).toBe('RVSwitchGroup');
+        expect(result[1].name).toBe('switchGroup_switch');
+        expect(result[1].protocol).toBe('RVSwitch');
+    });
+
+    it('sets display name in ui component', () => {
+        const result = SessionGTOExporter.buildSwitchGroupObjects('switchGroup', {
+            name: 'My Switch',
+        });
+
+        const groupComponents = result[0].components as Record<string, any>;
+        expect(groupComponents['ui'].properties.name.data).toEqual(['My Switch']);
+    });
+
+    it('creates output component with fps and autoSize', () => {
+        const result = SessionGTOExporter.buildSwitchGroupObjects('switchGroup', {
+            fps: 30.0,
+            autoSize: false,
+        });
+
+        const switchComponents = result[1].components as Record<string, any>;
+        const outputComp = switchComponents['output'];
+
+        expect(outputComp.properties.fps.data).toEqual([30.0]);
+        expect(outputComp.properties.autoSize.data).toEqual([0]);
+    });
+
+    it('creates output component with size and input', () => {
+        const result = SessionGTOExporter.buildSwitchGroupObjects('switchGroup', {
+            size: [1920, 1080],
+            input: 'sourceGroup000000',
+        });
+
+        const switchComponents = result[1].components as Record<string, any>;
+        const outputComp = switchComponents['output'];
+
+        expect(outputComp.properties.input.data).toEqual(['sourceGroup000000']);
+    });
+
+    it('creates mode component with settings', () => {
+        const result = SessionGTOExporter.buildSwitchGroupObjects('switchGroup', {
+            useCutInfo: false,
+            autoEDL: false,
+            alignStartFrames: true,
+        });
+
+        const switchComponents = result[1].components as Record<string, any>;
+        const modeComp = switchComponents['mode'];
+
+        expect(modeComp.properties.useCutInfo.data).toEqual([0]);
+        expect(modeComp.properties.autoEDL.data).toEqual([0]);
+        expect(modeComp.properties.alignStartFrames.data).toEqual([1]);
+    });
+
+    it('uses default values when settings not provided', () => {
+        const result = SessionGTOExporter.buildSwitchGroupObjects('switchGroup');
+
+        const switchComponents = result[1].components as Record<string, any>;
+
+        expect(switchComponents['output'].properties.fps.data).toEqual([0.0]);
+        expect(switchComponents['output'].properties.autoSize.data).toEqual([1]);
+        expect(switchComponents['mode'].properties.useCutInfo.data).toEqual([1]);
+        expect(switchComponents['mode'].properties.autoEDL.data).toEqual([1]);
+        expect(switchComponents['mode'].properties.alignStartFrames.data).toEqual([0]);
+    });
+});
+
+describe('SessionGTOExporter.buildFolderGroupObjects', () => {
+    it('creates RVFolderGroup object', () => {
+        const result = SessionGTOExporter.buildFolderGroupObjects('folderGroup');
+
+        expect(result).toHaveLength(1);
+        expect(result[0].name).toBe('folderGroup');
+        expect(result[0].protocol).toBe('RVFolderGroup');
+    });
+
+    it('sets display name in ui component', () => {
+        const result = SessionGTOExporter.buildFolderGroupObjects('folderGroup', {
+            name: 'My Folder',
+        });
+
+        const components = result[0].components as Record<string, any>;
+        expect(components['ui'].properties.name.data).toEqual(['My Folder']);
+    });
+
+    it('sets viewType in mode component', () => {
+        const result = SessionGTOExporter.buildFolderGroupObjects('folderGroup', {
+            viewType: 'layout',
+        });
+
+        const components = result[0].components as Record<string, any>;
+        expect(components['mode'].properties.viewType.data).toEqual(['layout']);
+    });
+
+    it('uses default values when settings not provided', () => {
+        const result = SessionGTOExporter.buildFolderGroupObjects('folderGroup');
+
+        const components = result[0].components as Record<string, any>;
+
+        expect(components['ui'].properties.name.data).toEqual(['Folder']);
+        expect(components['mode'].properties.viewType.data).toEqual(['switch']);
+    });
+});
+
+describe('SessionGTOExporter.buildWaveformObject', () => {
+    it('creates Waveform object with default settings', () => {
+        const result = SessionGTOExporter.buildWaveformObject('waveformNode');
+
+        expect(result.name).toBe('waveformNode');
+        expect(result.protocol).toBe('Waveform');
+        expect(result.protocolVersion).toBe(1);
+    });
+
+    it('creates Waveform with active state', () => {
+        const result = SessionGTOExporter.buildWaveformObject('waveformNode', true);
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.active.data).toEqual([1]);
+    });
+
+    it('creates Waveform with inactive state', () => {
+        const result = SessionGTOExporter.buildWaveformObject('waveformNode', false);
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.active.data).toEqual([0]);
+    });
+});
+
+describe('SessionGTOExporter.buildViewGroupObject', () => {
+    it('creates RVViewGroup object with default name', () => {
+        const result = SessionGTOExporter.buildViewGroupObject();
+
+        expect(result.name).toBe('viewGroup');
+        expect(result.protocol).toBe('RVViewGroup');
+        expect(result.protocolVersion).toBe(1);
+    });
+
+    it('creates RVViewGroup with custom name', () => {
+        const result = SessionGTOExporter.buildViewGroupObject('myViewGroup', 'My View');
+
+        expect(result.name).toBe('myViewGroup');
+        const components = result.components as Record<string, any>;
+        expect(components['ui'].properties.name.data).toEqual(['My View']);
+    });
+});
+
+describe('SessionGTOExporter.buildSoundTrackObject', () => {
+    it('creates RVSoundTrack object with default settings', () => {
+        const result = SessionGTOExporter.buildSoundTrackObject('soundTrackNode');
+
+        expect(result.name).toBe('soundTrackNode');
+        expect(result.protocol).toBe('RVSoundTrack');
+        expect(result.protocolVersion).toBe(1);
+    });
+
+    it('creates audio component with volume and balance', () => {
+        const result = SessionGTOExporter.buildSoundTrackObject('soundTrackNode', {
+            volume: 0.8,
+            balance: -0.5,
+            offset: 1.5,
+        });
+
+        const components = result.components as Record<string, any>;
+        const audioComp = components['audio'];
+
+        expect(audioComp.properties.volume.data).toEqual([0.8]);
+        expect(audioComp.properties.balance.data).toEqual([-0.5]);
+        expect(audioComp.properties.offset.data).toEqual([1.5]);
+    });
+
+    it('creates audio component with mute and softClamp', () => {
+        const result = SessionGTOExporter.buildSoundTrackObject('soundTrackNode', {
+            mute: true,
+            softClamp: true,
+        });
+
+        const components = result.components as Record<string, any>;
+        const audioComp = components['audio'];
+
+        expect(audioComp.properties.mute.data).toEqual([1]);
+        expect(audioComp.properties.softClamp.data).toEqual([1]);
+    });
+
+    it('creates visual component with waveform dimensions', () => {
+        const result = SessionGTOExporter.buildSoundTrackObject('soundTrackNode', {
+            waveformWidth: 800,
+            waveformHeight: 200,
+        });
+
+        const components = result.components as Record<string, any>;
+        const visualComp = components['visual'];
+
+        expect(visualComp.properties.width.data).toEqual([800]);
+        expect(visualComp.properties.height.data).toEqual([200]);
+    });
+
+    it('uses default values when settings not provided', () => {
+        const result = SessionGTOExporter.buildSoundTrackObject('soundTrackNode');
+
+        const components = result.components as Record<string, any>;
+
+        expect(components['audio'].properties.volume.data).toEqual([1.0]);
+        expect(components['audio'].properties.balance.data).toEqual([0.0]);
+        expect(components['audio'].properties.mute.data).toEqual([0]);
+        expect(components['visual'].properties.width.data).toEqual([0]);
+        expect(components['visual'].properties.height.data).toEqual([0]);
+    });
+});

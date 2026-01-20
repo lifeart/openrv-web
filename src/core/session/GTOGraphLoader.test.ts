@@ -1495,6 +1495,110 @@ describe('GTOGraphLoader', () => {
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('layoutRetimeInputs', true);
     });
 
+    it('parses RVSwitch output and mode components', () => {
+      const mockNode = {
+        type: 'RVSwitch',
+        name: 'switchNode',
+        properties: {
+          has: vi.fn((key: string) =>
+            ['switchFps', 'switchSize', 'switchInput', 'switchAutoSize', 'switchUseCutInfo', 'switchAutoEDL', 'switchAlignStartFrames'].includes(key)
+          ),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'switchNode',
+            protocol: 'RVSwitch',
+            components: {
+              output: {
+                fps: 30.0,
+                size: [1920, 1080],
+                input: 'sourceGroup000000',
+                autoSize: 0,
+              },
+              mode: {
+                useCutInfo: 0,
+                autoEDL: 1,
+                alignStartFrames: 1,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('switchFps', 30.0);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('switchSize', [1920, 1080]);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('switchInput', 'sourceGroup000000');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('switchAutoSize', false);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('switchUseCutInfo', false);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('switchAutoEDL', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('switchAlignStartFrames', true);
+    });
+
+    it('parses RVSoundTrack audio and visual components', () => {
+      const mockNode = {
+        type: 'RVSoundTrack',
+        name: 'soundTrackNode',
+        properties: {
+          has: vi.fn((key: string) =>
+            ['audioVolume', 'audioBalance', 'audioOffset', 'audioInternalOffset', 'audioMute', 'audioSoftClamp', 'waveformWidth', 'waveformHeight'].includes(key)
+          ),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'soundTrackNode',
+            protocol: 'RVSoundTrack',
+            components: {
+              audio: {
+                volume: 0.8,
+                balance: -0.5,
+                offset: 1.5,
+                internalOffset: 0.1,
+                mute: 1,
+                softClamp: 0,
+              },
+              visual: {
+                width: 800,
+                height: 200,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('audioVolume', 0.8);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('audioBalance', -0.5);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('audioOffset', 1.5);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('audioInternalOffset', 0.1);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('audioMute', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('audioSoftClamp', false);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('waveformWidth', 800);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('waveformHeight', 200);
+    });
+
     it('uses default session name when none provided', () => {
       vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
 

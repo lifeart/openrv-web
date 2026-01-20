@@ -40,6 +40,11 @@ Based on analysis of the GTO specification (`spec.md`), usage guide (`usage.md`)
 | RVRetimeGroup | ✅ | ✅ | - |
 | RVDisplayGroup | ✅ | ✅ | - |
 | RVHistogram | ✅ | ✅ | ✅ |
+| RVSwitchGroup/RVSwitch | ✅ | ✅ | - |
+| RVFolderGroup | ✅ | ✅ | - |
+| RVViewGroup | ✅ | ✅ | - |
+| RVSoundTrack | ✅ | ✅ | - |
+| Waveform | ✅ | ✅ | - |
 
 ### Gaps Identified
 
@@ -61,8 +66,8 @@ The following node types are defined in the spec but not fully implemented:
 | RVStackGroup | ✅ | ✅ | ✅ | ~~High~~ Done |
 | RVStack | ✅ | ✅ | ✅ | ~~High~~ Done |
 | RVLayoutGroup | ✅ | ✅ | ❌ | Medium |
-| RVSwitchGroup | ✅ | ⚠️ | ❌ | Medium |
-| RVFolderGroup | ✅ | ❌ | ❌ | Low |
+| RVSwitchGroup | ✅ | ✅ | ❌ | Medium |
+| RVFolderGroup | ✅ | ✅ | ❌ | Low |
 | RVRetimeGroup | ✅ | ✅ | ❌ | Medium |
 
 **Processing Nodes:**
@@ -113,8 +118,8 @@ The following node types are defined in the spec but not fully implemented:
 **View Nodes:**
 | Node | Parse | Create | Update | Priority |
 |------|-------|--------|--------|----------|
-| RVViewGroup | ⚠️ Partial | ❌ | ❌ | Medium |
-| RVSoundTrack | ❌ | ❌ | ❌ | Medium |
+| RVViewGroup | ✅ | ✅ | ❌ | Medium |
+| RVSoundTrack | ✅ | ✅ | ❌ | Medium |
 | RVDispTransform2D | ❌ | ❌ | ❌ | Low |
 | RVDisplayGroup | ✅ | ✅ | ❌ | Medium |
 
