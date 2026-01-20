@@ -81,6 +81,11 @@ export class App {
   private cacheIndicator: CacheIndicator;
   private textFormattingToolbar: TextFormattingToolbar;
 
+  // History recording state
+  private colorHistoryTimer: ReturnType<typeof setTimeout> | null = null;
+  private colorHistoryPrevious: ReturnType<ColorControls['getAdjustments']> | null = null;
+  private transformHistoryPrevious: ReturnType<TransformControl['getTransform']> | null = null;
+
   constructor() {
     // Bind event handlers for proper cleanup
     this.boundHandleResize = () => this.viewer.resize();
@@ -109,11 +114,59 @@ export class App {
     this.paintToolbar = new PaintToolbar(this.paintEngine);
     this.colorControls = new ColorControls();
 
-    // Connect color controls to viewer
+    // Initialize color history with current (default) state
+    this.colorHistoryPrevious = this.colorControls.getAdjustments();
+
+    // Connect color controls to viewer with history recording
     this.colorControls.on('adjustmentsChanged', (adjustments) => {
       this.viewer.setColorAdjustments(adjustments);
       this.scheduleUpdateScopes();
       this.syncGTOStore();
+
+      // Debounced history recording - records after user stops adjusting for 500ms
+      if (this.colorHistoryTimer) {
+        clearTimeout(this.colorHistoryTimer);
+      }
+
+      const previousSnapshot = { ...this.colorHistoryPrevious! };
+      this.colorHistoryTimer = setTimeout(() => {
+        const currentSnapshot = this.colorControls.getAdjustments();
+
+        // Find what changed for the description
+        const changes: string[] = [];
+        for (const key of Object.keys(currentSnapshot) as Array<keyof typeof currentSnapshot>) {
+          if (previousSnapshot[key] !== currentSnapshot[key]) {
+            changes.push(key);
+          }
+        }
+
+        if (changes.length > 0) {
+          const description = changes.length === 1
+            ? `Adjust ${changes[0]}`
+            : `Adjust ${changes.length} color settings`;
+
+          const historyManager = getGlobalHistoryManager();
+          historyManager.recordAction(
+            description,
+            'color',
+            () => {
+              // Restore previous state
+              this.colorControls.setAdjustments(previousSnapshot);
+              this.viewer.setColorAdjustments(previousSnapshot);
+              this.scheduleUpdateScopes();
+            },
+            () => {
+              // Redo to current state
+              this.colorControls.setAdjustments(currentSnapshot);
+              this.viewer.setColorAdjustments(currentSnapshot);
+              this.scheduleUpdateScopes();
+            }
+          );
+        }
+
+        this.colorHistoryPrevious = currentSnapshot;
+        this.colorHistoryTimer = null;
+      }, 500);
     });
 
     // Connect LUT events
@@ -226,11 +279,48 @@ export class App {
       this.saveRvSession(format);
     });
 
-    // Initialize transform control
+    // Initialize transform control with history recording
     this.transformControl = new TransformControl();
     this.transformControl.on('transformChanged', (transform) => {
+      const previousTransform = this.transformHistoryPrevious ?? { rotation: 0, flipH: false, flipV: false };
+      const currentTransform = { ...transform };
+
       this.viewer.setTransform(transform);
       this.syncGTOStore();
+
+      // Record history for transform changes (discrete actions, no debounce needed)
+      const changes: string[] = [];
+      if (previousTransform.rotation !== currentTransform.rotation) {
+        changes.push(`rotation to ${currentTransform.rotation}°`);
+      }
+      if (previousTransform.flipH !== currentTransform.flipH) {
+        changes.push(currentTransform.flipH ? 'flip horizontal' : 'unflip horizontal');
+      }
+      if (previousTransform.flipV !== currentTransform.flipV) {
+        changes.push(currentTransform.flipV ? 'flip vertical' : 'unflip vertical');
+      }
+
+      if (changes.length > 0) {
+        const description = changes.length === 1
+          ? changes[0]!.charAt(0).toUpperCase() + changes[0]!.slice(1)
+          : 'Transform image';
+
+        const historyManager = getGlobalHistoryManager();
+        historyManager.recordAction(
+          description,
+          'transform',
+          () => {
+            this.transformControl.setTransform(previousTransform);
+            this.viewer.setTransform(previousTransform);
+          },
+          () => {
+            this.transformControl.setTransform(currentTransform);
+            this.viewer.setTransform(currentTransform);
+          }
+        );
+      }
+
+      this.transformHistoryPrevious = currentTransform;
     });
 
     // Initialize filter control
@@ -795,6 +885,20 @@ export class App {
 
     this.paintEngine.on('annotationsChanged', () => this.syncGTOStore());
     this.paintEngine.on('effectsChanged', () => this.syncGTOStore());
+
+    // Record paint actions in history
+    this.paintEngine.on('strokeAdded', (annotation) => {
+      const historyManager = getGlobalHistoryManager();
+      const annotationType = annotation.type === 'pen' ? 'stroke' :
+                             annotation.type === 'shape' ? (annotation as { shapeType?: string }).shapeType || 'shape' :
+                             annotation.type;
+      historyManager.recordAction(
+        `Add ${annotationType}`,
+        'paint',
+        () => this.paintEngine.undo(),
+        () => this.paintEngine.redo()
+      );
+    });
 
     this.session.on('settingsLoaded', (settings) => {
       if (settings.colorAdjustments) {

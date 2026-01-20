@@ -2963,6 +2963,75 @@ test.describe('History Panel', () => {
     state = await getHistoryPanelState(page);
     expect(state.currentIndex).toBe(0);
   });
+
+  test('HIST-009: color adjustments should be recorded in history', async ({ page }) => {
+    // Open history panel
+    const historyButton = page.locator('[data-testid="history-toggle-button"]');
+    await historyButton.click();
+    await page.waitForTimeout(100);
+
+    let state = await getHistoryPanelState(page);
+    const initialCount = state.entryCount;
+
+    // Switch to Color tab
+    await page.locator('button:has-text("Color")').first().click();
+    await page.waitForTimeout(200);
+
+    // Click the Color toggle button to expand the color panel
+    const colorToggle = page.locator('button:has-text("Color")').nth(1);
+    if (await colorToggle.isVisible()) {
+      await colorToggle.click();
+      await page.waitForTimeout(200);
+    }
+
+    // Find and adjust a slider in the color panel
+    const colorPanel = page.locator('.color-controls-panel');
+    const slider = colorPanel.locator('input[type="range"]').first();
+    if (await slider.isVisible()) {
+      await slider.evaluate((el: HTMLInputElement) => {
+        el.value = '0.5';
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+
+      // Wait for debounce (500ms) + buffer
+      await page.waitForTimeout(700);
+
+      state = await getHistoryPanelState(page);
+      expect(state.entryCount).toBeGreaterThan(initialCount);
+    }
+  });
+
+  test('HIST-010: paint strokes should be recorded in history', async ({ page }) => {
+    // Open history panel
+    const historyButton = page.locator('[data-testid="history-toggle-button"]');
+    await historyButton.click();
+    await page.waitForTimeout(100);
+
+    let state = await getHistoryPanelState(page);
+    const initialCount = state.entryCount;
+
+    // Switch to Annotate tab and draw
+    await page.click('button[data-tab-id="annotate"]');
+    await page.waitForTimeout(200);
+
+    // Select pen tool
+    await page.keyboard.press('p');
+    await page.waitForTimeout(100);
+
+    // Draw a stroke
+    const canvas = page.locator('canvas').first();
+    const box = await canvas.boundingBox();
+    if (box) {
+      await page.mouse.move(box.x + 100, box.y + 100);
+      await page.mouse.down();
+      await page.mouse.move(box.x + 200, box.y + 200);
+      await page.mouse.up();
+      await page.waitForTimeout(200);
+
+      state = await getHistoryPanelState(page);
+      expect(state.entryCount).toBeGreaterThan(initialCount);
+    }
+  });
 });
 
 /**
