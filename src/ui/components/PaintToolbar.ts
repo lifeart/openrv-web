@@ -38,10 +38,10 @@ export class PaintToolbar {
     this.addSeparator();
 
     // Shape tool buttons
-    this.createToolButton('rectangle', 'box', 'Rectangle shape');
-    this.createToolButton('ellipse', 'circle', 'Ellipse shape');
-    this.createToolButton('line', 'minus', 'Line shape');
-    this.createToolButton('arrow', 'arrow-right', 'Arrow shape');
+    this.createToolButton('rectangle', 'box', 'Rectangle shape (R)');
+    this.createToolButton('ellipse', 'circle', 'Ellipse shape (O)');
+    this.createToolButton('line', 'minus', 'Line shape (L)');
+    this.createToolButton('arrow', 'arrow-right', 'Arrow shape (A)');
 
     this.addSeparator();
 
@@ -278,6 +278,18 @@ export class PaintToolbar {
         return true;
       case 't':
         this.paintEngine.tool = 'text';
+        return true;
+      case 'r':
+        this.paintEngine.tool = 'rectangle';
+        return true;
+      case 'o':
+        this.paintEngine.tool = 'ellipse';
+        return true;
+      case 'l':
+        this.paintEngine.tool = 'line';
+        return true;
+      case 'a':
+        this.paintEngine.tool = 'arrow';
         return true;
       case 'b':
         this.paintEngine.brush = this.paintEngine.brush === BrushType.Circle

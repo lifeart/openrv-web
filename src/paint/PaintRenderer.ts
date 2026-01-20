@@ -589,4 +589,37 @@ export class PaintRenderer {
 
     this.renderStroke(tempStroke, options, 1);
   }
+
+  // Render live shape being drawn (before it's finalized)
+  // NOTE: Call renderAnnotations() first to set up canvas size and render existing annotations
+  renderLiveShape(
+    shapeType: ShapeType,
+    startPoint: { x: number; y: number },
+    endPoint: { x: number; y: number },
+    color: [number, number, number, number],
+    width: number,
+    options: RenderOptions
+  ): void {
+    // Ensure canvas is properly sized (don't clear - may have existing annotations)
+    if (this.canvas.width !== options.width || this.canvas.height !== options.height) {
+      this.resize(options.width, options.height);
+    }
+
+    const tempShape: ShapeAnnotation = {
+      type: 'shape',
+      id: 'live',
+      frame: 0,
+      user: 'live',
+      shapeType,
+      startPoint,
+      endPoint,
+      strokeColor: color,
+      strokeWidth: width,
+      rotation: 0,
+      startFrame: 0,
+      duration: 1,
+    };
+
+    this.renderShape(tempShape, options, 1);
+  }
 }

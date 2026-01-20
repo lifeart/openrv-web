@@ -1,7 +1,7 @@
 import { Session } from '../../core/session/Session';
 import { PaintEngine, PaintTool } from '../../paint/PaintEngine';
 import { PaintRenderer } from '../../paint/PaintRenderer';
-import { StrokePoint } from '../../paint/types';
+import { StrokePoint, ShapeType, Point } from '../../paint/types';
 import { ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from './ColorControls';
 import { WipeState, WipeMode } from './WipeControl';
 import { Transform2D, DEFAULT_TRANSFORM } from './TransformControl';
@@ -52,6 +52,11 @@ export class Viewer {
   private paintRenderer: PaintRenderer;
   private isDrawing = false;
   private livePoints: StrokePoint[] = [];
+
+  // Shape drawing state
+  private isDrawingShape = false;
+  private shapeStartPoint: Point | null = null;
+  private shapeCurrentPoint: Point | null = null;
 
   // View state
   private panX = 0;
@@ -637,9 +642,11 @@ export class Viewer {
 
     switch (tool) {
       case 'pen':
-        this.container.style.cursor = 'crosshair';
-        break;
       case 'eraser':
+      case 'rectangle':
+      case 'ellipse':
+      case 'line':
+      case 'arrow':
         this.container.style.cursor = 'crosshair';
         break;
       case 'text':
@@ -749,6 +756,15 @@ export class Viewer {
             this.paintEngine.addText(this.session.currentFrame, point, text);
           }
         }
+      } else if (this.isShapeTool(tool)) {
+        // Shape tools (rectangle, ellipse, line, arrow)
+        const point = this.getCanvasPoint(e.clientX, e.clientY);
+        if (point) {
+          this.isDrawingShape = true;
+          this.shapeStartPoint = { x: point.x, y: point.y };
+          this.shapeCurrentPoint = { x: point.x, y: point.y };
+          this.renderLiveShape();
+        }
       } else if (e.button === 0 || e.pointerType === 'touch') {
         // Pan mode
         this.isPanning = true;
@@ -785,6 +801,12 @@ export class Viewer {
         this.livePoints.push(point);
         this.paintEngine.continueStroke(point);
         this.renderLiveStroke();
+      }
+    } else if (this.isDrawingShape) {
+      const point = this.getCanvasPoint(e.clientX, e.clientY);
+      if (point) {
+        this.shapeCurrentPoint = { x: point.x, y: point.y };
+        this.renderLiveShape();
       }
     } else if (this.isPanning) {
       const dx = e.clientX - this.lastPointerX;
@@ -823,6 +845,10 @@ export class Viewer {
       this.renderPaint();
     }
 
+    if (this.isDrawingShape) {
+      this.finalizeShape();
+    }
+
     if (this.isPanning) {
       this.isPanning = false;
       if (this.paintEngine.tool === 'none') {
@@ -855,6 +881,13 @@ export class Viewer {
       this.isDrawing = false;
       this.livePoints = [];
       this.paintEngine.endStroke();
+    }
+
+    // Cancel any shape drawing in progress
+    if (this.isDrawingShape) {
+      this.isDrawingShape = false;
+      this.shapeStartPoint = null;
+      this.shapeCurrentPoint = null;
     }
   }
 
@@ -1016,6 +1049,82 @@ export class Viewer {
     ctx.drawImage(this.paintRenderer.getCanvas(), 0, 0);
   }
 
+  private isShapeTool(tool: PaintTool): boolean {
+    return tool === 'rectangle' || tool === 'ellipse' || tool === 'line' || tool === 'arrow';
+  }
+
+  private getShapeType(tool: PaintTool): ShapeType {
+    switch (tool) {
+      case 'rectangle': return ShapeType.Rectangle;
+      case 'ellipse': return ShapeType.Ellipse;
+      case 'line': return ShapeType.Line;
+      case 'arrow': return ShapeType.Arrow;
+      default: return ShapeType.Rectangle;
+    }
+  }
+
+  private renderLiveShape(): void {
+    if (!this.shapeStartPoint || !this.shapeCurrentPoint) return;
+    if (this.displayWidth === 0 || this.displayHeight === 0) return;
+
+    const ctx = this.paintCtx;
+    const renderOptions = { width: this.displayWidth, height: this.displayHeight };
+
+    // Get existing annotations
+    const annotations = this.paintEngine.getAnnotationsWithGhost(this.session.currentFrame);
+
+    // Render all annotations to paintRenderer
+    this.paintRenderer.renderAnnotations(annotations, renderOptions);
+
+    // Then render live shape on top
+    const shapeType = this.getShapeType(this.paintEngine.tool);
+    this.paintRenderer.renderLiveShape(
+      shapeType,
+      this.shapeStartPoint,
+      this.shapeCurrentPoint,
+      this.paintEngine.color,
+      this.paintEngine.width,
+      renderOptions
+    );
+
+    // Copy to paint canvas
+    ctx.clearRect(0, 0, this.displayWidth, this.displayHeight);
+    ctx.drawImage(this.paintRenderer.getCanvas(), 0, 0);
+  }
+
+  private finalizeShape(): void {
+    if (!this.shapeStartPoint || !this.shapeCurrentPoint) {
+      this.isDrawingShape = false;
+      this.shapeStartPoint = null;
+      this.shapeCurrentPoint = null;
+      return;
+    }
+
+    const tool = this.paintEngine.tool;
+    const frame = this.session.currentFrame;
+    const shapeType = this.getShapeType(tool);
+
+    // Only add shape if there's meaningful size (prevent accidental clicks)
+    const dx = Math.abs(this.shapeCurrentPoint.x - this.shapeStartPoint.x);
+    const dy = Math.abs(this.shapeCurrentPoint.y - this.shapeStartPoint.y);
+    const minSize = 0.005; // Minimum 0.5% of canvas dimension
+
+    if (dx > minSize || dy > minSize) {
+      this.paintEngine.addShape(
+        frame,
+        shapeType,
+        this.shapeStartPoint,
+        this.shapeCurrentPoint
+      );
+    }
+
+    // Reset shape drawing state
+    this.isDrawingShape = false;
+    this.shapeStartPoint = null;
+    this.shapeCurrentPoint = null;
+    this.renderPaint();
+  }
+
   getElement(): HTMLElement {
     return this.container;
   }
@@ -1071,9 +1180,11 @@ export class Viewer {
   render(): void {
     this.renderImage();
 
-    // If actively drawing, render with live stroke; otherwise just paint
+    // If actively drawing, render with live stroke/shape; otherwise just paint
     if (this.isDrawing && this.livePoints.length > 0) {
       this.renderLiveStroke();
+    } else if (this.isDrawingShape && this.shapeStartPoint && this.shapeCurrentPoint) {
+      this.renderLiveShape();
     } else {
       this.renderPaint();
     }

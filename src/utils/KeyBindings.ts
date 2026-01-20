@@ -249,6 +249,22 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyT',
     description: 'Select text tool'
   },
+  'paint.rectangle': {
+    code: 'KeyR',
+    description: 'Select rectangle tool'
+  },
+  'paint.ellipse': {
+    code: 'KeyO',
+    description: 'Select ellipse tool'
+  },
+  'paint.line': {
+    code: 'KeyL',
+    description: 'Select line tool'
+  },
+  'paint.arrow': {
+    code: 'KeyA',
+    description: 'Select arrow tool'
+  },
   'paint.toggleBrush': {
     code: 'KeyB',
     description: 'Toggle brush type'

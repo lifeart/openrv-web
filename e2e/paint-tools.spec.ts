@@ -71,6 +71,38 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       expect(state.currentTool).toBe('text');
     });
 
+    test('PAINT-015: selecting rectangle tool with R key should update currentTool state', async ({ page }) => {
+      await page.keyboard.press('r');
+      await page.waitForTimeout(100);
+
+      const state = await getPaintState(page);
+      expect(state.currentTool).toBe('rectangle');
+    });
+
+    test('PAINT-016: selecting ellipse tool with O key should update currentTool state', async ({ page }) => {
+      await page.keyboard.press('o');
+      await page.waitForTimeout(100);
+
+      const state = await getPaintState(page);
+      expect(state.currentTool).toBe('ellipse');
+    });
+
+    test('PAINT-017: selecting line tool with L key should update currentTool state', async ({ page }) => {
+      await page.keyboard.press('l');
+      await page.waitForTimeout(100);
+
+      const state = await getPaintState(page);
+      expect(state.currentTool).toBe('line');
+    });
+
+    test('PAINT-018: selecting arrow tool with A key should update currentTool state', async ({ page }) => {
+      await page.keyboard.press('a');
+      await page.waitForTimeout(100);
+
+      const state = await getPaintState(page);
+      expect(state.currentTool).toBe('arrow');
+    });
+
     test('PAINT-014: toggling brush type with B key should update brushType state', async ({ page }) => {
       await page.keyboard.press('p');
       await page.waitForTimeout(100);
@@ -420,6 +452,243 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
       sessionState = await getSessionState(page);
       expect(sessionState.currentFrame).toBe(1);
+    });
+  });
+
+  test.describe('Shape Tools', () => {
+    test('PAINT-050: selecting rectangle tool via button should update currentTool state', async ({ page }) => {
+      const rectButton = page.locator('button[title*="Rectangle"]').first();
+      if (await rectButton.isVisible()) {
+        await rectButton.click();
+        await page.waitForTimeout(100);
+
+        const state = await getPaintState(page);
+        expect(state.currentTool).toBe('rectangle');
+      }
+    });
+
+    test('PAINT-051: selecting ellipse tool via button should update currentTool state', async ({ page }) => {
+      const ellipseButton = page.locator('button[title*="Ellipse"]').first();
+      if (await ellipseButton.isVisible()) {
+        await ellipseButton.click();
+        await page.waitForTimeout(100);
+
+        const state = await getPaintState(page);
+        expect(state.currentTool).toBe('ellipse');
+      }
+    });
+
+    test('PAINT-052: selecting line tool via button should update currentTool state', async ({ page }) => {
+      const lineButton = page.locator('button[title*="Line"]').first();
+      if (await lineButton.isVisible()) {
+        await lineButton.click();
+        await page.waitForTimeout(100);
+
+        const state = await getPaintState(page);
+        expect(state.currentTool).toBe('line');
+      }
+    });
+
+    test('PAINT-053: selecting arrow tool via button should update currentTool state', async ({ page }) => {
+      const arrowButton = page.locator('button[title*="Arrow"]').first();
+      if (await arrowButton.isVisible()) {
+        await arrowButton.click();
+        await page.waitForTimeout(100);
+
+        const state = await getPaintState(page);
+        expect(state.currentTool).toBe('arrow');
+      }
+    });
+
+    test('PAINT-054: drawing rectangle should modify canvas and add to annotatedFrames', async ({ page }) => {
+      const rectButton = page.locator('button[title*="Rectangle"]').first();
+      if (!(await rectButton.isVisible())) {
+        test.skip();
+        return;
+      }
+      await rectButton.click();
+      await page.waitForTimeout(100);
+
+      // Capture initial state
+      const initialState = await getPaintState(page);
+      const sessionState = await getSessionState(page);
+      const currentFrame = sessionState.currentFrame;
+      const initialScreenshot = await captureViewerScreenshot(page);
+
+      expect(initialState.annotatedFrames).not.toContain(currentFrame);
+
+      // Draw a rectangle
+      const canvas = await getCanvas(page);
+      const box = await canvas.boundingBox();
+      expect(box).not.toBeNull();
+
+      await page.mouse.move(box!.x + 100, box!.y + 100);
+      await page.mouse.down();
+      await page.mouse.move(box!.x + 250, box!.y + 200);
+      await page.mouse.up();
+      await page.waitForTimeout(200);
+
+      // Verify state changes
+      const newState = await getPaintState(page);
+      expect(newState.annotatedFrames).toContain(currentFrame);
+      expect(newState.canUndo).toBe(true);
+
+      // Verify canvas changed
+      const newScreenshot = await captureViewerScreenshot(page);
+      expect(imagesAreDifferent(initialScreenshot, newScreenshot)).toBe(true);
+    });
+
+    test('PAINT-055: drawing ellipse should modify canvas and add to annotatedFrames', async ({ page }) => {
+      const ellipseButton = page.locator('button[title*="Ellipse"]').first();
+      if (!(await ellipseButton.isVisible())) {
+        test.skip();
+        return;
+      }
+      await ellipseButton.click();
+      await page.waitForTimeout(100);
+
+      // Capture initial state
+      const initialState = await getPaintState(page);
+      const sessionState = await getSessionState(page);
+      const currentFrame = sessionState.currentFrame;
+      const initialScreenshot = await captureViewerScreenshot(page);
+
+      expect(initialState.annotatedFrames).not.toContain(currentFrame);
+
+      // Draw an ellipse
+      const canvas = await getCanvas(page);
+      const box = await canvas.boundingBox();
+      expect(box).not.toBeNull();
+
+      await page.mouse.move(box!.x + 100, box!.y + 100);
+      await page.mouse.down();
+      await page.mouse.move(box!.x + 250, box!.y + 200);
+      await page.mouse.up();
+      await page.waitForTimeout(200);
+
+      // Verify state changes
+      const newState = await getPaintState(page);
+      expect(newState.annotatedFrames).toContain(currentFrame);
+      expect(newState.canUndo).toBe(true);
+
+      // Verify canvas changed
+      const newScreenshot = await captureViewerScreenshot(page);
+      expect(imagesAreDifferent(initialScreenshot, newScreenshot)).toBe(true);
+    });
+
+    test('PAINT-056: drawing line should modify canvas and add to annotatedFrames', async ({ page }) => {
+      const lineButton = page.locator('button[title*="Line"]').first();
+      if (!(await lineButton.isVisible())) {
+        test.skip();
+        return;
+      }
+      await lineButton.click();
+      await page.waitForTimeout(100);
+
+      // Capture initial state
+      const initialState = await getPaintState(page);
+      const sessionState = await getSessionState(page);
+      const currentFrame = sessionState.currentFrame;
+      const initialScreenshot = await captureViewerScreenshot(page);
+
+      expect(initialState.annotatedFrames).not.toContain(currentFrame);
+
+      // Draw a line
+      const canvas = await getCanvas(page);
+      const box = await canvas.boundingBox();
+      expect(box).not.toBeNull();
+
+      await page.mouse.move(box!.x + 100, box!.y + 100);
+      await page.mouse.down();
+      await page.mouse.move(box!.x + 300, box!.y + 200);
+      await page.mouse.up();
+      await page.waitForTimeout(200);
+
+      // Verify state changes
+      const newState = await getPaintState(page);
+      expect(newState.annotatedFrames).toContain(currentFrame);
+      expect(newState.canUndo).toBe(true);
+
+      // Verify canvas changed
+      const newScreenshot = await captureViewerScreenshot(page);
+      expect(imagesAreDifferent(initialScreenshot, newScreenshot)).toBe(true);
+    });
+
+    test('PAINT-057: drawing arrow should modify canvas and add to annotatedFrames', async ({ page }) => {
+      const arrowButton = page.locator('button[title*="Arrow"]').first();
+      if (!(await arrowButton.isVisible())) {
+        test.skip();
+        return;
+      }
+      await arrowButton.click();
+      await page.waitForTimeout(100);
+
+      // Capture initial state
+      const initialState = await getPaintState(page);
+      const sessionState = await getSessionState(page);
+      const currentFrame = sessionState.currentFrame;
+      const initialScreenshot = await captureViewerScreenshot(page);
+
+      expect(initialState.annotatedFrames).not.toContain(currentFrame);
+
+      // Draw an arrow
+      const canvas = await getCanvas(page);
+      const box = await canvas.boundingBox();
+      expect(box).not.toBeNull();
+
+      await page.mouse.move(box!.x + 100, box!.y + 100);
+      await page.mouse.down();
+      await page.mouse.move(box!.x + 300, box!.y + 200);
+      await page.mouse.up();
+      await page.waitForTimeout(200);
+
+      // Verify state changes
+      const newState = await getPaintState(page);
+      expect(newState.annotatedFrames).toContain(currentFrame);
+      expect(newState.canUndo).toBe(true);
+
+      // Verify canvas changed
+      const newScreenshot = await captureViewerScreenshot(page);
+      expect(imagesAreDifferent(initialScreenshot, newScreenshot)).toBe(true);
+    });
+
+    test('PAINT-058: undo should remove shape and update canUndo/canRedo state', async ({ page }) => {
+      const rectButton = page.locator('button[title*="Rectangle"]').first();
+      if (!(await rectButton.isVisible())) {
+        test.skip();
+        return;
+      }
+      await rectButton.click();
+      await page.waitForTimeout(100);
+
+      // Draw a rectangle first
+      const canvas = await getCanvas(page);
+      const box = await canvas.boundingBox();
+      expect(box).not.toBeNull();
+
+      await page.mouse.move(box!.x + 100, box!.y + 100);
+      await page.mouse.down();
+      await page.mouse.move(box!.x + 250, box!.y + 200);
+      await page.mouse.up();
+      await page.waitForTimeout(200);
+
+      let state = await getPaintState(page);
+      expect(state.canUndo).toBe(true);
+      expect(state.canRedo).toBe(false);
+
+      const screenshotBeforeUndo = await captureViewerScreenshot(page);
+
+      // Undo
+      await page.keyboard.press('Control+z');
+      await page.waitForTimeout(100);
+
+      state = await getPaintState(page);
+      expect(state.canUndo).toBe(false);
+      expect(state.canRedo).toBe(true);
+
+      // Verify canvas changed (shape removed)
+      const screenshotAfterUndo = await captureViewerScreenshot(page);
+      expect(imagesAreDifferent(screenshotBeforeUndo, screenshotAfterUndo)).toBe(true);
     });
   });
 

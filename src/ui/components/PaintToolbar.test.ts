@@ -294,6 +294,30 @@ describe('PaintToolbar', () => {
       expect(handled).toBe(true);
       expect(paintEngine.tool).toBe('pen');
     });
+
+    it('PAINT-U082: R key selects rectangle tool', () => {
+      const handled = toolbar.handleKeyboard('r');
+      expect(handled).toBe(true);
+      expect(paintEngine.tool).toBe('rectangle');
+    });
+
+    it('PAINT-U083: O key selects ellipse tool', () => {
+      const handled = toolbar.handleKeyboard('o');
+      expect(handled).toBe(true);
+      expect(paintEngine.tool).toBe('ellipse');
+    });
+
+    it('PAINT-U084: L key selects line tool', () => {
+      const handled = toolbar.handleKeyboard('l');
+      expect(handled).toBe(true);
+      expect(paintEngine.tool).toBe('line');
+    });
+
+    it('PAINT-U085: A key selects arrow tool', () => {
+      const handled = toolbar.handleKeyboard('a');
+      expect(handled).toBe(true);
+      expect(paintEngine.tool).toBe('arrow');
+    });
   });
 
   describe('button hover effects', () => {

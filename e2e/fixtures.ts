@@ -179,7 +179,7 @@ export interface TransformState {
 }
 
 export interface PaintState {
-  currentTool: 'pan' | 'pen' | 'eraser' | 'text';
+  currentTool: 'pan' | 'pen' | 'eraser' | 'text' | 'rectangle' | 'ellipse' | 'line' | 'arrow';
   strokeColor: string;
   strokeWidth: number;
   brushType: 'circle' | 'gaussian';

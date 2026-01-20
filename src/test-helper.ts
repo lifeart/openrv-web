@@ -210,7 +210,7 @@ export interface TransformState {
 }
 
 export interface PaintState {
-  currentTool: 'pan' | 'pen' | 'eraser' | 'text';
+  currentTool: 'pan' | 'pen' | 'eraser' | 'text' | 'rectangle' | 'ellipse' | 'line' | 'arrow';
   strokeColor: string;
   strokeWidth: number;
   brushType: 'circle' | 'gaussian';
@@ -492,11 +492,15 @@ export function exposeForTesting(app: App): void {
       const paintEngine = appAny.paintEngine;
       // Map 'none' tool to 'pan' for test interface consistency
       const tool = paintEngine?.tool ?? 'none';
-      const toolMap: Record<string, 'pan' | 'pen' | 'eraser' | 'text'> = {
+      const toolMap: Record<string, 'pan' | 'pen' | 'eraser' | 'text' | 'rectangle' | 'ellipse' | 'line' | 'arrow'> = {
         'none': 'pan',
         'pen': 'pen',
         'eraser': 'eraser',
         'text': 'text',
+        'rectangle': 'rectangle',
+        'ellipse': 'ellipse',
+        'line': 'line',
+        'arrow': 'arrow',
       };
       // Convert RGBA color array to hex string
       const color = paintEngine?.color ?? [1, 0, 0, 1];
