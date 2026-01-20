@@ -631,7 +631,7 @@ describe('Session', () => {
       expect(state.loopMode).toBe('once');
       expect(state.volume).toBe(0.5);
       expect(state.currentFrame).toBe(1);
-      expect(state.marks).toContain(5);
+      expect(state.marks).toContainEqual(expect.objectContaining({ frame: 5 }));
     });
 
     it('setPlaybackState() restores state', () => {

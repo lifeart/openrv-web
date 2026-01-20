@@ -318,7 +318,7 @@ const rootNode = session.graphParseResult?.rootNode;
 # Type check
 pnpm typecheck
 
-# Run unit tests
+# Run unit tests (3100+ tests)
 pnpm test
 
 # Run e2e tests (requires dev server running)
@@ -331,6 +331,16 @@ pnpm build
 # Preview production build
 pnpm preview
 ```
+
+### Test Coverage
+
+The codebase includes comprehensive test coverage with **3100+ unit tests** across 90 test files:
+
+- **Color Tools**: ColorWheels (33 tests), FalseColor (30 tests), Curves, CDL
+- **Analysis**: ZebraStripes (49 tests), PixelProbe (45 tests), Waveform, Histogram, Vectorscope
+- **Overlays**: TimecodeOverlay (50 tests), SafeAreasOverlay (38 tests)
+- **UI Components**: ThemeControl, HistoryPanel, InfoPanel, Modal, Button
+- **Core**: Session, Graph, GTO loading/export, SequenceLoader
 
 ### Adding a New Node Type
 

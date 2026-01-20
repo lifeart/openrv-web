@@ -201,7 +201,10 @@ describe('Session GTO settings round-trip', () => {
     expect(session.currentFrame).toBe(12);
     expect(session.inPoint).toBe(11);
     expect(session.outPoint).toBe(19);
-    expect(session.marks).toEqual(new Set([12, 15]));
+    expect(session.marks).toEqual(new Map([
+      [12, { frame: 12, note: '', color: '#ff4444' }],
+      [15, { frame: 15, note: '', color: '#ff4444' }],
+    ]));
 
     expect(viewer.getColorAdjustments()).toEqual({
       ...DEFAULT_COLOR_ADJUSTMENTS,

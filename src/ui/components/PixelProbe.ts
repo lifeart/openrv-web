@@ -553,10 +553,14 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
   }
 
   /**
-   * Get current state
+   * Get current state (deep copy to prevent external mutation)
    */
   getState(): PixelProbeState {
-    return { ...this.state };
+    return {
+      ...this.state,
+      rgb: { ...this.state.rgb },
+      hsl: { ...this.state.hsl },
+    };
   }
 
   /**

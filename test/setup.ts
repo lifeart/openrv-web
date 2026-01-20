@@ -92,8 +92,13 @@ class MockCanvasRenderingContext2D {
   createRadialGradient = vi.fn(() => ({
     addColorStop: vi.fn(),
   }));
+  createConicGradient = vi.fn(() => ({
+    addColorStop: vi.fn(),
+  }));
   createPattern = vi.fn();
   roundRect = vi.fn();
+  setLineDash = vi.fn();
+  getLineDash = vi.fn(() => []);
 }
 
 // Mock HTMLCanvasElement.getContext

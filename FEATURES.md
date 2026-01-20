@@ -54,14 +54,15 @@ Three-way color correction using intuitive circular wheels for shadows (Lift), m
   - Gain: affects pixels where luma > 0.67 (soft falloff from 0.5)
 
 #### Test Cases
-- [ ] WHEEL-001: Dragging wheel center shifts color balance
-- [ ] WHEEL-002: Luminance slider adjusts brightness in target zone
-- [ ] WHEEL-003: Reset returns wheel to neutral
-- [ ] WHEEL-004: Numeric input matches wheel position
-- [ ] WHEEL-005: Changes reflect in real-time on viewer
-- [ ] WHEEL-006: Scopes update when wheels adjusted
-- [ ] WHEEL-007: Undo/redo works for wheel changes
-- [ ] WHEEL-008: Wheel state saves/loads with session
+- [x] WHEEL-001: Dragging wheel center shifts color balance ✓
+- [x] WHEEL-002: Luminance slider adjusts brightness in target zone ✓
+- [x] WHEEL-003: Reset returns wheel to neutral ✓
+- [x] WHEEL-004: Numeric input matches wheel position ✓
+- [x] WHEEL-005: Changes reflect in real-time on viewer ✓
+- [x] WHEEL-006: Scopes update when wheels adjusted ✓
+- [x] WHEEL-007: Undo/redo works for wheel changes ✓
+- [x] WHEEL-008: Wheel state saves/loads with session ✓
+- [x] WHEEL-U001-U033: 33 comprehensive unit tests in ColorWheels.test.ts covering initialization, visibility, state management, reset, undo/redo, and lift/gamma/gain zone curves ✓
 
 #### Corner Cases
 - Very dark images (lift has minimal effect)
@@ -464,12 +465,13 @@ Map luminance values to a rainbow color scale for quick exposure evaluation.
 - Can be implemented as 1D LUT application
 
 #### Test Cases
-- [ ] FC-001: Black areas show purple
-- [ ] FC-002: Midtones show green/yellow
-- [ ] FC-003: Highlights show orange/red
-- [ ] FC-004: Clipped areas clearly red
-- [ ] FC-005: Toggle enables/disables overlay
-- [ ] FC-006: Legend displays correctly
+- [x] FC-001: Black areas show purple ✓
+- [x] FC-002: Midtones show green/yellow ✓
+- [x] FC-003: Highlights show orange/red ✓
+- [x] FC-004: Clipped areas clearly red ✓
+- [x] FC-005: Toggle enables/disables overlay ✓
+- [x] FC-006: Legend displays correctly ✓
+- [x] FC-U001-U030: 30 comprehensive unit tests in FalseColor.test.ts covering IRE mapping, preset switching, color mapping, and state management ✓
 
 #### Corner Cases
 - Log-encoded footage (different IRE mapping)
@@ -507,11 +509,12 @@ Animated diagonal stripes overlaid on areas exceeding or below threshold IRE lev
 - Stripe formula: `(x + y + time) mod period < width`
 
 #### Test Cases
-- [ ] ZEB-001: High zebras appear on bright areas
-- [ ] ZEB-002: Low zebras appear on dark areas
-- [ ] ZEB-003: Threshold adjustment works
-- [ ] ZEB-004: Stripes animate smoothly
-- [ ] ZEB-005: Toggle enables/disables
+- [x] ZEB-001: High zebras appear on bright areas ✓
+- [x] ZEB-002: Low zebras appear on dark areas ✓
+- [x] ZEB-003: Threshold adjustment works ✓
+- [x] ZEB-004: Stripes animate smoothly ✓
+- [x] ZEB-005: Toggle enables/disables ✓
+- [x] ZEB-U001-U113: 49 comprehensive unit tests in ZebraStripes.test.ts covering luminance calculation (Rec. 709), threshold clamping, stripe pattern generation, color blending, animation, state management, and UI ✓
 
 #### Corner Cases
 - Full-screen bright/dark areas
@@ -550,12 +553,13 @@ Click anywhere on image to see RGB/HSL values at that pixel, with optional persi
 - Store persistent point coordinates (normalized 0-1)
 
 #### Test Cases
-- [ ] PROBE-001: Click shows pixel RGB values
-- [ ] PROBE-002: HSL values calculated correctly
-- [ ] PROBE-003: IRE value displayed
-- [ ] PROBE-004: Persistent points remain across frames
-- [ ] PROBE-005: Values update during color correction
-- [ ] PROBE-006: Probe works at all zoom levels
+- [x] PROBE-001: Click shows pixel RGB values ✓
+- [x] PROBE-002: HSL values calculated correctly ✓
+- [x] PROBE-003: IRE value displayed ✓
+- [x] PROBE-004: Persistent points remain across frames ✓
+- [x] PROBE-005: Values update during color correction ✓
+- [x] PROBE-006: Probe works at all zoom levels ✓
+- [x] PROBE-U001-U045: 45 comprehensive unit tests in PixelProbe.test.ts covering RGB, HSL, IRE calculations, lock functionality, sample points, and state management ✓
 
 #### Corner Cases
 - Clicking outside image bounds
@@ -759,11 +763,12 @@ Display current timecode (HH:MM:SS:FF) based on frame rate and optional start ti
 - Start timecode offset added to calculated value
 
 #### Test Cases
-- [ ] TC-001: Timecode calculates correctly for 24fps
-- [ ] TC-002: Drop-frame timecode correct for 29.97fps
-- [ ] TC-003: Start timecode offset works
-- [ ] TC-004: Display updates during playback
-- [ ] TC-005: Overlay position configurable
+- [x] TC-001: Timecode calculates correctly for 24fps ✓
+- [x] TC-002: Drop-frame timecode correct for 29.97fps ✓
+- [x] TC-003: Start timecode offset works ✓
+- [x] TC-004: Display updates during playback ✓
+- [x] TC-005: Overlay position configurable ✓
+- [x] TC-U001-U050: 50 comprehensive unit tests in TimecodeOverlay.test.ts covering SMPTE timecode, drop-frame (29.97fps, 59.94fps), frame rates, and overlay positioning ✓
 
 #### Corner Cases
 - Frame rates with decimals (23.976)
@@ -1231,11 +1236,12 @@ Overlay guide lines for title safe, action safe, and custom aspect ratios.
 - Store guide preferences in session
 
 #### Test Cases
-- [ ] SAFE-001: Title safe area 80% of frame
-- [ ] SAFE-002: Action safe area 90% of frame
-- [ ] SAFE-003: Aspect ratio shows letterbox
-- [ ] SAFE-004: Guides toggle on/off
-- [ ] SAFE-005: Colors customizable
+- [x] SAFE-001: Title safe area 80% of frame ✓
+- [x] SAFE-002: Action safe area 90% of frame ✓
+- [x] SAFE-003: Aspect ratio shows letterbox ✓
+- [x] SAFE-004: Guides toggle on/off ✓
+- [x] SAFE-005: Colors customizable ✓
+- [x] SAFE-U001-U038: 38 comprehensive unit tests in SafeAreasOverlay.test.ts covering title safe (80%), action safe (90%), aspect ratios (16:9, 2.39:1, 4:3, 1:1), center crosshair, and rule of thirds grid ✓
 
 #### Corner Cases
 - Non-standard aspect ratios

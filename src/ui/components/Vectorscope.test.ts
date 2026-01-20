@@ -39,8 +39,8 @@ describe('Vectorscope', () => {
       expect(vectorscope.isVisible()).toBe(false);
     });
 
-    it('should start with 1x zoom', () => {
-      expect(vectorscope.getZoom()).toBe(1);
+    it('should start with auto zoom', () => {
+      expect(vectorscope.getZoom()).toBe('auto');
     });
 
     it('should render container element', () => {
@@ -61,7 +61,8 @@ describe('Vectorscope', () => {
       const el = vectorscope.render();
       const zoomButton = el.querySelector('[data-testid="vectorscope-zoom-button"]');
       expect(zoomButton).not.toBeNull();
-      expect(zoomButton?.textContent).toBe('1x');
+      // Initial zoom mode is 'auto', so button shows 'Auto'
+      expect(zoomButton?.textContent).toBe('Auto');
     });
 
     it('should have close button with testid', () => {
@@ -140,13 +141,16 @@ describe('Vectorscope', () => {
 
   describe('zoom', () => {
     it('should cycle through zoom levels', () => {
+      // Initial zoom mode is 'auto'
+      expect(vectorscope.getZoom()).toBe('auto');
+      vectorscope.cycleZoom(); // auto -> 1
       expect(vectorscope.getZoom()).toBe(1);
-      vectorscope.cycleZoom();
+      vectorscope.cycleZoom(); // 1 -> 2
       expect(vectorscope.getZoom()).toBe(2);
-      vectorscope.cycleZoom();
+      vectorscope.cycleZoom(); // 2 -> 4
       expect(vectorscope.getZoom()).toBe(4);
-      vectorscope.cycleZoom();
-      expect(vectorscope.getZoom()).toBe(1);
+      vectorscope.cycleZoom(); // 4 -> auto
+      expect(vectorscope.getZoom()).toBe('auto');
     });
 
     it('should set zoom level directly', () => {
@@ -161,8 +165,8 @@ describe('Vectorscope', () => {
     it('should emit zoomChanged event on cycle', () => {
       const callback = vi.fn();
       vectorscope.on('zoomChanged', callback);
-      vectorscope.cycleZoom();
-      expect(callback).toHaveBeenCalledWith(2);
+      vectorscope.cycleZoom(); // auto -> 1
+      expect(callback).toHaveBeenCalledWith(1);
     });
 
     it('should emit zoomChanged event on setZoom', () => {
@@ -183,13 +187,14 @@ describe('Vectorscope', () => {
     it('should update zoom button text on cycle', () => {
       const el = vectorscope.render();
       const zoomButton = el.querySelector('[data-testid="vectorscope-zoom-button"]');
+      // Initial state is 'auto' mode, button shows 'Auto'
+      expect(zoomButton?.textContent).toBe('Auto');
+      vectorscope.cycleZoom(); // auto -> 1
       expect(zoomButton?.textContent).toBe('1x');
-      vectorscope.cycleZoom();
+      vectorscope.cycleZoom(); // 1 -> 2
       expect(zoomButton?.textContent).toBe('2x');
-      vectorscope.cycleZoom();
+      vectorscope.cycleZoom(); // 2 -> 4
       expect(zoomButton?.textContent).toBe('4x');
-      vectorscope.cycleZoom();
-      expect(zoomButton?.textContent).toBe('1x');
     });
 
     it('should update zoom button text on setZoom', () => {
@@ -278,8 +283,9 @@ describe('Vectorscope', () => {
       expect(updateSpy).toHaveBeenCalledTimes(1);
 
       // cycleZoom should trigger update internally with stored imageData
+      // Initial zoom is 'auto', cycling goes to 1
       vectorscope.cycleZoom();
-      expect(vectorscope.getZoom()).toBe(2);
+      expect(vectorscope.getZoom()).toBe(1);
       expect(updateSpy).toHaveBeenCalledTimes(2);
     });
 
@@ -310,16 +316,17 @@ describe('Vectorscope', () => {
       expect(updateSpy).toHaveBeenCalledTimes(1);
 
       // Multiple zoom changes should all trigger redraws
+      // Initial zoom is 'auto', cycling goes: auto -> 1 -> 2 -> 4 -> auto
+      vectorscope.cycleZoom(); // auto -> 1x
+      expect(vectorscope.getZoom()).toBe(1);
+      expect(updateSpy).toHaveBeenCalledTimes(2);
+
       vectorscope.cycleZoom(); // 1x -> 2x
       expect(vectorscope.getZoom()).toBe(2);
-      expect(updateSpy).toHaveBeenCalledTimes(2);
+      expect(updateSpy).toHaveBeenCalledTimes(3);
 
       vectorscope.cycleZoom(); // 2x -> 4x
       expect(vectorscope.getZoom()).toBe(4);
-      expect(updateSpy).toHaveBeenCalledTimes(3);
-
-      vectorscope.cycleZoom(); // 4x -> 1x
-      expect(vectorscope.getZoom()).toBe(1);
       expect(updateSpy).toHaveBeenCalledTimes(4);
     });
   });
