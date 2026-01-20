@@ -1448,6 +1448,53 @@ describe('GTOGraphLoader', () => {
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('formatChannels', ['luminance', 'alpha']);
     });
 
+    it('parses RVLayout layout and timing components', () => {
+      const mockNode = {
+        type: 'RVLayout',
+        name: 'layoutNode',
+        properties: {
+          has: vi.fn((key: string) =>
+            ['layoutMode', 'layoutSpacing', 'layoutGridRows', 'layoutGridColumns', 'layoutRetimeInputs'].includes(key)
+          ),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'layoutNode',
+            protocol: 'RVLayout',
+            components: {
+              layout: {
+                mode: 'grid',
+                spacing: 2.0,
+                gridRows: 3,
+                gridColumns: 4,
+              },
+              timing: {
+                retimeInputs: 1,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('layoutMode', 'grid');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('layoutSpacing', 2.0);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('layoutGridRows', 3);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('layoutGridColumns', 4);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('layoutRetimeInputs', true);
+    });
+
     it('uses default session name when none provided', () => {
       vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
 

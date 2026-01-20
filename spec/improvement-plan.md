@@ -34,6 +34,12 @@ Based on analysis of the GTO specification (`spec.md`), usage guide (`usage.md`)
 | RVDisplayStereo | ✅ | ✅ | ✅ |
 | RVSourceStereo | ✅ | ✅ | ✅ |
 | RVFormat (crop, channels) | ✅ | ✅ | ✅ |
+| RVOverlay (rect, text, window, matte) | ✅ | ✅ | - |
+| RVChannelMap | ✅ | ✅ | - |
+| RVLayoutGroup/RVLayout | ✅ | ✅ | - |
+| RVRetimeGroup | ✅ | ✅ | - |
+| RVDisplayGroup | ✅ | ✅ | - |
+| RVHistogram | ✅ | ✅ | ✅ |
 
 ### Gaps Identified
 
@@ -54,10 +60,10 @@ The following node types are defined in the spec but not fully implemented:
 | RVSequence (EDL) | ✅ | ✅ | ✅ | ~~High~~ Done |
 | RVStackGroup | ✅ | ✅ | ✅ | ~~High~~ Done |
 | RVStack | ✅ | ✅ | ✅ | ~~High~~ Done |
-| RVLayoutGroup | ✅ | ❌ | ❌ | Medium |
+| RVLayoutGroup | ✅ | ✅ | ❌ | Medium |
 | RVSwitchGroup | ✅ | ⚠️ | ❌ | Medium |
 | RVFolderGroup | ✅ | ❌ | ❌ | Low |
-| RVRetimeGroup | ✅ | ❌ | ❌ | Medium |
+| RVRetimeGroup | ✅ | ✅ | ❌ | Medium |
 
 **Processing Nodes:**
 | Node | Parse | Create | Update | Priority |
@@ -101,7 +107,7 @@ The following node types are defined in the spec but not fully implemented:
 | RVFormat | ✅ | ✅ | ✅ | ~~Medium~~ Done |
 | RVOverlay | ✅ | ✅ | ❌ | Medium |
 | RVResize | ❌ | ❌ | ❌ | Low |
-| RVHistogram | ✅ | ❌ | ✅ | Low |
+| RVHistogram | ✅ | ✅ | ✅ | ~~Low~~ Done |
 | RVCache | ❌ | ❌ | ❌ | Low |
 
 **View Nodes:**
@@ -110,7 +116,7 @@ The following node types are defined in the spec but not fully implemented:
 | RVViewGroup | ⚠️ Partial | ❌ | ❌ | Medium |
 | RVSoundTrack | ❌ | ❌ | ❌ | Medium |
 | RVDispTransform2D | ❌ | ❌ | ❌ | Low |
-| RVDisplayGroup | ✅ | ❌ | ❌ | Medium |
+| RVDisplayGroup | ✅ | ✅ | ❌ | Medium |
 
 **Color Management:**
 | Node | Parse | Create | Update | Priority |

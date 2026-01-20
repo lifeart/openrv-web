@@ -78,6 +78,7 @@ const PROTOCOL_TO_NODE_TYPE: Record<string, string> = {
   RVOverlay: 'RVOverlay',
   RVFormat: 'RVFormat',
   RVChannelMap: 'RVChannelMap',
+  RVLayout: 'RVLayout',
 };
 
 /**
@@ -971,6 +972,28 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
       if (formatComp?.exists()) {
         const channels = formatComp.property('channels').value() as string[];
         if (Array.isArray(channels)) nodeInfo.properties.formatChannels = channels;
+      }
+    }
+
+    // Parse RVLayout properties
+    if (protocol === 'RVLayout') {
+      const layoutComp = obj.component('layout');
+      if (layoutComp?.exists()) {
+        const mode = layoutComp.property('mode').value() as string;
+        const spacing = layoutComp.property('spacing').value() as number;
+        const gridRows = layoutComp.property('gridRows').value() as number;
+        const gridColumns = layoutComp.property('gridColumns').value() as number;
+
+        if (typeof mode === 'string') nodeInfo.properties.layoutMode = mode;
+        if (typeof spacing === 'number') nodeInfo.properties.layoutSpacing = spacing;
+        if (typeof gridRows === 'number') nodeInfo.properties.layoutGridRows = gridRows;
+        if (typeof gridColumns === 'number') nodeInfo.properties.layoutGridColumns = gridColumns;
+      }
+
+      const timingComp = obj.component('timing');
+      if (timingComp?.exists()) {
+        const retimeInputs = timingComp.property('retimeInputs').value() as number;
+        if (typeof retimeInputs === 'number') nodeInfo.properties.layoutRetimeInputs = retimeInputs !== 0;
       }
     }
 

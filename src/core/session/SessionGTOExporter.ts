@@ -74,6 +74,42 @@ export interface StackGroupSettings {
 }
 
 /**
+ * Layout group settings for visual arrangement
+ */
+export interface LayoutGroupSettings {
+  /** Display name */
+  name?: string;
+  /** Layout algorithm: 'packed', 'packed2', 'row', 'column', 'grid' */
+  mode?: string;
+  /** Spacing multiplier */
+  spacing?: number;
+  /** Grid rows (0 = auto) */
+  gridRows?: number;
+  /** Grid columns (0 = auto) */
+  gridColumns?: number;
+  /** Auto-retime to match FPS */
+  retimeInputs?: boolean;
+}
+
+/**
+ * Retime group settings
+ */
+export interface RetimeGroupSettings {
+  /** Display name */
+  name?: string;
+  /** Visual scale (speed factor) */
+  visualScale?: number;
+  /** Visual offset (frame shift) */
+  visualOffset?: number;
+  /** Audio scale (speed factor) */
+  audioScale?: number;
+  /** Audio offset (frame shift) */
+  audioOffset?: number;
+  /** Output FPS */
+  outputFps?: number;
+}
+
+/**
  * Cineon log settings
  */
 export interface CineonSettings {
@@ -803,6 +839,146 @@ export class SessionGTOExporter {
     objects.push(stackBuilder.build().objects[0]!);
 
     return objects;
+  }
+
+  /**
+   * Build layout group objects (RVLayoutGroup + RVLayout)
+   * @param groupName - Name for the layout group
+   * @param settings - Optional layout settings
+   */
+  static buildLayoutGroupObjects(
+    groupName: string,
+    settings?: LayoutGroupSettings
+  ): ObjectData[] {
+    const objects: ObjectData[] = [];
+    const layoutName = `${groupName}_layout`;
+
+    // 1. RVLayoutGroup container
+    const groupBuilder = new GTOBuilder();
+    groupBuilder
+      .object(groupName, 'RVLayoutGroup', 1)
+      .component('ui')
+      .string('name', settings?.name ?? 'Layout')
+      .end()
+      .end();
+    objects.push(groupBuilder.build().objects[0]!);
+
+    // 2. RVLayout node with layout settings
+    const layoutBuilder = new GTOBuilder();
+    const layoutObject = layoutBuilder.object(layoutName, 'RVLayout', 1);
+
+    // Layout component
+    layoutObject
+      .component('layout')
+      .string('mode', settings?.mode ?? 'packed')
+      .float('spacing', settings?.spacing ?? 1.0)
+      .int('gridRows', settings?.gridRows ?? 0)
+      .int('gridColumns', settings?.gridColumns ?? 0)
+      .end();
+
+    // Timing component
+    layoutObject
+      .component('timing')
+      .int('retimeInputs', settings?.retimeInputs ? 1 : 0)
+      .end();
+
+    layoutObject.end();
+    objects.push(layoutBuilder.build().objects[0]!);
+
+    return objects;
+  }
+
+  /**
+   * Build retime group objects (RVRetimeGroup + RVRetime)
+   * @param groupName - Name for the retime group
+   * @param settings - Optional retime settings
+   */
+  static buildRetimeGroupObjects(
+    groupName: string,
+    settings?: RetimeGroupSettings
+  ): ObjectData[] {
+    const objects: ObjectData[] = [];
+    const retimeName = `${groupName}_retime`;
+
+    // 1. RVRetimeGroup container
+    const groupBuilder = new GTOBuilder();
+    groupBuilder
+      .object(groupName, 'RVRetimeGroup', 1)
+      .component('ui')
+      .string('name', settings?.name ?? 'Retime')
+      .end()
+      .end();
+    objects.push(groupBuilder.build().objects[0]!);
+
+    // 2. RVRetime node with retime settings
+    const retimeBuilder = new GTOBuilder();
+    const retimeObject = retimeBuilder.object(retimeName, 'RVRetime', 1);
+
+    // Visual component
+    retimeObject
+      .component('visual')
+      .float('scale', settings?.visualScale ?? 1.0)
+      .float('offset', settings?.visualOffset ?? 0.0)
+      .end();
+
+    // Audio component
+    retimeObject
+      .component('audio')
+      .float('scale', settings?.audioScale ?? 1.0)
+      .float('offset', settings?.audioOffset ?? 0.0)
+      .end();
+
+    // Output component
+    if (settings?.outputFps !== undefined) {
+      retimeObject
+        .component('output')
+        .float('fps', settings.outputFps)
+        .end();
+    }
+
+    retimeObject.end();
+    objects.push(retimeBuilder.build().objects[0]!);
+
+    return objects;
+  }
+
+  /**
+   * Build a display group object (RVDisplayGroup)
+   * @param groupName - Name for the display group (typically 'displayGroup')
+   * @param displayName - Display name for UI
+   */
+  static buildDisplayGroupObject(
+    groupName: string = 'displayGroup',
+    displayName: string = 'Display'
+  ): ObjectData {
+    const builder = new GTOBuilder();
+
+    builder
+      .object(groupName, 'RVDisplayGroup', 1)
+      .component('ui')
+      .string('name', displayName)
+      .end()
+      .end();
+
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVHistogram object for histogram display
+   * @param name - Object name
+   * @param active - Whether histogram is active
+   */
+  static buildHistogramObject(name: string, active: boolean = false): ObjectData {
+    const builder = new GTOBuilder();
+
+    builder
+      .object(name, 'Histogram', 1)
+      .component('node')
+      .int('active', active ? 1 : 0)
+      .end()
+      .end();
+
+    return builder.build().objects[0]!;
   }
 
   /**

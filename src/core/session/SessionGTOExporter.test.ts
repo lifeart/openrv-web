@@ -1556,3 +1556,178 @@ describe('SessionGTOExporter.buildChannelMapObject', () => {
         expect(components['format']).toBeUndefined();
     });
 });
+
+describe('SessionGTOExporter.buildLayoutGroupObjects', () => {
+    it('creates RVLayoutGroup and RVLayout objects', () => {
+        const result = SessionGTOExporter.buildLayoutGroupObjects('layoutGroup');
+
+        expect(result).toHaveLength(2);
+        expect(result[0].name).toBe('layoutGroup');
+        expect(result[0].protocol).toBe('RVLayoutGroup');
+        expect(result[1].name).toBe('layoutGroup_layout');
+        expect(result[1].protocol).toBe('RVLayout');
+    });
+
+    it('sets display name in ui component', () => {
+        const result = SessionGTOExporter.buildLayoutGroupObjects('layoutGroup', {
+            name: 'My Layout',
+        });
+
+        const groupComponents = result[0].components as Record<string, any>;
+        expect(groupComponents['ui'].properties.name.data).toEqual(['My Layout']);
+    });
+
+    it('creates layout component with mode and spacing', () => {
+        const result = SessionGTOExporter.buildLayoutGroupObjects('layoutGroup', {
+            mode: 'grid',
+            spacing: 2.0,
+            gridRows: 2,
+            gridColumns: 3,
+        });
+
+        const layoutComponents = result[1].components as Record<string, any>;
+        const layoutComp = layoutComponents['layout'];
+
+        expect(layoutComp.properties.mode.data).toEqual(['grid']);
+        expect(layoutComp.properties.spacing.data).toEqual([2.0]);
+        expect(layoutComp.properties.gridRows.data).toEqual([2]);
+        expect(layoutComp.properties.gridColumns.data).toEqual([3]);
+    });
+
+    it('creates timing component with retimeInputs', () => {
+        const result = SessionGTOExporter.buildLayoutGroupObjects('layoutGroup', {
+            retimeInputs: true,
+        });
+
+        const layoutComponents = result[1].components as Record<string, any>;
+        const timingComp = layoutComponents['timing'];
+
+        expect(timingComp.properties.retimeInputs.data).toEqual([1]);
+    });
+
+    it('uses default values when settings not provided', () => {
+        const result = SessionGTOExporter.buildLayoutGroupObjects('layoutGroup');
+
+        const layoutComponents = result[1].components as Record<string, any>;
+        const layoutComp = layoutComponents['layout'];
+
+        expect(layoutComp.properties.mode.data).toEqual(['packed']);
+        expect(layoutComp.properties.spacing.data).toEqual([1.0]);
+        expect(layoutComp.properties.gridRows.data).toEqual([0]);
+        expect(layoutComp.properties.gridColumns.data).toEqual([0]);
+    });
+});
+
+describe('SessionGTOExporter.buildRetimeGroupObjects', () => {
+    it('creates RVRetimeGroup and RVRetime objects', () => {
+        const result = SessionGTOExporter.buildRetimeGroupObjects('retimeGroup');
+
+        expect(result).toHaveLength(2);
+        expect(result[0].name).toBe('retimeGroup');
+        expect(result[0].protocol).toBe('RVRetimeGroup');
+        expect(result[1].name).toBe('retimeGroup_retime');
+        expect(result[1].protocol).toBe('RVRetime');
+    });
+
+    it('sets display name in ui component', () => {
+        const result = SessionGTOExporter.buildRetimeGroupObjects('retimeGroup', {
+            name: 'My Retime',
+        });
+
+        const groupComponents = result[0].components as Record<string, any>;
+        expect(groupComponents['ui'].properties.name.data).toEqual(['My Retime']);
+    });
+
+    it('creates visual and audio components with scale and offset', () => {
+        const result = SessionGTOExporter.buildRetimeGroupObjects('retimeGroup', {
+            visualScale: 2.0,
+            visualOffset: 10,
+            audioScale: 1.5,
+            audioOffset: 5,
+        });
+
+        const retimeComponents = result[1].components as Record<string, any>;
+
+        expect(retimeComponents['visual'].properties.scale.data).toEqual([2.0]);
+        expect(retimeComponents['visual'].properties.offset.data).toEqual([10]);
+        expect(retimeComponents['audio'].properties.scale.data).toEqual([1.5]);
+        expect(retimeComponents['audio'].properties.offset.data).toEqual([5]);
+    });
+
+    it('creates output component when outputFps provided', () => {
+        const result = SessionGTOExporter.buildRetimeGroupObjects('retimeGroup', {
+            outputFps: 30,
+        });
+
+        const retimeComponents = result[1].components as Record<string, any>;
+        expect(retimeComponents['output'].properties.fps.data).toEqual([30]);
+    });
+
+    it('does not create output component when outputFps not provided', () => {
+        const result = SessionGTOExporter.buildRetimeGroupObjects('retimeGroup');
+
+        const retimeComponents = result[1].components as Record<string, any>;
+        expect(retimeComponents['output']).toBeUndefined();
+    });
+
+    it('uses default values when settings not provided', () => {
+        const result = SessionGTOExporter.buildRetimeGroupObjects('retimeGroup');
+
+        const retimeComponents = result[1].components as Record<string, any>;
+
+        expect(retimeComponents['visual'].properties.scale.data).toEqual([1.0]);
+        expect(retimeComponents['visual'].properties.offset.data).toEqual([0.0]);
+        expect(retimeComponents['audio'].properties.scale.data).toEqual([1.0]);
+        expect(retimeComponents['audio'].properties.offset.data).toEqual([0.0]);
+    });
+});
+
+describe('SessionGTOExporter.buildDisplayGroupObject', () => {
+    it('creates RVDisplayGroup object with default name', () => {
+        const result = SessionGTOExporter.buildDisplayGroupObject();
+
+        expect(result.name).toBe('displayGroup');
+        expect(result.protocol).toBe('RVDisplayGroup');
+        expect(result.protocolVersion).toBe(1);
+    });
+
+    it('creates RVDisplayGroup with custom name', () => {
+        const result = SessionGTOExporter.buildDisplayGroupObject('myDisplayGroup', 'My Display');
+
+        expect(result.name).toBe('myDisplayGroup');
+        const components = result.components as Record<string, any>;
+        expect(components['ui'].properties.name.data).toEqual(['My Display']);
+    });
+
+    it('creates ui component with display name', () => {
+        const result = SessionGTOExporter.buildDisplayGroupObject('displayGroup', 'Main Display');
+
+        const components = result.components as Record<string, any>;
+        expect(components['ui']).toBeDefined();
+        expect(components['ui'].properties.name.data).toEqual(['Main Display']);
+    });
+});
+
+describe('SessionGTOExporter.buildHistogramObject', () => {
+    it('creates Histogram object with default settings', () => {
+        const result = SessionGTOExporter.buildHistogramObject('histogramNode');
+
+        expect(result.name).toBe('histogramNode');
+        expect(result.protocol).toBe('Histogram');
+        expect(result.protocolVersion).toBe(1);
+    });
+
+    it('creates Histogram with active state', () => {
+        const result = SessionGTOExporter.buildHistogramObject('histogramNode', true);
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.active.data).toEqual([1]);
+    });
+
+    it('creates Histogram with inactive state', () => {
+        const result = SessionGTOExporter.buildHistogramObject('histogramNode', false);
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.active.data).toEqual([0]);
+    });
+});
