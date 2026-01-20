@@ -51,7 +51,7 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
 
     // Create button
     this.button = document.createElement('button');
-    this.button.dataset.testid = 'safe-areas-button';
+    this.button.dataset.testid = 'safe-areas-control-button';
     this.button.title = 'Safe Areas & Guides';
     this.button.style.cssText = `
       background: transparent;

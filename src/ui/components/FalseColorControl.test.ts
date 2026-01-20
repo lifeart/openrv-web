@@ -51,19 +51,19 @@ describe('FalseColorControl', () => {
 
     it('FALSE-U012: container has toggle button', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="false-color-control-toggle"]');
+      const button = el.querySelector('[data-testid="false-color-control-button"]');
       expect(button).not.toBeNull();
     });
 
     it('FALSE-U013: toggle button displays False label', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="false-color-control-toggle"]');
+      const button = el.querySelector('[data-testid="false-color-control-button"]');
       expect(button?.textContent).toContain('False');
     });
 
     it('FALSE-U014: toggle button has correct title with shortcut', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="false-color-control-toggle"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="false-color-control-button"]') as HTMLButtonElement;
       expect(button.title).toContain('Shift+Alt+F');
     });
 
@@ -83,13 +83,13 @@ describe('FalseColorControl', () => {
   describe('button styling', () => {
     it('FALSE-U020: button has transparent background when disabled', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="false-color-control-toggle"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="false-color-control-button"]') as HTMLButtonElement;
       expect(button.style.background).toBe('transparent');
     });
 
     it('FALSE-U021: button has gray color when disabled', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="false-color-control-toggle"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="false-color-control-button"]') as HTMLButtonElement;
       expect(button.style.cssText).toContain('rgb(153, 153, 153)'); // #999
     });
 
@@ -97,20 +97,20 @@ describe('FalseColorControl', () => {
       control.render();
       falseColor.enable();
       const el = control.render();
-      const button = el.querySelector('[data-testid="false-color-control-toggle"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="false-color-control-button"]') as HTMLButtonElement;
       expect(button.style.cssText).toContain('rgb(74, 158, 255)'); // #4a9eff
     });
 
     it('FALSE-U023: button hover changes background when disabled', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="false-color-control-toggle"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="false-color-control-button"]') as HTMLButtonElement;
       button.dispatchEvent(new MouseEvent('mouseenter'));
-      expect(button.style.cssText).toContain('rgba(255, 255, 255, 0.05)');
+      expect(button.style.cssText).toContain('rgb(58, 58, 58)');
     });
 
     it('FALSE-U024: button mouseleave restores background when disabled', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="false-color-control-toggle"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="false-color-control-button"]') as HTMLButtonElement;
       button.dispatchEvent(new MouseEvent('mouseenter'));
       button.dispatchEvent(new MouseEvent('mouseleave'));
       expect(button.style.background).toBe('transparent');
@@ -120,7 +120,7 @@ describe('FalseColorControl', () => {
   describe('dropdown behavior', () => {
     it('FALSE-U030: clicking button opens dropdown', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="false-color-control-toggle"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="false-color-control-button"]') as HTMLButtonElement;
       const dropdown = el.querySelector('[data-testid="false-color-dropdown"]') as HTMLElement;
 
       button.click();
@@ -130,7 +130,7 @@ describe('FalseColorControl', () => {
 
     it('FALSE-U031: clicking button twice closes dropdown', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="false-color-control-toggle"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="false-color-control-button"]') as HTMLButtonElement;
       const dropdown = el.querySelector('[data-testid="false-color-dropdown"]') as HTMLElement;
 
       button.click(); // open
@@ -260,7 +260,7 @@ describe('FalseColorControl', () => {
       const legendItems = dropdown.querySelector('.legend-items');
 
       // Open dropdown to trigger legend render
-      const button = el.querySelector('[data-testid="false-color-control-toggle"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="false-color-control-button"]') as HTMLButtonElement;
       button.click();
 
       // Should have legend items matching the palette
@@ -285,7 +285,7 @@ describe('FalseColorControl', () => {
   describe('state synchronization', () => {
     it('FALSE-U060: control updates when false color state changes', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="false-color-control-toggle"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="false-color-control-button"]') as HTMLButtonElement;
 
       // Initially disabled
       expect(button.style.color).toBe('rgb(153, 153, 153)');

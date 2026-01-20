@@ -50,19 +50,19 @@ describe('SafeAreasControl', () => {
 
     it('SAFE-U013: container has button element', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]');
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]');
       expect(button).not.toBeNull();
     });
 
     it('SAFE-U014: button displays Guides label', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]');
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]');
       expect(button?.textContent).toContain('Guides');
     });
 
     it('SAFE-U015: button has correct title', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       expect(button.title).toContain('Safe Areas');
     });
   });
@@ -70,13 +70,13 @@ describe('SafeAreasControl', () => {
   describe('button styling', () => {
     it('SAFE-U020: button has transparent background when disabled', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       expect(button.style.background).toBe('transparent');
     });
 
     it('SAFE-U021: button has gray color when disabled', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       expect(button.style.cssText).toContain('rgb(153, 153, 153)'); // #999
     });
 
@@ -84,20 +84,20 @@ describe('SafeAreasControl', () => {
       control.render();
       overlay.enable();
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       expect(button.style.cssText).toContain('rgb(74, 158, 255)'); // #4a9eff
     });
 
     it('SAFE-U023: button hover changes background when disabled', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       button.dispatchEvent(new MouseEvent('mouseenter'));
       expect(button.style.cssText).toContain('rgb(58, 58, 58)'); // #3a3a3a
     });
 
     it('SAFE-U024: button mouseleave restores background when disabled', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       button.dispatchEvent(new MouseEvent('mouseenter'));
       button.dispatchEvent(new MouseEvent('mouseleave'));
       expect(button.style.background).toBe('transparent');
@@ -109,7 +109,7 @@ describe('SafeAreasControl', () => {
       const el = control.render();
       overlay.enable();
 
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       // With default state (titleSafe and actionSafe enabled), count should be 2
       expect(button.textContent).toMatch(/Guides\s*\(2\)/);
     });
@@ -119,13 +119,13 @@ describe('SafeAreasControl', () => {
       overlay.enable();
       overlay.toggleCenterCrosshair();
 
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       expect(button.textContent).toMatch(/Guides\s*\(3\)/);
     });
 
     it('SAFE-U032: button shows just Guides when disabled', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       expect(button.textContent).toContain('Guides');
       expect(button.textContent).not.toContain('(');
     });
@@ -134,7 +134,7 @@ describe('SafeAreasControl', () => {
   describe('dropdown behavior', () => {
     it('SAFE-U040: clicking button opens dropdown', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
 
       button.click();
 
@@ -145,7 +145,7 @@ describe('SafeAreasControl', () => {
 
     it('SAFE-U041: clicking button twice closes dropdown', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
 
       button.click(); // open
       button.click(); // close
@@ -156,7 +156,7 @@ describe('SafeAreasControl', () => {
 
     it('SAFE-U042: dropdown has enable guides checkbox', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       button.click();
 
       const enableItem = document.querySelector('[data-testid="safe-areas-item-enabled"]');
@@ -165,7 +165,7 @@ describe('SafeAreasControl', () => {
 
     it('SAFE-U043: dropdown has action safe checkbox', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       button.click();
 
       const actionItem = document.querySelector('[data-testid="safe-areas-item-actionSafe"]');
@@ -174,7 +174,7 @@ describe('SafeAreasControl', () => {
 
     it('SAFE-U044: dropdown has title safe checkbox', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       button.click();
 
       const titleItem = document.querySelector('[data-testid="safe-areas-item-titleSafe"]');
@@ -183,7 +183,7 @@ describe('SafeAreasControl', () => {
 
     it('SAFE-U045: dropdown has center crosshair checkbox', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       button.click();
 
       const crosshairItem = document.querySelector('[data-testid="safe-areas-item-centerCrosshair"]');
@@ -192,7 +192,7 @@ describe('SafeAreasControl', () => {
 
     it('SAFE-U046: dropdown has rule of thirds checkbox', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       button.click();
 
       const thirdsItem = document.querySelector('[data-testid="safe-areas-item-ruleOfThirds"]');
@@ -201,7 +201,7 @@ describe('SafeAreasControl', () => {
 
     it('SAFE-U047: dropdown has aspect ratio select', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       button.click();
 
       const aspectSelect = document.querySelector('[data-testid="safe-areas-aspect-ratio"]');
@@ -212,7 +212,7 @@ describe('SafeAreasControl', () => {
   describe('checkbox interactions', () => {
     it('SAFE-U050: clicking enable item toggles overlay visibility', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       button.click();
 
       const enableItem = document.querySelector('[data-testid="safe-areas-item-enabled"]') as HTMLElement;
@@ -224,7 +224,7 @@ describe('SafeAreasControl', () => {
 
     it('SAFE-U051: clicking action safe item toggles action safe', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       button.click();
 
       const actionItem = document.querySelector('[data-testid="safe-areas-item-actionSafe"]') as HTMLElement;
@@ -237,7 +237,7 @@ describe('SafeAreasControl', () => {
 
     it('SAFE-U052: clicking title safe item toggles title safe', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       button.click();
 
       const titleItem = document.querySelector('[data-testid="safe-areas-item-titleSafe"]') as HTMLElement;
@@ -250,7 +250,7 @@ describe('SafeAreasControl', () => {
 
     it('SAFE-U053: clicking center crosshair item toggles crosshair', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       button.click();
 
       const crosshairItem = document.querySelector('[data-testid="safe-areas-item-centerCrosshair"]') as HTMLElement;
@@ -262,7 +262,7 @@ describe('SafeAreasControl', () => {
 
     it('SAFE-U054: clicking rule of thirds item toggles grid', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       button.click();
 
       const thirdsItem = document.querySelector('[data-testid="safe-areas-item-ruleOfThirds"]') as HTMLElement;
@@ -276,7 +276,7 @@ describe('SafeAreasControl', () => {
   describe('aspect ratio select', () => {
     it('SAFE-U060: aspect ratio select has None option', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       button.click();
 
       const select = document.querySelector('[data-testid="safe-areas-aspect-ratio"]') as HTMLSelectElement;
@@ -288,7 +288,7 @@ describe('SafeAreasControl', () => {
 
     it('SAFE-U061: aspect ratio select has 16:9 option', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       button.click();
 
       const select = document.querySelector('[data-testid="safe-areas-aspect-ratio"]') as HTMLSelectElement;
@@ -299,7 +299,7 @@ describe('SafeAreasControl', () => {
 
     it('SAFE-U062: aspect ratio select has 2.39:1 option', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       button.click();
 
       const select = document.querySelector('[data-testid="safe-areas-aspect-ratio"]') as HTMLSelectElement;
@@ -310,7 +310,7 @@ describe('SafeAreasControl', () => {
 
     it('SAFE-U063: changing select updates overlay aspect ratio', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       button.click();
 
       const select = document.querySelector('[data-testid="safe-areas-aspect-ratio"]') as HTMLSelectElement;
@@ -325,7 +325,7 @@ describe('SafeAreasControl', () => {
       const el = control.render();
       overlay.setAspectRatio('16:9');
 
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       button.click();
 
       const select = document.querySelector('[data-testid="safe-areas-aspect-ratio"]') as HTMLSelectElement;
@@ -387,7 +387,7 @@ describe('SafeAreasControl', () => {
   describe('dropdown item hover', () => {
     it('SAFE-U090: item mouseenter changes background', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       button.click();
 
       const item = document.querySelector('[data-testid="safe-areas-item-enabled"]') as HTMLElement;
@@ -398,7 +398,7 @@ describe('SafeAreasControl', () => {
 
     it('SAFE-U091: item mouseleave restores background', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       button.click();
 
       const item = document.querySelector('[data-testid="safe-areas-item-enabled"]') as HTMLElement;
@@ -423,7 +423,7 @@ describe('SafeAreasControl', () => {
 
     it('SAFE-U102: dispose removes dropdown from body if present', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       button.click(); // Opens dropdown, adds to body
 
       control.dispose();
@@ -436,7 +436,7 @@ describe('SafeAreasControl', () => {
   describe('positioning', () => {
     it('SAFE-U110: dropdown has fixed positioning', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       button.click();
 
       const dropdown = document.querySelector('[data-testid="safe-areas-dropdown"]') as HTMLElement;
@@ -445,7 +445,7 @@ describe('SafeAreasControl', () => {
 
     it('SAFE-U111: dropdown has high z-index', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-button"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       button.click();
 
       const dropdown = document.querySelector('[data-testid="safe-areas-dropdown"]') as HTMLElement;

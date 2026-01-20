@@ -40,21 +40,21 @@ export class ZebraControl {
     // Create toggle button
     this.toggleButton = document.createElement('button');
     this.toggleButton.className = 'zebra-toggle';
-    this.toggleButton.dataset.testid = 'zebra-control-toggle';
+    this.toggleButton.dataset.testid = 'zebra-control-button';
     this.toggleButton.innerHTML = `${getIconSvg('stripes', 'sm')} <span>Zebra</span> ${getIconSvg('chevron-down', 'sm')}`;
-    this.toggleButton.title = 'Zebra stripes exposure warnings (Shift+Z)';
+    this.toggleButton.title = 'Zebra stripes exposure warnings (Shift+Alt+Z)';
     this.toggleButton.style.cssText = `
       display: flex;
       align-items: center;
       gap: 4px;
-      padding: 4px 8px;
+      padding: 6px 10px;
       border: 1px solid transparent;
       border-radius: 4px;
       background: transparent;
       color: #999;
-      font-size: 11px;
+      font-size: 12px;
       cursor: pointer;
-      transition: all 0.15s ease;
+      transition: all 0.12s ease;
     `;
 
     this.toggleButton.addEventListener('click', (e) => {
@@ -64,7 +64,8 @@ export class ZebraControl {
 
     this.toggleButton.addEventListener('mouseenter', () => {
       if (!this.zebraStripes.isEnabled()) {
-        this.toggleButton.style.background = 'rgba(255, 255, 255, 0.05)';
+        this.toggleButton.style.background = '#3a3a3a';
+        this.toggleButton.style.borderColor = '#4a4a4a';
         this.toggleButton.style.color = '#ccc';
       }
     });
@@ -84,9 +85,9 @@ export class ZebraControl {
     this.dropdown.dataset.testid = 'zebra-dropdown';
     this.dropdown.style.cssText = `
       position: fixed;
-      background: rgba(30, 30, 30, 0.98);
-      border: 1px solid #444;
-      border-radius: 6px;
+      background: #2a2a2a;
+      border: 1px solid #4a4a4a;
+      border-radius: 4px;
       padding: 8px;
       min-width: 220px;
       z-index: 9999;

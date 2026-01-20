@@ -174,7 +174,7 @@ pnpm dev
 | `Shift+I` | Toggle pixel probe |
 | `Shift+Alt+F` | Toggle false color display |
 | `Shift+Alt+Z` | Toggle zebra stripes |
-| `Shift+G` | Toggle safe areas overlay |
+| `;` | Toggle safe areas overlay |
 | `Shift+Alt+T` | Toggle timecode overlay |
 | `Shift+Alt+W` | Toggle color wheels panel |
 
@@ -186,6 +186,8 @@ pnpm dev
 #### Channel View
 | Key | Action |
 |-----|--------|
+| `Shift+R` | Red channel |
+| `Shift+G` | Green channel |
 | `Shift+B` | Blue channel |
 | `Shift+A` | Alpha channel |
 | `Shift+L` | Luminance |
@@ -196,8 +198,8 @@ pnpm dev
 |-----|--------|
 | `C` | Toggle color panel |
 | `U` | Toggle curves panel |
-| `G` | Toggle filter panel |
-| `K` | Toggle crop mode |
+| `Shift+Alt+E` | Toggle effects/filter panel |
+| `Shift+K` | Toggle crop mode |
 | `Shift+H` | Toggle HSL Qualifier |
 
 #### Transform
@@ -211,11 +213,20 @@ pnpm dev
 #### Annotations
 | Key | Action |
 |-----|--------|
-| `P` | Toggle paint mode |
+| `V` | Pan tool |
+| `P` | Pen tool |
+| `E` | Eraser tool |
+| `T` | Text tool |
+| `R` | Rectangle tool |
+| `O` | Ellipse tool |
+| `L` | Line tool |
+| `A` | Arrow tool |
+| `B` | Toggle brush type (soft/hard) |
+| `G` | Toggle ghost mode |
 | `Shift+Q` | Toggle spotlight |
 | `Ctrl+Z` | Undo |
-| `Ctrl+Shift+Z` | Redo |
-| `< / >` | Jump to prev/next annotation |
+| `Ctrl+Y` | Redo |
+| `,` / `.` | Jump to prev/next annotation |
 
 #### UI Panels
 | Key | Action |
@@ -328,7 +339,7 @@ const rootNode = session.graphParseResult?.rootNode;
 # Type check
 pnpm typecheck
 
-# Run unit tests (3100+ tests)
+# Run unit tests (3297 tests)
 pnpm test
 
 # Run e2e tests (requires dev server running)
@@ -344,7 +355,7 @@ pnpm preview
 
 ### Test Coverage
 
-The codebase includes comprehensive test coverage with **3200+ unit tests** across 90+ test files:
+The codebase includes comprehensive test coverage with **3297 unit tests** across 94 test files and **39 e2e test suites**:
 
 - **Color Tools**: ColorWheels (46 tests), FalseColor (30 tests), HSLQualifier (57 tests), Curves, CDL
 - **Analysis**: ZebraStripes (49 tests), PixelProbe (45 tests), ClippingOverlay (48 tests), Waveform (50 tests), Histogram (45 tests), Vectorscope (49 tests)
@@ -352,6 +363,16 @@ The codebase includes comprehensive test coverage with **3200+ unit tests** acro
 - **UI Components**: ThemeControl, HistoryPanel, InfoPanel, Modal, Button, CurveEditor (33 tests)
 - **Core**: Session, Graph, GTO loading/export, SequenceLoader
 - **Utilities**: HiDPICanvas (32 tests) - hi-DPI display support with coordinate conversion
+
+**E2E Tests** (39 test suites):
+- **Core**: App initialization, tab navigation, media loading, playback controls
+- **Scopes**: Histogram, Waveform, Vectorscope, Parade scope
+- **Color**: Color controls, Curves, Vibrance, Highlight/Shadow recovery
+- **View**: Pixel probe, False color, Zebra stripes, Safe areas, Spotlight, Info panel
+- **Comparison**: A/B compare, Wipe modes, Difference matte
+- **Transform**: Rotation, Flip, Crop
+- **Annotations**: Paint tools, Paint coordinates, Text formatting
+- **Export**: Frame export, Sequence export
 
 ### Hi-DPI Canvas Support
 

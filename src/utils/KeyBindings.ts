@@ -129,7 +129,9 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     description: 'Toggle color controls panel'
   },
   'panel.effects': {
-    code: 'KeyG',
+    code: 'KeyE',
+    shift: true,
+    alt: true,
     description: 'Toggle effects panel'
   },
   'panel.curves': {
@@ -314,8 +316,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
 
   // Safe areas / guides
   'view.toggleGuides': {
-    code: 'KeyG',
-    shift: true,
+    code: 'Semicolon',
     description: 'Toggle safe areas and guides overlay'
   },
 
@@ -432,6 +433,7 @@ function codeToKey(code: string): string {
     case 'Comma': return ',';
     case 'Period': return '.';
     case 'Backquote': return '`';
+    case 'Semicolon': return ';';
     default:
       // For KeyX format, extract the X
       if (code.startsWith('Key')) {

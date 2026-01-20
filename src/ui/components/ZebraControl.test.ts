@@ -45,20 +45,20 @@ describe('ZebraControl', () => {
 
     it('ZEBRA-U012: container has toggle button', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="zebra-control-toggle"]');
+      const button = el.querySelector('[data-testid="zebra-control-button"]');
       expect(button).not.toBeNull();
     });
 
     it('ZEBRA-U013: toggle button displays Zebra label', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="zebra-control-toggle"]');
+      const button = el.querySelector('[data-testid="zebra-control-button"]');
       expect(button?.textContent).toContain('Zebra');
     });
 
     it('ZEBRA-U014: toggle button has correct title with shortcut', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="zebra-control-toggle"]') as HTMLButtonElement;
-      expect(button.title).toContain('Shift+Z');
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      expect(button.title).toContain('Shift+Alt+Z');
     });
 
     it('ZEBRA-U015: container has dropdown element', () => {
@@ -77,13 +77,13 @@ describe('ZebraControl', () => {
   describe('button styling', () => {
     it('ZEBRA-U020: button has transparent background when disabled', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="zebra-control-toggle"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
       expect(button.style.background).toBe('transparent');
     });
 
     it('ZEBRA-U021: button has gray color when disabled', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="zebra-control-toggle"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
       expect(button.style.cssText).toContain('rgb(153, 153, 153)'); // #999
     });
 
@@ -93,20 +93,20 @@ describe('ZebraControl', () => {
       zebraStripes.setState({ highEnabled: true });
 
       const el = control.render();
-      const button = el.querySelector('[data-testid="zebra-control-toggle"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
       expect(button.style.cssText).toContain('rgb(74, 158, 255)'); // #4a9eff
     });
 
     it('ZEBRA-U023: button hover changes background when disabled', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="zebra-control-toggle"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
       button.dispatchEvent(new MouseEvent('mouseenter'));
-      expect(button.style.cssText).toContain('rgba(255, 255, 255, 0.05)');
+      expect(button.style.cssText).toContain('rgb(58, 58, 58)');
     });
 
     it('ZEBRA-U024: button mouseleave restores background when disabled', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="zebra-control-toggle"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
       button.dispatchEvent(new MouseEvent('mouseenter'));
       button.dispatchEvent(new MouseEvent('mouseleave'));
       expect(button.style.background).toBe('transparent');
@@ -116,7 +116,7 @@ describe('ZebraControl', () => {
   describe('dropdown behavior', () => {
     it('ZEBRA-U030: clicking button opens dropdown', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="zebra-control-toggle"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
       const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
 
       button.click();
@@ -126,7 +126,7 @@ describe('ZebraControl', () => {
 
     it('ZEBRA-U031: clicking button twice closes dropdown', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="zebra-control-toggle"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
       const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
 
       button.click(); // open
@@ -303,7 +303,7 @@ describe('ZebraControl', () => {
   describe('state synchronization', () => {
     it('ZEBRA-U070: control updates when zebra state changes', () => {
       const el = control.render();
-      const button = el.querySelector('[data-testid="zebra-control-toggle"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
 
       // Initially disabled style
       expect(button.style.color).toBe('rgb(153, 153, 153)');
@@ -348,7 +348,7 @@ describe('ZebraControl', () => {
       const el = control.render();
       zebraStripes.setState({ enabled: true, highEnabled: false, lowEnabled: false });
 
-      const button = el.querySelector('[data-testid="zebra-control-toggle"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
       expect(button.style.color).toBe('rgb(153, 153, 153)');
     });
 
@@ -356,7 +356,7 @@ describe('ZebraControl', () => {
       const el = control.render();
       zebraStripes.setState({ enabled: true, highEnabled: true, lowEnabled: false });
 
-      const button = el.querySelector('[data-testid="zebra-control-toggle"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
       expect(button.style.cssText).toContain('rgb(74, 158, 255)');
     });
 
@@ -364,7 +364,7 @@ describe('ZebraControl', () => {
       const el = control.render();
       zebraStripes.setState({ enabled: true, highEnabled: false, lowEnabled: true });
 
-      const button = el.querySelector('[data-testid="zebra-control-toggle"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
       expect(button.style.cssText).toContain('rgb(74, 158, 255)');
     });
 
@@ -372,7 +372,7 @@ describe('ZebraControl', () => {
       const el = control.render();
       zebraStripes.setState({ enabled: true, highEnabled: true, lowEnabled: true });
 
-      const button = el.querySelector('[data-testid="zebra-control-toggle"]') as HTMLButtonElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
       expect(button.style.cssText).toContain('rgb(74, 158, 255)');
     });
   });
