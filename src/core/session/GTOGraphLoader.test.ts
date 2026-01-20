@@ -584,6 +584,149 @@ describe('GTOGraphLoader', () => {
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('contrast', 1.2);
     });
 
+    it('parses extended RVColor properties (invert, normalize, unpremult, hue)', () => {
+      const mockNode = {
+        type: 'RVColor',
+        name: 'colorNode',
+        properties: {
+          has: vi.fn((key: string) =>
+            ['invert', 'normalize', 'unpremult', 'hue', 'colorLut', 'colorScale', 'colorActive'].includes(key)
+          ),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'colorNode',
+            protocol: 'RVColor',
+            components: {
+              color: {
+                invert: 1,
+                normalize: 1,
+                unpremult: 1,
+                hue: 30.0,
+                lut: 'custom_lut',
+                scale: [1.2, 1.1, 1.0],
+                active: 1,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('invert', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('normalize', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('unpremult', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('hue', 30.0);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('colorLut', 'custom_lut');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('colorScale', [1.2, 1.1, 1.0]);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('colorActive', true);
+    });
+
+    it('parses CDL component in RVColor', () => {
+      const mockNode = {
+        type: 'RVColor',
+        name: 'colorNode',
+        properties: {
+          has: vi.fn((key: string) =>
+            ['cdlActive', 'cdlColorspace', 'slope', 'cdlOffset', 'power', 'cdlSaturation', 'cdlNoClamp'].includes(key)
+          ),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'colorNode',
+            protocol: 'RVColor',
+            components: {
+              CDL: {
+                active: 1,
+                colorspace: 'aceslog',
+                slope: [1.1, 1.0, 0.9],
+                offset: [0.01, 0.0, -0.01],
+                power: [1.0, 1.0, 1.05],
+                saturation: 0.95,
+                noClamp: 1,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('cdlActive', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('cdlColorspace', 'aceslog');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('slope', [1.1, 1.0, 0.9]);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('cdlOffset', [0.01, 0.0, -0.01]);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('power', [1.0, 1.0, 1.05]);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('cdlSaturation', 0.95);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('cdlNoClamp', true);
+    });
+
+    it('parses luminanceLUT component in RVColor', () => {
+      const mockNode = {
+        type: 'RVColor',
+        name: 'colorNode',
+        properties: {
+          has: vi.fn((key: string) =>
+            ['luminanceLutActive', 'luminanceLut', 'luminanceLutMax', 'luminanceLutSize', 'luminanceLutName'].includes(key)
+          ),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'colorNode',
+            protocol: 'RVColor',
+            components: {
+              luminanceLUT: {
+                active: 1,
+                lut: [0, 0.25, 0.5, 0.75, 1.0],
+                max: 2.0,
+                size: 256,
+                name: 'TestLumLUT',
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('luminanceLutActive', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('luminanceLut', [0, 0.25, 0.5, 0.75, 1.0]);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('luminanceLutMax', 2.0);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('luminanceLutSize', 256);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('luminanceLutName', 'TestLumLUT');
+    });
+
     it('uses default session name when none provided', () => {
       vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
 
@@ -1209,6 +1352,132 @@ describe('GTOGraphLoader', () => {
       loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('translate', [0.1, -0.2]);
+    });
+  });
+
+  describe('RVLookLUT parsing', () => {
+    it('parses RVLookLUT node component active state', () => {
+      const mockNode = {
+        type: 'RVLookLUT',
+        name: 'lookLut',
+        properties: {
+          has: vi.fn(() => true),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'rv' }],
+        objects: [
+          {
+            name: 'lookLut',
+            protocol: 'RVLookLUT',
+            components: {
+              node: { active: 1 },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('lookLutActive', true);
+    });
+
+    it('parses RVLookLUT lut component properties', () => {
+      const mockNode = {
+        type: 'RVLookLUT',
+        name: 'lookLut',
+        properties: {
+          has: vi.fn(() => true),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'rv' }],
+        objects: [
+          {
+            name: 'lookLut',
+            protocol: 'RVLookLUT',
+            components: {
+              node: { active: 1 },
+              lut: {
+                active: 1,
+                file: '/path/to/lut.cube',
+                name: 'TestLUT',
+                type: 'RGB',
+                scale: 1.5,
+                offset: 0.1,
+                conditioningGamma: 2.2,
+                size: [33, 33, 33],
+                preLUTSize: 256,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('lookLutComponentActive', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('lookLutFile', '/path/to/lut.cube');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('lookLutName', 'TestLUT');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('lookLutType', 'RGB');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('lookLutScale', 1.5);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('lookLutOffset', 0.1);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('lookLutConditioningGamma', 2.2);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('lookLutSize', [33, 33, 33]);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('lookLutPreLUTSize', 256);
+    });
+
+    it('parses RVCacheLUT the same as RVLookLUT', () => {
+      const mockNode = {
+        type: 'RVCacheLUT',
+        name: 'cacheLut',
+        properties: {
+          has: vi.fn(() => true),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'rv' }],
+        objects: [
+          {
+            name: 'cacheLut',
+            protocol: 'RVCacheLUT',
+            components: {
+              node: { active: 1 },
+              lut: {
+                active: 1,
+                file: '/cached/lut.cube',
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('lookLutActive', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('lookLutComponentActive', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('lookLutFile', '/cached/lut.cube');
     });
   });
 });

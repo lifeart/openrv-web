@@ -825,3 +825,201 @@ describe('SessionGTOExporter.buildLinearizeObject', () => {
         expect(lutComp.properties.active.data).toEqual([0]);
     });
 });
+
+describe('SessionGTOExporter.buildColorObject', () => {
+    it('creates RVColor object with default settings', () => {
+        const result = SessionGTOExporter.buildColorObject('sourceGroup000000_RVColor');
+
+        expect(result.name).toBe('sourceGroup000000_RVColor');
+        expect(result.protocol).toBe('RVColor');
+        expect(result.protocolVersion).toBe(1);
+    });
+
+    it('creates color component with basic settings', () => {
+        const result = SessionGTOExporter.buildColorObject('colorNode', {
+            active: true,
+            exposure: 0.5,
+            gamma: 1.2,
+            saturation: 1.1,
+            contrast: 0.1,
+            hue: 15.0,
+        });
+        const components = result.components as Record<string, any>;
+        const colorComp = components['color'];
+
+        expect(colorComp.properties.active.data).toEqual([1]);
+        expect(colorComp.properties.exposure.data).toEqual([0.5, 0.5, 0.5]);
+        expect(colorComp.properties.gamma.data).toEqual([1.2, 1.2, 1.2]);
+        expect(colorComp.properties.saturation.data).toEqual([1.1]);
+        expect(colorComp.properties.contrast.data).toEqual([0.1, 0.1, 0.1]);
+        expect(colorComp.properties.hue.data).toEqual([15.0]);
+    });
+
+    it('creates color component with per-channel values', () => {
+        const result = SessionGTOExporter.buildColorObject('colorNode', {
+            exposure: [0.2, 0.3, 0.4],
+            gamma: [1.1, 1.2, 1.3],
+            offset: [0.01, 0.02, 0.03],
+            contrast: [0.1, 0.15, 0.2],
+        });
+        const components = result.components as Record<string, any>;
+        const colorComp = components['color'];
+
+        expect(colorComp.properties.exposure.data).toEqual([0.2, 0.3, 0.4]);
+        expect(colorComp.properties.gamma.data).toEqual([1.1, 1.2, 1.3]);
+        expect(colorComp.properties.offset.data).toEqual([0.01, 0.02, 0.03]);
+        expect(colorComp.properties.contrast.data).toEqual([0.1, 0.15, 0.2]);
+    });
+
+    it('creates color component with invert, normalize, unpremult flags', () => {
+        const result = SessionGTOExporter.buildColorObject('colorNode', {
+            invert: true,
+            normalize: true,
+            unpremult: true,
+            lut: 'custom_lut',
+        });
+        const components = result.components as Record<string, any>;
+        const colorComp = components['color'];
+
+        expect(colorComp.properties.invert.data).toEqual([1]);
+        expect(colorComp.properties.normalize.data).toEqual([1]);
+        expect(colorComp.properties.unpremult.data).toEqual([1]);
+        expect(colorComp.properties.lut.data).toEqual(['custom_lut']);
+    });
+
+    it('creates CDL component when cdl settings provided', () => {
+        const result = SessionGTOExporter.buildColorObject('colorNode', {
+            cdl: {
+                active: true,
+                colorspace: 'aceslog',
+                slope: [1.1, 1.0, 0.9],
+                offset: [0.01, 0.0, -0.01],
+                power: [1.0, 1.0, 1.05],
+                saturation: 0.95,
+                noClamp: true,
+            },
+        });
+        const components = result.components as Record<string, any>;
+        const cdlComp = components['CDL'];
+
+        expect(cdlComp).toBeDefined();
+        expect(cdlComp.properties.active.data).toEqual([1]);
+        expect(cdlComp.properties.colorspace.data).toEqual(['aceslog']);
+        expect(cdlComp.properties.slope.data).toEqual([1.1, 1.0, 0.9]);
+        expect(cdlComp.properties.offset.data).toEqual([0.01, 0.0, -0.01]);
+        expect(cdlComp.properties.power.data).toEqual([1.0, 1.0, 1.05]);
+        expect(cdlComp.properties.saturation.data).toEqual([0.95]);
+        expect(cdlComp.properties.noClamp.data).toEqual([1]);
+    });
+
+    it('creates luminanceLUT component when settings provided', () => {
+        const result = SessionGTOExporter.buildColorObject('colorNode', {
+            luminanceLUT: {
+                active: true,
+                lut: [0, 0.5, 1.0],
+                max: 2.0,
+                size: 256,
+                name: 'TestLumLUT',
+            },
+        });
+        const components = result.components as Record<string, any>;
+        const lumLutComp = components['luminanceLUT'];
+
+        expect(lumLutComp).toBeDefined();
+        expect(lumLutComp.properties.active.data).toEqual([1]);
+        expect(lumLutComp.properties.lut.data).toEqual([0, 0.5, 1.0]);
+        expect(lumLutComp.properties.max.data).toEqual([2.0]);
+        expect(lumLutComp.properties.size.data).toEqual([256]);
+        expect(lumLutComp.properties.name.data).toEqual(['TestLumLUT']);
+    });
+
+    it('does not create CDL component when cdl settings not provided', () => {
+        const result = SessionGTOExporter.buildColorObject('colorNode');
+        const components = result.components as Record<string, any>;
+
+        expect(components['CDL']).toBeUndefined();
+    });
+
+    it('does not create luminanceLUT component when settings not provided', () => {
+        const result = SessionGTOExporter.buildColorObject('colorNode');
+        const components = result.components as Record<string, any>;
+
+        expect(components['luminanceLUT']).toBeUndefined();
+    });
+});
+
+describe('SessionGTOExporter.buildLookLUTObject', () => {
+    it('creates RVLookLUT object with default settings', () => {
+        const result = SessionGTOExporter.buildLookLUTObject('sourceGroup000000_RVLookLUT');
+
+        expect(result.name).toBe('sourceGroup000000_RVLookLUT');
+        expect(result.protocol).toBe('RVLookLUT');
+        expect(result.protocolVersion).toBe(1);
+    });
+
+    it('creates RVCacheLUT object when specified', () => {
+        const result = SessionGTOExporter.buildLookLUTObject(
+            'cacheLut',
+            {},
+            'RVCacheLUT'
+        );
+
+        expect(result.protocol).toBe('RVCacheLUT');
+    });
+
+    it('creates node component with active state', () => {
+        const result = SessionGTOExporter.buildLookLUTObject('lookLut', { active: true });
+        const components = result.components as Record<string, any>;
+
+        expect(components['node'].properties.active.data).toEqual([1]);
+    });
+
+    it('creates node component with inactive state', () => {
+        const result = SessionGTOExporter.buildLookLUTObject('lookLut', { active: false });
+        const components = result.components as Record<string, any>;
+
+        expect(components['node'].properties.active.data).toEqual([0]);
+    });
+
+    it('creates LUT component with file and settings', () => {
+        const result = SessionGTOExporter.buildLookLUTObject('lookLut', {
+            lutActive: true,
+            file: '/path/to/lut.cube',
+            name: 'TestLUT',
+            type: 'RGB',
+            scale: 1.5,
+            offset: 0.1,
+            conditioningGamma: 2.2,
+            size: [33, 33, 33],
+            preLUTSize: 256,
+        });
+        const components = result.components as Record<string, any>;
+        const lutComp = components['lut'];
+
+        expect(lutComp.properties.active.data).toEqual([1]);
+        expect(lutComp.properties.file.data).toEqual(['/path/to/lut.cube']);
+        expect(lutComp.properties.name.data).toEqual(['TestLUT']);
+        expect(lutComp.properties.type.data).toEqual(['RGB']);
+        expect(lutComp.properties.scale.data).toEqual([1.5]);
+        expect(lutComp.properties.offset.data).toEqual([0.1]);
+        expect(lutComp.properties.conditioningGamma.data).toEqual([2.2]);
+        expect(lutComp.properties.size.data).toEqual([33, 33, 33]);
+        expect(lutComp.properties.preLUTSize.data).toEqual([256]);
+    });
+
+    it('creates LUT component with default values', () => {
+        const result = SessionGTOExporter.buildLookLUTObject('lookLut');
+        const components = result.components as Record<string, any>;
+        const lutComp = components['lut'];
+
+        expect(lutComp.properties.active.data).toEqual([0]);
+        expect(lutComp.properties.file.data).toEqual(['']);
+        expect(lutComp.properties.name.data).toEqual(['']);
+        expect(lutComp.properties.type.data).toEqual(['Luminance']);
+        expect(lutComp.properties.scale.data).toEqual([1.0]);
+        expect(lutComp.properties.offset.data).toEqual([0.0]);
+        expect(lutComp.properties.conditioningGamma.data).toEqual([1.0]);
+        expect(lutComp.properties.size.data).toEqual([0, 0, 0]);
+        expect(lutComp.properties.preLUTSize.data).toEqual([0]);
+    });
+});

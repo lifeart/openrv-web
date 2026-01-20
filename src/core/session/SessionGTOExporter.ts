@@ -144,6 +144,107 @@ export interface LinearizeSettings {
   lutSettings?: LinearizeLUTSettings;
 }
 
+/**
+ * Luminance LUT settings for RVColor
+ */
+export interface LuminanceLUTSettings {
+  /** LUT is active */
+  active?: boolean;
+  /** LUT data (float array) */
+  lut?: number[];
+  /** Maximum range */
+  max?: number;
+  /** Input LUT size */
+  size?: number;
+  /** LUT identifier */
+  name?: string;
+}
+
+/**
+ * RVColor settings for color correction export
+ */
+export interface ColorSettings {
+  /** Node is active */
+  active?: boolean;
+  /** Invert colors */
+  invert?: boolean;
+  /** Per-channel gamma [r, g, b] or single value */
+  gamma?: number | number[];
+  /** LUT selection */
+  lut?: string;
+  /** RGB offset [r, g, b] or single value */
+  offset?: number | number[];
+  /** RGB scale [r, g, b] */
+  scale?: number[];
+  /** Per-channel exposure [r, g, b] or single value */
+  exposure?: number | number[];
+  /** Contrast adjustment [r, g, b] or single value */
+  contrast?: number | number[];
+  /** Saturation control */
+  saturation?: number;
+  /** Normalize color bounds */
+  normalize?: boolean;
+  /** Hue rotation */
+  hue?: number;
+  /** Unpremultiply alpha */
+  unpremult?: boolean;
+
+  /** CDL settings */
+  cdl?: {
+    /** CDL is active */
+    active?: boolean;
+    /** Colorspace (rec709, aceslog, aces) */
+    colorspace?: string;
+    /** CDL slope [r, g, b] */
+    slope?: number[];
+    /** CDL offset [r, g, b] */
+    offset?: number[];
+    /** CDL power [r, g, b] */
+    power?: number[];
+    /** CDL saturation */
+    saturation?: number;
+    /** Disable clamping */
+    noClamp?: boolean;
+  };
+
+  /** Luminance LUT settings */
+  luminanceLUT?: LuminanceLUTSettings;
+}
+
+/**
+ * LookLUT settings for RVLookLUT/RVCacheLUT export
+ */
+export interface LookLUTSettings {
+  /** Node is active */
+  active?: boolean;
+  /** LUT is active (component level) */
+  lutActive?: boolean;
+  /** LUT file path */
+  file?: string;
+  /** LUT name */
+  name?: string;
+  /** LUT type (Luminance, RGB, etc.) */
+  type?: string;
+  /** Scale factor */
+  scale?: number;
+  /** Offset value */
+  offset?: number;
+  /** Conditioning gamma */
+  conditioningGamma?: number;
+  /** LUT dimensions [x, y, z] */
+  size?: number[];
+  /** Pre-LUT size */
+  preLUTSize?: number;
+  /** Input transformation matrix (4x4) */
+  inMatrix?: number[][];
+  /** Output transformation matrix (4x4) */
+  outMatrix?: number[][];
+  /** Pre-compiled LUT data (for RVCacheLUT) */
+  lutData?: number[];
+  /** Pre-compiled pre-LUT data */
+  prelutData?: number[];
+}
+
 export interface GTOComponentDTO {
   property(name: string): {
     value(): unknown;
@@ -503,6 +604,133 @@ export class SessionGTOExporter {
     }
 
     linearizeObject.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVLookLUT or RVCacheLUT object for LUT application
+   * @param name - Object name (e.g., 'sourceGroup000000_RVLookLUT')
+   * @param settings - LookLUT settings
+   * @param protocol - Protocol type ('RVLookLUT' or 'RVCacheLUT')
+   */
+  static buildLookLUTObject(
+    name: string,
+    settings: LookLUTSettings = {},
+    protocol: 'RVLookLUT' | 'RVCacheLUT' = 'RVLookLUT'
+  ): ObjectData {
+    const builder = new GTOBuilder();
+
+    const lutObject = builder.object(name, protocol, 1);
+
+    // Node component (active state)
+    lutObject
+      .component('node')
+      .int('active', settings.active !== false ? 1 : 0)
+      .end();
+
+    // LUT component
+    lutObject
+      .component('lut')
+      .int('active', settings.lutActive ? 1 : 0)
+      .string('file', settings.file ?? '')
+      .string('name', settings.name ?? '')
+      .string('type', settings.type ?? 'Luminance')
+      .float('scale', settings.scale ?? 1.0)
+      .float('offset', settings.offset ?? 0.0)
+      .float('conditioningGamma', settings.conditioningGamma ?? 1.0)
+      .int('size', settings.size ?? [0, 0, 0])
+      .int('preLUTSize', settings.preLUTSize ?? 0)
+      .end();
+
+    // Add matrices if provided
+    if (settings.inMatrix) {
+      const lutComp = lutObject.component('lut');
+      lutComp.float('inMatrix', settings.inMatrix).end();
+    }
+    if (settings.outMatrix) {
+      const lutComp = lutObject.component('lut');
+      lutComp.float('outMatrix', settings.outMatrix).end();
+    }
+
+    // Add output component for cached LUT data (RVCacheLUT)
+    if (protocol === 'RVCacheLUT' && (settings.lutData || settings.prelutData)) {
+      const outputComp = lutObject.component('lut:output');
+      if (settings.lutData) {
+        outputComp.float('lut', settings.lutData);
+      }
+      if (settings.prelutData) {
+        outputComp.float('prelut', settings.prelutData);
+      }
+      outputComp.end();
+    }
+
+    lutObject.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVColor object for color correction
+   * @param name - Object name (e.g., 'sourceGroup000000_RVColor')
+   * @param settings - Color correction settings
+   */
+  static buildColorObject(name: string, settings: ColorSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const colorObject = builder.object(name, 'RVColor', 1);
+
+    // Helper to convert single value to array or use array directly
+    const toFloatArray = (value: number | number[] | undefined, defaultVal: number[]): number[] => {
+      if (value === undefined) return defaultVal;
+      if (Array.isArray(value)) return value;
+      return [value, value, value];
+    };
+
+    // Color component
+    colorObject
+      .component('color')
+      .int('active', settings.active !== false ? 1 : 0)
+      .int('invert', settings.invert ? 1 : 0)
+      .float('gamma', toFloatArray(settings.gamma, [1, 1, 1]))
+      .string('lut', settings.lut ?? 'default')
+      .float('offset', toFloatArray(settings.offset, [0, 0, 0]))
+      .float('scale', settings.scale ?? [1, 1, 1])
+      .float('exposure', toFloatArray(settings.exposure, [0, 0, 0]))
+      .float('contrast', toFloatArray(settings.contrast, [0, 0, 0]))
+      .float('saturation', settings.saturation ?? 1.0)
+      .int('normalize', settings.normalize ? 1 : 0)
+      .float('hue', settings.hue ?? 0.0)
+      .int('unpremult', settings.unpremult ? 1 : 0)
+      .end();
+
+    // CDL component (if settings provided)
+    if (settings.cdl) {
+      const cdl = settings.cdl;
+      colorObject
+        .component('CDL')
+        .int('active', cdl.active !== false ? 1 : 0)
+        .string('colorspace', cdl.colorspace ?? 'rec709')
+        .float('slope', cdl.slope ?? [1, 1, 1])
+        .float('offset', cdl.offset ?? [0, 0, 0])
+        .float('power', cdl.power ?? [1, 1, 1])
+        .float('saturation', cdl.saturation ?? 1.0)
+        .int('noClamp', cdl.noClamp ? 1 : 0)
+        .end();
+    }
+
+    // Luminance LUT component (if settings provided)
+    if (settings.luminanceLUT) {
+      const lum = settings.luminanceLUT;
+      colorObject
+        .component('luminanceLUT')
+        .int('active', lum.active ? 1 : 0)
+        .float('lut', lum.lut ?? [])
+        .float('max', lum.max ?? 1.0)
+        .int('size', lum.size ?? 0)
+        .string('name', lum.name ?? '')
+        .end();
+    }
+
+    colorObject.end();
     return builder.build().objects[0]!;
   }
 

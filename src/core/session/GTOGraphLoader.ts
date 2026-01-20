@@ -65,6 +65,8 @@ const PROTOCOL_TO_NODE_TYPE: Record<string, string> = {
   RVLensWarp: 'RVLensWarp',
   RVCDL: 'RVCDL',
   RVLinearize: 'RVLinearize',
+  RVLookLUT: 'RVLookLUT',
+  RVCacheLUT: 'RVCacheLUT',
 
   // View nodes (not yet implemented - will be skipped)
   RVDisplayColor: 'RVDisplayColor',
@@ -260,17 +262,67 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
     if (protocol === 'RVColor') {
       const colorComp = obj.component('color');
       if (colorComp?.exists()) {
-        const exposure = colorComp.property('exposure').value() as number;
-        const gamma = colorComp.property('gamma').value() as number;
+        const exposure = colorComp.property('exposure').value() as number | number[];
+        const gamma = colorComp.property('gamma').value() as number | number[];
         const saturation = colorComp.property('saturation').value() as number;
-        const offset = colorComp.property('offset').value() as number;
-        const contrast = colorComp.property('contrast').value() as number;
+        const offset = colorComp.property('offset').value() as number | number[];
+        const contrast = colorComp.property('contrast').value() as number | number[];
+        const scale = colorComp.property('scale').value() as number[];
+        const invert = colorComp.property('invert').value() as number;
+        const lut = colorComp.property('lut').value() as string;
+        const normalize = colorComp.property('normalize').value() as number;
+        const hue = colorComp.property('hue').value() as number;
+        const active = colorComp.property('active').value() as number;
+        const unpremult = colorComp.property('unpremult').value() as number;
 
-        if (typeof exposure === 'number') nodeInfo.properties.exposure = exposure;
-        if (typeof gamma === 'number') nodeInfo.properties.gamma = gamma;
+        if (exposure !== undefined) nodeInfo.properties.exposure = exposure;
+        if (gamma !== undefined) nodeInfo.properties.gamma = gamma;
         if (typeof saturation === 'number') nodeInfo.properties.saturation = saturation;
-        if (typeof offset === 'number') nodeInfo.properties.offset = offset;
-        if (typeof contrast === 'number') nodeInfo.properties.contrast = contrast;
+        if (offset !== undefined) nodeInfo.properties.offset = offset;
+        if (contrast !== undefined) nodeInfo.properties.contrast = contrast;
+        if (Array.isArray(scale)) nodeInfo.properties.colorScale = scale;
+        if (typeof invert === 'number') nodeInfo.properties.invert = invert !== 0;
+        if (typeof lut === 'string') nodeInfo.properties.colorLut = lut;
+        if (typeof normalize === 'number') nodeInfo.properties.normalize = normalize !== 0;
+        if (typeof hue === 'number') nodeInfo.properties.hue = hue;
+        if (typeof active === 'number') nodeInfo.properties.colorActive = active !== 0;
+        if (typeof unpremult === 'number') nodeInfo.properties.unpremult = unpremult !== 0;
+      }
+
+      // Parse CDL component in RVColor
+      const cdlComp = obj.component('CDL');
+      if (cdlComp?.exists()) {
+        const cdlActive = cdlComp.property('active').value() as number;
+        const colorspace = cdlComp.property('colorspace').value() as string;
+        const slope = cdlComp.property('slope').value() as number[];
+        const cdlOffset = cdlComp.property('offset').value() as number[];
+        const power = cdlComp.property('power').value() as number[];
+        const cdlSaturation = cdlComp.property('saturation').value() as number;
+        const noClamp = cdlComp.property('noClamp').value() as number;
+
+        if (typeof cdlActive === 'number') nodeInfo.properties.cdlActive = cdlActive !== 0;
+        if (typeof colorspace === 'string') nodeInfo.properties.cdlColorspace = colorspace;
+        if (Array.isArray(slope)) nodeInfo.properties.slope = slope;
+        if (Array.isArray(cdlOffset)) nodeInfo.properties.cdlOffset = cdlOffset;
+        if (Array.isArray(power)) nodeInfo.properties.power = power;
+        if (typeof cdlSaturation === 'number') nodeInfo.properties.cdlSaturation = cdlSaturation;
+        if (typeof noClamp === 'number') nodeInfo.properties.cdlNoClamp = noClamp !== 0;
+      }
+
+      // Parse luminanceLUT component
+      const lumLutComp = obj.component('luminanceLUT');
+      if (lumLutComp?.exists()) {
+        const lumLutActive = lumLutComp.property('active').value() as number;
+        const lumLut = lumLutComp.property('lut').value() as number[];
+        const lumMax = lumLutComp.property('max').value() as number;
+        const lumSize = lumLutComp.property('size').value() as number;
+        const lumName = lumLutComp.property('name').value() as string;
+
+        if (typeof lumLutActive === 'number') nodeInfo.properties.luminanceLutActive = lumLutActive !== 0;
+        if (Array.isArray(lumLut)) nodeInfo.properties.luminanceLut = lumLut;
+        if (typeof lumMax === 'number') nodeInfo.properties.luminanceLutMax = lumMax;
+        if (typeof lumSize === 'number') nodeInfo.properties.luminanceLutSize = lumSize;
+        if (typeof lumName === 'string') nodeInfo.properties.luminanceLutName = lumName;
       }
     }
 
@@ -391,6 +443,58 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
         if (Array.isArray(lutSize)) nodeInfo.properties.lutSize = lutSize;
         if (Array.isArray(inMatrix)) nodeInfo.properties.lutInMatrix = inMatrix;
         if (Array.isArray(outMatrix)) nodeInfo.properties.lutOutMatrix = outMatrix;
+      }
+    }
+
+    // Parse LookLUT/CacheLUT properties
+    if (protocol === 'RVLookLUT' || protocol === 'RVCacheLUT') {
+      // Parse node component (active state)
+      const nodeComp = obj.component('node');
+      if (nodeComp?.exists()) {
+        const active = nodeComp.property('active').value() as number;
+        if (typeof active === 'number') nodeInfo.properties.lookLutActive = active !== 0;
+      }
+
+      // Parse LUT component
+      const lutComp = obj.component('lut');
+      if (lutComp?.exists()) {
+        const lutActive = lutComp.property('active').value() as number;
+        const lutFile = lutComp.property('file').value() as string;
+        const lutName = lutComp.property('name').value() as string;
+        const lutType = lutComp.property('type').value() as string;
+        const lutScale = lutComp.property('scale').value() as number;
+        const lutOffset = lutComp.property('offset').value() as number;
+        const lutSize = lutComp.property('size').value() as number[];
+        const conditioningGamma = lutComp.property('conditioningGamma').value() as number;
+        const preLUTSize = lutComp.property('preLUTSize').value() as number;
+        const inMatrix = lutComp.property('inMatrix').value() as number[][];
+        const outMatrix = lutComp.property('outMatrix').value() as number[][];
+
+        if (typeof lutActive === 'number') nodeInfo.properties.lookLutComponentActive = lutActive !== 0;
+        if (typeof lutFile === 'string') nodeInfo.properties.lookLutFile = lutFile;
+        if (typeof lutName === 'string') nodeInfo.properties.lookLutName = lutName;
+        if (typeof lutType === 'string') nodeInfo.properties.lookLutType = lutType;
+        if (typeof lutScale === 'number') nodeInfo.properties.lookLutScale = lutScale;
+        if (typeof lutOffset === 'number') nodeInfo.properties.lookLutOffset = lutOffset;
+        if (Array.isArray(lutSize)) nodeInfo.properties.lookLutSize = lutSize;
+        if (typeof conditioningGamma === 'number') nodeInfo.properties.lookLutConditioningGamma = conditioningGamma;
+        if (typeof preLUTSize === 'number') nodeInfo.properties.lookLutPreLUTSize = preLUTSize;
+        if (Array.isArray(inMatrix)) nodeInfo.properties.lookLutInMatrix = inMatrix;
+        if (Array.isArray(outMatrix)) nodeInfo.properties.lookLutOutMatrix = outMatrix;
+      }
+
+      // Parse output component (compiled LUT data)
+      const outputComp = obj.component('lut:output');
+      if (outputComp?.exists()) {
+        const outputSize = outputComp.property('size').value() as number;
+        const outputType = outputComp.property('type').value() as string;
+        const outputLut = outputComp.property('lut').value() as number[];
+        const outputPrelut = outputComp.property('prelut').value() as number[];
+
+        if (typeof outputSize === 'number') nodeInfo.properties.lookLutOutputSize = outputSize;
+        if (typeof outputType === 'string') nodeInfo.properties.lookLutOutputType = outputType;
+        if (Array.isArray(outputLut)) nodeInfo.properties.lookLutOutputData = outputLut;
+        if (Array.isArray(outputPrelut)) nodeInfo.properties.lookLutOutputPrelut = outputPrelut;
       }
     }
 
