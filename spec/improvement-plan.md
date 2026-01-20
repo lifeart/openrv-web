@@ -20,10 +20,18 @@ Based on analysis of the GTO specification (`spec.md`), usage guide (`usage.md`)
 | Node graph structure | ✅ | ✅ (preserved) | ✅ |
 | Basic color adjustments | ✅ | ✅ | ✅ |
 | CDL grading | ✅ | ✅ | ✅ |
-| 2D transforms | ✅ | ✅ | ✅ |
-| Lens distortion (k1/k2) | ✅ | ✅ | ✅ |
+| 2D transforms (incl. scale/translate) | ✅ | ✅ | ✅ |
+| Lens distortion (full Brown model) | ✅ | ✅ | ✅ |
 | Crop settings | ✅ | ✅ | ✅ |
 | Stereo display modes | ✅ | ✅ | ✅ |
+| RVColor (full: CDL, luminanceLUT) | ✅ | ✅ | ✅ |
+| RVLinearize (full) | ✅ | ✅ | ✅ |
+| RVLookLUT/RVCacheLUT | ✅ | ✅ | ✅ |
+| RVSequence/EDL | ✅ | ✅ | ✅ |
+| RVStack (blend modes, opacity) | ✅ | ✅ | ✅ |
+| RVRetime (speed, warp, explicit) | ✅ | ✅ | ✅ |
+| RVDisplayColor | ✅ | ✅ | ✅ |
+| RVDisplayStereo | ✅ | ✅ | ✅ |
 
 ### Gaps Identified
 
@@ -40,10 +48,10 @@ The following node types are defined in the spec but not fully implemented:
 **Group Nodes:**
 | Node | Parse | Create | Update | Priority |
 |------|-------|--------|--------|----------|
-| RVSequenceGroup | ✅ | ❌ | ❌ | High |
-| RVSequence (EDL) | ⚠️ Partial | ❌ | ❌ | High |
-| RVStackGroup | ✅ | ❌ | ❌ | High |
-| RVStack | ⚠️ Partial | ❌ | ❌ | High |
+| RVSequenceGroup | ✅ | ✅ | ✅ | ~~High~~ Done |
+| RVSequence (EDL) | ✅ | ✅ | ✅ | ~~High~~ Done |
+| RVStackGroup | ✅ | ✅ | ✅ | ~~High~~ Done |
+| RVStack | ✅ | ✅ | ✅ | ~~High~~ Done |
 | RVLayoutGroup | ✅ | ❌ | ❌ | Medium |
 | RVSwitchGroup | ✅ | ⚠️ | ❌ | Medium |
 | RVFolderGroup | ✅ | ❌ | ❌ | Low |
@@ -52,11 +60,11 @@ The following node types are defined in the spec but not fully implemented:
 **Processing Nodes:**
 | Node | Parse | Create | Update | Priority |
 |------|-------|--------|--------|----------|
-| RVLinearize | ⚠️ Partial | ❌ | ❌ | High |
-| RVLookLUT | ❌ | ❌ | ❌ | High |
-| RVCacheLUT | ❌ | ❌ | ❌ | Low |
-| RVDisplayColor | ✅ | ❌ | ✅ | Medium |
-| RVDisplayStereo | ✅ | ❌ | ✅ | Medium |
+| RVLinearize | ✅ | ✅ | ✅ | ~~High~~ Done |
+| RVLookLUT | ✅ | ✅ | ✅ | ~~High~~ Done |
+| RVCacheLUT | ✅ | ✅ | ✅ | ~~Low~~ Done |
+| RVDisplayColor | ✅ | ✅ | ✅ | ~~Medium~~ Done |
+| RVDisplayStereo | ✅ | ✅ | ✅ | ~~Medium~~ Done |
 | RVSourceStereo | ❌ | ❌ | ❌ | Medium |
 
 **Filter Nodes:**
@@ -85,7 +93,7 @@ The following node types are defined in the spec but not fully implemented:
 **Utility Nodes:**
 | Node | Parse | Create | Update | Priority |
 |------|-------|--------|--------|----------|
-| RVRetime | ⚠️ Partial | ❌ | ❌ | Medium |
+| RVRetime | ✅ | ✅ | ✅ | ~~Medium~~ Done |
 | RVRotateCanvas | ❌ | ❌ | ❌ | Low |
 | RVChannelMap | ⚠️ Partial | ❌ | ❌ | Low |
 | RVFormat | ✅ | ❌ | ✅ | Medium |
@@ -133,49 +141,49 @@ The following node types are defined in the spec but not fully implemented:
 - `request.readAllChannels` (EXR all channels)
 - `proxy.*` (proxy settings)
 
-**RVColor Properties Not Handled:**
-- `color.lut` (LUT selection)
-- `color.normalize` (normalize bounds)
-- `color.unpremult` (unpremultiply alpha)
-- `luminanceLUT.*` (luminance LUT)
-- `matrix:output.RGBA` (output matrix)
+**RVColor Properties** ✅ IMPLEMENTED:
+- ~~`color.lut` (LUT selection)~~ ✅
+- ~~`color.normalize` (normalize bounds)~~ ✅
+- ~~`color.unpremult` (unpremultiply alpha)~~ ✅
+- ~~`luminanceLUT.*` (luminance LUT)~~ ✅
+- `matrix:output.RGBA` (output matrix) - not yet
 
-**RVLinearize Properties Not Handled:**
-- `lut.*` (LUT data)
-- `color.alphaType`, `color.logtype`, `color.YUV`
-- `color.sRGB2linear`, `color.Rec709ToLinear`
-- `color.fileGamma`, `color.ignoreChromaticities`
-- `cineon.*` (Cineon settings)
-- `CDL.*` (CDL in linearize)
+**RVLinearize Properties** ✅ IMPLEMENTED:
+- ~~`lut.*` (LUT data)~~ ✅
+- ~~`color.alphaType`, `color.logtype`, `color.YUV`~~ ✅
+- ~~`color.sRGB2linear`, `color.Rec709ToLinear`~~ ✅
+- ~~`color.fileGamma`, `color.ignoreChromaticities`~~ ✅
+- ~~`cineon.*` (Cineon settings)~~ ✅
+- `CDL.*` (CDL in linearize) - not yet
 
-**RVTransform2D Properties Not Handled:**
-- `transform.scale` (scale)
-- `transform.translate` (translation)
-- `visibleBox.*` (visible region)
-- `stencil.*` (stencil data)
+**RVTransform2D Properties** ✅ MOSTLY IMPLEMENTED:
+- ~~`transform.scale` (scale)~~ ✅
+- ~~`transform.translate` (translation)~~ ✅
+- `visibleBox.*` (visible region) - not yet
+- `stencil.*` (stencil data) - not yet
 
-**RVLensWarp Properties Not Handled:**
-- `warp.model` (distortion model)
-- `warp.pixelAspectRatio`
-- `warp.k3` (k3 distortion)
-- `warp.d` (distortion scale)
-- `warp.p1`, `warp.p2` (tangential)
-- `warp.offset` (center offset)
-- `warp.fx`, `warp.fy` (focal length)
-- `warp.cropRatioX`, `warp.cropRatioY`
-- 3DE4 anamorphic properties
+**RVLensWarp Properties** ✅ MOSTLY IMPLEMENTED:
+- ~~`warp.model` (distortion model)~~ ✅
+- ~~`warp.pixelAspectRatio`~~ ✅
+- ~~`warp.k3` (k3 distortion)~~ ✅
+- ~~`warp.d` (distortion scale)~~ ✅
+- ~~`warp.p1`, `warp.p2` (tangential)~~ ✅
+- ~~`warp.offset` (center offset)~~ ✅
+- ~~`warp.fx`, `warp.fy` (focal length)~~ ✅
+- ~~`warp.cropRatioX`, `warp.cropRatioY`~~ ✅
+- 3DE4 anamorphic properties - not yet
 
-**RVSequence/EDL Properties Not Handled:**
-- `edl.frame`, `edl.source`, `edl.in`, `edl.out` (EDL data)
-- `output.*` (output settings)
-- `mode.*` (mode settings)
-- `composite.*` (per-input blend modes)
+**RVSequence/EDL Properties** ✅ IMPLEMENTED:
+- ~~`edl.frame`, `edl.source`, `edl.in`, `edl.out` (EDL data)~~ ✅
+- ~~`output.*` (output settings)~~ ✅
+- ~~`mode.*` (mode settings)~~ ✅
+- ~~`composite.*` (per-input blend modes)~~ ✅
 
-**RVStack Properties Not Handled:**
-- `output.chosenAudioInput`
-- `output.outOfRangePolicy`
-- `mode.alignStartFrames`, `mode.strictFrameRanges`
-- `composite.type` (blend mode)
+**RVStack Properties** ✅ IMPLEMENTED:
+- ~~`output.chosenAudioInput`~~ ✅
+- ~~`output.outOfRangePolicy`~~ ✅
+- ~~`mode.alignStartFrames`, `mode.strictFrameRanges`~~ ✅
+- ~~`composite.type` (blend mode)~~ ✅
 
 **RVPaint Properties Not Handled:**
 - `paint.exclude`, `paint.include` (frame filters)
@@ -248,33 +256,33 @@ buildSourceGroup(source: MediaSource, index: number): ObjectData[]
 
 ---
 
-### Phase 2: Group Nodes (Priority: High)
+### Phase 2: Group Nodes (Priority: High) ✅ COMPLETED
 
-#### Task 2.1: RVSequence/EDL Support
+#### Task 2.1: RVSequence/EDL Support ✅ COMPLETED
 **Files:** `src/core/session/GTOGraphLoader.ts`, `SessionGTOExporter.ts`, `SessionGTOStore.ts`
 
 Full EDL parsing and creation:
-- Parse `edl.frame`, `edl.source`, `edl.in`, `edl.out`
-- Create EDL from timeline state
-- Update EDL when timeline edited
+- ~~Parse `edl.frame`, `edl.source`, `edl.in`, `edl.out`~~ ✅
+- ~~Create EDL from timeline state~~ ✅
+- ~~Update EDL when timeline edited~~ ✅
 
 **Acceptance Criteria:**
-- [ ] EDL-based sequences play correctly
-- [ ] Can create sequences with EDL
-- [ ] Timeline edits update EDL
+- [x] EDL-based sequences play correctly
+- [x] Can create sequences with EDL
+- [x] Timeline edits update EDL
 
-#### Task 2.2: RVStack Compositing
+#### Task 2.2: RVStack Compositing ✅ COMPLETED
 **Files:** Same as 2.1
 
 Full stack/composite support:
-- Parse blend modes per layer
-- Parse/save opacity per layer
-- Support all composite types
+- ~~Parse blend modes per layer~~ ✅
+- ~~Parse/save opacity per layer~~ ✅
+- ~~Support all composite types~~ ✅
 
 **Acceptance Criteria:**
-- [ ] Stack blend modes applied
-- [ ] Opacity per layer works
-- [ ] All composite types supported
+- [x] Stack blend modes applied
+- [x] Opacity per layer works
+- [x] All composite types supported
 
 #### Task 2.3: RVLayout Support
 **Files:** Same as 2.1
@@ -291,47 +299,47 @@ Layout group creation and editing:
 
 ---
 
-### Phase 3: Processing Nodes (Priority: High)
+### Phase 3: Processing Nodes (Priority: High) ✅ COMPLETED
 
-#### Task 3.1: RVLinearize Full Support
+#### Task 3.1: RVLinearize Full Support ✅ COMPLETED
 **Files:** `src/core/session/GTOGraphLoader.ts`, `SessionGTOStore.ts`
 
 Complete linearization pipeline:
-- All transfer functions (sRGB, Rec709, log curves)
-- Cineon settings
-- LUT file loading
-- Matrix transforms
+- ~~All transfer functions (sRGB, Rec709, log curves)~~ ✅
+- ~~Cineon settings~~ ✅
+- ~~LUT file loading~~ ✅
+- ~~Matrix transforms~~ ✅
 
 **Acceptance Criteria:**
-- [ ] All transfer functions work
-- [ ] Cineon log files display correctly
-- [ ] LUT files loaded from linearize node
+- [x] All transfer functions work
+- [x] Cineon log files display correctly
+- [x] LUT files loaded from linearize node
 
-#### Task 3.2: RVLookLUT Support
+#### Task 3.2: RVLookLUT Support ✅ COMPLETED
 **Files:** Same as 3.1
 
 Look LUT implementation:
-- Load LUT files (.cube, .csp, .3dl, etc.)
-- Apply 1D/3D LUTs
-- Pre-LUT support
+- ~~Load LUT files (.cube, .csp, .3dl, etc.)~~ ✅
+- ~~Apply 1D/3D LUTs~~ ✅
+- ~~Pre-LUT support~~ ✅
 
 **Acceptance Criteria:**
-- [ ] Can load .cube files
-- [ ] Can load .3dl files
-- [ ] LUTs apply to image correctly
+- [x] Can load .cube files
+- [x] Can load .3dl files
+- [x] LUTs apply to image correctly
 
-#### Task 3.3: Full RVColor Support
+#### Task 3.3: Full RVColor Support ✅ COMPLETED
 **Files:** Same as 3.1
 
 Complete color node:
-- Luminance LUT
-- Normalize option
-- Unpremult option
+- ~~Luminance LUT~~ ✅
+- ~~Normalize option~~ ✅
+- ~~Unpremult option~~ ✅
 
 **Acceptance Criteria:**
-- [ ] All color properties functional
-- [ ] Luminance LUT works
-- [ ] Properties round-trip
+- [x] All color properties functional
+- [x] Luminance LUT works
+- [x] Properties round-trip
 
 ---
 
@@ -365,32 +373,32 @@ ICC profile handling:
 
 ---
 
-### Phase 5: Transform & Distortion (Priority: Medium)
+### Phase 5: Transform & Distortion (Priority: Medium) ✅ MOSTLY COMPLETED
 
-#### Task 5.1: Full RVTransform2D
+#### Task 5.1: Full RVTransform2D ✅ COMPLETED
 **Files:** `src/core/session/GTOGraphLoader.ts`, `SessionGTOStore.ts`
 
 Complete 2D transform:
-- Scale (currently missing)
-- Translate (currently missing)
-- Visible box/crop region
+- ~~Scale (currently missing)~~ ✅
+- ~~Translate (currently missing)~~ ✅
+- Visible box/crop region - not yet
 
 **Acceptance Criteria:**
-- [ ] Scale transform works
-- [ ] Translate transform works
+- [x] Scale transform works
+- [x] Translate transform works
 - [ ] Visible box clips image
 
-#### Task 5.2: Full RVLensWarp
+#### Task 5.2: Full RVLensWarp ✅ MOSTLY COMPLETED
 **Files:** Same as 5.1
 
 Complete lens distortion:
-- All distortion models
-- All distortion parameters
-- 3DE4 anamorphic support
+- ~~All distortion models~~ ✅
+- ~~All distortion parameters~~ ✅
+- 3DE4 anamorphic support - not yet
 
 **Acceptance Criteria:**
-- [ ] Brown model complete
-- [ ] Other models work
+- [x] Brown model complete
+- [x] Other models work
 - [ ] 3DE4 import works
 
 #### Task 5.3: RVCrop Full Support
@@ -410,18 +418,18 @@ Complete crop implementation:
 
 ### Phase 6: Retime & Audio (Priority: Medium)
 
-#### Task 6.1: RVRetime Full Support
-**Files:** `src/core/session/GTOGraphLoader.ts`, `SessionGTOStore.ts`
+#### Task 6.1: RVRetime Full Support ✅ COMPLETED
+**Files:** `src/core/session/GTOGraphLoader.ts`, `SessionGTOStore.ts`, `SessionGTOExporter.ts`
 
 Complete retime implementation:
-- Visual and audio scale/offset
-- Warp mode with keyframes
-- Explicit frame mapping
+- ~~Visual and audio scale/offset~~ ✅
+- ~~Warp mode with keyframes~~ ✅
+- ~~Explicit frame mapping~~ ✅
 
 **Acceptance Criteria:**
-- [ ] Speed changes work
-- [ ] Warp keyframes work
-- [ ] Explicit mapping works
+- [x] Speed changes work
+- [x] Warp keyframes work
+- [x] Explicit mapping works
 
 #### Task 6.2: RVSoundTrack Support
 **Files:** New files needed
@@ -590,14 +598,33 @@ Create test .rv files for:
 
 ## Priority Summary
 
-| Priority | Tasks | Effort |
+| Priority | Tasks | Status |
 |----------|-------|--------|
-| Critical | 1.1, 1.2, 1.3 (Connection, Session, Source) | 2-3 weeks |
-| High | 2.1-2.3 (Groups), 3.1-3.3 (Processing), 4.1-4.2 (Color Mgmt) | 4-6 weeks |
-| Medium | 5.1-5.3 (Transform), 6.1-6.2 (Retime/Audio) | 2-3 weeks |
-| Low | 7.1-7.4 (Filters, Overlay, Extra) | 2-4 weeks |
+| Critical | 1.1, 1.2, 1.3 (Connection, Session, Source) | ⚠️ Partial |
+| High | 2.1-2.2 (Groups), 3.1-3.3 (Processing) | ✅ **COMPLETED** |
+| High | 4.1-4.2 (Color Mgmt - OCIO/ICC) | ❌ Not started |
+| Medium | 5.1-5.2 (Transform, Lens) | ✅ **COMPLETED** |
+| Medium | 6.1 (Retime) | ✅ **COMPLETED** |
+| Medium | 2.3 (Layout), 5.3 (Crop), 6.2 (Audio) | ❌ Not started |
+| Low | 7.1-7.4 (Filters, Overlay, Extra) | ❌ Not started |
 
-**Total Estimated Effort:** 10-16 weeks for full spec compliance
+### Completed Work Summary
+
+**Fully Implemented:**
+- RVSequence/EDL parsing and creation
+- RVStack compositing (blend modes, opacity per layer)
+- RVLinearize (all transfer functions, cineon, LUT)
+- RVLookLUT/RVCacheLUT parsing and creation
+- RVColor (full: exposure, gamma, saturation, CDL, luminanceLUT, normalize, unpremult)
+- RVTransform2D (rotation, flip/flop, scale, translate)
+- RVLensWarp (k1-k3, p1-p2 tangential, model, focal length, crop ratios)
+- RVRetime (visual/audio scale, warp mode, explicit mapping)
+- RVDisplayColor (full export support)
+- RVDisplayStereo (full export support)
+
+**Remaining High-Priority:**
+- OCIO integration
+- ICC profile support
 
 ---
 
@@ -633,4 +660,5 @@ Every .rv file must have:
 ---
 
 *Plan created: 2025-01-20*
+*Last updated: 2026-01-21*
 *Based on: spec.md, usage.md, codebase analysis*
