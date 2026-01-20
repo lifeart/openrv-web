@@ -25,6 +25,7 @@ import { CompareControl } from './ui/components/CompareControl';
 import { SafeAreasControl } from './ui/components/SafeAreasControl';
 import { FalseColorControl } from './ui/components/FalseColorControl';
 import { ZebraControl } from './ui/components/ZebraControl';
+import { HSLQualifierControl } from './ui/components/HSLQualifierControl';
 import { exportSequence } from './utils/SequenceExporter';
 import { showAlert, showModal, closeModal } from './ui/components/shared/Modal';
 import { SessionSerializer } from './core/session/SessionSerializer';
@@ -70,6 +71,7 @@ export class App {
   private safeAreasControl: SafeAreasControl;
   private falseColorControl: FalseColorControl;
   private zebraControl: ZebraControl;
+  private hslQualifierControl: HSLQualifierControl;
   private animationId: number | null = null;
   private boundHandleResize: () => void;
   private keyboardManager: KeyboardManager;
@@ -191,6 +193,7 @@ export class App {
     this.safeAreasControl = new SafeAreasControl(this.viewer.getSafeAreasOverlay());
     this.falseColorControl = new FalseColorControl(this.viewer.getFalseColor());
     this.zebraControl = new ZebraControl(this.viewer.getZebraStripes());
+    this.hslQualifierControl = new HSLQualifierControl(this.viewer.getHSLQualifier());
 
     // Connect volume control (from HeaderBar) to session (bidirectional)
     const volumeControl = this.headerBar.getVolumeControl();
@@ -538,6 +541,50 @@ export class App {
 
     viewContent.appendChild(ContextToolbar.createDivider());
 
+    // HSL Qualifier control (secondary color correction)
+    viewContent.appendChild(this.hslQualifierControl.render());
+
+    // Setup eyedropper for color picking from viewer
+    this.hslQualifierControl.setEyedropperCallback((active) => {
+      const viewerContainer = this.viewer.getContainer();
+      if (active) {
+        // Set cursor to crosshair when eyedropper is active
+        viewerContainer.style.cursor = 'crosshair';
+        // Add click handler for color picking
+        const clickHandler = (e: MouseEvent) => {
+          const rect = viewerContainer.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          const y = e.clientY - rect.top;
+          const imageData = this.viewer.getImageData();
+          if (imageData) {
+            const canvas = viewerContainer.querySelector('canvas');
+            if (canvas) {
+              const scaleX = imageData.width / canvas.clientWidth;
+              const scaleY = imageData.height / canvas.clientHeight;
+              const pixelX = Math.floor(x * scaleX);
+              const pixelY = Math.floor(y * scaleY);
+              if (pixelX >= 0 && pixelX < imageData.width && pixelY >= 0 && pixelY < imageData.height) {
+                const idx = (pixelY * imageData.width + pixelX) * 4;
+                const r = imageData.data[idx]!;
+                const g = imageData.data[idx + 1]!;
+                const b = imageData.data[idx + 2]!;
+                this.viewer.getHSLQualifier().pickColor(r, g, b);
+              }
+            }
+          }
+          // Deactivate eyedropper after picking
+          this.hslQualifierControl.deactivateEyedropper();
+          viewerContainer.style.cursor = '';
+          viewerContainer.removeEventListener('click', clickHandler);
+        };
+        viewerContainer.addEventListener('click', clickHandler, { once: true });
+      } else {
+        viewerContainer.style.cursor = '';
+      }
+    });
+
+    viewContent.appendChild(ContextToolbar.createDivider());
+
     // Spotlight Tool toggle button
     const spotlightButton = ContextToolbar.createButton('Spotlight', () => {
       this.viewer.getSpotlightOverlay().toggle();
@@ -590,6 +637,15 @@ export class App {
     });
     this.vectorscope.on('visibilityChanged', (visible) => {
       this.scopesControl.setScopeVisible('vectorscope', visible);
+    });
+
+    // Sync histogram clipping overlay toggle with Viewer
+    this.histogram.on('clippingOverlayToggled', (enabled) => {
+      if (enabled) {
+        this.viewer.getClippingOverlay().enable();
+      } else {
+        this.viewer.getClippingOverlay().disable();
+      }
     });
 
     // Sync A/B availability with CompareControl
@@ -897,6 +953,9 @@ export class App {
       },
       'view.toggleSpotlight': () => {
         this.viewer.getSpotlightOverlay().toggle();
+      },
+      'color.toggleHSLQualifier': () => {
+        this.viewer.getHSLQualifier().toggle();
       },
       'panel.history': () => {
         this.historyPanel.toggle();
@@ -1283,7 +1342,7 @@ export class App {
     const categories = {
       'TABS': ['tab.view', 'tab.color', 'tab.effects', 'tab.transform', 'tab.annotate'],
       'PLAYBACK': ['playback.toggle', 'playback.stepBackward', 'playback.stepForward', 'playback.goToStart', 'playback.goToEnd', 'playback.toggleDirection', 'playback.slower', 'playback.stop', 'playback.faster'],
-      'VIEW': ['view.fitToWindow', 'view.fitToWindowAlt', 'view.zoom50', 'view.toggleAB', 'view.toggleABAlt', 'view.toggleSpotlight'],
+      'VIEW': ['view.fitToWindow', 'view.fitToWindowAlt', 'view.zoom50', 'view.toggleAB', 'view.toggleABAlt', 'view.toggleSpotlight', 'color.toggleHSLQualifier'],
       'MOUSE CONTROLS': [], // Special case - not in DEFAULT_KEY_BINDINGS
       'CHANNEL ISOLATION': ['channel.red', 'channel.green', 'channel.blue', 'channel.alpha', 'channel.luminance', 'channel.none'],
       'SCOPES': ['panel.histogram', 'panel.waveform', 'panel.vectorscope'],

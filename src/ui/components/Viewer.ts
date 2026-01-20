@@ -29,6 +29,8 @@ import { TimecodeOverlay } from './TimecodeOverlay';
 import { ZebraStripes } from './ZebraStripes';
 import { ColorWheels } from './ColorWheels';
 import { SpotlightOverlay } from './SpotlightOverlay';
+import { ClippingOverlay } from './ClippingOverlay';
+import { HSLQualifier } from './HSLQualifier';
 
 interface PointerState {
   pointerId: number;
@@ -137,12 +139,16 @@ export class Viewer {
 
   // Zebra stripes overlay
   private zebraStripes: ZebraStripes;
+  private clippingOverlay: ClippingOverlay;
 
   // Lift/Gamma/Gain color wheels
   private colorWheels: ColorWheels;
 
   // Spotlight overlay
   private spotlightOverlay: SpotlightOverlay;
+
+  // HSL Qualifier (secondary color correction)
+  private hslQualifier: HSLQualifier;
 
   // CDL state
   private cdlValues: CDLValues = JSON.parse(JSON.stringify(DEFAULT_CDL));
@@ -261,6 +267,12 @@ export class Viewer {
       this.refresh();
     });
 
+    // Create clipping overlay
+    this.clippingOverlay = new ClippingOverlay();
+    this.clippingOverlay.on('stateChanged', () => {
+      this.refresh();
+    });
+
     // Create color wheels
     this.colorWheels = new ColorWheels(this.container);
     this.colorWheels.on('stateChanged', () => {
@@ -270,6 +282,12 @@ export class Viewer {
     // Create spotlight overlay
     this.spotlightOverlay = new SpotlightOverlay();
     this.canvasContainer.appendChild(this.spotlightOverlay.getElement());
+
+    // Create HSL Qualifier (secondary color correction)
+    this.hslQualifier = new HSLQualifier();
+    this.hslQualifier.on('stateChanged', () => {
+      this.refresh();
+    });
 
     const imageCtx = this.imageCanvas.getContext('2d', { alpha: false });
     if (!imageCtx) throw new Error('Failed to get image 2D context');
@@ -1683,11 +1701,13 @@ export class Viewer {
     const hasVibrance = this.colorAdjustments.vibrance !== 0;
     const hasClarity = this.colorAdjustments.clarity !== 0;
     const hasColorWheels = this.colorWheels.hasAdjustments();
+    const hasHSLQualifier = this.hslQualifier.isEnabled();
     const hasFalseColor = this.falseColor.isEnabled();
     const hasZebras = this.zebraStripes.isEnabled();
+    const hasClippingOverlay = this.clippingOverlay.isEnabled();
 
     // Early return if no pixel effects are active
-    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasColorWheels && !hasFalseColor && !hasZebras) {
+    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasZebras && !hasClippingOverlay) {
       return;
     }
 
@@ -1724,6 +1744,11 @@ export class Viewer {
       this.curveLUTCache.apply(imageData, this.curvesData);
     }
 
+    // Apply HSL Qualifier (secondary color correction - after primary corrections)
+    if (hasHSLQualifier) {
+      this.hslQualifier.apply(imageData);
+    }
+
     // Apply sharpen filter
     if (hasSharpen) {
       this.applySharpenToImageData(imageData, width, height);
@@ -1739,11 +1764,17 @@ export class Viewer {
       this.falseColor.apply(imageData);
     }
 
-    // Apply zebra stripes (LAST - overlay on top of other effects for exposure warnings)
+    // Apply zebra stripes (overlay on top of other effects for exposure warnings)
     // Note: Zebras work on original image luminance, so they're applied after false color
     // (typically you'd use one or the other, not both)
     if (hasZebras && !hasFalseColor) {
       this.zebraStripes.apply(imageData);
+    }
+
+    // Apply clipping overlay (shows clipped highlights/shadows)
+    // Applied last as it's a diagnostic overlay
+    if (hasClippingOverlay && !hasFalseColor && !hasZebras) {
+      this.clippingOverlay.apply(imageData);
     }
 
     // Single putImageData call
@@ -2698,6 +2729,13 @@ export class Viewer {
       this.sharpenProcessor.dispose();
       this.sharpenProcessor = null;
     }
+
+    // Cleanup overlays
+    this.clippingOverlay.dispose();
+    this.falseColor.dispose();
+    this.zebraStripes.dispose();
+    this.spotlightOverlay.dispose();
+    this.hslQualifier.dispose();
   }
 
   /**
@@ -2766,6 +2804,13 @@ export class Viewer {
   }
 
   /**
+   * Get the clipping overlay instance
+   */
+  getClippingOverlay(): ClippingOverlay {
+    return this.clippingOverlay;
+  }
+
+  /**
    * Get the color wheels instance
    */
   getColorWheels(): ColorWheels {
@@ -2777,6 +2822,13 @@ export class Viewer {
    */
   getSpotlightOverlay(): SpotlightOverlay {
     return this.spotlightOverlay;
+  }
+
+  /**
+   * Get the HSL Qualifier instance (secondary color correction)
+   */
+  getHSLQualifier(): HSLQualifier {
+    return this.hslQualifier;
   }
 
   /**

@@ -167,7 +167,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   },
   'transform.flipHorizontal': {
     code: 'KeyH',
-    shift: true,
+    alt: true,
     description: 'Flip horizontal'
   },
   'transform.flipVertical': {
@@ -352,6 +352,13 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyQ',
     shift: true,
     description: 'Toggle spotlight focus tool'
+  },
+
+  // HSL Qualifier (secondary color correction)
+  'color.toggleHSLQualifier': {
+    code: 'KeyH',
+    shift: true,
+    description: 'Toggle HSL Qualifier for secondary color correction'
   },
 
   // History panel

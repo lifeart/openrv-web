@@ -22,6 +22,7 @@ declare global {
       getZebraStripesState: () => ZebraStripesState;
       getColorWheelsState: () => ColorWheelsState;
       getSpotlightState: () => SpotlightState;
+      getHSLQualifierState: () => HSLQualifierState;
       getHistoryPanelState: () => HistoryPanelState;
       getInfoPanelState: () => InfoPanelState;
       getCacheIndicatorState: () => CacheIndicatorState;
@@ -84,6 +85,14 @@ export interface ViewerState {
   differenceMatteEnabled: boolean;
   differenceMatteGain: number;
   differenceMatteHeatmap: boolean;
+  // Clipping overlay state
+  clippingOverlayEnabled: boolean;
+  histogramClipping: {
+    shadows: number;
+    highlights: number;
+    shadowsPercent: number;
+    highlightsPercent: number;
+  } | null;
 }
 
 export interface ColorState {
@@ -163,6 +172,16 @@ export interface SpotlightState {
   height: number;
   dimAmount: number;
   feather: number;
+}
+
+export interface HSLQualifierState {
+  enabled: boolean;
+  hue: { center: number; width: number; softness: number };
+  saturation: { center: number; width: number; softness: number };
+  luminance: { center: number; width: number; softness: number };
+  correction: { hueShift: number; saturationScale: number; luminanceScale: number };
+  invert: boolean;
+  mattePreview: boolean;
 }
 
 export interface HistoryPanelState {
@@ -288,6 +307,9 @@ export function exposeForTesting(app: App): void {
         differenceMatteEnabled: viewer.differenceMatteState?.enabled ?? false,
         differenceMatteGain: viewer.differenceMatteState?.gain ?? 1,
         differenceMatteHeatmap: viewer.differenceMatteState?.heatmap ?? false,
+        // Clipping overlay state
+        clippingOverlayEnabled: viewer.getClippingOverlay?.()?.isEnabled?.() ?? false,
+        histogramClipping: histogram?.getClipping?.() ?? null,
       };
     },
 
@@ -406,6 +428,21 @@ export function exposeForTesting(app: App): void {
         height: state.height ?? 0.2,
         dimAmount: state.dimAmount ?? 0.7,
         feather: state.feather ?? 0.05,
+      };
+    },
+
+    getHSLQualifierState: (): HSLQualifierState => {
+      const viewer = appAny.viewer;
+      const hslQualifier = viewer?.getHSLQualifier?.();
+      const state = hslQualifier?.getState?.() ?? {};
+      return {
+        enabled: state.enabled ?? false,
+        hue: state.hue ?? { center: 0, width: 30, softness: 20 },
+        saturation: state.saturation ?? { center: 50, width: 100, softness: 10 },
+        luminance: state.luminance ?? { center: 50, width: 100, softness: 10 },
+        correction: state.correction ?? { hueShift: 0, saturationScale: 1, luminanceScale: 1 },
+        invert: state.invert ?? false,
+        mattePreview: state.mattePreview ?? false,
       };
     },
 

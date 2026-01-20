@@ -61,6 +61,14 @@ export interface ViewerState {
   differenceMatteEnabled: boolean;
   differenceMatteGain: number;
   differenceMatteHeatmap: boolean;
+  // Clipping overlay state
+  clippingOverlayEnabled: boolean;
+  histogramClipping: {
+    shadows: number;
+    highlights: number;
+    shadowsPercent: number;
+    highlightsPercent: number;
+  } | null;
 }
 
 export interface ColorState {
@@ -133,6 +141,16 @@ export interface SpotlightState {
   height: number;
   dimAmount: number;
   feather: number;
+}
+
+export interface HSLQualifierState {
+  enabled: boolean;
+  hue: { center: number; width: number; softness: number };
+  saturation: { center: number; width: number; softness: number };
+  luminance: { center: number; width: number; softness: number };
+  correction: { hueShift: number; saturationScale: number; luminanceScale: number };
+  invert: boolean;
+  mattePreview: boolean;
 }
 
 export interface HistoryPanelState {
@@ -244,6 +262,8 @@ export async function getViewerState(page: Page): Promise<ViewerState> {
       differenceMatteEnabled: false,
       differenceMatteGain: 1,
       differenceMatteHeatmap: false,
+      clippingOverlayEnabled: false,
+      histogramClipping: null,
     };
   });
 }
@@ -364,6 +384,23 @@ export async function getSpotlightState(page: Page): Promise<SpotlightState> {
       height: 0.2,
       dimAmount: 0.7,
       feather: 0.05,
+    };
+  });
+}
+
+/**
+ * Get HSL Qualifier state from the app
+ */
+export async function getHSLQualifierState(page: Page): Promise<HSLQualifierState> {
+  return page.evaluate(() => {
+    return window.__OPENRV_TEST__?.getHSLQualifierState() ?? {
+      enabled: false,
+      hue: { center: 0, width: 30, softness: 20 },
+      saturation: { center: 50, width: 100, softness: 10 },
+      luminance: { center: 50, width: 100, softness: 10 },
+      correction: { hueShift: 0, saturationScale: 1, luminanceScale: 1 },
+      invert: false,
+      mattePreview: false,
     };
   });
 }

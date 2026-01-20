@@ -22,6 +22,11 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
   - Master wheel for overall adjustments
   - Undo/redo support
   - Link option for gang adjustments
+- **HSL Qualifier** - secondary color correction with hue/saturation/luminance selection
+  - Isolate specific colors by HSL range
+  - Apply corrections only to selected regions
+  - Matte preview and invert selection
+  - Eyedropper for color picking
 - ASC CDL (slope, offset, power, saturation) with .cdl file support
 - 3D LUT support (.cube files) with GPU-accelerated processing
 - Color curves (Master/R/G/B channels) with presets and import/export
@@ -51,6 +56,8 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 
 ### Scopes & Analysis
 - Histogram (RGB/Luminance/Separate channels, log scale option)
+  - **Clipping Indicators** - show percentage of clipped highlights/shadows
+  - **Clipping Overlay** - visual overlay showing clipped areas (red for highlights, blue for shadows)
 - Waveform monitor (Luma/RGB/Parade modes)
 - Vectorscope with zoom levels
 - **Pixel Probe / Color Sampler** - click to sample RGB/HSL/IRE values at any pixel
@@ -190,13 +197,14 @@ pnpm dev
 | `U` | Toggle curves panel |
 | `G` | Toggle filter panel |
 | `K` | Toggle crop mode |
+| `Shift+H` | Toggle HSL Qualifier |
 
 #### Transform
 | Key | Action |
 |-----|--------|
 | `Shift+R` | Rotate left 90° |
 | `Alt+R` | Rotate right 90° |
-| `Shift+H` | Flip horizontal |
+| `Alt+H` | Flip horizontal |
 | `Shift+V` | Flip vertical |
 
 #### Annotations
@@ -334,10 +342,10 @@ pnpm preview
 
 ### Test Coverage
 
-The codebase includes comprehensive test coverage with **3100+ unit tests** across 90 test files:
+The codebase includes comprehensive test coverage with **3200+ unit tests** across 90+ test files:
 
-- **Color Tools**: ColorWheels (33 tests), FalseColor (30 tests), Curves, CDL
-- **Analysis**: ZebraStripes (49 tests), PixelProbe (45 tests), Waveform, Histogram, Vectorscope
+- **Color Tools**: ColorWheels (33 tests), FalseColor (30 tests), HSLQualifier (57 tests), Curves, CDL
+- **Analysis**: ZebraStripes (49 tests), PixelProbe (45 tests), ClippingOverlay (48 tests), Waveform, Histogram, Vectorscope
 - **Overlays**: TimecodeOverlay (50 tests), SafeAreasOverlay (38 tests)
 - **UI Components**: ThemeControl, HistoryPanel, InfoPanel, Modal, Button
 - **Core**: Session, Graph, GTO loading/export, SequenceLoader

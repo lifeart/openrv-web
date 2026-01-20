@@ -40,6 +40,7 @@ export interface HistogramEvents extends EventMap {
   visibilityChanged: boolean;
   modeChanged: HistogramMode;
   logScaleChanged: boolean;
+  clippingOverlayToggled: boolean;
 }
 
 const HISTOGRAM_BINS = 256;
@@ -56,6 +57,10 @@ export class Histogram extends EventEmitter<HistogramEvents> {
   private data: HistogramData | null = null;
   private modeButton: HTMLButtonElement | null = null;
   private logButton: HTMLButtonElement | null = null;
+  private clippingOverlayEnabled = false;
+  private clippingIndicators: HTMLElement | null = null;
+  private shadowIndicator: HTMLElement | null = null;
+  private highlightIndicator: HTMLElement | null = null;
 
   constructor() {
     super();
@@ -112,17 +117,140 @@ export class Histogram extends EventEmitter<HistogramEvents> {
     footer.className = 'histogram-footer';
     footer.style.cssText = `
       display: flex;
-      justify-content: space-between;
+      flex-direction: column;
+      gap: 4px;
       margin-top: 4px;
+    `;
+
+    // Scale labels row
+    const scaleRow = document.createElement('div');
+    scaleRow.style.cssText = `
+      display: flex;
+      justify-content: space-between;
       font-size: 9px;
       color: #666;
     `;
-    footer.innerHTML = `
+    scaleRow.innerHTML = `
       <span>0</span>
       <span>128</span>
       <span>255</span>
     `;
+    footer.appendChild(scaleRow);
+
+    // Clipping indicators row
+    this.clippingIndicators = document.createElement('div');
+    this.clippingIndicators.className = 'histogram-clipping-indicators';
+    this.clippingIndicators.dataset.testid = 'histogram-clipping-indicators';
+    this.clippingIndicators.style.cssText = `
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 9px;
+      cursor: pointer;
+    `;
+    this.clippingIndicators.title = 'Click to toggle clipping overlay on viewer';
+    this.clippingIndicators.addEventListener('click', () => this.toggleClippingOverlay());
+
+    // Shadow clipping indicator (left)
+    this.shadowIndicator = document.createElement('div');
+    this.shadowIndicator.className = 'shadow-clip-indicator';
+    this.shadowIndicator.dataset.testid = 'histogram-shadow-indicator';
+    this.shadowIndicator.style.cssText = `
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      color: #6699ff;
+    `;
+    this.shadowIndicator.innerHTML = `
+      <span style="font-size: 8px;">▼</span>
+      <span class="shadow-percent">0.0%</span>
+    `;
+
+    // Highlight clipping indicator (right)
+    this.highlightIndicator = document.createElement('div');
+    this.highlightIndicator.className = 'highlight-clip-indicator';
+    this.highlightIndicator.dataset.testid = 'histogram-highlight-indicator';
+    this.highlightIndicator.style.cssText = `
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      color: #ff6666;
+    `;
+    this.highlightIndicator.innerHTML = `
+      <span class="highlight-percent">0.0%</span>
+      <span style="font-size: 8px;">▲</span>
+    `;
+
+    this.clippingIndicators.appendChild(this.shadowIndicator);
+    this.clippingIndicators.appendChild(this.highlightIndicator);
+    footer.appendChild(this.clippingIndicators);
+
     this.draggableContainer.setFooter(footer);
+  }
+
+  /**
+   * Toggle clipping overlay on viewer
+   */
+  toggleClippingOverlay(): void {
+    this.clippingOverlayEnabled = !this.clippingOverlayEnabled;
+    this.updateClippingIndicatorStyle();
+    this.emit('clippingOverlayToggled', this.clippingOverlayEnabled);
+  }
+
+  /**
+   * Set clipping overlay state
+   */
+  setClippingOverlay(enabled: boolean): void {
+    if (this.clippingOverlayEnabled === enabled) return;
+    this.clippingOverlayEnabled = enabled;
+    this.updateClippingIndicatorStyle();
+    this.emit('clippingOverlayToggled', this.clippingOverlayEnabled);
+  }
+
+  /**
+   * Check if clipping overlay is enabled
+   */
+  isClippingOverlayEnabled(): boolean {
+    return this.clippingOverlayEnabled;
+  }
+
+  /**
+   * Update clipping indicator visual style
+   */
+  private updateClippingIndicatorStyle(): void {
+    if (this.clippingIndicators) {
+      this.clippingIndicators.style.background = this.clippingOverlayEnabled
+        ? 'rgba(74, 158, 255, 0.2)'
+        : 'transparent';
+      this.clippingIndicators.style.borderRadius = '2px';
+      this.clippingIndicators.style.padding = '2px 4px';
+      this.clippingIndicators.style.margin = '0 -4px';
+    }
+  }
+
+  /**
+   * Update clipping statistics display
+   */
+  private updateClippingDisplay(): void {
+    if (!this.data || !this.shadowIndicator || !this.highlightIndicator) return;
+
+    const { clipping } = this.data;
+
+    // Update shadow indicator
+    const shadowPercent = this.shadowIndicator.querySelector('.shadow-percent');
+    if (shadowPercent) {
+      shadowPercent.textContent = `${clipping.shadowsPercent.toFixed(1)}%`;
+    }
+    // Highlight if significant clipping (>1%)
+    this.shadowIndicator.style.color = clipping.shadowsPercent > 1 ? '#ff6666' : '#6699ff';
+
+    // Update highlight indicator
+    const highlightPercent = this.highlightIndicator.querySelector('.highlight-percent');
+    if (highlightPercent) {
+      highlightPercent.textContent = `${clipping.highlightsPercent.toFixed(1)}%`;
+    }
+    // Highlight if significant clipping (>1%)
+    this.highlightIndicator.style.color = clipping.highlightsPercent > 1 ? '#ff6666' : '#ff9966';
   }
 
   /**
@@ -183,6 +311,9 @@ export class Histogram extends EventEmitter<HistogramEvents> {
   update(imageData: ImageData): void {
     // Always calculate histogram data on CPU (fast, required for stats)
     this.calculate(imageData);
+
+    // Update clipping display
+    this.updateClippingDisplay();
 
     // Try GPU rendering for bar display (uses CPU-computed histogram data)
     const gpuProcessor = getSharedScopesProcessor();
@@ -494,10 +625,21 @@ export class Histogram extends EventEmitter<HistogramEvents> {
     return this.draggableContainer.element;
   }
 
+  /**
+   * Get clipping statistics
+   */
+  getClipping(): { shadows: number; highlights: number; shadowsPercent: number; highlightsPercent: number } | null {
+    if (!this.data) return null;
+    return this.data.clipping;
+  }
+
   dispose(): void {
     this.data = null;
     this.modeButton = null;
     this.logButton = null;
+    this.clippingIndicators = null;
+    this.shadowIndicator = null;
+    this.highlightIndicator = null;
     this.draggableContainer.dispose();
   }
 }
