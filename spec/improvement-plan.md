@@ -32,6 +32,7 @@ Based on analysis of the GTO specification (`spec.md`), usage guide (`usage.md`)
 | RVRetime (speed, warp, explicit) | ✅ | ✅ | ✅ |
 | RVDisplayColor | ✅ | ✅ | ✅ |
 | RVDisplayStereo | ✅ | ✅ | ✅ |
+| RVSourceStereo | ✅ | ✅ | ✅ |
 
 ### Gaps Identified
 
@@ -65,7 +66,7 @@ The following node types are defined in the spec but not fully implemented:
 | RVCacheLUT | ✅ | ✅ | ✅ | ~~Low~~ Done |
 | RVDisplayColor | ✅ | ✅ | ✅ | ~~Medium~~ Done |
 | RVDisplayStereo | ✅ | ✅ | ✅ | ~~Medium~~ Done |
-| RVSourceStereo | ❌ | ❌ | ❌ | Medium |
+| RVSourceStereo | ✅ | ✅ | ✅ | ~~Medium~~ Done |
 
 **Filter Nodes:**
 | Node | Parse | Create | Update | Priority |
@@ -619,8 +620,9 @@ Create test .rv files for:
 - RVTransform2D (rotation, flip/flop, scale, translate)
 - RVLensWarp (k1-k3, p1-p2 tangential, model, focal length, crop ratios)
 - RVRetime (visual/audio scale, warp mode, explicit mapping)
-- RVDisplayColor (full export support)
-- RVDisplayStereo (full export support)
+- RVDisplayColor (full parsing and export: gamma, sRGB, Rec709, brightness, chromaticities)
+- RVDisplayStereo (full parsing and export: type, swap, offset)
+- RVSourceStereo (full parsing and export: swap, offset, right eye transform)
 
 **Remaining High-Priority:**
 - OCIO integration

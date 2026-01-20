@@ -921,6 +921,249 @@ describe('GTOGraphLoader', () => {
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('explicitInputFrames', [5, 10, 15, 20, 25]);
     });
 
+    it('parses RVDisplayColor color component', () => {
+      const mockNode = {
+        type: 'RVDisplayColor',
+        name: 'displayColorNode',
+        properties: {
+          has: vi.fn((key: string) =>
+            [
+              'displayColorActive', 'channelOrder', 'channelFlood', 'premult',
+              'displayGamma', 'sRGB', 'Rec709', 'displayBrightness',
+              'outOfRange', 'dither', 'ditherLast', 'overrideColorspace',
+            ].includes(key)
+          ),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'displayColorNode',
+            protocol: 'RVDisplayColor',
+            components: {
+              color: {
+                active: 1,
+                channelOrder: 'BGRA',
+                channelFlood: 1,
+                premult: 1,
+                gamma: 2.4,
+                sRGB: 1,
+                Rec709: 0,
+                brightness: 0.5,
+                outOfRange: 1,
+                dither: 1,
+                ditherLast: 0,
+                overrideColorspace: 'sRGB',
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('displayColorActive', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('channelOrder', 'BGRA');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('channelFlood', 1);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('premult', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('displayGamma', 2.4);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('sRGB', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('Rec709', false);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('displayBrightness', 0.5);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('outOfRange', 1);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('dither', 1);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('ditherLast', false);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('overrideColorspace', 'sRGB');
+    });
+
+    it('parses RVDisplayColor chromaticities component', () => {
+      const mockNode = {
+        type: 'RVDisplayColor',
+        name: 'displayColorNode',
+        properties: {
+          has: vi.fn((key: string) =>
+            [
+              'chromaticitiesActive', 'adoptedNeutral', 'chromaticitiesWhite',
+              'chromaticitiesRed', 'chromaticitiesGreen', 'chromaticitiesBlue',
+              'chromaticitiesNeutral',
+            ].includes(key)
+          ),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'displayColorNode',
+            protocol: 'RVDisplayColor',
+            components: {
+              chromaticities: {
+                active: 1,
+                adoptedNeutral: 1,
+                white: [0.3127, 0.329],
+                red: [0.64, 0.33],
+                green: [0.3, 0.6],
+                blue: [0.15, 0.06],
+                neutral: [0.3127, 0.329],
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('chromaticitiesActive', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('adoptedNeutral', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('chromaticitiesWhite', [0.3127, 0.329]);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('chromaticitiesRed', [0.64, 0.33]);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('chromaticitiesGreen', [0.3, 0.6]);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('chromaticitiesBlue', [0.15, 0.06]);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('chromaticitiesNeutral', [0.3127, 0.329]);
+    });
+
+    it('parses RVDisplayStereo properties', () => {
+      const mockNode = {
+        type: 'RVDisplayStereo',
+        name: 'displayStereoNode',
+        properties: {
+          has: vi.fn((key: string) =>
+            ['stereoType', 'stereoSwap', 'stereoRelativeOffset', 'stereoRightOffset'].includes(key)
+          ),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'displayStereoNode',
+            protocol: 'RVDisplayStereo',
+            components: {
+              stereo: {
+                type: 'pair',
+                swap: 1,
+                relativeOffset: 0.05,
+                rightOffset: [10, 0],
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('stereoType', 'pair');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('stereoSwap', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('stereoRelativeOffset', 0.05);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('stereoRightOffset', [10, 0]);
+    });
+
+    it('parses RVSourceStereo stereo component', () => {
+      const mockNode = {
+        type: 'RVSourceStereo',
+        name: 'sourceStereoNode',
+        properties: {
+          has: vi.fn((key: string) =>
+            ['sourceStereoSwap', 'sourceStereoRelativeOffset', 'sourceStereoRightOffset'].includes(key)
+          ),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'sourceStereoNode',
+            protocol: 'RVSourceStereo',
+            components: {
+              stereo: {
+                swap: 1,
+                relativeOffset: 0.1,
+                rightOffset: 5.0,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('sourceStereoSwap', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('sourceStereoRelativeOffset', 0.1);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('sourceStereoRightOffset', 5.0);
+    });
+
+    it('parses RVSourceStereo rightTransform component', () => {
+      const mockNode = {
+        type: 'RVSourceStereo',
+        name: 'sourceStereoNode',
+        properties: {
+          has: vi.fn((key: string) =>
+            ['rightEyeFlip', 'rightEyeFlop', 'rightEyeRotate', 'rightEyeTranslate'].includes(key)
+          ),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'sourceStereoNode',
+            protocol: 'RVSourceStereo',
+            components: {
+              rightTransform: {
+                flip: 1,
+                flop: 0,
+                rotate: 90.0,
+                translate: [10, 20],
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('rightEyeFlip', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('rightEyeFlop', false);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('rightEyeRotate', 90.0);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('rightEyeTranslate', [10, 20]);
+    });
+
     it('uses default session name when none provided', () => {
       vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
 

@@ -69,9 +69,10 @@ const PROTOCOL_TO_NODE_TYPE: Record<string, string> = {
   RVCacheLUT: 'RVCacheLUT',
   RVRetime: 'RVRetime',
 
-  // View nodes (not yet implemented - will be skipped)
+  // View/Display nodes
   RVDisplayColor: 'RVDisplayColor',
   RVDisplayStereo: 'RVDisplayStereo',
+  RVSourceStereo: 'RVSourceStereo',
 };
 
 /**
@@ -707,6 +708,102 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
         if (typeof index === 'number') {
           nodeInfo.properties.outputIndex = index;
         }
+      }
+    }
+
+    // Parse display color properties
+    if (protocol === 'RVDisplayColor') {
+      const colorComp = obj.component('color');
+      if (colorComp?.exists()) {
+        const active = colorComp.property('active').value() as number;
+        const channelOrder = colorComp.property('channelOrder').value() as string;
+        const channelFlood = colorComp.property('channelFlood').value() as number;
+        const premult = colorComp.property('premult').value() as number;
+        const gamma = colorComp.property('gamma').value() as number;
+        const sRGB = colorComp.property('sRGB').value() as number;
+        const Rec709 = colorComp.property('Rec709').value() as number;
+        const brightness = colorComp.property('brightness').value() as number;
+        const outOfRange = colorComp.property('outOfRange').value() as number;
+        const dither = colorComp.property('dither').value() as number;
+        const ditherLast = colorComp.property('ditherLast').value() as number;
+        const overrideColorspace = colorComp.property('overrideColorspace').value() as string;
+
+        if (typeof active === 'number') nodeInfo.properties.displayColorActive = active !== 0;
+        if (typeof channelOrder === 'string') nodeInfo.properties.channelOrder = channelOrder;
+        if (typeof channelFlood === 'number') nodeInfo.properties.channelFlood = channelFlood;
+        if (typeof premult === 'number') nodeInfo.properties.premult = premult !== 0;
+        if (typeof gamma === 'number') nodeInfo.properties.displayGamma = gamma;
+        if (typeof sRGB === 'number') nodeInfo.properties.sRGB = sRGB !== 0;
+        if (typeof Rec709 === 'number') nodeInfo.properties.Rec709 = Rec709 !== 0;
+        if (typeof brightness === 'number') nodeInfo.properties.displayBrightness = brightness;
+        if (typeof outOfRange === 'number') nodeInfo.properties.outOfRange = outOfRange;
+        if (typeof dither === 'number') nodeInfo.properties.dither = dither;
+        if (typeof ditherLast === 'number') nodeInfo.properties.ditherLast = ditherLast !== 0;
+        if (typeof overrideColorspace === 'string') nodeInfo.properties.overrideColorspace = overrideColorspace;
+      }
+
+      // Parse chromaticities component
+      const chromComp = obj.component('chromaticities');
+      if (chromComp?.exists()) {
+        const chromActive = chromComp.property('active').value() as number;
+        const adoptedNeutral = chromComp.property('adoptedNeutral').value() as number;
+        const white = chromComp.property('white').value() as number[];
+        const red = chromComp.property('red').value() as number[];
+        const green = chromComp.property('green').value() as number[];
+        const blue = chromComp.property('blue').value() as number[];
+        const neutral = chromComp.property('neutral').value() as number[];
+
+        if (typeof chromActive === 'number') nodeInfo.properties.chromaticitiesActive = chromActive !== 0;
+        if (typeof adoptedNeutral === 'number') nodeInfo.properties.adoptedNeutral = adoptedNeutral !== 0;
+        if (Array.isArray(white)) nodeInfo.properties.chromaticitiesWhite = white;
+        if (Array.isArray(red)) nodeInfo.properties.chromaticitiesRed = red;
+        if (Array.isArray(green)) nodeInfo.properties.chromaticitiesGreen = green;
+        if (Array.isArray(blue)) nodeInfo.properties.chromaticitiesBlue = blue;
+        if (Array.isArray(neutral)) nodeInfo.properties.chromaticitiesNeutral = neutral;
+      }
+    }
+
+    // Parse display stereo properties
+    if (protocol === 'RVDisplayStereo') {
+      const stereoComp = obj.component('stereo');
+      if (stereoComp?.exists()) {
+        const stereoType = stereoComp.property('type').value() as string;
+        const swap = stereoComp.property('swap').value() as number;
+        const relativeOffset = stereoComp.property('relativeOffset').value() as number;
+        const rightOffset = stereoComp.property('rightOffset').value() as number[];
+
+        if (typeof stereoType === 'string') nodeInfo.properties.stereoType = stereoType;
+        if (typeof swap === 'number') nodeInfo.properties.stereoSwap = swap !== 0;
+        if (typeof relativeOffset === 'number') nodeInfo.properties.stereoRelativeOffset = relativeOffset;
+        if (Array.isArray(rightOffset)) nodeInfo.properties.stereoRightOffset = rightOffset;
+      }
+    }
+
+    // Parse source stereo properties (per-source stereo configuration)
+    if (protocol === 'RVSourceStereo') {
+      const stereoComp = obj.component('stereo');
+      if (stereoComp?.exists()) {
+        const swap = stereoComp.property('swap').value() as number;
+        const relativeOffset = stereoComp.property('relativeOffset').value() as number;
+        const rightOffset = stereoComp.property('rightOffset').value() as number;
+
+        if (typeof swap === 'number') nodeInfo.properties.sourceStereoSwap = swap !== 0;
+        if (typeof relativeOffset === 'number') nodeInfo.properties.sourceStereoRelativeOffset = relativeOffset;
+        if (typeof rightOffset === 'number') nodeInfo.properties.sourceStereoRightOffset = rightOffset;
+      }
+
+      // Parse right eye transform
+      const rightTransformComp = obj.component('rightTransform');
+      if (rightTransformComp?.exists()) {
+        const flip = rightTransformComp.property('flip').value() as number;
+        const flop = rightTransformComp.property('flop').value() as number;
+        const rotate = rightTransformComp.property('rotate').value() as number;
+        const translate = rightTransformComp.property('translate').value() as number[];
+
+        if (typeof flip === 'number') nodeInfo.properties.rightEyeFlip = flip !== 0;
+        if (typeof flop === 'number') nodeInfo.properties.rightEyeFlop = flop !== 0;
+        if (typeof rotate === 'number') nodeInfo.properties.rightEyeRotate = rotate;
+        if (Array.isArray(translate)) nodeInfo.properties.rightEyeTranslate = translate;
       }
     }
 

@@ -1209,3 +1209,62 @@ describe('SessionGTOExporter.buildDisplayStereoObject', () => {
         expect(stereoComp.properties.relativeOffset.data).toEqual([0.0]);
     });
 });
+
+describe('SessionGTOExporter.buildSourceStereoObject', () => {
+    it('creates RVSourceStereo object with default settings', () => {
+        const result = SessionGTOExporter.buildSourceStereoObject('sourceGroup000000_RVSourceStereo');
+
+        expect(result.name).toBe('sourceGroup000000_RVSourceStereo');
+        expect(result.protocol).toBe('RVSourceStereo');
+        expect(result.protocolVersion).toBe(1);
+    });
+
+    it('creates stereo component with settings', () => {
+        const result = SessionGTOExporter.buildSourceStereoObject('sourceStereoNode', {
+            swap: true,
+            relativeOffset: 0.1,
+            rightOffset: 5.0,
+        });
+        const components = result.components as Record<string, any>;
+        const stereoComp = components['stereo'];
+
+        expect(stereoComp.properties.swap.data).toEqual([1]);
+        expect(stereoComp.properties.relativeOffset.data).toEqual([0.1]);
+        expect(stereoComp.properties.rightOffset.data).toEqual([5.0]);
+    });
+
+    it('creates rightTransform component when settings provided', () => {
+        const result = SessionGTOExporter.buildSourceStereoObject('sourceStereoNode', {
+            rightTransform: {
+                flip: true,
+                flop: false,
+                rotate: 90.0,
+                translate: [10, 20],
+            },
+        });
+        const components = result.components as Record<string, any>;
+        const rtComp = components['rightTransform'];
+
+        expect(rtComp).toBeDefined();
+        expect(rtComp.properties.flip.data).toEqual([1]);
+        expect(rtComp.properties.flop.data).toEqual([0]);
+        expect(rtComp.properties.rotate.data).toEqual([90.0]);
+    });
+
+    it('does not create rightTransform component when not provided', () => {
+        const result = SessionGTOExporter.buildSourceStereoObject('sourceStereoNode');
+        const components = result.components as Record<string, any>;
+
+        expect(components['rightTransform']).toBeUndefined();
+    });
+
+    it('creates stereo component with default values', () => {
+        const result = SessionGTOExporter.buildSourceStereoObject('sourceStereoNode');
+        const components = result.components as Record<string, any>;
+        const stereoComp = components['stereo'];
+
+        expect(stereoComp.properties.swap.data).toEqual([0]);
+        expect(stereoComp.properties.relativeOffset.data).toEqual([0.0]);
+        expect(stereoComp.properties.rightOffset.data).toEqual([0.0]);
+    });
+});

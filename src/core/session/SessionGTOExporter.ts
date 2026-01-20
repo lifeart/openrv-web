@@ -302,6 +302,29 @@ export interface DisplayStereoSettings {
 }
 
 /**
+ * RVSourceStereo settings for per-source stereo configuration
+ */
+export interface SourceStereoSettings {
+  /** Swap left/right eyes */
+  swap?: boolean;
+  /** Relative offset between eyes */
+  relativeOffset?: number;
+  /** Right eye offset */
+  rightOffset?: number;
+  /** Right eye transform */
+  rightTransform?: {
+    /** Vertical flip (right eye) */
+    flip?: boolean;
+    /** Horizontal flip (right eye) */
+    flop?: boolean;
+    /** Rotation in degrees (right eye) */
+    rotate?: number;
+    /** Translation [x, y] (right eye) */
+    translate?: [number, number];
+  };
+}
+
+/**
  * RVRetime settings for time remapping
  */
 export interface RetimeSettings {
@@ -957,6 +980,40 @@ export class SessionGTOExporter {
       .end();
 
     displayStereoObject.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVSourceStereo object for per-source stereo configuration
+   * @param name - Object name (e.g., 'sourceGroup000000_RVSourceStereo')
+   * @param settings - Source stereo settings
+   */
+  static buildSourceStereoObject(name: string, settings: SourceStereoSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const sourceStereoObject = builder.object(name, 'RVSourceStereo', 1);
+
+    // Stereo component
+    sourceStereoObject
+      .component('stereo')
+      .int('swap', settings.swap ? 1 : 0)
+      .float('relativeOffset', settings.relativeOffset ?? 0.0)
+      .float('rightOffset', settings.rightOffset ?? 0.0)
+      .end();
+
+    // Right eye transform (if settings provided)
+    if (settings.rightTransform) {
+      const rt = settings.rightTransform;
+      sourceStereoObject
+        .component('rightTransform')
+        .int('flip', rt.flip ? 1 : 0)
+        .int('flop', rt.flop ? 1 : 0)
+        .float('rotate', rt.rotate ?? 0.0)
+        .float2('translate', [rt.translate ?? [0, 0]])
+        .end();
+    }
+
+    sourceStereoObject.end();
     return builder.build().objects[0]!;
   }
 
