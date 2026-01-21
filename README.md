@@ -97,6 +97,14 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 - **History Panel** - visual undo/redo with jump to any state
 - **Floating Info Panel** - filename, resolution, frame, FPS, and cursor color readout
 - **Hi-DPI/Retina Display Support** - crisp rendering on high-density displays (2x, 3x DPR)
+- **Auto-Save** - automatic session persistence to IndexedDB with crash recovery
+  - Configurable save interval (1-30 minutes, default 5)
+  - Debounced saves to prevent excessive writes during rapid changes
+  - Crash recovery detection with prompt to restore previous session
+  - Visual indicator showing save status (saving, saved, unsaved, error)
+  - Click-to-retry on save failures
+  - Storage quota monitoring with low-space warnings
+  - Theme-consistent styling with CSS variables
 
 ### Export
 - Frame export (PNG/JPEG/WebP)
@@ -254,7 +262,7 @@ src/
 ├── core/
 │   ├── graph/          # Node graph system (Graph, Property, Signal)
 │   ├── image/          # IPImage data structure
-│   └── session/        # Session management, GTO loading, serialization
+│   └── session/        # Session management, GTO loading, serialization, auto-save
 ├── nodes/
 │   ├── base/           # IPNode, NodeFactory with @RegisterNode decorator
 │   ├── sources/        # FileSourceNode, VideoSourceNode, SequenceSourceNode
@@ -355,16 +363,16 @@ pnpm preview
 
 ### Test Coverage
 
-The codebase includes comprehensive test coverage with **3297 unit tests** across 94 test files and **39 e2e test suites**:
+The codebase includes comprehensive test coverage with **3360+ unit tests** across 96 test files and **40 e2e test suites**:
 
 - **Color Tools**: ColorWheels (46 tests), FalseColor (30 tests), HSLQualifier (57 tests), Curves, CDL
 - **Analysis**: ZebraStripes (49 tests), PixelProbe (45 tests), ClippingOverlay (48 tests), Waveform (50 tests), Histogram (45 tests), Vectorscope (49 tests)
 - **Overlays**: TimecodeOverlay (50 tests), SafeAreasOverlay (46 tests), SpotlightOverlay (62 tests)
-- **UI Components**: ThemeControl, HistoryPanel, InfoPanel, Modal, Button, CurveEditor (33 tests)
-- **Core**: Session, Graph, GTO loading/export, SequenceLoader
+- **UI Components**: ThemeControl, HistoryPanel, InfoPanel, Modal, Button, CurveEditor (33 tests), AutoSaveIndicator (35 tests)
+- **Core**: Session, Graph, GTO loading/export, SequenceLoader, AutoSaveManager (28 tests)
 - **Utilities**: HiDPICanvas (32 tests) - hi-DPI display support with coordinate conversion
 
-**E2E Tests** (39 test suites):
+**E2E Tests** (40 test suites):
 - **Core**: App initialization, tab navigation, media loading, playback controls
 - **Scopes**: Histogram, Waveform, Vectorscope, Parade scope
 - **Color**: Color controls, Curves, Vibrance, Highlight/Shadow recovery
@@ -373,6 +381,7 @@ The codebase includes comprehensive test coverage with **3297 unit tests** acros
 - **Transform**: Rotation, Flip, Crop
 - **Annotations**: Paint tools, Paint coordinates, Text formatting
 - **Export**: Frame export, Sequence export
+- **Auto-Save**: Indicator display, status changes, styling, animations (14 tests)
 
 ### Hi-DPI Canvas Support
 
