@@ -87,50 +87,102 @@ export class SpotlightOverlay extends EventEmitter<SpotlightEvents> {
   }
 
   private bindEvents(): void {
-    // Bind mouse events for interaction when enabled
-    this.canvas.addEventListener('mousedown', this.onMouseDown);
-    window.addEventListener('mousemove', this.onMouseMove);
-    window.addEventListener('mouseup', this.onMouseUp);
+    // Use pointer events (fires before mouse events) to capture before viewer
+    this.canvas.addEventListener('pointerdown', this.onPointerDown);
+    this.canvas.addEventListener('pointermove', this.onPointerMove);
+    this.canvas.addEventListener('pointerup', this.onPointerUp);
+    this.canvas.addEventListener('pointercancel', this.onPointerUp);
+    // Also listen on window for moves/ups that happen outside the canvas during drag
+    window.addEventListener('pointermove', this.onPointerMove);
+    window.addEventListener('pointerup', this.onPointerUp);
   }
 
-  private onMouseDown = (e: MouseEvent): void => {
+  private onPointerDown = (e: PointerEvent): void => {
     if (!this.state.enabled) return;
+    if (this.displayWidth === 0 || this.displayHeight === 0) return;
 
     const rect = this.canvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left - this.offsetX) / this.displayWidth;
-    const y = (e.clientY - rect.top - this.offsetY) / this.displayHeight;
+    // Convert screen coordinates to normalized image coordinates (0-1)
+    // Account for canvas CSS size vs display image size
+    const scaleX = this.canvasWidth / rect.width;
+    const scaleY = this.canvasHeight / rect.height;
+    const canvasX = (e.clientX - rect.left) * scaleX;
+    const canvasY = (e.clientY - rect.top) * scaleY;
+    const x = (canvasX - this.offsetX) / this.displayWidth;
+    const y = (canvasY - this.offsetY) / this.displayHeight;
 
     // Check if clicking on resize handle
     const handle = this.getResizeHandle(x, y);
     if (handle) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      // Capture pointer so we get all events during drag
+      this.canvas.setPointerCapture(e.pointerId);
       this.isResizing = true;
       this.resizeHandle = handle;
       this.dragStartX = x;
       this.dragStartY = y;
       this.initialX = this.state.width;
       this.initialY = this.state.height;
+      // Set resize cursor
+      this.canvas.style.cursor = this.getResizeCursor(handle);
       return;
     }
 
     // Check if clicking inside spotlight
     if (this.isInsideSpotlight(x, y)) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      // Capture pointer so we get all events during drag
+      this.canvas.setPointerCapture(e.pointerId);
       this.isDragging = true;
       this.dragStartX = x;
       this.dragStartY = y;
       this.initialX = this.state.x;
       this.initialY = this.state.y;
+      // Set move cursor
+      this.canvas.style.cursor = 'move';
     }
   };
 
-  private onMouseMove = (e: MouseEvent): void => {
+  private getResizeCursor(handle: string): string {
+    const cursorMap: Record<string, string> = {
+      'n': 'ns-resize',
+      's': 'ns-resize',
+      'e': 'ew-resize',
+      'w': 'ew-resize',
+      'ne': 'nesw-resize',
+      'sw': 'nesw-resize',
+      'nw': 'nwse-resize',
+      'se': 'nwse-resize',
+    };
+    return cursorMap[handle] || 'move';
+  }
+
+  private onPointerMove = (e: PointerEvent): void => {
     if (!this.state.enabled) return;
-    if (!this.isDragging && !this.isResizing) return;
+    if (this.displayWidth === 0 || this.displayHeight === 0) return;
 
     const rect = this.canvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left - this.offsetX) / this.displayWidth;
-    const y = (e.clientY - rect.top - this.offsetY) / this.displayHeight;
+    // Convert screen coordinates to normalized image coordinates (0-1)
+    const scaleX = this.canvasWidth / rect.width;
+    const scaleY = this.canvasHeight / rect.height;
+    const canvasX = (e.clientX - rect.left) * scaleX;
+    const canvasY = (e.clientY - rect.top) * scaleY;
+    const x = (canvasX - this.offsetX) / this.displayWidth;
+    const y = (canvasY - this.offsetY) / this.displayHeight;
+
+    // Update cursor based on hover state (only when not dragging)
+    if (!this.isDragging && !this.isResizing) {
+      this.updateCursor(x, y);
+      return;
+    }
 
     if (this.isDragging) {
+      e.preventDefault();
+      e.stopPropagation();
       const dx = x - this.dragStartX;
       const dy = y - this.dragStartY;
 
@@ -139,6 +191,8 @@ export class SpotlightOverlay extends EventEmitter<SpotlightEvents> {
         y: Math.max(0, Math.min(1, this.initialY + dy)),
       });
     } else if (this.isResizing && this.resizeHandle) {
+      e.preventDefault();
+      e.stopPropagation();
       const dx = x - this.dragStartX;
       const dy = y - this.dragStartY;
 
@@ -164,7 +218,28 @@ export class SpotlightOverlay extends EventEmitter<SpotlightEvents> {
     }
   };
 
-  private onMouseUp = (): void => {
+  private updateCursor(x: number, y: number): void {
+    const handle = this.getResizeHandle(x, y);
+    if (handle) {
+      this.canvas.style.cursor = this.getResizeCursor(handle);
+    } else if (this.isInsideSpotlight(x, y)) {
+      this.canvas.style.cursor = 'move';
+    } else {
+      this.canvas.style.cursor = '';
+    }
+  }
+
+  private onPointerUp = (e: PointerEvent): void => {
+    if (this.isDragging || this.isResizing) {
+      // Release pointer capture (may already be released)
+      try {
+        this.canvas.releasePointerCapture(e.pointerId);
+      } catch {
+        // Pointer capture may have already been released
+      }
+      // Reset cursor
+      this.canvas.style.cursor = '';
+    }
     this.isDragging = false;
     this.isResizing = false;
     this.resizeHandle = null;
@@ -192,7 +267,8 @@ export class SpotlightOverlay extends EventEmitter<SpotlightEvents> {
     y: number
   ): 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw' | null {
     const { x: cx, y: cy, width, height, shape } = this.state;
-    const handleSize = 0.02;
+    // Hit area size for handles (4% of display for easier clicking)
+    const handleSize = 0.04;
 
     if (shape === 'circle') {
       // Only check the 4 cardinal points for circle
@@ -244,12 +320,13 @@ export class SpotlightOverlay extends EventEmitter<SpotlightEvents> {
     this.offsetY = offsetY;
 
     // Setup hi-DPI canvas with logical dimensions
+    // Must set CSS style so canvas displays at correct logical size
     setupHiDPICanvas({
       canvas: this.canvas,
       ctx: this.ctx,
       width: canvasWidth,
       height: canvasHeight,
-      setStyle: false, // CSS positioning is handled by parent
+      setStyle: true,
     });
 
     if (this.state.enabled) {
@@ -530,8 +607,11 @@ export class SpotlightOverlay extends EventEmitter<SpotlightEvents> {
    * Dispose
    */
   dispose(): void {
-    this.canvas.removeEventListener('mousedown', this.onMouseDown);
-    window.removeEventListener('mousemove', this.onMouseMove);
-    window.removeEventListener('mouseup', this.onMouseUp);
+    this.canvas.removeEventListener('pointerdown', this.onPointerDown);
+    this.canvas.removeEventListener('pointermove', this.onPointerMove);
+    this.canvas.removeEventListener('pointerup', this.onPointerUp);
+    this.canvas.removeEventListener('pointercancel', this.onPointerUp);
+    window.removeEventListener('pointermove', this.onPointerMove);
+    window.removeEventListener('pointerup', this.onPointerUp);
   }
 }
