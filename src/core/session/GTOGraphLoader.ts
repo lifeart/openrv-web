@@ -105,6 +105,19 @@ const PROTOCOL_TO_NODE_TYPE: Record<string, string> = {
   RVColorACESLogCDL: 'RVColorACESLogCDL',
   RVColorLinearToSRGB: 'RVColorLinearToSRGB',
   RVColorSRGBToLinear: 'RVColorSRGBToLinear',
+
+  // Filter nodes
+  RVFilterGaussian: 'RVFilterGaussian',
+  RVUnsharpMask: 'RVUnsharpMask',
+  RVNoiseReduction: 'RVNoiseReduction',
+  RVClarity: 'RVClarity',
+
+  // Utility nodes
+  RVRotateCanvas: 'RVRotateCanvas',
+  RVResize: 'RVResize',
+  RVCache: 'RVCache',
+  RVPrimaryConvert: 'RVPrimaryConvert',
+  RVDispTransform2D: 'RVDispTransform2D',
 };
 
 /**
@@ -1319,6 +1332,130 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
       if (nodeComp?.exists()) {
         const active = nodeComp.property('active').value() as number;
         if (typeof active === 'number') nodeInfo.properties.srgbToLinearActive = active !== 0;
+      }
+    }
+
+    // Parse RVFilterGaussian properties
+    if (protocol === 'RVFilterGaussian') {
+      const nodeComp = obj.component('node');
+      if (nodeComp?.exists()) {
+        const sigma = nodeComp.property('sigma').value() as number;
+        const radius = nodeComp.property('radius').value() as number;
+
+        if (typeof sigma === 'number') nodeInfo.properties.gaussianSigma = sigma;
+        if (typeof radius === 'number') nodeInfo.properties.gaussianRadius = radius;
+      }
+    }
+
+    // Parse RVUnsharpMask properties
+    if (protocol === 'RVUnsharpMask') {
+      const nodeComp = obj.component('node');
+      if (nodeComp?.exists()) {
+        const active = nodeComp.property('active').value() as number;
+        const amount = nodeComp.property('amount').value() as number;
+        const threshold = nodeComp.property('threshold').value() as number;
+        const unsharpRadius = nodeComp.property('unsharpRadius').value() as number;
+
+        if (typeof active === 'number') nodeInfo.properties.unsharpActive = active !== 0;
+        if (typeof amount === 'number') nodeInfo.properties.unsharpAmount = amount;
+        if (typeof threshold === 'number') nodeInfo.properties.unsharpThreshold = threshold;
+        if (typeof unsharpRadius === 'number') nodeInfo.properties.unsharpRadius = unsharpRadius;
+      }
+    }
+
+    // Parse RVNoiseReduction properties
+    if (protocol === 'RVNoiseReduction') {
+      const nodeComp = obj.component('node');
+      if (nodeComp?.exists()) {
+        const active = nodeComp.property('active').value() as number;
+        const amount = nodeComp.property('amount').value() as number;
+        const radius = nodeComp.property('radius').value() as number;
+        const threshold = nodeComp.property('threshold').value() as number;
+
+        if (typeof active === 'number') nodeInfo.properties.noiseReductionActive = active !== 0;
+        if (typeof amount === 'number') nodeInfo.properties.noiseReductionAmount = amount;
+        if (typeof radius === 'number') nodeInfo.properties.noiseReductionRadius = radius;
+        if (typeof threshold === 'number') nodeInfo.properties.noiseReductionThreshold = threshold;
+      }
+    }
+
+    // Parse RVClarity properties
+    if (protocol === 'RVClarity') {
+      const nodeComp = obj.component('node');
+      if (nodeComp?.exists()) {
+        const active = nodeComp.property('active').value() as number;
+        const amount = nodeComp.property('amount').value() as number;
+        const radius = nodeComp.property('radius').value() as number;
+
+        if (typeof active === 'number') nodeInfo.properties.clarityActive = active !== 0;
+        if (typeof amount === 'number') nodeInfo.properties.clarityAmount = amount;
+        if (typeof radius === 'number') nodeInfo.properties.clarityRadius = radius;
+      }
+    }
+
+    // Parse RVRotateCanvas properties
+    if (protocol === 'RVRotateCanvas') {
+      const nodeComp = obj.component('node');
+      if (nodeComp?.exists()) {
+        const active = nodeComp.property('active').value() as number;
+        const degrees = nodeComp.property('degrees').value() as number;
+        const flipH = nodeComp.property('flipH').value() as number;
+        const flipV = nodeComp.property('flipV').value() as number;
+
+        if (typeof active === 'number') nodeInfo.properties.rotateActive = active !== 0;
+        if (typeof degrees === 'number') nodeInfo.properties.rotateDegrees = degrees;
+        if (typeof flipH === 'number') nodeInfo.properties.rotateFlipH = flipH !== 0;
+        if (typeof flipV === 'number') nodeInfo.properties.rotateFlipV = flipV !== 0;
+      }
+    }
+
+    // Parse RVResize properties
+    if (protocol === 'RVResize') {
+      const nodeComp = obj.component('node');
+      if (nodeComp?.exists()) {
+        const active = nodeComp.property('active').value() as number;
+        const width = nodeComp.property('width').value() as number;
+        const height = nodeComp.property('height').value() as number;
+        const mode = nodeComp.property('mode').value() as number;
+        const filter = nodeComp.property('filter').value() as number;
+
+        if (typeof active === 'number') nodeInfo.properties.resizeActive = active !== 0;
+        if (typeof width === 'number') nodeInfo.properties.resizeWidth = width;
+        if (typeof height === 'number') nodeInfo.properties.resizeHeight = height;
+        if (typeof mode === 'number') nodeInfo.properties.resizeMode = mode;
+        if (typeof filter === 'number') nodeInfo.properties.resizeFilter = filter;
+      }
+    }
+
+    // Parse RVPrimaryConvert properties
+    if (protocol === 'RVPrimaryConvert') {
+      const nodeComp = obj.component('node');
+      if (nodeComp?.exists()) {
+        const active = nodeComp.property('active').value() as number;
+        const inPrimaries = nodeComp.property('inPrimaries').value() as string;
+        const outPrimaries = nodeComp.property('outPrimaries').value() as string;
+        const adaptationMethod = nodeComp.property('adaptationMethod').value() as number;
+
+        if (typeof active === 'number') nodeInfo.properties.primaryConvertActive = active !== 0;
+        if (typeof inPrimaries === 'string') nodeInfo.properties.primaryConvertInPrimaries = inPrimaries;
+        if (typeof outPrimaries === 'string') nodeInfo.properties.primaryConvertOutPrimaries = outPrimaries;
+        if (typeof adaptationMethod === 'number') nodeInfo.properties.primaryConvertAdaptationMethod = adaptationMethod;
+      }
+    }
+
+    // Parse RVDispTransform2D properties
+    if (protocol === 'RVDispTransform2D') {
+      const transformComp = obj.component('transform');
+      if (transformComp?.exists()) {
+        const active = transformComp.property('active').value() as number;
+        const translate = transformComp.property('translate').value() as number[];
+        const scale = transformComp.property('scale').value() as number[];
+        const rotate = transformComp.property('rotate').value() as number;
+
+        if (typeof active === 'number') nodeInfo.properties.dispTransformActive = active !== 0;
+        if (Array.isArray(translate)) nodeInfo.properties.dispTransformTranslate = translate;
+        if (Array.isArray(scale)) nodeInfo.properties.dispTransformScale = scale;
+        if (typeof rotate === 'number') nodeInfo.properties.dispTransformRotate = rotate;
       }
     }
 

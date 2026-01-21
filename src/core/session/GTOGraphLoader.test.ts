@@ -1974,6 +1974,250 @@ describe('GTOGraphLoader', () => {
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('linearToSRGBActive', true);
     });
 
+    it('parses RVFilterGaussian components', () => {
+      const mockNode = {
+        type: 'RVFilterGaussian',
+        name: 'gaussianNode',
+        properties: {
+          has: vi.fn((key: string) => ['gaussianSigma', 'gaussianRadius'].includes(key)),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'gaussianNode',
+            protocol: 'RVFilterGaussian',
+            components: {
+              node: {
+                sigma: 0.1,
+                radius: 15.0,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('gaussianSigma', 0.1);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('gaussianRadius', 15.0);
+    });
+
+    it('parses RVUnsharpMask components', () => {
+      const mockNode = {
+        type: 'RVUnsharpMask',
+        name: 'unsharpNode',
+        properties: {
+          has: vi.fn((key: string) =>
+            ['unsharpActive', 'unsharpAmount', 'unsharpThreshold', 'unsharpRadius'].includes(key)),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'unsharpNode',
+            protocol: 'RVUnsharpMask',
+            components: {
+              node: {
+                active: 1,
+                amount: 2.0,
+                threshold: 10.0,
+                unsharpRadius: 8.0,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('unsharpActive', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('unsharpAmount', 2.0);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('unsharpThreshold', 10.0);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('unsharpRadius', 8.0);
+    });
+
+    it('parses RVClarity components', () => {
+      const mockNode = {
+        type: 'RVClarity',
+        name: 'clarityNode',
+        properties: {
+          has: vi.fn((key: string) => ['clarityActive', 'clarityAmount', 'clarityRadius'].includes(key)),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'clarityNode',
+            protocol: 'RVClarity',
+            components: {
+              node: {
+                active: 1,
+                amount: 0.5,
+                radius: 25.0,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('clarityActive', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('clarityAmount', 0.5);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('clarityRadius', 25.0);
+    });
+
+    it('parses RVRotateCanvas components', () => {
+      const mockNode = {
+        type: 'RVRotateCanvas',
+        name: 'rotateNode',
+        properties: {
+          has: vi.fn((key: string) =>
+            ['rotateActive', 'rotateDegrees', 'rotateFlipH', 'rotateFlipV'].includes(key)),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'rotateNode',
+            protocol: 'RVRotateCanvas',
+            components: {
+              node: {
+                active: 1,
+                degrees: 90,
+                flipH: 1,
+                flipV: 0,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('rotateActive', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('rotateDegrees', 90);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('rotateFlipH', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('rotateFlipV', false);
+    });
+
+    it('parses RVPrimaryConvert components', () => {
+      const mockNode = {
+        type: 'RVPrimaryConvert',
+        name: 'primaryNode',
+        properties: {
+          has: vi.fn((key: string) =>
+            ['primaryConvertActive', 'primaryConvertInPrimaries', 'primaryConvertOutPrimaries', 'primaryConvertAdaptationMethod'].includes(key)),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'primaryNode',
+            protocol: 'RVPrimaryConvert',
+            components: {
+              node: {
+                active: 1,
+                inPrimaries: 'Rec709',
+                outPrimaries: 'P3',
+                adaptationMethod: 1,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('primaryConvertActive', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('primaryConvertInPrimaries', 'Rec709');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('primaryConvertOutPrimaries', 'P3');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('primaryConvertAdaptationMethod', 1);
+    });
+
+    it('parses RVDispTransform2D components', () => {
+      const mockNode = {
+        type: 'RVDispTransform2D',
+        name: 'transformNode',
+        properties: {
+          has: vi.fn((key: string) =>
+            ['dispTransformActive', 'dispTransformTranslate', 'dispTransformScale', 'dispTransformRotate'].includes(key)),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'transformNode',
+            protocol: 'RVDispTransform2D',
+            components: {
+              transform: {
+                active: 1,
+                translate: [100, 50],
+                scale: [2.0, 1.5],
+                rotate: 45,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('dispTransformActive', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('dispTransformTranslate', [100, 50]);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('dispTransformScale', [2.0, 1.5]);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('dispTransformRotate', 45);
+    });
+
     it('uses default session name when none provided', () => {
       vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
 

@@ -58,6 +58,15 @@ Based on analysis of the GTO specification (`spec.md`), usage guide (`usage.md`)
 | RVColorCDL | ✅ | ✅ | - |
 | RVColorLinearToSRGB | ✅ | ✅ | - |
 | RVColorSRGBToLinear | ✅ | ✅ | - |
+| RVFilterGaussian | ✅ | ✅ | - |
+| RVUnsharpMask | ✅ | ✅ | - |
+| RVNoiseReduction | ✅ | ✅ | - |
+| RVClarity | ✅ | ✅ | - |
+| RVRotateCanvas | ✅ | ✅ | - |
+| RVResize | ✅ | ✅ | - |
+| RVCache | ✅ | ✅ | - |
+| RVPrimaryConvert | ✅ | ✅ | - |
+| RVDispTransform2D | ✅ | ✅ | - |
 
 ### Gaps Identified
 
@@ -96,10 +105,10 @@ The following node types are defined in the spec but not fully implemented:
 **Filter Nodes:**
 | Node | Parse | Create | Update | Priority |
 |------|-------|--------|--------|----------|
-| RVFilterGaussian | ❌ | ❌ | ❌ | Low |
-| RVUnsharpMask | ❌ | ❌ | ❌ | Low |
-| RVNoiseReduction | ❌ | ❌ | ❌ | Low |
-| RVClarity | ❌ | ❌ | ❌ | Low |
+| RVFilterGaussian | ✅ | ✅ | ❌ | ~~Low~~ Done |
+| RVUnsharpMask | ✅ | ✅ | ❌ | ~~Low~~ Done |
+| RVNoiseReduction | ✅ | ✅ | ❌ | ~~Low~~ Done |
+| RVClarity | ✅ | ✅ | ❌ | ~~Low~~ Done |
 
 **Color Processing Nodes:**
 | Node | Parse | Create | Update | Priority |
@@ -120,20 +129,20 @@ The following node types are defined in the spec but not fully implemented:
 | Node | Parse | Create | Update | Priority |
 |------|-------|--------|--------|----------|
 | RVRetime | ✅ | ✅ | ✅ | ~~Medium~~ Done |
-| RVRotateCanvas | ❌ | ❌ | ❌ | Low |
+| RVRotateCanvas | ✅ | ✅ | ❌ | ~~Low~~ Done |
 | RVChannelMap | ✅ | ✅ | ❌ | Low |
 | RVFormat | ✅ | ✅ | ✅ | ~~Medium~~ Done |
 | RVOverlay | ✅ | ✅ | ❌ | Medium |
-| RVResize | ❌ | ❌ | ❌ | Low |
+| RVResize | ✅ | ✅ | ❌ | ~~Low~~ Done |
 | RVHistogram | ✅ | ✅ | ✅ | ~~Low~~ Done |
-| RVCache | ❌ | ❌ | ❌ | Low |
+| RVCache | ✅ | ✅ | ❌ | ~~Low~~ Done |
 
 **View Nodes:**
 | Node | Parse | Create | Update | Priority |
 |------|-------|--------|--------|----------|
 | RVViewGroup | ✅ | ✅ | ❌ | Medium |
 | RVSoundTrack | ✅ | ✅ | ❌ | Medium |
-| RVDispTransform2D | ❌ | ❌ | ❌ | Low |
+| RVDispTransform2D | ✅ | ✅ | ❌ | ~~Low~~ Done |
 | RVDisplayGroup | ✅ | ✅ | ❌ | Medium |
 
 **Color Management:**
@@ -141,7 +150,7 @@ The following node types are defined in the spec but not fully implemented:
 |------|-------|--------|--------|----------|
 | RVOCIO | ✅ | ✅ | ❌ | ~~High~~ Done |
 | RVICC | ✅ | ✅ | ❌ | ~~Medium~~ Done |
-| RVPrimaryConvert | ❌ | ❌ | ❌ | Low |
+| RVPrimaryConvert | ✅ | ✅ | ❌ | ~~Low~~ Done |
 
 ---
 

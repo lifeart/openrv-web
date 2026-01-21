@@ -2372,3 +2372,224 @@ describe('SessionGTOExporter.buildColorSRGBToLinearObject', () => {
         expect(components['node'].properties.active.data).toEqual([0]);
     });
 });
+
+describe('SessionGTOExporter.buildFilterGaussianObject', () => {
+    it('creates RVFilterGaussian object with default settings', () => {
+        const result = SessionGTOExporter.buildFilterGaussianObject('gaussianNode');
+
+        expect(result.name).toBe('gaussianNode');
+        expect(result.protocol).toBe('RVFilterGaussian');
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.sigma.data).toEqual([0.03]);
+        expect(components['node'].properties.radius.data).toEqual([10.0]);
+    });
+
+    it('creates RVFilterGaussian object with custom settings', () => {
+        const result = SessionGTOExporter.buildFilterGaussianObject('gaussianNode', {
+            sigma: 0.1,
+            radius: 20.0,
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.sigma.data).toEqual([0.1]);
+        expect(components['node'].properties.radius.data).toEqual([20.0]);
+    });
+});
+
+describe('SessionGTOExporter.buildUnsharpMaskObject', () => {
+    it('creates RVUnsharpMask object with default settings', () => {
+        const result = SessionGTOExporter.buildUnsharpMaskObject('unsharpNode');
+
+        expect(result.name).toBe('unsharpNode');
+        expect(result.protocol).toBe('RVUnsharpMask');
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.active.data).toEqual([1]);
+        expect(components['node'].properties.amount.data).toEqual([1.0]);
+        expect(components['node'].properties.threshold.data).toEqual([5.0]);
+        expect(components['node'].properties.unsharpRadius.data).toEqual([5.0]);
+    });
+
+    it('creates RVUnsharpMask object with custom settings', () => {
+        const result = SessionGTOExporter.buildUnsharpMaskObject('unsharpNode', {
+            amount: 2.0,
+            threshold: 10.0,
+            unsharpRadius: 8.0,
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.amount.data).toEqual([2.0]);
+        expect(components['node'].properties.threshold.data).toEqual([10.0]);
+        expect(components['node'].properties.unsharpRadius.data).toEqual([8.0]);
+    });
+});
+
+describe('SessionGTOExporter.buildNoiseReductionObject', () => {
+    it('creates RVNoiseReduction object with default settings', () => {
+        const result = SessionGTOExporter.buildNoiseReductionObject('noiseNode');
+
+        expect(result.name).toBe('noiseNode');
+        expect(result.protocol).toBe('RVNoiseReduction');
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.active.data).toEqual([1]);
+        expect(components['node'].properties.amount.data).toEqual([0.0]);
+        expect(components['node'].properties.radius.data).toEqual([0.0]);
+        expect(components['node'].properties.threshold.data).toEqual([5.0]);
+    });
+
+    it('creates RVNoiseReduction object with custom settings', () => {
+        const result = SessionGTOExporter.buildNoiseReductionObject('noiseNode', {
+            amount: 0.5,
+            radius: 3.0,
+            threshold: 8.0,
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.amount.data).toEqual([0.5]);
+        expect(components['node'].properties.radius.data).toEqual([3.0]);
+        expect(components['node'].properties.threshold.data).toEqual([8.0]);
+    });
+});
+
+describe('SessionGTOExporter.buildClarityObject', () => {
+    it('creates RVClarity object with default settings', () => {
+        const result = SessionGTOExporter.buildClarityObject('clarityNode');
+
+        expect(result.name).toBe('clarityNode');
+        expect(result.protocol).toBe('RVClarity');
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.active.data).toEqual([1]);
+        expect(components['node'].properties.amount.data).toEqual([0.0]);
+        expect(components['node'].properties.radius.data).toEqual([20.0]);
+    });
+
+    it('creates RVClarity object with custom settings', () => {
+        const result = SessionGTOExporter.buildClarityObject('clarityNode', {
+            amount: 0.6,
+            radius: 30.0,
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.amount.data).toEqual([0.6]);
+        expect(components['node'].properties.radius.data).toEqual([30.0]);
+    });
+});
+
+describe('SessionGTOExporter.buildRotateCanvasObject', () => {
+    it('creates RVRotateCanvas object with default settings', () => {
+        const result = SessionGTOExporter.buildRotateCanvasObject('rotateNode');
+
+        expect(result.name).toBe('rotateNode');
+        expect(result.protocol).toBe('RVRotateCanvas');
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.active.data).toEqual([1]);
+        expect(components['node'].properties.degrees.data).toEqual([0.0]);
+        expect(components['node'].properties.flipH.data).toEqual([0]);
+        expect(components['node'].properties.flipV.data).toEqual([0]);
+    });
+
+    it('creates RVRotateCanvas object with rotation and flip', () => {
+        const result = SessionGTOExporter.buildRotateCanvasObject('rotateNode', {
+            degrees: 90,
+            flipH: true,
+            flipV: true,
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.degrees.data).toEqual([90]);
+        expect(components['node'].properties.flipH.data).toEqual([1]);
+        expect(components['node'].properties.flipV.data).toEqual([1]);
+    });
+});
+
+describe('SessionGTOExporter.buildResizeObject', () => {
+    it('creates RVResize object with default settings', () => {
+        const result = SessionGTOExporter.buildResizeObject('resizeNode');
+
+        expect(result.name).toBe('resizeNode');
+        expect(result.protocol).toBe('RVResize');
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.active.data).toEqual([1]);
+        expect(components['node'].properties.width.data).toEqual([0]);
+        expect(components['node'].properties.height.data).toEqual([0]);
+        expect(components['node'].properties.mode.data).toEqual([0]);
+        expect(components['node'].properties.filter.data).toEqual([1]);
+    });
+
+    it('creates RVResize object with custom dimensions', () => {
+        const result = SessionGTOExporter.buildResizeObject('resizeNode', {
+            width: 1920,
+            height: 1080,
+            mode: 1,
+            filter: 3,
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.width.data).toEqual([1920]);
+        expect(components['node'].properties.height.data).toEqual([1080]);
+        expect(components['node'].properties.mode.data).toEqual([1]);
+        expect(components['node'].properties.filter.data).toEqual([3]);
+    });
+});
+
+describe('SessionGTOExporter.buildPrimaryConvertObject', () => {
+    it('creates RVPrimaryConvert object with default settings', () => {
+        const result = SessionGTOExporter.buildPrimaryConvertObject('primaryNode');
+
+        expect(result.name).toBe('primaryNode');
+        expect(result.protocol).toBe('RVPrimaryConvert');
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.active.data).toEqual([1]);
+        expect(components['node'].properties.inPrimaries.data).toEqual(['sRGB']);
+        expect(components['node'].properties.outPrimaries.data).toEqual(['sRGB']);
+    });
+
+    it('creates RVPrimaryConvert object with custom primaries', () => {
+        const result = SessionGTOExporter.buildPrimaryConvertObject('primaryNode', {
+            inPrimaries: 'Rec709',
+            outPrimaries: 'P3',
+            adaptationMethod: 1,
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.inPrimaries.data).toEqual(['Rec709']);
+        expect(components['node'].properties.outPrimaries.data).toEqual(['P3']);
+        expect(components['node'].properties.adaptationMethod.data).toEqual([1]);
+    });
+});
+
+describe('SessionGTOExporter.buildDispTransform2DObject', () => {
+    it('creates RVDispTransform2D object with default settings', () => {
+        const result = SessionGTOExporter.buildDispTransform2DObject('transformNode');
+
+        expect(result.name).toBe('transformNode');
+        expect(result.protocol).toBe('RVDispTransform2D');
+
+        const components = result.components as Record<string, any>;
+        expect(components['transform'].properties.active.data).toEqual([1]);
+        expect(components['transform'].properties.translate.data).toEqual([0, 0]);
+        expect(components['transform'].properties.scale.data).toEqual([1, 1]);
+        expect(components['transform'].properties.rotate.data).toEqual([0]);
+    });
+
+    it('creates RVDispTransform2D object with custom transform', () => {
+        const result = SessionGTOExporter.buildDispTransform2DObject('transformNode', {
+            translateX: 100,
+            translateY: 50,
+            scaleX: 2.0,
+            scaleY: 1.5,
+            rotate: 45,
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['transform'].properties.translate.data).toEqual([100, 50]);
+        expect(components['transform'].properties.scale.data).toEqual([2.0, 1.5]);
+        expect(components['transform'].properties.rotate.data).toEqual([45]);
+    });
+});

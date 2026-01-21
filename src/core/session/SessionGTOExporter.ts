@@ -350,6 +350,118 @@ export interface ColorSRGBToLinearSettings {
 }
 
 /**
+ * Gaussian blur filter settings
+ */
+export interface FilterGaussianSettings {
+  /** Gaussian sigma (r²/3) */
+  sigma?: number;
+  /** Filter radius */
+  radius?: number;
+}
+
+/**
+ * Unsharp mask filter settings
+ */
+export interface UnsharpMaskSettings {
+  /** Enable effect */
+  active?: boolean;
+  /** Sharpening amount */
+  amount?: number;
+  /** Edge threshold */
+  threshold?: number;
+  /** Blur radius */
+  unsharpRadius?: number;
+}
+
+/**
+ * Noise reduction filter settings
+ */
+export interface NoiseReductionSettings {
+  /** Enable effect */
+  active?: boolean;
+  /** Reduction amount */
+  amount?: number;
+  /** Filter radius */
+  radius?: number;
+  /** Noise threshold */
+  threshold?: number;
+}
+
+/**
+ * Clarity (local contrast) filter settings
+ */
+export interface ClaritySettings {
+  /** Enable effect */
+  active?: boolean;
+  /** Clarity amount */
+  amount?: number;
+  /** Effect radius */
+  radius?: number;
+}
+
+/**
+ * Canvas rotation settings
+ */
+export interface RotateCanvasSettings {
+  /** Enable rotation */
+  active?: boolean;
+  /** Rotation angle in degrees */
+  degrees?: number;
+  /** Flip horizontal */
+  flipH?: boolean;
+  /** Flip vertical */
+  flipV?: boolean;
+}
+
+/**
+ * Resize settings
+ */
+export interface ResizeSettings {
+  /** Enable resize */
+  active?: boolean;
+  /** Target width */
+  width?: number;
+  /** Target height */
+  height?: number;
+  /** Resize mode (0=fit, 1=fill, 2=stretch) */
+  mode?: number;
+  /** Filter type (0=nearest, 1=bilinear, 2=bicubic, 3=lanczos) */
+  filter?: number;
+}
+
+/**
+ * Primary color conversion settings
+ */
+export interface PrimaryConvertSettings {
+  /** Enable conversion */
+  active?: boolean;
+  /** Input primaries (e.g., 'sRGB', 'AdobeRGB', 'P3', 'Rec709', 'Rec2020') */
+  inPrimaries?: string;
+  /** Output primaries */
+  outPrimaries?: string;
+  /** Chromatic adaptation method */
+  adaptationMethod?: number;
+}
+
+/**
+ * Display 2D transform settings
+ */
+export interface DispTransform2DSettings {
+  /** Enable transform */
+  active?: boolean;
+  /** Translation X */
+  translateX?: number;
+  /** Translation Y */
+  translateY?: number;
+  /** Scale X */
+  scaleX?: number;
+  /** Scale Y */
+  scaleY?: number;
+  /** Rotation in degrees */
+  rotate?: number;
+}
+
+/**
  * Cineon log settings
  */
 export interface CineonSettings {
@@ -1722,6 +1834,164 @@ export class SessionGTOExporter {
     const obj = builder.object(name, 'RVColorSRGBToLinear', 1);
     obj.component('node')
       .int('active', settings.active !== false ? 1 : 0)
+      .end();
+
+    obj.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVFilterGaussian object for Gaussian blur
+   * @param name - Object name
+   * @param settings - Gaussian filter settings
+   */
+  static buildFilterGaussianObject(name: string, settings: FilterGaussianSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const obj = builder.object(name, 'RVFilterGaussian', 1);
+    obj.component('node')
+      .float('sigma', settings.sigma ?? 0.03)
+      .float('radius', settings.radius ?? 10.0)
+      .end();
+
+    obj.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVUnsharpMask object for sharpening
+   * @param name - Object name
+   * @param settings - Unsharp mask settings
+   */
+  static buildUnsharpMaskObject(name: string, settings: UnsharpMaskSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const obj = builder.object(name, 'RVUnsharpMask', 1);
+    obj.component('node')
+      .int('active', settings.active !== false ? 1 : 0)
+      .float('amount', settings.amount ?? 1.0)
+      .float('threshold', settings.threshold ?? 5.0)
+      .float('unsharpRadius', settings.unsharpRadius ?? 5.0)
+      .end();
+
+    obj.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVNoiseReduction object
+   * @param name - Object name
+   * @param settings - Noise reduction settings
+   */
+  static buildNoiseReductionObject(name: string, settings: NoiseReductionSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const obj = builder.object(name, 'RVNoiseReduction', 1);
+    obj.component('node')
+      .int('active', settings.active !== false ? 1 : 0)
+      .float('amount', settings.amount ?? 0.0)
+      .float('radius', settings.radius ?? 0.0)
+      .float('threshold', settings.threshold ?? 5.0)
+      .end();
+
+    obj.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVClarity object for local contrast enhancement
+   * @param name - Object name
+   * @param settings - Clarity settings
+   */
+  static buildClarityObject(name: string, settings: ClaritySettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const obj = builder.object(name, 'RVClarity', 1);
+    obj.component('node')
+      .int('active', settings.active !== false ? 1 : 0)
+      .float('amount', settings.amount ?? 0.0)
+      .float('radius', settings.radius ?? 20.0)
+      .end();
+
+    obj.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVRotateCanvas object
+   * @param name - Object name
+   * @param settings - Rotation settings
+   */
+  static buildRotateCanvasObject(name: string, settings: RotateCanvasSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const obj = builder.object(name, 'RVRotateCanvas', 1);
+    obj.component('node')
+      .int('active', settings.active !== false ? 1 : 0)
+      .float('degrees', settings.degrees ?? 0.0)
+      .int('flipH', settings.flipH ? 1 : 0)
+      .int('flipV', settings.flipV ? 1 : 0)
+      .end();
+
+    obj.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVResize object
+   * @param name - Object name
+   * @param settings - Resize settings
+   */
+  static buildResizeObject(name: string, settings: ResizeSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const obj = builder.object(name, 'RVResize', 1);
+    obj.component('node')
+      .int('active', settings.active !== false ? 1 : 0)
+      .int('width', settings.width ?? 0)
+      .int('height', settings.height ?? 0)
+      .int('mode', settings.mode ?? 0)
+      .int('filter', settings.filter ?? 1)
+      .end();
+
+    obj.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVPrimaryConvert object for color primary conversion
+   * @param name - Object name
+   * @param settings - Primary conversion settings
+   */
+  static buildPrimaryConvertObject(name: string, settings: PrimaryConvertSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const obj = builder.object(name, 'RVPrimaryConvert', 1);
+    obj.component('node')
+      .int('active', settings.active !== false ? 1 : 0)
+      .string('inPrimaries', settings.inPrimaries ?? 'sRGB')
+      .string('outPrimaries', settings.outPrimaries ?? 'sRGB')
+      .int('adaptationMethod', settings.adaptationMethod ?? 0)
+      .end();
+
+    obj.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVDispTransform2D object for display transforms
+   * @param name - Object name
+   * @param settings - Transform settings
+   */
+  static buildDispTransform2DObject(name: string, settings: DispTransform2DSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const obj = builder.object(name, 'RVDispTransform2D', 1);
+    obj.component('transform')
+      .int('active', settings.active !== false ? 1 : 0)
+      .float('translate', [settings.translateX ?? 0, settings.translateY ?? 0])
+      .float('scale', [settings.scaleX ?? 1, settings.scaleY ?? 1])
+      .float('rotate', settings.rotate ?? 0)
       .end();
 
     obj.end();
