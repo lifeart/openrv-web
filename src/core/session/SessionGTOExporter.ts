@@ -172,6 +172,184 @@ export interface WaveformSettings {
 }
 
 /**
+ * OCIO (OpenColorIO) settings for color management
+ */
+export interface OCIOSettings {
+  /** OCIO function type */
+  function?: string;
+  /** Enable OCIO */
+  active?: boolean;
+  /** Input colorspace */
+  inColorSpace?: string;
+  /** Output colorspace */
+  outColorSpace?: string;
+  /** 3D LUT resolution */
+  lut3DSize?: number;
+  /** Look name */
+  look?: string;
+  /** Look direction (0 = forward, 1 = inverse) */
+  lookDirection?: number;
+  /** Display name */
+  display?: string;
+  /** View transform name */
+  view?: string;
+  /** Enable dithering */
+  dither?: boolean;
+  /** Channel order (e.g., 'RGBA') */
+  channelOrder?: string;
+  /** Input transform URL */
+  inTransformUrl?: string;
+  /** Output transform URL */
+  outTransformUrl?: string;
+  /** Config description */
+  configDescription?: string;
+  /** Working directory */
+  workingDir?: string;
+}
+
+/**
+ * ICC (ICC Profile) settings for color profile transforms
+ */
+export interface ICCSettings {
+  /** Enable ICC */
+  active?: boolean;
+  /** 2D LUT samples */
+  samples2D?: number;
+  /** 3D LUT samples */
+  samples3D?: number;
+  /** Input profile URL */
+  inProfileUrl?: string;
+  /** Input profile description */
+  inProfileDescription?: string;
+  /** Output profile URL */
+  outProfileUrl?: string;
+  /** Output profile description */
+  outProfileDescription?: string;
+}
+
+/**
+ * Color exposure settings
+ */
+export interface ColorExposureSettings {
+  /** Enable effect */
+  active?: boolean;
+  /** Exposure stops */
+  exposure?: number;
+}
+
+/**
+ * Color curve (contrast) settings
+ */
+export interface ColorCurveSettings {
+  /** Enable effect */
+  active?: boolean;
+  /** Contrast amount */
+  contrast?: number;
+}
+
+/**
+ * Color temperature settings
+ */
+export interface ColorTemperatureSettings {
+  /** Enable effect */
+  active?: boolean;
+  /** Input white point [x, y] */
+  inWhitePrimary?: [number, number];
+  /** Input temperature in Kelvin */
+  inTemperature?: number;
+  /** Output temperature in Kelvin */
+  outTemperature?: number;
+  /** Adaptation method (0=Bradford, 1=Von Kries, 2=XYZ Scaling) */
+  method?: number;
+}
+
+/**
+ * Color saturation settings
+ */
+export interface ColorSaturationSettings {
+  /** Enable effect */
+  active?: boolean;
+  /** Saturation multiplier */
+  saturation?: number;
+}
+
+/**
+ * Color vibrance settings
+ */
+export interface ColorVibranceSettings {
+  /** Enable effect */
+  active?: boolean;
+  /** Vibrance amount */
+  vibrance?: number;
+}
+
+/**
+ * Color shadow settings
+ */
+export interface ColorShadowSettings {
+  /** Enable effect */
+  active?: boolean;
+  /** Shadow adjustment */
+  shadow?: number;
+}
+
+/**
+ * Color highlight settings
+ */
+export interface ColorHighlightSettings {
+  /** Enable effect */
+  active?: boolean;
+  /** Highlight adjustment */
+  highlight?: number;
+}
+
+/**
+ * Color grayscale settings
+ */
+export interface ColorGrayScaleSettings {
+  /** Enable effect */
+  active?: boolean;
+}
+
+/**
+ * Standalone CDL node settings
+ */
+export interface ColorCDLSettings {
+  /** Enable effect */
+  active?: boolean;
+  /** CDL file path */
+  file?: string;
+  /** Working colorspace */
+  colorspace?: string;
+  /** CDL slope [R, G, B] */
+  slope?: [number, number, number];
+  /** CDL offset [R, G, B] */
+  offset?: [number, number, number];
+  /** CDL power [R, G, B] */
+  power?: [number, number, number];
+  /** CDL saturation */
+  saturation?: number;
+  /** Disable value clamping */
+  noClamp?: boolean;
+}
+
+/**
+ * Linear to sRGB conversion settings
+ */
+export interface ColorLinearToSRGBSettings {
+  /** Enable effect */
+  active?: boolean;
+}
+
+/**
+ * sRGB to linear conversion settings
+ */
+export interface ColorSRGBToLinearSettings {
+  /** Enable effect */
+  active?: boolean;
+}
+
+/**
  * Cineon log settings
  */
 export interface CineonSettings {
@@ -1196,6 +1374,357 @@ export class SessionGTOExporter {
       .end();
 
     soundTrackObject.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVOCIO object for OpenColorIO color management
+   * @param name - Object name
+   * @param settings - OCIO settings
+   */
+  static buildOCIOObject(name: string, settings: OCIOSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const ocioObject = builder.object(name, 'RVOCIO', 1);
+
+    // Main OCIO component
+    const ocioComp = ocioObject.component('ocio');
+    ocioComp
+      .int('active', settings.active !== false ? 1 : 0);
+    if (settings.function) {
+      ocioComp.string('function', settings.function);
+    }
+    if (settings.inColorSpace) {
+      ocioComp.string('inColorSpace', settings.inColorSpace);
+    }
+    if (settings.lut3DSize !== undefined) {
+      ocioComp.int('lut3DSize', settings.lut3DSize);
+    }
+    ocioComp.end();
+
+    // Color output component
+    if (settings.outColorSpace) {
+      ocioObject
+        .component('ocio_color')
+        .string('outColorSpace', settings.outColorSpace)
+        .end();
+    }
+
+    // Look component
+    if (settings.look || settings.lookDirection !== undefined) {
+      const lookComp = ocioObject.component('ocio_look');
+      if (settings.look) {
+        lookComp.string('look', settings.look);
+      }
+      lookComp.int('direction', settings.lookDirection ?? 0);
+      if (settings.outColorSpace) {
+        lookComp.string('outColorSpace', settings.outColorSpace);
+      }
+      lookComp.end();
+    }
+
+    // Display component
+    if (settings.display || settings.view) {
+      const displayComp = ocioObject.component('ocio_display');
+      if (settings.display) {
+        displayComp.string('display', settings.display);
+      }
+      if (settings.view) {
+        displayComp.string('view', settings.view);
+      }
+      displayComp.end();
+    }
+
+    // Color settings component
+    ocioObject
+      .component('color')
+      .int('dither', settings.dither ? 1 : 0)
+      .string('channelOrder', settings.channelOrder ?? 'RGBA')
+      .end();
+
+    // Input transform component
+    if (settings.inTransformUrl) {
+      ocioObject
+        .component('inTransform')
+        .string('url', settings.inTransformUrl)
+        .end();
+    }
+
+    // Output transform component
+    if (settings.outTransformUrl) {
+      ocioObject
+        .component('outTransform')
+        .string('url', settings.outTransformUrl)
+        .end();
+    }
+
+    // Config component
+    if (settings.configDescription || settings.workingDir) {
+      const configComp = ocioObject.component('config');
+      if (settings.configDescription) {
+        configComp.string('description', settings.configDescription);
+      }
+      if (settings.workingDir) {
+        configComp.string('workingDir', settings.workingDir);
+      }
+      configComp.end();
+    }
+
+    ocioObject.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVICC object for ICC color profile transforms
+   * @param name - Object name
+   * @param settings - ICC settings
+   */
+  static buildICCObject(name: string, settings: ICCSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const iccObject = builder.object(name, 'RVICCTransform', 1);
+
+    // Node component
+    iccObject
+      .component('node')
+      .int('active', settings.active !== false ? 1 : 0)
+      .int('samples2D', settings.samples2D ?? 256)
+      .int('samples3D', settings.samples3D ?? 32)
+      .end();
+
+    // Input profile component
+    if (settings.inProfileUrl || settings.inProfileDescription) {
+      const inProfileComp = iccObject.component('inProfile');
+      if (settings.inProfileUrl) {
+        inProfileComp.string('url', settings.inProfileUrl);
+      }
+      if (settings.inProfileDescription) {
+        inProfileComp.string('description', settings.inProfileDescription);
+      }
+      inProfileComp.end();
+    }
+
+    // Output profile component
+    if (settings.outProfileUrl || settings.outProfileDescription) {
+      const outProfileComp = iccObject.component('outProfile');
+      if (settings.outProfileUrl) {
+        outProfileComp.string('url', settings.outProfileUrl);
+      }
+      if (settings.outProfileDescription) {
+        outProfileComp.string('description', settings.outProfileDescription);
+      }
+      outProfileComp.end();
+    }
+
+    iccObject.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVColorExposure object
+   * @param name - Object name
+   * @param settings - Exposure settings
+   */
+  static buildColorExposureObject(name: string, settings: ColorExposureSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const obj = builder.object(name, 'RVColorExposure', 1);
+    obj.component('color')
+      .int('active', settings.active !== false ? 1 : 0)
+      .float('exposure', settings.exposure ?? 0.0)
+      .end();
+
+    obj.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVColorCurve object
+   * @param name - Object name
+   * @param settings - Curve settings
+   */
+  static buildColorCurveObject(name: string, settings: ColorCurveSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const obj = builder.object(name, 'RVColorCurve', 1);
+    obj.component('color')
+      .int('active', settings.active !== false ? 1 : 0)
+      .float('contrast', settings.contrast ?? 0.0)
+      .end();
+
+    obj.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVColorTemperature object
+   * @param name - Object name
+   * @param settings - Temperature settings
+   */
+  static buildColorTemperatureObject(name: string, settings: ColorTemperatureSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const obj = builder.object(name, 'RVColorTemperature', 1);
+    obj.component('color')
+      .int('active', settings.active !== false ? 1 : 0)
+      .float('inWhitePrimary', settings.inWhitePrimary ?? [0.3457, 0.3585])
+      .float('inTemperature', settings.inTemperature ?? 6500.0)
+      .float('outTemperature', settings.outTemperature ?? 6500.0)
+      .int('method', settings.method ?? 2)
+      .end();
+
+    obj.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVColorSaturation object
+   * @param name - Object name
+   * @param settings - Saturation settings
+   */
+  static buildColorSaturationObject(name: string, settings: ColorSaturationSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const obj = builder.object(name, 'RVColorSaturation', 1);
+    obj.component('color')
+      .int('active', settings.active !== false ? 1 : 0)
+      .float('saturation', settings.saturation ?? 1.0)
+      .end();
+
+    obj.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVColorVibrance object
+   * @param name - Object name
+   * @param settings - Vibrance settings
+   */
+  static buildColorVibranceObject(name: string, settings: ColorVibranceSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const obj = builder.object(name, 'RVColorVibrance', 1);
+    obj.component('color')
+      .int('active', settings.active !== false ? 1 : 0)
+      .float('vibrance', settings.vibrance ?? 0.0)
+      .end();
+
+    obj.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVColorShadow object
+   * @param name - Object name
+   * @param settings - Shadow settings
+   */
+  static buildColorShadowObject(name: string, settings: ColorShadowSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const obj = builder.object(name, 'RVColorShadow', 1);
+    obj.component('color')
+      .int('active', settings.active !== false ? 1 : 0)
+      .float('shadow', settings.shadow ?? 0.0)
+      .end();
+
+    obj.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVColorHighlight object
+   * @param name - Object name
+   * @param settings - Highlight settings
+   */
+  static buildColorHighlightObject(name: string, settings: ColorHighlightSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const obj = builder.object(name, 'RVColorHighlight', 1);
+    obj.component('color')
+      .int('active', settings.active !== false ? 1 : 0)
+      .float('highlight', settings.highlight ?? 0.0)
+      .end();
+
+    obj.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVColorGrayScale object
+   * @param name - Object name
+   * @param settings - Grayscale settings
+   */
+  static buildColorGrayScaleObject(name: string, settings: ColorGrayScaleSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const obj = builder.object(name, 'RVColorGrayScale', 1);
+    obj.component('node')
+      .int('active', settings.active ? 1 : 0)
+      .end();
+
+    obj.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVColorCDL object (standalone CDL node)
+   * @param name - Object name
+   * @param settings - CDL settings
+   */
+  static buildColorCDLObject(name: string, settings: ColorCDLSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const obj = builder.object(name, 'RVColorCDL', 1);
+    const nodeComp = obj.component('node');
+    nodeComp
+      .int('active', settings.active !== false ? 1 : 0)
+      .string('colorspace', settings.colorspace ?? 'rec709')
+      .float('slope', settings.slope ?? [1, 1, 1])
+      .float('offset', settings.offset ?? [0, 0, 0])
+      .float('power', settings.power ?? [1, 1, 1])
+      .float('saturation', settings.saturation ?? 1.0)
+      .int('noClamp', settings.noClamp ? 1 : 0);
+
+    if (settings.file) {
+      nodeComp.string('file', settings.file);
+    }
+
+    nodeComp.end();
+    obj.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVColorLinearToSRGB object
+   * @param name - Object name
+   * @param settings - Settings
+   */
+  static buildColorLinearToSRGBObject(name: string, settings: ColorLinearToSRGBSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const obj = builder.object(name, 'RVColorLinearToSRGB', 1);
+    obj.component('node')
+      .int('active', settings.active !== false ? 1 : 0)
+      .end();
+
+    obj.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVColorSRGBToLinear object
+   * @param name - Object name
+   * @param settings - Settings
+   */
+  static buildColorSRGBToLinearObject(name: string, settings: ColorSRGBToLinearSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const obj = builder.object(name, 'RVColorSRGBToLinear', 1);
+    obj.component('node')
+      .int('active', settings.active !== false ? 1 : 0)
+      .end();
+
+    obj.end();
     return builder.build().objects[0]!;
   }
 

@@ -45,6 +45,19 @@ Based on analysis of the GTO specification (`spec.md`), usage guide (`usage.md`)
 | RVViewGroup | ✅ | ✅ | - |
 | RVSoundTrack | ✅ | ✅ | - |
 | Waveform | ✅ | ✅ | - |
+| RVOCIO | ✅ | ✅ | - |
+| RVICC (ICC Transforms) | ✅ | ✅ | - |
+| RVColorExposure | ✅ | ✅ | - |
+| RVColorCurve | ✅ | ✅ | - |
+| RVColorTemperature | ✅ | ✅ | - |
+| RVColorSaturation | ✅ | ✅ | - |
+| RVColorVibrance | ✅ | ✅ | - |
+| RVColorShadow | ✅ | ✅ | - |
+| RVColorHighlight | ✅ | ✅ | - |
+| RVColorGrayScale | ✅ | ✅ | - |
+| RVColorCDL | ✅ | ✅ | - |
+| RVColorLinearToSRGB | ✅ | ✅ | - |
+| RVColorSRGBToLinear | ✅ | ✅ | - |
 
 ### Gaps Identified
 
@@ -91,17 +104,17 @@ The following node types are defined in the spec but not fully implemented:
 **Color Processing Nodes:**
 | Node | Parse | Create | Update | Priority |
 |------|-------|--------|--------|----------|
-| RVColorExposure | ❌ | ❌ | ❌ | Medium |
-| RVColorCurve | ❌ | ❌ | ❌ | Medium |
-| RVColorTemperature | ❌ | ❌ | ❌ | Medium |
-| RVColorSaturation | ❌ | ❌ | ❌ | Medium |
-| RVColorVibrance | ❌ | ❌ | ❌ | Low |
-| RVColorShadow | ❌ | ❌ | ❌ | Low |
-| RVColorHighlight | ❌ | ❌ | ❌ | Low |
-| RVColorGrayScale | ❌ | ❌ | ❌ | Low |
-| RVColorCDL | ⚠️ Via RVColor | ❌ | ❌ | Medium |
-| RVColorLinearToSRGB | ❌ | ❌ | ❌ | Low |
-| RVColorSRGBToLinear | ❌ | ❌ | ❌ | Low |
+| RVColorExposure | ✅ | ✅ | ❌ | ~~Medium~~ Done |
+| RVColorCurve | ✅ | ✅ | ❌ | ~~Medium~~ Done |
+| RVColorTemperature | ✅ | ✅ | ❌ | ~~Medium~~ Done |
+| RVColorSaturation | ✅ | ✅ | ❌ | ~~Medium~~ Done |
+| RVColorVibrance | ✅ | ✅ | ❌ | ~~Low~~ Done |
+| RVColorShadow | ✅ | ✅ | ❌ | ~~Low~~ Done |
+| RVColorHighlight | ✅ | ✅ | ❌ | ~~Low~~ Done |
+| RVColorGrayScale | ✅ | ✅ | ❌ | ~~Low~~ Done |
+| RVColorCDL | ✅ | ✅ | ❌ | ~~Medium~~ Done |
+| RVColorLinearToSRGB | ✅ | ✅ | ❌ | ~~Low~~ Done |
+| RVColorSRGBToLinear | ✅ | ✅ | ❌ | ~~Low~~ Done |
 
 **Utility Nodes:**
 | Node | Parse | Create | Update | Priority |
@@ -126,8 +139,8 @@ The following node types are defined in the spec but not fully implemented:
 **Color Management:**
 | Node | Parse | Create | Update | Priority |
 |------|-------|--------|--------|----------|
-| RVOCIO | ❌ | ❌ | ❌ | High |
-| RVICC | ❌ | ❌ | ❌ | Medium |
+| RVOCIO | ✅ | ✅ | ❌ | ~~High~~ Done |
+| RVICC | ✅ | ✅ | ❌ | ~~Medium~~ Done |
 | RVPrimaryConvert | ❌ | ❌ | ❌ | Low |
 
 ---

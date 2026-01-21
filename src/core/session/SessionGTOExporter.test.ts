@@ -1946,3 +1946,429 @@ describe('SessionGTOExporter.buildSoundTrackObject', () => {
         expect(components['visual'].properties.height.data).toEqual([0]);
     });
 });
+
+describe('SessionGTOExporter.buildOCIOObject', () => {
+    it('creates RVOCIO object with default settings', () => {
+        const result = SessionGTOExporter.buildOCIOObject('ocioNode');
+
+        expect(result.name).toBe('ocioNode');
+        expect(result.protocol).toBe('RVOCIO');
+
+        const components = result.components as Record<string, any>;
+        expect(components['ocio']).toBeDefined();
+        expect(components['ocio'].properties.active.data).toEqual([1]);
+        expect(components['color']).toBeDefined();
+        expect(components['color'].properties.dither.data).toEqual([0]);
+        expect(components['color'].properties.channelOrder.data).toEqual(['RGBA']);
+    });
+
+    it('creates RVOCIO object with colorspace settings', () => {
+        const result = SessionGTOExporter.buildOCIOObject('ocioNode', {
+            inColorSpace: 'ACES - ACEScg',
+            outColorSpace: 'sRGB',
+            function: 'color',
+            lut3DSize: 64,
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['ocio'].properties.function.data).toEqual(['color']);
+        expect(components['ocio'].properties.inColorSpace.data).toEqual(['ACES - ACEScg']);
+        expect(components['ocio'].properties.lut3DSize.data).toEqual([64]);
+        expect(components['ocio_color'].properties.outColorSpace.data).toEqual(['sRGB']);
+    });
+
+    it('creates RVOCIO object with look settings', () => {
+        const result = SessionGTOExporter.buildOCIOObject('ocioNode', {
+            look: 'FilmLook',
+            lookDirection: 1,
+            outColorSpace: 'Output - Rec.709',
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['ocio_look'].properties.look.data).toEqual(['FilmLook']);
+        expect(components['ocio_look'].properties.direction.data).toEqual([1]);
+        expect(components['ocio_look'].properties.outColorSpace.data).toEqual(['Output - Rec.709']);
+    });
+
+    it('creates RVOCIO object with display settings', () => {
+        const result = SessionGTOExporter.buildOCIOObject('ocioNode', {
+            display: 'sRGB',
+            view: 'Standard',
+            dither: true,
+            channelOrder: 'BGRA',
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['ocio_display'].properties.display.data).toEqual(['sRGB']);
+        expect(components['ocio_display'].properties.view.data).toEqual(['Standard']);
+        expect(components['color'].properties.dither.data).toEqual([1]);
+        expect(components['color'].properties.channelOrder.data).toEqual(['BGRA']);
+    });
+
+    it('creates RVOCIO object with transform URLs', () => {
+        const result = SessionGTOExporter.buildOCIOObject('ocioNode', {
+            inTransformUrl: '/path/to/input.csp',
+            outTransformUrl: '/path/to/output.csp',
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['inTransform'].properties.url.data).toEqual(['/path/to/input.csp']);
+        expect(components['outTransform'].properties.url.data).toEqual(['/path/to/output.csp']);
+    });
+
+    it('creates RVOCIO object with config settings', () => {
+        const result = SessionGTOExporter.buildOCIOObject('ocioNode', {
+            configDescription: 'ACES 1.2',
+            workingDir: '/studio/ocio',
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['config'].properties.description.data).toEqual(['ACES 1.2']);
+        expect(components['config'].properties.workingDir.data).toEqual(['/studio/ocio']);
+    });
+
+    it('disables OCIO when active is false', () => {
+        const result = SessionGTOExporter.buildOCIOObject('ocioNode', {
+            active: false,
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['ocio'].properties.active.data).toEqual([0]);
+    });
+});
+
+describe('SessionGTOExporter.buildICCObject', () => {
+    it('creates RVICCTransform object with default settings', () => {
+        const result = SessionGTOExporter.buildICCObject('iccNode');
+
+        expect(result.name).toBe('iccNode');
+        expect(result.protocol).toBe('RVICCTransform');
+
+        const components = result.components as Record<string, any>;
+        expect(components['node']).toBeDefined();
+        expect(components['node'].properties.active.data).toEqual([1]);
+        expect(components['node'].properties.samples2D.data).toEqual([256]);
+        expect(components['node'].properties.samples3D.data).toEqual([32]);
+    });
+
+    it('creates RVICCTransform object with custom samples', () => {
+        const result = SessionGTOExporter.buildICCObject('iccNode', {
+            samples2D: 512,
+            samples3D: 64,
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.samples2D.data).toEqual([512]);
+        expect(components['node'].properties.samples3D.data).toEqual([64]);
+    });
+
+    it('creates RVICCTransform object with input profile', () => {
+        const result = SessionGTOExporter.buildICCObject('iccNode', {
+            inProfileUrl: '/path/to/input.icc',
+            inProfileDescription: 'sRGB IEC61966-2.1',
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['inProfile'].properties.url.data).toEqual(['/path/to/input.icc']);
+        expect(components['inProfile'].properties.description.data).toEqual(['sRGB IEC61966-2.1']);
+    });
+
+    it('creates RVICCTransform object with output profile', () => {
+        const result = SessionGTOExporter.buildICCObject('iccNode', {
+            outProfileUrl: '/path/to/output.icc',
+            outProfileDescription: 'Display P3',
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['outProfile'].properties.url.data).toEqual(['/path/to/output.icc']);
+        expect(components['outProfile'].properties.description.data).toEqual(['Display P3']);
+    });
+
+    it('creates RVICCTransform object with both profiles', () => {
+        const result = SessionGTOExporter.buildICCObject('iccNode', {
+            inProfileUrl: '/profiles/sRGB.icc',
+            inProfileDescription: 'sRGB',
+            outProfileUrl: '/profiles/P3.icc',
+            outProfileDescription: 'Display P3',
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['inProfile'].properties.url.data).toEqual(['/profiles/sRGB.icc']);
+        expect(components['inProfile'].properties.description.data).toEqual(['sRGB']);
+        expect(components['outProfile'].properties.url.data).toEqual(['/profiles/P3.icc']);
+        expect(components['outProfile'].properties.description.data).toEqual(['Display P3']);
+    });
+
+    it('disables ICC when active is false', () => {
+        const result = SessionGTOExporter.buildICCObject('iccNode', {
+            active: false,
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.active.data).toEqual([0]);
+    });
+});
+
+describe('SessionGTOExporter.buildColorExposureObject', () => {
+    it('creates RVColorExposure object with default settings', () => {
+        const result = SessionGTOExporter.buildColorExposureObject('exposureNode');
+
+        expect(result.name).toBe('exposureNode');
+        expect(result.protocol).toBe('RVColorExposure');
+
+        const components = result.components as Record<string, any>;
+        expect(components['color'].properties.active.data).toEqual([1]);
+        expect(components['color'].properties.exposure.data).toEqual([0.0]);
+    });
+
+    it('creates RVColorExposure object with custom exposure', () => {
+        const result = SessionGTOExporter.buildColorExposureObject('exposureNode', {
+            exposure: 1.5,
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['color'].properties.exposure.data).toEqual([1.5]);
+    });
+});
+
+describe('SessionGTOExporter.buildColorCurveObject', () => {
+    it('creates RVColorCurve object with default settings', () => {
+        const result = SessionGTOExporter.buildColorCurveObject('curveNode');
+
+        expect(result.name).toBe('curveNode');
+        expect(result.protocol).toBe('RVColorCurve');
+
+        const components = result.components as Record<string, any>;
+        expect(components['color'].properties.active.data).toEqual([1]);
+        expect(components['color'].properties.contrast.data).toEqual([0.0]);
+    });
+
+    it('creates RVColorCurve object with custom contrast', () => {
+        const result = SessionGTOExporter.buildColorCurveObject('curveNode', {
+            contrast: 0.5,
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['color'].properties.contrast.data).toEqual([0.5]);
+    });
+});
+
+describe('SessionGTOExporter.buildColorTemperatureObject', () => {
+    it('creates RVColorTemperature object with default settings', () => {
+        const result = SessionGTOExporter.buildColorTemperatureObject('tempNode');
+
+        expect(result.name).toBe('tempNode');
+        expect(result.protocol).toBe('RVColorTemperature');
+
+        const components = result.components as Record<string, any>;
+        expect(components['color'].properties.active.data).toEqual([1]);
+        expect(components['color'].properties.inTemperature.data).toEqual([6500.0]);
+        expect(components['color'].properties.outTemperature.data).toEqual([6500.0]);
+        expect(components['color'].properties.method.data).toEqual([2]);
+    });
+
+    it('creates RVColorTemperature object with custom temperature', () => {
+        const result = SessionGTOExporter.buildColorTemperatureObject('tempNode', {
+            inTemperature: 5500,
+            outTemperature: 7000,
+            method: 1,
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['color'].properties.inTemperature.data).toEqual([5500]);
+        expect(components['color'].properties.outTemperature.data).toEqual([7000]);
+        expect(components['color'].properties.method.data).toEqual([1]);
+    });
+});
+
+describe('SessionGTOExporter.buildColorSaturationObject', () => {
+    it('creates RVColorSaturation object with default settings', () => {
+        const result = SessionGTOExporter.buildColorSaturationObject('satNode');
+
+        expect(result.name).toBe('satNode');
+        expect(result.protocol).toBe('RVColorSaturation');
+
+        const components = result.components as Record<string, any>;
+        expect(components['color'].properties.saturation.data).toEqual([1.0]);
+    });
+
+    it('creates RVColorSaturation object with custom saturation', () => {
+        const result = SessionGTOExporter.buildColorSaturationObject('satNode', {
+            saturation: 1.5,
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['color'].properties.saturation.data).toEqual([1.5]);
+    });
+});
+
+describe('SessionGTOExporter.buildColorVibranceObject', () => {
+    it('creates RVColorVibrance object with default settings', () => {
+        const result = SessionGTOExporter.buildColorVibranceObject('vibNode');
+
+        expect(result.name).toBe('vibNode');
+        expect(result.protocol).toBe('RVColorVibrance');
+
+        const components = result.components as Record<string, any>;
+        expect(components['color'].properties.vibrance.data).toEqual([0.0]);
+    });
+
+    it('creates RVColorVibrance object with custom vibrance', () => {
+        const result = SessionGTOExporter.buildColorVibranceObject('vibNode', {
+            vibrance: 0.7,
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['color'].properties.vibrance.data).toEqual([0.7]);
+    });
+});
+
+describe('SessionGTOExporter.buildColorShadowObject', () => {
+    it('creates RVColorShadow object with default settings', () => {
+        const result = SessionGTOExporter.buildColorShadowObject('shadowNode');
+
+        expect(result.name).toBe('shadowNode');
+        expect(result.protocol).toBe('RVColorShadow');
+
+        const components = result.components as Record<string, any>;
+        expect(components['color'].properties.shadow.data).toEqual([0.0]);
+    });
+
+    it('creates RVColorShadow object with custom shadow', () => {
+        const result = SessionGTOExporter.buildColorShadowObject('shadowNode', {
+            shadow: -0.3,
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['color'].properties.shadow.data).toEqual([-0.3]);
+    });
+});
+
+describe('SessionGTOExporter.buildColorHighlightObject', () => {
+    it('creates RVColorHighlight object with default settings', () => {
+        const result = SessionGTOExporter.buildColorHighlightObject('highlightNode');
+
+        expect(result.name).toBe('highlightNode');
+        expect(result.protocol).toBe('RVColorHighlight');
+
+        const components = result.components as Record<string, any>;
+        expect(components['color'].properties.highlight.data).toEqual([0.0]);
+    });
+
+    it('creates RVColorHighlight object with custom highlight', () => {
+        const result = SessionGTOExporter.buildColorHighlightObject('highlightNode', {
+            highlight: 0.4,
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['color'].properties.highlight.data).toEqual([0.4]);
+    });
+});
+
+describe('SessionGTOExporter.buildColorGrayScaleObject', () => {
+    it('creates RVColorGrayScale object with default (inactive)', () => {
+        const result = SessionGTOExporter.buildColorGrayScaleObject('grayNode');
+
+        expect(result.name).toBe('grayNode');
+        expect(result.protocol).toBe('RVColorGrayScale');
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.active.data).toEqual([0]);
+    });
+
+    it('creates RVColorGrayScale object when active', () => {
+        const result = SessionGTOExporter.buildColorGrayScaleObject('grayNode', {
+            active: true,
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.active.data).toEqual([1]);
+    });
+});
+
+describe('SessionGTOExporter.buildColorCDLObject', () => {
+    it('creates RVColorCDL object with default settings', () => {
+        const result = SessionGTOExporter.buildColorCDLObject('cdlNode');
+
+        expect(result.name).toBe('cdlNode');
+        expect(result.protocol).toBe('RVColorCDL');
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.active.data).toEqual([1]);
+        expect(components['node'].properties.colorspace.data).toEqual(['rec709']);
+        expect(components['node'].properties.slope.data).toEqual([1, 1, 1]);
+        expect(components['node'].properties.offset.data).toEqual([0, 0, 0]);
+        expect(components['node'].properties.power.data).toEqual([1, 1, 1]);
+        expect(components['node'].properties.saturation.data).toEqual([1.0]);
+    });
+
+    it('creates RVColorCDL object with custom CDL values', () => {
+        const result = SessionGTOExporter.buildColorCDLObject('cdlNode', {
+            slope: [1.1, 1.0, 0.9],
+            offset: [0.01, 0, -0.01],
+            power: [1.0, 1.1, 1.0],
+            saturation: 0.95,
+            colorspace: 'aceslog',
+            noClamp: true,
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.slope.data).toEqual([1.1, 1.0, 0.9]);
+        expect(components['node'].properties.offset.data).toEqual([0.01, 0, -0.01]);
+        expect(components['node'].properties.power.data).toEqual([1.0, 1.1, 1.0]);
+        expect(components['node'].properties.saturation.data).toEqual([0.95]);
+        expect(components['node'].properties.colorspace.data).toEqual(['aceslog']);
+        expect(components['node'].properties.noClamp.data).toEqual([1]);
+    });
+
+    it('creates RVColorCDL object with file reference', () => {
+        const result = SessionGTOExporter.buildColorCDLObject('cdlNode', {
+            file: '/path/to/grade.cdl',
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.file.data).toEqual(['/path/to/grade.cdl']);
+    });
+});
+
+describe('SessionGTOExporter.buildColorLinearToSRGBObject', () => {
+    it('creates RVColorLinearToSRGB object with default settings', () => {
+        const result = SessionGTOExporter.buildColorLinearToSRGBObject('linearToSRGBNode');
+
+        expect(result.name).toBe('linearToSRGBNode');
+        expect(result.protocol).toBe('RVColorLinearToSRGB');
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.active.data).toEqual([1]);
+    });
+
+    it('creates RVColorLinearToSRGB object when disabled', () => {
+        const result = SessionGTOExporter.buildColorLinearToSRGBObject('linearToSRGBNode', {
+            active: false,
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.active.data).toEqual([0]);
+    });
+});
+
+describe('SessionGTOExporter.buildColorSRGBToLinearObject', () => {
+    it('creates RVColorSRGBToLinear object with default settings', () => {
+        const result = SessionGTOExporter.buildColorSRGBToLinearObject('srgbToLinearNode');
+
+        expect(result.name).toBe('srgbToLinearNode');
+        expect(result.protocol).toBe('RVColorSRGBToLinear');
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.active.data).toEqual([1]);
+    });
+
+    it('creates RVColorSRGBToLinear object when disabled', () => {
+        const result = SessionGTOExporter.buildColorSRGBToLinearObject('srgbToLinearNode', {
+            active: false,
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.active.data).toEqual([0]);
+    });
+});

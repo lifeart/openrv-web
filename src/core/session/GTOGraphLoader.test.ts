@@ -1599,6 +1599,381 @@ describe('GTOGraphLoader', () => {
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('waveformHeight', 200);
     });
 
+    it('parses RVOCIO components', () => {
+      const mockNode = {
+        type: 'RVOCIO',
+        name: 'ocioNode',
+        properties: {
+          has: vi.fn((key: string) =>
+            ['ocioActive', 'ocioFunction', 'ocioInColorSpace', 'ocioLut3DSize', 'ocioOutColorSpace',
+             'ocioLook', 'ocioLookDirection', 'ocioDisplay', 'ocioView', 'ocioDither', 'ocioChannelOrder',
+             'ocioInTransformUrl', 'ocioOutTransformUrl', 'ocioConfigDescription', 'ocioWorkingDir'].includes(key)
+          ),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'ocioNode',
+            protocol: 'RVOCIO',
+            components: {
+              ocio: {
+                active: 1,
+                function: 'color',
+                inColorSpace: 'ACES - ACEScg',
+                lut3DSize: 64,
+              },
+              ocio_color: {
+                outColorSpace: 'sRGB',
+              },
+              ocio_look: {
+                look: 'FilmLook',
+                direction: 1,
+              },
+              ocio_display: {
+                display: 'sRGB',
+                view: 'Standard',
+              },
+              color: {
+                dither: 1,
+                channelOrder: 'BGRA',
+              },
+              inTransform: {
+                url: '/path/to/input.csp',
+              },
+              outTransform: {
+                url: '/path/to/output.csp',
+              },
+              config: {
+                description: 'ACES 1.2',
+                workingDir: '/studio/ocio',
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('ocioActive', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('ocioFunction', 'color');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('ocioInColorSpace', 'ACES - ACEScg');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('ocioLut3DSize', 64);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('ocioOutColorSpace', 'sRGB');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('ocioLook', 'FilmLook');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('ocioLookDirection', 1);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('ocioDisplay', 'sRGB');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('ocioView', 'Standard');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('ocioDither', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('ocioChannelOrder', 'BGRA');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('ocioInTransformUrl', '/path/to/input.csp');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('ocioOutTransformUrl', '/path/to/output.csp');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('ocioConfigDescription', 'ACES 1.2');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('ocioWorkingDir', '/studio/ocio');
+    });
+
+    it('parses RVICCTransform components', () => {
+      const mockNode = {
+        type: 'RVICCTransform',
+        name: 'iccNode',
+        properties: {
+          has: vi.fn((key: string) =>
+            ['iccActive', 'iccSamples2D', 'iccSamples3D', 'iccInProfileUrl', 'iccInProfileDescription',
+             'iccOutProfileUrl', 'iccOutProfileDescription'].includes(key)
+          ),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'iccNode',
+            protocol: 'RVICCTransform',
+            components: {
+              node: {
+                active: 1,
+                samples2D: 512,
+                samples3D: 64,
+              },
+              inProfile: {
+                url: '/profiles/sRGB.icc',
+                description: 'sRGB IEC61966-2.1',
+              },
+              outProfile: {
+                url: '/profiles/P3.icc',
+                description: 'Display P3',
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('iccActive', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('iccSamples2D', 512);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('iccSamples3D', 64);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('iccInProfileUrl', '/profiles/sRGB.icc');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('iccInProfileDescription', 'sRGB IEC61966-2.1');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('iccOutProfileUrl', '/profiles/P3.icc');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('iccOutProfileDescription', 'Display P3');
+    });
+
+    it('parses RVColorExposure components', () => {
+      const mockNode = {
+        type: 'RVColorExposure',
+        name: 'exposureNode',
+        properties: {
+          has: vi.fn((key: string) => ['colorExposureActive', 'colorExposure'].includes(key)),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'exposureNode',
+            protocol: 'RVColorExposure',
+            components: {
+              color: {
+                active: 1,
+                exposure: 1.5,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('colorExposureActive', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('colorExposure', 1.5);
+    });
+
+    it('parses RVColorCurve components', () => {
+      const mockNode = {
+        type: 'RVColorCurve',
+        name: 'curveNode',
+        properties: {
+          has: vi.fn((key: string) => ['colorCurveActive', 'colorContrast'].includes(key)),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'curveNode',
+            protocol: 'RVColorCurve',
+            components: {
+              color: {
+                active: 1,
+                contrast: 0.5,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('colorCurveActive', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('colorContrast', 0.5);
+    });
+
+    it('parses RVColorTemperature components', () => {
+      const mockNode = {
+        type: 'RVColorTemperature',
+        name: 'tempNode',
+        properties: {
+          has: vi.fn((key: string) =>
+            ['colorTemperatureActive', 'colorInWhitePrimary', 'colorInTemperature', 'colorOutTemperature', 'colorTemperatureMethod'].includes(key)),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'tempNode',
+            protocol: 'RVColorTemperature',
+            components: {
+              color: {
+                active: 1,
+                inWhitePrimary: [0.31, 0.33],
+                inTemperature: 5500,
+                outTemperature: 7000,
+                method: 1,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('colorTemperatureActive', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('colorInWhitePrimary', [0.31, 0.33]);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('colorInTemperature', 5500);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('colorOutTemperature', 7000);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('colorTemperatureMethod', 1);
+    });
+
+    it('parses RVColorSaturation components', () => {
+      const mockNode = {
+        type: 'RVColorSaturation',
+        name: 'satNode',
+        properties: {
+          has: vi.fn((key: string) => ['colorSaturationActive', 'colorSaturation'].includes(key)),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'satNode',
+            protocol: 'RVColorSaturation',
+            components: {
+              color: {
+                active: 1,
+                saturation: 1.5,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('colorSaturationActive', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('colorSaturation', 1.5);
+    });
+
+    it('parses RVColorCDL components', () => {
+      const mockNode = {
+        type: 'RVColorCDL',
+        name: 'cdlNode',
+        properties: {
+          has: vi.fn((key: string) =>
+            ['cdlActive', 'cdlFile', 'cdlColorspace', 'cdlSlope', 'cdlOffset', 'cdlPower', 'cdlSaturation', 'cdlNoClamp'].includes(key)),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'cdlNode',
+            protocol: 'RVColorCDL',
+            components: {
+              node: {
+                active: 1,
+                file: '/path/to/grade.cdl',
+                colorspace: 'aceslog',
+                slope: [1.1, 1.0, 0.9],
+                offset: [0.01, 0, -0.01],
+                power: [1.0, 1.1, 1.0],
+                saturation: 0.95,
+                noClamp: 1,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('cdlActive', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('cdlFile', '/path/to/grade.cdl');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('cdlColorspace', 'aceslog');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('cdlSlope', [1.1, 1.0, 0.9]);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('cdlOffset', [0.01, 0, -0.01]);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('cdlPower', [1.0, 1.1, 1.0]);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('cdlSaturation', 0.95);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('cdlNoClamp', true);
+    });
+
+    it('parses RVColorLinearToSRGB components', () => {
+      const mockNode = {
+        type: 'RVColorLinearToSRGB',
+        name: 'linearToSRGBNode',
+        properties: {
+          has: vi.fn((key: string) => ['linearToSRGBActive'].includes(key)),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'linearToSRGBNode',
+            protocol: 'RVColorLinearToSRGB',
+            components: {
+              node: {
+                active: 1,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('linearToSRGBActive', true);
+    });
+
     it('uses default session name when none provided', () => {
       vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
 

@@ -85,6 +85,26 @@ const PROTOCOL_TO_NODE_TYPE: Record<string, string> = {
   RVViewGroup: 'RVViewGroup',
   RVSoundTrack: 'RVSoundTrack',
   Waveform: 'Waveform',
+
+  // Color management nodes
+  RVOCIO: 'RVOCIO',
+  RVICCTransform: 'RVICCTransform',
+  RVICCLinearizeTransform: 'RVICCLinearizeTransform',
+  RVICCDisplayTransform: 'RVICCDisplayTransform',
+
+  // Color processing nodes
+  RVColorExposure: 'RVColorExposure',
+  RVColorCurve: 'RVColorCurve',
+  RVColorTemperature: 'RVColorTemperature',
+  RVColorSaturation: 'RVColorSaturation',
+  RVColorVibrance: 'RVColorVibrance',
+  RVColorShadow: 'RVColorShadow',
+  RVColorHighlight: 'RVColorHighlight',
+  RVColorGrayScale: 'RVColorGrayScale',
+  RVColorCDL: 'RVColorCDL',
+  RVColorACESLogCDL: 'RVColorACESLogCDL',
+  RVColorLinearToSRGB: 'RVColorLinearToSRGB',
+  RVColorSRGBToLinear: 'RVColorSRGBToLinear',
 };
 
 /**
@@ -1056,6 +1076,249 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
 
         if (typeof width === 'number') nodeInfo.properties.waveformWidth = width;
         if (typeof height === 'number') nodeInfo.properties.waveformHeight = height;
+      }
+    }
+
+    // Parse RVOCIO properties
+    if (protocol === 'RVOCIO') {
+      const ocioComp = obj.component('ocio');
+      if (ocioComp?.exists()) {
+        const active = ocioComp.property('active').value() as number;
+        const func = ocioComp.property('function').value() as string;
+        const inColorSpace = ocioComp.property('inColorSpace').value() as string;
+        const lut3DSize = ocioComp.property('lut3DSize').value() as number;
+
+        if (typeof active === 'number') nodeInfo.properties.ocioActive = active !== 0;
+        if (typeof func === 'string') nodeInfo.properties.ocioFunction = func;
+        if (typeof inColorSpace === 'string') nodeInfo.properties.ocioInColorSpace = inColorSpace;
+        if (typeof lut3DSize === 'number') nodeInfo.properties.ocioLut3DSize = lut3DSize;
+      }
+
+      const ocioColorComp = obj.component('ocio_color');
+      if (ocioColorComp?.exists()) {
+        const outColorSpace = ocioColorComp.property('outColorSpace').value() as string;
+        if (typeof outColorSpace === 'string') nodeInfo.properties.ocioOutColorSpace = outColorSpace;
+      }
+
+      const ocioLookComp = obj.component('ocio_look');
+      if (ocioLookComp?.exists()) {
+        const look = ocioLookComp.property('look').value() as string;
+        const direction = ocioLookComp.property('direction').value() as number;
+
+        if (typeof look === 'string') nodeInfo.properties.ocioLook = look;
+        if (typeof direction === 'number') nodeInfo.properties.ocioLookDirection = direction;
+      }
+
+      const ocioDisplayComp = obj.component('ocio_display');
+      if (ocioDisplayComp?.exists()) {
+        const display = ocioDisplayComp.property('display').value() as string;
+        const view = ocioDisplayComp.property('view').value() as string;
+
+        if (typeof display === 'string') nodeInfo.properties.ocioDisplay = display;
+        if (typeof view === 'string') nodeInfo.properties.ocioView = view;
+      }
+
+      const colorComp = obj.component('color');
+      if (colorComp?.exists()) {
+        const dither = colorComp.property('dither').value() as number;
+        const channelOrder = colorComp.property('channelOrder').value() as string;
+
+        if (typeof dither === 'number') nodeInfo.properties.ocioDither = dither !== 0;
+        if (typeof channelOrder === 'string') nodeInfo.properties.ocioChannelOrder = channelOrder;
+      }
+
+      const inTransformComp = obj.component('inTransform');
+      if (inTransformComp?.exists()) {
+        const url = inTransformComp.property('url').value() as string;
+        if (typeof url === 'string') nodeInfo.properties.ocioInTransformUrl = url;
+      }
+
+      const outTransformComp = obj.component('outTransform');
+      if (outTransformComp?.exists()) {
+        const url = outTransformComp.property('url').value() as string;
+        if (typeof url === 'string') nodeInfo.properties.ocioOutTransformUrl = url;
+      }
+
+      const configComp = obj.component('config');
+      if (configComp?.exists()) {
+        const description = configComp.property('description').value() as string;
+        const workingDir = configComp.property('workingDir').value() as string;
+
+        if (typeof description === 'string') nodeInfo.properties.ocioConfigDescription = description;
+        if (typeof workingDir === 'string') nodeInfo.properties.ocioWorkingDir = workingDir;
+      }
+    }
+
+    // Parse RVICCTransform properties
+    if (protocol === 'RVICCTransform' || protocol === 'RVICCLinearizeTransform' || protocol === 'RVICCDisplayTransform') {
+      const nodeComp = obj.component('node');
+      if (nodeComp?.exists()) {
+        const active = nodeComp.property('active').value() as number;
+        const samples2D = nodeComp.property('samples2D').value() as number;
+        const samples3D = nodeComp.property('samples3D').value() as number;
+
+        if (typeof active === 'number') nodeInfo.properties.iccActive = active !== 0;
+        if (typeof samples2D === 'number') nodeInfo.properties.iccSamples2D = samples2D;
+        if (typeof samples3D === 'number') nodeInfo.properties.iccSamples3D = samples3D;
+      }
+
+      const inProfileComp = obj.component('inProfile');
+      if (inProfileComp?.exists()) {
+        const url = inProfileComp.property('url').value() as string;
+        const description = inProfileComp.property('description').value() as string;
+
+        if (typeof url === 'string') nodeInfo.properties.iccInProfileUrl = url;
+        if (typeof description === 'string') nodeInfo.properties.iccInProfileDescription = description;
+      }
+
+      const outProfileComp = obj.component('outProfile');
+      if (outProfileComp?.exists()) {
+        const url = outProfileComp.property('url').value() as string;
+        const description = outProfileComp.property('description').value() as string;
+
+        if (typeof url === 'string') nodeInfo.properties.iccOutProfileUrl = url;
+        if (typeof description === 'string') nodeInfo.properties.iccOutProfileDescription = description;
+      }
+    }
+
+    // Parse RVColorExposure properties
+    if (protocol === 'RVColorExposure') {
+      const colorComp = obj.component('color');
+      if (colorComp?.exists()) {
+        const active = colorComp.property('active').value() as number;
+        const exposure = colorComp.property('exposure').value() as number;
+
+        if (typeof active === 'number') nodeInfo.properties.colorExposureActive = active !== 0;
+        if (typeof exposure === 'number') nodeInfo.properties.colorExposure = exposure;
+      }
+    }
+
+    // Parse RVColorCurve properties
+    if (protocol === 'RVColorCurve') {
+      const colorComp = obj.component('color');
+      if (colorComp?.exists()) {
+        const active = colorComp.property('active').value() as number;
+        const contrast = colorComp.property('contrast').value() as number;
+
+        if (typeof active === 'number') nodeInfo.properties.colorCurveActive = active !== 0;
+        if (typeof contrast === 'number') nodeInfo.properties.colorContrast = contrast;
+      }
+    }
+
+    // Parse RVColorTemperature properties
+    if (protocol === 'RVColorTemperature') {
+      const colorComp = obj.component('color');
+      if (colorComp?.exists()) {
+        const active = colorComp.property('active').value() as number;
+        const inWhitePrimary = colorComp.property('inWhitePrimary').value() as number[];
+        const inTemperature = colorComp.property('inTemperature').value() as number;
+        const outTemperature = colorComp.property('outTemperature').value() as number;
+        const method = colorComp.property('method').value() as number;
+
+        if (typeof active === 'number') nodeInfo.properties.colorTemperatureActive = active !== 0;
+        if (Array.isArray(inWhitePrimary)) nodeInfo.properties.colorInWhitePrimary = inWhitePrimary;
+        if (typeof inTemperature === 'number') nodeInfo.properties.colorInTemperature = inTemperature;
+        if (typeof outTemperature === 'number') nodeInfo.properties.colorOutTemperature = outTemperature;
+        if (typeof method === 'number') nodeInfo.properties.colorTemperatureMethod = method;
+      }
+    }
+
+    // Parse RVColorSaturation properties
+    if (protocol === 'RVColorSaturation') {
+      const colorComp = obj.component('color');
+      if (colorComp?.exists()) {
+        const active = colorComp.property('active').value() as number;
+        const saturation = colorComp.property('saturation').value() as number;
+
+        if (typeof active === 'number') nodeInfo.properties.colorSaturationActive = active !== 0;
+        if (typeof saturation === 'number') nodeInfo.properties.colorSaturation = saturation;
+      }
+    }
+
+    // Parse RVColorVibrance properties
+    if (protocol === 'RVColorVibrance') {
+      const colorComp = obj.component('color');
+      if (colorComp?.exists()) {
+        const active = colorComp.property('active').value() as number;
+        const vibrance = colorComp.property('vibrance').value() as number;
+
+        if (typeof active === 'number') nodeInfo.properties.colorVibranceActive = active !== 0;
+        if (typeof vibrance === 'number') nodeInfo.properties.colorVibrance = vibrance;
+      }
+    }
+
+    // Parse RVColorShadow properties
+    if (protocol === 'RVColorShadow') {
+      const colorComp = obj.component('color');
+      if (colorComp?.exists()) {
+        const active = colorComp.property('active').value() as number;
+        const shadow = colorComp.property('shadow').value() as number;
+
+        if (typeof active === 'number') nodeInfo.properties.colorShadowActive = active !== 0;
+        if (typeof shadow === 'number') nodeInfo.properties.colorShadow = shadow;
+      }
+    }
+
+    // Parse RVColorHighlight properties
+    if (protocol === 'RVColorHighlight') {
+      const colorComp = obj.component('color');
+      if (colorComp?.exists()) {
+        const active = colorComp.property('active').value() as number;
+        const highlight = colorComp.property('highlight').value() as number;
+
+        if (typeof active === 'number') nodeInfo.properties.colorHighlightActive = active !== 0;
+        if (typeof highlight === 'number') nodeInfo.properties.colorHighlight = highlight;
+      }
+    }
+
+    // Parse RVColorGrayScale properties
+    if (protocol === 'RVColorGrayScale') {
+      const nodeComp = obj.component('node');
+      if (nodeComp?.exists()) {
+        const active = nodeComp.property('active').value() as number;
+        if (typeof active === 'number') nodeInfo.properties.colorGrayScaleActive = active !== 0;
+      }
+    }
+
+    // Parse RVColorCDL properties
+    if (protocol === 'RVColorCDL' || protocol === 'RVColorACESLogCDL') {
+      const nodeComp = obj.component('node');
+      if (nodeComp?.exists()) {
+        const active = nodeComp.property('active').value() as number;
+        const file = nodeComp.property('file').value() as string;
+        const colorspace = nodeComp.property('colorspace').value() as string;
+        const slope = nodeComp.property('slope').value() as number[];
+        const offset = nodeComp.property('offset').value() as number[];
+        const power = nodeComp.property('power').value() as number[];
+        const saturation = nodeComp.property('saturation').value() as number;
+        const noClamp = nodeComp.property('noClamp').value() as number;
+
+        if (typeof active === 'number') nodeInfo.properties.cdlActive = active !== 0;
+        if (typeof file === 'string') nodeInfo.properties.cdlFile = file;
+        if (typeof colorspace === 'string') nodeInfo.properties.cdlColorspace = colorspace;
+        if (Array.isArray(slope)) nodeInfo.properties.cdlSlope = slope;
+        if (Array.isArray(offset)) nodeInfo.properties.cdlOffset = offset;
+        if (Array.isArray(power)) nodeInfo.properties.cdlPower = power;
+        if (typeof saturation === 'number') nodeInfo.properties.cdlSaturation = saturation;
+        if (typeof noClamp === 'number') nodeInfo.properties.cdlNoClamp = noClamp !== 0;
+      }
+    }
+
+    // Parse RVColorLinearToSRGB properties
+    if (protocol === 'RVColorLinearToSRGB') {
+      const nodeComp = obj.component('node');
+      if (nodeComp?.exists()) {
+        const active = nodeComp.property('active').value() as number;
+        if (typeof active === 'number') nodeInfo.properties.linearToSRGBActive = active !== 0;
+      }
+    }
+
+    // Parse RVColorSRGBToLinear properties
+    if (protocol === 'RVColorSRGBToLinear') {
+      const nodeComp = obj.component('node');
+      if (nodeComp?.exists()) {
+        const active = nodeComp.property('active').value() as number;
+        if (typeof active === 'number') nodeInfo.properties.srgbToLinearActive = active !== 0;
       }
     }
 
