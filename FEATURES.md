@@ -1666,11 +1666,11 @@ Automatically save session state at regular intervals to prevent data loss.
 - Version recovery sessions
 
 #### Test Cases
-- [ ] AUTOSAVE-001: Session auto-saves at interval
-- [ ] AUTOSAVE-002: Recovery prompt appears after crash
-- [ ] AUTOSAVE-003: Manual save works
-- [ ] AUTOSAVE-004: Save indicator visible during save
-- [ ] AUTOSAVE-005: Auto-save interval configurable
+- [x] AUTOSAVE-001: Session auto-saves at interval
+- [x] AUTOSAVE-002: Recovery prompt appears after crash
+- [x] AUTOSAVE-003: Manual save works
+- [x] AUTOSAVE-004: Save indicator visible during save
+- [ ] AUTOSAVE-005: Auto-save interval configurable (UI settings pending)
 
 #### Corner Cases
 - Very large sessions (storage limits)
@@ -2128,7 +2128,7 @@ Configurable info overlay showing file metadata, frame info, and color values.
 10. ✅ A/B Wipe Compare (3.3)
 11. EXR Support (7.1)
 12. Web Worker Frame Decoding (9.1)
-13. Session Auto-Save (8.1) - NEW
+13. ✅ Session Auto-Save (8.1)
 
 ### Phase 2 - Medium Priority (Enhancement)
 1. ✅ Vibrance Control (1.3)

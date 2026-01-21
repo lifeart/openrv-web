@@ -27,7 +27,7 @@ import { FalseColorControl } from './ui/components/FalseColorControl';
 import { ZebraControl } from './ui/components/ZebraControl';
 import { HSLQualifierControl } from './ui/components/HSLQualifierControl';
 import { exportSequence } from './utils/SequenceExporter';
-import { showAlert, showModal, closeModal } from './ui/components/shared/Modal';
+import { showAlert, showModal, closeModal, showConfirm } from './ui/components/shared/Modal';
 import { SessionSerializer } from './core/session/SessionSerializer';
 import { SessionGTOExporter } from './core/session/SessionGTOExporter';
 import { SessionGTOStore } from './core/session/SessionGTOStore';
@@ -41,6 +41,8 @@ import { InfoPanel } from './ui/components/InfoPanel';
 import { MarkerListPanel } from './ui/components/MarkerListPanel';
 import { CacheIndicator } from './ui/components/CacheIndicator';
 import { TextFormattingToolbar } from './ui/components/TextFormattingToolbar';
+import { AutoSaveManager } from './core/session/AutoSaveManager';
+import { AutoSaveIndicator } from './ui/components/AutoSaveIndicator';
 
 export class App {
   private container: HTMLElement | null = null;
@@ -82,6 +84,8 @@ export class App {
   private markerListPanel: MarkerListPanel;
   private cacheIndicator: CacheIndicator;
   private textFormattingToolbar: TextFormattingToolbar;
+  private autoSaveManager: AutoSaveManager;
+  private autoSaveIndicator: AutoSaveIndicator;
 
   // History recording state
   private colorHistoryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -104,6 +108,13 @@ export class App {
     this.headerBar.on('showCustomKeyBindings', () => this.showCustomKeyBindings());
     this.headerBar.on('saveProject', () => this.saveProject());
     this.headerBar.on('openProject', (file) => this.openProject(file));
+
+    // Create AutoSave Manager and Indicator
+    this.autoSaveManager = new AutoSaveManager();
+    this.autoSaveIndicator = new AutoSaveIndicator();
+    this.autoSaveIndicator.connect(this.autoSaveManager);
+    this.autoSaveIndicator.setRetryCallback(() => this.retryAutoSave());
+    this.headerBar.setAutoSaveIndicator(this.autoSaveIndicator.render());
 
     // Create TabBar and ContextToolbar
     this.tabBar = new TabBar();
@@ -442,7 +453,7 @@ export class App {
     );
   }
 
-  mount(selector: string): void {
+  async mount(selector: string): Promise<void> {
     this.container = document.querySelector(selector);
     if (!this.container) {
       throw new Error(`Container not found: ${selector}`);
@@ -451,6 +462,98 @@ export class App {
     this.createLayout();
     this.bindEvents();
     this.start();
+
+    // Initialize auto-save and check for recovery
+    await this.initAutoSave();
+  }
+
+  /**
+   * Initialize auto-save system and handle crash recovery
+   */
+  private async initAutoSave(): Promise<void> {
+    try {
+      // Listen for storage warnings
+      this.autoSaveManager.on('storageWarning', (info) => {
+        showAlert(
+          `Storage space is running low (${info.percentUsed}% used). Consider clearing old auto-saves or freeing up browser storage.`,
+          { type: 'warning', title: 'Storage Warning' }
+        );
+      });
+
+      const hasRecovery = await this.autoSaveManager.initialize();
+
+      if (hasRecovery) {
+        // Show recovery prompt
+        const entries = await this.autoSaveManager.listAutoSaves();
+        const mostRecent = entries[0];
+        if (mostRecent) {
+          const savedTime = new Date(mostRecent.savedAt).toLocaleString();
+
+          const recover = await showConfirm(
+            `A previous session "${mostRecent.name}" was found from ${savedTime}. Would you like to recover it?`,
+            {
+              title: 'Recover Session',
+              confirmText: 'Recover',
+              cancelText: 'Discard',
+            }
+          );
+
+          if (recover) {
+            await this.recoverAutoSave(mostRecent.id);
+          } else {
+            // Clear old auto-saves if user discards
+            await this.autoSaveManager.clearAll();
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Auto-save initialization failed:', err);
+    }
+  }
+
+  /**
+   * Recover session from auto-save
+   */
+  private async recoverAutoSave(id: string): Promise<void> {
+    try {
+      const state = await this.autoSaveManager.getAutoSave(id);
+      if (state) {
+        const { loadedMedia, warnings } = await SessionSerializer.fromJSON(state, {
+          session: this.session,
+          paintEngine: this.paintEngine,
+          viewer: this.viewer,
+        });
+
+        // Update UI controls with restored state
+        this.colorControls.setAdjustments(state.color);
+        this.cdlControl.setCDL(state.cdl);
+        this.filterControl.setSettings(state.filters);
+        this.transformControl.setTransform(state.transform);
+        this.cropControl.setState(state.crop);
+        this.lensControl.setParams(state.lens);
+        // Note: wipe state is restored via viewer.setWipeState in SessionSerializer.fromJSON
+
+        if (warnings.length > 0) {
+          showAlert(`Session recovered with ${warnings.length} warning(s):\n${warnings.join('\n')}`, {
+            title: 'Recovery Warnings',
+            type: 'warning',
+          });
+        } else if (loadedMedia > 0) {
+          showAlert(`Session recovered successfully with ${loadedMedia} media file(s).`, {
+            title: 'Recovery Complete',
+            type: 'success',
+          });
+        }
+
+        // Clear the recovered entry
+        await this.autoSaveManager.deleteAutoSave(id);
+      }
+    } catch (err) {
+      showAlert(`Failed to recover session: ${err}`, {
+        title: 'Recovery Failed',
+        type: 'error',
+      });
+    }
   }
 
   private createLayout(): void {
@@ -1970,6 +2073,47 @@ export class App {
       paintEngine: this.paintEngine,
       scopesState: this.scopesControl.getState(),
     });
+
+    // Mark session as dirty for auto-save
+    this.markAutoSaveDirty();
+  }
+
+  /**
+   * Mark the session as having unsaved changes for auto-save
+   * Uses lazy evaluation - state is only serialized when actually saving
+   */
+  private markAutoSaveDirty(): void {
+    // Pass a getter function for lazy evaluation - serialization only happens when saving
+    this.autoSaveManager.markDirty(() =>
+      SessionSerializer.toJSON(
+        {
+          session: this.session,
+          paintEngine: this.paintEngine,
+          viewer: this.viewer,
+        },
+        this.session.currentSource?.name || 'Untitled'
+      )
+    );
+    this.autoSaveIndicator.markUnsaved();
+  }
+
+  /**
+   * Retry auto-save after a failure
+   */
+  private retryAutoSave(): void {
+    try {
+      const state = SessionSerializer.toJSON(
+        {
+          session: this.session,
+          paintEngine: this.paintEngine,
+          viewer: this.viewer,
+        },
+        this.session.currentSource?.name || 'Untitled'
+      );
+      this.autoSaveManager.saveNow(state);
+    } catch (err) {
+      console.error('Failed to retry auto-save:', err);
+    }
   }
 
   private async saveProject(): Promise<void> {
@@ -2069,5 +2213,10 @@ export class App {
     this.waveform.dispose();
     this.vectorscope.dispose();
     this.textFormattingToolbar.dispose();
+    this.autoSaveIndicator.dispose();
+    // Dispose auto-save manager (fire and forget - we can't await in dispose)
+    this.autoSaveManager.dispose().catch(err => {
+      console.error('Error disposing auto-save manager:', err);
+    });
   }
 }

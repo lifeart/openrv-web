@@ -38,6 +38,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private fileInput!: HTMLInputElement;
   private projectInput!: HTMLInputElement;
   private sessionNameDisplay!: HTMLElement;
+  private autoSaveSlot!: HTMLElement;
 
   constructor(session: Session) {
     super();
@@ -105,6 +106,17 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // === SESSION NAME DISPLAY ===
     this.sessionNameDisplay = this.createSessionNameDisplay();
     this.container.appendChild(this.sessionNameDisplay);
+
+    // === AUTO-SAVE INDICATOR SLOT ===
+    this.autoSaveSlot = document.createElement('div');
+    this.autoSaveSlot.className = 'autosave-slot';
+    this.autoSaveSlot.dataset.testid = 'autosave-slot';
+    this.autoSaveSlot.style.cssText = `
+      display: flex;
+      align-items: center;
+      margin-left: 8px;
+    `;
+    this.container.appendChild(this.autoSaveSlot);
     this.addDivider();
 
     // === PLAYBACK CONTROLS GROUP ===
@@ -606,5 +618,21 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
   getTimecodeDisplay(): TimecodeDisplay {
     return this.timecodeDisplay;
+  }
+
+  /**
+   * Set the auto-save indicator element to display in the header
+   */
+  setAutoSaveIndicator(element: HTMLElement): void {
+    // Clear existing content
+    this.autoSaveSlot.innerHTML = '';
+    this.autoSaveSlot.appendChild(element);
+  }
+
+  /**
+   * Get the auto-save indicator slot element
+   */
+  getAutoSaveSlot(): HTMLElement {
+    return this.autoSaveSlot;
   }
 }
