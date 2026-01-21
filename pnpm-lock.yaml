@@ -12,8 +12,8 @@ importers:
         specifier: ^3.4.3
         version: 3.4.4
       gto-js:
-        specifier: link:../gto-js
-        version: link:../gto-js
+        specifier: 1.0.0
+        version: 1.0.0
       mediabunny:
         specifier: ^1.28.0
         version: 1.28.0
@@ -756,6 +756,10 @@ packages:
   gopd@1.2.0:
     resolution: {integrity: sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==}
     engines: {node: '>= 0.4'}
+
+  gto-js@1.0.0:
+    resolution: {integrity: sha512-xHns9vzE28Mg1r+YcyOex0Cabh3DRnnuVdUP1jc8vKnI2vklMRF16rJilFG/htrMUCw4QZw4XhVNcT5CtyDsow==}
+    engines: {node: '>=18.0.0'}
 
   has-flag@4.0.0:
     resolution: {integrity: sha512-EykJT/Q1KjTWctppgIAgfSO0tKVuZUjhgMr17kqTumMl6Afv3EISleU7qZUzoXDFTAHTDC4NOoG/ZxU3EvlMPQ==}
@@ -1833,6 +1837,8 @@ snapshots:
       path-is-absolute: 1.0.1
 
   gopd@1.2.0: {}
+
+  gto-js@1.0.0: {}
 
   has-flag@4.0.0: {}
 
