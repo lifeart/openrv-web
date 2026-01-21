@@ -320,6 +320,246 @@ test.describe('Marker Deletion', () => {
   });
 });
 
+/**
+ * Keyboard Input Isolation Tests
+ *
+ * These tests verify that when typing in input fields (like marker notes),
+ * keyboard shortcuts don't interfere with text input.
+ * This is a regression test for the bug where Space would toggle playback
+ * instead of inserting a space character.
+ */
+test.describe('Keyboard Input Isolation', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+    await loadVideoFile(page);
+    // Show marker panel
+    await page.keyboard.press('Shift+Alt+KeyM');
+    await page.waitForTimeout(100);
+    // Add a marker
+    await page.keyboard.press('m');
+    await page.waitForTimeout(100);
+  });
+
+  test('MKR-R001: Space key inserts space in note input instead of toggling playback', async ({ page }) => {
+    const state = await getSessionState(page);
+
+    // Click edit to open note input
+    const editButton = page.locator(`[data-testid="marker-edit-${state.currentFrame}"]`);
+    await editButton.click();
+    await page.waitForTimeout(100);
+
+    // Verify not playing initially
+    let sessionState = await getSessionState(page);
+    expect(sessionState.isPlaying).toBe(false);
+
+    // Focus and type in the input including spaces
+    const noteInput = page.locator(`[data-testid="marker-note-input-${state.currentFrame}"]`);
+    await noteInput.focus();
+    await page.keyboard.type('Hello World');
+    await page.waitForTimeout(100);
+
+    // Verify playback was NOT triggered by space key
+    sessionState = await getSessionState(page);
+    expect(sessionState.isPlaying).toBe(false);
+
+    // Verify the text was entered correctly with space
+    const inputValue = await noteInput.inputValue();
+    expect(inputValue).toBe('Hello World');
+  });
+
+  test('MKR-R002: Home/End keys move cursor in note input instead of navigating timeline', async ({ page }) => {
+    const state = await getSessionState(page);
+
+    // Click edit to open note input
+    const editButton = page.locator(`[data-testid="marker-edit-${state.currentFrame}"]`);
+    await editButton.click();
+    await page.waitForTimeout(100);
+
+    // Get current frame
+    const initialFrame = state.currentFrame;
+
+    // Focus and type text
+    const noteInput = page.locator(`[data-testid="marker-note-input-${state.currentFrame}"]`);
+    await noteInput.focus();
+    await noteInput.fill('Test content');
+
+    // Press Home and End keys
+    await page.keyboard.press('Home');
+    await page.waitForTimeout(50);
+    await page.keyboard.press('End');
+    await page.waitForTimeout(100);
+
+    // Verify frame did NOT change (Home/End didn't navigate timeline)
+    const newState = await getSessionState(page);
+    expect(newState.currentFrame).toBe(initialFrame);
+  });
+
+  test('MKR-R003: Arrow keys work for text selection in note input', async ({ page }) => {
+    const state = await getSessionState(page);
+    const initialFrame = state.currentFrame;
+
+    // Click edit to open note input
+    const editButton = page.locator(`[data-testid="marker-edit-${state.currentFrame}"]`);
+    await editButton.click();
+    await page.waitForTimeout(100);
+
+    // Focus and type text
+    const noteInput = page.locator(`[data-testid="marker-note-input-${state.currentFrame}"]`);
+    await noteInput.focus();
+    await noteInput.fill('Test');
+
+    // Press arrow keys (normally these navigate frames)
+    await page.keyboard.press('ArrowLeft');
+    await page.waitForTimeout(50);
+    await page.keyboard.press('ArrowRight');
+    await page.waitForTimeout(100);
+
+    // Verify frame did NOT change
+    const newState = await getSessionState(page);
+    expect(newState.currentFrame).toBe(initialFrame);
+  });
+
+  test('MKR-R004: letter keys type in note input instead of triggering shortcuts', async ({ page }) => {
+    const state = await getSessionState(page);
+
+    // Click edit to open note input
+    const editButton = page.locator(`[data-testid="marker-edit-${state.currentFrame}"]`);
+    await editButton.click();
+    await page.waitForTimeout(100);
+
+    // Focus the input
+    const noteInput = page.locator(`[data-testid="marker-note-input-${state.currentFrame}"]`);
+    await noteInput.focus();
+
+    // Type letters that are normally shortcuts (M = add marker, C = color panel, etc.)
+    await page.keyboard.type('mcr');
+    await page.waitForTimeout(100);
+
+    // Verify text was entered
+    const inputValue = await noteInput.inputValue();
+    expect(inputValue).toBe('mcr');
+
+    // Verify no new markers were added (M key didn't trigger)
+    const newState = await getSessionState(page);
+    expect(newState.markers.length).toBe(1); // Only the original marker
+  });
+
+  test('MKR-R005: keyboard shortcuts work normally when input is not focused', async ({ page }) => {
+    const state = await getSessionState(page);
+    const initialFrame = state.currentFrame;
+
+    // Click somewhere outside the input to ensure it's not focused
+    await page.click('body');
+    await page.waitForTimeout(100);
+
+    // Press ArrowRight - should navigate frame
+    await page.keyboard.press('ArrowRight');
+    await page.waitForTimeout(100);
+
+    // Verify frame changed
+    const newState = await getSessionState(page);
+    expect(newState.currentFrame).toBe(initialFrame + 1);
+  });
+
+  test('MKR-R006: Escape in note input cancels editing without other side effects', async ({ page }) => {
+    const state = await getSessionState(page);
+
+    // Click edit to open note input
+    const editButton = page.locator(`[data-testid="marker-edit-${state.currentFrame}"]`);
+    await editButton.click();
+    await page.waitForTimeout(100);
+
+    // Focus and type text
+    const noteInput = page.locator(`[data-testid="marker-note-input-${state.currentFrame}"]`);
+    await noteInput.focus();
+    await noteInput.fill('Unsaved content');
+
+    // Press Escape
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(100);
+
+    // Verify the input is hidden (editing cancelled)
+    await expect(noteInput).toBeHidden();
+
+    // Verify the note was NOT saved
+    const newState = await getSessionState(page);
+    expect(newState.markers[0]?.note).toBe('');
+  });
+
+  test('MKR-R007: number keys type in note input instead of switching tabs', async ({ page }) => {
+    const state = await getSessionState(page);
+
+    // Click edit to open note input
+    const editButton = page.locator(`[data-testid="marker-edit-${state.currentFrame}"]`);
+    await editButton.click();
+    await page.waitForTimeout(100);
+
+    // Focus the input
+    const noteInput = page.locator(`[data-testid="marker-note-input-${state.currentFrame}"]`);
+    await noteInput.focus();
+
+    // Type numbers (1-5 are normally tab shortcuts)
+    await page.keyboard.type('12345');
+    await page.waitForTimeout(100);
+
+    // Verify text was entered
+    const inputValue = await noteInput.inputValue();
+    expect(inputValue).toBe('12345');
+  });
+
+  test('MKR-R008: Ctrl+Enter saves note from input field', async ({ page }) => {
+    const state = await getSessionState(page);
+
+    // Click edit to open note input
+    const editButton = page.locator(`[data-testid="marker-edit-${state.currentFrame}"]`);
+    await editButton.click();
+    await page.waitForTimeout(100);
+
+    // Focus and type text
+    const noteInput = page.locator(`[data-testid="marker-note-input-${state.currentFrame}"]`);
+    await noteInput.focus();
+    await noteInput.fill('Note saved with keyboard');
+
+    // Press Ctrl+Enter to save
+    await page.keyboard.press('Control+Enter');
+    await page.waitForTimeout(100);
+
+    // Verify the input is hidden (editing complete)
+    await expect(noteInput).toBeHidden();
+
+    // Verify the note was saved
+    const newState = await getSessionState(page);
+    expect(newState.markers[0]?.note).toBe('Note saved with keyboard');
+  });
+
+  test('MKR-R009: Enter key alone allows multiline input in note', async ({ page }) => {
+    const state = await getSessionState(page);
+
+    // Click edit to open note input (textarea supports multiline)
+    const editButton = page.locator(`[data-testid="marker-edit-${state.currentFrame}"]`);
+    await editButton.click();
+    await page.waitForTimeout(100);
+
+    // Focus and type text with Enter for new line
+    const noteInput = page.locator(`[data-testid="marker-note-input-${state.currentFrame}"]`);
+    await noteInput.focus();
+    await page.keyboard.type('Line 1');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('Line 2');
+    await page.waitForTimeout(100);
+
+    // Verify the input still contains the text (Enter didn't submit)
+    const inputValue = await noteInput.inputValue();
+    expect(inputValue).toContain('Line 1');
+    expect(inputValue).toContain('Line 2');
+
+    // Verify editing is still active (not submitted)
+    await expect(noteInput).toBeVisible();
+  });
+});
+
 test.describe('Marker Panel Accessibility', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');

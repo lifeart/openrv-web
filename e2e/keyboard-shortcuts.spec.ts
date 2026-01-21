@@ -725,42 +725,180 @@ test.describe('Keyboard Shortcuts', () => {
   });
 
   test.describe('Input Focus Handling', () => {
+    // Helper to open color wheels panel and get number input
+    async function openColorWheelsAndGetNumberInput(page: import('@playwright/test').Page) {
+      await page.keyboard.press('Shift+Alt+w');
+      const colorWheelsPanel = page.locator('[data-testid="color-wheels-container"]');
+      await expect(colorWheelsPanel).toBeVisible();
+      const numberInput = colorWheelsPanel.locator('input[type="number"]').first();
+      await expect(numberInput).toBeVisible();
+      return numberInput;
+    }
+
     test('KEYS-090: shortcuts should not trigger when typing in text input', async ({ page }) => {
-      const textInput = page.locator('input[type="text"]').first();
+      // Open marker panel which has a text input (note textarea)
+      await page.keyboard.press('Shift+Alt+KeyM');
+      await page.waitForTimeout(100);
 
-      if (await textInput.isVisible()) {
-        await textInput.focus();
-        await textInput.fill('test');
-        await page.waitForTimeout(100);
+      // Add a marker to get a note input
+      await page.keyboard.press('m');
+      await page.waitForTimeout(100);
 
-        // State should not have changed from typing
-        const state = await getSessionState(page);
-        expect(state.isPlaying).toBe(false);
-      }
+      const state = await getSessionState(page);
+      const editButton = page.locator(`[data-testid="marker-edit-${state.currentFrame}"]`);
+      await editButton.click();
+
+      const noteInput = page.locator(`[data-testid="marker-note-input-${state.currentFrame}"]`);
+      await expect(noteInput).toBeVisible();
+
+      // Focus and type - Space should insert space, not toggle playback
+      await noteInput.focus();
+      await noteInput.fill('test content');
+
+      // Verify playback not triggered
+      const newState = await getSessionState(page);
+      expect(newState.isPlaying).toBe(false);
     });
 
-    test('KEYS-091: global shortcuts should work and blur input', async ({ page }) => {
-      const rangeInput = page.locator('input[type="range"]').first();
+    test('KEYS-091: global shortcuts should work with range/slider inputs', async ({ page }) => {
+      // Range inputs (sliders) should allow shortcuts since they're not text inputs
+      // Open color wheels panel which has sliders
+      await page.keyboard.press('Shift+Alt+w');
+      const colorWheelsPanel = page.locator('[data-testid="color-wheels-container"]');
+      await expect(colorWheelsPanel).toBeVisible();
 
-      if (await rangeInput.isVisible()) {
-        await rangeInput.focus();
-        await page.waitForTimeout(100);
+      const rangeInput = colorWheelsPanel.locator('input[type="range"]').first();
+      await expect(rangeInput).toBeVisible();
 
-        let state = await getSessionState(page);
-        expect(state.isPlaying).toBe(false);
+      await rangeInput.focus();
 
-        await page.keyboard.press('Space');
-        await page.waitForTimeout(200);
+      let state = await getSessionState(page);
+      expect(state.isPlaying).toBe(false);
 
-        state = await getSessionState(page);
-        expect(state.isPlaying).toBe(true);
+      await page.keyboard.press('Space');
+      await page.waitForTimeout(200);
 
-        await page.keyboard.press('Space');
-        await page.waitForTimeout(100);
+      state = await getSessionState(page);
+      expect(state.isPlaying).toBe(true);
 
-        state = await getSessionState(page);
-        expect(state.isPlaying).toBe(false);
-      }
+      await page.keyboard.press('Space');
+      await page.waitForTimeout(100);
+
+      state = await getSessionState(page);
+      expect(state.isPlaying).toBe(false);
+    });
+
+    test('KEYS-092: shortcuts should not trigger when typing in number input', async ({ page }) => {
+      const numberInput = await openColorWheelsAndGetNumberInput(page);
+
+      // Get initial state
+      let state = await getSessionState(page);
+      const initialFrame = state.currentFrame;
+
+      // Focus and type in the number input
+      await numberInput.focus();
+
+      // Type numbers that would normally trigger tab shortcuts (1-5)
+      await page.keyboard.type('123');
+
+      // Verify frame did not change (shortcuts were not triggered)
+      state = await getSessionState(page);
+      expect(state.currentFrame).toBe(initialFrame);
+
+      // Verify the value was entered in the input
+      const inputValue = await numberInput.inputValue();
+      expect(inputValue).toContain('123');
+    });
+
+    test('KEYS-093: space key should not toggle playback when focused on number input', async ({ page }) => {
+      const numberInput = await openColorWheelsAndGetNumberInput(page);
+
+      // Verify not playing initially
+      let state = await getSessionState(page);
+      expect(state.isPlaying).toBe(false);
+
+      // Focus the number input
+      await numberInput.focus();
+
+      // Press Space - should not toggle playback
+      await page.keyboard.press('Space');
+      await page.waitForTimeout(100);
+
+      // Verify still not playing
+      state = await getSessionState(page);
+      expect(state.isPlaying).toBe(false);
+    });
+
+    test('KEYS-094: arrow keys should not navigate frames when in number input', async ({ page }) => {
+      const numberInput = await openColorWheelsAndGetNumberInput(page);
+
+      // Get initial frame
+      let state = await getSessionState(page);
+      const initialFrame = state.currentFrame;
+
+      // Focus the number input and set a value
+      await numberInput.focus();
+      await numberInput.fill('0.5');
+
+      // Press arrow keys (normally navigate frames)
+      await page.keyboard.press('ArrowLeft');
+      await page.keyboard.press('ArrowRight');
+      await page.waitForTimeout(100);
+
+      // Verify frame did not change
+      state = await getSessionState(page);
+      expect(state.currentFrame).toBe(initialFrame);
+    });
+
+    test('KEYS-095: shortcuts work after blurring number input', async ({ page }) => {
+      const numberInput = await openColorWheelsAndGetNumberInput(page);
+
+      // Focus and then blur the input
+      await numberInput.focus();
+      await numberInput.blur();
+
+      // Click outside to ensure focus is lost
+      await page.click('body');
+
+      // Close color wheels panel
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(100);
+
+      // Now shortcuts should work again
+      let state = await getSessionState(page);
+      const initialFrame = state.currentFrame;
+
+      await page.keyboard.press('ArrowRight');
+      await page.waitForTimeout(100);
+
+      state = await getSessionState(page);
+      expect(state.currentFrame).toBe(initialFrame + 1);
+    });
+
+    test('KEYS-096: Home/End keys should not navigate timeline when in number input', async ({ page }) => {
+      // Go to middle of timeline first (before opening panel)
+      await page.keyboard.press('ArrowRight');
+      await page.keyboard.press('ArrowRight');
+      await page.waitForTimeout(100);
+
+      let state = await getSessionState(page);
+      const initialFrame = state.currentFrame;
+      expect(initialFrame).toBeGreaterThan(1);
+
+      const numberInput = await openColorWheelsAndGetNumberInput(page);
+
+      // Focus the number input
+      await numberInput.focus();
+      await numberInput.fill('0.25');
+
+      // Press Home and End (normally navigate to first/last frame)
+      await page.keyboard.press('Home');
+      await page.keyboard.press('End');
+      await page.waitForTimeout(100);
+
+      // Verify frame did not change
+      state = await getSessionState(page);
+      expect(state.currentFrame).toBe(initialFrame);
     });
   });
 });

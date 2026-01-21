@@ -144,20 +144,25 @@ export class KeyboardManager {
   private shouldSkipEvent(e: KeyboardEvent): boolean {
     const target = e.target as HTMLElement;
 
-    // Allow global keys that should always work
-    const globalKeys = [' ', 'Escape', 'Home', 'End'];
-    if (globalKeys.includes(e.key)) {
-      return false;
-    }
-
-    // Skip if target is a text input
+    // Check if target is a text input or textarea FIRST
     if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
       const input = target as HTMLInputElement;
       const isTextInput = input.type === 'text' || input.type === 'search' ||
                           input.type === 'password' || input.type === 'email' ||
                           input.type === 'url' || input.type === 'tel' ||
+                          input.type === 'number' ||
                           target instanceof HTMLTextAreaElement;
-      return isTextInput;
+
+      if (isTextInput) {
+        // When in text input, skip ALL keys to let the input handle them
+        // This allows typing spaces, using Home/End for cursor movement, etc.
+        return true;
+      }
+    }
+
+    // Also check for contenteditable elements
+    if (target.isContentEditable || target.getAttribute('contenteditable') === 'true') {
+      return true;
     }
 
     return false;

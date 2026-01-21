@@ -232,7 +232,8 @@ describe('KeyboardManager', () => {
       expect(mockHandler).not.toHaveBeenCalled();
     });
 
-    it('KBM-023: allows global keys in input fields', () => {
+    it('KBM-023: skips all keys in input fields including Escape', () => {
+      // All keys should be skipped in input fields to allow normal text editing
       keyboardManager.register({ code: 'Escape' }, mockHandler);
 
       const mockInput = document.createElement('input');
@@ -251,7 +252,31 @@ describe('KeyboardManager', () => {
 
       keyboardManager['handleKeydown'](mockEvent);
 
-      expect(mockHandler).toHaveBeenCalled();
+      // Should NOT be called - input field handles Escape for canceling edits
+      expect(mockHandler).not.toHaveBeenCalled();
+    });
+
+    it('KBM-023b: skips events when typing in contenteditable elements', () => {
+      keyboardManager.register({ code: 'KeyA' }, mockHandler);
+
+      const mockDiv = document.createElement('div');
+      mockDiv.setAttribute('contenteditable', 'true');
+
+      const mockEvent = {
+        code: 'KeyA',
+        key: 'a',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: mockDiv
+      } as any;
+
+      keyboardManager['handleKeydown'](mockEvent);
+
+      // Should NOT be called - contenteditable handles text input
+      expect(mockHandler).not.toHaveBeenCalled();
     });
 
     it('KBM-024: treats meta key as ctrl for cross-platform compatibility', () => {
@@ -559,7 +584,9 @@ describe('KeyboardManager', () => {
       expect(toggleHandler).toHaveBeenCalledTimes(1);
     });
 
-    it('KBM-042: global playback keys work even in input fields', () => {
+    it('KBM-042: playback keys are skipped in input fields to allow text editing', () => {
+      // All keys should be skipped in input fields to allow normal text editing
+      // Space should insert space, Home/End should move cursor
       const toggleHandler = vi.fn();
       const goToStart = vi.fn();
       const goToEnd = vi.fn();
@@ -571,7 +598,7 @@ describe('KeyboardManager', () => {
       const mockInput = document.createElement('input');
       mockInput.type = 'text';
 
-      // Space should work in input (it's a global key)
+      // Space should be skipped in input (let input handle it for typing)
       const spaceEvent = {
         code: 'Space',
         key: ' ',
@@ -583,7 +610,7 @@ describe('KeyboardManager', () => {
         target: mockInput
       } as any;
 
-      // Home should work in input (it's a global key)
+      // Home should be skipped in input (let input handle cursor movement)
       const homeEvent = {
         code: 'Home',
         key: 'Home',
@@ -595,7 +622,7 @@ describe('KeyboardManager', () => {
         target: mockInput
       } as any;
 
-      // End should work in input (it's a global key)
+      // End should be skipped in input (let input handle cursor movement)
       const endEvent = {
         code: 'End',
         key: 'End',
@@ -611,9 +638,10 @@ describe('KeyboardManager', () => {
       keyboardManager['handleKeydown'](homeEvent);
       keyboardManager['handleKeydown'](endEvent);
 
-      expect(toggleHandler).toHaveBeenCalledTimes(1);
-      expect(goToStart).toHaveBeenCalledTimes(1);
-      expect(goToEnd).toHaveBeenCalledTimes(1);
+      // None should be called - input field needs these keys for text editing
+      expect(toggleHandler).not.toHaveBeenCalled();
+      expect(goToStart).not.toHaveBeenCalled();
+      expect(goToEnd).not.toHaveBeenCalled();
     });
 
     it('KBM-043: ArrowUp toggles play direction', () => {
@@ -652,6 +680,354 @@ describe('KeyboardManager', () => {
       expect(() => {
         keyboardManager['comboToId'](invalidCombo);
       }).toThrow('KeyCombination must have a code property');
+    });
+  });
+
+  describe('input field isolation', () => {
+    it('KBM-050: skips events when typing in number input', () => {
+      keyboardManager.register({ code: 'KeyA' }, mockHandler);
+
+      const mockInput = document.createElement('input');
+      mockInput.type = 'number';
+
+      const mockEvent = {
+        code: 'KeyA',
+        key: 'a',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: mockInput
+      } as any;
+
+      keyboardManager['handleKeydown'](mockEvent);
+
+      expect(mockHandler).not.toHaveBeenCalled();
+    });
+
+    it('KBM-051: skips events when typing in search input', () => {
+      keyboardManager.register({ code: 'KeyS' }, mockHandler);
+
+      const mockInput = document.createElement('input');
+      mockInput.type = 'search';
+
+      const mockEvent = {
+        code: 'KeyS',
+        key: 's',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: mockInput
+      } as any;
+
+      keyboardManager['handleKeydown'](mockEvent);
+
+      expect(mockHandler).not.toHaveBeenCalled();
+    });
+
+    it('KBM-052: skips events when typing in password input', () => {
+      keyboardManager.register({ code: 'KeyP' }, mockHandler);
+
+      const mockInput = document.createElement('input');
+      mockInput.type = 'password';
+
+      const mockEvent = {
+        code: 'KeyP',
+        key: 'p',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: mockInput
+      } as any;
+
+      keyboardManager['handleKeydown'](mockEvent);
+
+      expect(mockHandler).not.toHaveBeenCalled();
+    });
+
+    it('KBM-053: skips events when typing in email input', () => {
+      keyboardManager.register({ code: 'KeyE' }, mockHandler);
+
+      const mockInput = document.createElement('input');
+      mockInput.type = 'email';
+
+      const mockEvent = {
+        code: 'KeyE',
+        key: 'e',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: mockInput
+      } as any;
+
+      keyboardManager['handleKeydown'](mockEvent);
+
+      expect(mockHandler).not.toHaveBeenCalled();
+    });
+
+    it('KBM-054: skips events when typing in url input', () => {
+      keyboardManager.register({ code: 'KeyU' }, mockHandler);
+
+      const mockInput = document.createElement('input');
+      mockInput.type = 'url';
+
+      const mockEvent = {
+        code: 'KeyU',
+        key: 'u',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: mockInput
+      } as any;
+
+      keyboardManager['handleKeydown'](mockEvent);
+
+      expect(mockHandler).not.toHaveBeenCalled();
+    });
+
+    it('KBM-055: skips events when typing in tel input', () => {
+      keyboardManager.register({ code: 'Digit1' }, mockHandler);
+
+      const mockInput = document.createElement('input');
+      mockInput.type = 'tel';
+
+      const mockEvent = {
+        code: 'Digit1',
+        key: '1',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: mockInput
+      } as any;
+
+      keyboardManager['handleKeydown'](mockEvent);
+
+      expect(mockHandler).not.toHaveBeenCalled();
+    });
+
+    it('KBM-056: skips events when typing in textarea', () => {
+      keyboardManager.register({ code: 'KeyT' }, mockHandler);
+
+      const mockTextarea = document.createElement('textarea');
+
+      const mockEvent = {
+        code: 'KeyT',
+        key: 't',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: mockTextarea
+      } as any;
+
+      keyboardManager['handleKeydown'](mockEvent);
+
+      expect(mockHandler).not.toHaveBeenCalled();
+    });
+
+    it('KBM-057: allows shortcuts on checkbox input', () => {
+      keyboardManager.register({ code: 'Space' }, mockHandler);
+
+      const mockInput = document.createElement('input');
+      mockInput.type = 'checkbox';
+
+      const mockEvent = {
+        code: 'Space',
+        key: ' ',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: mockInput
+      } as any;
+
+      keyboardManager['handleKeydown'](mockEvent);
+
+      expect(mockHandler).toHaveBeenCalled();
+    });
+
+    it('KBM-058: allows shortcuts on range input (slider)', () => {
+      keyboardManager.register({ code: 'Space' }, mockHandler);
+
+      const mockInput = document.createElement('input');
+      mockInput.type = 'range';
+
+      const mockEvent = {
+        code: 'Space',
+        key: ' ',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: mockInput
+      } as any;
+
+      keyboardManager['handleKeydown'](mockEvent);
+
+      expect(mockHandler).toHaveBeenCalled();
+    });
+
+    it('KBM-059: Space key does not toggle playback in number input', () => {
+      const toggleHandler = vi.fn();
+      keyboardManager.register({ code: 'Space' }, toggleHandler, 'Toggle playback');
+
+      const mockInput = document.createElement('input');
+      mockInput.type = 'number';
+
+      const mockEvent = {
+        code: 'Space',
+        key: ' ',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: mockInput
+      } as any;
+
+      keyboardManager['handleKeydown'](mockEvent);
+
+      expect(toggleHandler).not.toHaveBeenCalled();
+    });
+
+    it('KBM-060: number keys do not switch tabs in number input', () => {
+      const tabHandler = vi.fn();
+      keyboardManager.register({ code: 'Digit1' }, tabHandler, 'Switch to tab 1');
+
+      const mockInput = document.createElement('input');
+      mockInput.type = 'number';
+
+      const mockEvent = {
+        code: 'Digit1',
+        key: '1',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: mockInput
+      } as any;
+
+      keyboardManager['handleKeydown'](mockEvent);
+
+      expect(tabHandler).not.toHaveBeenCalled();
+    });
+
+    it('KBM-061: arrow keys do not navigate frames in number input', () => {
+      const stepForward = vi.fn();
+      keyboardManager.register({ code: 'ArrowRight' }, stepForward, 'Step forward');
+
+      const mockInput = document.createElement('input');
+      mockInput.type = 'number';
+
+      const mockEvent = {
+        code: 'ArrowRight',
+        key: 'ArrowRight',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: mockInput
+      } as any;
+
+      keyboardManager['handleKeydown'](mockEvent);
+
+      expect(stepForward).not.toHaveBeenCalled();
+    });
+
+    it('KBM-062: Home/End keys do not navigate timeline in number input', () => {
+      const goToStart = vi.fn();
+      const goToEnd = vi.fn();
+      keyboardManager.register({ code: 'Home' }, goToStart, 'Go to start');
+      keyboardManager.register({ code: 'End' }, goToEnd, 'Go to end');
+
+      const mockInput = document.createElement('input');
+      mockInput.type = 'number';
+
+      const homeEvent = {
+        code: 'Home',
+        key: 'Home',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: mockInput
+      } as any;
+
+      const endEvent = {
+        code: 'End',
+        key: 'End',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: mockInput
+      } as any;
+
+      keyboardManager['handleKeydown'](homeEvent);
+      keyboardManager['handleKeydown'](endEvent);
+
+      expect(goToStart).not.toHaveBeenCalled();
+      expect(goToEnd).not.toHaveBeenCalled();
+    });
+
+    it('KBM-063: allows shortcuts on button elements', () => {
+      keyboardManager.register({ code: 'Space' }, mockHandler);
+
+      const mockButton = document.createElement('button');
+
+      const mockEvent = {
+        code: 'Space',
+        key: ' ',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: mockButton
+      } as any;
+
+      keyboardManager['handleKeydown'](mockEvent);
+
+      expect(mockHandler).toHaveBeenCalled();
+    });
+
+    it('KBM-064: allows shortcuts on div elements', () => {
+      keyboardManager.register({ code: 'KeyA' }, mockHandler);
+
+      const mockDiv = document.createElement('div');
+
+      const mockEvent = {
+        code: 'KeyA',
+        key: 'a',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: mockDiv
+      } as any;
+
+      keyboardManager['handleKeydown'](mockEvent);
+
+      expect(mockHandler).toHaveBeenCalled();
     });
   });
 });
