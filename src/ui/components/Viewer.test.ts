@@ -295,7 +295,7 @@ describe('Viewer', () => {
 
   describe('transform', () => {
     it('VWR-029: setTransform updates transform', () => {
-      viewer.setTransform({ rotation: 90, flipH: true, flipV: false });
+      viewer.setTransform({ ...DEFAULT_TRANSFORM, rotation: 90, flipH: true, flipV: false });
       const transform = viewer.getTransform();
       expect(transform.rotation).toBe(90);
       expect(transform.flipH).toBe(true);
@@ -403,7 +403,7 @@ describe('Viewer', () => {
 
   describe('lens distortion', () => {
     it('VWR-041: setLensParams updates params', () => {
-      viewer.setLensParams({ k1: 0.2, k2: 0.05, centerX: 0.5, centerY: 0.5, scale: 1.1 });
+      viewer.setLensParams({ ...DEFAULT_LENS_PARAMS, k1: 0.2, k2: 0.05, centerX: 0.5, centerY: 0.5, scale: 1.1 });
       const params = viewer.getLensParams();
       expect(params.k1).toBe(0.2);
       expect(params.scale).toBe(1.1);
@@ -417,7 +417,7 @@ describe('Viewer', () => {
     });
 
     it('VWR-043: resetLensParams restores defaults', () => {
-      viewer.setLensParams({ k1: 0.5, k2: 0.2, centerX: 0.4, centerY: 0.6, scale: 1.5 });
+      viewer.setLensParams({ ...DEFAULT_LENS_PARAMS, k1: 0.5, k2: 0.2, centerX: 0.4, centerY: 0.6, scale: 1.5 });
       viewer.resetLensParams();
       expect(viewer.getLensParams()).toEqual(DEFAULT_LENS_PARAMS);
     });

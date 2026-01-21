@@ -1,5 +1,6 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
+import { applyA11yFocus } from './shared/Button';
 import {
   StereoMode,
   StereoState,
@@ -73,6 +74,7 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
       justify-content: center;
       min-width: 80px;
       gap: 4px;
+      outline: none;
     `;
 
     this.modeButton.addEventListener('click', (e) => {
@@ -93,6 +95,9 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
         this.modeButton.style.color = '#999';
       }
     });
+
+    // Apply A11Y focus handling
+    applyA11yFocus(this.modeButton);
 
     // Create dropdown (will be rendered at body level to avoid z-index issues)
     this.modeDropdown = document.createElement('div');

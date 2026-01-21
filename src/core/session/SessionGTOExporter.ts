@@ -25,6 +25,13 @@ export interface SessionExportOptions {
 }
 
 /**
+ * Flattens a 2D matrix to a 1D array for GTO serialization
+ */
+function flattenMatrix(matrix: number[][]): number[] {
+  return matrix.flat();
+}
+
+/**
  * Generates a zero-padded source group name (e.g., 'sourceGroup000000')
  */
 export function generateSourceGroupName(index: number): string {
@@ -2505,14 +2512,14 @@ export class SessionGTOExporter {
       .int('size', lut.size ?? [0, 0, 0])
       .end();
 
-    // Add matrices if provided
+    // Add matrices if provided (flatten 2D matrices to 1D arrays for GTO)
     if (lut.inMatrix) {
       const lutComp = linearizeObject.component('lut');
-      lutComp.float('inMatrix', lut.inMatrix).end();
+      lutComp.float('inMatrix', flattenMatrix(lut.inMatrix)).end();
     }
     if (lut.outMatrix) {
       const lutComp = linearizeObject.component('lut');
-      lutComp.float('outMatrix', lut.outMatrix).end();
+      lutComp.float('outMatrix', flattenMatrix(lut.outMatrix)).end();
     }
 
     // CDL component (if settings provided)
@@ -2568,14 +2575,14 @@ export class SessionGTOExporter {
       .int('preLUTSize', settings.preLUTSize ?? 0)
       .end();
 
-    // Add matrices if provided
+    // Add matrices if provided (flatten 2D matrices to 1D arrays for GTO)
     if (settings.inMatrix) {
       const lutComp = lutObject.component('lut');
-      lutComp.float('inMatrix', settings.inMatrix).end();
+      lutComp.float('inMatrix', flattenMatrix(settings.inMatrix)).end();
     }
     if (settings.outMatrix) {
       const lutComp = lutObject.component('lut');
-      lutComp.float('outMatrix', settings.outMatrix).end();
+      lutComp.float('outMatrix', flattenMatrix(settings.outMatrix)).end();
     }
 
     // Add output component for cached LUT data (RVCacheLUT)
@@ -2758,7 +2765,7 @@ export class SessionGTOExporter {
       .int('ditherLast', settings.ditherLast !== false ? 1 : 0);
 
     if (settings.matrix) {
-      colorComp.float44('matrix', settings.matrix);
+      colorComp.float('matrix', flattenMatrix(settings.matrix));
     }
     if (settings.overrideColorspace) {
       colorComp.string('overrideColorspace', settings.overrideColorspace);

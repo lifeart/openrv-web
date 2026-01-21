@@ -7,6 +7,7 @@
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg, IconName } from './shared/Icons';
+import { applyA11yFocus } from './shared/Button';
 
 export type ScopeType = 'histogram' | 'waveform' | 'vectorscope';
 
@@ -73,6 +74,7 @@ export class ScopesControl extends EventEmitter<ScopesControlEvents> {
       justify-content: center;
       min-width: 70px;
       gap: 4px;
+      outline: none;
     `;
     this.updateButtonLabel();
 
@@ -94,6 +96,9 @@ export class ScopesControl extends EventEmitter<ScopesControlEvents> {
         this.button.style.color = '#999';
       }
     });
+
+    // Apply A11Y focus handling
+    applyA11yFocus(this.button);
 
     // Create dropdown
     this.dropdown = document.createElement('div');

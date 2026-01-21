@@ -335,7 +335,7 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
       if (typeof opacity === 'number') sessionInfo.matte.opacity = opacity;
       if (typeof heightVisible === 'number') sessionInfo.matte.heightVisible = heightVisible;
       if (Array.isArray(centerPoint) && centerPoint.length >= 2) {
-        sessionInfo.matte.centerPoint = [centerPoint[0], centerPoint[1]];
+        sessionInfo.matte.centerPoint = [centerPoint[0] ?? 0.5, centerPoint[1] ?? 0.5];
       }
     }
 

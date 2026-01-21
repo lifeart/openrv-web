@@ -1564,10 +1564,31 @@ export class Session extends EventEmitter<SessionEvents> {
       }
     }
 
+    // Parse scale and translate if available
+    const scaleValue = transformComp.property('scale').value();
+    const translateValue = transformComp.property('translate').value();
+
+    let scale = { x: 1, y: 1 };
+    let translate = { x: 0, y: 0 };
+
+    if (Array.isArray(scaleValue) && scaleValue.length >= 2) {
+      const sx = typeof scaleValue[0] === 'number' ? scaleValue[0] : 1;
+      const sy = typeof scaleValue[1] === 'number' ? scaleValue[1] : 1;
+      scale = { x: sx, y: sy };
+    }
+
+    if (Array.isArray(translateValue) && translateValue.length >= 2) {
+      const tx = typeof translateValue[0] === 'number' ? translateValue[0] : 0;
+      const ty = typeof translateValue[1] === 'number' ? translateValue[1] : 0;
+      translate = { x: tx, y: ty };
+    }
+
     return {
       rotation,
       flipH: flopValue === 1,
       flipV: flipValue === 1,
+      scale,
+      translate,
     };
   }
 
@@ -1591,12 +1612,38 @@ export class Session extends EventEmitter<SessionEvents> {
 
     if (k1 === undefined && k2 === undefined && !center) return null;
 
+    // Read additional properties if available
+    const k3 = this.getNumberValue(warpComp.property('k3').value());
+    const p1 = this.getNumberValue(warpComp.property('p1').value());
+    const p2 = this.getNumberValue(warpComp.property('p2').value());
+    const scaleValue = this.getNumberValue(warpComp.property('scale').value());
+    const model = warpComp.property('model').value() as string | undefined;
+    const pixelAspectRatio = this.getNumberValue(warpComp.property('pixelAspectRatio').value());
+    const fx = this.getNumberValue(warpComp.property('fx').value());
+    const fy = this.getNumberValue(warpComp.property('fy').value());
+    const cropRatioX = this.getNumberValue(warpComp.property('cropRatioX').value());
+    const cropRatioY = this.getNumberValue(warpComp.property('cropRatioY').value());
+
+    const validModels = ['brown', 'opencv', 'pfbarrel', '3de4_radial_standard', '3de4_anamorphic'] as const;
+    const parsedModel = validModels.includes(model as typeof validModels[number])
+      ? (model as typeof validModels[number])
+      : 'brown';
+
     const params: LensDistortionParams = {
       k1: k1 ?? 0,
       k2: k2 ?? 0,
+      k3: k3 ?? 0,
+      p1: p1 ?? 0,
+      p2: p2 ?? 0,
       centerX: 0,
       centerY: 0,
-      scale: 1,
+      scale: scaleValue ?? 1,
+      model: parsedModel,
+      pixelAspectRatio: pixelAspectRatio ?? 1,
+      fx: fx ?? 1,
+      fy: fy ?? 1,
+      cropRatioX: cropRatioX ?? 1,
+      cropRatioY: cropRatioY ?? 1,
     };
 
     if (center && center.length >= 2) {

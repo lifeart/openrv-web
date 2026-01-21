@@ -152,7 +152,7 @@ export class SessionGTOStore {
     centerX: number;
     centerY: number;
     scale: number;
-    model?: string;
+    model?: 'brown' | 'opencv' | 'pfbarrel' | '3de4_radial_standard' | '3de4_anamorphic';
     pixelAspectRatio?: number;
     fx?: number;
     fy?: number;

@@ -7,6 +7,7 @@
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg, type IconName } from './shared/Icons';
+import { applyA11yFocus } from './shared/Button';
 import { DifferenceMatteState, DEFAULT_DIFFERENCE_MATTE_STATE } from './DifferenceMatteControl';
 
 export type WipeMode = 'off' | 'horizontal' | 'vertical';
@@ -83,6 +84,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
       justify-content: center;
       min-width: 80px;
       gap: 4px;
+      outline: none;
     `;
     this.updateButtonLabel();
 
@@ -104,6 +106,9 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
         this.button.style.color = '#999';
       }
     });
+
+    // Apply A11Y focus handling
+    applyA11yFocus(this.button);
 
     // Create dropdown
     this.dropdown = document.createElement('div');

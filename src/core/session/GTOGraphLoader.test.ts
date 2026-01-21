@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { loadGTOGraph, getGraphSummary } from './GTOGraphLoader';
 import type { GTOParseResult } from './GTOGraphLoader';
+import type { GTODTO } from 'gto-js';
 import { NodeFactory } from '../../nodes/base/NodeFactory';
 
 // Mock the NodeFactory
@@ -169,7 +170,7 @@ function createMockDTO(config: {
       first: () => mockSessions[0],
     }),
     objects: () => mockObjects,
-  };
+  } as unknown as GTODTO;
 }
 
 describe('GTOGraphLoader', () => {

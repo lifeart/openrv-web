@@ -7,6 +7,7 @@
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
+import { applyA11yFocus } from './shared/Button';
 
 export type ZoomLevel = 'fit' | 0.25 | 0.5 | 1 | 2 | 4;
 
@@ -65,6 +66,7 @@ export class ZoomControl extends EventEmitter<ZoomControlEvents> {
       justify-content: center;
       min-width: 70px;
       gap: 4px;
+      outline: none;
     `;
     this.updateButtonLabel();
 
@@ -86,6 +88,9 @@ export class ZoomControl extends EventEmitter<ZoomControlEvents> {
         this.button.style.color = '#999';
       }
     });
+
+    // Apply A11Y focus handling
+    applyA11yFocus(this.button);
 
     // Create dropdown
     this.dropdown = document.createElement('div');

@@ -8,6 +8,7 @@
 import { EventEmitter, EventMap } from '../../../utils/EventEmitter';
 import { TabId } from './TabBar';
 import { getIconSvg, IconName } from '../shared/Icons';
+import { applyA11yFocus } from '../shared/Button';
 
 export interface ContextToolbarEvents extends EventMap {
   // Events will be added as tabs are implemented
@@ -180,6 +181,7 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
       justify-content: center;
       height: 28px;
       min-width: ${options.minWidth || 'auto'};
+      outline: none;
     `;
 
     button.addEventListener('mouseenter', () => {
@@ -199,6 +201,10 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
     });
 
     button.addEventListener('click', onClick);
+
+    // Apply A11Y focus handling from shared utility
+    applyA11yFocus(button);
+
     return button;
   }
 

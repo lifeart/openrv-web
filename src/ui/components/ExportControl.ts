@@ -1,6 +1,7 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { ExportFormat } from '../../utils/FrameExporter';
 import { getIconSvg, IconName } from './shared/Icons';
+import { applyA11yFocus } from './shared/Button';
 
 export interface ExportRequest {
   format: ExportFormat;
@@ -58,6 +59,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      outline: none;
     `;
 
     this.exportButton.addEventListener('click', () => this.toggleDropdown());
@@ -75,6 +77,9 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
         this.exportButton.style.color = '#999';
       }
     });
+
+    // Apply A11Y focus handling
+    applyA11yFocus(this.exportButton);
 
     // Create dropdown menu (rendered at body level)
     this.dropdown = document.createElement('div');

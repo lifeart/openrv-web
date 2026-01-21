@@ -71,6 +71,7 @@ describe('LensControl', () => {
 
     it('LENS-U021: setParams sets all parameter values', () => {
       const newParams: LensDistortionParams = {
+        ...DEFAULT_LENS_PARAMS,
         k1: 0.1,
         k2: -0.05,
         centerX: 0.02,
@@ -87,6 +88,7 @@ describe('LensControl', () => {
       control.on('lensChanged', callback);
 
       const newParams: LensDistortionParams = {
+        ...DEFAULT_LENS_PARAMS,
         k1: 0.15,
         k2: 0,
         centerX: 0,
@@ -100,6 +102,7 @@ describe('LensControl', () => {
 
     it('LENS-U023: setParams preserves parameter values exactly', () => {
       const params: LensDistortionParams = {
+        ...DEFAULT_LENS_PARAMS,
         k1: 0.123,
         k2: -0.456,
         centerX: 0.05,
@@ -121,6 +124,7 @@ describe('LensControl', () => {
   describe('reset', () => {
     it('LENS-U030: reset restores default params', () => {
       control.setParams({
+        ...DEFAULT_LENS_PARAMS,
         k1: 0.2,
         k2: -0.1,
         centerX: 0.05,
@@ -134,6 +138,7 @@ describe('LensControl', () => {
 
     it('LENS-U031: reset emits lensChanged event', () => {
       control.setParams({
+        ...DEFAULT_LENS_PARAMS,
         k1: 0.3,
         k2: 0,
         centerX: 0,
@@ -186,6 +191,7 @@ describe('LensControl', () => {
       control.on('lensChanged', callback);
 
       control.setParams({
+        ...DEFAULT_LENS_PARAMS,
         k1: 0.1,
         k2: 0.05,
         centerX: 0.01,
@@ -207,6 +213,7 @@ describe('LensControl', () => {
       control.on('lensChanged', callback);
 
       control.setParams({
+        ...DEFAULT_LENS_PARAMS,
         k1: 0.1,
         k2: 0,
         centerX: 0,
@@ -288,6 +295,7 @@ describe('LensControl', () => {
   describe('combined adjustments', () => {
     it('LENS-U080: can set distortion with center offset', () => {
       control.setParams({
+        ...DEFAULT_LENS_PARAMS,
         k1: 0.15,
         k2: -0.02,
         centerX: 0.03,
@@ -303,6 +311,7 @@ describe('LensControl', () => {
 
     it('LENS-U081: can set distortion with scale compensation', () => {
       control.setParams({
+        ...DEFAULT_LENS_PARAMS,
         k1: -0.3,
         k2: 0,
         centerX: 0,

@@ -16,6 +16,7 @@ import {
   ASPECT_RATIOS,
 } from './SafeAreasOverlay';
 import { getIconSvg } from './shared/Icons';
+import { applyA11yFocus } from './shared/Button';
 
 export interface SafeAreasControlEvents extends EventMap {
   stateChanged: SafeAreasState;
@@ -65,6 +66,7 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
       display: inline-flex;
       align-items: center;
       gap: 4px;
+      outline: none;
     `;
     this.updateButtonLabel();
 
@@ -88,6 +90,9 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
       e.stopPropagation();
       this.toggleDropdown();
     });
+
+    // Apply A11Y focus handling
+    applyA11yFocus(this.button);
 
     this.container.appendChild(this.button);
 

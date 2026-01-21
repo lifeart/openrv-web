@@ -7,7 +7,7 @@ import {
 } from './SessionGTOExporter';
 import { Session, type MediaSource } from './Session';
 import { PaintEngine } from '../../paint/PaintEngine';
-import type { GTOData, ObjectData } from 'gto-js';
+import type { GTOData } from 'gto-js';
 import { Graph } from '../graph/Graph';
 import { LineJoin, LineCap, BrushType, StrokeMode, type PenStroke } from '../../paint/types';
 
@@ -1688,10 +1688,10 @@ describe('SessionGTOExporter.buildLayoutGroupObjects', () => {
         const result = SessionGTOExporter.buildLayoutGroupObjects('layoutGroup');
 
         expect(result).toHaveLength(2);
-        expect(result[0].name).toBe('layoutGroup');
-        expect(result[0].protocol).toBe('RVLayoutGroup');
-        expect(result[1].name).toBe('layoutGroup_layout');
-        expect(result[1].protocol).toBe('RVLayout');
+        expect(result[0]!.name).toBe('layoutGroup');
+        expect(result[0]!.protocol).toBe('RVLayoutGroup');
+        expect(result[1]!.name).toBe('layoutGroup_layout');
+        expect(result[1]!.protocol).toBe('RVLayout');
     });
 
     it('sets display name in ui component', () => {
@@ -1699,7 +1699,7 @@ describe('SessionGTOExporter.buildLayoutGroupObjects', () => {
             name: 'My Layout',
         });
 
-        const groupComponents = result[0].components as Record<string, any>;
+        const groupComponents = result[0]!.components as Record<string, any>;
         expect(groupComponents['ui'].properties.name.data).toEqual(['My Layout']);
     });
 
@@ -1711,7 +1711,7 @@ describe('SessionGTOExporter.buildLayoutGroupObjects', () => {
             gridColumns: 3,
         });
 
-        const layoutComponents = result[1].components as Record<string, any>;
+        const layoutComponents = result[1]!.components as Record<string, any>;
         const layoutComp = layoutComponents['layout'];
 
         expect(layoutComp.properties.mode.data).toEqual(['grid']);
@@ -1725,7 +1725,7 @@ describe('SessionGTOExporter.buildLayoutGroupObjects', () => {
             retimeInputs: true,
         });
 
-        const layoutComponents = result[1].components as Record<string, any>;
+        const layoutComponents = result[1]!.components as Record<string, any>;
         const timingComp = layoutComponents['timing'];
 
         expect(timingComp.properties.retimeInputs.data).toEqual([1]);
@@ -1734,7 +1734,7 @@ describe('SessionGTOExporter.buildLayoutGroupObjects', () => {
     it('uses default values when settings not provided', () => {
         const result = SessionGTOExporter.buildLayoutGroupObjects('layoutGroup');
 
-        const layoutComponents = result[1].components as Record<string, any>;
+        const layoutComponents = result[1]!.components as Record<string, any>;
         const layoutComp = layoutComponents['layout'];
 
         expect(layoutComp.properties.mode.data).toEqual(['packed']);
@@ -1749,10 +1749,10 @@ describe('SessionGTOExporter.buildRetimeGroupObjects', () => {
         const result = SessionGTOExporter.buildRetimeGroupObjects('retimeGroup');
 
         expect(result).toHaveLength(2);
-        expect(result[0].name).toBe('retimeGroup');
-        expect(result[0].protocol).toBe('RVRetimeGroup');
-        expect(result[1].name).toBe('retimeGroup_retime');
-        expect(result[1].protocol).toBe('RVRetime');
+        expect(result[0]!.name).toBe('retimeGroup');
+        expect(result[0]!.protocol).toBe('RVRetimeGroup');
+        expect(result[1]!.name).toBe('retimeGroup_retime');
+        expect(result[1]!.protocol).toBe('RVRetime');
     });
 
     it('sets display name in ui component', () => {
@@ -1760,7 +1760,7 @@ describe('SessionGTOExporter.buildRetimeGroupObjects', () => {
             name: 'My Retime',
         });
 
-        const groupComponents = result[0].components as Record<string, any>;
+        const groupComponents = result[0]!.components as Record<string, any>;
         expect(groupComponents['ui'].properties.name.data).toEqual(['My Retime']);
     });
 
@@ -1772,7 +1772,7 @@ describe('SessionGTOExporter.buildRetimeGroupObjects', () => {
             audioOffset: 5,
         });
 
-        const retimeComponents = result[1].components as Record<string, any>;
+        const retimeComponents = result[1]!.components as Record<string, any>;
 
         expect(retimeComponents['visual'].properties.scale.data).toEqual([2.0]);
         expect(retimeComponents['visual'].properties.offset.data).toEqual([10]);
@@ -1785,21 +1785,21 @@ describe('SessionGTOExporter.buildRetimeGroupObjects', () => {
             outputFps: 30,
         });
 
-        const retimeComponents = result[1].components as Record<string, any>;
+        const retimeComponents = result[1]!.components as Record<string, any>;
         expect(retimeComponents['output'].properties.fps.data).toEqual([30]);
     });
 
     it('does not create output component when outputFps not provided', () => {
         const result = SessionGTOExporter.buildRetimeGroupObjects('retimeGroup');
 
-        const retimeComponents = result[1].components as Record<string, any>;
+        const retimeComponents = result[1]!.components as Record<string, any>;
         expect(retimeComponents['output']).toBeUndefined();
     });
 
     it('uses default values when settings not provided', () => {
         const result = SessionGTOExporter.buildRetimeGroupObjects('retimeGroup');
 
-        const retimeComponents = result[1].components as Record<string, any>;
+        const retimeComponents = result[1]!.components as Record<string, any>;
 
         expect(retimeComponents['visual'].properties.scale.data).toEqual([1.0]);
         expect(retimeComponents['visual'].properties.offset.data).toEqual([0.0]);
@@ -1863,10 +1863,10 @@ describe('SessionGTOExporter.buildSwitchGroupObjects', () => {
         const result = SessionGTOExporter.buildSwitchGroupObjects('switchGroup');
 
         expect(result).toHaveLength(2);
-        expect(result[0].name).toBe('switchGroup');
-        expect(result[0].protocol).toBe('RVSwitchGroup');
-        expect(result[1].name).toBe('switchGroup_switch');
-        expect(result[1].protocol).toBe('RVSwitch');
+        expect(result[0]!.name).toBe('switchGroup');
+        expect(result[0]!.protocol).toBe('RVSwitchGroup');
+        expect(result[1]!.name).toBe('switchGroup_switch');
+        expect(result[1]!.protocol).toBe('RVSwitch');
     });
 
     it('sets display name in ui component', () => {
@@ -1874,7 +1874,7 @@ describe('SessionGTOExporter.buildSwitchGroupObjects', () => {
             name: 'My Switch',
         });
 
-        const groupComponents = result[0].components as Record<string, any>;
+        const groupComponents = result[0]!.components as Record<string, any>;
         expect(groupComponents['ui'].properties.name.data).toEqual(['My Switch']);
     });
 
@@ -1884,7 +1884,7 @@ describe('SessionGTOExporter.buildSwitchGroupObjects', () => {
             autoSize: false,
         });
 
-        const switchComponents = result[1].components as Record<string, any>;
+        const switchComponents = result[1]!.components as Record<string, any>;
         const outputComp = switchComponents['output'];
 
         expect(outputComp.properties.fps.data).toEqual([30.0]);
@@ -1897,7 +1897,7 @@ describe('SessionGTOExporter.buildSwitchGroupObjects', () => {
             input: 'sourceGroup000000',
         });
 
-        const switchComponents = result[1].components as Record<string, any>;
+        const switchComponents = result[1]!.components as Record<string, any>;
         const outputComp = switchComponents['output'];
 
         expect(outputComp.properties.input.data).toEqual(['sourceGroup000000']);
@@ -1910,7 +1910,7 @@ describe('SessionGTOExporter.buildSwitchGroupObjects', () => {
             alignStartFrames: true,
         });
 
-        const switchComponents = result[1].components as Record<string, any>;
+        const switchComponents = result[1]!.components as Record<string, any>;
         const modeComp = switchComponents['mode'];
 
         expect(modeComp.properties.useCutInfo.data).toEqual([0]);
@@ -1921,7 +1921,7 @@ describe('SessionGTOExporter.buildSwitchGroupObjects', () => {
     it('uses default values when settings not provided', () => {
         const result = SessionGTOExporter.buildSwitchGroupObjects('switchGroup');
 
-        const switchComponents = result[1].components as Record<string, any>;
+        const switchComponents = result[1]!.components as Record<string, any>;
 
         expect(switchComponents['output'].properties.fps.data).toEqual([0.0]);
         expect(switchComponents['output'].properties.autoSize.data).toEqual([1]);
@@ -1936,8 +1936,8 @@ describe('SessionGTOExporter.buildFolderGroupObjects', () => {
         const result = SessionGTOExporter.buildFolderGroupObjects('folderGroup');
 
         expect(result).toHaveLength(1);
-        expect(result[0].name).toBe('folderGroup');
-        expect(result[0].protocol).toBe('RVFolderGroup');
+        expect(result[0]!.name).toBe('folderGroup');
+        expect(result[0]!.protocol).toBe('RVFolderGroup');
     });
 
     it('sets display name in ui component', () => {
@@ -1945,7 +1945,7 @@ describe('SessionGTOExporter.buildFolderGroupObjects', () => {
             name: 'My Folder',
         });
 
-        const components = result[0].components as Record<string, any>;
+        const components = result[0]!.components as Record<string, any>;
         expect(components['ui'].properties.name.data).toEqual(['My Folder']);
     });
 
@@ -1954,14 +1954,14 @@ describe('SessionGTOExporter.buildFolderGroupObjects', () => {
             viewType: 'layout',
         });
 
-        const components = result[0].components as Record<string, any>;
+        const components = result[0]!.components as Record<string, any>;
         expect(components['mode'].properties.viewType.data).toEqual(['layout']);
     });
 
     it('uses default values when settings not provided', () => {
         const result = SessionGTOExporter.buildFolderGroupObjects('folderGroup');
 
-        const components = result[0].components as Record<string, any>;
+        const components = result[0]!.components as Record<string, any>;
 
         expect(components['ui'].properties.name.data).toEqual(['Folder']);
         expect(components['mode'].properties.viewType.data).toEqual(['switch']);

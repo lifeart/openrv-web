@@ -7,7 +7,7 @@ import { ContextToolbar } from './ui/components/layout/ContextToolbar';
 import { PaintEngine } from './paint/PaintEngine';
 import { PaintToolbar } from './ui/components/PaintToolbar';
 import { ColorControls } from './ui/components/ColorControls';
-import { TransformControl } from './ui/components/TransformControl';
+import { TransformControl, DEFAULT_TRANSFORM } from './ui/components/TransformControl';
 import { FilterControl } from './ui/components/FilterControl';
 import { CropControl } from './ui/components/CropControl';
 import { CDLControl } from './ui/components/CDLControl';
@@ -295,7 +295,7 @@ export class App {
     // Initialize transform control with history recording
     this.transformControl = new TransformControl();
     this.transformControl.on('transformChanged', (transform) => {
-      const previousTransform = this.transformHistoryPrevious ?? { rotation: 0, flipH: false, flipV: false };
+      const previousTransform = this.transformHistoryPrevious ?? DEFAULT_TRANSFORM;
       const currentTransform = { ...transform };
 
       this.viewer.setTransform(transform);

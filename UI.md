@@ -453,9 +453,9 @@ src/ui/
 Unified button component for consistent styling across the application.
 
 ```typescript
-import { createButton, createIconButton, setButtonActive } from './shared/Button';
+import { createButton, createIconButton, setButtonActive, applyA11yFocus } from './shared/Button';
 
-// Text button
+// Text button (includes A11Y focus handling automatically)
 const btn = createButton('Save', () => handleSave(), {
   variant: 'primary',  // 'default' | 'primary' | 'danger' | 'ghost' | 'icon'
   size: 'md',          // 'sm' | 'md' | 'lg'
@@ -465,7 +465,7 @@ const btn = createButton('Save', () => handleSave(), {
   minWidth: '80px'
 });
 
-// Icon button
+// Icon button (includes A11Y focus handling automatically)
 const iconBtn = createIconButton('<svg>...</svg>', () => handleClick(), {
   variant: 'ghost',
   size: 'sm',
@@ -474,6 +474,12 @@ const iconBtn = createIconButton('<svg>...</svg>', () => handleClick(), {
 
 // Update active state
 setButtonActive(btn, true, 'default');
+
+// For custom buttons: apply A11Y focus handling
+// Shows focus ring only for keyboard navigation, not mouse clicks
+const customBtn = document.createElement('button');
+customBtn.style.cssText = '...outline: none;'; // Must include outline: none
+applyA11yFocus(customBtn); // Returns cleanup function if needed
 ```
 
 ### Modal Component (`src/ui/components/shared/Modal.ts`)
@@ -1369,6 +1375,8 @@ Use for **component-specific buttons** with full control:
 
 ```typescript
 // Standard flat button pattern
+import { applyA11yFocus } from './shared/Button';
+
 const button = document.createElement('button');
 button.dataset.testid = 'my-button'; // Required for e2e tests
 button.title = 'Button tooltip';
@@ -1385,6 +1393,7 @@ button.style.cssText = `
   align-items: center;
   justify-content: center;
   gap: 4px;
+  outline: none;
 `;
 
 // Hover state
@@ -1403,6 +1412,9 @@ button.addEventListener('mouseleave', () => {
     button.style.color = '#999';
   }
 });
+
+// Apply A11Y focus handling (shows focus ring only for keyboard navigation)
+applyA11yFocus(button);
 
 // Active state (when selected/enabled)
 function setActive(active: boolean): void {
@@ -1430,7 +1442,17 @@ function setActive(active: boolean): void {
    button.title = 'Stereo viewing mode (Shift+3)';
    ```
 
-3. **Use consistent sizing**:
+3. **Always add A11Y focus handling** for keyboard navigation:
+   ```typescript
+   import { applyA11yFocus } from './shared/Button';
+
+   // Add outline: none to base style, then apply A11Y focus
+   button.style.cssText = `...outline: none;`;
+   applyA11yFocus(button);
+   ```
+   This shows a blue focus ring (`outline: 2px solid #4a9eff`) only when the button is focused via keyboard (Tab), not on mouse click.
+
+4. **Use consistent sizing**:
    - Toolbar buttons: `padding: 6px 10px`, `font-size: 12px`
    - Small inline buttons: `padding: 4px 8px`, `font-size: 11px`
    - Icon buttons: `min-width: 28px`, same height

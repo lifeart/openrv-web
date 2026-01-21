@@ -10,6 +10,7 @@
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
+import { applyA11yFocus } from './shared/Button';
 
 export type ChannelMode = 'rgb' | 'red' | 'green' | 'blue' | 'alpha' | 'luminance';
 
@@ -108,6 +109,7 @@ export class ChannelSelect extends EventEmitter<ChannelSelectEvents> {
       justify-content: center;
       min-width: 60px;
       gap: 4px;
+      outline: none;
     `;
     this.updateButtonLabel();
 
@@ -129,6 +131,9 @@ export class ChannelSelect extends EventEmitter<ChannelSelectEvents> {
         this.button.style.color = '#999';
       }
     });
+
+    // Apply A11Y focus handling
+    applyA11yFocus(this.button);
 
     // Create dropdown
     this.dropdown = document.createElement('div');

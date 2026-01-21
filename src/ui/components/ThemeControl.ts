@@ -8,6 +8,7 @@
  */
 
 import { getIconSvg } from './shared/Icons';
+import { applyA11yFocus } from './shared/Button';
 import { getThemeManager, ThemeMode } from '../../utils/ThemeManager';
 
 export class ThemeControl {
@@ -42,6 +43,7 @@ export class ThemeControl {
       align-items: center;
       gap: 4px;
       transition: var(--theme-transition, all 0.12s ease);
+      outline: none;
     `;
     this.updateButtonLabel();
 
@@ -56,6 +58,9 @@ export class ThemeControl {
       }
     });
     this.button.addEventListener('click', () => this.toggleDropdown());
+
+    // Apply A11Y focus handling
+    applyA11yFocus(this.button);
 
     // Create dropdown
     this.dropdown = document.createElement('div');

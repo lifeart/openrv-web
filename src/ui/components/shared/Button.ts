@@ -2,6 +2,7 @@
  * Unified Button Component
  *
  * Consistent button styling across the application.
+ * Includes proper A11Y focus styles for keyboard navigation.
  */
 
 export type ButtonVariant = 'default' | 'primary' | 'danger' | 'ghost' | 'icon';
@@ -88,6 +89,7 @@ export function createButton(
     font-weight: 500;
     white-space: nowrap;
     opacity: ${disabled ? '0.5' : '1'};
+    outline: none;
     ${minWidth ? `min-width: ${minWidth};` : ''}
   `;
 
@@ -107,6 +109,10 @@ export function createButton(
     button.appendChild(textSpan);
   }
 
+  // Track if focus came from keyboard (for A11Y focus ring)
+  // Default to true - assume keyboard until mouse click proves otherwise
+  let focusFromKeyboard = true;
+
   // Event handlers
   if (!disabled) {
     button.addEventListener('mouseenter', () => {
@@ -120,11 +126,25 @@ export function createButton(
     });
 
     button.addEventListener('mousedown', () => {
+      focusFromKeyboard = false;
       button.style.cssText = `${baseStyle} ${variantStyle.active}`;
     });
 
     button.addEventListener('mouseup', () => {
       button.style.cssText = `${baseStyle} ${active ? variantStyle.active : variantStyle.hover}`;
+    });
+
+    button.addEventListener('focus', () => {
+      // Show focus ring only for keyboard navigation
+      if (focusFromKeyboard) {
+        button.style.outline = '2px solid #4a9eff';
+        button.style.outlineOffset = '2px';
+      }
+    });
+
+    button.addEventListener('blur', () => {
+      button.style.outline = 'none';
+      focusFromKeyboard = true; // Reset for next focus
     });
 
     button.addEventListener('click', onClick);
@@ -151,4 +171,42 @@ export function createIconButton(
   options: Omit<ButtonOptions, 'icon'> = {}
 ): HTMLButtonElement {
   return createButton('', onClick, { ...options, icon, variant: options.variant || 'icon' });
+}
+
+/**
+ * Apply A11Y focus handling to any button element.
+ * Shows focus ring only for keyboard navigation (tab), not mouse clicks.
+ *
+ * @param button - The button element to add focus handling to
+ * @returns Cleanup function to remove event listeners
+ */
+export function applyA11yFocus(button: HTMLButtonElement): () => void {
+  let focusFromKeyboard = true;
+
+  const handleMouseDown = () => {
+    focusFromKeyboard = false;
+  };
+
+  const handleFocus = () => {
+    if (focusFromKeyboard) {
+      button.style.outline = '2px solid #4a9eff';
+      button.style.outlineOffset = '2px';
+    }
+  };
+
+  const handleBlur = () => {
+    button.style.outline = 'none';
+    focusFromKeyboard = true;
+  };
+
+  button.addEventListener('mousedown', handleMouseDown);
+  button.addEventListener('focus', handleFocus);
+  button.addEventListener('blur', handleBlur);
+
+  // Return cleanup function
+  return () => {
+    button.removeEventListener('mousedown', handleMouseDown);
+    button.removeEventListener('focus', handleFocus);
+    button.removeEventListener('blur', handleBlur);
+  };
 }

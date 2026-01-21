@@ -1,5 +1,6 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
+import { applyA11yFocus } from './shared/Button';
 
 export interface VolumeState {
   volume: number;  // 0-1
@@ -51,6 +52,7 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      outline: none;
     `;
 
     this.muteButton.addEventListener('click', () => this.toggleMute());
@@ -64,6 +66,9 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
       this.muteButton.style.borderColor = 'transparent';
       this.muteButton.style.color = '#999';
     });
+
+    // Apply A11Y focus handling
+    applyA11yFocus(this.muteButton);
 
     // Create volume slider container (shows on hover)
     this.volumeContainer = document.createElement('div');
