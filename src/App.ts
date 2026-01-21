@@ -38,6 +38,7 @@ import { getGlobalHistoryManager } from './utils/HistoryManager';
 import { getThemeManager } from './utils/ThemeManager';
 import { HistoryPanel } from './ui/components/HistoryPanel';
 import { InfoPanel } from './ui/components/InfoPanel';
+import { MarkerListPanel } from './ui/components/MarkerListPanel';
 import { CacheIndicator } from './ui/components/CacheIndicator';
 import { TextFormattingToolbar } from './ui/components/TextFormattingToolbar';
 
@@ -78,6 +79,7 @@ export class App {
   private customKeyBindingsManager: CustomKeyBindingsManager;
   private historyPanel: HistoryPanel;
   private infoPanel: InfoPanel;
+  private markerListPanel: MarkerListPanel;
   private cacheIndicator: CacheIndicator;
   private textFormattingToolbar: TextFormattingToolbar;
 
@@ -430,6 +432,9 @@ export class App {
     // Initialize info panel
     this.infoPanel = new InfoPanel();
 
+    // Initialize marker list panel
+    this.markerListPanel = new MarkerListPanel(this.session);
+
     // Initialize text formatting toolbar
     this.textFormattingToolbar = new TextFormattingToolbar(
       this.paintEngine,
@@ -491,6 +496,9 @@ export class App {
 
     // Add info panel to viewer container
     this.viewer.getContainer().appendChild(this.infoPanel.getElement());
+
+    // Add marker list panel to viewer container
+    this.viewer.getContainer().appendChild(this.markerListPanel.getElement());
 
     // Wire up cursor color updates from viewer to info panel
     this.viewer.onCursorColorChange((color, position) => {
@@ -844,6 +852,24 @@ export class App {
       }
     });
 
+    // Markers panel toggle button
+    const markersButton = ContextToolbar.createButton('Markers', () => {
+      this.markerListPanel.toggle();
+    }, { title: 'Toggle markers list panel (Shift+Alt+M)', icon: 'marker' });
+    markersButton.dataset.testid = 'markers-toggle-button';
+    annotateContent.appendChild(markersButton);
+
+    // Update button state when visibility changes
+    this.markerListPanel.on('visibilityChanged', (visible) => {
+      if (visible) {
+        markersButton.style.background = 'rgba(74, 158, 255, 0.15)';
+        markersButton.style.borderColor = '#4a9eff';
+      } else {
+        markersButton.style.background = '';
+        markersButton.style.borderColor = '';
+      }
+    });
+
     this.contextToolbar.setTabContent('annotate', annotateContent);
   }
 
@@ -1092,6 +1118,9 @@ export class App {
       },
       'panel.history': () => {
         this.historyPanel.toggle();
+      },
+      'panel.markers': () => {
+        this.markerListPanel.toggle();
       },
       'view.toggleInfoPanel': () => {
         this.infoPanel.toggle();

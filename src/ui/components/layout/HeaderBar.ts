@@ -37,6 +37,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private speedButton!: HTMLButtonElement;
   private fileInput!: HTMLInputElement;
   private projectInput!: HTMLInputElement;
+  private sessionNameDisplay!: HTMLElement;
 
   constructor(session: Session) {
     super();
@@ -99,6 +100,11 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     fileGroup.appendChild(this.exportControl.render());
 
     this.container.appendChild(fileGroup);
+    this.addDivider();
+
+    // === SESSION NAME DISPLAY ===
+    this.sessionNameDisplay = this.createSessionNameDisplay();
+    this.container.appendChild(this.sessionNameDisplay);
     this.addDivider();
 
     // === PLAYBACK CONTROLS GROUP ===
@@ -293,6 +299,81 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       'keyboard': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"/><path d="m6 8h.01"/><path d="m10 8h.01"/><path d="m14 8h.01"/><path d="m18 8h.01"/><path d="m8 12h.01"/><path d="m12 12h.01"/><path d="m16 12h.01"/><path d="m7 16h10"/></svg>',
     };
     return icons[name] || '';
+  }
+
+  private createSessionNameDisplay(): HTMLElement {
+    const container = document.createElement('div');
+    container.className = 'session-name-display';
+    container.dataset.testid = 'session-name-display';
+    container.style.cssText = `
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      max-width: 200px;
+      min-width: 80px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: default;
+      transition: background 0.12s ease;
+    `;
+
+    // Icon
+    const icon = document.createElement('span');
+    icon.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>';
+    icon.style.cssText = `
+      color: #888;
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+    `;
+    container.appendChild(icon);
+
+    // Name text
+    const nameText = document.createElement('span');
+    nameText.className = 'session-name-text';
+    nameText.style.cssText = `
+      color: #ccc;
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    `;
+    nameText.textContent = 'Untitled';
+    container.appendChild(nameText);
+
+    // Hover effect
+    container.addEventListener('mouseenter', () => {
+      container.style.background = 'rgba(255,255,255,0.05)';
+    });
+    container.addEventListener('mouseleave', () => {
+      container.style.background = 'transparent';
+    });
+
+    return container;
+  }
+
+  private updateSessionNameDisplay(): void {
+    const metadata = this.session.metadata;
+    const nameText = this.sessionNameDisplay.querySelector('.session-name-text') as HTMLElement;
+
+    if (nameText) {
+      const displayName = metadata.displayName || 'Untitled';
+      nameText.textContent = displayName;
+
+      // Build tooltip with name and comment
+      let tooltip = displayName;
+      if (metadata.comment) {
+        tooltip += `\n\n${metadata.comment}`;
+      }
+      if (metadata.origin && metadata.origin !== 'openrv-web') {
+        tooltip += `\n\nCreated in: ${metadata.origin}`;
+      }
+      if (metadata.version > 0) {
+        tooltip += `\nSession version: ${metadata.version}`;
+      }
+
+      this.sessionNameDisplay.title = tooltip;
+    }
   }
 
   private cycleLoopMode(): void {
@@ -495,6 +576,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.session.on('loopModeChanged', () => this.updateLoopButton());
     this.session.on('playDirectionChanged', () => this.updateDirectionButton());
     this.session.on('playbackSpeedChanged', () => this.updateSpeedButton());
+    this.session.on('metadataChanged', () => this.updateSessionNameDisplay());
   }
 
   // Public accessors for child controls
@@ -511,6 +593,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.updatePlayButton();
     this.updateDirectionButton();
     this.updateSpeedButton();
+    this.updateSessionNameDisplay();
     return this.container;
   }
 

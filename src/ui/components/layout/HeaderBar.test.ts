@@ -617,4 +617,152 @@ describe('HeaderBar', () => {
       }
     });
   });
+
+  describe('session name display', () => {
+    it('HDR-U160: has session name display element', () => {
+      const el = headerBar.render();
+      const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]');
+      expect(sessionNameDisplay).not.toBeNull();
+    });
+
+    it('HDR-U161: session name display shows "Untitled" by default', () => {
+      const el = headerBar.render();
+      const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]');
+      const nameText = sessionNameDisplay?.querySelector('.session-name-text');
+      expect(nameText?.textContent).toBe('Untitled');
+    });
+
+    it('HDR-U162: session name display updates when metadata changes', () => {
+      const el = headerBar.render();
+      const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]');
+      const nameText = sessionNameDisplay?.querySelector('.session-name-text');
+
+      // Simulate metadata change
+      (session as any)._metadata = {
+        displayName: 'My Session',
+        comment: 'Test comment',
+        version: 2,
+        origin: 'openrv-web',
+        creationContext: 0,
+        clipboard: 0,
+        membershipContains: [],
+      };
+      session.emit('metadataChanged', (session as any)._metadata);
+
+      expect(nameText?.textContent).toBe('My Session');
+    });
+
+    it('HDR-U163: session name display tooltip includes comment', () => {
+      const el = headerBar.render();
+      const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]') as HTMLElement;
+
+      // Simulate metadata change with comment
+      (session as any)._metadata = {
+        displayName: 'Test Session',
+        comment: 'This is a test comment',
+        version: 2,
+        origin: 'openrv-web',
+        creationContext: 0,
+        clipboard: 0,
+        membershipContains: [],
+      };
+      session.emit('metadataChanged', (session as any)._metadata);
+
+      expect(sessionNameDisplay.title).toContain('Test Session');
+      expect(sessionNameDisplay.title).toContain('This is a test comment');
+    });
+
+    it('HDR-U164: session name display tooltip shows origin if not openrv-web', () => {
+      const el = headerBar.render();
+      const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]') as HTMLElement;
+
+      // Simulate metadata change with different origin
+      (session as any)._metadata = {
+        displayName: 'External Session',
+        comment: '',
+        version: 3,
+        origin: 'rv-desktop',
+        creationContext: 0,
+        clipboard: 0,
+        membershipContains: [],
+      };
+      session.emit('metadataChanged', (session as any)._metadata);
+
+      expect(sessionNameDisplay.title).toContain('Created in: rv-desktop');
+    });
+
+    it('HDR-U165: session name display tooltip shows version', () => {
+      const el = headerBar.render();
+      const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]') as HTMLElement;
+
+      // Simulate metadata change
+      (session as any)._metadata = {
+        displayName: 'Versioned Session',
+        comment: '',
+        version: 5,
+        origin: 'openrv-web',
+        creationContext: 0,
+        clipboard: 0,
+        membershipContains: [],
+      };
+      session.emit('metadataChanged', (session as any)._metadata);
+
+      expect(sessionNameDisplay.title).toContain('Session version: 5');
+    });
+
+    it('HDR-U166: session name display does not show origin if openrv-web', () => {
+      const el = headerBar.render();
+      const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]') as HTMLElement;
+
+      // Simulate metadata change with default origin
+      (session as any)._metadata = {
+        displayName: 'Local Session',
+        comment: '',
+        version: 2,
+        origin: 'openrv-web',
+        creationContext: 0,
+        clipboard: 0,
+        membershipContains: [],
+      };
+      session.emit('metadataChanged', (session as any)._metadata);
+
+      expect(sessionNameDisplay.title).not.toContain('Created in:');
+    });
+
+    it('HDR-U167: session name display handles empty displayName', () => {
+      const el = headerBar.render();
+      const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]');
+      const nameText = sessionNameDisplay?.querySelector('.session-name-text');
+
+      // Simulate metadata change with empty displayName
+      (session as any)._metadata = {
+        displayName: '',
+        comment: '',
+        version: 2,
+        origin: 'openrv-web',
+        creationContext: 0,
+        clipboard: 0,
+        membershipContains: [],
+      };
+      session.emit('metadataChanged', (session as any)._metadata);
+
+      expect(nameText?.textContent).toBe('Untitled');
+    });
+
+    it('HDR-U168: session name display has hover effect', () => {
+      const el = headerBar.render();
+      const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]') as HTMLElement;
+
+      // Initial state
+      expect(sessionNameDisplay.style.background).toBeFalsy();
+
+      // Simulate mouseenter
+      sessionNameDisplay.dispatchEvent(new MouseEvent('mouseenter'));
+      expect(sessionNameDisplay.style.background).toContain('rgba(255');
+
+      // Simulate mouseleave
+      sessionNameDisplay.dispatchEvent(new MouseEvent('mouseleave'));
+      expect(sessionNameDisplay.style.background).toBe('transparent');
+    });
+  });
 });

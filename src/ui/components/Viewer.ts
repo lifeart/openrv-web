@@ -39,6 +39,12 @@ interface PointerState {
   y: number;
 }
 
+// Wipe label constants
+const DEFAULT_WIPE_LABEL_A = 'Original';
+const DEFAULT_WIPE_LABEL_B = 'Graded';
+const WIPE_LABEL_HIDE_THRESHOLD_LOW = 0.1;  // Hide label A below 10%
+const WIPE_LABEL_HIDE_THRESHOLD_HIGH = 0.9; // Hide label B above 90%
+
 export class Viewer {
   private container: HTMLElement;
   private canvasContainer: HTMLElement;
@@ -108,6 +114,8 @@ export class Viewer {
   // Wipe comparison
   private wipeState: WipeState = { mode: 'off', position: 0.5, showOriginal: 'left' };
   private wipeLine: HTMLElement | null = null;
+  private wipeLabelA: HTMLElement | null = null;
+  private wipeLabelB: HTMLElement | null = null;
   private isDraggingWipe = false;
 
   // LUT
@@ -326,6 +334,43 @@ export class Viewer {
       box-shadow: 0 0 4px rgba(74, 158, 255, 0.5);
     `;
     this.container.appendChild(this.wipeLine);
+
+    // Create wipe source labels
+    this.wipeLabelA = document.createElement('div');
+    this.wipeLabelA.className = 'wipe-label-a';
+    this.wipeLabelA.dataset.testid = 'wipe-label-a';
+    this.wipeLabelA.textContent = DEFAULT_WIPE_LABEL_A;
+    this.wipeLabelA.style.cssText = `
+      position: absolute;
+      background: rgba(0, 0, 0, 0.7);
+      color: #fff;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 500;
+      z-index: 51;
+      display: none;
+      pointer-events: none;
+    `;
+    this.container.appendChild(this.wipeLabelA);
+
+    this.wipeLabelB = document.createElement('div');
+    this.wipeLabelB.className = 'wipe-label-b';
+    this.wipeLabelB.dataset.testid = 'wipe-label-b';
+    this.wipeLabelB.textContent = DEFAULT_WIPE_LABEL_B;
+    this.wipeLabelB.style.cssText = `
+      position: absolute;
+      background: rgba(74, 158, 255, 0.7);
+      color: #fff;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 500;
+      z-index: 51;
+      display: none;
+      pointer-events: none;
+    `;
+    this.container.appendChild(this.wipeLabelB);
 
     // Create LUT indicator badge
     this.lutIndicator = document.createElement('div');
@@ -1732,6 +1777,24 @@ export class Viewer {
     this.scheduleRender();
   }
 
+  /**
+   * Set the text labels shown on each side of the wipe split
+   */
+  setWipeLabels(labelA: string, labelB: string): void {
+    if (this.wipeLabelA) this.wipeLabelA.textContent = labelA;
+    if (this.wipeLabelB) this.wipeLabelB.textContent = labelB;
+  }
+
+  /**
+   * Get wipe labels
+   */
+  getWipeLabels(): { labelA: string; labelB: string } {
+    return {
+      labelA: this.wipeLabelA?.textContent || DEFAULT_WIPE_LABEL_A,
+      labelB: this.wipeLabelB?.textContent || DEFAULT_WIPE_LABEL_B,
+    };
+  }
+
   // Transform methods
   setTransform(transform: Transform2D): void {
     this.transform = {
@@ -2564,11 +2627,41 @@ export class Viewer {
     ctx.stroke();
   }
 
+  /**
+   * Update wipe label visibility and position based on boundary conditions
+   */
+  private updateWipeLabelVisibility(
+    label: HTMLElement | null,
+    position: number,
+    isLowBoundary: boolean,
+    left: string,
+    top: string
+  ): void {
+    if (!label) return;
+
+    const threshold = isLowBoundary
+      ? WIPE_LABEL_HIDE_THRESHOLD_LOW
+      : WIPE_LABEL_HIDE_THRESHOLD_HIGH;
+    const shouldHide = isLowBoundary
+      ? position <= threshold
+      : position >= threshold;
+
+    if (shouldHide) {
+      label.style.display = 'none';
+    } else {
+      label.style.display = 'block';
+      label.style.left = left;
+      label.style.top = top;
+    }
+  }
+
   private updateWipeLine(): void {
     if (!this.wipeLine) return;
 
     if (this.wipeState.mode === 'off') {
       this.wipeLine.style.display = 'none';
+      if (this.wipeLabelA) this.wipeLabelA.style.display = 'none';
+      if (this.wipeLabelB) this.wipeLabelB.style.display = 'none';
       return;
     }
 
@@ -2576,23 +2669,58 @@ export class Viewer {
 
     const containerRect = this.container.getBoundingClientRect();
     const canvasRect = this.canvasContainer.getBoundingClientRect();
+    const canvasLeft = canvasRect.left - containerRect.left;
+    const canvasTop = canvasRect.top - containerRect.top;
+    const position = this.wipeState.position;
 
     if (this.wipeState.mode === 'horizontal') {
       // Vertical line for horizontal wipe
-      const x = canvasRect.left - containerRect.left + this.displayWidth * this.wipeState.position;
+      const x = canvasLeft + this.displayWidth * position;
       this.wipeLine.style.width = '3px';
       this.wipeLine.style.height = `${this.displayHeight}px`;
       this.wipeLine.style.left = `${x - 1}px`;
-      this.wipeLine.style.top = `${canvasRect.top - containerRect.top}px`;
+      this.wipeLine.style.top = `${canvasTop}px`;
       this.wipeLine.style.cursor = 'ew-resize';
+
+      // Position labels at bottom of each side, hide at boundaries
+      this.updateWipeLabelVisibility(
+        this.wipeLabelA,
+        position,
+        true, // isLowBoundary
+        `${canvasLeft + 10}px`,
+        `${canvasTop + this.displayHeight - 30}px`
+      );
+      this.updateWipeLabelVisibility(
+        this.wipeLabelB,
+        position,
+        false, // isLowBoundary
+        `${x + 10}px`,
+        `${canvasTop + this.displayHeight - 30}px`
+      );
     } else if (this.wipeState.mode === 'vertical') {
       // Horizontal line for vertical wipe
-      const y = canvasRect.top - containerRect.top + this.displayHeight * this.wipeState.position;
+      const y = canvasTop + this.displayHeight * position;
       this.wipeLine.style.width = `${this.displayWidth}px`;
       this.wipeLine.style.height = '3px';
-      this.wipeLine.style.left = `${canvasRect.left - containerRect.left}px`;
+      this.wipeLine.style.left = `${canvasLeft}px`;
       this.wipeLine.style.top = `${y - 1}px`;
       this.wipeLine.style.cursor = 'ns-resize';
+
+      // Position labels on left side, hide at boundaries
+      this.updateWipeLabelVisibility(
+        this.wipeLabelA,
+        position,
+        true, // isLowBoundary
+        `${canvasLeft + 10}px`,
+        `${canvasTop + 10}px`
+      );
+      this.updateWipeLabelVisibility(
+        this.wipeLabelB,
+        position,
+        false, // isLowBoundary
+        `${canvasLeft + 10}px`,
+        `${y + 10}px`
+      );
     }
   }
 
@@ -2877,6 +3005,11 @@ export class Viewer {
     this.zebraStripes.dispose();
     this.spotlightOverlay.dispose();
     this.hslQualifier.dispose();
+
+    // Cleanup wipe elements
+    this.wipeLine = null;
+    this.wipeLabelA = null;
+    this.wipeLabelB = null;
   }
 
   /**

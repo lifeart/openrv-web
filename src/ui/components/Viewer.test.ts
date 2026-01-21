@@ -244,6 +244,53 @@ describe('Viewer', () => {
       viewer.setWipePosition(-0.5);
       expect(viewer.getWipeState().position).toBe(0);
     });
+
+    it('WIPE-001: wipe mode can be enabled', () => {
+      expect(viewer.getWipeState().mode).toBe('off');
+      viewer.setWipeMode('horizontal');
+      expect(viewer.getWipeState().mode).toBe('horizontal');
+    });
+
+    it('WIPE-003: vertical/horizontal toggle works', () => {
+      viewer.setWipeMode('horizontal');
+      expect(viewer.getWipeState().mode).toBe('horizontal');
+
+      viewer.setWipeMode('vertical');
+      expect(viewer.getWipeState().mode).toBe('vertical');
+
+      viewer.setWipeMode('off');
+      expect(viewer.getWipeState().mode).toBe('off');
+    });
+
+    it('WIPE-005: source labels have default values', () => {
+      const labels = viewer.getWipeLabels();
+      expect(labels.labelA).toBe('Original');
+      expect(labels.labelB).toBe('Graded');
+    });
+
+    it('WIPE-005b: setWipeLabels updates label text', () => {
+      viewer.setWipeLabels('Source A', 'Source B');
+      const labels = viewer.getWipeLabels();
+      expect(labels.labelA).toBe('Source A');
+      expect(labels.labelB).toBe('Source B');
+    });
+
+    it('WIPE-005c: wipe label elements exist', () => {
+      const container = viewer.getContainer();
+      const labelA = container.querySelector('[data-testid="wipe-label-a"]');
+      const labelB = container.querySelector('[data-testid="wipe-label-b"]');
+      expect(labelA).not.toBeNull();
+      expect(labelB).not.toBeNull();
+    });
+
+    it('WIPE-005d: wipe labels hidden when wipe mode is off', () => {
+      viewer.setWipeMode('off');
+      const container = viewer.getContainer();
+      const labelA = container.querySelector('[data-testid="wipe-label-a"]') as HTMLElement;
+      const labelB = container.querySelector('[data-testid="wipe-label-b"]') as HTMLElement;
+      expect(labelA.style.display).toBe('none');
+      expect(labelB.style.display).toBe('none');
+    });
   });
 
   describe('transform', () => {

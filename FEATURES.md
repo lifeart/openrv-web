@@ -13,8 +13,9 @@ Professional feature proposals for video playback, color grading, and review wor
 5. [Annotation & Review](#5-annotation--review)
 6. [Transform & Correction](#6-transform--correction)
 7. [File Format Support](#7-file-format-support)
-8. [Performance & Technical](#8-performance--technical)
-9. [UI/UX Improvements](#9-uiux-improvements)
+8. [Session & Project Management](#8-session--project-management)
+9. [Performance & Technical](#9-performance--technical)
+10. [UI/UX Improvements](#10-uiux-improvements)
 
 ---
 
@@ -314,7 +315,53 @@ Convert between color spaces and gamma curves for proper handling of different c
 
 ---
 
-### 1.7 Film Emulation / Print Film LUT
+### 1.7 3D LUT Support
+
+**Priority:** HIGH
+**Complexity:** Medium
+**Reference:** DaVinci Resolve LUT support, Nuke
+
+#### Description
+Load and apply 3D Look-Up Tables (.cube, .3dl) for color transforms and creative looks.
+
+#### Requirements
+- Load .cube format (Adobe/Resolve standard)
+- Load .3dl format (Lustre/Flame)
+- Preview LUT effect in real-time
+- LUT intensity/mix control (0-100%)
+- LUT library browser
+- Apply before or after other corrections
+
+#### UI/UX Specifications
+- LUT browser panel with thumbnails
+- Drag-and-drop LUT files
+- Intensity slider
+- Position in pipeline selector (input/output)
+- Recent LUTs list
+
+#### Technical Notes
+- Parse .cube text format (size, domain, data)
+- Store as 3D texture for GPU interpolation
+- Trilinear interpolation for smooth results
+- Support common sizes: 17x17x17, 33x33x33, 65x65x65
+
+#### Test Cases
+- [ ] LUT-001: .cube file loads correctly
+- [ ] LUT-002: .3dl file loads correctly
+- [ ] LUT-003: LUT applies to viewer in real-time
+- [ ] LUT-004: Intensity slider blends LUT effect
+- [ ] LUT-005: Multiple LUTs can be stacked
+- [ ] LUT-006: LUT state saves with session
+
+#### Corner Cases
+- Invalid LUT file format
+- Very large LUTs (65^3 = 274K entries)
+- LUTs with extended range (values outside 0-1)
+- 1D LUTs vs 3D LUTs
+
+---
+
+### 1.8 Film Emulation / Print Film LUT
 
 **Priority:** LOW
 **Complexity:** Low
@@ -424,9 +471,9 @@ Single waveform with all RGB channels overlaid, showing where colors align (whit
 - Adjustable trace intensity to prevent washout
 
 #### Test Cases
-- [ ] RGBW-001: Overlapping channels show combined color
-- [ ] RGBW-002: Individual channels distinguishable
-- [ ] RGBW-003: Toggle channels on/off works
+- [x] RGBW-001: Overlapping channels show combined color (additive blending)
+- [x] RGBW-002: Individual channels distinguishable (R/G/B toggle buttons)
+- [x] RGBW-003: Toggle channels on/off works (25 tests in Waveform.test.ts)
 
 ---
 
@@ -690,7 +737,50 @@ Overlay previous/next frames with adjustable opacity for motion analysis and ani
 
 ---
 
-### 3.3 Difference Matte
+### 3.3 A/B Wipe Compare
+
+**Priority:** HIGH
+**Complexity:** Medium
+**Reference:** RV A/B compare, Nuke wipe
+
+#### Description
+Interactive wipe between two sources or grade versions with draggable split line.
+
+#### Requirements
+- Vertical or horizontal split line
+- Draggable split position
+- Swap A/B sources
+- Show source labels
+- Keyboard shortcut to toggle wipe mode
+
+#### UI/UX Specifications
+- Click and drag split line
+- Double-click to center split
+- Labels showing A/B source names
+- Toggle between vertical/horizontal split
+
+#### Technical Notes
+- Render both sources to same canvas
+- Use clip regions or stencil buffer
+- Split line follows mouse during drag
+- Store split position as 0-1 normalized value
+
+#### Test Cases
+- [x] WIPE-001: Wipe mode can be enabled (Viewer.test.ts WIPE-001)
+- [x] WIPE-002: Split line is draggable (Viewer.ts handleWipePointerDown/Move/Up)
+- [x] WIPE-003: Vertical/horizontal toggle works (Viewer.test.ts WIPE-003)
+- [x] WIPE-004: A/B sources can be swapped (CompareControl toggleAB, 53 tests)
+- [x] WIPE-005: Source labels display correctly (Viewer.test.ts WIPE-005, WIPE-005b/c/d)
+- [x] WIPE-006: Keyboard shortcut toggles wipe (KeyBindings 'view.cycleWipeMode')
+
+#### Corner Cases
+- Different resolution sources
+- Different aspect ratio sources
+- Split at extreme positions (0%, 100%)
+
+---
+
+### 3.4 Difference Matte (Previously 3.3)
 
 **Priority:** LOW
 **Complexity:** Low
@@ -911,7 +1001,51 @@ Variable playback speed from slow motion to fast forward.
 
 ---
 
-### 4.5 Frame Caching Visualization
+### 4.5 Audio Waveform Display
+
+**Priority:** MEDIUM
+**Complexity:** Medium
+**Reference:** Premiere Pro, DaVinci Resolve audio tracks
+
+#### Description
+Display audio waveform visualization in timeline for audio sync and editing reference.
+
+#### Requirements
+- Generate waveform from audio track
+- Display in timeline below video track
+- Zoom with timeline
+- Show stereo channels (L/R)
+- Color coding for channels
+- Peak indicators
+
+#### UI/UX Specifications
+- Waveform height adjustable
+- Toggle visibility
+- Color options for L/R channels
+- Peak clipping indicators (red)
+
+#### Technical Notes
+- Decode audio using Web Audio API
+- Generate waveform data in web worker
+- Cache waveform data for performance
+- Downsample for zoomed out view
+
+#### Test Cases
+- [ ] AUDIO-001: Waveform generates for video with audio
+- [ ] AUDIO-002: Stereo channels display separately
+- [ ] AUDIO-003: Waveform scales with timeline zoom
+- [ ] AUDIO-004: Peak clipping indicated
+- [ ] AUDIO-005: Waveform cached for performance
+
+#### Corner Cases
+- Video without audio track
+- Very long audio (memory management)
+- Multi-channel audio (5.1, 7.1)
+- Variable sample rates
+
+---
+
+### 4.6 Frame Caching Visualization
 
 **Priority:** LOW
 **Complexity:** Low
@@ -1089,7 +1223,50 @@ Enhance existing text tool with more formatting options.
 
 ---
 
-### 5.4 Comparison Annotations
+### 5.4 Annotation Export
+
+**Priority:** MEDIUM
+**Complexity:** Medium
+**Reference:** Frame.io PDF export, SyncSketch
+
+#### Description
+Export annotations and review notes to various formats for sharing with team members.
+
+#### Requirements
+- Export to PDF with frame thumbnails and notes
+- Export to image (PNG/JPEG) with annotations burned in
+- Export to JSON for data interchange
+- Export to CSV for spreadsheet review
+- Include timecode and frame numbers
+
+#### UI/UX Specifications
+- Export dialog with format selection
+- Options for thumbnail size
+- Include/exclude options per annotation type
+- Filename template
+
+#### Technical Notes
+- Use canvas to render annotations on frames
+- PDF generation via jsPDF or similar
+- JSON schema for annotations interchange
+- Batch export for multiple frames
+
+#### Test Cases
+- [ ] EXPORT-001: PDF export generates valid file
+- [ ] EXPORT-002: PNG export includes annotations
+- [ ] EXPORT-003: JSON export contains all annotation data
+- [ ] EXPORT-004: CSV export readable in spreadsheet
+- [ ] EXPORT-005: Timecode included in exports
+
+#### Corner Cases
+- Very many annotations (large PDF)
+- Annotations outside frame bounds
+- Unicode text in annotations
+- Very long annotation text
+
+---
+
+### 5.5 Comparison Annotations (Previously 5.4)
 
 **Priority:** LOW
 **Complexity:** Medium
@@ -1458,9 +1635,143 @@ Import timeline/edit data from OpenTimelineIO format.
 
 ---
 
-## 8. Performance & Technical
+## 8. Session & Project Management
 
-### 8.1 Web Worker Frame Decoding
+### 8.1 Session Auto-Save
+
+**Priority:** HIGH
+**Complexity:** Low
+**Reference:** Professional NLE auto-save
+
+#### Description
+Automatically save session state at regular intervals to prevent data loss.
+
+#### Requirements
+- Configurable auto-save interval (1-30 minutes)
+- Save to browser storage (IndexedDB)
+- Recovery prompt on app reload after crash
+- Manual save trigger
+- Save indicator in UI
+
+#### UI/UX Specifications
+- Auto-save indicator (subtle pulse when saving)
+- Recovery dialog on startup if unsaved state found
+- Settings for auto-save interval
+- "Last saved" timestamp display
+
+#### Technical Notes
+- Use IndexedDB for large session storage
+- Debounce saves during rapid changes
+- Store session as GTO format internally
+- Version recovery sessions
+
+#### Test Cases
+- [ ] AUTOSAVE-001: Session auto-saves at interval
+- [ ] AUTOSAVE-002: Recovery prompt appears after crash
+- [ ] AUTOSAVE-003: Manual save works
+- [ ] AUTOSAVE-004: Save indicator visible during save
+- [ ] AUTOSAVE-005: Auto-save interval configurable
+
+#### Corner Cases
+- Very large sessions (storage limits)
+- Rapid changes (debouncing)
+- Browser storage disabled
+- Multiple tabs open
+
+---
+
+### 8.2 Session Version History
+
+**Priority:** MEDIUM
+**Complexity:** Medium
+**Reference:** Google Docs version history
+
+#### Description
+Maintain version history of session saves for rollback capability.
+
+#### Requirements
+- Store multiple session versions
+- Named versions (manual snapshots)
+- Auto-versioned saves with timestamps
+- Compare versions
+- Restore to previous version
+
+#### UI/UX Specifications
+- Version history panel
+- Create named snapshot button
+- Version list with timestamps
+- Preview version before restore
+- Delete old versions
+
+#### Technical Notes
+- Store versions in IndexedDB
+- Limit version count (configurable)
+- Delta storage for efficiency (optional)
+- Export version as .rv file
+
+#### Test Cases
+- [ ] VERSION-001: Named version creates snapshot
+- [ ] VERSION-002: Auto-versions created on save
+- [ ] VERSION-003: Version list displays correctly
+- [ ] VERSION-004: Restore to version works
+- [ ] VERSION-005: Old versions can be deleted
+
+#### Corner Cases
+- Many versions (storage management)
+- Corrupted version data
+- Restore during playback
+
+---
+
+### 8.3 Multi-Clip Playlist
+
+**Priority:** MEDIUM
+**Complexity:** Medium
+**Reference:** RV session manager, playlist functionality
+
+#### Description
+Manage multiple clips in a playlist/sequence for batch review.
+
+#### Requirements
+- Add multiple clips to playlist
+- Reorder clips via drag-and-drop
+- Play through all clips sequentially
+- Jump to specific clip
+- Remove clips from playlist
+- Save/load playlists
+
+#### UI/UX Specifications
+- Playlist panel (collapsible)
+- Drag-and-drop reordering
+- Thumbnail per clip
+- Current clip highlight
+- Add/remove buttons
+
+#### Technical Notes
+- Store clip references and order
+- Preload next clip during playback
+- Handle different frame rates/resolutions
+- Playlist as part of session state
+
+#### Test Cases
+- [ ] PLAYLIST-001: Add clip to playlist
+- [ ] PLAYLIST-002: Remove clip from playlist
+- [ ] PLAYLIST-003: Reorder clips via drag-and-drop
+- [ ] PLAYLIST-004: Play through clips sequentially
+- [ ] PLAYLIST-005: Jump to specific clip
+- [ ] PLAYLIST-006: Playlist saves with session
+
+#### Corner Cases
+- Clips with different frame rates
+- Missing/offline clips
+- Very long playlists
+- Playlist loop mode
+
+---
+
+## 9. Performance & Technical
+
+### 9.1 Web Worker Frame Decoding
 
 **Priority:** HIGH
 **Complexity:** Medium
@@ -1502,7 +1813,7 @@ Decode video frames in Web Workers to prevent UI blocking.
 
 ---
 
-### 8.2 GPU Texture Caching
+### 9.2 GPU Texture Caching
 
 **Priority:** MEDIUM
 **Complexity:** Medium
@@ -1541,7 +1852,7 @@ Cache decoded frames as GPU textures for faster rendering.
 
 ---
 
-### 8.3 Lazy Loading for Long Sequences
+### 9.3 Lazy Loading for Long Sequences
 
 **Priority:** MEDIUM
 **Complexity:** Medium
@@ -1581,9 +1892,9 @@ Load frames on-demand for very long sequences instead of all at once.
 
 ---
 
-## 9. UI/UX Improvements
+## 10. UI/UX Improvements
 
-### 9.1 Customizable Layout
+### 10.1 Customizable Layout
 
 **Priority:** MEDIUM
 **Complexity:** High
@@ -1624,7 +1935,7 @@ Allow users to arrange panels and create custom workspace layouts.
 
 ---
 
-### 9.2 Dark/Light Theme Options
+### 10.2 Dark/Light Theme Options
 
 **Priority:** LOW
 **Complexity:** Low
@@ -1670,7 +1981,7 @@ Support for dark and light color themes with system preference detection.
 
 ---
 
-### 9.3 Full Keyboard Navigation
+### 10.3 Full Keyboard Navigation
 
 **Priority:** MEDIUM
 **Complexity:** Medium
@@ -1712,7 +2023,7 @@ Full keyboard navigation support for all UI elements.
 
 ---
 
-### 9.4 Undo/Redo History Panel
+### 10.4 Undo/Redo History Panel
 
 **Priority:** MEDIUM
 **Complexity:** Low
@@ -1758,7 +2069,7 @@ Visual panel showing undo/redo history with ability to jump to any state.
 
 ---
 
-### 9.5 Floating Info Panel
+### 10.5 Floating Info Panel
 
 **Priority:** LOW
 **Complexity:** Low
@@ -1805,51 +2116,58 @@ Configurable info overlay showing file metadata, frame info, and color values.
 ## Implementation Priority Summary
 
 ### Phase 1 - High Priority (Foundation)
-1. Lift/Gamma/Gain Color Wheels (1.1)
-2. Highlight/Shadow Recovery (1.2)
-3. HSL Qualifier (1.5)
-4. False Color Display (2.3)
-5. Pixel Probe (2.5)
-6. Shape Tools (5.1)
-7. Safe Areas / Guides (6.3)
-8. Timecode Display (4.1)
-9. EXR Support (7.1)
-10. Web Worker Frame Decoding (8.1)
+1. ✅ Lift/Gamma/Gain Color Wheels (1.1)
+2. ✅ Highlight/Shadow Recovery (1.2)
+3. ✅ HSL Qualifier (1.5)
+4. ✅ False Color Display (2.3)
+5. ✅ Pixel Probe (2.5)
+6. ✅ Shape Tools (5.1)
+7. ✅ Safe Areas / Guides (6.3)
+8. ✅ Timecode Display (4.1)
+9. 3D LUT Support (1.7) - NEW
+10. ✅ A/B Wipe Compare (3.3)
+11. EXR Support (7.1)
+12. Web Worker Frame Decoding (9.1)
+13. Session Auto-Save (8.1) - NEW
 
 ### Phase 2 - Medium Priority (Enhancement)
-1. Vibrance Control (1.3)
-2. Clarity/Local Contrast (1.4)
+1. ✅ Vibrance Control (1.3)
+2. ✅ Clarity/Local Contrast (1.4)
 3. Color Space Conversion (1.6)
-4. Parade Scope (2.1)
-5. Zebra Stripes (2.4)
+4. ✅ Parade Scope (2.1)
+5. ✅ Zebra Stripes (2.4)
 6. Split Screen Compare (3.1)
 7. Onion Skin (3.2)
 8. Timeline Thumbnails (4.2)
-9. Markers with Notes (4.3)
-10. Playback Speed Control (4.4)
-11. Perspective Correction (6.1)
-12. DPX Support (7.2)
-13. OTIO Import (7.4)
-14. GPU Texture Caching (8.2)
-15. Lazy Loading (8.3)
-16. Customizable Layout (9.1)
-17. Full Keyboard Navigation (9.3)
-18. Undo/Redo History Panel (9.4)
+9. Markers with Notes UI (4.3) - partial, API done
+10. ✅ Playback Speed Control (4.4)
+11. Audio Waveform Display (4.5) - NEW
+12. Annotation Export (5.4) - NEW
+13. Perspective Correction (6.1)
+14. DPX Support (7.2)
+15. OTIO Import (7.4)
+16. Session Version History (8.2) - NEW
+17. Multi-Clip Playlist (8.3) - NEW
+18. GPU Texture Caching (9.2)
+19. Lazy Loading (9.3)
+20. Customizable Layout (10.1)
+21. Full Keyboard Navigation (10.3)
+22. ✅ Undo/Redo History Panel (10.4)
 
 ### Phase 3 - Lower Priority (Polish)
-1. Film Emulation (1.7)
-2. RGB Overlay Waveform (2.2)
-3. Histogram Clipping Indicators (2.6)
-4. Difference Matte (3.3)
-5. Frame Caching Visualization (4.5)
-6. Spotlight Tool (5.2)
-7. Text Annotations Enhancement (5.3)
-8. Comparison Annotations (5.4)
+1. Film Emulation (1.8)
+2. ✅ RGB Overlay Waveform (2.2)
+3. ✅ Histogram Clipping Indicators (2.6)
+4. ✅ Difference Matte (3.4)
+5. ✅ Frame Caching Visualization (4.6)
+6. ✅ Spotlight Tool (5.2)
+7. ✅ Text Annotations Enhancement (5.3)
+8. Comparison Annotations (5.5)
 9. Stabilization Preview (6.2)
 10. Deinterlace Preview (6.4)
 11. RAW Image Preview (7.3)
-12. Dark/Light Theme (9.2)
-13. Floating Info Panel (9.5)
+12. ✅ Dark/Light Theme (10.2)
+13. ✅ Floating Info Panel (10.5)
 
 ---
 
@@ -1867,4 +2185,4 @@ When implementing features from this list:
 
 ---
 
-*Last updated: 2026-01-20*
+*Last updated: 2026-01-21*

@@ -12,28 +12,31 @@ The GTOGraphLoader successfully parses session properties from .rv files, but se
 
 ### Fully Integrated (Working)
 
-| Property | Source | Target | Events |
-|----------|--------|--------|--------|
-| `fps` | sessionInfo.fps | Session._fps | fpsChanged |
-| `frame` | sessionInfo.frame | Session._currentFrame | frameChanged |
-| `inPoint/outPoint` | sessionInfo.inPoint/outPoint | Session._inPoint/_outPoint | inOutChanged |
-| `marks` | sessionInfo.marks | Session._marks Map | marksChanged |
-| `viewNode` | sessionInfo.viewNode | Used to find rootNode | - |
+| Property | Source | Target | Events | Status |
+|----------|--------|--------|--------|--------|
+| `fps` | sessionInfo.fps | Session._fps | fpsChanged | ✅ |
+| `frame` | sessionInfo.frame | Session._currentFrame | frameChanged | ✅ |
+| `inPoint/outPoint` | sessionInfo.inPoint/outPoint | Session._inPoint/_outPoint | inOutChanged | ✅ |
+| `marks` | sessionInfo.marks | Session._marks Map | marksChanged | ✅ |
+| `viewNode` | sessionInfo.viewNode | Used to find rootNode | - | ✅ |
+| `matte.*` | sessionInfo.matte | Session._matteSettings → MatteOverlay | matteChanged | ✅ |
+| `paintEffects.*` | sessionInfo.paintEffects | Session._sessionPaintEffects → PaintEngine | paintEffectsLoaded | ✅ |
+| `inc` | sessionInfo.inc | Session._frameIncrement | frameIncrementChanged | ✅ |
+| `version` | sessionInfo.version | Session._metadata.version | metadataChanged | ✅ |
+| `clipboard` | sessionInfo.clipboard | Session._metadata.clipboard | metadataChanged | ✅ |
+| `creationContext` | sessionInfo.creationContext | Session._metadata.creationContext | metadataChanged | ✅ |
+| `origin` | sessionInfo.origin | Session._metadata.origin | metadataChanged | ✅ |
+| `membershipContains` | sessionInfo.membershipContains | Session._metadata.membershipContains | metadataChanged | ✅ |
+| `displayName` | sessionInfo.displayName | Session._metadata.displayName → HeaderBar | metadataChanged | ✅ |
+| `comment` | sessionInfo.comment | Session._metadata.comment → HeaderBar tooltip | metadataChanged | ✅ |
 
-### Parsed But Not Integrated
+### All Properties Fully Integrated ✅
 
-| Property | Parsed Location | Current State | Priority |
-|----------|-----------------|---------------|----------|
-| `matte.*` | sessionInfo.matte | Not consumed | High |
-| `paintEffects.*` | sessionInfo.paintEffects | Not consumed | High |
-| `displayName` | sessionInfo.displayName | Not consumed | Medium |
-| `comment` | sessionInfo.comment | Not consumed | Medium |
-| `inc` | sessionInfo.inc | Not consumed | Medium |
-| `version` | sessionInfo.version | Not consumed | Low |
-| `clipboard` | sessionInfo.clipboard | Not consumed | Low |
-| `creationContext` | sessionInfo.creationContext | Not consumed | Low |
-| `origin` | sessionInfo.origin | Not consumed | Low |
-| `membershipContains` | sessionInfo.membershipContains | Not consumed | Low |
+All parsed session properties are now:
+1. Stored in Session state
+2. Events emitted on change
+3. Connected to UI components (where applicable)
+4. Correctly exported for round-trip support
 
 ---
 
@@ -189,41 +192,56 @@ private drawMatte(): void {
 **Goal:** Display session name, comment, and version in UI.
 
 **Files to modify:**
-- `src/core/session/Session.ts` - Store metadata
-- `src/ui/components/HeaderBar.ts` or new `SessionInfoPanel.ts`
+- `src/core/session/Session.ts` - Store metadata in unified `_metadata` object
+- `src/ui/components/layout/HeaderBar.ts` - Display session name with tooltip
 
-**Session.ts additions:**
+**Actual Implementation (Session.ts:177-185, 318-320):**
 
 ```typescript
-// Add properties
-private _displayName: string = '';
-private _comment: string = '';
-private _sessionVersion: number = 2;
+// SessionMetadata interface (line 86-94)
+export interface SessionMetadata {
+  displayName: string;
+  comment: string;
+  version: number;
+  origin: string;
+  creationContext: number;
+  clipboard: number;
+  membershipContains: string[];
+}
 
-get displayName(): string { return this._displayName; }
-get comment(): string { return this._comment; }
-get sessionVersion(): number { return this._sessionVersion; }
+// Unified _metadata property (line 177-185)
+private _metadata: SessionMetadata = {
+  displayName: '',
+  comment: '',
+  version: 2,
+  origin: 'openrv-web',
+  creationContext: 0,
+  clipboard: 0,
+  membershipContains: [],
+};
 
-// In loadFromGTO:
-if (result.sessionInfo.displayName) {
-  this._displayName = result.sessionInfo.displayName;
-}
-if (result.sessionInfo.comment) {
-  this._comment = result.sessionInfo.comment;
-}
-if (result.sessionInfo.version) {
-  this._sessionVersion = result.sessionInfo.version;
-}
-this.emit('metadataChanged');
+get metadata(): SessionMetadata { return this._metadata; }
+
+// In loadFromGTO (line 1046-1062):
+this._metadata = {
+  displayName: result.sessionInfo.displayName ?? '',
+  comment: result.sessionInfo.comment ?? '',
+  version: result.sessionInfo.version ?? 2,
+  origin: result.sessionInfo.origin ?? 'openrv-web',
+  creationContext: result.sessionInfo.creationContext ?? 0,
+  clipboard: result.sessionInfo.clipboard ?? 0,
+  membershipContains: result.sessionInfo.membershipContains ?? [],
+};
+this.emit('metadataChanged', this._metadata);
 ```
 
-**UI Options:**
+**UI Implementation (HeaderBar.ts:304-375):**
 
-1. **HeaderBar tooltip/dropdown:** Show session info on hover/click
-2. **Info Panel:** Dedicated panel showing session metadata
-3. **Title bar:** Display session name in window/tab title
+- Session name displayed between file operations and playback controls
+- Shows `displayName` or "Untitled" if empty
+- Tooltip shows: displayName, comment (if any), origin (if not openrv-web), version
 
-**Recommended:** Add to HeaderBar with hover tooltip showing name + comment.
+**Chosen approach:** HeaderBar with hover tooltip (recommended option #1).
 
 ---
 
@@ -357,19 +375,23 @@ if (result.sessionInfo.clipboard !== undefined) {
 
 ## Implementation Order
 
-### Sprint 1: Core Functionality
-1. [ ] Task 1.1: Paint Effects Integration
-2. [ ] Task 1.2: Matte Overlay Integration
+### Sprint 1: Core Functionality ✅ COMPLETED
+1. [x] Task 1.1: Paint Effects Integration
+2. [x] Task 1.2: Matte Overlay Integration
 
-### Sprint 2: User Experience
-3. [ ] Task 2.1: Session Metadata Display
-4. [ ] Task 2.2: Frame Increment Integration
+### Sprint 2: User Experience ✅ COMPLETED
+3. [x] Task 2.1: Session Metadata Display (HeaderBar shows session name with tooltip for comment/origin/version)
+4. [x] Task 2.2: Frame Increment Integration
 
-### Sprint 3: Compatibility
-5. [ ] Task 3.1: Session Origin Tracking
-6. [ ] Task 3.2: Creation Context Tracking
-7. [ ] Task 3.3: Membership Contains Integration
-8. [ ] Task 3.4: Clipboard State
+### Sprint 3: Compatibility ✅ COMPLETED
+5. [x] Task 3.1: Session Origin Tracking
+6. [x] Task 3.2: Creation Context Tracking
+7. [x] Task 3.3: Membership Contains Integration
+8. [x] Task 3.4: Clipboard State
+
+### Round-trip Export ✅ COMPLETED
+9. [x] SessionGTOExporter uses actual session values (not hardcoded defaults)
+10. [x] Round-trip tests verify export preserves all session properties
 
 ---
 
@@ -408,17 +430,19 @@ For each integration task:
 
 ## File Change Summary
 
-| File | Changes |
-|------|---------|
-| `src/core/session/Session.ts` | Add properties, event emissions, getters |
-| `src/App.ts` | Connect session events to UI components |
-| `src/ui/components/MatteOverlay.ts` | New component (or modify SafeAreasOverlay) |
-| `src/ui/components/HeaderBar.ts` | Add metadata display |
-| `src/ui/components/PaintToolbar.ts` | Sync with session paint effects |
+| File | Changes | Status |
+|------|---------|--------|
+| `src/core/session/Session.ts` | Add properties, event emissions, getters | ✅ Done |
+| `src/App.ts` | Connect session events to UI components | ✅ Done |
+| `src/ui/components/MatteOverlay.ts` | New component | ✅ Done |
+| `src/ui/components/layout/HeaderBar.ts` | Add metadata display (session name + tooltip) | ✅ Done |
+| `src/ui/components/Viewer.ts` | Integrate MatteOverlay | ✅ Done |
+| `src/ui/components/PaintToolbar.ts` | Sync with session paint effects (via effectsChanged) | ✅ Done |
+| `src/core/session/SessionGTOExporter.ts` | Export actual session values for round-trip | ✅ Done |
 
 ---
 
-## Event Flow After Integration
+## Event Flow After Integration (Verified)
 
 ```
 GTO File Load
@@ -431,35 +455,104 @@ Session.loadFromGTO()
      │
      ├──▶ Apply fps, frame, marks, in/out (existing)
      │
+     ├──▶ Apply frameIncrement ──▶ emit('frameIncrementChanged')
+     │                                    │
+     │                                    ▼
+     │                          Used by stepForward()/stepBackward()
+     │
      ├──▶ Apply paintEffects ──▶ emit('paintEffectsLoaded')
      │                                    │
      │                                    ▼
-     │                          App.ts listener
+     │                          App.ts listener (App.ts:887)
      │                                    │
      │                                    ▼
      │                          PaintEngine.setGhostMode()
      │                          PaintEngine.setHoldMode()
      │                                    │
      │                                    ▼
-     │                          PaintToolbar updates UI
+     │                          emit('effectsChanged')
+     │                                    │
+     │                                    ▼
+     │                          PaintToolbar.updateGhostButton()
      │
      ├──▶ Apply matteSettings ──▶ emit('matteChanged')
      │                                    │
      │                                    ▼
-     │                          App.ts listener
+     │                          App.ts listener (App.ts:901)
      │                                    │
      │                                    ▼
      │                          MatteOverlay.setSettings()
      │
-     ├──▶ Apply metadata ──▶ emit('metadataChanged')
-     │                                │
-     │                                ▼
-     │                        HeaderBar.updateTitle()
-     │
-     └──▶ Apply inc, origin, etc. (stored for export)
+     └──▶ Apply metadata ──▶ emit('metadataChanged')
+                                    │
+                                    ▼
+                          HeaderBar.updateSessionNameDisplay()
+                          (shows displayName, tooltip with comment/origin/version)
 ```
 
 ---
 
+---
+
+## Implementation Log
+
+### 2026-01-21: Initial Implementation
+
+**Files Created:**
+- `src/ui/components/MatteOverlay.ts` - New matte overlay component
+
+**Files Modified:**
+- `src/core/session/Session.ts`
+  - Added `MatteSettings` and `SessionMetadata` interfaces
+  - Added `_matteSettings`, `_sessionPaintEffects`, `_metadata`, `_frameIncrement` properties
+  - Added events: `paintEffectsLoaded`, `matteChanged`, `metadataChanged`, `frameIncrementChanged`
+  - Modified `stepForward()` / `stepBackward()` to use `_frameIncrement`
+  - Applied all session properties in `loadFromGTO()`
+
+- `src/ui/components/Viewer.ts`
+  - Integrated MatteOverlay component
+  - Added `getMatteOverlay()` method
+
+- `src/App.ts`
+  - Connected `paintEffectsLoaded` event to PaintEngine
+  - Connected `matteChanged` event to MatteOverlay
+  - Added `metadataChanged` listener (logs displayName)
+
+- `src/core/session/SessionGTOExporter.ts`
+  - Fixed `buildSessionObject()` to use actual session values instead of hardcoded defaults
+  - Now correctly exports: frameIncrement, matteSettings, paintEffects, metadata
+
+**Tests Added:**
+- `e2e/session-integration.spec.ts` - 41 E2E tests for session integration
+- `src/core/session/SessionGTOExporter.test.ts` - 15 round-trip export tests
+
+**Test Results:**
+- 3640 unit tests passing
+- 234 exporter tests passing
+
+### 2026-01-21: Session Metadata UI Display (Task 2.1)
+
+**Files Modified:**
+- `src/ui/components/layout/HeaderBar.ts`
+  - Added `sessionNameDisplay` element between file ops and playback controls
+  - Added `createSessionNameDisplay()` method to create UI element
+  - Added `updateSessionNameDisplay()` method to update from session metadata
+  - Bound `metadataChanged` event to update display
+  - Shows session displayName (or "Untitled")
+  - Tooltip shows: displayName, comment, origin (if not openrv-web), version
+
+- `src/ui/components/layout/HeaderBar.test.ts`
+  - Added 9 unit tests (HDR-U160 to HDR-U168) for session name display
+
+- `e2e/session-integration.spec.ts`
+  - Added 6 e2e tests (SI-E050 to SI-E055) for metadata UI integration
+
+**Test Results:**
+- 3649 unit tests passing (60 HeaderBar tests)
+- All e2e tests passing
+
+---
+
 *Plan created: 2026-01-21*
+*Implementation completed: 2026-01-21*
 *Based on: GTOGraphLoader analysis, Session.ts review, UI component exploration*

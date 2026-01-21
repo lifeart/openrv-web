@@ -536,3 +536,217 @@ describe('Waveform GPU rendering', () => {
     expect(() => waveform.setPlaybackMode(false)).not.toThrow();
   });
 });
+
+describe('Waveform RGB Overlay Controls', () => {
+  let waveform: Waveform;
+
+  beforeEach(() => {
+    waveform = new Waveform();
+  });
+
+  afterEach(() => {
+    waveform.dispose();
+  });
+
+  describe('RGB channel toggles', () => {
+    it('RGBW-001: all channels enabled by default', () => {
+      const channels = waveform.getEnabledChannels();
+      expect(channels.r).toBe(true);
+      expect(channels.g).toBe(true);
+      expect(channels.b).toBe(true);
+    });
+
+    it('RGBW-002: toggleChannel disables a channel', () => {
+      waveform.toggleChannel('r');
+      const channels = waveform.getEnabledChannels();
+      expect(channels.r).toBe(false);
+      expect(channels.g).toBe(true);
+      expect(channels.b).toBe(true);
+    });
+
+    it('RGBW-003: toggleChannel re-enables a channel', () => {
+      waveform.toggleChannel('r');
+      waveform.toggleChannel('r');
+      const channels = waveform.getEnabledChannels();
+      expect(channels.r).toBe(true);
+    });
+
+    it('RGBW-004: setChannel sets specific channel state', () => {
+      waveform.setChannel('g', false);
+      expect(waveform.getEnabledChannels().g).toBe(false);
+
+      waveform.setChannel('g', true);
+      expect(waveform.getEnabledChannels().g).toBe(true);
+    });
+
+    it('RGBW-005: channel toggle emits channelToggled event', () => {
+      const callback = vi.fn();
+      waveform.on('channelToggled', callback);
+
+      waveform.toggleChannel('b');
+
+      expect(callback).toHaveBeenCalledWith({ r: true, g: true, b: false });
+    });
+
+    it('RGBW-006: multiple channels can be toggled independently', () => {
+      waveform.toggleChannel('r');
+      waveform.toggleChannel('b');
+
+      const channels = waveform.getEnabledChannels();
+      expect(channels.r).toBe(false);
+      expect(channels.g).toBe(true);
+      expect(channels.b).toBe(false);
+    });
+  });
+
+  describe('intensity control', () => {
+    it('RGBW-010: default intensity is 0.1', () => {
+      expect(waveform.getIntensity()).toBe(0.1);
+    });
+
+    it('RGBW-011: setIntensity changes trace intensity', () => {
+      waveform.setIntensity(0.2);
+      expect(waveform.getIntensity()).toBe(0.2);
+    });
+
+    it('RGBW-012: intensity is clamped to minimum 0.05', () => {
+      waveform.setIntensity(0.01);
+      expect(waveform.getIntensity()).toBe(0.05);
+    });
+
+    it('RGBW-013: intensity is clamped to maximum 0.3', () => {
+      waveform.setIntensity(0.5);
+      expect(waveform.getIntensity()).toBe(0.3);
+    });
+
+    it('RGBW-014: setIntensity emits intensityChanged event', () => {
+      const callback = vi.fn();
+      waveform.on('intensityChanged', callback);
+
+      waveform.setIntensity(0.15);
+
+      expect(callback).toHaveBeenCalledWith(0.15);
+    });
+  });
+
+  describe('RGB controls UI', () => {
+    it('RGBW-020: RGB controls container exists', () => {
+      const el = waveform.render();
+      const controls = el.querySelector('[data-testid="waveform-rgb-controls"]');
+      expect(controls).not.toBeNull();
+    });
+
+    it('RGBW-021: RGB controls hidden when not in RGB mode', () => {
+      const el = waveform.render();
+      const controls = el.querySelector('[data-testid="waveform-rgb-controls"]') as HTMLElement;
+      expect(controls.style.display).toBe('none');
+    });
+
+    it('RGBW-022: RGB controls shown when in RGB mode', () => {
+      waveform.setMode('rgb');
+      const el = waveform.render();
+      const controls = el.querySelector('[data-testid="waveform-rgb-controls"]') as HTMLElement;
+      expect(controls.style.display).toBe('flex');
+    });
+
+    it('RGBW-023: RGB controls hidden when switching from RGB to parade', () => {
+      waveform.setMode('rgb');
+      waveform.setMode('parade');
+      const el = waveform.render();
+      const controls = el.querySelector('[data-testid="waveform-rgb-controls"]') as HTMLElement;
+      expect(controls.style.display).toBe('none');
+    });
+
+    it('RGBW-024: R channel button exists', () => {
+      const el = waveform.render();
+      const btn = el.querySelector('[data-testid="waveform-channel-r"]');
+      expect(btn).not.toBeNull();
+      expect(btn?.textContent).toBe('R');
+    });
+
+    it('RGBW-025: G channel button exists', () => {
+      const el = waveform.render();
+      const btn = el.querySelector('[data-testid="waveform-channel-g"]');
+      expect(btn).not.toBeNull();
+      expect(btn?.textContent).toBe('G');
+    });
+
+    it('RGBW-026: B channel button exists', () => {
+      const el = waveform.render();
+      const btn = el.querySelector('[data-testid="waveform-channel-b"]');
+      expect(btn).not.toBeNull();
+      expect(btn?.textContent).toBe('B');
+    });
+
+    it('RGBW-027: intensity slider exists', () => {
+      const el = waveform.render();
+      const slider = el.querySelector('[data-testid="waveform-intensity-slider"]');
+      expect(slider).not.toBeNull();
+      expect((slider as HTMLInputElement)?.type).toBe('range');
+    });
+
+    it('RGBW-028: clicking channel button toggles channel', () => {
+      const el = waveform.render();
+      const btn = el.querySelector('[data-testid="waveform-channel-r"]') as HTMLButtonElement;
+
+      btn.click();
+
+      expect(waveform.getEnabledChannels().r).toBe(false);
+    });
+
+    it('RGBW-029: channel button opacity changes when disabled', () => {
+      const el = waveform.render();
+      const btn = el.querySelector('[data-testid="waveform-channel-r"]') as HTMLButtonElement;
+
+      expect(btn.style.opacity).toBe('1');
+
+      btn.click();
+
+      expect(btn.style.opacity).toBe('0.3');
+    });
+  });
+
+  describe('RGB overlay drawing', () => {
+    let imageData: ImageData;
+
+    beforeEach(() => {
+      // Create test image data with distinct RGB values
+      imageData = new ImageData(10, 10);
+      for (let i = 0; i < imageData.data.length; i += 4) {
+        imageData.data[i] = 200;     // R
+        imageData.data[i + 1] = 100; // G
+        imageData.data[i + 2] = 50;  // B
+        imageData.data[i + 3] = 255; // A
+      }
+    });
+
+    it('RGBW-030: drawing with all channels enabled works', () => {
+      waveform.setMode('rgb');
+      expect(() => waveform.update(imageData)).not.toThrow();
+    });
+
+    it('RGBW-031: drawing with only R channel works', () => {
+      waveform.setMode('rgb');
+      waveform.setChannel('g', false);
+      waveform.setChannel('b', false);
+      expect(() => waveform.update(imageData)).not.toThrow();
+    });
+
+    it('RGBW-032: drawing with no channels disabled works', () => {
+      waveform.setMode('rgb');
+      waveform.setChannel('r', false);
+      waveform.setChannel('g', false);
+      waveform.setChannel('b', false);
+      expect(() => waveform.update(imageData)).not.toThrow();
+    });
+
+    it('RGBW-033: drawing with different intensity values works', () => {
+      waveform.setMode('rgb');
+      waveform.setIntensity(0.05);
+      expect(() => waveform.update(imageData)).not.toThrow();
+
+      waveform.setIntensity(0.3);
+      expect(() => waveform.update(imageData)).not.toThrow();
+    });
+  });
+});

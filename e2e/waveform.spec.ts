@@ -301,3 +301,142 @@ test.describe('Waveform State Persistence', () => {
     expect(state.waveformVisible).toBe(true);
   });
 });
+
+test.describe('RGB Overlay Waveform Controls', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+    await loadVideoFile(page);
+    // Show waveform and switch to RGB mode
+    await page.keyboard.press('w');
+    await page.waitForTimeout(100);
+    // Cycle to RGB mode
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.waveform?.setMode('rgb');
+    });
+    await page.waitForTimeout(100);
+  });
+
+  test('RGBW-E001: RGB controls are visible in RGB mode', async ({ page }) => {
+    const rgbControls = page.locator('[data-testid="waveform-rgb-controls"]');
+    await expect(rgbControls).toBeVisible();
+  });
+
+  test('RGBW-E002: RGB controls are hidden in Luma mode', async ({ page }) => {
+    // Switch back to luma mode
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.waveform?.setMode('luma');
+    });
+    await page.waitForTimeout(100);
+
+    const rgbControls = page.locator('[data-testid="waveform-rgb-controls"]');
+    await expect(rgbControls).toBeHidden();
+  });
+
+  test('RGBW-E003: RGB controls are hidden in Parade mode', async ({ page }) => {
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.waveform?.setMode('parade');
+    });
+    await page.waitForTimeout(100);
+
+    const rgbControls = page.locator('[data-testid="waveform-rgb-controls"]');
+    await expect(rgbControls).toBeHidden();
+  });
+
+  test('RGBW-E010: R channel button is visible', async ({ page }) => {
+    const rButton = page.locator('[data-testid="waveform-channel-r"]');
+    await expect(rButton).toBeVisible();
+    await expect(rButton).toHaveText('R');
+  });
+
+  test('RGBW-E011: G channel button is visible', async ({ page }) => {
+    const gButton = page.locator('[data-testid="waveform-channel-g"]');
+    await expect(gButton).toBeVisible();
+    await expect(gButton).toHaveText('G');
+  });
+
+  test('RGBW-E012: B channel button is visible', async ({ page }) => {
+    const bButton = page.locator('[data-testid="waveform-channel-b"]');
+    await expect(bButton).toBeVisible();
+    await expect(bButton).toHaveText('B');
+  });
+
+  test('RGBW-E020: clicking R button toggles R channel', async ({ page }) => {
+    const rButton = page.locator('[data-testid="waveform-channel-r"]');
+
+    // Initially full opacity
+    let opacity = await rButton.evaluate(el => getComputedStyle(el).opacity);
+    expect(parseFloat(opacity)).toBe(1);
+
+    // Click to disable
+    await rButton.click();
+    await page.waitForTimeout(100);
+
+    // Should be dimmed
+    opacity = await rButton.evaluate(el => getComputedStyle(el).opacity);
+    expect(parseFloat(opacity)).toBeLessThan(1);
+
+    // Click to re-enable
+    await rButton.click();
+    await page.waitForTimeout(100);
+
+    opacity = await rButton.evaluate(el => getComputedStyle(el).opacity);
+    expect(parseFloat(opacity)).toBe(1);
+  });
+
+  test('RGBW-E021: toggling channels updates state', async ({ page }) => {
+    // Disable R channel
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.waveform?.setChannel('r', false);
+    });
+    await page.waitForTimeout(100);
+
+    const channels = await page.evaluate(() => {
+      return (window as any).__OPENRV_TEST__?.app?.waveform?.getEnabledChannels();
+    });
+
+    expect(channels.r).toBe(false);
+    expect(channels.g).toBe(true);
+    expect(channels.b).toBe(true);
+  });
+
+  test('RGBW-E030: intensity slider is visible', async ({ page }) => {
+    const intensitySlider = page.locator('[data-testid="waveform-intensity-slider"]');
+    await expect(intensitySlider).toBeVisible();
+  });
+
+  test('RGBW-E031: intensity slider has aria-label', async ({ page }) => {
+    const intensitySlider = page.locator('[data-testid="waveform-intensity-slider"]');
+    const ariaLabel = await intensitySlider.getAttribute('aria-label');
+    expect(ariaLabel).toBe('Trace intensity');
+  });
+
+  test('RGBW-E032: changing intensity slider updates intensity', async ({ page }) => {
+    const intensitySlider = page.locator('[data-testid="waveform-intensity-slider"]');
+
+    // Set to max (30 = 0.3)
+    await intensitySlider.fill('30');
+    await intensitySlider.dispatchEvent('input');
+    await page.waitForTimeout(100);
+
+    const intensity = await page.evaluate(() => {
+      return (window as any).__OPENRV_TEST__?.app?.waveform?.getIntensity();
+    });
+
+    expect(intensity).toBe(0.3);
+  });
+
+  test('RGBW-E033: setIntensity syncs slider value', async ({ page }) => {
+    // Set intensity programmatically
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.waveform?.setIntensity(0.2);
+    });
+    await page.waitForTimeout(100);
+
+    // Verify slider value updated
+    const intensitySlider = page.locator('[data-testid="waveform-intensity-slider"]');
+    const value = await intensitySlider.inputValue();
+    expect(parseInt(value, 10)).toBe(20);
+  });
+});

@@ -447,3 +447,139 @@ test.describe('A/B Screenshot Comparison', () => {
     await expect(toggleButton).toBeVisible();
   });
 });
+
+test.describe('A/B Wipe Labels', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+    await loadVideoFile(page);
+  });
+
+  test('WIPE-E001: wipe labels are hidden when wipe is off', async ({ page }) => {
+    const labelA = page.locator('[data-testid="wipe-label-a"]');
+    const labelB = page.locator('[data-testid="wipe-label-b"]');
+    await expect(labelA).toBeHidden();
+    await expect(labelB).toBeHidden();
+  });
+
+  test('WIPE-E002: wipe labels appear when horizontal wipe is enabled', async ({ page }) => {
+    // Enable horizontal wipe
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipeMode('horizontal');
+    });
+    await page.waitForTimeout(100);
+
+    const labelA = page.locator('[data-testid="wipe-label-a"]');
+    const labelB = page.locator('[data-testid="wipe-label-b"]');
+    await expect(labelA).toBeVisible();
+    await expect(labelB).toBeVisible();
+  });
+
+  test('WIPE-E003: default wipe labels are Original and Graded', async ({ page }) => {
+    // Enable wipe
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipeMode('horizontal');
+    });
+    await page.waitForTimeout(100);
+
+    const labels = await page.evaluate(() => {
+      return (window as any).__OPENRV_TEST__?.app?.viewer?.getWipeLabels();
+    });
+
+    expect(labels.labelA).toBe('Original');
+    expect(labels.labelB).toBe('Graded');
+  });
+
+  test('WIPE-E004: setWipeLabels updates label text', async ({ page }) => {
+    // Enable wipe
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipeMode('horizontal');
+    });
+    await page.waitForTimeout(100);
+
+    // Set custom labels
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipeLabels('Before', 'After');
+    });
+    await page.waitForTimeout(100);
+
+    const labelA = page.locator('[data-testid="wipe-label-a"]');
+    const labelB = page.locator('[data-testid="wipe-label-b"]');
+    await expect(labelA).toHaveText('Before');
+    await expect(labelB).toHaveText('After');
+  });
+
+  test('WIPE-E005: label A is hidden at left boundary (position <= 10%)', async ({ page }) => {
+    // Enable wipe and set position to 5%
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipeMode('horizontal');
+      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipePosition(0.05);
+    });
+    await page.waitForTimeout(100);
+
+    const labelA = page.locator('[data-testid="wipe-label-a"]');
+    await expect(labelA).toBeHidden();
+  });
+
+  test('WIPE-E006: label B is hidden at right boundary (position >= 90%)', async ({ page }) => {
+    // Enable wipe and set position to 95%
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipeMode('horizontal');
+      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipePosition(0.95);
+    });
+    await page.waitForTimeout(100);
+
+    const labelB = page.locator('[data-testid="wipe-label-b"]');
+    await expect(labelB).toBeHidden();
+  });
+
+  test('WIPE-E007: both labels visible at center position (50%)', async ({ page }) => {
+    // Enable wipe at center
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipeMode('horizontal');
+      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipePosition(0.5);
+    });
+    await page.waitForTimeout(100);
+
+    const labelA = page.locator('[data-testid="wipe-label-a"]');
+    const labelB = page.locator('[data-testid="wipe-label-b"]');
+    await expect(labelA).toBeVisible();
+    await expect(labelB).toBeVisible();
+  });
+
+  test('WIPE-E010: vertical wipe shows labels correctly', async ({ page }) => {
+    // Enable vertical wipe
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipeMode('vertical');
+    });
+    await page.waitForTimeout(100);
+
+    const labelA = page.locator('[data-testid="wipe-label-a"]');
+    const labelB = page.locator('[data-testid="wipe-label-b"]');
+    await expect(labelA).toBeVisible();
+    await expect(labelB).toBeVisible();
+  });
+
+  test('WIPE-E011: vertical wipe label A hidden at top boundary', async ({ page }) => {
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipeMode('vertical');
+      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipePosition(0.05);
+    });
+    await page.waitForTimeout(100);
+
+    const labelA = page.locator('[data-testid="wipe-label-a"]');
+    await expect(labelA).toBeHidden();
+  });
+
+  test('WIPE-E012: vertical wipe label B hidden at bottom boundary', async ({ page }) => {
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipeMode('vertical');
+      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipePosition(0.95);
+    });
+    await page.waitForTimeout(100);
+
+    const labelB = page.locator('[data-testid="wipe-label-b"]');
+    await expect(labelB).toBeHidden();
+  });
+});

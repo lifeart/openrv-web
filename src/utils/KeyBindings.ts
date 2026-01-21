@@ -386,6 +386,14 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     description: 'Toggle undo/redo history panel'
   },
 
+  // Markers panel
+  'panel.markers': {
+    code: 'KeyM',
+    shift: true,
+    alt: true,
+    description: 'Toggle markers list panel'
+  },
+
   // Info panel
   'view.toggleInfoPanel': {
     code: 'KeyI',

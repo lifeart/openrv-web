@@ -301,3 +301,127 @@ test.describe('Session Event Flow', () => {
     expect(eventReceived).toBe(1.85);
   });
 });
+
+test.describe('Session Metadata UI Integration', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+    await loadVideoFile(page);
+  });
+
+  test('SI-E050: session name display element exists in header', async ({ page }) => {
+    const sessionNameDisplay = page.locator('[data-testid="session-name-display"]');
+    await expect(sessionNameDisplay).toBeVisible();
+  });
+
+  test('SI-E051: session name display shows Untitled by default', async ({ page }) => {
+    const nameText = page.locator('[data-testid="session-name-display"] .session-name-text');
+    await expect(nameText).toHaveText('Untitled');
+  });
+
+  test('SI-E052: session name display updates when metadata changes via API', async ({ page }) => {
+    // Update metadata via session API
+    await page.evaluate(() => {
+      const session = (window as any).__OPENRV_TEST__?.app?.session;
+      if (session) {
+        (session as any)._metadata = {
+          displayName: 'Test Session Name',
+          comment: 'Test comment',
+          version: 2,
+          origin: 'openrv-web',
+          creationContext: 0,
+          clipboard: 0,
+          membershipContains: [],
+        };
+        session.emit('metadataChanged', (session as any)._metadata);
+      }
+    });
+    await page.waitForTimeout(100);
+
+    const nameText = page.locator('[data-testid="session-name-display"] .session-name-text');
+    await expect(nameText).toHaveText('Test Session Name');
+  });
+
+  test('SI-E053: session name display tooltip shows comment', async ({ page }) => {
+    // Update metadata with comment
+    await page.evaluate(() => {
+      const session = (window as any).__OPENRV_TEST__?.app?.session;
+      if (session) {
+        (session as any)._metadata = {
+          displayName: 'My Project',
+          comment: 'This is a detailed comment about the session',
+          version: 2,
+          origin: 'openrv-web',
+          creationContext: 0,
+          clipboard: 0,
+          membershipContains: [],
+        };
+        session.emit('metadataChanged', (session as any)._metadata);
+      }
+    });
+    await page.waitForTimeout(100);
+
+    const sessionNameDisplay = page.locator('[data-testid="session-name-display"]');
+    const title = await sessionNameDisplay.getAttribute('title');
+
+    expect(title).toContain('My Project');
+    expect(title).toContain('This is a detailed comment about the session');
+  });
+
+  test('SI-E054: session name display tooltip shows external origin', async ({ page }) => {
+    // Update metadata with external origin
+    await page.evaluate(() => {
+      const session = (window as any).__OPENRV_TEST__?.app?.session;
+      if (session) {
+        (session as any)._metadata = {
+          displayName: 'Imported Session',
+          comment: '',
+          version: 3,
+          origin: 'rv-desktop',
+          creationContext: 1,
+          clipboard: 0,
+          membershipContains: [],
+        };
+        session.emit('metadataChanged', (session as any)._metadata);
+      }
+    });
+    await page.waitForTimeout(100);
+
+    const sessionNameDisplay = page.locator('[data-testid="session-name-display"]');
+    const title = await sessionNameDisplay.getAttribute('title');
+
+    expect(title).toContain('Created in: rv-desktop');
+    expect(title).toContain('Session version: 3');
+  });
+
+  test('SI-E055: session metadata persists when changing frames', async ({ page }) => {
+    // Set metadata
+    await page.evaluate(() => {
+      const session = (window as any).__OPENRV_TEST__?.app?.session;
+      if (session) {
+        (session as any)._metadata = {
+          displayName: 'Persistent Session',
+          comment: 'Should persist',
+          version: 4,
+          origin: 'openrv-web',
+          creationContext: 0,
+          clipboard: 0,
+          membershipContains: [],
+        };
+        session.emit('metadataChanged', (session as any)._metadata);
+      }
+    });
+    await page.waitForTimeout(100);
+
+    // Navigate frames
+    await page.keyboard.press('ArrowRight');
+    await page.waitForTimeout(100);
+    await page.keyboard.press('ArrowRight');
+    await page.waitForTimeout(100);
+
+    // Verify metadata still displayed
+    const nameText = page.locator('[data-testid="session-name-display"] .session-name-text');
+    await expect(nameText).toHaveText('Persistent Session');
+  });
+});

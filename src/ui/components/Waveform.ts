@@ -22,14 +22,26 @@ import { setupHiDPICanvas } from '../../utils/HiDPICanvas';
 
 export type WaveformMode = 'luma' | 'rgb' | 'parade';
 
+export interface RGBChannelState {
+  r: boolean;
+  g: boolean;
+  b: boolean;
+}
+
 export interface WaveformEvents extends EventMap {
   visibilityChanged: boolean;
   modeChanged: WaveformMode;
+  channelToggled: RGBChannelState;
+  intensityChanged: number;
 }
 
 const WAVEFORM_WIDTH = 256;
 const WAVEFORM_HEIGHT = 128;
 const PARADE_SECTION_WIDTH = Math.floor(WAVEFORM_WIDTH / 3);
+
+// Intensity range constants (0.05 to 0.3)
+const MIN_INTENSITY = 0.05;
+const MAX_INTENSITY = 0.3;
 
 export class Waveform extends EventEmitter<WaveformEvents> {
   private draggableContainer: DraggableContainer;
@@ -40,6 +52,14 @@ export class Waveform extends EventEmitter<WaveformEvents> {
   private modeButton: HTMLButtonElement | null = null;
   private lastImageData: ImageData | null = null;
   private isPlaybackMode = false;
+
+  // RGB overlay controls
+  private enabledChannels: RGBChannelState = { r: true, g: true, b: true };
+  private intensity = 0.1; // Trace opacity (MIN_INTENSITY to MAX_INTENSITY)
+  private rgbControlsContainer: HTMLElement | null = null;
+  private channelButtons: { r: HTMLButtonElement; g: HTMLButtonElement; b: HTMLButtonElement } | null = null;
+  private intensitySlider: HTMLInputElement | null = null;
+  private boundOnIntensityChange: ((e: Event) => void) | null = null;
 
   constructor() {
     super();
@@ -89,6 +109,94 @@ export class Waveform extends EventEmitter<WaveformEvents> {
     // Insert button before close button
     const closeButton = controls.querySelector('[data-testid="waveform-close-button"]');
     controls.insertBefore(this.modeButton, closeButton);
+
+    // Create RGB controls container (initially hidden)
+    this.rgbControlsContainer = document.createElement('div');
+    this.rgbControlsContainer.className = 'waveform-rgb-controls';
+    this.rgbControlsContainer.dataset.testid = 'waveform-rgb-controls';
+    this.rgbControlsContainer.style.cssText = `
+      display: none;
+      flex-direction: row;
+      align-items: center;
+      gap: 4px;
+      margin-top: 4px;
+      padding: 4px 8px;
+      background: rgba(0, 0, 0, 0.3);
+      border-radius: 3px;
+    `;
+
+    // Channel toggle buttons
+    this.channelButtons = {
+      r: this.createChannelButton('R', '#ff4444', 'r'),
+      g: this.createChannelButton('G', '#44ff44', 'g'),
+      b: this.createChannelButton('B', '#4444ff', 'b'),
+    };
+
+    this.rgbControlsContainer.appendChild(this.channelButtons.r);
+    this.rgbControlsContainer.appendChild(this.channelButtons.g);
+    this.rgbControlsContainer.appendChild(this.channelButtons.b);
+
+    // Intensity label
+    const intensityLabel = document.createElement('span');
+    intensityLabel.textContent = 'Int:';
+    intensityLabel.style.cssText = 'color: #888; font-size: 10px; margin-left: 8px;';
+    this.rgbControlsContainer.appendChild(intensityLabel);
+
+    // Intensity slider
+    this.intensitySlider = document.createElement('input');
+    this.intensitySlider.type = 'range';
+    this.intensitySlider.min = String(Math.round(MIN_INTENSITY * 100));
+    this.intensitySlider.max = String(Math.round(MAX_INTENSITY * 100));
+    this.intensitySlider.value = String(Math.round(this.intensity * 100));
+    this.intensitySlider.dataset.testid = 'waveform-intensity-slider';
+    this.intensitySlider.setAttribute('aria-label', 'Trace intensity');
+    this.intensitySlider.style.cssText = `
+      width: 50px;
+      height: 12px;
+      cursor: pointer;
+      accent-color: #666;
+    `;
+    this.boundOnIntensityChange = (e: Event) => {
+      const value = parseInt((e.target as HTMLInputElement).value, 10);
+      this.setIntensity(value / 100);
+    };
+    this.intensitySlider.addEventListener('input', this.boundOnIntensityChange);
+    this.rgbControlsContainer.appendChild(this.intensitySlider);
+
+    // Add RGB controls after content (above canvas)
+    this.draggableContainer.content.insertBefore(
+      this.rgbControlsContainer,
+      this.draggableContainer.content.firstChild
+    );
+  }
+
+  private createChannelButton(label: string, color: string, channel: 'r' | 'g' | 'b'): HTMLButtonElement {
+    const channelNames: Record<'r' | 'g' | 'b', string> = {
+      r: 'Red',
+      g: 'Green',
+      b: 'Blue',
+    };
+    const btn = document.createElement('button');
+    btn.textContent = label;
+    btn.dataset.testid = `waveform-channel-${channel}`;
+    btn.title = `Toggle ${channelNames[channel]} channel`;
+    btn.setAttribute('aria-label', `Toggle ${channelNames[channel]} channel`);
+    btn.setAttribute('aria-pressed', 'true');
+    btn.style.cssText = `
+      width: 20px;
+      height: 18px;
+      padding: 0;
+      font-size: 10px;
+      font-weight: bold;
+      color: ${color};
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid ${color};
+      border-radius: 2px;
+      cursor: pointer;
+      opacity: 1;
+    `;
+    btn.addEventListener('click', () => this.toggleChannel(channel));
+    return btn;
   }
 
   private createFooter(): void {
@@ -220,7 +328,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
   }
 
   private drawRGBOverlayWaveform(data: Uint8ClampedArray, srcWidth: number, srcHeight: number): void {
-    const { ctx } = this;
+    const { ctx, enabledChannels, intensity } = this;
     // Use logical dimensions for drawing
     const canvasWidth = WAVEFORM_WIDTH;
     const canvasHeight = WAVEFORM_HEIGHT;
@@ -228,38 +336,54 @@ export class Waveform extends EventEmitter<WaveformEvents> {
     const sampleStep = Math.max(1, Math.floor(srcWidth / canvasWidth));
     const pixelsPerColumn = Math.ceil(srcWidth / canvasWidth);
 
-    ctx.globalCompositeOperation = 'lighter';
+    // Pre-compute fill styles outside loops for performance
+    const rStyle = `rgba(255, 0, 0, ${intensity})`;
+    const gStyle = `rgba(0, 255, 0, ${intensity})`;
+    const bStyle = `rgba(0, 0, 255, ${intensity})`;
 
-    for (let x = 0; x < canvasWidth; x++) {
-      const srcX = Math.floor(x * srcWidth / canvasWidth);
-      const endX = Math.min(srcX + pixelsPerColumn, srcWidth);
+    // Additive blending for RGB overlay - creates white where all channels align
+    // Use try/finally to ensure composite operation is restored even on error
+    const previousCompositeOp = ctx.globalCompositeOperation;
+    try {
+      ctx.globalCompositeOperation = 'lighter';
 
-      for (let srcXi = srcX; srcXi < endX; srcXi += sampleStep) {
-        for (let srcY = 0; srcY < srcHeight; srcY++) {
-          const i = (srcY * srcWidth + srcXi) * 4;
-          const r = data[i]!;
-          const g = data[i + 1]!;
-          const b = data[i + 2]!;
+      for (let x = 0; x < canvasWidth; x++) {
+        const srcX = Math.floor(x * srcWidth / canvasWidth);
+        const endX = Math.min(srcX + pixelsPerColumn, srcWidth);
 
-          // Draw red
-          const yR = canvasHeight - 1 - Math.floor(r * (canvasHeight - 1) / 255);
-          ctx.fillStyle = 'rgba(255, 0, 0, 0.1)';
-          ctx.fillRect(x, yR, 1, 1);
+        for (let srcXi = srcX; srcXi < endX; srcXi += sampleStep) {
+          for (let srcY = 0; srcY < srcHeight; srcY++) {
+            const i = (srcY * srcWidth + srcXi) * 4;
+            const r = data[i]!;
+            const g = data[i + 1]!;
+            const b = data[i + 2]!;
 
-          // Draw green
-          const yG = canvasHeight - 1 - Math.floor(g * (canvasHeight - 1) / 255);
-          ctx.fillStyle = 'rgba(0, 255, 0, 0.1)';
-          ctx.fillRect(x, yG, 1, 1);
+            // Draw red (if enabled)
+            if (enabledChannels.r) {
+              const yR = canvasHeight - 1 - Math.floor(r * (canvasHeight - 1) / 255);
+              ctx.fillStyle = rStyle;
+              ctx.fillRect(x, yR, 1, 1);
+            }
 
-          // Draw blue
-          const yB = canvasHeight - 1 - Math.floor(b * (canvasHeight - 1) / 255);
-          ctx.fillStyle = 'rgba(0, 0, 255, 0.1)';
-          ctx.fillRect(x, yB, 1, 1);
+            // Draw green (if enabled)
+            if (enabledChannels.g) {
+              const yG = canvasHeight - 1 - Math.floor(g * (canvasHeight - 1) / 255);
+              ctx.fillStyle = gStyle;
+              ctx.fillRect(x, yG, 1, 1);
+            }
+
+            // Draw blue (if enabled)
+            if (enabledChannels.b) {
+              const yB = canvasHeight - 1 - Math.floor(b * (canvasHeight - 1) / 255);
+              ctx.fillStyle = bStyle;
+              ctx.fillRect(x, yB, 1, 1);
+            }
+          }
         }
       }
+    } finally {
+      ctx.globalCompositeOperation = previousCompositeOp;
     }
-
-    ctx.globalCompositeOperation = 'source-over';
   }
 
   private drawParadeWaveform(data: Uint8ClampedArray, srcWidth: number, srcHeight: number): void {
@@ -346,6 +470,91 @@ export class Waveform extends EventEmitter<WaveformEvents> {
   }
 
   /**
+   * Update channel button appearance to reflect enabled state
+   */
+  private updateChannelButtonAppearance(channel: 'r' | 'g' | 'b'): void {
+    if (this.channelButtons) {
+      const btn = this.channelButtons[channel];
+      const enabled = this.enabledChannels[channel];
+      btn.style.opacity = enabled ? '1' : '0.3';
+      btn.setAttribute('aria-pressed', String(enabled));
+    }
+  }
+
+  /**
+   * Toggle an RGB channel on/off
+   */
+  toggleChannel(channel: 'r' | 'g' | 'b'): void {
+    this.enabledChannels[channel] = !this.enabledChannels[channel];
+    this.updateChannelButtonAppearance(channel);
+
+    // Redraw
+    if (this.lastImageData) {
+      this.draw(this.lastImageData);
+    }
+
+    this.emit('channelToggled', { ...this.enabledChannels });
+  }
+
+  /**
+   * Set channel state
+   */
+  setChannel(channel: 'r' | 'g' | 'b', enabled: boolean): void {
+    if (this.enabledChannels[channel] === enabled) return;
+    this.enabledChannels[channel] = enabled;
+    this.updateChannelButtonAppearance(channel);
+
+    // Redraw
+    if (this.lastImageData) {
+      this.draw(this.lastImageData);
+    }
+
+    this.emit('channelToggled', { ...this.enabledChannels });
+  }
+
+  /**
+   * Get enabled channels
+   */
+  getEnabledChannels(): RGBChannelState {
+    return { ...this.enabledChannels };
+  }
+
+  /**
+   * Set trace intensity for RGB overlay
+   */
+  setIntensity(intensity: number): void {
+    this.intensity = Math.max(MIN_INTENSITY, Math.min(MAX_INTENSITY, intensity));
+
+    // Sync the slider if it exists
+    if (this.intensitySlider) {
+      this.intensitySlider.value = String(Math.round(this.intensity * 100));
+    }
+
+    // Redraw
+    if (this.lastImageData && this.mode === 'rgb') {
+      this.draw(this.lastImageData);
+    }
+
+    this.emit('intensityChanged', this.intensity);
+  }
+
+  /**
+   * Get current intensity
+   */
+  getIntensity(): number {
+    return this.intensity;
+  }
+
+  /**
+   * Update RGB controls visibility based on mode
+   */
+  private updateRGBControlsVisibility(): void {
+    if (this.rgbControlsContainer) {
+      this.rgbControlsContainer.style.display = this.mode === 'rgb' ? 'flex' : 'none';
+    }
+  }
+
+  /**
    * Cycle through display modes
    */
   cycleMode(): void {
@@ -361,6 +570,9 @@ export class Waveform extends EventEmitter<WaveformEvents> {
       };
       this.modeButton.textContent = labels[this.mode];
     }
+
+    // Update RGB controls visibility
+    this.updateRGBControlsVisibility();
 
     // Redraw with new mode if we have image data
     if (this.lastImageData) {
@@ -385,6 +597,9 @@ export class Waveform extends EventEmitter<WaveformEvents> {
       };
       this.modeButton.textContent = labels[this.mode];
     }
+
+    // Update RGB controls visibility
+    this.updateRGBControlsVisibility();
 
     // Redraw with new mode if we have image data
     if (this.lastImageData) {
@@ -427,7 +642,15 @@ export class Waveform extends EventEmitter<WaveformEvents> {
   }
 
   dispose(): void {
+    // Clean up intensity slider event listener
+    if (this.intensitySlider && this.boundOnIntensityChange) {
+      this.intensitySlider.removeEventListener('input', this.boundOnIntensityChange);
+    }
+    this.boundOnIntensityChange = null;
+    this.intensitySlider = null;
     this.modeButton = null;
+    this.channelButtons = null;
+    this.rgbControlsContainer = null;
     this.draggableContainer.dispose();
   }
 }
