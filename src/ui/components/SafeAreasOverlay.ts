@@ -122,7 +122,7 @@ export class SafeAreasOverlay extends EventEmitter<SafeAreasEvents> {
       ctx: this.ctx,
       width: canvasWidth,
       height: canvasHeight,
-      setStyle: false, // CSS positioning is handled by parent
+      setStyle: true, // CSS dimensions must be set for correct HiDPI scaling
     });
 
     if (this.state.enabled) {

@@ -85,7 +85,7 @@ export class MatteOverlay extends EventEmitter<MatteOverlayEvents> {
       ctx: this.ctx,
       width: canvasWidth,
       height: canvasHeight,
-      setStyle: false,
+      setStyle: true, // CSS dimensions must be set for correct HiDPI scaling
     });
 
     if (this.settings.show) {
