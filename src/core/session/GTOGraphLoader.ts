@@ -348,7 +348,7 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
     }
 
     // Parse source-specific properties
-    if (protocol === 'RVFileSource' || protocol === 'RVImageSource') {
+    if (protocol === 'RVFileSource' || protocol === 'RVImageSource' || protocol === 'RVMovieSource') {
       const mediaComp = obj.component('media');
       if (mediaComp?.exists()) {
         const movie = mediaComp.property('movie').value() as string;
@@ -424,6 +424,44 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
       if (requestComp?.exists()) {
         const readAllChannels = requestComp.property('readAllChannels').value() as number;
         if (typeof readAllChannels === 'number') nodeInfo.properties.sourceReadAllChannels = readAllChannels !== 0;
+      }
+
+      // Parse image component (RVImageSource specific)
+      if (protocol === 'RVImageSource') {
+        const imageComp = obj.component('image');
+        if (imageComp?.exists()) {
+          const width = imageComp.property('width').value() as number;
+          const height = imageComp.property('height').value() as number;
+          const uncropWidth = imageComp.property('uncropWidth').value() as number;
+          const uncropHeight = imageComp.property('uncropHeight').value() as number;
+          const uncropX = imageComp.property('uncropX').value() as number;
+          const uncropY = imageComp.property('uncropY').value() as number;
+          const pixelAspect = imageComp.property('pixelAspect').value() as number;
+          const fps = imageComp.property('fps').value() as number;
+          const start = imageComp.property('start').value() as number;
+          const end = imageComp.property('end').value() as number;
+          const inc = imageComp.property('inc').value() as number;
+          const encoding = imageComp.property('encoding').value() as string;
+          const channels = imageComp.property('channels').value() as string;
+          const bitsPerChannel = imageComp.property('bitsPerChannel').value() as number;
+          const isFloat = imageComp.property('float').value() as number;
+
+          if (typeof width === 'number') nodeInfo.properties.imageWidth = width;
+          if (typeof height === 'number') nodeInfo.properties.imageHeight = height;
+          if (typeof uncropWidth === 'number') nodeInfo.properties.imageUncropWidth = uncropWidth;
+          if (typeof uncropHeight === 'number') nodeInfo.properties.imageUncropHeight = uncropHeight;
+          if (typeof uncropX === 'number') nodeInfo.properties.imageUncropX = uncropX;
+          if (typeof uncropY === 'number') nodeInfo.properties.imageUncropY = uncropY;
+          if (typeof pixelAspect === 'number') nodeInfo.properties.imagePixelAspect = pixelAspect;
+          if (typeof fps === 'number') nodeInfo.properties.imageFps = fps;
+          if (typeof start === 'number') nodeInfo.properties.imageStart = start;
+          if (typeof end === 'number') nodeInfo.properties.imageEnd = end;
+          if (typeof inc === 'number') nodeInfo.properties.imageInc = inc;
+          if (typeof encoding === 'string') nodeInfo.properties.imageEncoding = encoding;
+          if (typeof channels === 'string') nodeInfo.properties.imageChannels = channels;
+          if (typeof bitsPerChannel === 'number') nodeInfo.properties.imageBitsPerChannel = bitsPerChannel;
+          if (typeof isFloat === 'number') nodeInfo.properties.imageIsFloat = isFloat !== 0;
+        }
       }
     }
 

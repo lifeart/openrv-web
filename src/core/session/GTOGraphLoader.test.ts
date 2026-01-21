@@ -2646,6 +2646,127 @@ describe('GTOGraphLoader', () => {
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('sourceReadAllChannels', true);
     });
 
+    it('parses RVImageSource image component properties', () => {
+      const mockNode = {
+        type: 'RVFileSource',
+        name: 'imageSource',
+        properties: {
+          has: vi.fn((key: string) =>
+            ['url', 'imageWidth', 'imageHeight', 'imageUncropWidth', 'imageUncropHeight',
+             'imageUncropX', 'imageUncropY', 'imagePixelAspect', 'imageFps', 'imageStart',
+             'imageEnd', 'imageInc', 'imageEncoding', 'imageChannels', 'imageBitsPerChannel',
+             'imageIsFloat'].includes(key)),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'imageSource',
+            protocol: 'RVImageSource',
+            components: {
+              media: { movie: '/path/to/image.exr' },
+              image: {
+                width: 1920,
+                height: 1080,
+                uncropWidth: 2048,
+                uncropHeight: 1152,
+                uncropX: 64,
+                uncropY: 36,
+                pixelAspect: 1.0,
+                fps: 24,
+                start: 1,
+                end: 100,
+                inc: 1,
+                encoding: 'None',
+                channels: 'RGBA',
+                bitsPerChannel: 16,
+                float: 1,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('url', '/path/to/image.exr');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('imageWidth', 1920);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('imageHeight', 1080);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('imageUncropWidth', 2048);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('imageUncropHeight', 1152);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('imageUncropX', 64);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('imageUncropY', 36);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('imagePixelAspect', 1.0);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('imageFps', 24);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('imageStart', 1);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('imageEnd', 100);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('imageInc', 1);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('imageEncoding', 'None');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('imageChannels', 'RGBA');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('imageBitsPerChannel', 16);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('imageIsFloat', true);
+    });
+
+    it('parses RVMovieSource properties', () => {
+      const mockNode = {
+        type: 'RVVideoSource',
+        name: 'movieSource',
+        properties: { has: vi.fn().mockReturnValue(true), setValue: vi.fn() },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test', viewNode: 'movieSource' }],
+        objects: [
+          {
+            name: 'movieSource',
+            protocol: 'RVMovieSource',
+            components: {
+              media: { movie: '/path/to/movie.mov' },
+              group: {
+                fps: 29.97,
+                volume: 0.8,
+                audioOffset: 0.5,
+                balance: 0.0,
+                noMovieAudio: 0,
+                rangeOffset: 10,
+                rangeStart: 1,
+              },
+              cut: {
+                in: 100,
+                out: 500,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('url', '/path/to/movie.mov');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('sourceFps', 29.97);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('sourceVolume', 0.8);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('sourceAudioOffset', 0.5);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('sourceBalance', 0.0);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('sourceNoMovieAudio', false);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('sourceRangeOffset', 10);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('sourceRangeStart', 1);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('sourceCutIn', 100);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('sourceCutOut', 500);
+    });
+
     it('finds leaf node as root when viewNode not specified', () => {
       let nodeIdCounter = 0;
 

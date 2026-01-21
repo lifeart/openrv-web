@@ -462,6 +462,80 @@ export interface DispTransform2DSettings {
 }
 
 /**
+ * Image source settings for RVImageSource
+ */
+export interface ImageSourceSettings {
+  /** Display name */
+  name?: string;
+  /** Source identifier/path */
+  movie?: string;
+  /** Source location type */
+  location?: string;
+  /** Image width */
+  width?: number;
+  /** Image height */
+  height?: number;
+  /** Uncropped width */
+  uncropWidth?: number;
+  /** Uncropped height */
+  uncropHeight?: number;
+  /** Uncrop X offset */
+  uncropX?: number;
+  /** Uncrop Y offset */
+  uncropY?: number;
+  /** Pixel aspect ratio */
+  pixelAspect?: number;
+  /** Frames per second */
+  fps?: number;
+  /** Start frame */
+  start?: number;
+  /** End frame */
+  end?: number;
+  /** Frame increment */
+  inc?: number;
+  /** Encoding type */
+  encoding?: string;
+  /** Channel layout (e.g., 'RGBA') */
+  channels?: string;
+  /** Bits per channel */
+  bitsPerChannel?: number;
+  /** Is floating point */
+  isFloat?: boolean;
+  /** Cut in point */
+  cutIn?: number;
+  /** Cut out point */
+  cutOut?: number;
+}
+
+/**
+ * Movie source settings for RVMovieSource
+ */
+export interface MovieSourceSettings {
+  /** Display name */
+  name?: string;
+  /** Movie file path */
+  movie?: string;
+  /** Source FPS (0 = derive from media) */
+  fps?: number;
+  /** Audio volume */
+  volume?: number;
+  /** Audio offset in seconds */
+  audioOffset?: number;
+  /** Stereo balance */
+  balance?: number;
+  /** Ignore embedded audio */
+  noMovieAudio?: boolean;
+  /** Range offset */
+  rangeOffset?: number;
+  /** Explicit start frame */
+  rangeStart?: number;
+  /** Cut in point */
+  cutIn?: number;
+  /** Cut out point */
+  cutOut?: number;
+}
+
+/**
  * Cineon log settings
  */
 export interface CineonSettings {
@@ -1993,6 +2067,107 @@ export class SessionGTOExporter {
       .float('scale', [settings.scaleX ?? 1, settings.scaleY ?? 1])
       .float('rotate', settings.rotate ?? 0)
       .end();
+
+    obj.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVImageSource object for programmatic image sources
+   * @param name - Object name (e.g., 'sourceGroup000000_source')
+   * @param settings - Image source settings
+   */
+  static buildImageSourceObject(name: string, settings: ImageSourceSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const obj = builder.object(name, 'RVImageSource', 1);
+
+    // Media component
+    const mediaComp = obj.component('media');
+    if (settings.name) {
+      mediaComp.string('name', settings.name);
+    }
+    if (settings.movie) {
+      mediaComp.string('movie', settings.movie);
+    }
+    mediaComp.string('location', settings.location ?? 'image');
+    mediaComp.end();
+
+    // Image component
+    obj.component('image')
+      .int('width', settings.width ?? 640)
+      .int('height', settings.height ?? 480)
+      .int('uncropWidth', settings.uncropWidth ?? settings.width ?? 640)
+      .int('uncropHeight', settings.uncropHeight ?? settings.height ?? 480)
+      .int('uncropX', settings.uncropX ?? 0)
+      .int('uncropY', settings.uncropY ?? 0)
+      .float('pixelAspect', settings.pixelAspect ?? 1.0)
+      .float('fps', settings.fps ?? 0.0)
+      .int('start', settings.start ?? 1)
+      .int('end', settings.end ?? 1)
+      .int('inc', settings.inc ?? 1)
+      .string('encoding', settings.encoding ?? 'None')
+      .string('channels', settings.channels ?? 'RGBA')
+      .int('bitsPerChannel', settings.bitsPerChannel ?? 0)
+      .int('float', settings.isFloat ? 1 : 0)
+      .end();
+
+    // Cut component (optional)
+    if (settings.cutIn !== undefined || settings.cutOut !== undefined) {
+      obj.component('cut')
+        .int('in', settings.cutIn ?? -2147483648)
+        .int('out', settings.cutOut ?? 2147483647)
+        .end();
+    }
+
+    obj.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVMovieSource object for video file sources
+   * @param name - Object name (e.g., 'sourceGroup000000_source')
+   * @param settings - Movie source settings
+   */
+  static buildMovieSourceObject(name: string, settings: MovieSourceSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const obj = builder.object(name, 'RVMovieSource', 1);
+
+    // Media component
+    const mediaComp = obj.component('media');
+    if (settings.name) {
+      mediaComp.string('name', settings.name);
+    }
+    if (settings.movie) {
+      mediaComp.string('movie', settings.movie);
+    }
+    mediaComp.end();
+
+    // Group component (playback settings)
+    obj.component('group')
+      .float('fps', settings.fps ?? 0.0)
+      .float('volume', settings.volume ?? 1.0)
+      .float('audioOffset', settings.audioOffset ?? 0.0)
+      .float('balance', settings.balance ?? 0.0)
+      .int('noMovieAudio', settings.noMovieAudio ? 1 : 0)
+      .int('rangeOffset', settings.rangeOffset ?? 0)
+      .end();
+
+    // RangeStart (optional)
+    if (settings.rangeStart !== undefined) {
+      const groupComp = obj.component('group');
+      groupComp.int('rangeStart', settings.rangeStart);
+      groupComp.end();
+    }
+
+    // Cut component (optional)
+    if (settings.cutIn !== undefined || settings.cutOut !== undefined) {
+      obj.component('cut')
+        .int('in', settings.cutIn ?? -2147483648)
+        .int('out', settings.cutOut ?? 2147483647)
+        .end();
+    }
 
     obj.end();
     return builder.build().objects[0]!;

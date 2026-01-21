@@ -77,8 +77,8 @@ The following node types are defined in the spec but not fully implemented:
 **Source Nodes:**
 | Node | Parse | Create | Update | Priority |
 |------|-------|--------|--------|----------|
-| RVImageSource | ⚠️ Partial | ❌ | ❌ | Medium |
-| RVMovieSource | ⚠️ Partial | ❌ | ❌ | Low |
+| RVImageSource | ✅ | ✅ | ❌ | ~~Medium~~ Done |
+| RVMovieSource | ✅ | ✅ | ❌ | ~~Low~~ Done |
 
 **Group Nodes:**
 | Node | Parse | Create | Update | Priority |

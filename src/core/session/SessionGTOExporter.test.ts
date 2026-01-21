@@ -2593,3 +2593,105 @@ describe('SessionGTOExporter.buildDispTransform2DObject', () => {
         expect(components['transform'].properties.rotate.data).toEqual([45]);
     });
 });
+
+describe('SessionGTOExporter.buildImageSourceObject', () => {
+    it('creates RVImageSource object with default settings', () => {
+        const result = SessionGTOExporter.buildImageSourceObject('imageSource');
+
+        expect(result.name).toBe('imageSource');
+        expect(result.protocol).toBe('RVImageSource');
+
+        const components = result.components as Record<string, any>;
+        expect(components['media'].properties.location.data).toEqual(['image']);
+        expect(components['image'].properties.width.data).toEqual([640]);
+        expect(components['image'].properties.height.data).toEqual([480]);
+        expect(components['image'].properties.pixelAspect.data).toEqual([1.0]);
+        expect(components['image'].properties.channels.data).toEqual(['RGBA']);
+    });
+
+    it('creates RVImageSource object with custom settings', () => {
+        const result = SessionGTOExporter.buildImageSourceObject('imageSource', {
+            name: 'Test Image',
+            movie: '/path/to/image.exr',
+            width: 1920,
+            height: 1080,
+            fps: 24,
+            start: 1,
+            end: 100,
+            channels: 'RGB',
+            bitsPerChannel: 16,
+            isFloat: true,
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['media'].properties.name.data).toEqual(['Test Image']);
+        expect(components['media'].properties.movie.data).toEqual(['/path/to/image.exr']);
+        expect(components['image'].properties.width.data).toEqual([1920]);
+        expect(components['image'].properties.height.data).toEqual([1080]);
+        expect(components['image'].properties.fps.data).toEqual([24]);
+        expect(components['image'].properties.start.data).toEqual([1]);
+        expect(components['image'].properties.end.data).toEqual([100]);
+        expect(components['image'].properties.channels.data).toEqual(['RGB']);
+        expect(components['image'].properties.bitsPerChannel.data).toEqual([16]);
+        expect(components['image'].properties.float.data).toEqual([1]);
+    });
+
+    it('creates RVImageSource object with cut points', () => {
+        const result = SessionGTOExporter.buildImageSourceObject('imageSource', {
+            cutIn: 10,
+            cutOut: 50,
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['cut'].properties.in.data).toEqual([10]);
+        expect(components['cut'].properties.out.data).toEqual([50]);
+    });
+});
+
+describe('SessionGTOExporter.buildMovieSourceObject', () => {
+    it('creates RVMovieSource object with default settings', () => {
+        const result = SessionGTOExporter.buildMovieSourceObject('movieSource');
+
+        expect(result.name).toBe('movieSource');
+        expect(result.protocol).toBe('RVMovieSource');
+
+        const components = result.components as Record<string, any>;
+        expect(components['group'].properties.fps.data).toEqual([0.0]);
+        expect(components['group'].properties.volume.data).toEqual([1.0]);
+        expect(components['group'].properties.audioOffset.data).toEqual([0.0]);
+        expect(components['group'].properties.balance.data).toEqual([0.0]);
+        expect(components['group'].properties.noMovieAudio.data).toEqual([0]);
+    });
+
+    it('creates RVMovieSource object with custom settings', () => {
+        const result = SessionGTOExporter.buildMovieSourceObject('movieSource', {
+            name: 'Test Movie',
+            movie: '/path/to/movie.mov',
+            fps: 29.97,
+            volume: 0.8,
+            audioOffset: 0.5,
+            balance: -0.3,
+            noMovieAudio: true,
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['media'].properties.name.data).toEqual(['Test Movie']);
+        expect(components['media'].properties.movie.data).toEqual(['/path/to/movie.mov']);
+        expect(components['group'].properties.fps.data).toEqual([29.97]);
+        expect(components['group'].properties.volume.data).toEqual([0.8]);
+        expect(components['group'].properties.audioOffset.data).toEqual([0.5]);
+        expect(components['group'].properties.balance.data).toEqual([-0.3]);
+        expect(components['group'].properties.noMovieAudio.data).toEqual([1]);
+    });
+
+    it('creates RVMovieSource object with cut points', () => {
+        const result = SessionGTOExporter.buildMovieSourceObject('movieSource', {
+            cutIn: 100,
+            cutOut: 500,
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['cut'].properties.in.data).toEqual([100]);
+        expect(components['cut'].properties.out.data).toEqual([500]);
+    });
+});
