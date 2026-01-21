@@ -648,6 +648,9 @@ Create test .rv files for:
 ### Completed Work Summary
 
 **Fully Implemented:**
+- Connection System Builder (evaluation.lhs/rhs, top.nodes)
+- Session Properties (name, comment, inc, version, matte, paintEffects)
+- Source Group Creation (RVSourceGroup, RVFileSource, RVImageSource, RVMovieSource)
 - RVSequence/EDL parsing and creation
 - RVStack compositing (blend modes, opacity per layer)
 - RVLinearize (all transfer functions, cineon, LUT)
@@ -659,10 +662,18 @@ Create test .rv files for:
 - RVDisplayColor (full parsing and export: gamma, sRGB, Rec709, brightness, chromaticities)
 - RVDisplayStereo (full parsing and export: type, swap, offset)
 - RVSourceStereo (full parsing and export: swap, offset, right eye transform)
+- RVOCIO (full parsing and creation: function, colorspaces, LUT3D, look, display/view, transforms)
+- RVICC (full parsing and creation: ICC profiles, transforms, linearize, display)
+- Color Processing Nodes (Exposure, Curve, Temperature, Saturation, Vibrance, Shadow, Highlight, GrayScale, CDL, LinearToSRGB, SRGBToLinear)
+- Filter Nodes (Gaussian, UnsharpMask, NoiseReduction, Clarity)
+- Utility Nodes (RotateCanvas, Resize, Cache, PrimaryConvert, DispTransform2D)
+- RVImageSource (full parsing and creation: 15 image properties)
+- RVMovieSource (full parsing and creation: media, group, cut properties)
 
-**Remaining High-Priority:**
-- OCIO integration
-- ICC profile support
+**Remaining Medium-Priority:**
+- RVLayout interactive editing (parsing done)
+- RVCrop interactive UI (parsing done)
+- RVSoundTrack audio sync (parsing done)
 
 ---
 
