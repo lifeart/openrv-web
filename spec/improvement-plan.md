@@ -199,7 +199,7 @@ The following node types are defined in the spec but not fully implemented:
 - ~~`visibleBox.*` (visible region)~~ ✅
 - ~~`stencil.*` (stencil data)~~ ✅
 
-**RVLensWarp Properties** ✅ MOSTLY IMPLEMENTED:
+**RVLensWarp Properties** ✅ FULLY IMPLEMENTED:
 - ~~`warp.model` (distortion model)~~ ✅
 - ~~`warp.pixelAspectRatio`~~ ✅
 - ~~`warp.k3` (k3 distortion)~~ ✅
@@ -208,7 +208,7 @@ The following node types are defined in the spec but not fully implemented:
 - ~~`warp.offset` (center offset)~~ ✅
 - ~~`warp.fx`, `warp.fy` (focal length)~~ ✅
 - ~~`warp.cropRatioX`, `warp.cropRatioY`~~ ✅
-- 3DE4 anamorphic properties - not yet
+- ~~3DE4 anamorphic properties (squeeze, rotation, cx/cy coefficients)~~ ✅
 
 **RVSequence/EDL Properties** ✅ IMPLEMENTED:
 - ~~`edl.frame`, `edl.source`, `edl.in`, `edl.out` (EDL data)~~ ✅
@@ -222,15 +222,17 @@ The following node types are defined in the spec but not fully implemented:
 - ~~`mode.alignStartFrames`, `mode.strictFrameRanges`~~ ✅
 - ~~`composite.type` (blend mode)~~ ✅
 
-**RVPaint Properties Not Handled:**
-- `paint.exclude`, `paint.include` (frame filters)
-- `pen:*.version`, `pen:*.mode` (pen mode)
-- Dynamic `window:*` components
+**RVPaint Properties** ✅ MOSTLY IMPLEMENTED:
+- ~~`paint.exclude`, `paint.include` (frame filters)~~ ✅
+- ~~`paint.nextId`, `paint.show` (metadata)~~ ✅
+- `pen:*.version`, `pen:*.mode` (advanced pen mode) - not yet
+- Dynamic `window:*` components - not yet
 
-**RVOverlay Properties Not Handled:**
-- `rect:*` (rectangle overlays)
-- `text:*` (text overlays)
-- `window:*` (window overlays)
+**RVOverlay Properties** ✅ FULLY IMPLEMENTED:
+- ~~`rect:*` (rectangle overlays)~~ ✅
+- ~~`text:*` (text overlays)~~ ✅
+- ~~`window:*` (window overlays)~~ ✅
+- ~~`matte.*` (matte settings)~~ ✅
 
 ---
 
@@ -657,6 +659,9 @@ Create test .rv files for:
 - RVLookLUT/RVCacheLUT parsing and creation
 - RVColor (full: exposure, gamma, saturation, CDL, luminanceLUT, normalize, unpremult, matrix:output)
 - RVTransform2D (rotation, flip/flop, scale, translate, visibleBox, stencil)
+- RVLensWarp (k1-k3, p1-p2 tangential, 3DE4 anamorphic: squeeze, rotation, cx/cy coefficients)
+- RVPaint (frame filters: exclude/include, nextId, show)
+- RVOverlay (rect:*, text:*, window:*, matte settings)
 - RVLensWarp (k1-k3, p1-p2 tangential, model, focal length, crop ratios)
 - RVRetime (visual/audio scale, warp mode, explicit mapping)
 - RVDisplayColor (full parsing and export: gamma, sRGB, Rec709, brightness, chromaticities)

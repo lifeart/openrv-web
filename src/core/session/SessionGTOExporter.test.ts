@@ -2748,6 +2748,152 @@ describe('SessionGTOExporter.buildTransform2DObject', () => {
     });
 });
 
+describe('SessionGTOExporter.buildLensWarpObject', () => {
+    it('creates RVLensWarp object with default settings', () => {
+        const result = SessionGTOExporter.buildLensWarpObject('lensWarp');
+
+        expect(result.name).toBe('lensWarp');
+        expect(result.protocol).toBe('RVLensWarp');
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.active.data).toEqual([1]);
+        expect(components['warp'].properties.model.data).toEqual(['brown']);
+        expect(components['warp'].properties.k1.data).toEqual([0]);
+        expect(components['warp'].properties.k2.data).toEqual([0]);
+        expect(components['warp'].properties.k3.data).toEqual([0]);
+    });
+
+    it('creates RVLensWarp object with basic distortion settings', () => {
+        const result = SessionGTOExporter.buildLensWarpObject('lensWarp', {
+            model: 'opencv',
+            k1: 0.1,
+            k2: 0.05,
+            k3: 0.01,
+            p1: 0.001,
+            p2: 0.002,
+            d: 1.1,
+            pixelAspectRatio: 1.0,
+            fx: 1.5,
+            fy: 1.5,
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['warp'].properties.model.data).toEqual(['opencv']);
+        expect(components['warp'].properties.k1.data).toEqual([0.1]);
+        expect(components['warp'].properties.k2.data).toEqual([0.05]);
+        expect(components['warp'].properties.k3.data).toEqual([0.01]);
+        expect(components['warp'].properties.p1.data).toEqual([0.001]);
+        expect(components['warp'].properties.p2.data).toEqual([0.002]);
+        expect(components['warp'].properties.d.data).toEqual([1.1]);
+        expect(components['warp'].properties.fx.data).toEqual([1.5]);
+        expect(components['warp'].properties.fy.data).toEqual([1.5]);
+    });
+
+    it('creates RVLensWarp object with 3DE4 anamorphic settings', () => {
+        const result = SessionGTOExporter.buildLensWarpObject('lensWarp', {
+            model: '3de4_anamorphic',
+            anamorphic: {
+                squeeze: 2.0,
+                squeezeX: 1.8,
+                squeezeY: 1.0,
+                anamorphicRotation: 0.5,
+                lensRotation: 1.2,
+                cx02: 0.01,
+                cy02: 0.02,
+                cx22: 0.03,
+                cy22: 0.04,
+                cx04: 0.05,
+                cy04: 0.06,
+                cx24: 0.07,
+                cy24: 0.08,
+                cx44: 0.09,
+                cy44: 0.10,
+            },
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['warp'].properties.model.data).toEqual(['3de4_anamorphic']);
+        expect(components['warp'].properties.squeeze.data).toEqual([2.0]);
+        expect(components['warp'].properties.squeezeX.data).toEqual([1.8]);
+        expect(components['warp'].properties.squeezeY.data).toEqual([1.0]);
+        expect(components['warp'].properties.anamorphicRotation.data).toEqual([0.5]);
+        expect(components['warp'].properties.lensRotation.data).toEqual([1.2]);
+        expect(components['warp'].properties.cx02.data).toEqual([0.01]);
+        expect(components['warp'].properties.cy02.data).toEqual([0.02]);
+        expect(components['warp'].properties.cx22.data).toEqual([0.03]);
+        expect(components['warp'].properties.cy22.data).toEqual([0.04]);
+        expect(components['warp'].properties.cx04.data).toEqual([0.05]);
+        expect(components['warp'].properties.cy04.data).toEqual([0.06]);
+        expect(components['warp'].properties.cx24.data).toEqual([0.07]);
+        expect(components['warp'].properties.cy24.data).toEqual([0.08]);
+        expect(components['warp'].properties.cx44.data).toEqual([0.09]);
+        expect(components['warp'].properties.cy44.data).toEqual([0.10]);
+    });
+
+    it('does not include anamorphic properties when not provided', () => {
+        const result = SessionGTOExporter.buildLensWarpObject('lensWarp');
+        const components = result.components as Record<string, any>;
+
+        // Basic properties should exist
+        expect(components['warp'].properties.model).toBeDefined();
+        expect(components['warp'].properties.k1).toBeDefined();
+
+        // Anamorphic properties should not exist
+        expect(components['warp'].properties.squeeze).toBeUndefined();
+        expect(components['warp'].properties.cx02).toBeUndefined();
+    });
+});
+
+describe('SessionGTOExporter.buildPaintNodeObject', () => {
+    it('creates RVPaint object with default settings', () => {
+        const result = SessionGTOExporter.buildPaintNodeObject('paintNode');
+
+        expect(result.name).toBe('paintNode');
+        expect(result.protocol).toBe('RVPaint');
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.active.data).toEqual([1]);
+        expect(components['paint'].properties.show.data).toEqual([1]);
+        expect(components['paint'].properties.nextId.data).toEqual([0]);
+    });
+
+    it('creates RVPaint object with frame filters', () => {
+        const result = SessionGTOExporter.buildPaintNodeObject('paintNode', {
+            active: true,
+            show: true,
+            nextId: 42,
+            exclude: [10, 20, 30],
+            include: [1, 5, 15],
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.active.data).toEqual([1]);
+        expect(components['paint'].properties.show.data).toEqual([1]);
+        expect(components['paint'].properties.nextId.data).toEqual([42]);
+        expect(components['paint'].properties.exclude.data).toEqual([10, 20, 30]);
+        expect(components['paint'].properties.include.data).toEqual([1, 5, 15]);
+    });
+
+    it('does not include empty exclude/include arrays', () => {
+        const result = SessionGTOExporter.buildPaintNodeObject('paintNode');
+        const components = result.components as Record<string, any>;
+
+        expect(components['paint'].properties.exclude).toBeUndefined();
+        expect(components['paint'].properties.include).toBeUndefined();
+    });
+
+    it('creates inactive paint node when specified', () => {
+        const result = SessionGTOExporter.buildPaintNodeObject('paintNode', {
+            active: false,
+            show: false,
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['node'].properties.active.data).toEqual([0]);
+        expect(components['paint'].properties.show.data).toEqual([0]);
+    });
+});
+
 describe('SessionGTOExporter.buildImageSourceObject', () => {
     it('creates RVImageSource object with default settings', () => {
         const result = SessionGTOExporter.buildImageSourceObject('imageSource');

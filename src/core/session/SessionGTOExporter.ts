@@ -504,6 +504,82 @@ export interface Transform2DSettings {
 }
 
 /**
+ * Lens warp settings for RVLensWarp
+ */
+export interface LensWarpSettings {
+  /** Node is active */
+  active?: boolean;
+  /** Distortion model (e.g., 'brown', 'opencv', '3de4_radial', '3de4_anamorphic') */
+  model?: string;
+  /** K1 radial distortion coefficient */
+  k1?: number;
+  /** K2 radial distortion coefficient */
+  k2?: number;
+  /** K3 radial distortion coefficient */
+  k3?: number;
+  /** P1 tangential distortion */
+  p1?: number;
+  /** P2 tangential distortion */
+  p2?: number;
+  /** Distortion scale factor */
+  d?: number;
+  /** Center point [x, y] */
+  center?: number[];
+  /** Offset [x, y] */
+  offset?: number[];
+  /** Pixel aspect ratio */
+  pixelAspectRatio?: number;
+  /** Focal length X */
+  fx?: number;
+  /** Focal length Y */
+  fy?: number;
+  /** Crop ratio X */
+  cropRatioX?: number;
+  /** Crop ratio Y */
+  cropRatioY?: number;
+  /** 3DE4 anamorphic settings */
+  anamorphic?: {
+    /** Anamorphic squeeze */
+    squeeze?: number;
+    /** Squeeze in X direction */
+    squeezeX?: number;
+    /** Squeeze in Y direction */
+    squeezeY?: number;
+    /** Anamorphic rotation angle */
+    anamorphicRotation?: number;
+    /** Physical lens rotation */
+    lensRotation?: number;
+    /** 3DE4 polynomial coefficients */
+    cx02?: number;
+    cy02?: number;
+    cx22?: number;
+    cy22?: number;
+    cx04?: number;
+    cy04?: number;
+    cx24?: number;
+    cy24?: number;
+    cx44?: number;
+    cy44?: number;
+  };
+}
+
+/**
+ * Paint settings for RVPaint
+ */
+export interface PaintSettings {
+  /** Node is active */
+  active?: boolean;
+  /** Show paint on frame */
+  show?: boolean;
+  /** Next stroke ID */
+  nextId?: number;
+  /** Frames to exclude from paint display */
+  exclude?: number[];
+  /** Frames to include for paint display */
+  include?: number[];
+}
+
+/**
  * Image source settings for RVImageSource
  */
 export interface ImageSourceSettings {
@@ -2175,6 +2251,102 @@ export class SessionGTOExporter {
         .end();
     }
 
+    obj.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build an RVLensWarp object for lens distortion correction
+   * @param name - Object name (e.g., 'sourceGroup000000_RVLensWarp')
+   * @param settings - Lens warp settings including 3DE4 anamorphic properties
+   */
+  static buildLensWarpObject(name: string, settings: LensWarpSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const obj = builder.object(name, 'RVLensWarp', 1);
+
+    // Node component (active state)
+    obj.component('node')
+      .int('active', settings.active !== false ? 1 : 0)
+      .end();
+
+    // Warp component
+    const warpComp = obj.component('warp');
+    warpComp
+      .string('model', settings.model ?? 'brown')
+      .float('k1', settings.k1 ?? 0)
+      .float('k2', settings.k2 ?? 0)
+      .float('k3', settings.k3 ?? 0)
+      .float('p1', settings.p1 ?? 0)
+      .float('p2', settings.p2 ?? 0)
+      .float('d', settings.d ?? 1.0)
+      .float2('center', [settings.center ?? [0.5, 0.5]])
+      .float2('offset', [settings.offset ?? [0, 0]])
+      .float('pixelAspectRatio', settings.pixelAspectRatio ?? 1.0)
+      .float('fx', settings.fx ?? 1.0)
+      .float('fy', settings.fy ?? 1.0)
+      .float('cropRatioX', settings.cropRatioX ?? 1.0)
+      .float('cropRatioY', settings.cropRatioY ?? 1.0);
+
+    // Add 3DE4 anamorphic properties if provided
+    if (settings.anamorphic) {
+      const ana = settings.anamorphic;
+      if (ana.squeeze !== undefined) warpComp.float('squeeze', ana.squeeze);
+      if (ana.squeezeX !== undefined) warpComp.float('squeezeX', ana.squeezeX);
+      if (ana.squeezeY !== undefined) warpComp.float('squeezeY', ana.squeezeY);
+      if (ana.anamorphicRotation !== undefined) warpComp.float('anamorphicRotation', ana.anamorphicRotation);
+      if (ana.lensRotation !== undefined) warpComp.float('lensRotation', ana.lensRotation);
+      // 3DE4 polynomial coefficients
+      if (ana.cx02 !== undefined) warpComp.float('cx02', ana.cx02);
+      if (ana.cy02 !== undefined) warpComp.float('cy02', ana.cy02);
+      if (ana.cx22 !== undefined) warpComp.float('cx22', ana.cx22);
+      if (ana.cy22 !== undefined) warpComp.float('cy22', ana.cy22);
+      if (ana.cx04 !== undefined) warpComp.float('cx04', ana.cx04);
+      if (ana.cy04 !== undefined) warpComp.float('cy04', ana.cy04);
+      if (ana.cx24 !== undefined) warpComp.float('cx24', ana.cx24);
+      if (ana.cy24 !== undefined) warpComp.float('cy24', ana.cy24);
+      if (ana.cx44 !== undefined) warpComp.float('cx44', ana.cx44);
+      if (ana.cy44 !== undefined) warpComp.float('cy44', ana.cy44);
+    }
+
+    warpComp.end();
+    obj.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
+   * Build a basic RVPaint node object (without stroke data)
+   * For creating standalone paint nodes with frame filters
+   * @param name - Object name (e.g., 'sourceGroup000000_paint')
+   * @param settings - Paint settings including frame filters
+   */
+  static buildPaintNodeObject(name: string, settings: PaintSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const obj = builder.object(name, 'RVPaint', 1);
+
+    // Node component (active state)
+    obj.component('node')
+      .int('active', settings.active !== false ? 1 : 0)
+      .end();
+
+    // Paint component (frame filters)
+    const paintComp = obj.component('paint');
+    paintComp
+      .int('show', settings.show !== false ? 1 : 0)
+      .int('nextId', settings.nextId ?? 0);
+
+    // Add exclude frames if provided
+    if (settings.exclude && settings.exclude.length > 0) {
+      paintComp.int('exclude', settings.exclude);
+    }
+
+    // Add include frames if provided
+    if (settings.include && settings.include.length > 0) {
+      paintComp.int('include', settings.include);
+    }
+
+    paintComp.end();
     obj.end();
     return builder.build().objects[0]!;
   }

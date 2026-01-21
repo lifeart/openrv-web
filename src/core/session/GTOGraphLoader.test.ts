@@ -658,6 +658,74 @@ describe('GTOGraphLoader', () => {
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('cropRatioY', 0.9);
     });
 
+    it('parses 3DE4 anamorphic properties in RVLensWarp', () => {
+      const mockNode = {
+        type: 'RVLensWarp',
+        name: 'lensNode',
+        properties: {
+          has: vi.fn((key: string) =>
+            [
+              'squeeze', 'squeezeX', 'squeezeY', 'anamorphicRotation', 'lensRotation',
+              'cx02', 'cy02', 'cx22', 'cy22', 'cx04', 'cy04', 'cx24', 'cy24', 'cx44', 'cy44',
+            ].includes(key)
+          ),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'lensNode',
+            protocol: 'RVLensWarp',
+            components: {
+              warp: {
+                squeeze: 2.0,
+                squeezeX: 1.8,
+                squeezeY: 1.0,
+                anamorphicRotation: 0.5,
+                lensRotation: 1.2,
+                cx02: 0.01,
+                cy02: 0.02,
+                cx22: 0.03,
+                cy22: 0.04,
+                cx04: 0.05,
+                cy04: 0.06,
+                cx24: 0.07,
+                cy24: 0.08,
+                cx44: 0.09,
+                cy44: 0.10,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('squeeze', 2.0);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('squeezeX', 1.8);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('squeezeY', 1.0);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('anamorphicRotation', 0.5);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('lensRotation', 1.2);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('cx02', 0.01);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('cy02', 0.02);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('cx22', 0.03);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('cy22', 0.04);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('cx04', 0.05);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('cy04', 0.06);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('cx24', 0.07);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('cy24', 0.08);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('cx44', 0.09);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('cy44', 0.10);
+    });
+
     it('parses color properties', () => {
       const mockNode = {
         type: 'RVColor',
@@ -3463,6 +3531,53 @@ describe('GTOGraphLoader', () => {
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('lookLutActive', true);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('lookLutComponentActive', true);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('lookLutFile', '/cached/lut.cube');
+    });
+  });
+
+  describe('RVPaint parsing', () => {
+    it('parses RVPaint frame filter properties', () => {
+      const mockNode = {
+        type: 'RVPaint',
+        name: 'paintNode',
+        properties: {
+          has: vi.fn((key: string) =>
+            ['paintExclude', 'paintInclude', 'paintNextId', 'paintShow', 'paintActive'].includes(key)
+          ),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'paintNode',
+            protocol: 'RVPaint',
+            components: {
+              node: { active: 1 },
+              paint: {
+                exclude: [10, 20, 30],
+                include: [1, 5, 15],
+                nextId: 42,
+                show: 1,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('paintActive', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('paintExclude', [10, 20, 30]);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('paintInclude', [1, 5, 15]);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('paintNextId', 42);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('paintShow', true);
     });
   });
 });

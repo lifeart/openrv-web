@@ -141,6 +141,9 @@ const PROTOCOL_TO_NODE_TYPE: Record<string, string> = {
   RVCache: 'RVCache',
   RVPrimaryConvert: 'RVPrimaryConvert',
   RVDispTransform2D: 'RVDispTransform2D',
+
+  // Paint/Annotation nodes
+  RVPaint: 'RVPaint',
 };
 
 /**
@@ -662,6 +665,41 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
         if (typeof fy === 'number') nodeInfo.properties.fy = fy;
         if (typeof cropRatioX === 'number') nodeInfo.properties.cropRatioX = cropRatioX;
         if (typeof cropRatioY === 'number') nodeInfo.properties.cropRatioY = cropRatioY;
+
+        // 3DE4 anamorphic properties
+        const squeeze = warpComp.property('squeeze').value() as number;
+        const squeezeX = warpComp.property('squeezeX').value() as number;
+        const squeezeY = warpComp.property('squeezeY').value() as number;
+        const anamorphicRotation = warpComp.property('anamorphicRotation').value() as number;
+        const lensRotation = warpComp.property('lensRotation').value() as number;
+
+        // 3DE4 polynomial coefficients (cx/cy pairs)
+        const cx02 = warpComp.property('cx02').value() as number;
+        const cy02 = warpComp.property('cy02').value() as number;
+        const cx22 = warpComp.property('cx22').value() as number;
+        const cy22 = warpComp.property('cy22').value() as number;
+        const cx04 = warpComp.property('cx04').value() as number;
+        const cy04 = warpComp.property('cy04').value() as number;
+        const cx24 = warpComp.property('cx24').value() as number;
+        const cy24 = warpComp.property('cy24').value() as number;
+        const cx44 = warpComp.property('cx44').value() as number;
+        const cy44 = warpComp.property('cy44').value() as number;
+
+        if (typeof squeeze === 'number') nodeInfo.properties.squeeze = squeeze;
+        if (typeof squeezeX === 'number') nodeInfo.properties.squeezeX = squeezeX;
+        if (typeof squeezeY === 'number') nodeInfo.properties.squeezeY = squeezeY;
+        if (typeof anamorphicRotation === 'number') nodeInfo.properties.anamorphicRotation = anamorphicRotation;
+        if (typeof lensRotation === 'number') nodeInfo.properties.lensRotation = lensRotation;
+        if (typeof cx02 === 'number') nodeInfo.properties.cx02 = cx02;
+        if (typeof cy02 === 'number') nodeInfo.properties.cy02 = cy02;
+        if (typeof cx22 === 'number') nodeInfo.properties.cx22 = cx22;
+        if (typeof cy22 === 'number') nodeInfo.properties.cy22 = cy22;
+        if (typeof cx04 === 'number') nodeInfo.properties.cx04 = cx04;
+        if (typeof cy04 === 'number') nodeInfo.properties.cy04 = cy04;
+        if (typeof cx24 === 'number') nodeInfo.properties.cx24 = cx24;
+        if (typeof cy24 === 'number') nodeInfo.properties.cy24 = cy24;
+        if (typeof cx44 === 'number') nodeInfo.properties.cx44 = cx44;
+        if (typeof cy44 === 'number') nodeInfo.properties.cy44 = cy44;
       }
     }
 
@@ -861,6 +899,30 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
         if (typeof explicitActive === 'number') nodeInfo.properties.explicitActive = explicitActive !== 0;
         if (typeof firstOutputFrame === 'number') nodeInfo.properties.explicitFirstOutputFrame = firstOutputFrame;
         if (Array.isArray(inputFrames)) nodeInfo.properties.explicitInputFrames = inputFrames;
+      }
+    }
+
+    // Parse RVPaint properties
+    if (protocol === 'RVPaint') {
+      // Parse paint component (frame filters)
+      const paintComp = obj.component('paint');
+      if (paintComp?.exists()) {
+        const exclude = paintComp.property('exclude').value() as number[];
+        const include = paintComp.property('include').value() as number[];
+        const nextId = paintComp.property('nextId').value() as number;
+        const show = paintComp.property('show').value() as number;
+
+        if (Array.isArray(exclude)) nodeInfo.properties.paintExclude = exclude;
+        if (Array.isArray(include)) nodeInfo.properties.paintInclude = include;
+        if (typeof nextId === 'number') nodeInfo.properties.paintNextId = nextId;
+        if (typeof show === 'number') nodeInfo.properties.paintShow = show !== 0;
+      }
+
+      // Parse node component (active state)
+      const nodeComp = obj.component('node');
+      if (nodeComp?.exists()) {
+        const active = nodeComp.property('active').value() as number;
+        if (typeof active === 'number') nodeInfo.properties.paintActive = active !== 0;
       }
     }
 
