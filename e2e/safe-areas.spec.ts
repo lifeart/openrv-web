@@ -254,3 +254,126 @@ test.describe('Safe Areas State Persistence', () => {
     expect(state.enabled).toBe(true);
   });
 });
+
+test.describe('Safe Areas HiDPI Scaling', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+    await loadVideoFile(page);
+    // Enable safe areas
+    await page.keyboard.press(';');
+    await page.waitForTimeout(100);
+  });
+
+  test('SA-E050: safe areas overlay canvas has correct CSS dimensions for HiDPI', async ({ page }) => {
+    // This test ensures the canvas CSS dimensions match the viewer canvas
+    // and physical dimensions scale properly with DPR
+    const dimensionCheck = await page.evaluate(() => {
+      const overlay = document.querySelector('[data-testid="safe-areas-overlay"]') as HTMLCanvasElement;
+      const viewerCanvas = document.querySelector('.viewer-container canvas:first-of-type') as HTMLCanvasElement;
+      if (!overlay || !viewerCanvas) return null;
+
+      const overlayRect = overlay.getBoundingClientRect();
+      const viewerRect = viewerCanvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+
+      return {
+        overlayCssWidth: overlayRect.width,
+        overlayCssHeight: overlayRect.height,
+        viewerCssWidth: viewerRect.width,
+        viewerCssHeight: viewerRect.height,
+        overlayPhysicalWidth: overlay.width,
+        overlayPhysicalHeight: overlay.height,
+        dpr,
+        // CSS dimensions should match viewer
+        cssWidthMatches: Math.abs(overlayRect.width - viewerRect.width) < 2,
+        cssHeightMatches: Math.abs(overlayRect.height - viewerRect.height) < 2,
+        // Physical dimensions should be CSS * DPR
+        physicalWidthMatchesDpr: Math.abs(overlay.width - overlayRect.width * dpr) < 2,
+        physicalHeightMatchesDpr: Math.abs(overlay.height - overlayRect.height * dpr) < 2,
+      };
+    });
+
+    expect(dimensionCheck).not.toBeNull();
+    if (dimensionCheck) {
+      // CSS dimensions should match viewer canvas
+      expect(dimensionCheck.cssWidthMatches).toBe(true);
+      expect(dimensionCheck.cssHeightMatches).toBe(true);
+      // Physical dimensions should scale with DPR
+      expect(dimensionCheck.physicalWidthMatchesDpr).toBe(true);
+      expect(dimensionCheck.physicalHeightMatchesDpr).toBe(true);
+    }
+  });
+
+  test('SA-E051: safe areas overlay is not oversized (regression test for HiDPI bug)', async ({ page }) => {
+    // This test catches the bug where setStyle: false caused canvas to display at physical pixel size
+    const dimensionCheck = await page.evaluate(() => {
+      const overlay = document.querySelector('[data-testid="safe-areas-overlay"]') as HTMLCanvasElement;
+      const viewerCanvas = document.querySelector('.viewer-container canvas:first-of-type') as HTMLCanvasElement;
+      if (!overlay || !viewerCanvas) return null;
+
+      const overlayRect = overlay.getBoundingClientRect();
+      const viewerRect = viewerCanvas.getBoundingClientRect();
+
+      return {
+        overlayCssWidth: overlayRect.width,
+        overlayCssHeight: overlayRect.height,
+        viewerCssWidth: viewerRect.width,
+        viewerCssHeight: viewerRect.height,
+        // Overlay should NOT be larger than viewer
+        overlayNotOversizedWidth: overlayRect.width <= viewerRect.width + 2,
+        overlayNotOversizedHeight: overlayRect.height <= viewerRect.height + 2,
+      };
+    });
+
+    expect(dimensionCheck).not.toBeNull();
+    if (dimensionCheck) {
+      // Overlay canvas CSS size should not exceed viewer canvas CSS size
+      expect(dimensionCheck.overlayNotOversizedWidth).toBe(true);
+      expect(dimensionCheck.overlayNotOversizedHeight).toBe(true);
+    }
+  });
+
+  test('SA-E052: matte overlay canvas has correct CSS dimensions for HiDPI', async ({ page }) => {
+    // Enable matte overlay
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.viewer?.getMatteOverlay?.()?.enable?.();
+    });
+    await page.waitForTimeout(100);
+
+    const dimensionCheck = await page.evaluate(() => {
+      const overlay = document.querySelector('[data-testid="matte-overlay"]') as HTMLCanvasElement;
+      const viewerCanvas = document.querySelector('.viewer-container canvas:first-of-type') as HTMLCanvasElement;
+      if (!overlay || !viewerCanvas) return null;
+
+      const overlayRect = overlay.getBoundingClientRect();
+      const viewerRect = viewerCanvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+
+      return {
+        overlayCssWidth: overlayRect.width,
+        overlayCssHeight: overlayRect.height,
+        viewerCssWidth: viewerRect.width,
+        viewerCssHeight: viewerRect.height,
+        dpr,
+        // CSS dimensions should match viewer
+        cssWidthMatches: Math.abs(overlayRect.width - viewerRect.width) < 2,
+        cssHeightMatches: Math.abs(overlayRect.height - viewerRect.height) < 2,
+        // Physical dimensions should be CSS * DPR
+        physicalWidthMatchesDpr: Math.abs(overlay.width - overlayRect.width * dpr) < 2,
+        physicalHeightMatchesDpr: Math.abs(overlay.height - overlayRect.height * dpr) < 2,
+      };
+    });
+
+    expect(dimensionCheck).not.toBeNull();
+    if (dimensionCheck) {
+      // CSS dimensions should match viewer canvas
+      expect(dimensionCheck.cssWidthMatches).toBe(true);
+      expect(dimensionCheck.cssHeightMatches).toBe(true);
+      // Physical dimensions should scale with DPR
+      expect(dimensionCheck.physicalWidthMatchesDpr).toBe(true);
+      expect(dimensionCheck.physicalHeightMatchesDpr).toBe(true);
+    }
+  });
+});
