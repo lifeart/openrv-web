@@ -2,6 +2,15 @@
   "name": "openrv-web",
   "version": "0.1.0",
   "description": "Web-based VFX image/sequence viewer inspired by OpenRV",
+  "author": "Alex Kanunnikov <lifeart92@gmail.com>",
+  "homepage": "https://lifeart.github.io/openrv-web",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lifeart/openrv-web.git"
+  },
+  "bugs": {
+    "url": "https://github.com/lifeart/openrv-web/issues"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -17,7 +26,7 @@
   },
   "dependencies": {
     "gl-matrix": "^3.4.3",
-    "gto-js": "link:../gto-js",
+    "gto-js": "^0.1.0",
     "mediabunny": "^1.28.0"
   },
   "devDependencies": {

@@ -1,5 +1,10 @@
 # OpenRV Web
 
+[![Deploy to GitHub Pages](https://github.com/lifeart/openrv-web/actions/workflows/deploy.yml/badge.svg)](https://github.com/lifeart/openrv-web/actions/workflows/deploy.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+**[Live Demo](https://lifeart.github.io/openrv-web)**
+
 A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.com/AcademySoftwareFoundation/OpenRV). View images, videos, and image sequences with professional color tools, annotations, and RV session file compatibility.
 
 ## Features
@@ -116,7 +121,7 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 
 ```bash
 # Clone the repository
-git clone https://github.com/user/openrv-web.git
+git clone https://github.com/lifeart/openrv-web.git
 cd openrv-web
 
 # Install dependencies
@@ -463,7 +468,7 @@ export class MyGroupNode extends BaseGroupNode {
 - **Vitest** - Unit testing framework
 - **Playwright** - End-to-end testing
 - **WebGL2** - GPU-accelerated rendering
-- **WebCodecs API** - Frame-accurate video decoding via [mediabunny](https://github.com/user/mediabunny)
+- **WebCodecs API** - Frame-accurate video decoding via [mediabunny](https://github.com/nickarora/mediabunny)
 - **Web Audio API** - Audio playback and waveforms
 - **gto-js** - RV/GTO file parsing
 - **gl-matrix** - Matrix/vector math
@@ -485,4 +490,4 @@ MIT
 ## Related Projects
 
 - [OpenRV](https://github.com/AcademySoftwareFoundation/OpenRV) - Original C++ application
-- [gto-js](https://github.com/user/gto-js) - GTO file format parser for JavaScript
+- [gto-js](https://github.com/lifeart/gto-js) - GTO file format parser for JavaScript
