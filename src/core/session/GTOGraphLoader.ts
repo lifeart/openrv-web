@@ -35,6 +35,29 @@ export interface GTOParseResult {
     inPoint?: number;
     outPoint?: number;
     marks?: number[];
+    /** Frame increment for playback */
+    inc?: number;
+    /** Session file version */
+    version?: number;
+    /** Session display name */
+    displayName?: string;
+    /** Session comment/notes */
+    comment?: string;
+    /** Matte overlay settings */
+    matte?: {
+      show?: boolean;
+      aspect?: number;
+      opacity?: number;
+      heightVisible?: number;
+      centerPoint?: [number, number];
+    };
+    /** Paint effect settings */
+    paintEffects?: {
+      hold?: boolean;
+      ghost?: boolean;
+      ghostBefore?: number;
+      ghostAfter?: number;
+    };
   };
 }
 
@@ -225,6 +248,66 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
       } else if (typeof fps === 'number' && fps > 0) {
         sessionInfo.fps = fps;
       }
+
+      // Frame increment
+      const inc = sessionComp.property('inc').value() as number;
+      if (typeof inc === 'number') {
+        sessionInfo.inc = inc;
+      }
+
+      // Session version
+      const version = sessionComp.property('version').value() as number;
+      if (typeof version === 'number') {
+        sessionInfo.version = version;
+      }
+    }
+
+    // Root component (session name and comment)
+    const rootComp = session.component('root');
+    if (rootComp?.exists()) {
+      const displayName = rootComp.property('name').value() as string;
+      const comment = rootComp.property('comment').value() as string;
+
+      if (typeof displayName === 'string' && displayName.length > 0) {
+        sessionInfo.displayName = displayName;
+      }
+      if (typeof comment === 'string' && comment.length > 0) {
+        sessionInfo.comment = comment;
+      }
+    }
+
+    // Matte component (session-level matte settings)
+    const matteComp = session.component('matte');
+    if (matteComp?.exists()) {
+      const show = matteComp.property('show').value() as number;
+      const aspect = matteComp.property('aspect').value() as number;
+      const opacity = matteComp.property('opacity').value() as number;
+      const heightVisible = matteComp.property('heightVisible').value() as number;
+      const centerPoint = matteComp.property('centerPoint').value() as number[];
+
+      sessionInfo.matte = {};
+      if (typeof show === 'number') sessionInfo.matte.show = show !== 0;
+      if (typeof aspect === 'number') sessionInfo.matte.aspect = aspect;
+      if (typeof opacity === 'number') sessionInfo.matte.opacity = opacity;
+      if (typeof heightVisible === 'number') sessionInfo.matte.heightVisible = heightVisible;
+      if (Array.isArray(centerPoint) && centerPoint.length >= 2) {
+        sessionInfo.matte.centerPoint = [centerPoint[0], centerPoint[1]];
+      }
+    }
+
+    // PaintEffects component (session-level paint settings)
+    const paintEffectsComp = session.component('paintEffects');
+    if (paintEffectsComp?.exists()) {
+      const hold = paintEffectsComp.property('hold').value() as number;
+      const ghost = paintEffectsComp.property('ghost').value() as number;
+      const ghostBefore = paintEffectsComp.property('ghostBefore').value() as number;
+      const ghostAfter = paintEffectsComp.property('ghostAfter').value() as number;
+
+      sessionInfo.paintEffects = {};
+      if (typeof hold === 'number') sessionInfo.paintEffects.hold = hold !== 0;
+      if (typeof ghost === 'number') sessionInfo.paintEffects.ghost = ghost !== 0;
+      if (typeof ghostBefore === 'number') sessionInfo.paintEffects.ghostBefore = ghostBefore;
+      if (typeof ghostAfter === 'number') sessionInfo.paintEffects.ghostAfter = ghostAfter;
     }
   }
 
@@ -302,6 +385,45 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
           nodeInfo.properties.width = size[0];
           nodeInfo.properties.height = size[1];
         }
+      }
+
+      // Parse group component (audio/playback settings)
+      const groupComp = obj.component('group');
+      if (groupComp?.exists()) {
+        const fps = groupComp.property('fps').value() as number;
+        const volume = groupComp.property('volume').value() as number;
+        const audioOffset = groupComp.property('audioOffset').value() as number;
+        const balance = groupComp.property('balance').value() as number;
+        const crossover = groupComp.property('crossover').value() as number;
+        const noMovieAudio = groupComp.property('noMovieAudio').value() as number;
+        const rangeOffset = groupComp.property('rangeOffset').value() as number;
+        const rangeStart = groupComp.property('rangeStart').value() as number;
+
+        if (typeof fps === 'number') nodeInfo.properties.sourceFps = fps;
+        if (typeof volume === 'number') nodeInfo.properties.sourceVolume = volume;
+        if (typeof audioOffset === 'number') nodeInfo.properties.sourceAudioOffset = audioOffset;
+        if (typeof balance === 'number') nodeInfo.properties.sourceBalance = balance;
+        if (typeof crossover === 'number') nodeInfo.properties.sourceCrossover = crossover;
+        if (typeof noMovieAudio === 'number') nodeInfo.properties.sourceNoMovieAudio = noMovieAudio !== 0;
+        if (typeof rangeOffset === 'number') nodeInfo.properties.sourceRangeOffset = rangeOffset;
+        if (typeof rangeStart === 'number') nodeInfo.properties.sourceRangeStart = rangeStart;
+      }
+
+      // Parse cut component (in/out points)
+      const cutComp = obj.component('cut');
+      if (cutComp?.exists()) {
+        const cutIn = cutComp.property('in').value() as number;
+        const cutOut = cutComp.property('out').value() as number;
+
+        if (typeof cutIn === 'number') nodeInfo.properties.sourceCutIn = cutIn;
+        if (typeof cutOut === 'number') nodeInfo.properties.sourceCutOut = cutOut;
+      }
+
+      // Parse request component (EXR options)
+      const requestComp = obj.component('request');
+      if (requestComp?.exists()) {
+        const readAllChannels = requestComp.property('readAllChannels').value() as number;
+        if (typeof readAllChannels === 'number') nodeInfo.properties.sourceReadAllChannels = readAllChannels !== 0;
       }
     }
 

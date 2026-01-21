@@ -27,6 +27,11 @@ function createMockDTO(config: {
     range?: number[] | number[][];
     region?: number[] | number[][];
     marks?: number[];
+    inc?: number;
+    version?: number;
+    root?: { name?: string; comment?: string };
+    matte?: { show?: number; aspect?: number; opacity?: number; heightVisible?: number; centerPoint?: number[] };
+    paintEffects?: { hold?: number; ghost?: number; ghostBefore?: number; ghostAfter?: number };
   }>;
   objects?: Array<{
     name: string;
@@ -68,6 +73,49 @@ function createMockDTO(config: {
               if (propName === 'range') return s.range;
               if (propName === 'region') return s.region;
               if (propName === 'marks') return s.marks;
+              if (propName === 'inc') return s.inc;
+              if (propName === 'version') return s.version;
+              return undefined;
+            },
+          }),
+        };
+      }
+      if (name === 'root' && s.root) {
+        return {
+          exists: () => true,
+          property: (propName: string) => ({
+            value: () => {
+              if (propName === 'name') return s.root?.name;
+              if (propName === 'comment') return s.root?.comment;
+              return undefined;
+            },
+          }),
+        };
+      }
+      if (name === 'matte' && s.matte) {
+        return {
+          exists: () => true,
+          property: (propName: string) => ({
+            value: () => {
+              if (propName === 'show') return s.matte?.show;
+              if (propName === 'aspect') return s.matte?.aspect;
+              if (propName === 'opacity') return s.matte?.opacity;
+              if (propName === 'heightVisible') return s.matte?.heightVisible;
+              if (propName === 'centerPoint') return s.matte?.centerPoint;
+              return undefined;
+            },
+          }),
+        };
+      }
+      if (name === 'paintEffects' && s.paintEffects) {
+        return {
+          exists: () => true,
+          property: (propName: string) => ({
+            value: () => {
+              if (propName === 'hold') return s.paintEffects?.hold;
+              if (propName === 'ghost') return s.paintEffects?.ghost;
+              if (propName === 'ghostBefore') return s.paintEffects?.ghostBefore;
+              if (propName === 'ghostAfter') return s.paintEffects?.ghostAfter;
               return undefined;
             },
           }),
@@ -2379,6 +2427,92 @@ describe('GTOGraphLoader', () => {
       expect(result.sessionInfo.frame).toBe(10);
     });
 
+    it('parses session inc and version properties', () => {
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test', inc: 2, version: 3 }],
+        objects: [],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.sessionInfo.inc).toBe(2);
+      expect(result.sessionInfo.version).toBe(3);
+    });
+
+    it('parses session root component (displayName and comment)', () => {
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
+
+      const dto = createMockDTO({
+        sessions: [{
+          name: 'Test',
+          root: {
+            name: 'My Session Name',
+            comment: 'This is a test session',
+          },
+        }],
+        objects: [],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.sessionInfo.displayName).toBe('My Session Name');
+      expect(result.sessionInfo.comment).toBe('This is a test session');
+    });
+
+    it('parses session matte settings', () => {
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
+
+      const dto = createMockDTO({
+        sessions: [{
+          name: 'Test',
+          matte: {
+            show: 1,
+            aspect: 2.35,
+            opacity: 0.8,
+            heightVisible: 0.9,
+            centerPoint: [0.1, 0.2],
+          },
+        }],
+        objects: [],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.sessionInfo.matte).toBeDefined();
+      expect(result.sessionInfo.matte?.show).toBe(true);
+      expect(result.sessionInfo.matte?.aspect).toBe(2.35);
+      expect(result.sessionInfo.matte?.opacity).toBe(0.8);
+      expect(result.sessionInfo.matte?.heightVisible).toBe(0.9);
+      expect(result.sessionInfo.matte?.centerPoint).toEqual([0.1, 0.2]);
+    });
+
+    it('parses session paintEffects settings', () => {
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
+
+      const dto = createMockDTO({
+        sessions: [{
+          name: 'Test',
+          paintEffects: {
+            hold: 1,
+            ghost: 1,
+            ghostBefore: 3,
+            ghostAfter: 7,
+          },
+        }],
+        objects: [],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.sessionInfo.paintEffects).toBeDefined();
+      expect(result.sessionInfo.paintEffects?.hold).toBe(true);
+      expect(result.sessionInfo.paintEffects?.ghost).toBe(true);
+      expect(result.sessionInfo.paintEffects?.ghostBefore).toBe(3);
+      expect(result.sessionInfo.paintEffects?.ghostAfter).toBe(7);
+    });
+
     it('creates RVImageSource nodes correctly', () => {
       const mockNode = {
         type: 'RVFileSource',
@@ -2446,6 +2580,70 @@ describe('GTOGraphLoader', () => {
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('width', 1920);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('height', 1080);
+    });
+
+    it('parses RVFileSource group, cut, and request components', () => {
+      const mockNode = {
+        type: 'RVFileSource',
+        name: 'sourceNode',
+        properties: {
+          has: vi.fn((key: string) =>
+            ['url', 'sourceFps', 'sourceVolume', 'sourceAudioOffset', 'sourceBalance',
+             'sourceCrossover', 'sourceNoMovieAudio', 'sourceRangeOffset', 'sourceRangeStart',
+             'sourceCutIn', 'sourceCutOut', 'sourceReadAllChannels'].includes(key)),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'sourceNode',
+            protocol: 'RVFileSource',
+            components: {
+              media: { movie: '/path/to/file.mov' },
+              group: {
+                fps: 29.97,
+                volume: 0.8,
+                audioOffset: 0.5,
+                balance: -0.3,
+                crossover: 1000,
+                noMovieAudio: 1,
+                rangeOffset: 10,
+                rangeStart: 5,
+              },
+              cut: {
+                in: 100,
+                out: 500,
+              },
+              request: {
+                readAllChannels: 1,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('url', '/path/to/file.mov');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('sourceFps', 29.97);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('sourceVolume', 0.8);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('sourceAudioOffset', 0.5);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('sourceBalance', -0.3);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('sourceCrossover', 1000);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('sourceNoMovieAudio', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('sourceRangeOffset', 10);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('sourceRangeStart', 5);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('sourceCutIn', 100);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('sourceCutOut', 500);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('sourceReadAllChannels', true);
     });
 
     it('finds leaf node as root when viewNode not specified', () => {

@@ -156,25 +156,27 @@ The following node types are defined in the spec but not fully implemented:
 
 #### 2. Missing Property Support
 
-**RVSession Properties Not Handled:**
-- `session.inc` (frame increment)
-- `session.clipboard` (clipboard state)
-- `session.version` (session version)
-- `root.name` (session name)
-- `root.comment` (session notes)
-- `internal.creationContext`
-- `node.origin`
-- `membership.contains`
-- `matte.*` (session-level matte settings)
-- `paintEffects.*` (session-level paint settings)
+**RVSession Properties** ✅ IMPLEMENTED:
+- ~~`session.inc` (frame increment)~~ ✅
+- `session.clipboard` (clipboard state) - not yet
+- ~~`session.version` (session version)~~ ✅
+- ~~`root.name` (session name)~~ ✅
+- ~~`root.comment` (session notes)~~ ✅
+- `internal.creationContext` - not yet
+- `node.origin` - not yet
+- `membership.contains` - not yet
+- ~~`matte.*` (session-level matte settings)~~ ✅
+- ~~`paintEffects.*` (session-level paint settings)~~ ✅
 
-**RVFileSource Properties Not Handled:**
-- `group.balance` (stereo balance)
-- `group.crossover` (audio crossover)
-- `group.noMovieAudio` (ignore embedded audio)
-- `group.rangeStart` (explicit start frame)
-- `request.readAllChannels` (EXR all channels)
-- `proxy.*` (proxy settings)
+**RVFileSource Properties** ✅ MOSTLY IMPLEMENTED:
+- ~~`group.balance` (stereo balance)~~ ✅
+- ~~`group.crossover` (audio crossover)~~ ✅
+- ~~`group.noMovieAudio` (ignore embedded audio)~~ ✅
+- ~~`group.rangeStart` (explicit start frame)~~ ✅
+- ~~`group.fps`, `group.volume`, `group.audioOffset`~~ ✅
+- ~~`cut.in`, `cut.out` (cut points)~~ ✅
+- ~~`request.readAllChannels` (EXR all channels)~~ ✅
+- `proxy.*` (proxy settings) - partial
 
 **RVColor Properties** ✅ IMPLEMENTED:
 - ~~`color.lut` (LUT selection)~~ ✅
