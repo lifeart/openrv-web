@@ -27,6 +27,8 @@ declare global {
       getInfoPanelState: () => InfoPanelState;
       getCacheIndicatorState: () => CacheIndicatorState;
       getThemeState: () => ThemeState;
+      getMatteState: () => MatteState;
+      getSessionMetadataState: () => SessionMetadataState;
       isUsingMediabunny: () => boolean;
     };
   }
@@ -234,6 +236,22 @@ export interface CacheIndicatorState {
 export interface ThemeState {
   mode: 'dark' | 'light' | 'auto';
   resolvedTheme: 'dark' | 'light';
+}
+
+export interface MatteState {
+  show: boolean;
+  aspect: number;
+  opacity: number;
+  heightVisible: number;
+  centerPoint: [number, number];
+}
+
+export interface SessionMetadataState {
+  displayName: string;
+  comment: string;
+  version: number;
+  origin: string;
+  frameIncrement: number;
 }
 
 export function exposeForTesting(app: App): void {
@@ -549,6 +567,31 @@ export function exposeForTesting(app: App): void {
       return {
         mode: themeManager.getMode(),
         resolvedTheme: themeManager.getResolvedTheme(),
+      };
+    },
+
+    getMatteState: (): MatteState => {
+      const viewer = appAny.viewer;
+      const matteOverlay = viewer?.getMatteOverlay?.();
+      const settings = matteOverlay?.getSettings?.() ?? {};
+      return {
+        show: settings.show ?? false,
+        aspect: settings.aspect ?? 1.78,
+        opacity: settings.opacity ?? 0.66,
+        heightVisible: settings.heightVisible ?? -1,
+        centerPoint: settings.centerPoint ?? [0, 0],
+      };
+    },
+
+    getSessionMetadataState: (): SessionMetadataState => {
+      const session = appAny.session;
+      const metadata = session?.metadata ?? {};
+      return {
+        displayName: metadata.displayName ?? '',
+        comment: metadata.comment ?? '',
+        version: metadata.version ?? 2,
+        origin: metadata.origin ?? 'openrv-web',
+        frameIncrement: session?.frameIncrement ?? 1,
       };
     },
 

@@ -18,6 +18,34 @@ class TestSession extends Session {
     public setSources(s: MediaSource[]) {
         this.sources = s;
     }
+    public setMatteSettingsForTest(matte: {
+        show: boolean;
+        aspect: number;
+        opacity: number;
+        heightVisible: number;
+        centerPoint: [number, number];
+    }) {
+        (this as any)._matteSettings = matte;
+    }
+    public setSessionPaintEffectsForTest(effects: {
+        hold?: boolean;
+        ghost?: boolean;
+        ghostBefore?: number;
+        ghostAfter?: number;
+    }) {
+        (this as any)._sessionPaintEffects = effects;
+    }
+    public setMetadataForTest(metadata: {
+        displayName: string;
+        comment: string;
+        version: number;
+        origin: string;
+        creationContext: number;
+        clipboard: number;
+        membershipContains: string[];
+    }) {
+        (this as any)._metadata = metadata;
+    }
 }
 
 describe('SessionGTOExporter', () => {
@@ -3020,5 +3048,334 @@ describe('SessionGTOExporter.buildMovieSourceObject', () => {
         const components = result.components as Record<string, any>;
         expect(components['cut'].properties.in.data).toEqual([100]);
         expect(components['cut'].properties.out.data).toEqual([500]);
+    });
+});
+
+describe('SessionGTOExporter Round-trip Export Tests', () => {
+    let session: TestSession;
+
+    beforeEach(() => {
+        session = new TestSession();
+        session.setSources([{
+            width: 1920,
+            height: 1080,
+            duration: 100,
+            fps: 24,
+            type: 'image',
+            name: 'test',
+            url: 'test.png'
+        }]);
+        session.fps = 24;
+    });
+
+    describe('Frame Increment export', () => {
+        it('exports custom frameIncrement value', () => {
+            session.frameIncrement = 5;
+
+            const result = SessionGTOExporter.buildSessionObject(session, 'testSession', 'defaultSequence');
+            const components = result.components as Record<string, any>;
+
+            expect(components['session'].properties.inc.data).toEqual([5]);
+        });
+
+        it('exports frameIncrement of 1 by default', () => {
+            const result = SessionGTOExporter.buildSessionObject(session, 'testSession', 'defaultSequence');
+            const components = result.components as Record<string, any>;
+
+            expect(components['session'].properties.inc.data).toEqual([1]);
+        });
+
+        it('exports high frameIncrement values', () => {
+            session.frameIncrement = 50;
+
+            const result = SessionGTOExporter.buildSessionObject(session, 'testSession', 'defaultSequence');
+            const components = result.components as Record<string, any>;
+
+            expect(components['session'].properties.inc.data).toEqual([50]);
+        });
+    });
+
+    describe('Matte Settings export', () => {
+        it('exports matte settings when configured', () => {
+            session.setMatteSettingsForTest({
+                show: true,
+                aspect: 2.35,
+                opacity: 0.8,
+                heightVisible: 0.5,
+                centerPoint: [0.1, -0.2]
+            });
+
+            const result = SessionGTOExporter.buildSessionObject(session, 'testSession', 'defaultSequence');
+            const components = result.components as Record<string, any>;
+            const matteComp = components['matte'];
+
+            expect(matteComp.properties.show.data).toEqual([1]);
+            expect(matteComp.properties.aspect.data).toEqual([2.35]);
+            expect(matteComp.properties.opacity.data).toEqual([0.8]);
+            expect(matteComp.properties.heightVisible.data).toEqual([0.5]);
+            expect(matteComp.properties.centerPoint.data).toEqual([[0.1, -0.2]]);
+        });
+
+        it('exports matte show=false correctly', () => {
+            session.setMatteSettingsForTest({
+                show: false,
+                aspect: 1.78,
+                opacity: 0.66,
+                heightVisible: -1.0,
+                centerPoint: [0, 0]
+            });
+
+            const result = SessionGTOExporter.buildSessionObject(session, 'testSession', 'defaultSequence');
+            const components = result.components as Record<string, any>;
+
+            expect(components['matte'].properties.show.data).toEqual([0]);
+        });
+
+        it('exports default matte values when not set', () => {
+            const result = SessionGTOExporter.buildSessionObject(session, 'testSession', 'defaultSequence');
+            const components = result.components as Record<string, any>;
+            const matteComp = components['matte'];
+
+            expect(matteComp.properties.show.data).toEqual([0]);
+            expect(matteComp.properties.aspect.data).toEqual([1.78]);
+            expect(matteComp.properties.opacity.data).toEqual([0.66]);
+            expect(matteComp.properties.heightVisible.data).toEqual([-1.0]);
+            expect(matteComp.properties.centerPoint.data).toEqual([[0, 0]]);
+        });
+    });
+
+    describe('Paint Effects export', () => {
+        it('exports paint effects when configured', () => {
+            session.setSessionPaintEffectsForTest({
+                hold: true,
+                ghost: true,
+                ghostBefore: 7,
+                ghostAfter: 10
+            });
+
+            const result = SessionGTOExporter.buildSessionObject(session, 'testSession', 'defaultSequence');
+            const components = result.components as Record<string, any>;
+            const paintComp = components['paintEffects'];
+
+            expect(paintComp.properties.hold.data).toEqual([1]);
+            expect(paintComp.properties.ghost.data).toEqual([1]);
+            expect(paintComp.properties.ghostBefore.data).toEqual([7]);
+            expect(paintComp.properties.ghostAfter.data).toEqual([10]);
+        });
+
+        it('exports paint effects disabled state', () => {
+            session.setSessionPaintEffectsForTest({
+                hold: false,
+                ghost: false,
+                ghostBefore: 3,
+                ghostAfter: 3
+            });
+
+            const result = SessionGTOExporter.buildSessionObject(session, 'testSession', 'defaultSequence');
+            const components = result.components as Record<string, any>;
+            const paintComp = components['paintEffects'];
+
+            expect(paintComp.properties.hold.data).toEqual([0]);
+            expect(paintComp.properties.ghost.data).toEqual([0]);
+        });
+
+        it('exports default paint effects when not set', () => {
+            const result = SessionGTOExporter.buildSessionObject(session, 'testSession', 'defaultSequence');
+            const components = result.components as Record<string, any>;
+            const paintComp = components['paintEffects'];
+
+            expect(paintComp.properties.hold.data).toEqual([0]);
+            expect(paintComp.properties.ghost.data).toEqual([0]);
+            expect(paintComp.properties.ghostBefore.data).toEqual([5]);
+            expect(paintComp.properties.ghostAfter.data).toEqual([5]);
+        });
+    });
+
+    describe('Session Metadata export', () => {
+        it('exports custom metadata values', () => {
+            session.setMetadataForTest({
+                displayName: 'My Custom Session',
+                comment: 'Test comment for round-trip',
+                version: 3,
+                origin: 'custom-tool',
+                creationContext: 42,
+                clipboard: 7,
+                membershipContains: ['node1', 'node2']
+            });
+
+            const result = SessionGTOExporter.buildSessionObject(session, 'testSession', 'defaultSequence');
+            const components = result.components as Record<string, any>;
+
+            expect(components['session'].properties.version.data).toEqual([3]);
+            expect(components['session'].properties.clipboard.data).toEqual([7]);
+            expect(components['root'].properties.name.data).toEqual(['My Custom Session']);
+            expect(components['root'].properties.comment.data).toEqual(['Test comment for round-trip']);
+            expect(components['internal'].properties.creationContext.data).toEqual([42]);
+            expect(components['node'].properties.origin.data).toEqual(['custom-tool']);
+            expect(components['membership'].properties.contains.data).toEqual(['node1', 'node2']);
+        });
+
+        it('exports default metadata values', () => {
+            const result = SessionGTOExporter.buildSessionObject(session, 'testSession', 'defaultSequence');
+            const components = result.components as Record<string, any>;
+
+            expect(components['session'].properties.version.data).toEqual([2]);
+            expect(components['session'].properties.clipboard.data).toEqual([0]);
+            expect(components['root'].properties.name.data).toEqual(['testSession']);
+            expect(components['internal'].properties.creationContext.data).toEqual([0]);
+            expect(components['node'].properties.origin.data).toEqual(['openrv-web']);
+        });
+
+        it('uses name parameter when displayName is empty', () => {
+            session.setMetadataForTest({
+                displayName: '',
+                comment: '',
+                version: 2,
+                origin: 'openrv-web',
+                creationContext: 0,
+                clipboard: 0,
+                membershipContains: []
+            });
+
+            const result = SessionGTOExporter.buildSessionObject(session, 'fallbackName', 'defaultSequence');
+            const components = result.components as Record<string, any>;
+
+            expect(components['root'].properties.name.data).toEqual(['fallbackName']);
+        });
+
+        it('uses comment parameter when metadata comment is empty', () => {
+            session.setMetadataForTest({
+                displayName: 'Test',
+                comment: '',
+                version: 2,
+                origin: 'openrv-web',
+                creationContext: 0,
+                clipboard: 0,
+                membershipContains: []
+            });
+
+            const result = SessionGTOExporter.buildSessionObject(session, 'testSession', 'defaultSequence', 'fallback comment');
+            const components = result.components as Record<string, any>;
+
+            expect(components['root'].properties.comment.data).toEqual(['fallback comment']);
+        });
+    });
+
+    describe('Complete round-trip simulation', () => {
+        it('exports all custom values correctly for a complete session', () => {
+            // Set up session with all custom values
+            session.frameIncrement = 8;
+            session.goToFrame(42);
+            session.toggleMark(10);
+            session.toggleMark(90);
+
+            session.setMatteSettingsForTest({
+                show: true,
+                aspect: 2.39,
+                opacity: 0.75,
+                heightVisible: 0.9,
+                centerPoint: [0.05, 0.1]
+            });
+
+            session.setSessionPaintEffectsForTest({
+                hold: true,
+                ghost: true,
+                ghostBefore: 4,
+                ghostAfter: 6
+            });
+
+            session.setMetadataForTest({
+                displayName: 'Complete Test Session',
+                comment: 'Testing full round-trip export',
+                version: 5,
+                origin: 'test-suite',
+                creationContext: 99,
+                clipboard: 3,
+                membershipContains: ['group1', 'group2', 'group3']
+            });
+
+            const result = SessionGTOExporter.buildSessionObject(session, 'exportTest', 'defaultSequence');
+            const components = result.components as Record<string, any>;
+
+            // Verify session component
+            expect(components['session'].properties.inc.data).toEqual([8]);
+            expect(components['session'].properties.frame.data).toEqual([42]);
+            expect(components['session'].properties.currentFrame.data).toEqual([42]);
+            expect(components['session'].properties.version.data).toEqual([5]);
+            expect(components['session'].properties.clipboard.data).toEqual([3]);
+
+            // Verify marks
+            const marksData = components['session'].properties.marks.data;
+            expect(marksData).toContain(10);
+            expect(marksData).toContain(90);
+
+            // Verify root component
+            expect(components['root'].properties.name.data).toEqual(['Complete Test Session']);
+            expect(components['root'].properties.comment.data).toEqual(['Testing full round-trip export']);
+
+            // Verify matte component
+            expect(components['matte'].properties.show.data).toEqual([1]);
+            expect(components['matte'].properties.aspect.data).toEqual([2.39]);
+            expect(components['matte'].properties.opacity.data).toEqual([0.75]);
+            expect(components['matte'].properties.heightVisible.data).toEqual([0.9]);
+            expect(components['matte'].properties.centerPoint.data).toEqual([[0.05, 0.1]]);
+
+            // Verify paintEffects component
+            expect(components['paintEffects'].properties.hold.data).toEqual([1]);
+            expect(components['paintEffects'].properties.ghost.data).toEqual([1]);
+            expect(components['paintEffects'].properties.ghostBefore.data).toEqual([4]);
+            expect(components['paintEffects'].properties.ghostAfter.data).toEqual([6]);
+
+            // Verify internal component
+            expect(components['internal'].properties.creationContext.data).toEqual([99]);
+
+            // Verify node component
+            expect(components['node'].properties.origin.data).toEqual(['test-suite']);
+
+            // Verify membership component
+            expect(components['membership'].properties.contains.data).toEqual(['group1', 'group2', 'group3']);
+        });
+
+        it('preserves session values through export when session has loaded values', () => {
+            // Simulate a session that was loaded from a file with specific values
+            session.frameIncrement = 10;
+            session.setMatteSettingsForTest({
+                show: true,
+                aspect: 1.85,
+                opacity: 0.5,
+                heightVisible: -1,
+                centerPoint: [-0.1, 0.2]
+            });
+            session.setSessionPaintEffectsForTest({
+                hold: false,
+                ghost: true,
+                ghostBefore: 2,
+                ghostAfter: 8
+            });
+            session.setMetadataForTest({
+                displayName: 'Loaded Session',
+                comment: 'This was loaded from a file',
+                version: 4,
+                origin: 'rv-desktop',
+                creationContext: 1,
+                clipboard: 0,
+                membershipContains: []
+            });
+
+            // Export the session
+            const exported = SessionGTOExporter.buildSessionObject(session, 'loadedSession', 'defaultSequence');
+            const components = exported.components as Record<string, any>;
+
+            // Verify the exported data matches what was loaded
+            expect(components['session'].properties.inc.data).toEqual([10]);
+            expect(components['matte'].properties.show.data).toEqual([1]);
+            expect(components['matte'].properties.aspect.data).toEqual([1.85]);
+            expect(components['matte'].properties.centerPoint.data).toEqual([[-0.1, 0.2]]);
+            expect(components['paintEffects'].properties.ghost.data).toEqual([1]);
+            expect(components['paintEffects'].properties.ghostBefore.data).toEqual([2]);
+            expect(components['paintEffects'].properties.ghostAfter.data).toEqual([8]);
+            expect(components['root'].properties.name.data).toEqual(['Loaded Session']);
+            expect(components['node'].properties.origin.data).toEqual(['rv-desktop']);
+        });
     });
 });

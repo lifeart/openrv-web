@@ -70,6 +70,30 @@ export interface Marker {
 }
 
 /**
+ * Matte overlay settings for letterbox/pillarbox display
+ */
+export interface MatteSettings {
+  show: boolean;
+  aspect: number;        // Target aspect ratio (e.g., 2.35 for cinemascope)
+  opacity: number;       // Matte opacity (0-1)
+  heightVisible: number; // Visible height fraction (-1 = auto)
+  centerPoint: [number, number]; // Center offset
+}
+
+/**
+ * Session metadata from GTO file
+ */
+export interface SessionMetadata {
+  displayName: string;
+  comment: string;
+  version: number;
+  origin: string;
+  creationContext: number;
+  clipboard: number;
+  membershipContains: string[];
+}
+
+/**
  * Default marker colors palette
  */
 export const MARKER_COLORS = [
@@ -103,6 +127,11 @@ export interface SessionEvents extends EventMap {
   graphLoaded: GTOParseResult;
   fpsChanged: number;
   abSourceChanged: { current: 'A' | 'B'; sourceIndex: number };
+  // New events for GTO session integration
+  paintEffectsLoaded: Partial<PaintEffects>;
+  matteChanged: MatteSettings;
+  metadataChanged: SessionMetadata;
+  frameIncrementChanged: number;
 }
 
 export type LoopMode = 'once' | 'loop' | 'pingpong';
@@ -140,6 +169,20 @@ export class Session extends EventEmitter<SessionEvents> {
   private _marks = new Map<number, Marker>();
   private _volume = 0.7;
   private _muted = false;
+
+  // Session integration properties
+  private _frameIncrement = 1;
+  private _matteSettings: MatteSettings | null = null;
+  private _sessionPaintEffects: Partial<PaintEffects> | null = null;
+  private _metadata: SessionMetadata = {
+    displayName: '',
+    comment: '',
+    version: 2,
+    origin: 'openrv-web',
+    creationContext: 0,
+    clipboard: 0,
+    membershipContains: [],
+  };
 
   private lastFrameTime = 0;
   private frameAccumulator = 0;
@@ -246,6 +289,34 @@ export class Session extends EventEmitter<SessionEvents> {
       this._fps = clamped;
       this.emit('fpsChanged', this._fps);
     }
+  }
+
+  /** Frame increment for step forward/backward */
+  get frameIncrement(): number {
+    return this._frameIncrement;
+  }
+
+  set frameIncrement(value: number) {
+    const clamped = Math.max(1, Math.min(100, value));
+    if (clamped !== this._frameIncrement) {
+      this._frameIncrement = clamped;
+      this.emit('frameIncrementChanged', this._frameIncrement);
+    }
+  }
+
+  /** Matte overlay settings */
+  get matteSettings(): MatteSettings | null {
+    return this._matteSettings;
+  }
+
+  /** Paint effects from session (ghost, hold, etc.) */
+  get sessionPaintEffects(): Partial<PaintEffects> | null {
+    return this._sessionPaintEffects;
+  }
+
+  /** Session metadata (name, comment, version, origin) */
+  get metadata(): SessionMetadata {
+    return this._metadata;
   }
 
   get playbackSpeed(): number {
@@ -515,12 +586,12 @@ export class Session extends EventEmitter<SessionEvents> {
 
   stepForward(): void {
     this.pause();
-    this.advanceFrame(1);
+    this.advanceFrame(this._frameIncrement);
   }
 
   stepBackward(): void {
     this.pause();
-    this.advanceFrame(-1);
+    this.advanceFrame(-this._frameIncrement);
   }
 
   goToFrame(frame: number): void {
@@ -945,6 +1016,49 @@ export class Session extends EventEmitter<SessionEvents> {
           });
         }
         this.emit('marksChanged', this._marks);
+      }
+
+      // Apply frame increment
+      if (result.sessionInfo.inc !== undefined) {
+        this._frameIncrement = result.sessionInfo.inc;
+        this.emit('frameIncrementChanged', this._frameIncrement);
+      }
+
+      // Apply paint effects from session
+      if (result.sessionInfo.paintEffects) {
+        this._sessionPaintEffects = result.sessionInfo.paintEffects;
+        this.emit('paintEffectsLoaded', this._sessionPaintEffects);
+      }
+
+      // Apply matte settings
+      if (result.sessionInfo.matte) {
+        const m = result.sessionInfo.matte;
+        this._matteSettings = {
+          show: m.show ?? false,
+          aspect: m.aspect ?? 1.78,
+          opacity: m.opacity ?? 0.66,
+          heightVisible: m.heightVisible ?? -1,
+          centerPoint: m.centerPoint ?? [0, 0],
+        };
+        this.emit('matteChanged', this._matteSettings);
+      }
+
+      // Apply session metadata
+      if (result.sessionInfo.displayName || result.sessionInfo.comment ||
+          result.sessionInfo.version || result.sessionInfo.origin ||
+          result.sessionInfo.creationContext !== undefined ||
+          result.sessionInfo.clipboard !== undefined ||
+          result.sessionInfo.membershipContains) {
+        this._metadata = {
+          displayName: result.sessionInfo.displayName ?? '',
+          comment: result.sessionInfo.comment ?? '',
+          version: result.sessionInfo.version ?? 2,
+          origin: result.sessionInfo.origin ?? 'openrv-web',
+          creationContext: result.sessionInfo.creationContext ?? 0,
+          clipboard: result.sessionInfo.clipboard ?? 0,
+          membershipContains: result.sessionInfo.membershipContains ?? [],
+        };
+        this.emit('metadataChanged', this._metadata);
       }
 
       if (result.nodes.size > 0) {

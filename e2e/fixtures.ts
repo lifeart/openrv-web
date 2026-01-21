@@ -205,6 +205,22 @@ export interface ThemeState {
   resolvedTheme: 'dark' | 'light';
 }
 
+export interface MatteState {
+  show: boolean;
+  aspect: number;
+  opacity: number;
+  heightVisible: number;
+  centerPoint: [number, number];
+}
+
+export interface SessionMetadataState {
+  displayName: string;
+  comment: string;
+  version: number;
+  origin: string;
+  frameIncrement: number;
+}
+
 /**
  * Get session state from the app
  */
@@ -461,6 +477,36 @@ export async function getThemeState(page: Page): Promise<ThemeState> {
     return window.__OPENRV_TEST__?.getThemeState() ?? {
       mode: 'auto',
       resolvedTheme: 'dark',
+    };
+  });
+}
+
+/**
+ * Get matte overlay state from the app
+ */
+export async function getMatteState(page: Page): Promise<MatteState> {
+  return page.evaluate(() => {
+    return window.__OPENRV_TEST__?.getMatteState() ?? {
+      show: false,
+      aspect: 1.78,
+      opacity: 0.66,
+      heightVisible: -1,
+      centerPoint: [0, 0],
+    };
+  });
+}
+
+/**
+ * Get session metadata state from the app
+ */
+export async function getSessionMetadataState(page: Page): Promise<SessionMetadataState> {
+  return page.evaluate(() => {
+    return window.__OPENRV_TEST__?.getSessionMetadataState() ?? {
+      displayName: '',
+      comment: '',
+      version: 2,
+      origin: 'openrv-web',
+      frameIncrement: 1,
     };
   });
 }

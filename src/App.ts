@@ -883,6 +883,31 @@ export class App {
     this.session.on('marksChanged', () => this.syncGTOStore());
     this.session.on('fpsChanged', () => this.syncGTOStore());
 
+    // Apply paint effects from GTO session to PaintEngine
+    this.session.on('paintEffectsLoaded', (effects) => {
+      if (effects.ghost !== undefined) {
+        this.paintEngine.setGhostMode(
+          effects.ghost,
+          effects.ghostBefore ?? 3,
+          effects.ghostAfter ?? 3
+        );
+      }
+      if (effects.hold !== undefined) {
+        this.paintEngine.setHoldMode(effects.hold);
+      }
+    });
+
+    // Apply matte settings from GTO session to MatteOverlay
+    this.session.on('matteChanged', (settings) => {
+      this.viewer.getMatteOverlay().setSettings(settings);
+    });
+
+    // Handle metadata changes (for future UI display)
+    this.session.on('metadataChanged', (metadata) => {
+      // Could update title bar, info panel, etc.
+      console.debug('Session metadata loaded:', metadata.displayName || 'Untitled');
+    });
+
     this.paintEngine.on('annotationsChanged', () => this.syncGTOStore());
     this.paintEngine.on('effectsChanged', () => this.syncGTOStore());
 

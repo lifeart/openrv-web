@@ -23,6 +23,7 @@ import { StereoState, DEFAULT_STEREO_STATE, isDefaultStereoState, applyStereoMod
 import { DifferenceMatteState, DEFAULT_DIFFERENCE_MATTE_STATE, applyDifferenceMatte } from './DifferenceMatteControl';
 import { WebGLSharpenProcessor } from '../../filters/WebGLSharpen';
 import { SafeAreasOverlay } from './SafeAreasOverlay';
+import { MatteOverlay } from './MatteOverlay';
 import { PixelProbe } from './PixelProbe';
 import { FalseColor } from './FalseColor';
 import { TimecodeOverlay } from './TimecodeOverlay';
@@ -137,6 +138,9 @@ export class Viewer {
   // Safe areas overlay
   private safeAreasOverlay: SafeAreasOverlay;
 
+  // Matte overlay
+  private matteOverlay: MatteOverlay;
+
   // Timecode overlay
   private timecodeOverlay: TimecodeOverlay;
 
@@ -249,6 +253,10 @@ export class Viewer {
     // Create safe areas overlay
     this.safeAreasOverlay = new SafeAreasOverlay();
     this.canvasContainer.appendChild(this.safeAreasOverlay.getElement());
+
+    // Create matte overlay (below safe areas, z-index 40)
+    this.matteOverlay = new MatteOverlay();
+    this.canvasContainer.appendChild(this.matteOverlay.getElement());
 
     // Create timecode overlay
     this.timecodeOverlay = new TimecodeOverlay(session);
@@ -437,6 +445,16 @@ export class Viewer {
 
     // Update safe areas overlay dimensions
     this.safeAreasOverlay.setViewerDimensions(
+      width,
+      height,
+      0,
+      0,
+      width,
+      height
+    );
+
+    // Update matte overlay dimensions
+    this.matteOverlay.setViewerDimensions(
       width,
       height,
       0,
@@ -2896,6 +2914,13 @@ export class Viewer {
    */
   getSafeAreasOverlay(): SafeAreasOverlay {
     return this.safeAreasOverlay;
+  }
+
+  /**
+   * Get the matte overlay instance
+   */
+  getMatteOverlay(): MatteOverlay {
+    return this.matteOverlay;
   }
 
   /**
