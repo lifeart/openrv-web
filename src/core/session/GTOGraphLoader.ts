@@ -58,6 +58,14 @@ export interface GTOParseResult {
       ghostBefore?: number;
       ghostAfter?: number;
     };
+    /** Clipboard state */
+    clipboard?: number;
+    /** Context in which session was created */
+    creationContext?: number;
+    /** Origin of the session */
+    origin?: string;
+    /** Contained node names (membership) */
+    membershipContains?: string[];
   };
 }
 
@@ -263,6 +271,39 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
       if (typeof version === 'number') {
         sessionInfo.version = version;
       }
+
+      // Clipboard state
+      const clipboard = sessionComp.property('clipboard').value() as number;
+      if (typeof clipboard === 'number') {
+        sessionInfo.clipboard = clipboard;
+      }
+    }
+
+    // Internal component (creation context)
+    const internalComp = session.component('internal');
+    if (internalComp?.exists()) {
+      const creationContext = internalComp.property('creationContext').value() as number;
+      if (typeof creationContext === 'number') {
+        sessionInfo.creationContext = creationContext;
+      }
+    }
+
+    // Node component (origin)
+    const nodeComp = session.component('node');
+    if (nodeComp?.exists()) {
+      const origin = nodeComp.property('origin').value() as string;
+      if (typeof origin === 'string' && origin.length > 0) {
+        sessionInfo.origin = origin;
+      }
+    }
+
+    // Membership component (contains)
+    const membershipComp = session.component('membership');
+    if (membershipComp?.exists()) {
+      const contains = membershipComp.property('contains').value();
+      if (Array.isArray(contains)) {
+        sessionInfo.membershipContains = contains.filter((v): v is string => typeof v === 'string');
+      }
     }
 
     // Root component (session name and comment)
@@ -388,6 +429,23 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
           nodeInfo.properties.width = size[0];
           nodeInfo.properties.height = size[1];
         }
+
+        // Additional proxy properties
+        const proxyPath = proxyComp.property('path').value() as string;
+        const proxyScale = proxyComp.property('scale').value() as number;
+        const depth = proxyComp.property('depth').value() as number;
+        const channels = proxyComp.property('channels').value() as number;
+        const floatingPoint = proxyComp.property('floatingPoint').value() as number;
+        const scanline = proxyComp.property('scanline').value() as number;
+        const planar = proxyComp.property('planar').value() as number;
+
+        if (typeof proxyPath === 'string') nodeInfo.properties.proxyPath = proxyPath;
+        if (typeof proxyScale === 'number') nodeInfo.properties.proxyScale = proxyScale;
+        if (typeof depth === 'number') nodeInfo.properties.proxyDepth = depth;
+        if (typeof channels === 'number') nodeInfo.properties.proxyChannels = channels;
+        if (typeof floatingPoint === 'number') nodeInfo.properties.proxyFloatingPoint = floatingPoint !== 0;
+        if (typeof scanline === 'number') nodeInfo.properties.proxyScanline = scanline !== 0;
+        if (typeof planar === 'number') nodeInfo.properties.proxyPlanar = planar !== 0;
       }
 
       // Parse group component (audio/playback settings)

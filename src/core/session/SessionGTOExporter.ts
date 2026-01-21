@@ -3050,6 +3050,15 @@ export class SessionGTOExporter {
       .int('ghostBefore', 5)
       .int('ghostAfter', 5)
       .end()
+      .component('internal')
+      .int('creationContext', 0)
+      .end()
+      .component('node')
+      .string('origin', 'openrv-web')
+      .end()
+      .component('membership')
+      .string('contains', [])
+      .end()
       .end();
 
     return builder.build().objects[0]!;

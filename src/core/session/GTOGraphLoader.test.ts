@@ -29,9 +29,13 @@ function createMockDTO(config: {
     marks?: number[];
     inc?: number;
     version?: number;
+    clipboard?: number;
     root?: { name?: string; comment?: string };
     matte?: { show?: number; aspect?: number; opacity?: number; heightVisible?: number; centerPoint?: number[] };
     paintEffects?: { hold?: number; ghost?: number; ghostBefore?: number; ghostAfter?: number };
+    internal?: { creationContext?: number };
+    node?: { origin?: string };
+    membership?: { contains?: string[] };
   }>;
   objects?: Array<{
     name: string;
@@ -75,6 +79,7 @@ function createMockDTO(config: {
               if (propName === 'marks') return s.marks;
               if (propName === 'inc') return s.inc;
               if (propName === 'version') return s.version;
+              if (propName === 'clipboard') return s.clipboard;
               return undefined;
             },
           }),
@@ -116,6 +121,39 @@ function createMockDTO(config: {
               if (propName === 'ghost') return s.paintEffects?.ghost;
               if (propName === 'ghostBefore') return s.paintEffects?.ghostBefore;
               if (propName === 'ghostAfter') return s.paintEffects?.ghostAfter;
+              return undefined;
+            },
+          }),
+        };
+      }
+      if (name === 'internal' && s.internal) {
+        return {
+          exists: () => true,
+          property: (propName: string) => ({
+            value: () => {
+              if (propName === 'creationContext') return s.internal?.creationContext;
+              return undefined;
+            },
+          }),
+        };
+      }
+      if (name === 'node' && s.node) {
+        return {
+          exists: () => true,
+          property: (propName: string) => ({
+            value: () => {
+              if (propName === 'origin') return s.node?.origin;
+              return undefined;
+            },
+          }),
+        };
+      }
+      if (name === 'membership' && s.membership) {
+        return {
+          exists: () => true,
+          property: (propName: string) => ({
+            value: () => {
+              if (propName === 'contains') return s.membership?.contains;
               return undefined;
             },
           }),
@@ -2623,6 +2661,77 @@ describe('GTOGraphLoader', () => {
       expect(result.sessionInfo.paintEffects?.ghostAfter).toBe(7);
     });
 
+    it('parses session clipboard property', () => {
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
+
+      const dto = createMockDTO({
+        sessions: [{
+          name: 'Test',
+          clipboard: 42,
+        }],
+        objects: [],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.sessionInfo.clipboard).toBe(42);
+    });
+
+    it('parses session internal creationContext', () => {
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
+
+      const dto = createMockDTO({
+        sessions: [{
+          name: 'Test',
+          internal: {
+            creationContext: 1,
+          },
+        }],
+        objects: [],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.sessionInfo.creationContext).toBe(1);
+    });
+
+    it('parses session node origin', () => {
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
+
+      const dto = createMockDTO({
+        sessions: [{
+          name: 'Test',
+          node: {
+            origin: 'OpenRV 2.0',
+          },
+        }],
+        objects: [],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.sessionInfo.origin).toBe('OpenRV 2.0');
+    });
+
+    it('parses session membership contains', () => {
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
+
+      const dto = createMockDTO({
+        sessions: [{
+          name: 'Test',
+          membership: {
+            contains: ['sourceGroup000000', 'sourceGroup000001', 'defaultSequence'],
+          },
+        }],
+        objects: [],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.sessionInfo.membershipContains).toBeDefined();
+      expect(result.sessionInfo.membershipContains).toEqual(['sourceGroup000000', 'sourceGroup000001', 'defaultSequence']);
+    });
+
     it('creates RVImageSource nodes correctly', () => {
       const mockNode = {
         type: 'RVFileSource',
@@ -2754,6 +2863,59 @@ describe('GTOGraphLoader', () => {
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('sourceCutIn', 100);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('sourceCutOut', 500);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('sourceReadAllChannels', true);
+    });
+
+    it('parses RVFileSource proxy component properties', () => {
+      const mockNode = {
+        type: 'RVFileSource',
+        name: 'sourceNode',
+        properties: {
+          has: vi.fn((key: string) =>
+            ['width', 'height', 'proxyPath', 'proxyScale', 'proxyDepth',
+             'proxyChannels', 'proxyFloatingPoint', 'proxyScanline', 'proxyPlanar'].includes(key)),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'sourceNode',
+            protocol: 'RVFileSource',
+            components: {
+              media: { movie: '/path/to/file.mov' },
+              proxy: {
+                size: [1920, 1080],
+                path: '/path/to/proxy.mov',
+                scale: 0.5,
+                depth: 8,
+                channels: 3,
+                floatingPoint: 0,
+                scanline: 1,
+                planar: 0,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('width', 1920);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('height', 1080);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('proxyPath', '/path/to/proxy.mov');
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('proxyScale', 0.5);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('proxyDepth', 8);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('proxyChannels', 3);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('proxyFloatingPoint', false);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('proxyScanline', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('proxyPlanar', false);
     });
 
     it('parses RVImageSource image component properties', () => {

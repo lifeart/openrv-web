@@ -450,6 +450,33 @@ describe('SessionGTOExporter.buildSessionObject', () => {
         expect(paintEffectsComp.properties.ghostBefore.data).toEqual([5]);
         expect(paintEffectsComp.properties.ghostAfter.data).toEqual([5]);
     });
+
+    it('includes internal component with creationContext', () => {
+        const result = SessionGTOExporter.buildSessionObject(session, 'mySession', 'defaultSequence');
+        const components = result.components as Record<string, any>;
+        const internalComp = components['internal'];
+
+        expect(internalComp).toBeDefined();
+        expect(internalComp.properties.creationContext.data).toEqual([0]);
+    });
+
+    it('includes node component with origin', () => {
+        const result = SessionGTOExporter.buildSessionObject(session, 'mySession', 'defaultSequence');
+        const components = result.components as Record<string, any>;
+        const nodeComp = components['node'];
+
+        expect(nodeComp).toBeDefined();
+        expect(nodeComp.properties.origin.data).toEqual(['openrv-web']);
+    });
+
+    it('includes membership component with contains', () => {
+        const result = SessionGTOExporter.buildSessionObject(session, 'mySession', 'defaultSequence');
+        const components = result.components as Record<string, any>;
+        const membershipComp = components['membership'];
+
+        expect(membershipComp).toBeDefined();
+        expect(membershipComp.properties.contains.data).toEqual([]);
+    });
 });
 
 describe('SessionGTOExporter.buildStackGroupObjects', () => {

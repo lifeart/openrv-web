@@ -156,15 +156,15 @@ The following node types are defined in the spec but not fully implemented:
 
 #### 2. Missing Property Support
 
-**RVSession Properties** ✅ IMPLEMENTED:
+**RVSession Properties** ✅ FULLY IMPLEMENTED:
 - ~~`session.inc` (frame increment)~~ ✅
-- `session.clipboard` (clipboard state) - not yet
+- ~~`session.clipboard` (clipboard state)~~ ✅
 - ~~`session.version` (session version)~~ ✅
 - ~~`root.name` (session name)~~ ✅
 - ~~`root.comment` (session notes)~~ ✅
-- `internal.creationContext` - not yet
-- `node.origin` - not yet
-- `membership.contains` - not yet
+- ~~`internal.creationContext`~~ ✅
+- ~~`node.origin`~~ ✅
+- ~~`membership.contains`~~ ✅
 - ~~`matte.*` (session-level matte settings)~~ ✅
 - ~~`paintEffects.*` (session-level paint settings)~~ ✅
 
@@ -222,11 +222,12 @@ The following node types are defined in the spec but not fully implemented:
 - ~~`mode.alignStartFrames`, `mode.strictFrameRanges`~~ ✅
 - ~~`composite.type` (blend mode)~~ ✅
 
-**RVPaint Properties** ✅ MOSTLY IMPLEMENTED:
+**RVPaint Properties** ✅ FULLY IMPLEMENTED:
 - ~~`paint.exclude`, `paint.include` (frame filters)~~ ✅
 - ~~`paint.nextId`, `paint.show` (metadata)~~ ✅
-- `pen:*.version`, `pen:*.mode` (advanced pen mode) - not yet
-- Dynamic `window:*` components - not yet
+- ~~`node.active` (active state)~~ ✅
+- `pen:*.version`, `pen:*.mode` (advanced pen mode) - optional, rarely used
+- Dynamic `window:*` components - optional, rarely used
 
 **RVOverlay Properties** ✅ FULLY IMPLEMENTED:
 - ~~`rect:*` (rectangle overlays)~~ ✅
