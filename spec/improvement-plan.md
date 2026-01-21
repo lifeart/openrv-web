@@ -246,9 +246,9 @@ Current implementation preserves connections but doesn't:
 
 ## Improvement Tasks
 
-### Phase 1: Core Infrastructure (Priority: Critical)
+### Phase 1: Core Infrastructure (Priority: Critical) ✅ COMPLETED
 
-#### Task 1.1: Connection System Builder
+#### Task 1.1: Connection System Builder ✅ COMPLETED
 **Files:** `src/core/session/SessionGTOExporter.ts`
 
 Add ability to create proper connection objects:
@@ -260,25 +260,25 @@ buildConnectionObject(graph: Graph): ObjectData {
 ```
 
 **Acceptance Criteria:**
-- [ ] Can create new .rv files with proper graph connectivity
-- [ ] Sources connected to sequences/stacks correctly
-- [ ] Round-trip preserves all connections
+- [x] Can create new .rv files with proper graph connectivity
+- [x] Sources connected to sequences/stacks correctly
+- [x] Round-trip preserves all connections
 
-#### Task 1.2: Session Properties Expansion
+#### Task 1.2: Session Properties Expansion ✅ COMPLETED
 **Files:** `src/core/session/Session.ts`, `SessionGTOStore.ts`, `SessionGTOExporter.ts`
 
 Add support for missing RVSession properties:
-- Session name and comment
-- Frame increment
-- Session-level matte settings
-- Paint effects settings (ghost, hold)
+- ~~Session name and comment~~ ✅
+- ~~Frame increment~~ ✅
+- ~~Session-level matte settings~~ ✅
+- ~~Paint effects settings (ghost, hold)~~ ✅
 
 **Acceptance Criteria:**
-- [ ] Session name/comment editable and saved
-- [ ] Frame increment respected in playback
-- [ ] Matte settings round-trip correctly
+- [x] Session name/comment editable and saved
+- [x] Frame increment respected in playback
+- [x] Matte settings round-trip correctly
 
-#### Task 1.3: Source Group Creation
+#### Task 1.3: Source Group Creation ✅ COMPLETED
 **Files:** `src/core/session/SessionGTOExporter.ts`
 
 Implement full RVSourceGroup/RVFileSource creation:
@@ -287,9 +287,9 @@ buildSourceGroup(source: MediaSource, index: number): ObjectData[]
 ```
 
 **Acceptance Criteria:**
-- [ ] Can create new sessions with multiple sources
-- [ ] All source properties preserved
-- [ ] Cut in/out points saved correctly
+- [x] Can create new sessions with multiple sources
+- [x] All source properties preserved
+- [x] Cut in/out points saved correctly
 
 ---
 
@@ -637,13 +637,13 @@ Create test .rv files for:
 
 | Priority | Tasks | Status |
 |----------|-------|--------|
-| Critical | 1.1, 1.2, 1.3 (Connection, Session, Source) | ⚠️ Partial |
+| Critical | 1.1, 1.2, 1.3 (Connection, Session, Source) | ✅ **COMPLETED** |
 | High | 2.1-2.2 (Groups), 3.1-3.3 (Processing) | ✅ **COMPLETED** |
-| High | 4.1-4.2 (Color Mgmt - OCIO/ICC) | ❌ Not started |
+| High | 4.1-4.2 (Color Mgmt - OCIO/ICC parsing/creation) | ✅ **COMPLETED** |
 | Medium | 5.1-5.2 (Transform, Lens) | ✅ **COMPLETED** |
 | Medium | 6.1 (Retime) | ✅ **COMPLETED** |
-| Medium | 2.3 (Layout), 5.3 (Crop), 6.2 (Audio) | ❌ Not started |
-| Low | 7.1-7.4 (Filters, Overlay, Extra) | ❌ Not started |
+| Medium | 2.3 (Layout), 5.3 (Crop), 6.2 (Audio) | ⚠️ Partial (parsing done) |
+| Low | 7.1-7.4 (Filters, Overlay, Extra) | ✅ **COMPLETED** |
 
 ### Completed Work Summary
 
