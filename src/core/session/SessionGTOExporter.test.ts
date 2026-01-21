@@ -824,6 +824,35 @@ describe('SessionGTOExporter.buildLinearizeObject', () => {
 
         expect(lutComp.properties.active.data).toEqual([0]);
     });
+
+    it('creates CDL component when cdl settings provided', () => {
+        const result = SessionGTOExporter.buildLinearizeObject('linearize', {
+            cdl: {
+                active: true,
+                slope: [1.1, 1.0, 0.9],
+                offset: [0.01, 0.0, -0.01],
+                power: [1.0, 1.1, 1.0],
+                saturation: 0.9,
+                noClamp: true,
+            },
+        });
+        const components = result.components as Record<string, any>;
+        const cdlComp = components['CDL'];
+
+        expect(cdlComp.properties.active.data).toEqual([1]);
+        expect(cdlComp.properties.slope.data).toEqual([[1.1, 1.0, 0.9]]);
+        expect(cdlComp.properties.offset.data).toEqual([[0.01, 0.0, -0.01]]);
+        expect(cdlComp.properties.power.data).toEqual([[1.0, 1.1, 1.0]]);
+        expect(cdlComp.properties.saturation.data).toEqual([0.9]);
+        expect(cdlComp.properties.noClamp.data).toEqual([1]);
+    });
+
+    it('does not create CDL component when cdl settings not provided', () => {
+        const result = SessionGTOExporter.buildLinearizeObject('linearize');
+        const components = result.components as Record<string, any>;
+
+        expect(components['CDL']).toBeUndefined();
+    });
 });
 
 describe('SessionGTOExporter.buildColorObject', () => {
@@ -945,6 +974,48 @@ describe('SessionGTOExporter.buildColorObject', () => {
         const components = result.components as Record<string, any>;
 
         expect(components['luminanceLUT']).toBeUndefined();
+    });
+
+    it('creates matrix:output component with flat array', () => {
+        const testMatrix = [
+            1, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0, 1, 0,
+            0, 0, 0, 1,
+        ];
+        const result = SessionGTOExporter.buildColorObject('colorNode', {
+            outputMatrix: testMatrix,
+        });
+        const components = result.components as Record<string, any>;
+        const matrixComp = components['matrix:output'];
+
+        expect(matrixComp).toBeDefined();
+        expect(matrixComp.properties.RGBA.data).toEqual(testMatrix);
+    });
+
+    it('creates matrix:output component with 2D array', () => {
+        const testMatrix2D = [
+            [1, 0, 0, 0],
+            [0, 1, 0, 0],
+            [0, 0, 1, 0],
+            [0, 0, 0, 1],
+        ];
+        const result = SessionGTOExporter.buildColorObject('colorNode', {
+            outputMatrix: testMatrix2D,
+        });
+        const components = result.components as Record<string, any>;
+        const matrixComp = components['matrix:output'];
+
+        expect(matrixComp).toBeDefined();
+        // Should be flattened
+        expect(matrixComp.properties.RGBA.data).toEqual([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+    });
+
+    it('does not create matrix:output component when not provided', () => {
+        const result = SessionGTOExporter.buildColorObject('colorNode');
+        const components = result.components as Record<string, any>;
+
+        expect(components['matrix:output']).toBeUndefined();
     });
 });
 
@@ -2591,6 +2662,89 @@ describe('SessionGTOExporter.buildDispTransform2DObject', () => {
         expect(components['transform'].properties.translate.data).toEqual([100, 50]);
         expect(components['transform'].properties.scale.data).toEqual([2.0, 1.5]);
         expect(components['transform'].properties.rotate.data).toEqual([45]);
+    });
+});
+
+describe('SessionGTOExporter.buildTransform2DObject', () => {
+    it('creates RVTransform2D object with default settings', () => {
+        const result = SessionGTOExporter.buildTransform2DObject('transformNode');
+
+        expect(result.name).toBe('transformNode');
+        expect(result.protocol).toBe('RVTransform2D');
+
+        const components = result.components as Record<string, any>;
+        expect(components['transform'].properties.rotate.data).toEqual([0]);
+        expect(components['transform'].properties.flip.data).toEqual([0]);
+        expect(components['transform'].properties.flop.data).toEqual([0]);
+        expect(components['transform'].properties.scale.data).toEqual([[1.0, 1.0]]);
+        expect(components['transform'].properties.translate.data).toEqual([[0.0, 0.0]]);
+    });
+
+    it('creates RVTransform2D object with transform settings', () => {
+        const result = SessionGTOExporter.buildTransform2DObject('transformNode', {
+            rotate: 90,
+            flip: true,
+            flop: false,
+            scale: [2.0, 1.5],
+            translate: [0.1, -0.2],
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['transform'].properties.rotate.data).toEqual([90]);
+        expect(components['transform'].properties.flip.data).toEqual([1]);
+        expect(components['transform'].properties.flop.data).toEqual([0]);
+        expect(components['transform'].properties.scale.data).toEqual([[2.0, 1.5]]);
+        expect(components['transform'].properties.translate.data).toEqual([[0.1, -0.2]]);
+    });
+
+    it('creates visibleBox component when settings provided', () => {
+        const result = SessionGTOExporter.buildTransform2DObject('transformNode', {
+            visibleBox: {
+                active: true,
+                minX: 0.1,
+                minY: 0.2,
+                maxX: 0.9,
+                maxY: 0.8,
+            },
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['visibleBox'].properties.active.data).toEqual([1]);
+        expect(components['visibleBox'].properties.minX.data).toEqual([0.1]);
+        expect(components['visibleBox'].properties.minY.data).toEqual([0.2]);
+        expect(components['visibleBox'].properties.maxX.data).toEqual([0.9]);
+        expect(components['visibleBox'].properties.maxY.data).toEqual([0.8]);
+    });
+
+    it('creates stencil component when settings provided', () => {
+        const result = SessionGTOExporter.buildTransform2DObject('transformNode', {
+            stencil: {
+                active: true,
+                inverted: true,
+                aspect: 1.778,
+                softEdge: 0.05,
+                ratio: 0.75,
+            },
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['stencil'].properties.active.data).toEqual([1]);
+        expect(components['stencil'].properties.inverted.data).toEqual([1]);
+        expect(components['stencil'].properties.aspect.data).toEqual([1.778]);
+        expect(components['stencil'].properties.softEdge.data).toEqual([0.05]);
+        expect(components['stencil'].properties.ratio.data).toEqual([0.75]);
+    });
+
+    it('does not create visibleBox component when not provided', () => {
+        const result = SessionGTOExporter.buildTransform2DObject('transformNode');
+        const components = result.components as Record<string, any>;
+        expect(components['visibleBox']).toBeUndefined();
+    });
+
+    it('does not create stencil component when not provided', () => {
+        const result = SessionGTOExporter.buildTransform2DObject('transformNode');
+        const components = result.components as Record<string, any>;
+        expect(components['stencil']).toBeUndefined();
     });
 });
 

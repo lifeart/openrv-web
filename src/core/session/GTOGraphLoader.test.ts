@@ -844,6 +844,48 @@ describe('GTOGraphLoader', () => {
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('luminanceLutName', 'TestLumLUT');
     });
 
+    it('parses matrix:output component in RVColor', () => {
+      const mockNode = {
+        type: 'RVColor',
+        name: 'colorNode',
+        properties: {
+          has: vi.fn((key: string) => key === 'outputMatrix'),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const testMatrix = [
+        1, 0, 0, 0,
+        0, 1, 0, 0,
+        0, 0, 1, 0,
+        0, 0, 0, 1,
+      ];
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'colorNode',
+            protocol: 'RVColor',
+            components: {
+              'matrix:output': {
+                RGBA: testMatrix,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('outputMatrix', testMatrix);
+    });
+
     it('parses RVRetime visual and audio properties', () => {
       const mockNode = {
         type: 'RVRetime',
@@ -3085,6 +3127,51 @@ describe('GTOGraphLoader', () => {
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('lutOffset', 0.1);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('lutSize', [32, 32, 32]);
     });
+
+    it('parses RVLinearize CDL component', () => {
+      const mockNode = {
+        type: 'RVLinearize',
+        name: 'linearize',
+        properties: {
+          has: vi.fn(() => true),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'rv' }],
+        objects: [
+          {
+            name: 'linearize',
+            protocol: 'RVLinearize',
+            components: {
+              CDL: {
+                active: 1,
+                slope: [1.1, 1.0, 0.9],
+                offset: [0.01, 0.0, -0.01],
+                power: [1.0, 1.1, 1.0],
+                saturation: 0.9,
+                noClamp: 1,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto as never);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('linearizeCdlActive', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('linearizeCdlSlope', [1.1, 1.0, 0.9]);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('linearizeCdlOffset', [0.01, 0.0, -0.01]);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('linearizeCdlPower', [1.0, 1.1, 1.0]);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('linearizeCdlSaturation', 0.9);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('linearizeCdlNoClamp', true);
+    });
   });
 
   describe('RVTransform2D parsing with scale and translate', () => {
@@ -3162,6 +3249,94 @@ describe('GTOGraphLoader', () => {
       loadGTOGraph(dto);
 
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('translate', [0.1, -0.2]);
+    });
+
+    it('parses visibleBox component', () => {
+      const mockNode = {
+        type: 'RVTransform2D',
+        name: 'transform',
+        properties: {
+          has: vi.fn(() => true),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'rv' }],
+        objects: [
+          {
+            name: 'transform',
+            protocol: 'RVTransform2D',
+            components: {
+              transform: { rotate: 0 },
+              visibleBox: {
+                active: 1,
+                minX: 0.1,
+                minY: 0.2,
+                maxX: 0.9,
+                maxY: 0.8,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('visibleBoxActive', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('visibleBoxMinX', 0.1);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('visibleBoxMinY', 0.2);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('visibleBoxMaxX', 0.9);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('visibleBoxMaxY', 0.8);
+    });
+
+    it('parses stencil component', () => {
+      const mockNode = {
+        type: 'RVTransform2D',
+        name: 'transform',
+        properties: {
+          has: vi.fn(() => true),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
+      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'rv' }],
+        objects: [
+          {
+            name: 'transform',
+            protocol: 'RVTransform2D',
+            components: {
+              transform: { rotate: 0 },
+              stencil: {
+                active: 1,
+                inverted: 1,
+                aspect: 1.778,
+                softEdge: 0.05,
+                ratio: 0.75,
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('stencilActive', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('stencilInverted', true);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('stencilAspect', 1.778);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('stencilSoftEdge', 0.05);
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith('stencilRatio', 0.75);
     });
   });
 

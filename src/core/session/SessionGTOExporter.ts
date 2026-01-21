@@ -462,6 +462,48 @@ export interface DispTransform2DSettings {
 }
 
 /**
+ * 2D transform settings for RVTransform2D
+ */
+export interface Transform2DSettings {
+  /** Rotation in degrees */
+  rotate?: number;
+  /** Horizontal flip */
+  flip?: boolean;
+  /** Vertical flip (flop) */
+  flop?: boolean;
+  /** Scale [x, y] */
+  scale?: number[];
+  /** Translation [x, y] */
+  translate?: number[];
+  /** Visible box/crop region settings */
+  visibleBox?: {
+    /** Enable visible box */
+    active?: boolean;
+    /** Min X coordinate */
+    minX?: number;
+    /** Min Y coordinate */
+    minY?: number;
+    /** Max X coordinate */
+    maxX?: number;
+    /** Max Y coordinate */
+    maxY?: number;
+  };
+  /** Stencil/mask settings */
+  stencil?: {
+    /** Enable stencil */
+    active?: boolean;
+    /** Invert stencil */
+    inverted?: boolean;
+    /** Aspect ratio */
+    aspect?: number;
+    /** Soft edge amount */
+    softEdge?: number;
+    /** Ratio value */
+    ratio?: number;
+  };
+}
+
+/**
  * Image source settings for RVImageSource
  */
 export interface ImageSourceSettings {
@@ -604,6 +646,21 @@ export interface LinearizeSettings {
   cineon?: CineonSettings;
   /** LUT settings */
   lutSettings?: LinearizeLUTSettings;
+  /** CDL settings for linearization */
+  cdl?: {
+    /** CDL is active */
+    active?: boolean;
+    /** Slope RGB values [r, g, b] */
+    slope?: number[];
+    /** Offset RGB values [r, g, b] */
+    offset?: number[];
+    /** Power RGB values [r, g, b] */
+    power?: number[];
+    /** Saturation value */
+    saturation?: number;
+    /** Disable clamping */
+    noClamp?: boolean;
+  };
 }
 
 /**
@@ -671,6 +728,9 @@ export interface ColorSettings {
 
   /** Luminance LUT settings */
   luminanceLUT?: LuminanceLUTSettings;
+
+  /** Output matrix for channel remapping (4x4 or flat 16-element array) */
+  outputMatrix?: number[][] | number[];
 }
 
 /**
@@ -2073,6 +2133,53 @@ export class SessionGTOExporter {
   }
 
   /**
+   * Build an RVTransform2D object for source transforms
+   * @param name - Object name (e.g., 'sourceGroup000000_RVTransform2D')
+   * @param settings - Transform settings including visibleBox and stencil
+   */
+  static buildTransform2DObject(name: string, settings: Transform2DSettings = {}): ObjectData {
+    const builder = new GTOBuilder();
+
+    const obj = builder.object(name, 'RVTransform2D', 1);
+
+    // Transform component
+    obj.component('transform')
+      .float('rotate', settings.rotate ?? 0)
+      .int('flip', settings.flip ? 1 : 0)
+      .int('flop', settings.flop ? 1 : 0)
+      .float2('scale', [settings.scale ?? [1.0, 1.0]])
+      .float2('translate', [settings.translate ?? [0.0, 0.0]])
+      .end();
+
+    // VisibleBox component (if provided)
+    if (settings.visibleBox) {
+      const vb = settings.visibleBox;
+      obj.component('visibleBox')
+        .int('active', vb.active ? 1 : 0)
+        .float('minX', vb.minX ?? 0)
+        .float('minY', vb.minY ?? 0)
+        .float('maxX', vb.maxX ?? 1)
+        .float('maxY', vb.maxY ?? 1)
+        .end();
+    }
+
+    // Stencil component (if provided)
+    if (settings.stencil) {
+      const st = settings.stencil;
+      obj.component('stencil')
+        .int('active', st.active ? 1 : 0)
+        .int('inverted', st.inverted ? 1 : 0)
+        .float('aspect', st.aspect ?? 1.0)
+        .float('softEdge', st.softEdge ?? 0)
+        .float('ratio', st.ratio ?? 1.0)
+        .end();
+    }
+
+    obj.end();
+    return builder.build().objects[0]!;
+  }
+
+  /**
    * Build an RVImageSource object for programmatic image sources
    * @param name - Object name (e.g., 'sourceGroup000000_source')
    * @param settings - Image source settings
@@ -2236,6 +2343,20 @@ export class SessionGTOExporter {
       lutComp.float('outMatrix', lut.outMatrix).end();
     }
 
+    // CDL component (if settings provided)
+    if (settings.cdl) {
+      const cdl = settings.cdl;
+      linearizeObject
+        .component('CDL')
+        .int('active', cdl.active ? 1 : 0)
+        .float3('slope', [cdl.slope ?? [1.0, 1.0, 1.0]])
+        .float3('offset', [cdl.offset ?? [0.0, 0.0, 0.0]])
+        .float3('power', [cdl.power ?? [1.0, 1.0, 1.0]])
+        .float('saturation', cdl.saturation ?? 1.0)
+        .int('noClamp', cdl.noClamp ? 1 : 0)
+        .end();
+    }
+
     linearizeObject.end();
     return builder.build().objects[0]!;
   }
@@ -2360,6 +2481,19 @@ export class SessionGTOExporter {
         .float('max', lum.max ?? 1.0)
         .int('size', lum.size ?? 0)
         .string('name', lum.name ?? '')
+        .end();
+    }
+
+    // Output matrix component (channel remapping)
+    if (settings.outputMatrix) {
+      // Flatten to 16-element array if needed
+      const matrixData = Array.isArray(settings.outputMatrix[0])
+        ? (settings.outputMatrix as number[][]).flat()
+        : (settings.outputMatrix as number[]);
+
+      colorObject
+        .component('matrix:output')
+        .float('RGBA', matrixData)
         .end();
     }
 

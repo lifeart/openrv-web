@@ -531,6 +531,15 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
         if (typeof lumSize === 'number') nodeInfo.properties.luminanceLutSize = lumSize;
         if (typeof lumName === 'string') nodeInfo.properties.luminanceLutName = lumName;
       }
+
+      // Parse matrix:output component (output channel matrix)
+      const matrixOutputComp = obj.component('matrix:output');
+      if (matrixOutputComp?.exists()) {
+        const rgbaMatrix = matrixOutputComp.property('RGBA').value() as number[][] | number[];
+        if (Array.isArray(rgbaMatrix)) {
+          nodeInfo.properties.outputMatrix = rgbaMatrix;
+        }
+      }
     }
 
     // Parse CDL properties
@@ -564,6 +573,38 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
         if (typeof flop === 'boolean') nodeInfo.properties.flop = flop;
         if (Array.isArray(scale)) nodeInfo.properties.scale = scale;
         if (Array.isArray(translate)) nodeInfo.properties.translate = translate;
+      }
+
+      // Parse visibleBox component (visible/crop region)
+      const visibleBoxComp = obj.component('visibleBox');
+      if (visibleBoxComp?.exists()) {
+        const active = visibleBoxComp.property('active').value() as number;
+        const minX = visibleBoxComp.property('minX').value() as number;
+        const minY = visibleBoxComp.property('minY').value() as number;
+        const maxX = visibleBoxComp.property('maxX').value() as number;
+        const maxY = visibleBoxComp.property('maxY').value() as number;
+
+        if (typeof active === 'number') nodeInfo.properties.visibleBoxActive = active !== 0;
+        if (typeof minX === 'number') nodeInfo.properties.visibleBoxMinX = minX;
+        if (typeof minY === 'number') nodeInfo.properties.visibleBoxMinY = minY;
+        if (typeof maxX === 'number') nodeInfo.properties.visibleBoxMaxX = maxX;
+        if (typeof maxY === 'number') nodeInfo.properties.visibleBoxMaxY = maxY;
+      }
+
+      // Parse stencil component (masking data)
+      const stencilComp = obj.component('stencil');
+      if (stencilComp?.exists()) {
+        const active = stencilComp.property('active').value() as number;
+        const inverted = stencilComp.property('inverted').value() as number;
+        const aspect = stencilComp.property('aspect').value() as number;
+        const softEdge = stencilComp.property('softEdge').value() as number;
+        const ratio = stencilComp.property('ratio').value() as number;
+
+        if (typeof active === 'number') nodeInfo.properties.stencilActive = active !== 0;
+        if (typeof inverted === 'number') nodeInfo.properties.stencilInverted = inverted !== 0;
+        if (typeof aspect === 'number') nodeInfo.properties.stencilAspect = aspect;
+        if (typeof softEdge === 'number') nodeInfo.properties.stencilSoftEdge = softEdge;
+        if (typeof ratio === 'number') nodeInfo.properties.stencilRatio = ratio;
       }
     }
 
@@ -693,6 +734,24 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
         if (Array.isArray(lutSize)) nodeInfo.properties.lutSize = lutSize;
         if (Array.isArray(inMatrix)) nodeInfo.properties.lutInMatrix = inMatrix;
         if (Array.isArray(outMatrix)) nodeInfo.properties.lutOutMatrix = outMatrix;
+      }
+
+      // Parse CDL component in RVLinearize
+      const cdlComp = obj.component('CDL');
+      if (cdlComp?.exists()) {
+        const cdlActive = cdlComp.property('active').value() as number;
+        const slope = cdlComp.property('slope').value() as number[];
+        const cdlOffset = cdlComp.property('offset').value() as number[];
+        const power = cdlComp.property('power').value() as number[];
+        const cdlSaturation = cdlComp.property('saturation').value() as number;
+        const noClamp = cdlComp.property('noClamp').value() as number;
+
+        if (typeof cdlActive === 'number') nodeInfo.properties.linearizeCdlActive = cdlActive !== 0;
+        if (Array.isArray(slope)) nodeInfo.properties.linearizeCdlSlope = slope;
+        if (Array.isArray(cdlOffset)) nodeInfo.properties.linearizeCdlOffset = cdlOffset;
+        if (Array.isArray(power)) nodeInfo.properties.linearizeCdlPower = power;
+        if (typeof cdlSaturation === 'number') nodeInfo.properties.linearizeCdlSaturation = cdlSaturation;
+        if (typeof noClamp === 'number') nodeInfo.properties.linearizeCdlNoClamp = noClamp !== 0;
       }
     }
 

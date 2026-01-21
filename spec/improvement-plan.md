@@ -178,26 +178,26 @@ The following node types are defined in the spec but not fully implemented:
 - ~~`request.readAllChannels` (EXR all channels)~~ ✅
 - `proxy.*` (proxy settings) - partial
 
-**RVColor Properties** ✅ IMPLEMENTED:
+**RVColor Properties** ✅ FULLY IMPLEMENTED:
 - ~~`color.lut` (LUT selection)~~ ✅
 - ~~`color.normalize` (normalize bounds)~~ ✅
 - ~~`color.unpremult` (unpremultiply alpha)~~ ✅
 - ~~`luminanceLUT.*` (luminance LUT)~~ ✅
-- `matrix:output.RGBA` (output matrix) - not yet
+- ~~`matrix:output.RGBA` (output matrix)~~ ✅
 
-**RVLinearize Properties** ✅ IMPLEMENTED:
+**RVLinearize Properties** ✅ FULLY IMPLEMENTED:
 - ~~`lut.*` (LUT data)~~ ✅
 - ~~`color.alphaType`, `color.logtype`, `color.YUV`~~ ✅
 - ~~`color.sRGB2linear`, `color.Rec709ToLinear`~~ ✅
 - ~~`color.fileGamma`, `color.ignoreChromaticities`~~ ✅
 - ~~`cineon.*` (Cineon settings)~~ ✅
-- `CDL.*` (CDL in linearize) - not yet
+- ~~`CDL.*` (CDL in linearize)~~ ✅
 
-**RVTransform2D Properties** ✅ MOSTLY IMPLEMENTED:
+**RVTransform2D Properties** ✅ FULLY IMPLEMENTED:
 - ~~`transform.scale` (scale)~~ ✅
 - ~~`transform.translate` (translation)~~ ✅
-- `visibleBox.*` (visible region) - not yet
-- `stencil.*` (stencil data) - not yet
+- ~~`visibleBox.*` (visible region)~~ ✅
+- ~~`stencil.*` (stencil data)~~ ✅
 
 **RVLensWarp Properties** ✅ MOSTLY IMPLEMENTED:
 - ~~`warp.model` (distortion model)~~ ✅
@@ -653,10 +653,10 @@ Create test .rv files for:
 - Source Group Creation (RVSourceGroup, RVFileSource, RVImageSource, RVMovieSource)
 - RVSequence/EDL parsing and creation
 - RVStack compositing (blend modes, opacity per layer)
-- RVLinearize (all transfer functions, cineon, LUT)
+- RVLinearize (all transfer functions, cineon, LUT, CDL)
 - RVLookLUT/RVCacheLUT parsing and creation
-- RVColor (full: exposure, gamma, saturation, CDL, luminanceLUT, normalize, unpremult)
-- RVTransform2D (rotation, flip/flop, scale, translate)
+- RVColor (full: exposure, gamma, saturation, CDL, luminanceLUT, normalize, unpremult, matrix:output)
+- RVTransform2D (rotation, flip/flop, scale, translate, visibleBox, stencil)
 - RVLensWarp (k1-k3, p1-p2 tangential, model, focal length, crop ratios)
 - RVRetime (visual/audio scale, warp mode, explicit mapping)
 - RVDisplayColor (full parsing and export: gamma, sRGB, Rec709, brightness, chromaticities)
