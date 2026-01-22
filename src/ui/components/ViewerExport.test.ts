@@ -56,21 +56,21 @@ function createMockMediaSource(
   return {
     name: 'test-source',
     type,
+    url: 'test://test-source',
     element,
     width,
     height,
     duration: type === 'video' ? 100 : 1,
+    fps: 24,
     sequenceInfo: type === 'sequence' ? {
-      directory: '/test',
+      name: 'test-sequence',
       pattern: 'frame_####.png',
+      frames: [],
       startFrame: 1,
       endFrame: 100,
-      frameCount: 100,
-      prefix: 'frame_',
-      padding: 4,
-      extension: 'png',
-      hasFrameGaps: false,
-      images: new Map(),
+      width,
+      height,
+      fps: 24,
     } : undefined,
   };
 }
@@ -112,6 +112,8 @@ function defaultTransform(): Transform2D {
     rotation: 0,
     flipH: false,
     flipV: false,
+    scale: { x: 1, y: 1 },
+    translate: { x: 0, y: 0 },
   };
 }
 
@@ -232,7 +234,7 @@ describe('ViewerExport', () => {
     it('should apply transform when provided', () => {
       const source = createMockMediaSource('image', 800, 600);
       mockSession = createMockSession(source);
-      const transform: Transform2D = { rotation: 90, flipH: false, flipV: false };
+      const transform: Transform2D = { rotation: 90, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
 
       const result = createExportCanvas(
         mockSession,
@@ -380,7 +382,7 @@ describe('ViewerExport', () => {
     it('should apply transform', async () => {
       const source = createMockMediaSource('image', 800, 600);
       mockSession = createMockSession(source);
-      const transform: Transform2D = { rotation: 180, flipH: true, flipV: false };
+      const transform: Transform2D = { rotation: 180, flipH: true, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
 
       const result = await renderFrameToCanvas(
         mockSession,
@@ -424,9 +426,9 @@ describe('ViewerExport', () => {
       const source = createMockMediaSource('image', 1920, 1080);
       (mockSession.getSourceByIndex as any).mockReturnValue(source);
 
-      const result = renderSourceToImageData(mockSession, 0, 200, 150);
+      // Call the function (result depends on canvas mock returning proper ImageData)
+      renderSourceToImageData(mockSession, 0, 200, 150);
 
-      // Result depends on canvas mock returning proper ImageData
       expect(mockSession.getSourceByIndex).toHaveBeenCalledWith(0);
     });
 
@@ -445,7 +447,8 @@ describe('ViewerExport', () => {
       const source = createMockMediaSource('video', 1280, 720);
       (mockSession.getSourceByIndex as any).mockReturnValue(source);
 
-      const result = renderSourceToImageData(mockSession, 1, 640, 360);
+      // Call the function
+      renderSourceToImageData(mockSession, 1, 640, 360);
 
       expect(mockSession.getSourceByIndex).toHaveBeenCalledWith(1);
     });

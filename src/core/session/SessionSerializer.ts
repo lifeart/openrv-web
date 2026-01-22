@@ -22,6 +22,7 @@ import { DEFAULT_LENS_PARAMS } from '../../transform/LensDistortion';
 import { DEFAULT_WIPE_STATE } from '../../ui/components/WipeControl';
 import type { Annotation, PaintEffects } from '../../paint/types';
 import { DEFAULT_PAINT_EFFECTS } from '../../paint/types';
+import { showFileReloadPrompt } from '../../ui/components/shared/Modal';
 
 /** Components needed for serialization */
 export interface SessionComponents {
@@ -93,18 +94,28 @@ export class SessionSerializer {
   }
 
   /**
-   * Convert media sources to portable references
+   * Convert media sources to portable references.
+   *
+   * Blob URLs (created when loading local files via File API) are session-specific
+   * and become invalid when the browser session ends. These are detected and marked
+   * with `requiresReload: true` so the user can re-select the file on project load.
    */
   private static serializeMedia(sources: MediaSource[]): MediaReference[] {
     return sources.map(source => {
+      // Check if the URL is a blob URL (not portable across sessions)
+      const isBlob = source.url.startsWith('blob:');
+
       const ref: MediaReference = {
-        path: source.url,
+        // Don't save blob URLs - they're session-specific and won't work on reload
+        path: isBlob ? '' : source.url,
         name: source.name,
         type: source.type,
         width: source.width,
         height: source.height,
         duration: source.duration,
         fps: source.fps,
+        // Only set requiresReload when true to keep saved files cleaner
+        ...(isBlob && { requiresReload: true }),
       };
 
       if (source.type === 'sequence' && source.sequenceInfo) {
@@ -136,9 +147,34 @@ export class SessionSerializer {
     let loadedMedia = 0;
     for (const ref of migrated.media) {
       try {
-        // Skip blob URLs as they're not portable
+        // Handle files that require user to reload (originally blob URLs)
+        if (ref.requiresReload) {
+          const accept = ref.type === 'video' ? 'video/*' : 'image/*';
+          const file = await showFileReloadPrompt(ref.name, {
+            title: 'Reload File',
+            accept,
+          });
+
+          if (file) {
+            // User provided a file - load it
+            try {
+              await session.loadFile(file);
+              loadedMedia++;
+            } catch (loadErr) {
+              warnings.push(`Failed to reload: ${ref.name}`);
+            }
+          } else {
+            // User skipped - add warning
+            warnings.push(`Skipped reload: ${ref.name}`);
+          }
+          continue;
+        }
+
+        // Defensive check: blob URLs should have been marked with requiresReload during save
+        // If we encounter one here, it indicates a bug in serialization
         if (ref.path.startsWith('blob:')) {
-          warnings.push(`Skipped blob URL: ${ref.name}`);
+          console.warn(`[SessionSerializer] Unexpected blob URL in saved project: ${ref.name}. This indicates a serialization bug.`);
+          warnings.push(`Cannot load blob URL: ${ref.name}`);
           continue;
         }
 

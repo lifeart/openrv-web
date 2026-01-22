@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   createFrameLoader,
   buildEffectsState,
@@ -38,21 +38,21 @@ function createMockMediaSource(
   return {
     name: 'test-source',
     type,
+    url: 'test://test-source',
     element: type === 'video' ? createMockVideo() : createMockImage(),
     width: 1920,
     height: 1080,
     duration: type === 'video' ? 100 : 1,
+    fps: 24,
     sequenceInfo: type === 'sequence' ? {
-      directory: '/test',
+      name: 'test-sequence',
       pattern: 'frame_####.png',
+      frames: [],
       startFrame: 1,
       endFrame: 100,
-      frameCount: 100,
-      prefix: 'frame_',
-      padding: 4,
-      extension: 'png',
-      hasFrameGaps: false,
-      images: new Map(),
+      width: 1920,
+      height: 1080,
+      fps: 24,
     } : undefined,
   };
 }
@@ -75,10 +75,18 @@ function createDefaultColorAdjustments(): ColorAdjustments {
   return {
     brightness: 0,
     exposure: 0,
+    gamma: 1,
     contrast: 1,
     saturation: 1,
+    vibrance: 0,
+    vibranceSkinProtection: true,
+    clarity: 0,
     temperature: 0,
     tint: 0,
+    highlights: 0,
+    shadows: 0,
+    whites: 0,
+    blacks: 0,
   };
 }
 
@@ -109,14 +117,8 @@ function createDefaultCurvesData(): ColorCurvesData {
 // Create default filter settings
 function createDefaultFilterSettings(): FilterSettings {
   return {
-    sharpen: 0,
     blur: 0,
-    denoise: 0,
-    grain: 0,
-    grainSize: 0.5,
-    vignette: 0,
-    vignetteSize: 0.5,
-    chromaAberration: 0,
+    sharpen: 0,
   };
 }
 
@@ -346,7 +348,7 @@ describe('ViewerPrerender', () => {
     });
 
     it('should preserve channel mode value', () => {
-      const modes: ChannelMode[] = ['rgb', 'r', 'g', 'b', 'a', 'luma'];
+      const modes: ChannelMode[] = ['rgb', 'red', 'green', 'blue', 'alpha', 'luminance'];
 
       for (const mode of modes) {
         const result = buildEffectsState(

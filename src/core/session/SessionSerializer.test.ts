@@ -2,12 +2,22 @@
  * SessionSerializer Unit Tests
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SessionSerializer, SessionComponents } from './SessionSerializer';
 import type { SessionState } from './SessionState';
 import { SESSION_STATE_VERSION } from './SessionState';
 
+// Mock the showFileReloadPrompt dialog
+vi.mock('../../ui/components/shared/Modal', () => ({
+  showFileReloadPrompt: vi.fn(),
+}));
+
+import { showFileReloadPrompt } from '../../ui/components/shared/Modal';
+
 describe('SessionSerializer', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
   describe('createEmpty', () => {
     it('creates empty session state with defaults', () => {
       const state = SessionSerializer.createEmpty('Test Project');
@@ -264,27 +274,181 @@ describe('SessionSerializer', () => {
         const state = SessionSerializer.toJSON(components);
         expect(state.lutPath).toBe('test.cube');
     });
+
+    it('SER-013: marks blob URLs with requiresReload and clears path', () => {
+      const components = createMockComponents();
+      (components.session as any).allSources = [{
+        url: 'blob:http://localhost:3000/abc-123',
+        name: 'local-image.png',
+        type: 'image',
+        width: 100,
+        height: 100,
+        duration: 1,
+        fps: 1,
+      }];
+
+      const state = SessionSerializer.toJSON(components);
+
+      expect(state.media[0]?.path).toBe(''); // Blob URL cleared
+      expect(state.media[0]?.requiresReload).toBe(true);
+      expect(state.media[0]?.name).toBe('local-image.png');
+    });
+
+    it('SER-014: does not set requiresReload for non-blob URLs', () => {
+      const components = createMockComponents();
+      (components.session as any).allSources = [{
+        url: 'https://example.com/video.mp4',
+        name: 'remote-video.mp4',
+        type: 'video',
+        width: 1920,
+        height: 1080,
+        duration: 100,
+        fps: 24,
+      }];
+
+      const state = SessionSerializer.toJSON(components);
+
+      expect(state.media[0]?.path).toBe('https://example.com/video.mp4');
+      expect(state.media[0]?.requiresReload).toBeUndefined(); // Not set at all
+    });
   });
 
   describe('fromJSON', () => {
-    it('SER-008: restores state correctly', async () => {
+    it('SER-008: restores state correctly (video, image, sequence)', async () => {
       const components = createMockComponents();
       const state = SessionSerializer.createEmpty('TestProject');
       state.media = [
         { name: 'video', path: 'video.mp4', type: 'video', width: 1920, height: 1080, duration: 100, fps: 24 },
         { name: 'img', path: 'image.jpg', type: 'image', width: 100, height: 100, duration: 1, fps: 1 },
-        { name: 'blob', path: 'blob:xxx', type: 'image', width: 100, height: 100, duration: 1, fps: 1 },
         { name: 'seq', path: 'seq.jpg', type: 'sequence', width: 100, height: 100, duration: 10, fps: 24 }
       ];
 
       const result = await SessionSerializer.fromJSON(state, components);
 
-      expect(result.loadedMedia).toBe(2); // video + img (blob and sequence skipped/warned)
-      expect(result.warnings.length).toBe(2); // blob + sequence
+      // video + img loaded; sequence requires manual selection
+      expect(result.loadedMedia).toBe(2);
+      expect(result.warnings.length).toBe(1);
+      expect(result.warnings[0]).toContain('seq');
       expect(components.session.loadVideo).toHaveBeenCalledWith('video', 'video.mp4');
       expect(components.session.loadImage).toHaveBeenCalledWith('img', 'image.jpg');
       expect(components.viewer.setZoom).toHaveBeenCalled();
       expect(components.paintEngine.loadFromAnnotations).toHaveBeenCalled();
+    });
+
+    it('SER-008b: warns on unexpected blob URL in saved project (defensive)', async () => {
+      // This tests the defensive check for blob URLs that weren't properly
+      // converted to requiresReload during save (indicates a serialization bug)
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty('TestProject');
+      state.media = [
+        { name: 'blob.png', path: 'blob:xxx', type: 'image', width: 100, height: 100, duration: 1, fps: 1 }
+      ];
+
+      const result = await SessionSerializer.fromJSON(state, components);
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Unexpected blob URL in saved project')
+      );
+      expect(result.loadedMedia).toBe(0);
+      expect(result.warnings).toContain('Cannot load blob URL: blob.png');
+      expect(showFileReloadPrompt).not.toHaveBeenCalled();
+
+      consoleSpy.mockRestore();
+    });
+
+    it('SER-008c: prompts user to reload requiresReload files', async () => {
+      const mockFile = new File(['test'], 'local.mp4', { type: 'video/mp4' });
+      (showFileReloadPrompt as ReturnType<typeof vi.fn>).mockResolvedValue(mockFile);
+
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty('TestProject');
+      state.media = [
+        { name: 'local.mp4', path: '', type: 'video', width: 1920, height: 1080, duration: 100, fps: 24, requiresReload: true }
+      ];
+
+      const result = await SessionSerializer.fromJSON(state, components);
+
+      expect(showFileReloadPrompt).toHaveBeenCalledWith('local.mp4', expect.objectContaining({
+        title: 'Reload File',
+        accept: 'video/*',
+      }));
+      expect(result.loadedMedia).toBe(1);
+      expect(components.session.loadFile).toHaveBeenCalledWith(mockFile);
+    });
+
+    it('SER-008d: adds warning when user skips file reload', async () => {
+      (showFileReloadPrompt as ReturnType<typeof vi.fn>).mockResolvedValue(null); // User skipped
+
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty('TestProject');
+      state.media = [
+        { name: 'skipped.png', path: '', type: 'image', width: 100, height: 100, duration: 1, fps: 1, requiresReload: true }
+      ];
+
+      const result = await SessionSerializer.fromJSON(state, components);
+
+      expect(showFileReloadPrompt).toHaveBeenCalled();
+      expect(result.loadedMedia).toBe(0);
+      expect(result.warnings).toContain('Skipped reload: skipped.png');
+    });
+
+    it('SER-008e: handles loadFile failure during reload gracefully', async () => {
+      const mockFile = new File(['test'], 'failing.png', { type: 'image/png' });
+      (showFileReloadPrompt as ReturnType<typeof vi.fn>).mockResolvedValue(mockFile);
+
+      const components = createMockComponents();
+      (components.session.loadFile as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('Load failed'));
+
+      const state = SessionSerializer.createEmpty('TestProject');
+      state.media = [
+        { name: 'failing.png', path: '', type: 'image', width: 100, height: 100, duration: 1, fps: 1, requiresReload: true }
+      ];
+
+      const result = await SessionSerializer.fromJSON(state, components);
+
+      expect(showFileReloadPrompt).toHaveBeenCalled();
+      expect(components.session.loadFile).toHaveBeenCalledWith(mockFile);
+      expect(result.loadedMedia).toBe(0);
+      expect(result.warnings).toContain('Failed to reload: failing.png');
+    });
+
+    it('SER-008f: handles multiple requiresReload files sequentially', async () => {
+      const mockFile1 = new File(['test1'], 'image1.png', { type: 'image/png' });
+      const mockFile3 = new File(['test3'], 'image2.png', { type: 'image/png' });
+
+      // Return different files for each call, skip the second one (no file needed for skip)
+      (showFileReloadPrompt as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(mockFile1)  // First file - user provides
+        .mockResolvedValueOnce(null)       // Second file - user skips (returns null)
+        .mockResolvedValueOnce(mockFile3); // Third file - user provides
+
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty('TestProject');
+      state.media = [
+        { name: 'image1.png', path: '', type: 'image', width: 100, height: 100, duration: 1, fps: 1, requiresReload: true },
+        { name: 'video1.mp4', path: '', type: 'video', width: 1920, height: 1080, duration: 100, fps: 24, requiresReload: true },
+        { name: 'image2.png', path: '', type: 'image', width: 200, height: 200, duration: 1, fps: 1, requiresReload: true },
+      ];
+
+      const result = await SessionSerializer.fromJSON(state, components);
+
+      // Verify all three prompts were shown
+      expect(showFileReloadPrompt).toHaveBeenCalledTimes(3);
+      expect(showFileReloadPrompt).toHaveBeenNthCalledWith(1, 'image1.png', expect.objectContaining({ accept: 'image/*' }));
+      expect(showFileReloadPrompt).toHaveBeenNthCalledWith(2, 'video1.mp4', expect.objectContaining({ accept: 'video/*' }));
+      expect(showFileReloadPrompt).toHaveBeenNthCalledWith(3, 'image2.png', expect.objectContaining({ accept: 'image/*' }));
+
+      // Verify loadFile was called for files 1 and 3 (not 2 which was skipped)
+      expect(components.session.loadFile).toHaveBeenCalledTimes(2);
+      expect(components.session.loadFile).toHaveBeenNthCalledWith(1, mockFile1);
+      expect(components.session.loadFile).toHaveBeenNthCalledWith(2, mockFile3);
+
+      // Two files loaded, one skipped
+      expect(result.loadedMedia).toBe(2);
+      expect(result.warnings).toHaveLength(1);
+      expect(result.warnings).toContain('Skipped reload: video1.mp4');
     });
 
     it('SER-009: handles load failures', async () => {
@@ -310,6 +474,15 @@ describe('SessionSerializer', () => {
   });
 });
 
+/**
+ * Creates mock SessionComponents for testing.
+ *
+ * This mock provides the minimal Session, PaintEngine, and Viewer interfaces
+ * needed by SessionSerializer. Methods are vi.fn() mocks that can be spied on.
+ *
+ * Available session mocks: allSources, getPlaybackState, setPlaybackState,
+ * loadImage, loadVideo, loadFile
+ */
 function createMockComponents(): SessionComponents {
   return {
     session: {
@@ -318,8 +491,9 @@ function createMockComponents(): SessionComponents {
       ],
       getPlaybackState: vi.fn().mockReturnValue({ currentFrame: 1, fps: 24, loopMode: 'loop' }),
       setPlaybackState: vi.fn(),
-      loadImage: vi.fn().mockResolvedValue(undefined),
-      loadVideo: vi.fn().mockResolvedValue(undefined),
+      loadImage: vi.fn<[string, string], Promise<void>>().mockResolvedValue(undefined),
+      loadVideo: vi.fn<[string, string], Promise<void>>().mockResolvedValue(undefined),
+      loadFile: vi.fn<[File], Promise<void>>().mockResolvedValue(undefined),
     },
     paintEngine: {
       toJSON: vi.fn().mockReturnValue({

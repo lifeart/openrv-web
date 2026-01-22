@@ -114,6 +114,10 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
   - Click-to-retry on save failures
   - Storage quota monitoring with low-space warnings
   - Theme-consistent styling with CSS variables
+- **Session Recovery** - intelligent handling of temporary file references
+  - Detects blob URLs that become invalid after browser restart
+  - Prompts user to re-select files with original filename validation
+  - Skip option to load session without unavailable media
 
 ### Export
 - Frame export (PNG/JPEG/WebP)
@@ -361,7 +365,7 @@ const rootNode = session.graphParseResult?.rootNode;
 # Type check
 pnpm typecheck
 
-# Run unit tests (4000+ tests)
+# Run unit tests (4250+ tests)
 pnpm test
 
 # Run e2e tests (requires dev server running)
@@ -377,17 +381,17 @@ pnpm preview
 
 ### Test Coverage
 
-The codebase includes comprehensive test coverage with **4050+ unit tests** across 102 test files and **41 e2e test suites**:
+The codebase includes comprehensive test coverage with **4250+ unit tests** across 107 test files and **42 e2e test suites**:
 
 - **Color Tools**: ColorWheels (46 tests), FalseColor (30 tests), HSLQualifier (57 tests), Curves, CDL
 - **Analysis**: ZebraStripes (49 tests), PixelProbe (45 tests), ClippingOverlay (48 tests), Waveform (50 tests), Histogram (45 tests), Vectorscope (49 tests)
 - **Overlays**: TimecodeOverlay (50 tests), SafeAreasOverlay (46 tests), SpotlightOverlay (62 tests)
 - **UI Components**: ThemeControl, HistoryPanel, InfoPanel, Modal, Button, CurveEditor (33 tests), AutoSaveIndicator (35 tests)
-- **Core**: Session, Graph, GTO loading/export, SequenceLoader, AutoSaveManager (28 tests)
+- **Core**: Session, Graph, GTO loading/export, SequenceLoader, AutoSaveManager (28 tests), SessionSerializer (35 tests)
 - **Utilities**: HiDPICanvas (32 tests), EffectProcessor (51 tests), WorkerPool (28 tests), PrerenderBufferManager (36 tests)
 
-**E2E Tests** (41 test suites):
-- **Core**: App initialization, tab navigation, media loading, playback controls
+**E2E Tests** (42 test suites):
+- **Core**: App initialization, tab navigation, media loading, playback controls, session recovery
 - **Scopes**: Histogram, Waveform, Vectorscope, Parade scope
 - **Color**: Color controls, Curves, Vibrance, Highlight/Shadow recovery
 - **View**: Pixel probe, False color, Zebra stripes, Safe areas, Spotlight, Info panel

@@ -60,10 +60,18 @@ function defaultAdjustments(): ColorAdjustments {
   return {
     brightness: 0,
     exposure: 0,
+    gamma: 1,
     contrast: 1,
     saturation: 1,
+    vibrance: 0,
+    vibranceSkinProtection: true,
+    clarity: 0,
     temperature: 0,
     tint: 0,
+    highlights: 0,
+    shadows: 0,
+    whites: 0,
+    blacks: 0,
   };
 }
 
@@ -73,6 +81,8 @@ function defaultTransform(): Transform2D {
     rotation: 0,
     flipH: false,
     flipV: false,
+    scale: { x: 1, y: 1 },
+    translate: { x: 0, y: 0 },
   };
 }
 
@@ -96,7 +106,7 @@ describe('ViewerRenderingUtils', () => {
 
     it('should apply rotation transform', () => {
       const image = createMockImage(800, 600);
-      const transform: Transform2D = { rotation: 90, flipH: false, flipV: false };
+      const transform: Transform2D = { ...defaultTransform(), rotation: 90 };
 
       drawWithTransform(ctx, image, 800, 600, transform);
 
@@ -108,7 +118,7 @@ describe('ViewerRenderingUtils', () => {
 
     it('should apply horizontal flip', () => {
       const image = createMockImage(800, 600);
-      const transform: Transform2D = { rotation: 0, flipH: true, flipV: false };
+      const transform: Transform2D = { ...defaultTransform(), flipH: true };
 
       drawWithTransform(ctx, image, 800, 600, transform);
 
@@ -119,7 +129,7 @@ describe('ViewerRenderingUtils', () => {
 
     it('should apply vertical flip', () => {
       const image = createMockImage(800, 600);
-      const transform: Transform2D = { rotation: 0, flipH: false, flipV: true };
+      const transform: Transform2D = { ...defaultTransform(), flipV: true };
 
       drawWithTransform(ctx, image, 800, 600, transform);
 
@@ -130,7 +140,7 @@ describe('ViewerRenderingUtils', () => {
 
     it('should apply both flips', () => {
       const image = createMockImage(800, 600);
-      const transform: Transform2D = { rotation: 0, flipH: true, flipV: true };
+      const transform: Transform2D = { ...defaultTransform(), flipH: true, flipV: true };
 
       drawWithTransform(ctx, image, 800, 600, transform);
 
@@ -139,7 +149,7 @@ describe('ViewerRenderingUtils', () => {
 
     it('should handle 270 degree rotation', () => {
       const image = createMockImage(800, 600);
-      const transform: Transform2D = { rotation: 270, flipH: false, flipV: false };
+      const transform: Transform2D = { ...defaultTransform(), rotation: 270 };
 
       drawWithTransform(ctx, image, 800, 600, transform);
 
@@ -148,7 +158,7 @@ describe('ViewerRenderingUtils', () => {
 
     it('should handle video element', () => {
       const video = createMockVideo(1920, 1080);
-      const transform: Transform2D = { rotation: 90, flipH: false, flipV: false };
+      const transform: Transform2D = { ...defaultTransform(), rotation: 90 };
 
       drawWithTransform(ctx, video, 1920, 1080, transform);
 
@@ -159,7 +169,7 @@ describe('ViewerRenderingUtils', () => {
 
     it('should handle zero video dimensions gracefully', () => {
       const video = createMockVideo(0, 0);
-      const transform: Transform2D = { rotation: 90, flipH: false, flipV: false };
+      const transform: Transform2D = { ...defaultTransform(), rotation: 90 };
 
       // Should not throw
       expect(() => {
@@ -169,7 +179,7 @@ describe('ViewerRenderingUtils', () => {
 
     it('should handle zero display dimensions', () => {
       const image = createMockImage(800, 600);
-      const transform: Transform2D = { rotation: 90, flipH: false, flipV: false };
+      const transform: Transform2D = { ...defaultTransform(), rotation: 90 };
 
       // Should not throw even with zero display dimensions
       expect(() => {
@@ -253,12 +263,10 @@ describe('ViewerRenderingUtils', () => {
 
     it('should combine multiple filters', () => {
       const adjustments: ColorAdjustments = {
+        ...defaultAdjustments(),
         brightness: 0.2,
-        exposure: 0,
         contrast: 1.2,
         saturation: 0.8,
-        temperature: 0,
-        tint: 0,
       };
       const cache: FilterStringCache = { filterString: null, cachedAdjustments: null };
 
@@ -331,6 +339,7 @@ describe('ViewerRenderingUtils', () => {
       const cropState: CropState = {
         enabled: false,
         region: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 },
+        aspectRatio: null,
       };
 
       renderCropOverlay(ctx, cropState, 800, 600);
@@ -343,6 +352,7 @@ describe('ViewerRenderingUtils', () => {
       const cropState: CropState = {
         enabled: true,
         region: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 },
+        aspectRatio: null,
       };
 
       renderCropOverlay(ctx, cropState, 800, 600);
@@ -359,6 +369,7 @@ describe('ViewerRenderingUtils', () => {
       const cropState: CropState = {
         enabled: true,
         region: { x: 0.25, y: 0.25, width: 0.5, height: 0.5 },
+        aspectRatio: null,
       };
 
       renderCropOverlay(ctx, cropState, 400, 400);
@@ -371,6 +382,7 @@ describe('ViewerRenderingUtils', () => {
       const cropState: CropState = {
         enabled: true,
         region: { x: 0, y: 0, width: 1, height: 1 },
+        aspectRatio: null,
       };
 
       renderCropOverlay(ctx, cropState, 600, 600);

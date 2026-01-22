@@ -2067,7 +2067,7 @@ export class Viewer {
     return copyCanvasToClipboard(canvas);
   }
 
-  private createExportCanvas(includeAnnotations: boolean): HTMLCanvasElement | null {
+  createExportCanvas(includeAnnotations: boolean): HTMLCanvasElement | null {
     return createExportCanvasUtil(
       this.session,
       this.paintEngine,

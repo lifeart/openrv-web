@@ -13,6 +13,7 @@ import { PaintEngine } from '../../paint/PaintEngine';
 import { DEFAULT_COLOR_ADJUSTMENTS } from './ColorControls';
 import { DEFAULT_TRANSFORM } from './TransformControl';
 import { DEFAULT_FILTER_SETTINGS } from './FilterControl';
+import { DEFAULT_CROP_STATE } from './CropControl';
 
 // Mock WebGLLUTProcessor
 vi.mock('../../color/WebGLLUT', () => ({
@@ -35,10 +36,12 @@ function createMockImageSource(width: number = 800, height: number = 600): Media
   return {
     name: 'test-image.jpg',
     type: 'image',
+    url: 'test://test-image.jpg',
     element: img,
     width,
     height,
     duration: 1,
+    fps: 24,
   };
 }
 
@@ -52,10 +55,12 @@ function createMockVideoSource(width: number = 1920, height: number = 1080): Med
   return {
     name: 'test-video.mp4',
     type: 'video',
+    url: 'test://test-video.mp4',
     element: video,
     width,
     height,
     duration: 240, // 10 seconds at 24fps
+    fps: 24,
   };
 }
 
@@ -290,34 +295,34 @@ describe('Viewer Integration Tests', () => {
       });
 
       it('INT-013: renders with rotation transform', () => {
-        viewer.setTransform({ rotation: 90, flipH: false, flipV: false });
+        viewer.setTransform({ ...DEFAULT_TRANSFORM, rotation: 90 });
 
         expect(() => viewer.render()).not.toThrow();
         expect(viewer.getTransform().rotation).toBe(90);
       });
 
       it('INT-014: renders with horizontal flip', () => {
-        viewer.setTransform({ rotation: 0, flipH: true, flipV: false });
+        viewer.setTransform({ ...DEFAULT_TRANSFORM, flipH: true });
 
         expect(() => viewer.render()).not.toThrow();
         expect(viewer.getTransform().flipH).toBe(true);
       });
 
       it('INT-015: renders with vertical flip', () => {
-        viewer.setTransform({ rotation: 0, flipH: false, flipV: true });
+        viewer.setTransform({ ...DEFAULT_TRANSFORM, flipV: true });
 
         expect(() => viewer.render()).not.toThrow();
         expect(viewer.getTransform().flipV).toBe(true);
       });
 
       it('INT-016: renders with combined transforms', () => {
-        viewer.setTransform({ rotation: 180, flipH: true, flipV: true });
+        viewer.setTransform({ ...DEFAULT_TRANSFORM, rotation: 180, flipH: true, flipV: true });
 
         expect(() => viewer.render()).not.toThrow();
       });
 
       it('INT-017: setTransform to defaults restores default state', () => {
-        viewer.setTransform({ rotation: 270, flipH: true, flipV: true });
+        viewer.setTransform({ ...DEFAULT_TRANSFORM, rotation: 270, flipH: true, flipV: true });
         viewer.setTransform(DEFAULT_TRANSFORM);
 
         expect(viewer.getTransform()).toEqual(DEFAULT_TRANSFORM);
@@ -367,19 +372,13 @@ describe('Viewer Integration Tests', () => {
 
       it('INT-022: renders with combined color adjustments', () => {
         viewer.setColorAdjustments({
+          ...DEFAULT_COLOR_ADJUSTMENTS,
           brightness: 0.2,
           exposure: 0.5,
           contrast: 1.2,
           saturation: 1.1,
           temperature: 20,
           tint: 10,
-          gamma: 1.0,
-          highlights: 0,
-          shadows: 0,
-          whites: 0,
-          blacks: 0,
-          vibrance: 0,
-          clarity: 0,
         });
 
         expect(() => viewer.render()).not.toThrow();
@@ -393,6 +392,7 @@ describe('Viewer Integration Tests', () => {
 
       it('INT-023: renders crop overlay when enabled', () => {
         viewer.setCropState({
+          ...DEFAULT_CROP_STATE,
           enabled: true,
           region: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 },
         });
@@ -403,6 +403,7 @@ describe('Viewer Integration Tests', () => {
 
       it('INT-024: crop overlay hidden when disabled', () => {
         viewer.setCropState({
+          ...DEFAULT_CROP_STATE,
           enabled: false,
           region: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 },
         });
@@ -413,6 +414,7 @@ describe('Viewer Integration Tests', () => {
 
       it('INT-025: handles full-frame crop region', () => {
         viewer.setCropState({
+          ...DEFAULT_CROP_STATE,
           enabled: true,
           region: { x: 0, y: 0, width: 1, height: 1 },
         });
@@ -422,6 +424,7 @@ describe('Viewer Integration Tests', () => {
 
       it('INT-026: handles small crop region', () => {
         viewer.setCropState({
+          ...DEFAULT_CROP_STATE,
           enabled: true,
           region: { x: 0.4, y: 0.4, width: 0.2, height: 0.2 },
         });
@@ -488,7 +491,7 @@ describe('Viewer Integration Tests', () => {
       });
 
       it('INT-034: export canvas applies transforms', () => {
-        viewer.setTransform({ rotation: 90, flipH: false, flipV: false });
+        viewer.setTransform({ ...DEFAULT_TRANSFORM, rotation: 90 });
 
         const canvas = viewer.createExportCanvas(false);
 
@@ -636,13 +639,13 @@ describe('Viewer Integration Tests', () => {
       });
 
       it('INT-042c: channel mode affects render', () => {
-        viewer.setChannelMode('r');
+        viewer.setChannelMode('red');
         expect(() => viewer.render()).not.toThrow();
-        expect(viewer.getChannelMode()).toBe('r');
+        expect(viewer.getChannelMode()).toBe('red');
 
-        viewer.setChannelMode('luma');
+        viewer.setChannelMode('luminance');
         expect(() => viewer.render()).not.toThrow();
-        expect(viewer.getChannelMode()).toBe('luma');
+        expect(viewer.getChannelMode()).toBe('luminance');
       });
     });
   });
@@ -669,7 +672,7 @@ describe('Viewer Integration Tests', () => {
       });
 
       // Apply transform
-      viewer.setTransform({ rotation: 0, flipH: true, flipV: false });
+      viewer.setTransform({ ...DEFAULT_TRANSFORM, flipH: true });
 
       // Render should work
       expect(() => viewer.render()).not.toThrow();
@@ -697,20 +700,22 @@ describe('Viewer Integration Tests', () => {
     });
 
     it('INT-052: transform changes with multiple renders', () => {
-      const transforms = [
-        { rotation: 0, flipH: false, flipV: false },
-        { rotation: 90, flipH: false, flipV: false },
-        { rotation: 180, flipH: false, flipV: false },
-        { rotation: 270, flipH: false, flipV: false },
-        { rotation: 0, flipH: true, flipV: false },
-        { rotation: 0, flipH: false, flipV: true },
-        { rotation: 90, flipH: true, flipV: true },
-      ];
+      const rotations: (0 | 90 | 180 | 270)[] = [0, 90, 180, 270];
 
-      for (const transform of transforms) {
-        viewer.setTransform(transform);
+      for (const rotation of rotations) {
+        viewer.setTransform({ ...DEFAULT_TRANSFORM, rotation });
         expect(() => viewer.render()).not.toThrow();
       }
+
+      // Test flips
+      viewer.setTransform({ ...DEFAULT_TRANSFORM, flipH: true });
+      expect(() => viewer.render()).not.toThrow();
+
+      viewer.setTransform({ ...DEFAULT_TRANSFORM, flipV: true });
+      expect(() => viewer.render()).not.toThrow();
+
+      viewer.setTransform({ ...DEFAULT_TRANSFORM, rotation: 90, flipH: true, flipV: true });
+      expect(() => viewer.render()).not.toThrow();
     });
 
     it('INT-053: zoom changes preserve other settings', () => {
@@ -718,7 +723,7 @@ describe('Viewer Integration Tests', () => {
         ...DEFAULT_COLOR_ADJUSTMENTS,
         brightness: 0.3,
       });
-      viewer.setTransform({ rotation: 90, flipH: false, flipV: false });
+      viewer.setTransform({ ...DEFAULT_TRANSFORM, rotation: 90 });
 
       // Change zoom
       viewer.setZoom(2);
@@ -745,8 +750,9 @@ describe('Viewer Integration Tests', () => {
         ...DEFAULT_COLOR_ADJUSTMENTS,
         brightness: 0.2,
       });
-      viewer.setTransform({ rotation: 180, flipH: false, flipV: false });
+      viewer.setTransform({ ...DEFAULT_TRANSFORM, rotation: 180 });
       viewer.setCropState({
+        ...DEFAULT_CROP_STATE,
         enabled: true,
         region: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 },
       });
@@ -775,7 +781,7 @@ describe('Viewer Integration Tests', () => {
     });
 
     it('INT-062: transforms work with video source', () => {
-      viewer.setTransform({ rotation: 90, flipH: true, flipV: false });
+      viewer.setTransform({ ...DEFAULT_TRANSFORM, rotation: 90, flipH: true });
 
       expect(() => viewer.render()).not.toThrow();
     });
@@ -797,9 +803,10 @@ describe('Viewer Integration Tests', () => {
     it('INT-071: handles rapid transform changes', () => {
       session.addTestSource(createMockImageSource());
 
-      const rotations = [0, 90, 180, 270];
+      const rotations: (0 | 90 | 180 | 270)[] = [0, 90, 180, 270];
       for (let i = 0; i < 20; i++) {
         viewer.setTransform({
+          ...DEFAULT_TRANSFORM,
           rotation: rotations[i % 4]!,
           flipH: i % 2 === 0,
           flipV: i % 3 === 0,
@@ -837,6 +844,7 @@ describe('Viewer Integration Tests', () => {
       session.addTestSource(createMockImageSource());
 
       viewer.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
         brightness: 1,
         exposure: 3,
         contrast: 3,

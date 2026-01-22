@@ -449,3 +449,202 @@ export function showModal(content: HTMLElement, options: ModalOptions = {}): { c
 export function closeModal(): void {
   hideContainer();
 }
+
+export interface FileReloadOptions extends ModalOptions {
+  /** File type filter (e.g., 'image/*', 'video/*') */
+  accept?: string;
+  /** Browse button text */
+  browseText?: string;
+  /** Skip button text */
+  skipText?: string;
+}
+
+/**
+ * Show a dialog prompting user to reload a file
+ * Returns the selected File or null if skipped
+ */
+export function showFileReloadPrompt(
+  filename: string,
+  options: FileReloadOptions = {}
+): Promise<File | null> {
+  return new Promise((resolve) => {
+    const {
+      title = 'Reload File',
+      accept = 'image/*,video/*',
+      browseText = 'Browse...',
+      skipText = 'Skip',
+      onClose,
+    } = options;
+
+    const container = getModalContainer();
+    container.innerHTML = '';
+
+    const modal = createModalBase({ ...options, title, onClose: () => { onClose?.(); resolve(null); } });
+    modal.setAttribute('data-testid', 'file-reload-dialog');
+
+    // Content
+    const content = document.createElement('div');
+    content.style.cssText = `
+      padding: 16px;
+      color: #ccc;
+      font-size: 13px;
+      line-height: 1.5;
+    `;
+
+    const messageP = document.createElement('p');
+    messageP.style.margin = '0 0 8px 0';
+    messageP.textContent = 'The following file needs to be reloaded to restore the session:';
+    content.appendChild(messageP);
+
+    // Expected filename display (prominent)
+    const expectedFile = document.createElement('div');
+    expectedFile.style.cssText = `
+      padding: 8px 12px;
+      background: #1a3a5c;
+      border: 1px solid #2a5a8c;
+      border-radius: 4px;
+      color: #7cb3e0;
+      font-size: 13px;
+      font-family: monospace;
+      margin-bottom: 12px;
+      word-break: break-all;
+    `;
+    expectedFile.textContent = filename;
+    content.appendChild(expectedFile);
+
+    const hintP = document.createElement('p');
+    hintP.style.cssText = 'margin: 0 0 12px 0; color: #888; font-size: 12px;';
+    hintP.textContent = 'Please select the same file from your system.';
+    content.appendChild(hintP);
+
+    // Hidden file input
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = accept;
+    fileInput.style.display = 'none';
+
+    let selectedFile: File | null = null;
+
+    // File selection display
+    const fileDisplay = document.createElement('div');
+    fileDisplay.style.cssText = `
+      padding: 8px 12px;
+      background: #333;
+      border: 1px solid #555;
+      border-radius: 4px;
+      color: #888;
+      font-size: 12px;
+    `;
+    fileDisplay.textContent = 'No file selected';
+
+    // Warning message for mismatched filenames
+    const warningEl = document.createElement('div');
+    warningEl.setAttribute('data-testid', 'filename-mismatch-warning');
+    warningEl.style.cssText = `
+      margin-top: 8px;
+      padding: 8px 12px;
+      background: #5c3a1a;
+      border: 1px solid #8c5a2a;
+      border-radius: 4px;
+      color: #e0a77c;
+      font-size: 12px;
+      display: none;
+    `;
+    warningEl.textContent = '\u26A0\uFE0F Filename does not match. Make sure you selected the correct file.';
+
+    // Load button reference for enabling/disabling
+    let loadBtn: HTMLButtonElement;
+
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files?.[0];
+      if (file) {
+        selectedFile = file;
+        fileDisplay.textContent = `Selected: ${file.name}`;
+
+        // Check if filename matches
+        const matches = file.name === filename;
+        if (matches) {
+          fileDisplay.style.color = '#4ade80'; // Green for match
+          fileDisplay.style.borderColor = '#22c55e';
+          warningEl.style.display = 'none';
+        } else {
+          fileDisplay.style.color = '#fbbf24'; // Yellow/orange for mismatch
+          fileDisplay.style.borderColor = '#f59e0b';
+          warningEl.style.display = 'block';
+        }
+
+        // Enable load button when file is selected and focus it
+        loadBtn.disabled = false;
+        loadBtn.style.opacity = '1';
+        loadBtn.focus();
+      }
+    });
+
+    content.appendChild(fileInput);
+    content.appendChild(fileDisplay);
+    content.appendChild(warningEl);
+    modal.appendChild(content);
+
+    // Footer
+    const footer = document.createElement('div');
+    footer.style.cssText = `
+      display: flex;
+      justify-content: flex-end;
+      padding: 12px 16px;
+      border-top: 1px solid #444;
+      gap: 8px;
+    `;
+
+    // Keyboard handling - declare early so buttons can remove it
+    const handleKeydown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        hideContainer();
+        onClose?.();
+        resolve(null);
+        document.removeEventListener('keydown', handleKeydown);
+      } else if (e.key === 'Enter' && selectedFile && !loadBtn.disabled) {
+        // Enter confirms when file is selected
+        hideContainer();
+        onClose?.();
+        resolve(selectedFile);
+        document.removeEventListener('keydown', handleKeydown);
+      }
+    };
+
+    const skipBtn = createButton(skipText, () => {
+      hideContainer();
+      onClose?.();
+      resolve(null);
+      document.removeEventListener('keydown', handleKeydown);
+    }, { variant: 'default', minWidth: '80px' });
+    skipBtn.setAttribute('data-testid', 'file-reload-skip');
+
+    const browseBtn = createButton(browseText, () => {
+      fileInput.click();
+    }, { variant: 'default', minWidth: '100px' });
+    browseBtn.setAttribute('data-testid', 'file-reload-browse');
+
+    loadBtn = createButton('Load', () => {
+      hideContainer();
+      onClose?.();
+      resolve(selectedFile);
+      document.removeEventListener('keydown', handleKeydown);
+    }, { variant: 'primary', minWidth: '80px' });
+    loadBtn.setAttribute('data-testid', 'file-reload-load');
+
+    // Disable load button until a file is selected
+    loadBtn.disabled = true;
+    loadBtn.style.opacity = '0.5';
+
+    footer.appendChild(skipBtn);
+    footer.appendChild(browseBtn);
+    footer.appendChild(loadBtn);
+    modal.appendChild(footer);
+
+    container.appendChild(modal);
+    showContainer();
+
+    // Register keyboard handler
+    document.addEventListener('keydown', handleKeydown);
+  });
+}

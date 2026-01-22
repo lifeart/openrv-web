@@ -39,6 +39,8 @@ export interface MediaReference {
   sequencePattern?: string;
   /** For sequences: frame range */
   frameRange?: { start: number; end: number };
+  /** True if original was a blob URL (requires user to reload file) */
+  requiresReload?: boolean;
 }
 
 /** Playback state */
