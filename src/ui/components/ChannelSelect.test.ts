@@ -48,11 +48,11 @@ describe('ChannelSelect', () => {
       const options = dropdown.querySelectorAll('button');
       expect(options.length).toBe(6); // rgb, red, green, blue, alpha, luminance
 
-      const channels = Array.from(options).map((option) => (option as HTMLElement).dataset.channel);
+      const channels = Array.from(options).map((option) => (option as HTMLElement).dataset.value);
       expect(channels).toEqual(['rgb', 'red', 'green', 'blue', 'alpha', 'luminance']);
 
       options.forEach((option) => {
-        const channel = (option as HTMLElement).dataset.channel as ChannelMode;
+        const channel = (option as HTMLElement).dataset.value as ChannelMode;
         expect(option.textContent).toContain(CHANNEL_LABELS[channel]);
       });
     });
@@ -120,6 +120,125 @@ describe('ChannelSelect', () => {
       control.reset();
 
       expect(handler).toHaveBeenCalledWith('rgb');
+    });
+  });
+
+  describe('dropdown visual selection', () => {
+    it('CH-050: only selected channel has accent styling in dropdown', () => {
+      const el = control.render();
+      document.body.appendChild(el);
+      control.setChannel('green');
+
+      // Open dropdown
+      const button = el.querySelector('[data-testid="channel-select-button"]') as HTMLButtonElement;
+      button.click();
+
+      const dropdown = document.querySelector('[data-testid="channel-dropdown"]') as HTMLElement;
+      const options = dropdown.querySelectorAll('button');
+
+      // Count items with accent color (selected styling)
+      let accentCount = 0;
+      options.forEach((option) => {
+        if ((option as HTMLButtonElement).style.color === 'rgb(74, 158, 255)') {
+          accentCount++;
+        }
+      });
+
+      expect(accentCount).toBeLessThanOrEqual(1);
+      document.body.removeChild(el);
+    });
+
+    it('CH-051: changing channel via setChannel updates dropdown styling', () => {
+      const el = control.render();
+      document.body.appendChild(el);
+
+      // Open dropdown and select red
+      const button = el.querySelector('[data-testid="channel-select-button"]') as HTMLButtonElement;
+      button.click();
+
+      const dropdown = document.querySelector('[data-testid="channel-dropdown"]') as HTMLElement;
+      const options = dropdown.querySelectorAll('button');
+
+      // Set to red
+      control.setChannel('red');
+
+      // Red (index 1) should have accent styling
+      expect((options[1] as HTMLButtonElement).style.color).toBe('rgb(74, 158, 255)');
+
+      // Change to blue
+      control.setChannel('blue');
+
+      // Red should no longer have accent styling
+      expect((options[1] as HTMLButtonElement).style.color).not.toBe('rgb(74, 158, 255)');
+      // Blue (index 3) should have accent styling
+      expect((options[3] as HTMLButtonElement).style.color).toBe('rgb(74, 158, 255)');
+      document.body.removeChild(el);
+    });
+
+    it('CH-052: clicking dropdown item selects channel and resets previous styling', () => {
+      const handler = vi.fn();
+      control.on('channelChanged', handler);
+      const el = control.render();
+      document.body.appendChild(el);
+
+      // Open dropdown
+      const button = el.querySelector('[data-testid="channel-select-button"]') as HTMLButtonElement;
+      button.click();
+
+      const dropdown = document.querySelector('[data-testid="channel-dropdown"]') as HTMLElement;
+      const options = dropdown.querySelectorAll('button');
+
+      // Click red (index 1)
+      (options[1] as HTMLButtonElement).click();
+      expect(handler).toHaveBeenCalledWith('red');
+      expect(control.getChannel()).toBe('red');
+
+      // Reopen dropdown
+      button.click();
+
+      // Click green (index 2)
+      (options[2] as HTMLButtonElement).click();
+      expect(handler).toHaveBeenCalledWith('green');
+      expect(control.getChannel()).toBe('green');
+
+      // Verify only green has accent styling
+      // Need to reopen to check
+      button.click();
+      expect((options[1] as HTMLButtonElement).style.color).not.toBe('rgb(74, 158, 255)');
+      expect((options[2] as HTMLButtonElement).style.color).toBe('rgb(74, 158, 255)');
+      document.body.removeChild(el);
+    });
+
+    it('CH-053: rapid channel changes maintain correct visual state', () => {
+      const el = control.render();
+      document.body.appendChild(el);
+
+      // Open dropdown
+      const button = el.querySelector('[data-testid="channel-select-button"]') as HTMLButtonElement;
+      button.click();
+
+      const dropdown = document.querySelector('[data-testid="channel-dropdown"]') as HTMLElement;
+      const options = dropdown.querySelectorAll('button');
+
+      // Rapidly change channels
+      control.setChannel('red');
+      control.setChannel('green');
+      control.setChannel('blue');
+      control.setChannel('alpha');
+      control.setChannel('luminance');
+      control.setChannel('rgb');
+
+      // Only rgb (index 0) should have accent styling
+      let accentCount = 0;
+      options.forEach((option) => {
+        if ((option as HTMLButtonElement).style.color === 'rgb(74, 158, 255)') {
+          accentCount++;
+        }
+      });
+
+      expect(accentCount).toBe(1);
+      expect((options[0] as HTMLButtonElement).style.color).toBe('rgb(74, 158, 255)');
+      document.body.removeChild(el);
     });
   });
 

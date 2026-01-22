@@ -270,3 +270,160 @@ describe('ZoomControl event handling', () => {
     expect(callback).not.toHaveBeenCalled();
   });
 });
+
+describe('ZoomControl dropdown visual selection', () => {
+  let control: ZoomControl;
+
+  beforeEach(() => {
+    control = new ZoomControl();
+  });
+
+  afterEach(() => {
+    control.dispose();
+  });
+
+  it('ZOOM-U080: only selected zoom has accent styling in dropdown', () => {
+    const el = control.render();
+    document.body.appendChild(el);
+    control.setZoom(1); // 100%
+
+    // Open dropdown
+    const button = el.querySelector('[data-testid="zoom-control-button"]') as HTMLButtonElement;
+    button.click();
+
+    const dropdown = document.querySelector('[data-testid="zoom-dropdown"]') as HTMLElement;
+    const options = dropdown.querySelectorAll('button');
+
+    // Count items with accent color (selected styling)
+    let accentCount = 0;
+    options.forEach((option) => {
+      if ((option as HTMLButtonElement).style.color === 'rgb(74, 158, 255)') {
+        accentCount++;
+      }
+    });
+
+    expect(accentCount).toBeLessThanOrEqual(1);
+    document.body.removeChild(el);
+  });
+
+  it('ZOOM-U081: changing zoom via setZoom updates dropdown styling', () => {
+    const el = control.render();
+    document.body.appendChild(el);
+
+    // Open dropdown
+    const button = el.querySelector('[data-testid="zoom-control-button"]') as HTMLButtonElement;
+    button.click();
+
+    const dropdown = document.querySelector('[data-testid="zoom-dropdown"]') as HTMLElement;
+    const options = dropdown.querySelectorAll('button');
+
+    // Set to 100% (index 3: Fit, 25%, 50%, 100%)
+    control.setZoom(1);
+
+    // 100% should have accent styling
+    expect((options[3] as HTMLButtonElement).style.color).toBe('rgb(74, 158, 255)');
+
+    // Change to 200% (index 4)
+    control.setZoom(2);
+
+    // 100% should no longer have accent styling
+    expect((options[3] as HTMLButtonElement).style.color).not.toBe('rgb(74, 158, 255)');
+    // 200% should have accent styling
+    expect((options[4] as HTMLButtonElement).style.color).toBe('rgb(74, 158, 255)');
+    document.body.removeChild(el);
+  });
+
+  it('ZOOM-U082: clicking dropdown item selects zoom and resets previous styling', () => {
+    const handler = vi.fn();
+    control.on('zoomChanged', handler);
+    const el = control.render();
+    document.body.appendChild(el);
+
+    // Open dropdown
+    const button = el.querySelector('[data-testid="zoom-control-button"]') as HTMLButtonElement;
+    button.click();
+
+    const dropdown = document.querySelector('[data-testid="zoom-dropdown"]') as HTMLElement;
+    const options = dropdown.querySelectorAll('button');
+
+    // Click 100% (index 3)
+    (options[3] as HTMLButtonElement).click();
+    expect(handler).toHaveBeenCalledWith(1);
+    expect(control.getZoom()).toBe(1);
+
+    // Reopen dropdown
+    button.click();
+
+    // Click 200% (index 4)
+    (options[4] as HTMLButtonElement).click();
+    expect(handler).toHaveBeenCalledWith(2);
+    expect(control.getZoom()).toBe(2);
+
+    // Verify only 200% has accent styling
+    button.click();
+    expect((options[3] as HTMLButtonElement).style.color).not.toBe('rgb(74, 158, 255)');
+    expect((options[4] as HTMLButtonElement).style.color).toBe('rgb(74, 158, 255)');
+    document.body.removeChild(el);
+  });
+
+  it('ZOOM-U083: rapid zoom changes maintain correct visual state', () => {
+    const el = control.render();
+    document.body.appendChild(el);
+
+    // Open dropdown
+    const button = el.querySelector('[data-testid="zoom-control-button"]') as HTMLButtonElement;
+    button.click();
+
+    const dropdown = document.querySelector('[data-testid="zoom-dropdown"]') as HTMLElement;
+    const options = dropdown.querySelectorAll('button');
+
+    // Rapidly change zoom levels
+    control.setZoom('fit');
+    control.setZoom(0.25);
+    control.setZoom(0.5);
+    control.setZoom(1);
+    control.setZoom(2);
+    control.setZoom(4);
+    control.setZoom('fit');
+
+    // Only fit (index 0) should have accent styling
+    let accentCount = 0;
+    options.forEach((option) => {
+      if ((option as HTMLButtonElement).style.color === 'rgb(74, 158, 255)') {
+        accentCount++;
+      }
+    });
+
+    expect(accentCount).toBe(1);
+    expect((options[0] as HTMLButtonElement).style.color).toBe('rgb(74, 158, 255)');
+
+    document.body.removeChild(el);
+  });
+
+  it('ZOOM-U084: keyboard shortcut followed by dropdown click resets previous styling', () => {
+    const el = control.render();
+    document.body.appendChild(el);
+
+    // Use keyboard to set fit
+    control.handleKeyboard('f');
+    expect(control.getZoom()).toBe('fit');
+
+    // Open dropdown
+    const button = el.querySelector('[data-testid="zoom-control-button"]') as HTMLButtonElement;
+    button.click();
+
+    const dropdown = document.querySelector('[data-testid="zoom-dropdown"]') as HTMLElement;
+    const options = dropdown.querySelectorAll('button');
+
+    // Click 100% (index 3)
+    (options[3] as HTMLButtonElement).click();
+    expect(control.getZoom()).toBe(1);
+
+    // Reopen and verify only 100% has accent styling
+    button.click();
+    expect((options[0] as HTMLButtonElement).style.color).not.toBe('rgb(74, 158, 255)');
+    expect((options[3] as HTMLButtonElement).style.color).toBe('rgb(74, 158, 255)');
+
+    document.body.removeChild(el);
+  });
+});

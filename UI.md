@@ -537,6 +537,105 @@ panel.element.appendChild(slider.container);
 panel.show(anchorElement);
 ```
 
+### DropdownMenu Component (`src/ui/components/shared/DropdownMenu.ts`)
+
+Reusable dropdown menu with keyboard navigation, accessibility support, and single/multi-select modes.
+
+**Features:**
+- Full keyboard navigation (ArrowUp/Down, Home/End, Enter, Space, Escape, Tab)
+- ARIA accessibility (role="listbox", aria-selected, aria-activedescendant)
+- Single-select and multi-select modes
+- Auto-close when clicking outside or opening another dropdown
+- Visual deselection when changing selection (accent styling properly reset)
+- Color indicators and shortcut hints for items
+- Disabled item support
+- Z-index stacking for multiple dropdowns
+
+```typescript
+import { DropdownMenu } from './shared/DropdownMenu';
+
+// Create dropdown menu
+const dropdown = new DropdownMenu({
+  minWidth: '120px',
+  multiSelect: false,  // Set to true for checkbox-style multi-select
+  closeOthers: true,   // Auto-close other open dropdowns
+  onSelect: (value) => {
+    // Called when item is selected (single-select mode)
+    console.log('Selected:', value);
+  },
+  onSelectionChange: (values) => {
+    // Called when selection changes (multi-select mode)
+    console.log('Selected values:', values);
+  },
+  onClose: () => {
+    // Called when dropdown closes
+    updateButtonStyle();
+  },
+});
+
+// Set items
+dropdown.setItems([
+  { value: 'rgb', label: 'RGB', color: '#ccc', shortcut: 'N' },
+  { value: 'red', label: 'Red', color: '#ff6b6b', shortcut: 'R' },
+  { value: 'green', label: 'Green', color: '#6bff6b', shortcut: 'G' },
+  { value: 'blue', label: 'Blue', color: '#6b9fff', shortcut: 'B' },
+  { value: 'disabled', label: 'Disabled Option', disabled: true },
+]);
+
+// Open/close/toggle
+dropdown.open(anchorButton);
+dropdown.close();
+dropdown.toggle(anchorButton);
+
+// Selection management
+dropdown.setSelectedValue('red');           // Single value
+dropdown.setSelectedValues(['red', 'blue']); // Multiple values (multi-select mode)
+dropdown.clearSelection();
+dropdown.getSelectedValues();  // Returns string[]
+dropdown.isValueSelected('red'); // Returns boolean
+
+// State
+dropdown.isVisible(); // Returns boolean
+dropdown.getElement(); // Returns HTMLElement
+
+// Cleanup
+dropdown.dispose();
+```
+
+**Usage with ChannelSelect/ZoomControl:**
+```typescript
+// In component constructor
+this.dropdown = new DropdownMenu({
+  onSelect: (value) => this.setChannel(value as ChannelMode),
+  onClose: () => this.updateButtonLabel(),
+});
+
+// Set items with colors
+this.dropdown.setItems(
+  channels.map((channel) => ({
+    value: channel,
+    label: CHANNEL_LABELS[channel],
+    color: CHANNEL_COLORS[channel],
+    shortcut: CHANNEL_SHORT_LABELS[channel],
+  }))
+);
+
+// In button click handler
+this.button.addEventListener('click', () => {
+  this.dropdown.toggle(this.button);
+});
+
+// When programmatically changing selection
+setChannel(channel: ChannelMode): void {
+  if (this.currentChannel === channel) return;
+  this.currentChannel = channel;
+  this.dropdown.setSelectedValue(channel); // Updates visual styling
+  this.emit('channelChanged', channel);
+}
+```
+
+**Important:** Always call `setSelectedValue()` after changing selection to ensure proper visual deselection of previous item.
+
 ### DraggableContainer Component (`src/ui/components/shared/DraggableContainer.ts`)
 
 Unified draggable overlay container for scopes and floating panels. Used by Histogram, Waveform, and Vectorscope.

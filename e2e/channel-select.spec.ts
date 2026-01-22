@@ -25,7 +25,7 @@ async function openChannelSelect(page: Page): Promise<void> {
 
 async function selectChannel(page: Page, channel: string): Promise<void> {
   await openChannelSelect(page);
-  await page.click(`button[data-channel="${channel}"]`);
+  await page.click(`button[data-value="${channel}"]`);
   await page.waitForTimeout(100);
 }
 
