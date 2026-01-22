@@ -103,7 +103,7 @@ export class App {
     this.paintEngine = new PaintEngine();
     this.viewer = new Viewer(this.session, this.paintEngine);
     this.timeline = new Timeline(this.session, this.paintEngine);
-    this.cacheIndicator = new CacheIndicator(this.session);
+    this.cacheIndicator = new CacheIndicator(this.session, this.viewer);
 
     // Create HeaderBar (contains file ops, playback, volume, export, help)
     this.headerBar = new HeaderBar(this.session);
@@ -651,6 +651,10 @@ export class App {
       this.waveform.setPlaybackMode(isPlaying);
       this.vectorscope.setPlaybackMode(isPlaying);
 
+      // Update prerender buffer playback state
+      const playDirection = this.session.playDirection;
+      this.viewer.updatePrerenderPlaybackState(isPlaying, playDirection);
+
       // Playback preload state management:
       // - START: Handled in Session.play() which calls videoSourceNode.startPlaybackPreload()
       //   This is done there because Session has immediate access to playback direction and
@@ -1021,6 +1025,9 @@ export class App {
       }
       // Update available sources for stack control
       this.updateStackControlSources();
+
+      // Initialize prerender buffer for the new source
+      this.viewer.initPrerenderBuffer();
     });
 
     this.session.on('frameChanged', () => this.syncGTOStore());
@@ -1493,7 +1500,7 @@ export class App {
    * Called when sources are loaded or changed.
    */
   private updateStackControlSources(): void {
-    const sources = this.session.sources.map((source, index) => ({
+    const sources = this.session.allSources.map((source, index) => ({
       index,
       name: source.name,
     }));

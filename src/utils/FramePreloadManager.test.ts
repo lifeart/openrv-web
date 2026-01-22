@@ -385,6 +385,34 @@ describe('FramePreloadManager', () => {
       expect(DEFAULT_PRELOAD_CONFIG.scrubWindow).toBeGreaterThan(0);
       expect(DEFAULT_PRELOAD_CONFIG.maxConcurrent).toBeGreaterThan(0);
     });
+
+    // REGRESSION TEST: Ensure config values don't accidentally change
+    // These values were incorrectly overridden in VideoSourceNode causing
+    // 70-frame videos to only cache 60 frames instead of all frames
+    it('FPM-047: maxCacheSize must be at least 100 to cache typical short videos', () => {
+      // Videos up to 100 frames should be fully cacheable
+      // This was broken when VideoSourceNode hardcoded maxCacheSize: 60
+      expect(DEFAULT_PRELOAD_CONFIG.maxCacheSize).toBeGreaterThanOrEqual(100);
+    });
+
+    it('FPM-048: preloadAhead must be at least 20 for smooth playback', () => {
+      // At 24fps, 20 frames = ~0.8s buffer which is minimum for smooth playback
+      // This was broken when VideoSourceNode hardcoded preloadAhead: 15
+      expect(DEFAULT_PRELOAD_CONFIG.preloadAhead).toBeGreaterThanOrEqual(20);
+    });
+
+    it('FPM-049: exact default config values for regression detection', () => {
+      // If these values need to change, update both the defaults AND this test
+      // This prevents accidental config changes that break caching behavior
+      expect(DEFAULT_PRELOAD_CONFIG).toEqual({
+        maxCacheSize: 100,
+        preloadAhead: 20,
+        preloadBehind: 5,
+        scrubWindow: 10,
+        maxConcurrent: 4,
+        priorityDecayRate: 1.0,
+      });
+    });
   });
 
   describe('LRU optimization', () => {
@@ -743,6 +771,83 @@ describe('FramePreloadManager', () => {
       // Should complete quickly (batch eviction is efficient)
       expect(elapsed).toBeLessThan(500);
       expect(manager.getStats().evictionCount).toBe(10);
+    });
+  });
+
+  // REGRESSION TEST: Small videos should cache ALL frames
+  // This was broken when VideoSourceNode had hardcoded maxCacheSize: 60,
+  // causing 70-frame videos to only cache 60 frames
+  describe('small video full caching', () => {
+    it('FPM-050: video with frames <= maxCacheSize caches all frames without eviction', async () => {
+      // Simulate a 70-frame video with default config (maxCacheSize: 100)
+      const totalFrames = 70;
+      const manager = new FramePreloadManager(totalFrames, loader, disposer);
+
+      // Load all 70 frames
+      for (let i = 1; i <= totalFrames; i++) {
+        await manager.getFrame(i);
+      }
+
+      const stats = manager.getStats();
+
+      // ALL 70 frames should be cached - no eviction
+      expect(stats.cacheSize).toBe(70);
+      expect(stats.evictionCount).toBe(0);
+
+      // Verify each frame is actually cached
+      for (let i = 1; i <= totalFrames; i++) {
+        expect(manager.hasFrame(i)).toBe(true);
+      }
+    });
+
+    it('FPM-051: preloadAround does not evict frames when video fits in cache', async () => {
+      // 70-frame video should fit entirely in default 100-frame cache
+      const totalFrames = 70;
+      const manager = new FramePreloadManager(totalFrames, loader, disposer, {
+        maxConcurrent: 10, // Fast loading
+      });
+
+      // Pre-cache all frames
+      for (let i = 1; i <= totalFrames; i++) {
+        await manager.getFrame(i);
+      }
+
+      // Scrubbing around should NOT evict any frames
+      manager.preloadAround(1);
+      manager.preloadAround(35);
+      manager.preloadAround(70);
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      const stats = manager.getStats();
+      expect(stats.cacheSize).toBe(70);
+      expect(stats.evictionCount).toBe(0);
+    });
+
+    it('FPM-052: 100-frame video fully cacheable with default config', async () => {
+      // Edge case: exactly maxCacheSize frames
+      const totalFrames = 100;
+      const manager = new FramePreloadManager(totalFrames, loader, disposer);
+
+      for (let i = 1; i <= totalFrames; i++) {
+        await manager.getFrame(i);
+      }
+
+      expect(manager.getStats().cacheSize).toBe(100);
+      expect(manager.getStats().evictionCount).toBe(0);
+    });
+
+    it('FPM-053: 101-frame video triggers eviction (boundary test)', async () => {
+      // Just over maxCacheSize - should evict 1 frame
+      const totalFrames = 101;
+      const manager = new FramePreloadManager(totalFrames, loader, disposer);
+
+      for (let i = 1; i <= totalFrames; i++) {
+        await manager.getFrame(i);
+      }
+
+      expect(manager.getStats().cacheSize).toBe(100);
+      expect(manager.getStats().evictionCount).toBe(1);
     });
   });
 

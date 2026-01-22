@@ -10,6 +10,7 @@
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { Session } from '../../core/session/Session';
+import type { Viewer } from './Viewer';
 
 export interface CacheIndicatorState {
   visible: boolean;
@@ -34,20 +35,28 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private session: Session;
+  private viewer: Viewer | null = null;
   private visible = true;
   private updateScheduled = false;
   private totalFrames = 0;
   private inPoint = 1;
   private outPoint = 1;
+  private prerenderStatsSpan: HTMLSpanElement | null = null;
 
   // Colors for cache states
   private static readonly CACHED_COLOR = '#4ade80'; // green-400
   private static readonly PENDING_COLOR = '#facc15'; // yellow-400
   private static readonly UNCACHED_COLOR = '#374151'; // gray-700
 
-  constructor(session: Session) {
+  constructor(session: Session, viewer?: Viewer) {
     super();
     this.session = session;
+    this.viewer = viewer ?? null;
+
+    // Register for prerender cache updates if viewer provided
+    if (this.viewer) {
+      this.viewer.setOnPrerenderCacheUpdate(() => this.scheduleUpdate());
+    }
 
     // Create container
     this.container = document.createElement('div');
@@ -96,6 +105,16 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
     statsSpan.dataset.testid = 'cache-indicator-stats';
     statsSpan.textContent = 'Cache: 0 / 0 frames';
 
+    // Create prerender stats span (for effects cache)
+    this.prerenderStatsSpan = document.createElement('span');
+    this.prerenderStatsSpan.className = 'prerender-stats';
+    this.prerenderStatsSpan.dataset.testid = 'prerender-indicator-stats';
+    this.prerenderStatsSpan.style.cssText = `
+      margin-left: 12px;
+      color: #60a5fa;
+    `;
+    this.prerenderStatsSpan.textContent = '';
+
     this.clearButton = document.createElement('button');
     this.clearButton.dataset.testid = 'cache-indicator-clear';
     this.clearButton.textContent = 'Clear';
@@ -124,6 +143,7 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
     });
 
     this.infoContainer.appendChild(statsSpan);
+    this.infoContainer.appendChild(this.prerenderStatsSpan);
     this.infoContainer.appendChild(this.clearButton);
 
     this.container.appendChild(this.barContainer);
@@ -278,8 +298,54 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
       }
     }
 
+    // Update prerender stats display
+    this.updatePrerenderStats();
+
     // Render cache bar
     this.renderBar(cachedFrames, pendingFrames);
+  }
+
+  /**
+   * Update prerender buffer stats display
+   */
+  private updatePrerenderStats(): void {
+    if (!this.prerenderStatsSpan) return;
+
+    if (!this.viewer) {
+      this.prerenderStatsSpan.textContent = '';
+      return;
+    }
+
+    const stats = this.viewer.getPrerenderStats();
+    // Hide stats when nothing to show (no cache and no activity)
+    if (!stats || (stats.cacheSize === 0 && stats.pendingRequests === 0 && stats.activeRequests === 0)) {
+      this.prerenderStatsSpan.textContent = '';
+      return;
+    }
+
+    const memoryStr = this.formatMemorySize(stats.memorySizeMB);
+    let text = `Effects: ${stats.cacheSize} / ${stats.totalFrames} frames (${memoryStr})`;
+
+    // Show active (processing) vs queued (waiting) for better visibility into worker utilization
+    if (stats.activeRequests > 0 || stats.pendingRequests > 0) {
+      text += ` [${stats.activeRequests} active, ${stats.pendingRequests} queued]`;
+    }
+
+    this.prerenderStatsSpan.textContent = text;
+  }
+
+  /**
+   * Set the viewer reference for prerender stats
+   */
+  setViewer(viewer: Viewer): void {
+    // Unregister from old viewer
+    if (this.viewer) {
+      this.viewer.setOnPrerenderCacheUpdate(null);
+    }
+    this.viewer = viewer;
+    // Register for prerender cache updates
+    this.viewer.setOnPrerenderCacheUpdate(() => this.scheduleUpdate());
+    this.scheduleUpdate();
   }
 
   /**
@@ -339,6 +405,10 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
    * Cleanup
    */
   dispose(): void {
+    // Unregister prerender cache update callback
+    if (this.viewer) {
+      this.viewer.setOnPrerenderCacheUpdate(null);
+    }
     this.container.remove();
     this.removeAllListeners();
   }

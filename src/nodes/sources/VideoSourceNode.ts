@@ -199,21 +199,11 @@ export class VideoSourceNode extends BaseSourceNode {
       return result;
     };
 
-    // Default config optimized for video playback
-    const defaultConfig: Partial<PreloadConfig> = {
-      maxCacheSize: 60,
-      preloadAhead: 15,
-      preloadBehind: 5,
-      scrubWindow: 10,
-      maxConcurrent: 4,
-      ...config,
-    };
-
     this.preloadManager = new FramePreloadManager<FrameResult>(
       totalFrames,
       loader,
       undefined, // No special disposer needed for FrameResult
-      defaultConfig
+      config // FramePreloadManager applies DEFAULT_PRELOAD_CONFIG internally
     );
   }
 

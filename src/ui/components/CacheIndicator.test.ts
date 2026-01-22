@@ -325,6 +325,267 @@ describe('CacheIndicator', () => {
       expect(state.cachedCount).toBe(3);
     });
   });
+
+  describe('prerender stats', () => {
+    // Mock Viewer for prerender stats
+    const createMockViewer = (stats: {
+      cacheSize?: number;
+      totalFrames?: number;
+      pendingRequests?: number;
+      activeRequests?: number;
+      memorySizeMB?: number;
+      cacheHits?: number;
+      cacheMisses?: number;
+      hitRate?: number;
+    } | null = null) => {
+      return {
+        getPrerenderStats: vi.fn(() => stats ? {
+          cacheSize: stats.cacheSize ?? 0,
+          totalFrames: stats.totalFrames ?? 100,
+          pendingRequests: stats.pendingRequests ?? 0,
+          activeRequests: stats.activeRequests ?? 0,
+          memorySizeMB: stats.memorySizeMB ?? 0,
+          cacheHits: stats.cacheHits ?? 0,
+          cacheMisses: stats.cacheMisses ?? 0,
+          hitRate: stats.hitRate ?? 0,
+        } : null),
+        setOnPrerenderCacheUpdate: vi.fn(),
+      };
+    };
+
+    it('CACHE-U080: creates prerender stats span element', () => {
+      const el = indicator.getElement();
+      const prerenderStats = el.querySelector('[data-testid="prerender-indicator-stats"]');
+      expect(prerenderStats).not.toBeNull();
+    });
+
+    it('CACHE-U081: prerender stats empty when no viewer provided', () => {
+      const el = indicator.getElement();
+      const prerenderStats = el.querySelector('[data-testid="prerender-indicator-stats"]') as HTMLSpanElement;
+      expect(prerenderStats.textContent).toBe('');
+    });
+
+    it('CACHE-U082: setViewer updates prerender stats', () => {
+      const mockViewer = createMockViewer({
+        cacheSize: 25,
+        totalFrames: 100,
+        pendingRequests: 5,
+        activeRequests: 2,
+        memorySizeMB: 50,
+      });
+
+      indicator.setViewer(mockViewer as any);
+      vi.advanceTimersByTime(16); // Wait for RAF
+
+      const el = indicator.getElement();
+      const prerenderStats = el.querySelector('[data-testid="prerender-indicator-stats"]') as HTMLSpanElement;
+      expect(prerenderStats.textContent).toContain('Effects:');
+      expect(prerenderStats.textContent).toContain('25');
+      expect(prerenderStats.textContent).toContain('100');
+    });
+
+    it('CACHE-U083: shows active vs queued count when requests pending', () => {
+      const mockViewer = createMockViewer({
+        cacheSize: 10,
+        totalFrames: 50,
+        pendingRequests: 8,
+        activeRequests: 2,
+        memorySizeMB: 20,
+      });
+
+      indicator.setViewer(mockViewer as any);
+      vi.advanceTimersByTime(16);
+
+      const el = indicator.getElement();
+      const prerenderStats = el.querySelector('[data-testid="prerender-indicator-stats"]') as HTMLSpanElement;
+      // Now shows "[2 active, 8 queued]" instead of "[10 loading]"
+      expect(prerenderStats.textContent).toContain('[2 active, 8 queued]');
+    });
+
+    it('CACHE-U087: shows only active count when no queued requests', () => {
+      const mockViewer = createMockViewer({
+        cacheSize: 10,
+        totalFrames: 50,
+        pendingRequests: 0,
+        activeRequests: 4,
+        memorySizeMB: 20,
+      });
+
+      indicator.setViewer(mockViewer as any);
+      vi.advanceTimersByTime(16);
+
+      const el = indicator.getElement();
+      const prerenderStats = el.querySelector('[data-testid="prerender-indicator-stats"]') as HTMLSpanElement;
+      expect(prerenderStats.textContent).toContain('[4 active, 0 queued]');
+    });
+
+    it('CACHE-U088: shows only queued count when no active requests', () => {
+      const mockViewer = createMockViewer({
+        cacheSize: 10,
+        totalFrames: 50,
+        pendingRequests: 6,
+        activeRequests: 0,
+        memorySizeMB: 20,
+      });
+
+      indicator.setViewer(mockViewer as any);
+      vi.advanceTimersByTime(16);
+
+      const el = indicator.getElement();
+      const prerenderStats = el.querySelector('[data-testid="prerender-indicator-stats"]') as HTMLSpanElement;
+      expect(prerenderStats.textContent).toContain('[0 active, 6 queued]');
+    });
+
+    it('CACHE-U089: shows stats when only active requests (no cache, no queued)', () => {
+      // REGRESSION TEST: Ensure stats are shown when there are active requests
+      // even if cache is empty and no queued requests
+      const mockViewer = createMockViewer({
+        cacheSize: 0,
+        totalFrames: 50,
+        pendingRequests: 0,
+        activeRequests: 4,
+        memorySizeMB: 0,
+      });
+
+      indicator.setViewer(mockViewer as any);
+      vi.advanceTimersByTime(16);
+
+      const el = indicator.getElement();
+      const prerenderStats = el.querySelector('[data-testid="prerender-indicator-stats"]') as HTMLSpanElement;
+      // Should show stats because there are active requests
+      expect(prerenderStats.textContent).toContain('Effects:');
+      expect(prerenderStats.textContent).toContain('[4 active, 0 queued]');
+    });
+
+    it('CACHE-U090: hides stats only when cache, active, and queued are all zero', () => {
+      // REGRESSION TEST: Stats should only be hidden when ALL of:
+      // cacheSize === 0 AND activeRequests === 0 AND pendingRequests === 0
+      const mockViewer = createMockViewer({
+        cacheSize: 0,
+        totalFrames: 50,
+        pendingRequests: 0,
+        activeRequests: 0,
+        memorySizeMB: 0,
+      });
+
+      indicator.setViewer(mockViewer as any);
+      vi.advanceTimersByTime(16);
+
+      const el = indicator.getElement();
+      const prerenderStats = el.querySelector('[data-testid="prerender-indicator-stats"]') as HTMLSpanElement;
+      // Should be empty because nothing to show
+      expect(prerenderStats.textContent).toBe('');
+    });
+
+    it('CACHE-U084: hides prerender stats when cache is empty and no loading', () => {
+      const mockViewer = createMockViewer({
+        cacheSize: 0,
+        totalFrames: 50,
+        pendingRequests: 0,
+        activeRequests: 0,
+        memorySizeMB: 0,
+      });
+
+      indicator.setViewer(mockViewer as any);
+      vi.advanceTimersByTime(16);
+
+      const el = indicator.getElement();
+      const prerenderStats = el.querySelector('[data-testid="prerender-indicator-stats"]') as HTMLSpanElement;
+      expect(prerenderStats.textContent).toBe('');
+    });
+
+    it('CACHE-U085: constructor accepts viewer parameter', () => {
+      const mockViewer = createMockViewer({
+        cacheSize: 15,
+        totalFrames: 100,
+        memorySizeMB: 30,
+      });
+
+      const indicatorWithViewer = new CacheIndicator(mockSession as any, mockViewer as any);
+      vi.advanceTimersByTime(16);
+
+      const el = indicatorWithViewer.getElement();
+      const prerenderStats = el.querySelector('[data-testid="prerender-indicator-stats"]') as HTMLSpanElement;
+      expect(prerenderStats.textContent).toContain('Effects:');
+      expect(prerenderStats.textContent).toContain('15');
+
+      indicatorWithViewer.dispose();
+    });
+
+    it('CACHE-U086: displays memory size in prerender stats', () => {
+      const mockViewer = createMockViewer({
+        cacheSize: 20,
+        totalFrames: 100,
+        memorySizeMB: 156,
+      });
+
+      indicator.setViewer(mockViewer as any);
+      vi.advanceTimersByTime(16);
+
+      const el = indicator.getElement();
+      const prerenderStats = el.querySelector('[data-testid="prerender-indicator-stats"]') as HTMLSpanElement;
+      expect(prerenderStats.textContent).toContain('156 MB');
+    });
+
+    // REGRESSION TESTS: Ensure cache update callback is properly registered
+    // This fixes the issue where effects cache progress only updated on play/pause
+    it('CACHE-U091: setViewer registers cache update callback', () => {
+      const mockViewer = createMockViewer({ cacheSize: 10, totalFrames: 100 });
+      indicator.setViewer(mockViewer as any);
+
+      expect(mockViewer.setOnPrerenderCacheUpdate).toHaveBeenCalledWith(expect.any(Function));
+    });
+
+    it('CACHE-U092: setViewer unregisters callback from previous viewer', () => {
+      const mockViewer1 = createMockViewer({ cacheSize: 5, totalFrames: 50 });
+      const mockViewer2 = createMockViewer({ cacheSize: 10, totalFrames: 100 });
+
+      indicator.setViewer(mockViewer1 as any);
+      indicator.setViewer(mockViewer2 as any);
+
+      // First viewer should have callback unregistered (set to null)
+      expect(mockViewer1.setOnPrerenderCacheUpdate).toHaveBeenCalledWith(null);
+      // Second viewer should have callback registered
+      expect(mockViewer2.setOnPrerenderCacheUpdate).toHaveBeenCalledWith(expect.any(Function));
+    });
+
+    it('CACHE-U093: constructor registers callback when viewer provided', () => {
+      const mockViewer = createMockViewer({ cacheSize: 15, totalFrames: 100 });
+      const indicatorWithViewer = new CacheIndicator(mockSession as any, mockViewer as any);
+
+      expect(mockViewer.setOnPrerenderCacheUpdate).toHaveBeenCalledWith(expect.any(Function));
+
+      indicatorWithViewer.dispose();
+    });
+
+    it('CACHE-U094: dispose unregisters cache update callback', () => {
+      const mockViewer = createMockViewer({ cacheSize: 10, totalFrames: 100 });
+      const indicatorWithViewer = new CacheIndicator(mockSession as any, mockViewer as any);
+
+      // Clear previous calls
+      mockViewer.setOnPrerenderCacheUpdate.mockClear();
+
+      indicatorWithViewer.dispose();
+
+      // Should unregister callback on dispose
+      expect(mockViewer.setOnPrerenderCacheUpdate).toHaveBeenCalledWith(null);
+    });
+
+    it('CACHE-U095: cache update callback triggers scheduleUpdate', () => {
+      const mockViewer = createMockViewer({ cacheSize: 10, totalFrames: 100 });
+      indicator.setViewer(mockViewer as any);
+
+      // Get the callback that was registered
+      const registeredCallback = mockViewer.setOnPrerenderCacheUpdate.mock.calls[0][0];
+      expect(registeredCallback).toBeInstanceOf(Function);
+
+      // Calling the callback should schedule an update
+      const scheduleSpy = vi.spyOn(indicator, 'scheduleUpdate');
+      registeredCallback();
+
+      expect(scheduleSpy).toHaveBeenCalled();
+    });
+  });
 });
 
 describe('CacheIndicator memory formatting', () => {

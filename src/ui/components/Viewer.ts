@@ -32,6 +32,8 @@ import { ColorWheels } from './ColorWheels';
 import { SpotlightOverlay } from './SpotlightOverlay';
 import { ClippingOverlay } from './ClippingOverlay';
 import { HSLQualifier } from './HSLQualifier';
+import { PrerenderBufferManager } from '../../utils/PrerenderBufferManager';
+import { AllEffectsState } from '../../utils/EffectProcessor';
 
 interface PointerState {
   pointerId: number;
@@ -194,6 +196,12 @@ export class Viewer {
   // Difference matte state
   private differenceMatteState: DifferenceMatteState = { ...DEFAULT_DIFFERENCE_MATTE_STATE };
 
+  // Prerender buffer for smooth playback with effects
+  private prerenderBuffer: PrerenderBufferManager | null = null;
+  private prerenderCacheUpdateCallback: (() => void) | null = null;
+  private effectsChangeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private static readonly EFFECTS_DEBOUNCE_MS = 50;
+
   // Cursor color callback for InfoPanel
   private cursorColorCallback: ((color: { r: number; g: number; b: number } | null, position: { x: number; y: number } | null) => void) | null = null;
   private lastCursorColorUpdate = 0;
@@ -301,6 +309,7 @@ export class Viewer {
     // Create color wheels
     this.colorWheels = new ColorWheels(this.container);
     this.colorWheels.on('stateChanged', () => {
+      this.notifyEffectsChanged();
       this.refresh();
     });
 
@@ -311,10 +320,12 @@ export class Viewer {
     // Create HSL Qualifier (secondary color correction)
     this.hslQualifier = new HSLQualifier();
     this.hslQualifier.on('stateChanged', () => {
+      this.notifyEffectsChanged();
       this.refresh();
     });
 
-    const imageCtx = this.imageCanvas.getContext('2d', { alpha: false });
+    // Use willReadFrequently for better getImageData performance during effect processing
+    const imageCtx = this.imageCanvas.getContext('2d', { alpha: false, willReadFrequently: true });
     if (!imageCtx) throw new Error('Failed to get image 2D context');
     this.imageCtx = imageCtx;
 
@@ -1384,6 +1395,21 @@ export class Viewer {
     // Clear canvas
     this.imageCtx.clearRect(0, 0, displayWidth, displayHeight);
 
+    // Try prerendered cache first during playback for smooth performance with effects
+    if (this.session.isPlaying && this.prerenderBuffer) {
+      const currentFrame = this.session.currentFrame;
+      const cached = this.prerenderBuffer.getFrame(currentFrame);
+      if (cached) {
+        // Draw cached pre-rendered frame scaled to display size
+        this.imageCtx.drawImage(cached.canvas, 0, 0, displayWidth, displayHeight);
+        this.updateCanvasPosition();
+        this.updateWipeLine();
+        // Trigger preloading of nearby frames
+        this.prerenderBuffer.preloadAround(currentFrame);
+        return; // Skip live effect processing
+      }
+    }
+
     // Check if difference matte mode is enabled
     if (this.differenceMatteState.enabled && this.session.abCompareAvailable) {
       // Render difference between A and B sources
@@ -1673,6 +1699,7 @@ export class Viewer {
   setColorAdjustments(adjustments: ColorAdjustments): void {
     this.colorAdjustments = { ...adjustments };
     this.applyColorFilters();
+    this.notifyEffectsChanged();
     this.scheduleRender();
   }
 
@@ -1683,6 +1710,7 @@ export class Viewer {
   resetColorAdjustments(): void {
     this.colorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
     this.applyColorFilters();
+    this.notifyEffectsChanged();
     this.scheduleRender();
   }
 
@@ -1817,6 +1845,7 @@ export class Viewer {
   setFilterSettings(settings: FilterSettings): void {
     this.filterSettings = { ...settings };
     this.applyColorFilters();
+    this.notifyEffectsChanged();
     this.scheduleRender();
   }
 
@@ -1827,6 +1856,7 @@ export class Viewer {
   resetFilterSettings(): void {
     this.filterSettings = { ...DEFAULT_FILTER_SETTINGS };
     this.applyColorFilters();
+    this.notifyEffectsChanged();
     this.scheduleRender();
   }
 
@@ -1853,6 +1883,7 @@ export class Viewer {
   // CDL methods
   setCDL(cdl: CDLValues): void {
     this.cdlValues = JSON.parse(JSON.stringify(cdl));
+    this.notifyEffectsChanged();
     this.scheduleRender();
   }
 
@@ -1862,6 +1893,7 @@ export class Viewer {
 
   resetCDL(): void {
     this.cdlValues = JSON.parse(JSON.stringify(DEFAULT_CDL));
+    this.notifyEffectsChanged();
     this.scheduleRender();
   }
 
@@ -1873,6 +1905,7 @@ export class Viewer {
       green: { ...curves.green, points: [...curves.green.points] },
       blue: { ...curves.blue, points: [...curves.blue.points] },
     };
+    this.notifyEffectsChanged();
     this.scheduleRender();
   }
 
@@ -1887,6 +1920,7 @@ export class Viewer {
 
   resetCurves(): void {
     this.curvesData = createDefaultCurvesData();
+    this.notifyEffectsChanged();
     this.scheduleRender();
   }
 
@@ -2407,6 +2441,7 @@ export class Viewer {
   setChannelMode(mode: ChannelMode): void {
     if (this.channelMode === mode) return;
     this.channelMode = mode;
+    this.notifyEffectsChanged();
     this.scheduleRender();
   }
 
@@ -2416,6 +2451,7 @@ export class Viewer {
 
   resetChannelMode(): void {
     this.channelMode = 'rgb';
+    this.notifyEffectsChanged();
     this.scheduleRender();
   }
 
@@ -2498,11 +2534,11 @@ export class Viewer {
     const source = this.session.getSourceByIndex(sourceIndex);
     if (!source?.element) return null;
 
-    // Create temp canvas
+    // Create temp canvas with willReadFrequently for getImageData performance
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = width;
     tempCanvas.height = height;
-    const tempCtx = tempCanvas.getContext('2d');
+    const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
     if (!tempCtx) return null;
 
     // Draw source element
@@ -2973,6 +3009,129 @@ export class Viewer {
     return canvas;
   }
 
+  /**
+   * Initialize the prerender buffer for smooth playback with effects.
+   * Should be called when the session has a valid source loaded.
+   */
+  initPrerenderBuffer(): void {
+    // Clear any pending effects debounce timer to avoid stale updates
+    if (this.effectsChangeDebounceTimer !== null) {
+      clearTimeout(this.effectsChangeDebounceTimer);
+      this.effectsChangeDebounceTimer = null;
+    }
+
+    if (this.prerenderBuffer) {
+      this.prerenderBuffer.dispose();
+    }
+
+    const totalFrames = this.session.frameCount;
+    if (totalFrames <= 0) {
+      this.prerenderBuffer = null;
+      return;
+    }
+
+    // Create frame loader that gets raw frames from session
+    const frameLoader = (frame: number): HTMLCanvasElement | OffscreenCanvas | HTMLImageElement | null => {
+      try {
+        const source = this.session.currentSource;
+        if (!source) return null;
+
+        if (source.type === 'sequence') {
+          // For sequences, get the frame image synchronously
+          // Verify required method exists
+          if (typeof this.session.getSequenceFrameSync !== 'function') {
+            return null;
+          }
+          const savedFrame = this.session.currentFrame;
+          try {
+            this.session.currentFrame = frame;
+            const frameImage = this.session.getSequenceFrameSync();
+            return frameImage || null;
+          } finally {
+            this.session.currentFrame = savedFrame;
+          }
+        } else if (source.type === 'video') {
+          // For videos with mediabunny, get cached frame canvas
+          if (typeof this.session.isUsingMediabunny === 'function' &&
+              this.session.isUsingMediabunny() &&
+              typeof this.session.getVideoFrameCanvas === 'function') {
+            return this.session.getVideoFrameCanvas(frame) || null;
+          }
+        }
+
+        return null;
+      } catch (error) {
+        // Silently handle errors - frame will be rendered live instead
+        console.warn(`Prerender frame loader error for frame ${frame}:`, error);
+        return null;
+      }
+    };
+
+    this.prerenderBuffer = new PrerenderBufferManager(totalFrames, frameLoader);
+    // Apply stored callback if any
+    if (this.prerenderCacheUpdateCallback) {
+      this.prerenderBuffer.setOnCacheUpdate(this.prerenderCacheUpdateCallback);
+    }
+    this.notifyEffectsChanged();
+  }
+
+  /**
+   * Notify the prerender buffer that effects have changed.
+   * Uses debouncing to avoid excessive cache invalidations during rapid changes.
+   */
+  private notifyEffectsChanged(): void {
+    if (!this.prerenderBuffer) return;
+
+    // Clear any pending debounce timer
+    if (this.effectsChangeDebounceTimer !== null) {
+      clearTimeout(this.effectsChangeDebounceTimer);
+    }
+
+    // Debounce the effect update to avoid excessive invalidations during rapid slider changes
+    this.effectsChangeDebounceTimer = setTimeout(() => {
+      this.effectsChangeDebounceTimer = null;
+      this.doUpdateEffects();
+    }, Viewer.EFFECTS_DEBOUNCE_MS);
+  }
+
+  /**
+   * Actually perform the effects update (called after debounce)
+   */
+  private doUpdateEffects(): void {
+    if (!this.prerenderBuffer) return;
+
+    const effectsState: AllEffectsState = {
+      colorAdjustments: { ...this.colorAdjustments },
+      cdlValues: JSON.parse(JSON.stringify(this.cdlValues)),
+      curvesData: {
+        master: { ...this.curvesData.master, points: [...this.curvesData.master.points] },
+        red: { ...this.curvesData.red, points: [...this.curvesData.red.points] },
+        green: { ...this.curvesData.green, points: [...this.curvesData.green.points] },
+        blue: { ...this.curvesData.blue, points: [...this.curvesData.blue.points] },
+      },
+      filterSettings: { ...this.filterSettings },
+      channelMode: this.channelMode,
+      colorWheelsState: this.colorWheels.getState(),
+      hslQualifierState: this.hslQualifier.getState(),
+    };
+
+    this.prerenderBuffer.updateEffects(effectsState);
+  }
+
+  /**
+   * Update prerender buffer playback state.
+   * Should be called when playback starts/stops.
+   */
+  updatePrerenderPlaybackState(isPlaying: boolean, direction: number = 1): void {
+    if (this.prerenderBuffer) {
+      this.prerenderBuffer.setPlaybackState(isPlaying, direction);
+      if (isPlaying) {
+        // Start preloading around current frame
+        this.prerenderBuffer.preloadAround(this.session.currentFrame);
+      }
+    }
+  }
+
   dispose(): void {
     this.resizeObserver.disconnect();
     this.container.removeEventListener('pointerdown', this.onPointerDown);
@@ -2997,6 +3156,18 @@ export class Viewer {
     if (this.sharpenProcessor) {
       this.sharpenProcessor.dispose();
       this.sharpenProcessor = null;
+    }
+
+    // Cleanup effects debounce timer
+    if (this.effectsChangeDebounceTimer !== null) {
+      clearTimeout(this.effectsChangeDebounceTimer);
+      this.effectsChangeDebounceTimer = null;
+    }
+
+    // Cleanup prerender buffer
+    if (this.prerenderBuffer) {
+      this.prerenderBuffer.dispose();
+      this.prerenderBuffer = null;
     }
 
     // Cleanup overlays
@@ -3110,6 +3281,58 @@ export class Viewer {
    */
   getHSLQualifier(): HSLQualifier {
     return this.hslQualifier;
+  }
+
+  /**
+   * Get prerender buffer statistics for UI display
+   * Returns null if prerender buffer is not active
+   */
+  getPrerenderStats(): {
+    cacheSize: number;
+    totalFrames: number;
+    pendingRequests: number;
+    activeRequests: number;
+    memorySizeMB: number;
+    cacheHits: number;
+    cacheMisses: number;
+    hitRate: number;
+  } | null {
+    if (!this.prerenderBuffer) {
+      return null;
+    }
+
+    const stats = this.prerenderBuffer.getStats();
+    const source = this.session.currentSource;
+
+    // Calculate memory size (each cached frame is a canvas with RGBA data)
+    let memorySizeMB = 0;
+    if (source && stats.cacheSize > 0) {
+      const width = source.width || 0;
+      const height = source.height || 0;
+      const bytesPerPixel = 4; // RGBA
+      const bytesPerFrame = width * height * bytesPerPixel;
+      memorySizeMB = (bytesPerFrame * stats.cacheSize) / (1024 * 1024);
+    }
+
+    return {
+      cacheSize: stats.cacheSize,
+      totalFrames: this.session.frameCount,
+      pendingRequests: stats.pendingRequests,
+      activeRequests: stats.activeRequests,
+      memorySizeMB,
+      cacheHits: stats.cacheHits,
+      cacheMisses: stats.cacheMisses,
+      hitRate: stats.hitRate,
+    };
+  }
+
+  /**
+   * Set callback to be called when prerender cache is updated
+   * Used by CacheIndicator to refresh display in real-time
+   */
+  setOnPrerenderCacheUpdate(callback: (() => void) | null): void {
+    this.prerenderCacheUpdateCallback = callback;
+    this.prerenderBuffer?.setOnCacheUpdate(callback);
   }
 
   /**

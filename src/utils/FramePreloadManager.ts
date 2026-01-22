@@ -171,8 +171,12 @@ export class FramePreloadManager<T> {
     // Process queue
     this.processQueue();
 
-    // Evict distant frames to manage memory
-    this.evictDistantFrames(centerFrame);
+    // Evict distant frames only when cache is near capacity (80% full)
+    // Skip eviction entirely if entire video fits in cache
+    if (this.totalFrames > this.config.maxCacheSize &&
+        this.cache.size >= this.config.maxCacheSize * 0.8) {
+      this.evictDistantFrames(centerFrame);
+    }
   }
 
   /**
@@ -368,7 +372,8 @@ export class FramePreloadManager<T> {
    */
   private evictDistantFrames(centerFrame: number): void {
     const { maxCacheSize, preloadAhead, preloadBehind } = this.config;
-    const keepRange = Math.max(maxCacheSize / 2, preloadAhead + preloadBehind + 10);
+    // Keep frames within maxCacheSize distance, but at minimum the preload range + buffer
+    const keepRange = Math.max(maxCacheSize, preloadAhead + preloadBehind + 20);
 
     const framesToEvict: number[] = [];
 
