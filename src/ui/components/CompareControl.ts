@@ -628,8 +628,9 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
   toggleDifferenceMatte(): void {
     this.state.differenceMatte.enabled = !this.state.differenceMatte.enabled;
     // When enabling difference matte, disable wipe mode to avoid conflicts
-    if (this.state.differenceMatte.enabled) {
+    if (this.state.differenceMatte.enabled && this.state.wipeMode !== 'off') {
       this.state.wipeMode = 'off';
+      this.emit('wipeModeChanged', 'off');
     }
     this.updateButtonLabel();
     this.updateDropdownStates();
@@ -641,8 +642,9 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     if (this.state.differenceMatte.enabled !== enabled) {
       this.state.differenceMatte.enabled = enabled;
       // When enabling difference matte, disable wipe mode to avoid conflicts
-      if (enabled) {
+      if (enabled && this.state.wipeMode !== 'off') {
         this.state.wipeMode = 'off';
+        this.emit('wipeModeChanged', 'off');
       }
       this.updateButtonLabel();
       this.updateDropdownStates();

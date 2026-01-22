@@ -221,6 +221,22 @@ export interface SessionMetadataState {
   frameIncrement: number;
 }
 
+export interface StackLayerState {
+  id: string;
+  name: string;
+  visible: boolean;
+  opacity: number;
+  blendMode: string;
+  sourceIndex: number;
+}
+
+export interface StackState {
+  layers: StackLayerState[];
+  activeLayerId: string | null;
+  layerCount: number;
+  isPanelOpen: boolean;
+}
+
 /**
  * Get session state from the app
  */
@@ -507,6 +523,20 @@ export async function getSessionMetadataState(page: Page): Promise<SessionMetada
       version: 2,
       origin: 'openrv-web',
       frameIncrement: 1,
+    };
+  });
+}
+
+/**
+ * Get stack/layer state from the app
+ */
+export async function getStackState(page: Page): Promise<StackState> {
+  return page.evaluate(() => {
+    return window.__OPENRV_TEST__?.getStackState() ?? {
+      layers: [],
+      activeLayerId: null,
+      layerCount: 0,
+      isPanelOpen: false,
     };
   });
 }

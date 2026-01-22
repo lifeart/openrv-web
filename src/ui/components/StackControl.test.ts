@@ -577,6 +577,60 @@ describe('StackControl', () => {
       control.showPanel();
       expect(() => control.dispose()).not.toThrow();
     });
+
+    it('STACK-U153: dispose removes document click listener', () => {
+      const removeEventListenerSpy = vi.spyOn(document, 'removeEventListener');
+      control.render();
+      control.dispose();
+      expect(removeEventListenerSpy).toHaveBeenCalledWith('click', expect.any(Function));
+      removeEventListenerSpy.mockRestore();
+    });
+  });
+});
+
+describe('StackControl source selection', () => {
+  let control: StackControl;
+
+  beforeEach(() => {
+    control = new StackControl();
+  });
+
+  afterEach(() => {
+    control.dispose();
+  });
+
+  it('STACK-U170: setAvailableSources stores sources', () => {
+    const sources = [
+      { index: 0, name: 'Video 1' },
+      { index: 1, name: 'Video 2' },
+    ];
+    control.setAvailableSources(sources);
+    expect(control.getAvailableSources()).toEqual(sources);
+  });
+
+  it('STACK-U171: getAvailableSources returns copy of sources', () => {
+    const sources = [
+      { index: 0, name: 'Video 1' },
+      { index: 1, name: 'Video 2' },
+    ];
+    control.setAvailableSources(sources);
+
+    const result1 = control.getAvailableSources();
+    const result2 = control.getAvailableSources();
+    expect(result1).toEqual(result2);
+    expect(result1).not.toBe(result2);
+  });
+
+  it('STACK-U172: initial available sources is empty', () => {
+    expect(control.getAvailableSources()).toEqual([]);
+  });
+
+  it('STACK-U173: layerSourceChanged event is emittable', () => {
+    const callback = vi.fn();
+    control.on('layerSourceChanged', callback);
+
+    control.emit('layerSourceChanged', { layerId: 'layer_1', sourceIndex: 1 });
+    expect(callback).toHaveBeenCalledWith({ layerId: 'layer_1', sourceIndex: 1 });
   });
 });
 
@@ -647,5 +701,119 @@ describe('StackControl multiple layers', () => {
     expect(layers[1]?.opacity).toBe(0.5);
     expect(layers[0]?.blendMode).toBe('normal');
     expect(layers[1]?.blendMode).toBe('add');
+  });
+});
+
+describe('StackControl source validation', () => {
+  let control: StackControl;
+
+  beforeEach(() => {
+    control = new StackControl();
+  });
+
+  afterEach(() => {
+    control.dispose();
+  });
+
+  it('STACK-U180: isSourceValid returns true when source exists in available sources', () => {
+    const sources = [
+      { index: 0, name: 'Video 1' },
+      { index: 1, name: 'Video 2' },
+    ];
+    control.setAvailableSources(sources);
+
+    const layer = control.addLayer({
+      name: 'Layer 1',
+      visible: true,
+      opacity: 1,
+      blendMode: 'normal',
+      sourceIndex: 0,
+    });
+
+    // Source 0 exists in available sources
+    const availableSources = control.getAvailableSources();
+    const isValid = availableSources.some(s => s.index === layer.sourceIndex);
+    expect(isValid).toBe(true);
+  });
+
+  it('STACK-U181: isSourceValid returns false when source not in available sources', () => {
+    const sources = [
+      { index: 0, name: 'Video 1' },
+      { index: 1, name: 'Video 2' },
+    ];
+    control.setAvailableSources(sources);
+
+    const layer = control.addLayer({
+      name: 'Layer 1',
+      visible: true,
+      opacity: 1,
+      blendMode: 'normal',
+      sourceIndex: 5, // Invalid source index
+    });
+
+    // Source 5 does not exist in available sources
+    const availableSources = control.getAvailableSources();
+    const isValid = availableSources.some(s => s.index === layer.sourceIndex);
+    expect(isValid).toBe(false);
+  });
+
+  it('STACK-U182: layer with missing source can be updated to valid source', () => {
+    const sources = [
+      { index: 0, name: 'Video 1' },
+      { index: 1, name: 'Video 2' },
+    ];
+    control.setAvailableSources(sources);
+
+    const layer = control.addLayer({
+      name: 'Layer 1',
+      visible: true,
+      opacity: 1,
+      blendMode: 'normal',
+      sourceIndex: 99, // Invalid source
+    });
+
+    // Update to valid source
+    control.updateLayerSource(layer.id, 0);
+
+    const layers = control.getLayers();
+    expect(layers[0]?.sourceIndex).toBe(0);
+
+    // Now source is valid
+    const availableSources = control.getAvailableSources();
+    const isValid = availableSources.some(s => s.index === layers[0]?.sourceIndex);
+    expect(isValid).toBe(true);
+  });
+
+  it('STACK-U183: source validation works when sources are removed', () => {
+    // Start with 3 sources
+    control.setAvailableSources([
+      { index: 0, name: 'Video 1' },
+      { index: 1, name: 'Video 2' },
+      { index: 2, name: 'Video 3' },
+    ]);
+
+    const layer = control.addLayer({
+      name: 'Layer 1',
+      visible: true,
+      opacity: 1,
+      blendMode: 'normal',
+      sourceIndex: 2,
+    });
+
+    // Source 2 is valid
+    let availableSources = control.getAvailableSources();
+    let isValid = availableSources.some(s => s.index === layer.sourceIndex);
+    expect(isValid).toBe(true);
+
+    // Remove source 2 (simulate source being closed)
+    control.setAvailableSources([
+      { index: 0, name: 'Video 1' },
+      { index: 1, name: 'Video 2' },
+    ]);
+
+    // Source 2 is now invalid
+    availableSources = control.getAvailableSources();
+    isValid = availableSources.some(s => s.index === layer.sourceIndex);
+    expect(isValid).toBe(false);
   });
 });

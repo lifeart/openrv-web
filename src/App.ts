@@ -92,6 +92,9 @@ export class App {
   private colorHistoryPrevious: ReturnType<ColorControls['getAdjustments']> | null = null;
   private transformHistoryPrevious: ReturnType<TransformControl['getTransform']> | null = null;
 
+  // Layer counter - only increments, never decreases (even when layers are removed)
+  private nextLayerNumber = 1;
+
   constructor() {
     // Bind event handlers for proper cleanup
     this.boundHandleResize = () => this.viewer.resize();
@@ -248,8 +251,12 @@ export class App {
     this.compareControl.on('abSourceChanged', (source) => {
       this.session.setCurrentAB(source);
     });
+    // Note: abToggled is fired after setABSource already emitted abSourceChanged,
+    // so the toggle has already happened via session.setCurrentAB(). This event
+    // is just for notification/analytics purposes - do not call session.toggleAB()
+    // again or it will double-toggle.
     this.compareControl.on('abToggled', () => {
-      this.session.toggleAB();
+      // Toggle already handled via abSourceChanged -> session.setCurrentAB()
     });
     this.compareControl.on('differenceMatteChanged', (state) => {
       this.viewer.setDifferenceMatteState(state);
@@ -381,7 +388,8 @@ export class App {
     this.stackControl.on('layerAdded', (layer) => {
       // When adding a layer, use the current source index
       layer.sourceIndex = this.session.currentSourceIndex;
-      layer.name = this.session.currentSource?.name ?? `Layer ${layer.sourceIndex + 1}`;
+      // Use incrementing layer number that never decreases (even when layers are removed)
+      layer.name = `Layer ${this.nextLayerNumber++}`;
       this.stackControl.updateLayerSource(layer.id, layer.sourceIndex);
       this.stackControl.updateLayerName(layer.id, layer.name);
       this.viewer.setStackLayers(this.stackControl.getLayers());
@@ -396,6 +404,12 @@ export class App {
       this.scheduleUpdateScopes();
     });
     this.stackControl.on('layerReordered', () => {
+      this.viewer.setStackLayers(this.stackControl.getLayers());
+      this.scheduleUpdateScopes();
+    });
+    this.stackControl.on('layerSourceChanged', ({ layerId, sourceIndex }) => {
+      this.stackControl.updateLayerSource(layerId, sourceIndex);
+      // Don't update layer name - keep the original "Layer N" name
       this.viewer.setStackLayers(this.stackControl.getLayers());
       this.scheduleUpdateScopes();
     });
@@ -1005,6 +1019,8 @@ export class App {
       if (!this.session.gtoData) {
         this.gtoStore = null;
       }
+      // Update available sources for stack control
+      this.updateStackControlSources();
     });
 
     this.session.on('frameChanged', () => this.syncGTOStore());
@@ -1470,6 +1486,18 @@ export class App {
 
       showAlert(`Export error: ${err}`, { type: 'error', title: 'Export Error' });
     }
+  }
+
+  /**
+   * Update available sources for the stack control.
+   * Called when sources are loaded or changed.
+   */
+  private updateStackControlSources(): void {
+    const sources = this.session.sources.map((source, index) => ({
+      index,
+      name: source.name,
+    }));
+    this.stackControl.setAvailableSources(sources);
   }
 
   /**

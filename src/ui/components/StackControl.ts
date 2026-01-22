@@ -11,12 +11,18 @@ export interface StackLayer {
   sourceIndex: number; // Index in session sources array
 }
 
+export interface SourceInfo {
+  index: number;
+  name: string;
+}
+
 export interface StackControlEvents extends EventMap {
   layerAdded: StackLayer;
   layerRemoved: string; // layer id
   layerChanged: StackLayer;
   layerReordered: { layerId: string; newIndex: number };
   activeLayerChanged: string | null;
+  layerSourceChanged: { layerId: string; sourceIndex: number };
 }
 
 export class StackControl extends EventEmitter<StackControlEvents> {
@@ -28,6 +34,8 @@ export class StackControl extends EventEmitter<StackControlEvents> {
   private layers: StackLayer[] = [];
   private activeLayerId: string | null = null;
   private nextLayerId = 1;
+  private boundHandleOutsideClick: (e: MouseEvent) => void;
+  private availableSources: SourceInfo[] = [];
 
   constructor() {
     super();
@@ -46,6 +54,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     this.stackButton = document.createElement('button');
     this.stackButton.innerHTML = `${getIconSvg('layers', 'sm')}<span style="margin-left: 6px;">Stack</span>`;
     this.stackButton.title = 'Layer stack controls';
+    this.stackButton.setAttribute('data-testid', 'stack-button');
     this.stackButton.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -79,6 +88,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     // Create panel (rendered at body level to avoid z-index issues)
     this.panel = document.createElement('div');
     this.panel.className = 'stack-panel';
+    this.panel.setAttribute('data-testid', 'stack-panel');
     this.panel.style.cssText = `
       position: fixed;
       background: #2a2a2a;
@@ -97,12 +107,13 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     this.container.appendChild(this.stackButton);
     // Panel will be appended to body when shown
 
-    // Close panel on outside click
-    document.addEventListener('click', (e) => {
+    // Close panel on outside click (store reference for cleanup)
+    this.boundHandleOutsideClick = (e: MouseEvent) => {
       if (!this.container.contains(e.target as Node) && !this.panel.contains(e.target as Node)) {
         this.hidePanel();
       }
-    });
+    };
+    document.addEventListener('click', this.boundHandleOutsideClick);
   }
 
   private createPanelContent(): void {
@@ -124,6 +135,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     const addBtn = document.createElement('button');
     addBtn.textContent = '+ Add';
     addBtn.title = 'Add current source as new layer';
+    addBtn.setAttribute('data-testid', 'stack-add-layer-button');
     addBtn.style.cssText = `
       background: #4a9eff;
       border: none;
@@ -144,6 +156,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     // Layer list container
     this.layerList = document.createElement('div');
     this.layerList.className = 'layer-list';
+    this.layerList.setAttribute('data-testid', 'stack-layer-list');
     this.layerList.style.cssText = `
       max-height: 300px;
       overflow-y: auto;
@@ -170,7 +183,12 @@ export class StackControl extends EventEmitter<StackControlEvents> {
       return;
     }
 
-    // Render layers from top to bottom (last in array = top of stack)
+    // Visual Stacking Order:
+    // - Array index 0 = bottom layer (rendered first, appears below others)
+    // - Array index N = top layer (rendered last, appears above others)
+    // We display layers in reverse order so the topmost layer appears at the
+    // top of the UI list, matching typical graphics software conventions
+    // (e.g., Photoshop, After Effects, OpenRV)
     for (let i = this.layers.length - 1; i >= 0; i--) {
       const layer = this.layers[i]!;
       const layerEl = this.createLayerElement(layer, i);
@@ -183,6 +201,8 @@ export class StackControl extends EventEmitter<StackControlEvents> {
 
     const el = document.createElement('div');
     el.className = 'layer-item';
+    el.setAttribute('data-testid', `stack-layer-${layer.id}`);
+    el.setAttribute('data-layer-index', String(index));
     el.style.cssText = `
       display: flex;
       flex-direction: column;
@@ -202,6 +222,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     const visBtn = document.createElement('button');
     visBtn.innerHTML = getIconSvg(layer.visible ? 'eye' : 'eye-off', 'sm');
     visBtn.title = layer.visible ? 'Hide layer' : 'Show layer';
+    visBtn.setAttribute('data-testid', `stack-layer-visibility-${layer.id}`);
     visBtn.style.cssText = `
       background: none;
       border: none;
@@ -211,7 +232,8 @@ export class StackControl extends EventEmitter<StackControlEvents> {
       display: flex;
       align-items: center;
     `;
-    visBtn.addEventListener('click', () => {
+    visBtn.addEventListener('click', (e) => {
+      e.stopPropagation(); // Prevent panel from closing when button is clicked
       layer.visible = !layer.visible;
       this.emit('layerChanged', { ...layer });
       this.updateLayerList();
@@ -220,6 +242,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     // Layer name (clickable to select)
     const nameEl = document.createElement('span');
     nameEl.textContent = layer.name;
+    nameEl.setAttribute('data-testid', `stack-layer-name-${layer.id}`);
     nameEl.style.cssText = `
       flex: 1;
       color: #ddd;
@@ -229,7 +252,8 @@ export class StackControl extends EventEmitter<StackControlEvents> {
       text-overflow: ellipsis;
       white-space: nowrap;
     `;
-    nameEl.addEventListener('click', () => {
+    nameEl.addEventListener('click', (e) => {
+      e.stopPropagation(); // Prevent panel from closing when name is clicked
       this.activeLayerId = layer.id;
       this.emit('activeLayerChanged', layer.id);
       this.updateLayerList();
@@ -239,6 +263,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     const moveUp = document.createElement('button');
     moveUp.innerHTML = getIconSvg('chevron-up', 'sm');
     moveUp.title = 'Move up';
+    moveUp.setAttribute('data-testid', `stack-layer-move-up-${layer.id}`);
     moveUp.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -251,7 +276,8 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     `;
     moveUp.disabled = index === this.layers.length - 1;
     moveUp.style.opacity = moveUp.disabled ? '0.3' : '1';
-    moveUp.addEventListener('click', () => {
+    moveUp.addEventListener('click', (e) => {
+      e.stopPropagation(); // Prevent panel from closing
       if (index < this.layers.length - 1) {
         this.swapLayers(index, index + 1);
       }
@@ -260,6 +286,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     const moveDown = document.createElement('button');
     moveDown.innerHTML = getIconSvg('chevron-down', 'sm');
     moveDown.title = 'Move down';
+    moveDown.setAttribute('data-testid', `stack-layer-move-down-${layer.id}`);
     moveDown.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -272,7 +299,8 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     `;
     moveDown.disabled = index === 0;
     moveDown.style.opacity = moveDown.disabled ? '0.3' : '1';
-    moveDown.addEventListener('click', () => {
+    moveDown.addEventListener('click', (e) => {
+      e.stopPropagation(); // Prevent panel from closing
       if (index > 0) {
         this.swapLayers(index, index - 1);
       }
@@ -282,6 +310,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     const deleteBtn = document.createElement('button');
     deleteBtn.innerHTML = getIconSvg('x', 'sm');
     deleteBtn.title = 'Remove layer';
+    deleteBtn.setAttribute('data-testid', `stack-layer-delete-${layer.id}`);
     deleteBtn.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -292,7 +321,10 @@ export class StackControl extends EventEmitter<StackControlEvents> {
       display: flex;
       align-items: center;
     `;
-    deleteBtn.addEventListener('click', () => this.removeLayer(layer.id));
+    deleteBtn.addEventListener('click', (e) => {
+      e.stopPropagation(); // Prevent panel from closing
+      this.removeLayer(layer.id);
+    });
 
     topRow.appendChild(visBtn);
     topRow.appendChild(nameEl);
@@ -301,12 +333,89 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     topRow.appendChild(deleteBtn);
     el.appendChild(topRow);
 
+    // Middle row: source selector (only show if multiple sources available)
+    if (this.availableSources.length > 1) {
+      const sourceRow = document.createElement('div');
+      sourceRow.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+
+      const sourceLabel = document.createElement('span');
+      sourceLabel.style.cssText = 'color: #888; font-size: 10px;';
+      sourceLabel.textContent = 'Source:';
+
+      // Check if current source is valid (exists in available sources)
+      const isSourceValid = this.availableSources.some(s => s.index === layer.sourceIndex);
+
+      const sourceSelect = document.createElement('select');
+      sourceSelect.setAttribute('data-testid', `stack-layer-source-${layer.id}`);
+      sourceSelect.style.cssText = `
+        background: ${isSourceValid ? '#444' : '#553333'};
+        border: 1px solid ${isSourceValid ? '#555' : '#aa5555'};
+        color: ${isSourceValid ? '#ddd' : '#ffaaaa'};
+        padding: 3px 6px;
+        border-radius: 3px;
+        font-size: 11px;
+        cursor: pointer;
+        flex: 1;
+        max-width: 180px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      `;
+
+      if (!isSourceValid) {
+        sourceSelect.title = 'Source no longer available. Please select a valid source.';
+      }
+
+      // If source is invalid, add a placeholder option showing the missing source
+      if (!isSourceValid && layer.sourceIndex >= 0) {
+        const missingOpt = document.createElement('option');
+        missingOpt.value = String(layer.sourceIndex);
+        missingOpt.textContent = `Source ${layer.sourceIndex} (Missing)`;
+        missingOpt.selected = true;
+        missingOpt.disabled = true;
+        sourceSelect.appendChild(missingOpt);
+      }
+
+      for (const source of this.availableSources) {
+        const opt = document.createElement('option');
+        opt.value = String(source.index);
+        opt.textContent = source.name;
+        opt.selected = source.index === layer.sourceIndex;
+        sourceSelect.appendChild(opt);
+      }
+
+      sourceSelect.addEventListener('change', () => {
+        const newSourceIndex = parseInt(sourceSelect.value);
+        layer.sourceIndex = newSourceIndex;
+        // Keep the original layer name - don't change it when source changes
+        this.emit('layerSourceChanged', { layerId: layer.id, sourceIndex: newSourceIndex });
+        this.emit('layerChanged', { ...layer });
+        // Update visual state to remove warning styling if source is now valid
+        const nowValid = this.availableSources.some(s => s.index === newSourceIndex);
+        if (nowValid) {
+          sourceSelect.style.background = '#444';
+          sourceSelect.style.border = '1px solid #555';
+          sourceSelect.style.color = '#ddd';
+          sourceSelect.title = '';
+          // Remove the "(Missing)" option if it exists
+          const missingOption = sourceSelect.querySelector('option[disabled]');
+          if (missingOption) {
+            sourceSelect.removeChild(missingOption);
+          }
+        }
+      });
+
+      sourceRow.appendChild(sourceLabel);
+      sourceRow.appendChild(sourceSelect);
+      el.appendChild(sourceRow);
+    }
+
     // Bottom row: blend mode and opacity
     const bottomRow = document.createElement('div');
     bottomRow.style.cssText = 'display: flex; align-items: center; gap: 8px;';
 
     // Blend mode select
     const blendSelect = document.createElement('select');
+    blendSelect.setAttribute('data-testid', `stack-layer-blend-${layer.id}`);
     blendSelect.style.cssText = `
       background: #444;
       border: 1px solid #555;
@@ -338,6 +447,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     opacitySlider.min = '0';
     opacitySlider.max = '100';
     opacitySlider.value = String(Math.round(layer.opacity * 100));
+    opacitySlider.setAttribute('data-testid', `stack-layer-opacity-${layer.id}`);
     opacitySlider.style.cssText = `
       width: 60px;
       height: 4px;
@@ -459,6 +569,21 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     }
   }
 
+  /**
+   * Set available sources that can be selected for layers
+   */
+  setAvailableSources(sources: SourceInfo[]): void {
+    this.availableSources = [...sources];
+    // Update UI if panel is open
+    if (this.isPanelOpen) {
+      this.updateLayerList();
+    }
+  }
+
+  getAvailableSources(): SourceInfo[] {
+    return [...this.availableSources];
+  }
+
   clearLayers(): void {
     this.layers = [];
     this.activeLayerId = null;
@@ -520,6 +645,9 @@ export class StackControl extends EventEmitter<StackControlEvents> {
   }
 
   dispose(): void {
+    // Remove outside click listener
+    document.removeEventListener('click', this.boundHandleOutsideClick);
+
     // Remove panel from body if present
     if (document.body.contains(this.panel)) {
       document.body.removeChild(this.panel);

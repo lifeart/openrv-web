@@ -377,12 +377,13 @@ The codebase includes comprehensive test coverage with **3360+ unit tests** acro
 - **Core**: Session, Graph, GTO loading/export, SequenceLoader, AutoSaveManager (28 tests)
 - **Utilities**: HiDPICanvas (32 tests) - hi-DPI display support with coordinate conversion
 
-**E2E Tests** (40 test suites):
+**E2E Tests** (41 test suites):
 - **Core**: App initialization, tab navigation, media loading, playback controls
 - **Scopes**: Histogram, Waveform, Vectorscope, Parade scope
 - **Color**: Color controls, Curves, Vibrance, Highlight/Shadow recovery
 - **View**: Pixel probe, False color, Zebra stripes, Safe areas, Spotlight, Info panel
 - **Comparison**: A/B compare, Wipe modes, Difference matte
+- **Compositing**: Stack Control - layer management, blend modes, opacity, visibility, reordering (44 tests)
 - **Transform**: Rotation, Flip, Crop
 - **Annotations**: Paint tools, Paint coordinates, Text formatting
 - **Export**: Frame export, Sequence export

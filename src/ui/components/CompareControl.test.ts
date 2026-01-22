@@ -20,7 +20,7 @@ describe('CompareControl', () => {
   });
 
   describe('initialization', () => {
-    it('CMP-001: should initialize with default state', () => {
+    it('CMP-U001: should initialize with default state', () => {
       const state = control.getState();
       expect(state.wipeMode).toBe('off');
       expect(state.wipePosition).toBe(0.5);
@@ -29,13 +29,13 @@ describe('CompareControl', () => {
       expect(state.differenceMatte).toEqual(DEFAULT_DIFFERENCE_MATTE_STATE);
     });
 
-    it('CMP-002: should render container element', () => {
+    it('CMP-U002: should render container element', () => {
       const el = control.render();
       expect(el).toBeInstanceOf(HTMLElement);
       expect(el.dataset.testid).toBe('compare-control');
     });
 
-    it('CMP-003: should have button with testid', () => {
+    it('CMP-U003: should have button with testid', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="compare-control-button"]');
       expect(button).not.toBeNull();
@@ -43,7 +43,7 @@ describe('CompareControl', () => {
   });
 
   describe('wipe mode', () => {
-    it('CMP-010: setWipeMode changes wipe mode', () => {
+    it('CMP-U010: setWipeMode changes wipe mode', () => {
       control.setWipeMode('horizontal');
       expect(control.getWipeMode()).toBe('horizontal');
 
@@ -54,7 +54,7 @@ describe('CompareControl', () => {
       expect(control.getWipeMode()).toBe('off');
     });
 
-    it('CMP-011: setWipeMode emits wipeModeChanged event', () => {
+    it('CMP-U011: setWipeMode emits wipeModeChanged event', () => {
       const callback = vi.fn();
       control.on('wipeModeChanged', callback);
 
@@ -62,7 +62,7 @@ describe('CompareControl', () => {
       expect(callback).toHaveBeenCalledWith('horizontal');
     });
 
-    it('CMP-012: setWipeMode emits stateChanged event', () => {
+    it('CMP-U012: setWipeMode emits stateChanged event', () => {
       const callback = vi.fn();
       control.on('stateChanged', callback);
 
@@ -70,7 +70,7 @@ describe('CompareControl', () => {
       expect(callback).toHaveBeenCalledWith(expect.objectContaining({ wipeMode: 'horizontal' }));
     });
 
-    it('CMP-013: setWipeMode does not emit if mode unchanged', () => {
+    it('CMP-U013: setWipeMode does not emit if mode unchanged', () => {
       control.setWipeMode('horizontal');
       const callback = vi.fn();
       control.on('wipeModeChanged', callback);
@@ -79,7 +79,7 @@ describe('CompareControl', () => {
       expect(callback).not.toHaveBeenCalled();
     });
 
-    it('CMP-014: cycleWipeMode cycles through modes', () => {
+    it('CMP-U014: cycleWipeMode cycles through modes', () => {
       expect(control.getWipeMode()).toBe('off');
 
       control.cycleWipeMode();
@@ -94,12 +94,12 @@ describe('CompareControl', () => {
   });
 
   describe('wipe position', () => {
-    it('CMP-020: setWipePosition sets position', () => {
+    it('CMP-U020: setWipePosition sets position', () => {
       control.setWipePosition(0.75);
       expect(control.getWipePosition()).toBe(0.75);
     });
 
-    it('CMP-021: setWipePosition clamps to 0-1 range', () => {
+    it('CMP-U021: setWipePosition clamps to 0-1 range', () => {
       control.setWipePosition(1.5);
       expect(control.getWipePosition()).toBe(1);
 
@@ -107,7 +107,7 @@ describe('CompareControl', () => {
       expect(control.getWipePosition()).toBe(0);
     });
 
-    it('CMP-022: setWipePosition accepts boundary values', () => {
+    it('CMP-U022: setWipePosition accepts boundary values', () => {
       control.setWipePosition(0);
       expect(control.getWipePosition()).toBe(0);
 
@@ -115,7 +115,7 @@ describe('CompareControl', () => {
       expect(control.getWipePosition()).toBe(1);
     });
 
-    it('CMP-023: setWipePosition emits wipePositionChanged event', () => {
+    it('CMP-U023: setWipePosition emits wipePositionChanged event', () => {
       const callback = vi.fn();
       control.on('wipePositionChanged', callback);
 
@@ -123,7 +123,7 @@ describe('CompareControl', () => {
       expect(callback).toHaveBeenCalledWith(0.3);
     });
 
-    it('CMP-024: setWipePosition does not emit if position unchanged', () => {
+    it('CMP-U024: setWipePosition does not emit if position unchanged', () => {
       control.setWipePosition(0.5);
       const callback = vi.fn();
       control.on('wipePositionChanged', callback);
@@ -134,7 +134,7 @@ describe('CompareControl', () => {
   });
 
   describe('A/B source', () => {
-    it('CMP-030: setABSource changes source', () => {
+    it('CMP-U030: setABSource changes source', () => {
       control.setABSource('B');
       expect(control.getABSource()).toBe('B');
 
@@ -142,7 +142,7 @@ describe('CompareControl', () => {
       expect(control.getABSource()).toBe('A');
     });
 
-    it('CMP-031: setABSource emits abSourceChanged event', () => {
+    it('CMP-U031: setABSource emits abSourceChanged event', () => {
       const callback = vi.fn();
       control.on('abSourceChanged', callback);
 
@@ -150,7 +150,7 @@ describe('CompareControl', () => {
       expect(callback).toHaveBeenCalledWith('B');
     });
 
-    it('CMP-032: setABSource does not emit if source unchanged', () => {
+    it('CMP-U032: setABSource does not emit if source unchanged', () => {
       const callback = vi.fn();
       control.on('abSourceChanged', callback);
 
@@ -158,7 +158,7 @@ describe('CompareControl', () => {
       expect(callback).not.toHaveBeenCalled();
     });
 
-    it('CMP-033: toggleAB switches between A and B', () => {
+    it('CMP-U033: toggleAB switches between A and B', () => {
       control.setABAvailable(true);
       expect(control.getABSource()).toBe('A');
 
@@ -169,7 +169,7 @@ describe('CompareControl', () => {
       expect(control.getABSource()).toBe('A');
     });
 
-    it('CMP-034: toggleAB does nothing when AB not available', () => {
+    it('CMP-U034: toggleAB does nothing when AB not available', () => {
       control.setABAvailable(false);
       control.setABSource('A');
 
@@ -177,7 +177,7 @@ describe('CompareControl', () => {
       expect(control.getABSource()).toBe('A'); // Unchanged
     });
 
-    it('CMP-035: toggleAB emits abToggled event when available', () => {
+    it('CMP-U035: toggleAB emits abToggled event when available', () => {
       control.setABAvailable(true);
       const callback = vi.fn();
       control.on('abToggled', callback);
@@ -185,10 +185,49 @@ describe('CompareControl', () => {
       control.toggleAB();
       expect(callback).toHaveBeenCalled();
     });
+
+    it('CMP-U036: toggleAB emits BOTH abSourceChanged AND abToggled', () => {
+      control.setABAvailable(true);
+      const sourceCallback = vi.fn();
+      const toggleCallback = vi.fn();
+      control.on('abSourceChanged', sourceCallback);
+      control.on('abToggled', toggleCallback);
+
+      control.toggleAB();
+
+      // Both events should fire - abSourceChanged via setABSource, then abToggled
+      expect(sourceCallback).toHaveBeenCalledWith('B');
+      expect(toggleCallback).toHaveBeenCalled();
+    });
+
+    it('CMP-U037: toggleAB does not emit abToggled when AB not available', () => {
+      control.setABAvailable(false);
+      const callback = vi.fn();
+      control.on('abToggled', callback);
+
+      control.toggleAB();
+      expect(callback).not.toHaveBeenCalled();
+    });
+
+    it('CMP-U038: setABSource can set B even when abAvailable is false', () => {
+      // This documents current behavior - setABSource does NOT check abAvailable
+      control.setABAvailable(false);
+      control.setABSource('B');
+      expect(control.getABSource()).toBe('B');
+    });
+
+    it('CMP-U039: setABSource emits event even when abAvailable is false', () => {
+      control.setABAvailable(false);
+      const callback = vi.fn();
+      control.on('abSourceChanged', callback);
+
+      control.setABSource('B');
+      expect(callback).toHaveBeenCalledWith('B');
+    });
   });
 
   describe('A/B availability', () => {
-    it('CMP-040: setABAvailable sets availability', () => {
+    it('CMP-U040: setABAvailable sets availability', () => {
       control.setABAvailable(true);
       expect(control.isABAvailable()).toBe(true);
 
@@ -196,13 +235,13 @@ describe('CompareControl', () => {
       expect(control.isABAvailable()).toBe(false);
     });
 
-    it('CMP-041: default AB availability is false', () => {
+    it('CMP-U041: default AB availability is false', () => {
       expect(control.isABAvailable()).toBe(false);
     });
   });
 
   describe('difference matte', () => {
-    it('CMP-050: toggleDifferenceMatte toggles enabled state', () => {
+    it('CMP-U050: toggleDifferenceMatte toggles enabled state', () => {
       expect(control.isDifferenceMatteEnabled()).toBe(false);
 
       control.toggleDifferenceMatte();
@@ -212,7 +251,7 @@ describe('CompareControl', () => {
       expect(control.isDifferenceMatteEnabled()).toBe(false);
     });
 
-    it('CMP-051: setDifferenceMatteEnabled sets enabled state', () => {
+    it('CMP-U051: setDifferenceMatteEnabled sets enabled state', () => {
       control.setDifferenceMatteEnabled(true);
       expect(control.isDifferenceMatteEnabled()).toBe(true);
 
@@ -220,7 +259,7 @@ describe('CompareControl', () => {
       expect(control.isDifferenceMatteEnabled()).toBe(false);
     });
 
-    it('CMP-052: setDifferenceMatteEnabled does not emit if unchanged', () => {
+    it('CMP-U052: setDifferenceMatteEnabled does not emit if unchanged', () => {
       const callback = vi.fn();
       control.on('differenceMatteChanged', callback);
 
@@ -228,12 +267,12 @@ describe('CompareControl', () => {
       expect(callback).not.toHaveBeenCalled();
     });
 
-    it('CMP-053: setDifferenceMatteGain sets gain value', () => {
+    it('CMP-U053: setDifferenceMatteGain sets gain value', () => {
       control.setDifferenceMatteGain(5.0);
       expect(control.getDifferenceMatteState().gain).toBe(5.0);
     });
 
-    it('CMP-054: setDifferenceMatteGain clamps to 1-10 range', () => {
+    it('CMP-U054: setDifferenceMatteGain clamps to 1-10 range', () => {
       control.setDifferenceMatteGain(15);
       expect(control.getDifferenceMatteState().gain).toBe(10);
 
@@ -241,7 +280,7 @@ describe('CompareControl', () => {
       expect(control.getDifferenceMatteState().gain).toBe(1);
     });
 
-    it('CMP-055: setDifferenceMatteGain accepts boundary values', () => {
+    it('CMP-U055: setDifferenceMatteGain accepts boundary values', () => {
       control.setDifferenceMatteGain(1);
       expect(control.getDifferenceMatteState().gain).toBe(1);
 
@@ -249,7 +288,7 @@ describe('CompareControl', () => {
       expect(control.getDifferenceMatteState().gain).toBe(10);
     });
 
-    it('CMP-056: toggleDifferenceMatteHeatmap toggles heatmap mode', () => {
+    it('CMP-U056: toggleDifferenceMatteHeatmap toggles heatmap mode', () => {
       expect(control.getDifferenceMatteState().heatmap).toBe(false);
 
       control.toggleDifferenceMatteHeatmap();
@@ -259,7 +298,7 @@ describe('CompareControl', () => {
       expect(control.getDifferenceMatteState().heatmap).toBe(false);
     });
 
-    it('CMP-057: setDifferenceMatteHeatmap sets heatmap state', () => {
+    it('CMP-U057: setDifferenceMatteHeatmap sets heatmap state', () => {
       control.setDifferenceMatteHeatmap(true);
       expect(control.getDifferenceMatteState().heatmap).toBe(true);
 
@@ -267,7 +306,7 @@ describe('CompareControl', () => {
       expect(control.getDifferenceMatteState().heatmap).toBe(false);
     });
 
-    it('CMP-058: difference matte methods emit differenceMatteChanged event', () => {
+    it('CMP-U058: difference matte methods emit differenceMatteChanged event', () => {
       const callback = vi.fn();
       control.on('differenceMatteChanged', callback);
 
@@ -283,7 +322,7 @@ describe('CompareControl', () => {
   });
 
   describe('state interdependencies', () => {
-    it('CMP-060: enabling difference matte disables wipe mode', () => {
+    it('CMP-U060: enabling difference matte disables wipe mode', () => {
       control.setWipeMode('horizontal');
       expect(control.getWipeMode()).toBe('horizontal');
 
@@ -292,7 +331,7 @@ describe('CompareControl', () => {
       expect(control.isDifferenceMatteEnabled()).toBe(true);
     });
 
-    it('CMP-061: toggle difference matte also disables wipe mode', () => {
+    it('CMP-U061: toggle difference matte also disables wipe mode', () => {
       control.setWipeMode('vertical');
       expect(control.getWipeMode()).toBe('vertical');
 
@@ -300,7 +339,35 @@ describe('CompareControl', () => {
       expect(control.getWipeMode()).toBe('off');
     });
 
-    it('CMP-062: disabling difference matte does not re-enable wipe mode', () => {
+    it('CMP-U064: enabling difference matte emits wipeModeChanged when wipe is active', () => {
+      control.setWipeMode('horizontal');
+      const callback = vi.fn();
+      control.on('wipeModeChanged', callback);
+
+      control.setDifferenceMatteEnabled(true);
+      expect(callback).toHaveBeenCalledWith('off');
+    });
+
+    it('CMP-U065: enabling difference matte does not emit wipeModeChanged when wipe is already off', () => {
+      // Wipe is off by default
+      expect(control.getWipeMode()).toBe('off');
+      const callback = vi.fn();
+      control.on('wipeModeChanged', callback);
+
+      control.setDifferenceMatteEnabled(true);
+      expect(callback).not.toHaveBeenCalled();
+    });
+
+    it('CMP-U066: toggleDifferenceMatte emits wipeModeChanged when wipe is active', () => {
+      control.setWipeMode('vertical');
+      const callback = vi.fn();
+      control.on('wipeModeChanged', callback);
+
+      control.toggleDifferenceMatte(); // Enable
+      expect(callback).toHaveBeenCalledWith('off');
+    });
+
+    it('CMP-U062: disabling difference matte does not re-enable wipe mode', () => {
       control.setWipeMode('horizontal');
       control.setDifferenceMatteEnabled(true);
       expect(control.getWipeMode()).toBe('off');
@@ -309,7 +376,7 @@ describe('CompareControl', () => {
       expect(control.getWipeMode()).toBe('off'); // Stays off
     });
 
-    it('CMP-063: wipe mode can be set after difference matte is disabled', () => {
+    it('CMP-U063: wipe mode can be set after difference matte is disabled', () => {
       control.setDifferenceMatteEnabled(true);
       control.setDifferenceMatteEnabled(false);
 
@@ -319,7 +386,7 @@ describe('CompareControl', () => {
   });
 
   describe('isActive logic', () => {
-    it('CMP-070: isActive false when everything off', () => {
+    it('CMP-U070: isActive false when everything off', () => {
       const state = control.getState();
       // isActive is private, but we can check button styling indirectly
       // For now, we check state combinations that should be active
@@ -328,19 +395,19 @@ describe('CompareControl', () => {
       expect(state.currentAB).toBe('A');
     });
 
-    it('CMP-071: wipe mode makes control active', () => {
+    it('CMP-U071: wipe mode makes control active', () => {
       control.setWipeMode('horizontal');
       const state = control.getState();
       expect(state.wipeMode).toBe('horizontal');
     });
 
-    it('CMP-072: difference matte makes control active', () => {
+    it('CMP-U072: difference matte makes control active', () => {
       control.setDifferenceMatteEnabled(true);
       const state = control.getState();
       expect(state.differenceMatte.enabled).toBe(true);
     });
 
-    it('CMP-073: B source with availability makes control active', () => {
+    it('CMP-U073: B source with availability makes control active', () => {
       control.setABAvailable(true);
       control.setABSource('B');
       const state = control.getState();
@@ -348,7 +415,7 @@ describe('CompareControl', () => {
       expect(state.abAvailable).toBe(true);
     });
 
-    it('CMP-074: B source without availability does not show as active', () => {
+    it('CMP-U074: B source without availability does not show as active', () => {
       control.setABAvailable(false);
       control.setABSource('B');
       const state = control.getState();
@@ -358,7 +425,7 @@ describe('CompareControl', () => {
   });
 
   describe('getWipeState compatibility', () => {
-    it('CMP-080: getWipeState returns correct structure', () => {
+    it('CMP-U080: getWipeState returns correct structure', () => {
       control.setWipeMode('horizontal');
       control.setWipePosition(0.3);
 
@@ -368,31 +435,31 @@ describe('CompareControl', () => {
       expect(wipeState.showOriginal).toBe('left');
     });
 
-    it('CMP-081: getWipeState showOriginal is left for horizontal', () => {
+    it('CMP-U081: getWipeState showOriginal is left for horizontal', () => {
       control.setWipeMode('horizontal');
       expect(control.getWipeState().showOriginal).toBe('left');
     });
 
-    it('CMP-082: getWipeState showOriginal is top for vertical', () => {
+    it('CMP-U082: getWipeState showOriginal is top for vertical', () => {
       control.setWipeMode('vertical');
       expect(control.getWipeState().showOriginal).toBe('top');
     });
 
-    it('CMP-083: getWipeState showOriginal is top for off (defaults to vertical behavior)', () => {
+    it('CMP-U083: getWipeState showOriginal is top for off (defaults to vertical behavior)', () => {
       control.setWipeMode('off');
       expect(control.getWipeState().showOriginal).toBe('top');
     });
   });
 
   describe('getDifferenceMatteState', () => {
-    it('CMP-090: returns copy of difference matte state', () => {
+    it('CMP-U090: returns copy of difference matte state', () => {
       const state1 = control.getDifferenceMatteState();
       const state2 = control.getDifferenceMatteState();
       expect(state1).toEqual(state2);
       expect(state1).not.toBe(state2);
     });
 
-    it('CMP-091: returns complete difference matte state', () => {
+    it('CMP-U091: returns complete difference matte state', () => {
       control.setDifferenceMatteEnabled(true);
       control.setDifferenceMatteGain(5);
       control.setDifferenceMatteHeatmap(true);
@@ -405,14 +472,14 @@ describe('CompareControl', () => {
   });
 
   describe('getState', () => {
-    it('CMP-100: getState returns copy of full state', () => {
+    it('CMP-U100: getState returns copy of full state', () => {
       const state1 = control.getState();
       const state2 = control.getState();
       expect(state1).toEqual(state2);
       expect(state1).not.toBe(state2);
     });
 
-    it('CMP-101: getState returns complete state', () => {
+    it('CMP-U101: getState returns complete state', () => {
       control.setWipeMode('horizontal');
       control.setWipePosition(0.3);
       control.setABAvailable(true);
@@ -429,7 +496,7 @@ describe('CompareControl', () => {
   });
 
   describe('events', () => {
-    it('CMP-110: stateChanged emitted for wipe mode change', () => {
+    it('CMP-U110: stateChanged emitted for wipe mode change', () => {
       const callback = vi.fn();
       control.on('stateChanged', callback);
 
@@ -437,7 +504,7 @@ describe('CompareControl', () => {
       expect(callback).toHaveBeenCalledWith(expect.objectContaining({ wipeMode: 'horizontal' }));
     });
 
-    it('CMP-111: stateChanged emitted for wipe position change', () => {
+    it('CMP-U111: stateChanged emitted for wipe position change', () => {
       const callback = vi.fn();
       control.on('stateChanged', callback);
 
@@ -445,7 +512,7 @@ describe('CompareControl', () => {
       expect(callback).toHaveBeenCalledWith(expect.objectContaining({ wipePosition: 0.7 }));
     });
 
-    it('CMP-112: stateChanged emitted for AB source change', () => {
+    it('CMP-U112: stateChanged emitted for AB source change', () => {
       const callback = vi.fn();
       control.on('stateChanged', callback);
 
@@ -453,7 +520,7 @@ describe('CompareControl', () => {
       expect(callback).toHaveBeenCalledWith(expect.objectContaining({ currentAB: 'B' }));
     });
 
-    it('CMP-113: stateChanged emitted for difference matte change', () => {
+    it('CMP-U113: stateChanged emitted for difference matte change', () => {
       const callback = vi.fn();
       control.on('stateChanged', callback);
 
@@ -463,11 +530,11 @@ describe('CompareControl', () => {
   });
 
   describe('dispose', () => {
-    it('CMP-120: dispose cleans up without error', () => {
+    it('CMP-U120: dispose cleans up without error', () => {
       expect(() => control.dispose()).not.toThrow();
     });
 
-    it('CMP-121: dispose can be called multiple times', () => {
+    it('CMP-U121: dispose can be called multiple times', () => {
       expect(() => {
         control.dispose();
         control.dispose();

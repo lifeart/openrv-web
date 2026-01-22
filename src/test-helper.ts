@@ -29,6 +29,7 @@ declare global {
       getThemeState: () => ThemeState;
       getMatteState: () => MatteState;
       getSessionMetadataState: () => SessionMetadataState;
+      getStackState: () => StackState;
       isUsingMediabunny: () => boolean;
     };
   }
@@ -252,6 +253,22 @@ export interface SessionMetadataState {
   version: number;
   origin: string;
   frameIncrement: number;
+}
+
+export interface StackLayerState {
+  id: string;
+  name: string;
+  visible: boolean;
+  opacity: number;
+  blendMode: string;
+  sourceIndex: number;
+}
+
+export interface StackState {
+  layers: StackLayerState[];
+  activeLayerId: string | null;
+  layerCount: number;
+  isPanelOpen: boolean;
 }
 
 export function exposeForTesting(app: App): void {
@@ -592,6 +609,25 @@ export function exposeForTesting(app: App): void {
         version: metadata.version ?? 2,
         origin: metadata.origin ?? 'openrv-web',
         frameIncrement: session?.frameIncrement ?? 1,
+      };
+    },
+
+    getStackState: (): StackState => {
+      const stackControl = appAny.stackControl;
+      const layers = stackControl?.getLayers?.() ?? [];
+      const activeLayer = stackControl?.getActiveLayer?.();
+      return {
+        layers: layers.map((l: any) => ({
+          id: l.id ?? '',
+          name: l.name ?? '',
+          visible: l.visible ?? true,
+          opacity: l.opacity ?? 1,
+          blendMode: l.blendMode ?? 'normal',
+          sourceIndex: l.sourceIndex ?? 0,
+        })),
+        activeLayerId: activeLayer?.id ?? null,
+        layerCount: layers.length,
+        isPanelOpen: stackControl?.isPanelOpen ?? false,
       };
     },
 
