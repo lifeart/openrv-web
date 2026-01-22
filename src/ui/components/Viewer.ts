@@ -33,7 +33,6 @@ import { SpotlightOverlay } from './SpotlightOverlay';
 import { ClippingOverlay } from './ClippingOverlay';
 import { HSLQualifier } from './HSLQualifier';
 import { PrerenderBufferManager } from '../../utils/PrerenderBufferManager';
-import { AllEffectsState } from '../../utils/EffectProcessor';
 
 // Extracted effect processing utilities
 import { applyHighlightsShadows, applyVibrance, applyClarity, applySharpenCPU } from './ViewerEffects';
@@ -46,11 +45,38 @@ import {
   getWipeLabels as getWipeLabelsUtil,
   WipeUIElements,
 } from './ViewerWipe';
-interface PointerState {
-  pointerId: number;
-  x: number;
-  y: number;
-}
+import {
+  PointerState,
+  getCanvasPoint as getCanvasPointUtil,
+  calculateWheelZoom,
+  calculateZoomPan,
+  calculatePinchDistance,
+  calculatePinchZoom,
+  isViewerContentElement as isViewerContentElementUtil,
+  getPixelCoordinates,
+  getPixelColor,
+} from './ViewerInteraction';
+import {
+  drawWithTransform as drawWithTransformUtil,
+  FilterStringCache,
+  getCanvasFilterString as getCanvasFilterStringUtil,
+  buildContainerFilterString,
+  renderCropOverlay as renderCropOverlayUtil,
+  drawPlaceholder as drawPlaceholderUtil,
+  calculateDisplayDimensions,
+} from './ViewerRenderingUtils';
+import {
+  createExportCanvas as createExportCanvasUtil,
+  renderFrameToCanvas as renderFrameToCanvasUtil,
+  renderSourceToImageData as renderSourceToImageDataUtil,
+} from './ViewerExport';
+import {
+  createFrameLoader,
+  buildEffectsState,
+  getPrerenderStats as getPrerenderStatsUtil,
+  PrerenderStats,
+  EFFECTS_DEBOUNCE_MS,
+} from './ViewerPrerender';
 
 // Wipe label constants (kept for wipe UI initialization)
 const DEFAULT_WIPE_LABEL_A = 'Original';
@@ -117,10 +143,6 @@ export class Viewer {
 
   // Color adjustments
   private colorAdjustments: ColorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
-
-  // Cached filter string for performance (avoid rebuilding every frame)
-  private cachedFilterString: string | null = null;
-  private cachedFilterAdjustments: ColorAdjustments | null = null;
 
   // Wipe comparison
   private wipeState: WipeState = { mode: 'off', position: 0.5, showOriginal: 'left' };
@@ -207,7 +229,9 @@ export class Viewer {
   private prerenderBuffer: PrerenderBufferManager | null = null;
   private prerenderCacheUpdateCallback: (() => void) | null = null;
   private effectsChangeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-  private static readonly EFFECTS_DEBOUNCE_MS = 50;
+
+  // Filter string cache for performance
+  private filterStringCache: FilterStringCache = { filterString: null, cachedAdjustments: null };
 
   // Cursor color callback for InfoPanel
   private cursorColorCallback: ((color: { r: number; g: number; b: number } | null, position: { x: number; y: number } | null) => void) | null = null;
@@ -493,37 +517,7 @@ export class Viewer {
   }
 
   private drawPlaceholder(): void {
-    const ctx = this.imageCtx;
-    const w = this.displayWidth;
-    const h = this.displayHeight;
-
-    // Clear first
-    ctx.clearRect(0, 0, w, h);
-
-    // Draw checkerboard (scale size with zoom)
-    const baseSize = 20;
-    const size = Math.max(4, Math.floor(baseSize * this.zoom));
-    for (let y = 0; y < h; y += size) {
-      for (let x = 0; x < w; x += size) {
-        const isLight = ((x / size) + (y / size)) % 2 === 0;
-        ctx.fillStyle = isLight ? '#2a2a2a' : '#222';
-        ctx.fillRect(x, y, size, size);
-      }
-    }
-
-    // Draw text (scale font with zoom)
-    const baseFontSize = 24;
-    const fontSize = Math.max(10, Math.floor(baseFontSize * this.zoom));
-    ctx.fillStyle = '#666';
-    ctx.font = `${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('Drop image or video here', w / 2, h / 2 - fontSize);
-
-    const smallFontSize = Math.max(8, Math.floor(14 * this.zoom));
-    ctx.font = `${smallFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
-    ctx.fillStyle = '#555';
-    ctx.fillText('Supports: PNG, JPEG, WebP, GIF, MP4, WebM', w / 2, h / 2 + smallFontSize);
+    drawPlaceholderUtil(this.imageCtx, this.displayWidth, this.displayHeight, this.zoom);
   }
 
   private bindEvents(): void {
@@ -611,45 +605,33 @@ export class Viewer {
     }
     this.lastCursorColorUpdate = now;
 
-    // Get canvas-relative coordinates
     const canvasRect = this.imageCanvas.getBoundingClientRect();
-    const x = e.clientX - canvasRect.left;
-    const y = e.clientY - canvasRect.top;
+    const position = getPixelCoordinates(
+      e.clientX,
+      e.clientY,
+      canvasRect,
+      this.displayWidth,
+      this.displayHeight
+    );
 
-    // Check if within canvas bounds
-    if (x < 0 || y < 0 || x > canvasRect.width || y > canvasRect.height) {
+    if (!position) {
       this.cursorColorCallback(null, null);
       return;
     }
 
-    // Scale to canvas pixel coordinates
-    const scaleX = this.displayWidth / canvasRect.width;
-    const scaleY = this.displayHeight / canvasRect.height;
-    const canvasX = Math.floor(x * scaleX);
-    const canvasY = Math.floor(y * scaleY);
-
-    // Get pixel color from canvas
     const imageData = this.getImageData();
     if (!imageData) {
       this.cursorColorCallback(null, null);
       return;
     }
 
-    // Calculate pixel index
-    const pixelIndex = (canvasY * imageData.width + canvasX) * 4;
-    if (pixelIndex < 0 || pixelIndex >= imageData.data.length - 3) {
+    const color = getPixelColor(imageData, position.x, position.y);
+    if (!color) {
       this.cursorColorCallback(null, null);
       return;
     }
 
-    const r = imageData.data[pixelIndex]!;
-    const g = imageData.data[pixelIndex + 1]!;
-    const b = imageData.data[pixelIndex + 2]!;
-
-    this.cursorColorCallback(
-      { r, g, b },
-      { x: canvasX, y: canvasY }
-    );
+    this.cursorColorCallback(color, position);
   };
 
   /**
@@ -712,38 +694,20 @@ export class Viewer {
    * and not an overlay UI element like curves control
    */
   private isViewerContentElement(element: HTMLElement): boolean {
-    // The element should be the container itself or one of its direct viewer elements
-    return (
-      element === this.container ||
-      element === this.imageCanvas ||
-      element === this.paintCanvas ||
-      element === this.cropOverlay ||
-      element === this.wipeElements?.wipeLine ||
-      element === this.canvasContainer ||
-      this.canvasContainer.contains(element)
+    return isViewerContentElementUtil(
+      element,
+      this.container,
+      this.canvasContainer,
+      this.imageCanvas,
+      this.paintCanvas,
+      this.cropOverlay,
+      this.wipeElements?.wipeLine ?? null
     );
   }
 
   private getCanvasPoint(clientX: number, clientY: number, pressure = 0.5): StrokePoint | null {
-    if (this.displayWidth === 0 || this.displayHeight === 0) return null;
-
     const rect = this.imageCanvas.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) return null;
-
-    // Get position relative to canvas
-    const canvasX = clientX - rect.left;
-    const canvasY = clientY - rect.top;
-
-    // Convert to normalized coordinates (0,0 = bottom-left for OpenRV compatibility)
-    // Account for CSS scaling
-    const scaleX = this.displayWidth / rect.width;
-    const scaleY = this.displayHeight / rect.height;
-
-    // Calculate normalized position and clamp to valid range
-    const x = Math.max(0, Math.min(1, (canvasX * scaleX) / this.displayWidth));
-    const y = Math.max(0, Math.min(1, 1 - (canvasY * scaleY) / this.displayHeight));
-
-    return { x, y, pressure };
+    return getCanvasPointUtil(clientX, clientY, rect, this.displayWidth, this.displayHeight, pressure);
   }
 
   private onPointerDown = (e: PointerEvent): void => {
@@ -909,9 +873,7 @@ export class Viewer {
     const pointers = Array.from(this.activePointers.values());
     if (pointers.length !== 2) return;
 
-    const dx = pointers[1]!.x - pointers[0]!.x;
-    const dy = pointers[1]!.y - pointers[0]!.y;
-    this.initialPinchDistance = Math.hypot(dx, dy);
+    this.initialPinchDistance = calculatePinchDistance(pointers);
     this.initialZoom = this.zoom;
 
     // Cancel any drawing in progress
@@ -931,21 +893,12 @@ export class Viewer {
 
   private handlePinchZoom(): void {
     const pointers = Array.from(this.activePointers.values());
-    if (pointers.length !== 2) return;
+    const currentDistance = calculatePinchDistance(pointers);
+    const newZoom = calculatePinchZoom(this.initialPinchDistance, currentDistance, this.initialZoom);
 
-    // Get current distance between pointers
-    const dx = pointers[1]!.x - pointers[0]!.x;
-    const dy = pointers[1]!.y - pointers[0]!.y;
-    const currentDistance = Math.hypot(dx, dy);
-
-    if (this.initialPinchDistance > 0 && currentDistance > 0) {
-      const scale = currentDistance / this.initialPinchDistance;
-      const newZoom = Math.max(0.1, Math.min(10, this.initialZoom * scale));
-
-      if (Math.abs(newZoom - this.zoom) > 0.01) {
-        this.zoom = newZoom;
-        this.scheduleRender();
-      }
+    if (newZoom !== null && Math.abs(newZoom - this.zoom) > 0.01) {
+      this.zoom = newZoom;
+      this.scheduleRender();
     }
   }
 
@@ -956,49 +909,27 @@ export class Viewer {
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
-    const oldZoom = this.zoom;
-    const newZoom = Math.max(0.1, Math.min(10, oldZoom * zoomFactor));
+    const newZoom = calculateWheelZoom(e.deltaY, this.zoom);
+    if (newZoom === null) return;
 
-    if (newZoom === oldZoom) return;
-
-    // Calculate old and new display sizes
     const containerWidth = rect.width || 640;
     const containerHeight = rect.height || 360;
 
-    const fitScale = Math.min(
-      containerWidth / this.sourceWidth,
-      containerHeight / this.sourceHeight,
-      1
+    const { panX, panY } = calculateZoomPan(
+      mouseX,
+      mouseY,
+      containerWidth,
+      containerHeight,
+      this.sourceWidth,
+      this.sourceHeight,
+      this.panX,
+      this.panY,
+      this.zoom,
+      newZoom
     );
 
-    const oldDisplayWidth = this.sourceWidth * fitScale * oldZoom;
-    const oldDisplayHeight = this.sourceHeight * fitScale * oldZoom;
-    const newDisplayWidth = this.sourceWidth * fitScale * newZoom;
-    const newDisplayHeight = this.sourceHeight * fitScale * newZoom;
-
-    // Canvas position before zoom
-    const oldCanvasLeft = (containerWidth - oldDisplayWidth) / 2 + this.panX;
-    const oldCanvasTop = (containerHeight - oldDisplayHeight) / 2 + this.panY;
-
-    // Mouse position relative to old canvas (in pixels)
-    const mouseOnCanvasX = mouseX - oldCanvasLeft;
-    const mouseOnCanvasY = mouseY - oldCanvasTop;
-
-    // Normalized position on canvas (0-1)
-    const normalizedX = mouseOnCanvasX / oldDisplayWidth;
-    const normalizedY = mouseOnCanvasY / oldDisplayHeight;
-
-    // After zoom, same normalized position should be under mouse
-    // newCanvasLeft + normalizedX * newDisplayWidth = mouseX
-    // (containerWidth - newDisplayWidth) / 2 + newPanX + normalizedX * newDisplayWidth = mouseX
-    // newPanX = mouseX - (containerWidth - newDisplayWidth) / 2 - normalizedX * newDisplayWidth
-
-    const newPanX = mouseX - (containerWidth - newDisplayWidth) / 2 - normalizedX * newDisplayWidth;
-    const newPanY = mouseY - (containerHeight - newDisplayHeight) / 2 - normalizedY * newDisplayHeight;
-
-    this.panX = newPanX;
-    this.panY = newPanY;
+    this.panX = panX;
+    this.panY = panY;
     this.zoom = newZoom;
     this.scheduleRender();
   };
@@ -1310,17 +1241,13 @@ export class Viewer {
       this.sourceWidth = 640;
       this.sourceHeight = 360;
 
-      // Calculate fit scale for placeholder
-      const fitScale = Math.min(
-        containerWidth / this.sourceWidth,
-        containerHeight / this.sourceHeight,
-        1
+      const { width: displayWidth, height: displayHeight } = calculateDisplayDimensions(
+        this.sourceWidth,
+        this.sourceHeight,
+        containerWidth,
+        containerHeight,
+        this.zoom
       );
-
-      // Apply zoom
-      const scale = fitScale * this.zoom;
-      const displayWidth = Math.max(1, Math.floor(this.sourceWidth * scale));
-      const displayHeight = Math.max(1, Math.floor(this.sourceHeight * scale));
 
       if (this.displayWidth !== displayWidth || this.displayHeight !== displayHeight) {
         this.setCanvasSize(displayWidth, displayHeight);
@@ -1335,17 +1262,13 @@ export class Viewer {
     this.sourceWidth = source.width;
     this.sourceHeight = source.height;
 
-    // Calculate fit scale
-    const fitScale = Math.min(
-      containerWidth / this.sourceWidth,
-      containerHeight / this.sourceHeight,
-      1
+    const { width: displayWidth, height: displayHeight } = calculateDisplayDimensions(
+      this.sourceWidth,
+      this.sourceHeight,
+      containerWidth,
+      containerHeight,
+      this.zoom
     );
-
-    // Apply zoom
-    const scale = fitScale * this.zoom;
-    const displayWidth = Math.max(1, Math.floor(this.sourceWidth * scale));
-    const displayHeight = Math.max(1, Math.floor(this.sourceHeight * scale));
 
     // Update canvas size if needed
     if (this.displayWidth !== displayWidth || this.displayHeight !== displayHeight) {
@@ -1433,64 +1356,7 @@ export class Viewer {
     displayWidth: number,
     displayHeight: number
   ): void {
-    const { rotation, flipH, flipV } = this.transform;
-
-    // If no transforms, just draw normally
-    if (rotation === 0 && !flipH && !flipV) {
-      ctx.drawImage(element, 0, 0, displayWidth, displayHeight);
-      return;
-    }
-
-    ctx.save();
-
-    // Move to center for transformations
-    ctx.translate(displayWidth / 2, displayHeight / 2);
-
-    // Apply rotation
-    if (rotation !== 0) {
-      ctx.rotate((rotation * Math.PI) / 180);
-    }
-
-    // Apply flips
-    const scaleX = flipH ? -1 : 1;
-    const scaleY = flipV ? -1 : 1;
-    if (flipH || flipV) {
-      ctx.scale(scaleX, scaleY);
-    }
-
-    // For 90/270 rotation, we need to swap the draw dimensions
-    let drawWidth = displayWidth;
-    let drawHeight = displayHeight;
-    if (rotation === 90 || rotation === 270) {
-      // When rotated 90/270, the source needs to fill the rotated space
-      // We need to scale to fit the rotated dimensions
-      let sourceAspect: number;
-      if (element instanceof HTMLVideoElement) {
-        sourceAspect = element.videoWidth / element.videoHeight;
-      } else if (element instanceof HTMLImageElement) {
-        sourceAspect = element.naturalWidth / element.naturalHeight;
-      } else if (element instanceof HTMLCanvasElement || (typeof OffscreenCanvas !== 'undefined' && element instanceof OffscreenCanvas)) {
-        sourceAspect = element.width / element.height;
-      } else {
-        sourceAspect = displayWidth / displayHeight; // Fallback
-      }
-      const targetAspect = displayHeight / displayWidth; // Swapped for rotation
-
-      if (sourceAspect > targetAspect) {
-        drawHeight = displayWidth;
-        drawWidth = displayWidth * sourceAspect;
-      } else {
-        drawWidth = displayHeight;
-        drawHeight = displayHeight / sourceAspect;
-      }
-      // Swap for rotated coordinate system
-      [drawWidth, drawHeight] = [drawHeight, drawWidth];
-    }
-
-    // Draw centered
-    ctx.drawImage(element, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
-
-    ctx.restore();
+    drawWithTransformUtil(ctx, element, displayWidth, displayHeight, this.transform);
   }
 
   private renderWithWipe(
@@ -1557,64 +1423,7 @@ export class Viewer {
   }
 
   private getCanvasFilterString(): string {
-    // Check if cached filter is still valid
-    if (this.cachedFilterString !== null && this.cachedFilterAdjustments !== null) {
-      const adj = this.colorAdjustments;
-      const cached = this.cachedFilterAdjustments;
-      if (
-        adj.brightness === cached.brightness &&
-        adj.exposure === cached.exposure &&
-        adj.contrast === cached.contrast &&
-        adj.saturation === cached.saturation &&
-        adj.temperature === cached.temperature &&
-        adj.tint === cached.tint
-      ) {
-        return this.cachedFilterString;
-      }
-    }
-
-    // Build new filter string
-    const filters: string[] = [];
-
-    const brightness = 1 + this.colorAdjustments.brightness;
-    if (brightness !== 1) {
-      filters.push(`brightness(${brightness.toFixed(3)})`);
-    }
-
-    if (this.colorAdjustments.exposure !== 0) {
-      const exposureBrightness = Math.pow(2, this.colorAdjustments.exposure);
-      filters.push(`brightness(${exposureBrightness.toFixed(3)})`);
-    }
-
-    if (this.colorAdjustments.contrast !== 1) {
-      filters.push(`contrast(${this.colorAdjustments.contrast.toFixed(3)})`);
-    }
-
-    if (this.colorAdjustments.saturation !== 1) {
-      filters.push(`saturate(${this.colorAdjustments.saturation.toFixed(3)})`);
-    }
-
-    if (this.colorAdjustments.temperature !== 0) {
-      const temp = this.colorAdjustments.temperature;
-      if (temp > 0) {
-        const sepia = Math.min(temp / 200, 0.3);
-        filters.push(`sepia(${sepia.toFixed(3)})`);
-      } else {
-        const hue = temp * 0.3;
-        filters.push(`hue-rotate(${hue.toFixed(1)}deg)`);
-      }
-    }
-
-    if (this.colorAdjustments.tint !== 0) {
-      const hue = this.colorAdjustments.tint * 0.5;
-      filters.push(`hue-rotate(${hue.toFixed(1)}deg)`);
-    }
-
-    // Cache the result
-    this.cachedFilterString = filters.length > 0 ? filters.join(' ') : 'none';
-    this.cachedFilterAdjustments = { ...this.colorAdjustments };
-
-    return this.cachedFilterString;
+    return getCanvasFilterStringUtil(this.colorAdjustments, this.filterStringCache);
   }
 
   private renderPaint(): void {
@@ -2125,22 +1934,7 @@ export class Viewer {
     width: number,
     height: number
   ): ImageData | null {
-    const source = this.session.getSourceByIndex(sourceIndex);
-    if (!source?.element) return null;
-
-    // Create temp canvas with willReadFrequently for getImageData performance
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = width;
-    tempCanvas.height = height;
-    const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
-    if (!tempCtx) return null;
-
-    // Draw source element
-    if (source.element instanceof HTMLImageElement || source.element instanceof HTMLVideoElement) {
-      tempCtx.drawImage(source.element, 0, 0, width, height);
-    }
-
-    return tempCtx.getImageData(0, 0, width, height);
+    return renderSourceToImageDataUtil(this.session, sourceIndex, width, height);
   }
 
   /**
@@ -2193,68 +1987,7 @@ export class Viewer {
 
   private renderCropOverlay(): void {
     if (!this.cropOverlay || !this.cropCtx) return;
-
-    const ctx = this.cropCtx;
-    const w = this.displayWidth;
-    const h = this.displayHeight;
-
-    // Clear overlay
-    ctx.clearRect(0, 0, w, h);
-
-    if (!this.cropState.enabled) return;
-
-    const region = this.cropState.region;
-    const cropX = region.x * w;
-    const cropY = region.y * h;
-    const cropW = region.width * w;
-    const cropH = region.height * h;
-
-    // Draw darkened areas outside crop region
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-
-    // Top
-    ctx.fillRect(0, 0, w, cropY);
-    // Bottom
-    ctx.fillRect(0, cropY + cropH, w, h - cropY - cropH);
-    // Left
-    ctx.fillRect(0, cropY, cropX, cropH);
-    // Right
-    ctx.fillRect(cropX + cropW, cropY, w - cropX - cropW, cropH);
-
-    // Draw crop border
-    ctx.strokeStyle = '#4a9eff';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(cropX, cropY, cropW, cropH);
-
-    // Draw corner handles
-    const handleSize = 8;
-    ctx.fillStyle = '#4a9eff';
-
-    // Top-left
-    ctx.fillRect(cropX - handleSize / 2, cropY - handleSize / 2, handleSize, handleSize);
-    // Top-right
-    ctx.fillRect(cropX + cropW - handleSize / 2, cropY - handleSize / 2, handleSize, handleSize);
-    // Bottom-left
-    ctx.fillRect(cropX - handleSize / 2, cropY + cropH - handleSize / 2, handleSize, handleSize);
-    // Bottom-right
-    ctx.fillRect(cropX + cropW - handleSize / 2, cropY + cropH - handleSize / 2, handleSize, handleSize);
-
-    // Draw rule of thirds guides
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.lineWidth = 1;
-
-    // Vertical lines
-    ctx.beginPath();
-    ctx.moveTo(cropX + cropW / 3, cropY);
-    ctx.lineTo(cropX + cropW / 3, cropY + cropH);
-    ctx.moveTo(cropX + (cropW * 2) / 3, cropY);
-    ctx.lineTo(cropX + (cropW * 2) / 3, cropY + cropH);
-    // Horizontal lines
-    ctx.moveTo(cropX, cropY + cropH / 3);
-    ctx.lineTo(cropX + cropW, cropY + cropH / 3);
-    ctx.moveTo(cropX, cropY + (cropH * 2) / 3);
-    ctx.lineTo(cropX + cropW, cropY + (cropH * 2) / 3);
-    ctx.stroke();
+    renderCropOverlayUtil(this.cropCtx, this.cropState, this.displayWidth, this.displayHeight);
   }
 
   private updateWipeLine(): void {
@@ -2306,61 +2039,7 @@ export class Viewer {
   }
 
   private applyColorFilters(): void {
-    // Build CSS filter string from color adjustments
-    // CSS filters: brightness, contrast, saturate, hue-rotate, etc.
-    const filters: string[] = [];
-
-    // Brightness: CSS uses 1 = normal, we use -1 to +1 offset
-    // Convert: brightness = 1 + adjustment
-    const brightness = 1 + this.colorAdjustments.brightness;
-    if (brightness !== 1) {
-      filters.push(`brightness(${brightness.toFixed(3)})`);
-    }
-
-    // Exposure: simulate with brightness (2^exposure)
-    if (this.colorAdjustments.exposure !== 0) {
-      const exposureBrightness = Math.pow(2, this.colorAdjustments.exposure);
-      filters.push(`brightness(${exposureBrightness.toFixed(3)})`);
-    }
-
-    // Contrast: CSS uses 1 = normal
-    if (this.colorAdjustments.contrast !== 1) {
-      filters.push(`contrast(${this.colorAdjustments.contrast.toFixed(3)})`);
-    }
-
-    // Saturation: CSS uses 1 = normal
-    if (this.colorAdjustments.saturation !== 1) {
-      filters.push(`saturate(${this.colorAdjustments.saturation.toFixed(3)})`);
-    }
-
-    // Temperature: approximate with hue-rotate and sepia
-    // Warm = positive temperature, Cold = negative
-    if (this.colorAdjustments.temperature !== 0) {
-      const temp = this.colorAdjustments.temperature;
-      if (temp > 0) {
-        // Warm: add sepia and slight hue rotation
-        const sepia = Math.min(temp / 200, 0.3);
-        filters.push(`sepia(${sepia.toFixed(3)})`);
-      } else {
-        // Cold: use hue rotation towards blue
-        const hue = temp * 0.3;
-        filters.push(`hue-rotate(${hue.toFixed(1)}deg)`);
-      }
-    }
-
-    // Tint: approximate with hue-rotate
-    if (this.colorAdjustments.tint !== 0) {
-      const hue = this.colorAdjustments.tint * 0.5;
-      filters.push(`hue-rotate(${hue.toFixed(1)}deg)`);
-    }
-
-    // Blur filter effect
-    if (this.filterSettings.blur > 0) {
-      filters.push(`blur(${this.filterSettings.blur.toFixed(1)}px)`);
-    }
-
-    // Apply to canvas container (affects both image and paint layers)
-    const filterString = filters.length > 0 ? filters.join(' ') : 'none';
+    const filterString = buildContainerFilterString(this.colorAdjustments, this.filterSettings.blur);
     this.canvasContainer.style.filter = filterString;
   }
 
@@ -2389,41 +2068,14 @@ export class Viewer {
   }
 
   private createExportCanvas(includeAnnotations: boolean): HTMLCanvasElement | null {
-    const source = this.session.currentSource;
-    if (!source?.element) return null;
-
-    // Create canvas at source resolution
-    const canvas = document.createElement('canvas');
-    canvas.width = source.width;
-    canvas.height = source.height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-
-    // Apply color filters
-    ctx.filter = this.getCanvasFilterString();
-
-    // Draw image
-    if (source.element instanceof HTMLImageElement || source.element instanceof HTMLVideoElement) {
-      ctx.drawImage(source.element, 0, 0, source.width, source.height);
-    }
-
-    // Reset filter for annotations
-    ctx.filter = 'none';
-
-    // Draw annotations if requested
-    if (includeAnnotations) {
-      const annotations = this.paintEngine.getAnnotationsWithGhost(this.session.currentFrame);
-      if (annotations.length > 0) {
-        // Render annotations at source resolution
-        this.paintRenderer.renderAnnotations(annotations, {
-          width: source.width,
-          height: source.height,
-        });
-        ctx.drawImage(this.paintRenderer.getCanvas(), 0, 0, source.width, source.height);
-      }
-    }
-
-    return canvas;
+    return createExportCanvasUtil(
+      this.session,
+      this.paintEngine,
+      this.paintRenderer,
+      this.getCanvasFilterString(),
+      includeAnnotations,
+      this.transform
+    );
   }
 
   /**
@@ -2431,84 +2083,15 @@ export class Viewer {
    * Seeks to the frame, renders, and returns the canvas
    */
   async renderFrameToCanvas(frame: number, includeAnnotations: boolean): Promise<HTMLCanvasElement | null> {
-    const source = this.session.currentSource;
-    if (!source) return null;
-
-    // Save current frame
-    const originalFrame = this.session.currentFrame;
-
-    // Seek to target frame
-    this.session.currentFrame = frame;
-
-    // For sequences, wait for the frame to load
-    if (source.type === 'sequence') {
-      await this.session.getSequenceFrameImage(frame);
-    }
-
-    // For video, seek and wait
-    if (source.type === 'video' && source.element instanceof HTMLVideoElement) {
-      const video = source.element;
-      const targetTime = (frame - 1) / this.session.fps;
-      if (Math.abs(video.currentTime - targetTime) > 0.01) {
-        video.currentTime = targetTime;
-        await new Promise<void>((resolve) => {
-          const onSeeked = () => {
-            video.removeEventListener('seeked', onSeeked);
-            resolve();
-          };
-          video.addEventListener('seeked', onSeeked);
-        });
-      }
-    }
-
-    // Get the element to render
-    let element: HTMLImageElement | HTMLVideoElement | undefined;
-    if (source.type === 'sequence') {
-      element = this.session.getSequenceFrameSync(frame) ?? undefined;
-    } else {
-      element = source.element;
-    }
-
-    if (!element) {
-      this.session.currentFrame = originalFrame;
-      return null;
-    }
-
-    // Create canvas at source resolution
-    const canvas = document.createElement('canvas');
-    canvas.width = source.width;
-    canvas.height = source.height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      this.session.currentFrame = originalFrame;
-      return null;
-    }
-
-    // Apply color filters
-    ctx.filter = this.getCanvasFilterString();
-
-    // Draw image with transforms
-    this.drawWithTransform(ctx, element, source.width, source.height);
-
-    // Reset filter for annotations
-    ctx.filter = 'none';
-
-    // Draw annotations if requested
-    if (includeAnnotations) {
-      const annotations = this.paintEngine.getAnnotationsWithGhost(frame);
-      if (annotations.length > 0) {
-        this.paintRenderer.renderAnnotations(annotations, {
-          width: source.width,
-          height: source.height,
-        });
-        ctx.drawImage(this.paintRenderer.getCanvas(), 0, 0, source.width, source.height);
-      }
-    }
-
-    // Restore original frame
-    this.session.currentFrame = originalFrame;
-
-    return canvas;
+    return renderFrameToCanvasUtil(
+      this.session,
+      this.paintEngine,
+      this.paintRenderer,
+      frame,
+      this.transform,
+      this.getCanvasFilterString(),
+      includeAnnotations
+    );
   }
 
   /**
@@ -2532,42 +2115,8 @@ export class Viewer {
       return;
     }
 
-    // Create frame loader that gets raw frames from session
-    const frameLoader = (frame: number): HTMLCanvasElement | OffscreenCanvas | HTMLImageElement | null => {
-      try {
-        const source = this.session.currentSource;
-        if (!source) return null;
-
-        if (source.type === 'sequence') {
-          // For sequences, get the frame image synchronously
-          // Verify required method exists
-          if (typeof this.session.getSequenceFrameSync !== 'function') {
-            return null;
-          }
-          const savedFrame = this.session.currentFrame;
-          try {
-            this.session.currentFrame = frame;
-            const frameImage = this.session.getSequenceFrameSync();
-            return frameImage || null;
-          } finally {
-            this.session.currentFrame = savedFrame;
-          }
-        } else if (source.type === 'video') {
-          // For videos with mediabunny, get cached frame canvas
-          if (typeof this.session.isUsingMediabunny === 'function' &&
-              this.session.isUsingMediabunny() &&
-              typeof this.session.getVideoFrameCanvas === 'function') {
-            return this.session.getVideoFrameCanvas(frame) || null;
-          }
-        }
-
-        return null;
-      } catch (error) {
-        // Silently handle errors - frame will be rendered live instead
-        console.warn(`Prerender frame loader error for frame ${frame}:`, error);
-        return null;
-      }
-    };
+    // Create frame loader using extracted utility
+    const frameLoader = createFrameLoader(this.session);
 
     this.prerenderBuffer = new PrerenderBufferManager(totalFrames, frameLoader);
     // Apply stored callback if any
@@ -2593,7 +2142,7 @@ export class Viewer {
     this.effectsChangeDebounceTimer = setTimeout(() => {
       this.effectsChangeDebounceTimer = null;
       this.doUpdateEffects();
-    }, Viewer.EFFECTS_DEBOUNCE_MS);
+    }, EFFECTS_DEBOUNCE_MS);
   }
 
   /**
@@ -2602,20 +2151,15 @@ export class Viewer {
   private doUpdateEffects(): void {
     if (!this.prerenderBuffer) return;
 
-    const effectsState: AllEffectsState = {
-      colorAdjustments: { ...this.colorAdjustments },
-      cdlValues: JSON.parse(JSON.stringify(this.cdlValues)),
-      curvesData: {
-        master: { ...this.curvesData.master, points: [...this.curvesData.master.points] },
-        red: { ...this.curvesData.red, points: [...this.curvesData.red.points] },
-        green: { ...this.curvesData.green, points: [...this.curvesData.green.points] },
-        blue: { ...this.curvesData.blue, points: [...this.curvesData.blue.points] },
-      },
-      filterSettings: { ...this.filterSettings },
-      channelMode: this.channelMode,
-      colorWheelsState: this.colorWheels.getState(),
-      hslQualifierState: this.hslQualifier.getState(),
-    };
+    const effectsState = buildEffectsState(
+      this.colorAdjustments,
+      this.cdlValues,
+      this.curvesData,
+      this.filterSettings,
+      this.channelMode,
+      this.colorWheels,
+      this.hslQualifier
+    );
 
     this.prerenderBuffer.updateEffects(effectsState);
   }
@@ -2787,43 +2331,14 @@ export class Viewer {
    * Get prerender buffer statistics for UI display
    * Returns null if prerender buffer is not active
    */
-  getPrerenderStats(): {
-    cacheSize: number;
-    totalFrames: number;
-    pendingRequests: number;
-    activeRequests: number;
-    memorySizeMB: number;
-    cacheHits: number;
-    cacheMisses: number;
-    hitRate: number;
-  } | null {
-    if (!this.prerenderBuffer) {
-      return null;
-    }
-
-    const stats = this.prerenderBuffer.getStats();
+  getPrerenderStats(): PrerenderStats | null {
     const source = this.session.currentSource;
-
-    // Calculate memory size (each cached frame is a canvas with RGBA data)
-    let memorySizeMB = 0;
-    if (source && stats.cacheSize > 0) {
-      const width = source.width || 0;
-      const height = source.height || 0;
-      const bytesPerPixel = 4; // RGBA
-      const bytesPerFrame = width * height * bytesPerPixel;
-      memorySizeMB = (bytesPerFrame * stats.cacheSize) / (1024 * 1024);
-    }
-
-    return {
-      cacheSize: stats.cacheSize,
-      totalFrames: this.session.frameCount,
-      pendingRequests: stats.pendingRequests,
-      activeRequests: stats.activeRequests,
-      memorySizeMB,
-      cacheHits: stats.cacheHits,
-      cacheMisses: stats.cacheMisses,
-      hitRate: stats.hitRate,
-    };
+    return getPrerenderStatsUtil(
+      this.prerenderBuffer,
+      this.session.frameCount,
+      source?.width ?? 0,
+      source?.height ?? 0
+    );
   }
 
   /**
