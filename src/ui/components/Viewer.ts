@@ -6,7 +6,7 @@ import { ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from './ColorControls';
 import { WipeState, WipeMode } from './WipeControl';
 import { Transform2D, DEFAULT_TRANSFORM } from './TransformControl';
 import { FilterSettings, DEFAULT_FILTER_SETTINGS } from './FilterControl';
-import { CropState, CropRegion, DEFAULT_CROP_STATE, DEFAULT_CROP_REGION } from './CropControl';
+import { CropState, CropRegion, DEFAULT_CROP_STATE, DEFAULT_CROP_REGION, ASPECT_RATIOS, MIN_CROP_FRACTION } from './CropControl';
 import { LUT3D } from '../../color/LUTLoader';
 import { WebGLLUTProcessor } from '../../color/WebGLLUT';
 import { CDLValues, DEFAULT_CDL, isDefaultCDL, applyCDLToImageData } from '../../color/CDL';
@@ -64,6 +64,7 @@ import {
   renderCropOverlay as renderCropOverlayUtil,
   drawPlaceholder as drawPlaceholderUtil,
   calculateDisplayDimensions,
+  isFullCropRegion,
 } from './ViewerRenderingUtils';
 import {
   createExportCanvas as createExportCanvasUtil,
@@ -173,6 +174,12 @@ export class Viewer {
   private cropState: CropState = { ...DEFAULT_CROP_STATE, region: { ...DEFAULT_CROP_REGION } };
   private cropOverlay: HTMLCanvasElement | null = null;
   private cropCtx: CanvasRenderingContext2D | null = null;
+  private isDraggingCrop = false;
+  private cropDragHandle: 'tl' | 'tr' | 'bl' | 'br' | 'top' | 'bottom' | 'left' | 'right' | 'move' | null = null;
+  private cropDragStart: { x: number; y: number; region: CropRegion } | null = null;
+  private cropDragPointerId: number | null = null;
+  private cropRegionChangedCallback: ((region: CropRegion) => void) | null = null;
+  private isCropPanelOpen = false;
 
   // Safe areas overlay
   private safeAreasOverlay: SafeAreasOverlay;
@@ -726,6 +733,11 @@ export class Viewer {
       return;
     }
 
+    // Check for crop handle dragging
+    if (this.handleCropPointerDown(e)) {
+      return;
+    }
+
     this.activePointers.set(e.pointerId, {
       pointerId: e.pointerId,
       x: e.clientX,
@@ -784,6 +796,18 @@ export class Viewer {
       return;
     }
 
+    // Handle crop dragging
+    if (this.isDraggingCrop) {
+      this.handleCropPointerMove(e);
+      return;
+    }
+
+    // Update cursor for crop handles on hover (only when panel is open / editing)
+    if (this.cropState.enabled && this.isCropPanelOpen && !this.activePointers.size) {
+      const handle = this.getCropHandleAtPoint(e.clientX, e.clientY);
+      this.updateCropCursor(handle);
+    }
+
     if (!this.activePointers.has(e.pointerId)) return;
 
     // Update pointer position
@@ -830,6 +854,12 @@ export class Viewer {
     // Handle wipe dragging end
     if (this.isDraggingWipe) {
       this.handleWipePointerUp();
+      return;
+    }
+
+    // Handle crop dragging end
+    if (this.isDraggingCrop) {
+      this.handleCropPointerUp();
       return;
     }
 
@@ -1278,6 +1308,10 @@ export class Viewer {
     // Clear canvas
     this.imageCtx.clearRect(0, 0, displayWidth, displayHeight);
 
+    // Check if crop clipping should be applied (will be done AFTER all rendering)
+    // Note: We can't use ctx.clip() because putImageData() ignores clip regions
+    const cropClipActive = this.cropState.enabled && !isFullCropRegion(this.cropState.region);
+
     // Try prerendered cache first during playback for smooth performance with effects
     if (this.session.isPlaying && this.prerenderBuffer) {
       const currentFrame = this.session.currentFrame;
@@ -1285,6 +1319,10 @@ export class Viewer {
       if (cached) {
         // Draw cached pre-rendered frame scaled to display size
         this.imageCtx.drawImage(cached.canvas, 0, 0, displayWidth, displayHeight);
+        // Apply crop clipping by clearing outside areas
+        if (cropClipActive) {
+          this.clearOutsideCropRegion(displayWidth, displayHeight);
+        }
         this.updateCanvasPosition();
         this.updateWipeLine();
         // Trigger preloading of nearby frames
@@ -1342,6 +1380,12 @@ export class Viewer {
     // Apply batched pixel-level effects (CDL, curves, sharpen, channel isolation)
     // This uses a single getImageData/putImageData pair for better performance
     this.applyBatchedPixelEffects(this.imageCtx, displayWidth, displayHeight);
+
+    // Apply crop clipping by clearing areas outside the crop region
+    // Note: This is done AFTER all effects because putImageData() ignores ctx.clip()
+    if (cropClipActive) {
+      this.clearOutsideCropRegion(displayWidth, displayHeight);
+    }
 
     this.updateCanvasPosition();
     this.updateWipeLine();
@@ -1987,7 +2031,59 @@ export class Viewer {
 
   private renderCropOverlay(): void {
     if (!this.cropOverlay || !this.cropCtx) return;
-    renderCropOverlayUtil(this.cropCtx, this.cropState, this.displayWidth, this.displayHeight);
+    // Show full editing overlay when panel is open or dragging, subtle indicator otherwise
+    const isEditing = this.isCropPanelOpen || this.isDraggingCrop;
+    renderCropOverlayUtil(this.cropCtx, this.cropState, this.displayWidth, this.displayHeight, isEditing);
+  }
+
+  /**
+   * Clear pixels outside the crop region to implement pixel-level clipping.
+   * This approach is used instead of ctx.clip() because putImageData() ignores clip regions.
+   */
+  private clearOutsideCropRegion(displayWidth: number, displayHeight: number): void {
+    const { x, y, width, height } = this.cropState.region;
+    // Use floor for positions and ceil for the far edge to avoid 1px gaps
+    const cropX = Math.floor(x * displayWidth);
+    const cropY = Math.floor(y * displayHeight);
+    const cropRight = Math.ceil((x + width) * displayWidth);
+    const cropBottom = Math.ceil((y + height) * displayHeight);
+    const cropH = cropBottom - cropY;
+
+    // Clear the four regions outside the crop area
+    // Top
+    if (cropY > 0) {
+      this.imageCtx.clearRect(0, 0, displayWidth, cropY);
+    }
+    // Bottom
+    if (cropBottom < displayHeight) {
+      this.imageCtx.clearRect(0, cropBottom, displayWidth, displayHeight - cropBottom);
+    }
+    // Left
+    if (cropX > 0) {
+      this.imageCtx.clearRect(0, cropY, cropX, cropH);
+    }
+    // Right
+    if (cropRight < displayWidth) {
+      this.imageCtx.clearRect(cropRight, cropY, displayWidth - cropRight, cropH);
+    }
+  }
+
+  /**
+   * Set whether the crop panel is currently open (for overlay rendering).
+   */
+  setCropPanelOpen(isOpen: boolean): void {
+    this.isCropPanelOpen = isOpen;
+    this.renderCropOverlay();
+  }
+
+  /**
+   * Register a callback for crop region changes from interactive handle dragging.
+   * Uses single-consumer callback pattern consistent with other Viewer callbacks
+   * (e.g., cursorColorCallback, prerenderCacheUpdateCallback).
+   * Only one listener is supported — the App wires this to CropControl.setCropRegion.
+   */
+  setOnCropRegionChanged(callback: ((region: CropRegion) => void) | null): void {
+    this.cropRegionChangedCallback = callback;
   }
 
   private updateWipeLine(): void {
@@ -2038,6 +2134,274 @@ export class Viewer {
     this.isDraggingWipe = false;
   }
 
+  // Crop dragging methods
+  private getCropHandleAtPoint(clientX: number, clientY: number): typeof this.cropDragHandle {
+    if (!this.cropState.enabled || !this.cropOverlay || !this.isCropPanelOpen) return null;
+
+    const rect = this.cropOverlay.getBoundingClientRect();
+    const x = (clientX - rect.left) / rect.width;
+    const y = (clientY - rect.top) / rect.height;
+
+    const region = this.cropState.region;
+    // Hit area is 16px (2x the visual 8px handle in renderCropOverlay) for easier targeting.
+    // Use separate X/Y thresholds since normalized coords scale differently on non-square canvases.
+    const handleSizeX = 16 / rect.width;
+    const handleSizeY = 16 / rect.height;
+
+    // Check corners first (higher priority)
+    // Top-left
+    if (Math.abs(x - region.x) < handleSizeX && Math.abs(y - region.y) < handleSizeY) {
+      return 'tl';
+    }
+    // Top-right
+    if (Math.abs(x - (region.x + region.width)) < handleSizeX && Math.abs(y - region.y) < handleSizeY) {
+      return 'tr';
+    }
+    // Bottom-left
+    if (Math.abs(x - region.x) < handleSizeX && Math.abs(y - (region.y + region.height)) < handleSizeY) {
+      return 'bl';
+    }
+    // Bottom-right
+    if (Math.abs(x - (region.x + region.width)) < handleSizeX && Math.abs(y - (region.y + region.height)) < handleSizeY) {
+      return 'br';
+    }
+
+    // Check edges (only when region is large enough to have distinct edge zones)
+    const edgeThresholdX = handleSizeX / 2;
+    const edgeThresholdY = handleSizeY / 2;
+    const hasHorizontalEdge = region.width > 2 * handleSizeX;
+    const hasVerticalEdge = region.height > 2 * handleSizeY;
+
+    // Top edge
+    if (hasHorizontalEdge &&
+        x > region.x + handleSizeX && x < region.x + region.width - handleSizeX &&
+        Math.abs(y - region.y) < edgeThresholdY) {
+      return 'top';
+    }
+    // Bottom edge
+    if (hasHorizontalEdge &&
+        x > region.x + handleSizeX && x < region.x + region.width - handleSizeX &&
+        Math.abs(y - (region.y + region.height)) < edgeThresholdY) {
+      return 'bottom';
+    }
+    // Left edge
+    if (hasVerticalEdge &&
+        y > region.y + handleSizeY && y < region.y + region.height - handleSizeY &&
+        Math.abs(x - region.x) < edgeThresholdX) {
+      return 'left';
+    }
+    // Right edge
+    if (hasVerticalEdge &&
+        y > region.y + handleSizeY && y < region.y + region.height - handleSizeY &&
+        Math.abs(x - (region.x + region.width)) < edgeThresholdX) {
+      return 'right';
+    }
+
+    // Check if inside region (for moving)
+    if (x > region.x && x < region.x + region.width &&
+        y > region.y && y < region.y + region.height) {
+      return 'move';
+    }
+
+    return null;
+  }
+
+  private handleCropPointerDown(e: PointerEvent): boolean {
+    // Only intercept events when the crop panel is open (editing mode).
+    // When closed, let other tools (pan, zoom, paint, wipe) handle the event.
+    if (!this.cropState.enabled || !this.cropOverlay || !this.isCropPanelOpen) return false;
+
+    const handle = this.getCropHandleAtPoint(e.clientX, e.clientY);
+    if (!handle) return false;
+
+    this.isDraggingCrop = true;
+    this.cropDragHandle = handle;
+    this.cropDragPointerId = e.pointerId;
+
+    // Capture pointer so drag continues even if cursor leaves the container
+    this.container.setPointerCapture(e.pointerId);
+
+    const rect = this.cropOverlay.getBoundingClientRect();
+    this.cropDragStart = {
+      x: (e.clientX - rect.left) / rect.width,
+      y: (e.clientY - rect.top) / rect.height,
+      region: { ...this.cropState.region },
+    };
+
+    // Set appropriate cursor
+    this.updateCropCursor(handle);
+
+    return true;
+  }
+
+  private handleCropPointerMove(e: PointerEvent): void {
+    if (!this.isDraggingCrop || !this.cropDragStart || !this.cropDragHandle || !this.cropOverlay) return;
+
+    const rect = this.cropOverlay.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+
+    const dx = x - this.cropDragStart.x;
+    const dy = y - this.cropDragStart.y;
+    const startRegion = this.cropDragStart.region;
+
+    let newRegion: CropRegion = { ...startRegion };
+
+    switch (this.cropDragHandle) {
+      case 'move':
+        newRegion.x = Math.max(0, Math.min(1 - startRegion.width, startRegion.x + dx));
+        newRegion.y = Math.max(0, Math.min(1 - startRegion.height, startRegion.y + dy));
+        break;
+      case 'tl':
+        newRegion.x = Math.max(0, Math.min(startRegion.x + startRegion.width - MIN_CROP_FRACTION, startRegion.x + dx));
+        newRegion.y = Math.max(0, Math.min(startRegion.y + startRegion.height - MIN_CROP_FRACTION, startRegion.y + dy));
+        newRegion.width = startRegion.x + startRegion.width - newRegion.x;
+        newRegion.height = startRegion.y + startRegion.height - newRegion.y;
+        break;
+      case 'tr':
+        newRegion.width = Math.max(MIN_CROP_FRACTION, Math.min(1 - startRegion.x, startRegion.width + dx));
+        newRegion.y = Math.max(0, Math.min(startRegion.y + startRegion.height - MIN_CROP_FRACTION, startRegion.y + dy));
+        newRegion.height = startRegion.y + startRegion.height - newRegion.y;
+        break;
+      case 'bl':
+        newRegion.x = Math.max(0, Math.min(startRegion.x + startRegion.width - MIN_CROP_FRACTION, startRegion.x + dx));
+        newRegion.width = startRegion.x + startRegion.width - newRegion.x;
+        newRegion.height = Math.max(MIN_CROP_FRACTION, Math.min(1 - startRegion.y, startRegion.height + dy));
+        break;
+      case 'br':
+        newRegion.width = Math.max(MIN_CROP_FRACTION, Math.min(1 - startRegion.x, startRegion.width + dx));
+        newRegion.height = Math.max(MIN_CROP_FRACTION, Math.min(1 - startRegion.y, startRegion.height + dy));
+        break;
+      case 'top':
+        newRegion.y = Math.max(0, Math.min(startRegion.y + startRegion.height - MIN_CROP_FRACTION, startRegion.y + dy));
+        newRegion.height = startRegion.y + startRegion.height - newRegion.y;
+        break;
+      case 'bottom':
+        newRegion.height = Math.max(MIN_CROP_FRACTION, Math.min(1 - startRegion.y, startRegion.height + dy));
+        break;
+      case 'left':
+        newRegion.x = Math.max(0, Math.min(startRegion.x + startRegion.width - MIN_CROP_FRACTION, startRegion.x + dx));
+        newRegion.width = startRegion.x + startRegion.width - newRegion.x;
+        break;
+      case 'right':
+        newRegion.width = Math.max(MIN_CROP_FRACTION, Math.min(1 - startRegion.x, startRegion.width + dx));
+        break;
+    }
+
+    // Apply aspect ratio constraint if set
+    if (this.cropState.aspectRatio && this.cropDragHandle !== 'move') {
+      newRegion = this.constrainToAspectRatio(newRegion, this.cropDragHandle);
+    }
+
+    // Enforce minimum crop size to prevent zero-area regions
+    newRegion.width = Math.max(MIN_CROP_FRACTION, newRegion.width);
+    newRegion.height = Math.max(MIN_CROP_FRACTION, newRegion.height);
+
+    this.cropState.region = newRegion;
+    this.scheduleRender();
+  }
+
+  private constrainToAspectRatio(region: CropRegion, handle: typeof this.cropDragHandle): CropRegion {
+    // Look up target pixel ratio from the shared ASPECT_RATIOS constant
+    const arEntry = ASPECT_RATIOS.find(a => a.value === this.cropState.aspectRatio);
+    if (!arEntry?.ratio) return region;
+
+    // Account for source aspect ratio: normalized coords don't map 1:1 to pixels
+    const source = this.session.currentSource;
+    const sourceWidth = source?.width ?? 1;
+    const sourceHeight = source?.height ?? 1;
+    if (sourceWidth <= 0 || sourceHeight <= 0) return region;
+    const sourceAspect = sourceWidth / sourceHeight;
+
+    // Convert target pixel ratio to normalized coordinate ratio
+    const normalizedTargetRatio = arEntry.ratio / sourceAspect;
+    if (!Number.isFinite(normalizedTargetRatio) || normalizedTargetRatio <= 0) return region;
+
+    const result = { ...region };
+
+    // Determine whether to adjust width or height based on the handle being dragged.
+    // Edge drags: adjust the dimension perpendicular to the edge being dragged.
+    // Corner drags: adjust whichever dimension is "too large" relative to the ratio.
+    const adjustWidth =
+      (handle === 'top' || handle === 'bottom')
+        ? true  // Vertical edge: user controls height, width follows
+        : (handle === 'left' || handle === 'right')
+          ? false  // Horizontal edge: user controls width, height follows
+          : (result.width / result.height > normalizedTargetRatio);  // Corner: shrink the larger dimension
+
+    if (adjustWidth) {
+      result.width = result.height * normalizedTargetRatio;
+    } else {
+      result.height = result.width / normalizedTargetRatio;
+    }
+
+    // For edge drags, preserve the anchor (the fixed opposite edge)
+    if (handle === 'left' || handle === 'tl' || handle === 'bl') {
+      const rightEdge = region.x + region.width;
+      result.x = rightEdge - result.width;
+    }
+    if (handle === 'top' || handle === 'tl' || handle === 'tr') {
+      const bottomEdge = region.y + region.height;
+      result.y = bottomEdge - result.height;
+    }
+
+    // Clamp to bounds while preserving aspect ratio (single pass).
+    // Compute the maximum size that fits within [0,1] at the current position,
+    // then take the minimum of current size and max allowed size.
+    const maxW = Math.min(result.width, 1 - Math.max(0, result.x));
+    const maxH = Math.min(result.height, 1 - Math.max(0, result.y));
+
+    // The constraining dimension is whichever hits the bound first
+    const wFromH = maxH * normalizedTargetRatio;
+    const hFromW = maxW / normalizedTargetRatio;
+
+    if (maxW < result.width || maxH < result.height) {
+      if (wFromH <= maxW) {
+        result.width = wFromH;
+        result.height = maxH;
+      } else {
+        result.width = maxW;
+        result.height = hFromW;
+      }
+    }
+
+    // Final position clamp
+    result.x = Math.max(0, Math.min(result.x, 1 - result.width));
+    result.y = Math.max(0, Math.min(result.y, 1 - result.height));
+
+    return result;
+  }
+
+  private handleCropPointerUp(): void {
+    if (this.isDraggingCrop && this.cropRegionChangedCallback) {
+      this.cropRegionChangedCallback({ ...this.cropState.region });
+    }
+    // Release pointer capture
+    if (this.cropDragPointerId !== null) {
+      try { this.container.releasePointerCapture(this.cropDragPointerId); } catch (e) { if (typeof console !== 'undefined') console.debug('Pointer capture already released', e); }
+      this.cropDragPointerId = null;
+    }
+    this.isDraggingCrop = false;
+    this.cropDragHandle = null;
+    this.cropDragStart = null;
+    this.container.style.cursor = 'grab';
+  }
+
+  private updateCropCursor(handle: typeof this.cropDragHandle): void {
+    const cursors: Record<string, string> = {
+      'tl': 'nwse-resize',
+      'br': 'nwse-resize',
+      'tr': 'nesw-resize',
+      'bl': 'nesw-resize',
+      'top': 'ns-resize',
+      'bottom': 'ns-resize',
+      'left': 'ew-resize',
+      'right': 'ew-resize',
+      'move': 'move',
+    };
+    this.container.style.cursor = handle ? (cursors[handle] || 'default') : 'default';
+  }
+
   private applyColorFilters(): void {
     const filterString = buildContainerFilterString(this.colorAdjustments, this.filterSettings.blur);
     this.canvasContainer.style.filter = filterString;
@@ -2068,13 +2432,15 @@ export class Viewer {
   }
 
   createExportCanvas(includeAnnotations: boolean): HTMLCanvasElement | null {
+    const cropRegion = this.cropState.enabled ? this.cropState.region : undefined;
     return createExportCanvasUtil(
       this.session,
       this.paintEngine,
       this.paintRenderer,
       this.getCanvasFilterString(),
       includeAnnotations,
-      this.transform
+      this.transform,
+      cropRegion
     );
   }
 
@@ -2083,6 +2449,7 @@ export class Viewer {
    * Seeks to the frame, renders, and returns the canvas
    */
   async renderFrameToCanvas(frame: number, includeAnnotations: boolean): Promise<HTMLCanvasElement | null> {
+    const cropRegion = this.cropState.enabled ? this.cropState.region : undefined;
     return renderFrameToCanvasUtil(
       this.session,
       this.paintEngine,
@@ -2090,7 +2457,8 @@ export class Viewer {
       frame,
       this.transform,
       this.getCanvasFilterString(),
-      includeAnnotations
+      includeAnnotations,
+      cropRegion
     );
   }
 
@@ -2222,6 +2590,16 @@ export class Viewer {
     this.zebraStripes.dispose();
     this.spotlightOverlay.dispose();
     this.hslQualifier.dispose();
+
+    // Cleanup crop drag state
+    if (this.isDraggingCrop && this.cropDragPointerId !== null) {
+      try { this.container.releasePointerCapture(this.cropDragPointerId); } catch (e) { if (typeof console !== 'undefined') console.debug('Pointer capture already released', e); }
+    }
+    this.isDraggingCrop = false;
+    this.cropDragHandle = null;
+    this.cropDragStart = null;
+    this.cropDragPointerId = null;
+    this.cropRegionChangedCallback = null;
 
     // Cleanup wipe elements
     this.wipeElements = null;

@@ -360,6 +360,15 @@ export class App {
     this.cropControl.on('cropModeToggled', (enabled) => {
       this.viewer.setCropEnabled(enabled);
     });
+    this.cropControl.on('panelToggled', (isOpen) => {
+      this.viewer.setCropPanelOpen(isOpen);
+    });
+
+    // Handle crop region changes from Viewer (when user drags crop handles)
+    this.viewer.setOnCropRegionChanged((region) => {
+      this.cropControl.setCropRegion(region);
+      this.syncGTOStore();
+    });
 
     // Initialize CDL control
     this.cdlControl = new CDLControl();
@@ -634,9 +643,20 @@ export class App {
       this.updateVectorscope();
       this.updateInfoPanel();
     });
-    this.session.on('sourceChanged', () => {
+    this.session.on('sourceLoaded', () => {
       this.updateInfoPanel();
-      // Small delay to allow canvas to render
+      // Update crop control with new source dimensions for correct aspect ratio computation
+      const source = this.session.currentSource;
+      if (source) {
+        this.cropControl.setSourceDimensions(source.width, source.height);
+      }
+      // GTO store and stack updates
+      if (!this.session.gtoData) {
+        this.gtoStore = null;
+      }
+      this.updateStackControlSources();
+      this.viewer.initPrerenderBuffer();
+      // Small delay to allow canvas to render before updating scopes
       setTimeout(() => {
         this.updateHistogram();
         this.updateWaveform();
@@ -1019,17 +1039,6 @@ export class App {
       }
     });
 
-    this.session.on('sourceLoaded', () => {
-      if (!this.session.gtoData) {
-        this.gtoStore = null;
-      }
-      // Update available sources for stack control
-      this.updateStackControlSources();
-
-      // Initialize prerender buffer for the new source
-      this.viewer.initPrerenderBuffer();
-    });
-
     this.session.on('frameChanged', () => this.syncGTOStore());
     this.session.on('inOutChanged', () => this.syncGTOStore());
     this.session.on('marksChanged', () => this.syncGTOStore());
@@ -1260,6 +1269,12 @@ export class App {
       'panel.close': () => {
         if (this.colorControls) {
           this.colorControls.hide();
+        }
+        if (this.cropControl) {
+          this.cropControl.hidePanel();
+          if (this.cropControl.getCropState().enabled) {
+            this.cropControl.toggle();
+          }
         }
       },
     };

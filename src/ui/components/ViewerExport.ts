@@ -7,11 +7,118 @@ import { Session } from '../../core/session/Session';
 import { PaintEngine } from '../../paint/PaintEngine';
 import { PaintRenderer } from '../../paint/PaintRenderer';
 import { Transform2D } from './TransformControl';
-import { drawWithTransform } from './ViewerRenderingUtils';
+import { CropRegion } from './CropControl';
+import {
+  drawWithTransformFill,
+  isFullCropRegion,
+  getEffectiveDimensions,
+} from './ViewerRenderingUtils';
+
+/**
+ * Shared helper: draw an element onto a context with transform and/or crop applied.
+ * Handles the four cases (transform+crop, crop-only, transform-only, neither)
+ * in a single function to avoid code duplication.
+ */
+function drawElementWithTransformAndCrop(
+  ctx: CanvasRenderingContext2D,
+  element: CanvasImageSource,
+  sourceWidth: number,
+  sourceHeight: number,
+  effectiveWidth: number,
+  effectiveHeight: number,
+  outputWidth: number,
+  outputHeight: number,
+  transform: Transform2D | undefined,
+  crop: { x: number; y: number } | null,
+  filterString?: string
+): void {
+  const hasTransform = transform && (transform.rotation !== 0 || transform.flipH || transform.flipV);
+
+  if (crop && hasTransform) {
+    // Transform with crop: render transformed to temp canvas, then extract crop
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = effectiveWidth;
+    tempCanvas.height = effectiveHeight;
+    const tempCtx = tempCanvas.getContext('2d');
+    if (tempCtx) {
+      if (filterString) {
+        tempCtx.filter = filterString;
+      }
+      drawWithTransformFill(tempCtx, element, effectiveWidth, effectiveHeight, transform!);
+      // Extract crop from temp canvas. Temporarily disable filter on ctx to avoid
+      // double-applying it (filter was already applied on tempCtx).
+      const prevFilter = ctx.filter;
+      ctx.filter = 'none';
+      ctx.drawImage(tempCanvas, crop.x, crop.y, outputWidth, outputHeight, 0, 0, outputWidth, outputHeight);
+      ctx.filter = prevFilter;
+    }
+  } else if (crop) {
+    // Crop without transform: direct cropped draw from source.
+    // Note: ctx.filter is already set by the caller — drawImage will apply it during this draw call.
+    ctx.drawImage(element, crop.x, crop.y, outputWidth, outputHeight, 0, 0, outputWidth, outputHeight);
+  } else if (hasTransform) {
+    // Transform without crop
+    drawWithTransformFill(ctx, element, effectiveWidth, effectiveHeight, transform!);
+  } else {
+    // No transform, no crop: draw at source dimensions
+    ctx.drawImage(element, 0, 0, sourceWidth, sourceHeight);
+  }
+}
+
+interface ExportParams {
+  effectiveWidth: number;
+  effectiveHeight: number;
+  outputWidth: number;
+  outputHeight: number;
+  crop: { x: number; y: number } | null;
+}
+
+/**
+ * Compute export parameters from source dimensions, transform, and crop region.
+ */
+function computeExportParams(
+  sourceWidth: number,
+  sourceHeight: number,
+  transform: Transform2D | undefined,
+  cropRegion: CropRegion | undefined
+): ExportParams {
+  // Clamp rotation to valid values to handle potentially corrupted session data
+  const rawRotation = transform?.rotation ?? 0;
+  const validRotations: (0 | 90 | 180 | 270)[] = [0, 90, 180, 270];
+  const isValidRotation = validRotations.includes(rawRotation as 0 | 90 | 180 | 270);
+  if (!isValidRotation && rawRotation !== 0) {
+    console.warn(`[ViewerExport] Invalid rotation value ${rawRotation}° clamped to 0°. Expected one of: 0, 90, 180, 270.`);
+  }
+  const rotation = isValidRotation ? (rawRotation as 0 | 90 | 180 | 270) : 0;
+
+  const { width: effectiveWidth, height: effectiveHeight } = getEffectiveDimensions(
+    sourceWidth,
+    sourceHeight,
+    rotation
+  );
+
+  const hasCrop = !!(cropRegion && !isFullCropRegion(cropRegion));
+  const crop = hasCrop ? cropRegion : null;
+
+  const outputWidth = crop
+    ? Math.round(crop.width * effectiveWidth)
+    : effectiveWidth;
+  const outputHeight = crop
+    ? Math.round(crop.height * effectiveHeight)
+    : effectiveHeight;
+
+  const cropOffset = crop ? {
+    x: Math.round(crop.x * effectiveWidth),
+    y: Math.round(crop.y * effectiveHeight),
+  } : null;
+
+  return { effectiveWidth, effectiveHeight, outputWidth, outputHeight, crop: cropOffset };
+}
 
 /**
  * Create an export canvas with the current frame at source resolution.
- * Applies color filters, transforms, and optionally includes paint annotations.
+ * Applies color filters, transforms, crop, and optionally includes paint annotations.
+ * Crop is applied in display space (after transforms), matching what the user sees.
  */
 export function createExportCanvas(
   session: Session,
@@ -19,28 +126,34 @@ export function createExportCanvas(
   paintRenderer: PaintRenderer,
   filterString: string,
   includeAnnotations: boolean,
-  transform?: Transform2D
+  transform?: Transform2D,
+  cropRegion?: CropRegion
 ): HTMLCanvasElement | null {
   const source = session.currentSource;
   if (!source?.element) return null;
 
-  // Create canvas at source resolution
+  const { effectiveWidth, effectiveHeight, outputWidth, outputHeight, crop } =
+    computeExportParams(source.width, source.height, transform, cropRegion);
+
+  // Create canvas at output resolution (cropped or full)
   const canvas = document.createElement('canvas');
-  canvas.width = source.width;
-  canvas.height = source.height;
+  canvas.width = outputWidth;
+  canvas.height = outputHeight;
   const ctx = canvas.getContext('2d');
   if (!ctx) return null;
 
   // Apply color filters
   ctx.filter = filterString;
 
-  // Draw image with optional transforms
+  // Draw image with optional transforms and crop
   if (source.element instanceof HTMLImageElement || source.element instanceof HTMLVideoElement) {
-    if (transform) {
-      drawWithTransform(ctx, source.element, source.width, source.height, transform);
-    } else {
-      ctx.drawImage(source.element, 0, 0, source.width, source.height);
-    }
+    drawElementWithTransformAndCrop(
+      ctx, source.element,
+      source.width, source.height,
+      effectiveWidth, effectiveHeight,
+      outputWidth, outputHeight,
+      transform, crop, filterString
+    );
   }
 
   // Reset filter for annotations
@@ -50,12 +163,18 @@ export function createExportCanvas(
   if (includeAnnotations) {
     const annotations = paintEngine.getAnnotationsWithGhost(session.currentFrame);
     if (annotations.length > 0) {
-      // Render annotations at source resolution
       paintRenderer.renderAnnotations(annotations, {
         width: source.width,
         height: source.height,
       });
-      ctx.drawImage(paintRenderer.getCanvas(), 0, 0, source.width, source.height);
+
+      drawElementWithTransformAndCrop(
+        ctx, paintRenderer.getCanvas(),
+        source.width, source.height,
+        effectiveWidth, effectiveHeight,
+        outputWidth, outputHeight,
+        transform, crop
+      );
     }
   }
 
@@ -65,6 +184,7 @@ export function createExportCanvas(
 /**
  * Render a specific frame to a canvas for sequence export.
  * Seeks to the frame, renders, and returns the canvas.
+ * Crop is applied in display space (after transforms), matching what the user sees.
  */
 export async function renderFrameToCanvas(
   session: Session,
@@ -73,7 +193,8 @@ export async function renderFrameToCanvas(
   frame: number,
   transform: Transform2D,
   filterString: string,
-  includeAnnotations: boolean
+  includeAnnotations: boolean,
+  cropRegion?: CropRegion
 ): Promise<HTMLCanvasElement | null> {
   const source = session.currentSource;
   if (!source) return null;
@@ -118,10 +239,13 @@ export async function renderFrameToCanvas(
       return null;
     }
 
-    // Create canvas at source resolution
+    const { effectiveWidth, effectiveHeight, outputWidth, outputHeight, crop } =
+      computeExportParams(source.width, source.height, transform, cropRegion);
+
+    // Create canvas at output resolution (cropped or full)
     const canvas = document.createElement('canvas');
-    canvas.width = source.width;
-    canvas.height = source.height;
+    canvas.width = outputWidth;
+    canvas.height = outputHeight;
     const ctx = canvas.getContext('2d');
     if (!ctx) {
       return null;
@@ -130,8 +254,14 @@ export async function renderFrameToCanvas(
     // Apply color filters
     ctx.filter = filterString;
 
-    // Draw image with transforms
-    drawWithTransform(ctx, element, source.width, source.height, transform);
+    // Draw image with transforms and optional crop
+    drawElementWithTransformAndCrop(
+      ctx, element,
+      source.width, source.height,
+      effectiveWidth, effectiveHeight,
+      outputWidth, outputHeight,
+      transform, crop, filterString
+    );
 
     // Reset filter for annotations
     ctx.filter = 'none';
@@ -144,7 +274,14 @@ export async function renderFrameToCanvas(
           width: source.width,
           height: source.height,
         });
-        ctx.drawImage(paintRenderer.getCanvas(), 0, 0, source.width, source.height);
+
+        drawElementWithTransformAndCrop(
+          ctx, paintRenderer.getCanvas(),
+          source.width, source.height,
+          effectiveWidth, effectiveHeight,
+          outputWidth, outputHeight,
+          transform, crop
+        );
       }
     }
 

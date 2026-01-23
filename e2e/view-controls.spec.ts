@@ -283,7 +283,7 @@ test.describe('View Controls', () => {
   });
 
   test.describe('Crop Control', () => {
-    test('VIEW-030: pressing K key should enable crop mode and update state', async ({ page }) => {
+    test('VIEW-030: pressing Shift+K should enable crop mode and update state', async ({ page }) => {
       // Switch to Transform tab where crop control is located
       await page.click('button[data-tab-id="transform"]');
       await page.waitForTimeout(100);
@@ -292,7 +292,7 @@ test.describe('View Controls', () => {
       expect(state.cropEnabled).toBe(false);
 
       // Press K to enable crop
-      await page.keyboard.press('k');
+      await page.keyboard.press('Shift+k');
       await page.waitForTimeout(200);
 
       state = await getViewerState(page);
@@ -313,7 +313,7 @@ test.describe('View Controls', () => {
       expect(optionCount).toBeGreaterThan(1); // Should have Free, 16:9, 4:3, 1:1, etc.
 
       // Disable crop
-      await page.keyboard.press('k');
+      await page.keyboard.press('Shift+k');
       await page.waitForTimeout(200);
 
       state = await getViewerState(page);
@@ -364,7 +364,7 @@ test.describe('View Controls', () => {
       await page.waitForTimeout(100);
 
       // Enable crop
-      await page.keyboard.press('k');
+      await page.keyboard.press('Shift+k');
       await page.waitForTimeout(200);
 
       // Click crop button to open panel
@@ -401,7 +401,12 @@ test.describe('View Controls', () => {
       await page.waitForTimeout(100);
 
       // Enable crop
-      await page.keyboard.press('k');
+      await page.keyboard.press('Shift+k');
+      await page.waitForTimeout(200);
+
+      // Open crop panel (handles only work when panel is open)
+      const cropButton = page.locator('button[title*="Crop"]').first();
+      await cropButton.click();
       await page.waitForTimeout(200);
 
       const initialScreenshot = await captureViewerScreenshot(page);
@@ -410,10 +415,12 @@ test.describe('View Controls', () => {
       const box = await canvas.boundingBox();
       expect(box).not.toBeNull();
 
-      // Drag from corner to resize crop
-      await page.mouse.move(box!.x + box!.width * 0.1, box!.y + box!.height * 0.1);
+      // Drag from bottom-right corner to resize crop (crop starts at full image)
+      const brX = box!.x + box!.width;
+      const brY = box!.y + box!.height;
+      await page.mouse.move(brX - 5, brY - 5);
       await page.mouse.down();
-      await page.mouse.move(box!.x + box!.width * 0.3, box!.y + box!.height * 0.3);
+      await page.mouse.move(brX - box!.width * 0.3, brY - box!.height * 0.3, { steps: 5 });
       await page.mouse.up();
       await page.waitForTimeout(200);
 

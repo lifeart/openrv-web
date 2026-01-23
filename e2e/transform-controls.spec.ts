@@ -223,18 +223,18 @@ test.describe('Transform Controls', () => {
   });
 
   test.describe('Crop Controls', () => {
-    test('TRANSFORM-020: pressing K key should toggle crop mode', async ({ page }) => {
+    test('TRANSFORM-020: pressing Shift+K should toggle crop mode', async ({ page }) => {
       let viewState = await getViewerState(page);
       expect(viewState.cropEnabled).toBe(false);
 
-      await page.keyboard.press('k');
+      await page.keyboard.press('Shift+k');
       await page.waitForTimeout(200);
 
       viewState = await getViewerState(page);
       expect(viewState.cropEnabled).toBe(true);
 
       // Toggle off
-      await page.keyboard.press('k');
+      await page.keyboard.press('Shift+k');
       await page.waitForTimeout(200);
 
       viewState = await getViewerState(page);
@@ -300,7 +300,7 @@ test.describe('Transform Controls', () => {
     });
 
     test('TRANSFORM-023: selecting 16:9 aspect ratio should change crop region', async ({ page }) => {
-      await page.keyboard.press('k');
+      await page.keyboard.press('Shift+k');
       await page.waitForTimeout(200);
 
       const initialScreenshot = await captureViewerScreenshot(page);
@@ -316,14 +316,14 @@ test.describe('Transform Controls', () => {
     });
 
     test('TRANSFORM-024: crop should show rule of thirds overlay', async ({ page }) => {
-      await page.keyboard.press('k');
+      await page.keyboard.press('Shift+k');
       await page.waitForTimeout(200);
 
       // Canvas should display crop overlay (visual verification via screenshot)
       const cropScreenshot = await captureViewerScreenshot(page);
 
       // Disable crop
-      await page.keyboard.press('k');
+      await page.keyboard.press('Shift+k');
       await page.waitForTimeout(200);
 
       const normalScreenshot = await captureViewerScreenshot(page);

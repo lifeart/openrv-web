@@ -1,16 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   drawWithTransform,
+  drawWithTransformFill,
   FilterStringCache,
   getCanvasFilterString,
   buildContainerFilterString,
   renderCropOverlay,
   drawPlaceholder,
   calculateDisplayDimensions,
+  isFullCropRegion,
+  getEffectiveDimensions,
 } from './ViewerRenderingUtils';
 import { ColorAdjustments } from './ColorControls';
 import { Transform2D } from './TransformControl';
-import { CropState } from './CropControl';
+import { CropState, CropRegion } from './CropControl';
 
 // Mock canvas context
 function createMockContext(): CanvasRenderingContext2D {
@@ -381,7 +384,7 @@ describe('ViewerRenderingUtils', () => {
     it('should draw rule of thirds guides', () => {
       const cropState: CropState = {
         enabled: true,
-        region: { x: 0, y: 0, width: 1, height: 1 },
+        region: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 },
         aspectRatio: null,
       };
 
@@ -391,6 +394,37 @@ describe('ViewerRenderingUtils', () => {
       expect(ctx.beginPath).toHaveBeenCalled();
       expect(ctx.moveTo).toHaveBeenCalled();
       expect(ctx.lineTo).toHaveBeenCalled();
+    });
+
+    it('should skip rendering for full-frame crop (performance optimization)', () => {
+      const cropState: CropState = {
+        enabled: true,
+        region: { x: 0, y: 0, width: 1, height: 1 },
+        aspectRatio: null,
+      };
+
+      renderCropOverlay(ctx, cropState, 600, 600);
+
+      // Should only clear, no overlay rendering for full-frame crop
+      expect(ctx.clearRect).toHaveBeenCalledWith(0, 0, 600, 600);
+      expect(ctx.fillRect).not.toHaveBeenCalled();
+      expect(ctx.strokeRect).not.toHaveBeenCalled();
+    });
+
+    it('should not render overlay when isEditing is false (pixel clipping suffices)', () => {
+      const cropState: CropState = {
+        enabled: true,
+        region: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 },
+        aspectRatio: null,
+      };
+
+      renderCropOverlay(ctx, cropState, 800, 600, false);
+
+      // Should only clear, no overlay rendering when not editing
+      expect(ctx.clearRect).toHaveBeenCalledWith(0, 0, 800, 600);
+      expect(ctx.fillRect).not.toHaveBeenCalled();
+      expect(ctx.strokeRect).not.toHaveBeenCalled();
+      expect(ctx.stroke).not.toHaveBeenCalled();
     });
   });
 
@@ -520,6 +554,294 @@ describe('ViewerRenderingUtils', () => {
 
       expect(result.width).toBe(8000);
       expect(result.height).toBe(6000);
+    });
+  });
+
+  describe('isFullCropRegion', () => {
+    it('should return true for full-frame crop', () => {
+      const region: CropRegion = { x: 0, y: 0, width: 1, height: 1 };
+      expect(isFullCropRegion(region)).toBe(true);
+    });
+
+    it('should return false for non-zero x', () => {
+      const region: CropRegion = { x: 0.1, y: 0, width: 1, height: 1 };
+      expect(isFullCropRegion(region)).toBe(false);
+    });
+
+    it('should return false for non-zero y', () => {
+      const region: CropRegion = { x: 0, y: 0.1, width: 1, height: 1 };
+      expect(isFullCropRegion(region)).toBe(false);
+    });
+
+    it('should return false for width less than 1', () => {
+      const region: CropRegion = { x: 0, y: 0, width: 0.5, height: 1 };
+      expect(isFullCropRegion(region)).toBe(false);
+    });
+
+    it('should return false for height less than 1', () => {
+      const region: CropRegion = { x: 0, y: 0, width: 1, height: 0.5 };
+      expect(isFullCropRegion(region)).toBe(false);
+    });
+
+    it('should return false for centered crop', () => {
+      const region: CropRegion = { x: 0.25, y: 0.25, width: 0.5, height: 0.5 };
+      expect(isFullCropRegion(region)).toBe(false);
+    });
+
+    it('should return true for near-full crop (floating-point imprecision)', () => {
+      // Simulate floating-point drift from drag operations
+      const region: CropRegion = { x: 1e-10, y: -1e-12, width: 0.9999999999, height: 1.0000000001 };
+      expect(isFullCropRegion(region)).toBe(true);
+    });
+
+    it('should return false for values just outside epsilon threshold', () => {
+      const region: CropRegion = { x: 0.001, y: 0, width: 1, height: 1 };
+      expect(isFullCropRegion(region)).toBe(false);
+    });
+  });
+
+  describe('getEffectiveDimensions', () => {
+    it('should return same dimensions for 0° rotation', () => {
+      const result = getEffectiveDimensions(1920, 1080, 0);
+      expect(result.width).toBe(1920);
+      expect(result.height).toBe(1080);
+    });
+
+    it('should return same dimensions for 180° rotation', () => {
+      const result = getEffectiveDimensions(1920, 1080, 180);
+      expect(result.width).toBe(1920);
+      expect(result.height).toBe(1080);
+    });
+
+    it('should swap dimensions for 90° rotation', () => {
+      const result = getEffectiveDimensions(1920, 1080, 90);
+      expect(result.width).toBe(1080);
+      expect(result.height).toBe(1920);
+    });
+
+    it('should swap dimensions for 270° rotation', () => {
+      const result = getEffectiveDimensions(1920, 1080, 270);
+      expect(result.width).toBe(1080);
+      expect(result.height).toBe(1920);
+    });
+
+    it('should handle square dimensions', () => {
+      const result90 = getEffectiveDimensions(500, 500, 90);
+      expect(result90.width).toBe(500);
+      expect(result90.height).toBe(500);
+
+      const result0 = getEffectiveDimensions(500, 500, 0);
+      expect(result0.width).toBe(500);
+      expect(result0.height).toBe(500);
+    });
+  });
+
+  describe('drawWithTransformFill', () => {
+    let ctx: CanvasRenderingContext2D;
+
+    beforeEach(() => {
+      ctx = createMockContext();
+    });
+
+    it('should draw directly without transforms', () => {
+      const element = createMockImage(800, 600);
+      const transform: Transform2D = {
+        rotation: 0,
+        flipH: false,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      };
+
+      drawWithTransformFill(ctx, element, 800, 600, transform);
+
+      expect(ctx.drawImage).toHaveBeenCalledWith(element, 0, 0, 800, 600);
+      expect(ctx.save).not.toHaveBeenCalled();
+    });
+
+    it('should apply rotation with save/restore', () => {
+      const element = createMockImage(1080, 1920);
+      const transform: Transform2D = {
+        rotation: 90,
+        flipH: false,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      };
+
+      // For 90° rotation, canvas should be sized with swapped dimensions (1080x1920)
+      drawWithTransformFill(ctx, element, 1080, 1920, transform);
+
+      expect(ctx.save).toHaveBeenCalled();
+      expect(ctx.translate).toHaveBeenCalled();
+      expect(ctx.rotate).toHaveBeenCalled();
+      expect(ctx.drawImage).toHaveBeenCalled();
+      expect(ctx.restore).toHaveBeenCalled();
+    });
+
+    it('should apply horizontal flip', () => {
+      const element = createMockImage(800, 600);
+      const transform: Transform2D = {
+        rotation: 0,
+        flipH: true,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      };
+
+      drawWithTransformFill(ctx, element, 800, 600, transform);
+
+      expect(ctx.scale).toHaveBeenCalledWith(-1, 1);
+    });
+
+    it('should apply vertical flip', () => {
+      const element = createMockImage(800, 600);
+      const transform: Transform2D = {
+        rotation: 0,
+        flipH: false,
+        flipV: true,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      };
+
+      drawWithTransformFill(ctx, element, 800, 600, transform);
+
+      expect(ctx.scale).toHaveBeenCalledWith(1, -1);
+    });
+
+    it('should apply both flips', () => {
+      const element = createMockImage(800, 600);
+      const transform: Transform2D = {
+        rotation: 0,
+        flipH: true,
+        flipV: true,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      };
+
+      drawWithTransformFill(ctx, element, 800, 600, transform);
+
+      expect(ctx.scale).toHaveBeenCalledWith(-1, -1);
+    });
+
+    it('should swap draw dimensions for 90° rotation', () => {
+      const element = createMockImage(1920, 1080);
+      const transform: Transform2D = {
+        rotation: 90,
+        flipH: false,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      };
+
+      // Canvas is 1080x1920 (swapped), draw should use swapped dimensions
+      drawWithTransformFill(ctx, element, 1080, 1920, transform);
+
+      // drawImage should be called with swapped draw dimensions
+      const drawCalls = (ctx.drawImage as ReturnType<typeof vi.fn>).mock.calls;
+      expect(drawCalls.length).toBeGreaterThan(0);
+      const drawCall = drawCalls[0]!;
+      // For 90° rotation, drawWidth=canvasHeight, drawHeight=canvasWidth
+      // So it draws at -960, -540 with size 1920x1080
+      expect(drawCall[1]).toBe(-960); // -drawWidth/2
+      expect(drawCall[2]).toBe(-540); // -drawHeight/2
+    });
+
+    it('should handle 180° rotation without swapping dimensions', () => {
+      const element = createMockImage(800, 600);
+      const transform: Transform2D = {
+        rotation: 180,
+        flipH: false,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      };
+
+      drawWithTransformFill(ctx, element, 800, 600, transform);
+
+      expect(ctx.save).toHaveBeenCalled();
+      expect(ctx.translate).toHaveBeenCalledWith(400, 300); // center
+      expect(ctx.rotate).toHaveBeenCalledWith(Math.PI); // 180° in radians
+      // 180° does NOT swap dimensions, so drawImage uses -400, -300
+      const drawCalls = (ctx.drawImage as ReturnType<typeof vi.fn>).mock.calls;
+      expect(drawCalls[0]![1]).toBe(-400); // -canvasWidth/2
+      expect(drawCalls[0]![2]).toBe(-300); // -canvasHeight/2
+      expect(drawCalls[0]![3]).toBe(800);  // drawWidth = canvasWidth
+      expect(drawCalls[0]![4]).toBe(600);  // drawHeight = canvasHeight
+      expect(ctx.restore).toHaveBeenCalled();
+    });
+
+    it('should handle 270° rotation with swapped dimensions', () => {
+      const element = createMockImage(1920, 1080);
+      const transform: Transform2D = {
+        rotation: 270,
+        flipH: false,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      };
+
+      // Canvas is 1080x1920 (swapped for 270°)
+      drawWithTransformFill(ctx, element, 1080, 1920, transform);
+
+      expect(ctx.rotate).toHaveBeenCalledWith((270 * Math.PI) / 180);
+      // For 270° rotation, drawWidth=canvasHeight=1920, drawHeight=canvasWidth=1080
+      const drawCalls = (ctx.drawImage as ReturnType<typeof vi.fn>).mock.calls;
+      expect(drawCalls[0]![3]).toBe(1920); // drawWidth = canvasHeight
+      expect(drawCalls[0]![4]).toBe(1080); // drawHeight = canvasWidth
+    });
+
+    it('should apply 90° rotation with horizontal flip', () => {
+      const element = createMockImage(1920, 1080);
+      const transform: Transform2D = {
+        rotation: 90,
+        flipH: true,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      };
+
+      drawWithTransformFill(ctx, element, 1080, 1920, transform);
+
+      expect(ctx.save).toHaveBeenCalled();
+      expect(ctx.rotate).toHaveBeenCalledWith((90 * Math.PI) / 180);
+      expect(ctx.scale).toHaveBeenCalledWith(-1, 1);
+      expect(ctx.restore).toHaveBeenCalled();
+    });
+
+    it('should apply 180° rotation with both flips', () => {
+      const element = createMockImage(800, 600);
+      const transform: Transform2D = {
+        rotation: 180,
+        flipH: true,
+        flipV: true,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      };
+
+      drawWithTransformFill(ctx, element, 800, 600, transform);
+
+      expect(ctx.save).toHaveBeenCalled();
+      expect(ctx.rotate).toHaveBeenCalledWith(Math.PI);
+      expect(ctx.scale).toHaveBeenCalledWith(-1, -1);
+      expect(ctx.drawImage).toHaveBeenCalled();
+      expect(ctx.restore).toHaveBeenCalled();
+    });
+
+    it('should apply 270° rotation with vertical flip', () => {
+      const element = createMockImage(1920, 1080);
+      const transform: Transform2D = {
+        rotation: 270,
+        flipH: false,
+        flipV: true,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      };
+
+      drawWithTransformFill(ctx, element, 1080, 1920, transform);
+
+      expect(ctx.rotate).toHaveBeenCalledWith((270 * Math.PI) / 180);
+      expect(ctx.scale).toHaveBeenCalledWith(1, -1);
     });
   });
 });

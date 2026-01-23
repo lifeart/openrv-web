@@ -5,7 +5,7 @@
 
 import { ColorAdjustments } from './ColorControls';
 import { Transform2D } from './TransformControl';
-import { CropState } from './CropControl';
+import { CropState, CropRegion } from './CropControl';
 
 /**
  * Draw image/video with rotation and flip transforms applied.
@@ -185,27 +185,35 @@ export function buildContainerFilterString(
 
 /**
  * Render crop overlay on a canvas context.
- * Shows darkened areas outside the crop region with handles and guides.
+ * Shows darkened areas outside the crop region with handles and guides when editing,
+ * or a subtle border when crop is active but not being edited.
+ * @param isEditing - Whether the user is actively editing the crop (panel open, dragging, etc.)
  */
 export function renderCropOverlay(
   ctx: CanvasRenderingContext2D,
   cropState: CropState,
   displayWidth: number,
-  displayHeight: number
+  displayHeight: number,
+  isEditing: boolean = true
 ): void {
   const w = displayWidth;
   const h = displayHeight;
 
-  // Clear overlay
+  // Determine early if we need to render anything
+  const shouldRender = cropState.enabled && !isFullCropRegion(cropState.region) && isEditing;
+
+  // Always clear the overlay canvas
   ctx.clearRect(0, 0, w, h);
 
-  if (!cropState.enabled) return;
+  if (!shouldRender) return;
 
   const region = cropState.region;
   const cropX = region.x * w;
   const cropY = region.y * h;
   const cropW = region.width * w;
   const cropH = region.height * h;
+
+  // Full editing overlay: darkened areas, handles, and guides
 
   // Draw darkened areas outside crop region
   ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
@@ -324,5 +332,84 @@ export function calculateDisplayDimensions(
   const width = Math.max(1, Math.floor(sourceWidth * scale));
   const height = Math.max(1, Math.floor(sourceHeight * scale));
 
+  return { width, height };
+}
+
+/**
+ * Check if crop region covers the full image (no clipping needed).
+ * Uses epsilon comparison to handle floating-point imprecision from drag operations.
+ */
+export function isFullCropRegion(region: CropRegion): boolean {
+  const EPS = 1e-6;
+  return Math.abs(region.x) < EPS && Math.abs(region.y) < EPS
+    && Math.abs(region.width - 1) < EPS && Math.abs(region.height - 1) < EPS;
+}
+
+/**
+ * Draw image/video with rotation and flip transforms, filling the target canvas.
+ * Unlike drawWithTransform (for display), this function draws to fill the entire
+ * canvas without letterboxing, used for exports where we want pixel-perfect output.
+ * For 90/270 rotation, the canvas should already be sized with swapped dimensions.
+ */
+export function drawWithTransformFill(
+  ctx: CanvasRenderingContext2D,
+  element: CanvasImageSource,
+  canvasWidth: number,
+  canvasHeight: number,
+  transform: Transform2D
+): void {
+  const { rotation, flipH, flipV } = transform;
+
+  // If no transforms, just draw normally
+  if (rotation === 0 && !flipH && !flipV) {
+    ctx.drawImage(element, 0, 0, canvasWidth, canvasHeight);
+    return;
+  }
+
+  ctx.save();
+
+  // Move to center for transformations
+  ctx.translate(canvasWidth / 2, canvasHeight / 2);
+
+  // Apply rotation
+  if (rotation !== 0) {
+    ctx.rotate((rotation * Math.PI) / 180);
+  }
+
+  // Apply flips
+  const scaleX = flipH ? -1 : 1;
+  const scaleY = flipV ? -1 : 1;
+  if (flipH || flipV) {
+    ctx.scale(scaleX, scaleY);
+  }
+
+  // For 90/270 rotation, swap draw dimensions since the canvas is already swapped
+  let drawWidth = canvasWidth;
+  let drawHeight = canvasHeight;
+  if (rotation === 90 || rotation === 270) {
+    // Canvas dimensions are swapped (height x width), so we draw with swapped dimensions
+    // to fill the canvas after rotation
+    drawWidth = canvasHeight;
+    drawHeight = canvasWidth;
+  }
+
+  // Draw centered (will fill canvas after transform)
+  ctx.drawImage(element, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+
+  ctx.restore();
+}
+
+/**
+ * Get effective dimensions after rotation transform.
+ * For 90/270 rotation, width and height are swapped.
+ */
+export function getEffectiveDimensions(
+  width: number,
+  height: number,
+  rotation: 0 | 90 | 180 | 270
+): { width: number; height: number } {
+  if (rotation === 90 || rotation === 270) {
+    return { width: height, height: width };
+  }
   return { width, height };
 }

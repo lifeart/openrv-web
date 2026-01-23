@@ -364,6 +364,339 @@ describe('Viewer', () => {
       viewer.setCropEnabled(false);
       expect(viewer.getCropState().enabled).toBe(false);
     });
+
+    it('VWR-100: setCropPanelOpen stores panel state', () => {
+      viewer.setCropPanelOpen(true);
+      expect((viewer as any).isCropPanelOpen).toBe(true);
+
+      viewer.setCropPanelOpen(false);
+      expect((viewer as any).isCropPanelOpen).toBe(false);
+    });
+
+    it('VWR-101: setOnCropRegionChanged stores callback', () => {
+      const callback = vi.fn();
+      viewer.setOnCropRegionChanged(callback);
+      expect((viewer as any).cropRegionChangedCallback).toBe(callback);
+    });
+
+    it('VWR-102: setOnCropRegionChanged(null) clears callback', () => {
+      viewer.setOnCropRegionChanged(vi.fn());
+      viewer.setOnCropRegionChanged(null);
+      expect((viewer as any).cropRegionChangedCallback).toBeNull();
+    });
+
+    it('VWR-103: handleCropPointerUp invokes callback with region copy', () => {
+      const callback = vi.fn();
+      viewer.setOnCropRegionChanged(callback);
+
+      // Setup crop state
+      viewer.setCropEnabled(true);
+      viewer.setCropRegion({ x: 0.1, y: 0.2, width: 0.5, height: 0.4 });
+      (viewer as any).isDraggingCrop = true;
+
+      (viewer as any).handleCropPointerUp();
+
+      expect(callback).toHaveBeenCalledWith({ x: 0.1, y: 0.2, width: 0.5, height: 0.4 });
+      // Should be a copy
+      const callArg = callback.mock.calls[0][0];
+      expect(callArg).not.toBe((viewer as any).cropState.region);
+    });
+
+    it('VWR-104: handleCropPointerUp does not invoke callback when not dragging', () => {
+      const callback = vi.fn();
+      viewer.setOnCropRegionChanged(callback);
+      (viewer as any).isDraggingCrop = false;
+
+      (viewer as any).handleCropPointerUp();
+
+      expect(callback).not.toHaveBeenCalled();
+    });
+
+    it('VWR-105: handleCropPointerUp resets drag state', () => {
+      viewer.setCropEnabled(true);
+      (viewer as any).isDraggingCrop = true;
+      (viewer as any).cropDragHandle = 'br';
+      (viewer as any).cropDragStart = { x: 0.5, y: 0.5, region: { x: 0, y: 0, width: 1, height: 1 } };
+
+      (viewer as any).handleCropPointerUp();
+
+      expect((viewer as any).isDraggingCrop).toBe(false);
+      expect((viewer as any).cropDragHandle).toBeNull();
+      expect((viewer as any).cropDragStart).toBeNull();
+    });
+
+    it('VWR-106: getCropHandleAtPoint returns null when crop disabled', () => {
+      viewer.setCropEnabled(false);
+      viewer.setCropPanelOpen(true);
+      const result = (viewer as any).getCropHandleAtPoint(100, 100);
+      expect(result).toBeNull();
+    });
+
+    it('VWR-107: getCropHandleAtPoint returns null when panel closed', () => {
+      viewer.setCropEnabled(true);
+      viewer.setCropPanelOpen(false);
+      const result = (viewer as any).getCropHandleAtPoint(100, 100);
+      expect(result).toBeNull();
+    });
+
+    it('VWR-108: handleCropPointerDown returns false when crop disabled', () => {
+      viewer.setCropEnabled(false);
+      viewer.setCropPanelOpen(true);
+      const event = { clientX: 50, clientY: 50, pointerId: 1 } as unknown as PointerEvent;
+      const result = (viewer as any).handleCropPointerDown(event);
+      expect(result).toBe(false);
+    });
+
+    it('VWR-109: handleCropPointerDown returns false when panel closed', () => {
+      viewer.setCropEnabled(true);
+      viewer.setCropPanelOpen(false);
+      const event = { clientX: 50, clientY: 50, pointerId: 1 } as unknown as PointerEvent;
+      const result = (viewer as any).handleCropPointerDown(event);
+      expect(result).toBe(false);
+    });
+
+    it('VWR-110: updateCropCursor sets correct cursor for corners', () => {
+      (viewer as any).updateCropCursor('tl');
+      expect((viewer as any).container.style.cursor).toBe('nwse-resize');
+
+      (viewer as any).updateCropCursor('br');
+      expect((viewer as any).container.style.cursor).toBe('nwse-resize');
+
+      (viewer as any).updateCropCursor('tr');
+      expect((viewer as any).container.style.cursor).toBe('nesw-resize');
+
+      (viewer as any).updateCropCursor('bl');
+      expect((viewer as any).container.style.cursor).toBe('nesw-resize');
+    });
+
+    it('VWR-111: updateCropCursor sets correct cursor for edges', () => {
+      (viewer as any).updateCropCursor('top');
+      expect((viewer as any).container.style.cursor).toBe('ns-resize');
+
+      (viewer as any).updateCropCursor('bottom');
+      expect((viewer as any).container.style.cursor).toBe('ns-resize');
+
+      (viewer as any).updateCropCursor('left');
+      expect((viewer as any).container.style.cursor).toBe('ew-resize');
+
+      (viewer as any).updateCropCursor('right');
+      expect((viewer as any).container.style.cursor).toBe('ew-resize');
+    });
+
+    it('VWR-112: updateCropCursor sets move cursor for move handle', () => {
+      (viewer as any).updateCropCursor('move');
+      expect((viewer as any).container.style.cursor).toBe('move');
+    });
+
+    it('VWR-113: updateCropCursor sets default cursor for null', () => {
+      (viewer as any).updateCropCursor(null);
+      expect((viewer as any).container.style.cursor).toBe('default');
+    });
+
+    it('VWR-114: handleCropPointerMove updates region for br handle', () => {
+      viewer.setCropEnabled(true);
+      viewer.setCropRegion({ x: 0, y: 0, width: 1, height: 1 });
+      viewer.setCropPanelOpen(true);
+
+      // Simulate drag start state
+      (viewer as any).isDraggingCrop = true;
+      (viewer as any).cropDragHandle = 'br';
+      (viewer as any).cropOverlay = {
+        getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON: () => {} }),
+      };
+      (viewer as any).cropDragStart = {
+        x: 1.0,
+        y: 1.0,
+        region: { x: 0, y: 0, width: 1, height: 1 },
+      };
+
+      // Simulate drag to shrink (move br corner inward by 0.2)
+      const event = { clientX: 640, clientY: 480 } as unknown as PointerEvent;
+      (viewer as any).handleCropPointerMove(event);
+
+      const region = (viewer as any).cropState.region;
+      expect(region.width).toBeCloseTo(0.8, 1);
+      expect(region.height).toBeCloseTo(0.8, 1);
+    });
+
+    it('VWR-115: handleCropPointerMove clamps move to bounds', () => {
+      viewer.setCropEnabled(true);
+      viewer.setCropRegion({ x: 0.5, y: 0.5, width: 0.3, height: 0.3 });
+      viewer.setCropPanelOpen(true);
+
+      (viewer as any).isDraggingCrop = true;
+      (viewer as any).cropDragHandle = 'move';
+      (viewer as any).cropOverlay = {
+        getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON: () => {} }),
+      };
+      (viewer as any).cropDragStart = {
+        x: 0.65,
+        y: 0.65,
+        region: { x: 0.5, y: 0.5, width: 0.3, height: 0.3 },
+      };
+
+      // Try to drag way beyond bounds
+      const event = { clientX: 800, clientY: 600 } as unknown as PointerEvent;
+      (viewer as any).handleCropPointerMove(event);
+
+      const region = (viewer as any).cropState.region;
+      // x + width should not exceed 1
+      expect(region.x + region.width).toBeLessThanOrEqual(1.001);
+      expect(region.y + region.height).toBeLessThanOrEqual(1.001);
+    });
+
+    it('VWR-116: handleCropPointerMove enforces MIN_CROP_FRACTION', () => {
+      viewer.setCropEnabled(true);
+      viewer.setCropRegion({ x: 0, y: 0, width: 0.5, height: 0.5 });
+      viewer.setCropPanelOpen(true);
+
+      (viewer as any).isDraggingCrop = true;
+      (viewer as any).cropDragHandle = 'br';
+      (viewer as any).cropOverlay = {
+        getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON: () => {} }),
+      };
+      (viewer as any).cropDragStart = {
+        x: 0.5,
+        y: 0.5,
+        region: { x: 0, y: 0, width: 0.5, height: 0.5 },
+      };
+
+      // Drag br corner to origin (try to make region 0-width)
+      const event = { clientX: 0, clientY: 0 } as unknown as PointerEvent;
+      (viewer as any).handleCropPointerMove(event);
+
+      const region = (viewer as any).cropState.region;
+      expect(region.width).toBeGreaterThanOrEqual(0.05);
+      expect(region.height).toBeGreaterThanOrEqual(0.05);
+    });
+
+    it('VWR-117: handleCropPointerMove with tl handle adjusts position and size', () => {
+      viewer.setCropEnabled(true);
+      viewer.setCropRegion({ x: 0, y: 0, width: 1, height: 1 });
+      viewer.setCropPanelOpen(true);
+
+      (viewer as any).isDraggingCrop = true;
+      (viewer as any).cropDragHandle = 'tl';
+      (viewer as any).cropOverlay = {
+        getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON: () => {} }),
+      };
+      (viewer as any).cropDragStart = {
+        x: 0,
+        y: 0,
+        region: { x: 0, y: 0, width: 1, height: 1 },
+      };
+
+      // Drag tl corner inward by 0.2
+      const event = { clientX: 160, clientY: 120 } as unknown as PointerEvent;
+      (viewer as any).handleCropPointerMove(event);
+
+      const region = (viewer as any).cropState.region;
+      expect(region.x).toBeCloseTo(0.2, 1);
+      expect(region.y).toBeCloseTo(0.2, 1);
+      expect(region.width).toBeCloseTo(0.8, 1);
+      expect(region.height).toBeCloseTo(0.8, 1);
+    });
+
+    it('VWR-118: handleCropPointerMove with right edge only changes width', () => {
+      viewer.setCropEnabled(true);
+      viewer.setCropRegion({ x: 0, y: 0, width: 1, height: 1 });
+      viewer.setCropPanelOpen(true);
+
+      (viewer as any).isDraggingCrop = true;
+      (viewer as any).cropDragHandle = 'right';
+      (viewer as any).cropOverlay = {
+        getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON: () => {} }),
+      };
+      (viewer as any).cropDragStart = {
+        x: 1.0,
+        y: 0.5,
+        region: { x: 0, y: 0, width: 1, height: 1 },
+      };
+
+      // Drag right edge inward by 0.3
+      const event = { clientX: 560, clientY: 300 } as unknown as PointerEvent;
+      (viewer as any).handleCropPointerMove(event);
+
+      const region = (viewer as any).cropState.region;
+      expect(region.width).toBeCloseTo(0.7, 1);
+      expect(region.height).toBeCloseTo(1, 1); // height unchanged
+    });
+
+    it('VWR-119: constrainToAspectRatio preserves ratio during drag', () => {
+      viewer.setCropEnabled(true);
+      viewer.setCropState({
+        enabled: true,
+        region: { x: 0, y: 0, width: 0.8, height: 0.8 },
+        aspectRatio: '1:1',
+      });
+
+      // Mock source
+      (viewer as any).session = {
+        ...session,
+        currentSource: { width: 1920, height: 1080 },
+      };
+
+      const input = { x: 0, y: 0, width: 0.6, height: 0.8 };
+      const result = (viewer as any).constrainToAspectRatio(input, 'br');
+
+      // For 1:1 pixel ratio on 1920x1080, normalizedRatio = 1 / (1920/1080) ≈ 0.5625
+      const sourceAspect = 1920 / 1080;
+      const normalizedRatio = 1 / sourceAspect;
+      const actualRatio = result.width / result.height;
+      expect(actualRatio).toBeCloseTo(normalizedRatio, 2);
+    });
+
+    it('VWR-120: constrainToAspectRatio clamps to bounds', () => {
+      viewer.setCropEnabled(true);
+      viewer.setCropState({
+        enabled: true,
+        region: { x: 0.8, y: 0.8, width: 0.5, height: 0.5 },
+        aspectRatio: '16:9',
+      });
+
+      (viewer as any).session = {
+        ...session,
+        currentSource: { width: 1920, height: 1080 },
+      };
+
+      const input = { x: 0.8, y: 0.8, width: 0.5, height: 0.5 };
+      const result = (viewer as any).constrainToAspectRatio(input, 'br');
+
+      // Result should be within bounds
+      expect(result.x + result.width).toBeLessThanOrEqual(1.001);
+      expect(result.y + result.height).toBeLessThanOrEqual(1.001);
+    });
+
+    it('VWR-121: constrainToAspectRatio returns input when no aspect ratio match', () => {
+      viewer.setCropState({
+        enabled: true,
+        region: { x: 0, y: 0, width: 1, height: 1 },
+        aspectRatio: 'invalid',
+      });
+
+      const input = { x: 0.1, y: 0.2, width: 0.5, height: 0.4 };
+      const result = (viewer as any).constrainToAspectRatio(input, 'br');
+
+      expect(result).toEqual(input);
+    });
+
+    it('VWR-122: constrainToAspectRatio returns input when no source', () => {
+      viewer.setCropState({
+        enabled: true,
+        region: { x: 0, y: 0, width: 1, height: 1 },
+        aspectRatio: '16:9',
+      });
+
+      (viewer as any).session = { ...session, currentSource: null };
+
+      const input = { x: 0.1, y: 0.2, width: 0.5, height: 0.4 };
+      const result = (viewer as any).constrainToAspectRatio(input, 'br');
+
+      // sourceWidth/height defaults to ?? 1 so it should still work
+      // but the logic handles null with ?? 1
+      expect(result.width).toBeGreaterThan(0);
+      expect(result.height).toBeGreaterThan(0);
+    });
   });
 
   describe('CDL', () => {

@@ -46,6 +46,13 @@ export interface ViewerState {
   wipeMode: 'off' | 'horizontal' | 'vertical' | 'quad';
   wipePosition: number;
   cropEnabled: boolean;
+  cropRegion: {
+    x: number;      // 0-1 normalized left position
+    y: number;      // 0-1 normalized top position
+    width: number;  // 0-1 normalized width
+    height: number; // 0-1 normalized height
+  };
+  cropAspectRatio: string | null;  // null = free, "16:9", "4:3", "1:1", etc.
   channelMode: 'rgb' | 'red' | 'green' | 'blue' | 'alpha' | 'luminance';
   stereoMode: 'off' | 'side-by-side' | 'over-under' | 'mirror' | 'anaglyph' | 'anaglyph-luminance' | 'checkerboard' | 'scanline';
   stereoEyeSwap: boolean;
@@ -280,6 +287,8 @@ export async function getViewerState(page: Page): Promise<ViewerState> {
       wipeMode: 'off',
       wipePosition: 0.5,
       cropEnabled: false,
+      cropRegion: { x: 0, y: 0, width: 1, height: 1 },
+      cropAspectRatio: null,
       channelMode: 'rgb',
       stereoMode: 'off',
       stereoEyeSwap: false,
@@ -298,6 +307,35 @@ export async function getViewerState(page: Page): Promise<ViewerState> {
       histogramClipping: null,
     };
   });
+}
+
+/**
+ * Wait for the crop enabled state to reach the expected value.
+ * Prefer this over waitForTimeout for deterministic E2E tests.
+ */
+export async function waitForCropEnabled(page: Page, enabled: boolean, timeout = 2000): Promise<void> {
+  await page.waitForFunction(
+    (expected) => {
+      const state = (window as any).__OPENRV_TEST__?.getViewerState();
+      return state?.cropEnabled === expected;
+    },
+    enabled,
+    { timeout }
+  );
+}
+
+/**
+ * Wait for the crop aspect ratio to reach the expected value.
+ */
+export async function waitForCropAspectRatio(page: Page, ratio: string | null, timeout = 2000): Promise<void> {
+  await page.waitForFunction(
+    (expected) => {
+      const state = (window as any).__OPENRV_TEST__?.getViewerState();
+      return state?.cropAspectRatio === expected;
+    },
+    ratio,
+    { timeout }
+  );
 }
 
 /**

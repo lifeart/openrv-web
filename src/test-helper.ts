@@ -73,6 +73,13 @@ export interface ViewerState {
   wipeMode: 'off' | 'horizontal' | 'vertical' | 'quad';
   wipePosition: number;
   cropEnabled: boolean;
+  cropRegion: {
+    x: number;      // 0-1 normalized left position
+    y: number;      // 0-1 normalized top position
+    width: number;  // 0-1 normalized width
+    height: number; // 0-1 normalized height
+  };
+  cropAspectRatio: string | null;  // null = free, "16:9", "4:3", "1:1", etc.
   channelMode: 'rgb' | 'red' | 'green' | 'blue' | 'alpha' | 'luminance';
   stereoMode: 'off' | 'side-by-side' | 'over-under' | 'mirror' | 'anaglyph' | 'anaglyph-luminance' | 'checkerboard' | 'scanline';
   stereoEyeSwap: boolean;
@@ -327,6 +334,13 @@ export function exposeForTesting(app: App): void {
         wipeMode: viewer.wipeState?.mode ?? 'off',
         wipePosition: viewer.wipeState?.position ?? 0.5,
         cropEnabled: viewer.cropState?.enabled ?? false,
+        cropRegion: {
+          x: viewer.cropState?.region?.x ?? 0,
+          y: viewer.cropState?.region?.y ?? 0,
+          width: viewer.cropState?.region?.width ?? 1,
+          height: viewer.cropState?.region?.height ?? 1,
+        },
+        cropAspectRatio: viewer.cropState?.aspectRatio ?? null,
         channelMode: viewer.channelMode ?? 'rgb',
         stereoMode: viewer.stereoState?.mode ?? 'off',
         stereoEyeSwap: viewer.stereoState?.eyeSwap ?? false,

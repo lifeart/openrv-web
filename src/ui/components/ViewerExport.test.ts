@@ -396,6 +396,306 @@ describe('ViewerExport', () => {
 
       expect(result).not.toBeNull();
     });
+
+    it('should create canvas at cropped dimensions', async () => {
+      const source = createMockMediaSource('image', 1920, 1080);
+      mockSession = createMockSession(source);
+      const cropRegion = { x: 0.25, y: 0.25, width: 0.5, height: 0.5 };
+
+      const result = await renderFrameToCanvas(
+        mockSession,
+        mockPaintEngine,
+        mockPaintRenderer,
+        1,
+        defaultTransform(),
+        'none',
+        false,
+        cropRegion
+      );
+
+      expect(result).not.toBeNull();
+      expect(result!.width).toBe(960);  // 0.5 * 1920
+      expect(result!.height).toBe(540); // 0.5 * 1080
+    });
+
+    it('should apply crop after rotation', async () => {
+      const source = createMockMediaSource('image', 1920, 1080);
+      mockSession = createMockSession(source);
+      const transform: Transform2D = { rotation: 90, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
+      const cropRegion = { x: 0, y: 0, width: 0.5, height: 0.5 };
+
+      const result = await renderFrameToCanvas(
+        mockSession,
+        mockPaintEngine,
+        mockPaintRenderer,
+        1,
+        transform,
+        'none',
+        false,
+        cropRegion
+      );
+
+      // After 90° rotation, effective dims are 1080x1920
+      // Crop is 0.5 of each: 540x960
+      expect(result).not.toBeNull();
+      expect(result!.width).toBe(540);
+      expect(result!.height).toBe(960);
+    });
+
+    it('should handle full-frame crop without cropping', async () => {
+      const source = createMockMediaSource('image', 800, 600);
+      mockSession = createMockSession(source);
+      const cropRegion = { x: 0, y: 0, width: 1, height: 1 };
+
+      const result = await renderFrameToCanvas(
+        mockSession,
+        mockPaintEngine,
+        mockPaintRenderer,
+        1,
+        defaultTransform(),
+        'none',
+        false,
+        cropRegion
+      );
+
+      expect(result).not.toBeNull();
+      expect(result!.width).toBe(800);
+      expect(result!.height).toBe(600);
+    });
+
+    it('should apply crop with annotations', async () => {
+      const source = createMockMediaSource('image', 1920, 1080);
+      mockSession = createMockSession(source);
+      (mockPaintEngine.getAnnotationsWithGhost as any).mockReturnValue([{ id: '1' }]);
+      const cropRegion = { x: 0, y: 0, width: 0.5, height: 0.5 };
+
+      const result = await renderFrameToCanvas(
+        mockSession,
+        mockPaintEngine,
+        mockPaintRenderer,
+        1,
+        defaultTransform(),
+        'none',
+        true,
+        cropRegion
+      );
+
+      expect(result).not.toBeNull();
+      expect(result!.width).toBe(960);
+      expect(result!.height).toBe(540);
+      expect(mockPaintRenderer.renderAnnotations).toHaveBeenCalled();
+    });
+  });
+
+  describe('rotation clamping (computeExportParams)', () => {
+    beforeEach(() => {
+      mockPaintEngine = createMockPaintEngine();
+      mockPaintRenderer = createMockPaintRenderer();
+    });
+
+    it('should handle 90° rotation by swapping dimensions', () => {
+      const source = createMockMediaSource('image', 1920, 1080);
+      mockSession = createMockSession(source);
+      const transform: Transform2D = { rotation: 90, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
+
+      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false, transform);
+
+      expect(result).not.toBeNull();
+      expect(result!.width).toBe(1080); // Swapped
+      expect(result!.height).toBe(1920); // Swapped
+    });
+
+    it('should handle 270° rotation by swapping dimensions', () => {
+      const source = createMockMediaSource('image', 1920, 1080);
+      mockSession = createMockSession(source);
+      const transform: Transform2D = { rotation: 270, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
+
+      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false, transform);
+
+      expect(result).not.toBeNull();
+      expect(result!.width).toBe(1080);
+      expect(result!.height).toBe(1920);
+    });
+
+    it('should handle 180° rotation without swapping', () => {
+      const source = createMockMediaSource('image', 1920, 1080);
+      mockSession = createMockSession(source);
+      const transform: Transform2D = { rotation: 180, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
+
+      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false, transform);
+
+      expect(result).not.toBeNull();
+      expect(result!.width).toBe(1920);
+      expect(result!.height).toBe(1080);
+    });
+
+    it('should clamp invalid rotation to 0 (no dimension swap)', () => {
+      const source = createMockMediaSource('image', 1920, 1080);
+      mockSession = createMockSession(source);
+      // Invalid rotation (e.g., corrupted session data)
+      const transform: Transform2D = { rotation: 45 as any, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
+
+      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false, transform);
+
+      // Should fall back to 0° (no swap)
+      expect(result).not.toBeNull();
+      expect(result!.width).toBe(1920);
+      expect(result!.height).toBe(1080);
+    });
+
+    it('should clamp negative rotation to 0', () => {
+      const source = createMockMediaSource('image', 1920, 1080);
+      mockSession = createMockSession(source);
+      const transform: Transform2D = { rotation: -90 as any, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
+
+      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false, transform);
+
+      expect(result).not.toBeNull();
+      expect(result!.width).toBe(1920);
+      expect(result!.height).toBe(1080);
+    });
+
+    it('should clamp 360 rotation to 0', () => {
+      const source = createMockMediaSource('image', 800, 600);
+      mockSession = createMockSession(source);
+      const transform: Transform2D = { rotation: 360 as any, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
+
+      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false, transform);
+
+      expect(result).not.toBeNull();
+      expect(result!.width).toBe(800);
+      expect(result!.height).toBe(600);
+    });
+
+    it('should handle undefined transform gracefully', () => {
+      const source = createMockMediaSource('image', 1920, 1080);
+      mockSession = createMockSession(source);
+
+      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false, undefined);
+
+      expect(result).not.toBeNull();
+      expect(result!.width).toBe(1920);
+      expect(result!.height).toBe(1080);
+    });
+  });
+
+  describe('crop region in export', () => {
+    beforeEach(() => {
+      mockPaintEngine = createMockPaintEngine();
+      mockPaintRenderer = createMockPaintRenderer();
+    });
+
+    it('should create canvas at cropped dimensions', () => {
+      const source = createMockMediaSource('image', 1920, 1080);
+      mockSession = createMockSession(source);
+      const cropRegion = { x: 0.25, y: 0.25, width: 0.5, height: 0.5 };
+
+      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false, defaultTransform(), cropRegion);
+
+      expect(result).not.toBeNull();
+      expect(result!.width).toBe(960);  // 0.5 * 1920
+      expect(result!.height).toBe(540); // 0.5 * 1080
+    });
+
+    it('should handle full-frame crop region without cropping', () => {
+      const source = createMockMediaSource('image', 1920, 1080);
+      mockSession = createMockSession(source);
+      const cropRegion = { x: 0, y: 0, width: 1, height: 1 };
+
+      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false, defaultTransform(), cropRegion);
+
+      expect(result).not.toBeNull();
+      expect(result!.width).toBe(1920);
+      expect(result!.height).toBe(1080);
+    });
+
+    it('should apply crop after rotation', () => {
+      const source = createMockMediaSource('image', 1920, 1080);
+      mockSession = createMockSession(source);
+      const transform: Transform2D = { rotation: 90, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
+      const cropRegion = { x: 0, y: 0, width: 0.5, height: 0.5 };
+
+      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false, transform, cropRegion);
+
+      // After 90° rotation, effective dims are 1080x1920
+      // Crop is 0.5 of each: 540x960
+      expect(result).not.toBeNull();
+      expect(result!.width).toBe(540);
+      expect(result!.height).toBe(960);
+    });
+
+    it('should handle near-full-frame crop (floating-point edge case)', () => {
+      const source = createMockMediaSource('image', 1920, 1080);
+      mockSession = createMockSession(source);
+      // Near-full crop due to floating-point imprecision
+      const cropRegion = { x: 1e-10, y: 0, width: 0.9999999999, height: 1 };
+
+      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false, defaultTransform(), cropRegion);
+
+      // isFullCropRegion should detect this as full-frame
+      expect(result).not.toBeNull();
+      expect(result!.width).toBe(1920);
+      expect(result!.height).toBe(1080);
+    });
+
+    it('should round crop dimensions to whole pixels', () => {
+      const source = createMockMediaSource('image', 1000, 1000);
+      mockSession = createMockSession(source);
+      // 1/3 crop — not exactly representable in binary
+      const cropRegion = { x: 0, y: 0, width: 1 / 3, height: 1 / 3 };
+
+      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false, defaultTransform(), cropRegion);
+
+      expect(result).not.toBeNull();
+      expect(result!.width).toBe(Math.round(1000 / 3));
+      expect(result!.height).toBe(Math.round(1000 / 3));
+    });
+
+    it('should apply crop without transform (crop-only path)', () => {
+      const source = createMockMediaSource('image', 1920, 1080);
+      mockSession = createMockSession(source);
+      // No rotation, no flip — exercises the crop-only branch
+      const transform: Transform2D = { rotation: 0, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
+      const cropRegion = { x: 0.1, y: 0.2, width: 0.6, height: 0.5 };
+
+      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', false, transform, cropRegion);
+
+      expect(result).not.toBeNull();
+      expect(result!.width).toBe(Math.round(0.6 * 1920));
+      expect(result!.height).toBe(Math.round(0.5 * 1080));
+    });
+
+    it('should apply annotations with crop and transform combined', () => {
+      const source = createMockMediaSource('image', 1920, 1080);
+      mockSession = createMockSession(source);
+      (mockPaintEngine.getAnnotationsWithGhost as any).mockReturnValue([{ id: 'ann1' }]);
+      const transform: Transform2D = { rotation: 90, flipH: true, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
+      const cropRegion = { x: 0, y: 0, width: 0.5, height: 0.5 };
+
+      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', true, transform, cropRegion);
+
+      // After 90° rotation, effective dims are 1080x1920
+      // Crop 0.5 of each: 540x960
+      expect(result).not.toBeNull();
+      expect(result!.width).toBe(540);
+      expect(result!.height).toBe(960);
+      expect(mockPaintEngine.getAnnotationsWithGhost).toHaveBeenCalled();
+      expect(mockPaintRenderer.renderAnnotations).toHaveBeenCalled();
+    });
+
+    it('should apply annotations with crop only (no transform)', () => {
+      const source = createMockMediaSource('image', 800, 600);
+      mockSession = createMockSession(source);
+      (mockPaintEngine.getAnnotationsWithGhost as any).mockReturnValue([{ id: 'ann1' }]);
+      const cropRegion = { x: 0.25, y: 0.25, width: 0.5, height: 0.5 };
+
+      const result = createExportCanvas(mockSession, mockPaintEngine, mockPaintRenderer, 'none', true, defaultTransform(), cropRegion);
+
+      expect(result).not.toBeNull();
+      expect(result!.width).toBe(400); // 0.5 * 800
+      expect(result!.height).toBe(300); // 0.5 * 600
+      expect(mockPaintRenderer.renderAnnotations).toHaveBeenCalled();
+    });
   });
 
   describe('renderSourceToImageData', () => {
