@@ -198,6 +198,36 @@ export function isHiDPI(): boolean {
 }
 
 /**
+ * Reset a canvas from hi-DPI mode back to standard mode
+ *
+ * This clears CSS dimension styles and resets the context transform to identity.
+ * Use this when transitioning from hi-DPI placeholder rendering to standard
+ * pixel-based rendering (e.g., when loading media).
+ *
+ * @param canvas - The canvas element to reset
+ * @param ctx - The 2D rendering context
+ * @param width - The new logical/physical width
+ * @param height - The new logical/physical height
+ */
+export function resetCanvasFromHiDPI(
+  canvas: HTMLCanvasElement,
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number
+): void {
+  // Set canvas to standard dimensions (logical = physical)
+  canvas.width = width;
+  canvas.height = height;
+
+  // Clear CSS dimension styles so canvas displays at natural size
+  canvas.style.width = '';
+  canvas.style.height = '';
+
+  // Reset context transform to identity
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+}
+
+/**
  * Convert client (mouse event) coordinates to canvas logical coordinates
  *
  * This handles the case where CSS dimensions may differ from logical dimensions

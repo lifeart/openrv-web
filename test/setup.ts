@@ -42,9 +42,23 @@ if (typeof globalThis.ImageData === 'undefined') {
   globalThis.ImageData = ImageDataPolyfill as unknown as typeof ImageData;
 }
 
+// Mock canvas style object that behaves like CSSStyleDeclaration
+class MockCSSStyleDeclaration {
+  width = '';
+  height = '';
+  [key: string]: string;
+}
+
+// Mock canvas for tests that need it
+class MockCanvas {
+  width = 100;
+  height = 100;
+  style = new MockCSSStyleDeclaration();
+}
+
 // Mock canvas context for tests that need it
 class MockCanvasRenderingContext2D {
-  canvas = { width: 100, height: 100 };
+  canvas = new MockCanvas();
   fillStyle = '';
   strokeStyle = '';
   lineWidth = 1;

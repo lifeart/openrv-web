@@ -34,6 +34,7 @@ import { ClippingOverlay } from './ClippingOverlay';
 import { HSLQualifier } from './HSLQualifier';
 import { PrerenderBufferManager } from '../../utils/PrerenderBufferManager';
 import { getThemeManager } from '../../utils/ThemeManager';
+import { setupHiDPICanvas, resetCanvasFromHiDPI } from '../../utils/HiDPICanvas';
 
 // Extracted effect processing utilities
 import { applyHighlightsShadows, applyVibrance, applyClarity, applySharpenCPU } from './ViewerEffects';
@@ -479,61 +480,68 @@ export class Viewer {
   }
 
   private initializeCanvas(): void {
-    // Set initial canvas size
+    // Set initial canvas size for placeholder
     this.sourceWidth = 640;
     this.sourceHeight = 360;
-    this.setCanvasSize(640, 360);
+    this.displayWidth = 640;
+    this.displayHeight = 360;
+    // Draw placeholder with hi-DPI support
     this.drawPlaceholder();
+    this.updateOverlayDimensions();
+    this.updateCanvasPosition();
   }
 
+  /**
+   * Set canvas size for media rendering (standard mode, no hi-DPI scaling).
+   * This resets any hi-DPI configuration from placeholder mode.
+   */
   private setCanvasSize(width: number, height: number): void {
     this.displayWidth = width;
     this.displayHeight = height;
 
-    this.imageCanvas.width = width;
-    this.imageCanvas.height = height;
-    this.paintCanvas.width = width;
-    this.paintCanvas.height = height;
+    // Reset all canvases from hi-DPI mode using the utility
+    resetCanvasFromHiDPI(this.imageCanvas, this.imageCtx, width, height);
+    resetCanvasFromHiDPI(this.paintCanvas, this.paintCtx, width, height);
 
-    if (this.cropOverlay) {
-      this.cropOverlay.width = width;
-      this.cropOverlay.height = height;
+    if (this.cropOverlay && this.cropCtx) {
+      resetCanvasFromHiDPI(this.cropOverlay, this.cropCtx, width, height);
     }
 
-    // Update safe areas overlay dimensions
-    this.safeAreasOverlay.setViewerDimensions(
-      width,
-      height,
-      0,
-      0,
-      width,
-      height
-    );
-
-    // Update matte overlay dimensions
-    this.matteOverlay.setViewerDimensions(
-      width,
-      height,
-      0,
-      0,
-      width,
-      height
-    );
-
-    // Update spotlight overlay dimensions
-    this.spotlightOverlay.setViewerDimensions(
-      width,
-      height,
-      0,
-      0,
-      width,
-      height
-    );
-
+    this.updateOverlayDimensions();
     this.updateCanvasPosition();
   }
 
+  /**
+   * Update overlay dimensions to match display size.
+   */
+  private updateOverlayDimensions(): void {
+    const width = this.displayWidth;
+    const height = this.displayHeight;
+
+    // Update safe areas overlay dimensions
+    this.safeAreasOverlay.setViewerDimensions(width, height, 0, 0, width, height);
+
+    // Update matte overlay dimensions
+    this.matteOverlay.setViewerDimensions(width, height, 0, 0, width, height);
+
+    // Update spotlight overlay dimensions
+    this.spotlightOverlay.setViewerDimensions(width, height, 0, 0, width, height);
+  }
+
+  /**
+   * Draw placeholder content with hi-DPI support for crisp text.
+   * Sets up the canvas for hi-DPI rendering before drawing.
+   */
   private drawPlaceholder(): void {
+    // Setup hi-DPI canvas for crisp placeholder text
+    setupHiDPICanvas({
+      canvas: this.imageCanvas,
+      ctx: this.imageCtx,
+      width: this.displayWidth,
+      height: this.displayHeight,
+    });
+
+    // Draw the placeholder content using logical coordinates
     drawPlaceholderUtil(this.imageCtx, this.displayWidth, this.displayHeight, this.zoom);
   }
 

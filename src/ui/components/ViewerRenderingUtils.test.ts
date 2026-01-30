@@ -17,12 +17,21 @@ import { CropState, CropRegion } from './CropControl';
 
 // Mock canvas context
 function createMockContext(): CanvasRenderingContext2D {
+  const mockCanvas = {
+    width: 800,
+    height: 600,
+    style: {
+      width: '',
+      height: '',
+    },
+  };
   return {
     save: vi.fn(),
     restore: vi.fn(),
     translate: vi.fn(),
     rotate: vi.fn(),
     scale: vi.fn(),
+    setTransform: vi.fn(),
     drawImage: vi.fn(),
     clearRect: vi.fn(),
     fillRect: vi.fn(),
@@ -39,6 +48,7 @@ function createMockContext(): CanvasRenderingContext2D {
     textAlign: 'left' as CanvasTextAlign,
     textBaseline: 'alphabetic' as CanvasTextBaseline,
     filter: 'none',
+    canvas: mockCanvas,
   } as unknown as CanvasRenderingContext2D;
 }
 

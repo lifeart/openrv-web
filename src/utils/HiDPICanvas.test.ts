@@ -12,6 +12,7 @@ import {
   physicalToLogical,
   isHiDPI,
   clientToCanvasCoordinates,
+  resetCanvasFromHiDPI,
 } from './HiDPICanvas';
 
 describe('HiDPICanvas', () => {
@@ -494,6 +495,83 @@ describe('HiDPICanvas', () => {
       // x: 75 * (300/150) = 150, y: 100 * (200/200) = 100
       expect(result.x).toBe(150);
       expect(result.y).toBe(100);
+    });
+  });
+
+  describe('resetCanvasFromHiDPI', () => {
+    it('HDPI-033: resets canvas from hi-DPI to standard mode', () => {
+      setDevicePixelRatio(2);
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d')!;
+
+      // Setup in hi-DPI mode
+      setupHiDPICanvas({ canvas, ctx, width: 200, height: 100 });
+
+      expect(canvas.width).toBe(400); // Physical: 200 * 2
+      expect(canvas.height).toBe(200); // Physical: 100 * 2
+      expect(canvas.style.width).toBe('200px');
+      expect(canvas.style.height).toBe('100px');
+
+      // Reset to standard mode
+      resetCanvasFromHiDPI(canvas, ctx, 300, 150);
+
+      expect(canvas.width).toBe(300); // Now logical = physical
+      expect(canvas.height).toBe(150);
+      expect(canvas.style.width).toBe('');
+      expect(canvas.style.height).toBe('');
+    });
+
+    it('HDPI-034: resets context transform to identity', () => {
+      setDevicePixelRatio(2);
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d')!;
+
+      // Setup in hi-DPI mode (context is scaled by 2x)
+      setupHiDPICanvas({ canvas, ctx, width: 200, height: 100 });
+
+      const setTransformSpy = vi.spyOn(ctx, 'setTransform');
+
+      // Reset to standard mode
+      resetCanvasFromHiDPI(canvas, ctx, 300, 150);
+
+      // Should reset transform to identity
+      expect(setTransformSpy).toHaveBeenCalledWith(1, 0, 0, 1, 0, 0);
+    });
+
+    it('HDPI-035: clears CSS style dimensions', () => {
+      setDevicePixelRatio(2);
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d')!;
+
+      // Manually set CSS styles
+      canvas.style.width = '500px';
+      canvas.style.height = '400px';
+
+      // Reset should clear them
+      resetCanvasFromHiDPI(canvas, ctx, 200, 150);
+
+      expect(canvas.style.width).toBe('');
+      expect(canvas.style.height).toBe('');
+    });
+
+    it('HDPI-036: works even when canvas was not in hi-DPI mode', () => {
+      setDevicePixelRatio(1);
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d')!;
+      canvas.width = 100;
+      canvas.height = 100;
+
+      // Reset (even though it wasn't in hi-DPI mode)
+      resetCanvasFromHiDPI(canvas, ctx, 200, 150);
+
+      expect(canvas.width).toBe(200);
+      expect(canvas.height).toBe(150);
+      expect(canvas.style.width).toBe('');
+      expect(canvas.style.height).toBe('');
     });
   });
 

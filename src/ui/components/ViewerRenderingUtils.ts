@@ -266,17 +266,26 @@ export function renderCropOverlay(
 
 /**
  * Draw placeholder content when no source is loaded.
+ *
+ * This is a pure drawing function - it does NOT modify canvas dimensions.
+ * The caller is responsible for setting up the canvas (including hi-DPI
+ * configuration if desired) before calling this function.
+ *
+ * @param ctx - The 2D rendering context (already configured with proper transform)
+ * @param logicalWidth - The logical width to draw within
+ * @param logicalHeight - The logical height to draw within
+ * @param zoom - The current zoom level for scaling UI elements
  */
 export function drawPlaceholder(
   ctx: CanvasRenderingContext2D,
-  displayWidth: number,
-  displayHeight: number,
+  logicalWidth: number,
+  logicalHeight: number,
   zoom: number
 ): void {
-  const w = displayWidth;
-  const h = displayHeight;
+  const w = logicalWidth;
+  const h = logicalHeight;
 
-  // Clear first
+  // Clear first (using logical dimensions)
   ctx.clearRect(0, 0, w, h);
 
   // Draw checkerboard (scale size with zoom)
