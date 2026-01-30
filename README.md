@@ -105,8 +105,15 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
   - Web Worker-based parallel effect processing
   - Smart cache management with LRU eviction
   - Direction-aware preloading (forward/backward)
-- Audio waveform display
-- Volume control with mute
+- **Audio Playback System** - robust audio handling with multiple fallbacks
+  - Web Audio API for independent audio control and waveform generation
+  - HTMLVideoElement fallback for cross-origin or codec issues
+  - Mediabunny-based audio extraction for CORS-blocked content
+  - Graceful autoplay policy handling with user-friendly error messages
+  - Audio sync during frame-accurate playback with drift correction
+  - Automatic muting during reverse playback (audio cannot be reversed)
+- Audio waveform display with multi-channel support
+- Volume control with mute (volume preserved across mute/unmute cycles)
 
 ### UI/UX
 - **Dark/Light Theme** with auto (system) mode and Shift+T shortcut
@@ -311,7 +318,9 @@ src/
 │   ├── components/     # Viewer, Timeline, Toolbar, Controls, TimelineEditor
 │   └── shared/         # Button, Modal, Panel utilities
 ├── paint/              # Annotation engine
-├── audio/              # Waveform renderer
+├── audio/              # Audio playback and waveform rendering
+│   ├── AudioPlaybackManager.ts # Web Audio API playback with fallbacks
+│   └── WaveformRenderer.ts     # Waveform extraction and rendering
 ├── color/              # CDL, LUT loader, WebGL LUT processor
 │   └── LogCurves.ts    # Camera log curve presets (Cineon, LogC, S-Log3, etc.)
 ├── stereo/             # Stereoscopic 3D viewing modes
@@ -419,10 +428,12 @@ The codebase includes comprehensive test coverage with **4500+ unit tests** acro
 - **Core**: Session, Graph, GTO loading/export, SequenceLoader, AutoSaveManager (28 tests), SessionSerializer (35 tests)
 - **Render**: TextureCacheManager (22 tests)
 - **Export**: AnnotationJSONExporter (19 tests), AnnotationPDFExporter (21 tests)
+- **Audio**: AudioPlaybackManager (36 tests), WaveformRenderer (35 tests)
 - **Utilities**: HiDPICanvas (32 tests), EffectProcessor (51 tests), WorkerPool (28 tests), PrerenderBufferManager (36 tests)
 
 **E2E Tests** (50+ test suites):
 - **Core**: App initialization, tab navigation, media loading, playback controls, session recovery
+- **Audio**: Volume control, mute/unmute, audio sync, error recovery, keyboard shortcuts (21 tests)
 - **GTO**: Round-trip verification (markers, frame ranges, matte, paint effects, metadata, custom nodes)
 - **Scopes**: Histogram, Waveform, Vectorscope, Parade scope
 - **Color**: Color controls, Curves, Vibrance, Highlight/Shadow recovery, Log curves
@@ -516,7 +527,8 @@ export class MyGroupNode extends BaseGroupNode {
 - **Playwright** - End-to-end testing
 - **WebGL2** - GPU-accelerated rendering
 - **WebCodecs API** - Frame-accurate video decoding via [mediabunny](https://github.com/nickarora/mediabunny)
-- **Web Audio API** - Audio playback and waveforms
+- **Web Audio API** - Audio playback, waveform generation, and volume control
+- **Mediabunny** - Also used for audio extraction fallback when native fetch is blocked by CORS
 - **gto-js** - RV/GTO file parsing
 - **gl-matrix** - Matrix/vector math
 

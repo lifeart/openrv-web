@@ -109,6 +109,15 @@ export const MARKER_COLORS = [
 
 export type MarkerColor = typeof MARKER_COLORS[number];
 
+/**
+ * Audio playback error types
+ */
+export interface AudioPlaybackError {
+  type: 'autoplay' | 'decode' | 'network' | 'aborted' | 'unknown';
+  message: string;
+  originalError?: Error;
+}
+
 export interface SessionEvents extends EventMap {
   frameChanged: number;
   playbackChanged: boolean;
@@ -132,6 +141,8 @@ export interface SessionEvents extends EventMap {
   matteChanged: MatteSettings;
   metadataChanged: SessionMetadata;
   frameIncrementChanged: number;
+  // Audio playback events
+  audioError: AudioPlaybackError;
 }
 
 export type LoopMode = 'once' | 'loop' | 'pingpong';
@@ -169,6 +180,11 @@ export class Session extends EventEmitter<SessionEvents> {
   private _marks = new Map<number, Marker>();
   private _volume = 0.7;
   private _muted = false;
+  private _previousVolume = 0.7; // For unmute restore
+
+  // Playback guard to prevent concurrent play() calls
+  private _pendingPlayPromise: Promise<void> | null = null;
+  private _audioSyncEnabled = true; // Controls whether to sync video element for audio
 
   // Session integration properties
   private _frameIncrement = 1;
@@ -432,7 +448,16 @@ export class Session extends EventEmitter<SessionEvents> {
   set volume(value: number) {
     const clamped = Math.max(0, Math.min(1, value));
     if (clamped !== this._volume) {
+      // Store previous volume for unmute restore (only if setting a non-zero value)
+      if (clamped > 0) {
+        this._previousVolume = clamped;
+      }
       this._volume = clamped;
+      // Auto-unmute when volume is set to non-zero
+      if (clamped > 0 && this._muted) {
+        this._muted = false;
+        this.emit('mutedChanged', this._muted);
+      }
       this.applyVolumeToVideo();
       this.emit('volumeChanged', this._volume);
     }
@@ -451,14 +476,37 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   toggleMute(): void {
-    this.muted = !this._muted;
+    if (this._muted) {
+      // Unmuting - restore previous volume
+      this._muted = false;
+      if (this._volume === 0) {
+        this._volume = this._previousVolume || 0.7;
+        this.emit('volumeChanged', this._volume);
+      }
+    } else {
+      // Muting - save current volume for later restore
+      if (this._volume > 0) {
+        this._previousVolume = this._volume;
+      }
+      this._muted = true;
+    }
+    this.applyVolumeToVideo();
+    this.emit('mutedChanged', this._muted);
   }
 
   private applyVolumeToVideo(): void {
     const source = this.currentSource;
     if (source?.type === 'video' && source.element instanceof HTMLVideoElement) {
-      source.element.volume = this._muted ? 0 : this._volume;
-      source.element.muted = this._muted;
+      const video = source.element;
+      // Apply effective volume (0 if muted, otherwise the actual volume)
+      const effectiveVolume = this._muted ? 0 : this._volume;
+      video.volume = effectiveVolume;
+      video.muted = this._muted;
+
+      // Also mute during reverse playback (sounds bad)
+      if (this._playDirection < 0) {
+        video.muted = true;
+      }
     }
   }
 
@@ -484,39 +532,123 @@ export class Session extends EventEmitter<SessionEvents> {
 
   // Playback control
   play(): void {
-    if (!this._isPlaying) {
-      this._isPlaying = true;
-      this.lastFrameTime = performance.now();
-      this.frameAccumulator = 0;
+    if (this._isPlaying) return;
 
-      // Reset FPS tracking
-      this.fpsFrameCount = 0;
-      this.fpsLastTime = performance.now();
-      this._effectiveFps = 0;
+    // Guard against concurrent play() calls
+    if (this._pendingPlayPromise) {
+      return;
+    }
 
-      const source = this.currentSource;
+    this._isPlaying = true;
+    this.lastFrameTime = performance.now();
+    this.frameAccumulator = 0;
 
-      // Check if we should use mediabunny for smooth playback
-      if (source?.type === 'video' && source.videoSourceNode?.isUsingMediabunny()) {
-        // Use frame-based playback with mediabunny for both forward and reverse
-        source.videoSourceNode.setPlaybackDirection(this._playDirection);
-        source.videoSourceNode.startPlaybackPreload(this._currentFrame, this._playDirection);
+    // Reset FPS tracking
+    this.fpsFrameCount = 0;
+    this.fpsLastTime = performance.now();
+    this._effectiveFps = 0;
 
-        // Pause video element - we'll use mediabunny for frames
-        if (source.element instanceof HTMLVideoElement) {
-          source.element.pause();
-        }
-      } else if (source?.type === 'video' && source.element instanceof HTMLVideoElement) {
-        // Fallback to native video playback (only for forward)
+    const source = this.currentSource;
+
+    // Check if we should use mediabunny for smooth playback
+    if (source?.type === 'video' && source.videoSourceNode?.isUsingMediabunny()) {
+      // Use frame-based playback with mediabunny for both forward and reverse
+      source.videoSourceNode.setPlaybackDirection(this._playDirection);
+      source.videoSourceNode.startPlaybackPreload(this._currentFrame, this._playDirection);
+
+      // For mediabunny mode, start audio sync at current position
+      if (source.element instanceof HTMLVideoElement) {
+        const video = source.element;
+        const targetTime = (this._currentFrame - 1) / this._fps;
+        video.currentTime = targetTime;
+
+        // Only play audio for forward playback
         if (this._playDirection === 1) {
-          source.element.play();
+          this._pendingPlayPromise = this.safeVideoPlay(video);
         } else {
-          // For reverse playback, keep video paused - we'll seek frame by frame
-          source.element.pause();
+          // Mute during reverse
+          video.muted = true;
+          video.pause();
         }
       }
+    } else if (source?.type === 'video' && source.element instanceof HTMLVideoElement) {
+      // Fallback to native video playback (only for forward)
+      if (this._playDirection === 1) {
+        this._pendingPlayPromise = this.safeVideoPlay(source.element);
+      } else {
+        // For reverse playback, keep video paused - we'll seek frame by frame
+        source.element.pause();
+      }
+    }
 
-      this.emit('playbackChanged', true);
+    // Enable audio sync for playback
+    this._audioSyncEnabled = this._playDirection === 1;
+
+    this.emit('playbackChanged', true);
+  }
+
+  /**
+   * Safely play a video element with proper promise handling
+   */
+  private async safeVideoPlay(video: HTMLVideoElement): Promise<void> {
+    // Create promise before any async operations to prevent race conditions
+    const playPromise = (async () => {
+      try {
+        // Ensure volume is applied before playing
+        this.applyVolumeToVideo();
+
+        await video.play();
+      } catch (error) {
+        const err = error as Error;
+
+        // Handle specific error types
+        if (err.name === 'NotAllowedError') {
+          // Autoplay policy blocked playback
+          this.emit('audioError', {
+            type: 'autoplay',
+            message: 'Playback blocked by browser autoplay policy. Click the player to enable audio.',
+            originalError: err,
+          });
+          // Continue playing muted - update internal state to match
+          video.muted = true;
+          this._muted = true;
+          this.emit('mutedChanged', this._muted);
+          try {
+            await video.play();
+          } catch {
+            // If still failing, pause playback
+            this.pause();
+          }
+        } else if (err.name === 'NotSupportedError') {
+          this.emit('audioError', {
+            type: 'decode',
+            message: 'Media format not supported',
+            originalError: err,
+          });
+          this.pause();
+        } else if (err.name === 'AbortError') {
+          // Playback was interrupted (e.g., by seeking) - this is normal, don't emit error
+          console.debug('Video play() was aborted');
+        } else {
+          this.emit('audioError', {
+            type: 'unknown',
+            message: `Playback failed: ${err.message}`,
+            originalError: err,
+          });
+          this.pause();
+        }
+      }
+    })();
+
+    this._pendingPlayPromise = playPromise;
+
+    try {
+      await playPromise;
+    } finally {
+      // Only clear if this is still our promise (prevents clearing newer promises)
+      if (this._pendingPlayPromise === playPromise) {
+        this._pendingPlayPromise = null;
+      }
     }
   }
 
@@ -547,6 +679,9 @@ export class Session extends EventEmitter<SessionEvents> {
 
     const source = this.currentSource;
 
+    // Update audio mute state based on direction (reverse should be muted)
+    this._audioSyncEnabled = this._playDirection === 1;
+
     // Handle video playback mode switching while playing
     if (this._isPlaying && source?.type === 'video') {
       // If using mediabunny, update direction and restart preloading
@@ -555,11 +690,25 @@ export class Session extends EventEmitter<SessionEvents> {
         source.videoSourceNode.startPlaybackPreload(this._currentFrame, this._playDirection);
         this.lastFrameTime = performance.now();
         this.frameAccumulator = 0;
+
+        // Handle audio for direction change
+        if (source.element instanceof HTMLVideoElement) {
+          if (this._playDirection === 1) {
+            // Switching to forward: resume audio
+            this.applyVolumeToVideo();
+            this.safeVideoPlay(source.element);
+          } else {
+            // Switching to reverse: mute and pause audio
+            source.element.muted = true;
+            source.element.pause();
+          }
+        }
       } else if (source.element instanceof HTMLVideoElement) {
         // Fallback behavior
         if (this._playDirection === 1) {
           // Switching to forward: start native video playback
-          source.element.play();
+          this.applyVolumeToVideo();
+          this.safeVideoPlay(source.element);
         } else {
           // Switching to reverse: pause video, will use frame-based seeking
           source.element.pause();
@@ -803,11 +952,25 @@ export class Session extends EventEmitter<SessionEvents> {
       }
 
       // Sync HTMLVideoElement for audio (but not for frame display)
-      if (source.element instanceof HTMLVideoElement) {
+      // Only sync during forward playback with audio enabled
+      if (this._audioSyncEnabled && source.element instanceof HTMLVideoElement) {
+        const video = source.element;
         const targetTime = (this._currentFrame - 1) / this._fps;
+
         // Only sync if significantly out of sync (for audio purposes)
-        if (Math.abs(source.element.currentTime - targetTime) > 0.5) {
-          source.element.currentTime = targetTime;
+        // Use a larger threshold (0.5s) to avoid stuttering from frequent seeks
+        const drift = Math.abs(video.currentTime - targetTime);
+        if (drift > 0.5) {
+          // Pause, seek, then resume to avoid audio glitches
+          const wasPlaying = !video.paused;
+          if (wasPlaying) {
+            video.pause();
+          }
+          video.currentTime = targetTime;
+          if (wasPlaying) {
+            // Use safe play to handle any errors
+            this.safeVideoPlay(video);
+          }
         }
       }
     } else if (source?.type === 'video' && source.element instanceof HTMLVideoElement && this._playDirection === 1) {
@@ -825,7 +988,7 @@ export class Session extends EventEmitter<SessionEvents> {
       if (video.ended || frame >= this._outPoint) {
         if (this._loopMode === 'loop') {
           video.currentTime = (this._inPoint - 1) / this._fps;
-          video.play();
+          this.safeVideoPlay(video);
         } else if (this._loopMode === 'once') {
           this.pause();
         }

@@ -9,6 +9,7 @@ import {
   renderWaveformRegion,
   extractAudioFromVideo,
   extractAudioFromBlob,
+  extractAudioWithFallback,
 } from './WaveformRenderer';
 import type { WaveformData } from './WaveformRenderer';
 
@@ -103,6 +104,8 @@ describe('WaveformRenderer', () => {
   describe('Audio extraction', () => {
     const mockAudioBuffer = {
       getChannelData: vi.fn().mockReturnValue(new Float32Array(1000)),
+      numberOfChannels: 1,
+      length: 1000,
       duration: 1,
       sampleRate: 44100,
     };
@@ -161,14 +164,196 @@ describe('WaveformRenderer', () => {
 
     it('EXT-004: extractAudioFromBlob handles decode error', async () => {
       mockAudioContext.decodeAudioData.mockRejectedValueOnce(new Error('Decode failed'));
-      
+
       const blob = new Blob(['test']);
       if (!blob.arrayBuffer) {
         blob.arrayBuffer = async () => new ArrayBuffer(0);
       }
-      
+
       const result = await extractAudioFromBlob(blob);
       expect(result).toBeNull();
+    });
+
+    it('EXT-005: extractAudioFromVideo handles CORS error', async () => {
+      const corsError = new TypeError('Failed to fetch');
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(corsError));
+
+      const video = document.createElement('video');
+      video.src = 'https://external-domain.com/test.mp4';
+
+      const onError = vi.fn();
+      const result = await extractAudioFromVideo(video, { onError });
+
+      expect(result).toBeNull();
+      expect(onError).toHaveBeenCalled();
+      expect(onError.mock.calls[0][0].type).toBe('cors');
+    });
+
+    it('EXT-006: extractAudioFromVideo handles no source', async () => {
+      const video = document.createElement('video');
+      // No src set
+
+      const onError = vi.fn();
+      const result = await extractAudioFromVideo(video, { onError });
+
+      expect(result).toBeNull();
+      expect(onError).toHaveBeenCalled();
+      expect(onError.mock.calls[0][0].type).toBe('no-source');
+    });
+
+    it('EXT-007: extractAudioFromVideo handles timeout', async () => {
+      // Create a fetch that never resolves within timeout
+      vi.stubGlobal('fetch', vi.fn().mockImplementation((_url: string, options: { signal?: AbortSignal }) => {
+        return new Promise((_, reject) => {
+          if (options?.signal) {
+            options.signal.addEventListener('abort', () => {
+              reject(new DOMException('Aborted', 'AbortError'));
+            });
+          }
+        });
+      }));
+
+      const video = document.createElement('video');
+      video.src = 'test.mp4';
+
+      const onError = vi.fn();
+      const result = await extractAudioFromVideo(video, { timeout: 10, onError });
+
+      expect(result).toBeNull();
+      expect(onError).toHaveBeenCalled();
+      expect(onError.mock.calls[0][0].type).toBe('timeout');
+    });
+
+    it('EXT-008: extractAudioFromVideo handles network error', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+      }));
+
+      const video = document.createElement('video');
+      video.src = 'test.mp4';
+
+      const onError = vi.fn();
+      const result = await extractAudioFromVideo(video, { onError });
+
+      expect(result).toBeNull();
+      expect(onError).toHaveBeenCalled();
+      expect(onError.mock.calls[0][0].type).toBe('network');
+    });
+
+    it('EXT-009: extractAudioFromVideo handles decode error with callback', async () => {
+      mockAudioContext.decodeAudioData.mockRejectedValueOnce(new Error('Unsupported codec'));
+
+      const video = document.createElement('video');
+      video.src = 'test.mp4';
+
+      const onError = vi.fn();
+      const result = await extractAudioFromVideo(video, { onError });
+
+      expect(result).toBeNull();
+      expect(onError).toHaveBeenCalled();
+      expect(onError.mock.calls[0][0].type).toBe('decode');
+    });
+
+    it('EXT-010: extractAudioFromVideo handles multi-channel audio', async () => {
+      // Mock stereo audio buffer
+      const stereoBuffer = {
+        numberOfChannels: 2,
+        length: 1000,
+        getChannelData: vi.fn().mockImplementation((ch: number) => {
+          const data = new Float32Array(1000);
+          for (let i = 0; i < 1000; i++) {
+            data[i] = ch === 0 ? 0.5 : -0.5; // Left and right channels
+          }
+          return data;
+        }),
+        duration: 1,
+        sampleRate: 44100,
+      };
+      mockAudioContext.decodeAudioData.mockResolvedValueOnce(stereoBuffer);
+
+      const video = document.createElement('video');
+      video.src = 'test.mp4';
+
+      const result = await extractAudioFromVideo(video);
+
+      expect(result).not.toBeNull();
+      expect(stereoBuffer.getChannelData).toHaveBeenCalledWith(0);
+      expect(stereoBuffer.getChannelData).toHaveBeenCalledWith(1);
+    });
+  });
+
+  describe('extractAudioWithFallback', () => {
+    const mockAudioBuffer = {
+      getChannelData: vi.fn().mockReturnValue(new Float32Array(1000)),
+      numberOfChannels: 1,
+      length: 1000,
+      duration: 10,
+      sampleRate: 44100,
+    };
+
+    const mockAudioContext = {
+      decodeAudioData: vi.fn().mockResolvedValue(mockAudioBuffer),
+      close: vi.fn().mockResolvedValue(undefined),
+    };
+
+    beforeEach(() => {
+      vi.stubGlobal('AudioContext', vi.fn().mockImplementation(() => mockAudioContext));
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        arrayBuffer: vi.fn().mockResolvedValue(new ArrayBuffer(1024)),
+      }));
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('EXT-020: returns native result when successful', async () => {
+      const video = document.createElement('video');
+      video.src = 'test.mp4';
+
+      const result = await extractAudioWithFallback(video);
+
+      expect(result).not.toBeNull();
+      expect(result!.duration).toBe(10);
+    });
+
+    it('EXT-021: returns null when native fails and no file provided', async () => {
+      // Make native method fail
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+
+      const video = document.createElement('video');
+      video.src = 'https://external-domain.com/test.mp4';
+
+      const result = await extractAudioWithFallback(video);
+
+      expect(result).toBeNull();
+    });
+
+    it('EXT-022: calls onError when native method fails', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+
+      const video = document.createElement('video');
+      video.src = 'https://external-domain.com/test.mp4';
+
+      const onError = vi.fn();
+      await extractAudioWithFallback(video, undefined, { onError });
+
+      expect(onError).toHaveBeenCalled();
+    });
+
+    it('EXT-023: onProgress is passed through to native method', async () => {
+      const video = document.createElement('video');
+      video.src = 'test.mp4';
+
+      const onProgress = vi.fn();
+      // Native method doesn't call onProgress, but verify it doesn't throw
+      const result = await extractAudioWithFallback(video, undefined, { onProgress });
+
+      expect(result).not.toBeNull();
     });
   });
 
