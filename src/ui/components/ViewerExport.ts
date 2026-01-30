@@ -18,6 +18,7 @@ import {
  * Shared helper: draw an element onto a context with transform and/or crop applied.
  * Handles the four cases (transform+crop, crop-only, transform-only, neither)
  * in a single function to avoid code duplication.
+ * Uses high-quality image smoothing for best picture quality.
  */
 function drawElementWithTransformAndCrop(
   ctx: CanvasRenderingContext2D,
@@ -32,6 +33,10 @@ function drawElementWithTransformAndCrop(
   crop: { x: number; y: number } | null,
   filterString?: string
 ): void {
+  // Enable high-quality image smoothing for best picture quality
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
   const hasTransform = transform && (transform.rotation !== 0 || transform.flipH || transform.flipV);
 
   if (crop && hasTransform) {
@@ -41,6 +46,9 @@ function drawElementWithTransformAndCrop(
     tempCanvas.height = effectiveHeight;
     const tempCtx = tempCanvas.getContext('2d');
     if (tempCtx) {
+      // Enable high-quality image smoothing for temp canvas too
+      tempCtx.imageSmoothingEnabled = true;
+      tempCtx.imageSmoothingQuality = 'high';
       if (filterString) {
         tempCtx.filter = filterString;
       }
@@ -310,6 +318,10 @@ export function renderSourceToImageData(
   tempCanvas.height = height;
   const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
   if (!tempCtx) return null;
+
+  // Enable high-quality image smoothing for best picture quality
+  tempCtx.imageSmoothingEnabled = true;
+  tempCtx.imageSmoothingQuality = 'high';
 
   // Draw source element
   if (source.element instanceof HTMLImageElement || source.element instanceof HTMLVideoElement) {

@@ -10,6 +10,7 @@ import { getCSSColor } from '../../utils/getCSSColor';
 
 /**
  * Draw image/video with rotation and flip transforms applied.
+ * Uses high-quality image smoothing for best picture quality.
  */
 export function drawWithTransform(
   ctx: CanvasRenderingContext2D,
@@ -19,6 +20,10 @@ export function drawWithTransform(
   transform: Transform2D
 ): void {
   const { rotation, flipH, flipV } = transform;
+
+  // Enable high-quality image smoothing for best picture quality
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
 
   // If no transforms, just draw normally
   if (rotation === 0 && !flipH && !flipV) {
@@ -362,6 +367,7 @@ export function isFullCropRegion(region: CropRegion): boolean {
  * Unlike drawWithTransform (for display), this function draws to fill the entire
  * canvas without letterboxing, used for exports where we want pixel-perfect output.
  * For 90/270 rotation, the canvas should already be sized with swapped dimensions.
+ * Uses high-quality image smoothing for best picture quality.
  */
 export function drawWithTransformFill(
   ctx: CanvasRenderingContext2D,
@@ -371,6 +377,10 @@ export function drawWithTransformFill(
   transform: Transform2D
 ): void {
   const { rotation, flipH, flipV } = transform;
+
+  // Enable high-quality image smoothing for best picture quality
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
 
   // If no transforms, just draw normally
   if (rotation === 0 && !flipH && !flipV) {

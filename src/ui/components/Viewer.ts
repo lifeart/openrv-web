@@ -1326,6 +1326,10 @@ export class Viewer {
     // Clear canvas
     this.imageCtx.clearRect(0, 0, displayWidth, displayHeight);
 
+    // Enable high-quality image smoothing for best picture quality
+    this.imageCtx.imageSmoothingEnabled = true;
+    this.imageCtx.imageSmoothingQuality = 'high';
+
     // Check if crop clipping should be applied (will be done AFTER all rendering)
     // Note: We can't use ctx.clip() because putImageData() ignores clip regions
     const cropClipActive = this.cropState.enabled && !isFullCropRegion(this.cropState.region);
@@ -1428,6 +1432,10 @@ export class Viewer {
   ): void {
     const ctx = this.imageCtx;
     const pos = this.wipeState.position;
+
+    // Enable high-quality image smoothing for best picture quality
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
 
     // For wipe, we need to render both with and without filters
     // Since CSS filters apply to the whole container, we'll use canvas filter property

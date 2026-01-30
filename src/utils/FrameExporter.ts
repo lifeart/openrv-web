@@ -68,6 +68,10 @@ export function exportMergedCanvases(
     return;
   }
 
+  // Enable high-quality image smoothing for best picture quality
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
   // Draw each canvas in order
   for (const canvas of canvases) {
     ctx.drawImage(canvas, 0, 0, width, height);
