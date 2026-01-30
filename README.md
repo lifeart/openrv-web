@@ -14,6 +14,7 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 - Video files (MP4, WebM)
 - Image sequences (numbered files like `frame_001.png`, `file.0001.exr`)
 - RV/GTO session files with full graph reconstruction
+- **Enhanced marker support** - notes and colors preserved through GTO round-trip
 
 ### Color Tools
 - Exposure, gamma, saturation, contrast, brightness
@@ -35,6 +36,12 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 - ASC CDL (slope, offset, power, saturation) with .cdl file support
 - 3D LUT support (.cube files) with GPU-accelerated processing
 - Color curves (Master/R/G/B channels) with presets and import/export
+- **Log Curve Presets** - camera-specific log-to-linear conversion
+  - Cineon Film Log (10-bit)
+  - ARRI LogC3 (EI 800) and LogC4
+  - Sony S-Log3
+  - RED Log3G10
+  - GLSL shader generation for GPU processing
 
 ### Transform & Effects
 - Rotation (90°/180°/270°) and flip (H/V)
@@ -124,6 +131,23 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 - Sequence export with progress
 - Copy to clipboard
 - Session save/load (.orvproject format)
+- **Annotation JSON Export** - standalone annotation metadata export
+  - Frame range filtering
+  - Statistics (pen strokes, text, shapes)
+  - Import/validation for round-trip
+- **Annotation PDF Export** - printable annotation reports
+  - Frame thumbnails with timecodes
+  - Annotation summary tables
+  - Uses browser native print (no external libraries)
+
+### Timeline Editor
+- **Visual EDL/Cut Editing** for sequence nodes
+  - Colored cut blocks representing source clips
+  - Drag handles for trimming in/out points
+  - Drag cuts to reorder
+  - Zoom control for timeline detail
+  - Context menu for delete operations
+  - Real-time event emission for cut changes
 
 ## Installation
 
@@ -282,20 +306,24 @@ src/
 │   ├── sources/        # FileSourceNode, VideoSourceNode, SequenceSourceNode
 │   └── groups/         # SequenceGroup, StackGroup, SwitchGroup, etc.
 ├── render/             # WebGL2 renderer and shaders
+│   └── TextureCacheManager.ts  # LRU texture cache for GPU performance
 ├── ui/
-│   ├── components/     # Viewer, Timeline, Toolbar, Controls
+│   ├── components/     # Viewer, Timeline, Toolbar, Controls, TimelineEditor
 │   └── shared/         # Button, Modal, Panel utilities
 ├── paint/              # Annotation engine
 ├── audio/              # Waveform renderer
 ├── color/              # CDL, LUT loader, WebGL LUT processor
+│   └── LogCurves.ts    # Camera log curve presets (Cineon, LogC, S-Log3, etc.)
 ├── stereo/             # Stereoscopic 3D viewing modes
 ├── transform/          # Lens distortion
 ├── composite/          # Blend modes
 ├── scopes/             # GPU-accelerated scopes (Histogram, Waveform, Vectorscope)
 ├── utils/              # EventEmitter, FrameExporter, SequenceLoader, HiDPICanvas
-│   ├── EffectProcessor.ts      # CPU effect processing (highlights, vibrance, clarity, etc.)
+│   ├── EffectProcessor.ts        # CPU effect processing (highlights, vibrance, clarity, etc.)
 │   ├── PrerenderBufferManager.ts # Prerender cache for smooth playback with effects
-│   └── WorkerPool.ts           # Generic worker pool for parallel processing
+│   ├── WorkerPool.ts             # Generic worker pool for parallel processing
+│   ├── AnnotationJSONExporter.ts # Export annotations as JSON
+│   └── AnnotationPDFExporter.ts  # Export annotations as PDF via browser print
 └── workers/            # Web Workers for background processing
     └── effectProcessor.worker.ts # Background effect processing
 ```
@@ -382,25 +410,29 @@ pnpm preview
 
 ### Test Coverage
 
-The codebase includes comprehensive test coverage with **4250+ unit tests** across 107 test files and **42 e2e test suites**:
+The codebase includes comprehensive test coverage with **4500+ unit tests** across 113 test files and **50+ e2e test suites**:
 
-- **Color Tools**: ColorWheels (46 tests), FalseColor (30 tests), HSLQualifier (57 tests), Curves, CDL
+- **Color Tools**: ColorWheels (46 tests), FalseColor (30 tests), HSLQualifier (57 tests), Curves, CDL, LogCurves (27 tests)
 - **Analysis**: ZebraStripes (49 tests), PixelProbe (45 tests), ClippingOverlay (48 tests), Waveform (50 tests), Histogram (45 tests), Vectorscope (49 tests)
 - **Overlays**: TimecodeOverlay (50 tests), SafeAreasOverlay (46 tests), SpotlightOverlay (62 tests)
-- **UI Components**: ThemeControl, HistoryPanel, InfoPanel, Modal, Button, CurveEditor (33 tests), AutoSaveIndicator (35 tests)
+- **UI Components**: ThemeControl, HistoryPanel, InfoPanel, Modal, Button, CurveEditor (33 tests), AutoSaveIndicator (35 tests), TimelineEditor (25 tests)
 - **Core**: Session, Graph, GTO loading/export, SequenceLoader, AutoSaveManager (28 tests), SessionSerializer (35 tests)
+- **Render**: TextureCacheManager (22 tests)
+- **Export**: AnnotationJSONExporter (19 tests), AnnotationPDFExporter (21 tests)
 - **Utilities**: HiDPICanvas (32 tests), EffectProcessor (51 tests), WorkerPool (28 tests), PrerenderBufferManager (36 tests)
 
-**E2E Tests** (42 test suites):
+**E2E Tests** (50+ test suites):
 - **Core**: App initialization, tab navigation, media loading, playback controls, session recovery
+- **GTO**: Round-trip verification (markers, frame ranges, matte, paint effects, metadata, custom nodes)
 - **Scopes**: Histogram, Waveform, Vectorscope, Parade scope
-- **Color**: Color controls, Curves, Vibrance, Highlight/Shadow recovery
+- **Color**: Color controls, Curves, Vibrance, Highlight/Shadow recovery, Log curves
 - **View**: Pixel probe, False color, Zebra stripes, Safe areas, Spotlight, Info panel
 - **Comparison**: A/B compare, Wipe modes, Difference matte
 - **Compositing**: Stack Control - layer management, blend modes, opacity, visibility, reordering (44 tests)
 - **Transform**: Rotation, Flip, Crop
-- **Annotations**: Paint tools, Paint coordinates, Text formatting
-- **Export**: Frame export, Sequence export
+- **Annotations**: Paint tools, Paint coordinates, Text formatting, JSON/PDF export
+- **Export**: Frame export, Sequence export, Annotation export
+- **Timeline**: EDL editing, cut manipulation
 - **Auto-Save**: Indicator display, status changes, styling, animations (14 tests)
 
 ### Hi-DPI Canvas Support

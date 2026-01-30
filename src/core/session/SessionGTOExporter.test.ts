@@ -444,6 +444,42 @@ describe('SessionGTOExporter.buildSessionObject', () => {
         expect(marksProp.data).toContain(20);
     });
 
+    it('GTO-MRK-U003: includes markerNotes and markerColors in session component', () => {
+        // Set up markers with notes and colors
+        session.setMarker(10, 'Note for frame 10', '#ff0000');
+        session.setMarker(20, 'Note for frame 20', '#00ff00');
+
+        const result = SessionGTOExporter.buildSessionObject(session, 'mySession', 'defaultSequence');
+        const components = result.components as Record<string, any>;
+        const sessionComp = components['session'];
+
+        const markerNotesProp = sessionComp.properties.markerNotes;
+        const markerColorsProp = sessionComp.properties.markerColors;
+
+        expect(markerNotesProp).toBeDefined();
+        expect(markerColorsProp).toBeDefined();
+        expect(markerNotesProp.data).toContain('Note for frame 10');
+        expect(markerNotesProp.data).toContain('Note for frame 20');
+        expect(markerColorsProp.data).toContain('#ff0000');
+        expect(markerColorsProp.data).toContain('#00ff00');
+    });
+
+    it('GTO-MRK-U004: exports default values for markers without explicit notes/colors', () => {
+        // Default markers from beforeEach (frames 10 and 20) have no explicit notes/colors
+        const result = SessionGTOExporter.buildSessionObject(session, 'mySession', 'defaultSequence');
+        const components = result.components as Record<string, any>;
+        const sessionComp = components['session'];
+
+        const markerNotesProp = sessionComp.properties.markerNotes;
+        const markerColorsProp = sessionComp.properties.markerColors;
+
+        // Should have empty strings for notes (defaults)
+        expect(markerNotesProp.data).toEqual(['', '']);
+        // Should have default color for colors
+        expect(markerColorsProp.data[0]).toBe('#ff4444');
+        expect(markerColorsProp.data[1]).toBe('#ff4444');
+    });
+
     it('includes root component with name and comment', () => {
         const result = SessionGTOExporter.buildSessionObject(
             session,

@@ -21,6 +21,8 @@ export interface ExportControlEvents extends EventMap {
   copyRequested: void;
   sequenceExportRequested: SequenceExportRequest;
   rvSessionExportRequested: { format: 'rv' | 'gto' };
+  annotationsJSONExportRequested: void;
+  annotationsPDFExportRequested: void;
 }
 
 export class ExportControl extends EventEmitter<ExportControlEvents> {
@@ -129,6 +131,13 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     this.addSectionHeader('Session');
     this.addMenuItem('download', 'Save RV Session (.rv)', () => this.exportRvSession('rv'));
     this.addMenuItem('download', 'Save RV Session (.gto)', () => this.exportRvSession('gto'));
+
+    this.addSeparator();
+
+    // Annotations export section
+    this.addSectionHeader('Annotations');
+    this.addMenuItem('download', 'Export Annotations (JSON)', () => this.exportAnnotationsJSON());
+    this.addMenuItem('download', 'Export Annotations (PDF)', () => this.exportAnnotationsPDF());
 
     this.addSeparator();
 
@@ -304,6 +313,13 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     this.emit('rvSessionExportRequested', { format });
   }
 
+  private exportAnnotationsJSON(): void {
+    this.emit('annotationsJSONExportRequested', undefined);
+  }
+
+  private exportAnnotationsPDF(): void {
+    this.emit('annotationsPDFExportRequested', undefined);
+  }
 
   quickExport(format: ExportFormat = 'png'): void {
     this.exportAs(format);

@@ -28,6 +28,8 @@ function createMockDTO(config: {
     range?: number[] | number[][];
     region?: number[] | number[][];
     marks?: number[];
+    markerNotes?: string[];
+    markerColors?: string[];
     inc?: number;
     version?: number;
     clipboard?: number;
@@ -78,6 +80,8 @@ function createMockDTO(config: {
               if (propName === 'range') return s.range;
               if (propName === 'region') return s.region;
               if (propName === 'marks') return s.marks;
+              if (propName === 'markerNotes') return s.markerNotes;
+              if (propName === 'markerColors') return s.markerColors;
               if (propName === 'inc') return s.inc;
               if (propName === 'version') return s.version;
               if (propName === 'clipboard') return s.clipboard;
@@ -247,6 +251,49 @@ describe('GTOGraphLoader', () => {
       expect(result.sessionInfo.marks).toEqual([12, 18]);
       // Should prefer realtime over fps
       expect(result.sessionInfo.fps).toBe(24);
+    });
+
+    it('GTO-MRK-U001: extracts marker notes and colors correctly', () => {
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
+
+      const dto = createMockDTO({
+        sessions: [
+          {
+            name: 'MarkerSession',
+            marks: [10, 20, 30],
+            markerNotes: ['First note', 'Second note', 'Third note'],
+            markerColors: ['#ff0000', '#00ff00', '#0000ff'],
+          },
+        ],
+        objects: [],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.sessionInfo.marks).toEqual([10, 20, 30]);
+      expect(result.sessionInfo.markerNotes).toEqual(['First note', 'Second note', 'Third note']);
+      expect(result.sessionInfo.markerColors).toEqual(['#ff0000', '#00ff00', '#0000ff']);
+    });
+
+    it('GTO-MRK-U002: handles missing marker notes and colors gracefully', () => {
+      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
+
+      const dto = createMockDTO({
+        sessions: [
+          {
+            name: 'LegacySession',
+            marks: [5, 15],
+            // No markerNotes or markerColors - legacy format
+          },
+        ],
+        objects: [],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.sessionInfo.marks).toEqual([5, 15]);
+      expect(result.sessionInfo.markerNotes).toBeUndefined();
+      expect(result.sessionInfo.markerColors).toBeUndefined();
     });
 
     it('GTO-003: creates RVFileSource nodes', () => {

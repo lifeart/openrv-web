@@ -3041,6 +3041,8 @@ export class SessionGTOExporter {
       .int('frame', playback.currentFrame)
       .int('currentFrame', playback.currentFrame)
       .int('marks', playback.marks.map(m => m.frame))
+      .string('markerNotes', playback.marks.map(m => m.note || ''))
+      .string('markerColors', playback.marks.map(m => m.color || '#ff4444'))
       .int('version', metadata.version)
       .int('clipboard', metadata.clipboard)
       .end()
@@ -3203,9 +3205,13 @@ export class SessionGTOExporter {
         
         if (playback.marks.length > 0) {
            this.updateProperty(sessionComp, 'marks', playback.marks.map(m => m.frame));
+           this.updateProperty(sessionComp, 'markerNotes', playback.marks.map(m => m.note || ''));
+           this.updateProperty(sessionComp, 'markerColors', playback.marks.map(m => m.color || '#ff4444'));
         } else {
             // Remove marks property if empty? Or set to empty array?
              this.updateProperty(sessionComp, 'marks', []);
+             this.updateProperty(sessionComp, 'markerNotes', []);
+             this.updateProperty(sessionComp, 'markerColors', []);
         }
       }
       

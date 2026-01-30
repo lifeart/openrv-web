@@ -35,6 +35,10 @@ export interface GTOParseResult {
     inPoint?: number;
     outPoint?: number;
     marks?: number[];
+    /** Marker notes (parallel array to marks) */
+    markerNotes?: string[];
+    /** Marker colors (parallel array to marks) */
+    markerColors?: string[];
     /** Frame increment for playback */
     inc?: number;
     /** Session file version */
@@ -248,6 +252,24 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
         const marks = marksValue.filter((value): value is number => typeof value === 'number');
         if (marks.length > 0) {
           sessionInfo.marks = marks;
+        }
+      }
+
+      // Parse marker notes (parallel array to marks)
+      const markerNotesValue = sessionComp.property('markerNotes').value();
+      if (Array.isArray(markerNotesValue)) {
+        const markerNotes = markerNotesValue.filter((value): value is string => typeof value === 'string');
+        if (markerNotes.length > 0) {
+          sessionInfo.markerNotes = markerNotes;
+        }
+      }
+
+      // Parse marker colors (parallel array to marks)
+      const markerColorsValue = sessionComp.property('markerColors').value();
+      if (Array.isArray(markerColorsValue)) {
+        const markerColors = markerColorsValue.filter((value): value is string => typeof value === 'string');
+        if (markerColors.length > 0) {
+          sessionInfo.markerColors = markerColors;
         }
       }
 
