@@ -146,6 +146,8 @@ describe('Waveform', () => {
       waveform.cycleMode();
       expect(waveform.getMode()).toBe('parade');
       waveform.cycleMode();
+      expect(waveform.getMode()).toBe('ycbcr');
+      waveform.cycleMode();
       expect(waveform.getMode()).toBe('luma');
     });
 
@@ -154,6 +156,8 @@ describe('Waveform', () => {
       expect(waveform.getMode()).toBe('parade');
       waveform.setMode('rgb');
       expect(waveform.getMode()).toBe('rgb');
+      waveform.setMode('ycbcr');
+      expect(waveform.getMode()).toBe('ycbcr');
       waveform.setMode('luma');
       expect(waveform.getMode()).toBe('luma');
     });
@@ -188,6 +192,8 @@ describe('Waveform', () => {
       expect(modeButton?.textContent).toBe('RGB');
       waveform.cycleMode();
       expect(modeButton?.textContent).toBe('Parade');
+      waveform.cycleMode();
+      expect(modeButton?.textContent).toBe('YCbCr');
       waveform.cycleMode();
       expect(modeButton?.textContent).toBe('Luma');
     });
@@ -345,7 +351,9 @@ describe('Waveform', () => {
       expect(waveform.getMode()).toBe('rgb');
       waveform.cycleMode(); // rgb -> parade
       expect(waveform.getMode()).toBe('parade');
-      waveform.cycleMode(); // parade -> luma
+      waveform.cycleMode(); // parade -> ycbcr
+      expect(waveform.getMode()).toBe('ycbcr');
+      waveform.cycleMode(); // ycbcr -> luma
       expect(waveform.getMode()).toBe('luma');
     });
   });

@@ -119,6 +119,13 @@ test.describe('Waveform Modes', () => {
     });
     await page.waitForTimeout(100);
     state = await getViewerState(page);
+    expect(state.waveformMode).toBe('ycbcr');
+
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.waveform?.cycleMode();
+    });
+    await page.waitForTimeout(100);
+    state = await getViewerState(page);
     expect(state.waveformMode).toBe('luma');
   });
 
@@ -136,6 +143,65 @@ test.describe('Waveform Modes', () => {
     await page.waitForTimeout(100);
     state = await getViewerState(page);
     expect(state.waveformMode).toBe('parade');
+
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.waveform?.setMode('ycbcr');
+    });
+    await page.waitForTimeout(100);
+    state = await getViewerState(page);
+    expect(state.waveformMode).toBe('ycbcr');
+  });
+});
+
+test.describe('YCbCr Waveform Mode', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+    await loadVideoFile(page);
+    // Show waveform
+    await page.keyboard.press('w');
+    await page.waitForTimeout(100);
+  });
+
+  test('YCBCR-001: YCbCr mode is selectable via setMode', async ({ page }) => {
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.waveform?.setMode('ycbcr');
+    });
+    await page.waitForTimeout(100);
+
+    const state = await getViewerState(page);
+    expect(state.waveformMode).toBe('ycbcr');
+  });
+
+  test('YCBCR-002: mode button shows YCbCr label in YCbCr mode', async ({ page }) => {
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.waveform?.setMode('ycbcr');
+    });
+    await page.waitForTimeout(100);
+
+    const modeButton = page.locator('[data-testid="waveform-mode-button"]');
+    await expect(modeButton).toHaveText('YCbCr');
+  });
+
+  test('YCBCR-003: RGB controls are hidden in YCbCr mode', async ({ page }) => {
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.waveform?.setMode('ycbcr');
+    });
+    await page.waitForTimeout(100);
+
+    const rgbControls = page.locator('[data-testid="waveform-rgb-controls"]');
+    await expect(rgbControls).toBeHidden();
+  });
+
+  test('YCBCR-004: waveform canvas is visible in YCbCr mode', async ({ page }) => {
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.waveform?.setMode('ycbcr');
+    });
+    await page.waitForTimeout(100);
+
+    const canvas = page.locator('.waveform-container canvas');
+    await expect(canvas).toBeVisible();
   });
 });
 
@@ -201,7 +267,15 @@ test.describe('Waveform Internal Button Controls', () => {
     expect(state.waveformMode).toBe('parade');
     await expect(modeButton).toHaveText('Parade');
 
-    // Click to change from Parade back to Luma
+    // Click to change from Parade to YCbCr
+    await modeButton.click();
+    await page.waitForTimeout(100);
+
+    state = await getViewerState(page);
+    expect(state.waveformMode).toBe('ycbcr');
+    await expect(modeButton).toHaveText('YCbCr');
+
+    // Click to change from YCbCr back to Luma
     await modeButton.click();
     await page.waitForTimeout(100);
 

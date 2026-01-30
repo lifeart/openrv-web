@@ -147,6 +147,26 @@ export function createSampleCubeLUT(size: number = 2): string {
 }
 
 /**
+ * Create sample 1D .cube LUT content
+ */
+export function createSample1DLUT(size: number = 16): string {
+  const lines = [
+    `TITLE "Test 1D LUT"`,
+    `LUT_1D_SIZE ${size}`,
+    `DOMAIN_MIN 0.0 0.0 0.0`,
+    `DOMAIN_MAX 1.0 1.0 1.0`,
+  ];
+
+  // Generate identity 1D LUT data (each channel maps input to same output)
+  for (let i = 0; i < size; i++) {
+    const val = i / (size - 1);
+    lines.push(`${val.toFixed(6)} ${val.toFixed(6)} ${val.toFixed(6)}`);
+  }
+
+  return lines.join('\n');
+}
+
+/**
  * Create sample CDL XML content
  */
 export function createSampleCDL(

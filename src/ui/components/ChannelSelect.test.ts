@@ -273,6 +273,12 @@ describe('ChannelSelect', () => {
       expect(control.getChannel()).toBe('luminance');
     });
 
+    it('CH-015b: Shift+Y selects luminance/grayscale channel (alias)', () => {
+      const handled = control.handleKeyboard('Y', true);
+      expect(handled).toBe(true);
+      expect(control.getChannel()).toBe('luminance');
+    });
+
     it('CH-016: Shift+N selects RGB (normal) channel', () => {
       control.setChannel('red');
       const handled = control.handleKeyboard('N', true);
@@ -306,7 +312,7 @@ describe('CHANNEL_LABELS', () => {
     expect(CHANNEL_LABELS.green).toBe('Green');
     expect(CHANNEL_LABELS.blue).toBe('Blue');
     expect(CHANNEL_LABELS.alpha).toBe('Alpha');
-    expect(CHANNEL_LABELS.luminance).toBe('Luma');
+    expect(CHANNEL_LABELS.luminance).toBe('Grayscale');
   });
 });
 
@@ -317,6 +323,7 @@ describe('CHANNEL_SHORTCUTS', () => {
     expect(CHANNEL_SHORTCUTS['B']).toBe('blue');
     expect(CHANNEL_SHORTCUTS['A']).toBe('alpha');
     expect(CHANNEL_SHORTCUTS['L']).toBe('luminance');
+    expect(CHANNEL_SHORTCUTS['Y']).toBe('luminance'); // Y for grayscale alias
     expect(CHANNEL_SHORTCUTS['N']).toBe('rgb');
   });
 });

@@ -25,7 +25,7 @@ export const CHANNEL_LABELS: Record<ChannelMode, string> = {
   green: 'Green',
   blue: 'Blue',
   alpha: 'Alpha',
-  luminance: 'Luma',
+  luminance: 'Grayscale',
 };
 
 export const CHANNEL_SHORT_LABELS: Record<ChannelMode, string> = {
@@ -43,6 +43,7 @@ export const CHANNEL_SHORTCUTS: Record<string, ChannelMode> = {
   'B': 'blue',
   'A': 'alpha',
   'L': 'luminance',
+  'Y': 'luminance', // Y for "graY" - alias for grayscale/luminance
   'N': 'rgb', // N for "normal" or neutral
 };
 
@@ -100,7 +101,8 @@ export class ChannelSelect extends EventEmitter<ChannelSelectEvents> {
         value: channel,
         label: CHANNEL_LABELS[channel],
         color: CHANNEL_COLORS[channel],
-        shortcut: channel === 'rgb' ? 'N' : CHANNEL_SHORT_LABELS[channel],
+        // Show L/Y for grayscale (luminance) to indicate both shortcuts work
+        shortcut: channel === 'rgb' ? 'N' : channel === 'luminance' ? 'L/Y' : CHANNEL_SHORT_LABELS[channel],
       }))
     );
 
@@ -113,7 +115,7 @@ export class ChannelSelect extends EventEmitter<ChannelSelectEvents> {
     // Create button
     this.button = document.createElement('button');
     this.button.dataset.testid = 'channel-select-button';
-    this.button.title = 'Channel isolation (Shift+R/G/B/A/L/N)';
+    this.button.title = 'Channel isolation (Shift+R/G/B/A/L/Y/N) - Y for grayscale';
     this.button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;

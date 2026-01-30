@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { CompareControl } from './CompareControl';
+import { CompareControl, DEFAULT_BLEND_MODE_STATE } from './CompareControl';
 import { DEFAULT_DIFFERENCE_MATTE_STATE } from './DifferenceMatteControl';
 
 describe('CompareControl', () => {
@@ -27,6 +27,7 @@ describe('CompareControl', () => {
       expect(state.currentAB).toBe('A');
       expect(state.abAvailable).toBe(false);
       expect(state.differenceMatte).toEqual(DEFAULT_DIFFERENCE_MATTE_STATE);
+      expect(state.blendMode).toEqual(DEFAULT_BLEND_MODE_STATE);
     });
 
     it('CMP-U002: should render container element', () => {
@@ -385,6 +386,246 @@ describe('CompareControl', () => {
     });
   });
 
+  describe('blend modes', () => {
+    it('CMP-U130: setBlendMode changes blend mode', () => {
+      control.setBlendMode('onionskin');
+      expect(control.getBlendMode()).toBe('onionskin');
+
+      control.setBlendMode('flicker');
+      expect(control.getBlendMode()).toBe('flicker');
+
+      control.setBlendMode('blend');
+      expect(control.getBlendMode()).toBe('blend');
+
+      control.setBlendMode('off');
+      expect(control.getBlendMode()).toBe('off');
+    });
+
+    it('CMP-U131: toggleBlendMode toggles mode on and off', () => {
+      control.toggleBlendMode('onionskin');
+      expect(control.getBlendMode()).toBe('onionskin');
+
+      control.toggleBlendMode('onionskin');
+      expect(control.getBlendMode()).toBe('off');
+    });
+
+    it('CMP-U132: toggleBlendMode switches between modes', () => {
+      control.toggleBlendMode('onionskin');
+      expect(control.getBlendMode()).toBe('onionskin');
+
+      control.toggleBlendMode('flicker');
+      expect(control.getBlendMode()).toBe('flicker');
+    });
+
+    it('CMP-U133: setBlendMode emits blendModeChanged event', () => {
+      const callback = vi.fn();
+      control.on('blendModeChanged', callback);
+
+      control.setBlendMode('onionskin');
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ mode: 'onionskin' }));
+    });
+
+    it('CMP-U134: setBlendMode does not emit if mode unchanged', () => {
+      control.setBlendMode('onionskin');
+      const callback = vi.fn();
+      control.on('blendModeChanged', callback);
+
+      control.setBlendMode('onionskin'); // Same mode
+      expect(callback).not.toHaveBeenCalled();
+    });
+
+    it('CMP-U135: getBlendModeState returns complete state', () => {
+      const state = control.getBlendModeState();
+      expect(state).toHaveProperty('mode');
+      expect(state).toHaveProperty('onionOpacity');
+      expect(state).toHaveProperty('flickerRate');
+      expect(state).toHaveProperty('blendRatio');
+    });
+
+    it('CMP-U136: getBlendModeState returns copy', () => {
+      const state1 = control.getBlendModeState();
+      const state2 = control.getBlendModeState();
+      expect(state1).toEqual(state2);
+      expect(state1).not.toBe(state2);
+    });
+  });
+
+  describe('onion skin opacity', () => {
+    it('CMP-U140: setOnionOpacity sets opacity', () => {
+      control.setOnionOpacity(0.75);
+      expect(control.getOnionOpacity()).toBe(0.75);
+    });
+
+    it('CMP-U141: setOnionOpacity clamps to 0-1 range', () => {
+      control.setOnionOpacity(1.5);
+      expect(control.getOnionOpacity()).toBe(1);
+
+      control.setOnionOpacity(-0.5);
+      expect(control.getOnionOpacity()).toBe(0);
+    });
+
+    it('CMP-U142: setOnionOpacity accepts boundary values', () => {
+      control.setOnionOpacity(0);
+      expect(control.getOnionOpacity()).toBe(0);
+
+      control.setOnionOpacity(1);
+      expect(control.getOnionOpacity()).toBe(1);
+    });
+
+    it('CMP-U143: setOnionOpacity emits blendModeChanged event', () => {
+      const callback = vi.fn();
+      control.on('blendModeChanged', callback);
+
+      control.setOnionOpacity(0.3);
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ onionOpacity: 0.3 }));
+    });
+
+    it('CMP-U144: setOnionOpacity does not emit if unchanged', () => {
+      control.setOnionOpacity(0.5);
+      const callback = vi.fn();
+      control.on('blendModeChanged', callback);
+
+      control.setOnionOpacity(0.5); // Same
+      expect(callback).not.toHaveBeenCalled();
+    });
+
+    it('CMP-U145: default onion opacity is 0.5', () => {
+      expect(control.getOnionOpacity()).toBe(0.5);
+    });
+  });
+
+  describe('flicker rate', () => {
+    it('CMP-U150: setFlickerRate sets rate', () => {
+      control.setFlickerRate(10);
+      expect(control.getFlickerRate()).toBe(10);
+    });
+
+    it('CMP-U151: setFlickerRate clamps to 1-30 range', () => {
+      control.setFlickerRate(50);
+      expect(control.getFlickerRate()).toBe(30);
+
+      control.setFlickerRate(0);
+      expect(control.getFlickerRate()).toBe(1);
+    });
+
+    it('CMP-U152: setFlickerRate accepts boundary values', () => {
+      control.setFlickerRate(1);
+      expect(control.getFlickerRate()).toBe(1);
+
+      control.setFlickerRate(30);
+      expect(control.getFlickerRate()).toBe(30);
+    });
+
+    it('CMP-U153: setFlickerRate rounds to integer', () => {
+      control.setFlickerRate(5.7);
+      expect(control.getFlickerRate()).toBe(6);
+    });
+
+    it('CMP-U154: setFlickerRate emits blendModeChanged event', () => {
+      const callback = vi.fn();
+      control.on('blendModeChanged', callback);
+
+      control.setFlickerRate(8);
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ flickerRate: 8 }));
+    });
+
+    it('CMP-U155: default flicker rate is 4 Hz', () => {
+      expect(control.getFlickerRate()).toBe(4);
+    });
+
+    it('CMP-U156: getFlickerFrame returns 0 or 1', () => {
+      expect([0, 1]).toContain(control.getFlickerFrame());
+    });
+  });
+
+  describe('blend ratio', () => {
+    it('CMP-U160: setBlendRatio sets ratio', () => {
+      control.setBlendRatio(0.75);
+      expect(control.getBlendRatio()).toBe(0.75);
+    });
+
+    it('CMP-U161: setBlendRatio clamps to 0-1 range', () => {
+      control.setBlendRatio(1.5);
+      expect(control.getBlendRatio()).toBe(1);
+
+      control.setBlendRatio(-0.5);
+      expect(control.getBlendRatio()).toBe(0);
+    });
+
+    it('CMP-U162: setBlendRatio accepts boundary values', () => {
+      control.setBlendRatio(0);
+      expect(control.getBlendRatio()).toBe(0);
+
+      control.setBlendRatio(1);
+      expect(control.getBlendRatio()).toBe(1);
+    });
+
+    it('CMP-U163: setBlendRatio emits blendModeChanged event', () => {
+      const callback = vi.fn();
+      control.on('blendModeChanged', callback);
+
+      control.setBlendRatio(0.3);
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ blendRatio: 0.3 }));
+    });
+
+    it('CMP-U164: default blend ratio is 0.5', () => {
+      expect(control.getBlendRatio()).toBe(0.5);
+    });
+  });
+
+  describe('blend mode state interdependencies', () => {
+    it('CMP-U170: enabling blend mode disables wipe mode', () => {
+      control.setWipeMode('horizontal');
+      expect(control.getWipeMode()).toBe('horizontal');
+
+      control.setBlendMode('onionskin');
+      expect(control.getWipeMode()).toBe('off');
+      expect(control.getBlendMode()).toBe('onionskin');
+    });
+
+    it('CMP-U171: enabling blend mode disables difference matte', () => {
+      control.setDifferenceMatteEnabled(true);
+      expect(control.isDifferenceMatteEnabled()).toBe(true);
+
+      control.setBlendMode('flicker');
+      expect(control.isDifferenceMatteEnabled()).toBe(false);
+      expect(control.getBlendMode()).toBe('flicker');
+    });
+
+    it('CMP-U172: enabling blend mode emits wipeModeChanged when wipe is active', () => {
+      control.setWipeMode('horizontal');
+      const callback = vi.fn();
+      control.on('wipeModeChanged', callback);
+
+      control.setBlendMode('blend');
+      expect(callback).toHaveBeenCalledWith('off');
+    });
+
+    it('CMP-U173: enabling blend mode emits differenceMatteChanged when diff matte is active', () => {
+      control.setDifferenceMatteEnabled(true);
+      const callback = vi.fn();
+      control.on('differenceMatteChanged', callback);
+
+      control.setBlendMode('onionskin');
+      expect(callback).toHaveBeenCalled();
+    });
+
+    it('CMP-U174: disabling blend mode does not re-enable wipe or diff matte', () => {
+      control.setWipeMode('horizontal');
+      control.setBlendMode('onionskin');
+      expect(control.getWipeMode()).toBe('off');
+
+      control.setBlendMode('off');
+      expect(control.getWipeMode()).toBe('off'); // Stays off
+    });
+
+    it('CMP-U175: blend mode is part of isActive logic', () => {
+      control.setBlendMode('onionskin');
+      const state = control.getState();
+      expect(state.blendMode.mode).toBe('onionskin');
+    });
+  });
+
   describe('isActive logic', () => {
     it('CMP-U070: isActive false when everything off', () => {
       const state = control.getState();
@@ -525,6 +766,42 @@ describe('CompareControl', () => {
       control.on('stateChanged', callback);
 
       control.setDifferenceMatteEnabled(true);
+      expect(callback).toHaveBeenCalled();
+    });
+
+    it('CMP-U114: stateChanged emitted for blend mode change', () => {
+      const callback = vi.fn();
+      control.on('stateChanged', callback);
+
+      control.setBlendMode('onionskin');
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          blendMode: expect.objectContaining({ mode: 'onionskin' }),
+        })
+      );
+    });
+
+    it('CMP-U115: stateChanged emitted for onion opacity change', () => {
+      const callback = vi.fn();
+      control.on('stateChanged', callback);
+
+      control.setOnionOpacity(0.7);
+      expect(callback).toHaveBeenCalled();
+    });
+
+    it('CMP-U116: stateChanged emitted for flicker rate change', () => {
+      const callback = vi.fn();
+      control.on('stateChanged', callback);
+
+      control.setFlickerRate(10);
+      expect(callback).toHaveBeenCalled();
+    });
+
+    it('CMP-U117: stateChanged emitted for blend ratio change', () => {
+      const callback = vi.fn();
+      control.on('stateChanged', callback);
+
+      control.setBlendRatio(0.3);
       expect(callback).toHaveBeenCalled();
     });
   });

@@ -22,7 +22,7 @@ import { setupHiDPICanvas } from '../../utils/HiDPICanvas';
 import { getThemeManager } from '../../utils/ThemeManager';
 import { getCSSColor } from '../../utils/getCSSColor';
 
-export type WaveformMode = 'luma' | 'rgb' | 'parade';
+export type WaveformMode = 'luma' | 'rgb' | 'parade' | 'ycbcr';
 
 export interface RGBChannelState {
   r: boolean;
@@ -281,6 +281,8 @@ export class Waveform extends EventEmitter<WaveformEvents> {
       this.drawRGBOverlayWaveform(data, width, height);
     } else if (this.mode === 'parade') {
       this.drawParadeWaveform(data, width, height);
+    } else if (this.mode === 'ycbcr') {
+      this.drawYCbCrWaveform(data, width, height);
     }
   }
 
@@ -443,6 +445,91 @@ export class Waveform extends EventEmitter<WaveformEvents> {
   }
 
   /**
+   * Draw YCbCr parade waveform
+   * Uses BT.709 coefficients:
+   * Y  =  0.2126 * R + 0.7152 * G + 0.0722 * B
+   * Cb = -0.1146 * R - 0.3854 * G + 0.5000 * B + 0.5
+   * Cr =  0.5000 * R - 0.4542 * G - 0.0458 * B + 0.5
+   */
+  private drawYCbCrWaveform(data: Uint8ClampedArray, srcWidth: number, srcHeight: number): void {
+    const { ctx } = this;
+    const canvasWidth = WAVEFORM_WIDTH;
+    const canvasHeight = WAVEFORM_HEIGHT;
+    const sectionWidth = PARADE_SECTION_WIDTH;
+
+    const sampleStep = Math.max(1, Math.floor(srcWidth / sectionWidth));
+    const pixelsPerColumn = Math.ceil(srcWidth / sectionWidth);
+
+    // Draw Y, Cb, Cr in three columns
+    // Y: white, Cb: blue, Cr: red
+    const yColor = 'rgba(200, 200, 200, 0.15)';
+    const cbColor = 'rgba(68, 136, 255, 0.15)';
+    const crColor = 'rgba(255, 68, 68, 0.15)';
+
+    for (let x = 0; x < sectionWidth; x++) {
+      const srcX = Math.floor(x * srcWidth / sectionWidth);
+      const endX = Math.min(srcX + pixelsPerColumn, srcWidth);
+
+      for (let srcXi = srcX; srcXi < endX; srcXi += sampleStep) {
+        for (let srcY = 0; srcY < srcHeight; srcY++) {
+          const i = (srcY * srcWidth + srcXi) * 4;
+          const r = data[i]! / 255;
+          const g = data[i + 1]! / 255;
+          const b = data[i + 2]! / 255;
+
+          // BT.709 YCbCr conversion
+          const y  =  0.2126 * r + 0.7152 * g + 0.0722 * b;
+          const cb = -0.1146 * r - 0.3854 * g + 0.5000 * b + 0.5;
+          const cr =  0.5000 * r - 0.4542 * g - 0.0458 * b + 0.5;
+
+          // Y channel (first column - white)
+          const yPos = canvasHeight - 1 - Math.floor(Math.max(0, Math.min(1, y)) * (canvasHeight - 1));
+          ctx.fillStyle = yColor;
+          ctx.fillRect(x, yPos, 1, 1);
+
+          // Cb channel (second column - blue)
+          const cbPos = canvasHeight - 1 - Math.floor(Math.max(0, Math.min(1, cb)) * (canvasHeight - 1));
+          ctx.fillStyle = cbColor;
+          ctx.fillRect(sectionWidth + x, cbPos, 1, 1);
+
+          // Cr channel (third column - red)
+          const crPos = canvasHeight - 1 - Math.floor(Math.max(0, Math.min(1, cr)) * (canvasHeight - 1));
+          ctx.fillStyle = crColor;
+          ctx.fillRect(sectionWidth * 2 + x, crPos, 1, 1);
+        }
+      }
+    }
+
+    // Draw vertical separator lines
+    ctx.strokeStyle = 'rgba(100, 100, 100, 0.5)';
+    ctx.beginPath();
+    ctx.moveTo(sectionWidth, 0);
+    ctx.lineTo(sectionWidth, canvasHeight);
+    ctx.moveTo(sectionWidth * 2, 0);
+    ctx.lineTo(sectionWidth * 2, canvasHeight);
+    ctx.stroke();
+
+    // Draw horizontal reference line at 50% for Cb/Cr (neutral point)
+    ctx.strokeStyle = 'rgba(100, 100, 100, 0.4)';
+    ctx.setLineDash([2, 2]);
+    const neutralY = Math.floor(canvasHeight * 0.5);
+    ctx.beginPath();
+    ctx.moveTo(sectionWidth, neutralY);
+    ctx.lineTo(canvasWidth, neutralY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Draw channel labels
+    ctx.font = '9px sans-serif';
+    ctx.fillStyle = 'rgba(200, 200, 200, 0.8)';
+    ctx.fillText('Y', 2, 10);
+    ctx.fillStyle = 'rgba(68, 136, 255, 0.8)';
+    ctx.fillText('Cb', sectionWidth + 2, 10);
+    ctx.fillStyle = 'rgba(255, 68, 68, 0.8)';
+    ctx.fillText('Cr', sectionWidth * 2 + 2, 10);
+  }
+
+  /**
    * Toggle visibility
    */
   toggle(): void {
@@ -569,7 +656,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
    * Cycle through display modes
    */
   cycleMode(): void {
-    const modes: WaveformMode[] = ['luma', 'rgb', 'parade'];
+    const modes: WaveformMode[] = ['luma', 'rgb', 'parade', 'ycbcr'];
     const currentIndex = modes.indexOf(this.mode);
     this.mode = modes[(currentIndex + 1) % modes.length]!;
 
@@ -578,6 +665,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
         luma: 'Luma',
         rgb: 'RGB',
         parade: 'Parade',
+        ycbcr: 'YCbCr',
       };
       this.modeButton.textContent = labels[this.mode];
     }
@@ -605,6 +693,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
         luma: 'Luma',
         rgb: 'RGB',
         parade: 'Parade',
+        ycbcr: 'YCbCr',
       };
       this.modeButton.textContent = labels[this.mode];
     }

@@ -77,6 +77,8 @@ export class App {
   private hslQualifierControl: HSLQualifierControl;
   private animationId: number | null = null;
   private boundHandleResize: () => void;
+  private boundHandleVisibilityChange: () => void;
+  private wasPlayingBeforeHide = false;
   private keyboardManager: KeyboardManager;
   private customKeyBindingsManager: CustomKeyBindingsManager;
   private historyPanel: HistoryPanel;
@@ -98,6 +100,7 @@ export class App {
   constructor() {
     // Bind event handlers for proper cleanup
     this.boundHandleResize = () => this.viewer.resize();
+    this.boundHandleVisibilityChange = this.handleVisibilityChange.bind(this);
 
     this.session = new Session();
     this.paintEngine = new PaintEngine();
@@ -994,9 +997,47 @@ export class App {
     // For example, could show/hide certain viewer overlays based on tab
   }
 
+  /**
+   * Handle page visibility changes.
+   * Pauses playback when tab is hidden to save resources,
+   * and resumes playback when tab becomes visible again.
+   */
+  private handleVisibilityChange(): void {
+    if (document.hidden) {
+      // Tab is hidden - save playback state and pause
+      this.wasPlayingBeforeHide = this.session.isPlaying;
+      if (this.wasPlayingBeforeHide) {
+        this.session.pause();
+      }
+      // Use aggressive subsampling for scopes while hidden
+      this.histogram.setPlaybackMode(true);
+      this.waveform.setPlaybackMode(true);
+      this.vectorscope.setPlaybackMode(true);
+    } else {
+      // Tab is visible again - restore playback if it was playing before
+      if (this.wasPlayingBeforeHide) {
+        this.session.play();
+        this.wasPlayingBeforeHide = false;
+      }
+      // Restore scope quality if not playing
+      if (!this.session.isPlaying) {
+        this.histogram.setPlaybackMode(false);
+        this.waveform.setPlaybackMode(false);
+        this.vectorscope.setPlaybackMode(false);
+        // Update scopes with full quality
+        this.updateHistogram();
+        this.updateWaveform();
+        this.updateVectorscope();
+      }
+    }
+  }
+
   private bindEvents(): void {
     // Handle window resize
     window.addEventListener('resize', this.boundHandleResize);
+
+    // Handle page visibility changes (pause playback when tab is hidden)
+    document.addEventListener('visibilitychange', this.boundHandleVisibilityChange);
 
     // Initialize keyboard shortcuts
     this.keyboardManager.attach();
@@ -2214,6 +2255,7 @@ export class App {
 
     // Remove global event listeners
     window.removeEventListener('resize', this.boundHandleResize);
+    document.removeEventListener('visibilitychange', this.boundHandleVisibilityChange);
 
     this.viewer.dispose();
     this.timeline.dispose();

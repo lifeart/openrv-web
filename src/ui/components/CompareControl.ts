@@ -12,6 +12,21 @@ import { DifferenceMatteState, DEFAULT_DIFFERENCE_MATTE_STATE } from './Differen
 
 export type WipeMode = 'off' | 'horizontal' | 'vertical';
 export type ABSource = 'A' | 'B';
+export type BlendMode = 'off' | 'onionskin' | 'flicker' | 'blend';
+
+export interface BlendModeState {
+  mode: BlendMode;
+  onionOpacity: number;    // 0-1 for onion skin mode
+  flickerRate: number;     // Hz for flicker mode (1-30)
+  blendRatio: number;      // 0-1 for blend mode (0.5 = 50/50)
+}
+
+export const DEFAULT_BLEND_MODE_STATE: BlendModeState = {
+  mode: 'off',
+  onionOpacity: 0.5,
+  flickerRate: 4,
+  blendRatio: 0.5,
+};
 
 export interface CompareState {
   wipeMode: WipeMode;
@@ -19,6 +34,7 @@ export interface CompareState {
   currentAB: ABSource;
   abAvailable: boolean;
   differenceMatte: DifferenceMatteState;
+  blendMode: BlendModeState;
 }
 
 export interface CompareControlEvents extends EventMap {
@@ -27,6 +43,7 @@ export interface CompareControlEvents extends EventMap {
   abSourceChanged: ABSource;
   abToggled: void;
   differenceMatteChanged: DifferenceMatteState;
+  blendModeChanged: BlendModeState;
   stateChanged: CompareState;
 }
 
@@ -46,7 +63,10 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     currentAB: 'A',
     abAvailable: false,
     differenceMatte: { ...DEFAULT_DIFFERENCE_MATTE_STATE },
+    blendMode: { ...DEFAULT_BLEND_MODE_STATE },
   };
+  private flickerInterval: number | null = null;
+  private flickerFrame: 0 | 1 = 0;
   private isOpen = false;
   private boundHandleOutsideClick: (e: MouseEvent) => void;
   private boundHandleReposition: () => void;
@@ -377,7 +397,161 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
 
     this.dropdown.appendChild(diffSection);
 
+    // Divider
+    const divider3 = document.createElement('div');
+    divider3.style.cssText = 'height: 1px; background: var(--border-primary); margin: 4px 0;';
+    this.dropdown.appendChild(divider3);
+
+    // Blend Modes section
+    const blendSection = document.createElement('div');
+    blendSection.className = 'blend-modes-section';
+    blendSection.style.cssText = 'display: flex; flex-direction: column; gap: 2px;';
+
+    const blendHeader = document.createElement('div');
+    blendHeader.textContent = 'Blend Modes';
+    blendHeader.style.cssText = 'color: var(--text-secondary); font-size: 10px; text-transform: uppercase; padding: 4px 6px;';
+    blendSection.appendChild(blendHeader);
+
+    // Onion Skin button
+    const onionButton = this.createBlendModeButton('onionskin', 'Onion Skin', 'layers');
+    blendSection.appendChild(onionButton);
+
+    // Onion Skin opacity slider
+    const onionOpacityRow = document.createElement('div');
+    onionOpacityRow.className = 'onion-opacity-row';
+    onionOpacityRow.style.cssText = 'display: none; align-items: center; gap: 6px; padding: 4px 10px;';
+
+    const onionOpacityLabel = document.createElement('span');
+    onionOpacityLabel.textContent = 'Opacity:';
+    onionOpacityLabel.style.cssText = 'font-size: 11px; color: var(--text-secondary); min-width: 50px;';
+
+    const onionOpacitySlider = document.createElement('input');
+    onionOpacitySlider.type = 'range';
+    onionOpacitySlider.min = '0';
+    onionOpacitySlider.max = '100';
+    onionOpacitySlider.value = String(this.state.blendMode.onionOpacity * 100);
+    onionOpacitySlider.dataset.testid = 'onion-opacity-slider';
+    onionOpacitySlider.style.cssText = 'flex: 1; height: 4px; cursor: pointer;';
+    onionOpacitySlider.addEventListener('input', (e) => {
+      const value = parseFloat((e.target as HTMLInputElement).value) / 100;
+      this.setOnionOpacity(value);
+    });
+
+    const onionOpacityValue = document.createElement('span');
+    onionOpacityValue.className = 'onion-opacity-value';
+    onionOpacityValue.textContent = `${Math.round(this.state.blendMode.onionOpacity * 100)}%`;
+    onionOpacityValue.style.cssText = 'font-size: 11px; color: var(--text-secondary); min-width: 35px; text-align: right;';
+
+    onionOpacityRow.appendChild(onionOpacityLabel);
+    onionOpacityRow.appendChild(onionOpacitySlider);
+    onionOpacityRow.appendChild(onionOpacityValue);
+    blendSection.appendChild(onionOpacityRow);
+
+    // Flicker button
+    const flickerButton = this.createBlendModeButton('flicker', 'Flicker', 'activity');
+    blendSection.appendChild(flickerButton);
+
+    // Flicker rate slider
+    const flickerRateRow = document.createElement('div');
+    flickerRateRow.className = 'flicker-rate-row';
+    flickerRateRow.style.cssText = 'display: none; align-items: center; gap: 6px; padding: 4px 10px;';
+
+    const flickerRateLabel = document.createElement('span');
+    flickerRateLabel.textContent = 'Rate:';
+    flickerRateLabel.style.cssText = 'font-size: 11px; color: var(--text-secondary); min-width: 50px;';
+
+    const flickerRateSlider = document.createElement('input');
+    flickerRateSlider.type = 'range';
+    flickerRateSlider.min = '1';
+    flickerRateSlider.max = '30';
+    flickerRateSlider.value = String(this.state.blendMode.flickerRate);
+    flickerRateSlider.dataset.testid = 'flicker-rate-slider';
+    flickerRateSlider.style.cssText = 'flex: 1; height: 4px; cursor: pointer;';
+    flickerRateSlider.addEventListener('input', (e) => {
+      const value = parseFloat((e.target as HTMLInputElement).value);
+      this.setFlickerRate(value);
+    });
+
+    const flickerRateValue = document.createElement('span');
+    flickerRateValue.className = 'flicker-rate-value';
+    flickerRateValue.textContent = `${this.state.blendMode.flickerRate} Hz`;
+    flickerRateValue.style.cssText = 'font-size: 11px; color: var(--text-secondary); min-width: 40px; text-align: right;';
+
+    flickerRateRow.appendChild(flickerRateLabel);
+    flickerRateRow.appendChild(flickerRateSlider);
+    flickerRateRow.appendChild(flickerRateValue);
+    blendSection.appendChild(flickerRateRow);
+
+    // Blend button
+    const blendButton = this.createBlendModeButton('blend', 'Blend', 'sliders');
+    blendSection.appendChild(blendButton);
+
+    // Blend ratio slider
+    const blendRatioRow = document.createElement('div');
+    blendRatioRow.className = 'blend-ratio-row';
+    blendRatioRow.style.cssText = 'display: none; align-items: center; gap: 6px; padding: 4px 10px;';
+
+    const blendRatioLabel = document.createElement('span');
+    blendRatioLabel.textContent = 'A/B:';
+    blendRatioLabel.style.cssText = 'font-size: 11px; color: var(--text-secondary); min-width: 50px;';
+
+    const blendRatioSlider = document.createElement('input');
+    blendRatioSlider.type = 'range';
+    blendRatioSlider.min = '0';
+    blendRatioSlider.max = '100';
+    blendRatioSlider.value = String(this.state.blendMode.blendRatio * 100);
+    blendRatioSlider.dataset.testid = 'blend-ratio-slider';
+    blendRatioSlider.style.cssText = 'flex: 1; height: 4px; cursor: pointer;';
+    blendRatioSlider.addEventListener('input', (e) => {
+      const value = parseFloat((e.target as HTMLInputElement).value) / 100;
+      this.setBlendRatio(value);
+    });
+
+    const blendRatioValue = document.createElement('span');
+    blendRatioValue.className = 'blend-ratio-value';
+    blendRatioValue.textContent = `${Math.round(this.state.blendMode.blendRatio * 100)}%`;
+    blendRatioValue.style.cssText = 'font-size: 11px; color: var(--text-secondary); min-width: 35px; text-align: right;';
+
+    blendRatioRow.appendChild(blendRatioLabel);
+    blendRatioRow.appendChild(blendRatioSlider);
+    blendRatioRow.appendChild(blendRatioValue);
+    blendSection.appendChild(blendRatioRow);
+
+    this.dropdown.appendChild(blendSection);
+
     this.updateDropdownStates();
+  }
+
+  private createBlendModeButton(mode: BlendMode, label: string, icon: IconName): HTMLButtonElement {
+    const button = document.createElement('button');
+    button.dataset.blendMode = mode;
+    button.dataset.testid = `blend-mode-${mode}`;
+    button.style.cssText = `
+      background: transparent;
+      border: none;
+      color: var(--text-primary);
+      padding: 6px 10px;
+      text-align: left;
+      cursor: pointer;
+      font-size: 12px;
+      border-radius: 3px;
+      transition: background 0.12s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    `;
+    button.innerHTML = `${getIconSvg(icon, 'sm')}<span>${label}</span>`;
+    button.addEventListener('mouseenter', () => {
+      button.style.background = 'var(--bg-hover)';
+    });
+    button.addEventListener('mouseleave', () => {
+      this.updateBlendModeButtonStyle(button, mode);
+    });
+    button.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggleBlendMode(mode);
+    });
+    return button;
   }
 
   private updateButtonLabel(): void {
@@ -385,6 +559,14 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
 
     if (this.state.differenceMatte.enabled) {
       parts.push('Diff');
+    } else if (this.state.blendMode.mode !== 'off') {
+      const blendLabels: Record<BlendMode, string> = {
+        off: '',
+        onionskin: 'Onion',
+        flicker: 'Flicker',
+        blend: 'Blend',
+      };
+      parts.push(blendLabels[this.state.blendMode.mode]);
     } else if (this.state.wipeMode !== 'off') {
       parts.push(this.state.wipeMode === 'horizontal' ? 'H-Wipe' : 'V-Wipe');
     }
@@ -483,12 +665,63 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
         gainValue.style.opacity = this.state.differenceMatte.enabled ? '1' : '0.5';
       }
     }
+
+    // Update blend mode controls
+    const blendSection = this.dropdown.querySelector('.blend-modes-section');
+    if (blendSection) {
+      const blendModes: BlendMode[] = ['onionskin', 'flicker', 'blend'];
+      for (const mode of blendModes) {
+        const button = blendSection.querySelector(`[data-blend-mode="${mode}"]`) as HTMLButtonElement;
+        if (button) {
+          this.updateBlendModeButtonStyle(button, mode);
+          button.disabled = !this.state.abAvailable;
+          button.style.opacity = this.state.abAvailable ? '1' : '0.5';
+        }
+      }
+
+      // Onion skin slider
+      const onionOpacityRow = blendSection.querySelector('.onion-opacity-row') as HTMLElement;
+      if (onionOpacityRow) {
+        onionOpacityRow.style.display = this.state.blendMode.mode === 'onionskin' ? 'flex' : 'none';
+        const slider = onionOpacityRow.querySelector('[data-testid="onion-opacity-slider"]') as HTMLInputElement;
+        const valueSpan = onionOpacityRow.querySelector('.onion-opacity-value') as HTMLSpanElement;
+        if (slider) slider.value = String(this.state.blendMode.onionOpacity * 100);
+        if (valueSpan) valueSpan.textContent = `${Math.round(this.state.blendMode.onionOpacity * 100)}%`;
+      }
+
+      // Flicker rate slider
+      const flickerRateRow = blendSection.querySelector('.flicker-rate-row') as HTMLElement;
+      if (flickerRateRow) {
+        flickerRateRow.style.display = this.state.blendMode.mode === 'flicker' ? 'flex' : 'none';
+        const slider = flickerRateRow.querySelector('[data-testid="flicker-rate-slider"]') as HTMLInputElement;
+        const valueSpan = flickerRateRow.querySelector('.flicker-rate-value') as HTMLSpanElement;
+        if (slider) slider.value = String(this.state.blendMode.flickerRate);
+        if (valueSpan) valueSpan.textContent = `${this.state.blendMode.flickerRate} Hz`;
+      }
+
+      // Blend ratio slider
+      const blendRatioRow = blendSection.querySelector('.blend-ratio-row') as HTMLElement;
+      if (blendRatioRow) {
+        blendRatioRow.style.display = this.state.blendMode.mode === 'blend' ? 'flex' : 'none';
+        const slider = blendRatioRow.querySelector('[data-testid="blend-ratio-slider"]') as HTMLInputElement;
+        const valueSpan = blendRatioRow.querySelector('.blend-ratio-value') as HTMLSpanElement;
+        if (slider) slider.value = String(this.state.blendMode.blendRatio * 100);
+        if (valueSpan) valueSpan.textContent = `${Math.round(this.state.blendMode.blendRatio * 100)}%`;
+      }
+    }
   }
 
   private isActive(): boolean {
     return this.state.wipeMode !== 'off' ||
            (this.state.currentAB === 'B' && this.state.abAvailable) ||
-           this.state.differenceMatte.enabled;
+           this.state.differenceMatte.enabled ||
+           this.state.blendMode.mode !== 'off';
+  }
+
+  private updateBlendModeButtonStyle(button: HTMLButtonElement, mode: BlendMode): void {
+    const isActive = this.state.blendMode.mode === mode;
+    button.style.background = isActive ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent';
+    button.style.color = isActive ? 'var(--accent-primary)' : 'var(--text-primary)';
   }
 
   private updateDiffToggleStyle(toggle: HTMLButtonElement): void {
@@ -687,6 +920,176 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     return this.state.differenceMatte.enabled;
   }
 
+  // Blend Mode methods
+
+  /**
+   * Toggle a blend mode on/off.
+   * If the specified mode is already active, turns it off.
+   * Otherwise, activates the specified mode.
+   * @param mode - The blend mode to toggle ('onionskin' | 'flicker' | 'blend')
+   */
+  toggleBlendMode(mode: BlendMode): void {
+    if (this.state.blendMode.mode === mode) {
+      // Toggle off
+      this.setBlendMode('off');
+    } else {
+      this.setBlendMode(mode);
+    }
+  }
+
+  /**
+   * Set the active blend mode.
+   * Automatically disables wipe mode and difference matte when enabling a blend mode.
+   * @param mode - The blend mode to set ('off' | 'onionskin' | 'flicker' | 'blend')
+   */
+  setBlendMode(mode: BlendMode): void {
+    if (this.state.blendMode.mode !== mode) {
+      const previousMode = this.state.blendMode.mode;
+      this.state.blendMode.mode = mode;
+
+      // Stop flicker if switching away from it
+      if (previousMode === 'flicker') {
+        this.stopFlicker();
+      }
+
+      // Start flicker if switching to it
+      if (mode === 'flicker') {
+        this.startFlicker();
+      }
+
+      // When enabling a blend mode, disable wipe and difference matte to avoid conflicts
+      if (mode !== 'off') {
+        if (this.state.wipeMode !== 'off') {
+          this.state.wipeMode = 'off';
+          this.emit('wipeModeChanged', 'off');
+        }
+        if (this.state.differenceMatte.enabled) {
+          this.state.differenceMatte.enabled = false;
+          this.emit('differenceMatteChanged', { ...this.state.differenceMatte });
+        }
+      }
+
+      this.updateButtonLabel();
+      this.updateDropdownStates();
+      this.emit('blendModeChanged', { ...this.state.blendMode });
+      this.emit('stateChanged', { ...this.state });
+    }
+  }
+
+  /**
+   * Get the current blend mode.
+   * @returns The active blend mode ('off' | 'onionskin' | 'flicker' | 'blend')
+   */
+  getBlendMode(): BlendMode {
+    return this.state.blendMode.mode;
+  }
+
+  /**
+   * Get the complete blend mode state including all parameters.
+   * @returns A copy of the blend mode state object
+   */
+  getBlendModeState(): BlendModeState {
+    return { ...this.state.blendMode };
+  }
+
+  /**
+   * Set the opacity for onion skin blend mode.
+   * @param opacity - Opacity value between 0 (transparent) and 1 (opaque)
+   */
+  setOnionOpacity(opacity: number): void {
+    const clamped = Math.max(0, Math.min(1, opacity));
+    if (clamped !== this.state.blendMode.onionOpacity) {
+      this.state.blendMode.onionOpacity = clamped;
+      this.updateDropdownStates();
+      this.emit('blendModeChanged', { ...this.state.blendMode });
+      this.emit('stateChanged', { ...this.state });
+    }
+  }
+
+  /**
+   * Get the current onion skin opacity.
+   * @returns Opacity value between 0 and 1
+   */
+  getOnionOpacity(): number {
+    return this.state.blendMode.onionOpacity;
+  }
+
+  /**
+   * Set the flicker rate for flicker blend mode.
+   * @param rate - Flicker frequency in Hz (1-30)
+   */
+  setFlickerRate(rate: number): void {
+    const clamped = Math.max(1, Math.min(30, Math.round(rate)));
+    if (clamped !== this.state.blendMode.flickerRate) {
+      this.state.blendMode.flickerRate = clamped;
+      // Restart flicker with new rate if active
+      if (this.state.blendMode.mode === 'flicker') {
+        this.stopFlicker();
+        this.startFlicker();
+      }
+      this.updateDropdownStates();
+      this.emit('blendModeChanged', { ...this.state.blendMode });
+      this.emit('stateChanged', { ...this.state });
+    }
+  }
+
+  /**
+   * Get the current flicker rate.
+   * @returns Flicker frequency in Hz (1-30)
+   */
+  getFlickerRate(): number {
+    return this.state.blendMode.flickerRate;
+  }
+
+  private startFlicker(): void {
+    if (this.flickerInterval !== null) return;
+    const intervalMs = 1000 / this.state.blendMode.flickerRate;
+    this.flickerInterval = window.setInterval(() => {
+      this.flickerFrame = this.flickerFrame === 0 ? 1 : 0;
+      // Emit state change to trigger re-render
+      this.emit('blendModeChanged', { ...this.state.blendMode });
+    }, intervalMs);
+  }
+
+  private stopFlicker(): void {
+    if (this.flickerInterval !== null) {
+      window.clearInterval(this.flickerInterval);
+      this.flickerInterval = null;
+      this.flickerFrame = 0;
+    }
+  }
+
+  /**
+   * Get the current flicker frame (for rendering).
+   * Alternates between 0 (show A) and 1 (show B) at the flicker rate.
+   * @returns Current frame index (0 or 1)
+   */
+  getFlickerFrame(): 0 | 1 {
+    return this.flickerFrame;
+  }
+
+  /**
+   * Set the blend ratio for blend mode.
+   * @param ratio - Blend ratio between 0 (100% A) and 1 (100% B), 0.5 = 50/50
+   */
+  setBlendRatio(ratio: number): void {
+    const clamped = Math.max(0, Math.min(1, ratio));
+    if (clamped !== this.state.blendMode.blendRatio) {
+      this.state.blendMode.blendRatio = clamped;
+      this.updateDropdownStates();
+      this.emit('blendModeChanged', { ...this.state.blendMode });
+      this.emit('stateChanged', { ...this.state });
+    }
+  }
+
+  /**
+   * Get the current blend ratio.
+   * @returns Blend ratio between 0 and 1
+   */
+  getBlendRatio(): number {
+    return this.state.blendMode.blendRatio;
+  }
+
   getState(): CompareState {
     return { ...this.state };
   }
@@ -707,6 +1110,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
   }
 
   dispose(): void {
+    this.stopFlicker();
     this.closeDropdown();
     if (document.body.contains(this.dropdown)) {
       document.body.removeChild(this.dropdown);

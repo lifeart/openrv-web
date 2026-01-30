@@ -96,10 +96,16 @@ precision highp float;
 
 uniform sampler2D u_image;
 uniform vec2 u_imageSize; // Dimensions of the analysis image (texture)
-uniform int u_mode; // 0=Luma, 1=RGB, 2=Parade
+uniform int u_mode; // 0=Luma, 1=RGB, 2=Parade, 3=YCbCr
 uniform int u_channel;
 
 const vec3 LUMA_COEFF = vec3(0.2126, 0.7152, 0.0722);
+
+// BT.709 YCbCr conversion coefficients
+// Cb = -0.1146*R - 0.3854*G + 0.5000*B + 0.5
+// Cr =  0.5000*R - 0.4542*G - 0.0458*B + 0.5
+const vec3 CB_COEFF = vec3(-0.1146, -0.3854, 0.5000);
+const vec3 CR_COEFF = vec3(0.5000, -0.4542, -0.0458);
 
 flat out vec3 v_color;
 
@@ -139,7 +145,7 @@ void main() {
     v_color = u_channel == 0 ? vec3(1.0, 0.0, 0.0) :
               u_channel == 1 ? vec3(0.0, 1.0, 0.0) :
                                vec3(0.0, 0.0, 1.0);
-  } else {
+  } else if (u_mode == 2) {
     // Parade mode - split into thirds
     value = color[u_channel];
     float thirdWidth = 1.0 / 3.0;
@@ -147,6 +153,24 @@ void main() {
     v_color = u_channel == 0 ? vec3(1.0, 0.4, 0.4) :
               u_channel == 1 ? vec3(0.4, 1.0, 0.4) :
                                vec3(0.4, 0.4, 1.0);
+  } else {
+    // YCbCr parade mode - split into thirds (Y, Cb, Cr)
+    float thirdWidth = 1.0 / 3.0;
+    xPos = (float(u_channel) + normalizedX) * thirdWidth;
+
+    if (u_channel == 0) {
+      // Y channel (white)
+      value = dot(color.rgb, LUMA_COEFF);
+      v_color = vec3(0.8, 0.8, 0.8);
+    } else if (u_channel == 1) {
+      // Cb channel (blue)
+      value = dot(color.rgb, CB_COEFF) + 0.5;
+      v_color = vec3(0.27, 0.53, 1.0);
+    } else {
+      // Cr channel (red)
+      value = dot(color.rgb, CR_COEFF) + 0.5;
+      v_color = vec3(1.0, 0.27, 0.27);
+    }
   }
 
   gl_Position = vec4(xPos * 2.0 - 1.0, value * 2.0 - 1.0, 0.0, 1.0);
@@ -212,7 +236,7 @@ void main() {
 }
 `;
 
-export type WaveformMode = 'luma' | 'rgb' | 'parade';
+export type WaveformMode = 'luma' | 'rgb' | 'parade' | 'ycbcr';
 
 // Target resolution for analysis during playback (keeps scopes responsive)
 const PLAYBACK_TARGET_WIDTH = 320;
@@ -640,6 +664,12 @@ export class WebGLScopesProcessor {
       }
     } else if (mode === 'parade') {
       gl.uniform1i(this.waveformUniforms.u_mode!, 2);
+      for (let ch = 0; ch < 3; ch++) {
+        gl.uniform1i(this.waveformUniforms.u_channel!, ch);
+        gl.drawArrays(gl.POINTS, 0, this.vertexCount);
+      }
+    } else if (mode === 'ycbcr') {
+      gl.uniform1i(this.waveformUniforms.u_mode!, 3);
       for (let ch = 0; ch < 3; ch++) {
         gl.uniform1i(this.waveformUniforms.u_channel!, ch);
         gl.drawArrays(gl.POINTS, 0, this.vertexCount);

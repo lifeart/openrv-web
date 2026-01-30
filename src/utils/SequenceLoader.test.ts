@@ -13,8 +13,11 @@ import {
   releaseDistantFrames,
   createSequenceInfo,
   disposeSequence,
+  detectMissingFrames,
+  isFrameMissing,
+  getFrameIndexByNumber,
 } from './SequenceLoader';
-import type { SequenceFrame } from './SequenceLoader';
+import type { SequenceFrame, SequenceInfo } from './SequenceLoader';
 
 describe('SequenceLoader', () => {
   describe('filterImageFiles', () => {
@@ -365,6 +368,136 @@ describe('SequenceLoader', () => {
       const files = [new File([''], 'photo.png')];
       const result = await createSequenceInfo(files);
       expect(result).toBeNull();
+    });
+  });
+
+  describe('detectMissingFrames', () => {
+    it('MF-001: detects missing frames in sequence', () => {
+      const frames: SequenceFrame[] = [
+        { index: 0, frameNumber: 1, file: new File([''], 'f1.png') },
+        { index: 1, frameNumber: 2, file: new File([''], 'f2.png') },
+        { index: 2, frameNumber: 4, file: new File([''], 'f4.png') }, // Frame 3 missing
+        { index: 3, frameNumber: 5, file: new File([''], 'f5.png') },
+      ];
+
+      const missing = detectMissingFrames(frames);
+
+      expect(missing).toEqual([3]);
+    });
+
+    it('MF-002: detects multiple missing frames', () => {
+      const frames: SequenceFrame[] = [
+        { index: 0, frameNumber: 1, file: new File([''], 'f1.png') },
+        { index: 1, frameNumber: 5, file: new File([''], 'f5.png') }, // Frames 2, 3, 4 missing
+        { index: 2, frameNumber: 8, file: new File([''], 'f8.png') }, // Frames 6, 7 missing
+      ];
+
+      const missing = detectMissingFrames(frames);
+
+      expect(missing).toEqual([2, 3, 4, 6, 7]);
+    });
+
+    it('MF-003: returns empty array for complete sequence', () => {
+      const frames: SequenceFrame[] = [
+        { index: 0, frameNumber: 1, file: new File([''], 'f1.png') },
+        { index: 1, frameNumber: 2, file: new File([''], 'f2.png') },
+        { index: 2, frameNumber: 3, file: new File([''], 'f3.png') },
+      ];
+
+      const missing = detectMissingFrames(frames);
+
+      expect(missing).toEqual([]);
+    });
+
+    it('MF-004: returns empty array for single frame', () => {
+      const frames: SequenceFrame[] = [
+        { index: 0, frameNumber: 100, file: new File([''], 'f100.png') },
+      ];
+
+      const missing = detectMissingFrames(frames);
+
+      expect(missing).toEqual([]);
+    });
+
+    it('MF-005: returns empty array for empty input', () => {
+      const missing = detectMissingFrames([]);
+      expect(missing).toEqual([]);
+    });
+
+    it('MF-006: handles non-sequential starting frames', () => {
+      const frames: SequenceFrame[] = [
+        { index: 0, frameNumber: 100, file: new File([''], 'f100.png') },
+        { index: 1, frameNumber: 102, file: new File([''], 'f102.png') }, // Frame 101 missing
+        { index: 2, frameNumber: 103, file: new File([''], 'f103.png') },
+      ];
+
+      const missing = detectMissingFrames(frames);
+
+      expect(missing).toEqual([101]);
+    });
+  });
+
+  describe('isFrameMissing', () => {
+    const mockSequenceInfo: SequenceInfo = {
+      name: 'test',
+      pattern: 'f###.png',
+      frames: [
+        { index: 0, frameNumber: 1, file: new File([''], 'f1.png') },
+        { index: 1, frameNumber: 3, file: new File([''], 'f3.png') },
+      ],
+      startFrame: 1,
+      endFrame: 3,
+      width: 1920,
+      height: 1080,
+      fps: 24,
+      missingFrames: [2],
+    };
+
+    it('MF-007: returns true for missing frame', () => {
+      expect(isFrameMissing(mockSequenceInfo, 2)).toBe(true);
+    });
+
+    it('MF-008: returns false for existing frame', () => {
+      expect(isFrameMissing(mockSequenceInfo, 1)).toBe(false);
+      expect(isFrameMissing(mockSequenceInfo, 3)).toBe(false);
+    });
+
+    it('MF-009: returns false for out-of-range frame', () => {
+      expect(isFrameMissing(mockSequenceInfo, 100)).toBe(false);
+    });
+  });
+
+  describe('getFrameIndexByNumber', () => {
+    const mockSequenceInfo: SequenceInfo = {
+      name: 'test',
+      pattern: 'f###.png',
+      frames: [
+        { index: 0, frameNumber: 1, file: new File([''], 'f1.png') },
+        { index: 1, frameNumber: 3, file: new File([''], 'f3.png') },
+        { index: 2, frameNumber: 5, file: new File([''], 'f5.png') },
+      ],
+      startFrame: 1,
+      endFrame: 5,
+      width: 1920,
+      height: 1080,
+      fps: 24,
+      missingFrames: [2, 4],
+    };
+
+    it('MF-010: returns correct index for existing frame', () => {
+      expect(getFrameIndexByNumber(mockSequenceInfo, 1)).toBe(0);
+      expect(getFrameIndexByNumber(mockSequenceInfo, 3)).toBe(1);
+      expect(getFrameIndexByNumber(mockSequenceInfo, 5)).toBe(2);
+    });
+
+    it('MF-011: returns -1 for missing frame', () => {
+      expect(getFrameIndexByNumber(mockSequenceInfo, 2)).toBe(-1);
+      expect(getFrameIndexByNumber(mockSequenceInfo, 4)).toBe(-1);
+    });
+
+    it('MF-012: returns -1 for out-of-range frame', () => {
+      expect(getFrameIndexByNumber(mockSequenceInfo, 100)).toBe(-1);
+      expect(getFrameIndexByNumber(mockSequenceInfo, 0)).toBe(-1);
     });
   });
 });

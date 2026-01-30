@@ -53,6 +53,7 @@ function createMockMediaSource(
       width: 1920,
       height: 1080,
       fps: 24,
+      missingFrames: [],
     } : undefined,
   };
 }

@@ -306,6 +306,11 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     shift: true,
     description: 'Select luminance channel'
   },
+  'channel.grayscale': {
+    code: 'KeyY',
+    shift: true,
+    description: 'Toggle grayscale mode (alias for luminance)'
+  },
   'channel.none': {
     code: 'KeyN',
     shift: true,

@@ -13,6 +13,8 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 - Single images (PNG, JPEG, WebP, EXR)
 - Video files (MP4, WebM)
 - Image sequences (numbered files like `frame_001.png`, `file.0001.exr`)
+  - **Missing frame detection** - automatically detect and indicate gaps in sequences
+  - Visual overlay for missing frames during playback
 - RV/GTO session files with full graph reconstruction
 - **Enhanced marker support** - notes and colors preserved through GTO round-trip
 
@@ -34,7 +36,9 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
   - Matte preview and invert selection
   - Eyedropper for color picking
 - ASC CDL (slope, offset, power, saturation) with .cdl file support
-- 3D LUT support (.cube files) with GPU-accelerated processing
+- **LUT support** (.cube files) with GPU-accelerated processing
+  - 3D LUTs for complex color transforms
+  - 1D LUTs for simple curve-based corrections
 - Color curves (Master/R/G/B channels) with presets and import/export
 - **Log Curve Presets** - camera-specific log-to-linear conversion
   - Cineon Film Log (10-bit)
@@ -48,10 +52,18 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 - Crop tool with aspect ratio presets and rule-of-thirds guides
 - Lens distortion correction (barrel/pincushion)
 - Blur and sharpen filters
+- **Noise Reduction** - edge-preserving bilateral filter
+  - GPU-accelerated with WebGL2
+  - Automatic CPU fallback
+  - Adjustable strength and radius (1-5)
 
 ### Comparison & Composition
 - Wipe comparison (horizontal/vertical split view)
 - **Difference Matte** - show pixel differences between A/B with gain and heatmap modes
+- **Blend Modes** for A/B comparison
+  - Onion skin - overlay B over A with adjustable opacity
+  - Flicker - rapidly alternate between A/B at configurable rate (1-30 Hz)
+  - Blend - mix A and B with adjustable ratio
 - Multi-layer stack with blend modes
 - A/B source switching with auto-assignment when loading multiple files
 - Quick toggle between sources with backtick key
@@ -70,7 +82,8 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 - Histogram (RGB/Luminance/Separate channels, log scale option)
   - **Clipping Indicators** - show percentage of clipped highlights/shadows
   - **Clipping Overlay** - visual overlay showing clipped areas (red for highlights, blue for shadows)
-- Waveform monitor (Luma/RGB/Parade modes)
+- Waveform monitor (Luma/RGB/Parade/YCbCr modes)
+  - **YCbCr Parade** - visualize Y (luma), Cb (blue difference), Cr (red difference) using BT.709 coefficients
 - Vectorscope with zoom levels
 - **Pixel Probe / Color Sampler** - click to sample RGB/HSL/IRE values at any pixel
 - **False Color Display** - exposure visualization with ARRI, RED, and custom presets
@@ -114,6 +127,10 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
   - Automatic muting during reverse playback (audio cannot be reversed)
 - Audio waveform display with multi-channel support
 - Volume control with mute (volume preserved across mute/unmute cycles)
+- **Page Visibility Handling** - smart resource management
+  - Automatically pauses playback when tab is hidden
+  - Resumes playback when tab becomes visible
+  - Reduces scope processing while hidden
 
 ### UI/UX
 - **Dark/Light Theme** with auto (system) mode and Shift+T shortcut
@@ -132,6 +149,12 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
   - Detects blob URLs that become invalid after browser restart
   - Prompts user to re-select files with original filename validation
   - Skip option to load session without unavailable media
+
+### Overlays & Watermarks
+- **Watermark Overlay** - add logos and watermarks to exports
+  - 9 preset positions (3x3 grid) plus custom positioning
+  - Adjustable scale (10-200%), opacity, and margin
+  - Supports PNG, JPEG, WebP, and SVG images
 
 ### Export
 - Frame export (PNG/JPEG/WebP)
@@ -242,7 +265,8 @@ pnpm dev
 | `Shift+G` | Green channel |
 | `Shift+B` | Blue channel |
 | `Shift+A` | Alpha channel |
-| `Shift+L` | Luminance |
+| `Shift+L` | Luminance/Grayscale |
+| `Shift+Y` | Grayscale (alias for Shift+L) |
 | `Shift+N` | Normal (RGB) |
 
 #### Color & Effects
@@ -321,8 +345,11 @@ src/
 ├── audio/              # Audio playback and waveform rendering
 │   ├── AudioPlaybackManager.ts # Web Audio API playback with fallbacks
 │   └── WaveformRenderer.ts     # Waveform extraction and rendering
-├── color/              # CDL, LUT loader, WebGL LUT processor
+├── color/              # CDL, LUT loader (1D & 3D), WebGL LUT processor
 │   └── LogCurves.ts    # Camera log curve presets (Cineon, LogC, S-Log3, etc.)
+├── filters/            # Image processing filters
+│   ├── NoiseReduction.ts       # Bilateral filter (CPU implementation)
+│   └── WebGLNoiseReduction.ts  # GPU-accelerated bilateral filter
 ├── stereo/             # Stereoscopic 3D viewing modes
 ├── transform/          # Lens distortion
 ├── composite/          # Blend modes
@@ -403,7 +430,7 @@ const rootNode = session.graphParseResult?.rootNode;
 # Type check
 pnpm typecheck
 
-# Run unit tests (4250+ tests)
+# Run unit tests (4750+ tests)
 pnpm test
 
 # Run e2e tests (requires dev server running)
@@ -419,7 +446,7 @@ pnpm preview
 
 ### Test Coverage
 
-The codebase includes comprehensive test coverage with **4500+ unit tests** across 113 test files and **50+ e2e test suites**:
+The codebase includes comprehensive test coverage with **4750+ unit tests** across 119 test files and **50+ e2e test suites**:
 
 - **Color Tools**: ColorWheels (46 tests), FalseColor (30 tests), HSLQualifier (57 tests), Curves, CDL, LogCurves (27 tests)
 - **Analysis**: ZebraStripes (49 tests), PixelProbe (45 tests), ClippingOverlay (48 tests), Waveform (50 tests), Histogram (45 tests), Vectorscope (49 tests)
@@ -429,11 +456,14 @@ The codebase includes comprehensive test coverage with **4500+ unit tests** acro
 - **Render**: TextureCacheManager (22 tests)
 - **Export**: AnnotationJSONExporter (19 tests), AnnotationPDFExporter (21 tests)
 - **Audio**: AudioPlaybackManager (36 tests), WaveformRenderer (35 tests)
-- **Utilities**: HiDPICanvas (32 tests), EffectProcessor (51 tests), WorkerPool (28 tests), PrerenderBufferManager (36 tests)
+- **Filters**: NoiseReduction (18 tests), WebGLNoiseReduction
+- **Overlays**: MissingFrameOverlay (16 tests), WatermarkOverlay, WatermarkControl
+- **Utilities**: HiDPICanvas (32 tests), EffectProcessor (51 tests), WorkerPool (28 tests), PrerenderBufferManager (36 tests), SequenceLoader (missing frame detection)
 
 **E2E Tests** (50+ test suites):
-- **Core**: App initialization, tab navigation, media loading, playback controls, session recovery
+- **Core**: App initialization, tab navigation, media loading, playback controls, session recovery, page visibility handling
 - **Audio**: Volume control, mute/unmute, audio sync, error recovery, keyboard shortcuts (21 tests)
+- **View**: Grayscale toggle (Shift+L/Y), channel isolation
 - **GTO**: Round-trip verification (markers, frame ranges, matte, paint effects, metadata, custom nodes)
 - **Scopes**: Histogram, Waveform, Vectorscope, Parade scope
 - **Color**: Color controls, Curves, Vibrance, Highlight/Shadow recovery, Log curves

@@ -94,6 +94,7 @@ describe('SequenceSourceNode', () => {
         width: 1920,
         height: 1080,
         fps: 24,
+        missingFrames: [],
       };
 
       vi.mocked(createSequenceInfo).mockResolvedValue(mockInfo);
@@ -127,6 +128,7 @@ describe('SequenceSourceNode', () => {
         width: 4096,
         height: 2160,
         fps: 30,
+        missingFrames: [],
       };
 
       vi.mocked(createSequenceInfo).mockResolvedValue(mockInfo);
@@ -158,6 +160,7 @@ describe('SequenceSourceNode', () => {
         width: 100,
         height: 100,
         fps: 60,
+        missingFrames: [],
       };
 
       vi.mocked(createSequenceInfo).mockResolvedValue(mockInfo);
@@ -186,6 +189,7 @@ describe('SequenceSourceNode', () => {
         width: 100,
         height: 100,
         fps: 24,
+        missingFrames: [],
       };
 
       vi.mocked(createSequenceInfo).mockResolvedValue(mockInfo);
@@ -223,6 +227,7 @@ describe('SequenceSourceNode', () => {
         width: 100,
         height: 100,
         fps: 24,
+        missingFrames: [],
       };
 
       vi.mocked(createSequenceInfo).mockResolvedValue(mockInfo);
@@ -258,6 +263,7 @@ describe('SequenceSourceNode', () => {
         width: 100,
         height: 100,
         fps: 24,
+        missingFrames: [],
       };
 
       vi.mocked(createSequenceInfo).mockResolvedValue(mockInfo);
@@ -283,6 +289,7 @@ describe('SequenceSourceNode', () => {
         width: 100,
         height: 100,
         fps: 24,
+        missingFrames: [],
       };
 
       vi.mocked(createSequenceInfo).mockResolvedValue(mockInfo);
@@ -310,6 +317,7 @@ describe('SequenceSourceNode', () => {
         width: 100,
         height: 100,
         fps: 24,
+        missingFrames: [],
       };
 
       vi.mocked(createSequenceInfo).mockResolvedValue(mockInfo);
@@ -343,6 +351,7 @@ describe('SequenceSourceNode', () => {
         width: 1920,
         height: 1080,
         fps: 24,
+        missingFrames: [],
       };
 
       vi.mocked(createSequenceInfo).mockResolvedValue(mockInfo);
@@ -395,6 +404,7 @@ describe('SequenceSourceNode', () => {
         width: 100,
         height: 100,
         fps: 24,
+        missingFrames: [],
       };
 
       vi.mocked(createSequenceInfo).mockResolvedValue(mockInfo);

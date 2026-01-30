@@ -20,6 +20,7 @@ export interface SequenceInfo {
   width: number;
   height: number;
   fps: number;
+  missingFrames: number[]; // List of missing frame numbers in the sequence
 }
 
 // Common frame number patterns
@@ -205,6 +206,9 @@ export async function createSequenceInfo(
     .replace(/[._-]?\d+(?=\.[^.]+$)/, '')
     .replace(/\.[^.]+$/, '');
 
+  // Detect missing frames in the sequence
+  const missingFrames = detectMissingFrames(frames);
+
   return {
     name: baseName || 'sequence',
     pattern,
@@ -214,7 +218,46 @@ export async function createSequenceInfo(
     width: firstImage.naturalWidth,
     height: firstImage.naturalHeight,
     fps,
+    missingFrames,
   };
+}
+
+/**
+ * Detect missing frames in a sequence by finding gaps between frame numbers
+ */
+export function detectMissingFrames(frames: SequenceFrame[]): number[] {
+  if (frames.length < 2) return [];
+
+  const frameNumbers = frames.map(f => f.frameNumber).sort((a, b) => a - b);
+  const missing: number[] = [];
+  const presentSet = new Set(frameNumbers);
+
+  const min = frameNumbers[0]!;
+  const max = frameNumbers[frameNumbers.length - 1]!;
+
+  for (let f = min; f <= max; f++) {
+    if (!presentSet.has(f)) {
+      missing.push(f);
+    }
+  }
+
+  return missing;
+}
+
+/**
+ * Check if a specific frame number is missing
+ */
+export function isFrameMissing(sequenceInfo: SequenceInfo, frameNumber: number): boolean {
+  return sequenceInfo.missingFrames.includes(frameNumber);
+}
+
+/**
+ * Get the index of a frame by its frame number
+ * Returns -1 if the frame is missing
+ */
+export function getFrameIndexByNumber(sequenceInfo: SequenceInfo, frameNumber: number): number {
+  const frame = sequenceInfo.frames.find(f => f.frameNumber === frameNumber);
+  return frame ? frame.index : -1;
 }
 
 /**
