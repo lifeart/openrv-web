@@ -335,6 +335,106 @@ describe('PaintEngine', () => {
       expect(engine.effects.hold).toBe(true);
       expect(listener).toHaveBeenCalled();
     });
+
+    it('PAINT-016: stroke with hold OFF has duration 0', () => {
+      engine.tool = 'pen';
+      engine.setHoldMode(false);
+
+      engine.beginStroke(5, { x: 0.1, y: 0.1 });
+      const stroke = engine.endStroke();
+
+      expect(stroke?.duration).toBe(0);
+    });
+
+    it('PAINT-017: stroke with hold ON has duration -1', () => {
+      engine.tool = 'pen';
+      engine.setHoldMode(true);
+
+      engine.beginStroke(5, { x: 0.1, y: 0.1 });
+      const stroke = engine.endStroke();
+
+      expect(stroke?.duration).toBe(-1);
+    });
+
+    it('PAINT-018: text with hold OFF has duration 0', () => {
+      engine.setHoldMode(false);
+
+      const text = engine.addText(5, { x: 0.5, y: 0.5 }, 'Test');
+
+      expect(text.duration).toBe(0);
+    });
+
+    it('PAINT-019: text with hold ON has duration -1', () => {
+      engine.setHoldMode(true);
+
+      const text = engine.addText(5, { x: 0.5, y: 0.5 }, 'Test');
+
+      expect(text.duration).toBe(-1);
+    });
+
+    it('PAINT-020: shape with hold OFF has duration 0', () => {
+      engine.setHoldMode(false);
+
+      const shape = engine.addRectangle(5, { x: 0.1, y: 0.1 }, { x: 0.5, y: 0.5 });
+
+      expect(shape.duration).toBe(0);
+    });
+
+    it('PAINT-021: shape with hold ON has duration -1', () => {
+      engine.setHoldMode(true);
+
+      const shape = engine.addRectangle(5, { x: 0.1, y: 0.1 }, { x: 0.5, y: 0.5 });
+
+      expect(shape.duration).toBe(-1);
+    });
+
+    it('PAINT-022: annotation with duration -1 visible on subsequent frames', () => {
+      engine.tool = 'pen';
+      engine.setHoldMode(true);
+
+      engine.beginStroke(5, { x: 0.1, y: 0.1 });
+      engine.endStroke();
+
+      // Visible on frame 5 (drawn frame)
+      expect(engine.getAnnotationsForFrame(5)).toHaveLength(1);
+      // Visible on frame 6, 7, 10, 100 (all subsequent frames)
+      expect(engine.getAnnotationsForFrame(6)).toHaveLength(1);
+      expect(engine.getAnnotationsForFrame(7)).toHaveLength(1);
+      expect(engine.getAnnotationsForFrame(10)).toHaveLength(1);
+      expect(engine.getAnnotationsForFrame(100)).toHaveLength(1);
+      // NOT visible on frame 4 (before drawn frame)
+      expect(engine.getAnnotationsForFrame(4)).toHaveLength(0);
+    });
+
+    it('PAINT-023: annotation with duration 0 visible only on drawn frame', () => {
+      engine.tool = 'pen';
+      engine.setHoldMode(false);
+
+      engine.beginStroke(5, { x: 0.1, y: 0.1 });
+      engine.endStroke();
+
+      // Visible only on frame 5
+      expect(engine.getAnnotationsForFrame(5)).toHaveLength(1);
+      // NOT visible on any other frame
+      expect(engine.getAnnotationsForFrame(4)).toHaveLength(0);
+      expect(engine.getAnnotationsForFrame(6)).toHaveLength(0);
+    });
+
+    it('PAINT-024: turning hold OFF does not affect already-drawn hold annotations', () => {
+      engine.tool = 'pen';
+      engine.setHoldMode(true);
+
+      // Draw with hold ON
+      engine.beginStroke(5, { x: 0.1, y: 0.1 });
+      engine.endStroke();
+
+      // Turn hold OFF
+      engine.setHoldMode(false);
+
+      // Annotation should still persist (duration was set at draw time)
+      expect(engine.getAnnotationsForFrame(5)).toHaveLength(1);
+      expect(engine.getAnnotationsForFrame(10)).toHaveLength(1);
+    });
   });
 
   describe('undo/redo', () => {

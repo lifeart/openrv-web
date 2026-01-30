@@ -285,8 +285,15 @@ describe('PaintToolbar', () => {
     });
 
     it('PAINT-U076: unhandled key returns false', () => {
-      const handled = toolbar.handleKeyboard('x');
+      const handled = toolbar.handleKeyboard('z');
       expect(handled).toBe(false);
+    });
+
+    it('PAINT-U086: X key toggles hold mode', () => {
+      expect(paintEngine.effects.hold).toBe(false);
+      const handled = toolbar.handleKeyboard('x');
+      expect(handled).toBe(true);
+      expect(paintEngine.effects.hold).toBe(true);
     });
 
     it('PAINT-U077: uppercase keys work', () => {

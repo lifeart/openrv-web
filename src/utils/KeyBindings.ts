@@ -275,6 +275,10 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyG',
     description: 'Toggle ghost mode'
   },
+  'paint.toggleHold': {
+    code: 'KeyX',
+    description: 'Toggle hold mode'
+  },
 
   // Channel selection (handled by ChannelSelect component)
   'channel.red': {

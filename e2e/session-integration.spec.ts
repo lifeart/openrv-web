@@ -149,7 +149,10 @@ test.describe('Frame Increment Integration', () => {
 
   test('SI-E021: frame increment can be changed via API', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.session.frameIncrement = 5;
+      const testHelper = (window as any).__OPENRV_TEST__;
+      if (testHelper?.app?.session) {
+        testHelper.app.session.frameIncrement = 5;
+      }
     });
     await page.waitForTimeout(100);
 

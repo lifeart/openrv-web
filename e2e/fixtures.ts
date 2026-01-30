@@ -195,6 +195,7 @@ export interface PaintState {
   ghostBefore: number;
   ghostAfter: number;
   annotatedFrames: number[];
+  visibleAnnotationCount: number; // Number of annotations visible on current frame (including hold mode)
   canUndo: boolean;
   canRedo: boolean;
 }

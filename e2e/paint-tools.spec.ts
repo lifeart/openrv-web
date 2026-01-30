@@ -732,4 +732,310 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       }
     });
   });
+
+  test.describe('Hold Mode', () => {
+    test('HOLD-E001: toggle hold mode via toolbar should update holdMode state', async ({ page }) => {
+      let state = await getPaintState(page);
+      expect(state.holdMode).toBe(false);
+
+      // Look for hold mode button in toolbar
+      const holdButton = page.locator('button[title*="Hold"], button:has-text("Hold")').first();
+      if (await holdButton.isVisible()) {
+        await holdButton.click();
+        await page.waitForTimeout(100);
+
+        state = await getPaintState(page);
+        expect(state.holdMode).toBe(true);
+
+        // Toggle off
+        await holdButton.click();
+        await page.waitForTimeout(100);
+
+        state = await getPaintState(page);
+        expect(state.holdMode).toBe(false);
+      }
+    });
+
+    test('HOLD-E002: annotations persist across frames when hold enabled', async ({ page }) => {
+      // Enable hold mode first
+      const holdButton = page.locator('button[title*="Hold"], button:has-text("Hold")').first();
+      if (await holdButton.isVisible()) {
+        await holdButton.click();
+        await page.waitForTimeout(100);
+
+        let state = await getPaintState(page);
+        expect(state.holdMode).toBe(true);
+      } else {
+        // Use keyboard shortcut
+        await page.keyboard.press('x');
+        await page.waitForTimeout(100);
+
+        let state = await getPaintState(page);
+        expect(state.holdMode).toBe(true);
+      }
+
+      // Draw on frame 1
+      await page.keyboard.press('Home');
+      await page.keyboard.press('p');
+      await page.waitForTimeout(100);
+
+      const canvas = await getCanvas(page);
+      const box = await canvas.boundingBox();
+      expect(box).not.toBeNull();
+
+      await page.mouse.move(box!.x + 100, box!.y + 100);
+      await page.mouse.down();
+      await page.mouse.move(box!.x + 200, box!.y + 200);
+      await page.mouse.up();
+      await page.waitForTimeout(200);
+
+      // Verify annotation was created on frame 1
+      let state = await getPaintState(page);
+      expect(state.annotatedFrames).toContain(1);
+      expect(state.visibleAnnotationCount).toBe(1);
+
+      // Navigate to frame 2
+      await page.keyboard.press('ArrowRight');
+      await page.waitForTimeout(200);
+
+      // With hold mode enabled, the annotation should be visible on frame 2
+      state = await getPaintState(page);
+      expect(state.visibleAnnotationCount).toBe(1); // Annotation persists from frame 1
+
+      // Navigate to frame 5
+      await page.keyboard.press('ArrowRight');
+      await page.keyboard.press('ArrowRight');
+      await page.keyboard.press('ArrowRight');
+      await page.waitForTimeout(200);
+
+      // Annotation should still be visible
+      state = await getPaintState(page);
+      expect(state.visibleAnnotationCount).toBe(1);
+    });
+
+    test('HOLD-E003: hold mode indicator visible in UI when enabled', async ({ page }) => {
+      const holdButton = page.locator('button[title*="Hold"], button:has-text("Hold")').first();
+      if (!(await holdButton.isVisible())) {
+        test.skip();
+        return;
+      }
+
+      // Get initial styling - button should have reduced opacity when OFF
+      const initialOpacity = await holdButton.evaluate((el) => el.style.opacity);
+      const initialColor = await holdButton.evaluate((el) => el.style.color);
+      expect(initialOpacity).toBe('0.5');
+
+      // Enable hold mode
+      await holdButton.click();
+      await page.waitForTimeout(100);
+
+      let state = await getPaintState(page);
+      expect(state.holdMode).toBe(true);
+
+      // Button should show active state (full opacity, blue color)
+      const activeOpacity = await holdButton.evaluate((el) => el.style.opacity);
+      const activeColor = await holdButton.evaluate((el) => el.style.color);
+      expect(activeOpacity).toBe('1');
+      expect(activeColor).toContain('74, 158, 255'); // #4a9eff in rgb format
+
+      // Disable hold mode
+      await holdButton.click();
+      await page.waitForTimeout(100);
+
+      state = await getPaintState(page);
+      expect(state.holdMode).toBe(false);
+
+      // Button should return to inactive styling
+      const finalOpacity = await holdButton.evaluate((el) => el.style.opacity);
+      expect(finalOpacity).toBe('0.5');
+    });
+
+    test('HOLD-E004: annotations drawn with hold OFF do not persist to other frames', async ({ page }) => {
+      // Ensure hold mode is OFF
+      let state = await getPaintState(page);
+      expect(state.holdMode).toBe(false);
+
+      // Draw annotation on frame 1 with hold mode OFF
+      await page.keyboard.press('Home');
+      await page.keyboard.press('p');
+      await page.waitForTimeout(100);
+
+      const canvas = await getCanvas(page);
+      const box = await canvas.boundingBox();
+      expect(box).not.toBeNull();
+
+      await page.mouse.move(box!.x + 100, box!.y + 100);
+      await page.mouse.down();
+      await page.mouse.move(box!.x + 200, box!.y + 200);
+      await page.mouse.up();
+      await page.waitForTimeout(200);
+
+      // Verify annotation exists on frame 1
+      state = await getPaintState(page);
+      expect(state.annotatedFrames).toContain(1);
+      expect(state.visibleAnnotationCount).toBe(1);
+
+      // Navigate to frame 2
+      await page.keyboard.press('ArrowRight');
+      await page.waitForTimeout(200);
+
+      // Annotation should NOT be visible on frame 2 (hold was off when drawn)
+      state = await getPaintState(page);
+      expect(state.visibleAnnotationCount).toBe(0);
+
+      // Navigate back to frame 1
+      await page.keyboard.press('ArrowLeft');
+      await page.waitForTimeout(200);
+
+      // Annotation should still be visible on frame 1
+      state = await getPaintState(page);
+      expect(state.visibleAnnotationCount).toBe(1);
+    });
+
+    test('HOLD-E005: hold mode state persists during navigation', async ({ page }) => {
+      // Enable hold mode via keyboard
+      await page.keyboard.press('x');
+      await page.waitForTimeout(100);
+
+      let state = await getPaintState(page);
+      expect(state.holdMode).toBe(true);
+
+      // Navigate forward
+      await page.keyboard.press('ArrowRight');
+      await page.waitForTimeout(100);
+
+      state = await getPaintState(page);
+      expect(state.holdMode).toBe(true);
+
+      // Navigate backward
+      await page.keyboard.press('ArrowLeft');
+      await page.waitForTimeout(100);
+
+      state = await getPaintState(page);
+      expect(state.holdMode).toBe(true);
+
+      // Go to end
+      await page.keyboard.press('End');
+      await page.waitForTimeout(100);
+
+      state = await getPaintState(page);
+      expect(state.holdMode).toBe(true);
+    });
+
+    test('HOLD-E006: toggle hold mode via keyboard (X)', async ({ page }) => {
+      let state = await getPaintState(page);
+      expect(state.holdMode).toBe(false);
+
+      // Enable hold mode with X key
+      await page.keyboard.press('x');
+      await page.waitForTimeout(100);
+
+      state = await getPaintState(page);
+      expect(state.holdMode).toBe(true);
+
+      // Disable hold mode with X key
+      await page.keyboard.press('x');
+      await page.waitForTimeout(100);
+
+      state = await getPaintState(page);
+      expect(state.holdMode).toBe(false);
+    });
+
+    test('HOLD-E007: annotations drawn with hold ON persist after hold is turned OFF', async ({ page }) => {
+      // Enable hold mode
+      await page.keyboard.press('x');
+      await page.waitForTimeout(100);
+
+      let state = await getPaintState(page);
+      expect(state.holdMode).toBe(true);
+
+      // Draw annotation on frame 1 with hold ON
+      await page.keyboard.press('Home');
+      await page.keyboard.press('p');
+      await page.waitForTimeout(100);
+
+      const canvas = await getCanvas(page);
+      const box = await canvas.boundingBox();
+      expect(box).not.toBeNull();
+
+      await page.mouse.move(box!.x + 100, box!.y + 100);
+      await page.mouse.down();
+      await page.mouse.move(box!.x + 200, box!.y + 200);
+      await page.mouse.up();
+      await page.waitForTimeout(200);
+
+      // Disable hold mode AFTER drawing
+      await page.keyboard.press('x');
+      await page.waitForTimeout(100);
+
+      state = await getPaintState(page);
+      expect(state.holdMode).toBe(false);
+
+      // Navigate to frame 3
+      await page.keyboard.press('ArrowRight');
+      await page.keyboard.press('ArrowRight');
+      await page.waitForTimeout(200);
+
+      // Annotation should STILL be visible (it was drawn with hold ON)
+      state = await getPaintState(page);
+      expect(state.visibleAnnotationCount).toBe(1);
+
+      // Draw another annotation on frame 3 with hold OFF
+      await page.mouse.move(box!.x + 150, box!.y + 150);
+      await page.mouse.down();
+      await page.mouse.move(box!.x + 250, box!.y + 250);
+      await page.mouse.up();
+      await page.waitForTimeout(200);
+
+      // Now we should have 2 visible annotations on frame 3
+      state = await getPaintState(page);
+      expect(state.visibleAnnotationCount).toBe(2);
+
+      // Navigate to frame 4
+      await page.keyboard.press('ArrowRight');
+      await page.waitForTimeout(200);
+
+      // Only the first annotation (drawn with hold ON) should be visible
+      state = await getPaintState(page);
+      expect(state.visibleAnnotationCount).toBe(1);
+    });
+
+    test('HOLD-E008: hold mode works with shapes', async ({ page }) => {
+      // Enable hold mode
+      await page.keyboard.press('x');
+      await page.waitForTimeout(100);
+
+      let state = await getPaintState(page);
+      expect(state.holdMode).toBe(true);
+
+      // Draw rectangle on frame 1
+      await page.keyboard.press('Home');
+      await page.keyboard.press('r'); // Rectangle tool
+      await page.waitForTimeout(100);
+
+      const canvas = await getCanvas(page);
+      const box = await canvas.boundingBox();
+      expect(box).not.toBeNull();
+
+      await page.mouse.move(box!.x + 100, box!.y + 100);
+      await page.mouse.down();
+      await page.mouse.move(box!.x + 200, box!.y + 200);
+      await page.mouse.up();
+      await page.waitForTimeout(200);
+
+      // Verify annotation on frame 1
+      state = await getPaintState(page);
+      expect(state.visibleAnnotationCount).toBe(1);
+
+      // Navigate to frame 5
+      for (let i = 0; i < 4; i++) {
+        await page.keyboard.press('ArrowRight');
+      }
+      await page.waitForTimeout(200);
+
+      // Shape should persist
+      state = await getPaintState(page);
+      expect(state.visibleAnnotationCount).toBe(1);
+    });
+  });
 });

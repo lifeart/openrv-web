@@ -1226,6 +1226,7 @@ export class App {
       'paint.arrow': () => this.paintToolbar.handleKeyboard('a'),
       'paint.toggleBrush': () => this.paintToolbar.handleKeyboard('b'),
       'paint.toggleGhost': () => this.paintToolbar.handleKeyboard('g'),
+      'paint.toggleHold': () => this.paintToolbar.handleKeyboard('x'),
       'channel.red': () => this.channelSelect.handleKeyboard('R', true),
       'channel.green': () => this.channelSelect.handleKeyboard('G', true),
       'channel.blue': () => this.channelSelect.handleKeyboard('B', true),
@@ -1662,7 +1663,7 @@ export class App {
       'CHANNEL ISOLATION': ['channel.red', 'channel.green', 'channel.blue', 'channel.alpha', 'channel.luminance', 'channel.none'],
       'SCOPES': ['panel.histogram', 'panel.waveform', 'panel.vectorscope'],
       'TIMELINE': ['timeline.setInPoint', 'timeline.setInPointAlt', 'timeline.setOutPoint', 'timeline.setOutPointAlt', 'timeline.resetInOut', 'timeline.toggleMark', 'timeline.cycleLoopMode'],
-      'PAINT (Annotate tab)': ['paint.pan', 'paint.pen', 'paint.eraser', 'paint.text', 'paint.rectangle', 'paint.ellipse', 'paint.line', 'paint.arrow', 'paint.toggleBrush', 'paint.toggleGhost', 'edit.undo', 'edit.redo'],
+      'PAINT (Annotate tab)': ['paint.pan', 'paint.pen', 'paint.eraser', 'paint.text', 'paint.rectangle', 'paint.ellipse', 'paint.line', 'paint.arrow', 'paint.toggleBrush', 'paint.toggleGhost', 'paint.toggleHold', 'edit.undo', 'edit.redo'],
       'COLOR': ['panel.color', 'panel.curves'],
       'WIPE COMPARISON': ['view.cycleWipeMode'],
       'AUDIO (Video only)': [], // Special case - not in DEFAULT_KEY_BINDINGS

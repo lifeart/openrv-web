@@ -229,6 +229,7 @@ export interface PaintState {
   ghostBefore: number;
   ghostAfter: number;
   annotatedFrames: number[];
+  visibleAnnotationCount: number; // Number of annotations visible on current frame (including hold mode)
   canUndo: boolean;
   canRedo: boolean;
 }
@@ -539,6 +540,7 @@ export function exposeForTesting(app: App): void {
 
     getPaintState: (): PaintState => {
       const paintEngine = appAny.paintEngine;
+      const session = appAny.session;
       // Map 'none' tool to 'pan' for test interface consistency
       const tool = paintEngine?.tool ?? 'none';
       const toolMap: Record<string, 'pan' | 'pen' | 'eraser' | 'text' | 'rectangle' | 'ellipse' | 'line' | 'arrow'> = {
@@ -563,6 +565,9 @@ export function exposeForTesting(app: App): void {
       // Check undo/redo stacks directly since there are no public methods
       const undoStack = paintEngine?.undoStack ?? [];
       const redoStack = paintEngine?.redoStack ?? [];
+      // Get visible annotation count on current frame
+      const currentFrame = session?.currentFrame ?? 0;
+      const visibleAnnotations = paintEngine?.getAnnotationsForFrame?.(currentFrame) ?? [];
 
       return {
         currentTool: toolMap[tool] ?? 'pan',
@@ -574,6 +579,7 @@ export function exposeForTesting(app: App): void {
         ghostBefore: paintEngine?.effects?.ghostBefore ?? 3,
         ghostAfter: paintEngine?.effects?.ghostAfter ?? 3,
         annotatedFrames: Array.from(paintEngine?.getAnnotatedFrames?.() ?? []),
+        visibleAnnotationCount: visibleAnnotations.length,
         canUndo: undoStack.length > 0,
         canRedo: redoStack.length > 0,
       };

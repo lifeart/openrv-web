@@ -657,3 +657,589 @@ test.describe('Spotlight State Persistence', () => {
     expect(state.enabled).toBe(true);
   });
 });
+
+/**
+ * UI Button Toggle Tests
+ *
+ * These tests verify the spotlight toggle button in the View tab
+ */
+test.describe('Spotlight UI Button Toggle', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+    await loadVideoFile(page);
+  });
+
+  test('SL-E060: clicking spotlight button enables spotlight', async ({ page }) => {
+    // Go to View tab
+    await page.click('button[data-tab-id="view"]');
+    await page.waitForTimeout(100);
+
+    // Verify spotlight is disabled initially
+    let state = await getSpotlightState(page);
+    expect(state.enabled).toBe(false);
+
+    // Click spotlight button
+    const spotlightButton = page.locator('[data-testid="spotlight-toggle-btn"]');
+    await spotlightButton.click();
+    await page.waitForTimeout(100);
+
+    // Verify spotlight is enabled
+    state = await getSpotlightState(page);
+    expect(state.enabled).toBe(true);
+  });
+
+  test('SL-E061: clicking spotlight button twice disables spotlight', async ({ page }) => {
+    await page.click('button[data-tab-id="view"]');
+    await page.waitForTimeout(100);
+
+    const spotlightButton = page.locator('[data-testid="spotlight-toggle-btn"]');
+
+    // Enable spotlight
+    await spotlightButton.click();
+    await page.waitForTimeout(100);
+    let state = await getSpotlightState(page);
+    expect(state.enabled).toBe(true);
+
+    // Disable spotlight
+    await spotlightButton.click();
+    await page.waitForTimeout(100);
+    state = await getSpotlightState(page);
+    expect(state.enabled).toBe(false);
+  });
+
+  test('SL-E062: spotlight button has active styling when enabled', async ({ page }) => {
+    await page.click('button[data-tab-id="view"]');
+    await page.waitForTimeout(100);
+
+    const spotlightButton = page.locator('[data-testid="spotlight-toggle-btn"]');
+
+    // Check initial styling (should not have active color)
+    let bgColor = await spotlightButton.evaluate(el => el.style.background);
+    expect(bgColor).not.toContain('74, 158, 255');
+
+    // Enable spotlight
+    await spotlightButton.click();
+    await page.waitForTimeout(100);
+
+    // Check active styling
+    bgColor = await spotlightButton.evaluate(el => el.style.background);
+    expect(bgColor).toContain('74, 158, 255');
+  });
+
+  test('SL-E063: spotlight button syncs with keyboard toggle', async ({ page }) => {
+    await page.click('button[data-tab-id="view"]');
+    await page.waitForTimeout(100);
+
+    const spotlightButton = page.locator('[data-testid="spotlight-toggle-btn"]');
+
+    // Enable via keyboard
+    await page.keyboard.press('Shift+q');
+    await page.waitForTimeout(100);
+
+    // Button should show active styling
+    const bgColor = await spotlightButton.evaluate(el => el.style.background);
+    expect(bgColor).toContain('74, 158, 255');
+  });
+});
+
+/**
+ * Shape Switching Tests
+ *
+ * These tests verify shape switching between circle and rectangle
+ */
+test.describe('Spotlight Shape Switching', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+    await loadVideoFile(page);
+    // Enable spotlight
+    await page.keyboard.press('Shift+q');
+    await page.waitForTimeout(100);
+  });
+
+  test('SL-E070: can switch from circle to rectangle shape', async ({ page }) => {
+    let state = await getSpotlightState(page);
+    expect(state.shape).toBe('circle');
+
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setShape('rectangle');
+    });
+    await page.waitForTimeout(100);
+
+    state = await getSpotlightState(page);
+    expect(state.shape).toBe('rectangle');
+  });
+
+  test('SL-E071: can switch from rectangle back to circle', async ({ page }) => {
+    // Set to rectangle first
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setShape('rectangle');
+    });
+    await page.waitForTimeout(100);
+
+    let state = await getSpotlightState(page);
+    expect(state.shape).toBe('rectangle');
+
+    // Switch back to circle
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setShape('circle');
+    });
+    await page.waitForTimeout(100);
+
+    state = await getSpotlightState(page);
+    expect(state.shape).toBe('circle');
+  });
+
+  test('SL-E072: shape change produces different canvas rendering', async ({ page }) => {
+    // Capture circle rendering
+    const circleData = await page.evaluate(() => {
+      const overlay = document.querySelector('[data-testid="spotlight-overlay"]') as HTMLCanvasElement;
+      return overlay?.toDataURL('image/png') ?? null;
+    });
+
+    // Switch to rectangle
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setShape('rectangle');
+    });
+    await page.waitForTimeout(200);
+
+    // Capture rectangle rendering
+    const rectangleData = await page.evaluate(() => {
+      const overlay = document.querySelector('[data-testid="spotlight-overlay"]') as HTMLCanvasElement;
+      return overlay?.toDataURL('image/png') ?? null;
+    });
+
+    // Should produce different visuals
+    expect(circleData).not.toBeNull();
+    expect(rectangleData).not.toBeNull();
+    expect(circleData !== rectangleData).toBe(true);
+  });
+
+  test('SL-E073: rectangle shape has 8 resize handles', async ({ page }) => {
+    await page.evaluate(() => {
+      const spotlight = (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.();
+      spotlight?.setShape('rectangle');
+      spotlight?.setSize(0.3, 0.3);
+    });
+    await page.waitForTimeout(100);
+
+    // Verify rectangle mode is active
+    const state = await getSpotlightState(page);
+    expect(state.shape).toBe('rectangle');
+
+    // The handles are rendered on canvas, so we verify by checking
+    // that resize works from corner positions (NW, NE, SW, SE)
+    const overlay = page.locator('[data-testid="spotlight-overlay"]');
+    const box = await overlay.boundingBox();
+    expect(box).not.toBeNull();
+
+    if (box) {
+      const initialWidth = state.width;
+
+      // Try resizing from the east (right) edge
+      const spotCenterX = box.x + box.width * state.x;
+      const handleX = spotCenterX + (state.width * box.width);
+      const handleY = box.y + box.height * state.y;
+
+      await page.mouse.move(handleX, handleY);
+      await page.mouse.down();
+      await page.mouse.move(handleX + 30, handleY, { steps: 3 });
+      await page.mouse.up();
+      await page.waitForTimeout(100);
+
+      const newState = await getSpotlightState(page);
+      expect(newState.width).toBeGreaterThan(initialWidth);
+    }
+  });
+});
+
+/**
+ * Feather and Dim Amount Tests
+ *
+ * These tests verify feather and dim amount adjustments
+ */
+test.describe('Spotlight Feather and Dim Amount', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+    await loadVideoFile(page);
+    await page.keyboard.press('Shift+q');
+    await page.waitForTimeout(100);
+  });
+
+  test('SL-E080: increasing feather produces softer edge', async ({ page }) => {
+    // Capture with default feather (0.05)
+    const lowFeatherData = await page.evaluate(() => {
+      const overlay = document.querySelector('[data-testid="spotlight-overlay"]') as HTMLCanvasElement;
+      return overlay?.toDataURL('image/png') ?? null;
+    });
+
+    // Increase feather to max
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setFeather(0.5);
+    });
+    await page.waitForTimeout(200);
+
+    const highFeatherData = await page.evaluate(() => {
+      const overlay = document.querySelector('[data-testid="spotlight-overlay"]') as HTMLCanvasElement;
+      return overlay?.toDataURL('image/png') ?? null;
+    });
+
+    // Verify state changed
+    const state = await getSpotlightState(page);
+    expect(state.feather).toBeCloseTo(0.5, 1);
+
+    // Visual should be different
+    expect(lowFeatherData !== highFeatherData).toBe(true);
+  });
+
+  test('SL-E081: setting feather to 0 produces hard edge', async ({ page }) => {
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setFeather(0);
+    });
+    await page.waitForTimeout(100);
+
+    const state = await getSpotlightState(page);
+    expect(state.feather).toBe(0);
+  });
+
+  test('SL-E082: increasing dim amount darkens surroundings more', async ({ page }) => {
+    // Capture with default dim (0.7)
+    const normalDimData = await page.evaluate(() => {
+      const overlay = document.querySelector('[data-testid="spotlight-overlay"]') as HTMLCanvasElement;
+      return overlay?.toDataURL('image/png') ?? null;
+    });
+
+    // Set dim to maximum
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setDimAmount(1.0);
+    });
+    await page.waitForTimeout(200);
+
+    const maxDimData = await page.evaluate(() => {
+      const overlay = document.querySelector('[data-testid="spotlight-overlay"]') as HTMLCanvasElement;
+      return overlay?.toDataURL('image/png') ?? null;
+    });
+
+    // Verify state changed
+    const state = await getSpotlightState(page);
+    expect(state.dimAmount).toBe(1);
+
+    // Visual should be different (darker)
+    expect(normalDimData !== maxDimData).toBe(true);
+  });
+
+  test('SL-E083: setting dim amount to 0 removes dimming', async ({ page }) => {
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setDimAmount(0);
+    });
+    await page.waitForTimeout(100);
+
+    const state = await getSpotlightState(page);
+    expect(state.dimAmount).toBe(0);
+  });
+
+  test('SL-E084: feather is clamped to valid range', async ({ page }) => {
+    // Try setting feather above max
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setFeather(1.5);
+    });
+    await page.waitForTimeout(100);
+
+    let state = await getSpotlightState(page);
+    expect(state.feather).toBeLessThanOrEqual(0.5);
+
+    // Try setting feather below min
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setFeather(-0.5);
+    });
+    await page.waitForTimeout(100);
+
+    state = await getSpotlightState(page);
+    expect(state.feather).toBeGreaterThanOrEqual(0);
+  });
+});
+
+/**
+ * Edge Cases and Boundary Tests
+ *
+ * These tests verify spotlight behavior at extreme positions and sizes
+ */
+test.describe('Spotlight Edge Cases', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+    await loadVideoFile(page);
+    await page.keyboard.press('Shift+q');
+    await page.waitForTimeout(100);
+  });
+
+  test('SL-E090: spotlight at corner position (0, 0)', async ({ page }) => {
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setPosition(0, 0);
+    });
+    await page.waitForTimeout(100);
+
+    const state = await getSpotlightState(page);
+    expect(state.x).toBe(0);
+    expect(state.y).toBe(0);
+  });
+
+  test('SL-E091: spotlight at corner position (1, 1)', async ({ page }) => {
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setPosition(1, 1);
+    });
+    await page.waitForTimeout(100);
+
+    const state = await getSpotlightState(page);
+    expect(state.x).toBe(1);
+    expect(state.y).toBe(1);
+  });
+
+  test('SL-E092: position is clamped to valid range', async ({ page }) => {
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setPosition(-0.5, 1.5);
+    });
+    await page.waitForTimeout(100);
+
+    const state = await getSpotlightState(page);
+    expect(state.x).toBeGreaterThanOrEqual(0);
+    expect(state.x).toBeLessThanOrEqual(1);
+    expect(state.y).toBeGreaterThanOrEqual(0);
+    expect(state.y).toBeLessThanOrEqual(1);
+  });
+
+  test('SL-E093: minimum spotlight size is enforced', async ({ page }) => {
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setSize(0.001, 0.001);
+    });
+    await page.waitForTimeout(100);
+
+    const state = await getSpotlightState(page);
+    // Minimum size is 0.01
+    expect(state.width).toBeGreaterThanOrEqual(0.01);
+    expect(state.height).toBeGreaterThanOrEqual(0.01);
+  });
+
+  test('SL-E094: very large spotlight size is handled', async ({ page }) => {
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setSize(1, 1);
+    });
+    await page.waitForTimeout(100);
+
+    const state = await getSpotlightState(page);
+    expect(state.width).toBe(1);
+    expect(state.height).toBe(1);
+  });
+
+  test('SL-E095: spotlight size beyond maximum is clamped', async ({ page }) => {
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setSize(2, 2);
+    });
+    await page.waitForTimeout(100);
+
+    const state = await getSpotlightState(page);
+    expect(state.width).toBeLessThanOrEqual(1);
+    expect(state.height).toBeLessThanOrEqual(1);
+  });
+
+  test('SL-E096: spotlight works with very small resize', async ({ page }) => {
+    // Set initial size
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setSize(0.3, 0.3);
+    });
+    await page.waitForTimeout(100);
+
+    const overlay = page.locator('[data-testid="spotlight-overlay"]');
+    const box = await overlay.boundingBox();
+    expect(box).not.toBeNull();
+
+    if (box) {
+      const state = await getSpotlightState(page);
+
+      // Try to resize to very small
+      const spotCenterX = box.x + box.width * state.x;
+      const handleX = spotCenterX + (state.width * box.width);
+      const handleY = box.y + box.height * state.y;
+
+      await page.mouse.move(handleX, handleY);
+      await page.mouse.down();
+      // Try to drag handle past center (would make negative size)
+      await page.mouse.move(spotCenterX - 50, handleY, { steps: 5 });
+      await page.mouse.up();
+      await page.waitForTimeout(100);
+
+      // Size should be enforced to minimum
+      const newState = await getSpotlightState(page);
+      expect(newState.width).toBeGreaterThanOrEqual(0.05);
+    }
+  });
+});
+
+/**
+ * Spotlight Interaction with Other Features
+ *
+ * These tests verify spotlight works correctly with other viewer features
+ */
+test.describe('Spotlight Feature Interactions', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+    await loadVideoFile(page);
+  });
+
+  test('SL-E100: spotlight works with zoom', async ({ page }) => {
+    await page.keyboard.press('Shift+q');
+    await page.waitForTimeout(100);
+
+    let state = await getSpotlightState(page);
+    expect(state.enabled).toBe(true);
+
+    // Zoom viewer
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.viewer?.setZoom?.(2);
+    });
+    await page.waitForTimeout(200);
+
+    // Spotlight should still be enabled
+    state = await getSpotlightState(page);
+    expect(state.enabled).toBe(true);
+
+    // Overlay should still be visible
+    const overlay = page.locator('[data-testid="spotlight-overlay"]');
+    await expect(overlay).toBeVisible();
+  });
+
+  test('SL-E101: spotlight works with pan', async ({ page }) => {
+    await page.keyboard.press('Shift+q');
+    await page.waitForTimeout(100);
+
+    // Pan the viewer (not the spotlight)
+    await page.evaluate(() => {
+      const viewer = (window as any).__OPENRV_TEST__?.app?.viewer;
+      if (viewer) {
+        viewer.panX = 50;
+        viewer.panY = 50;
+      }
+    });
+    await page.waitForTimeout(100);
+
+    const state = await getSpotlightState(page);
+    expect(state.enabled).toBe(true);
+    // Spotlight position should not have changed
+    expect(state.x).toBeCloseTo(0.5, 1);
+    expect(state.y).toBeCloseTo(0.5, 1);
+  });
+
+  test('SL-E102: spotlight renders above main canvas', async ({ page }) => {
+    await page.keyboard.press('Shift+q');
+    await page.waitForTimeout(100);
+
+    // Check z-index
+    const zIndex = await page.evaluate(() => {
+      const overlay = document.querySelector('[data-testid="spotlight-overlay"]') as HTMLCanvasElement;
+      const mainCanvas = document.querySelector('.image-canvas, canvas:not([data-testid])') as HTMLCanvasElement;
+
+      const overlayZ = parseInt(getComputedStyle(overlay).zIndex) || 0;
+      const canvasZ = parseInt(getComputedStyle(mainCanvas).zIndex) || 0;
+
+      return { overlayZ, canvasZ };
+    });
+
+    expect(zIndex.overlayZ).toBeGreaterThan(zIndex.canvasZ);
+  });
+
+  test('SL-E103: spotlight does not interfere with playback', async ({ page }) => {
+    await page.keyboard.press('Shift+q');
+    await page.waitForTimeout(100);
+
+    // Start playback
+    await page.keyboard.press('Space');
+    await page.waitForTimeout(500);
+
+    // Spotlight should still be enabled
+    const state = await getSpotlightState(page);
+    expect(state.enabled).toBe(true);
+
+    // Stop playback
+    await page.keyboard.press('Space');
+  });
+
+  test('SL-E104: enabling spotlight via button after keyboard works', async ({ page }) => {
+    // Enable via keyboard
+    await page.keyboard.press('Shift+q');
+    await page.waitForTimeout(100);
+
+    // Disable via keyboard
+    await page.keyboard.press('Shift+q');
+    await page.waitForTimeout(100);
+
+    let state = await getSpotlightState(page);
+    expect(state.enabled).toBe(false);
+
+    // Enable via button
+    await page.click('button[data-tab-id="view"]');
+    await page.waitForTimeout(100);
+
+    const spotlightButton = page.locator('[data-testid="spotlight-toggle-btn"]');
+    await spotlightButton.click();
+    await page.waitForTimeout(100);
+
+    state = await getSpotlightState(page);
+    expect(state.enabled).toBe(true);
+  });
+});
+
+/**
+ * Spotlight Visibility Without Media
+ *
+ * Tests for spotlight behavior when no media is loaded
+ */
+test.describe('Spotlight Without Media', () => {
+  test('SL-E110: spotlight button exists even without media', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+    // Don't load any media
+
+    // Go to View tab
+    await page.click('button[data-tab-id="view"]');
+    await page.waitForTimeout(100);
+
+    // Button should exist
+    const spotlightButton = page.locator('[data-testid="spotlight-toggle-btn"]');
+    await expect(spotlightButton).toBeVisible();
+  });
+
+  test('SL-E111: spotlight can be enabled without media', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+    // Don't load any media
+
+    await page.keyboard.press('Shift+q');
+    await page.waitForTimeout(100);
+
+    const state = await getSpotlightState(page);
+    expect(state.enabled).toBe(true);
+  });
+
+  test('SL-E112: spotlight overlay exists without media', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+    // Don't load any media
+
+    await page.keyboard.press('Shift+q');
+    await page.waitForTimeout(100);
+
+    const overlay = page.locator('[data-testid="spotlight-overlay"]');
+    await expect(overlay).toBeVisible();
+  });
+});

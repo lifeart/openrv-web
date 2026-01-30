@@ -12,6 +12,7 @@ export class PaintToolbar {
   private widthLabel!: HTMLSpanElement;
   private brushButton!: HTMLButtonElement;
   private ghostButton!: HTMLButtonElement;
+  private holdButton!: HTMLButtonElement;
 
   constructor(paintEngine: PaintEngine) {
     this.paintEngine = paintEngine;
@@ -126,10 +127,15 @@ export class PaintToolbar {
 
     this.addSeparator();
 
-    // Actions group: ghost, undo, redo, clear
+    // Actions group: ghost, hold, undo, redo, clear
     this.ghostButton = this.createIconButton('ghost', 'Toggle ghost mode (G)', () => {
       const effects = this.paintEngine.effects;
       this.paintEngine.setGhostMode(!effects.ghost, effects.ghostBefore, effects.ghostAfter);
+    });
+
+    this.holdButton = this.createIconButton('lock', 'Toggle hold mode (X)', () => {
+      const effects = this.paintEngine.effects;
+      this.paintEngine.setHoldMode(!effects.hold);
     });
 
     this.createIconButton('undo', 'Undo (Ctrl+Z)', () => this.paintEngine.undo());
@@ -225,7 +231,10 @@ export class PaintToolbar {
   private bindEvents(): void {
     this.paintEngine.on('toolChanged', () => this.updateToolButtons());
     this.paintEngine.on('brushChanged', () => this.updateBrushButton());
-    this.paintEngine.on('effectsChanged', () => this.updateGhostButton());
+    this.paintEngine.on('effectsChanged', () => {
+      this.updateGhostButton();
+      this.updateHoldButton();
+    });
   }
 
   private updateBrushButton(): void {
@@ -245,6 +254,15 @@ export class PaintToolbar {
       : 'Ghost mode OFF (G)';
   }
 
+  private updateHoldButton(): void {
+    const effects = this.paintEngine.effects;
+    this.holdButton.style.opacity = effects.hold ? '1' : '0.5';
+    this.holdButton.style.color = effects.hold ? '#4a9eff' : '#999';
+    this.holdButton.title = effects.hold
+      ? 'Hold mode ON (X)'
+      : 'Hold mode OFF (X)';
+  }
+
   private rgbaToHex(rgba: [number, number, number, number]): string {
     const r = Math.round(rgba[0] * 255).toString(16).padStart(2, '0');
     const g = Math.round(rgba[1] * 255).toString(16).padStart(2, '0');
@@ -262,6 +280,7 @@ export class PaintToolbar {
   render(): HTMLElement {
     this.updateBrushButton();
     this.updateGhostButton();
+    this.updateHoldButton();
     return this.container;
   }
 
@@ -296,10 +315,16 @@ export class PaintToolbar {
           ? BrushType.Gaussian
           : BrushType.Circle;
         return true;
-      case 'g':
+      case 'g': {
         const effects = this.paintEngine.effects;
         this.paintEngine.setGhostMode(!effects.ghost);
         return true;
+      }
+      case 'x': {
+        const effects = this.paintEngine.effects;
+        this.paintEngine.setHoldMode(!effects.hold);
+        return true;
+      }
       default:
         return false;
     }

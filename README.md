@@ -244,6 +244,7 @@ pnpm dev
 | `A` | Arrow tool |
 | `B` | Toggle brush type (soft/hard) |
 | `G` | Toggle ghost mode |
+| `X` | Toggle hold mode (persist annotations across frames) |
 | `Shift+Q` | Toggle spotlight |
 | `Ctrl+Z` | Undo |
 | `Ctrl+Y` | Redo |

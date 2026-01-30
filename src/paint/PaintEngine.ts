@@ -129,6 +129,9 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
   beginStroke(frame: number, point: StrokePoint): void {
     if (this._tool !== 'pen' && this._tool !== 'eraser') return;
 
+    // When hold mode is enabled, annotations persist on all subsequent frames
+    const duration = this.state.effects.hold ? -1 : 0;
+
     this.currentStroke = {
       type: 'pen',
       id: String(this.state.nextId++),
@@ -143,7 +146,7 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
       splat: this._brush === BrushType.Gaussian,
       mode: this._tool === 'eraser' ? StrokeMode.Erase : StrokeMode.Draw,
       startFrame: frame,
-      duration: 0, // Visible only on the frame it was drawn
+      duration, // -1 = visible on all subsequent frames (hold mode), 0 = visible only on drawn frame
     };
   }
 
@@ -171,6 +174,10 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
 
   // Text operations
   addText(frame: number, position: StrokePoint, text: string, size = 24, options?: Partial<TextAnnotation>): TextAnnotation {
+    // When hold mode is enabled, annotations persist on all subsequent frames
+    // duration: 0 = visible only on drawn frame, -1 = visible on all subsequent frames
+    const defaultDuration = this.state.effects.hold ? -1 : 0;
+
     const annotation: TextAnnotation = {
       type: 'text',
       id: String(this.state.nextId++),
@@ -186,7 +193,7 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
       font: 'sans-serif',
       origin: TextOrigin.Center,
       startFrame: frame,
-      duration: 1,
+      duration: options?.duration ?? defaultDuration,
       // Apply optional styling
       bold: options?.bold,
       italic: options?.italic,
@@ -239,6 +246,10 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
     endPoint: Point,
     options?: Partial<ShapeAnnotation>
   ): ShapeAnnotation {
+    // When hold mode is enabled, annotations persist on all subsequent frames
+    // duration: 0 = visible only on drawn frame, -1 = visible on all subsequent frames
+    const defaultDuration = this.state.effects.hold ? -1 : 0;
+
     const annotation: ShapeAnnotation = {
       type: 'shape',
       id: String(this.state.nextId++),
@@ -254,7 +265,7 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
       cornerRadius: options?.cornerRadius,
       arrowheadSize: options?.arrowheadSize ?? 12,
       startFrame: frame,
-      duration: options?.duration ?? 1,
+      duration: options?.duration ?? defaultDuration,
     };
 
     this.addAnnotation(annotation);
@@ -337,6 +348,10 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
       maxY = Math.max(maxY, point.y);
     }
 
+    // When hold mode is enabled, annotations persist on all subsequent frames
+    // duration: 0 = visible only on drawn frame, -1 = visible on all subsequent frames
+    const defaultDuration = this.state.effects.hold ? -1 : 0;
+
     const annotation: ShapeAnnotation = {
       type: 'shape',
       id: String(this.state.nextId++),
@@ -351,7 +366,7 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
       rotation: options?.rotation ?? 0,
       points: points.map(p => ({ x: p.x, y: p.y })),
       startFrame: frame,
-      duration: options?.duration ?? 1,
+      duration: options?.duration ?? defaultDuration,
     };
 
     this.addAnnotation(annotation);
