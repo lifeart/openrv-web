@@ -753,13 +753,13 @@ export class App {
     // Update pixel probe button state
     this.viewer.getPixelProbe().on('stateChanged', (state) => {
       if (state.enabled) {
-        pixelProbeButton.style.background = 'rgba(74, 158, 255, 0.15)';
-        pixelProbeButton.style.borderColor = '#4a9eff';
-        pixelProbeButton.style.color = '#4a9eff';
+        pixelProbeButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+        pixelProbeButton.style.borderColor = 'var(--accent-primary)';
+        pixelProbeButton.style.color = 'var(--accent-primary)';
       } else {
         pixelProbeButton.style.background = 'transparent';
         pixelProbeButton.style.borderColor = 'transparent';
-        pixelProbeButton.style.color = '#999';
+        pixelProbeButton.style.color = 'var(--text-secondary)';
       }
     });
 
@@ -834,13 +834,13 @@ export class App {
     // Update spotlight button state when visibility changes
     this.viewer.getSpotlightOverlay().on('stateChanged', (state) => {
       if (state.enabled) {
-        spotlightButton.style.background = 'rgba(74, 158, 255, 0.15)';
-        spotlightButton.style.borderColor = '#4a9eff';
-        spotlightButton.style.color = '#4a9eff';
+        spotlightButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+        spotlightButton.style.borderColor = 'var(--accent-primary)';
+        spotlightButton.style.color = 'var(--accent-primary)';
       } else {
         spotlightButton.style.background = 'transparent';
         spotlightButton.style.borderColor = 'transparent';
-        spotlightButton.style.color = '#999';
+        spotlightButton.style.color = 'var(--text-secondary)';
       }
     });
 
@@ -859,8 +859,8 @@ export class App {
     // Update button state when visibility changes
     this.infoPanel.on('visibilityChanged', (visible) => {
       if (visible) {
-        infoPanelButton.style.background = 'rgba(74, 158, 255, 0.15)';
-        infoPanelButton.style.borderColor = '#4a9eff';
+        infoPanelButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+        infoPanelButton.style.borderColor = 'var(--accent-primary)';
       } else {
         infoPanelButton.style.background = '';
         infoPanelButton.style.borderColor = '';
@@ -918,8 +918,8 @@ export class App {
     // Update button state when visibility changes
     this.curvesControl.on('visibilityChanged', (visible) => {
       if (visible) {
-        curvesButton.style.background = 'rgba(74, 158, 255, 0.15)';
-        curvesButton.style.borderColor = '#4a9eff';
+        curvesButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+        curvesButton.style.borderColor = 'var(--accent-primary)';
       } else {
         curvesButton.style.background = '';
         curvesButton.style.borderColor = '';
@@ -937,8 +937,8 @@ export class App {
     // Update button state when visibility changes
     colorWheels.on('visibilityChanged', (visible) => {
       if (visible) {
-        colorWheelsButton.style.background = 'rgba(74, 158, 255, 0.15)';
-        colorWheelsButton.style.borderColor = '#4a9eff';
+        colorWheelsButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+        colorWheelsButton.style.borderColor = 'var(--accent-primary)';
       } else {
         colorWheelsButton.style.background = '';
         colorWheelsButton.style.borderColor = '';
@@ -985,8 +985,8 @@ export class App {
     // Update button state when visibility changes
     this.historyPanel.on('visibilityChanged', (visible) => {
       if (visible) {
-        historyButton.style.background = 'rgba(74, 158, 255, 0.15)';
-        historyButton.style.borderColor = '#4a9eff';
+        historyButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+        historyButton.style.borderColor = 'var(--accent-primary)';
       } else {
         historyButton.style.background = '';
         historyButton.style.borderColor = '';
@@ -1003,8 +1003,8 @@ export class App {
     // Update button state when visibility changes
     this.markerListPanel.on('visibilityChanged', (visible) => {
       if (visible) {
-        markersButton.style.background = 'rgba(74, 158, 255, 0.15)';
-        markersButton.style.borderColor = '#4a9eff';
+        markersButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+        markersButton.style.borderColor = 'var(--accent-primary)';
       } else {
         markersButton.style.background = '';
         markersButton.style.borderColor = '';
@@ -1397,8 +1397,8 @@ export class App {
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      background: #2a2a2a;
-      border: 1px solid #444;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
       border-radius: 8px;
       padding: 24px;
       z-index: 10000;
@@ -1407,13 +1407,13 @@ export class App {
     `;
 
     const progressText = document.createElement('div');
-    progressText.style.cssText = 'color: #ddd; margin-bottom: 12px; font-size: 14px;';
+    progressText.style.cssText = 'color: var(--text-primary); margin-bottom: 12px; font-size: 14px;';
     progressText.textContent = `Exporting frames 0/${totalFrames}...`;
 
     const progressBar = document.createElement('div');
     progressBar.style.cssText = `
       height: 8px;
-      background: #444;
+      background: var(--border-primary);
       border-radius: 4px;
       overflow: hidden;
       margin-bottom: 16px;
@@ -1422,7 +1422,7 @@ export class App {
     const progressFill = document.createElement('div');
     progressFill.style.cssText = `
       height: 100%;
-      background: #4a9eff;
+      background: var(--accent-primary);
       width: 0%;
       transition: width 0.1s ease;
     `;
@@ -1431,9 +1431,9 @@ export class App {
     const cancelButton = document.createElement('button');
     cancelButton.textContent = 'Cancel';
     cancelButton.style.cssText = `
-      background: #555;
-      border: 1px solid #666;
-      color: #ddd;
+      background: var(--bg-active);
+      border: 1px solid var(--border-primary);
+      color: var(--text-primary);
       padding: 8px 16px;
       border-radius: 4px;
       cursor: pointer;
@@ -1650,7 +1650,7 @@ export class App {
       padding: 8px;
       font-family: monospace;
       font-size: 12px;
-      color: #ccc;
+      color: var(--text-primary);
       line-height: 1.6;
     `;
 
@@ -1688,7 +1688,7 @@ export class App {
       categoryDiv.style.cssText = 'margin-bottom: 16px;';
 
       const categoryHeader = document.createElement('div');
-      categoryHeader.style.cssText = 'font-weight: bold; color: #4a9eff; margin-bottom: 4px;';
+      categoryHeader.style.cssText = 'font-weight: bold; color: var(--accent-primary); margin-bottom: 4px;';
       categoryHeader.textContent = categoryName;
       categoryDiv.appendChild(categoryHeader);
 
@@ -1700,11 +1700,11 @@ export class App {
 
           const keySpan = document.createElement('span');
           keySpan.textContent = shortcut.key;
-          keySpan.style.cssText = 'color: #888; min-width: 120px;';
+          keySpan.style.cssText = 'color: var(--text-muted); min-width: 120px;';
 
           const descSpan = document.createElement('span');
           descSpan.textContent = shortcut.desc;
-          descSpan.style.cssText = 'color: #ccc; flex: 1;';
+          descSpan.style.cssText = 'color: var(--text-primary); flex: 1;';
 
           shortcutDiv.appendChild(keySpan);
           shortcutDiv.appendChild(descSpan);
@@ -1725,11 +1725,11 @@ export class App {
 
           const keySpan = document.createElement('span');
           keySpan.textContent = shortcut.key;
-          keySpan.style.cssText = 'color: #888; min-width: 120px;';
+          keySpan.style.cssText = 'color: var(--text-muted); min-width: 120px;';
 
           const descSpan = document.createElement('span');
           descSpan.textContent = shortcut.desc;
-          descSpan.style.cssText = 'color: #ccc; flex: 1;';
+          descSpan.style.cssText = 'color: var(--text-primary); flex: 1;';
 
           shortcutDiv.appendChild(keySpan);
           shortcutDiv.appendChild(descSpan);
@@ -1749,11 +1749,11 @@ export class App {
 
           const keySpan = document.createElement('span');
           keySpan.textContent = describeKeyCombo(effectiveCombo);
-          keySpan.style.cssText = `min-width: 120px; ${isCustom ? 'color: #4a9eff; font-weight: bold;' : 'color: #888;'}`;
+          keySpan.style.cssText = `min-width: 120px; ${isCustom ? 'color: var(--accent-primary); font-weight: bold;' : 'color: var(--text-muted);'}`;
 
           const descSpan = document.createElement('span');
           descSpan.textContent = defaultBinding.description;
-          descSpan.style.cssText = 'color: #ccc; flex: 1;';
+          descSpan.style.cssText = 'color: var(--text-primary); flex: 1;';
 
           const actionsDiv = document.createElement('div');
           actionsDiv.style.cssText = 'display: flex; gap: 4px;';
@@ -1763,9 +1763,9 @@ export class App {
             const resetButton = document.createElement('button');
             resetButton.textContent = 'Reset';
             resetButton.style.cssText = `
-              background: #666;
+              background: var(--text-muted);
               border: none;
-              color: white;
+              color: var(--bg-primary);
               padding: 2px 6px;
               border-radius: 3px;
               cursor: pointer;
@@ -1794,14 +1794,14 @@ export class App {
     resetAllContainer.style.cssText = `
       margin-top: 20px;
       padding-top: 16px;
-      border-top: 1px solid #444;
+      border-top: 1px solid var(--border-primary);
       text-align: center;
     `;
 
     const resetAllButton = document.createElement('button');
     resetAllButton.textContent = 'Reset All Shortcuts to Defaults';
     resetAllButton.style.cssText = `
-      background: #d9534f;
+      background: var(--error);
       border: none;
       color: white;
       padding: 8px 16px;
@@ -1839,9 +1839,9 @@ export class App {
       grid-template-columns: 1fr 120px 80px;
       gap: 8px;
       padding: 8px 0;
-      border-bottom: 1px solid #444;
+      border-bottom: 1px solid var(--border-primary);
       font-weight: bold;
-      color: #ccc;
+      color: var(--text-primary);
       font-size: 12px;
     `;
     header.innerHTML = `
@@ -1859,14 +1859,14 @@ export class App {
         grid-template-columns: 1fr 120px 80px;
         gap: 8px;
         padding: 8px 0;
-        border-bottom: 1px solid #333;
+        border-bottom: 1px solid var(--border-secondary);
         align-items: center;
       `;
 
       // Action description
       const descCell = document.createElement('div');
       descCell.style.cssText = `
-        color: #eee;
+        color: var(--text-primary);
         font-size: 13px;
       `;
       descCell.textContent = action.description;
@@ -1875,11 +1875,11 @@ export class App {
       // Current key combination
       const keyCell = document.createElement('div');
       keyCell.style.cssText = `
-        background: #333;
-        border: 1px solid #555;
+        background: var(--bg-hover);
+        border: 1px solid var(--bg-active);
         border-radius: 4px;
         padding: 4px 8px;
-        color: #ccc;
+        color: var(--text-primary);
         font-family: monospace;
         font-size: 12px;
         text-align: center;
@@ -1898,7 +1898,7 @@ export class App {
       const setButton = document.createElement('button');
       setButton.textContent = 'Set';
       setButton.style.cssText = `
-        background: #4a9eff;
+        background: var(--accent-primary);
         border: none;
         color: white;
         padding: 4px 8px;
@@ -1914,9 +1914,9 @@ export class App {
         const resetButton = document.createElement('button');
         resetButton.textContent = 'Reset';
         resetButton.style.cssText = `
-          background: #666;
+          background: var(--text-muted);
           border: none;
-          color: white;
+          color: var(--bg-primary);
           padding: 4px 6px;
           border-radius: 3px;
           cursor: pointer;
@@ -1940,14 +1940,14 @@ export class App {
     resetAllContainer.style.cssText = `
       margin-top: 16px;
       padding-top: 16px;
-      border-top: 1px solid #444;
+      border-top: 1px solid var(--border-primary);
       text-align: center;
     `;
 
     const resetAllButton = document.createElement('button');
     resetAllButton.textContent = 'Reset All to Defaults';
     resetAllButton.style.cssText = `
-      background: #d9534f;
+      background: var(--error);
       border: none;
       color: white;
       padding: 8px 16px;
@@ -1983,7 +1983,7 @@ export class App {
 
     const instruction = document.createElement('div');
     instruction.style.cssText = `
-      color: #ccc;
+      color: var(--text-primary);
       margin-bottom: 16px;
       font-size: 14px;
     `;
@@ -1992,11 +1992,11 @@ export class App {
 
     const keyDisplay = document.createElement('div');
     keyDisplay.style.cssText = `
-      background: #333;
-      border: 2px solid #4a9eff;
+      background: var(--bg-hover);
+      border: 2px solid var(--accent-primary);
       border-radius: 8px;
       padding: 16px;
-      color: #4a9eff;
+      color: var(--accent-primary);
       font-family: monospace;
       font-size: 18px;
       font-weight: bold;
@@ -2009,9 +2009,9 @@ export class App {
     const cancelButton = document.createElement('button');
     cancelButton.textContent = 'Cancel';
     cancelButton.style.cssText = `
-      background: #666;
+      background: var(--text-muted);
       border: none;
-      color: white;
+      color: var(--bg-primary);
       padding: 8px 16px;
       border-radius: 4px;
       cursor: pointer;
@@ -2063,7 +2063,7 @@ export class App {
       const confirmButton = document.createElement('button');
       confirmButton.textContent = 'Confirm';
       confirmButton.style.cssText = `
-        background: #4a9eff;
+        background: var(--accent-primary);
         border: none;
         color: white;
         padding: 8px 16px;
@@ -2096,9 +2096,9 @@ export class App {
       const newCancelButton = document.createElement('button');
       newCancelButton.textContent = 'Cancel';
       newCancelButton.style.cssText = `
-        background: #666;
+        background: var(--text-muted);
         border: none;
-        color: white;
+        color: var(--bg-primary);
         padding: 8px 16px;
         border-radius: 4px;
         cursor: pointer;

@@ -57,7 +57,7 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
     this.button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
-      color: #999;
+      color: var(--text-muted);
       padding: 6px 10px;
       border-radius: 4px;
       cursor: pointer;
@@ -72,9 +72,9 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
 
     this.button.addEventListener('mouseenter', () => {
       if (!this.overlay.isVisible()) {
-        this.button.style.background = '#3a3a3a';
-        this.button.style.borderColor = '#4a4a4a';
-        this.button.style.color = '#ccc';
+        this.button.style.background = 'var(--bg-hover)';
+        this.button.style.borderColor = 'var(--border-primary)';
+        this.button.style.color = 'var(--text-primary)';
       }
     });
 
@@ -82,7 +82,7 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
       if (!this.overlay.isVisible()) {
         this.button.style.background = 'transparent';
         this.button.style.borderColor = 'transparent';
-        this.button.style.color = '#999';
+        this.button.style.color = 'var(--text-muted)';
       }
     });
 
@@ -113,8 +113,8 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
     dropdown.dataset.testid = 'safe-areas-dropdown';
     dropdown.style.cssText = `
       position: fixed;
-      background: #2a2a2a;
-      border: 1px solid #444;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
       border-radius: 6px;
       padding: 8px 0;
       min-width: 220px;
@@ -173,7 +173,7 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
     label.style.cssText = `
       padding: 4px 12px;
       font-size: 10px;
-      color: #666;
+      color: var(--text-muted);
       text-transform: uppercase;
       letter-spacing: 0.5px;
     `;
@@ -185,7 +185,7 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
     const sep = document.createElement('div');
     sep.style.cssText = `
       height: 1px;
-      background: #3a3a3a;
+      background: var(--bg-hover);
       margin: 6px 0;
     `;
     return sep;
@@ -213,7 +213,7 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
     checkbox.style.cssText = `
       width: 14px;
       height: 14px;
-      border: 1px solid #555;
+      border: 1px solid var(--border-secondary);
       border-radius: 3px;
       display: flex;
       align-items: center;
@@ -224,7 +224,7 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
     const text = document.createElement('span');
     text.textContent = label;
     text.style.cssText = `
-      color: #ccc;
+      color: var(--text-primary);
       font-size: 12px;
     `;
 
@@ -232,7 +232,7 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
     item.appendChild(text);
 
     item.addEventListener('mouseenter', () => {
-      item.style.background = '#3a3a3a';
+      item.style.background = 'var(--bg-hover)';
     });
 
     item.addEventListener('mouseleave', () => {
@@ -258,10 +258,10 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
     select.style.cssText = `
       width: 100%;
       padding: 6px 8px;
-      background: #333;
-      border: 1px solid #444;
+      background: var(--bg-hover);
+      border: 1px solid var(--border-primary);
       border-radius: 4px;
-      color: #ccc;
+      color: var(--text-primary);
       font-size: 12px;
       cursor: pointer;
     `;
@@ -312,13 +312,13 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
 
     // Update active styling
     if (isActive) {
-      this.button.style.background = 'rgba(74, 158, 255, 0.15)';
-      this.button.style.borderColor = '#4a9eff';
-      this.button.style.color = '#4a9eff';
+      this.button.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+      this.button.style.borderColor = 'var(--accent-primary)';
+      this.button.style.color = 'var(--accent-primary)';
     } else {
       this.button.style.background = 'transparent';
       this.button.style.borderColor = 'transparent';
-      this.button.style.color = '#999';
+      this.button.style.color = 'var(--text-muted)';
     }
   }
 
@@ -332,13 +332,13 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
         const checkbox = item.querySelector('.checkbox-indicator') as HTMLElement;
         if (checkbox) {
           if (checked) {
-            checkbox.style.background = '#4a9eff';
-            checkbox.style.borderColor = '#4a9eff';
+            checkbox.style.background = 'var(--accent-primary)';
+            checkbox.style.borderColor = 'var(--accent-primary)';
             checkbox.innerHTML = getIconSvg('check', 'sm');
-            (checkbox.querySelector('svg') as SVGElement).style.color = '#fff';
+            (checkbox.querySelector('svg') as SVGElement).style.color = 'var(--text-on-accent)';
           } else {
             checkbox.style.background = 'transparent';
-            checkbox.style.borderColor = '#555';
+            checkbox.style.borderColor = 'var(--border-secondary)';
             checkbox.innerHTML = '';
           }
         }

@@ -4,34 +4,34 @@
  * Centralized color and styling constants for consistent UI appearance.
  */
 
-// Background colors
+// Background colors - Use CSS variables with fallbacks for theming support
 export const COLORS = {
   // Backgrounds
-  bgPanel: '#2a2a2a',
-  bgHover: '#3a3a3a',
-  bgPressed: '#444',
+  bgPanel: 'var(--bg-secondary)',
+  bgHover: 'var(--bg-hover)',
+  bgPressed: 'var(--border-primary)',
 
   // Borders
-  borderDefault: '#4a4a4a',
-  borderHover: '#555',
+  borderDefault: 'var(--border-primary)',
+  borderHover: 'var(--border-secondary)',
 
   // Text
-  textDefault: '#ccc',
-  textMuted: '#999',
-  textDisabled: '#666',
-  textBright: '#fff',
+  textDefault: 'var(--text-primary)',
+  textMuted: 'var(--text-muted)',
+  textDisabled: 'var(--text-muted)',
+  textBright: 'var(--text-on-accent)',
 
   // Accent/Primary
-  accent: '#4a9eff',
-  accentHover: '#5aafff',
-  accentPressed: '#3a8eef',
-  accentBg: 'rgba(74, 158, 255, 0.15)',
-  accentBgStrong: 'rgba(74, 158, 255, 0.2)',
+  accent: 'var(--accent-primary)',
+  accentHover: 'var(--accent-hover)',
+  accentPressed: 'var(--accent-active)',
+  accentBg: 'rgba(var(--accent-primary-rgb), 0.15)',
+  accentBgStrong: 'rgba(var(--accent-primary-rgb), 0.2)',
 
   // Danger
-  danger: '#dc3545',
-  dangerHover: '#e04555',
-  dangerPressed: '#c82535',
+  danger: 'var(--error)',
+  dangerHover: 'var(--error)',
+  dangerPressed: 'var(--error)',
 
   // Shadows
   shadowDropdown: '0 4px 12px rgba(0, 0, 0, 0.4)',

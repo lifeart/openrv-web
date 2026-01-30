@@ -18,6 +18,8 @@ import {
   DraggableContainer,
 } from './shared/DraggableContainer';
 import { setupHiDPICanvas } from '../../utils/HiDPICanvas';
+import { getThemeManager } from '../../utils/ThemeManager';
+import { getCSSColor } from '../../utils/getCSSColor';
 
 export interface VectorscopeEvents extends EventMap {
   visibilityChanged: boolean;
@@ -53,6 +55,7 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
   private lastImageData: ImageData | null = null;
   private isPlaybackMode = false;
   private dpr = 1;
+  private boundOnThemeChange: (() => void) | null = null;
 
   constructor() {
     super();
@@ -69,7 +72,7 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
     this.canvas = document.createElement('canvas');
     this.canvas.style.cssText = `
       display: block;
-      background: #111;
+      background: var(--bg-primary);
       border-radius: 50%;
     `;
 
@@ -90,6 +93,16 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
 
     // Draw initial graticule
     this.drawGraticule();
+
+    // Listen for theme changes to redraw with new colors
+    this.boundOnThemeChange = () => {
+      if (this.lastImageData) {
+        this.update(this.lastImageData);
+      } else {
+        this.drawGraticule();
+      }
+    };
+    getThemeManager().on('themeChanged', this.boundOnThemeChange);
   }
 
   private createControls(): void {
@@ -117,7 +130,7 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
     const radius = GRATICULE_RADIUS;
 
     // Clear canvas
-    ctx.fillStyle = '#111';
+    ctx.fillStyle = getCSSColor('--bg-primary', '#111');
     ctx.fillRect(0, 0, size, size);
 
     // Draw circular grid
@@ -471,6 +484,11 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
   }
 
   dispose(): void {
+    // Clean up theme change listener
+    if (this.boundOnThemeChange) {
+      getThemeManager().off('themeChanged', this.boundOnThemeChange);
+    }
+    this.boundOnThemeChange = null;
     this.zoomButton = null;
     this.draggableContainer.dispose();
   }

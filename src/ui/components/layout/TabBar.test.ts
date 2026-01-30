@@ -153,18 +153,18 @@ describe('TabBar', () => {
   });
 
   describe('active tab styling', () => {
-    it('TAB-U050: active tab has white color', () => {
+    it('TAB-U050: active tab has primary text color', () => {
       const el = tabBar.render();
       const btn = el.querySelector('[data-tab-id="view"]') as HTMLButtonElement;
 
-      expect(btn.style.cssText).toContain('rgb(255, 255, 255)'); // #fff
+      expect(btn.style.cssText).toContain('var(--text-primary)');
     });
 
-    it('TAB-U051: inactive tab has gray color', () => {
+    it('TAB-U051: inactive tab has muted color', () => {
       const el = tabBar.render();
       const btn = el.querySelector('[data-tab-id="color"]') as HTMLButtonElement;
 
-      expect(btn.style.cssText).toContain('rgb(136, 136, 136)'); // #888
+      expect(btn.style.cssText).toContain('var(--text-muted)');
     });
 
     it('TAB-U052: changing active tab updates styling', () => {
@@ -174,8 +174,8 @@ describe('TabBar', () => {
 
       tabBar.setActiveTab('color');
 
-      expect(colorBtn.style.cssText).toContain('rgb(255, 255, 255)');
-      expect(viewBtn.style.cssText).toContain('rgb(136, 136, 136)');
+      expect(colorBtn.style.cssText).toContain('var(--text-primary)');
+      expect(viewBtn.style.cssText).toContain('var(--text-muted)');
     });
   });
 
@@ -186,7 +186,7 @@ describe('TabBar', () => {
 
       btn.dispatchEvent(new MouseEvent('mouseenter'));
 
-      expect(btn.style.cssText).toContain('rgb(187, 187, 187)'); // #bbb
+      expect(btn.style.cssText).toContain('var(--text-secondary)');
     });
 
     it('TAB-U061: inactive tab restores on mouseleave', () => {
@@ -196,7 +196,7 @@ describe('TabBar', () => {
       btn.dispatchEvent(new MouseEvent('mouseenter'));
       btn.dispatchEvent(new MouseEvent('mouseleave'));
 
-      expect(btn.style.cssText).toContain('rgb(136, 136, 136)'); // #888
+      expect(btn.style.cssText).toContain('var(--text-muted)');
     });
 
     it('TAB-U062: active tab does not change on hover', () => {
@@ -205,8 +205,8 @@ describe('TabBar', () => {
 
       btn.dispatchEvent(new MouseEvent('mouseenter'));
 
-      // Active tab keeps white color
-      expect(btn.style.cssText).toContain('rgb(255, 255, 255)');
+      // Active tab keeps primary color
+      expect(btn.style.cssText).toContain('var(--text-primary)');
     });
   });
 
@@ -251,8 +251,8 @@ describe('TabBar', () => {
   describe('indicator', () => {
     it('TAB-U080: has indicator element', () => {
       const el = tabBar.render();
-      // Indicator is a div with position absolute and blue background
-      const indicator = el.querySelector('div[style*="rgb(74, 158, 255)"]');
+      // Indicator is a div with position absolute and accent-primary background
+      const indicator = el.querySelector('div[style*="var(--accent-primary)"]');
       expect(indicator).not.toBeNull();
     });
   });

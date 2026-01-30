@@ -19,20 +19,25 @@ export class Timeline {
   private boundHandleResize: () => void;
   private paintEngineSubscribed = false;
 
-  private colors = {
-    background: '#252525',
-    track: '#333',
-    played: '#4a9eff33',
-    playhead: '#4a9eff',
-    playheadShadow: '#4a9eff44',
-    inOutRange: '#4a9eff22',
-    mark: '#ff6b6b',
-    annotation: '#ffcc00',  // Yellow/gold for annotations
-    waveform: 'rgba(100, 180, 255, 0.4)',  // Light blue for waveform
-    text: '#ccc',
-    textDim: '#666',
-    border: '#444',
-  };
+  // Colors are resolved at render time from CSS variables
+  private getColors() {
+    const style = getComputedStyle(document.documentElement);
+    const accentRgb = style.getPropertyValue('--accent-primary-rgb').trim() || '74, 158, 255';
+    return {
+      background: style.getPropertyValue('--bg-secondary').trim() || '#252525',
+      track: style.getPropertyValue('--bg-hover').trim() || '#333',
+      played: `rgba(${accentRgb}, 0.2)`,
+      playhead: style.getPropertyValue('--accent-primary').trim() || '#4a9eff',
+      playheadShadow: `rgba(${accentRgb}, 0.27)`,
+      inOutRange: `rgba(${accentRgb}, 0.13)`,
+      mark: style.getPropertyValue('--error').trim() || '#ff6b6b',
+      annotation: style.getPropertyValue('--warning').trim() || '#ffcc00',
+      waveform: `rgba(${accentRgb}, 0.4)`,
+      text: style.getPropertyValue('--text-primary').trim() || '#ccc',
+      textDim: style.getPropertyValue('--text-muted').trim() || '#666',
+      border: style.getPropertyValue('--border-primary').trim() || '#444',
+    };
+  }
 
   constructor(session: Session, paintEngine?: PaintEngine) {
     this.session = session;
@@ -48,8 +53,8 @@ export class Timeline {
     this.container.className = 'timeline-container';
     this.container.style.cssText = `
       height: 80px;
-      background: ${this.colors.background};
-      border-top: 1px solid ${this.colors.border};
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--border-primary);
       user-select: none;
       flex-shrink: 0;
     `;
@@ -230,9 +235,12 @@ export class Timeline {
 
     if (width === 0 || height === 0) return;
 
+    // Get current theme colors
+    const colors = this.getColors();
+
     // Clear
     ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = this.colors.background;
+    ctx.fillStyle = colors.background;
     ctx.fillRect(0, 0, width, height);
 
     const padding = 60;
@@ -248,7 +256,7 @@ export class Timeline {
     const currentFrame = this.session.currentFrame;
 
     // Draw track background (full duration)
-    ctx.fillStyle = this.colors.track;
+    ctx.fillStyle = colors.track;
     ctx.beginPath();
     ctx.roundRect(padding, trackY, trackWidth, trackHeight, 4);
     ctx.fill();
@@ -267,7 +275,7 @@ export class Timeline {
           trackHeight - 4,       // height: with margin
           0,                     // startTime
           audioDuration,         // endTime
-          this.colors.waveform
+          colors.waveform
         );
       }
     }
@@ -285,20 +293,20 @@ export class Timeline {
         const rangeWidth = outX - inX;
 
         // Draw in/out range highlight
-        ctx.fillStyle = this.colors.inOutRange;
+        ctx.fillStyle = colors.inOutRange;
         ctx.fillRect(inX, trackY, rangeWidth, trackHeight);
 
         // Draw played portion within range (from in point to current frame)
         if (currentFrame >= inPoint && currentFrame <= outPoint) {
           const playedWidth = frameToX(currentFrame) - inX;
           if (playedWidth > 0) {
-            ctx.fillStyle = this.colors.played;
+            ctx.fillStyle = colors.played;
             ctx.fillRect(inX, trackY, playedWidth, trackHeight);
           }
         }
 
         // Draw in point marker (left bracket)
-        ctx.fillStyle = '#4a9eff';
+        ctx.fillStyle = colors.playhead;
         ctx.fillRect(inX - 2, trackY - 4, 4, trackHeight + 8);
         ctx.fillRect(inX - 2, trackY - 4, 8, 3);
         ctx.fillRect(inX - 2, trackY + trackHeight + 1, 8, 3);
@@ -311,7 +319,7 @@ export class Timeline {
         // No custom range - draw played portion from start to current frame
         const playedWidth = frameToX(currentFrame) - padding;
         if (playedWidth > 0) {
-          ctx.fillStyle = this.colors.played;
+          ctx.fillStyle = colors.played;
           ctx.fillRect(padding, trackY, playedWidth, trackHeight);
         }
       }
@@ -320,7 +328,7 @@ export class Timeline {
     // Draw annotation markers (small triangles below track)
     if (this.paintEngine) {
       const annotatedFrames = this.paintEngine.getAnnotatedFrames();
-      ctx.fillStyle = this.colors.annotation;
+      ctx.fillStyle = colors.annotation;
       for (const frame of annotatedFrames) {
         if (frame >= 1 && frame <= duration) {
           const annotX = frameToX(frame);
@@ -340,7 +348,7 @@ export class Timeline {
       if (marker.frame >= 1 && marker.frame <= duration) {
         const markX = frameToX(marker.frame);
         // Use marker's color if set, otherwise default to mark color
-        ctx.fillStyle = marker.color || this.colors.mark;
+        ctx.fillStyle = marker.color || colors.mark;
         ctx.fillRect(markX - 1, trackY, 2, trackHeight);
 
         // If marker has a note, draw a small indicator dot above
@@ -356,13 +364,13 @@ export class Timeline {
     const playheadX = duration > 1 ? frameToX(currentFrame) : padding + trackWidth / 2;
 
     // Playhead glow
-    ctx.fillStyle = this.colors.playheadShadow;
+    ctx.fillStyle = colors.playheadShadow;
     ctx.beginPath();
     ctx.arc(playheadX, trackY + trackHeight / 2, 12, 0, Math.PI * 2);
     ctx.fill();
 
     // Playhead line
-    ctx.fillStyle = this.colors.playhead;
+    ctx.fillStyle = colors.playhead;
     ctx.fillRect(playheadX - 1.5, trackY - 6, 3, trackHeight + 12);
 
     // Playhead circle
@@ -374,7 +382,7 @@ export class Timeline {
     ctx.font = '12px -apple-system, BlinkMacSystemFont, monospace';
 
     // Left frame number (always 1)
-    ctx.fillStyle = this.colors.textDim;
+    ctx.fillStyle = colors.textDim;
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
     ctx.fillText('1', padding - 10, trackY + trackHeight / 2);
@@ -384,7 +392,7 @@ export class Timeline {
     ctx.fillText(String(duration), width - padding + 10, trackY + trackHeight / 2);
 
     // Current frame and in/out info (top center)
-    ctx.fillStyle = this.colors.text;
+    ctx.fillStyle = colors.text;
     ctx.textAlign = 'center';
     ctx.font = 'bold 14px -apple-system, BlinkMacSystemFont, monospace';
     const inOutInfo = inPoint !== 1 || outPoint !== duration ? ` [${inPoint}-${outPoint}]` : '';
@@ -392,7 +400,7 @@ export class Timeline {
 
     // Info text (bottom)
     ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
-    ctx.fillStyle = this.colors.textDim;
+    ctx.fillStyle = colors.textDim;
 
     // Source info
     if (source) {

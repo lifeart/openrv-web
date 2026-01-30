@@ -51,7 +51,7 @@ export class ZebraControl {
       border: 1px solid transparent;
       border-radius: 4px;
       background: transparent;
-      color: #999;
+      color: var(--text-muted);
       font-size: 12px;
       cursor: pointer;
       transition: all 0.12s ease;
@@ -64,16 +64,16 @@ export class ZebraControl {
 
     this.toggleButton.addEventListener('mouseenter', () => {
       if (!this.zebraStripes.isEnabled()) {
-        this.toggleButton.style.background = '#3a3a3a';
-        this.toggleButton.style.borderColor = '#4a4a4a';
-        this.toggleButton.style.color = '#ccc';
+        this.toggleButton.style.background = 'var(--bg-hover)';
+        this.toggleButton.style.borderColor = 'var(--border-primary)';
+        this.toggleButton.style.color = 'var(--text-primary)';
       }
     });
 
     this.toggleButton.addEventListener('mouseleave', () => {
       if (!this.zebraStripes.isEnabled()) {
         this.toggleButton.style.background = 'transparent';
-        this.toggleButton.style.color = '#999';
+        this.toggleButton.style.color = 'var(--text-muted)';
       }
     });
 
@@ -85,8 +85,8 @@ export class ZebraControl {
     this.dropdown.dataset.testid = 'zebra-dropdown';
     this.dropdown.style.cssText = `
       position: fixed;
-      background: #2a2a2a;
-      border: 1px solid #4a4a4a;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
       border-radius: 4px;
       padding: 8px;
       min-width: 220px;
@@ -129,7 +129,7 @@ export class ZebraControl {
     const divider = document.createElement('div');
     divider.style.cssText = `
       height: 1px;
-      background: #444;
+      background: var(--border-primary);
       margin: 10px 0;
     `;
     this.dropdown.appendChild(divider);
@@ -191,14 +191,14 @@ export class ZebraControl {
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.checked = defaultEnabled;
-    checkbox.style.cssText = 'cursor: pointer; accent-color: #4a9eff;';
+    checkbox.style.cssText = 'cursor: pointer; accent-color: var(--accent-primary);';
     checkbox.addEventListener('change', () => {
       onEnableChange(checkbox.checked);
     });
 
     const labelText = document.createElement('span');
     labelText.textContent = label;
-    labelText.style.cssText = 'color: #ccc; font-size: 11px; font-weight: 500;';
+    labelText.style.cssText = 'color: var(--text-primary); font-size: 11px; font-weight: 500;';
 
     labelContainer.appendChild(checkbox);
     labelContainer.appendChild(labelText);
@@ -228,7 +228,7 @@ export class ZebraControl {
     const descText = document.createElement('div');
     descText.textContent = description;
     descText.style.cssText = `
-      color: #666;
+      color: var(--text-muted);
       font-size: 9px;
       margin-bottom: 8px;
       margin-left: 20px;
@@ -246,7 +246,7 @@ export class ZebraControl {
 
     const sliderLabel = document.createElement('span');
     sliderLabel.textContent = 'Threshold:';
-    sliderLabel.style.cssText = 'color: #888; font-size: 10px; min-width: 55px;';
+    sliderLabel.style.cssText = 'color: var(--text-secondary); font-size: 10px; min-width: 55px;';
 
     const slider = document.createElement('input');
     slider.type = 'range';
@@ -256,7 +256,7 @@ export class ZebraControl {
     slider.style.cssText = `
       flex: 1;
       height: 4px;
-      accent-color: #4a9eff;
+      accent-color: var(--accent-primary);
       cursor: pointer;
     `;
     slider.addEventListener('input', () => {
@@ -267,7 +267,7 @@ export class ZebraControl {
 
     const valueLabel = document.createElement('span');
     valueLabel.textContent = `${defaultThreshold}%`;
-    valueLabel.style.cssText = 'color: #aaa; font-size: 10px; min-width: 30px; text-align: right;';
+    valueLabel.style.cssText = 'color: var(--text-secondary); font-size: 10px; min-width: 30px; text-align: right;';
 
     sliderRow.appendChild(sliderLabel);
     sliderRow.appendChild(slider);
@@ -281,13 +281,13 @@ export class ZebraControl {
     const state = this.zebraStripes.getState();
     const active = state.enabled && (state.highEnabled || state.lowEnabled);
     if (active) {
-      this.toggleButton.style.background = 'rgba(74, 158, 255, 0.15)';
-      this.toggleButton.style.borderColor = '#4a9eff';
-      this.toggleButton.style.color = '#4a9eff';
+      this.toggleButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+      this.toggleButton.style.borderColor = 'var(--accent-primary)';
+      this.toggleButton.style.color = 'var(--accent-primary)';
     } else {
       this.toggleButton.style.background = 'transparent';
       this.toggleButton.style.borderColor = 'transparent';
-      this.toggleButton.style.color = '#999';
+      this.toggleButton.style.color = 'var(--text-muted)';
     }
   }
 

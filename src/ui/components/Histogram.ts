@@ -18,6 +18,8 @@ import {
   DraggableContainer,
 } from './shared/DraggableContainer';
 import { setupHiDPICanvas } from '../../utils/HiDPICanvas';
+import { getThemeManager } from '../../utils/ThemeManager';
+import { getCSSColor } from '../../utils/getCSSColor';
 
 export type HistogramMode = 'rgb' | 'luminance' | 'separate';
 
@@ -62,6 +64,7 @@ export class Histogram extends EventEmitter<HistogramEvents> {
   private clippingIndicators: HTMLElement | null = null;
   private shadowIndicator: HTMLElement | null = null;
   private highlightIndicator: HTMLElement | null = null;
+  private boundOnThemeChange: (() => void) | null = null;
 
   constructor() {
     super();
@@ -78,7 +81,7 @@ export class Histogram extends EventEmitter<HistogramEvents> {
     this.canvas = document.createElement('canvas');
     this.canvas.style.cssText = `
       display: block;
-      background: #111;
+      background: var(--bg-primary);
       border-radius: 2px;
     `;
 
@@ -98,6 +101,15 @@ export class Histogram extends EventEmitter<HistogramEvents> {
 
     // Add footer
     this.createFooter();
+
+    // Listen for theme changes to redraw with new colors
+    this.boundOnThemeChange = () => {
+      if (this.data) {
+        this.draw();
+        this.updateClippingDisplay();
+      }
+    };
+    getThemeManager().on('themeChanged', this.boundOnThemeChange);
   }
 
   private createControls(): void {
@@ -135,7 +147,7 @@ export class Histogram extends EventEmitter<HistogramEvents> {
       display: flex;
       justify-content: space-between;
       font-size: 9px;
-      color: #666;
+      color: var(--text-secondary);
     `;
     scaleRow.innerHTML = `
       <span>0</span>
@@ -166,7 +178,7 @@ export class Histogram extends EventEmitter<HistogramEvents> {
       display: flex;
       align-items: center;
       gap: 2px;
-      color: #6699ff;
+      color: var(--info);
     `;
     this.shadowIndicator.innerHTML = `
       <span style="font-size: 8px;">▼</span>
@@ -181,7 +193,7 @@ export class Histogram extends EventEmitter<HistogramEvents> {
       display: flex;
       align-items: center;
       gap: 2px;
-      color: #ff6666;
+      color: var(--error);
     `;
     this.highlightIndicator.innerHTML = `
       <span class="highlight-percent">0.0%</span>
@@ -249,7 +261,7 @@ export class Histogram extends EventEmitter<HistogramEvents> {
       shadowPercent.textContent = `${clipping.shadowsPercent.toFixed(1)}%`;
     }
     // Highlight if significant clipping (>1%)
-    this.shadowIndicator.style.color = clipping.shadowsPercent > 1 ? '#ff6666' : '#6699ff';
+    this.shadowIndicator.style.color = clipping.shadowsPercent > 1 ? getCSSColor('--error', '#ff6666') : getCSSColor('--info', '#6699ff');
 
     // Update highlight indicator
     const highlightPercent = this.highlightIndicator.querySelector('.highlight-percent');
@@ -257,7 +269,7 @@ export class Histogram extends EventEmitter<HistogramEvents> {
       highlightPercent.textContent = `${clipping.highlightsPercent.toFixed(1)}%`;
     }
     // Highlight if significant clipping (>1%)
-    this.highlightIndicator.style.color = clipping.highlightsPercent > 1 ? '#ff6666' : '#ff9966';
+    this.highlightIndicator.style.color = clipping.highlightsPercent > 1 ? getCSSColor('--error', '#ff6666') : getCSSColor('--warning', '#ff9966');
   }
 
   /**
@@ -326,7 +338,7 @@ export class Histogram extends EventEmitter<HistogramEvents> {
     const gpuProcessor = getSharedScopesProcessor();
     if (gpuProcessor && gpuProcessor.isReady() && this.mode !== 'separate' && this.data) {
       // Clear canvas with dark background before GPU overlay (use logical dimensions)
-      this.ctx.fillStyle = '#111';
+      this.ctx.fillStyle = getCSSColor('--bg-primary', '#111');
       this.ctx.fillRect(0, 0, HISTOGRAM_WIDTH, HISTOGRAM_HEIGHT);
 
       gpuProcessor.renderHistogram(this.canvas, this.data, this.mode, this.logScale);
@@ -643,6 +655,11 @@ export class Histogram extends EventEmitter<HistogramEvents> {
   }
 
   dispose(): void {
+    // Clean up theme change listener
+    if (this.boundOnThemeChange) {
+      getThemeManager().off('themeChanged', this.boundOnThemeChange);
+    }
+    this.boundOnThemeChange = null;
     this.data = null;
     this.modeButton = null;
     this.logButton = null;

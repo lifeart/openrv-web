@@ -121,17 +121,17 @@ describe('createButton', () => {
     it('BTN-U050: default variant has gray background', () => {
       const btn = createButton('Click', () => {}, { variant: 'default' });
       expect(btn.style.cssText).toContain('background');
-      expect(btn.style.cssText).toContain('rgb(58, 58, 58)'); // #3a3a3a
+      expect(btn.style.cssText).toContain('var(--bg-active)');
     });
 
-    it('BTN-U051: primary variant has blue background', () => {
+    it('BTN-U051: primary variant has accent background', () => {
       const btn = createButton('Click', () => {}, { variant: 'primary' });
-      expect(btn.style.cssText).toContain('rgb(74, 158, 255)'); // #4a9eff
+      expect(btn.style.cssText).toContain('var(--accent-primary)');
     });
 
-    it('BTN-U052: danger variant has red background', () => {
+    it('BTN-U052: danger variant has error background', () => {
       const btn = createButton('Click', () => {}, { variant: 'danger' });
-      expect(btn.style.cssText).toContain('rgb(220, 53, 69)'); // #dc3545
+      expect(btn.style.cssText).toContain('var(--error)');
     });
 
     it('BTN-U053: ghost variant has transparent background', () => {
@@ -146,7 +146,7 @@ describe('createButton', () => {
 
     it('BTN-U055: default variant is used when not specified', () => {
       const btn = createButton('Click', () => {});
-      expect(btn.style.cssText).toContain('rgb(58, 58, 58)');
+      expect(btn.style.cssText).toContain('var(--bg-active)');
     });
   });
 
@@ -183,19 +183,19 @@ describe('createButton', () => {
   });
 
   describe('active state', () => {
-    it('BTN-U070: active option applies blue highlight color', () => {
+    it('BTN-U070: active option applies accent highlight color', () => {
       const btn = createButton('Click', () => {}, { active: true });
-      expect(btn.style.cssText).toContain('rgb(74, 158, 255)');
+      expect(btn.style.cssText).toContain('var(--accent-primary)');
     });
 
     it('BTN-U071: non-active default button has gray background', () => {
       const btn = createButton('Click', () => {}, { active: false });
-      expect(btn.style.cssText).toContain('rgb(58, 58, 58)');
+      expect(btn.style.cssText).toContain('var(--bg-active)');
     });
 
-    it('BTN-U072: active button has blue border', () => {
+    it('BTN-U072: active button has accent border', () => {
       const btn = createButton('Click', () => {}, { active: true });
-      expect(btn.style.borderColor).toBe('rgb(74, 158, 255)');
+      expect(btn.style.cssText).toContain('border-color: var(--accent-primary)');
     });
   });
 
@@ -205,27 +205,27 @@ describe('createButton', () => {
       const originalBg = btn.style.background;
       btn.dispatchEvent(new MouseEvent('mouseenter'));
       expect(btn.style.background).not.toBe(originalBg);
-      expect(btn.style.cssText).toContain('rgb(68, 68, 68)'); // #444 hover color
+      expect(btn.style.cssText).toContain('var(--border-primary)'); // hover color
     });
 
     it('BTN-U081: mouseleave restores original background', () => {
       const btn = createButton('Click', () => {});
       btn.dispatchEvent(new MouseEvent('mouseenter'));
       btn.dispatchEvent(new MouseEvent('mouseleave'));
-      expect(btn.style.cssText).toContain('rgb(58, 58, 58)'); // original #3a3a3a
+      expect(btn.style.cssText).toContain('var(--bg-active)'); // original
     });
 
     it('BTN-U082: mousedown applies active highlight color', () => {
       const btn = createButton('Click', () => {});
       btn.dispatchEvent(new MouseEvent('mousedown'));
-      expect(btn.style.cssText).toContain('rgb(74, 158, 255)');
+      expect(btn.style.cssText).toContain('var(--accent-primary)');
     });
 
     it('BTN-U083: mouseup after mousedown shows hover state', () => {
       const btn = createButton('Click', () => {});
       btn.dispatchEvent(new MouseEvent('mousedown'));
       btn.dispatchEvent(new MouseEvent('mouseup'));
-      expect(btn.style.cssText).toContain('rgb(68, 68, 68)'); // hover color
+      expect(btn.style.cssText).toContain('var(--border-primary)'); // hover color
     });
 
     it('BTN-U084: disabled button does not change style on hover', () => {
@@ -245,29 +245,29 @@ describe('createButton', () => {
 });
 
 describe('setButtonActive', () => {
-  it('BTN-U090: setButtonActive(true) applies blue highlight', () => {
+  it('BTN-U090: setButtonActive(true) applies accent highlight', () => {
     const btn = createButton('Click', () => {});
     setButtonActive(btn, true);
-    expect(btn.style.cssText).toContain('rgb(74, 158, 255)');
+    expect(btn.style.cssText).toContain('var(--accent-primary)');
   });
 
-  it('BTN-U091: setButtonActive(false) removes blue highlight', () => {
+  it('BTN-U091: setButtonActive(false) removes accent highlight', () => {
     const btn = createButton('Click', () => {}, { active: true });
     setButtonActive(btn, false);
-    expect(btn.style.cssText).not.toContain('rgba(74, 158, 255, 0.15)');
-    expect(btn.style.cssText).toContain('rgb(58, 58, 58)');
+    expect(btn.style.cssText).not.toContain('rgba(var(--accent-primary-rgb), 0.15)');
+    expect(btn.style.cssText).toContain('var(--bg-active)');
   });
 
-  it('BTN-U092: setButtonActive with primary variant keeps primary color', () => {
+  it('BTN-U092: setButtonActive with primary variant applies accent-active', () => {
     const btn = createButton('Click', () => {}, { variant: 'primary' });
     setButtonActive(btn, true, 'primary');
-    expect(btn.style.cssText).toContain('rgb(58, 142, 239)'); // primary active #3a8eef
+    expect(btn.style.cssText).toContain('var(--accent-active)');
   });
 
-  it('BTN-U093: setButtonActive with danger variant uses danger active color', () => {
+  it('BTN-U093: setButtonActive with danger variant uses error color', () => {
     const btn = createButton('Click', () => {}, { variant: 'danger' });
     setButtonActive(btn, true, 'danger');
-    expect(btn.style.cssText).toContain('rgb(200, 37, 53)'); // danger active #c82535
+    expect(btn.style.cssText).toContain('var(--error)');
   });
 });
 
@@ -294,7 +294,7 @@ describe('createIconButton', () => {
 
   it('BTN-U103: createIconButton can override variant to primary', () => {
     const btn = createIconButton('<svg></svg>', () => {}, { variant: 'primary' });
-    expect(btn.style.cssText).toContain('rgb(74, 158, 255)');
+    expect(btn.style.cssText).toContain('var(--accent-primary)');
   });
 
   it('BTN-U104: createIconButton calls onClick when clicked', () => {

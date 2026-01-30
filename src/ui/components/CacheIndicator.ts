@@ -43,10 +43,16 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
   private outPoint = 1;
   private prerenderStatsSpan: HTMLSpanElement | null = null;
 
-  // Colors for cache states
-  private static readonly CACHED_COLOR = '#4ade80'; // green-400
-  private static readonly PENDING_COLOR = '#facc15'; // yellow-400
-  private static readonly UNCACHED_COLOR = '#374151'; // gray-700
+  // Colors for cache states - resolved from CSS variables at runtime
+  private static getCachedColor(): string {
+    return getComputedStyle(document.documentElement).getPropertyValue('--success').trim() || '#4ade80';
+  }
+  private static getPendingColor(): string {
+    return getComputedStyle(document.documentElement).getPropertyValue('--warning').trim() || '#facc15';
+  }
+  private static getUncachedColor(): string {
+    return getComputedStyle(document.documentElement).getPropertyValue('--bg-hover').trim() || '#374151';
+  }
 
   constructor(session: Session, viewer?: Viewer) {
     super();
@@ -73,7 +79,7 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
     this.barContainer = document.createElement('div');
     this.barContainer.style.cssText = `
       height: 6px;
-      background: ${CacheIndicator.UNCACHED_COLOR};
+      background: var(--bg-hover);
       border-radius: 2px;
       overflow: hidden;
       position: relative;
@@ -97,7 +103,7 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
       justify-content: space-between;
       align-items: center;
       font-size: 10px;
-      color: #888;
+      color: var(--text-muted);
     `;
 
     const statsSpan = document.createElement('span');
@@ -111,7 +117,7 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
     this.prerenderStatsSpan.dataset.testid = 'prerender-indicator-stats';
     this.prerenderStatsSpan.style.cssText = `
       margin-left: 12px;
-      color: #60a5fa;
+      color: var(--accent-primary);
     `;
     this.prerenderStatsSpan.textContent = '';
 
@@ -120,8 +126,8 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
     this.clearButton.textContent = 'Clear';
     this.clearButton.style.cssText = `
       background: transparent;
-      border: 1px solid #555;
-      color: #888;
+      border: 1px solid var(--border-secondary);
+      color: var(--text-muted);
       padding: 1px 6px;
       font-size: 9px;
       border-radius: 3px;
@@ -129,12 +135,12 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
       transition: all 0.12s ease;
     `;
     this.clearButton.addEventListener('mouseenter', () => {
-      this.clearButton.style.background = '#333';
-      this.clearButton.style.color = '#fff';
+      this.clearButton.style.background = 'var(--bg-hover)';
+      this.clearButton.style.color = 'var(--text-primary)';
     });
     this.clearButton.addEventListener('mouseleave', () => {
       this.clearButton.style.background = 'transparent';
-      this.clearButton.style.color = '#888';
+      this.clearButton.style.color = 'var(--text-muted)';
     });
     this.clearButton.addEventListener('click', () => {
       this.session.clearVideoCache();
@@ -366,7 +372,7 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
     }
 
     // Clear canvas
-    this.ctx.fillStyle = CacheIndicator.UNCACHED_COLOR;
+    this.ctx.fillStyle = CacheIndicator.getUncachedColor();
     this.ctx.fillRect(0, 0, width, height);
 
     // Draw cache status for each frame
@@ -381,7 +387,7 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
     const pixelsPerFrame = width / rangeLength;
 
     // Draw cached frames (green)
-    this.ctx.fillStyle = CacheIndicator.CACHED_COLOR;
+    this.ctx.fillStyle = CacheIndicator.getCachedColor();
     for (const frame of cachedFrames) {
       if (frame >= rangeStart && frame <= rangeEnd) {
         const x = Math.floor((frame - rangeStart) * pixelsPerFrame);
@@ -391,7 +397,7 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
     }
 
     // Draw pending frames (yellow) on top
-    this.ctx.fillStyle = CacheIndicator.PENDING_COLOR;
+    this.ctx.fillStyle = CacheIndicator.getPendingColor();
     for (const frame of pendingFrames) {
       if (frame >= rangeStart && frame <= rangeEnd) {
         const x = Math.floor((frame - rangeStart) * pixelsPerFrame);

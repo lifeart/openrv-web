@@ -47,12 +47,12 @@ export const CHANNEL_SHORTCUTS: Record<string, ChannelMode> = {
 };
 
 const CHANNEL_COLORS: Record<ChannelMode, string> = {
-  rgb: '#ccc',
+  rgb: 'var(--text-primary)',
   red: '#ff6b6b',
   green: '#6bff6b',
   blue: '#6b9fff',
-  alpha: '#999',
-  luminance: '#ddd',
+  alpha: 'var(--text-muted)',
+  luminance: 'var(--text-primary)',
 };
 
 /**
@@ -117,7 +117,7 @@ export class ChannelSelect extends EventEmitter<ChannelSelectEvents> {
     this.button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
-      color: #999;
+      color: var(--text-muted);
       padding: 6px 10px;
       border-radius: 4px;
       cursor: pointer;
@@ -139,16 +139,16 @@ export class ChannelSelect extends EventEmitter<ChannelSelectEvents> {
     });
     this.button.addEventListener('mouseenter', () => {
       if (!this.dropdown.isVisible() && this.currentChannel === 'rgb') {
-        this.button.style.background = '#3a3a3a';
-        this.button.style.borderColor = '#4a4a4a';
-        this.button.style.color = '#ccc';
+        this.button.style.background = 'var(--bg-hover)';
+        this.button.style.borderColor = 'var(--border-primary)';
+        this.button.style.color = 'var(--text-primary)';
       }
     });
     this.button.addEventListener('mouseleave', () => {
       if (!this.dropdown.isVisible() && this.currentChannel === 'rgb') {
         this.button.style.background = 'transparent';
         this.button.style.borderColor = 'transparent';
-        this.button.style.color = '#999';
+        this.button.style.color = 'var(--text-muted)';
       }
     });
 
@@ -165,24 +165,24 @@ export class ChannelSelect extends EventEmitter<ChannelSelectEvents> {
 
     // Update button style based on active state
     if (this.currentChannel !== 'rgb') {
-      this.button.style.background = 'rgba(74, 158, 255, 0.15)';
-      this.button.style.borderColor = '#4a9eff';
-      this.button.style.color = '#4a9eff';
+      this.button.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+      this.button.style.borderColor = 'var(--accent-primary)';
+      this.button.style.color = 'var(--accent-primary)';
     } else if (!this.dropdown.isVisible()) {
       this.button.style.background = 'transparent';
       this.button.style.borderColor = 'transparent';
-      this.button.style.color = '#999';
+      this.button.style.color = 'var(--text-muted)';
     }
   }
 
   private updateButtonStyle(): void {
     if (this.dropdown.isVisible()) {
-      this.button.style.background = '#3a3a3a';
-      this.button.style.borderColor = '#4a4a4a';
+      this.button.style.background = 'var(--bg-hover)';
+      this.button.style.borderColor = 'var(--border-primary)';
     } else if (this.currentChannel === 'rgb') {
       this.button.style.background = 'transparent';
       this.button.style.borderColor = 'transparent';
-      this.button.style.color = '#999';
+      this.button.style.color = 'var(--text-muted)';
     }
   }
 

@@ -77,7 +77,7 @@ describe('SafeAreasControl', () => {
     it('SAFE-U021: button has gray color when disabled', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
-      expect(button.style.cssText).toContain('rgb(153, 153, 153)'); // #999
+      expect(button.style.cssText).toContain('var(--text-muted)'); // #999
     });
 
     it('SAFE-U022: button has blue styling when enabled', () => {
@@ -85,14 +85,14 @@ describe('SafeAreasControl', () => {
       overlay.enable();
       const el = control.render();
       const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
-      expect(button.style.cssText).toContain('rgb(74, 158, 255)'); // #4a9eff
+      expect(button.style.cssText).toContain('var(--accent-primary)'); // #4a9eff
     });
 
     it('SAFE-U023: button hover changes background when disabled', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
       button.dispatchEvent(new MouseEvent('mouseenter'));
-      expect(button.style.cssText).toContain('rgb(58, 58, 58)'); // #3a3a3a
+      expect(button.style.cssText).toContain('var(--bg-hover)'); // #3a3a3a
     });
 
     it('SAFE-U024: button mouseleave restores background when disabled', () => {
@@ -393,7 +393,7 @@ describe('SafeAreasControl', () => {
       const item = document.querySelector('[data-testid="safe-areas-item-enabled"]') as HTMLElement;
       item.dispatchEvent(new MouseEvent('mouseenter'));
 
-      expect(item.style.cssText).toContain('rgb(58, 58, 58)'); // #3a3a3a
+      expect(item.style.cssText).toContain('var(--bg-hover)'); // #3a3a3a
     });
 
     it('SAFE-U091: item mouseleave restores background', () => {

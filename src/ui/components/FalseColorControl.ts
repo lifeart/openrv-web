@@ -46,7 +46,7 @@ export class FalseColorControl {
       border: 1px solid transparent;
       border-radius: 4px;
       background: transparent;
-      color: #999;
+      color: var(--text-muted);
       font-size: 12px;
       cursor: pointer;
       transition: all 0.12s ease;
@@ -59,16 +59,16 @@ export class FalseColorControl {
 
     this.toggleButton.addEventListener('mouseenter', () => {
       if (!this.falseColor.isEnabled()) {
-        this.toggleButton.style.background = '#3a3a3a';
-        this.toggleButton.style.borderColor = '#4a4a4a';
-        this.toggleButton.style.color = '#ccc';
+        this.toggleButton.style.background = 'var(--bg-hover)';
+        this.toggleButton.style.borderColor = 'var(--border-primary)';
+        this.toggleButton.style.color = 'var(--text-primary)';
       }
     });
 
     this.toggleButton.addEventListener('mouseleave', () => {
       if (!this.falseColor.isEnabled()) {
         this.toggleButton.style.background = 'transparent';
-        this.toggleButton.style.color = '#999';
+        this.toggleButton.style.color = 'var(--text-muted)';
       }
     });
 
@@ -80,8 +80,8 @@ export class FalseColorControl {
     this.dropdown.dataset.testid = 'false-color-dropdown';
     this.dropdown.style.cssText = `
       position: fixed;
-      background: #2a2a2a;
-      border: 1px solid #4a4a4a;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
       border-radius: 4px;
       padding: 8px;
       min-width: 200px;
@@ -119,7 +119,7 @@ export class FalseColorControl {
 
     const enableLabel = document.createElement('span');
     enableLabel.textContent = 'Enable False Color';
-    enableLabel.style.cssText = 'color: #ccc; font-size: 11px;';
+    enableLabel.style.cssText = 'color: var(--text-primary); font-size: 11px;';
 
     const enableCheckbox = document.createElement('input');
     enableCheckbox.type = 'checkbox';
@@ -143,13 +143,13 @@ export class FalseColorControl {
     presetSection.style.cssText = `
       margin-bottom: 10px;
       padding-bottom: 10px;
-      border-bottom: 1px solid #444;
+      border-bottom: 1px solid var(--border-primary);
     `;
 
     const presetLabel = document.createElement('div');
     presetLabel.textContent = 'Preset';
     presetLabel.style.cssText = `
-      color: #888;
+      color: var(--text-secondary);
       font-size: 10px;
       text-transform: uppercase;
       margin-bottom: 6px;
@@ -170,10 +170,10 @@ export class FalseColorControl {
       btn.style.cssText = `
         flex: 1;
         padding: 5px 8px;
-        border: 1px solid #555;
+        border: 1px solid var(--border-secondary);
         border-radius: 3px;
-        background: #333;
-        color: #aaa;
+        background: var(--bg-secondary);
+        color: var(--text-secondary);
         font-size: 10px;
         cursor: pointer;
         transition: all 0.1s ease;
@@ -185,13 +185,13 @@ export class FalseColorControl {
 
       btn.addEventListener('mouseenter', () => {
         if (this.falseColor.getState().preset !== preset.key) {
-          btn.style.background = '#444';
+          btn.style.background = 'var(--border-primary)';
         }
       });
 
       btn.addEventListener('mouseleave', () => {
         if (this.falseColor.getState().preset !== preset.key) {
-          btn.style.background = '#333';
+          btn.style.background = 'var(--bg-secondary)';
         }
       });
 
@@ -209,7 +209,7 @@ export class FalseColorControl {
     const legendLabel = document.createElement('div');
     legendLabel.textContent = 'Legend';
     legendLabel.style.cssText = `
-      color: #888;
+      color: var(--text-secondary);
       font-size: 10px;
       text-transform: uppercase;
       margin-bottom: 6px;
@@ -235,13 +235,13 @@ export class FalseColorControl {
   private updateButtonState(): void {
     const enabled = this.falseColor.isEnabled();
     if (enabled) {
-      this.toggleButton.style.background = 'rgba(74, 158, 255, 0.15)';
-      this.toggleButton.style.borderColor = '#4a9eff';
-      this.toggleButton.style.color = '#4a9eff';
+      this.toggleButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+      this.toggleButton.style.borderColor = 'var(--accent-primary)';
+      this.toggleButton.style.color = 'var(--accent-primary)';
     } else {
       this.toggleButton.style.background = 'transparent';
       this.toggleButton.style.borderColor = 'transparent';
-      this.toggleButton.style.color = '#999';
+      this.toggleButton.style.color = 'var(--text-muted)';
     }
   }
 
@@ -249,13 +249,13 @@ export class FalseColorControl {
     const currentPreset = this.falseColor.getState().preset;
     for (const [key, btn] of this.presetButtons) {
       if (key === currentPreset) {
-        btn.style.background = '#4a9eff';
-        btn.style.borderColor = '#4a9eff';
+        btn.style.background = 'var(--accent-primary)';
+        btn.style.borderColor = 'var(--accent-primary)';
         btn.style.color = '#fff';
       } else {
-        btn.style.background = '#333';
-        btn.style.borderColor = '#555';
-        btn.style.color = '#aaa';
+        btn.style.background = 'var(--bg-secondary)';
+        btn.style.borderColor = 'var(--border-secondary)';
+        btn.style.color = 'var(--text-secondary)';
       }
     }
   }
@@ -289,7 +289,7 @@ export class FalseColorControl {
       const label = document.createElement('span');
       label.textContent = item.label;
       label.style.cssText = `
-        color: #aaa;
+        color: var(--text-secondary);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;

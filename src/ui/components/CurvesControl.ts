@@ -77,7 +77,7 @@ export class CurvesControl extends EventEmitter<CurvesControlEvents> {
     presetLabel.textContent = 'Preset';
     presetLabel.style.cssText = `
       font-size: 11px;
-      color: #888;
+      color: var(--text-secondary);
       min-width: 40px;
     `;
     presetRow.appendChild(presetLabel);
@@ -87,9 +87,9 @@ export class CurvesControl extends EventEmitter<CurvesControlEvents> {
     this.presetSelect.style.cssText = `
       flex: 1;
       padding: 4px 8px;
-      border: 1px solid #3a3a3a;
+      border: 1px solid var(--bg-hover);
       border-radius: 4px;
-      background: #2a2a2a;
+      background: var(--bg-secondary);
       color: #fff;
       font-size: 11px;
       cursor: pointer;

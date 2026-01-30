@@ -662,7 +662,7 @@ describe('DropdownMenu', () => {
       const buttons = dropdown.getElement().querySelectorAll('button');
 
       // First item should have highlight background
-      expect((buttons[0] as HTMLButtonElement).style.background).toBe('rgb(58, 58, 58)'); // #3a3a3a
+      expect((buttons[0] as HTMLButtonElement).style.background).toBe('var(--bg-hover)'); // #3a3a3a
     });
 
     it('DM-096: non-highlighted items have transparent background', () => {
@@ -682,7 +682,7 @@ describe('DropdownMenu', () => {
 
       // Should have special selected styling (blue tint)
       expect((buttons[1] as HTMLButtonElement).style.background).toContain('rgba');
-      expect((buttons[1] as HTMLButtonElement).style.color).toBe('rgb(74, 158, 255)'); // #4a9eff
+      expect((buttons[1] as HTMLButtonElement).style.color).toBe('var(--accent-primary)'); // #4a9eff
     });
   });
 
@@ -954,18 +954,18 @@ describe('DropdownMenu', () => {
       // Select first item
       dropdown.setSelectedValue('item1');
       expect((buttons[0] as HTMLButtonElement).style.background).toContain('rgba');
-      expect((buttons[0] as HTMLButtonElement).style.color).toBe('rgb(74, 158, 255)');
+      expect((buttons[0] as HTMLButtonElement).style.color).toBe('var(--accent-primary)');
 
       // Select second item - first should be reset
       dropdown.setSelectedValue('item2');
 
       // First item should have transparent background (deselected)
       expect((buttons[0] as HTMLButtonElement).style.background).toBe('transparent');
-      expect((buttons[0] as HTMLButtonElement).style.color).toBe('rgb(204, 204, 204)'); // #ccc
+      expect((buttons[0] as HTMLButtonElement).style.color).toBe('var(--text-primary)'); // #ccc
 
       // Second item should have selected styling
       expect((buttons[1] as HTMLButtonElement).style.background).toContain('rgba');
-      expect((buttons[1] as HTMLButtonElement).style.color).toBe('rgb(74, 158, 255)');
+      expect((buttons[1] as HTMLButtonElement).style.color).toBe('var(--accent-primary)');
     });
 
     it('DM-141: only one item has selected styling after multiple selections', () => {
@@ -980,14 +980,14 @@ describe('DropdownMenu', () => {
       // Count items with selected styling (accent color)
       let selectedCount = 0;
       buttons.forEach((button) => {
-        if ((button as HTMLButtonElement).style.color === 'rgb(74, 158, 255)') {
+        if ((button as HTMLButtonElement).style.color === 'var(--accent-primary)') {
           selectedCount++;
         }
       });
 
       expect(selectedCount).toBe(1);
       // Only item3 should have selected styling
-      expect((buttons[2] as HTMLButtonElement).style.color).toBe('rgb(74, 158, 255)');
+      expect((buttons[2] as HTMLButtonElement).style.color).toBe('var(--accent-primary)');
     });
 
     it('DM-142: previous selection is visually reset when dropdown reopens after new selection', () => {
@@ -997,7 +997,7 @@ describe('DropdownMenu', () => {
       // Open, verify item1 is selected
       dropdown.open(anchor);
       let buttons = dropdown.getElement().querySelectorAll('button');
-      expect((buttons[0] as HTMLButtonElement).style.color).toBe('rgb(74, 158, 255)');
+      expect((buttons[0] as HTMLButtonElement).style.color).toBe('var(--accent-primary)');
       dropdown.close();
 
       // Select item2 (while closed)
@@ -1008,7 +1008,7 @@ describe('DropdownMenu', () => {
       buttons = dropdown.getElement().querySelectorAll('button');
 
       // item1 should NOT have selected styling
-      expect((buttons[0] as HTMLButtonElement).style.color).not.toBe('rgb(74, 158, 255)');
+      expect((buttons[0] as HTMLButtonElement).style.color).not.toBe('var(--accent-primary)');
       // item2 should have selected styling (might be overwritten by highlight on open)
       // but selectedValues should only contain item2
       expect(dropdown.getSelectedValues()).toEqual(['item2']);
@@ -1050,7 +1050,7 @@ describe('DropdownMenu', () => {
       buttons = testDropdown.getElement().querySelectorAll('button');
 
       // Red should not have accent color
-      expect((buttons[0] as HTMLButtonElement).style.color).not.toBe('rgb(74, 158, 255)');
+      expect((buttons[0] as HTMLButtonElement).style.color).not.toBe('var(--accent-primary)');
 
       testDropdown.dispose();
     });
@@ -1075,7 +1075,7 @@ describe('DropdownMenu', () => {
       dropdown.open(anchor);
 
       // item2 should not have selected styling
-      expect((buttons[1] as HTMLButtonElement).style.color).not.toBe('rgb(74, 158, 255)');
+      expect((buttons[1] as HTMLButtonElement).style.color).not.toBe('var(--accent-primary)');
       // Only item3 should be in selectedValues
       expect(dropdown.getSelectedValues()).toEqual(['item3']);
     });
@@ -1099,7 +1099,7 @@ describe('DropdownMenu', () => {
       dropdown.open(anchor);
 
       // item1 should not have selected styling
-      expect((buttons[0] as HTMLButtonElement).style.color).not.toBe('rgb(74, 158, 255)');
+      expect((buttons[0] as HTMLButtonElement).style.color).not.toBe('var(--accent-primary)');
       // Only item3 should be in selectedValues
       expect(dropdown.getSelectedValues()).toEqual(['item3']);
     });
@@ -1118,13 +1118,13 @@ describe('DropdownMenu', () => {
       // Only item2 should have selected styling
       let selectedCount = 0;
       buttons.forEach((button) => {
-        if ((button as HTMLButtonElement).style.color === 'rgb(74, 158, 255)') {
+        if ((button as HTMLButtonElement).style.color === 'var(--accent-primary)') {
           selectedCount++;
         }
       });
 
       expect(selectedCount).toBe(1);
-      expect((buttons[1] as HTMLButtonElement).style.color).toBe('rgb(74, 158, 255)');
+      expect((buttons[1] as HTMLButtonElement).style.color).toBe('var(--accent-primary)');
       expect(dropdown.getSelectedValues()).toEqual(['item2']);
     });
 
@@ -1134,13 +1134,13 @@ describe('DropdownMenu', () => {
 
       // Select an item
       dropdown.setSelectedValue('item2');
-      expect((buttons[1] as HTMLButtonElement).style.color).toBe('rgb(74, 158, 255)');
+      expect((buttons[1] as HTMLButtonElement).style.color).toBe('var(--accent-primary)');
 
       // Clear selection
       dropdown.clearSelection();
 
       // item2 should no longer have selected styling
-      expect((buttons[1] as HTMLButtonElement).style.color).not.toBe('rgb(74, 158, 255)');
+      expect((buttons[1] as HTMLButtonElement).style.color).not.toBe('var(--accent-primary)');
       expect((buttons[1] as HTMLButtonElement).style.background).toBe('transparent');
       expect(dropdown.getSelectedValues()).toEqual([]);
     });

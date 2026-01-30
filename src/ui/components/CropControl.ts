@@ -81,7 +81,7 @@ export class CropControl extends EventEmitter<CropControlEvents> {
     this.cropButton.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
-      color: #999;
+      color: var(--text-muted);
       padding: 6px 10px;
       border-radius: 4px;
       cursor: pointer;
@@ -95,16 +95,16 @@ export class CropControl extends EventEmitter<CropControlEvents> {
     this.cropButton.addEventListener('click', () => this.togglePanel());
     this.cropButton.addEventListener('mouseenter', () => {
       if (!this.isPanelOpen && !this.state.enabled) {
-        this.cropButton.style.background = '#3a3a3a';
-        this.cropButton.style.borderColor = '#4a4a4a';
-        this.cropButton.style.color = '#ccc';
+        this.cropButton.style.background = 'var(--bg-hover)';
+        this.cropButton.style.borderColor = 'var(--border-primary)';
+        this.cropButton.style.color = 'var(--text-primary)';
       }
     });
     this.cropButton.addEventListener('mouseleave', () => {
       if (!this.isPanelOpen && !this.state.enabled) {
         this.cropButton.style.background = 'transparent';
         this.cropButton.style.borderColor = 'transparent';
-        this.cropButton.style.color = '#999';
+        this.cropButton.style.color = 'var(--text-muted)';
       }
     });
 
@@ -115,8 +115,8 @@ export class CropControl extends EventEmitter<CropControlEvents> {
     this.panel.setAttribute('aria-label', 'Crop Settings');
     this.panel.style.cssText = `
       position: fixed;
-      background: #2a2a2a;
-      border: 1px solid #444;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
       border-radius: 6px;
       padding: 12px;
       min-width: 200px;
@@ -148,12 +148,12 @@ export class CropControl extends EventEmitter<CropControlEvents> {
       align-items: center;
       margin-bottom: 12px;
       padding-bottom: 8px;
-      border-bottom: 1px solid #444;
+      border-bottom: 1px solid var(--border-primary);
     `;
 
     const title = document.createElement('span');
     title.textContent = 'Crop Settings';
-    title.style.cssText = 'color: #ddd; font-size: 13px; font-weight: 500;';
+    title.style.cssText = 'color: var(--text-primary); font-size: 13px; font-weight: 500;';
 
     const closeButton = document.createElement('button');
     closeButton.innerHTML = '&times;';
@@ -161,15 +161,15 @@ export class CropControl extends EventEmitter<CropControlEvents> {
     closeButton.style.cssText = `
       background: transparent;
       border: none;
-      color: #888;
+      color: var(--text-secondary);
       font-size: 18px;
       cursor: pointer;
       padding: 0 4px;
       line-height: 1;
     `;
     closeButton.addEventListener('click', () => this.hidePanel());
-    closeButton.addEventListener('mouseenter', () => { closeButton.style.color = '#ddd'; });
-    closeButton.addEventListener('mouseleave', () => { closeButton.style.color = '#888'; });
+    closeButton.addEventListener('mouseenter', () => { closeButton.style.color = 'var(--text-primary)'; });
+    closeButton.addEventListener('mouseleave', () => { closeButton.style.color = 'var(--text-secondary)'; });
 
     header.appendChild(title);
     header.appendChild(closeButton);
@@ -186,7 +186,7 @@ export class CropControl extends EventEmitter<CropControlEvents> {
 
     const toggleLabel = document.createElement('span');
     toggleLabel.textContent = 'Enable Crop';
-    toggleLabel.style.cssText = 'color: #aaa; font-size: 12px;';
+    toggleLabel.style.cssText = 'color: var(--text-secondary); font-size: 12px;';
 
     const toggleSwitch = document.createElement('button');
     this.toggleSwitch = toggleSwitch;
@@ -195,7 +195,7 @@ export class CropControl extends EventEmitter<CropControlEvents> {
     toggleSwitch.setAttribute('aria-label', 'Enable Crop');
     toggleSwitch.textContent = this.state.enabled ? 'ON' : 'OFF';
     toggleSwitch.style.cssText = `
-      background: ${this.state.enabled ? '#4a9eff' : '#555'};
+      background: ${this.state.enabled ? 'var(--accent-primary)' : 'var(--border-secondary)'};
       border: none;
       color: #fff;
       padding: 4px 12px;
@@ -224,16 +224,16 @@ export class CropControl extends EventEmitter<CropControlEvents> {
 
     const aspectLabel = document.createElement('div');
     aspectLabel.textContent = 'Aspect Ratio';
-    aspectLabel.style.cssText = 'color: #aaa; font-size: 12px; margin-bottom: 4px;';
+    aspectLabel.style.cssText = 'color: var(--text-secondary); font-size: 12px; margin-bottom: 4px;';
 
     this.aspectSelect = document.createElement('select');
     this.aspectSelect.dataset.testid = 'crop-aspect-select';
     this.aspectSelect.setAttribute('aria-label', 'Aspect Ratio');
     this.aspectSelect.style.cssText = `
       width: 100%;
-      background: #444;
-      border: 1px solid #555;
-      color: #ddd;
+      background: var(--border-primary);
+      border: 1px solid var(--border-secondary);
+      color: var(--text-primary);
       padding: 6px 8px;
       border-radius: 4px;
       font-size: 12px;
@@ -263,9 +263,9 @@ export class CropControl extends EventEmitter<CropControlEvents> {
     resetBtn.textContent = 'Reset Crop';
     resetBtn.style.cssText = `
       width: 100%;
-      background: #555;
+      background: var(--border-secondary);
       border: none;
-      color: #ddd;
+      color: var(--text-primary);
       padding: 8px;
       border-radius: 4px;
       cursor: pointer;
@@ -274,10 +274,10 @@ export class CropControl extends EventEmitter<CropControlEvents> {
     `;
     resetBtn.addEventListener('click', () => this.reset());
     resetBtn.addEventListener('mouseenter', () => {
-      resetBtn.style.background = '#666';
+      resetBtn.style.background = 'var(--text-muted)';
     });
     resetBtn.addEventListener('mouseleave', () => {
-      resetBtn.style.background = '#555';
+      resetBtn.style.background = 'var(--border-secondary)';
     });
 
     this.panel.appendChild(resetBtn);
@@ -286,7 +286,7 @@ export class CropControl extends EventEmitter<CropControlEvents> {
     this.dimensionsLabel = document.createElement('div');
     this.dimensionsLabel.dataset.testid = 'crop-dimensions';
     this.dimensionsLabel.style.cssText = `
-      color: #888;
+      color: var(--text-secondary);
       font-size: 11px;
       margin-top: 10px;
       text-align: center;
@@ -298,7 +298,7 @@ export class CropControl extends EventEmitter<CropControlEvents> {
     // Instructions
     const instructions = document.createElement('div');
     instructions.style.cssText = `
-      color: #666;
+      color: var(--text-muted);
       font-size: 10px;
       margin-top: 8px;
       line-height: 1.4;
@@ -380,7 +380,7 @@ export class CropControl extends EventEmitter<CropControlEvents> {
   private syncToggleSwitch(): void {
     if (this.toggleSwitch) {
       this.toggleSwitch.textContent = this.state.enabled ? 'ON' : 'OFF';
-      this.toggleSwitch.style.background = this.state.enabled ? '#4a9eff' : '#555';
+      this.toggleSwitch.style.background = this.state.enabled ? 'var(--accent-primary)' : 'var(--border-secondary)';
       this.toggleSwitch.setAttribute('aria-checked', String(this.state.enabled));
     }
   }
@@ -401,13 +401,13 @@ export class CropControl extends EventEmitter<CropControlEvents> {
   private updateButtonState(): void {
     const isActive = this.state.enabled || this.isPanelOpen;
     if (isActive) {
-      this.cropButton.style.background = 'rgba(74, 158, 255, 0.15)';
-      this.cropButton.style.borderColor = '#4a9eff';
-      this.cropButton.style.color = '#4a9eff';
+      this.cropButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+      this.cropButton.style.borderColor = 'var(--accent-primary)';
+      this.cropButton.style.color = 'var(--accent-primary)';
     } else {
       this.cropButton.style.background = 'transparent';
       this.cropButton.style.borderColor = 'transparent';
-      this.cropButton.style.color = '#999';
+      this.cropButton.style.color = 'var(--text-muted)';
     }
   }
 

@@ -38,7 +38,7 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
     this.cdlButton.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
-      color: #999;
+      color: var(--text-muted);
       padding: 6px 10px;
       border-radius: 4px;
       cursor: pointer;
@@ -52,16 +52,16 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
     this.cdlButton.addEventListener('click', () => this.togglePanel());
     this.cdlButton.addEventListener('mouseenter', () => {
       if (!this.isPanelOpen) {
-        this.cdlButton.style.background = '#3a3a3a';
-        this.cdlButton.style.borderColor = '#4a4a4a';
-        this.cdlButton.style.color = '#ccc';
+        this.cdlButton.style.background = 'var(--bg-hover)';
+        this.cdlButton.style.borderColor = 'var(--border-primary)';
+        this.cdlButton.style.color = 'var(--text-primary)';
       }
     });
     this.cdlButton.addEventListener('mouseleave', () => {
       if (!this.isPanelOpen && isDefaultCDL(this.cdl)) {
         this.cdlButton.style.background = 'transparent';
         this.cdlButton.style.borderColor = 'transparent';
-        this.cdlButton.style.color = '#999';
+        this.cdlButton.style.color = 'var(--text-muted)';
       }
     });
 
@@ -70,8 +70,8 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
     this.panel.className = 'cdl-panel';
     this.panel.style.cssText = `
       position: fixed;
-      background: #2a2a2a;
-      border: 1px solid #444;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
       border-radius: 6px;
       padding: 12px;
       min-width: 300px;
@@ -104,12 +104,12 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
       align-items: center;
       margin-bottom: 12px;
       padding-bottom: 8px;
-      border-bottom: 1px solid #444;
+      border-bottom: 1px solid var(--border-primary);
     `;
 
     const title = document.createElement('span');
     title.textContent = 'ASC CDL';
-    title.style.cssText = 'color: #ddd; font-size: 13px; font-weight: 500;';
+    title.style.cssText = 'color: var(--text-primary); font-size: 13px; font-weight: 500;';
 
     const buttonGroup = document.createElement('div');
     buttonGroup.style.cssText = 'display: flex; gap: 4px;';
@@ -143,9 +143,9 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
     const btn = document.createElement('button');
     btn.textContent = text;
     btn.style.cssText = `
-      background: #555;
+      background: var(--border-secondary);
       border: none;
-      color: #aaa;
+      color: var(--text-secondary);
       padding: 3px 8px;
       border-radius: 3px;
       cursor: pointer;
@@ -155,8 +155,8 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
       e.stopPropagation();
       onClick();
     });
-    btn.addEventListener('mouseenter', () => { btn.style.background = '#666'; });
-    btn.addEventListener('mouseleave', () => { btn.style.background = '#555'; });
+    btn.addEventListener('mouseenter', () => { btn.style.background = 'var(--text-muted)'; });
+    btn.addEventListener('mouseleave', () => { btn.style.background = 'var(--border-secondary)'; });
     return btn;
   }
 
@@ -174,7 +174,7 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
     const sectionHeader = document.createElement('div');
     sectionHeader.textContent = title;
     sectionHeader.style.cssText = `
-      color: #888;
+      color: var(--text-secondary);
       font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
@@ -233,7 +233,7 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
       flex: 1;
       height: 4px;
       -webkit-appearance: none;
-      background: #444;
+      background: var(--border-primary);
       border-radius: 2px;
       outline: none;
       cursor: pointer;
@@ -242,7 +242,7 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
     const valueEl = document.createElement('span');
     valueEl.textContent = defaultValue.toFixed(2);
     valueEl.style.cssText = `
-      color: #888;
+      color: var(--text-secondary);
       font-size: 10px;
       width: 40px;
       text-align: right;
@@ -279,7 +279,7 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
     section.style.cssText = `
       margin-top: 12px;
       padding-top: 12px;
-      border-top: 1px solid #444;
+      border-top: 1px solid var(--border-primary);
     `;
 
     const row = document.createElement('div');
@@ -291,7 +291,7 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
 
     const labelEl = document.createElement('span');
     labelEl.textContent = 'Saturation';
-    labelEl.style.cssText = 'color: #aaa; font-size: 12px; width: 70px;';
+    labelEl.style.cssText = 'color: var(--text-secondary); font-size: 12px; width: 70px;';
 
     const slider = document.createElement('input');
     slider.type = 'range';
@@ -303,7 +303,7 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
       flex: 1;
       height: 4px;
       -webkit-appearance: none;
-      background: #444;
+      background: var(--border-primary);
       border-radius: 2px;
       outline: none;
       cursor: pointer;
@@ -312,7 +312,7 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
     const valueEl = document.createElement('span');
     valueEl.textContent = '1.00';
     valueEl.style.cssText = `
-      color: #888;
+      color: var(--text-secondary);
       font-size: 10px;
       width: 40px;
       text-align: right;
@@ -350,13 +350,13 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
   private updateButtonState(): void {
     const isActive = !isDefaultCDL(this.cdl);
     if (isActive || this.isPanelOpen) {
-      this.cdlButton.style.background = 'rgba(74, 158, 255, 0.15)';
-      this.cdlButton.style.borderColor = '#4a9eff';
-      this.cdlButton.style.color = '#4a9eff';
+      this.cdlButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+      this.cdlButton.style.borderColor = 'var(--accent-primary)';
+      this.cdlButton.style.color = 'var(--accent-primary)';
     } else {
       this.cdlButton.style.background = 'transparent';
       this.cdlButton.style.borderColor = 'transparent';
-      this.cdlButton.style.color = '#999';
+      this.cdlButton.style.color = 'var(--text-muted)';
     }
   }
 

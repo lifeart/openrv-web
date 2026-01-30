@@ -297,7 +297,7 @@ describe('ZoomControl dropdown visual selection', () => {
     // Count items with accent color (selected styling)
     let accentCount = 0;
     options.forEach((option) => {
-      if ((option as HTMLButtonElement).style.color === 'rgb(74, 158, 255)') {
+      if ((option as HTMLButtonElement).style.color === 'var(--accent-primary)') {
         accentCount++;
       }
     });
@@ -321,15 +321,15 @@ describe('ZoomControl dropdown visual selection', () => {
     control.setZoom(1);
 
     // 100% should have accent styling
-    expect((options[3] as HTMLButtonElement).style.color).toBe('rgb(74, 158, 255)');
+    expect((options[3] as HTMLButtonElement).style.color).toBe('var(--accent-primary)');
 
     // Change to 200% (index 4)
     control.setZoom(2);
 
     // 100% should no longer have accent styling
-    expect((options[3] as HTMLButtonElement).style.color).not.toBe('rgb(74, 158, 255)');
+    expect((options[3] as HTMLButtonElement).style.color).not.toBe('var(--accent-primary)');
     // 200% should have accent styling
-    expect((options[4] as HTMLButtonElement).style.color).toBe('rgb(74, 158, 255)');
+    expect((options[4] as HTMLButtonElement).style.color).toBe('var(--accent-primary)');
     document.body.removeChild(el);
   });
 
@@ -361,8 +361,8 @@ describe('ZoomControl dropdown visual selection', () => {
 
     // Verify only 200% has accent styling
     button.click();
-    expect((options[3] as HTMLButtonElement).style.color).not.toBe('rgb(74, 158, 255)');
-    expect((options[4] as HTMLButtonElement).style.color).toBe('rgb(74, 158, 255)');
+    expect((options[3] as HTMLButtonElement).style.color).not.toBe('var(--accent-primary)');
+    expect((options[4] as HTMLButtonElement).style.color).toBe('var(--accent-primary)');
     document.body.removeChild(el);
   });
 
@@ -389,13 +389,13 @@ describe('ZoomControl dropdown visual selection', () => {
     // Only fit (index 0) should have accent styling
     let accentCount = 0;
     options.forEach((option) => {
-      if ((option as HTMLButtonElement).style.color === 'rgb(74, 158, 255)') {
+      if ((option as HTMLButtonElement).style.color === 'var(--accent-primary)') {
         accentCount++;
       }
     });
 
     expect(accentCount).toBe(1);
-    expect((options[0] as HTMLButtonElement).style.color).toBe('rgb(74, 158, 255)');
+    expect((options[0] as HTMLButtonElement).style.color).toBe('var(--accent-primary)');
 
     document.body.removeChild(el);
   });
@@ -421,8 +421,8 @@ describe('ZoomControl dropdown visual selection', () => {
 
     // Reopen and verify only 100% has accent styling
     button.click();
-    expect((options[0] as HTMLButtonElement).style.color).not.toBe('rgb(74, 158, 255)');
-    expect((options[3] as HTMLButtonElement).style.color).toBe('rgb(74, 158, 255)');
+    expect((options[0] as HTMLButtonElement).style.color).not.toBe('var(--accent-primary)');
+    expect((options[3] as HTMLButtonElement).style.color).toBe('var(--accent-primary)');
 
     document.body.removeChild(el);
   });

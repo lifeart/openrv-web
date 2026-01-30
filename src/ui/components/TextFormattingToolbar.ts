@@ -92,7 +92,7 @@ export class TextFormattingToolbar extends EventEmitter<TextFormattingToolbarEve
     button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
-      color: #999;
+      color: var(--text-muted);
       padding: 4px;
       border-radius: 4px;
       cursor: pointer;
@@ -106,9 +106,9 @@ export class TextFormattingToolbar extends EventEmitter<TextFormattingToolbarEve
 
     button.addEventListener('mouseenter', () => {
       if (!button.classList.contains('active')) {
-        button.style.background = '#3a3a3a';
-        button.style.borderColor = '#4a4a4a';
-        button.style.color = '#ccc';
+        button.style.background = 'var(--bg-hover)';
+        button.style.borderColor = 'var(--border-primary)';
+        button.style.color = 'var(--text-primary)';
       }
     });
 
@@ -116,7 +116,7 @@ export class TextFormattingToolbar extends EventEmitter<TextFormattingToolbarEve
       if (!button.classList.contains('active')) {
         button.style.background = 'transparent';
         button.style.borderColor = 'transparent';
-        button.style.color = '#999';
+        button.style.color = 'var(--text-muted)';
       }
     });
 
@@ -225,14 +225,14 @@ export class TextFormattingToolbar extends EventEmitter<TextFormattingToolbarEve
 
   private updateButtonState(button: HTMLButtonElement, isActive: boolean): void {
     if (isActive) {
-      button.style.background = 'rgba(74, 158, 255, 0.15)';
-      button.style.borderColor = '#4a9eff';
-      button.style.color = '#4a9eff';
+      button.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+      button.style.borderColor = 'var(--accent-primary)';
+      button.style.color = 'var(--accent-primary)';
       button.classList.add('active');
     } else {
       button.style.background = 'transparent';
       button.style.borderColor = 'transparent';
-      button.style.color = '#999';
+      button.style.color = 'var(--text-muted)';
       button.classList.remove('active');
     }
   }

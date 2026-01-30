@@ -70,7 +70,7 @@ export class TransformControl extends EventEmitter<TransformControlEvents> {
     btn.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
-      color: #999;
+      color: var(--text-muted);
       width: 28px;
       height: 28px;
       border-radius: 4px;
@@ -84,9 +84,9 @@ export class TransformControl extends EventEmitter<TransformControlEvents> {
     btn.addEventListener('click', onClick);
     btn.addEventListener('mouseenter', () => {
       if (!btn.classList.contains('active')) {
-        btn.style.background = '#3a3a3a';
-        btn.style.borderColor = '#4a4a4a';
-        btn.style.color = '#ccc';
+        btn.style.background = 'var(--bg-hover)';
+        btn.style.borderColor = 'var(--border-primary)';
+        btn.style.color = 'var(--text-primary)';
       }
     });
     btn.addEventListener('mouseleave', () => {
@@ -108,14 +108,14 @@ export class TransformControl extends EventEmitter<TransformControlEvents> {
     }
 
     if (isActive) {
-      btn.style.background = 'rgba(74, 158, 255, 0.15)';
-      btn.style.borderColor = '#4a9eff';
-      btn.style.color = '#4a9eff';
+      btn.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+      btn.style.borderColor = 'var(--accent-primary)';
+      btn.style.color = 'var(--accent-primary)';
       btn.classList.add('active');
     } else {
       btn.style.background = 'transparent';
       btn.style.borderColor = 'transparent';
-      btn.style.color = '#999';
+      btn.style.color = 'var(--text-muted)';
       btn.classList.remove('active');
     }
   }

@@ -15,6 +15,8 @@ import {
   updatePointInCurve,
 } from '../../color/ColorCurves';
 import { setupHiDPICanvas, clientToCanvasCoordinates } from '../../utils/HiDPICanvas';
+import { getThemeManager } from '../../utils/ThemeManager';
+import { getCSSColor } from '../../utils/getCSSColor';
 
 export type CurveChannelType = 'master' | 'red' | 'green' | 'blue';
 
@@ -50,6 +52,15 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
 
   private draggingPointIndex: number | null = null;
   private hoverPointIndex: number | null = null;
+  private boundOnThemeChange: (() => void) | null = null;
+
+  // Bound event handlers for proper cleanup
+  private boundHandleMouseDown: (e: MouseEvent) => void;
+  private boundHandleMouseMove: (e: MouseEvent) => void;
+  private boundHandleMouseUp: () => void;
+  private boundHandleMouseLeave: () => void;
+  private boundHandleDoubleClick: (e: MouseEvent) => void;
+  private boundHandleContextMenu: (e: MouseEvent) => void;
 
   constructor(initialCurves?: ColorCurvesData) {
     super();
@@ -69,7 +80,7 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
       flex-direction: column;
       gap: 8px;
       padding: 8px;
-      background: #1a1a1a;
+      background: var(--bg-secondary);
       border-radius: 6px;
     `;
 
@@ -89,7 +100,7 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
       btn.style.cssText = `
         flex: 1;
         padding: 4px 8px;
-        border: 1px solid #3a3a3a;
+        border: 1px solid var(--border-primary);
         border-radius: 3px;
         background: ${channel === this.activeChannel ? CHANNEL_BG_COLORS[channel] : 'transparent'};
         color: ${CHANNEL_COLORS[channel]};
@@ -101,7 +112,7 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
       btn.addEventListener('click', () => this.setActiveChannel(channel));
       btn.addEventListener('mouseenter', () => {
         if (channel !== this.activeChannel) {
-          btn.style.background = '#2a2a2a';
+          btn.style.background = 'var(--bg-hover)';
         }
       });
       btn.addEventListener('mouseleave', () => {
@@ -118,7 +129,7 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
     this.canvas = document.createElement('canvas');
     this.canvas.dataset.testid = 'curve-canvas';
     this.canvas.style.cssText = `
-      background: #0a0a0a;
+      background: var(--bg-primary);
       border-radius: 4px;
       cursor: crosshair;
     `;
@@ -134,16 +145,30 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
       height: this.size,
     });
 
+    // Create bound event handlers for proper cleanup
+    this.boundHandleMouseDown = this.handleMouseDown.bind(this);
+    this.boundHandleMouseMove = this.handleMouseMove.bind(this);
+    this.boundHandleMouseUp = this.handleMouseUp.bind(this);
+    this.boundHandleMouseLeave = this.handleMouseLeave.bind(this);
+    this.boundHandleDoubleClick = this.handleDoubleClick.bind(this);
+    this.boundHandleContextMenu = this.handleContextMenu.bind(this);
+
     // Bind events
-    this.canvas.addEventListener('mousedown', this.handleMouseDown.bind(this));
-    this.canvas.addEventListener('mousemove', this.handleMouseMove.bind(this));
-    this.canvas.addEventListener('mouseup', this.handleMouseUp.bind(this));
-    this.canvas.addEventListener('mouseleave', this.handleMouseLeave.bind(this));
-    this.canvas.addEventListener('dblclick', this.handleDoubleClick.bind(this));
-    this.canvas.addEventListener('contextmenu', this.handleContextMenu.bind(this));
+    this.canvas.addEventListener('mousedown', this.boundHandleMouseDown);
+    this.canvas.addEventListener('mousemove', this.boundHandleMouseMove);
+    this.canvas.addEventListener('mouseup', this.boundHandleMouseUp);
+    this.canvas.addEventListener('mouseleave', this.boundHandleMouseLeave);
+    this.canvas.addEventListener('dblclick', this.boundHandleDoubleClick);
+    this.canvas.addEventListener('contextmenu', this.boundHandleContextMenu);
 
     // Initial render
     this.render();
+
+    // Listen for theme changes to redraw with new colors
+    this.boundOnThemeChange = () => {
+      this.render();
+    };
+    getThemeManager().on('themeChanged', this.boundOnThemeChange);
   }
 
   private setActiveChannel(channel: CurveChannelType): void {
@@ -314,11 +339,11 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
     const innerSize = size - padding * 2;
 
     // Clear
-    ctx.fillStyle = '#0a0a0a';
+    ctx.fillStyle = getCSSColor('--bg-primary', '#0a0a0a');
     ctx.fillRect(0, 0, size, size);
 
     // Draw grid
-    ctx.strokeStyle = '#2a2a2a';
+    ctx.strokeStyle = getCSSColor('--bg-hover', '#2a2a2a');
     ctx.lineWidth = 1;
 
     // Vertical and horizontal lines at 25%, 50%, 75%
@@ -339,11 +364,11 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
     });
 
     // Draw border
-    ctx.strokeStyle = '#3a3a3a';
+    ctx.strokeStyle = getCSSColor('--border-primary', '#3a3a3a');
     ctx.strokeRect(padding, padding, innerSize, innerSize);
 
     // Draw diagonal reference line (identity)
-    ctx.strokeStyle = '#3a3a3a';
+    ctx.strokeStyle = getCSSColor('--border-primary', '#3a3a3a');
     ctx.setLineDash([4, 4]);
     ctx.beginPath();
     ctx.moveTo(padding, size - padding);
@@ -386,7 +411,7 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
         // Outer circle
         ctx.beginPath();
         ctx.arc(canvasPt.x, canvasPt.y, radius, 0, Math.PI * 2);
-        ctx.fillStyle = isDragging ? color : (isHovered ? '#ffffff' : '#1a1a1a');
+        ctx.fillStyle = isDragging ? color : (isHovered ? '#ffffff' : getCSSColor('--bg-secondary', '#1a1a1a'));
         ctx.fill();
         ctx.strokeStyle = color;
         ctx.lineWidth = 2;
@@ -506,11 +531,18 @@ export class CurveEditor extends EventEmitter<CurveEditorEvents> {
   }
 
   dispose(): void {
-    this.canvas.removeEventListener('mousedown', this.handleMouseDown.bind(this));
-    this.canvas.removeEventListener('mousemove', this.handleMouseMove.bind(this));
-    this.canvas.removeEventListener('mouseup', this.handleMouseUp.bind(this));
-    this.canvas.removeEventListener('mouseleave', this.handleMouseLeave.bind(this));
-    this.canvas.removeEventListener('dblclick', this.handleDoubleClick.bind(this));
-    this.canvas.removeEventListener('contextmenu', this.handleContextMenu.bind(this));
+    // Clean up theme change listener
+    if (this.boundOnThemeChange) {
+      getThemeManager().off('themeChanged', this.boundOnThemeChange);
+    }
+    this.boundOnThemeChange = null;
+
+    // Clean up canvas event listeners using stored bound handlers
+    this.canvas.removeEventListener('mousedown', this.boundHandleMouseDown);
+    this.canvas.removeEventListener('mousemove', this.boundHandleMouseMove);
+    this.canvas.removeEventListener('mouseup', this.boundHandleMouseUp);
+    this.canvas.removeEventListener('mouseleave', this.boundHandleMouseLeave);
+    this.canvas.removeEventListener('dblclick', this.boundHandleDoubleClick);
+    this.canvas.removeEventListener('contextmenu', this.boundHandleContextMenu);
   }
 }

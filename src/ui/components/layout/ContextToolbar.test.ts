@@ -191,9 +191,9 @@ describe('ContextToolbar', () => {
       expect(btn.title).toBe('Tooltip');
     });
 
-    it('CTX-U064: active button has blue styling', () => {
+    it('CTX-U064: active button has accent styling', () => {
       const btn = ContextToolbar.createButton('Test', () => {}, { active: true });
-      expect(btn.style.cssText).toContain('rgb(74, 158, 255)'); // #4a9eff
+      expect(btn.style.cssText).toContain('var(--accent-primary)');
     });
 
     it('CTX-U065: inactive button has transparent background', () => {
@@ -211,7 +211,7 @@ describe('ContextToolbar', () => {
 
       btn.dispatchEvent(new MouseEvent('mouseenter'));
 
-      expect(btn.style.cssText).toContain('rgba(255, 255, 255, 0.08)');
+      expect(btn.style.cssText).toContain('var(--bg-hover)');
     });
 
     it('CTX-U068: inactive button restores on mouseleave', () => {

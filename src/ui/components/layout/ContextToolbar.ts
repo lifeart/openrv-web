@@ -30,8 +30,8 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
     this.container.className = 'context-toolbar';
     this.container.style.cssText = `
       height: 44px;
-      background: #252525;
-      border-bottom: 1px solid #333;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-secondary);
       display: flex;
       align-items: center;
       padding: 0 12px;
@@ -141,7 +141,7 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
     divider.style.cssText = `
       width: 1px;
       height: 24px;
-      background: #444;
+      background: var(--border-primary);
       margin: 0 4px;
     `;
     return divider;
@@ -168,9 +168,9 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
     }
     button.title = options.title || '';
     button.style.cssText = `
-      background: ${options.active ? 'rgba(74, 158, 255, 0.15)' : 'transparent'};
-      border: 1px solid ${options.active ? '#4a9eff' : 'transparent'};
-      color: ${options.active ? '#4a9eff' : '#bbb'};
+      background: ${options.active ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent'};
+      border: 1px solid ${options.active ? 'var(--accent-primary)' : 'transparent'};
+      color: ${options.active ? 'var(--accent-primary)' : 'var(--text-secondary)'};
       padding: 6px 12px;
       border-radius: 4px;
       cursor: pointer;
@@ -186,9 +186,9 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
 
     button.addEventListener('mouseenter', () => {
       if (!options.active) {
-        button.style.background = 'rgba(255,255,255,0.08)';
-        button.style.borderColor = 'rgba(255,255,255,0.1)';
-        button.style.color = '#fff';
+        button.style.background = 'var(--bg-hover)';
+        button.style.borderColor = 'var(--border-secondary)';
+        button.style.color = 'var(--text-primary)';
       }
     });
 
@@ -196,7 +196,7 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
       if (!options.active) {
         button.style.background = 'transparent';
         button.style.borderColor = 'transparent';
-        button.style.color = '#bbb';
+        button.style.color = 'var(--text-secondary)';
       }
     });
 
@@ -233,7 +233,7 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
     const labelEl = document.createElement('span');
     labelEl.textContent = label;
     labelEl.style.cssText = `
-      color: #888;
+      color: var(--text-muted);
       font-size: 11px;
       min-width: 60px;
     `;
@@ -248,7 +248,7 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
       width: ${options.width || '80px'};
       height: 4px;
       cursor: pointer;
-      accent-color: #4a9eff;
+      accent-color: var(--accent-primary);
     `;
 
     if (options.onChange) {

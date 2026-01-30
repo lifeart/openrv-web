@@ -36,7 +36,7 @@ export class LensControl extends EventEmitter<LensControlEvents> {
     this.lensButton.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
-      color: #999;
+      color: var(--text-muted);
       padding: 6px 10px;
       border-radius: 4px;
       cursor: pointer;
@@ -50,16 +50,16 @@ export class LensControl extends EventEmitter<LensControlEvents> {
     this.lensButton.addEventListener('click', () => this.togglePanel());
     this.lensButton.addEventListener('mouseenter', () => {
       if (!this.isPanelOpen) {
-        this.lensButton.style.background = '#3a3a3a';
-        this.lensButton.style.borderColor = '#4a4a4a';
-        this.lensButton.style.color = '#ccc';
+        this.lensButton.style.background = 'var(--bg-hover)';
+        this.lensButton.style.borderColor = 'var(--border-primary)';
+        this.lensButton.style.color = 'var(--text-primary)';
       }
     });
     this.lensButton.addEventListener('mouseleave', () => {
       if (!this.isPanelOpen && isDefaultLensParams(this.params)) {
         this.lensButton.style.background = 'transparent';
         this.lensButton.style.borderColor = 'transparent';
-        this.lensButton.style.color = '#999';
+        this.lensButton.style.color = 'var(--text-muted)';
       }
     });
 
@@ -68,8 +68,8 @@ export class LensControl extends EventEmitter<LensControlEvents> {
     this.panel.className = 'lens-panel';
     this.panel.style.cssText = `
       position: fixed;
-      background: #2a2a2a;
-      border: 1px solid #444;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
       border-radius: 6px;
       padding: 12px;
       min-width: 250px;
@@ -100,27 +100,27 @@ export class LensControl extends EventEmitter<LensControlEvents> {
       align-items: center;
       margin-bottom: 12px;
       padding-bottom: 8px;
-      border-bottom: 1px solid #444;
+      border-bottom: 1px solid var(--border-primary);
     `;
 
     const title = document.createElement('span');
     title.textContent = 'Lens Correction';
-    title.style.cssText = 'color: #ddd; font-size: 13px; font-weight: 500;';
+    title.style.cssText = 'color: var(--text-primary); font-size: 13px; font-weight: 500;';
 
     const resetBtn = document.createElement('button');
     resetBtn.textContent = 'Reset';
     resetBtn.style.cssText = `
-      background: #555;
+      background: var(--border-secondary);
       border: none;
-      color: #aaa;
+      color: var(--text-secondary);
       padding: 4px 8px;
       border-radius: 3px;
       cursor: pointer;
       font-size: 11px;
     `;
     resetBtn.addEventListener('click', () => this.reset());
-    resetBtn.addEventListener('mouseenter', () => { resetBtn.style.background = '#666'; });
-    resetBtn.addEventListener('mouseleave', () => { resetBtn.style.background = '#555'; });
+    resetBtn.addEventListener('mouseenter', () => { resetBtn.style.background = 'var(--text-muted)'; });
+    resetBtn.addEventListener('mouseleave', () => { resetBtn.style.background = 'var(--border-secondary)'; });
 
     header.appendChild(title);
     header.appendChild(resetBtn);
@@ -130,7 +130,7 @@ export class LensControl extends EventEmitter<LensControlEvents> {
     const distortionLabel = document.createElement('div');
     distortionLabel.textContent = 'Radial Distortion';
     distortionLabel.style.cssText = `
-      color: #888;
+      color: var(--text-secondary);
       font-size: 10px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
@@ -152,14 +152,14 @@ export class LensControl extends EventEmitter<LensControlEvents> {
 
     // Separator
     const sep = document.createElement('div');
-    sep.style.cssText = 'height: 1px; background: #444; margin: 12px 0;';
+    sep.style.cssText = 'height: 1px; background: var(--border-primary); margin: 12px 0;';
     this.panel.appendChild(sep);
 
     // Center section
     const centerLabel = document.createElement('div');
     centerLabel.textContent = 'Center Offset';
     centerLabel.style.cssText = `
-      color: #888;
+      color: var(--text-secondary);
       font-size: 10px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
@@ -181,7 +181,7 @@ export class LensControl extends EventEmitter<LensControlEvents> {
 
     // Scale slider
     const sep2 = document.createElement('div');
-    sep2.style.cssText = 'height: 1px; background: #444; margin: 12px 0;';
+    sep2.style.cssText = 'height: 1px; background: var(--border-primary); margin: 12px 0;';
     this.panel.appendChild(sep2);
 
     this.createSlider('scale', 'Scale', 0.5, 1.5, 0.01, 1, (v) => {
@@ -191,7 +191,7 @@ export class LensControl extends EventEmitter<LensControlEvents> {
 
     // Presets section
     const sep3 = document.createElement('div');
-    sep3.style.cssText = 'height: 1px; background: #444; margin: 12px 0;';
+    sep3.style.cssText = 'height: 1px; background: var(--border-primary); margin: 12px 0;';
     this.panel.appendChild(sep3);
 
     const presetsRow = document.createElement('div');
@@ -208,9 +208,9 @@ export class LensControl extends EventEmitter<LensControlEvents> {
       btn.textContent = preset.label;
       btn.style.cssText = `
         flex: 1;
-        background: #444;
-        border: 1px solid #555;
-        color: #aaa;
+        background: var(--border-primary);
+        border: 1px solid var(--border-secondary);
+        color: var(--text-secondary);
         padding: 4px 6px;
         border-radius: 3px;
         cursor: pointer;
@@ -223,8 +223,8 @@ export class LensControl extends EventEmitter<LensControlEvents> {
         this.updateSliderValue('k2', preset.k2);
         this.emitChange();
       });
-      btn.addEventListener('mouseenter', () => { btn.style.background = '#555'; });
-      btn.addEventListener('mouseleave', () => { btn.style.background = '#444'; });
+      btn.addEventListener('mouseenter', () => { btn.style.background = 'var(--border-secondary)'; });
+      btn.addEventListener('mouseleave', () => { btn.style.background = 'var(--border-primary)'; });
       presetsRow.appendChild(btn);
     }
 
@@ -252,11 +252,11 @@ export class LensControl extends EventEmitter<LensControlEvents> {
 
     const labelEl = document.createElement('span');
     labelEl.textContent = label;
-    labelEl.style.cssText = 'color: #aaa; font-size: 11px;';
+    labelEl.style.cssText = 'color: var(--text-secondary); font-size: 11px;';
 
     const valueEl = document.createElement('span');
     valueEl.textContent = defaultValue.toFixed(2);
-    valueEl.style.cssText = 'color: #888; font-size: 10px;';
+    valueEl.style.cssText = 'color: var(--text-secondary); font-size: 10px;';
 
     labelRow.appendChild(labelEl);
     labelRow.appendChild(valueEl);
@@ -271,7 +271,7 @@ export class LensControl extends EventEmitter<LensControlEvents> {
       width: 100%;
       height: 4px;
       -webkit-appearance: none;
-      background: #444;
+      background: var(--border-primary);
       border-radius: 2px;
       outline: none;
       cursor: pointer;
@@ -313,13 +313,13 @@ export class LensControl extends EventEmitter<LensControlEvents> {
   private updateButtonState(): void {
     const isActive = !isDefaultLensParams(this.params);
     if (isActive || this.isPanelOpen) {
-      this.lensButton.style.background = 'rgba(74, 158, 255, 0.15)';
-      this.lensButton.style.borderColor = '#4a9eff';
-      this.lensButton.style.color = '#4a9eff';
+      this.lensButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+      this.lensButton.style.borderColor = 'var(--accent-primary)';
+      this.lensButton.style.color = 'var(--accent-primary)';
     } else {
       this.lensButton.style.background = 'transparent';
       this.lensButton.style.borderColor = 'transparent';
-      this.lensButton.style.color = '#999';
+      this.lensButton.style.color = 'var(--text-muted)';
     }
   }
 

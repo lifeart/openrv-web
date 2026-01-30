@@ -218,7 +218,7 @@ describe('ScopesControl', () => {
 
       const button = el.querySelector('[data-testid="scopes-control-button"]') as HTMLButtonElement;
       // Active state has blue highlight color
-      expect(button.style.cssText).toContain('rgb(74, 158, 255)');
+      expect(button.style.cssText).toContain('var(--accent-primary)');
     });
 
     it('SCOPE-U055: button has default style when no scopes enabled', () => {

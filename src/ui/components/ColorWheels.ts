@@ -15,6 +15,7 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { createDraggableContainer, createControlButton, DraggableContainer } from './shared/DraggableContainer';
 import { setupHiDPICanvas, clientToCanvasCoordinates } from '../../utils/HiDPICanvas';
+import { getThemeManager } from '../../utils/ThemeManager';
 
 export interface WheelValues {
   r: number;  // Red offset: -1.0 to +1.0
@@ -66,6 +67,7 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
   private undoStack: ColorWheelsState[] = [];
   private redoStack: ColorWheelsState[] = [];
   private maxUndoLevels = 50;
+  private boundOnThemeChange: (() => void) | null = null;
 
   constructor(parent: HTMLElement) {
     super();
@@ -82,16 +84,22 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
 
     parent.appendChild(this.draggable.element);
     this.createUI();
+
+    // Listen for theme changes to redraw with new colors
+    this.boundOnThemeChange = () => {
+      this.redrawAllWheels();
+    };
+    getThemeManager().on('themeChanged', this.boundOnThemeChange);
   }
 
   private createUI(): void {
     // Add Link toggle to header controls (before close button)
     const linkLabel = document.createElement('label');
-    linkLabel.style.cssText = 'display: flex; align-items: center; gap: 3px; color: #888; font-size: 9px; cursor: pointer;';
+    linkLabel.style.cssText = 'display: flex; align-items: center; gap: 3px; color: var(--text-muted); font-size: 9px; cursor: pointer;';
     const linkCheckbox = document.createElement('input');
     linkCheckbox.type = 'checkbox';
     linkCheckbox.checked = this.state.linked;
-    linkCheckbox.style.cssText = 'accent-color: #4a9eff; width: 12px; height: 12px;';
+    linkCheckbox.style.cssText = 'accent-color: var(--accent-primary); width: 12px; height: 12px;';
     linkCheckbox.addEventListener('change', () => {
       this.state.linked = linkCheckbox.checked;
       this.emitChange();
@@ -277,7 +285,7 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
 
     const sliderValue = document.createElement('div');
     sliderValue.textContent = '0';
-    sliderValue.style.cssText = 'color: #888; font-size: 10px; font-family: monospace;';
+    sliderValue.style.cssText = 'color: var(--text-muted); font-size: 10px; font-family: monospace;';
 
     slider.addEventListener('pointerdown', () => {
       this.saveStateForUndo(); // Save state before modification
@@ -326,8 +334,8 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
       input.style.cssText = `
         width: 40px;
         padding: 2px;
-        background: #222;
-        border: 1px solid #444;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-primary);
         border-radius: 2px;
         color: ${channel === 'R' ? '#ff6666' : channel === 'G' ? '#66ff66' : '#6666ff'};
         font-size: 9px;
@@ -356,10 +364,10 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
     resetBtn.textContent = 'Reset';
     resetBtn.style.cssText = `
       padding: 2px 8px;
-      background: #282828;
-      border: 1px solid #444;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-primary);
       border-radius: 3px;
-      color: #888;
+      color: var(--text-muted);
       font-size: 9px;
       cursor: pointer;
     `;
@@ -405,7 +413,7 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
     ctx.fill();
 
     // Draw wheel border
-    ctx.strokeStyle = '#555';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
     ctx.lineWidth = 1;
     ctx.stroke();
 
@@ -424,7 +432,7 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
     }
 
     // Draw crosshairs
-    ctx.strokeStyle = '#444';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(center - wheelRadius, center);
@@ -793,6 +801,11 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
   }
 
   dispose(): void {
+    // Clean up theme change listener
+    if (this.boundOnThemeChange) {
+      getThemeManager().off('themeChanged', this.boundOnThemeChange);
+    }
+    this.boundOnThemeChange = null;
     this.draggable.dispose();
     this.draggable.element.remove();
     this.wheels.clear();

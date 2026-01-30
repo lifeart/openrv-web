@@ -319,8 +319,8 @@ describe('HeaderBar', () => {
       // Change to 2x
       speedBtn.click();
 
-      // Should have blue styling
-      expect(speedBtn.style.cssText).toContain('rgb(74, 158, 255)');
+      // Should have accent styling
+      expect(speedBtn.style.cssText).toContain('var(--accent-primary)');
     });
   });
 
@@ -758,7 +758,7 @@ describe('HeaderBar', () => {
 
       // Simulate mouseenter
       sessionNameDisplay.dispatchEvent(new MouseEvent('mouseenter'));
-      expect(sessionNameDisplay.style.background).toContain('rgba(255');
+      expect(sessionNameDisplay.style.background).toContain('var(--bg-hover)');
 
       // Simulate mouseleave
       sessionNameDisplay.dispatchEvent(new MouseEvent('mouseleave'));

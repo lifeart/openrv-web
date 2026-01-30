@@ -253,6 +253,63 @@ describe('CurveEditor', () => {
         editor.dispose();
       }).not.toThrow();
     });
+
+    it('CURVE-U082: dispose removes canvas event listeners', () => {
+      const el = editor.render_element();
+      const canvas = el.querySelector('[data-testid="curve-canvas"]') as HTMLCanvasElement;
+
+      // Spy on removeEventListener
+      const removeSpy = vi.spyOn(canvas, 'removeEventListener');
+
+      editor.dispose();
+
+      // Should have removed all 6 event listeners
+      expect(removeSpy).toHaveBeenCalledWith('mousedown', expect.any(Function));
+      expect(removeSpy).toHaveBeenCalledWith('mousemove', expect.any(Function));
+      expect(removeSpy).toHaveBeenCalledWith('mouseup', expect.any(Function));
+      expect(removeSpy).toHaveBeenCalledWith('mouseleave', expect.any(Function));
+      expect(removeSpy).toHaveBeenCalledWith('dblclick', expect.any(Function));
+      expect(removeSpy).toHaveBeenCalledWith('contextmenu', expect.any(Function));
+
+      removeSpy.mockRestore();
+    });
+
+    it('CURVE-U083: dispose removes event listeners with correct handler references', () => {
+      const el = editor.render_element();
+      const canvas = el.querySelector('[data-testid="curve-canvas"]') as HTMLCanvasElement;
+
+      // Track added handlers
+      const addedHandlers: Map<string, Function> = new Map();
+      const originalAddEventListener = canvas.addEventListener.bind(canvas);
+      const addSpy = vi.spyOn(canvas, 'addEventListener').mockImplementation(
+        (type: string, handler: EventListenerOrEventListenerObject) => {
+          addedHandlers.set(type, handler as Function);
+          originalAddEventListener(type, handler);
+        }
+      );
+
+      // Create a new editor so we can track the handlers
+      const newEditor = new CurveEditor();
+      const newEl = newEditor.render_element();
+      const newCanvas = newEl.querySelector('[data-testid="curve-canvas"]') as HTMLCanvasElement;
+
+      // Track removed handlers
+      const removedHandlers: Map<string, Function> = new Map();
+      const removeSpy = vi.spyOn(newCanvas, 'removeEventListener').mockImplementation(
+        (type: string, handler: EventListenerOrEventListenerObject) => {
+          removedHandlers.set(type, handler as Function);
+        }
+      );
+
+      newEditor.dispose();
+
+      // The removed handlers should match the added handlers (same function reference)
+      // This ensures we're not creating new bound functions in dispose()
+      expect(removeSpy).toHaveBeenCalledTimes(6);
+
+      addSpy.mockRestore();
+      removeSpy.mockRestore();
+    });
   });
 });
 

@@ -43,8 +43,8 @@ export class TabBar extends EventEmitter<TabBarEvents> {
     this.container.className = 'tab-bar';
     this.container.style.cssText = `
       height: 36px;
-      background: #1e1e1e;
-      border-bottom: 1px solid #333;
+      background: var(--bg-primary);
+      border-bottom: 1px solid var(--border-secondary);
       display: flex;
       align-items: stretch;
       padding: 0 12px;
@@ -60,7 +60,7 @@ export class TabBar extends EventEmitter<TabBarEvents> {
       position: absolute;
       bottom: 0;
       height: 2px;
-      background: #4a9eff;
+      background: var(--accent-primary);
       transition: left 0.2s ease, width 0.2s ease;
       border-radius: 1px 1px 0 0;
     `;
@@ -87,7 +87,7 @@ export class TabBar extends EventEmitter<TabBarEvents> {
     button.style.cssText = `
       background: transparent;
       border: none;
-      color: #888;
+      color: var(--text-muted);
       padding: 0 16px;
       cursor: pointer;
       font-size: 12px;
@@ -117,14 +117,14 @@ export class TabBar extends EventEmitter<TabBarEvents> {
 
     button.addEventListener('mouseenter', () => {
       if (tab.id !== this._activeTab) {
-        button.style.color = '#bbb';
-        button.style.background = 'rgba(255,255,255,0.03)';
+        button.style.color = 'var(--text-secondary)';
+        button.style.background = 'var(--bg-hover)';
       }
     });
 
     button.addEventListener('mouseleave', () => {
       if (tab.id !== this._activeTab) {
-        button.style.color = '#888';
+        button.style.color = 'var(--text-muted)';
         button.style.background = 'transparent';
       }
     });
@@ -139,8 +139,8 @@ export class TabBar extends EventEmitter<TabBarEvents> {
   private updateActiveState(): void {
     for (const [id, button] of this.tabButtons) {
       const isActive = id === this._activeTab;
-      button.style.color = isActive ? '#fff' : '#888';
-      button.style.background = isActive ? 'rgba(255,255,255,0.05)' : 'transparent';
+      button.style.color = isActive ? 'var(--text-primary)' : 'var(--text-muted)';
+      button.style.background = isActive ? 'var(--bg-hover)' : 'transparent';
     }
 
     // Update indicator position

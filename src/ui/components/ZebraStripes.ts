@@ -238,7 +238,7 @@ export class ZebraStripes extends EventEmitter<ZebraStripesEvents> {
 
     // Separator
     const separator = document.createElement('div');
-    separator.style.cssText = 'height: 1px; background: #444; margin: 8px 12px;';
+    separator.style.cssText = 'height: 1px; background: var(--border-primary); margin: 8px 12px;';
     container.appendChild(separator);
 
     // Low zebras section
@@ -269,12 +269,12 @@ export class ZebraStripes extends EventEmitter<ZebraStripesEvents> {
 
     const labelEl = document.createElement('span');
     labelEl.textContent = label;
-    labelEl.style.cssText = 'color: #ccc; font-size: 12px; font-weight: 500;';
+    labelEl.style.cssText = 'color: var(--text-primary); font-size: 12px; font-weight: 500;';
 
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.checked = enabled;
-    checkbox.style.cssText = 'cursor: pointer; accent-color: #4a9eff;';
+    checkbox.style.cssText = 'cursor: pointer; accent-color: var(--accent-primary);';
     checkbox.addEventListener('change', () => onChange(checkbox.checked));
 
     row.appendChild(labelEl);
@@ -300,18 +300,18 @@ export class ZebraStripes extends EventEmitter<ZebraStripesEvents> {
 
     const labelEl = document.createElement('label');
     labelEl.textContent = label;
-    labelEl.style.cssText = 'color: #888; font-size: 11px; width: 60px; flex-shrink: 0;';
+    labelEl.style.cssText = 'color: var(--text-secondary); font-size: 11px; width: 60px; flex-shrink: 0;';
 
     const slider = document.createElement('input');
     slider.type = 'range';
     slider.min = String(min);
     slider.max = String(max);
     slider.value = String(value);
-    slider.style.cssText = 'flex: 1; height: 4px; cursor: pointer; accent-color: #4a9eff;';
+    slider.style.cssText = 'flex: 1; height: 4px; cursor: pointer; accent-color: var(--accent-primary);';
 
     const valueEl = document.createElement('span');
     valueEl.textContent = `${value}${unit}`;
-    valueEl.style.cssText = 'color: #888; font-size: 11px; width: 40px; text-align: right; font-family: monospace;';
+    valueEl.style.cssText = 'color: var(--text-secondary); font-size: 11px; width: 40px; text-align: right; font-family: monospace;';
 
     slider.addEventListener('input', () => {
       const v = parseInt(slider.value, 10);

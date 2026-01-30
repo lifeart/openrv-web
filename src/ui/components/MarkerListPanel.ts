@@ -18,8 +18,10 @@ export interface MarkerListPanelEvents extends EventMap {
   markerSelected: number;
 }
 
-// Default marker color fallback
-const DEFAULT_MARKER_COLOR = '#ff0000';
+// Default marker color fallback - resolved from CSS variable
+function getDefaultMarkerColor(): string {
+  return getComputedStyle(document.documentElement).getPropertyValue('--error').trim() || '#ff0000';
+}
 
 export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
   private container: HTMLElement;
@@ -55,14 +57,14 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
       top: 60px;
       width: 320px;
       max-height: 450px;
-      background: rgba(30, 30, 30, 0.95);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: var(--overlay-bg);
+      border: 1px solid var(--overlay-border);
       border-radius: 8px;
       display: none;
       flex-direction: column;
       font-family: system-ui, -apple-system, sans-serif;
       font-size: 12px;
-      color: #e0e0e0;
+      color: var(--text-primary);
       z-index: 1000;
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
       overflow: hidden;
@@ -76,8 +78,8 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
       justify-content: space-between;
       align-items: center;
       padding: 10px 12px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-      background: rgba(40, 40, 40, 0.8);
+      border-bottom: 1px solid var(--overlay-border);
+      background: var(--bg-secondary);
     `;
 
     const title = document.createElement('span');
@@ -92,9 +94,9 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
     addBtn.title = 'Add marker at current frame';
     addBtn.dataset.testid = 'marker-add-btn';
     addBtn.style.cssText = `
-      background: rgba(100, 200, 100, 0.2);
-      border: 1px solid rgba(100, 200, 100, 0.3);
-      color: #99ff99;
+      background: rgba(var(--accent-primary-rgb), 0.15);
+      border: 1px solid var(--success);
+      color: var(--success);
       padding: 4px 8px;
       border-radius: 4px;
       font-size: 11px;
@@ -107,9 +109,9 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
     clearBtn.title = 'Clear all markers';
     clearBtn.dataset.testid = 'marker-clear-btn';
     clearBtn.style.cssText = `
-      background: rgba(255, 100, 100, 0.2);
-      border: 1px solid rgba(255, 100, 100, 0.3);
-      color: #ff9999;
+      background: rgba(var(--accent-primary-rgb), 0.15);
+      border: 1px solid var(--error);
+      color: var(--error);
       padding: 4px 8px;
       border-radius: 4px;
       font-size: 11px;
@@ -124,7 +126,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
     closeBtn.style.cssText = `
       background: none;
       border: none;
-      color: #999;
+      color: var(--text-muted);
       font-size: 18px;
       cursor: pointer;
       padding: 0 4px;
@@ -214,7 +216,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
   private addMarkerAtCurrentFrame(): void {
     const frame = this.session.currentFrame;
     if (!this.session.hasMarker(frame)) {
-      this.session.setMarker(frame, '', MARKER_COLORS[0] ?? DEFAULT_MARKER_COLOR);
+      this.session.setMarker(frame, '', MARKER_COLORS[0] ?? getDefaultMarkerColor());
     }
   }
 
@@ -307,7 +309,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
       const emptyMsg = document.createElement('div');
       emptyMsg.textContent = 'No markers yet. Press M to add a marker.';
       emptyMsg.style.cssText = `
-        color: #666;
+        color: var(--text-muted);
         text-align: center;
         padding: 20px;
         font-style: italic;
@@ -337,9 +339,9 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
       display: flex;
       flex-direction: column;
       padding: 10px 12px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      border-bottom: 1px solid var(--overlay-border);
       transition: background 0.15s;
-      ${isCurrentFrame ? 'background: rgba(100, 150, 255, 0.15);' : ''}
+      ${isCurrentFrame ? 'background: rgba(var(--accent-primary-rgb), 0.15);' : ''}
     `;
 
     // Top row: color indicator, frame info, and buttons
@@ -374,7 +376,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
     frameInfo.style.cssText = `
       flex: 1;
       cursor: pointer;
-      color: ${isCurrentFrame ? '#8af' : '#ccc'};
+      color: ${isCurrentFrame ? 'var(--accent-primary)' : 'var(--text-primary)'};
       font-weight: ${isCurrentFrame ? '600' : '400'};
     `;
     frameInfo.addEventListener('click', () => this.goToMarker(marker.frame));
@@ -388,7 +390,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
     editBtn.style.cssText = `
       background: none;
       border: none;
-      color: #888;
+      color: var(--text-muted);
       cursor: pointer;
       padding: 2px;
       display: flex;
@@ -408,7 +410,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
     deleteBtn.style.cssText = `
       background: none;
       border: none;
-      color: #f66;
+      color: var(--error);
       cursor: pointer;
       padding: 2px;
       display: flex;
@@ -440,10 +442,10 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
       textarea.style.cssText = `
         width: 100%;
         min-height: 60px;
-        background: rgba(0, 0, 0, 0.3);
-        border: 1px solid rgba(100, 150, 255, 0.5);
+        background: var(--bg-primary);
+        border: 1px solid var(--accent-primary);
         border-radius: 4px;
-        color: #e0e0e0;
+        color: var(--text-primary);
         font-size: 12px;
         padding: 8px;
         resize: vertical;
@@ -463,9 +465,9 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
       saveBtn.dataset.testid = `marker-save-${marker.frame}`;
       saveBtn.style.cssText = `
         margin-top: 6px;
-        background: rgba(100, 150, 255, 0.3);
-        border: 1px solid rgba(100, 150, 255, 0.5);
-        color: #8af;
+        background: rgba(var(--accent-primary-rgb), 0.3);
+        border: 1px solid var(--accent-primary);
+        color: var(--accent-primary);
         padding: 4px 10px;
         border-radius: 4px;
         font-size: 11px;
@@ -484,7 +486,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
       noteText.textContent = marker.note;
       noteText.dataset.testid = `marker-note-${marker.frame}`;
       noteText.style.cssText = `
-        color: #aaa;
+        color: var(--text-secondary);
         font-size: 11px;
         line-height: 1.4;
         white-space: pre-wrap;
@@ -498,7 +500,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
       const hintText = document.createElement('div');
       hintText.textContent = 'Click edit to add a note';
       hintText.style.cssText = `
-        color: #555;
+        color: var(--text-muted);
         font-size: 11px;
         font-style: italic;
         cursor: pointer;
@@ -514,12 +516,12 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
     el.addEventListener('mouseenter', () => {
       const isNowCurrentFrame = marker.frame === this.session.currentFrame;
       if (!isNowCurrentFrame) {
-        el.style.background = 'rgba(255, 255, 255, 0.05)';
+        el.style.background = 'var(--bg-hover)';
       }
     });
     el.addEventListener('mouseleave', () => {
       const isNowCurrentFrame = marker.frame === this.session.currentFrame;
-      el.style.background = isNowCurrentFrame ? 'rgba(100, 150, 255, 0.15)' : '';
+      el.style.background = isNowCurrentFrame ? 'rgba(var(--accent-primary-rgb), 0.15)' : '';
     });
 
     return el;
@@ -543,7 +545,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
         prevEntry.style.background = '';
         const frameInfo = prevEntry.querySelector('span');
         if (frameInfo) {
-          frameInfo.style.color = '#ccc';
+          frameInfo.style.color = 'var(--text-primary)';
           frameInfo.style.fontWeight = '400';
         }
       }
@@ -554,10 +556,10 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
       `[data-frame="${currentFrame}"]`
     ) as HTMLElement | null;
     if (currentEntry) {
-      currentEntry.style.background = 'rgba(100, 150, 255, 0.15)';
+      currentEntry.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
       const frameInfo = currentEntry.querySelector('span');
       if (frameInfo) {
-        frameInfo.style.color = '#8af';
+        frameInfo.style.color = 'var(--accent-primary)';
         frameInfo.style.fontWeight = '600';
       }
     }
@@ -639,7 +641,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
           `[data-frame="${marker.frame}"]`
         ) as HTMLElement | null;
         if (entry) {
-          entry.style.outline = '2px solid rgba(100, 150, 255, 0.5)';
+          entry.style.outline = '2px solid var(--accent-primary)';
           entry.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
         }
       }

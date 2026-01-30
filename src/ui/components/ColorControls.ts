@@ -84,7 +84,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     this.toggleButton.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
-      color: #999;
+      color: var(--text-muted);
       padding: 6px 10px;
       border-radius: 4px;
       cursor: pointer;
@@ -97,16 +97,16 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     this.toggleButton.addEventListener('click', () => this.toggle());
     this.toggleButton.addEventListener('mouseenter', () => {
       if (!this.isExpanded) {
-        this.toggleButton.style.background = '#3a3a3a';
-        this.toggleButton.style.borderColor = '#4a4a4a';
-        this.toggleButton.style.color = '#ccc';
+        this.toggleButton.style.background = 'var(--bg-hover)';
+        this.toggleButton.style.borderColor = 'var(--border-primary)';
+        this.toggleButton.style.color = 'var(--text-primary)';
       }
     });
     this.toggleButton.addEventListener('mouseleave', () => {
       if (!this.isExpanded) {
         this.toggleButton.style.background = 'transparent';
         this.toggleButton.style.borderColor = 'transparent';
-        this.toggleButton.style.color = '#999';
+        this.toggleButton.style.color = 'var(--text-muted)';
       }
     });
     this.container.appendChild(this.toggleButton);
@@ -116,8 +116,8 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     this.panel.className = 'color-controls-panel';
     this.panel.style.cssText = `
       position: fixed;
-      background: #2a2a2a;
-      border: 1px solid #444;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
       border-radius: 6px;
       padding: 12px;
       min-width: 280px;
@@ -171,28 +171,28 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
       align-items: center;
       margin-bottom: 12px;
       padding-bottom: 8px;
-      border-bottom: 1px solid #444;
+      border-bottom: 1px solid var(--border-primary);
     `;
 
     const title = document.createElement('span');
     title.textContent = 'Color Adjustments';
-    title.style.cssText = 'font-weight: 600; color: #eee; font-size: 13px;';
+    title.style.cssText = 'font-weight: 600; color: var(--text-primary); font-size: 13px;';
 
     const resetButton = document.createElement('button');
     resetButton.textContent = 'Reset';
     resetButton.title = 'Reset all adjustments';
     resetButton.style.cssText = `
-      background: #555;
-      border: 1px solid #666;
-      color: #ccc;
+      background: var(--border-secondary);
+      border: 1px solid var(--text-muted);
+      color: var(--text-primary);
       padding: 3px 8px;
       border-radius: 3px;
       cursor: pointer;
       font-size: 11px;
     `;
     resetButton.addEventListener('click', () => this.reset());
-    resetButton.addEventListener('mouseenter', () => { resetButton.style.background = '#666'; });
-    resetButton.addEventListener('mouseleave', () => { resetButton.style.background = '#555'; });
+    resetButton.addEventListener('mouseenter', () => { resetButton.style.background = 'var(--text-muted)'; });
+    resetButton.addEventListener('mouseleave', () => { resetButton.style.background = 'var(--border-secondary)'; });
 
     header.appendChild(title);
     header.appendChild(resetButton);
@@ -219,7 +219,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     const separator = document.createElement('div');
     separator.style.cssText = `
       height: 1px;
-      background: #444;
+      background: var(--border-primary);
       margin: 12px 0;
     `;
     this.panel.appendChild(separator);
@@ -235,16 +235,16 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
 
     const lutTitle = document.createElement('span');
     lutTitle.textContent = 'LUT';
-    lutTitle.style.cssText = 'font-weight: 600; color: #eee; font-size: 12px;';
+    lutTitle.style.cssText = 'font-weight: 600; color: var(--text-primary); font-size: 12px;';
 
     // LUT load button
     const lutLoadBtn = document.createElement('button');
     lutLoadBtn.textContent = 'Load .cube';
     lutLoadBtn.title = 'Load a .cube LUT file';
     lutLoadBtn.style.cssText = `
-      background: #555;
-      border: 1px solid #666;
-      color: #ccc;
+      background: var(--border-secondary);
+      border: 1px solid var(--text-muted);
+      color: var(--text-primary);
       padding: 3px 8px;
       border-radius: 3px;
       cursor: pointer;
@@ -259,8 +259,8 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     fileInput.addEventListener('change', (e) => this.handleLUTFile(e));
 
     lutLoadBtn.addEventListener('click', () => fileInput.click());
-    lutLoadBtn.addEventListener('mouseenter', () => { lutLoadBtn.style.background = '#666'; });
-    lutLoadBtn.addEventListener('mouseleave', () => { lutLoadBtn.style.background = '#555'; });
+    lutLoadBtn.addEventListener('mouseenter', () => { lutLoadBtn.style.background = 'var(--text-muted)'; });
+    lutLoadBtn.addEventListener('mouseleave', () => { lutLoadBtn.style.background = 'var(--border-secondary)'; });
 
     lutHeader.appendChild(lutTitle);
     lutHeader.appendChild(lutLoadBtn);
@@ -279,7 +279,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     const lutLabel = document.createElement('label');
     lutLabel.textContent = 'Active:';
     lutLabel.style.cssText = `
-      color: #888;
+      color: var(--text-secondary);
       font-size: 11px;
       width: 50px;
     `;
@@ -287,7 +287,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     this.lutNameLabel = document.createElement('span');
     this.lutNameLabel.textContent = 'None';
     this.lutNameLabel.style.cssText = `
-      color: #aaa;
+      color: var(--text-secondary);
       font-size: 11px;
       flex: 1;
       overflow: hidden;
@@ -302,7 +302,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     clearBtn.style.cssText = `
       background: transparent;
       border: none;
-      color: #888;
+      color: var(--text-secondary);
       padding: 2px 6px;
       cursor: pointer;
       font-size: 12px;
@@ -329,7 +329,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     const intensityLabel = document.createElement('label');
     intensityLabel.textContent = 'Intensity';
     intensityLabel.style.cssText = `
-      color: #bbb;
+      color: var(--text-primary);
       font-size: 12px;
       width: 80px;
       flex-shrink: 0;
@@ -345,13 +345,13 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
       flex: 1;
       height: 4px;
       cursor: pointer;
-      accent-color: #4a9eff;
+      accent-color: var(--accent-primary);
     `;
 
     const intensityValue = document.createElement('span');
     intensityValue.textContent = '100%';
     intensityValue.style.cssText = `
-      color: #888;
+      color: var(--text-secondary);
       font-size: 11px;
       width: 50px;
       text-align: right;
@@ -434,7 +434,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     const label = document.createElement('label');
     label.textContent = config.label;
     label.style.cssText = `
-      color: #bbb;
+      color: var(--text-primary);
       font-size: 12px;
       width: 80px;
       flex-shrink: 0;
@@ -452,14 +452,14 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
       flex: 1;
       height: 4px;
       cursor: pointer;
-      accent-color: #4a9eff;
+      accent-color: var(--accent-primary);
     `;
 
     // Value display
     const valueLabel = document.createElement('span');
     valueLabel.textContent = config.format(this.adjustments[config.key]);
     valueLabel.style.cssText = `
-      color: #888;
+      color: var(--text-secondary);
       font-size: 11px;
       width: 50px;
       text-align: right;
@@ -517,7 +517,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     checkbox.checked = this.adjustments.vibranceSkinProtection;
     checkbox.id = 'vibrance-skin-protection';
     checkbox.style.cssText = `
-      accent-color: #4a9eff;
+      accent-color: var(--accent-primary);
       cursor: pointer;
       width: 14px;
       height: 14px;
@@ -529,7 +529,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     label.htmlFor = 'vibrance-skin-protection';
     label.textContent = 'Protect Skin Tones';
     label.style.cssText = `
-      color: #888;
+      color: var(--text-secondary);
       font-size: 11px;
       cursor: pointer;
     `;
@@ -538,7 +538,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     const indicator = document.createElement('span');
     indicator.textContent = '';
     indicator.style.cssText = `
-      color: #66cc66;
+      color: var(--success);
       font-size: 10px;
       margin-left: 4px;
     `;
@@ -593,9 +593,9 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
 
     this.isExpanded = true;
     this.panel.style.display = 'block';
-    this.toggleButton.style.background = 'rgba(74, 158, 255, 0.15)';
-    this.toggleButton.style.borderColor = '#4a9eff';
-    this.toggleButton.style.color = '#4a9eff';
+    this.toggleButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+    this.toggleButton.style.borderColor = 'var(--accent-primary)';
+    this.toggleButton.style.color = 'var(--accent-primary)';
     this.emit('visibilityChanged', true);
   }
 
@@ -606,7 +606,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     this.panel.style.display = 'none';
     this.toggleButton.style.background = 'transparent';
     this.toggleButton.style.borderColor = 'transparent';
-    this.toggleButton.style.color = '#999';
+    this.toggleButton.style.color = 'var(--text-muted)';
     this.emit('visibilityChanged', false);
   }
 

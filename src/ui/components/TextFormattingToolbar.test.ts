@@ -247,7 +247,7 @@ describe('TextFormattingToolbar', () => {
 
       // Now should be active
       expect(boldBtn.classList.contains('active')).toBe(true);
-      expect(boldBtn.style.color).toBe('rgb(74, 158, 255)');
+      expect(boldBtn.style.color).toBe('var(--accent-primary)');
     });
   });
 });

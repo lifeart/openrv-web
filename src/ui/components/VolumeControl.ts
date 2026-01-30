@@ -43,7 +43,7 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
     this.muteButton.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
-      color: #999;
+      color: var(--text-muted);
       padding: 6px;
       border-radius: 4px;
       cursor: pointer;
@@ -57,14 +57,14 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
 
     this.muteButton.addEventListener('click', () => this.toggleMute());
     this.muteButton.addEventListener('mouseenter', () => {
-      this.muteButton.style.background = '#3a3a3a';
-      this.muteButton.style.borderColor = '#4a4a4a';
-      this.muteButton.style.color = '#ccc';
+      this.muteButton.style.background = 'var(--bg-hover)';
+      this.muteButton.style.borderColor = 'var(--border-primary)';
+      this.muteButton.style.color = 'var(--text-primary)';
     });
     this.muteButton.addEventListener('mouseleave', () => {
       this.muteButton.style.background = 'transparent';
       this.muteButton.style.borderColor = 'transparent';
-      this.muteButton.style.color = '#999';
+      this.muteButton.style.color = 'var(--text-muted)';
     });
 
     // Apply A11Y focus handling
@@ -91,7 +91,7 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
       width: 80px;
       height: 4px;
       cursor: pointer;
-      accent-color: #4a9eff;
+      accent-color: var(--accent-primary);
       margin: 0 8px;
     `;
 

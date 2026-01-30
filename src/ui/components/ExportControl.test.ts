@@ -224,7 +224,7 @@ describe('ExportControl', () => {
       button.dispatchEvent(new MouseEvent('mouseenter'));
 
       expect(button.style.background).not.toBe(originalBg);
-      expect(button.style.cssText).toContain('rgb(58, 58, 58)'); // #3a3a3a hover
+      expect(button.style.cssText).toContain('var(--bg-hover)'); // #3a3a3a hover
     });
 
     it('EXPORT-U061: button restores transparent background on mouseleave', () => {

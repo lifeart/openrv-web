@@ -47,7 +47,7 @@ export class WipeControl extends EventEmitter<WipeControlEvents> {
     this.toggleButton.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
-      color: #999;
+      color: var(--text-muted);
       padding: 6px 10px;
       border-radius: 4px;
       cursor: pointer;
@@ -62,16 +62,16 @@ export class WipeControl extends EventEmitter<WipeControlEvents> {
     this.toggleButton.addEventListener('click', () => this.cycleMode());
     this.toggleButton.addEventListener('mouseenter', () => {
       if (this.state.mode === 'off') {
-        this.toggleButton.style.background = '#3a3a3a';
-        this.toggleButton.style.borderColor = '#4a4a4a';
-        this.toggleButton.style.color = '#ccc';
+        this.toggleButton.style.background = 'var(--bg-hover)';
+        this.toggleButton.style.borderColor = 'var(--border-primary)';
+        this.toggleButton.style.color = 'var(--text-primary)';
       }
     });
     this.toggleButton.addEventListener('mouseleave', () => {
       if (this.state.mode === 'off') {
         this.toggleButton.style.background = 'transparent';
         this.toggleButton.style.borderColor = 'transparent';
-        this.toggleButton.style.color = '#999';
+        this.toggleButton.style.color = 'var(--text-muted)';
       }
     });
 
@@ -95,13 +95,13 @@ export class WipeControl extends EventEmitter<WipeControlEvents> {
 
     // Update button style based on active state
     if (this.state.mode !== 'off') {
-      this.toggleButton.style.background = 'rgba(74, 158, 255, 0.15)';
-      this.toggleButton.style.borderColor = '#4a9eff';
-      this.toggleButton.style.color = '#4a9eff';
+      this.toggleButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+      this.toggleButton.style.borderColor = 'var(--accent-primary)';
+      this.toggleButton.style.color = 'var(--accent-primary)';
     } else {
       this.toggleButton.style.background = 'transparent';
       this.toggleButton.style.borderColor = 'transparent';
-      this.toggleButton.style.color = '#999';
+      this.toggleButton.style.color = 'var(--text-muted)';
     }
   }
 

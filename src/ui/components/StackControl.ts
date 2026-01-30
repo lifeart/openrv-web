@@ -58,7 +58,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     this.stackButton.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
-      color: #999;
+      color: var(--text-muted);
       padding: 6px 10px;
       border-radius: 4px;
       cursor: pointer;
@@ -72,16 +72,16 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     this.stackButton.addEventListener('click', () => this.togglePanel());
     this.stackButton.addEventListener('mouseenter', () => {
       if (!this.isPanelOpen) {
-        this.stackButton.style.background = '#3a3a3a';
-        this.stackButton.style.borderColor = '#4a4a4a';
-        this.stackButton.style.color = '#ccc';
+        this.stackButton.style.background = 'var(--bg-hover)';
+        this.stackButton.style.borderColor = 'var(--border-primary)';
+        this.stackButton.style.color = 'var(--text-primary)';
       }
     });
     this.stackButton.addEventListener('mouseleave', () => {
       if (!this.isPanelOpen && this.layers.length <= 1) {
         this.stackButton.style.background = 'transparent';
         this.stackButton.style.borderColor = 'transparent';
-        this.stackButton.style.color = '#999';
+        this.stackButton.style.color = 'var(--text-muted)';
       }
     });
 
@@ -91,8 +91,8 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     this.panel.setAttribute('data-testid', 'stack-panel');
     this.panel.style.cssText = `
       position: fixed;
-      background: #2a2a2a;
-      border: 1px solid #444;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
       border-radius: 6px;
       padding: 12px;
       min-width: 280px;
@@ -125,19 +125,19 @@ export class StackControl extends EventEmitter<StackControlEvents> {
       align-items: center;
       margin-bottom: 12px;
       padding-bottom: 8px;
-      border-bottom: 1px solid #444;
+      border-bottom: 1px solid var(--border-primary);
     `;
 
     const title = document.createElement('span');
     title.textContent = 'Layer Stack';
-    title.style.cssText = 'color: #ddd; font-size: 13px; font-weight: 500;';
+    title.style.cssText = 'color: var(--text-primary); font-size: 13px; font-weight: 500;';
 
     const addBtn = document.createElement('button');
     addBtn.textContent = '+ Add';
     addBtn.title = 'Add current source as new layer';
     addBtn.setAttribute('data-testid', 'stack-add-layer-button');
     addBtn.style.cssText = `
-      background: #4a9eff;
+      background: var(--accent-primary);
       border: none;
       color: white;
       padding: 4px 8px;
@@ -146,8 +146,8 @@ export class StackControl extends EventEmitter<StackControlEvents> {
       font-size: 11px;
     `;
     addBtn.addEventListener('click', () => this.addLayerFromCurrentSource());
-    addBtn.addEventListener('mouseenter', () => { addBtn.style.background = '#5aafff'; });
-    addBtn.addEventListener('mouseleave', () => { addBtn.style.background = '#4a9eff'; });
+    addBtn.addEventListener('mouseenter', () => { addBtn.style.background = 'var(--accent-hover)'; });
+    addBtn.addEventListener('mouseleave', () => { addBtn.style.background = 'var(--accent-primary)'; });
 
     header.appendChild(title);
     header.appendChild(addBtn);
@@ -173,7 +173,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     if (this.layers.length === 0) {
       const emptyMsg = document.createElement('div');
       emptyMsg.style.cssText = `
-        color: #666;
+        color: var(--text-muted);
         font-size: 12px;
         text-align: center;
         padding: 20px;
@@ -208,8 +208,8 @@ export class StackControl extends EventEmitter<StackControlEvents> {
       flex-direction: column;
       gap: 6px;
       padding: 8px;
-      background: ${isActive ? '#3a3a3a' : '#333'};
-      border: 1px solid ${isActive ? '#4a9eff' : '#444'};
+      background: ${isActive ? 'var(--bg-hover)' : 'var(--bg-tertiary)'};
+      border: 1px solid ${isActive ? 'var(--accent-primary)' : 'var(--border-primary)'};
       border-radius: 4px;
       margin-bottom: 6px;
     `;
@@ -228,7 +228,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
       border: none;
       cursor: pointer;
       padding: 2px;
-      color: ${layer.visible ? '#999' : '#555'};
+      color: ${layer.visible ? 'var(--text-muted)' : 'var(--border-secondary)'};
       display: flex;
       align-items: center;
     `;
@@ -245,7 +245,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     nameEl.setAttribute('data-testid', `stack-layer-name-${layer.id}`);
     nameEl.style.cssText = `
       flex: 1;
-      color: #ddd;
+      color: var(--text-primary);
       font-size: 12px;
       cursor: pointer;
       overflow: hidden;
@@ -267,7 +267,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     moveUp.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
-      color: #999;
+      color: var(--text-muted);
       padding: 2px;
       border-radius: 2px;
       cursor: pointer;
@@ -290,7 +290,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     moveDown.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
-      color: #999;
+      color: var(--text-muted);
       padding: 2px;
       border-radius: 2px;
       cursor: pointer;
@@ -314,7 +314,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     deleteBtn.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
-      color: #ff8888;
+      color: var(--error);
       padding: 2px;
       border-radius: 2px;
       cursor: pointer;
@@ -339,7 +339,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
       sourceRow.style.cssText = 'display: flex; align-items: center; gap: 8px;';
 
       const sourceLabel = document.createElement('span');
-      sourceLabel.style.cssText = 'color: #888; font-size: 10px;';
+      sourceLabel.style.cssText = 'color: var(--text-secondary); font-size: 10px;';
       sourceLabel.textContent = 'Source:';
 
       // Check if current source is valid (exists in available sources)
@@ -348,9 +348,9 @@ export class StackControl extends EventEmitter<StackControlEvents> {
       const sourceSelect = document.createElement('select');
       sourceSelect.setAttribute('data-testid', `stack-layer-source-${layer.id}`);
       sourceSelect.style.cssText = `
-        background: ${isSourceValid ? '#444' : '#553333'};
-        border: 1px solid ${isSourceValid ? '#555' : '#aa5555'};
-        color: ${isSourceValid ? '#ddd' : '#ffaaaa'};
+        background: ${isSourceValid ? 'var(--border-primary)' : 'rgba(var(--error-rgb, 255, 100, 100), 0.2)'};
+        border: 1px solid ${isSourceValid ? 'var(--border-secondary)' : 'var(--error)'};
+        color: ${isSourceValid ? 'var(--text-primary)' : 'var(--error)'};
         padding: 3px 6px;
         border-radius: 3px;
         font-size: 11px;
@@ -392,9 +392,9 @@ export class StackControl extends EventEmitter<StackControlEvents> {
         // Update visual state to remove warning styling if source is now valid
         const nowValid = this.availableSources.some(s => s.index === newSourceIndex);
         if (nowValid) {
-          sourceSelect.style.background = '#444';
-          sourceSelect.style.border = '1px solid #555';
-          sourceSelect.style.color = '#ddd';
+          sourceSelect.style.background = 'var(--border-primary)';
+          sourceSelect.style.border = '1px solid var(--border-secondary)';
+          sourceSelect.style.color = 'var(--text-primary)';
           sourceSelect.title = '';
           // Remove the "(Missing)" option if it exists
           const missingOption = sourceSelect.querySelector('option[disabled]');
@@ -417,9 +417,9 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     const blendSelect = document.createElement('select');
     blendSelect.setAttribute('data-testid', `stack-layer-blend-${layer.id}`);
     blendSelect.style.cssText = `
-      background: #444;
-      border: 1px solid #555;
-      color: #ddd;
+      background: var(--border-primary);
+      border: 1px solid var(--border-secondary);
+      color: var(--text-primary);
       padding: 3px 6px;
       border-radius: 3px;
       font-size: 11px;
@@ -439,7 +439,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
 
     // Opacity slider
     const opacityLabel = document.createElement('span');
-    opacityLabel.style.cssText = 'color: #888; font-size: 10px;';
+    opacityLabel.style.cssText = 'color: var(--text-secondary); font-size: 10px;';
     opacityLabel.textContent = 'Opacity:';
 
     const opacitySlider = document.createElement('input');
@@ -460,7 +460,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     });
 
     const opacityValue = document.createElement('span');
-    opacityValue.style.cssText = 'color: #888; font-size: 10px; min-width: 32px;';
+    opacityValue.style.cssText = 'color: var(--text-secondary); font-size: 10px; min-width: 32px;';
     opacityValue.textContent = `${Math.round(layer.opacity * 100)}%`;
 
     bottomRow.appendChild(blendSelect);
@@ -595,13 +595,13 @@ export class StackControl extends EventEmitter<StackControlEvents> {
   private updateButtonState(): void {
     const hasMultipleLayers = this.layers.length > 1;
     if (hasMultipleLayers || this.isPanelOpen) {
-      this.stackButton.style.background = 'rgba(74, 158, 255, 0.15)';
-      this.stackButton.style.borderColor = '#4a9eff';
-      this.stackButton.style.color = '#4a9eff';
+      this.stackButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+      this.stackButton.style.borderColor = 'var(--accent-primary)';
+      this.stackButton.style.color = 'var(--accent-primary)';
     } else {
       this.stackButton.style.background = 'transparent';
       this.stackButton.style.borderColor = 'transparent';
-      this.stackButton.style.color = '#999';
+      this.stackButton.style.color = 'var(--text-muted)';
     }
   }
 

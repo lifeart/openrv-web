@@ -228,6 +228,40 @@ describe('ThemeControl', () => {
         control.dispose();
       }).not.toThrow();
     });
+
+    it('THEME-U073: dispose unsubscribes from modeChanged event', () => {
+      control.dispose();
+
+      expect(mockThemeManager.off).toHaveBeenCalledWith('modeChanged', expect.any(Function));
+    });
+
+    it('THEME-U074: dispose unsubscribes from themeChanged event', () => {
+      control.dispose();
+
+      expect(mockThemeManager.off).toHaveBeenCalledWith('themeChanged', expect.any(Function));
+    });
+
+    it('THEME-U075: dispose calls off with the same handler that was passed to on', () => {
+      // Get the handlers that were passed to 'on'
+      const onModeChangedCall = mockThemeManager.on.mock.calls.find(
+        (call: [string, Function]) => call[0] === 'modeChanged'
+      );
+      const onThemeChangedCall = mockThemeManager.on.mock.calls.find(
+        (call: [string, Function]) => call[0] === 'themeChanged'
+      );
+
+      expect(onModeChangedCall).toBeDefined();
+      expect(onThemeChangedCall).toBeDefined();
+
+      const modeChangedHandler = onModeChangedCall![1];
+      const themeChangedHandler = onThemeChangedCall![1];
+
+      control.dispose();
+
+      // Verify off was called with the same handlers
+      expect(mockThemeManager.off).toHaveBeenCalledWith('modeChanged', modeChangedHandler);
+      expect(mockThemeManager.off).toHaveBeenCalledWith('themeChanged', themeChangedHandler);
+    });
   });
 });
 

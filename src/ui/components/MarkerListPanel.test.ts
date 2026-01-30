@@ -171,7 +171,7 @@ describe('MarkerListPanel', () => {
       panel.show();
 
       const entry50 = panel.getElement().querySelector('[data-testid="marker-entry-50"]') as HTMLElement;
-      expect(entry50?.style.cssText).toContain('rgba(100, 150, 255');
+      expect(entry50?.style.cssText).toContain('rgba(var(--accent-primary-rgb)');
     });
   });
 

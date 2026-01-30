@@ -50,7 +50,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     this.exportButton.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
-      color: #999;
+      color: var(--text-muted);
       padding: 6px 10px;
       border-radius: 4px;
       cursor: pointer;
@@ -65,16 +65,16 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     this.exportButton.addEventListener('click', () => this.toggleDropdown());
     this.exportButton.addEventListener('mouseenter', () => {
       if (!this.isDropdownOpen) {
-        this.exportButton.style.background = '#3a3a3a';
-        this.exportButton.style.borderColor = '#4a4a4a';
-        this.exportButton.style.color = '#ccc';
+        this.exportButton.style.background = 'var(--bg-hover)';
+        this.exportButton.style.borderColor = 'var(--border-primary)';
+        this.exportButton.style.color = 'var(--text-primary)';
       }
     });
     this.exportButton.addEventListener('mouseleave', () => {
       if (!this.isDropdownOpen) {
         this.exportButton.style.background = 'transparent';
         this.exportButton.style.borderColor = 'transparent';
-        this.exportButton.style.color = '#999';
+        this.exportButton.style.color = 'var(--text-muted)';
       }
     });
 
@@ -86,8 +86,8 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     this.dropdown.className = 'export-dropdown';
     this.dropdown.style.cssText = `
       position: fixed;
-      background: #252525;
-      border: 1px solid #3a3a3a;
+      background: var(--bg-secondary);
+      border: 1px solid var(--bg-hover);
       border-radius: 4px;
       padding: 4px 0;
       min-width: 200px;
@@ -140,7 +140,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     const header = document.createElement('div');
     header.style.cssText = `
       padding: 6px 12px 4px;
-      color: #666;
+      color: var(--text-muted);
       font-size: 10px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
@@ -163,16 +163,16 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
       cursor: pointer;
       transition: background 0.1s ease;
       gap: 8px;
-      color: #999;
+      color: var(--text-muted);
     `;
 
     row.addEventListener('mouseenter', () => {
-      row.style.background = '#3a3a3a';
-      row.style.color = '#ccc';
+      row.style.background = 'var(--bg-hover)';
+      row.style.color = 'var(--text-primary)';
     });
     row.addEventListener('mouseleave', () => {
       row.style.background = 'transparent';
-      row.style.color = '#999';
+      row.style.color = 'var(--text-muted)';
     });
 
     const iconEl = document.createElement('span');
@@ -189,7 +189,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     if (shortcut) {
       const shortcutEl = document.createElement('span');
       shortcutEl.textContent = shortcut;
-      shortcutEl.style.cssText = 'color: #555; font-size: 10px;';
+      shortcutEl.style.cssText = 'color: var(--border-secondary); font-size: 10px;';
       row.appendChild(shortcutEl);
     }
 
@@ -205,7 +205,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     const separator = document.createElement('div');
     separator.style.cssText = `
       height: 1px;
-      background: #3a3a3a;
+      background: var(--bg-hover);
       margin: 4px 0;
     `;
     this.dropdown.appendChild(separator);
@@ -227,14 +227,14 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     checkbox.style.cssText = `
       width: 14px;
       height: 14px;
-      accent-color: #4a9eff;
+      accent-color: var(--accent-primary);
       cursor: pointer;
     `;
 
     const label = document.createElement('label');
     label.htmlFor = 'export-annotations';
     label.textContent = 'Include annotations';
-    label.style.cssText = 'color: #888; font-size: 11px; cursor: pointer;';
+    label.style.cssText = 'color: var(--text-secondary); font-size: 11px; cursor: pointer;';
 
     row.appendChild(checkbox);
     row.appendChild(label);
@@ -262,9 +262,9 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
 
     this.isDropdownOpen = true;
     this.dropdown.style.display = 'block';
-    this.exportButton.style.background = 'rgba(74, 158, 255, 0.15)';
-    this.exportButton.style.borderColor = '#4a9eff';
-    this.exportButton.style.color = '#4a9eff';
+    this.exportButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+    this.exportButton.style.borderColor = 'var(--accent-primary)';
+    this.exportButton.style.color = 'var(--accent-primary)';
   }
 
   private closeDropdown(): void {
@@ -272,7 +272,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     this.dropdown.style.display = 'none';
     this.exportButton.style.background = 'transparent';
     this.exportButton.style.borderColor = 'transparent';
-    this.exportButton.style.color = '#999';
+    this.exportButton.style.color = 'var(--text-muted)';
   }
 
   private getIncludeAnnotations(): boolean {

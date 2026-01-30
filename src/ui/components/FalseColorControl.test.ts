@@ -90,7 +90,7 @@ describe('FalseColorControl', () => {
     it('FALSE-U021: button has gray color when disabled', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="false-color-control-button"]') as HTMLButtonElement;
-      expect(button.style.cssText).toContain('rgb(153, 153, 153)'); // #999
+      expect(button.style.cssText).toContain('var(--text-muted)'); // #999
     });
 
     it('FALSE-U022: button has blue styling when enabled', () => {
@@ -98,14 +98,14 @@ describe('FalseColorControl', () => {
       falseColor.enable();
       const el = control.render();
       const button = el.querySelector('[data-testid="false-color-control-button"]') as HTMLButtonElement;
-      expect(button.style.cssText).toContain('rgb(74, 158, 255)'); // #4a9eff
+      expect(button.style.cssText).toContain('var(--accent-primary)'); // #4a9eff
     });
 
     it('FALSE-U023: button hover changes background when disabled', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="false-color-control-button"]') as HTMLButtonElement;
       button.dispatchEvent(new MouseEvent('mouseenter'));
-      expect(button.style.cssText).toContain('rgb(58, 58, 58)');
+      expect(button.style.cssText).toContain('var(--bg-hover)');
     });
 
     it('FALSE-U024: button mouseleave restores background when disabled', () => {
@@ -217,7 +217,7 @@ describe('FalseColorControl', () => {
       const standardBtn = dropdown.querySelector('button[data-preset="standard"]') as HTMLButtonElement;
 
       // Standard is default preset
-      expect(standardBtn.style.cssText).toContain('rgb(74, 158, 255)'); // #4a9eff
+      expect(standardBtn.style.cssText).toContain('var(--accent-primary)'); // #4a9eff
     });
 
     it('FALSE-U046: inactive preset button has gray styling', () => {
@@ -225,7 +225,7 @@ describe('FalseColorControl', () => {
       const dropdown = el.querySelector('[data-testid="false-color-dropdown"]') as HTMLElement;
       const arriBtn = dropdown.querySelector('button[data-preset="arri"]') as HTMLButtonElement;
 
-      expect(arriBtn.style.cssText).toContain('rgb(51, 51, 51)'); // #333
+      expect(arriBtn.style.cssText).toContain('var(--bg-secondary)'); // #333
     });
 
     it('FALSE-U047: preset button hover changes background', () => {
@@ -235,7 +235,7 @@ describe('FalseColorControl', () => {
 
       arriBtn.dispatchEvent(new MouseEvent('mouseenter'));
 
-      expect(arriBtn.style.cssText).toContain('rgb(68, 68, 68)'); // #444
+      expect(arriBtn.style.cssText).toContain('var(--border-primary)'); // #444
     });
   });
 
@@ -288,13 +288,13 @@ describe('FalseColorControl', () => {
       const button = el.querySelector('[data-testid="false-color-control-button"]') as HTMLButtonElement;
 
       // Initially disabled
-      expect(button.style.color).toBe('rgb(153, 153, 153)');
+      expect(button.style.color).toBe('var(--text-muted)');
 
       // Enable false color externally
       falseColor.enable();
 
       // Button should update to blue
-      expect(button.style.cssText).toContain('rgb(74, 158, 255)');
+      expect(button.style.cssText).toContain('var(--accent-primary)');
     });
 
     it('FALSE-U061: preset buttons update when preset changes externally', () => {
@@ -304,13 +304,13 @@ describe('FalseColorControl', () => {
       const standardBtn = dropdown.querySelector('button[data-preset="standard"]') as HTMLButtonElement;
 
       // Initially standard is active
-      expect(standardBtn.style.cssText).toContain('rgb(74, 158, 255)');
+      expect(standardBtn.style.cssText).toContain('var(--accent-primary)');
 
       // Change preset externally
       falseColor.setPreset('arri');
 
       // ARRI should now be active
-      expect(arriBtn.style.cssText).toContain('rgb(74, 158, 255)');
+      expect(arriBtn.style.cssText).toContain('var(--accent-primary)');
     });
   });
 

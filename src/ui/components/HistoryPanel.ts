@@ -43,7 +43,7 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
       flex-direction: column;
       font-family: system-ui, -apple-system, sans-serif;
       font-size: 12px;
-      color: #e0e0e0;
+      color: var(--text-primary);
       z-index: 1000;
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
       overflow: hidden;
@@ -75,7 +75,7 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
     clearBtn.style.cssText = `
       background: rgba(255, 100, 100, 0.2);
       border: 1px solid rgba(255, 100, 100, 0.3);
-      color: #ff9999;
+      color: var(--error);
       padding: 4px 8px;
       border-radius: 4px;
       font-size: 11px;
@@ -89,7 +89,7 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
     closeBtn.style.cssText = `
       background: none;
       border: none;
-      color: #999;
+      color: var(--text-muted);
       font-size: 18px;
       cursor: pointer;
       padding: 0 4px;
@@ -185,7 +185,7 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
       const emptyMsg = document.createElement('div');
       emptyMsg.textContent = 'No history yet';
       emptyMsg.style.cssText = `
-        color: #666;
+        color: var(--text-muted);
         text-align: center;
         padding: 20px;
         font-style: italic;
@@ -244,7 +244,7 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
     // Category icon (SVG)
     const icon = document.createElement('span');
     icon.innerHTML = HistoryManager.getCategoryIcon(entry.category);
-    icon.style.cssText = 'width: 20px; display: flex; align-items: center; justify-content: center; color: #999;';
+    icon.style.cssText = 'width: 20px; display: flex; align-items: center; justify-content: center; color: var(--text-muted);';
 
     // Description
     const desc = document.createElement('span');
@@ -260,14 +260,14 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
     if (isCurrent) {
       const indicator = document.createElement('span');
       indicator.textContent = '●';
-      indicator.style.cssText = 'color: #6af; font-size: 8px;';
+      indicator.style.cssText = 'color: var(--accent-primary); font-size: 8px;';
       el.appendChild(indicator);
     }
 
     // Time
     const time = document.createElement('span');
     time.textContent = HistoryManager.formatTimeSince(entry.timestamp);
-    time.style.cssText = 'color: #666; font-size: 10px; min-width: 50px; text-align: right;';
+    time.style.cssText = 'color: var(--text-muted); font-size: 10px; min-width: 50px; text-align: right;';
 
     el.appendChild(icon);
     el.appendChild(desc);

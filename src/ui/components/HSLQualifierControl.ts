@@ -50,7 +50,7 @@ export class HSLQualifierControl {
       border: 1px solid transparent;
       border-radius: 4px;
       background: transparent;
-      color: #999;
+      color: var(--text-muted);
       font-size: 11px;
       cursor: pointer;
       transition: all 0.15s ease;
@@ -64,14 +64,14 @@ export class HSLQualifierControl {
     this.toggleButton.addEventListener('mouseenter', () => {
       if (!this.hslQualifier.isEnabled()) {
         this.toggleButton.style.background = 'rgba(255, 255, 255, 0.05)';
-        this.toggleButton.style.color = '#ccc';
+        this.toggleButton.style.color = 'var(--text-primary)';
       }
     });
 
     this.toggleButton.addEventListener('mouseleave', () => {
       if (!this.hslQualifier.isEnabled()) {
         this.toggleButton.style.background = 'transparent';
-        this.toggleButton.style.color = '#999';
+        this.toggleButton.style.color = 'var(--text-muted)';
       }
     });
 
@@ -84,7 +84,7 @@ export class HSLQualifierControl {
     this.dropdown.style.cssText = `
       position: fixed;
       background: rgba(30, 30, 30, 0.98);
-      border: 1px solid #444;
+      border: 1px solid var(--border-primary);
       border-radius: 6px;
       padding: 10px;
       min-width: 300px;
@@ -138,7 +138,7 @@ export class HSLQualifierControl {
       justify-content: space-between;
       padding: 6px 0;
       margin-bottom: 10px;
-      border-bottom: 1px solid #444;
+      border-bottom: 1px solid var(--border-primary);
     `;
 
     // Title and enable toggle
@@ -160,7 +160,7 @@ export class HSLQualifierControl {
 
     const title = document.createElement('span');
     title.textContent = 'HSL Qualifier';
-    title.style.cssText = 'color: #ccc; font-size: 12px; font-weight: 500;';
+    title.style.cssText = 'color: var(--text-primary); font-size: 12px; font-weight: 500;';
 
     leftSide.appendChild(enableCheckbox);
     leftSide.appendChild(title);
@@ -171,15 +171,15 @@ export class HSLQualifierControl {
     resetBtn.dataset.testid = 'hsl-reset-button';
     resetBtn.style.cssText = `
       padding: 3px 8px;
-      border: 1px solid #555;
+      border: 1px solid var(--border-secondary);
       border-radius: 3px;
-      background: #333;
-      color: #aaa;
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
       font-size: 10px;
       cursor: pointer;
     `;
     resetBtn.addEventListener('click', () => this.hslQualifier.reset());
-    resetBtn.addEventListener('mouseenter', () => { resetBtn.style.background = '#444'; });
+    resetBtn.addEventListener('mouseenter', () => { resetBtn.style.background = 'var(--border-primary)'; });
     resetBtn.addEventListener('mouseleave', () => { resetBtn.style.background = '#333'; });
 
     header.appendChild(leftSide);
@@ -193,12 +193,12 @@ export class HSLQualifierControl {
     section.style.cssText = `
       margin-bottom: 12px;
       padding-bottom: 12px;
-      border-bottom: 1px solid #444;
+      border-bottom: 1px solid var(--border-primary);
     `;
 
     const sectionTitle = document.createElement('div');
     sectionTitle.style.cssText = `
-      color: #888;
+      color: var(--text-secondary);
       font-size: 10px;
       text-transform: uppercase;
       margin-bottom: 10px;
@@ -218,10 +218,10 @@ export class HSLQualifierControl {
     eyedropperBtn.dataset.testid = 'hsl-eyedropper-button';
     eyedropperBtn.style.cssText = `
       padding: 3px 6px;
-      border: 1px solid #555;
+      border: 1px solid var(--border-secondary);
       border-radius: 3px;
-      background: #333;
-      color: #aaa;
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
       font-size: 10px;
       cursor: pointer;
       display: flex;
@@ -229,8 +229,8 @@ export class HSLQualifierControl {
     `;
     eyedropperBtn.addEventListener('click', () => {
       this.eyedropperActive = !this.eyedropperActive;
-      eyedropperBtn.style.background = this.eyedropperActive ? '#4a9eff' : '#333';
-      eyedropperBtn.style.color = this.eyedropperActive ? '#fff' : '#aaa';
+      eyedropperBtn.style.background = this.eyedropperActive ? 'var(--accent-primary)' : '#333';
+      eyedropperBtn.style.color = this.eyedropperActive ? 'var(--text-on-accent)' : 'var(--text-secondary)';
       if (this.onEyedropperCallback) {
         this.onEyedropperCallback(this.eyedropperActive);
       }
@@ -268,7 +268,7 @@ export class HSLQualifierControl {
 
     const labelEl = document.createElement('span');
     labelEl.textContent = label;
-    labelEl.style.cssText = 'color: #aaa; font-size: 11px;';
+    labelEl.style.cssText = 'color: var(--text-secondary); font-size: 11px;';
 
     const state = this.hslQualifier.getState();
     const range = state[key];
@@ -276,7 +276,7 @@ export class HSLQualifierControl {
     const valueEl = document.createElement('span');
     valueEl.className = `${key}-value`;
     valueEl.textContent = `${range.center}${isHue ? '°' : '%'}`;
-    valueEl.style.cssText = 'color: #888; font-size: 10px; font-family: monospace;';
+    valueEl.style.cssText = 'color: var(--text-secondary); font-size: 10px; font-family: monospace;';
 
     labelRow.appendChild(labelEl);
     labelRow.appendChild(valueEl);
@@ -358,7 +358,7 @@ export class HSLQualifierControl {
     widthGroup.style.cssText = 'flex: 1;';
 
     const widthLabel = document.createElement('div');
-    widthLabel.style.cssText = 'color: #666; margin-bottom: 2px;';
+    widthLabel.style.cssText = 'color: var(--text-muted); margin-bottom: 2px;';
     widthLabel.textContent = 'Width';
 
     const widthSlider = document.createElement('input');
@@ -389,7 +389,7 @@ export class HSLQualifierControl {
     softGroup.style.cssText = 'flex: 1;';
 
     const softLabel = document.createElement('div');
-    softLabel.style.cssText = 'color: #666; margin-bottom: 2px;';
+    softLabel.style.cssText = 'color: var(--text-muted); margin-bottom: 2px;';
     softLabel.textContent = 'Softness';
 
     const softSlider = document.createElement('input');
@@ -427,13 +427,13 @@ export class HSLQualifierControl {
     section.style.cssText = `
       margin-bottom: 12px;
       padding-bottom: 12px;
-      border-bottom: 1px solid #444;
+      border-bottom: 1px solid var(--border-primary);
     `;
 
     const sectionTitle = document.createElement('div');
     sectionTitle.textContent = 'Correction';
     sectionTitle.style.cssText = `
-      color: #888;
+      color: var(--text-secondary);
       font-size: 10px;
       text-transform: uppercase;
       margin-bottom: 10px;
@@ -473,7 +473,7 @@ export class HSLQualifierControl {
 
     const labelEl = document.createElement('span');
     labelEl.textContent = label;
-    labelEl.style.cssText = 'color: #aaa; font-size: 11px; width: 70px; flex-shrink: 0;';
+    labelEl.style.cssText = 'color: var(--text-secondary); font-size: 11px; width: 70px; flex-shrink: 0;';
 
     const state = this.hslQualifier.getState();
     const value = state.correction[key];
@@ -491,7 +491,7 @@ export class HSLQualifierControl {
     const valueEl = document.createElement('span');
     valueEl.className = `correction-${key}-value`;
     valueEl.textContent = format(value);
-    valueEl.style.cssText = 'color: #888; font-size: 10px; font-family: monospace; width: 45px; text-align: right;';
+    valueEl.style.cssText = 'color: var(--text-secondary); font-size: 10px; font-family: monospace; width: 45px; text-align: right;';
 
     slider.addEventListener('input', () => {
       const val = parseFloat(slider.value);
@@ -538,7 +538,7 @@ export class HSLQualifierControl {
 
     const invertLabel = document.createElement('span');
     invertLabel.textContent = 'Invert';
-    invertLabel.style.cssText = 'color: #aaa; font-size: 11px;';
+    invertLabel.style.cssText = 'color: var(--text-secondary); font-size: 11px;';
 
     invertGroup.appendChild(invertCheckbox);
     invertGroup.appendChild(invertLabel);
@@ -568,7 +568,7 @@ export class HSLQualifierControl {
 
     const matteLabel = document.createElement('span');
     matteLabel.textContent = 'Matte Preview';
-    matteLabel.style.cssText = 'color: #aaa; font-size: 11px;';
+    matteLabel.style.cssText = 'color: var(--text-secondary); font-size: 11px;';
 
     matteGroup.appendChild(matteCheckbox);
     matteGroup.appendChild(matteLabel);
@@ -582,13 +582,13 @@ export class HSLQualifierControl {
   private updateButtonState(): void {
     const enabled = this.hslQualifier.isEnabled();
     if (enabled) {
-      this.toggleButton.style.background = 'rgba(74, 158, 255, 0.15)';
-      this.toggleButton.style.borderColor = '#4a9eff';
-      this.toggleButton.style.color = '#4a9eff';
+      this.toggleButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+      this.toggleButton.style.borderColor = 'var(--accent-primary)';
+      this.toggleButton.style.color = 'var(--accent-primary)';
     } else {
       this.toggleButton.style.background = 'transparent';
       this.toggleButton.style.borderColor = 'transparent';
-      this.toggleButton.style.color = '#999';
+      this.toggleButton.style.color = 'var(--text-muted)';
     }
   }
 
@@ -710,7 +710,7 @@ export class HSLQualifierControl {
     const eyedropperBtn = this.dropdown.querySelector('[data-testid="hsl-eyedropper-button"]') as HTMLButtonElement;
     if (eyedropperBtn) {
       eyedropperBtn.style.background = '#333';
-      eyedropperBtn.style.color = '#aaa';
+      eyedropperBtn.style.color = 'var(--text-secondary)';
     }
   }
 

@@ -45,7 +45,7 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
     this.filterButton.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
-      color: #999;
+      color: var(--text-muted);
       padding: 6px 10px;
       border-radius: 4px;
       cursor: pointer;
@@ -59,9 +59,9 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
     this.filterButton.addEventListener('click', () => this.toggle());
     this.filterButton.addEventListener('mouseenter', () => {
       if (!this.isPanelOpen) {
-        this.filterButton.style.background = '#3a3a3a';
-        this.filterButton.style.borderColor = '#4a4a4a';
-        this.filterButton.style.color = '#ccc';
+        this.filterButton.style.background = 'var(--bg-hover)';
+        this.filterButton.style.borderColor = 'var(--border-primary)';
+        this.filterButton.style.color = 'var(--text-primary)';
       }
     });
     this.filterButton.addEventListener('mouseleave', () => {
@@ -70,7 +70,7 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
         if (!hasFilters) {
           this.filterButton.style.background = 'transparent';
           this.filterButton.style.borderColor = 'transparent';
-          this.filterButton.style.color = '#999';
+          this.filterButton.style.color = 'var(--text-muted)';
         }
       }
     });
@@ -80,8 +80,8 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
     this.panel.className = 'filter-panel';
     this.panel.style.cssText = `
       position: fixed;
-      background: #2a2a2a;
-      border: 1px solid #444;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
       border-radius: 6px;
       padding: 12px;
       min-width: 220px;
@@ -112,19 +112,19 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
       align-items: center;
       margin-bottom: 12px;
       padding-bottom: 8px;
-      border-bottom: 1px solid #444;
+      border-bottom: 1px solid var(--border-primary);
     `;
 
     const title = document.createElement('span');
     title.textContent = 'Filter Effects';
-    title.style.cssText = 'color: #ddd; font-size: 13px; font-weight: 500;';
+    title.style.cssText = 'color: var(--text-primary); font-size: 13px; font-weight: 500;';
 
     const resetBtn = document.createElement('button');
     resetBtn.textContent = 'Reset';
     resetBtn.style.cssText = `
-      background: #555;
+      background: var(--border-secondary);
       border: none;
-      color: #aaa;
+      color: var(--text-secondary);
       padding: 4px 8px;
       border-radius: 3px;
       cursor: pointer;
@@ -132,10 +132,10 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
     `;
     resetBtn.addEventListener('click', () => this.reset());
     resetBtn.addEventListener('mouseenter', () => {
-      resetBtn.style.background = '#666';
+      resetBtn.style.background = 'var(--text-muted)';
     });
     resetBtn.addEventListener('mouseleave', () => {
-      resetBtn.style.background = '#555';
+      resetBtn.style.background = 'var(--border-secondary)';
     });
 
     header.appendChild(title);
@@ -175,11 +175,11 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
 
     const labelEl = document.createElement('span');
     labelEl.textContent = label;
-    labelEl.style.cssText = 'color: #aaa; font-size: 12px;';
+    labelEl.style.cssText = 'color: var(--text-secondary); font-size: 12px;';
 
     const valueEl = document.createElement('span');
     valueEl.textContent = String(initialValue);
-    valueEl.style.cssText = 'color: #888; font-size: 11px;';
+    valueEl.style.cssText = 'color: var(--text-secondary); font-size: 11px;';
 
     labelRow.appendChild(labelEl);
     labelRow.appendChild(valueEl);
@@ -194,7 +194,7 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
       width: 100%;
       height: 4px;
       -webkit-appearance: none;
-      background: #444;
+      background: var(--border-primary);
       border-radius: 2px;
       outline: none;
       cursor: pointer;
@@ -210,14 +210,14 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
           -webkit-appearance: none;
           width: 12px;
           height: 12px;
-          background: #4a9eff;
+          background: var(--accent-primary);
           border-radius: 50%;
           cursor: pointer;
         }
         .filter-panel input[type="range"]::-moz-range-thumb {
           width: 12px;
           height: 12px;
-          background: #4a9eff;
+          background: var(--accent-primary);
           border-radius: 50%;
           cursor: pointer;
           border: none;
@@ -254,13 +254,13 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
   private updateButtonState(): void {
     const hasFilters = this.settings.blur > 0 || this.settings.sharpen > 0;
     if (hasFilters || this.isPanelOpen) {
-      this.filterButton.style.background = 'rgba(74, 158, 255, 0.15)';
-      this.filterButton.style.borderColor = '#4a9eff';
-      this.filterButton.style.color = '#4a9eff';
+      this.filterButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+      this.filterButton.style.borderColor = 'var(--accent-primary)';
+      this.filterButton.style.color = 'var(--accent-primary)';
     } else {
       this.filterButton.style.background = 'transparent';
       this.filterButton.style.borderColor = 'transparent';
-      this.filterButton.style.color = '#999';
+      this.filterButton.style.color = 'var(--text-muted)';
     }
   }
 

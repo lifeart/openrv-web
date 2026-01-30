@@ -235,6 +235,7 @@ describe('ThemeManager', () => {
       expect(colors).toHaveProperty('success');
       expect(colors).toHaveProperty('warning');
       expect(colors).toHaveProperty('error');
+      expect(colors).toHaveProperty('info');
 
       // Overlay colors
       expect(colors).toHaveProperty('overlayBg');
@@ -369,6 +370,32 @@ describe('ThemeManager color contrast', () => {
     // Accent colors should be similar blue tones
     expect(dark.accentPrimary).toMatch(/#[0-9a-f]{6}/i);
     expect(light.accentPrimary).toMatch(/#[0-9a-f]{6}/i);
+  });
+
+  it('THEME-M093: info color is defined in dark theme', () => {
+    const colors = ThemeManager.getColorsForTheme('dark');
+    expect(colors.info).toBe('#60a5fa');
+  });
+
+  it('THEME-M094: info color is defined in light theme', () => {
+    const colors = ThemeManager.getColorsForTheme('light');
+    expect(colors.info).toBe('#3b82f6');
+  });
+
+  it('THEME-M095: all semantic colors are defined in both themes', () => {
+    const dark = ThemeManager.getColorsForTheme('dark');
+    const light = ThemeManager.getColorsForTheme('light');
+
+    // Check all semantic colors exist
+    expect(dark.success).toBeDefined();
+    expect(dark.warning).toBeDefined();
+    expect(dark.error).toBeDefined();
+    expect(dark.info).toBeDefined();
+
+    expect(light.success).toBeDefined();
+    expect(light.warning).toBeDefined();
+    expect(light.error).toBeDefined();
+    expect(light.info).toBeDefined();
   });
 });
 

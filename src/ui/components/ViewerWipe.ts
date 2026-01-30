@@ -26,11 +26,11 @@ export function createWipeUIElements(container: HTMLElement): WipeUIElements {
   wipeLine.className = 'wipe-line';
   wipeLine.style.cssText = `
     position: absolute;
-    background: #4a9eff;
+    background: var(--accent-primary);
     cursor: ew-resize;
     z-index: 50;
     display: none;
-    box-shadow: 0 0 4px rgba(74, 158, 255, 0.5);
+    box-shadow: 0 0 4px rgba(var(--accent-primary-rgb), 0.5);
   `;
   container.appendChild(wipeLine);
 
@@ -59,7 +59,7 @@ export function createWipeUIElements(container: HTMLElement): WipeUIElements {
   wipeLabelB.textContent = DEFAULT_WIPE_LABEL_B;
   wipeLabelB.style.cssText = `
     position: absolute;
-    background: rgba(74, 158, 255, 0.7);
+    background: rgba(var(--accent-primary-rgb), 0.7);
     color: #fff;
     padding: 4px 8px;
     border-radius: 4px;

@@ -82,8 +82,8 @@ export function createDraggableContainer(options: DraggableContainerOptions): Dr
   container.dataset.testid = testId || `${id}-container`;
   container.style.cssText = `
     position: absolute;
-    background: rgba(0, 0, 0, 0.8);
-    border: 1px solid #333;
+    background: var(--overlay-bg);
+    border: 1px solid var(--border-secondary);
     border-radius: 4px;
     padding: 8px;
     display: none;
@@ -119,7 +119,7 @@ export function createDraggableContainer(options: DraggableContainerOptions): Dr
   titleEl.className = `${id}-title`;
   titleEl.textContent = title;
   titleEl.style.cssText = `
-    color: #888;
+    color: var(--text-muted);
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 1px;
@@ -323,20 +323,20 @@ export function createControlButton(text: string, title: string): HTMLButtonElem
   button.textContent = text;
   button.title = title;
   button.style.cssText = `
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--overlay-border);
     border: none;
     border-radius: 2px;
-    color: #aaa;
+    color: var(--text-secondary);
     padding: 2px 6px;
     font-size: 9px;
     cursor: pointer;
     transition: background 0.1s;
   `;
   button.addEventListener('mouseenter', () => {
-    button.style.background = 'rgba(255, 255, 255, 0.2)';
+    button.style.background = 'var(--bg-hover)';
   });
   button.addEventListener('mouseleave', () => {
-    button.style.background = 'rgba(255, 255, 255, 0.1)';
+    button.style.background = 'var(--overlay-border)';
   });
   return button;
 }

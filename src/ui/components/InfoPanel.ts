@@ -79,7 +79,7 @@ export class InfoPanel extends EventEmitter<InfoPanelEvents> {
       padding: 8px 12px;
       font-family: monospace;
       font-size: 11px;
-      color: #e0e0e0;
+      color: var(--text-primary);
       z-index: 500;
       pointer-events: none;
       display: none;
@@ -266,7 +266,7 @@ export class InfoPanel extends EventEmitter<InfoPanelEvents> {
 
     if (this.fields.filename && this.currentData.filename) {
       const name = this.truncateFilename(this.currentData.filename, 25);
-      lines.push(`<span style="color: #8cf;">${name}</span>`);
+      lines.push(`<span style="color: var(--accent-primary);">${name}</span>`);
     }
 
     if (this.fields.resolution && this.currentData.width && this.currentData.height) {
@@ -294,15 +294,15 @@ export class InfoPanel extends EventEmitter<InfoPanelEvents> {
       if (this.currentData.colorAtCursor) {
         const { r, g, b } = this.currentData.colorAtCursor;
         const hex = this.rgbToHex(r, g, b);
-        const swatch = `<span style="display:inline-block;width:12px;height:12px;background:${hex};border:1px solid #666;vertical-align:middle;margin-right:4px;"></span>`;
+        const swatch = `<span style="display:inline-block;width:12px;height:12px;background:${hex};border:1px solid var(--text-muted);vertical-align:middle;margin-right:4px;"></span>`;
         lines.push(`${swatch}RGB: ${r}, ${g}, ${b}`);
       } else {
-        lines.push(`<span style="color: #666;">RGB: --</span>`);
+        lines.push(`<span style="color: var(--text-muted);">RGB: --</span>`);
       }
     }
 
     if (lines.length === 0) {
-      lines.push('<span style="color: #666;">No data</span>');
+      lines.push('<span style="color: var(--text-muted);">No data</span>');
     }
 
     this.contentElement.innerHTML = lines.join('<br>');

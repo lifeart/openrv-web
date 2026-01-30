@@ -72,8 +72,8 @@ function createModalBase(options: ModalOptions = {}): HTMLElement {
   const modal = document.createElement('div');
   modal.className = 'modal';
   modal.style.cssText = `
-    background: #2a2a2a;
-    border: 1px solid #444;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
     border-radius: 8px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
     max-width: 90vw;
@@ -105,7 +105,7 @@ function createModalBase(options: ModalOptions = {}): HTMLElement {
       align-items: center;
       justify-content: space-between;
       padding: 12px 16px;
-      border-bottom: 1px solid #444;
+      border-bottom: 1px solid var(--border-primary);
     `;
 
     const titleEl = document.createElement('h3');
@@ -114,7 +114,7 @@ function createModalBase(options: ModalOptions = {}): HTMLElement {
       margin: 0;
       font-size: 14px;
       font-weight: 600;
-      color: #eee;
+      color: var(--text-primary);
     `;
     header.appendChild(titleEl);
 
@@ -153,7 +153,7 @@ export function showAlert(message: string, options: AlertOptions = {}): Promise<
     const content = document.createElement('div');
     content.style.cssText = `
       padding: 16px;
-      color: #ccc;
+      color: var(--text-primary);
       font-size: 13px;
       line-height: 1.5;
       white-space: pre-wrap;
@@ -186,7 +186,7 @@ export function showAlert(message: string, options: AlertOptions = {}): Promise<
       display: flex;
       justify-content: flex-end;
       padding: 12px 16px;
-      border-top: 1px solid #444;
+      border-top: 1px solid var(--border-primary);
       gap: 8px;
     `;
 
@@ -245,7 +245,7 @@ export function showConfirm(message: string, options: ConfirmOptions = {}): Prom
     const content = document.createElement('div');
     content.style.cssText = `
       padding: 16px;
-      color: #ccc;
+      color: var(--text-primary);
       font-size: 13px;
       line-height: 1.5;
       white-space: pre-wrap;
@@ -259,7 +259,7 @@ export function showConfirm(message: string, options: ConfirmOptions = {}): Prom
       display: flex;
       justify-content: flex-end;
       padding: 12px 16px;
-      border-top: 1px solid #444;
+      border-top: 1px solid var(--border-primary);
       gap: 8px;
     `;
 
@@ -334,7 +334,7 @@ export function showPrompt(message: string, options: PromptOptions = {}): Promis
     const label = document.createElement('label');
     label.textContent = message;
     label.style.cssText = `
-      color: #ccc;
+      color: var(--text-primary);
       font-size: 13px;
     `;
 
@@ -343,20 +343,20 @@ export function showPrompt(message: string, options: PromptOptions = {}): Promis
     input.placeholder = placeholder;
     input.value = defaultValue;
     input.style.cssText = `
-      background: #333;
-      border: 1px solid #555;
+      background: var(--bg-hover);
+      border: 1px solid var(--bg-active);
       border-radius: 4px;
       padding: 8px 12px;
-      color: #eee;
+      color: var(--text-primary);
       font-size: 13px;
       width: 100%;
       box-sizing: border-box;
     `;
     input.addEventListener('focus', () => {
-      input.style.borderColor = '#4a9eff';
+      input.style.borderColor = 'var(--accent-primary)';
     });
     input.addEventListener('blur', () => {
-      input.style.borderColor = '#555';
+      input.style.borderColor = 'var(--bg-active)';
     });
 
     content.appendChild(label);
@@ -369,7 +369,7 @@ export function showPrompt(message: string, options: PromptOptions = {}): Promis
       display: flex;
       justify-content: flex-end;
       padding: 12px 16px;
-      border-top: 1px solid #444;
+      border-top: 1px solid var(--border-primary);
       gap: 8px;
     `;
 
@@ -486,7 +486,7 @@ export function showFileReloadPrompt(
     const content = document.createElement('div');
     content.style.cssText = `
       padding: 16px;
-      color: #ccc;
+      color: var(--text-primary);
       font-size: 13px;
       line-height: 1.5;
     `;
@@ -500,10 +500,10 @@ export function showFileReloadPrompt(
     const expectedFile = document.createElement('div');
     expectedFile.style.cssText = `
       padding: 8px 12px;
-      background: #1a3a5c;
-      border: 1px solid #2a5a8c;
+      background: rgba(var(--accent-primary-rgb), 0.15);
+      border: 1px solid var(--accent-primary);
       border-radius: 4px;
-      color: #7cb3e0;
+      color: var(--accent-primary);
       font-size: 13px;
       font-family: monospace;
       margin-bottom: 12px;
@@ -513,7 +513,7 @@ export function showFileReloadPrompt(
     content.appendChild(expectedFile);
 
     const hintP = document.createElement('p');
-    hintP.style.cssText = 'margin: 0 0 12px 0; color: #888; font-size: 12px;';
+    hintP.style.cssText = 'margin: 0 0 12px 0; color: var(--text-muted); font-size: 12px;';
     hintP.textContent = 'Please select the same file from your system.';
     content.appendChild(hintP);
 
@@ -529,10 +529,10 @@ export function showFileReloadPrompt(
     const fileDisplay = document.createElement('div');
     fileDisplay.style.cssText = `
       padding: 8px 12px;
-      background: #333;
-      border: 1px solid #555;
+      background: var(--bg-hover);
+      border: 1px solid var(--bg-active);
       border-radius: 4px;
-      color: #888;
+      color: var(--text-muted);
       font-size: 12px;
     `;
     fileDisplay.textContent = 'No file selected';
@@ -543,10 +543,10 @@ export function showFileReloadPrompt(
     warningEl.style.cssText = `
       margin-top: 8px;
       padding: 8px 12px;
-      background: #5c3a1a;
-      border: 1px solid #8c5a2a;
+      background: rgba(var(--warning), 0.15);
+      border: 1px solid var(--warning);
       border-radius: 4px;
-      color: #e0a77c;
+      color: var(--warning);
       font-size: 12px;
       display: none;
     `;
@@ -564,12 +564,12 @@ export function showFileReloadPrompt(
         // Check if filename matches
         const matches = file.name === filename;
         if (matches) {
-          fileDisplay.style.color = '#4ade80'; // Green for match
-          fileDisplay.style.borderColor = '#22c55e';
+          fileDisplay.style.color = 'var(--success)';
+          fileDisplay.style.borderColor = 'var(--success)';
           warningEl.style.display = 'none';
         } else {
-          fileDisplay.style.color = '#fbbf24'; // Yellow/orange for mismatch
-          fileDisplay.style.borderColor = '#f59e0b';
+          fileDisplay.style.color = 'var(--warning)';
+          fileDisplay.style.borderColor = 'var(--warning)';
           warningEl.style.display = 'block';
         }
 
@@ -591,7 +591,7 @@ export function showFileReloadPrompt(
       display: flex;
       justify-content: flex-end;
       padding: 12px 16px;
-      border-top: 1px solid #444;
+      border-top: 1px solid var(--border-primary);
       gap: 8px;
     `;
 

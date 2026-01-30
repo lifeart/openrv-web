@@ -61,11 +61,11 @@ export class PaintToolbar {
     this.colorPicker.style.cssText = `
       width: 24px;
       height: 24px;
-      border: 1px solid #3a3a3a;
+      border: 1px solid var(--bg-hover);
       border-radius: 4px;
       padding: 2px;
       cursor: pointer;
-      background: #2a2a2a;
+      background: var(--bg-secondary);
       margin-left: 4px;
     `;
     this.colorPicker.addEventListener('input', () => {
@@ -80,7 +80,7 @@ export class PaintToolbar {
       preset.style.cssText = `
         width: 16px;
         height: 16px;
-        border: 1px solid #3a3a3a;
+        border: 1px solid var(--bg-hover);
         border-radius: 3px;
         padding: 0;
         cursor: pointer;
@@ -89,10 +89,10 @@ export class PaintToolbar {
       `;
       preset.title = color;
       preset.addEventListener('mouseenter', () => {
-        preset.style.borderColor = '#555';
+        preset.style.borderColor = 'var(--border-secondary)';
       });
       preset.addEventListener('mouseleave', () => {
-        preset.style.borderColor = '#3a3a3a';
+        preset.style.borderColor = 'var(--bg-hover)';
       });
       preset.addEventListener('click', () => {
         this.colorPicker.value = color;
@@ -104,7 +104,7 @@ export class PaintToolbar {
     // Width slider
     this.widthLabel = document.createElement('span');
     this.widthLabel.textContent = `${this.paintEngine.width}`;
-    this.widthLabel.style.cssText = 'color: #888; font-size: 10px; min-width: 20px; text-align: right; margin-left: 8px;';
+    this.widthLabel.style.cssText = 'color: var(--text-secondary); font-size: 10px; min-width: 20px; text-align: right; margin-left: 8px;';
     this.container.appendChild(this.widthLabel);
 
     this.widthSlider = document.createElement('input');
@@ -117,7 +117,7 @@ export class PaintToolbar {
       width: 60px;
       height: 4px;
       cursor: pointer;
-      accent-color: #4a9eff;
+      accent-color: var(--accent-primary);
     `;
     this.widthSlider.addEventListener('input', () => {
       this.paintEngine.width = parseInt(this.widthSlider.value, 10);
@@ -172,7 +172,7 @@ export class PaintToolbar {
     button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
-      color: #999;
+      color: var(--text-muted);
       padding: 4px;
       border-radius: 4px;
       cursor: pointer;
@@ -186,9 +186,9 @@ export class PaintToolbar {
 
     button.addEventListener('mouseenter', () => {
       if (!button.classList.contains('active')) {
-        button.style.background = '#3a3a3a';
-        button.style.borderColor = '#4a4a4a';
-        button.style.color = '#ccc';
+        button.style.background = 'var(--bg-hover)';
+        button.style.borderColor = 'var(--border-primary)';
+        button.style.color = 'var(--text-primary)';
       }
     });
 
@@ -196,7 +196,7 @@ export class PaintToolbar {
       if (!button.classList.contains('active')) {
         button.style.background = 'transparent';
         button.style.borderColor = 'transparent';
-        button.style.color = '#999';
+        button.style.color = 'var(--text-muted)';
       }
     });
 
@@ -207,7 +207,7 @@ export class PaintToolbar {
 
   private addSeparator(): void {
     const sep = document.createElement('div');
-    sep.style.cssText = 'width: 1px; height: 18px; background: #3a3a3a; margin: 0 2px;';
+    sep.style.cssText = 'width: 1px; height: 18px; background: var(--bg-hover); margin: 0 2px;';
     this.container.appendChild(sep);
   }
 
@@ -215,14 +215,14 @@ export class PaintToolbar {
     const currentTool = this.paintEngine.tool;
     for (const [tool, btn] of this.buttons) {
       if (tool === currentTool) {
-        btn.style.background = 'rgba(74, 158, 255, 0.15)';
-        btn.style.borderColor = '#4a9eff';
-        btn.style.color = '#4a9eff';
+        btn.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+        btn.style.borderColor = 'var(--accent-primary)';
+        btn.style.color = 'var(--accent-primary)';
         btn.classList.add('active');
       } else {
         btn.style.background = 'transparent';
         btn.style.borderColor = 'transparent';
-        btn.style.color = '#999';
+        btn.style.color = 'var(--text-muted)';
         btn.classList.remove('active');
       }
     }
@@ -248,7 +248,7 @@ export class PaintToolbar {
   private updateGhostButton(): void {
     const effects = this.paintEngine.effects;
     this.ghostButton.style.opacity = effects.ghost ? '1' : '0.5';
-    this.ghostButton.style.color = effects.ghost ? '#4a9eff' : '#999';
+    this.ghostButton.style.color = effects.ghost ? 'var(--accent-primary)' : 'var(--text-muted)';
     this.ghostButton.title = effects.ghost
       ? 'Ghost mode ON (G)'
       : 'Ghost mode OFF (G)';
@@ -257,7 +257,7 @@ export class PaintToolbar {
   private updateHoldButton(): void {
     const effects = this.paintEngine.effects;
     this.holdButton.style.opacity = effects.hold ? '1' : '0.5';
-    this.holdButton.style.color = effects.hold ? '#4a9eff' : '#999';
+    this.holdButton.style.color = effects.hold ? 'var(--accent-primary)' : 'var(--text-muted)';
     this.holdButton.title = effects.hold
       ? 'Hold mode ON (X)'
       : 'Hold mode OFF (X)';

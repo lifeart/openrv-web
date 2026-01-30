@@ -84,7 +84,7 @@ describe('ZebraControl', () => {
     it('ZEBRA-U021: button has gray color when disabled', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
-      expect(button.style.cssText).toContain('rgb(153, 153, 153)'); // #999
+      expect(button.style.cssText).toContain('var(--text-muted)'); // #999
     });
 
     it('ZEBRA-U022: button has blue styling when enabled with high zebras', () => {
@@ -94,14 +94,14 @@ describe('ZebraControl', () => {
 
       const el = control.render();
       const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
-      expect(button.style.cssText).toContain('rgb(74, 158, 255)'); // #4a9eff
+      expect(button.style.cssText).toContain('var(--accent-primary)');
     });
 
     it('ZEBRA-U023: button hover changes background when disabled', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
       button.dispatchEvent(new MouseEvent('mouseenter'));
-      expect(button.style.cssText).toContain('rgb(58, 58, 58)');
+      expect(button.style.cssText).toContain('var(--bg-hover)');
     });
 
     it('ZEBRA-U024: button mouseleave restores background when disabled', () => {
@@ -306,14 +306,14 @@ describe('ZebraControl', () => {
       const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
 
       // Initially disabled style
-      expect(button.style.color).toBe('rgb(153, 153, 153)');
+      expect(button.style.color).toBe('var(--text-muted)');
 
       // Enable zebras externally
       zebraStripes.enable();
       zebraStripes.setState({ highEnabled: true });
 
       // Button should update to blue
-      expect(button.style.cssText).toContain('rgb(74, 158, 255)');
+      expect(button.style.cssText).toContain('var(--accent-primary)');
     });
 
     it('ZEBRA-U071: checkboxes update when state changes externally', () => {
@@ -349,7 +349,7 @@ describe('ZebraControl', () => {
       zebraStripes.setState({ enabled: true, highEnabled: false, lowEnabled: false });
 
       const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
-      expect(button.style.color).toBe('rgb(153, 153, 153)');
+      expect(button.style.color).toBe('var(--text-muted)');
     });
 
     it('ZEBRA-U081: button active when enabled with high zebras', () => {
@@ -357,7 +357,7 @@ describe('ZebraControl', () => {
       zebraStripes.setState({ enabled: true, highEnabled: true, lowEnabled: false });
 
       const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
-      expect(button.style.cssText).toContain('rgb(74, 158, 255)');
+      expect(button.style.cssText).toContain('var(--accent-primary)');
     });
 
     it('ZEBRA-U082: button active when enabled with low zebras', () => {
@@ -365,7 +365,7 @@ describe('ZebraControl', () => {
       zebraStripes.setState({ enabled: true, highEnabled: false, lowEnabled: true });
 
       const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
-      expect(button.style.cssText).toContain('rgb(74, 158, 255)');
+      expect(button.style.cssText).toContain('var(--accent-primary)');
     });
 
     it('ZEBRA-U083: button active when enabled with both zebras', () => {
@@ -373,7 +373,7 @@ describe('ZebraControl', () => {
       zebraStripes.setState({ enabled: true, highEnabled: true, lowEnabled: true });
 
       const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
-      expect(button.style.cssText).toContain('rgb(74, 158, 255)');
+      expect(button.style.cssText).toContain('var(--accent-primary)');
     });
   });
 
@@ -398,7 +398,7 @@ describe('ZebraControl', () => {
       // Find divider by style
       let hasDivider = false;
       dividers.forEach(div => {
-        if (div.style.height === '1px' && div.style.background === 'rgb(68, 68, 68)') {
+        if (div.style.height === '1px' && div.style.background === 'var(--border-primary)') {
           hasDivider = true;
         }
       });

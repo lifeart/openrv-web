@@ -55,7 +55,7 @@ export class ZoomControl extends EventEmitter<ZoomControlEvents> {
     this.button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
-      color: #999;
+      color: var(--text-muted);
       padding: 6px 10px;
       border-radius: 4px;
       cursor: pointer;
@@ -77,16 +77,16 @@ export class ZoomControl extends EventEmitter<ZoomControlEvents> {
     });
     this.button.addEventListener('mouseenter', () => {
       if (!this.dropdown.isVisible()) {
-        this.button.style.background = '#3a3a3a';
-        this.button.style.borderColor = '#4a4a4a';
-        this.button.style.color = '#ccc';
+        this.button.style.background = 'var(--bg-hover)';
+        this.button.style.borderColor = 'var(--border-primary)';
+        this.button.style.color = 'var(--text-primary)';
       }
     });
     this.button.addEventListener('mouseleave', () => {
       if (!this.dropdown.isVisible()) {
         this.button.style.background = 'transparent';
         this.button.style.borderColor = 'transparent';
-        this.button.style.color = '#999';
+        this.button.style.color = 'var(--text-muted)';
       }
     });
 
@@ -131,12 +131,12 @@ export class ZoomControl extends EventEmitter<ZoomControlEvents> {
 
   private updateButtonStyle(): void {
     if (this.dropdown.isVisible()) {
-      this.button.style.background = '#3a3a3a';
-      this.button.style.borderColor = '#4a4a4a';
+      this.button.style.background = 'var(--bg-hover)';
+      this.button.style.borderColor = 'var(--border-primary)';
     } else {
       this.button.style.background = 'transparent';
       this.button.style.borderColor = 'transparent';
-      this.button.style.color = '#999';
+      this.button.style.color = 'var(--text-muted)';
     }
   }
 

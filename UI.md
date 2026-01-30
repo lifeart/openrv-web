@@ -168,29 +168,145 @@
 
 ## Style Guide
 
-### Colors
+### Theme System
+
+The application uses a comprehensive CSS variable-based theming system managed by `ThemeManager` (`src/utils/ThemeManager.ts`). This enables seamless dark/light mode switching and consistent styling across all UI components.
+
+#### Theme Modes
+- **Dark** (default): Dark background with light text
+- **Light**: Light background with dark text
+- **Auto**: Follows system preference (prefers-color-scheme)
+
+Theme preference is persisted to localStorage and can be cycled via the theme toggle button.
+
+### CSS Variables (Runtime)
+
+All UI components must use these CSS variables instead of hardcoded colors:
+
 ```css
---bg-darkest: #1a1a1a;
---bg-dark: #222;
---bg-medium: #2a2a2a;
---bg-light: #333;
---bg-lighter: #3a3a3a;
+/* Background colors */
+--bg-primary: #1a1a1a;      /* Main background */
+--bg-secondary: #252525;    /* Panels, toolbars */
+--bg-tertiary: #2d2d2d;     /* Nested elements */
+--bg-hover: #333333;        /* Hover state background */
+--bg-active: #3a3a3a;       /* Active/pressed state */
 
---border-dark: #333;
---border-medium: #444;
---border-light: #555;
+/* Text colors */
+--text-primary: #e0e0e0;    /* Primary text */
+--text-secondary: #b0b0b0;  /* Secondary/label text */
+--text-muted: #666666;      /* Muted/hint text */
 
---text-primary: #e0e0e0;
---text-secondary: #aaa;
---text-muted: #666;
+/* Border colors */
+--border-primary: #444444;  /* Primary borders */
+--border-secondary: #333333; /* Subtle borders */
 
---accent-primary: #4a9eff;
---accent-hover: #5aafff;
---accent-active: #3a8eef;
+/* Accent colors (interactive elements) */
+--accent-primary: #4a9eff;  /* Primary accent */
+--accent-hover: #5aafff;    /* Hover state */
+--accent-active: #3a8eef;   /* Active/pressed state */
+--accent-primary-rgb: 74, 158, 255;  /* For rgba() usage */
 
---danger: #ff6b6b;
---success: #6bff6b;
---warning: #ffbb33;
+/* Semantic colors */
+--success: #4ade80;         /* Success state */
+--warning: #facc15;         /* Warning state */
+--error: #f87171;           /* Error/danger state */
+
+/* Overlay colors */
+--overlay-bg: rgba(0, 0, 0, 0.75);     /* Overlay background */
+--overlay-border: rgba(255, 255, 255, 0.1); /* Overlay borders */
+
+/* Viewer specific */
+--viewer-bg: #1e1e1e;       /* Canvas/viewer background */
+```
+
+### Using CSS Variables in Components
+
+#### Basic Usage
+```typescript
+// Always use CSS variables for colors
+element.style.background = 'var(--bg-secondary)';
+element.style.color = 'var(--text-primary)';
+element.style.borderColor = 'var(--border-primary)';
+```
+
+#### Using RGBA with CSS Variables
+For semi-transparent colors, use the `-rgb` suffix variables:
+```typescript
+// Transparent accent background
+element.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+
+// Active state highlight
+button.style.cssText = `
+  background: rgba(var(--accent-primary-rgb), 0.15);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+`;
+```
+
+#### Canvas/2D Context Colors
+For canvas drawing, resolve CSS variables at render time:
+```typescript
+private getColors() {
+  const style = getComputedStyle(document.documentElement);
+  return {
+    background: style.getPropertyValue('--bg-secondary').trim() || '#252525',
+    accent: style.getPropertyValue('--accent-primary').trim() || '#4a9eff',
+    // etc.
+  };
+}
+
+protected draw(): void {
+  const colors = this.getColors();
+  ctx.fillStyle = colors.background;
+  // ...
+}
+```
+
+### Color Usage Guidelines
+
+| Use Case | Variable | Example |
+|----------|----------|---------|
+| Panel/container background | `--bg-secondary` | Toolbars, dropdown panels |
+| Hover state | `--bg-hover` | Button hover |
+| Active/pressed state | `--bg-active` | Selected button |
+| Primary text | `--text-primary` | Labels, headings |
+| Secondary text | `--text-secondary` | Descriptions |
+| Disabled/hint text | `--text-muted` | Placeholders, hints |
+| Interactive elements | `--accent-primary` | Buttons, links, active states |
+| Success indicator | `--success` | Cache complete, save success |
+| Warning indicator | `--warning` | Pending, caution |
+| Error/danger | `--error` | Delete button, error messages |
+| Floating overlays | `--overlay-bg` | Modals, dropdowns, scopes |
+
+### Do NOT Use
+
+**Never use hardcoded hex colors in UI components:**
+```typescript
+// BAD - hardcoded colors
+button.style.color = '#4a9eff';
+button.style.background = 'rgba(74, 158, 255, 0.15)';
+panel.style.background = '#252525';
+
+// GOOD - CSS variables
+button.style.color = 'var(--accent-primary)';
+button.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+panel.style.background = 'var(--bg-secondary)';
+```
+
+### Light Theme Values
+
+When auto mode detects light system preference, these values are used:
+```css
+--bg-primary: #ffffff;
+--bg-secondary: #f5f5f5;
+--bg-hover: #e0e0e0;
+--bg-active: #d5d5d5;
+--text-primary: #1a1a1a;
+--text-secondary: #4a4a4a;
+--text-muted: #999999;
+--accent-primary: #0066cc;
+--accent-primary-rgb: 0, 102, 204;
+/* etc. */
 ```
 
 ### Spacing
@@ -876,14 +992,14 @@ All icons follow these design rules:
 
 ## Flat Design Pattern
 
-All interactive buttons follow a consistent flat design pattern:
+All interactive buttons follow a consistent flat design pattern using CSS variables:
 
 ```typescript
-// Default state
+// Default state - use CSS variables
 button.style.cssText = `
   background: transparent;
   border: 1px solid transparent;
-  color: #999;
+  color: var(--text-muted);
   padding: 4px;
   border-radius: 4px;
   cursor: pointer;
@@ -892,15 +1008,15 @@ button.style.cssText = `
 
 // Hover state
 button.addEventListener('mouseenter', () => {
-  button.style.background = '#3a3a3a';
-  button.style.borderColor = '#4a4a4a';
-  button.style.color = '#ccc';
+  button.style.background = 'var(--bg-hover)';
+  button.style.borderColor = 'var(--border-primary)';
+  button.style.color = 'var(--text-primary)';
 });
 
 // Active/Selected state
-button.style.background = 'rgba(74, 158, 255, 0.15)';
-button.style.borderColor = '#4a9eff';
-button.style.color = '#4a9eff';
+button.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+button.style.borderColor = 'var(--accent-primary)';
+button.style.color = 'var(--accent-primary)';
 ```
 
 ### Container Styling
@@ -919,7 +1035,7 @@ Use 1-2 dividers per section for logical grouping:
 
 ```typescript
 const separator = document.createElement('div');
-separator.style.cssText = 'width: 1px; height: 18px; background: #3a3a3a; margin: 0 2px;';
+separator.style.cssText = 'width: 1px; height: 18px; background: var(--border-secondary); margin: 0 2px;';
 ```
 
 ---
@@ -1473,7 +1589,7 @@ viewContent.appendChild(histogramBtn);
 Use for **component-specific buttons** with full control:
 
 ```typescript
-// Standard flat button pattern
+// Standard flat button pattern - ALWAYS use CSS variables
 import { applyA11yFocus } from './shared/Button';
 
 const button = document.createElement('button');
@@ -1482,7 +1598,7 @@ button.title = 'Button tooltip';
 button.style.cssText = `
   background: transparent;
   border: 1px solid transparent;
-  color: #999;
+  color: var(--text-muted);
   padding: 6px 10px;
   border-radius: 4px;
   cursor: pointer;
@@ -1498,9 +1614,9 @@ button.style.cssText = `
 // Hover state
 button.addEventListener('mouseenter', () => {
   if (!isActive) {
-    button.style.background = '#3a3a3a';
-    button.style.borderColor = '#4a4a4a';
-    button.style.color = '#ccc';
+    button.style.background = 'var(--bg-hover)';
+    button.style.borderColor = 'var(--border-primary)';
+    button.style.color = 'var(--text-primary)';
   }
 });
 
@@ -1508,7 +1624,7 @@ button.addEventListener('mouseleave', () => {
   if (!isActive) {
     button.style.background = 'transparent';
     button.style.borderColor = 'transparent';
-    button.style.color = '#999';
+    button.style.color = 'var(--text-muted)';
   }
 });
 
@@ -1518,13 +1634,13 @@ applyA11yFocus(button);
 // Active state (when selected/enabled)
 function setActive(active: boolean): void {
   if (active) {
-    button.style.background = 'rgba(74, 158, 255, 0.15)';
-    button.style.borderColor = '#4a9eff';
-    button.style.color = '#4a9eff';
+    button.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+    button.style.borderColor = 'var(--accent-primary)';
+    button.style.color = 'var(--accent-primary)';
   } else {
     button.style.background = 'transparent';
     button.style.borderColor = 'transparent';
-    button.style.color = '#999';
+    button.style.color = 'var(--text-muted)';
   }
 }
 ```
@@ -1549,19 +1665,19 @@ function setActive(active: boolean): void {
    button.style.cssText = `...outline: none;`;
    applyA11yFocus(button);
    ```
-   This shows a blue focus ring (`outline: 2px solid #4a9eff`) only when the button is focused via keyboard (Tab), not on mouse click.
+   This shows a focus ring (`outline: 2px solid var(--accent-primary)`) only when the button is focused via keyboard (Tab), not on mouse click.
 
 4. **Use consistent sizing**:
    - Toolbar buttons: `padding: 6px 10px`, `font-size: 12px`
    - Small inline buttons: `padding: 4px 8px`, `font-size: 11px`
    - Icon buttons: `min-width: 28px`, same height
 
-4. **Use consistent active state colors**:
+5. **Use consistent active state colors** (CSS variables):
    ```css
-   /* Active/selected state */
-   background: rgba(74, 158, 255, 0.15);
-   border-color: #4a9eff;
-   color: #4a9eff;
+   /* Active/selected state - ALWAYS use CSS variables */
+   background: rgba(var(--accent-primary-rgb), 0.15);
+   border-color: var(--accent-primary);
+   color: var(--accent-primary);
    ```
 
 5. **Use consistent transition timing**:
@@ -1608,7 +1724,7 @@ container.appendChild(button2);
 
 // Add divider between groups
 const divider = document.createElement('div');
-divider.style.cssText = 'width: 1px; height: 18px; background: #3a3a3a; margin: 0 4px;';
+divider.style.cssText = 'width: 1px; height: 18px; background: var(--border-secondary); margin: 0 4px;';
 container.appendChild(divider);
 
 container.appendChild(button3);

@@ -33,6 +33,7 @@ import { SpotlightOverlay } from './SpotlightOverlay';
 import { ClippingOverlay } from './ClippingOverlay';
 import { HSLQualifier } from './HSLQualifier';
 import { PrerenderBufferManager } from '../../utils/PrerenderBufferManager';
+import { getThemeManager } from '../../utils/ThemeManager';
 
 // Extracted effect processing utilities
 import { applyHighlightsShadows, applyVibrance, applyClarity, applySharpenCPU } from './ViewerEffects';
@@ -244,6 +245,9 @@ export class Viewer {
   private cursorColorCallback: ((color: { r: number; g: number; b: number } | null, position: { x: number; y: number } | null) => void) | null = null;
   private lastCursorColorUpdate = 0;
 
+  // Theme change listener for runtime theme updates
+  private boundOnThemeChange: (() => void) | null = null;
+
   constructor(session: Session, paintEngine: PaintEngine) {
     this.session = session;
     this.paintEngine = paintEngine;
@@ -256,7 +260,7 @@ export class Viewer {
       flex: 1;
       position: relative;
       overflow: hidden;
-      background: #1e1e1e;
+      background: var(--viewer-bg);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -381,7 +385,7 @@ export class Viewer {
       position: absolute;
       top: 10px;
       right: 10px;
-      background: rgba(74, 158, 255, 0.8);
+      background: rgba(var(--accent-primary-rgb), 0.8);
       color: white;
       padding: 4px 8px;
       border-radius: 4px;
@@ -403,7 +407,7 @@ export class Viewer {
       top: 10px;
       right: 60px;
       background: rgba(255, 180, 50, 0.9);
-      color: #1a1a1a;
+      color: var(--bg-primary);
       padding: 4px 10px;
       border-radius: 4px;
       font-size: 12px;
@@ -425,8 +429,8 @@ export class Viewer {
     this.dropOverlay.style.cssText = `
       position: absolute;
       inset: 0;
-      background: rgba(74, 158, 255, 0.2);
-      border: 3px dashed #4a9eff;
+      background: rgba(var(--accent-primary-rgb), 0.2);
+      border: 3px dashed var(--accent-primary);
       display: none;
       align-items: center;
       justify-content: center;
@@ -434,7 +438,7 @@ export class Viewer {
       z-index: 100;
     `;
     this.dropOverlay.innerHTML = `
-      <div style="text-align: center; color: #4a9eff; font-size: 18px;">
+      <div style="text-align: center; color: var(--accent-primary); font-size: 18px;">
         <div style="margin-bottom: 10px;">${getIconSvg('folder-open', 'lg')}</div>
         Drop files here
       </div>
@@ -466,6 +470,12 @@ export class Viewer {
       console.warn('WebGL sharpen processor not available, falling back to CPU:', e);
       this.sharpenProcessor = null;
     }
+
+    // Listen for theme changes to redraw placeholders and overlays with updated colors
+    this.boundOnThemeChange = () => {
+      this.scheduleRender();
+    };
+    getThemeManager().on('themeChanged', this.boundOnThemeChange);
   }
 
   private initializeCanvas(): void {
@@ -1570,11 +1580,11 @@ export class Viewer {
       this.abIndicator.textContent = ab;
       // Different colors for A and B
       if (ab === 'A') {
-        this.abIndicator.style.background = 'rgba(74, 158, 255, 0.9)';
+        this.abIndicator.style.background = 'rgba(var(--accent-primary-rgb), 0.9)';
         this.abIndicator.style.color = 'white';
       } else {
         this.abIndicator.style.background = 'rgba(255, 180, 50, 0.9)';
-        this.abIndicator.style.color = '#1a1a1a';
+        this.abIndicator.style.color = 'var(--bg-primary)';
       }
     } else {
       this.abIndicator.style.display = 'none';
@@ -2559,6 +2569,12 @@ export class Viewer {
 
     // Clear cursor color callback
     this.cursorColorCallback = null;
+
+    // Cleanup theme change listener
+    if (this.boundOnThemeChange) {
+      getThemeManager().off('themeChanged', this.boundOnThemeChange);
+      this.boundOnThemeChange = null;
+    }
 
     // Cleanup WebGL LUT processor
     if (this.lutProcessor) {

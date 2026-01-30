@@ -75,14 +75,14 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     this.overlay.style.cssText = `
       position: fixed;
       background: rgba(30, 30, 30, 0.95);
-      border: 1px solid #444;
+      border: 1px solid var(--border-primary);
       border-radius: 6px;
       padding: 10px;
       z-index: 9998;
       display: none;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       font-size: 11px;
-      color: #ccc;
+      color: var(--text-primary);
       min-width: 180px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.4);
       pointer-events: auto;
@@ -100,17 +100,17 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
       justify-content: space-between;
       margin-bottom: 8px;
       padding-bottom: 6px;
-      border-bottom: 1px solid #444;
+      border-bottom: 1px solid var(--border-primary);
     `;
 
     const title = document.createElement('span');
     title.textContent = 'Pixel Probe';
-    title.style.cssText = 'font-weight: 600; color: #eee;';
+    title.style.cssText = 'font-weight: 600; color: var(--text-primary);';
 
     this.lockIndicator = document.createElement('span');
     this.lockIndicator.innerHTML = getIconSvg('lock', 'sm');
     this.lockIndicator.style.cssText = `
-      color: #4a9eff;
+      color: var(--accent-primary);
       display: none;
     `;
     this.lockIndicator.title = 'Position locked (click image to unlock)';
@@ -133,7 +133,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     this.swatch.style.cssText = `
       width: 32px;
       height: 32px;
-      border: 1px solid #555;
+      border: 1px solid var(--border-secondary);
       border-radius: 4px;
       background: #000;
     `;
@@ -141,7 +141,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     this.coordsLabel = document.createElement('div');
     this.coordsLabel.style.cssText = `
       font-family: monospace;
-      color: #888;
+      color: var(--text-secondary);
     `;
     this.coordsLabel.textContent = 'X: 0, Y: 0';
 
@@ -197,22 +197,22 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
       btn.style.cssText = `
         flex: 1;
         padding: 4px 6px;
-        border: 1px solid #555;
+        border: 1px solid var(--border-secondary);
         border-radius: 3px;
-        background: #333;
-        color: #aaa;
+        background: var(--bg-secondary);
+        color: var(--text-secondary);
         font-size: 10px;
         cursor: pointer;
       `;
       btn.addEventListener('click', () => this.setFormat(fmt.key));
       btn.addEventListener('mouseenter', () => {
         if (this.state.format !== fmt.key) {
-          btn.style.background = '#444';
+          btn.style.background = 'var(--border-primary)';
         }
       });
       btn.addEventListener('mouseleave', () => {
         if (this.state.format !== fmt.key) {
-          btn.style.background = '#333';
+          btn.style.background = 'var(--bg-secondary)';
         }
       });
       this.formatButtons.set(fmt.key, btn);
@@ -227,7 +227,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     hint.style.cssText = `
       margin-top: 8px;
       font-size: 10px;
-      color: #666;
+      color: var(--text-muted);
       text-align: center;
     `;
     hint.textContent = 'Click row to copy • Click image to lock';
@@ -251,7 +251,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
       transition: background 0.1s ease;
     `;
     row.addEventListener('mouseenter', () => {
-      row.style.background = '#3a3a3a';
+      row.style.background = 'var(--bg-hover)';
     });
     row.addEventListener('mouseleave', () => {
       row.style.background = 'transparent';
@@ -262,7 +262,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     labelEl.textContent = label;
     labelEl.style.cssText = `
       width: 40px;
-      color: #888;
+      color: var(--text-secondary);
       font-size: 10px;
     `;
 
@@ -270,7 +270,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     valueEl.textContent = initialValue;
     valueEl.style.cssText = `
       font-family: monospace;
-      color: #ccc;
+      color: var(--text-primary);
     `;
 
     row.appendChild(labelEl);
@@ -437,7 +437,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
       const label = labels[format];
       if (label) {
         const original = label.style.color;
-        label.style.color = '#4a9eff';
+        label.style.color = 'var(--accent-primary)';
         setTimeout(() => {
           label.style.color = original;
         }, 200);
@@ -459,13 +459,13 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
   private updateFormatButtons(): void {
     for (const [key, btn] of this.formatButtons) {
       if (key === this.state.format) {
-        btn.style.background = '#4a9eff';
-        btn.style.borderColor = '#4a9eff';
-        btn.style.color = '#fff';
+        btn.style.background = 'var(--accent-primary)';
+        btn.style.borderColor = 'var(--accent-primary)';
+        btn.style.color = 'var(--text-on-accent)';
       } else {
-        btn.style.background = '#333';
-        btn.style.borderColor = '#555';
-        btn.style.color = '#aaa';
+        btn.style.background = 'var(--bg-secondary)';
+        btn.style.borderColor = 'var(--border-secondary)';
+        btn.style.color = 'var(--text-secondary)';
       }
     }
   }

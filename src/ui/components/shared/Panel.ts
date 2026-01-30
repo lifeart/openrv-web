@@ -26,8 +26,8 @@ export function createPanel(options: PanelOptions = {}): Panel {
   panel.className = 'dropdown-panel';
   panel.style.cssText = `
     position: fixed;
-    background: #2a2a2a;
-    border: 1px solid #444;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
     border-radius: 6px;
     padding: 12px;
     width: ${width};
@@ -132,12 +132,12 @@ export function createPanelHeader(title: string, onClose?: () => void): HTMLElem
     align-items: center;
     margin-bottom: 12px;
     padding-bottom: 8px;
-    border-bottom: 1px solid #444;
+    border-bottom: 1px solid var(--border-primary);
   `;
 
   const titleEl = document.createElement('span');
   titleEl.textContent = title;
-  titleEl.style.cssText = 'color: #ddd; font-size: 13px; font-weight: 500;';
+  titleEl.style.cssText = 'color: var(--text-primary); font-size: 13px; font-weight: 500;';
   header.appendChild(titleEl);
 
   if (onClose) {
@@ -147,14 +147,14 @@ export function createPanelHeader(title: string, onClose?: () => void): HTMLElem
     closeBtn.style.cssText = `
       background: transparent;
       border: none;
-      color: #888;
+      color: var(--text-muted);
       cursor: pointer;
       font-size: 14px;
       padding: 2px 6px;
       border-radius: 3px;
     `;
-    closeBtn.addEventListener('mouseenter', () => { closeBtn.style.color = '#fff'; });
-    closeBtn.addEventListener('mouseleave', () => { closeBtn.style.color = '#888'; });
+    closeBtn.addEventListener('mouseenter', () => { closeBtn.style.color = 'var(--text-primary)'; });
+    closeBtn.addEventListener('mouseleave', () => { closeBtn.style.color = 'var(--text-muted)'; });
     closeBtn.addEventListener('click', onClose);
     header.appendChild(closeBtn);
   }
@@ -189,7 +189,7 @@ export function createSliderRow(
 
   const labelEl = document.createElement('span');
   labelEl.textContent = label;
-  labelEl.style.cssText = 'color: #aaa; font-size: 11px; min-width: 70px;';
+  labelEl.style.cssText = 'color: var(--text-secondary); font-size: 11px; min-width: 70px;';
 
   const slider = document.createElement('input');
   slider.type = 'range';
@@ -201,11 +201,11 @@ export function createSliderRow(
     flex: 1;
     height: 4px;
     cursor: pointer;
-    accent-color: #4a9eff;
+    accent-color: var(--accent-primary);
   `;
 
   const valueLabel = document.createElement('span');
-  valueLabel.style.cssText = 'color: #888; font-size: 11px; min-width: 40px; text-align: right;';
+  valueLabel.style.cssText = 'color: var(--text-muted); font-size: 11px; min-width: 40px; text-align: right;';
   valueLabel.textContent = `${value}${unit}`;
 
   if (onChange) {

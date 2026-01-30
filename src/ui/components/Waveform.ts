@@ -19,6 +19,8 @@ import {
   DraggableContainer,
 } from './shared/DraggableContainer';
 import { setupHiDPICanvas } from '../../utils/HiDPICanvas';
+import { getThemeManager } from '../../utils/ThemeManager';
+import { getCSSColor } from '../../utils/getCSSColor';
 
 export type WaveformMode = 'luma' | 'rgb' | 'parade';
 
@@ -60,6 +62,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
   private channelButtons: { r: HTMLButtonElement; g: HTMLButtonElement; b: HTMLButtonElement } | null = null;
   private intensitySlider: HTMLInputElement | null = null;
   private boundOnIntensityChange: ((e: Event) => void) | null = null;
+  private boundOnThemeChange: (() => void) | null = null;
 
   constructor() {
     super();
@@ -76,7 +79,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
     this.canvas = document.createElement('canvas');
     this.canvas.style.cssText = `
       display: block;
-      background: #111;
+      background: var(--bg-primary);
       border-radius: 2px;
     `;
 
@@ -96,6 +99,14 @@ export class Waveform extends EventEmitter<WaveformEvents> {
 
     // Add footer
     this.createFooter();
+
+    // Listen for theme changes to redraw with new colors
+    this.boundOnThemeChange = () => {
+      if (this.lastImageData) {
+        this.update(this.lastImageData);
+      }
+    };
+    getThemeManager().on('themeChanged', this.boundOnThemeChange);
   }
 
   private createControls(): void {
@@ -139,7 +150,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
     // Intensity label
     const intensityLabel = document.createElement('span');
     intensityLabel.textContent = 'Int:';
-    intensityLabel.style.cssText = 'color: #888; font-size: 10px; margin-left: 8px;';
+    intensityLabel.style.cssText = 'color: var(--text-muted); font-size: 10px; margin-left: 8px;';
     this.rgbControlsContainer.appendChild(intensityLabel);
 
     // Intensity slider
@@ -154,7 +165,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
       width: 50px;
       height: 12px;
       cursor: pointer;
-      accent-color: #666;
+      accent-color: var(--text-secondary);
     `;
     this.boundOnIntensityChange = (e: Event) => {
       const value = parseInt((e.target as HTMLInputElement).value, 10);
@@ -207,7 +218,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
       justify-content: space-between;
       margin-top: 4px;
       font-size: 9px;
-      color: #666;
+      color: var(--text-secondary);
     `;
     footer.innerHTML = `
       <span>0</span>
@@ -230,7 +241,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
       gpuProcessor.setPlaybackMode(this.isPlaybackMode);
       gpuProcessor.setImage(imageData);
       // Draw background and grid first (CPU) - use logical dimensions
-      this.ctx.fillStyle = '#111';
+      this.ctx.fillStyle = getCSSColor('--bg-primary', '#111');
       this.ctx.fillRect(0, 0, WAVEFORM_WIDTH, WAVEFORM_HEIGHT);
       this.drawGrid();
       // Then GPU waveform overlay
@@ -646,6 +657,11 @@ export class Waveform extends EventEmitter<WaveformEvents> {
     if (this.intensitySlider && this.boundOnIntensityChange) {
       this.intensitySlider.removeEventListener('input', this.boundOnIntensityChange);
     }
+    // Clean up theme change listener
+    if (this.boundOnThemeChange) {
+      getThemeManager().off('themeChanged', this.boundOnThemeChange);
+    }
+    this.boundOnThemeChange = null;
     this.boundOnIntensityChange = null;
     this.intensitySlider = null;
     this.modeButton = null;

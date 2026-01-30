@@ -35,11 +35,13 @@ export interface ThemeColors {
   accentPrimary: string;
   accentHover: string;
   accentActive: string;
+  accentPrimaryRgb: string; // RGB values for use with rgba()
 
   // Semantic colors
   success: string;
   warning: string;
   error: string;
+  info: string;
 
   // Overlay colors
   overlayBg: string;
@@ -66,10 +68,12 @@ const DARK_THEME: ThemeColors = {
   accentPrimary: '#4a9eff',
   accentHover: '#5aafff',
   accentActive: '#3a8eef',
+  accentPrimaryRgb: '74, 158, 255',
 
   success: '#4ade80',
   warning: '#facc15',
   error: '#f87171',
+  info: '#60a5fa',
 
   overlayBg: 'rgba(0, 0, 0, 0.75)',
   overlayBorder: 'rgba(255, 255, 255, 0.1)',
@@ -94,10 +98,12 @@ const LIGHT_THEME: ThemeColors = {
   accentPrimary: '#0066cc',
   accentHover: '#0077dd',
   accentActive: '#0055bb',
+  accentPrimaryRgb: '0, 102, 204',
 
   success: '#22c55e',
   warning: '#eab308',
   error: '#ef4444',
+  info: '#3b82f6',
 
   overlayBg: 'rgba(255, 255, 255, 0.9)',
   overlayBorder: 'rgba(0, 0, 0, 0.1)',
@@ -286,10 +292,12 @@ export class ThemeManager extends EventEmitter<ThemeManagerEvents> {
     root.style.setProperty('--accent-primary', colors.accentPrimary);
     root.style.setProperty('--accent-hover', colors.accentHover);
     root.style.setProperty('--accent-active', colors.accentActive);
+    root.style.setProperty('--accent-primary-rgb', colors.accentPrimaryRgb);
 
     root.style.setProperty('--success', colors.success);
     root.style.setProperty('--warning', colors.warning);
     root.style.setProperty('--error', colors.error);
+    root.style.setProperty('--info', colors.info);
 
     root.style.setProperty('--overlay-bg', colors.overlayBg);
     root.style.setProperty('--overlay-border', colors.overlayBorder);

@@ -367,13 +367,13 @@ describe('createControlButton', () => {
   it('DRAG-U115: mouseenter changes background', () => {
     const btn = createControlButton('X', 'Close');
     btn.dispatchEvent(new MouseEvent('mouseenter'));
-    expect(btn.style.background).toContain('0.2');
+    expect(btn.style.background).toContain('var(--bg-hover)');
   });
 
   it('DRAG-U116: mouseleave restores background', () => {
     const btn = createControlButton('X', 'Close');
     btn.dispatchEvent(new MouseEvent('mouseenter'));
     btn.dispatchEvent(new MouseEvent('mouseleave'));
-    expect(btn.style.background).toContain('0.1');
+    expect(btn.style.background).toContain('var(--overlay-border)');
   });
 });

@@ -63,7 +63,7 @@ export class ScopesControl extends EventEmitter<ScopesControlEvents> {
     this.button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
-      color: #999;
+      color: var(--text-muted);
       padding: 6px 10px;
       border-radius: 4px;
       cursor: pointer;
@@ -84,16 +84,16 @@ export class ScopesControl extends EventEmitter<ScopesControlEvents> {
     });
     this.button.addEventListener('mouseenter', () => {
       if (!this.isOpen && !this.hasActiveScopes()) {
-        this.button.style.background = '#3a3a3a';
-        this.button.style.borderColor = '#4a4a4a';
-        this.button.style.color = '#ccc';
+        this.button.style.background = 'var(--bg-hover)';
+        this.button.style.borderColor = 'var(--border-primary)';
+        this.button.style.color = 'var(--text-primary)';
       }
     });
     this.button.addEventListener('mouseleave', () => {
       if (!this.isOpen && !this.hasActiveScopes()) {
         this.button.style.background = 'transparent';
         this.button.style.borderColor = 'transparent';
-        this.button.style.color = '#999';
+        this.button.style.color = 'var(--text-muted)';
       }
     });
 
@@ -106,8 +106,8 @@ export class ScopesControl extends EventEmitter<ScopesControlEvents> {
     this.dropdown.dataset.testid = 'scopes-dropdown';
     this.dropdown.style.cssText = `
       position: fixed;
-      background: #2a2a2a;
-      border: 1px solid #4a4a4a;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
       border-radius: 4px;
       padding: 4px;
       z-index: 9999;
@@ -130,7 +130,7 @@ export class ScopesControl extends EventEmitter<ScopesControlEvents> {
       option.style.cssText = `
         background: transparent;
         border: none;
-        color: #ccc;
+        color: var(--text-primary);
         padding: 6px 10px;
         text-align: left;
         cursor: pointer;
@@ -149,13 +149,13 @@ export class ScopesControl extends EventEmitter<ScopesControlEvents> {
 
       const shortcutHint = document.createElement('span');
       shortcutHint.textContent = shortcut;
-      shortcutHint.style.cssText = 'color: #666; font-size: 10px;';
+      shortcutHint.style.cssText = 'color: var(--text-muted); font-size: 10px;';
 
       option.appendChild(leftPart);
       option.appendChild(shortcutHint);
 
       option.addEventListener('mouseenter', () => {
-        option.style.background = '#3a3a3a';
+        option.style.background = 'var(--bg-hover)';
       });
       option.addEventListener('mouseleave', () => {
         this.updateOptionStyle(option, type);
@@ -180,20 +180,20 @@ export class ScopesControl extends EventEmitter<ScopesControlEvents> {
 
     // Update button style based on active state
     if (this.hasActiveScopes()) {
-      this.button.style.background = 'rgba(74, 158, 255, 0.15)';
-      this.button.style.borderColor = '#4a9eff';
-      this.button.style.color = '#4a9eff';
+      this.button.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+      this.button.style.borderColor = 'var(--accent-primary)';
+      this.button.style.color = 'var(--accent-primary)';
     } else if (!this.isOpen) {
       this.button.style.background = 'transparent';
       this.button.style.borderColor = 'transparent';
-      this.button.style.color = '#999';
+      this.button.style.color = 'var(--text-muted)';
     }
   }
 
   private updateOptionStyle(option: HTMLButtonElement, type: ScopeType): void {
     const isActive = this.state[type];
-    option.style.background = isActive ? 'rgba(74, 158, 255, 0.15)' : 'transparent';
-    option.style.color = isActive ? '#4a9eff' : '#ccc';
+    option.style.background = isActive ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent';
+    option.style.color = isActive ? 'var(--accent-primary)' : 'var(--text-primary)';
   }
 
   private updateDropdownStates(): void {
@@ -247,8 +247,8 @@ export class ScopesControl extends EventEmitter<ScopesControlEvents> {
     this.isOpen = true;
     this.positionDropdown();
     this.dropdown.style.display = 'flex';
-    this.button.style.background = '#3a3a3a';
-    this.button.style.borderColor = '#4a4a4a';
+    this.button.style.background = 'var(--bg-hover)';
+    this.button.style.borderColor = 'var(--border-primary)';
 
     document.addEventListener('click', this.boundHandleOutsideClick);
     window.addEventListener('scroll', this.boundHandleReposition, true);

@@ -17,10 +17,14 @@ export class ThemeControl {
   private dropdown: HTMLElement;
   private isOpen = false;
   private boundHandleOutsideClick: (e: MouseEvent) => void;
+  private boundOnModeChanged: () => void;
+  private boundOnThemeChanged: () => void;
 
   constructor() {
     const themeManager = getThemeManager();
     this.boundHandleOutsideClick = (e) => this.handleOutsideClick(e);
+    this.boundOnModeChanged = () => this.updateButtonLabel();
+    this.boundOnThemeChanged = () => this.updateDropdownStates();
 
     // Create container
     this.container = document.createElement('div');
@@ -85,8 +89,8 @@ export class ThemeControl {
     this.container.appendChild(this.dropdown);
 
     // Subscribe to theme changes
-    themeManager.on('modeChanged', () => this.updateButtonLabel());
-    themeManager.on('themeChanged', () => this.updateDropdownStates());
+    themeManager.on('modeChanged', this.boundOnModeChanged);
+    themeManager.on('themeChanged', this.boundOnThemeChanged);
   }
 
   /**
@@ -278,6 +282,12 @@ export class ThemeControl {
    */
   dispose(): void {
     document.removeEventListener('mousedown', this.boundHandleOutsideClick);
+
+    // Clean up theme change listeners
+    const themeManager = getThemeManager();
+    themeManager.off('modeChanged', this.boundOnModeChanged);
+    themeManager.off('themeChanged', this.boundOnThemeChanged);
+
     this.container.remove();
   }
 }

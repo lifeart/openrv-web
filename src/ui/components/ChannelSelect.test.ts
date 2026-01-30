@@ -139,7 +139,7 @@ describe('ChannelSelect', () => {
       // Count items with accent color (selected styling)
       let accentCount = 0;
       options.forEach((option) => {
-        if ((option as HTMLButtonElement).style.color === 'rgb(74, 158, 255)') {
+        if ((option as HTMLButtonElement).style.color === 'var(--accent-primary)') {
           accentCount++;
         }
       });
@@ -163,15 +163,15 @@ describe('ChannelSelect', () => {
       control.setChannel('red');
 
       // Red (index 1) should have accent styling
-      expect((options[1] as HTMLButtonElement).style.color).toBe('rgb(74, 158, 255)');
+      expect((options[1] as HTMLButtonElement).style.color).toBe('var(--accent-primary)');
 
       // Change to blue
       control.setChannel('blue');
 
       // Red should no longer have accent styling
-      expect((options[1] as HTMLButtonElement).style.color).not.toBe('rgb(74, 158, 255)');
+      expect((options[1] as HTMLButtonElement).style.color).not.toBe('var(--accent-primary)');
       // Blue (index 3) should have accent styling
-      expect((options[3] as HTMLButtonElement).style.color).toBe('rgb(74, 158, 255)');
+      expect((options[3] as HTMLButtonElement).style.color).toBe('var(--accent-primary)');
       document.body.removeChild(el);
     });
 
@@ -204,8 +204,8 @@ describe('ChannelSelect', () => {
       // Verify only green has accent styling
       // Need to reopen to check
       button.click();
-      expect((options[1] as HTMLButtonElement).style.color).not.toBe('rgb(74, 158, 255)');
-      expect((options[2] as HTMLButtonElement).style.color).toBe('rgb(74, 158, 255)');
+      expect((options[1] as HTMLButtonElement).style.color).not.toBe('var(--accent-primary)');
+      expect((options[2] as HTMLButtonElement).style.color).toBe('var(--accent-primary)');
       document.body.removeChild(el);
     });
 
@@ -231,13 +231,13 @@ describe('ChannelSelect', () => {
       // Only rgb (index 0) should have accent styling
       let accentCount = 0;
       options.forEach((option) => {
-        if ((option as HTMLButtonElement).style.color === 'rgb(74, 158, 255)') {
+        if ((option as HTMLButtonElement).style.color === 'var(--accent-primary)') {
           accentCount++;
         }
       });
 
       expect(accentCount).toBe(1);
-      expect((options[0] as HTMLButtonElement).style.color).toBe('rgb(74, 158, 255)');
+      expect((options[0] as HTMLButtonElement).style.color).toBe('var(--accent-primary)');
       document.body.removeChild(el);
     });
   });

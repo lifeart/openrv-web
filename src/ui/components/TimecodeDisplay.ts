@@ -118,7 +118,7 @@ export class TimecodeDisplay {
       gap: 12px;
       font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
       font-size: 12px;
-      color: #ccc;
+      color: var(--text-primary);
       padding: 0 8px;
       user-select: none;
     `;
@@ -131,7 +131,7 @@ export class TimecodeDisplay {
       background: rgba(0, 0, 0, 0.3);
       padding: 4px 8px;
       border-radius: 3px;
-      border: 1px solid #333;
+      border: 1px solid var(--bg-secondary);
       min-width: 90px;
       text-align: center;
       letter-spacing: 0.5px;
@@ -143,7 +143,7 @@ export class TimecodeDisplay {
     this.frameCounterElement.className = 'frame-counter';
     this.frameCounterElement.dataset.testid = 'frame-counter';
     this.frameCounterElement.style.cssText = `
-      color: #888;
+      color: var(--text-secondary);
       font-size: 11px;
       min-width: 70px;
       text-align: right;

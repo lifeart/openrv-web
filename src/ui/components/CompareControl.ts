@@ -73,7 +73,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     this.button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
-      color: #999;
+      color: var(--text-muted);
       padding: 6px 10px;
       border-radius: 4px;
       cursor: pointer;
@@ -94,16 +94,16 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     });
     this.button.addEventListener('mouseenter', () => {
       if (!this.isOpen && !this.isActive()) {
-        this.button.style.background = '#3a3a3a';
-        this.button.style.borderColor = '#4a4a4a';
-        this.button.style.color = '#ccc';
+        this.button.style.background = 'var(--bg-hover)';
+        this.button.style.borderColor = 'var(--border-primary)';
+        this.button.style.color = 'var(--text-primary)';
       }
     });
     this.button.addEventListener('mouseleave', () => {
       if (!this.isOpen && !this.isActive()) {
         this.button.style.background = 'transparent';
         this.button.style.borderColor = 'transparent';
-        this.button.style.color = '#999';
+        this.button.style.color = 'var(--text-muted)';
       }
     });
 
@@ -116,8 +116,8 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     this.dropdown.dataset.testid = 'compare-dropdown';
     this.dropdown.style.cssText = `
       position: fixed;
-      background: #2a2a2a;
-      border: 1px solid #4a4a4a;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
       border-radius: 4px;
       padding: 8px;
       z-index: 9999;
@@ -141,7 +141,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
 
     const wipeHeader = document.createElement('div');
     wipeHeader.textContent = 'Wipe Mode';
-    wipeHeader.style.cssText = 'color: #888; font-size: 10px; text-transform: uppercase; padding: 4px 6px;';
+    wipeHeader.style.cssText = 'color: var(--text-secondary); font-size: 10px; text-transform: uppercase; padding: 4px 6px;';
     wipeSection.appendChild(wipeHeader);
 
     for (const { mode, label, icon } of WIPE_MODES) {
@@ -150,7 +150,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
       option.style.cssText = `
         background: transparent;
         border: none;
-        color: #ccc;
+        color: var(--text-primary);
         padding: 6px 10px;
         text-align: left;
         cursor: pointer;
@@ -164,7 +164,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
       option.innerHTML = `${getIconSvg(icon, 'sm')}<span>${label}</span>`;
 
       option.addEventListener('mouseenter', () => {
-        option.style.background = '#3a3a3a';
+        option.style.background = 'var(--bg-hover)';
       });
       option.addEventListener('mouseleave', () => {
         this.updateWipeOptionStyle(option, mode);
@@ -180,7 +180,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
 
     // Divider
     const divider = document.createElement('div');
-    divider.style.cssText = 'height: 1px; background: #444; margin: 4px 0;';
+    divider.style.cssText = 'height: 1px; background: var(--border-primary); margin: 4px 0;';
     this.dropdown.appendChild(divider);
 
     // A/B section
@@ -189,7 +189,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
 
     const abHeader = document.createElement('div');
     abHeader.textContent = 'A/B Compare';
-    abHeader.style.cssText = 'color: #888; font-size: 10px; text-transform: uppercase; padding: 4px 6px;';
+    abHeader.style.cssText = 'color: var(--text-secondary); font-size: 10px; text-transform: uppercase; padding: 4px 6px;';
     abSection.appendChild(abHeader);
 
     // A/B button row
@@ -205,8 +205,8 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     aButton.style.cssText = `
       flex: 1;
       background: transparent;
-      border: 1px solid #555;
-      color: #ccc;
+      border: 1px solid var(--border-secondary);
+      color: var(--text-primary);
       padding: 6px 10px;
       border-radius: 3px;
       cursor: pointer;
@@ -227,8 +227,8 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     bButton.style.cssText = `
       flex: 1;
       background: transparent;
-      border: 1px solid #555;
-      color: #ccc;
+      border: 1px solid var(--border-secondary);
+      color: var(--text-primary);
       padding: 6px 10px;
       border-radius: 3px;
       cursor: pointer;
@@ -247,8 +247,8 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     toggleButton.title = 'Toggle A/B (`)';
     toggleButton.style.cssText = `
       background: transparent;
-      border: 1px solid #555;
-      color: #ccc;
+      border: 1px solid var(--border-secondary);
+      color: var(--text-primary);
       padding: 6px 10px;
       border-radius: 3px;
       cursor: pointer;
@@ -269,7 +269,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
 
     // Divider
     const divider2 = document.createElement('div');
-    divider2.style.cssText = 'height: 1px; background: #444; margin: 4px 0;';
+    divider2.style.cssText = 'height: 1px; background: var(--border-primary); margin: 4px 0;';
     this.dropdown.appendChild(divider2);
 
     // Difference Matte section
@@ -279,7 +279,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
 
     const diffHeader = document.createElement('div');
     diffHeader.textContent = 'Difference Matte';
-    diffHeader.style.cssText = 'color: #888; font-size: 10px; text-transform: uppercase; padding: 4px 6px;';
+    diffHeader.style.cssText = 'color: var(--text-secondary); font-size: 10px; text-transform: uppercase; padding: 4px 6px;';
     diffSection.appendChild(diffHeader);
 
     // Enable toggle
@@ -288,7 +288,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     diffToggle.style.cssText = `
       background: transparent;
       border: none;
-      color: #ccc;
+      color: var(--text-primary);
       padding: 6px 10px;
       text-align: left;
       cursor: pointer;
@@ -301,7 +301,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     `;
     diffToggle.innerHTML = `${getIconSvg('eye', 'sm')}<span>Show Difference</span>`;
     diffToggle.addEventListener('mouseenter', () => {
-      diffToggle.style.background = '#3a3a3a';
+      diffToggle.style.background = 'var(--bg-hover)';
     });
     diffToggle.addEventListener('mouseleave', () => {
       this.updateDiffToggleStyle(diffToggle);
@@ -319,7 +319,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
 
     const gainLabel = document.createElement('span');
     gainLabel.textContent = 'Gain:';
-    gainLabel.style.cssText = 'font-size: 11px; color: #888; min-width: 35px;';
+    gainLabel.style.cssText = 'font-size: 11px; color: var(--text-secondary); min-width: 35px;';
 
     const gainSlider = document.createElement('input');
     gainSlider.type = 'range';
@@ -338,7 +338,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     const gainValue = document.createElement('span');
     gainValue.className = 'diff-gain-value';
     gainValue.textContent = `${this.state.differenceMatte.gain.toFixed(1)}x`;
-    gainValue.style.cssText = 'font-size: 11px; color: #aaa; min-width: 30px; text-align: right;';
+    gainValue.style.cssText = 'font-size: 11px; color: var(--text-secondary); min-width: 30px; text-align: right;';
 
     gainRow.appendChild(gainLabel);
     gainRow.appendChild(gainSlider);
@@ -351,7 +351,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     heatmapToggle.style.cssText = `
       background: transparent;
       border: none;
-      color: #ccc;
+      color: var(--text-primary);
       padding: 6px 10px;
       text-align: left;
       cursor: pointer;
@@ -364,7 +364,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     `;
     heatmapToggle.innerHTML = `${getIconSvg('palette', 'sm')}<span>Heatmap Mode</span>`;
     heatmapToggle.addEventListener('mouseenter', () => {
-      heatmapToggle.style.background = '#3a3a3a';
+      heatmapToggle.style.background = 'var(--bg-hover)';
     });
     heatmapToggle.addEventListener('mouseleave', () => {
       this.updateHeatmapToggleStyle(heatmapToggle);
@@ -397,20 +397,20 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
 
     // Update button style based on active state
     if (this.isActive()) {
-      this.button.style.background = 'rgba(74, 158, 255, 0.15)';
-      this.button.style.borderColor = '#4a9eff';
-      this.button.style.color = '#4a9eff';
+      this.button.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+      this.button.style.borderColor = 'var(--accent-primary)';
+      this.button.style.color = 'var(--accent-primary)';
     } else if (!this.isOpen) {
       this.button.style.background = 'transparent';
       this.button.style.borderColor = 'transparent';
-      this.button.style.color = '#999';
+      this.button.style.color = 'var(--text-muted)';
     }
   }
 
   private updateWipeOptionStyle(option: HTMLButtonElement, mode: WipeMode): void {
     const isActive = this.state.wipeMode === mode;
-    option.style.background = isActive ? 'rgba(74, 158, 255, 0.15)' : 'transparent';
-    option.style.color = isActive ? '#4a9eff' : '#ccc';
+    option.style.background = isActive ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent';
+    option.style.color = isActive ? 'var(--accent-primary)' : 'var(--text-primary)';
   }
 
   private updateDropdownStates(): void {
@@ -430,16 +430,16 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
 
       if (aButton) {
         const isActive = this.state.currentAB === 'A';
-        aButton.style.background = isActive ? 'rgba(74, 158, 255, 0.15)' : 'transparent';
-        aButton.style.borderColor = isActive ? '#4a9eff' : '#555';
-        aButton.style.color = isActive ? '#4a9eff' : '#ccc';
+        aButton.style.background = isActive ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent';
+        aButton.style.borderColor = isActive ? 'var(--accent-primary)' : 'var(--border-secondary)';
+        aButton.style.color = isActive ? 'var(--accent-primary)' : 'var(--text-primary)';
       }
 
       if (bButton) {
         const isActive = this.state.currentAB === 'B';
-        bButton.style.background = isActive ? 'rgba(74, 158, 255, 0.15)' : 'transparent';
-        bButton.style.borderColor = isActive ? '#4a9eff' : '#555';
-        bButton.style.color = isActive ? '#4a9eff' : '#ccc';
+        bButton.style.background = isActive ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent';
+        bButton.style.borderColor = isActive ? 'var(--accent-primary)' : 'var(--border-secondary)';
+        bButton.style.color = isActive ? 'var(--accent-primary)' : 'var(--text-primary)';
         bButton.disabled = !this.state.abAvailable;
         bButton.style.opacity = this.state.abAvailable ? '1' : '0.5';
       }
@@ -493,14 +493,14 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
 
   private updateDiffToggleStyle(toggle: HTMLButtonElement): void {
     const isActive = this.state.differenceMatte.enabled;
-    toggle.style.background = isActive ? 'rgba(74, 158, 255, 0.15)' : 'transparent';
-    toggle.style.color = isActive ? '#4a9eff' : '#ccc';
+    toggle.style.background = isActive ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent';
+    toggle.style.color = isActive ? 'var(--accent-primary)' : 'var(--text-primary)';
   }
 
   private updateHeatmapToggleStyle(toggle: HTMLButtonElement): void {
     const isActive = this.state.differenceMatte.heatmap;
-    toggle.style.background = isActive ? 'rgba(74, 158, 255, 0.15)' : 'transparent';
-    toggle.style.color = isActive ? '#4a9eff' : '#ccc';
+    toggle.style.background = isActive ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent';
+    toggle.style.color = isActive ? 'var(--accent-primary)' : 'var(--text-primary)';
   }
 
   private handleOutsideClick(e: MouseEvent): void {
@@ -536,8 +536,8 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     this.isOpen = true;
     this.positionDropdown();
     this.dropdown.style.display = 'flex';
-    this.button.style.background = '#3a3a3a';
-    this.button.style.borderColor = '#4a4a4a';
+    this.button.style.background = 'var(--bg-hover)';
+    this.button.style.borderColor = 'var(--border-primary)';
 
     document.addEventListener('click', this.boundHandleOutsideClick);
     window.addEventListener('scroll', this.boundHandleReposition, true);

@@ -63,7 +63,7 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
     this.modeButton.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
-      color: #999;
+      color: var(--text-muted);
       padding: 6px 10px;
       border-radius: 4px;
       cursor: pointer;
@@ -83,16 +83,16 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
     });
     this.modeButton.addEventListener('mouseenter', () => {
       if (this.state.mode === 'off' && !this.isDropdownOpen) {
-        this.modeButton.style.background = '#3a3a3a';
-        this.modeButton.style.borderColor = '#4a4a4a';
-        this.modeButton.style.color = '#ccc';
+        this.modeButton.style.background = 'var(--bg-hover)';
+        this.modeButton.style.borderColor = 'var(--border-primary)';
+        this.modeButton.style.color = 'var(--text-primary)';
       }
     });
     this.modeButton.addEventListener('mouseleave', () => {
       if (this.state.mode === 'off' && !this.isDropdownOpen) {
         this.modeButton.style.background = 'transparent';
         this.modeButton.style.borderColor = 'transparent';
-        this.modeButton.style.color = '#999';
+        this.modeButton.style.color = 'var(--text-muted)';
       }
     });
 
@@ -105,8 +105,8 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
     this.modeDropdown.dataset.testid = 'stereo-mode-dropdown';
     this.modeDropdown.style.cssText = `
       position: fixed;
-      background: #2a2a2a;
-      border: 1px solid #4a4a4a;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
       border-radius: 4px;
       padding: 4px;
       z-index: 9999;
@@ -124,7 +124,7 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
       option.style.cssText = `
         background: transparent;
         border: none;
-        color: #ccc;
+        color: var(--text-primary);
         padding: 6px 10px;
         text-align: left;
         cursor: pointer;
@@ -133,7 +133,7 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
         transition: background 0.12s ease;
       `;
       option.addEventListener('mouseenter', () => {
-        option.style.background = '#3a3a3a';
+        option.style.background = 'var(--bg-hover)';
       });
       option.addEventListener('mouseleave', () => {
         if (this.state.mode !== mode) {
@@ -156,7 +156,7 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
     this.eyeSwapButton.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
-      color: #999;
+      color: var(--text-muted);
       padding: 4px 8px;
       border-radius: 4px;
       cursor: pointer;
@@ -167,8 +167,8 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
     this.eyeSwapButton.addEventListener('click', () => this.toggleEyeSwap());
     this.eyeSwapButton.addEventListener('mouseenter', () => {
       if (!this.state.eyeSwap) {
-        this.eyeSwapButton.style.background = '#3a3a3a';
-        this.eyeSwapButton.style.borderColor = '#4a4a4a';
+        this.eyeSwapButton.style.background = 'var(--bg-hover)';
+        this.eyeSwapButton.style.borderColor = 'var(--border-primary)';
       }
     });
     this.eyeSwapButton.addEventListener('mouseleave', () => {
@@ -191,7 +191,7 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
     this.offsetLabel = document.createElement('span');
     this.offsetLabel.textContent = 'Offset:';
     this.offsetLabel.style.cssText = `
-      color: #888;
+      color: var(--text-secondary);
       font-size: 10px;
     `;
 
@@ -207,7 +207,7 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
       width: 60px;
       height: 4px;
       cursor: pointer;
-      accent-color: #4a9eff;
+      accent-color: var(--accent-primary);
     `;
     this.offsetSlider.addEventListener('input', () => {
       this.setOffset(parseFloat(this.offsetSlider.value));
@@ -218,7 +218,7 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
     offsetValue.dataset.testid = 'stereo-offset-value';
     offsetValue.textContent = '0';
     offsetValue.style.cssText = `
-      color: #888;
+      color: var(--text-secondary);
       font-size: 10px;
       min-width: 24px;
       text-align: right;
@@ -260,13 +260,13 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
 
     // Update button style based on active state
     if (this.state.mode !== 'off') {
-      this.modeButton.style.background = 'rgba(74, 158, 255, 0.15)';
-      this.modeButton.style.borderColor = '#4a9eff';
-      this.modeButton.style.color = '#4a9eff';
+      this.modeButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+      this.modeButton.style.borderColor = 'var(--accent-primary)';
+      this.modeButton.style.color = 'var(--accent-primary)';
     } else {
       this.modeButton.style.background = 'transparent';
       this.modeButton.style.borderColor = 'transparent';
-      this.modeButton.style.color = '#999';
+      this.modeButton.style.color = 'var(--text-muted)';
     }
 
     // Update dropdown option highlighting
@@ -274,11 +274,11 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
     options.forEach((option) => {
       const mode = (option as HTMLElement).dataset.stereoMode;
       if (mode === this.state.mode) {
-        option.style.background = 'rgba(74, 158, 255, 0.2)';
-        option.style.color = '#4a9eff';
+        option.style.background = 'rgba(var(--accent-primary-rgb), 0.2)';
+        option.style.color = 'var(--accent-primary)';
       } else {
         option.style.background = 'transparent';
-        option.style.color = '#ccc';
+        option.style.color = 'var(--text-primary)';
       }
     });
   }
@@ -294,13 +294,13 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
 
   private updateEyeSwapButton(): void {
     if (this.state.eyeSwap) {
-      this.eyeSwapButton.style.background = 'rgba(74, 158, 255, 0.15)';
-      this.eyeSwapButton.style.borderColor = '#4a9eff';
-      this.eyeSwapButton.style.color = '#4a9eff';
+      this.eyeSwapButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+      this.eyeSwapButton.style.borderColor = 'var(--accent-primary)';
+      this.eyeSwapButton.style.color = 'var(--accent-primary)';
     } else {
       this.eyeSwapButton.style.background = 'transparent';
       this.eyeSwapButton.style.borderColor = 'transparent';
-      this.eyeSwapButton.style.color = '#999';
+      this.eyeSwapButton.style.color = 'var(--text-muted)';
     }
   }
 
@@ -330,8 +330,8 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
     this.isDropdownOpen = true;
     this.positionDropdown();
     this.modeDropdown.style.display = 'flex';
-    this.modeButton.style.background = '#3a3a3a';
-    this.modeButton.style.borderColor = '#4a4a4a';
+    this.modeButton.style.background = 'var(--bg-hover)';
+    this.modeButton.style.borderColor = 'var(--border-primary)';
 
     // Add listeners
     document.addEventListener('click', this.boundHandleOutsideClick);

@@ -138,7 +138,7 @@ describe('PaintToolbar', () => {
       const btn = el.querySelector('[data-testid="paint-tool-pen"]') as HTMLButtonElement;
 
       expect(btn.classList.contains('active')).toBe(true);
-      expect(btn.style.cssText).toContain('rgb(74, 158, 255)'); // #4a9eff
+      expect(btn.style.cssText).toContain('var(--accent-primary)'); // #4a9eff
     });
 
     it('PAINT-U035: inactive tool button has default styling', () => {
@@ -334,7 +334,7 @@ describe('PaintToolbar', () => {
 
       btn.dispatchEvent(new MouseEvent('mouseenter'));
 
-      expect(btn.style.cssText).toContain('rgb(58, 58, 58)'); // #3a3a3a
+      expect(btn.style.cssText).toContain('var(--bg-hover)'); // #3a3a3a
     });
 
     it('PAINT-U081: inactive button restores on mouseleave', () => {

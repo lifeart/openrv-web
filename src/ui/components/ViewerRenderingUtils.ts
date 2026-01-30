@@ -6,6 +6,7 @@
 import { ColorAdjustments } from './ColorControls';
 import { Transform2D } from './TransformControl';
 import { CropState, CropRegion } from './CropControl';
+import { getCSSColor } from '../../utils/getCSSColor';
 
 /**
  * Draw image/video with rotation and flip transforms applied.
@@ -228,13 +229,13 @@ export function renderCropOverlay(
   ctx.fillRect(cropX + cropW, cropY, w - cropX - cropW, cropH);
 
   // Draw crop border
-  ctx.strokeStyle = '#4a9eff';
+  ctx.strokeStyle = getCSSColor('--accent-primary', '#4a9eff');
   ctx.lineWidth = 2;
   ctx.strokeRect(cropX, cropY, cropW, cropH);
 
   // Draw corner handles
   const handleSize = 8;
-  ctx.fillStyle = '#4a9eff';
+  ctx.fillStyle = getCSSColor('--accent-primary', '#4a9eff');
 
   // Top-left
   ctx.fillRect(cropX - handleSize / 2, cropY - handleSize / 2, handleSize, handleSize);
@@ -281,10 +282,12 @@ export function drawPlaceholder(
   // Draw checkerboard (scale size with zoom)
   const baseSize = 20;
   const size = Math.max(4, Math.floor(baseSize * zoom));
+  const lightColor = getCSSColor('--bg-hover', '#2a2a2a');
+  const darkColor = getCSSColor('--bg-secondary', '#222');
   for (let y = 0; y < h; y += size) {
     for (let x = 0; x < w; x += size) {
       const isLight = ((x / size) + (y / size)) % 2 === 0;
-      ctx.fillStyle = isLight ? '#2a2a2a' : '#222';
+      ctx.fillStyle = isLight ? lightColor : darkColor;
       ctx.fillRect(x, y, size, size);
     }
   }
@@ -292,7 +295,7 @@ export function drawPlaceholder(
   // Draw text (scale font with zoom)
   const baseFontSize = 24;
   const fontSize = Math.max(10, Math.floor(baseFontSize * zoom));
-  ctx.fillStyle = '#666';
+  ctx.fillStyle = getCSSColor('--text-secondary', '#666');
   ctx.font = `${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
@@ -300,7 +303,7 @@ export function drawPlaceholder(
 
   const smallFontSize = Math.max(8, Math.floor(14 * zoom));
   ctx.font = `${smallFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
-  ctx.fillStyle = '#555';
+  ctx.fillStyle = getCSSColor('--text-muted', '#555');
   ctx.fillText('Supports: PNG, JPEG, WebP, GIF, MP4, WebM', w / 2, h / 2 + smallFontSize);
 }
 

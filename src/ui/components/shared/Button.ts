@@ -20,29 +20,29 @@ export interface ButtonOptions {
 
 const VARIANT_STYLES: Record<ButtonVariant, { base: string; hover: string; active: string }> = {
   default: {
-    base: 'background: #3a3a3a; border: 1px solid #4a4a4a; color: #ccc;',
-    hover: 'background: #444; border-color: #555; color: #fff;',
-    active: 'background: rgba(74, 158, 255, 0.15); border-color: #4a9eff; color: #4a9eff;',
+    base: 'background: var(--bg-active); border: 1px solid var(--border-primary); color: var(--text-primary);',
+    hover: 'background: var(--border-primary); border-color: var(--bg-active); color: var(--text-primary);',
+    active: 'background: rgba(var(--accent-primary-rgb), 0.15); border-color: var(--accent-primary); color: var(--accent-primary);',
   },
   primary: {
-    base: 'background: #4a9eff; border: 1px solid #4a9eff; color: #fff;',
-    hover: 'background: #5aafff; border-color: #5aafff; color: #fff;',
-    active: 'background: #3a8eef; border-color: #3a8eef; color: #fff;',
+    base: 'background: var(--accent-primary); border: 1px solid var(--accent-primary); color: #fff;',
+    hover: 'background: var(--accent-hover); border-color: var(--accent-hover); color: #fff;',
+    active: 'background: var(--accent-active); border-color: var(--accent-active); color: #fff;',
   },
   danger: {
-    base: 'background: #dc3545; border: 1px solid #dc3545; color: #fff;',
-    hover: 'background: #e04555; border-color: #e04555; color: #fff;',
-    active: 'background: #c82535; border-color: #c82535; color: #fff;',
+    base: 'background: var(--error); border: 1px solid var(--error); color: #fff;',
+    hover: 'background: var(--error); border-color: var(--error); color: #fff; filter: brightness(1.1);',
+    active: 'background: var(--error); border-color: var(--error); color: #fff; filter: brightness(0.9);',
   },
   ghost: {
-    base: 'background: transparent; border: 1px solid transparent; color: #aaa;',
-    hover: 'background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.1); color: #fff;',
-    active: 'background: rgba(74, 158, 255, 0.15); border-color: #4a9eff; color: #4a9eff;',
+    base: 'background: transparent; border: 1px solid transparent; color: var(--text-secondary);',
+    hover: 'background: var(--bg-hover); border-color: var(--border-secondary); color: var(--text-primary);',
+    active: 'background: rgba(var(--accent-primary-rgb), 0.15); border-color: var(--accent-primary); color: var(--accent-primary);',
   },
   icon: {
-    base: 'background: transparent; border: 1px solid transparent; color: #aaa;',
-    hover: 'background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.1); color: #fff;',
-    active: 'background: rgba(74, 158, 255, 0.15); border-color: #4a9eff; color: #4a9eff;',
+    base: 'background: transparent; border: 1px solid transparent; color: var(--text-secondary);',
+    hover: 'background: var(--bg-hover); border-color: var(--border-secondary); color: var(--text-primary);',
+    active: 'background: rgba(var(--accent-primary-rgb), 0.15); border-color: var(--accent-primary); color: var(--accent-primary);',
   },
 };
 
@@ -137,7 +137,7 @@ export function createButton(
     button.addEventListener('focus', () => {
       // Show focus ring only for keyboard navigation
       if (focusFromKeyboard) {
-        button.style.outline = '2px solid #4a9eff';
+        button.style.outline = '2px solid var(--accent-primary)';
         button.style.outlineOffset = '2px';
       }
     });
@@ -189,7 +189,7 @@ export function applyA11yFocus(button: HTMLButtonElement): () => void {
 
   const handleFocus = () => {
     if (focusFromKeyboard) {
-      button.style.outline = '2px solid #4a9eff';
+      button.style.outline = '2px solid var(--accent-primary)';
       button.style.outlineOffset = '2px';
     }
   };

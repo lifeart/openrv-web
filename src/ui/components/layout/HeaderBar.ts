@@ -53,8 +53,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.container.className = 'header-bar';
     this.container.style.cssText = `
       height: 40px;
-      background: linear-gradient(180deg, #2a2a2a 0%, #222 100%);
-      border-bottom: 1px solid #333;
+      background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+      border-bottom: 1px solid var(--border-secondary);
       display: flex;
       align-items: center;
       padding: 0 12px;
@@ -197,7 +197,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     divider.style.cssText = `
       width: 1px;
       height: 24px;
-      background: #444;
+      background: var(--border-primary);
       margin: 0 12px;
     `;
     this.container.appendChild(divider);
@@ -209,7 +209,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
-      color: #bbb;
+      color: var(--text-secondary);
       padding: 6px 12px;
       border-radius: 4px;
       cursor: pointer;
@@ -238,23 +238,23 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     }
 
     button.addEventListener('mouseenter', () => {
-      button.style.background = 'rgba(255,255,255,0.08)';
-      button.style.borderColor = 'rgba(255,255,255,0.1)';
-      button.style.color = '#fff';
+      button.style.background = 'var(--bg-hover)';
+      button.style.borderColor = 'var(--border-secondary)';
+      button.style.color = 'var(--text-primary)';
     });
 
     button.addEventListener('mouseleave', () => {
       button.style.background = 'transparent';
       button.style.borderColor = 'transparent';
-      button.style.color = '#bbb';
+      button.style.color = 'var(--text-secondary)';
     });
 
     button.addEventListener('mousedown', () => {
-      button.style.background = 'rgba(255,255,255,0.15)';
+      button.style.background = 'var(--bg-active)';
     });
 
     button.addEventListener('mouseup', () => {
-      button.style.background = 'rgba(255,255,255,0.08)';
+      button.style.background = 'var(--bg-hover)';
     });
 
     button.addEventListener('click', onClick);
@@ -268,7 +268,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
-      color: #bbb;
+      color: var(--text-secondary);
       padding: 6px 12px;
       border-radius: 4px;
       cursor: pointer;
@@ -281,15 +281,15 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     `;
 
     button.addEventListener('mouseenter', () => {
-      button.style.background = 'rgba(255,255,255,0.08)';
-      button.style.borderColor = 'rgba(255,255,255,0.1)';
-      button.style.color = '#fff';
+      button.style.background = 'var(--bg-hover)';
+      button.style.borderColor = 'var(--border-secondary)';
+      button.style.color = 'var(--text-primary)';
     });
 
     button.addEventListener('mouseleave', () => {
       button.style.background = 'transparent';
       button.style.borderColor = 'transparent';
-      button.style.color = '#bbb';
+      button.style.color = 'var(--text-secondary)';
     });
 
     button.addEventListener('click', onClick);
@@ -333,7 +333,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     const icon = document.createElement('span');
     icon.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>';
     icon.style.cssText = `
-      color: #888;
+      color: var(--text-muted);
       display: flex;
       align-items: center;
       flex-shrink: 0;
@@ -344,7 +344,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     const nameText = document.createElement('span');
     nameText.className = 'session-name-text';
     nameText.style.cssText = `
-      color: #ccc;
+      color: var(--text-primary);
       font-size: 12px;
       white-space: nowrap;
       overflow: hidden;
@@ -355,7 +355,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
     // Hover effect
     container.addEventListener('mouseenter', () => {
-      container.style.background = 'rgba(255,255,255,0.05)';
+      container.style.background = 'var(--bg-hover)';
     });
     container.addEventListener('mouseleave', () => {
       container.style.background = 'transparent';
@@ -405,7 +405,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
-      color: #bbb;
+      color: var(--text-secondary);
       padding: 6px 8px;
       border-radius: 4px;
       cursor: pointer;
@@ -421,21 +421,21 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     `;
 
     button.addEventListener('mouseenter', () => {
-      button.style.background = 'rgba(255,255,255,0.08)';
-      button.style.borderColor = 'rgba(255,255,255,0.1)';
-      button.style.color = '#fff';
+      button.style.background = 'var(--bg-hover)';
+      button.style.borderColor = 'var(--border-secondary)';
+      button.style.color = 'var(--text-primary)';
     });
 
     button.addEventListener('mouseleave', () => {
       const speed = this.session.playbackSpeed;
       if (speed !== 1) {
-        button.style.background = 'rgba(74, 158, 255, 0.15)';
-        button.style.borderColor = '#4a9eff';
-        button.style.color = '#4a9eff';
+        button.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+        button.style.borderColor = 'var(--accent-primary)';
+        button.style.color = 'var(--accent-primary)';
       } else {
         button.style.background = 'transparent';
         button.style.borderColor = 'transparent';
-        button.style.color = '#bbb';
+        button.style.color = 'var(--text-secondary)';
       }
     });
 
@@ -470,13 +470,13 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
     // Highlight when not at 1x
     if (speed !== 1) {
-      button.style.background = 'rgba(74, 158, 255, 0.15)';
-      button.style.borderColor = '#4a9eff';
-      button.style.color = '#4a9eff';
+      button.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+      button.style.borderColor = 'var(--accent-primary)';
+      button.style.color = 'var(--accent-primary)';
     } else {
       button.style.background = 'transparent';
       button.style.borderColor = 'transparent';
-      button.style.color = '#bbb';
+      button.style.color = 'var(--text-secondary)';
     }
   }
 
