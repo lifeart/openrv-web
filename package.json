@@ -39,10 +39,30 @@
   },
   "keywords": [
     "vfx",
-    "image-viewer",
     "openrv",
+    "openrv-alternative",
+    "image-viewer",
+    "sequence-viewer",
+    "video-player",
+    "exr-viewer",
+    "dailies-review",
+    "color-grading",
+    "color-correction",
+    "cdl",
+    "lut",
+    "3d-lut",
+    "histogram",
+    "waveform",
+    "vectorscope",
     "gto",
-    "webgl"
+    "rv-session",
+    "webgl",
+    "annotations",
+    "frame-accurate",
+    "stereo-3d",
+    "post-production",
+    "film-production",
+    "aswf"
   ],
   "license": "MIT"
 }

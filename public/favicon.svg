@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b6db5"/>
+      <stop offset="100%" style="stop-color:#1e4a80"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#5dd3f7"/>
+      <stop offset="100%" style="stop-color:#3bb8e0"/>
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="32" height="32" rx="5" fill="url(#bg)"/>
+  <!-- Play triangle accent (VFX/viewer symbol) -->
+  <polygon points="22,16 28,20 28,12" fill="url(#accent)" opacity="0.3"/>
+  <!-- R letter -->
+  <path d="M5 7h5.5c2.2 0 3.8 1.4 3.8 3.3 0 1.4-.7 2.4-1.8 2.9l2.5 4.8h-3l-2-4h-2v4H5V7zm3 2.5v3h2c.9 0 1.5-.5 1.5-1.5s-.6-1.5-1.5-1.5H8z" fill="#fff"/>
+  <!-- V letter -->
+  <path d="M15.5 7h3l2.5 7.5L23.5 7h3l-4 11h-3l-4-11z" fill="url(#accent)"/>
+</svg>

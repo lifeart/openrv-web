@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="100%" style="stop-color:#0d0d18"/>
+    </linearGradient>
+    <linearGradient id="logoBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b6db5"/>
+      <stop offset="100%" style="stop-color:#1e4a80"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#5dd3f7"/>
+      <stop offset="100%" style="stop-color:#3bb8e0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- Subtle grid pattern for VFX feel -->
+  <g opacity="0.05" stroke="#4fc3f7" stroke-width="1">
+    <line x1="0" y1="157" x2="1200" y2="157"/>
+    <line x1="0" y1="315" x2="1200" y2="315"/>
+    <line x1="0" y1="473" x2="1200" y2="473"/>
+    <line x1="300" y1="0" x2="300" y2="630"/>
+    <line x1="600" y1="0" x2="600" y2="630"/>
+    <line x1="900" y1="0" x2="900" y2="630"/>
+  </g>
+
+  <!-- Logo mark -->
+  <g transform="translate(500, 140)">
+    <rect width="200" height="80" rx="12" fill="url(#logoBg)"/>
+    <polygon points="140,40 175,55 175,25" fill="url(#accent)" opacity="0.3"/>
+    <path d="M25 18h28c11 0 19 7 19 16.5 0 7-3.5 12-9 14.5l12.5 24h-15l-10-20H40v20H25V18zm15 12.5v15h10c4.5 0 7.5-2.5 7.5-7.5s-3-7.5-7.5-7.5H40z" fill="#fff"/>
+    <path d="M90 18h15l12.5 37.5L130 18h15l-20 55h-15L90 18z" fill="url(#accent)"/>
+  </g>
+
+  <!-- Title -->
+  <text x="600" y="290" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="56" font-weight="700" fill="#ffffff" text-anchor="middle">OpenRV Web</text>
+
+  <!-- Subtitle -->
+  <text x="600" y="350" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="26" fill="#b0b0b0" text-anchor="middle">Professional VFX Image &amp; Sequence Viewer</text>
+
+  <!-- Tagline -->
+  <text x="600" y="400" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="20" fill="#7a7a7a" text-anchor="middle">Free &amp; Open Source | No Installation Required</text>
+
+  <!-- Feature pills -->
+  <g transform="translate(600, 480)" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" text-anchor="middle">
+    <g transform="translate(-380, 0)">
+      <rect x="-60" y="-18" width="120" height="36" rx="18" fill="#2d5aa0" opacity="0.8"/>
+      <text y="5" fill="#fff">Color Grading</text>
+    </g>
+    <g transform="translate(-190, 0)">
+      <rect x="-50" y="-18" width="100" height="36" rx="18" fill="#2d5aa0" opacity="0.8"/>
+      <text y="5" fill="#fff">EXR Support</text>
+    </g>
+    <g transform="translate(0, 0)">
+      <rect x="-70" y="-18" width="140" height="36" rx="18" fill="#2d5aa0" opacity="0.8"/>
+      <text y="5" fill="#fff">Dailies Review</text>
+    </g>
+    <g transform="translate(190, 0)">
+      <rect x="-45" y="-18" width="90" height="36" rx="18" fill="#2d5aa0" opacity="0.8"/>
+      <text y="5" fill="#fff">Scopes</text>
+    </g>
+    <g transform="translate(380, 0)">
+      <rect x="-70" y="-18" width="140" height="36" rx="18" fill="#2d5aa0" opacity="0.8"/>
+      <text y="5" fill="#fff">RV Compatible</text>
+    </g>
+  </g>
+
+  <!-- Bottom accent line -->
+  <rect x="400" y="560" width="400" height="3" rx="1.5" fill="url(#accent)" opacity="0.6"/>
+</svg>

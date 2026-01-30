@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenRV Web</title>
+    <script>
+      // Single Page App redirect for GitHub Pages
+      // Redirects 404s to index.html with the path preserved in sessionStorage
+      const path = window.location.pathname;
+      const search = window.location.search;
+      const hash = window.location.hash;
+      sessionStorage.setItem('redirect', path + search + hash);
+      window.location.replace('/openrv-web/');
+    </script>
+  </head>
+  <body>
+    <p>Redirecting...</p>
+  </body>
+</html>

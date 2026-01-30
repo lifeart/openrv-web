@@ -3,7 +3,125 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OpenRV Web</title>
+
+    <!-- Primary Meta Tags -->
+    <title>OpenRV Web - Free Browser-Based VFX Image & Sequence Viewer</title>
+    <meta name="title" content="OpenRV Web - Free Browser-Based VFX Image & Sequence Viewer" />
+    <meta name="description" content="Free, open source web-based VFX image and video sequence viewer. Professional color grading with CDL/LUT/curves, scopes (histogram, waveform, vectorscope), annotations, EXR support, and RV session compatibility. No installation required - runs in your browser." />
+    <meta name="keywords" content="OpenRV, OpenRV alternative, OpenRV web, RV player, VFX viewer, VFX review tool, image sequence viewer, EXR viewer, dailies viewer, dailies review, shot review, client review tool, color grading, color correction, professional video player, frame-accurate playback, histogram, waveform monitor, vectorscope, parade scope, false color, zebra stripes, CDL, ASC CDL, 3D LUT, cube LUT, color curves, color wheels, lift gamma gain, ARRI LogC, LogC3, LogC4, Sony S-Log3, RED Log3G10, Cineon, log to linear, HDR viewer, stereo 3D, stereoscopic viewer, anaglyph, side by side 3D, image annotations, video annotations, WebGL video, browser video player, online color grading, ASWF, Academy Software Foundation, film production, post-production, DI, digital intermediate, editorial review, VFX pipeline, sequence player, numbered image sequence, frame scrubbing, RV session files, GTO files, timecode overlay, safe areas, crop tool, pixel probe, clipping indicator, open source video" />
+    <meta name="author" content="OpenRV Web Contributors" />
+    <meta name="robots" content="index, follow" />
+    <meta name="googlebot" content="index, follow, max-video-preview:-1, max-image-preview:large, max-snippet:-1" />
+    <meta name="theme-color" content="#1a1a1a" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="generator" content="Vite" />
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+    <link rel="mask-icon" href="/favicon.svg" color="#3b6db5" />
+
+    <!-- Web App Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://lifeart.github.io/openrv-web/" />
+    <meta property="og:title" content="OpenRV Web - Free Browser-Based VFX Viewer" />
+    <meta property="og:description" content="Professional VFX image and sequence viewer with color grading, scopes, annotations, and RV session compatibility. Free, open source, no installation required." />
+    <meta property="og:image" content="https://lifeart.github.io/openrv-web/og-image.svg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="OpenRV Web - Professional VFX Image & Sequence Viewer" />
+    <meta property="og:site_name" content="OpenRV Web" />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://lifeart.github.io/openrv-web/" />
+    <meta name="twitter:title" content="OpenRV Web - Free Browser-Based VFX Viewer" />
+    <meta name="twitter:description" content="Professional VFX image and sequence viewer with color grading, scopes, annotations, and RV session compatibility. Free and open source." />
+    <meta name="twitter:image" content="https://lifeart.github.io/openrv-web/og-image.svg" />
+    <meta name="twitter:image:alt" content="OpenRV Web - Professional VFX Image & Sequence Viewer" />
+
+    <!-- Canonical URL -->
+    <link rel="canonical" href="https://lifeart.github.io/openrv-web/" />
+
+    <!-- Application Info -->
+    <meta name="application-name" content="OpenRV Web" />
+    <meta name="apple-mobile-web-app-title" content="OpenRV Web" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="format-detection" content="telephone=no" />
+
+    <!-- JSON-LD Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "OpenRV Web",
+      "applicationCategory": "MultimediaApplication",
+      "applicationSubCategory": "Video Player",
+      "operatingSystem": "Web Browser (Chrome, Firefox, Safari, Edge)",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "description": "Professional VFX image and video sequence viewer with color grading, scopes, annotations, and RV session compatibility. Web-based alternative to OpenRV.",
+      "url": "https://lifeart.github.io/openrv-web/",
+      "downloadUrl": "https://github.com/lifeart/openrv-web",
+      "softwareVersion": "1.0.0",
+      "releaseNotes": "https://github.com/lifeart/openrv-web/releases",
+      "screenshot": "https://lifeart.github.io/openrv-web/og-image.svg",
+      "featureList": [
+        "EXR image support",
+        "Image sequence playback",
+        "Video playback (MP4, WebM)",
+        "Professional color grading",
+        "ASC CDL support",
+        "3D LUT (.cube) support",
+        "Color curves editor",
+        "Lift/Gamma/Gain color wheels",
+        "Histogram scope",
+        "Waveform monitor",
+        "Vectorscope",
+        "False color display",
+        "Zebra stripes",
+        "Frame annotations",
+        "RV session file compatibility",
+        "Stereo 3D viewing modes",
+        "WebGL accelerated rendering"
+      ],
+      "author": {
+        "@type": "Organization",
+        "name": "OpenRV Web Contributors",
+        "url": "https://github.com/lifeart/openrv-web"
+      },
+      "license": "https://opensource.org/licenses/MIT",
+      "isAccessibleForFree": true,
+      "inLanguage": "en",
+      "keywords": "OpenRV, VFX, image viewer, sequence viewer, color grading, EXR, dailies review"
+    }
+    </script>
+
+    <!-- Additional Schema for WebApplication -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "OpenRV Web",
+      "url": "https://lifeart.github.io/openrv-web/",
+      "browserRequirements": "Requires WebGL2 support. Chrome 56+, Firefox 51+, Safari 15+, Edge 79+",
+      "permissions": "camera (optional for color picking)",
+      "softwareHelp": {
+        "@type": "CreativeWork",
+        "url": "https://github.com/lifeart/openrv-web#readme"
+      }
+    }
+    </script>
+
     <style>
       * {
         margin: 0;
@@ -30,6 +148,18 @@
   </head>
   <body>
     <div id="app"></div>
+    <!-- SPA redirect handler for GitHub Pages -->
+    <script>
+      (function() {
+        const redirect = sessionStorage.getItem('redirect');
+        if (redirect) {
+          sessionStorage.removeItem('redirect');
+          if (redirect !== window.location.pathname + window.location.search + window.location.hash) {
+            history.replaceState(null, '', redirect);
+          }
+        }
+      })();
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

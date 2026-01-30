@@ -1,0 +1,26 @@
+{
+  "id": "openrv-web",
+  "name": "OpenRV Web",
+  "short_name": "OpenRV",
+  "description": "Professional VFX image and sequence viewer with color grading, scopes, and annotations. Free, open source, browser-based alternative to OpenRV.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#1a1a1a",
+  "theme_color": "#1a1a1a",
+  "orientation": "landscape",
+  "categories": ["graphics", "productivity", "utilities", "entertainment"],
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "related_applications": [],
+  "prefer_related_applications": false,
+  "lang": "en",
+  "dir": "ltr"
+}

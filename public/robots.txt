@@ -1,0 +1,8 @@
+# robots.txt for OpenRV Web
+# https://lifeart.github.io/openrv-web/
+
+User-agent: *
+Allow: /
+
+# Sitemap location
+Sitemap: https://lifeart.github.io/openrv-web/sitemap.xml
