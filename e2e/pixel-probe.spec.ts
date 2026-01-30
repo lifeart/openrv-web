@@ -47,7 +47,7 @@ test.describe('Pixel Probe Display', () => {
     await page.keyboard.press('Shift+i');
     await page.waitForTimeout(100);
 
-    const probe = page.locator('[data-testid="pixel-probe"], .pixel-probe');
+    const probe = page.locator('[data-testid="pixel-probe-overlay"], .pixel-probe');
     await expect(probe).toBeVisible();
   });
 

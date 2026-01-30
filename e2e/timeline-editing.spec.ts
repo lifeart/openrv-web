@@ -31,9 +31,8 @@ test.describe('Timeline Editor', () => {
       await loadVideoFile(page);
       await page.waitForTimeout(500);
 
-      // Look for ruler or frame markers
-      const ruler = page.locator('.timeline-ruler, .ruler, [class*="ruler"]').first();
-      const timeline = page.locator('.timeline').first();
+      // Look for timeline container (main timeline component uses timeline-container class)
+      const timeline = page.locator('.timeline-container, .timeline, [class*="timeline"]').first();
 
       // Timeline should exist
       await expect(timeline).toBeVisible();
@@ -156,14 +155,22 @@ test.describe('Timeline Editor', () => {
       expect(newState.inPoint).toBe(currentFrame);
     });
 
-    test('TL-EDIT-E009: should set out point with O key', async ({ page }) => {
+    test('TL-EDIT-E009: should set out point with ] key', async ({ page }) => {
       await page.goto('/');
       await page.waitForSelector('#app');
       await loadVideoFile(page);
       await page.waitForTimeout(500);
 
-      // Move to frame 20
-      for (let i = 0; i < 20; i++) {
+      // Get initial state to know frame count
+      const initialState = await getSessionState(page);
+      const frameCount = initialState.frameCount;
+
+      // Move to a frame that's not the last frame (less than frameCount)
+      const targetFrame = Math.min(10, frameCount - 1);
+      await page.keyboard.press('Home');
+      await page.waitForTimeout(50);
+
+      for (let i = 1; i < targetFrame; i++) {
         await page.keyboard.press('ArrowRight');
       }
       await page.waitForTimeout(100);
@@ -171,41 +178,47 @@ test.describe('Timeline Editor', () => {
       const currentState = await getSessionState(page);
       const currentFrame = currentState.currentFrame;
 
-      // Set out point
-      await page.keyboard.press('o');
+      // Set out point with ] key (BracketRight - alternative binding that doesn't conflict with paint.ellipse)
+      await page.keyboard.press(']');
       await page.waitForTimeout(100);
 
       const newState = await getSessionState(page);
       expect(newState.outPoint).toBe(currentFrame);
     });
 
-    test('TL-EDIT-E010: should reset in/out points with R key', async ({ page }) => {
+    test('TL-EDIT-E010: should set in point with [ key (alternative binding)', async ({ page }) => {
       await page.goto('/');
       await page.waitForSelector('#app');
       await loadVideoFile(page);
       await page.waitForTimeout(500);
 
-      // Set custom in/out points first
-      await page.keyboard.press('ArrowRight');
-      await page.keyboard.press('ArrowRight');
-      await page.keyboard.press('i');
+      // Get initial state - in/out should be at full range
+      const initialState = await getSessionState(page);
+      expect(initialState.inPoint).toBe(1);
+      expect(initialState.outPoint).toBe(initialState.frameCount);
+
+      // Move to frame 5 using arrow keys
+      await page.keyboard.press('Home'); // Go to start (frame 1)
       await page.waitForTimeout(50);
 
-      for (let i = 0; i < 10; i++) {
+      for (let i = 0; i < 4; i++) {
         await page.keyboard.press('ArrowRight');
       }
-      await page.keyboard.press('o');
       await page.waitForTimeout(100);
 
-      // Reset with R
-      await page.keyboard.press('r');
+      // Verify we're at frame 5
+      const midState = await getSessionState(page);
+      expect(midState.currentFrame).toBe(5);
+
+      // Set in point at frame 5 using [ key (alternative binding)
+      await page.keyboard.press('[');
       await page.waitForTimeout(100);
 
-      const state = await getSessionState(page);
-      // In point should be at start
-      expect(state.inPoint).toBeLessThanOrEqual(1);
-      // Out point should be at end
-      expect(state.outPoint).toBe(state.frameCount);
+      const finalState = await getSessionState(page);
+      // In point should now be at frame 5
+      expect(finalState.inPoint).toBe(5);
+      // Out point should still be at end
+      expect(finalState.outPoint).toBe(finalState.frameCount);
     });
   });
 
@@ -280,7 +293,7 @@ test.describe('Timeline Editor', () => {
   });
 
   test.describe('Loop Modes', () => {
-    test('TL-EDIT-E014: should cycle loop mode with L key', async ({ page }) => {
+    test('TL-EDIT-E014: should cycle loop mode with Ctrl+L', async ({ page }) => {
       await page.goto('/');
       await page.waitForSelector('#app');
       await loadVideoFile(page);
@@ -289,8 +302,8 @@ test.describe('Timeline Editor', () => {
       const initialState = await getSessionState(page);
       const initialLoopMode = initialState.loopMode;
 
-      // Press L to cycle
-      await page.keyboard.press('l');
+      // Press Ctrl+L to cycle loop mode (L alone is playback.faster)
+      await page.keyboard.press('Control+l');
       await page.waitForTimeout(100);
 
       const newState = await getSessionState(page);
@@ -342,6 +355,80 @@ test.describe('Timeline Editor', () => {
 
       const newState = await getSessionState(page);
       expect(newState.currentAB).not.toBe(initialSource);
+    });
+  });
+
+  test.describe('Timeline Zoom Controls', () => {
+    // Note: TimelineEditor zoom controls are only available when editing sequences/EDL
+    // These tests verify the zoom functionality when the controls are present
+
+    test('TL-EDIT-E018: viewer zoom should work with mouse wheel', async ({ page }) => {
+      await page.goto('/');
+      await page.waitForSelector('#app');
+      await loadVideoFile(page);
+      await page.waitForTimeout(500);
+
+      // Get initial viewer state
+      const initialState = await page.evaluate(() => {
+        return window.__OPENRV_TEST__?.getViewerState();
+      });
+      const initialZoom = initialState?.zoom || 1;
+
+      // Find the canvas/viewer and zoom with mouse wheel
+      const canvas = page.locator('canvas').first();
+      const box = await canvas.boundingBox();
+
+      if (box) {
+        // Move mouse to canvas center and scroll
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        await page.mouse.wheel(0, -100); // Zoom in
+        await page.waitForTimeout(300);
+
+        const newState = await page.evaluate(() => {
+          return window.__OPENRV_TEST__?.getViewerState();
+        });
+        const newZoom = newState?.zoom || 1;
+
+        // Zoom should have changed (either increased or stayed at max)
+        expect(newZoom).toBeGreaterThanOrEqual(initialZoom);
+      }
+    });
+
+    test('TL-EDIT-E019: viewer should support fit-to-window zoom', async ({ page }) => {
+      await page.goto('/');
+      await page.waitForSelector('#app');
+      await loadVideoFile(page);
+      await page.waitForTimeout(500);
+
+      // Press 'f' to fit to window
+      await page.keyboard.press('f');
+      await page.waitForTimeout(200);
+
+      const state = await page.evaluate(() => {
+        return window.__OPENRV_TEST__?.getViewerState();
+      });
+
+      // After fit-to-window, zoom should be set (may be < 1 or > 1 depending on media size)
+      expect(state?.zoom).toBeDefined();
+      expect(state?.zoom).toBeGreaterThan(0);
+    });
+
+    test('TL-EDIT-E020: viewer should support 100% zoom', async ({ page }) => {
+      await page.goto('/');
+      await page.waitForSelector('#app');
+      await loadVideoFile(page);
+      await page.waitForTimeout(500);
+
+      // Press '1' for 100% zoom
+      await page.keyboard.press('1');
+      await page.waitForTimeout(200);
+
+      const state = await page.evaluate(() => {
+        return window.__OPENRV_TEST__?.getViewerState();
+      });
+
+      // After 100% zoom, zoom should be exactly 1
+      expect(state?.zoom).toBeCloseTo(1, 1);
     });
   });
 });

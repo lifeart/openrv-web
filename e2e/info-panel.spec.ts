@@ -166,9 +166,9 @@ test.describe('Info Panel UI Controls', () => {
     await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
 
-    // Look for info panel control
-    const control = page.locator('[data-testid="info-panel-control"], button:has-text("Info")');
-    await expect(control.first()).toBeVisible();
+    // Look for info panel toggle button (icon-only button)
+    const control = page.locator('[data-testid="info-panel-toggle"]');
+    await expect(control).toBeVisible();
   });
 });
 

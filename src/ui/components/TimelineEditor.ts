@@ -63,7 +63,7 @@ const CUT_COLORS = [
  */
 export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
   private container: HTMLElement;
-  private session: Session;
+  private _session: Session;
   private sequenceNode: SequenceGroupNode | null = null;
 
   // UI elements
@@ -93,7 +93,7 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
     super();
 
     this.container = container;
-    this.session = session;
+    this._session = session;
     this.sequenceNode = sequenceNode ?? null;
 
     // Bind event handlers for cleanup
@@ -170,6 +170,13 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
   setZoom(pixelsPerFrame: number): void {
     this.pixelsPerFrame = Math.max(0.5, Math.min(10, pixelsPerFrame));
     this.render();
+  }
+
+  /**
+   * Get the associated session
+   */
+  get session(): Session {
+    return this._session;
   }
 
   /**

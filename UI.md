@@ -505,6 +505,137 @@ this.keyboardManager.register(DEFAULT_KEY_BINDINGS['playback.toggle'], () => {
 - [x] Container styling unification (no boxed appearances)
 - [x] Divider standardization (1-2 per section)
 
+### Phase 10: View Tab Space Optimization ✅
+- [x] Reduce dividers from 13 → 4 (logical group separators only)
+- [x] Reduce gaps from 8px → 6px across all toolbars
+- [x] Convert overlay toggles to icon-only buttons (Probe, Spotlight, Info)
+- [x] Add `createIconButton()` helper to ContextToolbar
+- [x] Update e2e tests for new dropdown patterns
+
+---
+
+## View Tab Space Optimization
+
+### Problem Statement
+
+The View tab had **26 elements** (13 controls + 13 dividers) requiring ~1,400px horizontal space, causing scroll on most laptop displays.
+
+### Solution: Logical Grouping with Minimal Dividers
+
+Reorganized controls into 5 logical groups with only 4 dividers between them:
+
+```
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ [Zoom][Ch] │ [Compare][Stereo] │ [Scopes][Stack] │ [Guides][False][Zebra][HSL] │ [🔍][☀️][ℹ️] │
+│  Navigation │    Comparison     │   Monitoring    │        Analysis            │   Overlays  │
+└──────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Implementation in App.ts setupTabContents()
+
+```typescript
+private setupTabContents(): void {
+  const viewContent = document.createElement('div');
+  viewContent.style.cssText = 'display: flex; align-items: center; gap: 6px; flex-shrink: 0;';
+
+  // --- GROUP 1: Navigation (Zoom + Channel) ---
+  viewContent.appendChild(this.zoomControl.render());
+  viewContent.appendChild(this.channelSelect.render());
+  viewContent.appendChild(ContextToolbar.createDivider());
+
+  // --- GROUP 2: Comparison (Compare + Stereo) ---
+  viewContent.appendChild(this.compareControl.render());
+  viewContent.appendChild(this.stereoControl.render());
+  viewContent.appendChild(ContextToolbar.createDivider());
+
+  // --- GROUP 3: Monitoring (Scopes + Stack) ---
+  viewContent.appendChild(this.scopesControl.render());
+  viewContent.appendChild(this.stackControl.render());
+  viewContent.appendChild(ContextToolbar.createDivider());
+
+  // --- GROUP 4: Analysis Tools (no internal dividers) ---
+  viewContent.appendChild(this.safeAreasControl.render());
+  viewContent.appendChild(this.falseColorControl.render());
+  viewContent.appendChild(this.zebraControl.render());
+  viewContent.appendChild(this.hslQualifierControl.render());
+  viewContent.appendChild(ContextToolbar.createDivider());
+
+  // --- GROUP 5: Overlay Toggles (icon-only buttons) ---
+  const pixelProbeButton = ContextToolbar.createIconButton('eyedropper', ...);
+  const spotlightButton = ContextToolbar.createIconButton('sun', ...);
+  const infoPanelButton = ContextToolbar.createIconButton('info', ...);
+  // ...
+}
+```
+
+### Space Savings Achieved
+
+| Optimization | Savings |
+|--------------|---------|
+| Reduced dividers (13 → 4) | ~80px |
+| Icon-only overlay buttons (3 buttons) | ~115px |
+| Reduced gaps (8px → 6px) | ~50px |
+| **Total** | **~245px (~17% reduction)** |
+
+### Icon-Only Buttons Pattern
+
+Use `ContextToolbar.createIconButton()` for compact toggle buttons:
+
+```typescript
+// Icon-only button (28px × 28px)
+const probeButton = ContextToolbar.createIconButton('eyedropper', () => {
+  this.viewer.getPixelProbe().toggle();
+}, { title: 'Pixel Probe (Shift+I)' });
+probeButton.dataset.testid = 'pixel-probe-toggle';
+
+// Update state on change
+this.viewer.getPixelProbe().on('stateChanged', (state) => {
+  if (state.enabled) {
+    probeButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+    probeButton.style.borderColor = 'var(--accent-primary)';
+    probeButton.style.color = 'var(--accent-primary)';
+  } else {
+    probeButton.style.background = 'transparent';
+    probeButton.style.borderColor = 'transparent';
+    probeButton.style.color = 'var(--text-secondary)';
+  }
+});
+```
+
+### Divider Strategy
+
+**Principle:** Use dividers only between major conceptual groups, not between every control.
+
+**Before (excessive):**
+```
+[Zoom] | [Channel] | [Compare] | [Stereo] | [Scopes] | [Stack] | [Guides] | [False] | [Zebra] | [HSL] | [Probe] | [Spotlight] | [Info]
+       ^          ^           ^          ^          ^         ^          ^         ^         ^       ^          ^             ^
+       13 dividers total
+```
+
+**After (logical):**
+```
+[Zoom][Channel] | [Compare][Stereo] | [Scopes][Stack] | [Guides][False][Zebra][HSL] | [Probe][Spotlight][Info]
+                ^                   ^                 ^                             ^
+                4 dividers total (between logical groups)
+```
+
+### Gap Optimization
+
+Reduced `gap` from 8px to 6px across all toolbar containers:
+
+```typescript
+// ContextToolbar.ts - container and content
+this.container.style.gap = '6px';
+this.contentContainer.style.gap = '6px';
+
+// App.ts - all tab content containers
+viewContent.style.cssText = 'display: flex; align-items: center; gap: 6px;';
+colorContent.style.cssText = 'display: flex; align-items: center; gap: 6px;';
+effectsContent.style.cssText = 'display: flex; align-items: center; gap: 6px;';
+// etc.
+```
+
 ---
 
 ## File Structure (New)
@@ -1040,21 +1171,25 @@ separator.style.cssText = 'width: 1px; height: 18px; background: var(--border-se
 
 ---
 
-## View Tab Dropdown Controls
+## View Tab Control Layout
 
-The View tab uses a grouped dropdown pattern to reduce visual clutter. Instead of showing all controls as individual buttons, related controls are grouped into dropdown menus.
+The View tab uses a grouped layout pattern to reduce visual clutter and horizontal scroll. Controls are organized into 5 logical groups with minimal dividers.
 
-### Before (23+ elements with scroll issues):
+### Current Layout (Optimized):
 ```
-[Zoom:] [Fit] [50%] [100%] [200%] [400%] | [Ch:] [RGB] [R] [G] [B] [A] [Luma] |
-[Wipe] | [Stereo ▾] | [Stack] | [Histogram] [Waveform] [Vectorscope] |
-[A/B:] [A] [B] [⇄]
+[Zoom ▾][Ch ▾] │ [Compare ▾][Stereo ▾] │ [Scopes ▾][Stack] │ [Guides ▾][False ▾][Zebra ▾][HSL ▾] │ [🔍][☀️][ℹ️]
+   Navigation  │      Comparison       │    Monitoring     │           Analysis               │  Overlays
 ```
 
-### After (6 compact dropdowns):
-```
-[Zoom ▾] | [Ch ▾] | [Compare ▾] | [Stereo ▾] | [Scopes ▾] | [Stack]
-```
+### Control Groups:
+
+| Group | Controls | Purpose |
+|-------|----------|---------|
+| **Navigation** | ZoomControl, ChannelSelect | Basic view navigation |
+| **Comparison** | CompareControl, StereoControl | A/B, wipe, stereo modes |
+| **Monitoring** | ScopesControl, StackControl | Scopes and layer panel |
+| **Analysis** | SafeAreas, FalseColor, Zebra, HSL | Exposure and color analysis |
+| **Overlays** | Probe, Spotlight, Info (icon-only) | Toggle overlays |
 
 ### Dropdown Components:
 
@@ -1062,15 +1197,27 @@ The View tab uses a grouped dropdown pattern to reduce visual clutter. Instead o
 |-----------|----------|-------------|
 | `ZoomControl` | Fit, 25%, 50%, 100%, 200%, 400% | Shows current zoom level |
 | `ChannelSelect` | RGB, R, G, B, A, Luma | Channel isolation with color dots |
-| `CompareControl` | Wipe modes, A/B source | Comparison tools grouped |
-| `StereoControl` | Stereo viewing modes | Existing dropdown (unchanged) |
+| `CompareControl` | Wipe modes, A/B source, Diff matte | Comparison tools grouped |
+| `StereoControl` | Stereo viewing modes | Side-by-side, anaglyph, etc. |
 | `ScopesControl` | Histogram, Waveform, Vectorscope | Scope visibility toggles |
-| `StackControl` | Opens layer panel | Panel button (unchanged) |
+| `SafeAreasControl` | Safe zones, guides, aspect overlays | Broadcast safe areas |
+| `FalseColorControl` | False color presets, legend | Exposure visualization |
+| `ZebraControl` | Zebra stripes, thresholds | Exposure warnings |
+| `HSLQualifierControl` | HSL ranges, eyedropper | Secondary color correction |
+
+### Icon-Only Overlay Toggles:
+
+| Button | Icon | Shortcut | Purpose |
+|--------|------|----------|---------|
+| Pixel Probe | `eyedropper` | Shift+I | Color sampling |
+| Spotlight | `sun` | Shift+Q | Focus spotlight |
+| Info Panel | `info` | Shift+Alt+I | Floating info overlay |
 
 ### Active State Indicators:
 - Dropdowns show active state (highlighted) when any non-default option is selected
 - `ScopesControl` shows count: "Scopes (2)" when 2 scopes are visible
 - `CompareControl` shows active modes: "H-Wipe + B"
+- Icon-only buttons highlight with accent color when enabled
 
 ---
 
@@ -1458,6 +1605,97 @@ npx playwright test --headed
 npx playwright test --grep "ST-001"
 ```
 
+### Updating Tests When UI Changes
+
+When UI controls change from individual buttons to dropdowns (or vice versa), e2e tests must be updated.
+
+#### Pattern: Individual Buttons → Dropdown
+
+**Before (individual zoom buttons):**
+```typescript
+// OLD - looking for individual buttons by text
+const zoom200 = page.locator('button:has-text("200%")');
+await zoom200.click();
+```
+
+**After (dropdown pattern):**
+```typescript
+// NEW - helper function for dropdown interaction
+async function selectZoomLevel(page: Page, label: string) {
+  // Open the dropdown
+  await page.click('[data-testid="zoom-control-button"]');
+  await page.waitForTimeout(100);
+  // Click the option (dropdown items use role="option")
+  await page.click(`[role="option"]:has-text("${label}")`);
+  await page.waitForTimeout(100);
+}
+
+// Usage
+await selectZoomLevel(page, '200%');
+await selectZoomLevel(page, 'Fit');
+```
+
+#### Pattern: Text Buttons → Icon-Only Buttons
+
+**Before (text button):**
+```typescript
+// OLD - looking for button by text content
+const control = page.locator('button:has-text("Info")');
+await expect(control).toBeVisible();
+```
+
+**After (icon-only with testid):**
+```typescript
+// NEW - use data-testid for icon-only buttons
+const control = page.locator('[data-testid="info-panel-toggle"]');
+await expect(control).toBeVisible();
+```
+
+#### Pattern: Wipe Control → CompareControl Dropdown
+
+**Before (separate wipe button):**
+```typescript
+const wipeButton = page.locator('button[title*="wipe"]').first();
+await wipeButton.click();
+```
+
+**After (CompareControl dropdown):**
+```typescript
+// Open Compare dropdown
+await page.click('[data-testid="compare-control-button"]');
+await page.waitForTimeout(100);
+
+// Click specific wipe mode option
+await page.click('[data-wipe-mode="horizontal"]');
+```
+
+#### Key Selectors for View Tab Controls
+
+| Control | Button Selector | Dropdown/Option Selector |
+|---------|----------------|-------------------------|
+| Zoom | `[data-testid="zoom-control-button"]` | `[role="option"]:has-text("...")` |
+| Channel | `[data-testid="channel-select-button"]` | `[role="option"]:has-text("...")` |
+| Compare | `[data-testid="compare-control-button"]` | `[data-wipe-mode="..."]` |
+| Stereo | `[data-testid="stereo-mode-button"]` | `[data-stereo-mode="..."]` |
+| Scopes | `[data-testid="scopes-control-button"]` | `[data-scope="..."]` |
+| Probe | `[data-testid="pixel-probe-toggle"]` | N/A (toggle button) |
+| Spotlight | `[data-testid="spotlight-toggle-btn"]` | N/A (toggle button) |
+| Info | `[data-testid="info-panel-toggle"]` | N/A (toggle button) |
+
+#### Always Prefer data-testid
+
+When adding new controls, always include `data-testid` for stable test selectors:
+
+```typescript
+// In component code
+button.dataset.testid = 'my-feature-toggle';
+dropdown.dataset.testid = 'my-feature-dropdown';
+
+// In tests
+await page.click('[data-testid="my-feature-toggle"]');
+await expect(page.locator('[data-testid="my-feature-dropdown"]')).toBeVisible();
+```
+
 ---
 
 ## Viewer Integration
@@ -1583,6 +1821,41 @@ viewContent.appendChild(fitBtn);
 viewContent.appendChild(ContextToolbar.createDivider());
 viewContent.appendChild(histogramBtn);
 ```
+
+### 2b. ContextToolbar.createIconButton
+
+Use for **compact icon-only toggle buttons** in toolbars (saves ~40px per button vs text+icon):
+
+```typescript
+import { ContextToolbar } from './layout/ContextToolbar';
+
+// Icon-only button (28px × 28px square)
+const probeBtn = ContextToolbar.createIconButton('eyedropper', () => {
+  viewer.getPixelProbe().toggle();
+}, {
+  title: 'Pixel Probe (Shift+I)',  // Tooltip is essential for discoverability
+  active: false,
+  size: 'sm',  // 'sm' (28px) or 'md' (32px)
+});
+probeBtn.dataset.testid = 'pixel-probe-toggle';
+
+// Update active state dynamically
+viewer.getPixelProbe().on('stateChanged', (state) => {
+  if (state.enabled) {
+    probeBtn.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+    probeBtn.style.borderColor = 'var(--accent-primary)';
+    probeBtn.style.color = 'var(--accent-primary)';
+  } else {
+    probeBtn.style.background = 'transparent';
+    probeBtn.style.borderColor = 'transparent';
+    probeBtn.style.color = 'var(--text-secondary)';
+  }
+});
+```
+
+**When to use icon-only vs text+icon:**
+- **Icon-only:** Secondary features, toggle overlays, when space is limited
+- **Text+icon:** Primary features, dropdown triggers, when discoverability is important
 
 ### 3. Inline Button Creation (Custom Controls)
 

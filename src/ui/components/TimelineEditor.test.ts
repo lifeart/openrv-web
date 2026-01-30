@@ -298,7 +298,7 @@ describe('TimelineEditor', () => {
 
       editor.setZoom(5);
 
-      const cuts = container.querySelector('.timeline-cuts');
+      const cuts = container.querySelector('.timeline-cuts') as HTMLElement | null;
       const computedWidth = parseInt(cuts?.style.width || '0');
       expect(computedWidth).toBe(500); // 100 frames * 5 px/frame
     });
@@ -308,11 +308,11 @@ describe('TimelineEditor', () => {
       editor.setTotalFrames(100);
 
       editor.setZoom(0.1); // Below minimum
-      let cuts = container.querySelector('.timeline-cuts');
+      let cuts = container.querySelector('.timeline-cuts') as HTMLElement | null;
       expect(parseInt(cuts?.style.width || '0')).toBeGreaterThanOrEqual(50); // Min 0.5 px/frame
 
       editor.setZoom(100); // Above maximum
-      cuts = container.querySelector('.timeline-cuts');
+      cuts = container.querySelector('.timeline-cuts') as HTMLElement | null;
       expect(parseInt(cuts?.style.width || '0')).toBeLessThanOrEqual(1000); // Max 10 px/frame
     });
   });

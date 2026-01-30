@@ -10,7 +10,6 @@ import {
   type AnnotationExportData,
 } from './AnnotationJSONExporter';
 import { PaintEngine } from '../paint/PaintEngine';
-import { ShapeType } from '../paint/types';
 
 describe('AnnotationJSONExporter', () => {
   let paintEngine: PaintEngine;
@@ -205,8 +204,8 @@ describe('AnnotationJSONExporter', () => {
     it('ANN-JSON-U018: creates download link correctly', () => {
       // Mock DOM APIs
       const mockCreateElement = vi.spyOn(document, 'createElement');
-      const mockAppendChild = vi.spyOn(document.body, 'appendChild').mockImplementation(() => null as never);
-      const mockRemoveChild = vi.spyOn(document.body, 'removeChild').mockImplementation(() => null as never);
+      vi.spyOn(document.body, 'appendChild').mockImplementation(() => null as never);
+      vi.spyOn(document.body, 'removeChild').mockImplementation(() => null as never);
       const mockRevokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
       const mockCreateObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test');
 
@@ -226,16 +225,14 @@ describe('AnnotationJSONExporter', () => {
 
       // Cleanup
       mockCreateElement.mockRestore();
-      mockAppendChild.mockRestore();
-      mockRemoveChild.mockRestore();
       mockRevokeObjectURL.mockRestore();
       mockCreateObjectURL.mockRestore();
     });
 
     it('ANN-JSON-U019: preserves .json extension if provided', () => {
       const mockCreateElement = vi.spyOn(document, 'createElement');
-      const mockAppendChild = vi.spyOn(document.body, 'appendChild').mockImplementation(() => null as never);
-      const mockRemoveChild = vi.spyOn(document.body, 'removeChild').mockImplementation(() => null as never);
+      vi.spyOn(document.body, 'appendChild').mockImplementation(() => null as never);
+      vi.spyOn(document.body, 'removeChild').mockImplementation(() => null as never);
       vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
       vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test');
 

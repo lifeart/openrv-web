@@ -35,7 +35,7 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
       display: flex;
       align-items: center;
       padding: 0 12px;
-      gap: 8px;
+      gap: 6px;
       flex-shrink: 0;
       overflow-x: auto;
       overflow-y: hidden;
@@ -46,7 +46,7 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
     this.contentContainer.style.cssText = `
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       height: 100%;
     `;
     this.container.appendChild(this.contentContainer);
@@ -64,7 +64,7 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
       content.style.cssText = `
         display: none;
         align-items: center;
-        gap: 8px;
+        gap: 6px;
         height: 100%;
       `;
       this.tabContents.set(tabId, content);
@@ -181,6 +181,65 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
       justify-content: center;
       height: 28px;
       min-width: ${options.minWidth || 'auto'};
+      outline: none;
+    `;
+
+    button.addEventListener('mouseenter', () => {
+      if (!options.active) {
+        button.style.background = 'var(--bg-hover)';
+        button.style.borderColor = 'var(--border-secondary)';
+        button.style.color = 'var(--text-primary)';
+      }
+    });
+
+    button.addEventListener('mouseleave', () => {
+      if (!options.active) {
+        button.style.background = 'transparent';
+        button.style.borderColor = 'transparent';
+        button.style.color = 'var(--text-secondary)';
+      }
+    });
+
+    button.addEventListener('click', onClick);
+
+    // Apply A11Y focus handling from shared utility
+    applyA11yFocus(button);
+
+    return button;
+  }
+
+  /**
+   * Helper to create an icon-only button (compact, no text label)
+   * Use for toolbar toggles where space is at a premium
+   */
+  static createIconButton(
+    icon: IconName,
+    onClick: () => void,
+    options: {
+      title?: string;
+      active?: boolean;
+      size?: 'sm' | 'md';
+    } = {}
+  ): HTMLButtonElement {
+    const button = document.createElement('button');
+    const iconSize = options.size === 'md' ? 'md' : 'sm';
+    button.innerHTML = getIconSvg(icon, iconSize);
+    button.title = options.title || '';
+
+    const btnSize = options.size === 'md' ? '32px' : '28px';
+    button.style.cssText = `
+      background: ${options.active ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent'};
+      border: 1px solid ${options.active ? 'var(--accent-primary)' : 'transparent'};
+      color: ${options.active ? 'var(--accent-primary)' : 'var(--text-secondary)'};
+      padding: 0;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.12s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: ${btnSize};
+      height: ${btnSize};
       outline: none;
     `;
 

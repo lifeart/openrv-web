@@ -8,6 +8,14 @@ export default defineConfig({
       '@': resolve(__dirname, 'src'),
     },
   },
+  worker: {
+    format: 'es',
+    rollupOptions: {
+      output: {
+        entryFileNames: 'assets/[name]-[hash].js',
+      },
+    },
+  },
   build: {
     target: 'es2022',
     sourcemap: true,

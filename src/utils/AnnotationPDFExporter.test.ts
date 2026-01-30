@@ -214,7 +214,7 @@ describe('AnnotationPDFExporter', () => {
       const renderFrame = vi.fn().mockResolvedValue(document.createElement('canvas'));
 
       // Don't await - just start the export
-      const exportPromise = exportAnnotationsPDF(paintEngine, session, renderFrame, {
+      void exportAnnotationsPDF(paintEngine, session, renderFrame, {
         includeFrameThumbnails: false,
       });
 

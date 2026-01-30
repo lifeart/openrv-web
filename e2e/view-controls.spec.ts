@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
 import {
   loadVideoFile,
   waitForTestHelper,
@@ -15,6 +15,16 @@ import {
  * and visual modifications to the canvas.
  */
 
+// Helper to select a zoom level from the ZoomControl dropdown
+async function selectZoomLevel(page: Page, label: string) {
+  // Open zoom dropdown
+  await page.click('[data-testid="zoom-control-button"]');
+  await page.waitForTimeout(100);
+  // Click the dropdown option - dropdown options use role="option"
+  await page.click(`[role="option"]:has-text("${label}")`);
+  await page.waitForTimeout(100);
+}
+
 test.describe('View Controls', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
@@ -29,8 +39,7 @@ test.describe('View Controls', () => {
   test.describe('Zoom Controls', () => {
     test('VIEW-001: clicking Fit button should update zoom state and change canvas', async ({ page }) => {
       // First zoom to 200% to set a known state
-      const zoom200 = page.locator('button:has-text("200%")');
-      await zoom200.click();
+      await selectZoomLevel(page, '200%');
       await page.waitForTimeout(200);
 
       let state = await getViewerState(page);
@@ -39,8 +48,7 @@ test.describe('View Controls', () => {
       const zoomedScreenshot = await captureViewerScreenshot(page);
 
       // Now fit
-      const fitButton = page.locator('button:has-text("Fit")');
-      await fitButton.click();
+      await selectZoomLevel(page, 'Fit');
       await page.waitForTimeout(200);
 
       state = await getViewerState(page);
@@ -51,8 +59,7 @@ test.describe('View Controls', () => {
     });
 
     test('VIEW-002: clicking 50% zoom should update zoom state to 0.5', async ({ page }) => {
-      const zoom50 = page.locator('button:has-text("50%")');
-      await zoom50.click();
+      await selectZoomLevel(page, '50%');
       await page.waitForTimeout(200);
 
       const state = await getViewerState(page);
@@ -60,8 +67,7 @@ test.describe('View Controls', () => {
     });
 
     test('VIEW-003: clicking 100% zoom should update zoom state to 1.0', async ({ page }) => {
-      const zoom100 = page.locator('button:has-text("100%")');
-      await zoom100.click();
+      await selectZoomLevel(page, '100%');
       await page.waitForTimeout(200);
 
       const state = await getViewerState(page);
@@ -69,8 +75,7 @@ test.describe('View Controls', () => {
     });
 
     test('VIEW-004: clicking 200% zoom should update zoom state to 2.0', async ({ page }) => {
-      const zoom200 = page.locator('button:has-text("200%")');
-      await zoom200.click();
+      await selectZoomLevel(page, '200%');
       await page.waitForTimeout(200);
 
       const state = await getViewerState(page);
@@ -78,8 +83,7 @@ test.describe('View Controls', () => {
     });
 
     test('VIEW-005: clicking 400% zoom should update zoom state to 4.0', async ({ page }) => {
-      const zoom400 = page.locator('button:has-text("400%")');
-      await zoom400.click();
+      await selectZoomLevel(page, '400%');
       await page.waitForTimeout(200);
 
       const state = await getViewerState(page);
@@ -88,7 +92,7 @@ test.describe('View Controls', () => {
 
     test('VIEW-006: pressing F key should fit to window', async ({ page }) => {
       // First zoom in
-      await page.locator('button:has-text("200%")').click();
+      await selectZoomLevel(page, '200%');
       await page.waitForTimeout(100);
 
       let state = await getViewerState(page);
@@ -134,7 +138,7 @@ test.describe('View Controls', () => {
       await page.waitForTimeout(100);
 
       // Zoom in first to enable visible panning
-      await page.locator('button:has-text("200%")').click();
+      await selectZoomLevel(page, '200%');
       await page.waitForTimeout(200);
 
       let state = await getViewerState(page);
@@ -174,7 +178,7 @@ test.describe('View Controls', () => {
       await page.waitForTimeout(100);
 
       // Zoom in
-      await page.locator('button:has-text("200%")').click();
+      await selectZoomLevel(page, '200%');
       await page.waitForTimeout(100);
 
       // Get the viewer container
@@ -192,7 +196,7 @@ test.describe('View Controls', () => {
       await page.waitForTimeout(100);
 
       // Fit should reset pan
-      await page.locator('button:has-text("Fit")').click();
+      await selectZoomLevel(page, 'Fit');
       await page.waitForTimeout(200);
 
       const state = await getViewerState(page);
@@ -202,17 +206,17 @@ test.describe('View Controls', () => {
     });
   });
 
-  test.describe('Wipe Control', () => {
-    test('VIEW-020: wipe button should be visible in View tab', async ({ page }) => {
-      const wipeButton = page.locator('button[title*="wipe"]').first();
-      await expect(wipeButton).toBeVisible();
+  test.describe('Wipe Control (via CompareControl)', () => {
+    test('VIEW-020: compare control button should be visible in View tab', async ({ page }) => {
+      const compareButton = page.locator('[data-testid="compare-control-button"]');
+      await expect(compareButton).toBeVisible();
     });
 
-    test('VIEW-021: pressing W key should cycle through wipe modes and update state', async ({ page }) => {
+    test('VIEW-021: pressing Shift+W key should cycle through wipe modes and update state', async ({ page }) => {
       let state = await getViewerState(page);
       expect(state.wipeMode).toBe('off');
 
-      // Press W to enable horizontal wipe
+      // Press Shift+W to enable horizontal wipe
       await page.keyboard.press('Shift+w');
       await page.waitForTimeout(200);
 
@@ -222,7 +226,7 @@ test.describe('View Controls', () => {
       // Verify visual change
       const horizontalScreenshot = await captureViewerScreenshot(page);
 
-      // Press W to switch to vertical wipe
+      // Press Shift+W to switch to vertical wipe
       await page.keyboard.press('Shift+w');
       await page.waitForTimeout(200);
 
@@ -232,7 +236,7 @@ test.describe('View Controls', () => {
       const verticalScreenshot = await captureViewerScreenshot(page);
       expect(imagesAreDifferent(horizontalScreenshot, verticalScreenshot)).toBe(true);
 
-      // Press W to turn off (cycles: off -> horizontal -> vertical -> off)
+      // Press Shift+W to turn off (cycles: off -> horizontal -> vertical -> off)
       await page.keyboard.press('Shift+w');
       await page.waitForTimeout(200);
 
@@ -240,16 +244,20 @@ test.describe('View Controls', () => {
       expect(state.wipeMode).toBe('off');
     });
 
-    test('VIEW-022: clicking wipe mode button should toggle wipe', async ({ page }) => {
+    test('VIEW-022: clicking wipe mode in compare dropdown should toggle wipe', async ({ page }) => {
       let state = await getViewerState(page);
       expect(state.wipeMode).toBe('off');
 
-      const wipeButton = page.locator('button[title*="wipe"]').first();
-      await wipeButton.click();
+      // Open Compare dropdown
+      await page.click('[data-testid="compare-control-button"]');
+      await page.waitForTimeout(100);
+
+      // Click H-Wipe option
+      await page.click('[data-wipe-mode="horizontal"]');
       await page.waitForTimeout(200);
 
       state = await getViewerState(page);
-      expect(state.wipeMode).not.toBe('off');
+      expect(state.wipeMode).toBe('horizontal');
     });
 
     test('VIEW-023: dragging in wipe mode should change wipe position', async ({ page }) => {
@@ -432,7 +440,7 @@ test.describe('View Controls', () => {
   test.describe('View State Persistence', () => {
     test('VIEW-040: zoom level should persist across frame changes', async ({ page }) => {
       // Set zoom to 200%
-      await page.locator('button:has-text("200%")').click();
+      await selectZoomLevel(page, '200%');
       await page.waitForTimeout(100);
 
       let state = await getViewerState(page);
@@ -453,7 +461,7 @@ test.describe('View Controls', () => {
       await page.waitForTimeout(100);
 
       // Zoom in
-      await page.locator('button:has-text("200%")').click();
+      await selectZoomLevel(page, '200%');
       await page.waitForTimeout(100);
 
       // Get the viewer container

@@ -704,84 +704,36 @@ export class App {
 
   private setupTabContents(): void {
     // === VIEW TAB ===
-    // Reorganized into grouped dropdowns to reduce button count and scroll issues
+    // Organized into 5 logical groups with minimal dividers for compact layout
+    // Groups: Navigation | Comparison | Monitoring | Analysis | Overlays
     const viewContent = document.createElement('div');
-    viewContent.style.cssText = 'display: flex; align-items: center; gap: 8px; flex-shrink: 0;';
+    viewContent.style.cssText = 'display: flex; align-items: center; gap: 6px; flex-shrink: 0;';
 
-    // Zoom dropdown (replaces 5 separate buttons)
+    // --- GROUP 1: Navigation (Zoom + Channel) ---
     viewContent.appendChild(this.zoomControl.render());
-
-    viewContent.appendChild(ContextToolbar.createDivider());
-
-    // Channel select dropdown
     viewContent.appendChild(this.channelSelect.render());
-
     viewContent.appendChild(ContextToolbar.createDivider());
 
-    // Compare dropdown (Wipe + A/B)
+    // --- GROUP 2: Comparison (Compare + Stereo) ---
     viewContent.appendChild(this.compareControl.render());
-
-    viewContent.appendChild(ContextToolbar.createDivider());
-
-    // Stereo control (already a dropdown)
     viewContent.appendChild(this.stereoControl.render());
-
     viewContent.appendChild(ContextToolbar.createDivider());
 
-    // Scopes dropdown (Histogram + Waveform + Vectorscope)
+    // --- GROUP 3: Monitoring (Scopes + Stack) ---
     viewContent.appendChild(this.scopesControl.render());
-
-    viewContent.appendChild(ContextToolbar.createDivider());
-
-    // Stack control (opens panel)
     viewContent.appendChild(this.stackControl.render());
-
     viewContent.appendChild(ContextToolbar.createDivider());
 
-    // Safe Areas / Guides control
+    // --- GROUP 4: Analysis Tools (SafeAreas, FalseColor, Zebra, HSL) ---
     viewContent.appendChild(this.safeAreasControl.render());
-
-    viewContent.appendChild(ContextToolbar.createDivider());
-
-    // Pixel Probe / Color Sampler toggle
-    const pixelProbeButton = ContextToolbar.createButton('Probe', () => {
-      this.viewer.getPixelProbe().toggle();
-    }, { title: 'Toggle pixel color probe (Shift+I)', icon: 'eyedropper' });
-    pixelProbeButton.dataset.testid = 'pixel-probe-toggle';
-    viewContent.appendChild(pixelProbeButton);
-
-    // Update pixel probe button state
-    this.viewer.getPixelProbe().on('stateChanged', (state) => {
-      if (state.enabled) {
-        pixelProbeButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-        pixelProbeButton.style.borderColor = 'var(--accent-primary)';
-        pixelProbeButton.style.color = 'var(--accent-primary)';
-      } else {
-        pixelProbeButton.style.background = 'transparent';
-        pixelProbeButton.style.borderColor = 'transparent';
-        pixelProbeButton.style.color = 'var(--text-secondary)';
-      }
-    });
-
-    viewContent.appendChild(ContextToolbar.createDivider());
-
-    // False Color control (with preset selector and legend)
     viewContent.appendChild(this.falseColorControl.render());
+    viewContent.appendChild(this.zebraControl.render());
+    viewContent.appendChild(this.hslQualifierControl.render());
 
     // Trigger re-render when false color state changes
     this.viewer.getFalseColor().on('stateChanged', () => {
       this.viewer.refresh();
     });
-
-    viewContent.appendChild(ContextToolbar.createDivider());
-
-    // Zebra Stripes control
-    viewContent.appendChild(this.zebraControl.render());
-
-    viewContent.appendChild(ContextToolbar.createDivider());
-
-    // HSL Qualifier control (secondary color correction)
-    viewContent.appendChild(this.hslQualifierControl.render());
 
     // Setup eyedropper for color picking from viewer
     this.hslQualifierControl.setEyedropperCallback((active) => {
@@ -824,10 +776,33 @@ export class App {
 
     viewContent.appendChild(ContextToolbar.createDivider());
 
+    // --- GROUP 5: Overlay Toggles (Probe, Spotlight, Info) ---
+    // Icon-only buttons for compact display
+
+    // Pixel Probe / Color Sampler toggle
+    const pixelProbeButton = ContextToolbar.createIconButton('eyedropper', () => {
+      this.viewer.getPixelProbe().toggle();
+    }, { title: 'Pixel Probe (Shift+I)' });
+    pixelProbeButton.dataset.testid = 'pixel-probe-toggle';
+    viewContent.appendChild(pixelProbeButton);
+
+    // Update pixel probe button state
+    this.viewer.getPixelProbe().on('stateChanged', (state) => {
+      if (state.enabled) {
+        pixelProbeButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+        pixelProbeButton.style.borderColor = 'var(--accent-primary)';
+        pixelProbeButton.style.color = 'var(--accent-primary)';
+      } else {
+        pixelProbeButton.style.background = 'transparent';
+        pixelProbeButton.style.borderColor = 'transparent';
+        pixelProbeButton.style.color = 'var(--text-secondary)';
+      }
+    });
+
     // Spotlight Tool toggle button
-    const spotlightButton = ContextToolbar.createButton('Spotlight', () => {
+    const spotlightButton = ContextToolbar.createIconButton('sun', () => {
       this.viewer.getSpotlightOverlay().toggle();
-    }, { title: 'Toggle spotlight overlay (Shift+Q)', icon: 'eye' });
+    }, { title: 'Spotlight (Shift+Q)' });
     spotlightButton.dataset.testid = 'spotlight-toggle-btn';
     viewContent.appendChild(spotlightButton);
 
@@ -844,15 +819,13 @@ export class App {
       }
     });
 
-    viewContent.appendChild(ContextToolbar.createDivider());
-
     // Info Panel toggle button
-    const infoPanelButton = ContextToolbar.createButton('Info', () => {
+    const infoPanelButton = ContextToolbar.createIconButton('info', () => {
       this.infoPanel.toggle();
       if (this.infoPanel.isEnabled()) {
         this.updateInfoPanel();
       }
-    }, { title: 'Toggle info panel overlay (Shift+Alt+I)', icon: 'info' });
+    }, { title: 'Info Panel (Shift+Alt+I)' });
     infoPanelButton.dataset.testid = 'info-panel-toggle';
     viewContent.appendChild(infoPanelButton);
 
@@ -861,9 +834,11 @@ export class App {
       if (visible) {
         infoPanelButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
         infoPanelButton.style.borderColor = 'var(--accent-primary)';
+        infoPanelButton.style.color = 'var(--accent-primary)';
       } else {
-        infoPanelButton.style.background = '';
-        infoPanelButton.style.borderColor = '';
+        infoPanelButton.style.background = 'transparent';
+        infoPanelButton.style.borderColor = 'transparent';
+        infoPanelButton.style.color = 'var(--text-secondary)';
       }
     });
 
@@ -902,7 +877,7 @@ export class App {
 
     // === COLOR TAB ===
     const colorContent = document.createElement('div');
-    colorContent.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+    colorContent.style.cssText = 'display: flex; align-items: center; gap: 6px;';
     colorContent.appendChild(this.colorControls.render());
     colorContent.appendChild(ContextToolbar.createDivider());
     colorContent.appendChild(this.cdlControl.render());
@@ -949,7 +924,7 @@ export class App {
 
     // === EFFECTS TAB ===
     const effectsContent = document.createElement('div');
-    effectsContent.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+    effectsContent.style.cssText = 'display: flex; align-items: center; gap: 6px;';
     effectsContent.appendChild(this.filterControl.render());
     effectsContent.appendChild(ContextToolbar.createDivider());
     effectsContent.appendChild(this.lensControl.render());
@@ -957,7 +932,7 @@ export class App {
 
     // === TRANSFORM TAB ===
     const transformContent = document.createElement('div');
-    transformContent.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+    transformContent.style.cssText = 'display: flex; align-items: center; gap: 6px;';
     transformContent.appendChild(this.transformControl.render());
     transformContent.appendChild(ContextToolbar.createDivider());
     transformContent.appendChild(this.cropControl.render());
@@ -965,7 +940,7 @@ export class App {
 
     // === ANNOTATE TAB ===
     const annotateContent = document.createElement('div');
-    annotateContent.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+    annotateContent.style.cssText = 'display: flex; align-items: center; gap: 6px;';
     annotateContent.appendChild(this.paintToolbar.render());
 
     annotateContent.appendChild(ContextToolbar.createDivider());

@@ -9,7 +9,6 @@ import {
   buildLogLUT,
   buildLogToLinearGLSL,
   applyLogCurve,
-  type LogCurveParams,
 } from './LogCurves';
 
 describe('LogCurves', () => {
@@ -195,8 +194,8 @@ describe('LogCurves', () => {
       const options = getLogCurveOptions();
 
       expect(options.length).toBe(6);
-      expect(options[0].id).toBe('none');
-      expect(options[0].name).toBe('None (Linear)');
+      expect(options[0]!.id).toBe('none');
+      expect(options[0]!.name).toBe('None (Linear)');
     });
 
     it('LOG-U018: each option has id and name', () => {

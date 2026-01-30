@@ -15,6 +15,7 @@
 
 import { EffectProcessor, AllEffectsState, computeEffectsHash, hasActiveEffects } from './EffectProcessor';
 import { WorkerPool } from './WorkerPool';
+import EffectWorker from '../workers/effectProcessor.worker?worker';
 
 /**
  * Cached frame entry
@@ -153,15 +154,10 @@ export class PrerenderBufferManager {
         return;
       }
 
-      // Create worker pool using build-time worker file
-      // Vite handles the worker URL resolution via import.meta.url
+      // Create worker pool using Vite's worker import
       this.workerPool = new WorkerPool<WorkerResultMessage>({
         maxWorkers: this.config.numWorkers,
-        workerFactory: () => {
-          // Use Vite's worker import pattern with new URL
-          const workerUrl = new URL('../workers/effectProcessor.worker.ts', import.meta.url);
-          return new Worker(workerUrl, { type: 'module' });
-        },
+        workerFactory: () => new EffectWorker(),
       });
 
       await this.workerPool.init();
