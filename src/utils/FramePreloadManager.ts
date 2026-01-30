@@ -34,7 +34,7 @@ export const DEFAULT_PRELOAD_CONFIG: PreloadConfig = {
   priorityDecayRate: 1.0,
 };
 
-type FrameLoader<T> = (frame: number) => Promise<T>;
+type FrameLoader<T> = (frame: number, signal?: AbortSignal) => Promise<T>;
 type FrameDisposer<T> = (frame: number, data: T) => void;
 
 export class FramePreloadManager<T> {
@@ -57,6 +57,9 @@ export class FramePreloadManager<T> {
   private disposer: FrameDisposer<T> | null;
 
   private totalFrames: number;
+
+  // AbortController for cancelling pending async operations
+  private abortController: AbortController = new AbortController();
 
   constructor(
     totalFrames: number,
@@ -101,15 +104,22 @@ export class FramePreloadManager<T> {
       cancelled: false,
     };
 
-    const loadPromise = this.loader(frame)
+    // Capture abort signal at request time to detect abort even after controller is replaced
+    const requestSignal = this.abortController.signal;
+
+    // Pass abort signal to loader for cancellation support
+    const loadPromise = this.loader(frame, requestSignal)
       .then(data => {
-        if (!request.cancelled) {
+        if (!request.cancelled && !requestSignal.aborted) {
           this.addToCache(frame, data);
         }
         return data;
       })
       .catch(e => {
-        console.warn(`Failed to load frame ${frame}:`, e);
+        // Don't log abort errors as warnings
+        if (e?.name !== 'AbortError' && !requestSignal.aborted) {
+          console.warn(`Failed to load frame ${frame}:`, e);
+        }
         return null;
       })
       .finally(() => {
@@ -144,10 +154,71 @@ export class FramePreloadManager<T> {
 
   /**
    * Update playback state for optimized preloading
+   *
+   * Aborts pending operations when:
+   * - Stopping playback (prevents stale requests blocking new ones)
+   * - Changing direction (old direction preloads are now useless)
+   * - Starting playback (clears any old scrub-mode requests)
    */
   setPlaybackState(isPlaying: boolean, direction: number = 1): void {
+    const wasPlaying = this.isPlaying;
+    const oldDirection = this.playbackDirection;
+    const newDirection = direction >= 0 ? 1 : -1;
+
     this.isPlaying = isPlaying;
-    this.playbackDirection = direction >= 0 ? 1 : -1;
+    this.playbackDirection = newDirection;
+
+    // Abort pending operations on significant state changes:
+    // 1. Stopping playback - stale requests shouldn't block future requests
+    // 2. Changing direction - preloaded frames in old direction are useless
+    // 3. Starting playback - clear old scrub-mode requests for fresh start
+    const stoppedPlaying = wasPlaying && !isPlaying;
+    const startedPlaying = !wasPlaying && isPlaying;
+    const changedDirection = wasPlaying && isPlaying && oldDirection !== newDirection;
+
+    if (stoppedPlaying || startedPlaying || changedDirection) {
+      this.abortPendingOperations();
+    }
+  }
+
+  /**
+   * Abort all pending frame load operations
+   * Creates a new AbortController for future operations
+   *
+   * Note: Active in-flight requests will complete but their results
+   * will be discarded (not added to cache) due to the aborted signal.
+   * The .finally() handlers in startRequest() will clean up activeRequests.
+   */
+  abortPendingOperations(): void {
+    // Abort current operations - this signals all in-flight loaders to stop
+    this.abortController.abort();
+    // Create new controller for future operations
+    this.abortController = new AbortController();
+
+    // Mark all pending (not-yet-started) requests as cancelled
+    for (const request of this.pendingRequests.values()) {
+      request.cancelled = true;
+    }
+    this.pendingRequests.clear();
+
+    // Note: We intentionally do NOT clear activeRequests here.
+    // Active requests are in-flight promises that will complete and
+    // clean themselves up via .finally() handlers. Clearing the set
+    // would lose track of running operations and cause issues with
+    // the concurrency limit in processQueue().
+  }
+
+  /**
+   * Get the current abort signal for external use.
+   *
+   * Use this to pass to external async operations that should be cancelled
+   * when playback state changes. The signal is replaced after each abort,
+   * so always call this method to get the current signal rather than caching it.
+   *
+   * @returns The current AbortSignal that will be aborted on state changes
+   */
+  getAbortSignal(): AbortSignal {
+    return this.abortController.signal;
   }
 
   /**
@@ -289,22 +360,31 @@ export class FramePreloadManager<T> {
   private startRequest(request: PreloadRequest<T>): void {
     this.activeRequests.add(request.frame);
 
-    request.promise = this.loader(request.frame)
+    // Capture abort signal at request time to detect abort even after controller is replaced
+    const requestSignal = this.abortController.signal;
+
+    // Pass abort signal to loader for cancellation support
+    request.promise = this.loader(request.frame, requestSignal)
       .then(data => {
-        if (!request.cancelled) {
+        if (!request.cancelled && !requestSignal.aborted) {
           this.addToCache(request.frame, data);
         }
         return data;
       })
       .catch(e => {
-        console.warn(`Preload failed for frame ${request.frame}:`, e);
+        // Don't log abort errors as warnings
+        if (e?.name !== 'AbortError' && !requestSignal.aborted) {
+          console.warn(`Preload failed for frame ${request.frame}:`, e);
+        }
         throw e;
       })
       .finally(() => {
         this.activeRequests.delete(request.frame);
         this.pendingRequests.delete(request.frame);
-        // Process more from queue
-        this.processQueue();
+        // Process more from queue (only if not aborted)
+        if (!requestSignal.aborted) {
+          this.processQueue();
+        }
       });
   }
 
@@ -476,11 +556,8 @@ export class FramePreloadManager<T> {
    * Clear all cached frames and pending requests
    */
   clear(): void {
-    // Cancel all pending
-    for (const request of this.pendingRequests.values()) {
-      request.cancelled = true;
-    }
-    this.pendingRequests.clear();
+    // Abort all pending async operations
+    this.abortPendingOperations();
 
     // Dispose all cached
     for (const [frame, data] of this.cache) {

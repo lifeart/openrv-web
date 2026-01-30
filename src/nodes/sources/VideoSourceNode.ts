@@ -188,11 +188,12 @@ export class VideoSourceNode extends BaseSourceNode {
     this.preloadManager?.dispose();
 
     // Create loader function that uses frameExtractor
-    const loader = async (frame: number): Promise<FrameResult> => {
+    // Accepts optional AbortSignal for cancellation support
+    const loader = async (frame: number, signal?: AbortSignal): Promise<FrameResult> => {
       if (!this.frameExtractor) {
         throw new Error('Frame extractor not available');
       }
-      const result = await this.frameExtractor.getFrame(frame);
+      const result = await this.frameExtractor.getFrame(frame, signal);
       if (!result) {
         throw new Error(`Failed to extract frame ${frame}`);
       }
@@ -460,9 +461,16 @@ export class VideoSourceNode extends BaseSourceNode {
   /**
    * Stop playback preloading mode
    * Call this when playback stops to switch back to scrub mode
+   *
+   * Note: setPlaybackState(false) will abort pending operations in
+   * FramePreloadManager, which propagates to frameExtractor via the
+   * loader's abort signal. We don't call frameExtractor.abortPendingOperations()
+   * directly to avoid double-abort issues and queue state inconsistencies.
    */
   stopPlaybackPreload(): void {
     this.isPlaybackActive = false;
+    // setPlaybackState will abort pending operations in FramePreloadManager
+    // The abort signal is passed to the loader which calls frameExtractor.getFrame()
     this.preloadManager?.setPlaybackState(false, this.playbackDirection);
   }
 

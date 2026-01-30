@@ -69,6 +69,9 @@ export class MediabunnyFrameExtractor {
   // Uses a proper mutex pattern where only one operation runs at a time
   private extractionQueue: Promise<void> = Promise.resolve();
 
+  // AbortController for cancelling pending frame extraction operations
+  private abortController: AbortController = new AbortController();
+
   /**
    * Check if WebCodecs API is available
    */
@@ -77,6 +80,30 @@ export class MediabunnyFrameExtractor {
       typeof VideoDecoder !== 'undefined' &&
       typeof VideoEncoder !== 'undefined'
     );
+  }
+
+  /**
+   * Abort all pending frame extraction operations
+   * Creates a new AbortController for future operations
+   *
+   * Note: In-progress extractions cannot be cancelled mid-decode due to
+   * WebCodecs limitations. This only cancels operations waiting in queue
+   * and prevents new operations from starting until current one completes.
+   */
+  abortPendingOperations(): void {
+    this.abortController.abort();
+    this.abortController = new AbortController();
+    // Note: We intentionally do NOT reset extractionQueue here.
+    // Resetting the queue while an operation holds the lock would allow
+    // concurrent decoder access, corrupting state. Operations waiting
+    // in queue will check the abort signal and exit early.
+  }
+
+  /**
+   * Get the current abort signal for external use
+   */
+  getAbortSignal(): AbortSignal {
+    return this.abortController.signal;
   }
 
   /**
@@ -279,14 +306,29 @@ export class MediabunnyFrameExtractor {
    * Extract a single frame by frame number (1-based)
    * Uses frame index for accurate frame-to-content mapping
    * Serialized via queue to prevent concurrent decoder state corruption
+   * @param frame - The frame number to extract (1-based)
+   * @param signal - Optional AbortSignal to cancel the operation
    */
-  async getFrame(frame: number): Promise<FrameResult | null> {
+  async getFrame(frame: number, signal?: AbortSignal): Promise<FrameResult | null> {
+    // Use provided signal or the internal one
+    const abortSignal = signal ?? this.abortController.signal;
+
+    // Check if already aborted before starting
+    if (abortSignal.aborted) {
+      return null;
+    }
+
     if (!this.canvasSink || !this.metadata) {
       throw new Error('Extractor not initialized. Call load() first.');
     }
 
     // Build frame index if not already built
     await this.buildFrameIndex();
+
+    // Check abort after potentially long frame index build
+    if (abortSignal.aborted) {
+      return null;
+    }
 
     // Clamp frame to valid range
     const maxFrame = this.metadata.frameCount;
@@ -313,6 +355,11 @@ export class MediabunnyFrameExtractor {
       // Wait for any pending operation to complete
       await previousQueue;
 
+      // Check abort after waiting in queue
+      if (abortSignal.aborted) {
+        return null;
+      }
+
       // Now we have exclusive access to the decoder
       // Get the frame at this exact timestamp
       // Use a wider window to ensure we capture the frame even with slight timing differences
@@ -327,6 +374,11 @@ export class MediabunnyFrameExtractor {
       const iterator = this.canvasSink!.canvases(startTimestamp, endTimestamp);
 
       for await (const wrapped of { [Symbol.asyncIterator]: () => iterator }) {
+        // Check abort during iteration
+        if (abortSignal.aborted) {
+          return null;
+        }
+
         const timestampDiff = Math.abs(wrapped.timestamp - expectedTimestamp);
 
         // Keep track of the frame closest to our expected timestamp
@@ -344,6 +396,11 @@ export class MediabunnyFrameExtractor {
         if (timestampDiff < 0.001) {
           break;
         }
+      }
+
+      // Final abort check before returning result
+      if (abortSignal.aborted) {
+        return null;
       }
 
       if (bestMatch) {
@@ -594,6 +651,9 @@ export class MediabunnyFrameExtractor {
    * Clean up resources
    */
   dispose(): void {
+    // Abort any pending operations first
+    this.abortPendingOperations();
+
     this.frameIndex.clear();
     this.frameIndexBuilt = false;
     this.buildingFrameIndex = null;

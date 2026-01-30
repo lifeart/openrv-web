@@ -379,4 +379,94 @@ describe('MediabunnyFrameExtractor', () => {
       expect(detectedFps === null || typeof detectedFps === 'number').toBe(true);
     });
   });
+
+  describe('AbortController support', () => {
+    it('should have abortPendingOperations method', async () => {
+      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
+      const extractor = new MediabunnyFrameExtractor();
+
+      // Method should exist and not throw
+      expect(typeof extractor.abortPendingOperations).toBe('function');
+      extractor.abortPendingOperations();
+    });
+
+    it('should have getAbortSignal method that returns AbortSignal', async () => {
+      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
+      const extractor = new MediabunnyFrameExtractor();
+
+      const signal = extractor.getAbortSignal();
+      expect(signal).toBeInstanceOf(AbortSignal);
+      expect(signal.aborted).toBe(false);
+    });
+
+    it('should create new abort signal after abortPendingOperations', async () => {
+      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
+      const extractor = new MediabunnyFrameExtractor();
+
+      const signal1 = extractor.getAbortSignal();
+      expect(signal1.aborted).toBe(false);
+
+      extractor.abortPendingOperations();
+
+      // Old signal should be aborted
+      expect(signal1.aborted).toBe(true);
+
+      // New signal should be fresh
+      const signal2 = extractor.getAbortSignal();
+      expect(signal2.aborted).toBe(false);
+      expect(signal2).not.toBe(signal1);
+    });
+
+    it('should abort pending operations on dispose', async () => {
+      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
+      const extractor = new MediabunnyFrameExtractor();
+
+      const signal = extractor.getAbortSignal();
+      expect(signal.aborted).toBe(false);
+
+      extractor.dispose();
+
+      // Signal should be aborted after dispose
+      expect(signal.aborted).toBe(true);
+    });
+
+    it('getFrame should return null when aborted before start', async () => {
+      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
+
+      if (!MediabunnyFrameExtractor.isSupported()) {
+        return;
+      }
+
+      const extractor = new MediabunnyFrameExtractor();
+      const mockFile = new File(['test'], 'test.mp4', { type: 'video/mp4' });
+      await extractor.load(mockFile, 24);
+
+      // Abort before calling getFrame
+      extractor.abortPendingOperations();
+
+      // getFrame should return null for aborted signal
+      const result = await extractor.getFrame(1);
+      expect(result).toBeNull();
+    });
+
+    it('getFrame should accept external AbortSignal', async () => {
+      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
+
+      if (!MediabunnyFrameExtractor.isSupported()) {
+        return;
+      }
+
+      const extractor = new MediabunnyFrameExtractor();
+      const mockFile = new File(['test'], 'test.mp4', { type: 'video/mp4' });
+      await extractor.load(mockFile, 24);
+
+      // Create external abort controller
+      const abortController = new AbortController();
+      abortController.abort();
+
+      // getFrame should return null for aborted external signal
+      const result = await extractor.getFrame(1, abortController.signal);
+      expect(result).toBeNull();
+    });
+  });
 });

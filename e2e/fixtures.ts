@@ -1140,3 +1140,165 @@ export async function getExtendedSessionState(page: Page): Promise<SessionState 
     };
   });
 }
+
+// Timeout constants for deterministic E2E tests
+// Use these instead of magic numbers to maintain consistency
+const TIMEOUT_SHORT = 2000;   // For quick state changes (play/pause, direction)
+const TIMEOUT_MEDIUM = 5000;  // For frame operations that may require loading
+const TIMEOUT_LONG = 10000;   // For heavy operations like initial media load
+
+/**
+ * Wait for playback state to change to the expected value.
+ * Prefer this over waitForTimeout for deterministic E2E tests.
+ */
+export async function waitForPlaybackState(page: Page, isPlaying: boolean, timeout = TIMEOUT_SHORT): Promise<void> {
+  await page.waitForFunction(
+    (expected) => {
+      const state = (window as any).__OPENRV_TEST__?.getSessionState();
+      return state?.isPlaying === expected;
+    },
+    isPlaying,
+    { timeout }
+  );
+}
+
+/**
+ * Wait for the current frame to reach or exceed a target value.
+ */
+export async function waitForFrameAtLeast(page: Page, minFrame: number, timeout = TIMEOUT_MEDIUM): Promise<void> {
+  await page.waitForFunction(
+    (min) => {
+      const state = (window as any).__OPENRV_TEST__?.getSessionState();
+      return state?.currentFrame >= min;
+    },
+    minFrame,
+    { timeout }
+  );
+}
+
+/**
+ * Wait for frame to change from a known value.
+ */
+export async function waitForFrameChange(page: Page, fromFrame: number, timeout = TIMEOUT_MEDIUM): Promise<void> {
+  await page.waitForFunction(
+    (from) => {
+      const state = (window as any).__OPENRV_TEST__?.getSessionState();
+      return state?.currentFrame !== from;
+    },
+    fromFrame,
+    { timeout }
+  );
+}
+
+/**
+ * Wait for cache to have at least N cached frames.
+ */
+export async function waitForCachedFrames(page: Page, minCached: number, timeout = TIMEOUT_MEDIUM): Promise<void> {
+  await page.waitForFunction(
+    (min) => {
+      const state = (window as any).__OPENRV_TEST__?.getCacheIndicatorState();
+      return state?.cachedCount >= min;
+    },
+    minCached,
+    { timeout }
+  );
+}
+
+/**
+ * Wait for pending frame count to drop to or below a threshold.
+ */
+export async function waitForPendingFramesBelow(page: Page, maxPending: number, timeout = TIMEOUT_MEDIUM): Promise<void> {
+  await page.waitForFunction(
+    (max) => {
+      const state = (window as any).__OPENRV_TEST__?.getCacheIndicatorState();
+      return state?.pendingCount <= max;
+    },
+    maxPending,
+    { timeout }
+  );
+}
+
+/**
+ * Wait for play direction to change to the expected value.
+ */
+export async function waitForPlayDirection(page: Page, direction: number, timeout = TIMEOUT_SHORT): Promise<void> {
+  await page.waitForFunction(
+    (expected) => {
+      const state = (window as any).__OPENRV_TEST__?.getSessionState();
+      return state?.playDirection === expected;
+    },
+    direction,
+    { timeout }
+  );
+}
+
+/**
+ * Wait for frame to be at an exact value.
+ */
+export async function waitForFrame(page: Page, frame: number, timeout = TIMEOUT_SHORT): Promise<void> {
+  await page.waitForFunction(
+    (expected) => {
+      const state = (window as any).__OPENRV_TEST__?.getSessionState();
+      return state?.currentFrame === expected;
+    },
+    frame,
+    { timeout }
+  );
+}
+
+/**
+ * Wait for media to be loaded (hasMedia becomes true).
+ */
+export async function waitForMediaLoaded(page: Page, timeout = TIMEOUT_LONG): Promise<void> {
+  await page.waitForFunction(
+    () => {
+      const state = (window as any).__OPENRV_TEST__?.getSessionState();
+      return state?.hasMedia === true;
+    },
+    undefined,
+    { timeout }
+  );
+}
+
+/**
+ * Wait for the current frame to be at or below a target value.
+ * Useful for verifying reverse playback.
+ */
+export async function waitForFrameAtMost(page: Page, maxFrame: number, timeout = TIMEOUT_MEDIUM): Promise<void> {
+  await page.waitForFunction(
+    (max) => {
+      const state = (window as any).__OPENRV_TEST__?.getSessionState();
+      return state?.currentFrame <= max;
+    },
+    maxFrame,
+    { timeout }
+  );
+}
+
+/**
+ * Wait for the current frame to be at the end of the video.
+ */
+export async function waitForFrameAtEnd(page: Page, timeout = TIMEOUT_MEDIUM): Promise<void> {
+  await page.waitForFunction(
+    () => {
+      const state = (window as any).__OPENRV_TEST__?.getSessionState();
+      return state?.currentFrame === state?.frameCount;
+    },
+    undefined,
+    { timeout }
+  );
+}
+
+/**
+ * Wait for buffering state to change to the expected value.
+ */
+export async function waitForBufferingState(page: Page, isBuffering: boolean, timeout = TIMEOUT_MEDIUM): Promise<void> {
+  await page.waitForFunction(
+    (expected) => {
+      const state = (window as any).__OPENRV_TEST__?.getSessionState();
+      return state?.isBuffering === expected;
+    },
+    isBuffering,
+    { timeout }
+  );
+}

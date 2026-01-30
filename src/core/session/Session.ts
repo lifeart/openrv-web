@@ -203,6 +203,11 @@ export class Session extends EventEmitter<SessionEvents> {
   private lastFrameTime = 0;
   private frameAccumulator = 0;
 
+  // Buffering state - counter to handle multiple concurrent frame requests
+  // Only emit 'buffering: false' when counter reaches 0
+  private _bufferingCount = 0;
+  private _isBuffering = false;
+
   // Effective FPS tracking
   private fpsFrameCount = 0;
   private fpsLastTime = 0;
@@ -530,6 +535,9 @@ export class Session extends EventEmitter<SessionEvents> {
     return this._currentSourceIndex;
   }
 
+  // Minimum number of frames to buffer before starting playback
+  private readonly MIN_PLAYBACK_BUFFER = 3;
+
   // Playback control
   play(): void {
     if (this._isPlaying) return;
@@ -555,6 +563,9 @@ export class Session extends EventEmitter<SessionEvents> {
       // Use frame-based playback with mediabunny for both forward and reverse
       source.videoSourceNode.setPlaybackDirection(this._playDirection);
       source.videoSourceNode.startPlaybackPreload(this._currentFrame, this._playDirection);
+
+      // Trigger initial buffer loading to avoid starvation at playback start
+      this.triggerInitialBufferLoad(source.videoSourceNode, this._currentFrame, this._playDirection);
 
       // For mediabunny mode, start audio sync at current position
       if (source.element instanceof HTMLVideoElement) {
@@ -585,6 +596,50 @@ export class Session extends EventEmitter<SessionEvents> {
     this._audioSyncEnabled = this._playDirection === 1;
 
     this.emit('playbackChanged', true);
+  }
+
+  /**
+   * Trigger initial playback buffer loading (fire-and-forget)
+   *
+   * This kicks off parallel frame loading to prime the cache before
+   * the update() loop needs them. The requests go through preloadManager
+   * which handles:
+   * - Request coalescing (no duplicates with startPlaybackPreload)
+   * - Cancellation via abort signal when pause() is called
+   *
+   * We don't await this because:
+   * - Blocking play() would cause UI lag
+   * - The frame-gated logic in update() handles waiting for frames
+   */
+  private triggerInitialBufferLoad(
+    videoSourceNode: import('../../nodes/sources/VideoSourceNode').VideoSourceNode,
+    startFrame: number,
+    direction: number
+  ): void {
+    const duration = this._outPoint - this._inPoint + 1;
+    const bufferSize = Math.min(this.MIN_PLAYBACK_BUFFER, duration);
+
+    // Calculate frames to pre-buffer based on playback direction
+    const framesToBuffer: number[] = [];
+    for (let i = 0; i < bufferSize; i++) {
+      const frame = startFrame + (i * direction);
+      if (frame >= this._inPoint && frame <= this._outPoint) {
+        framesToBuffer.push(frame);
+      }
+    }
+
+    // Request frames in parallel - preloadManager coalesces with startPlaybackPreload
+    // These requests will be cancelled if pause() is called (via abort signal)
+    // Use Promise.allSettled to handle individual failures without losing other results
+    Promise.allSettled(
+      framesToBuffer.map(frame => videoSourceNode.getFrameAsync(frame))
+    ).then(results => {
+      for (const result of results) {
+        if (result.status === 'rejected' && result.reason?.name !== 'AbortError') {
+          console.debug('Initial buffer preload error:', result.reason);
+        }
+      }
+    });
   }
 
   /**
@@ -656,13 +711,47 @@ export class Session extends EventEmitter<SessionEvents> {
     if (this._isPlaying) {
       this._isPlaying = false;
 
+      // Reset buffering state
+      this.resetBufferingState();
+
       // Pause video if current source is video
       const source = this.currentSource;
-      if (source?.type === 'video' && source.element instanceof HTMLVideoElement) {
-        source.element.pause();
+      if (source?.type === 'video') {
+        // Stop playback preloading to reset preload state and cancel pending requests
+        if (source.videoSourceNode?.isUsingMediabunny()) {
+          source.videoSourceNode.stopPlaybackPreload();
+        }
+        if (source.element instanceof HTMLVideoElement) {
+          source.element.pause();
+        }
       }
 
       this.emit('playbackChanged', false);
+    }
+  }
+
+  /**
+   * Decrement buffering counter and emit 'buffering: false' when all pending loads complete
+   */
+  private decrementBufferingCount(): void {
+    this._bufferingCount = Math.max(0, this._bufferingCount - 1);
+    if (this._bufferingCount === 0 && this._isBuffering) {
+      this._isBuffering = false;
+      // Only emit if still playing - no need to signal buffering end if paused
+      if (this._isPlaying) {
+        this.emit('buffering', false);
+      }
+    }
+  }
+
+  /**
+   * Reset buffering state (called on pause or stop)
+   */
+  private resetBufferingState(): void {
+    this._bufferingCount = 0;
+    if (this._isBuffering) {
+      this._isBuffering = false;
+      this.emit('buffering', false);
     }
   }
 
@@ -934,6 +1023,13 @@ export class Session extends EventEmitter<SessionEvents> {
           // Cap accumulator to prevent huge jumps when frame becomes available
           this.frameAccumulator = Math.min(this.frameAccumulator, frameDuration * 2);
 
+          // Track buffering state with counter to prevent event flickering
+          this._bufferingCount++;
+          if (!this._isBuffering) {
+            this._isBuffering = true;
+            this.emit('buffering', true);
+          }
+
           // Request the frame and trigger surrounding preload via preloadManager
           // getFrameAsync internally uses preloadManager which handles:
           // - Request coalescing (no duplicate requests)
@@ -944,8 +1040,13 @@ export class Session extends EventEmitter<SessionEvents> {
             // Use optional chaining because source may be disposed/changed during async load
             // (this is intentional - if disposed, we simply skip the buffer update)
             source.videoSourceNode?.updatePlaybackBuffer(nextFrame);
+            this.decrementBufferingCount();
           }).catch(err => {
-            console.warn('Frame fetch error:', err);
+            // Don't log abort errors
+            if (err?.name !== 'AbortError') {
+              console.warn('Frame fetch error:', err);
+            }
+            this.decrementBufferingCount();
           });
           break;
         }

@@ -47,7 +47,8 @@ describe('FramePreloadManager', () => {
       const result = await manager.getFrame(5);
 
       expect(result).toEqual({ frame: 5, data: 'frame-5' });
-      expect(loader).toHaveBeenCalledWith(5);
+      // Loader now receives frame number and optional AbortSignal
+      expect(loader).toHaveBeenCalledWith(5, expect.any(AbortSignal));
     });
 
     it('FPM-004: returns cached frame without loading', async () => {
@@ -888,6 +889,230 @@ describe('FramePreloadManager', () => {
 
       expect(disposer).toHaveBeenCalledTimes(1);
       expect(disposer).toHaveBeenCalledWith(1, { frame: 1, data: 'frame-1' });
+    });
+  });
+
+  describe('AbortController support', () => {
+    it('FPM-060: abortPendingOperations cancels pending requests', async () => {
+      const slowLoader = vi.fn(async (frame: number, signal?: AbortSignal) => {
+        return new Promise<TestFrame>((resolve) => {
+          const timeout = setTimeout(() => resolve({ frame, data: `frame-${frame}` }), 100);
+          signal?.addEventListener('abort', () => {
+            clearTimeout(timeout);
+            // Resolve immediately on abort to speed up cleanup
+            resolve({ frame, data: 'aborted' } as TestFrame);
+          });
+        });
+      });
+
+      const config: Partial<PreloadConfig> = {
+        scrubWindow: 5,
+        maxConcurrent: 2,
+      };
+      const manager = new FramePreloadManager<TestFrame>(100, slowLoader, disposer, config);
+
+      // Start preloading
+      manager.preloadAround(50);
+
+      // Immediately abort
+      manager.abortPendingOperations();
+
+      // Wait for active requests to complete via .finally() handlers
+      // Active requests will resolve quickly due to abort signal
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const stats = manager.getStats();
+      // All pending requests should be cleared immediately
+      expect(stats.pendingRequests).toBe(0);
+      // Active requests clean up via .finally() after abort signal triggers resolution
+      expect(stats.activeRequests).toBe(0);
+    });
+
+    it('FPM-061: setPlaybackState(false) aborts pending when stopping playback', async () => {
+      const slowLoader = vi.fn(async (frame: number, signal?: AbortSignal) => {
+        return new Promise<TestFrame>((resolve) => {
+          const timeout = setTimeout(() => resolve({ frame, data: `frame-${frame}` }), 100);
+          signal?.addEventListener('abort', () => {
+            clearTimeout(timeout);
+            // Return null instead of rejecting to avoid unhandled rejection
+            resolve({ frame, data: 'aborted' } as TestFrame);
+          });
+        });
+      });
+
+      const config: Partial<PreloadConfig> = {
+        preloadAhead: 5,
+        maxConcurrent: 2,
+      };
+      const manager = new FramePreloadManager<TestFrame>(100, slowLoader, disposer, config);
+
+      // Start playback mode and preload
+      manager.setPlaybackState(true, 1);
+      manager.preloadAround(50);
+
+      // Wait a bit for requests to start
+      await new Promise(resolve => setTimeout(resolve, 20));
+
+      // Stop playback - should abort pending operations
+      manager.setPlaybackState(false);
+
+      // Wait for cleanup
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      const stats = manager.getStats();
+      // Pending requests should be cleared when stopping playback
+      expect(stats.pendingRequests).toBe(0);
+    });
+
+    it('FPM-061b: setPlaybackState aborts on direction change', async () => {
+      const slowLoader = vi.fn(async (frame: number, signal?: AbortSignal) => {
+        return new Promise<TestFrame>((resolve) => {
+          const timeout = setTimeout(() => resolve({ frame, data: `frame-${frame}` }), 100);
+          signal?.addEventListener('abort', () => {
+            clearTimeout(timeout);
+            resolve({ frame, data: 'aborted' } as TestFrame);
+          });
+        });
+      });
+
+      const config: Partial<PreloadConfig> = {
+        preloadAhead: 5,
+        maxConcurrent: 2,
+      };
+      const manager = new FramePreloadManager<TestFrame>(100, slowLoader, disposer, config);
+
+      // Start forward playback and preload
+      manager.setPlaybackState(true, 1);
+      manager.preloadAround(50);
+
+      // Wait for requests to start
+      await new Promise(resolve => setTimeout(resolve, 20));
+
+      // Get signal before direction change
+      const signalBefore = manager.getAbortSignal();
+
+      // Change direction while playing - should abort old preloads
+      manager.setPlaybackState(true, -1);
+
+      // Old signal should be aborted
+      expect(signalBefore.aborted).toBe(true);
+
+      // Wait for cleanup
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      const stats = manager.getStats();
+      expect(stats.pendingRequests).toBe(0);
+    });
+
+    it('FPM-061c: setPlaybackState aborts on play start', async () => {
+      const manager = new FramePreloadManager(100, loader, disposer);
+
+      // Queue some scrub-mode preloads
+      manager.preloadAround(50);
+
+      // Get signal before starting playback
+      const signalBefore = manager.getAbortSignal();
+
+      // Start playback - should abort scrub preloads for fresh start
+      manager.setPlaybackState(true, 1);
+
+      // Old signal should be aborted
+      expect(signalBefore.aborted).toBe(true);
+    });
+
+    it('FPM-062: getAbortSignal returns current abort signal', () => {
+      const manager = new FramePreloadManager(100, loader);
+
+      const signal1 = manager.getAbortSignal();
+      expect(signal1).toBeInstanceOf(AbortSignal);
+      expect(signal1.aborted).toBe(false);
+
+      // After abort, new signal should be available
+      manager.abortPendingOperations();
+      const signal2 = manager.getAbortSignal();
+      expect(signal2).toBeInstanceOf(AbortSignal);
+      expect(signal2.aborted).toBe(false);
+
+      // Old signal should be aborted
+      expect(signal1.aborted).toBe(true);
+    });
+
+    it('FPM-063: clear() aborts pending operations', async () => {
+      const slowLoader = vi.fn(async (frame: number, signal?: AbortSignal) => {
+        return new Promise<TestFrame>((resolve) => {
+          const timeout = setTimeout(() => resolve({ frame, data: `frame-${frame}` }), 100);
+          signal?.addEventListener('abort', () => {
+            clearTimeout(timeout);
+            // Resolve instead of reject to avoid unhandled rejection
+            resolve({ frame, data: 'aborted' } as TestFrame);
+          });
+        });
+      });
+
+      const manager = new FramePreloadManager<TestFrame>(100, slowLoader, disposer);
+
+      // Start loading
+      manager.preloadAround(50);
+
+      // Wait for requests to start
+      await new Promise(resolve => setTimeout(resolve, 20));
+
+      // Clear should abort everything
+      manager.clear();
+
+      const stats = manager.getStats();
+      expect(stats.pendingRequests).toBe(0);
+      expect(stats.cacheSize).toBe(0);
+    });
+
+    it('FPM-064: aborted loader does not add to cache', async () => {
+      // Use a container object to capture the resolve function
+      const resolveContainer: { resolve: ((value: TestFrame) => void) | null } = { resolve: null };
+      const controlledLoader = vi.fn((_frame: number, signal?: AbortSignal): Promise<TestFrame> => {
+        return new Promise((resolve, reject) => {
+          resolveContainer.resolve = resolve;
+          signal?.addEventListener('abort', () => {
+            reject(new DOMException('Aborted', 'AbortError'));
+          });
+        });
+      });
+
+      const manager = new FramePreloadManager<TestFrame>(100, controlledLoader);
+
+      // Start loading frame 5
+      const loadPromise = manager.getFrame(5);
+
+      // Abort before it completes
+      manager.abortPendingOperations();
+
+      // Try to resolve anyway (simulates race condition)
+      if (resolveContainer.resolve) {
+        resolveContainer.resolve({ frame: 5, data: 'frame-5' });
+      }
+
+      // Wait for promise to settle
+      await loadPromise.catch(() => {});
+
+      // Frame should not be in cache because it was aborted
+      expect(manager.hasFrame(5)).toBe(false);
+    });
+
+    it('FPM-065: new operations work after abort', async () => {
+      const manager = new FramePreloadManager(100, loader, disposer);
+
+      // Load a frame
+      await manager.getFrame(1);
+      expect(manager.hasFrame(1)).toBe(true);
+
+      // Abort (clears pending but not cache)
+      manager.abortPendingOperations();
+
+      // Should still be able to use cached frames
+      expect(manager.hasFrame(1)).toBe(true);
+
+      // Should be able to load new frames
+      await manager.getFrame(2);
+      expect(manager.hasFrame(2)).toBe(true);
     });
   });
 });
