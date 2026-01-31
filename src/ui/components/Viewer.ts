@@ -1789,6 +1789,13 @@ export class Viewer {
     const ab = current ?? this.session.currentAB;
     const available = this.session.abCompareAvailable;
 
+    // Hide the A/B indicator in split screen mode since both sources are visible
+    // with their own labels (A and B) on each side of the split
+    if (isSplitScreenMode(this.wipeState.mode)) {
+      this.abIndicator.style.display = 'none';
+      return;
+    }
+
     if (available) {
       this.abIndicator.style.display = 'block';
       this.abIndicator.textContent = ab;
@@ -1824,6 +1831,7 @@ export class Viewer {
     this.wipeState = { ...state };
     this.updateWipeLine();
     this.updateSplitScreenLine();
+    this.updateABIndicator(); // Hide/show A/B indicator based on mode
     this.scheduleRender();
   }
 
@@ -1835,6 +1843,7 @@ export class Viewer {
     this.wipeState.mode = mode;
     this.updateWipeLine();
     this.updateSplitScreenLine();
+    this.updateABIndicator(); // Hide/show A/B indicator based on mode
     this.scheduleRender();
   }
 

@@ -969,6 +969,77 @@ export async function captureViewerScreenshot(page: Page): Promise<Buffer> {
 }
 
 /**
+ * Capture just the right half (B side) of the split screen viewer
+ * Used to verify that the B source is actually updating during playback
+ */
+export async function captureBSideScreenshot(page: Page): Promise<Buffer> {
+  const canvas = page.locator('canvas').first();
+  const box = await canvas.boundingBox();
+  if (!box) {
+    throw new Error('Canvas not found');
+  }
+  // Capture right half (B side in horizontal split)
+  const screenshot = await canvas.screenshot({
+    clip: {
+      x: Math.floor(box.width / 2),
+      y: 0,
+      width: Math.ceil(box.width / 2),
+      height: box.height,
+    },
+  });
+  return screenshot;
+}
+
+/**
+ * Capture just the left half (A side) of the split screen viewer
+ * Used to verify that the A source is actually updating during playback
+ */
+export async function captureASideScreenshot(page: Page): Promise<Buffer> {
+  const canvas = page.locator('canvas').first();
+  const box = await canvas.boundingBox();
+  if (!box) {
+    throw new Error('Canvas not found');
+  }
+  // Capture left half (A side in horizontal split)
+  const screenshot = await canvas.screenshot({
+    clip: {
+      x: 0,
+      y: 0,
+      width: Math.floor(box.width / 2),
+      height: box.height,
+    },
+  });
+  return screenshot;
+}
+
+/**
+ * Capture both A and B sides of split screen separately
+ * Optimized to only call boundingBox() once
+ * Returns { aSide, bSide } screenshots
+ */
+export async function captureBothSidesScreenshot(page: Page): Promise<{ aSide: Buffer; bSide: Buffer }> {
+  const canvas = page.locator('canvas').first();
+  const box = await canvas.boundingBox();
+  if (!box) {
+    throw new Error('Canvas not found');
+  }
+
+  const halfWidth = Math.floor(box.width / 2);
+
+  // Capture both sides in parallel using the same bounding box
+  const [aSide, bSide] = await Promise.all([
+    canvas.screenshot({
+      clip: { x: 0, y: 0, width: halfWidth, height: box.height },
+    }),
+    canvas.screenshot({
+      clip: { x: halfWidth, y: 0, width: Math.ceil(box.width / 2), height: box.height },
+    }),
+  ]);
+
+  return { aSide, bSide };
+}
+
+/**
  * Compare screenshots with tolerance for minor differences
  */
 export function screenshotsMatch(img1: Buffer, img2: Buffer, tolerance: number = 0): boolean {
