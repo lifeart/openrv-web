@@ -273,7 +273,12 @@ export class WorkerPool<TResult = unknown> {
     if (type === 'result') {
       task.resolve(event.data);
     } else if (type === 'error') {
-      task.reject(new Error(event.data.error || 'Worker error'));
+      const workerError = new Error(event.data.error || 'Worker error');
+      // Preserve the original stack trace from the worker if available
+      if (event.data.stack) {
+        workerError.stack = `Worker Error: ${event.data.error}\n${event.data.stack}`;
+      }
+      task.reject(workerError);
     }
 
     // Process next task
@@ -284,7 +289,14 @@ export class WorkerPool<TResult = unknown> {
    * Handle worker error
    */
   private handleWorkerError(workerState: WorkerState, event: ErrorEvent): void {
-    console.error('Worker error:', event);
+    // Log detailed error information for debugging
+    console.error('Worker error:', {
+      message: event.message,
+      filename: event.filename,
+      lineno: event.lineno,
+      colno: event.colno,
+      error: event.error,
+    });
 
     const taskId = workerState.currentTaskId;
     if (taskId !== null) {
@@ -295,7 +307,16 @@ export class WorkerPool<TResult = unknown> {
           clearTimeout(task.timeoutHandle);
         }
         this.pendingTasks.delete(taskId);
-        task.reject(new Error(event.message || 'Worker error'));
+        // Create error with detailed context
+        const errorMessage = event.message || 'Worker error';
+        const workerError = new Error(errorMessage);
+        // Include original error stack if available, otherwise use file location
+        if (event.error?.stack) {
+          workerError.stack = event.error.stack;
+        } else if (event.filename) {
+          workerError.stack = `${errorMessage}\n    at ${event.filename}:${event.lineno}:${event.colno}`;
+        }
+        task.reject(workerError);
       }
     }
 

@@ -34,11 +34,11 @@ test.describe('Composition', () => {
       await page.waitForTimeout(200);
     });
 
-    test('COMP-001: W key cycles through wipe modes (off -> horizontal -> vertical -> off)', async ({ page }) => {
+    test('COMP-001: Shift+W key cycles through wipe/split modes', async ({ page }) => {
       let state = await getViewerState(page);
       expect(state.wipeMode).toBe('off');
 
-      // Cycle through: off -> horizontal -> vertical -> off
+      // Cycle through: off -> horizontal -> vertical -> splitscreen-h -> splitscreen-v -> off
       await page.keyboard.press('Shift+w');
       await page.waitForTimeout(100);
       state = await getViewerState(page);
@@ -48,6 +48,16 @@ test.describe('Composition', () => {
       await page.waitForTimeout(100);
       state = await getViewerState(page);
       expect(state.wipeMode).toBe('vertical');
+
+      await page.keyboard.press('Shift+w');
+      await page.waitForTimeout(100);
+      state = await getViewerState(page);
+      expect(state.wipeMode).toBe('splitscreen-h');
+
+      await page.keyboard.press('Shift+w');
+      await page.waitForTimeout(100);
+      state = await getViewerState(page);
+      expect(state.wipeMode).toBe('splitscreen-v');
 
       await page.keyboard.press('Shift+w');
       await page.waitForTimeout(100);

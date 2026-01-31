@@ -156,7 +156,8 @@ export function isViewerContentElement(
   imageCanvas: HTMLCanvasElement,
   paintCanvas: HTMLCanvasElement,
   cropOverlay: HTMLCanvasElement | null,
-  wipeLine: HTMLElement | null
+  wipeLine: HTMLElement | null,
+  splitLine: HTMLElement | null = null
 ): boolean {
   return (
     element === container ||
@@ -164,6 +165,7 @@ export function isViewerContentElement(
     element === paintCanvas ||
     element === cropOverlay ||
     element === wipeLine ||
+    element === splitLine ||
     element === canvasContainer ||
     canvasContainer.contains(element)
   );

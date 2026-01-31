@@ -236,7 +236,22 @@ test.describe('View Controls', () => {
       const verticalScreenshot = await captureViewerScreenshot(page);
       expect(imagesAreDifferent(horizontalScreenshot, verticalScreenshot)).toBe(true);
 
-      // Press Shift+W to turn off (cycles: off -> horizontal -> vertical -> off)
+      // Press Shift+W to switch to horizontal split screen
+      // (cycles: off -> horizontal -> vertical -> splitscreen-h -> splitscreen-v -> off)
+      await page.keyboard.press('Shift+w');
+      await page.waitForTimeout(200);
+
+      state = await getViewerState(page);
+      expect(state.wipeMode).toBe('splitscreen-h');
+
+      // Press Shift+W to switch to vertical split screen
+      await page.keyboard.press('Shift+w');
+      await page.waitForTimeout(200);
+
+      state = await getViewerState(page);
+      expect(state.wipeMode).toBe('splitscreen-v');
+
+      // Press Shift+W to turn off
       await page.keyboard.press('Shift+w');
       await page.waitForTimeout(200);
 

@@ -747,7 +747,8 @@ export class Viewer {
       this.imageCanvas,
       this.paintCanvas,
       this.cropOverlay,
-      this.wipeElements?.wipeLine ?? null
+      this.wipeElements?.wipeLine ?? null,
+      this.splitScreenElements?.splitLine ?? null
     );
   }
 
@@ -829,8 +830,8 @@ export class Viewer {
   };
 
   private onPointerMove = (e: PointerEvent): void => {
-    // Handle wipe dragging
-    if (this.isDraggingWipe) {
+    // Handle wipe/split dragging
+    if (this.isDraggingWipe || this.isDraggingSplit) {
       this.handleWipePointerMove(e);
       return;
     }
@@ -890,8 +891,8 @@ export class Viewer {
   private onPointerUp = (e: PointerEvent): void => {
     this.container.releasePointerCapture(e.pointerId);
 
-    // Handle wipe dragging end
-    if (this.isDraggingWipe) {
+    // Handle wipe/split dragging end
+    if (this.isDraggingWipe || this.isDraggingSplit) {
       this.handleWipePointerUp();
       return;
     }
@@ -1753,6 +1754,7 @@ export class Viewer {
   setWipeState(state: WipeState): void {
     this.wipeState = { ...state };
     this.updateWipeLine();
+    this.updateSplitScreenLine();
     this.scheduleRender();
   }
 
@@ -1763,6 +1765,7 @@ export class Viewer {
   setWipeMode(mode: WipeMode): void {
     this.wipeState.mode = mode;
     this.updateWipeLine();
+    this.updateSplitScreenLine();
     this.scheduleRender();
   }
 
