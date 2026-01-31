@@ -34,6 +34,10 @@ export const DEFAULT_PRELOAD_CONFIG: PreloadConfig = {
   priorityDecayRate: 1.0,
 };
 
+// Bounds for cache size to prevent memory exhaustion
+const MIN_CACHE_SIZE = 5;
+const MAX_CACHE_SIZE = 500;
+
 type FrameLoader<T> = (frame: number, signal?: AbortSignal) => Promise<T | null>;
 type FrameDisposer<T> = (frame: number, data: T) => void;
 
@@ -70,7 +74,20 @@ export class FramePreloadManager<T> {
     this.totalFrames = totalFrames;
     this.loader = loader;
     this.disposer = disposer ?? null;
-    this.config = { ...DEFAULT_PRELOAD_CONFIG, ...config };
+
+    // Merge config with defaults and validate bounds
+    const mergedConfig = { ...DEFAULT_PRELOAD_CONFIG, ...config };
+
+    // Clamp maxCacheSize to valid bounds to prevent memory exhaustion
+    mergedConfig.maxCacheSize = Math.max(
+      MIN_CACHE_SIZE,
+      Math.min(MAX_CACHE_SIZE, mergedConfig.maxCacheSize)
+    );
+
+    // Ensure maxConcurrent is reasonable
+    mergedConfig.maxConcurrent = Math.max(1, Math.min(16, mergedConfig.maxConcurrent));
+
+    this.config = mergedConfig;
   }
 
   /**
@@ -547,10 +564,25 @@ export class FramePreloadManager<T> {
   }
 
   /**
-   * Update configuration
+   * Update configuration with bounds validation
    */
   updateConfig(config: Partial<PreloadConfig>): void {
-    this.config = { ...this.config, ...config };
+    const mergedConfig = { ...this.config, ...config };
+
+    // Clamp maxCacheSize to valid bounds
+    if (config.maxCacheSize !== undefined) {
+      mergedConfig.maxCacheSize = Math.max(
+        MIN_CACHE_SIZE,
+        Math.min(MAX_CACHE_SIZE, mergedConfig.maxCacheSize)
+      );
+    }
+
+    // Ensure maxConcurrent is reasonable
+    if (config.maxConcurrent !== undefined) {
+      mergedConfig.maxConcurrent = Math.max(1, Math.min(16, mergedConfig.maxConcurrent));
+    }
+
+    this.config = mergedConfig;
   }
 
   /**

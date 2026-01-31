@@ -401,7 +401,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private createSpeedButton(): HTMLButtonElement {
     const button = document.createElement('button');
     button.dataset.testid = 'playback-speed-button';
-    button.title = 'Playback speed (J/K/L keys)';
+    button.title = 'Playback speed: Click to increase, Shift+Click to decrease, Right-click for menu (J/K/L keys)';
     button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -439,25 +439,134 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       }
     });
 
-    button.addEventListener('click', () => this.cycleSpeed());
+    button.addEventListener('click', (e) => this.cycleSpeed(e.shiftKey ? -1 : 1));
+
+    // Right-click context menu with all speed presets
+    button.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      this.showSpeedMenu(button);
+    });
 
     // Initial state
     this.updateSpeedButtonText(button);
     return button;
   }
 
-  private cycleSpeed(): void {
+  private showSpeedMenu(anchor: HTMLElement): void {
+    // Remove any existing speed menu
+    const existingMenu = document.getElementById('speed-preset-menu');
+    if (existingMenu) {
+      existingMenu.remove();
+    }
+
+    const menu = document.createElement('div');
+    menu.id = 'speed-preset-menu';
+    menu.style.cssText = `
+      position: fixed;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      padding: 4px 0;
+      z-index: 10000;
+      min-width: 80px;
+    `;
+
+    const currentSpeed = this.session.playbackSpeed;
+
+    for (const preset of PLAYBACK_SPEED_PRESETS) {
+      const item = document.createElement('button');
+      item.dataset.testid = `speed-preset-${preset}`;
+      item.textContent = `${preset}x`;
+      item.style.cssText = `
+        display: block;
+        width: 100%;
+        padding: 6px 12px;
+        background: ${preset === currentSpeed ? 'var(--accent-primary)' : 'transparent'};
+        color: ${preset === currentSpeed ? 'white' : 'var(--text-primary)'};
+        border: none;
+        text-align: left;
+        cursor: pointer;
+        font-size: 12px;
+        font-family: monospace;
+      `;
+
+      item.addEventListener('mouseenter', () => {
+        if (preset !== currentSpeed) {
+          item.style.background = 'var(--bg-hover)';
+        }
+      });
+
+      item.addEventListener('mouseleave', () => {
+        if (preset !== currentSpeed) {
+          item.style.background = 'transparent';
+        }
+      });
+
+      item.addEventListener('click', () => {
+        this.session.playbackSpeed = preset;
+        removeMenu();
+      });
+
+      menu.appendChild(item);
+    }
+
+    // Position the menu below the button
+    const rect = anchor.getBoundingClientRect();
+    menu.style.left = `${rect.left}px`;
+    menu.style.top = `${rect.bottom + 4}px`;
+
+    document.body.appendChild(menu);
+
+    // Cleanup function to remove menu and listener
+    const removeMenu = () => {
+      menu.remove();
+      document.removeEventListener('click', closeMenu);
+    };
+
+    // Close menu when clicking outside
+    const closeMenu = (e: MouseEvent) => {
+      if (!menu.contains(e.target as Node)) {
+        removeMenu();
+      }
+    };
+    setTimeout(() => document.addEventListener('click', closeMenu), 0);
+  }
+
+  private cycleSpeed(direction: number): void {
     const currentSpeed = this.session.playbackSpeed;
     const currentIndex = PLAYBACK_SPEED_PRESETS.indexOf(currentSpeed as typeof PLAYBACK_SPEED_PRESETS[number]);
-    if (currentIndex >= 0 && currentIndex < PLAYBACK_SPEED_PRESETS.length - 1) {
-      const nextSpeed = PLAYBACK_SPEED_PRESETS[currentIndex + 1];
-      if (nextSpeed !== undefined) {
-        this.session.playbackSpeed = nextSpeed;
-        return;
+
+    if (direction > 0) {
+      // Cycle forward (increase speed)
+      if (currentIndex >= 0 && currentIndex < PLAYBACK_SPEED_PRESETS.length - 1) {
+        const nextSpeed = PLAYBACK_SPEED_PRESETS[currentIndex + 1];
+        if (nextSpeed !== undefined) {
+          this.session.playbackSpeed = nextSpeed;
+          return;
+        }
       }
+      // Reset to 1x when at max or not a preset
+      this.session.playbackSpeed = 1;
+    } else {
+      // Cycle backward (decrease speed)
+      if (currentIndex > 0) {
+        const prevSpeed = PLAYBACK_SPEED_PRESETS[currentIndex - 1];
+        if (prevSpeed !== undefined) {
+          this.session.playbackSpeed = prevSpeed;
+          return;
+        }
+      } else if (currentIndex === -1) {
+        // Not a preset, find nearest lower preset
+        const lowerPreset = [...PLAYBACK_SPEED_PRESETS].reverse().find(p => p < currentSpeed);
+        if (lowerPreset !== undefined) {
+          this.session.playbackSpeed = lowerPreset;
+          return;
+        }
+      }
+      // Reset to 1x when at min or not a preset
+      this.session.playbackSpeed = 1;
     }
-    // Reset to 1x when at max or not a preset
-    this.session.playbackSpeed = 1;
   }
 
   private updateSpeedButton(): void {

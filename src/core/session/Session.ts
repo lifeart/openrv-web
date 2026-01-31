@@ -168,6 +168,12 @@ export interface MediaSource {
 export const PLAYBACK_SPEED_PRESETS = [0.1, 0.25, 0.5, 1, 2, 4, 8] as const;
 export type PlaybackSpeedPreset = typeof PLAYBACK_SPEED_PRESETS[number];
 
+// Maximum reverse playback speed - higher speeds may outpace frame extraction
+const MAX_REVERSE_SPEED = 4;
+
+// Starvation timeout - if frame extraction hangs for this long, skip the frame
+const STARVATION_TIMEOUT_MS = 5000;
+
 export class Session extends EventEmitter<SessionEvents> {
   private _currentFrame = 1;
   private _inPoint = 1;
@@ -207,6 +213,9 @@ export class Session extends EventEmitter<SessionEvents> {
   // Only emit 'buffering: false' when counter reaches 0
   private _bufferingCount = 0;
   private _isBuffering = false;
+
+  // Starvation tracking - timestamp when starvation started
+  private _starvationStartTime = 0;
 
   // Effective FPS tracking
   private fpsFrameCount = 0;
@@ -360,6 +369,14 @@ export class Session extends EventEmitter<SessionEvents> {
     const clamped = Math.max(0.1, Math.min(8, value));
     if (clamped !== this._playbackSpeed) {
       this._playbackSpeed = clamped;
+
+      // Reset frame accumulator on speed change to prevent timing discontinuity
+      // This avoids frame skips when changing speed during playback
+      if (this._isPlaying) {
+        this.frameAccumulator = 0;
+        this.lastFrameTime = performance.now();
+      }
+
       this.emit('playbackSpeedChanged', this._playbackSpeed);
       // Update video playback rate if playing a video natively
       const source = this.currentSource;
@@ -416,6 +433,10 @@ export class Session extends EventEmitter<SessionEvents> {
 
   get isPlaying(): boolean {
     return this._isPlaying;
+  }
+
+  get isBuffering(): boolean {
+    return this._isBuffering;
   }
 
   get loopMode(): LoopMode {
@@ -767,6 +788,7 @@ export class Session extends EventEmitter<SessionEvents> {
    */
   private resetBufferingState(): void {
     this._bufferingCount = 0;
+    this._starvationStartTime = 0;
     if (this._isBuffering) {
       this._isBuffering = false;
       this.emit('buffering', false);
@@ -1023,7 +1045,11 @@ export class Session extends EventEmitter<SessionEvents> {
       const delta = now - this.lastFrameTime;
       this.lastFrameTime = now;
 
-      const frameDuration = (1000 / this._fps) / this._playbackSpeed;
+      // Limit speed for reverse playback to prevent frame extraction from being outpaced
+      const effectiveSpeed = this._playDirection < 0
+        ? Math.min(this._playbackSpeed, MAX_REVERSE_SPEED)
+        : this._playbackSpeed;
+      const frameDuration = (1000 / this._fps) / effectiveSpeed;
       this.frameAccumulator += delta;
 
       // Only advance if next frame is cached (frame-gated playback)
@@ -1034,6 +1060,8 @@ export class Session extends EventEmitter<SessionEvents> {
 
         // Check if next frame is cached and ready
         if (source.videoSourceNode.hasFrameCached(nextFrame)) {
+          // Reset starvation tracking on successful frame
+          this._starvationStartTime = 0;
           this.frameAccumulator -= frameDuration;
           this.advanceFrame(this._playDirection);
           // Update source B's playback buffer for split screen support
@@ -1042,6 +1070,22 @@ export class Session extends EventEmitter<SessionEvents> {
           // Frame not ready - trigger fetch and wait
           // Cap accumulator to prevent huge jumps when frame becomes available
           this.frameAccumulator = Math.min(this.frameAccumulator, frameDuration * 2);
+
+          // Track starvation start time
+          if (this._starvationStartTime === 0) {
+            this._starvationStartTime = performance.now();
+          }
+
+          // Check for starvation timeout - if waiting too long, skip the frame
+          const starvationDuration = performance.now() - this._starvationStartTime;
+          if (starvationDuration > STARVATION_TIMEOUT_MS) {
+            console.warn(`Frame ${nextFrame} starvation timeout (${Math.round(starvationDuration)}ms) - skipping frame`);
+            this._starvationStartTime = 0;
+            this.frameAccumulator -= frameDuration;
+            this.advanceFrame(this._playDirection);
+            // Emit a starvation event for UI notification (uses existing buffering event)
+            continue; // Try the next frame
+          }
 
           // Track buffering state with counter to prevent event flickering
           this._bufferingCount++;
@@ -1122,7 +1166,11 @@ export class Session extends EventEmitter<SessionEvents> {
       const delta = now - this.lastFrameTime;
       this.lastFrameTime = now;
 
-      const frameDuration = (1000 / this._fps) / this._playbackSpeed;
+      // Limit speed for reverse playback
+      const effectiveSpeed = this._playDirection < 0
+        ? Math.min(this._playbackSpeed, MAX_REVERSE_SPEED)
+        : this._playbackSpeed;
+      const frameDuration = (1000 / this._fps) / effectiveSpeed;
       this.frameAccumulator += delta;
 
       while (this.frameAccumulator >= frameDuration) {

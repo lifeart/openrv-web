@@ -20,6 +20,7 @@ export interface SessionState {
   inPoint: number;
   outPoint: number;
   isPlaying: boolean;
+  isBuffering: boolean;
   loopMode: 'once' | 'loop' | 'pingpong';
   playDirection: number;
   playbackSpeed: number;
@@ -256,6 +257,7 @@ export async function getSessionState(page: Page): Promise<SessionState> {
       inPoint: 0,
       outPoint: 0,
       isPlaying: false,
+      isBuffering: false,
       loopMode: 'loop',
       playDirection: 1,
       playbackSpeed: 1,
@@ -1203,6 +1205,7 @@ export async function getExtendedSessionState(page: Page): Promise<SessionState 
       inPoint: 0,
       outPoint: 0,
       isPlaying: false,
+      isBuffering: false,
       loopMode: 'loop',
       playDirection: 1,
       playbackSpeed: 1,

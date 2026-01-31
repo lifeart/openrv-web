@@ -47,6 +47,7 @@ export interface SessionState {
   inPoint: number;
   outPoint: number;
   isPlaying: boolean;
+  isBuffering: boolean;
   loopMode: 'once' | 'loop' | 'pingpong';
   playDirection: number;
   playbackSpeed: number;
@@ -296,6 +297,7 @@ export function exposeForTesting(app: App): void {
         inPoint: session.inPoint,
         outPoint: session.outPoint,
         isPlaying: session.isPlaying,
+        isBuffering: session.isBuffering,
         loopMode: session.loopMode,
         playDirection: session.playDirection,
         playbackSpeed: session.playbackSpeed,
