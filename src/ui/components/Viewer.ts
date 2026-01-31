@@ -1388,11 +1388,6 @@ export class Viewer {
       }
     }
 
-    // Render ghost frames (onion skin) behind the main frame
-    if (this.ghostFrameState.enabled && !this.session.isPlaying) {
-      this.renderGhostFrames(displayWidth, displayHeight);
-    }
-
     // Check if difference matte mode is enabled
     let rendered = false;
     if (this.differenceMatteState.enabled && this.session.abCompareAvailable) {
@@ -1443,6 +1438,11 @@ export class Viewer {
       if (currentSource?.element) {
         this.drawWithTransform(this.imageCtx, currentSource.element, displayWidth, displayHeight);
       }
+    }
+
+    // Render ghost frames (onion skin) on top of the main frame
+    if (this.ghostFrameState.enabled) {
+      this.renderGhostFrames(displayWidth, displayHeight);
     }
 
     // Apply post-processing effects (stereo, lens, LUT, color, sharpen) regardless of stack mode

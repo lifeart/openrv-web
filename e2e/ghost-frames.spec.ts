@@ -40,19 +40,29 @@ test.describe('Ghost Frames / Onion Skin', () => {
   });
 
   test.describe('Toggle Ghost Frames', () => {
-    test('GHOST-E001: enable ghost frames via keyboard (Shift+G) should toggle', async ({ page }) => {
+    test('GHOST-E001: enable ghost frames via keyboard (Ctrl+G) should toggle', async ({ page }) => {
+      // Verify button starts in disabled state
+      const ghostButton = page.locator('[data-testid="ghost-frame-button"]');
+      const initialText = await ghostButton.textContent();
+      expect(initialText).not.toContain('On');
+
       const screenshotBefore = await captureViewerScreenshot(page);
 
       // Enable ghost frames
-      await page.keyboard.press('Shift+g');
+      await page.keyboard.press('Control+g');
       await page.waitForTimeout(200);
+
+      // Verify button shows enabled state
+      const enabledText = await ghostButton.textContent();
+      expect(enabledText).toContain('On');
 
       const screenshotAfter = await captureViewerScreenshot(page);
 
-      // View should change when ghost frames are enabled
-      // (though change might be subtle depending on content)
+      // Ghost frames should cause visual change (overlay previous/next frames)
       expect(screenshotBefore).toBeDefined();
       expect(screenshotAfter).toBeDefined();
+      // Note: Visual difference depends on having distinct adjacent frames
+      expect(await imagesAreDifferent(screenshotBefore, screenshotAfter)).toBe(true);
     });
 
     test('GHOST-E002: ghost frame button should be present in View tab', async ({ page }) => {
@@ -129,19 +139,48 @@ test.describe('Ghost Frames / Onion Skin', () => {
 
       // Get initial button text
       const initialText = await ghostButton.textContent();
+      expect(initialText).not.toContain('On');
 
       // Enable ghost frames via keyboard
-      await page.keyboard.press('Shift+g');
+      await page.keyboard.press('Control+g');
       await page.waitForTimeout(100);
 
       // Button text should change to indicate enabled state
       const enabledText = await ghostButton.textContent();
       expect(enabledText).toContain('On');
+
+      // Disable via keyboard
+      await page.keyboard.press('Control+g');
+      await page.waitForTimeout(100);
+
+      // Button should show disabled state
+      const disabledText = await ghostButton.textContent();
+      expect(disabledText).not.toContain('On');
     });
 
-    test('GHOST-E010: ghost frames only show when playback is paused', async ({ page }) => {
+    test('GHOST-E009b: enabling ghost frames via dropdown checkbox', async ({ page }) => {
+      const ghostButton = page.locator('[data-testid="ghost-frame-button"]');
+
+      // Open dropdown
+      await ghostButton.click();
+      await page.waitForTimeout(100);
+
+      const dropdown = page.locator('[data-testid="ghost-frame-dropdown"]');
+      await expect(dropdown).toBeVisible();
+
+      // Find and click the enable checkbox
+      const enableToggle = page.locator('[data-testid="ghost-enable-toggle"] input[type="checkbox"]');
+      await enableToggle.click();
+      await page.waitForTimeout(100);
+
+      // Button should show enabled state
+      const enabledText = await ghostButton.textContent();
+      expect(enabledText).toContain('On');
+    });
+
+    test('GHOST-E010: ghost frames show during playback', async ({ page }) => {
       // Enable ghost frames
-      await page.keyboard.press('Shift+g');
+      await page.keyboard.press('Control+g');
       await page.waitForTimeout(100);
 
       const screenshotPaused = await captureViewerScreenshot(page);
@@ -156,7 +195,7 @@ test.describe('Ghost Frames / Onion Skin', () => {
       await page.keyboard.press('k');
       await page.waitForTimeout(100);
 
-      // Screenshots may differ (playback advances frame)
+      // Ghost frames should be visible during both paused and playing states
       expect(screenshotPaused).toBeDefined();
       expect(screenshotPlaying).toBeDefined();
     });
@@ -166,14 +205,17 @@ test.describe('Ghost Frames / Onion Skin', () => {
       await ghostButton.click();
       await page.waitForTimeout(100);
 
-      // Find and click reset button
-      const resetBtn = page.locator('button:has-text("Reset")');
+      // Dropdown should be visible
+      const dropdown = page.locator('[data-testid="ghost-frame-dropdown"]');
+      await expect(dropdown).toBeVisible();
+
+      // Find and click reset button within the dropdown
+      const resetBtn = dropdown.locator('button:has-text("Reset")');
       if (await resetBtn.isVisible()) {
         await resetBtn.click();
         await page.waitForTimeout(100);
 
         // Dropdown should still be visible with default values
-        const dropdown = page.locator('[data-testid="ghost-frame-dropdown"]');
         await expect(dropdown).toBeVisible();
       }
     });
@@ -182,7 +224,7 @@ test.describe('Ghost Frames / Onion Skin', () => {
   test.describe('Ghost Frame State Persistence', () => {
     test('GHOST-E012: ghost frame state persists across frame navigation', async ({ page }) => {
       // Enable ghost frames
-      await page.keyboard.press('Shift+g');
+      await page.keyboard.press('Control+g');
       await page.waitForTimeout(100);
 
       const ghostButton = page.locator('[data-testid="ghost-frame-button"]');

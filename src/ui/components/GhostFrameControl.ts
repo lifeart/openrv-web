@@ -76,7 +76,7 @@ export class GhostFrameControl extends EventEmitter<GhostFrameControlEvents> {
     // Create toggle button
     this.button = document.createElement('button');
     this.button.dataset.testid = 'ghost-frame-button';
-    this.button.title = 'Ghost Frames / Onion Skin (Shift+G)';
+    this.button.title = 'Ghost Frames / Onion Skin (Ctrl+G)';
     this.button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;

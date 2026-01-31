@@ -29,7 +29,7 @@ export class SessionGTOStore {
   updateFromState(context: UpdateContext): void {
     const { session, viewer, paintEngine, scopesState } = context;
 
-    this.updateSessionObject(session);
+    this.updateSessionObject(session, paintEngine);
     this.updatePaintObject(session, paintEngine);
     this.updateColorAdjustments(viewer.getColorAdjustments());
     this.updateCDL(viewer.getCDL());
@@ -71,11 +71,11 @@ export class SessionGTOStore {
     URL.revokeObjectURL(url);
   }
 
-  private updateSessionObject(session: Session): void {
+  private updateSessionObject(session: Session, paintEngine: PaintEngine): void {
     const existing = this.findObject('RVSession');
     const name = existing?.obj.name ?? 'rv';
     const viewNode = this.getStringProperty(existing?.obj, 'session', 'viewNode') ?? 'defaultSequence';
-    const nextObject = SessionGTOExporter.buildSessionObject(session, name, viewNode);
+    const nextObject = SessionGTOExporter.buildSessionObject(session, paintEngine, name, viewNode);
     this.mergeObject(nextObject, 'RVSession');
   }
 

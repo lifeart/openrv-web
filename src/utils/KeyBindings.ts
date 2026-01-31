@@ -283,7 +283,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   },
   'view.toggleGhostFrames': {
     code: 'KeyG',
-    shift: true,
+    ctrl: true,
     description: 'Toggle ghost frames (onion skin)'
   },
   'paint.toggleHold': {

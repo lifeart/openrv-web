@@ -1148,7 +1148,7 @@ export class SessionGTOExporter {
     const sourceGroupNames: string[] = [];
 
     // 1. Build RVSession object
-    const sessionObject = this.buildSessionObject(session, name, viewNode, comment);
+    const sessionObject = this.buildSessionObject(session, paintEngine, name, viewNode, comment);
     objects.push(sessionObject);
 
     // 2. Build source groups for each media source
@@ -3013,12 +3013,14 @@ export class SessionGTOExporter {
   /**
    * Build the RVSession object with all session properties
    * @param session - Session instance
+   * @param paintEngine - Paint engine for current effects state
    * @param name - Object name (typically 'rv' or session name)
    * @param viewNode - Name of the default view node
    * @param comment - Optional session comment/notes
    */
   static buildSessionObject(
     session: Session,
+    paintEngine: PaintEngine,
     name: string,
     viewNode: string,
     comment = ''
@@ -3027,7 +3029,9 @@ export class SessionGTOExporter {
     const playback = session.getPlaybackState();
     const metadata = session.metadata;
     const matteSettings = session.matteSettings;
-    const paintEffects = session.sessionPaintEffects;
+    // Use current paint engine state, not stale session state
+    const paintState = paintEngine.toJSON() as PaintSnapshot;
+    const paintEffects = paintState.effects;
 
     builder
       .object(name, 'RVSession', 1)
@@ -3058,10 +3062,10 @@ export class SessionGTOExporter {
       .float2('centerPoint', [[matteSettings?.centerPoint?.[0] ?? 0, matteSettings?.centerPoint?.[1] ?? 0]])
       .end()
       .component('paintEffects')
-      .int('hold', paintEffects?.hold ? 1 : 0)
-      .int('ghost', paintEffects?.ghost ? 1 : 0)
-      .int('ghostBefore', paintEffects?.ghostBefore ?? 5)
-      .int('ghostAfter', paintEffects?.ghostAfter ?? 5)
+      .int('hold', paintEffects.hold ? 1 : 0)
+      .int('ghost', paintEffects.ghost ? 1 : 0)
+      .int('ghostBefore', paintEffects.ghostBefore)
+      .int('ghostAfter', paintEffects.ghostAfter)
       .end()
       .component('internal')
       .int('creationContext', metadata.creationContext)

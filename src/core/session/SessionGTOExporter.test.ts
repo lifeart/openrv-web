@@ -401,6 +401,7 @@ describe('SessionGTOExporter.buildSequenceGroupObjects', () => {
 
 describe('SessionGTOExporter.buildSessionObject', () => {
     let session: TestSession;
+    let paintEngine: PaintEngine;
 
     beforeEach(() => {
         session = new TestSession();
@@ -417,10 +418,11 @@ describe('SessionGTOExporter.buildSessionObject', () => {
         session.goToFrame(50);
         session.toggleMark(10);
         session.toggleMark(20);
+        paintEngine = new PaintEngine();
     });
 
     it('creates RVSession with session component', () => {
-        const result = SessionGTOExporter.buildSessionObject(session, 'mySession', 'defaultSequence');
+        const result = SessionGTOExporter.buildSessionObject(session, paintEngine, 'mySession', 'defaultSequence');
 
         expect(result.name).toBe('mySession');
         expect(result.protocol).toBe('RVSession');
@@ -436,7 +438,7 @@ describe('SessionGTOExporter.buildSessionObject', () => {
     });
 
     it('includes marks in session component', () => {
-        const result = SessionGTOExporter.buildSessionObject(session, 'mySession', 'defaultSequence');
+        const result = SessionGTOExporter.buildSessionObject(session, paintEngine, 'mySession', 'defaultSequence');
         const components = result.components as Record<string, any>;
         const marksProp = components['session'].properties.marks;
 
@@ -449,7 +451,7 @@ describe('SessionGTOExporter.buildSessionObject', () => {
         session.setMarker(10, 'Note for frame 10', '#ff0000');
         session.setMarker(20, 'Note for frame 20', '#00ff00');
 
-        const result = SessionGTOExporter.buildSessionObject(session, 'mySession', 'defaultSequence');
+        const result = SessionGTOExporter.buildSessionObject(session, paintEngine, 'mySession', 'defaultSequence');
         const components = result.components as Record<string, any>;
         const sessionComp = components['session'];
 
@@ -466,7 +468,7 @@ describe('SessionGTOExporter.buildSessionObject', () => {
 
     it('GTO-MRK-U004: exports default values for markers without explicit notes/colors', () => {
         // Default markers from beforeEach (frames 10 and 20) have no explicit notes/colors
-        const result = SessionGTOExporter.buildSessionObject(session, 'mySession', 'defaultSequence');
+        const result = SessionGTOExporter.buildSessionObject(session, paintEngine, 'mySession', 'defaultSequence');
         const components = result.components as Record<string, any>;
         const sessionComp = components['session'];
 
@@ -483,6 +485,7 @@ describe('SessionGTOExporter.buildSessionObject', () => {
     it('includes root component with name and comment', () => {
         const result = SessionGTOExporter.buildSessionObject(
             session,
+            paintEngine,
             'mySession',
             'defaultSequence',
             'Test comment'
@@ -495,7 +498,7 @@ describe('SessionGTOExporter.buildSessionObject', () => {
     });
 
     it('includes matte component with defaults', () => {
-        const result = SessionGTOExporter.buildSessionObject(session, 'mySession', 'defaultSequence');
+        const result = SessionGTOExporter.buildSessionObject(session, paintEngine, 'mySession', 'defaultSequence');
         const components = result.components as Record<string, any>;
         const matteComp = components['matte'];
 
@@ -505,18 +508,19 @@ describe('SessionGTOExporter.buildSessionObject', () => {
     });
 
     it('includes paintEffects component with defaults', () => {
-        const result = SessionGTOExporter.buildSessionObject(session, 'mySession', 'defaultSequence');
+        const result = SessionGTOExporter.buildSessionObject(session, paintEngine, 'mySession', 'defaultSequence');
         const components = result.components as Record<string, any>;
         const paintEffectsComp = components['paintEffects'];
 
         expect(paintEffectsComp.properties.hold.data).toEqual([0]);
         expect(paintEffectsComp.properties.ghost.data).toEqual([0]);
-        expect(paintEffectsComp.properties.ghostBefore.data).toEqual([5]);
-        expect(paintEffectsComp.properties.ghostAfter.data).toEqual([5]);
+        // PaintEngine defaults: ghostBefore=3, ghostAfter=3
+        expect(paintEffectsComp.properties.ghostBefore.data).toEqual([3]);
+        expect(paintEffectsComp.properties.ghostAfter.data).toEqual([3]);
     });
 
     it('includes internal component with creationContext', () => {
-        const result = SessionGTOExporter.buildSessionObject(session, 'mySession', 'defaultSequence');
+        const result = SessionGTOExporter.buildSessionObject(session, paintEngine, 'mySession', 'defaultSequence');
         const components = result.components as Record<string, any>;
         const internalComp = components['internal'];
 
@@ -525,7 +529,7 @@ describe('SessionGTOExporter.buildSessionObject', () => {
     });
 
     it('includes node component with origin', () => {
-        const result = SessionGTOExporter.buildSessionObject(session, 'mySession', 'defaultSequence');
+        const result = SessionGTOExporter.buildSessionObject(session, paintEngine, 'mySession', 'defaultSequence');
         const components = result.components as Record<string, any>;
         const nodeComp = components['node'];
 
@@ -534,7 +538,7 @@ describe('SessionGTOExporter.buildSessionObject', () => {
     });
 
     it('includes membership component with contains', () => {
-        const result = SessionGTOExporter.buildSessionObject(session, 'mySession', 'defaultSequence');
+        const result = SessionGTOExporter.buildSessionObject(session, paintEngine, 'mySession', 'defaultSequence');
         const components = result.components as Record<string, any>;
         const membershipComp = components['membership'];
 
@@ -3089,6 +3093,7 @@ describe('SessionGTOExporter.buildMovieSourceObject', () => {
 
 describe('SessionGTOExporter Round-trip Export Tests', () => {
     let session: TestSession;
+    let paintEngine: PaintEngine;
 
     beforeEach(() => {
         session = new TestSession();
@@ -3102,20 +3107,21 @@ describe('SessionGTOExporter Round-trip Export Tests', () => {
             url: 'test.png'
         }]);
         session.fps = 24;
+        paintEngine = new PaintEngine();
     });
 
     describe('Frame Increment export', () => {
         it('exports custom frameIncrement value', () => {
             session.frameIncrement = 5;
 
-            const result = SessionGTOExporter.buildSessionObject(session, 'testSession', 'defaultSequence');
+            const result = SessionGTOExporter.buildSessionObject(session, paintEngine, 'testSession', 'defaultSequence');
             const components = result.components as Record<string, any>;
 
             expect(components['session'].properties.inc.data).toEqual([5]);
         });
 
         it('exports frameIncrement of 1 by default', () => {
-            const result = SessionGTOExporter.buildSessionObject(session, 'testSession', 'defaultSequence');
+            const result = SessionGTOExporter.buildSessionObject(session, paintEngine, 'testSession', 'defaultSequence');
             const components = result.components as Record<string, any>;
 
             expect(components['session'].properties.inc.data).toEqual([1]);
@@ -3124,7 +3130,7 @@ describe('SessionGTOExporter Round-trip Export Tests', () => {
         it('exports high frameIncrement values', () => {
             session.frameIncrement = 50;
 
-            const result = SessionGTOExporter.buildSessionObject(session, 'testSession', 'defaultSequence');
+            const result = SessionGTOExporter.buildSessionObject(session, paintEngine, 'testSession', 'defaultSequence');
             const components = result.components as Record<string, any>;
 
             expect(components['session'].properties.inc.data).toEqual([50]);
@@ -3141,7 +3147,7 @@ describe('SessionGTOExporter Round-trip Export Tests', () => {
                 centerPoint: [0.1, -0.2]
             });
 
-            const result = SessionGTOExporter.buildSessionObject(session, 'testSession', 'defaultSequence');
+            const result = SessionGTOExporter.buildSessionObject(session, paintEngine, 'testSession', 'defaultSequence');
             const components = result.components as Record<string, any>;
             const matteComp = components['matte'];
 
@@ -3161,14 +3167,14 @@ describe('SessionGTOExporter Round-trip Export Tests', () => {
                 centerPoint: [0, 0]
             });
 
-            const result = SessionGTOExporter.buildSessionObject(session, 'testSession', 'defaultSequence');
+            const result = SessionGTOExporter.buildSessionObject(session, paintEngine, 'testSession', 'defaultSequence');
             const components = result.components as Record<string, any>;
 
             expect(components['matte'].properties.show.data).toEqual([0]);
         });
 
         it('exports default matte values when not set', () => {
-            const result = SessionGTOExporter.buildSessionObject(session, 'testSession', 'defaultSequence');
+            const result = SessionGTOExporter.buildSessionObject(session, paintEngine, 'testSession', 'defaultSequence');
             const components = result.components as Record<string, any>;
             const matteComp = components['matte'];
 
@@ -3182,14 +3188,11 @@ describe('SessionGTOExporter Round-trip Export Tests', () => {
 
     describe('Paint Effects export', () => {
         it('exports paint effects when configured', () => {
-            session.setSessionPaintEffectsForTest({
-                hold: true,
-                ghost: true,
-                ghostBefore: 7,
-                ghostAfter: 10
-            });
+            // Set paint effects on the paint engine (source of truth for export)
+            paintEngine.setGhostMode(true, 7, 10);
+            paintEngine.setHoldMode(true);
 
-            const result = SessionGTOExporter.buildSessionObject(session, 'testSession', 'defaultSequence');
+            const result = SessionGTOExporter.buildSessionObject(session, paintEngine, 'testSession', 'defaultSequence');
             const components = result.components as Record<string, any>;
             const paintComp = components['paintEffects'];
 
@@ -3200,14 +3203,11 @@ describe('SessionGTOExporter Round-trip Export Tests', () => {
         });
 
         it('exports paint effects disabled state', () => {
-            session.setSessionPaintEffectsForTest({
-                hold: false,
-                ghost: false,
-                ghostBefore: 3,
-                ghostAfter: 3
-            });
+            // Set paint effects on the paint engine (source of truth for export)
+            paintEngine.setGhostMode(false, 3, 3);
+            paintEngine.setHoldMode(false);
 
-            const result = SessionGTOExporter.buildSessionObject(session, 'testSession', 'defaultSequence');
+            const result = SessionGTOExporter.buildSessionObject(session, paintEngine, 'testSession', 'defaultSequence');
             const components = result.components as Record<string, any>;
             const paintComp = components['paintEffects'];
 
@@ -3216,14 +3216,15 @@ describe('SessionGTOExporter Round-trip Export Tests', () => {
         });
 
         it('exports default paint effects when not set', () => {
-            const result = SessionGTOExporter.buildSessionObject(session, 'testSession', 'defaultSequence');
+            const result = SessionGTOExporter.buildSessionObject(session, paintEngine, 'testSession', 'defaultSequence');
             const components = result.components as Record<string, any>;
             const paintComp = components['paintEffects'];
 
             expect(paintComp.properties.hold.data).toEqual([0]);
             expect(paintComp.properties.ghost.data).toEqual([0]);
-            expect(paintComp.properties.ghostBefore.data).toEqual([5]);
-            expect(paintComp.properties.ghostAfter.data).toEqual([5]);
+            // PaintEngine defaults: ghostBefore=3, ghostAfter=3
+            expect(paintComp.properties.ghostBefore.data).toEqual([3]);
+            expect(paintComp.properties.ghostAfter.data).toEqual([3]);
         });
     });
 
@@ -3239,7 +3240,7 @@ describe('SessionGTOExporter Round-trip Export Tests', () => {
                 membershipContains: ['node1', 'node2']
             });
 
-            const result = SessionGTOExporter.buildSessionObject(session, 'testSession', 'defaultSequence');
+            const result = SessionGTOExporter.buildSessionObject(session, paintEngine, 'testSession', 'defaultSequence');
             const components = result.components as Record<string, any>;
 
             expect(components['session'].properties.version.data).toEqual([3]);
@@ -3252,7 +3253,7 @@ describe('SessionGTOExporter Round-trip Export Tests', () => {
         });
 
         it('exports default metadata values', () => {
-            const result = SessionGTOExporter.buildSessionObject(session, 'testSession', 'defaultSequence');
+            const result = SessionGTOExporter.buildSessionObject(session, paintEngine, 'testSession', 'defaultSequence');
             const components = result.components as Record<string, any>;
 
             expect(components['session'].properties.version.data).toEqual([2]);
@@ -3273,7 +3274,7 @@ describe('SessionGTOExporter Round-trip Export Tests', () => {
                 membershipContains: []
             });
 
-            const result = SessionGTOExporter.buildSessionObject(session, 'fallbackName', 'defaultSequence');
+            const result = SessionGTOExporter.buildSessionObject(session, paintEngine, 'fallbackName', 'defaultSequence');
             const components = result.components as Record<string, any>;
 
             expect(components['root'].properties.name.data).toEqual(['fallbackName']);
@@ -3290,7 +3291,7 @@ describe('SessionGTOExporter Round-trip Export Tests', () => {
                 membershipContains: []
             });
 
-            const result = SessionGTOExporter.buildSessionObject(session, 'testSession', 'defaultSequence', 'fallback comment');
+            const result = SessionGTOExporter.buildSessionObject(session, paintEngine, 'testSession', 'defaultSequence', 'fallback comment');
             const components = result.components as Record<string, any>;
 
             expect(components['root'].properties.comment.data).toEqual(['fallback comment']);
@@ -3313,12 +3314,9 @@ describe('SessionGTOExporter Round-trip Export Tests', () => {
                 centerPoint: [0.05, 0.1]
             });
 
-            session.setSessionPaintEffectsForTest({
-                hold: true,
-                ghost: true,
-                ghostBefore: 4,
-                ghostAfter: 6
-            });
+            // Set paint effects on the paint engine (source of truth for export)
+            paintEngine.setGhostMode(true, 4, 6);
+            paintEngine.setHoldMode(true);
 
             session.setMetadataForTest({
                 displayName: 'Complete Test Session',
@@ -3330,7 +3328,7 @@ describe('SessionGTOExporter Round-trip Export Tests', () => {
                 membershipContains: ['group1', 'group2', 'group3']
             });
 
-            const result = SessionGTOExporter.buildSessionObject(session, 'exportTest', 'defaultSequence');
+            const result = SessionGTOExporter.buildSessionObject(session, paintEngine, 'exportTest', 'defaultSequence');
             const components = result.components as Record<string, any>;
 
             // Verify session component
@@ -3382,12 +3380,9 @@ describe('SessionGTOExporter Round-trip Export Tests', () => {
                 heightVisible: -1,
                 centerPoint: [-0.1, 0.2]
             });
-            session.setSessionPaintEffectsForTest({
-                hold: false,
-                ghost: true,
-                ghostBefore: 2,
-                ghostAfter: 8
-            });
+            // Set paint effects on the paint engine (source of truth for export)
+            paintEngine.setGhostMode(true, 2, 8);
+            paintEngine.setHoldMode(false);
             session.setMetadataForTest({
                 displayName: 'Loaded Session',
                 comment: 'This was loaded from a file',
@@ -3399,7 +3394,7 @@ describe('SessionGTOExporter Round-trip Export Tests', () => {
             });
 
             // Export the session
-            const exported = SessionGTOExporter.buildSessionObject(session, 'loadedSession', 'defaultSequence');
+            const exported = SessionGTOExporter.buildSessionObject(session, paintEngine, 'loadedSession', 'defaultSequence');
             const components = exported.components as Record<string, any>;
 
             // Verify the exported data matches what was loaded
