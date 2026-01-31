@@ -28,17 +28,12 @@ export function createFrameLoader(
 
       if (source.type === 'sequence') {
         // For sequences, get the frame image synchronously
+        // Use the frame parameter directly to avoid modifying session.currentFrame
+        // which would trigger syncVideoToFrame and emit events during playback
         if (typeof session.getSequenceFrameSync !== 'function') {
           return null;
         }
-        const savedFrame = session.currentFrame;
-        try {
-          session.currentFrame = frame;
-          const frameImage = session.getSequenceFrameSync();
-          return frameImage || null;
-        } finally {
-          session.currentFrame = savedFrame;
-        }
+        return session.getSequenceFrameSync(frame) || null;
       } else if (source.type === 'video') {
         // For videos with mediabunny, get cached frame canvas
         if (typeof session.isUsingMediabunny === 'function' &&

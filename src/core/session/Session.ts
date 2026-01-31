@@ -567,6 +567,9 @@ export class Session extends EventEmitter<SessionEvents> {
       // Trigger initial buffer loading to avoid starvation at playback start
       this.triggerInitialBufferLoad(source.videoSourceNode, this._currentFrame, this._playDirection);
 
+      // Also start preloading for source B (for split screen support)
+      this.startSourceBPlaybackPreload();
+
       // For mediabunny mode, start audio sync at current position
       if (source.element instanceof HTMLVideoElement) {
         const video = source.element;
@@ -725,6 +728,9 @@ export class Session extends EventEmitter<SessionEvents> {
           source.element.pause();
         }
       }
+
+      // Also stop source B's playback preload (for split screen support)
+      this.stopSourceBPlaybackPreload();
 
       this.emit('playbackChanged', false);
     }
@@ -1018,6 +1024,8 @@ export class Session extends EventEmitter<SessionEvents> {
         if (source.videoSourceNode.hasFrameCached(nextFrame)) {
           this.frameAccumulator -= frameDuration;
           this.advanceFrame(this._playDirection);
+          // Update source B's playback buffer for split screen support
+          this.updateSourceBPlaybackBuffer(nextFrame);
         } else {
           // Frame not ready - trigger fetch and wait
           // Cap accumulator to prevent huge jumps when frame becomes available
@@ -1040,6 +1048,8 @@ export class Session extends EventEmitter<SessionEvents> {
             // Use optional chaining because source may be disposed/changed during async load
             // (this is intentional - if disposed, we simply skip the buffer update)
             source.videoSourceNode?.updatePlaybackBuffer(nextFrame);
+            // Also update source B for split screen mode support
+            this.updateSourceBPlaybackBuffer(nextFrame);
             this.decrementBufferingCount();
           }).catch(err => {
             // Don't log abort errors
@@ -2995,6 +3005,49 @@ export class Session extends EventEmitter<SessionEvents> {
     if (this._currentAB === 'B') {
       this._currentAB = 'A';
       this.switchToSource(this._sourceAIndex);
+    }
+  }
+
+  /**
+   * Update source B's playback buffer for split screen support.
+   * Called during playback to keep source B's frames in sync with current playback position.
+   */
+  private updateSourceBPlaybackBuffer(frame: number): void {
+    const sourceB = this.sourceB;
+    if (!sourceB || sourceB.type !== 'video') return;
+
+    // Update source B's playback buffer if it uses mediabunny
+    if (sourceB.videoSourceNode?.isUsingMediabunny()) {
+      sourceB.videoSourceNode.updatePlaybackBuffer(frame);
+    }
+  }
+
+  /**
+   * Start playback preloading for source B (for split screen support).
+   * Called when playback starts to ensure source B's frames are preloaded.
+   */
+  private startSourceBPlaybackPreload(): void {
+    const sourceB = this.sourceB;
+    if (!sourceB || sourceB.type !== 'video') return;
+
+    // Start source B's playback preload if it uses mediabunny
+    if (sourceB.videoSourceNode?.isUsingMediabunny()) {
+      sourceB.videoSourceNode.setPlaybackDirection(this._playDirection);
+      sourceB.videoSourceNode.startPlaybackPreload(this._currentFrame, this._playDirection);
+    }
+  }
+
+  /**
+   * Stop playback preloading for source B.
+   * Called when playback stops.
+   */
+  private stopSourceBPlaybackPreload(): void {
+    const sourceB = this.sourceB;
+    if (!sourceB || sourceB.type !== 'video') return;
+
+    // Stop source B's playback preload if it uses mediabunny
+    if (sourceB.videoSourceNode?.isUsingMediabunny()) {
+      sourceB.videoSourceNode.stopPlaybackPreload();
     }
   }
 

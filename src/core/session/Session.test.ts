@@ -2363,4 +2363,265 @@ describe('Session', () => {
       expect(durationChangedSpy).toHaveBeenCalledWith(100);
     });
   });
+
+  describe('split screen playback support', () => {
+    // Helper to create a complete mock video source node
+    const createMockVideoSourceNode = (usesMediabunny = true) => ({
+      isUsingMediabunny: vi.fn().mockReturnValue(usesMediabunny),
+      setPlaybackDirection: vi.fn(),
+      startPlaybackPreload: vi.fn(),
+      hasFrameCached: vi.fn().mockReturnValue(true),
+      getFrameAsync: vi.fn().mockResolvedValue({}),
+      updatePlaybackBuffer: vi.fn(),
+      stopPlaybackPreload: vi.fn(),
+      preloadFrames: vi.fn().mockResolvedValue(undefined),
+    });
+
+    it('SPLIT-001: startSourceBPlaybackPreload is called when playback starts with source B', () => {
+      // Create mock video sources with videoSourceNode
+      const mockVideoNodeA = createMockVideoSourceNode();
+      const mockVideoNodeB = createMockVideoSourceNode();
+
+      const videoA = createMockVideo();
+      const videoB = createMockVideo();
+
+      const sourceA: MediaSource = {
+        name: 'videoA.mp4',
+        type: 'video',
+        duration: 100,
+        fps: 24,
+        width: 1920,
+        height: 1080,
+        url: 'videoA.mp4',
+        element: videoA,
+        videoSourceNode: mockVideoNodeA as any,
+      };
+      const sourceB: MediaSource = {
+        name: 'videoB.mp4',
+        type: 'video',
+        duration: 100,
+        fps: 24,
+        width: 1920,
+        height: 1080,
+        url: 'videoB.mp4',
+        element: videoB,
+        videoSourceNode: mockVideoNodeB as any,
+      };
+
+      const sessionInternal = session as any;
+      sessionInternal.addSource(sourceA);
+      sessionInternal.addSource(sourceB);
+
+      // Play should start preloading for both source A and source B
+      session.play();
+
+      expect(mockVideoNodeA.startPlaybackPreload).toHaveBeenCalled();
+      expect(mockVideoNodeB.startPlaybackPreload).toHaveBeenCalled();
+    });
+
+    it('SPLIT-002: stopSourceBPlaybackPreload is called when playback pauses', () => {
+      const mockVideoNodeA = createMockVideoSourceNode();
+      const mockVideoNodeB = createMockVideoSourceNode();
+
+      const videoA = createMockVideo();
+      const videoB = createMockVideo();
+
+      const sourceA: MediaSource = {
+        name: 'videoA.mp4',
+        type: 'video',
+        duration: 100,
+        fps: 24,
+        width: 1920,
+        height: 1080,
+        url: 'videoA.mp4',
+        element: videoA,
+        videoSourceNode: mockVideoNodeA as any,
+      };
+      const sourceB: MediaSource = {
+        name: 'videoB.mp4',
+        type: 'video',
+        duration: 100,
+        fps: 24,
+        width: 1920,
+        height: 1080,
+        url: 'videoB.mp4',
+        element: videoB,
+        videoSourceNode: mockVideoNodeB as any,
+      };
+
+      const sessionInternal = session as any;
+      sessionInternal.addSource(sourceA);
+      sessionInternal.addSource(sourceB);
+
+      session.play();
+      session.pause();
+
+      expect(mockVideoNodeA.stopPlaybackPreload).toHaveBeenCalled();
+      expect(mockVideoNodeB.stopPlaybackPreload).toHaveBeenCalled();
+    });
+
+    it('SPLIT-003: updateSourceBPlaybackBuffer is called during playback when frame advances', () => {
+      const mockVideoNodeA = createMockVideoSourceNode();
+      const mockVideoNodeB = createMockVideoSourceNode();
+
+      const videoA = createMockVideo();
+      const videoB = createMockVideo();
+
+      const sourceA: MediaSource = {
+        name: 'videoA.mp4',
+        type: 'video',
+        duration: 100,
+        fps: 24,
+        width: 1920,
+        height: 1080,
+        url: 'videoA.mp4',
+        element: videoA,
+        videoSourceNode: mockVideoNodeA as any,
+      };
+      const sourceB: MediaSource = {
+        name: 'videoB.mp4',
+        type: 'video',
+        duration: 100,
+        fps: 24,
+        width: 1920,
+        height: 1080,
+        url: 'videoB.mp4',
+        element: videoB,
+        videoSourceNode: mockVideoNodeB as any,
+      };
+
+      const sessionInternal = session as any;
+      sessionInternal.addSource(sourceA);
+      sessionInternal.addSource(sourceB);
+      sessionInternal._outPoint = 100;
+
+      session.play();
+
+      // Clear mocks after play to only track calls during update
+      mockVideoNodeB.updatePlaybackBuffer.mockClear();
+
+      // Simulate time passing to trigger frame advance
+      sessionInternal.lastFrameTime = performance.now() - 100;
+      sessionInternal.frameAccumulator = 50;
+
+      session.update();
+
+      // Source B's buffer should be updated when frame advances (key fix for split screen)
+      expect(mockVideoNodeB.updatePlaybackBuffer).toHaveBeenCalled();
+    });
+
+    it('SPLIT-004: source B without mediabunny is handled gracefully', () => {
+      const mockVideoNodeA = createMockVideoSourceNode();
+      // Source B doesn't use mediabunny
+      const mockVideoNodeB = createMockVideoSourceNode(false);
+
+      const videoA = createMockVideo();
+      const videoB = createMockVideo();
+
+      const sourceA: MediaSource = {
+        name: 'videoA.mp4',
+        type: 'video',
+        duration: 100,
+        fps: 24,
+        width: 1920,
+        height: 1080,
+        url: 'videoA.mp4',
+        element: videoA,
+        videoSourceNode: mockVideoNodeA as any,
+      };
+      const sourceB: MediaSource = {
+        name: 'videoB.mp4',
+        type: 'video',
+        duration: 100,
+        fps: 24,
+        width: 1920,
+        height: 1080,
+        url: 'videoB.mp4',
+        element: videoB,
+        videoSourceNode: mockVideoNodeB as any,
+      };
+
+      const sessionInternal = session as any;
+      sessionInternal.addSource(sourceA);
+      sessionInternal.addSource(sourceB);
+
+      // Should not throw
+      expect(() => {
+        session.play();
+        session.pause();
+      }).not.toThrow();
+    });
+
+    it('SPLIT-005: source B as image is handled gracefully', () => {
+      const mockVideoNodeA = createMockVideoSourceNode();
+
+      const videoA = createMockVideo();
+
+      const sourceA: MediaSource = {
+        name: 'videoA.mp4',
+        type: 'video',
+        duration: 100,
+        fps: 24,
+        width: 1920,
+        height: 1080,
+        url: 'videoA.mp4',
+        element: videoA,
+        videoSourceNode: mockVideoNodeA as any,
+      };
+      // Source B is an image, not a video
+      const sourceB: MediaSource = {
+        name: 'imageB.png',
+        type: 'image',
+        duration: 1,
+        fps: 24,
+        width: 1920,
+        height: 1080,
+        url: 'imageB.png',
+      };
+
+      const sessionInternal = session as any;
+      sessionInternal.addSource(sourceA);
+      sessionInternal.addSource(sourceB);
+
+      // Should not throw - image sources don't have videoSourceNode
+      expect(() => {
+        session.play();
+        session.pause();
+      }).not.toThrow();
+    });
+
+    it('SPLIT-006: no source B is handled gracefully', () => {
+      const mockVideoNodeA = createMockVideoSourceNode();
+
+      const videoA = createMockVideo();
+
+      const sourceA: MediaSource = {
+        name: 'videoA.mp4',
+        type: 'video',
+        duration: 100,
+        fps: 24,
+        width: 1920,
+        height: 1080,
+        url: 'videoA.mp4',
+        element: videoA,
+        videoSourceNode: mockVideoNodeA as any,
+      };
+
+      const sessionInternal = session as any;
+      sessionInternal.addSource(sourceA);
+      // Don't add source B - only one source
+
+      // Clear auto-assigned source B
+      session.clearSourceB();
+
+      // Should not throw when there's no source B
+      expect(() => {
+        session.play();
+        session.pause();
+      }).not.toThrow();
+
+      expect(mockVideoNodeA.startPlaybackPreload).toHaveBeenCalled();
+      expect(mockVideoNodeA.stopPlaybackPreload).toHaveBeenCalled();
+    });
+  });
 });

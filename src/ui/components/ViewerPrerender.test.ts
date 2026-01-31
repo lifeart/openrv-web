@@ -189,15 +189,64 @@ describe('ViewerPrerender', () => {
       expect(result).not.toBeNull();
     });
 
-    it('should restore frame after loading for sequence', () => {
+    it('should not modify session.currentFrame when loading for sequence', () => {
       const source = createMockMediaSource('sequence');
       const session = createMockSession(source);
       session.currentFrame = 5;
+
+      // Track if currentFrame setter was called
+      let setterCalled = false;
+      const originalFrame = session.currentFrame;
+      Object.defineProperty(session, 'currentFrame', {
+        get: () => originalFrame,
+        set: () => { setterCalled = true; },
+        configurable: true,
+      });
+
       const loader = createFrameLoader(session);
 
       loader(20);
 
-      expect(session.currentFrame).toBe(5);
+      // Verify that currentFrame setter was NEVER called
+      // (The old implementation would save/restore frame, calling setter twice)
+      expect(setterCalled).toBe(false);
+    });
+
+    it('should pass frame parameter directly to getSequenceFrameSync', () => {
+      const source = createMockMediaSource('sequence');
+      const session = createMockSession(source);
+      const loader = createFrameLoader(session);
+
+      loader(42);
+
+      // Verify getSequenceFrameSync was called with the frame parameter
+      expect(session.getSequenceFrameSync).toHaveBeenCalledWith(42);
+    });
+
+    it('should not cause side effects during playback (regression test)', () => {
+      // This test verifies the fix for the issue where prerender frame loading
+      // during playback would modify session.currentFrame, triggering
+      // syncVideoToFrame and frameChanged events that could corrupt playback state
+      const source = createMockMediaSource('sequence');
+      const session = createMockSession(source);
+      session.currentFrame = 10;
+
+      // Mock event emitter to track if frameChanged would be emitted
+      const eventEmitter = { emit: vi.fn() };
+      (session as any).emit = eventEmitter.emit;
+
+      const loader = createFrameLoader(session);
+
+      // Load multiple different frames (simulating prerender buffer activity)
+      loader(5);
+      loader(15);
+      loader(25);
+
+      // Verify no frameChanged events were emitted
+      expect(eventEmitter.emit).not.toHaveBeenCalled();
+
+      // Verify currentFrame is still the original value
+      expect(session.currentFrame).toBe(10);
     });
 
     it('should return null for image source', () => {
