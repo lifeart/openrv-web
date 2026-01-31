@@ -1,7 +1,7 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg, type IconName } from './shared/Icons';
 
-export type WipeMode = 'off' | 'horizontal' | 'vertical' | 'quad';
+export type WipeMode = 'off' | 'horizontal' | 'vertical' | 'quad' | 'splitscreen-h' | 'splitscreen-v';
 export type WipeSide = 'left' | 'right' | 'top' | 'bottom';
 
 export interface WipeState {
@@ -84,12 +84,16 @@ export class WipeControl extends EventEmitter<WipeControlEvents> {
       horizontal: 'split-vertical',
       vertical: 'split-horizontal',
       quad: 'columns',
+      'splitscreen-h': 'columns',
+      'splitscreen-v': 'rows',
     };
     const labels: Record<WipeMode, string> = {
       off: 'Wipe',
       horizontal: 'H-Wipe',
       vertical: 'V-Wipe',
       quad: 'Quad',
+      'splitscreen-h': 'Split-H',
+      'splitscreen-v': 'Split-V',
     };
     this.toggleButton.innerHTML = `${getIconSvg(icons[this.state.mode], 'sm')}<span style="margin-left: 6px;">${labels[this.state.mode]}</span>`;
 

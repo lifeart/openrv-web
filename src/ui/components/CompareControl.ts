@@ -10,7 +10,7 @@ import { getIconSvg, type IconName } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { DifferenceMatteState, DEFAULT_DIFFERENCE_MATTE_STATE } from './DifferenceMatteControl';
 
-export type WipeMode = 'off' | 'horizontal' | 'vertical';
+export type WipeMode = 'off' | 'horizontal' | 'vertical' | 'splitscreen-h' | 'splitscreen-v';
 export type ABSource = 'A' | 'B';
 export type BlendMode = 'off' | 'onionskin' | 'flicker' | 'blend';
 
@@ -51,6 +51,8 @@ const WIPE_MODES: { mode: WipeMode; label: string; icon: IconName }[] = [
   { mode: 'off', label: 'Wipe Off', icon: 'columns' },
   { mode: 'horizontal', label: 'H-Wipe', icon: 'split-vertical' },
   { mode: 'vertical', label: 'V-Wipe', icon: 'split-horizontal' },
+  { mode: 'splitscreen-h', label: 'Split H', icon: 'columns' },
+  { mode: 'splitscreen-v', label: 'Split V', icon: 'rows' },
 ];
 
 export class CompareControl extends EventEmitter<CompareControlEvents> {
@@ -568,7 +570,14 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
       };
       parts.push(blendLabels[this.state.blendMode.mode]);
     } else if (this.state.wipeMode !== 'off') {
-      parts.push(this.state.wipeMode === 'horizontal' ? 'H-Wipe' : 'V-Wipe');
+      const wipeLabels: Record<WipeMode, string> = {
+        'off': '',
+        'horizontal': 'H-Wipe',
+        'vertical': 'V-Wipe',
+        'splitscreen-h': 'Split-H',
+        'splitscreen-v': 'Split-V',
+      };
+      parts.push(wipeLabels[this.state.wipeMode]);
     }
     if (this.state.currentAB === 'B' && this.state.abAvailable) {
       parts.push('B');
@@ -799,7 +808,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
   }
 
   cycleWipeMode(): void {
-    const modes: WipeMode[] = ['off', 'horizontal', 'vertical'];
+    const modes: WipeMode[] = ['off', 'horizontal', 'vertical', 'splitscreen-h', 'splitscreen-v'];
     const currentIndex = modes.indexOf(this.state.wipeMode);
     const nextMode = modes[(currentIndex + 1) % modes.length]!;
     this.setWipeMode(nextMode);
@@ -1098,11 +1107,38 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
    * Get wipe state for WipeControl compatibility
    */
   getWipeState(): { mode: WipeMode; position: number; showOriginal: 'left' | 'right' | 'top' | 'bottom' } {
+    // For split screen modes, use 'left' or 'top' as placeholders (not actually used for split screen)
+    let showOriginal: 'left' | 'right' | 'top' | 'bottom' = 'left';
+    if (this.state.wipeMode === 'horizontal' || this.state.wipeMode === 'splitscreen-h') {
+      showOriginal = 'left';
+    } else {
+      showOriginal = 'top';
+    }
     return {
       mode: this.state.wipeMode,
       position: this.state.wipePosition,
-      showOriginal: this.state.wipeMode === 'horizontal' ? 'left' : 'top',
+      showOriginal,
     };
+  }
+
+  /**
+   * Check if split screen mode is active
+   */
+  isSplitScreenMode(): boolean {
+    return this.state.wipeMode === 'splitscreen-h' || this.state.wipeMode === 'splitscreen-v';
+  }
+
+  /**
+   * Toggle split screen mode (cycles between off, horizontal split, vertical split)
+   */
+  toggleSplitScreen(): void {
+    if (this.state.wipeMode === 'off' || this.state.wipeMode === 'horizontal' || this.state.wipeMode === 'vertical') {
+      this.setWipeMode('splitscreen-h');
+    } else if (this.state.wipeMode === 'splitscreen-h') {
+      this.setWipeMode('splitscreen-v');
+    } else {
+      this.setWipeMode('off');
+    }
   }
 
   render(): HTMLElement {

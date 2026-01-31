@@ -43,7 +43,7 @@ export interface ViewerState {
   zoom: number;
   panX: number;
   panY: number;
-  wipeMode: 'off' | 'horizontal' | 'vertical' | 'quad';
+  wipeMode: 'off' | 'horizontal' | 'vertical' | 'quad' | 'splitscreen-h' | 'splitscreen-v';
   wipePosition: number;
   cropEnabled: boolean;
   cropRegion: {

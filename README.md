@@ -59,6 +59,10 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 
 ### Comparison & Composition
 - Wipe comparison (horizontal/vertical split view)
+- **Split Screen Compare** - side-by-side A/B source comparison
+  - Horizontal and vertical split modes
+  - Draggable divider for adjustable split position
+  - A/B labels for source identification
 - **Difference Matte** - show pixel differences between A/B with gain and heatmap modes
 - **Blend Modes** for A/B comparison
   - Onion skin - overlay B over A with adjustable opacity
@@ -107,14 +111,28 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 - Ghost mode (show nearby frame annotations)
 - Hold mode (persist annotations across frames)
 - Per-frame annotation storage
+- **Ghost Frames / Onion Skin** - semi-transparent previous/next frames for animation review
+  - Configurable frames before and after (0-5 each)
+  - Adjustable base opacity and falloff
+  - Optional color tinting (red for before, green for after)
 
 ### Playback
 - Frame-accurate timeline with scrubbing
+- **Timeline Thumbnails** - frame preview thumbnails along the timeline track
+  - LRU cache for efficient memory usage (max 150 thumbnails)
+  - Progressive loading without blocking UI
+  - Automatic recalculation on resize
 - In/out points and **markers with notes** (color-coded, with text annotations)
 - Loop modes (once, loop, ping-pong)
 - **Playback speed control** (0.1x to 8x) with J/K/L shortcuts
 - **Cache indicator** showing cached frames and memory usage
 - **Prerender Buffer** - background processing of effects for smooth playback
+- **Multi-Clip Playlist** - manage and play multiple clips in sequence
+  - Add clips from any loaded source with in/out points
+  - Drag-and-drop reordering
+  - Loop modes: none, single clip, or all clips
+  - EDL (Edit Decision List) export
+  - Total duration display
   - Web Worker-based parallel effect processing
   - Smart cache management with LRU eviction
   - Direction-aware preloading (forward/backward)
@@ -137,6 +155,13 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 - **History Panel** - visual undo/redo with jump to any state
 - **Floating Info Panel** - filename, resolution, frame, FPS, and cursor color readout
 - **Hi-DPI/Retina Display Support** - crisp rendering on high-density displays (2x, 3x DPR)
+- **Session Snapshots** - named version history with preview and restore
+  - Manual snapshots with custom names and descriptions
+  - Auto-checkpoints before major operations (project load, restore)
+  - IndexedDB persistence across browser sessions
+  - Preview showing frame count, annotations, and color grade status
+  - Export/import snapshots as JSON
+  - LRU eviction (max 50 manual snapshots, 10 auto-checkpoints)
 - **Auto-Save** - automatic session persistence to IndexedDB with crash recovery
   - Configurable save interval (1-30 minutes, default 5)
   - Debounced saves to prevent excessive writes during rapid changes
@@ -234,6 +259,7 @@ pnpm dev
 | `` ` `` (backtick) | Toggle between A/B sources |
 | `~` (tilde) | Toggle between A/B sources |
 | `Shift+D` | Toggle difference matte |
+| `Shift+Alt+S` | Toggle split screen A/B comparison |
 
 #### Scopes & Wipe
 | Key | Action |
@@ -299,6 +325,7 @@ pnpm dev
 | `A` | Arrow tool |
 | `B` | Toggle brush type (soft/hard) |
 | `G` | Toggle ghost mode |
+| `Shift+G` | Toggle ghost frames (onion skin) |
 | `X` | Toggle hold mode (persist annotations across frames) |
 | `Shift+Q` | Toggle spotlight |
 | `Ctrl+Z` | Undo |
@@ -311,6 +338,10 @@ pnpm dev
 | `Shift+T` | Cycle theme (auto/dark/light) |
 | `Shift+Alt+H` | Toggle history panel |
 | `Shift+Alt+I` | Toggle info panel |
+| `Shift+Alt+M` | Toggle markers panel |
+| `Ctrl+Shift+S` | Create quick snapshot |
+| `Ctrl+Shift+Alt+S` | Toggle snapshots panel |
+| `Shift+Alt+P` | Toggle playlist panel |
 
 #### Export
 | Key | Action |
@@ -332,6 +363,8 @@ src/
 │   ├── graph/          # Node graph system (Graph, Property, Signal)
 │   ├── image/          # IPImage data structure
 │   └── session/        # Session management, GTO loading, serialization, auto-save
+│       ├── SnapshotManager.ts  # IndexedDB-based session snapshots
+│       └── PlaylistManager.ts  # Multi-clip playlist with EDL export
 ├── nodes/
 │   ├── base/           # IPNode, NodeFactory with @RegisterNode decorator
 │   ├── sources/        # FileSourceNode, VideoSourceNode, SequenceSourceNode
@@ -340,6 +373,11 @@ src/
 │   └── TextureCacheManager.ts  # LRU texture cache for GPU performance
 ├── ui/
 │   ├── components/     # Viewer, Timeline, Toolbar, Controls, TimelineEditor
+│   │   ├── ViewerSplitScreen.ts   # Split screen A/B comparison
+│   │   ├── ThumbnailManager.ts    # Timeline thumbnail generation and caching
+│   │   ├── GhostFrameControl.ts   # Ghost frames / onion skin control
+│   │   ├── SnapshotPanel.ts       # Session snapshot management UI
+│   │   └── PlaylistPanel.ts       # Multi-clip playlist UI
 │   └── shared/         # Button, Modal, Panel utilities
 ├── paint/              # Annotation engine
 ├── audio/              # Audio playback and waveform rendering
@@ -430,7 +468,7 @@ const rootNode = session.graphParseResult?.rootNode;
 # Type check
 pnpm typecheck
 
-# Run unit tests (4750+ tests)
+# Run unit tests (4850+ tests)
 pnpm test
 
 # Run e2e tests (requires dev server running)
@@ -446,13 +484,13 @@ pnpm preview
 
 ### Test Coverage
 
-The codebase includes comprehensive test coverage with **4750+ unit tests** across 119 test files and **50+ e2e test suites**:
+The codebase includes comprehensive test coverage with **4850+ unit tests** across 122 test files and **50+ e2e test suites**:
 
 - **Color Tools**: ColorWheels (46 tests), FalseColor (30 tests), HSLQualifier (57 tests), Curves, CDL, LogCurves (27 tests)
 - **Analysis**: ZebraStripes (49 tests), PixelProbe (45 tests), ClippingOverlay (48 tests), Waveform (50 tests), Histogram (45 tests), Vectorscope (49 tests)
 - **Overlays**: TimecodeOverlay (50 tests), SafeAreasOverlay (46 tests), SpotlightOverlay (62 tests)
-- **UI Components**: ThemeControl, HistoryPanel, InfoPanel, Modal, Button, CurveEditor (33 tests), AutoSaveIndicator (35 tests), TimelineEditor (25 tests)
-- **Core**: Session, Graph, GTO loading/export, SequenceLoader, AutoSaveManager (28 tests), SessionSerializer (35 tests)
+- **UI Components**: ThemeControl, HistoryPanel, InfoPanel, Modal, Button, CurveEditor (33 tests), AutoSaveIndicator (35 tests), TimelineEditor (25 tests), ThumbnailManager (12 tests)
+- **Core**: Session, Graph, GTO loading/export, SequenceLoader, AutoSaveManager (28 tests), SessionSerializer (35 tests), SnapshotManager (16 tests), PlaylistManager (34 tests)
 - **Render**: TextureCacheManager (22 tests)
 - **Export**: AnnotationJSONExporter (19 tests), AnnotationPDFExporter (21 tests)
 - **Audio**: AudioPlaybackManager (36 tests), WaveformRenderer (35 tests)

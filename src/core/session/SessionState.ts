@@ -15,6 +15,7 @@ import type { WipeState } from '../../ui/components/WipeControl';
 import type { StackLayer } from '../../ui/components/StackControl';
 import type { Annotation, PaintEffects } from '../../paint/types';
 import type { LoopMode, MediaType, Marker } from './Session';
+import type { PlaylistState } from './PlaylistManager';
 
 /** Schema version for migration support */
 export const SESSION_STATE_VERSION = 1;
@@ -110,6 +111,8 @@ export interface SessionState {
   lutPath?: string;
   /** LUT intensity blend */
   lutIntensity: number;
+  /** Playlist state (optional) */
+  playlist?: PlaylistState;
 }
 
 /** Default values for empty state */

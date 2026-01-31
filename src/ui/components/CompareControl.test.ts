@@ -90,6 +90,12 @@ describe('CompareControl', () => {
       expect(control.getWipeMode()).toBe('vertical');
 
       control.cycleWipeMode();
+      expect(control.getWipeMode()).toBe('splitscreen-h');
+
+      control.cycleWipeMode();
+      expect(control.getWipeMode()).toBe('splitscreen-v');
+
+      control.cycleWipeMode();
       expect(control.getWipeMode()).toBe('off');
     });
   });

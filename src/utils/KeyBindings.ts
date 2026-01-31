@@ -122,6 +122,12 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     shift: true,
     description: 'Toggle difference matte mode'
   },
+  'view.toggleSplitScreen': {
+    code: 'KeyS',
+    shift: true,
+    alt: true,
+    description: 'Toggle split screen A/B comparison'
+  },
 
   // Panel toggles
   'panel.color': {
@@ -275,6 +281,11 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyG',
     description: 'Toggle ghost mode'
   },
+  'view.toggleGhostFrames': {
+    code: 'KeyG',
+    shift: true,
+    description: 'Toggle ghost frames (onion skin)'
+  },
   'paint.toggleHold': {
     code: 'KeyX',
     description: 'Toggle hold mode'
@@ -395,12 +406,35 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     description: 'Toggle undo/redo history panel'
   },
 
+  // Snapshot controls
+  'snapshot.create': {
+    code: 'KeyS',
+    ctrl: true,
+    shift: true,
+    description: 'Create quick snapshot of current session'
+  },
+  'panel.snapshots': {
+    code: 'KeyS',
+    ctrl: true,
+    shift: true,
+    alt: true,
+    description: 'Toggle snapshots panel'
+  },
+
   // Markers panel
   'panel.markers': {
     code: 'KeyM',
     shift: true,
     alt: true,
     description: 'Toggle markers list panel'
+  },
+
+  // Playlist panel
+  'panel.playlist': {
+    code: 'KeyP',
+    shift: true,
+    alt: true,
+    description: 'Toggle playlist panel'
   },
 
   // Info panel

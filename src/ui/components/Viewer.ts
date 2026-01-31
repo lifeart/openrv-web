@@ -48,6 +48,16 @@ import {
   WipeUIElements,
 } from './ViewerWipe';
 import {
+  SplitScreenState,
+  SplitScreenUIElements,
+  createSplitScreenUIElements,
+  updateSplitScreenPosition,
+  isPointerOnSplitLine,
+  calculateSplitPosition,
+  isSplitScreenMode,
+} from './ViewerSplitScreen';
+import { GhostFrameState, DEFAULT_GHOST_FRAME_STATE } from './GhostFrameControl';
+import {
   PointerState,
   getCanvasPoint as getCanvasPointUtil,
   calculateWheelZoom,
@@ -152,6 +162,11 @@ export class Viewer {
   private wipeElements: WipeUIElements | null = null;
   private isDraggingWipe = false;
 
+  // Split screen comparison (shows A/B sources side-by-side)
+  // Note: Split screen state is managed via wipeState.mode for unified handling
+  private splitScreenElements: SplitScreenUIElements | null = null;
+  private isDraggingSplit = false;
+
   // LUT
   private currentLUT: LUT3D | null = null;
   private lutIntensity = 1.0;
@@ -233,6 +248,9 @@ export class Viewer {
 
   // Difference matte state
   private differenceMatteState: DifferenceMatteState = { ...DEFAULT_DIFFERENCE_MATTE_STATE };
+
+  // Ghost frame (onion skin) state
+  private ghostFrameState: GhostFrameState = { ...DEFAULT_GHOST_FRAME_STATE };
 
   // Prerender buffer for smooth playback with effects
   private prerenderBuffer: PrerenderBufferManager | null = null;
@@ -378,6 +396,9 @@ export class Viewer {
 
     // Create wipe UI elements (line and labels)
     this.wipeElements = createWipeUIElements(this.container);
+
+    // Create split screen UI elements (divider line and A/B labels)
+    this.splitScreenElements = createSplitScreenUIElements(this.container);
 
     // Create LUT indicator badge
     this.lutIndicator = document.createElement('div');
@@ -1353,33 +1374,60 @@ export class Viewer {
       }
     }
 
+    // Render ghost frames (onion skin) behind the main frame
+    if (this.ghostFrameState.enabled && !this.session.isPlaying) {
+      this.renderGhostFrames(displayWidth, displayHeight);
+    }
+
     // Check if difference matte mode is enabled
+    let rendered = false;
     if (this.differenceMatteState.enabled && this.session.abCompareAvailable) {
       // Render difference between A and B sources
       const diffData = this.renderDifferenceMatte(displayWidth, displayHeight);
       if (diffData) {
         this.imageCtx.putImageData(diffData, 0, 0);
+        rendered = true;
       }
-    } else if (this.isStackEnabled()) {
+    }
+
+    if (!rendered && isSplitScreenMode(this.wipeState.mode) && this.session.abCompareAvailable) {
+      // Split screen A/B comparison - show source A on one side, source B on other
+      this.renderSplitScreen(displayWidth, displayHeight);
+      rendered = true;
+    }
+
+    if (!rendered && this.isStackEnabled()) {
       // Composite all stack layers
       const compositedData = this.compositeStackLayers(displayWidth, displayHeight);
       if (compositedData) {
         this.imageCtx.putImageData(compositedData, 0, 0);
+        rendered = true;
       }
-    } else if (
+    }
+
+    if (!rendered && (
       element instanceof HTMLImageElement ||
       element instanceof HTMLVideoElement ||
       element instanceof HTMLCanvasElement ||
       (typeof OffscreenCanvas !== 'undefined' && element instanceof OffscreenCanvas)
-    ) {
+    )) {
       // Single source rendering (supports images, videos, and canvas elements from mediabunny)
-      // Handle wipe rendering
-      if (this.wipeState.mode !== 'off' && !(element instanceof HTMLCanvasElement) && !(typeof OffscreenCanvas !== 'undefined' && element instanceof OffscreenCanvas)) {
+      // Handle wipe rendering (but not split screen modes which are handled above)
+      if (this.wipeState.mode !== 'off' && !isSplitScreenMode(this.wipeState.mode) && !(element instanceof HTMLCanvasElement) && !(typeof OffscreenCanvas !== 'undefined' && element instanceof OffscreenCanvas)) {
         // Wipe only works with HTMLImageElement/HTMLVideoElement
         this.renderWithWipe(element as HTMLImageElement | HTMLVideoElement, displayWidth, displayHeight);
       } else {
         // Normal rendering with transforms
         this.drawWithTransform(this.imageCtx, element as CanvasImageSource, displayWidth, displayHeight);
+      }
+      rendered = true;
+    }
+
+    // Fallback: if nothing was rendered but we have a current source, draw it
+    if (!rendered) {
+      const currentSource = this.session.currentSource;
+      if (currentSource?.element) {
+        this.drawWithTransform(this.imageCtx, currentSource.element, displayWidth, displayHeight);
       }
     }
 
@@ -1490,6 +1538,86 @@ export class Viewer {
     }
 
     ctx.restore();
+  }
+
+  /**
+   * Render split screen A/B comparison.
+   * Shows source A on one side and source B on the other, using canvas clipping.
+   */
+  private renderSplitScreen(displayWidth: number, displayHeight: number): void {
+    const sourceA = this.session.sourceA;
+    const sourceB = this.session.sourceB;
+
+    if (!sourceA?.element || !sourceB?.element) {
+      // Fallback to current source if A/B not properly set up
+      const currentSource = this.session.currentSource;
+      if (currentSource?.element) {
+        this.drawWithTransform(this.imageCtx, currentSource.element, displayWidth, displayHeight);
+      }
+      return;
+    }
+
+    const ctx = this.imageCtx;
+    const pos = this.wipeState.position;
+
+    // Enable high-quality image smoothing
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    ctx.save();
+
+    if (this.wipeState.mode === 'splitscreen-h') {
+      // Horizontal split: A on left, B on right
+      const splitX = Math.floor(displayWidth * pos);
+      this.drawClippedSource(ctx, sourceA.element, 0, 0, splitX, displayHeight, displayWidth, displayHeight);
+      this.drawClippedSource(ctx, sourceB.element, splitX, 0, displayWidth - splitX, displayHeight, displayWidth, displayHeight);
+    } else if (this.wipeState.mode === 'splitscreen-v') {
+      // Vertical split: A on top, B on bottom
+      const splitY = Math.floor(displayHeight * pos);
+      this.drawClippedSource(ctx, sourceA.element, 0, 0, displayWidth, splitY, displayWidth, displayHeight);
+      this.drawClippedSource(ctx, sourceB.element, 0, splitY, displayWidth, displayHeight - splitY, displayWidth, displayHeight);
+    }
+
+    ctx.restore();
+
+    // Update split screen UI elements
+    this.updateSplitScreenLine();
+  }
+
+  /**
+   * Draw a source element clipped to a specific region.
+   * Used by split screen rendering to show different sources in different areas.
+   */
+  private drawClippedSource(
+    ctx: CanvasRenderingContext2D,
+    element: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement,
+    clipX: number,
+    clipY: number,
+    clipWidth: number,
+    clipHeight: number,
+    displayWidth: number,
+    displayHeight: number
+  ): void {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(clipX, clipY, clipWidth, clipHeight);
+    ctx.clip();
+    ctx.filter = this.getCanvasFilterString();
+    this.drawSourceToContext(ctx, element, displayWidth, displayHeight);
+    ctx.restore();
+  }
+
+  /**
+   * Draw a source element to a context, handling different element types.
+   */
+  private drawSourceToContext(
+    ctx: CanvasRenderingContext2D,
+    element: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement,
+    width: number,
+    height: number
+  ): void {
+    // Apply transform and draw
+    drawWithTransformUtil(ctx, element, width, height, this.transform);
   }
 
   private getCanvasFilterString(): string {
@@ -1976,6 +2104,128 @@ export class Viewer {
     return this.differenceMatteState.enabled;
   }
 
+  // Ghost frame (onion skin) methods
+  setGhostFrameState(state: GhostFrameState): void {
+    this.ghostFrameState = { ...state };
+    this.scheduleRender();
+  }
+
+  getGhostFrameState(): GhostFrameState {
+    return { ...this.ghostFrameState };
+  }
+
+  resetGhostFrameState(): void {
+    this.ghostFrameState = { ...DEFAULT_GHOST_FRAME_STATE };
+    this.scheduleRender();
+  }
+
+  isGhostFrameEnabled(): boolean {
+    return this.ghostFrameState.enabled;
+  }
+
+  /**
+   * Render ghost frames (onion skin overlay) behind the main frame.
+   * Shows semi-transparent previous/next frames for animation review.
+   */
+  private renderGhostFrames(displayWidth: number, displayHeight: number): void {
+    if (!this.ghostFrameState.enabled) return;
+
+    const currentFrame = this.session.currentFrame;
+    const source = this.session.currentSource;
+    if (!source) return;
+
+    const duration = source.duration ?? 1;
+    const ctx = this.imageCtx;
+
+    // Enable high-quality smoothing
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    // Collect frames to render (before frames first, then after frames)
+    const framesToRender: { frame: number; distance: number; isBefore: boolean }[] = [];
+
+    // Frames before current (rendered first, farthest first)
+    for (let i = this.ghostFrameState.framesBefore; i >= 1; i--) {
+      const frame = currentFrame - i;
+      if (frame >= 1) {
+        framesToRender.push({ frame, distance: i, isBefore: true });
+      }
+    }
+
+    // Frames after current (rendered second, farthest first)
+    for (let i = this.ghostFrameState.framesAfter; i >= 1; i--) {
+      const frame = currentFrame + i;
+      if (frame <= duration) {
+        framesToRender.push({ frame, distance: i, isBefore: false });
+      }
+    }
+
+    // Render ghost frames
+    for (const { frame, distance, isBefore } of framesToRender) {
+      // Calculate opacity with falloff
+      const opacity = this.ghostFrameState.opacityBase *
+        Math.pow(this.ghostFrameState.opacityFalloff, distance - 1);
+
+      // Try to get the frame from prerender cache
+      let frameCanvas: HTMLCanvasElement | OffscreenCanvas | null = null;
+
+      if (this.prerenderBuffer) {
+        const cached = this.prerenderBuffer.getFrame(frame);
+        if (cached) {
+          frameCanvas = cached.canvas;
+        }
+      }
+
+      // If not in cache, try to get from sequence or video
+      if (!frameCanvas) {
+        if (source.type === 'sequence') {
+          // Synchronous check for cached sequence frame
+          const seqFrame = this.session.getSequenceFrameSync(frame);
+          if (seqFrame) {
+            // Draw to temporary canvas
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = displayWidth;
+            tempCanvas.height = displayHeight;
+            const tempCtx = tempCanvas.getContext('2d');
+            if (tempCtx) {
+              tempCtx.drawImage(seqFrame, 0, 0, displayWidth, displayHeight);
+              frameCanvas = tempCanvas;
+            }
+          }
+        } else if (source.type === 'video') {
+          // Try mediabunny cached frame
+          const videoFrame = this.session.getVideoFrameCanvas(frame);
+          if (videoFrame) {
+            frameCanvas = videoFrame;
+          }
+        }
+      }
+
+      if (!frameCanvas) continue;
+
+      // Draw ghost frame with opacity and optional color tint
+      ctx.save();
+      ctx.globalAlpha = opacity;
+
+      if (this.ghostFrameState.colorTint) {
+        // Apply color tint using composite operations
+        // First draw the frame
+        ctx.drawImage(frameCanvas, 0, 0, displayWidth, displayHeight);
+
+        // Then overlay color tint
+        ctx.globalCompositeOperation = 'multiply';
+        ctx.fillStyle = isBefore ? 'rgba(255, 100, 100, 1)' : 'rgba(100, 255, 100, 1)';
+        ctx.fillRect(0, 0, displayWidth, displayHeight);
+        ctx.globalCompositeOperation = 'source-over';
+      } else {
+        // Just draw with opacity
+        ctx.drawImage(frameCanvas, 0, 0, displayWidth, displayHeight);
+      }
+
+      ctx.restore();
+    }
+  }
+
   // Stack/composite methods
   setStackLayers(layers: StackLayer[]): void {
     this.stackLayers = [...layers];
@@ -2118,6 +2368,14 @@ export class Viewer {
     const containerRect = this.container.getBoundingClientRect();
     const canvasRect = this.canvasContainer.getBoundingClientRect();
 
+    // If split screen mode is active, hide the wipe line (split screen has its own UI)
+    if (isSplitScreenMode(this.wipeState.mode)) {
+      this.wipeElements.wipeLine.style.display = 'none';
+      this.wipeElements.wipeLabelA.style.display = 'none';
+      this.wipeElements.wipeLabelB.style.display = 'none';
+      return;
+    }
+
     updateWipeLinePosition(
       this.wipeState,
       this.wipeElements,
@@ -2128,8 +2386,56 @@ export class Viewer {
     );
   }
 
+  private updateSplitScreenLine(): void {
+    if (!this.splitScreenElements) return;
+
+    // Only update if actually in split screen mode
+    if (!isSplitScreenMode(this.wipeState.mode)) {
+      // Hide split screen UI when not in split screen mode
+      this.splitScreenElements.splitLine.style.display = 'none';
+      this.splitScreenElements.labelA.style.display = 'none';
+      this.splitScreenElements.labelB.style.display = 'none';
+      return;
+    }
+
+    const containerRect = this.container.getBoundingClientRect();
+    const canvasRect = this.canvasContainer.getBoundingClientRect();
+
+    // Safe to cast since we validated with isSplitScreenMode
+    const splitState: SplitScreenState = {
+      mode: this.wipeState.mode as 'splitscreen-h' | 'splitscreen-v',
+      position: this.wipeState.position,
+    };
+
+    updateSplitScreenPosition(
+      splitState,
+      this.splitScreenElements,
+      containerRect,
+      canvasRect,
+      this.displayWidth,
+      this.displayHeight
+    );
+  }
+
   private handleWipePointerDown(e: PointerEvent): boolean {
-    if (this.wipeState.mode === 'off' || !this.wipeElements) return false;
+    if (this.wipeState.mode === 'off') return false;
+
+    // Handle split screen mode
+    if (isSplitScreenMode(this.wipeState.mode) && this.splitScreenElements) {
+      const splitRect = this.splitScreenElements.splitLine.getBoundingClientRect();
+      const splitState: SplitScreenState = {
+        mode: this.wipeState.mode as 'splitscreen-h' | 'splitscreen-v',
+        position: this.wipeState.position,
+      };
+      if (isPointerOnSplitLine(e, splitState, splitRect)) {
+        this.isDraggingSplit = true;
+        return true;
+      }
+      return false;
+    }
+
+    // Handle regular wipe mode
+    if (!this.wipeElements) return false;
 
     const wipeRect = this.wipeElements.wipeLine.getBoundingClientRect();
     if (isPointerOnWipeLine(e, this.wipeState, wipeRect)) {
@@ -2141,6 +2447,26 @@ export class Viewer {
   }
 
   private handleWipePointerMove(e: PointerEvent): void {
+    // Handle split screen dragging
+    if (this.isDraggingSplit) {
+      const canvasRect = this.canvasContainer.getBoundingClientRect();
+      const splitState: SplitScreenState = {
+        mode: this.wipeState.mode as 'splitscreen-h' | 'splitscreen-v',
+        position: this.wipeState.position,
+      };
+      this.wipeState.position = calculateSplitPosition(
+        e,
+        splitState,
+        canvasRect,
+        this.displayWidth,
+        this.displayHeight
+      );
+      this.updateSplitScreenLine();
+      this.scheduleRender();
+      return;
+    }
+
+    // Handle regular wipe dragging
     if (!this.isDraggingWipe) return;
 
     const canvasRect = this.canvasContainer.getBoundingClientRect();
@@ -2158,6 +2484,7 @@ export class Viewer {
 
   private handleWipePointerUp(): void {
     this.isDraggingWipe = false;
+    this.isDraggingSplit = false;
   }
 
   // Crop dragging methods

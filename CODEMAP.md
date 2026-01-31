@@ -186,7 +186,12 @@ openrv-web/
 │   │       ├── Session.ts      # Session state + GTO loading
 │   │       ├── SessionState.ts # Serializable state types
 │   │       ├── SessionSerializer.ts # .orvproject save/load
+│   │       ├── SessionGTOStore.ts # GTO property storage/retrieval
+│   │       ├── SessionGTOExporter.ts # Export session to GTO format
 │   │       ├── GTOGraphLoader.ts # Node graph from GTO
+│   │       ├── AutoSaveManager.ts # Auto-save to IndexedDB
+│   │       ├── SnapshotManager.ts # Session version snapshots
+│   │       ├── PlaylistManager.ts # Multi-clip playlist management
 │   │       └── index.ts        # Module exports
 │   │
 │   ├── nodes/                   # Processing nodes
@@ -237,7 +242,12 @@ openrv-web/
 │   │   │   ├── Histogram.ts    # Histogram display
 │   │   │   ├── Waveform.ts     # Waveform monitor
 │   │   │   ├── Vectorscope.ts  # Vectorscope display
-│   │   │   └── CurvesControl.ts # Color curves editor
+│   │   │   ├── CurvesControl.ts # Color curves editor
+│   │   │   ├── ViewerSplitScreen.ts # Split screen A/B comparison
+│   │   │   ├── ThumbnailManager.ts # Timeline thumbnail generation
+│   │   │   ├── GhostFrameControl.ts # Ghost frames / onion skin
+│   │   │   ├── SnapshotPanel.ts # Session snapshot management
+│   │   │   └── PlaylistPanel.ts # Multi-clip playlist UI
 │   │   ├── controls/           # Input handling
 │   │   │   ├── PanZoom.ts      # Pan/zoom control
 │   │   │   ├── Keyboard.ts     # Keyboard shortcuts
@@ -311,6 +321,11 @@ openrv-web/
 | Histogram | `src/ui/components/Histogram.ts` | Real-time histogram |
 | Waveform | `src/ui/components/Waveform.ts` | Waveform monitor |
 | Vectorscope | `src/ui/components/Vectorscope.ts` | Color vectorscope |
+| Split Screen | `src/ui/components/ViewerSplitScreen.ts` | A/B split comparison |
+| Timeline Thumbnails | `src/ui/components/ThumbnailManager.ts` | Frame preview thumbnails |
+| Ghost Frames | `src/ui/components/GhostFrameControl.ts` | Onion skin overlay |
+| Snapshots | `src/core/session/SnapshotManager.ts` | Session version history |
+| Playlist | `src/core/session/PlaylistManager.ts` | Multi-clip sequencing |
 
 ### Shader Mapping
 
@@ -458,3 +473,10 @@ const annotations = dto.byProtocol('RVPaint');
 - [x] Color curves (Bezier curve editor, channel presets, import/export)
 - [x] Stereo viewing modes (side-by-side, over-under, mirror, anaglyph, checkerboard, scanline)
 - [x] Eye swap and convergence offset controls
+
+### Phase 7 (Advanced Comparison & Session Management)
+- [x] Split screen compare (horizontal/vertical A/B side-by-side, draggable divider)
+- [x] Timeline thumbnails (LRU cache, progressive loading, automatic recalculation)
+- [x] Ghost frames / onion skin (configurable before/after frames, opacity falloff, color tinting)
+- [x] Session snapshots (IndexedDB storage, manual + auto-checkpoints, preview, export/import)
+- [x] Multi-clip playlist (add/remove/reorder clips, loop modes, EDL export)

@@ -1,6 +1,7 @@
 import { Session } from '../../core/session/Session';
 import { PaintEngine } from '../../paint/PaintEngine';
 import { WaveformRenderer } from '../../audio/WaveformRenderer';
+import { ThumbnailManager } from './ThumbnailManager';
 
 export class Timeline {
   private container: HTMLElement;
@@ -10,6 +11,8 @@ export class Timeline {
   private paintEngine: PaintEngine | null = null;
   private waveformRenderer: WaveformRenderer;
   private waveformLoaded = false;
+  private thumbnailManager: ThumbnailManager;
+  private thumbnailsEnabled = true;
 
   protected isDragging = false;
   protected width = 0;
@@ -18,6 +21,7 @@ export class Timeline {
   // Bound event handlers for proper cleanup
   private boundHandleResize: () => void;
   private paintEngineSubscribed = false;
+  private resizeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Colors are resolved at render time from CSS variables
   private getColors() {
@@ -43,9 +47,23 @@ export class Timeline {
     this.session = session;
     this.paintEngine = paintEngine ?? null;
     this.waveformRenderer = new WaveformRenderer();
-    this.boundHandleResize = () => {
-      this.resize();
+    this.thumbnailManager = new ThumbnailManager(session);
+
+    // Set up thumbnail ready callback to trigger redraw
+    this.thumbnailManager.setOnThumbnailReady(() => {
       this.draw();
+    });
+
+    this.boundHandleResize = () => {
+      // Debounce resize to avoid recalculating thumbnails too frequently
+      if (this.resizeDebounceTimer) {
+        clearTimeout(this.resizeDebounceTimer);
+      }
+      this.resizeDebounceTimer = setTimeout(() => {
+        this.resize();
+        this.recalculateThumbnails();
+        this.draw();
+      }, 150);
     };
 
     // Create container
@@ -85,9 +103,13 @@ export class Timeline {
     // Listen to session changes
     this.session.on('frameChanged', () => this.draw());
     this.session.on('playbackChanged', () => this.draw());
-    this.session.on('durationChanged', () => this.draw());
+    this.session.on('durationChanged', () => {
+      this.recalculateThumbnails();
+      this.draw();
+    });
     this.session.on('sourceLoaded', () => {
       this.loadWaveform().catch((err) => console.warn('Failed to load waveform:', err));
+      this.loadThumbnails();
       this.draw();
     });
     this.session.on('inOutChanged', () => this.draw());
@@ -137,6 +159,65 @@ export class Timeline {
     if (success) {
       this.draw();
     }
+  }
+
+  /**
+   * Load thumbnails for the timeline
+   */
+  private loadThumbnails(): void {
+    if (!this.thumbnailsEnabled) return;
+
+    const source = this.session.currentSource;
+    if (!source) {
+      this.thumbnailManager.clear();
+      return;
+    }
+
+    this.recalculateThumbnails();
+  }
+
+  /**
+   * Recalculate thumbnail slots based on current dimensions
+   */
+  private recalculateThumbnails(): void {
+    if (!this.thumbnailsEnabled) return;
+
+    const source = this.session.currentSource;
+    if (!source || this.width === 0) return;
+
+    const padding = 60;
+    const trackY = 35;
+    const trackHeight = 24;
+    const trackWidth = this.width - padding * 2;
+    const duration = source.duration ?? 1;
+
+    this.thumbnailManager.calculateSlots(
+      padding,
+      trackY,
+      trackWidth,
+      trackHeight,
+      duration,
+      source.width,
+      source.height
+    );
+
+    // Start loading thumbnails asynchronously
+    this.thumbnailManager.loadThumbnails().catch((err) => {
+      console.warn('Failed to load thumbnails:', err);
+    });
+  }
+
+  /**
+   * Enable or disable thumbnail display
+   */
+  setThumbnailsEnabled(enabled: boolean): void {
+    this.thumbnailsEnabled = enabled;
+    if (enabled) {
+      this.loadThumbnails();
+    } else {
+      this.thumbnailManager.clear();
+    }
+    this.draw();
   }
 
   /**
@@ -260,6 +341,11 @@ export class Timeline {
     ctx.beginPath();
     ctx.roundRect(padding, trackY, trackWidth, trackHeight, 4);
     ctx.fill();
+
+    // Draw thumbnails behind waveform and markers (if enabled)
+    if (this.thumbnailsEnabled) {
+      this.thumbnailManager.drawThumbnails(ctx);
+    }
 
     // Draw waveform if available (for video sources)
     if (this.waveformLoaded && this.waveformRenderer.hasData()) {
@@ -429,5 +515,9 @@ export class Timeline {
     window.removeEventListener('resize', this.boundHandleResize);
     this.canvas.removeEventListener('mousedown', this.onMouseDown);
     this.canvas.removeEventListener('dblclick', this.onDoubleClick);
+    this.thumbnailManager.dispose();
+    if (this.resizeDebounceTimer) {
+      clearTimeout(this.resizeDebounceTimer);
+    }
   }
 }

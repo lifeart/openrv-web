@@ -26,6 +26,7 @@ import { SafeAreasControl } from './ui/components/SafeAreasControl';
 import { FalseColorControl } from './ui/components/FalseColorControl';
 import { ZebraControl } from './ui/components/ZebraControl';
 import { HSLQualifierControl } from './ui/components/HSLQualifierControl';
+import { GhostFrameControl } from './ui/components/GhostFrameControl';
 import { exportSequence } from './utils/SequenceExporter';
 import { showAlert, showModal, closeModal, showConfirm } from './ui/components/shared/Modal';
 import { SessionSerializer } from './core/session/SessionSerializer';
@@ -43,6 +44,10 @@ import { CacheIndicator } from './ui/components/CacheIndicator';
 import { TextFormattingToolbar } from './ui/components/TextFormattingToolbar';
 import { AutoSaveManager } from './core/session/AutoSaveManager';
 import { AutoSaveIndicator } from './ui/components/AutoSaveIndicator';
+import { SnapshotManager } from './core/session/SnapshotManager';
+import { SnapshotPanel } from './ui/components/SnapshotPanel';
+import { PlaylistManager } from './core/session/PlaylistManager';
+import { PlaylistPanel } from './ui/components/PlaylistPanel';
 
 export class App {
   private container: HTMLElement | null = null;
@@ -75,6 +80,7 @@ export class App {
   private falseColorControl: FalseColorControl;
   private zebraControl: ZebraControl;
   private hslQualifierControl: HSLQualifierControl;
+  private ghostFrameControl: GhostFrameControl;
   private animationId: number | null = null;
   private boundHandleResize: () => void;
   private boundHandleVisibilityChange: () => void;
@@ -88,6 +94,10 @@ export class App {
   private textFormattingToolbar: TextFormattingToolbar;
   private autoSaveManager: AutoSaveManager;
   private autoSaveIndicator: AutoSaveIndicator;
+  private snapshotManager: SnapshotManager;
+  private snapshotPanel: SnapshotPanel;
+  private playlistManager: PlaylistManager;
+  private playlistPanel: PlaylistPanel;
 
   // History recording state
   private colorHistoryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -270,6 +280,12 @@ export class App {
     this.falseColorControl = new FalseColorControl(this.viewer.getFalseColor());
     this.zebraControl = new ZebraControl(this.viewer.getZebraStripes());
     this.hslQualifierControl = new HSLQualifierControl(this.viewer.getHSLQualifier());
+
+    // Ghost Frame control
+    this.ghostFrameControl = new GhostFrameControl();
+    this.ghostFrameControl.on('stateChanged', (state) => {
+      this.viewer.setGhostFrameState(state);
+    });
 
     // Connect volume control (from HeaderBar) to session (bidirectional)
     const volumeControl = this.headerBar.getVolumeControl();
@@ -472,6 +488,19 @@ export class App {
     // Initialize marker list panel
     this.markerListPanel = new MarkerListPanel(this.session);
 
+    // Initialize snapshot manager and panel
+    this.snapshotManager = new SnapshotManager();
+    this.snapshotPanel = new SnapshotPanel(this.snapshotManager);
+    this.snapshotPanel.on('restoreRequested', ({ id }) => this.restoreSnapshot(id));
+
+    // Initialize playlist manager and panel
+    this.playlistManager = new PlaylistManager();
+    this.playlistPanel = new PlaylistPanel(this.playlistManager);
+    this.playlistPanel.on('addCurrentSource', () => this.addCurrentSourceToPlaylist());
+    this.playlistPanel.on('clipSelected', ({ sourceIndex, frame }) => {
+      this.jumpToPlaylistClip(sourceIndex, frame);
+    });
+
     // Initialize text formatting toolbar
     this.textFormattingToolbar = new TextFormattingToolbar(
       this.paintEngine,
@@ -491,6 +520,20 @@ export class App {
 
     // Initialize auto-save and check for recovery
     await this.initAutoSave();
+
+    // Initialize snapshot manager
+    await this.initSnapshots();
+  }
+
+  /**
+   * Initialize snapshot system
+   */
+  private async initSnapshots(): Promise<void> {
+    try {
+      await this.snapshotManager.initialize();
+    } catch (err) {
+      console.error('Snapshot manager initialization failed:', err);
+    }
   }
 
   /**
@@ -717,9 +760,10 @@ export class App {
     viewContent.appendChild(this.channelSelect.render());
     viewContent.appendChild(ContextToolbar.createDivider());
 
-    // --- GROUP 2: Comparison (Compare + Stereo) ---
+    // --- GROUP 2: Comparison (Compare + Stereo + Ghost) ---
     viewContent.appendChild(this.compareControl.render());
     viewContent.appendChild(this.stereoControl.render());
+    viewContent.appendChild(this.ghostFrameControl.render());
     viewContent.appendChild(ContextToolbar.createDivider());
 
     // --- GROUP 3: Monitoring (Scopes + Stack) ---
@@ -1210,6 +1254,8 @@ export class App {
       'view.toggleAB': () => this.session.toggleAB(),
       'view.toggleABAlt': () => this.session.toggleAB(),
       'view.toggleDifferenceMatte': () => this.compareControl.toggleDifferenceMatte(),
+      'view.toggleSplitScreen': () => this.compareControl.toggleSplitScreen(),
+      'view.toggleGhostFrames': () => this.ghostFrameControl.toggle(),
       'panel.color': () => this.colorControls.toggle(),
       'panel.effects': () => this.filterControl.toggle(),
       'panel.curves': () => this.curvesControl.toggle(),
@@ -1293,6 +1339,15 @@ export class App {
             this.cropControl.toggle();
           }
         }
+      },
+      'snapshot.create': () => {
+        this.createQuickSnapshot();
+      },
+      'panel.snapshots': () => {
+        this.snapshotPanel.toggle();
+      },
+      'panel.playlist': () => {
+        this.playlistPanel.toggle();
       },
     };
 
@@ -1681,7 +1736,7 @@ export class App {
       'TIMELINE': ['timeline.setInPoint', 'timeline.setInPointAlt', 'timeline.setOutPoint', 'timeline.setOutPointAlt', 'timeline.resetInOut', 'timeline.toggleMark', 'timeline.cycleLoopMode'],
       'PAINT (Annotate tab)': ['paint.pan', 'paint.pen', 'paint.eraser', 'paint.text', 'paint.rectangle', 'paint.ellipse', 'paint.line', 'paint.arrow', 'paint.toggleBrush', 'paint.toggleGhost', 'paint.toggleHold', 'edit.undo', 'edit.redo'],
       'COLOR': ['panel.color', 'panel.curves'],
-      'WIPE COMPARISON': ['view.cycleWipeMode'],
+      'WIPE COMPARISON': ['view.cycleWipeMode', 'view.toggleSplitScreen'],
       'AUDIO (Video only)': [], // Special case - not in DEFAULT_KEY_BINDINGS
       'EXPORT': ['export.quickExport', 'export.copyFrame'],
       'ANNOTATIONS': ['annotation.previous', 'annotation.next'],
@@ -2183,6 +2238,134 @@ export class App {
     }
   }
 
+  /**
+   * Create a quick snapshot with auto-generated name
+   */
+  private async createQuickSnapshot(): Promise<void> {
+    try {
+      const state = SessionSerializer.toJSON(
+        {
+          session: this.session,
+          paintEngine: this.paintEngine,
+          viewer: this.viewer,
+        },
+        this.session.currentSource?.name || 'Untitled'
+      );
+      const now = new Date();
+      const name = `Snapshot ${now.toLocaleTimeString()}`;
+      await this.snapshotManager.createSnapshot(name, state);
+      showAlert(`Snapshot "${name}" created`, { type: 'success', title: 'Snapshot Created' });
+    } catch (err) {
+      console.error('Failed to create snapshot:', err);
+      showAlert(`Failed to create snapshot: ${err}`, { type: 'error', title: 'Snapshot Error' });
+    }
+  }
+
+  /**
+   * Create an auto-checkpoint before major operations
+   */
+  private async createAutoCheckpoint(event: string): Promise<void> {
+    try {
+      const state = SessionSerializer.toJSON(
+        {
+          session: this.session,
+          paintEngine: this.paintEngine,
+          viewer: this.viewer,
+        },
+        this.session.currentSource?.name || 'Untitled'
+      );
+      await this.snapshotManager.createAutoCheckpoint(event, state);
+    } catch (err) {
+      console.error('Failed to create auto-checkpoint:', err);
+    }
+  }
+
+  /**
+   * Restore a snapshot by ID
+   */
+  private async restoreSnapshot(id: string): Promise<void> {
+    try {
+      const state = await this.snapshotManager.getSnapshot(id);
+      if (!state) {
+        showAlert('Snapshot not found', { type: 'error', title: 'Restore Error' });
+        return;
+      }
+
+      // Create auto-checkpoint before restore
+      await this.createAutoCheckpoint('Before Restore');
+
+      // Restore the session state
+      await SessionSerializer.fromJSON(
+        state,
+        {
+          session: this.session,
+          paintEngine: this.paintEngine,
+          viewer: this.viewer,
+        }
+      );
+
+      // Update UI controls with restored state
+      if (state.color) this.colorControls.setAdjustments(state.color);
+      if (state.cdl) this.cdlControl.setCDL(state.cdl);
+      if (state.filters) this.filterControl.setSettings(state.filters);
+      if (state.transform) this.transformControl.setTransform(state.transform);
+      if (state.crop) this.cropControl.setState(state.crop);
+      if (state.lens) this.lensControl.setParams(state.lens);
+
+      // Close the panel
+      this.snapshotPanel.hide();
+
+      const metadata = await this.snapshotManager.getSnapshotMetadata(id);
+      showAlert(`Restored "${metadata?.name || 'snapshot'}"`, { type: 'success', title: 'Snapshot Restored' });
+    } catch (err) {
+      console.error('Failed to restore snapshot:', err);
+      showAlert(`Failed to restore snapshot: ${err}`, { type: 'error', title: 'Restore Error' });
+    }
+  }
+
+  /**
+   * Add current source to playlist
+   */
+  private addCurrentSourceToPlaylist(): void {
+    const source = this.session.currentSource;
+    if (!source) {
+      showAlert('No source loaded', { type: 'warning', title: 'Cannot Add Clip' });
+      return;
+    }
+
+    const sourceIndex = this.session.currentSourceIndex;
+    const inPoint = this.session.inPoint;
+    const outPoint = this.session.outPoint;
+
+    this.playlistManager.addClip(
+      sourceIndex,
+      source.name || `Source ${sourceIndex + 1}`,
+      inPoint,
+      outPoint
+    );
+
+    showAlert(`Added "${source.name}" to playlist`, { type: 'success', title: 'Clip Added' });
+  }
+
+  /**
+   * Jump to a playlist clip
+   */
+  private jumpToPlaylistClip(sourceIndex: number, frame: number): void {
+    // Switch to the source if different
+    if (this.session.currentSourceIndex !== sourceIndex) {
+      this.session.setCurrentSource(sourceIndex);
+    }
+
+    // If playlist mode is enabled, use global frame
+    if (this.playlistManager.isEnabled()) {
+      this.playlistManager.setCurrentFrame(frame);
+      const mapping = this.playlistManager.getClipAtFrame(frame);
+      if (mapping) {
+        this.session.currentFrame = mapping.localFrame;
+      }
+    }
+  }
+
   private async saveProject(): Promise<void> {
     try {
       const state = SessionSerializer.toJSON(
@@ -2217,6 +2400,9 @@ export class App {
 
   private async openProject(file: File): Promise<void> {
     try {
+      // Create auto-checkpoint before loading new project
+      await this.createAutoCheckpoint('Before Project Load');
+
       const state = await SessionSerializer.loadFromFile(file);
       const result = await SessionSerializer.fromJSON(
         state,
@@ -2282,6 +2468,10 @@ export class App {
     this.vectorscope.dispose();
     this.textFormattingToolbar.dispose();
     this.autoSaveIndicator.dispose();
+    this.snapshotPanel.dispose();
+    this.snapshotManager.dispose();
+    this.playlistPanel.dispose();
+    this.playlistManager.dispose();
     // Dispose auto-save manager (fire and forget - we can't await in dispose)
     this.autoSaveManager.dispose().catch(err => {
       console.error('Error disposing auto-save manager:', err);
