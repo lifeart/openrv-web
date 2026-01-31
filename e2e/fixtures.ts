@@ -668,6 +668,21 @@ export async function loadTwoVideoFiles(page: Page): Promise<void> {
   await page.waitForTimeout(1000);
 }
 
+/**
+ * Load a second video file after the first video is already loaded
+ * This simulates dropping a second video onto an existing session
+ */
+export async function loadSecondVideoFile(page: Page): Promise<void> {
+  const filePath = path.resolve(process.cwd(), SAMPLE_VIDEO2);
+
+  // Get the file input
+  const fileInput = page.locator('input[type="file"]').first();
+  await fileInput.setInputFiles(filePath);
+
+  // Wait for video to load and render
+  await page.waitForTimeout(1000);
+}
+
 export async function loadImageFile(page: Page): Promise<void> {
   const filePath = path.resolve(process.cwd(), SAMPLE_IMAGE);
 

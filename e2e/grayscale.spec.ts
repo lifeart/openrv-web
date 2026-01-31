@@ -6,7 +6,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { loadTestImage, getViewerState, captureViewerScreenshot, imagesAreDifferent } from './fixtures';
+import { loadImageFile, getViewerState, captureViewerScreenshot, imagesAreDifferent } from './fixtures';
 
 test.describe('Grayscale Toggle', () => {
   test.beforeEach(async ({ page }) => {
@@ -14,7 +14,7 @@ test.describe('Grayscale Toggle', () => {
   });
 
   test('GRAY-001: Shift+L toggles grayscale/luminance mode', async ({ page }) => {
-    await loadTestImage(page);
+    await loadImageFile(page);
 
     const colorScreenshot = await captureViewerScreenshot(page);
 
@@ -32,7 +32,7 @@ test.describe('Grayscale Toggle', () => {
   });
 
   test('GRAY-002: Shift+Y also toggles grayscale mode (alias)', async ({ page }) => {
-    await loadTestImage(page);
+    await loadImageFile(page);
 
     const colorScreenshot = await captureViewerScreenshot(page);
 
@@ -50,7 +50,7 @@ test.describe('Grayscale Toggle', () => {
   });
 
   test('GRAY-003: toggling grayscale off restores color', async ({ page }) => {
-    await loadTestImage(page);
+    await loadImageFile(page);
 
     const original = await captureViewerScreenshot(page);
 
@@ -68,7 +68,7 @@ test.describe('Grayscale Toggle', () => {
   });
 
   test('GRAY-004: grayscale dropdown shows "Grayscale" label', async ({ page }) => {
-    await loadTestImage(page);
+    await loadImageFile(page);
 
     // Click channel select button
     await page.click('[data-testid="channel-select-button"]');
@@ -82,7 +82,7 @@ test.describe('Grayscale Toggle', () => {
   });
 
   test('GRAY-005: clicking grayscale in dropdown activates grayscale mode', async ({ page }) => {
-    await loadTestImage(page);
+    await loadImageFile(page);
 
     // Click channel select button
     await page.click('[data-testid="channel-select-button"]');
@@ -96,7 +96,7 @@ test.describe('Grayscale Toggle', () => {
   });
 
   test('GRAY-006: grayscale button shows active indicator when enabled', async ({ page }) => {
-    await loadTestImage(page);
+    await loadImageFile(page);
 
     const button = page.locator('[data-testid="channel-select-button"]');
 
@@ -112,7 +112,7 @@ test.describe('Grayscale Toggle', () => {
   });
 
   test('GRAY-007: Shift+Y and Shift+L produce same result', async ({ page }) => {
-    await loadTestImage(page);
+    await loadImageFile(page);
 
     // Use Shift+L
     await page.keyboard.press('Shift+L');

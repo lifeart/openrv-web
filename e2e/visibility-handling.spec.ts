@@ -5,7 +5,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { loadTestVideo, getViewerState, captureViewerScreenshot } from './fixtures';
+import { loadVideoFile, getViewerState, captureViewerScreenshot } from './fixtures';
 
 test.describe('Page Visibility Handling', () => {
   test.beforeEach(async ({ page }) => {
@@ -13,7 +13,7 @@ test.describe('Page Visibility Handling', () => {
   });
 
   test('VIS-001: playback pauses when tab loses focus via new tab', async ({ page, context }) => {
-    await loadTestVideo(page);
+    await loadVideoFile(page);
 
     // Start playback
     await page.keyboard.press('Space');
@@ -48,7 +48,7 @@ test.describe('Page Visibility Handling', () => {
   });
 
   test('VIS-002: playback resumes when tab becomes visible again', async ({ page, context }) => {
-    await loadTestVideo(page);
+    await loadVideoFile(page);
 
     // Start playback
     await page.keyboard.press('Space');
@@ -73,7 +73,7 @@ test.describe('Page Visibility Handling', () => {
   });
 
   test('VIS-003: paused playback stays paused after visibility change', async ({ page, context }) => {
-    await loadTestVideo(page);
+    await loadVideoFile(page);
 
     // Ensure NOT playing (default state)
     const stateBefore = await getViewerState(page);
@@ -93,7 +93,7 @@ test.describe('Page Visibility Handling', () => {
   });
 
   test('VIS-004: frame does not advance while tab is hidden', async ({ page, context }) => {
-    await loadTestVideo(page);
+    await loadVideoFile(page);
 
     // Start playback
     await page.keyboard.press('Space');
@@ -126,7 +126,7 @@ test.describe('Page Visibility Handling', () => {
   });
 
   test('VIS-005: viewer image is preserved when tab is hidden', async ({ page, context }) => {
-    await loadTestVideo(page);
+    await loadVideoFile(page);
 
     // Go to a specific frame
     await page.keyboard.press('Home');
@@ -153,7 +153,7 @@ test.describe('Page Visibility Handling', () => {
   });
 
   test('VIS-006: multiple visibility changes work correctly', async ({ page, context }) => {
-    await loadTestVideo(page);
+    await loadVideoFile(page);
 
     // Start playback
     await page.keyboard.press('Space');

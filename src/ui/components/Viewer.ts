@@ -151,6 +151,14 @@ export class Viewer {
   private pendingVideoFrameFetch: Promise<void> | null = null;
   private pendingVideoFrameNumber: number = 0; // Which frame is being fetched
 
+  // Pending source B video frame fetch tracking (for split screen)
+  private pendingSourceBFrameFetch: Promise<void> | null = null;
+  private pendingSourceBFrameNumber: number = 0;
+  private hasDisplayedSourceBMediabunnyFrame = false;
+  // Cache the last successfully rendered source B frame canvas to prevent flickering
+  // when the next frame is being fetched asynchronously
+  private lastSourceBFrameCanvas: HTMLCanvasElement | OffscreenCanvas | null = null;
+
   // Track if we've ever displayed a mediabunny frame (for fallback logic)
   private hasDisplayedMediabunnyFrame = false;
 
@@ -595,6 +603,11 @@ export class Viewer {
       this.hasDisplayedMediabunnyFrame = false;
       this.pendingVideoFrameFetch = null;
       this.pendingVideoFrameNumber = 0;
+      // Also reset source B tracking for split screen
+      this.hasDisplayedSourceBMediabunnyFrame = false;
+      this.pendingSourceBFrameFetch = null;
+      this.pendingSourceBFrameNumber = 0;
+      this.lastSourceBFrameCanvas = null;
       this.scheduleRender();
     });
     this.session.on('frameChanged', () => this.scheduleRender());
@@ -1560,6 +1573,62 @@ export class Viewer {
 
     const ctx = this.imageCtx;
     const pos = this.wipeState.position;
+    const currentFrame = this.session.currentFrame;
+
+    // Determine the element to use for source A
+    // For mediabunny videos, use the cached frame canvas
+    let elementA: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas = sourceA.element;
+    if (sourceA.type === 'video' && this.session.isUsingMediabunny()) {
+      const frameCanvas = this.session.getVideoFrameCanvas(currentFrame);
+      if (frameCanvas) {
+        elementA = frameCanvas;
+      }
+    }
+
+    // Determine the element to use for source B
+    // For mediabunny videos, use the cached frame canvas
+    let elementB: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas = sourceB.element;
+    if (sourceB.type === 'video' && this.session.isSourceBUsingMediabunny()) {
+      const frameCanvas = this.session.getSourceBFrameCanvas(currentFrame);
+      if (frameCanvas) {
+        elementB = frameCanvas;
+        // Cache this frame canvas to use as fallback while next frame loads
+        this.lastSourceBFrameCanvas = frameCanvas;
+        this.hasDisplayedSourceBMediabunnyFrame = true;
+        this.pendingSourceBFrameFetch = null;
+        this.pendingSourceBFrameNumber = 0;
+      } else {
+        // Frame not cached - fetch it asynchronously
+        if (!this.pendingSourceBFrameFetch || this.pendingSourceBFrameNumber !== currentFrame) {
+          this.pendingSourceBFrameNumber = currentFrame;
+          const frameToFetch = currentFrame;
+
+          this.pendingSourceBFrameFetch = this.session.fetchSourceBVideoFrame(frameToFetch)
+            .then(() => {
+              if (this.pendingSourceBFrameNumber === frameToFetch) {
+                this.pendingSourceBFrameFetch = null;
+                this.pendingSourceBFrameNumber = 0;
+                this.refresh();
+              }
+            })
+            .catch(() => {
+              if (this.pendingSourceBFrameNumber === frameToFetch) {
+                this.pendingSourceBFrameFetch = null;
+                this.pendingSourceBFrameNumber = 0;
+              }
+            });
+        }
+
+        // Use fallback while frame is being fetched
+        if (this.hasDisplayedSourceBMediabunnyFrame && this.lastSourceBFrameCanvas) {
+          // Use the last successfully rendered frame to prevent flickering
+          elementB = this.lastSourceBFrameCanvas;
+        } else {
+          // First render - use HTMLVideoElement as initial fallback
+          elementB = sourceB.element;
+        }
+      }
+    }
 
     // Enable high-quality image smoothing
     ctx.imageSmoothingEnabled = true;
@@ -1570,13 +1639,13 @@ export class Viewer {
     if (this.wipeState.mode === 'splitscreen-h') {
       // Horizontal split: A on left, B on right
       const splitX = Math.floor(displayWidth * pos);
-      this.drawClippedSource(ctx, sourceA.element, 0, 0, splitX, displayHeight, displayWidth, displayHeight);
-      this.drawClippedSource(ctx, sourceB.element, splitX, 0, displayWidth - splitX, displayHeight, displayWidth, displayHeight);
+      this.drawClippedSource(ctx, elementA, 0, 0, splitX, displayHeight, displayWidth, displayHeight);
+      this.drawClippedSource(ctx, elementB, splitX, 0, displayWidth - splitX, displayHeight, displayWidth, displayHeight);
     } else if (this.wipeState.mode === 'splitscreen-v') {
       // Vertical split: A on top, B on bottom
       const splitY = Math.floor(displayHeight * pos);
-      this.drawClippedSource(ctx, sourceA.element, 0, 0, displayWidth, splitY, displayWidth, displayHeight);
-      this.drawClippedSource(ctx, sourceB.element, 0, splitY, displayWidth, displayHeight - splitY, displayWidth, displayHeight);
+      this.drawClippedSource(ctx, elementA, 0, 0, displayWidth, splitY, displayWidth, displayHeight);
+      this.drawClippedSource(ctx, elementB, 0, splitY, displayWidth, displayHeight - splitY, displayWidth, displayHeight);
     }
 
     ctx.restore();
@@ -1591,7 +1660,7 @@ export class Viewer {
    */
   private drawClippedSource(
     ctx: CanvasRenderingContext2D,
-    element: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement,
+    element: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas,
     clipX: number,
     clipY: number,
     clipWidth: number,
@@ -1613,7 +1682,7 @@ export class Viewer {
    */
   private drawSourceToContext(
     ctx: CanvasRenderingContext2D,
-    element: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement,
+    element: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas,
     width: number,
     height: number
   ): void {

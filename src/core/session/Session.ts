@@ -234,10 +234,22 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   /**
-   * Add a source to the session and auto-configure A/B compare
-   * When the second source is added, it automatically becomes source B
+   * Add a source to the session and auto-configure A/B compare.
+   * When the second source is added, it automatically becomes source B.
+   *
+   * Note: If playback is active when this method is called, it will be paused
+   * automatically. This prevents timing state corruption where accumulated
+   * frame timing from the previous source would be incorrectly applied to the
+   * new source. A 'playbackChanged' event will be emitted in this case.
    */
   protected addSource(source: MediaSource): void {
+    // Pause playback before adding new source to prevent timing state corruption
+    // The timing variables (lastFrameTime, frameAccumulator) from the old source
+    // would cause issues if applied to the new source
+    if (this._isPlaying) {
+      this.pause();
+    }
+
     this.sources.push(source);
     this._currentSourceIndex = this.sources.length - 1;
 
@@ -2786,8 +2798,63 @@ export class Session extends EventEmitter<SessionEvents> {
    * Check if current source is using mediabunny for frame extraction
    */
   isUsingMediabunny(): boolean {
-    const source = this.currentSource;
+    return this.isSourceUsingMediabunny(this.currentSource);
+  }
+
+  /**
+   * Check if source B is using mediabunny for frame extraction
+   */
+  isSourceBUsingMediabunny(): boolean {
+    return this.isSourceUsingMediabunny(this.sourceB);
+  }
+
+  /**
+   * Internal helper: Check if a specific source is using mediabunny
+   */
+  private isSourceUsingMediabunny(source: MediaSource | null): boolean {
     return source?.type === 'video' && source.videoSourceNode?.isUsingMediabunny() === true;
+  }
+
+  /**
+   * Get video frame canvas for source B from mediabunny (for split screen rendering)
+   * Returns null if mediabunny is not available or frame is not cached
+   */
+  getSourceBFrameCanvas(frameIndex?: number): HTMLCanvasElement | OffscreenCanvas | null {
+    return this.getFrameCanvasForSource(this.sourceB, frameIndex);
+  }
+
+  /**
+   * Internal helper: Get frame canvas for a specific source
+   */
+  private getFrameCanvasForSource(
+    source: MediaSource | null,
+    frameIndex?: number
+  ): HTMLCanvasElement | OffscreenCanvas | null {
+    if (source?.type !== 'video' || !source.videoSourceNode?.isUsingMediabunny()) {
+      return null;
+    }
+
+    const frame = frameIndex ?? this._currentFrame;
+    return source.videoSourceNode.getCachedFrameCanvas(frame);
+  }
+
+  /**
+   * Fetch a specific frame for source B (async)
+   * Used for split screen rendering when frame is not cached
+   */
+  async fetchSourceBVideoFrame(frameIndex: number): Promise<void> {
+    await this.fetchFrameForSource(this.sourceB, frameIndex);
+  }
+
+  /**
+   * Internal helper: Fetch a specific frame for a source
+   */
+  private async fetchFrameForSource(source: MediaSource | null, frameIndex: number): Promise<void> {
+    if (source?.type !== 'video' || !source.videoSourceNode?.isUsingMediabunny()) {
+      return;
+    }
+
+    await source.videoSourceNode.getFrameAsync(frameIndex);
   }
 
   /**

@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import {
   loadVideoFile,
+  loadSecondVideoFile,
   waitForTestHelper,
   getSessionState,
   getCacheIndicatorState,
@@ -833,6 +834,145 @@ test.describe('Playback State Fixes', () => {
 
       const cacheState = await getCacheIndicatorState(page);
       expect(cacheState.cachedCount).toBeGreaterThan(0);
+    });
+  });
+
+  test.describe('Second Video Drop During Playback', () => {
+    test('PLAY-STATE-100: dropping second video during playback pauses playback', async ({ page }) => {
+      // Start playback
+      await page.keyboard.press('Space');
+      await waitForPlaybackState(page, true);
+      await waitForFrameAtLeast(page, 3);
+
+      let state = await getSessionState(page);
+      expect(state.isPlaying).toBe(true);
+
+      // Load second video file while first is playing
+      await loadSecondVideoFile(page);
+
+      // Wait for the new source to be loaded
+      await page.waitForTimeout(500);
+
+      // Playback should be paused after loading second video
+      state = await getSessionState(page);
+      expect(state.isPlaying).toBe(false);
+    });
+
+    test('PLAY-STATE-101: session remains functional after dropping second video during playback', async ({ page }) => {
+      // Start playback
+      await page.keyboard.press('Space');
+      await waitForPlaybackState(page, true);
+      await waitForFrameAtLeast(page, 3);
+
+      // Load second video file while first is playing
+      await loadSecondVideoFile(page);
+      // Wait for video to fully load and process
+      await waitForMediaLoaded(page);
+
+      // Verify paused (this is the fix we're testing)
+      let state = await getSessionState(page);
+      expect(state.isPlaying).toBe(false);
+
+      const frameBeforeAction = state.currentFrame;
+
+      // Verify the session is functional by testing frame navigation
+      // This is more reliable than testing playback which can be affected by browser autoplay policies
+      await page.keyboard.press('ArrowRight');
+      await waitForFrameChange(page, frameBeforeAction);
+
+      state = await getSessionState(page);
+      expect(state.currentFrame).toBe(frameBeforeAction + 1);
+
+      // Navigate back to verify bidirectional navigation works
+      await page.keyboard.press('ArrowLeft');
+      await waitForFrame(page, frameBeforeAction);
+
+      state = await getSessionState(page);
+      expect(state.currentFrame).toBe(frameBeforeAction);
+    });
+
+    test('PLAY-STATE-102: timing state resets when second video is loaded during playback', async ({ page }) => {
+      // Start playback and let it run for a bit to accumulate timing state
+      await page.keyboard.press('Space');
+      await waitForPlaybackState(page, true);
+      await waitForFrameAtLeast(page, 5);
+
+      // Record the frame before loading second video
+      let state = await getSessionState(page);
+      const frameWhilePlaying = state.currentFrame;
+
+      // Load second video file - this should pause and reset timing state
+      await loadSecondVideoFile(page);
+      // Wait for the source to be added and playback to pause
+      // The addSource method pauses playback, so we wait for that
+      await waitForPlaybackState(page, false, 5000);
+
+      // Verify paused (this is the fix we're testing)
+      state = await getSessionState(page);
+      expect(state.isPlaying).toBe(false);
+
+      // The key test: frame should be at a reasonable position
+      // If timing state wasn't reset, the accumulated frameAccumulator from
+      // the previous playback would cause immediate frame jumps
+      const frameAfterLoad = state.currentFrame;
+
+      // Frame should be reasonable - not jumped due to stale accumulated time
+      // The frame may have changed during the load, but shouldn't have jumped by hundreds
+      expect(frameAfterLoad).toBeLessThan(frameWhilePlaying + 30);
+
+      // Additionally verify frame navigation works correctly (no timing corruption)
+      await page.keyboard.press('ArrowRight');
+      await waitForFrameChange(page, frameAfterLoad);
+
+      state = await getSessionState(page);
+      // Should advance by exactly 1, not by a large jump
+      expect(state.currentFrame).toBe(frameAfterLoad + 1);
+    });
+
+    test('PLAY-STATE-103: can navigate frames after dropping second video during playback', async ({ page }) => {
+      // Start playback
+      await page.keyboard.press('Space');
+      await waitForPlaybackState(page, true);
+      await waitForFrameAtLeast(page, 3);
+
+      // Load second video file
+      await loadSecondVideoFile(page);
+      await page.waitForTimeout(500);
+
+      // Verify paused
+      let state = await getSessionState(page);
+      expect(state.isPlaying).toBe(false);
+      const currentFrame = state.currentFrame;
+
+      // Navigate frames with arrow keys
+      await page.keyboard.press('ArrowRight');
+      await waitForFrameChange(page, currentFrame);
+
+      state = await getSessionState(page);
+      expect(state.currentFrame).toBe(currentFrame + 1);
+
+      await page.keyboard.press('ArrowLeft');
+      await waitForFrame(page, currentFrame);
+
+      state = await getSessionState(page);
+      expect(state.currentFrame).toBe(currentFrame);
+    });
+
+    test('PLAY-STATE-104: A/B comparison available after dropping second video', async ({ page }) => {
+      // Start playback
+      await page.keyboard.press('Space');
+      await waitForPlaybackState(page, true);
+      await waitForFrameAtLeast(page, 3);
+
+      // Load second video file
+      await loadSecondVideoFile(page);
+      await page.waitForTimeout(500);
+
+      // A/B comparison should be available
+      const state = await getSessionState(page);
+      expect(state.abCompareAvailable).toBe(true);
+      expect(state.sourceAIndex).toBe(0);
+      expect(state.sourceBIndex).toBe(1);
     });
   });
 });
