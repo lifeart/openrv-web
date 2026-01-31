@@ -189,15 +189,27 @@ export class VideoSourceNode extends BaseSourceNode {
 
     // Create loader function that uses frameExtractor
     // Accepts optional AbortSignal for cancellation support
-    const loader = async (frame: number, signal?: AbortSignal): Promise<FrameResult> => {
+    // Returns null on failure instead of throwing to avoid breaking the app
+    const loader = async (frame: number, signal?: AbortSignal): Promise<FrameResult | null> => {
       if (!this.frameExtractor) {
-        throw new Error('Frame extractor not available');
+        return null;
       }
-      const result = await this.frameExtractor.getFrame(frame, signal);
-      if (!result) {
-        throw new Error(`Failed to extract frame ${frame}`);
+
+      // Check if aborted before attempting extraction
+      if (signal?.aborted) {
+        return null;
       }
-      return result;
+
+      try {
+        const result = await this.frameExtractor.getFrame(frame, signal);
+        return result;
+      } catch (error) {
+        // Log error for debugging but don't break the app
+        if (!signal?.aborted) {
+          console.warn(`Frame ${frame} extraction failed:`, error);
+        }
+        return null;
+      }
     };
 
     this.preloadManager = new FramePreloadManager<FrameResult>(

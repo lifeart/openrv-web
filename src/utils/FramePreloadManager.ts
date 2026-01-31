@@ -12,7 +12,7 @@
 export interface PreloadRequest<T> {
   frame: number;
   priority: number; // Lower = higher priority
-  promise: Promise<T> | null;
+  promise: Promise<T | null> | null;
   cancelled: boolean;
 }
 
@@ -34,7 +34,7 @@ export const DEFAULT_PRELOAD_CONFIG: PreloadConfig = {
   priorityDecayRate: 1.0,
 };
 
-type FrameLoader<T> = (frame: number, signal?: AbortSignal) => Promise<T>;
+type FrameLoader<T> = (frame: number, signal?: AbortSignal) => Promise<T | null>;
 type FrameDisposer<T> = (frame: number, data: T) => void;
 
 export class FramePreloadManager<T> {
@@ -110,7 +110,7 @@ export class FramePreloadManager<T> {
     // Pass abort signal to loader for cancellation support
     const loadPromise = this.loader(frame, requestSignal)
       .then(data => {
-        if (!request.cancelled && !requestSignal.aborted) {
+        if (data !== null && !request.cancelled && !requestSignal.aborted) {
           this.addToCache(frame, data);
         }
         return data;
@@ -366,7 +366,7 @@ export class FramePreloadManager<T> {
     // Pass abort signal to loader for cancellation support
     request.promise = this.loader(request.frame, requestSignal)
       .then(data => {
-        if (!request.cancelled && !requestSignal.aborted) {
+        if (data !== null && !request.cancelled && !requestSignal.aborted) {
           this.addToCache(request.frame, data);
         }
         return data;
@@ -376,7 +376,8 @@ export class FramePreloadManager<T> {
         if (e?.name !== 'AbortError' && !requestSignal.aborted) {
           console.warn(`Preload failed for frame ${request.frame}:`, e);
         }
-        throw e;
+        // Return null instead of re-throwing to avoid unhandled promise rejections
+        return null;
       })
       .finally(() => {
         this.activeRequests.delete(request.frame);
