@@ -330,7 +330,8 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
 
   // Stereo controls (handled by StereoControl component)
   'stereo.toggle': {
-    code: 'KeyS',
+    code: 'Digit3',
+    shift: true,
     description: 'Toggle stereo viewing mode'
   },
 

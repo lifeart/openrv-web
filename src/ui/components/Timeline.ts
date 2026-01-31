@@ -22,6 +22,8 @@ export class Timeline {
   private boundHandleResize: () => void;
   private paintEngineSubscribed = false;
   private resizeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private initialRenderFrameId: number | null = null;
+  private disposed = false;
 
   // Colors are resolved at render time from CSS variables
   private getColors() {
@@ -283,8 +285,11 @@ export class Timeline {
   }
 
   render(): HTMLElement {
-    // Initial resize
-    requestAnimationFrame(() => {
+    // Initial resize (store ID for cleanup)
+    this.initialRenderFrameId = requestAnimationFrame(() => {
+      this.initialRenderFrameId = null;
+      // Guard against disposed state (test teardown)
+      if (this.disposed) return;
       this.resize();
       this.draw();
     });
@@ -510,6 +515,12 @@ export class Timeline {
   }
 
   dispose(): void {
+    this.disposed = true;
+    // Cancel pending animation frame to prevent callback after teardown
+    if (this.initialRenderFrameId !== null) {
+      cancelAnimationFrame(this.initialRenderFrameId);
+      this.initialRenderFrameId = null;
+    }
     window.removeEventListener('mousemove', this.onMouseMove);
     window.removeEventListener('mouseup', this.onMouseUp);
     window.removeEventListener('resize', this.boundHandleResize);

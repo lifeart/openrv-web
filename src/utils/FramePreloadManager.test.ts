@@ -224,13 +224,13 @@ describe('FramePreloadManager', () => {
 
     it('FPM-018: calls disposer when evicting frames', async () => {
       const config: Partial<PreloadConfig> = {
-        maxCacheSize: 3,
+        maxCacheSize: 5,
         scrubWindow: 0,
       };
       const manager = new FramePreloadManager(100, loader, disposer, config);
 
-      // Fill cache
-      for (let i = 1; i <= 5; i++) {
+      // Fill cache beyond maxCacheSize to trigger eviction
+      for (let i = 1; i <= 7; i++) {
         await manager.getFrame(i);
       }
 
@@ -240,26 +240,30 @@ describe('FramePreloadManager', () => {
 
     it('FPM-019: evicts LRU frames first', async () => {
       const config: Partial<PreloadConfig> = {
-        maxCacheSize: 3,
+        maxCacheSize: 5,
         scrubWindow: 0,
       };
       const manager = new FramePreloadManager(100, loader, disposer, config);
 
-      // Load frames 1, 2, 3
+      // Load frames 1, 2, 3, 4, 5
       await manager.getFrame(1);
       await manager.getFrame(2);
       await manager.getFrame(3);
+      await manager.getFrame(4);
+      await manager.getFrame(5);
 
       // Access frame 1 again to make it recently used
       await manager.getFrame(1);
 
-      // Load frame 4, should evict frame 2 (least recently used)
-      await manager.getFrame(4);
+      // Load frame 6, should evict frame 2 (least recently used)
+      await manager.getFrame(6);
 
       expect(manager.hasFrame(1)).toBe(true); // Recently accessed
       expect(manager.hasFrame(2)).toBe(false); // LRU, evicted
       expect(manager.hasFrame(3)).toBe(true);
       expect(manager.hasFrame(4)).toBe(true);
+      expect(manager.hasFrame(5)).toBe(true);
+      expect(manager.hasFrame(6)).toBe(true);
     });
   });
 
@@ -443,30 +447,34 @@ describe('FramePreloadManager', () => {
 
     it('FPM-029: eviction maintains correct LRU order after multiple accesses', async () => {
       const config: Partial<PreloadConfig> = {
-        maxCacheSize: 3,
+        maxCacheSize: 5,
         scrubWindow: 0,
       };
       const manager = new FramePreloadManager(100, loader, disposer, config);
 
-      // Load frames 1, 2, 3
+      // Load frames 1, 2, 3, 4, 5
       await manager.getFrame(1);
       await manager.getFrame(2);
       await manager.getFrame(3);
+      await manager.getFrame(4);
+      await manager.getFrame(5);
 
-      // Access in order: 3, 1, 2 (making 2 most recent, then 1, then 3 least recent)
+      // Access in order: 3, 1, 2 (making 2 most recent, then 1, then 3, and 4,5 least recent)
       manager.getCachedFrame(3);
       manager.getCachedFrame(1);
       manager.getCachedFrame(2);
 
-      // Load frame 4 and 5 - should evict 3 then 1
-      await manager.getFrame(4);
-      await manager.getFrame(5);
+      // Load frame 6 and 7 - should evict 4 then 5 (least recently used)
+      await manager.getFrame(6);
+      await manager.getFrame(7);
 
       expect(manager.hasFrame(2)).toBe(true); // Most recent
-      expect(manager.hasFrame(4)).toBe(true);
-      expect(manager.hasFrame(5)).toBe(true);
-      expect(manager.hasFrame(1)).toBe(false); // Evicted
-      expect(manager.hasFrame(3)).toBe(false); // Evicted first
+      expect(manager.hasFrame(1)).toBe(true); // Recently accessed
+      expect(manager.hasFrame(3)).toBe(true); // Recently accessed
+      expect(manager.hasFrame(6)).toBe(true);
+      expect(manager.hasFrame(7)).toBe(true);
+      expect(manager.hasFrame(4)).toBe(false); // Evicted first
+      expect(manager.hasFrame(5)).toBe(false); // Evicted second
     });
   });
 
@@ -640,7 +648,7 @@ describe('FramePreloadManager', () => {
 
     it('FPM-038: tracks evictions correctly', async () => {
       const config: Partial<PreloadConfig> = {
-        maxCacheSize: 3,
+        maxCacheSize: 5,
         scrubWindow: 0,
       };
       const manager = new FramePreloadManager(100, loader, disposer, config);
@@ -649,10 +657,12 @@ describe('FramePreloadManager', () => {
       await manager.getFrame(1);
       await manager.getFrame(2);
       await manager.getFrame(3);
+      await manager.getFrame(4);
+      await manager.getFrame(5);
 
       // Trigger evictions
-      await manager.getFrame(4); // evicts 1
-      await manager.getFrame(5); // evicts 2
+      await manager.getFrame(6); // evicts 1
+      await manager.getFrame(7); // evicts 2
 
       const stats = manager.getStats();
       expect(stats.evictionCount).toBe(2);
@@ -726,26 +736,30 @@ describe('FramePreloadManager', () => {
 
     it('FPM-042: eviction respects LRU order after access', async () => {
       const config: Partial<PreloadConfig> = {
-        maxCacheSize: 3,
+        maxCacheSize: 5,
         scrubWindow: 0,
       };
       const manager = new FramePreloadManager(100, loader, disposer, config);
 
-      // Load frames 1, 2, 3
+      // Load frames 1, 2, 3, 4, 5
       await manager.getFrame(1);
       await manager.getFrame(2);
       await manager.getFrame(3);
+      await manager.getFrame(4);
+      await manager.getFrame(5);
 
       // Access frame 1 to make it most recent
       manager.getCachedFrame(1);
 
-      // Add frame 4 - should evict frame 2 (oldest unused)
-      await manager.getFrame(4);
+      // Add frame 6 - should evict frame 2 (oldest unused)
+      await manager.getFrame(6);
 
       expect(manager.hasFrame(1)).toBe(true); // recently accessed
       expect(manager.hasFrame(2)).toBe(false); // evicted
       expect(manager.hasFrame(3)).toBe(true);
       expect(manager.hasFrame(4)).toBe(true);
+      expect(manager.hasFrame(5)).toBe(true);
+      expect(manager.hasFrame(6)).toBe(true);
     });
 
     it('FPM-043: large batch eviction does not cause performance issues', async () => {
@@ -878,14 +892,18 @@ describe('FramePreloadManager', () => {
 
     it('FPM-046: disposer called exactly once per eviction', async () => {
       const config: Partial<PreloadConfig> = {
-        maxCacheSize: 2,
+        maxCacheSize: 5,
         scrubWindow: 0,
       };
       const manager = new FramePreloadManager<TestFrame>(100, loader, disposer, config);
 
+      // Fill cache to capacity
       await manager.getFrame(1);
       await manager.getFrame(2);
-      await manager.getFrame(3); // evicts 1
+      await manager.getFrame(3);
+      await manager.getFrame(4);
+      await manager.getFrame(5);
+      await manager.getFrame(6); // evicts 1
 
       expect(disposer).toHaveBeenCalledTimes(1);
       expect(disposer).toHaveBeenCalledWith(1, { frame: 1, data: 'frame-1' });

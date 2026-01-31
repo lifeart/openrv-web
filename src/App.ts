@@ -1230,13 +1230,34 @@ export class App {
       'playback.goToEnd': () => this.session.goToEnd(),
       'playback.slower': () => this.session.decreaseSpeed(),
       'playback.stop': () => this.session.pause(),
-      'playback.faster': () => this.session.increaseSpeed(),
+      'playback.faster': () => {
+        // L key - increase speed, but on Annotate tab, line tool takes precedence
+        if (this.tabBar.activeTab === 'annotate') {
+          this.paintToolbar.handleKeyboard('l');
+          return;
+        }
+        this.session.increaseSpeed();
+      },
       'timeline.setInPoint': () => this.session.setInPoint(),
       'timeline.setInPointAlt': () => this.session.setInPoint(),
-      'timeline.setOutPoint': () => this.session.setOutPoint(),
+      'timeline.setOutPoint': () => {
+        // O key - set out point, but on Annotate tab, ellipse tool takes precedence
+        if (this.tabBar.activeTab === 'annotate') {
+          this.paintToolbar.handleKeyboard('o');
+          return;
+        }
+        this.session.setOutPoint();
+      },
       'timeline.setOutPointAlt': () => this.session.setOutPoint(),
       'timeline.toggleMark': () => this.session.toggleMark(),
-      'timeline.resetInOut': () => this.session.resetInOutPoints(),
+      'timeline.resetInOut': () => {
+        // R key - reset in/out points, but on Annotate tab, rectangle tool takes precedence
+        if (this.tabBar.activeTab === 'annotate') {
+          this.paintToolbar.handleKeyboard('r');
+          return;
+        }
+        this.session.resetInOutPoints();
+      },
       'timeline.cycleLoopMode': () => {
         const modes: Array<'once' | 'loop' | 'pingpong'> = ['once', 'loop', 'pingpong'];
         const currentIndex = modes.indexOf(this.session.loopMode);
@@ -1351,8 +1372,22 @@ export class App {
       },
     };
 
+    // Paint shortcuts that conflict with other shortcuts are handled by delegating handlers
+    // (e.g., playback.faster handles L key, but delegates to paint.line on Annotate tab)
+    // Skip registering these to avoid overwriting the delegating handlers
+    const conflictingPaintShortcuts = new Set([
+      'paint.line',      // L key - handled by playback.faster
+      'paint.rectangle', // R key - handled by timeline.resetInOut
+      'paint.ellipse',   // O key - handled by timeline.setOutPoint
+    ]);
+
     // Register all keyboard shortcuts using effective combos (custom or default)
     for (const [action, defaultBinding] of Object.entries(DEFAULT_KEY_BINDINGS)) {
+      // Skip conflicting paint shortcuts - they're handled by delegating handlers
+      if (conflictingPaintShortcuts.has(action)) {
+        continue;
+      }
+
       const handler = actionHandlers[action];
       if (handler) {
         // Use effective combo if custom key bindings manager is available, otherwise use default
