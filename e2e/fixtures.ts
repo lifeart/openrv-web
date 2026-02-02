@@ -248,6 +248,19 @@ export interface StackState {
   isPanelOpen: boolean;
 }
 
+export interface OCIOState {
+  enabled: boolean;
+  configName: string;
+  inputColorSpace: string;
+  detectedColorSpace: string | null;
+  workingColorSpace: string;
+  display: string;
+  view: string;
+  look: string;
+  lookDirection: 'forward' | 'inverse';
+  panelVisible: boolean;
+}
+
 /**
  * Get session state from the app
  */
@@ -580,6 +593,26 @@ export async function getStackState(page: Page): Promise<StackState> {
       activeLayerId: null,
       layerCount: 0,
       isPanelOpen: false,
+    };
+  });
+}
+
+/**
+ * Get OCIO color management state from the app
+ */
+export async function getOCIOState(page: Page): Promise<OCIOState> {
+  return page.evaluate(() => {
+    return (window as any).__OPENRV_TEST__?.getOCIOState() ?? {
+      enabled: false,
+      configName: 'aces_1.2',
+      inputColorSpace: 'Auto',
+      detectedColorSpace: null,
+      workingColorSpace: 'ACEScg',
+      display: 'sRGB',
+      view: 'ACES 1.0 SDR-video',
+      look: 'None',
+      lookDirection: 'forward',
+      panelVisible: false,
     };
   });
 }

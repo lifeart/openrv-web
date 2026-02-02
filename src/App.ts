@@ -27,6 +27,7 @@ import { FalseColorControl } from './ui/components/FalseColorControl';
 import { ZebraControl } from './ui/components/ZebraControl';
 import { HSLQualifierControl } from './ui/components/HSLQualifierControl';
 import { GhostFrameControl } from './ui/components/GhostFrameControl';
+import { OCIOControl } from './ui/components/OCIOControl';
 import { exportSequence } from './utils/SequenceExporter';
 import { showAlert, showModal, closeModal, showConfirm } from './ui/components/shared/Modal';
 import { SessionSerializer } from './core/session/SessionSerializer';
@@ -81,6 +82,7 @@ export class App {
   private zebraControl: ZebraControl;
   private hslQualifierControl: HSLQualifierControl;
   private ghostFrameControl: GhostFrameControl;
+  private ocioControl: OCIOControl;
   private animationId: number | null = null;
   private boundHandleResize: () => void;
   private boundHandleVisibilityChange: () => void;
@@ -285,6 +287,14 @@ export class App {
     this.ghostFrameControl = new GhostFrameControl();
     this.ghostFrameControl.on('stateChanged', (state) => {
       this.viewer.setGhostFrameState(state);
+    });
+
+    // OCIO color management control
+    this.ocioControl = new OCIOControl();
+    this.ocioControl.on('stateChanged', () => {
+      this.viewer.refresh();
+      this.scheduleUpdateScopes();
+      this.syncGTOStore();
     });
 
     // Connect volume control (from HeaderBar) to session (bidirectional)
@@ -925,6 +935,8 @@ export class App {
     // === COLOR TAB ===
     const colorContent = document.createElement('div');
     colorContent.style.cssText = 'display: flex; align-items: center; gap: 6px;';
+    colorContent.appendChild(this.ocioControl.render());
+    colorContent.appendChild(ContextToolbar.createDivider());
     colorContent.appendChild(this.colorControls.render());
     colorContent.appendChild(ContextToolbar.createDivider());
     colorContent.appendChild(this.cdlControl.render());
@@ -1284,6 +1296,7 @@ export class App {
       'panel.waveform': () => this.scopesControl.toggleScope('waveform'),
       'panel.vectorscope': () => this.scopesControl.toggleScope('vectorscope'),
       'panel.histogram': () => this.scopesControl.toggleScope('histogram'),
+      'panel.ocio': () => this.ocioControl.toggle(),
       'transform.rotateLeft': () => this.transformControl.rotateLeft(),
       'transform.rotateRight': () => this.transformControl.rotateRight(),
       'transform.flipHorizontal': () => this.transformControl.toggleFlipH(),
@@ -1770,7 +1783,7 @@ export class App {
       'SCOPES': ['panel.histogram', 'panel.waveform', 'panel.vectorscope'],
       'TIMELINE': ['timeline.setInPoint', 'timeline.setInPointAlt', 'timeline.setOutPoint', 'timeline.setOutPointAlt', 'timeline.resetInOut', 'timeline.toggleMark', 'timeline.cycleLoopMode'],
       'PAINT (Annotate tab)': ['paint.pan', 'paint.pen', 'paint.eraser', 'paint.text', 'paint.rectangle', 'paint.ellipse', 'paint.line', 'paint.arrow', 'paint.toggleBrush', 'paint.toggleGhost', 'paint.toggleHold', 'edit.undo', 'edit.redo'],
-      'COLOR': ['panel.color', 'panel.curves'],
+      'COLOR': ['panel.color', 'panel.curves', 'panel.ocio'],
       'WIPE COMPARISON': ['view.cycleWipeMode', 'view.toggleSplitScreen'],
       'AUDIO (Video only)': [], // Special case - not in DEFAULT_KEY_BINDINGS
       'EXPORT': ['export.quickExport', 'export.copyFrame'],

@@ -30,6 +30,7 @@ declare global {
       getMatteState: () => MatteState;
       getSessionMetadataState: () => SessionMetadataState;
       getStackState: () => StackState;
+      getOCIOState: () => OCIOState;
       isUsingMediabunny: () => boolean;
     };
   }
@@ -278,6 +279,19 @@ export interface StackState {
   activeLayerId: string | null;
   layerCount: number;
   isPanelOpen: boolean;
+}
+
+export interface OCIOState {
+  enabled: boolean;
+  configName: string;
+  inputColorSpace: string;
+  detectedColorSpace: string | null;
+  workingColorSpace: string;
+  display: string;
+  view: string;
+  look: string;
+  lookDirection: 'forward' | 'inverse';
+  panelVisible: boolean;
 }
 
 export function exposeForTesting(app: App): void {
@@ -650,6 +664,23 @@ export function exposeForTesting(app: App): void {
         activeLayerId: activeLayer?.id ?? null,
         layerCount: layers.length,
         isPanelOpen: stackControl?.isPanelOpen ?? false,
+      };
+    },
+
+    getOCIOState: (): OCIOState => {
+      const ocioControl = appAny.ocioControl;
+      const state = ocioControl?.getState?.() ?? {};
+      return {
+        enabled: state.enabled ?? false,
+        configName: state.configName ?? 'aces_1.2',
+        inputColorSpace: state.inputColorSpace ?? 'Auto',
+        detectedColorSpace: state.detectedColorSpace ?? null,
+        workingColorSpace: state.workingColorSpace ?? 'ACEScg',
+        display: state.display ?? 'sRGB',
+        view: state.view ?? 'ACES 1.0 SDR-video',
+        look: state.look ?? 'None',
+        lookDirection: state.lookDirection ?? 'forward',
+        panelVisible: ocioControl?.isExpanded ?? false,
       };
     },
 

@@ -161,6 +161,11 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyH',
     description: 'Toggle histogram'
   },
+  'panel.ocio': {
+    code: 'KeyO',
+    shift: true,
+    description: 'Toggle OCIO color management panel'
+  },
 
   // Transform controls
   'transform.rotateLeft': {

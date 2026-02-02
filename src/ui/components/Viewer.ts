@@ -35,6 +35,7 @@ import { HSLQualifier } from './HSLQualifier';
 import { PrerenderBufferManager } from '../../utils/PrerenderBufferManager';
 import { getThemeManager } from '../../utils/ThemeManager';
 import { setupHiDPICanvas, resetCanvasFromHiDPI } from '../../utils/HiDPICanvas';
+import { getSharedOCIOProcessor } from '../../color/OCIOProcessor';
 
 // Extracted effect processing utilities
 import { applyHighlightsShadows, applyVibrance, applyClarity, applySharpenCPU } from './ViewerEffects';
@@ -1992,9 +1993,11 @@ export class Viewer {
     const hasFalseColor = this.falseColor.isEnabled();
     const hasZebras = this.zebraStripes.isEnabled();
     const hasClippingOverlay = this.clippingOverlay.isEnabled();
+    const ocioProcessor = getSharedOCIOProcessor();
+    const hasOCIO = ocioProcessor.isEnabled();
 
     // Early return if no pixel effects are active
-    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasZebras && !hasClippingOverlay) {
+    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasZebras && !hasClippingOverlay && !hasOCIO) {
       return;
     }
 
@@ -2042,6 +2045,11 @@ export class Viewer {
     // Apply HSL Qualifier (secondary color correction - after primary corrections)
     if (hasHSLQualifier) {
       this.hslQualifier.apply(imageData);
+    }
+
+    // Apply OCIO color transforms (display/view transform after grading)
+    if (hasOCIO) {
+      ocioProcessor.apply(imageData);
     }
 
     // Apply sharpen filter
