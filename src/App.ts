@@ -24,6 +24,7 @@ import { ScopesControl } from './ui/components/ScopesControl';
 import { CompareControl } from './ui/components/CompareControl';
 import { SafeAreasControl } from './ui/components/SafeAreasControl';
 import { FalseColorControl } from './ui/components/FalseColorControl';
+import { ToneMappingControl } from './ui/components/ToneMappingControl';
 import { ZebraControl } from './ui/components/ZebraControl';
 import { HSLQualifierControl } from './ui/components/HSLQualifierControl';
 import { GhostFrameControl } from './ui/components/GhostFrameControl';
@@ -79,6 +80,7 @@ export class App {
   private compareControl: CompareControl;
   private safeAreasControl: SafeAreasControl;
   private falseColorControl: FalseColorControl;
+  private toneMappingControl: ToneMappingControl;
   private zebraControl: ZebraControl;
   private hslQualifierControl: HSLQualifierControl;
   private ghostFrameControl: GhostFrameControl;
@@ -280,6 +282,11 @@ export class App {
     // Safe Areas control
     this.safeAreasControl = new SafeAreasControl(this.viewer.getSafeAreasOverlay());
     this.falseColorControl = new FalseColorControl(this.viewer.getFalseColor());
+    this.toneMappingControl = new ToneMappingControl();
+    this.toneMappingControl.on('stateChanged', (state) => {
+      this.viewer.setToneMappingState(state);
+      this.scheduleUpdateScopes();
+    });
     this.zebraControl = new ZebraControl(this.viewer.getZebraStripes());
     this.hslQualifierControl = new HSLQualifierControl(this.viewer.getHSLQualifier());
 
@@ -781,9 +788,10 @@ export class App {
     viewContent.appendChild(this.stackControl.render());
     viewContent.appendChild(ContextToolbar.createDivider());
 
-    // --- GROUP 4: Analysis Tools (SafeAreas, FalseColor, Zebra, HSL) ---
+    // --- GROUP 4: Analysis Tools (SafeAreas, FalseColor, ToneMapping, Zebra, HSL) ---
     viewContent.appendChild(this.safeAreasControl.render());
     viewContent.appendChild(this.falseColorControl.render());
+    viewContent.appendChild(this.toneMappingControl.render());
     viewContent.appendChild(this.zebraControl.render());
     viewContent.appendChild(this.hslQualifierControl.render());
 
@@ -1333,6 +1341,7 @@ export class App {
       'view.toggleGuides': () => this.safeAreasControl.getOverlay().toggle(),
       'view.togglePixelProbe': () => this.viewer.getPixelProbe().toggle(),
       'view.toggleFalseColor': () => this.viewer.getFalseColor().toggle(),
+      'view.toggleToneMapping': () => this.toneMappingControl.toggle(),
       'view.toggleTimecodeOverlay': () => this.viewer.getTimecodeOverlay().toggle(),
       'view.toggleZebraStripes': () => {
         const zebras = this.viewer.getZebraStripes();

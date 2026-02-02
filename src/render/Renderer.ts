@@ -1,12 +1,26 @@
 import { IPImage, DataType } from '../core/image/Image';
 import { ShaderProgram } from './ShaderProgram';
 import { ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from '../ui/components/ColorControls';
+import { ToneMappingState, ToneMappingOperator, DEFAULT_TONE_MAPPING_STATE } from '../ui/components/ToneMappingControl';
+
+/**
+ * Tone mapping operator integer codes for shader uniform
+ */
+export const TONE_MAPPING_OPERATOR_CODES: Record<ToneMappingOperator, number> = {
+  'off': 0,
+  'reinhard': 1,
+  'filmic': 2,
+  'aces': 3,
+};
 
 export class Renderer {
   // Color adjustments state
   private colorAdjustments: ColorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
   private gl: WebGL2RenderingContext | null = null;
   private canvas: HTMLCanvasElement | null = null;
+
+  // Tone mapping state
+  private toneMappingState: ToneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
 
   // Shaders
   private displayShader: ShaderProgram | null = null;
@@ -81,6 +95,9 @@ export class Renderer {
       uniform float u_temperature;   // -100 to +100
       uniform float u_tint;          // -100 to +100
 
+      // Tone mapping
+      uniform int u_toneMappingOperator;  // 0=off, 1=reinhard, 2=filmic, 3=aces
+
       // Luminance coefficients (Rec. 709)
       const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 
@@ -98,6 +115,59 @@ export class Renderer {
         color.b -= g * 0.05;
 
         return color;
+      }
+
+      // Reinhard tone mapping operator
+      // Simple global operator that preserves detail in highlights
+      // Reference: Reinhard et al., "Photographic Tone Reproduction for Digital Images"
+      vec3 tonemapReinhard(vec3 color) {
+        return color / (color + vec3(1.0));
+      }
+
+      // Filmic tone mapping (Uncharted 2 style)
+      // S-curve response similar to film stock
+      // Reference: John Hable, "Uncharted 2: HDR Lighting"
+      vec3 filmic(vec3 x) {
+        float A = 0.15;  // Shoulder strength
+        float B = 0.50;  // Linear strength
+        float C = 0.10;  // Linear angle
+        float D = 0.20;  // Toe strength
+        float E = 0.02;  // Toe numerator
+        float F = 0.30;  // Toe denominator
+        return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
+      }
+
+      vec3 tonemapFilmic(vec3 color) {
+        float exposureBias = 2.0;
+        vec3 curr = filmic(exposureBias * color);
+        vec3 whiteScale = vec3(1.0) / filmic(vec3(11.2));  // Linear white point
+        // Clamp to non-negative to match CPU implementation (filmic curve can produce slightly negative values)
+        return max(curr * whiteScale, vec3(0.0));
+      }
+
+      // ACES (Academy Color Encoding System) tone mapping
+      // Industry standard for cinema
+      // Reference: Academy ACES Output Transform
+      vec3 tonemapACES(vec3 color) {
+        // ACES fitted curve by Krzysztof Narkowicz
+        float a = 2.51;
+        float b = 0.03;
+        float c = 2.43;
+        float d = 0.59;
+        float e = 0.14;
+        return clamp((color * (a * color + b)) / (color * (c * color + d) + e), 0.0, 1.0);
+      }
+
+      // Apply selected tone mapping operator
+      vec3 applyToneMapping(vec3 color, int operator) {
+        if (operator == 1) {
+          return tonemapReinhard(color);
+        } else if (operator == 2) {
+          return tonemapFilmic(color);
+        } else if (operator == 3) {
+          return tonemapACES(color);
+        }
+        return color;  // operator == 0 (off)
       }
 
       void main() {
@@ -119,7 +189,10 @@ export class Renderer {
         float luma = dot(color.rgb, LUMA);
         color.rgb = mix(vec3(luma), color.rgb, u_saturation);
 
-        // 6. Gamma correction (display transform)
+        // 6. Tone mapping (applied before gamma for proper HDR handling)
+        color.rgb = applyToneMapping(max(color.rgb, 0.0), u_toneMappingOperator);
+
+        // 7. Gamma correction (display transform)
         color.rgb = pow(max(color.rgb, 0.0), vec3(1.0 / u_gamma));
 
         // Clamp final output
@@ -209,6 +282,13 @@ export class Renderer {
     this.displayShader.setUniform('u_brightness', this.colorAdjustments.brightness);
     this.displayShader.setUniform('u_temperature', this.colorAdjustments.temperature);
     this.displayShader.setUniform('u_tint', this.colorAdjustments.tint);
+
+    // Set tone mapping uniform
+    const toneMappingCode = this.toneMappingState.enabled
+      ? TONE_MAPPING_OPERATOR_CODES[this.toneMappingState.operator]
+      : 0;
+    this.displayShader.setUniformInt('u_toneMappingOperator', toneMappingCode);
+
     this.displayShader.setUniform('u_texture', 0);
 
     // Bind texture
@@ -358,6 +438,18 @@ export class Renderer {
 
   resetColorAdjustments(): void {
     this.colorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
+  }
+
+  setToneMappingState(state: ToneMappingState): void {
+    this.toneMappingState = { ...state };
+  }
+
+  getToneMappingState(): ToneMappingState {
+    return { ...this.toneMappingState };
+  }
+
+  resetToneMappingState(): void {
+    this.toneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
   }
 
   dispose(): void {

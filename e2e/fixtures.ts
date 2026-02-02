@@ -114,6 +114,11 @@ export interface FalseColorState {
   preset: 'standard' | 'arri' | 'red' | 'custom';
 }
 
+export interface ToneMappingState {
+  enabled: boolean;
+  operator: 'off' | 'reinhard' | 'filmic' | 'aces';
+}
+
 export interface SafeAreasState {
   enabled: boolean;
   titleSafe: boolean;
@@ -405,6 +410,18 @@ export async function getFalseColorState(page: Page): Promise<FalseColorState> {
     return window.__OPENRV_TEST__?.getFalseColorState() ?? {
       enabled: false,
       preset: 'standard',
+    };
+  });
+}
+
+/**
+ * Get tone mapping state from the app
+ */
+export async function getToneMappingState(page: Page): Promise<ToneMappingState> {
+  return page.evaluate(() => {
+    return window.__OPENRV_TEST__?.getToneMappingState() ?? {
+      enabled: false,
+      operator: 'off',
     };
   });
 }

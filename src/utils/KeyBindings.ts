@@ -397,6 +397,14 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     description: 'Toggle spotlight focus tool'
   },
 
+  // Tone mapping for HDR content
+  'view.toggleToneMapping': {
+    code: 'KeyJ',
+    shift: true,
+    alt: true,
+    description: 'Toggle tone mapping for HDR content'
+  },
+
   // HSL Qualifier (secondary color correction)
   'color.toggleHSLQualifier': {
     code: 'KeyH',

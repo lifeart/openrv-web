@@ -13,6 +13,7 @@ import { ColorCurvesData } from '../../color/ColorCurves';
 import { ChannelMode } from './ChannelSelect';
 import { ColorWheels } from './ColorWheels';
 import { HSLQualifier } from './HSLQualifier';
+import { ToneMappingState } from './ToneMappingControl';
 
 /**
  * Create a frame loader function for the prerender buffer.
@@ -63,7 +64,8 @@ export function buildEffectsState(
   filterSettings: FilterSettings,
   channelMode: ChannelMode,
   colorWheels: ColorWheels,
-  hslQualifier: HSLQualifier
+  hslQualifier: HSLQualifier,
+  toneMappingState: ToneMappingState
 ): AllEffectsState {
   return {
     colorAdjustments: { ...colorAdjustments },
@@ -78,6 +80,7 @@ export function buildEffectsState(
     channelMode: channelMode,
     colorWheelsState: colorWheels.getState(),
     hslQualifierState: hslQualifier.getState(),
+    toneMappingState: { ...toneMappingState },
   };
 }
 

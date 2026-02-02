@@ -356,6 +356,168 @@ export function applyClarity(imageData: ImageData, clarity: number): void {
 }
 
 /**
+ * Tone Mapping Operators
+ *
+ * These functions map HDR (High Dynamic Range) values to SDR (Standard Dynamic Range)
+ * for display on standard monitors. They compress the wide luminance range of HDR content
+ * while preserving perceptual detail and contrast.
+ */
+
+import { ToneMappingOperator } from './ToneMappingControl';
+
+/**
+ * Reinhard tone mapping operator
+ * Simple global operator that preserves detail in highlights.
+ * Formula: output = input / (1 + input)
+ * Reference: Reinhard et al., "Photographic Tone Reproduction for Digital Images"
+ */
+function tonemapReinhard(value: number): number {
+  // Handle edge cases: NaN, Infinity, negative values
+  if (!Number.isFinite(value) || value < 0) {
+    return 0;
+  }
+  return value / (1.0 + value);
+}
+
+/**
+ * Filmic tone mapping operator (Uncharted 2 style)
+ * Provides an S-curve response similar to film stock.
+ * Reference: John Hable, "Uncharted 2: HDR Lighting"
+ */
+function filmicCurve(x: number): number {
+  const A = 0.15; // Shoulder strength
+  const B = 0.50; // Linear strength
+  const C = 0.10; // Linear angle
+  const D = 0.20; // Toe strength
+  const E = 0.02; // Toe numerator
+  const F = 0.30; // Toe denominator
+  return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
+}
+
+function tonemapFilmic(value: number): number {
+  // Handle edge cases: NaN, Infinity, negative values
+  if (!Number.isFinite(value) || value < 0) {
+    return 0;
+  }
+  const exposureBias = 2.0;
+  const curr = filmicCurve(exposureBias * value);
+  const whiteScale = 1.0 / filmicCurve(11.2); // Linear white point
+  // Clamp to ensure non-negative output (filmicCurve can return slightly negative for very small inputs)
+  return Math.max(0, curr * whiteScale);
+}
+
+/**
+ * ACES (Academy Color Encoding System) tone mapping
+ * Industry standard for cinema color management.
+ * Reference: Academy ACES Output Transform, fitted curve by Krzysztof Narkowicz
+ */
+function tonemapACES(value: number): number {
+  // Handle edge cases: NaN, Infinity, negative values
+  if (!Number.isFinite(value) || value < 0) {
+    return 0;
+  }
+  const a = 2.51;
+  const b = 0.03;
+  const c = 2.43;
+  const d = 0.59;
+  const e = 0.14;
+  return Math.max(0, Math.min(1, (value * (a * value + b)) / (value * (c * value + d) + e)));
+}
+
+/**
+ * Apply the selected tone mapping operator to a single value
+ */
+function applyToneMappingToValue(value: number, operator: ToneMappingOperator): number {
+  switch (operator) {
+    case 'reinhard':
+      return tonemapReinhard(value);
+    case 'filmic':
+      return tonemapFilmic(value);
+    case 'aces':
+      return tonemapACES(value);
+    default:
+      return value;
+  }
+}
+
+/**
+ * Apply tone mapping to ImageData in-place.
+ * Converts HDR pixel values to displayable SDR range using the selected operator.
+ *
+ * The process:
+ * 1. Convert 8-bit [0-255] to normalized [0-1]
+ * 2. Apply tone mapping curve to compress high values
+ * 3. Convert back to 8-bit [0-255]
+ *
+ * Note: For true HDR content (EXR/float), values may exceed 1.0.
+ * For 8-bit content, this still provides pleasing compression of bright areas.
+ */
+export function applyToneMapping(imageData: ImageData, operator: ToneMappingOperator): void {
+  if (operator === 'off') return;
+
+  const data = imageData.data;
+  const len = data.length;
+
+  for (let i = 0; i < len; i += 4) {
+    // Convert to normalized [0-1] range (assuming 8-bit input)
+    // For true HDR, this would handle float values directly
+    let r = data[i]! / 255;
+    let g = data[i + 1]! / 255;
+    let b = data[i + 2]! / 255;
+
+    // Apply tone mapping to each channel
+    // The individual tone mapping functions handle edge cases (NaN, Infinity, negative)
+    r = applyToneMappingToValue(r, operator);
+    g = applyToneMappingToValue(g, operator);
+    b = applyToneMappingToValue(b, operator);
+
+    // Convert back to 8-bit with safe clamping
+    // Handle NaN that could have slipped through by treating it as 0
+    data[i] = Math.max(0, Math.min(255, Math.round(Number.isFinite(r) ? r * 255 : 0)));
+    data[i + 1] = Math.max(0, Math.min(255, Math.round(Number.isFinite(g) ? g * 255 : 0)));
+    data[i + 2] = Math.max(0, Math.min(255, Math.round(Number.isFinite(b) ? b * 255 : 0)));
+    // Alpha unchanged
+  }
+}
+
+/**
+ * Apply tone mapping for HDR float data (values can exceed 1.0)
+ * This is used for true HDR content like EXR files.
+ */
+export function applyToneMappingHDR(
+  imageData: ImageData,
+  operator: ToneMappingOperator,
+  hdrData: Float32Array,
+  channels: number
+): void {
+  if (operator === 'off') return;
+
+  const data = imageData.data;
+  const pixelCount = imageData.width * imageData.height;
+
+  for (let i = 0; i < pixelCount; i++) {
+    const hdrIndex = i * channels;
+    const dataIndex = i * 4;
+
+    // Get HDR values (may exceed 1.0)
+    let r = channels >= 1 ? hdrData[hdrIndex]! : 0;
+    let g = channels >= 2 ? hdrData[hdrIndex + 1]! : r;
+    let b = channels >= 3 ? hdrData[hdrIndex + 2]! : r;
+
+    // Apply tone mapping to compress HDR to SDR range
+    r = applyToneMappingToValue(r, operator);
+    g = applyToneMappingToValue(g, operator);
+    b = applyToneMappingToValue(b, operator);
+
+    // Convert to 8-bit
+    data[dataIndex] = Math.max(0, Math.min(255, Math.round(Number.isFinite(r) ? r * 255 : 0)));
+    data[dataIndex + 1] = Math.max(0, Math.min(255, Math.round(Number.isFinite(g) ? g * 255 : 0)));
+    data[dataIndex + 2] = Math.max(0, Math.min(255, Math.round(Number.isFinite(b) ? b * 255 : 0)));
+    // Alpha unchanged
+  }
+}
+
+/**
  * CPU-based sharpen filter (fallback when GPU is unavailable)
  */
 export function applySharpenCPU(

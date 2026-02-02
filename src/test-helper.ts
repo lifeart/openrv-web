@@ -17,6 +17,7 @@ declare global {
       getPaintState: () => PaintState;
       getPixelProbeState: () => PixelProbeState;
       getFalseColorState: () => FalseColorState;
+      getToneMappingState: () => ToneMappingTestState;
       getSafeAreasState: () => SafeAreasState;
       getTimecodeOverlayState: () => TimecodeOverlayState;
       getZebraStripesState: () => ZebraStripesState;
@@ -138,6 +139,11 @@ export interface PixelProbeState {
 export interface FalseColorState {
   enabled: boolean;
   preset: 'standard' | 'arri' | 'red' | 'custom';
+}
+
+export interface ToneMappingTestState {
+  enabled: boolean;
+  operator: 'off' | 'reinhard' | 'filmic' | 'aces';
 }
 
 export interface SafeAreasState {
@@ -423,6 +429,15 @@ export function exposeForTesting(app: App): void {
       return {
         enabled: state.enabled ?? false,
         preset: state.preset ?? 'standard',
+      };
+    },
+
+    getToneMappingState: (): ToneMappingTestState => {
+      const toneMappingControl = appAny.toneMappingControl;
+      const state = toneMappingControl?.getState?.() ?? {};
+      return {
+        enabled: state.enabled ?? false,
+        operator: state.operator ?? 'off',
       };
     },
 

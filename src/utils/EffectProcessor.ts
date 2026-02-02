@@ -20,6 +20,7 @@ import { FilterSettings, DEFAULT_FILTER_SETTINGS } from '../ui/components/Filter
 import { ChannelMode, applyChannelIsolation } from '../ui/components/ChannelSelect';
 import { ColorWheelsState, DEFAULT_COLOR_WHEELS_STATE } from '../ui/components/ColorWheels';
 import { HSLQualifierState, DEFAULT_HSL_QUALIFIER_STATE } from '../ui/components/HSLQualifier';
+import { ToneMappingState, DEFAULT_TONE_MAPPING_STATE } from '../ui/components/ToneMappingControl';
 
 // Import shared constants and helpers from the file shared with the worker
 import {
@@ -54,6 +55,7 @@ export interface AllEffectsState {
   channelMode: ChannelMode;
   colorWheelsState: ColorWheelsState;
   hslQualifierState: HSLQualifierState;
+  toneMappingState: ToneMappingState;
 }
 
 /**
@@ -68,6 +70,7 @@ export function createDefaultEffectsState(): AllEffectsState {
     channelMode: 'rgb',
     colorWheelsState: JSON.parse(JSON.stringify(DEFAULT_COLOR_WHEELS_STATE)),
     hslQualifierState: JSON.parse(JSON.stringify(DEFAULT_HSL_QUALIFIER_STATE)),
+    toneMappingState: { ...DEFAULT_TONE_MAPPING_STATE },
   };
 }
 
@@ -85,6 +88,7 @@ export function computeEffectsHash(state: AllEffectsState): string {
     channel: state.channelMode,
     wheels: state.colorWheelsState,
     hsl: state.hslQualifierState,
+    tm: state.toneMappingState,
   });
 
   // Simple hash function (djb2)
@@ -112,10 +116,11 @@ export function hasActiveEffects(state: AllEffectsState): boolean {
   const hasClarity = state.colorAdjustments.clarity !== 0;
   const hasColorWheels = hasColorWheelAdjustments(state.colorWheelsState);
   const hasHSLQualifier = state.hslQualifierState.enabled;
+  const hasToneMapping = state.toneMappingState.enabled && state.toneMappingState.operator !== 'off';
 
   return hasCDL || hasCurves || hasSharpen || hasChannel ||
          hasHighlightsShadows || hasVibrance || hasClarity ||
-         hasColorWheels || hasHSLQualifier;
+         hasColorWheels || hasHSLQualifier || hasToneMapping;
 }
 
 /**

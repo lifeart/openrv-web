@@ -38,7 +38,7 @@ import { setupHiDPICanvas, resetCanvasFromHiDPI } from '../../utils/HiDPICanvas'
 import { getSharedOCIOProcessor } from '../../color/OCIOProcessor';
 
 // Extracted effect processing utilities
-import { applyHighlightsShadows, applyVibrance, applyClarity, applySharpenCPU } from './ViewerEffects';
+import { applyHighlightsShadows, applyVibrance, applyClarity, applySharpenCPU, applyToneMapping } from './ViewerEffects';
 import {
   createWipeUIElements,
   updateWipeLinePosition,
@@ -58,6 +58,7 @@ import {
   isSplitScreenMode,
 } from './ViewerSplitScreen';
 import { GhostFrameState, DEFAULT_GHOST_FRAME_STATE } from './GhostFrameControl';
+import { ToneMappingState, DEFAULT_TONE_MAPPING_STATE } from './ToneMappingControl';
 import {
   PointerState,
   getCanvasPoint as getCanvasPointUtil,
@@ -260,6 +261,9 @@ export class Viewer {
 
   // Ghost frame (onion skin) state
   private ghostFrameState: GhostFrameState = { ...DEFAULT_GHOST_FRAME_STATE };
+
+  // Tone mapping state
+  private toneMappingState: ToneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
 
   // Prerender buffer for smooth playback with effects
   private prerenderBuffer: PrerenderBufferManager | null = null;
@@ -1995,9 +1999,10 @@ export class Viewer {
     const hasClippingOverlay = this.clippingOverlay.isEnabled();
     const ocioProcessor = getSharedOCIOProcessor();
     const hasOCIO = ocioProcessor.isEnabled();
+    const hasToneMapping = this.isToneMappingEnabled();
 
     // Early return if no pixel effects are active
-    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasZebras && !hasClippingOverlay && !hasOCIO) {
+    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasZebras && !hasClippingOverlay && !hasOCIO && !hasToneMapping) {
       return;
     }
 
@@ -2012,6 +2017,11 @@ export class Viewer {
         whites: this.colorAdjustments.whites,
         blacks: this.colorAdjustments.blacks,
       });
+    }
+
+    // Apply tone mapping (HDR to SDR conversion, applied early in pipeline)
+    if (hasToneMapping) {
+      applyToneMapping(imageData, this.toneMappingState.operator);
     }
 
     // Apply vibrance (intelligent saturation - before CDL/curves for natural results)
@@ -2210,6 +2220,27 @@ export class Viewer {
 
   isGhostFrameEnabled(): boolean {
     return this.ghostFrameState.enabled;
+  }
+
+  // Tone mapping methods
+  setToneMappingState(state: ToneMappingState): void {
+    this.toneMappingState = { ...state };
+    this.notifyEffectsChanged();
+    this.scheduleRender();
+  }
+
+  getToneMappingState(): ToneMappingState {
+    return { ...this.toneMappingState };
+  }
+
+  resetToneMappingState(): void {
+    this.toneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
+    this.notifyEffectsChanged();
+    this.scheduleRender();
+  }
+
+  isToneMappingEnabled(): boolean {
+    return this.toneMappingState.enabled && this.toneMappingState.operator !== 'off';
   }
 
   /**
@@ -2968,7 +2999,8 @@ export class Viewer {
       this.filterSettings,
       this.channelMode,
       this.colorWheels,
-      this.hslQualifier
+      this.hslQualifier,
+      this.toneMappingState
     );
 
     this.prerenderBuffer.updateEffects(effectsState);
