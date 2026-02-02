@@ -210,6 +210,18 @@ if (typeof File.prototype.text !== 'function') {
   };
 }
 
+// Polyfill File.arrayBuffer() if not available (needed for EXR loading)
+if (typeof File.prototype.arrayBuffer !== 'function') {
+  File.prototype.arrayBuffer = function () {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsArrayBuffer(this);
+    });
+  };
+}
+
 // Console warning suppression for expected warnings in tests
 const originalWarn = console.warn;
 console.warn = (...args: unknown[]) => {

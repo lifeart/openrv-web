@@ -6,6 +6,8 @@ export const SAMPLE_VIDEO = 'sample/2d56d82687b78171f50c496bab002bc18d53149b.mp4
 export const SAMPLE_VIDEO2 = 'sample/3ef76c68a6da876ad221431399e0cfe434fbaee5.mp4';
 export const SAMPLE_IMAGE = 'sample/test_image.png';
 export const SAMPLE_RV_SESSION = 'sample/test_session.rv';
+export const SAMPLE_EXR = 'sample/test_hdr.exr';
+export const SAMPLE_EXR_SMALL = 'sample/test_small.exr';
 
 // Types matching test-helper.ts
 export interface MarkerData {
@@ -703,6 +705,19 @@ export async function loadRvSession(page: Page): Promise<void> {
   await fileInput.setInputFiles(filePath);
 
   // Wait for session to load
+  await page.waitForTimeout(1000);
+}
+
+/**
+ * Load an EXR (HDR) image file
+ */
+export async function loadExrFile(page: Page): Promise<void> {
+  const filePath = path.resolve(process.cwd(), SAMPLE_EXR);
+
+  const fileInput = page.locator('input[type="file"]').first();
+  await fileInput.setInputFiles(filePath);
+
+  // Wait for EXR to decode and render
   await page.waitForTimeout(1000);
 }
 
