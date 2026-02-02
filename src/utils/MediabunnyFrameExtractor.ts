@@ -13,6 +13,13 @@ import {
   ALL_FORMATS,
   type InputVideoTrack,
 } from 'mediabunny';
+import {
+  detectCodecFamily,
+  isProfessionalCodec,
+  createUnsupportedCodecError,
+  type CodecFamily,
+  type UnsupportedCodecError,
+} from './CodecUtils';
 
 export interface VideoMetadata {
   width: number;
@@ -21,7 +28,28 @@ export interface VideoMetadata {
   frameCount: number;
   fps: number;
   codec: string | null;
+  codecFamily: CodecFamily;
   canDecode: boolean;
+  /** True if this is a professional codec (ProRes, DNxHD) that requires transcoding */
+  isProfessionalCodec: boolean;
+}
+
+/**
+ * Error thrown when a codec is not supported by WebCodecs
+ */
+export class UnsupportedCodecException extends Error {
+  public readonly codecError: UnsupportedCodecError;
+  public readonly codec: string | null;
+  public readonly codecFamily: CodecFamily;
+
+  constructor(codec: string | null, filename?: string) {
+    const error = createUnsupportedCodecError(codec, filename);
+    super(error.message);
+    this.name = 'UnsupportedCodecException';
+    this.codecError = error;
+    this.codec = codec;
+    this.codecFamily = error.codecInfo.family;
+  }
 }
 
 export interface FrameResult {
@@ -131,9 +159,14 @@ export class MediabunnyFrameExtractor {
 
       // Check codec support
       const codec = this.videoTrack.codec;
+      const codecFamily = detectCodecFamily(codec);
       const canDecode = await this.videoTrack.canDecode();
 
       if (!canDecode) {
+        // Check if this is a professional codec that typically isn't supported
+        if (isProfessionalCodec(codecFamily)) {
+          throw new UnsupportedCodecException(codec, file instanceof File ? file.name : undefined);
+        }
         throw new Error(
           `Cannot decode video codec: ${codec ?? 'unknown'}. WebCodecs may not support this format.`
         );
@@ -159,7 +192,9 @@ export class MediabunnyFrameExtractor {
         frameCount,
         fps,
         codec,
+        codecFamily,
         canDecode,
+        isProfessionalCodec: isProfessionalCodec(codecFamily),
       };
 
       return this.metadata;

@@ -190,10 +190,21 @@ export function showAlert(message: string, options: AlertOptions = {}): Promise<
       gap: 8px;
     `;
 
+    // Close on Escape or Enter - defined early so button handler can remove it
+    const handleKeydown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' || e.key === 'Enter') {
+        hideContainer();
+        onClose?.();
+        resolve();
+        document.removeEventListener('keydown', handleKeydown);
+      }
+    };
+
     const okBtn = createButton('OK', () => {
       hideContainer();
       onClose?.();
       resolve();
+      document.removeEventListener('keydown', handleKeydown);
     }, { variant: 'primary', minWidth: '80px' });
 
     footer.appendChild(okBtn);
@@ -205,20 +216,6 @@ export function showAlert(message: string, options: AlertOptions = {}): Promise<
     // Focus OK button
     okBtn.focus();
 
-    // Close on Escape
-    const handleKeydown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        hideContainer();
-        onClose?.();
-        resolve();
-        document.removeEventListener('keydown', handleKeydown);
-      } else if (e.key === 'Enter') {
-        hideContainer();
-        onClose?.();
-        resolve();
-        document.removeEventListener('keydown', handleKeydown);
-      }
-    };
     document.addEventListener('keydown', handleKeydown);
   });
 }
@@ -263,29 +260,7 @@ export function showConfirm(message: string, options: ConfirmOptions = {}): Prom
       gap: 8px;
     `;
 
-    const cancelBtn = createButton(cancelText, () => {
-      hideContainer();
-      onClose?.();
-      resolve(false);
-    }, { variant: 'default', minWidth: '80px' });
-
-    const confirmBtn = createButton(confirmText, () => {
-      hideContainer();
-      onClose?.();
-      resolve(true);
-    }, { variant: confirmVariant, minWidth: '80px' });
-
-    footer.appendChild(cancelBtn);
-    footer.appendChild(confirmBtn);
-    modal.appendChild(footer);
-
-    container.appendChild(modal);
-    showContainer();
-
-    // Focus confirm button
-    confirmBtn.focus();
-
-    // Keyboard handling
+    // Keyboard handling - defined early so button handlers can remove it
     const handleKeydown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         hideContainer();
@@ -299,6 +274,31 @@ export function showConfirm(message: string, options: ConfirmOptions = {}): Prom
         document.removeEventListener('keydown', handleKeydown);
       }
     };
+
+    const cancelBtn = createButton(cancelText, () => {
+      hideContainer();
+      onClose?.();
+      resolve(false);
+      document.removeEventListener('keydown', handleKeydown);
+    }, { variant: 'default', minWidth: '80px' });
+
+    const confirmBtn = createButton(confirmText, () => {
+      hideContainer();
+      onClose?.();
+      resolve(true);
+      document.removeEventListener('keydown', handleKeydown);
+    }, { variant: confirmVariant, minWidth: '80px' });
+
+    footer.appendChild(cancelBtn);
+    footer.appendChild(confirmBtn);
+    modal.appendChild(footer);
+
+    container.appendChild(modal);
+    showContainer();
+
+    // Focus confirm button
+    confirmBtn.focus();
+
     document.addEventListener('keydown', handleKeydown);
   });
 }
@@ -373,30 +373,7 @@ export function showPrompt(message: string, options: PromptOptions = {}): Promis
       gap: 8px;
     `;
 
-    const cancelBtn = createButton(cancelText, () => {
-      hideContainer();
-      onClose?.();
-      resolve(null);
-    }, { variant: 'default', minWidth: '80px' });
-
-    const confirmBtn = createButton(confirmText, () => {
-      hideContainer();
-      onClose?.();
-      resolve(input.value);
-    }, { variant: 'primary', minWidth: '80px' });
-
-    footer.appendChild(cancelBtn);
-    footer.appendChild(confirmBtn);
-    modal.appendChild(footer);
-
-    container.appendChild(modal);
-    showContainer();
-
-    // Focus input
-    input.focus();
-    input.select();
-
-    // Keyboard handling
+    // Keyboard handling - defined early so button handlers can remove it
     const handleKeydown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         hideContainer();
@@ -410,6 +387,32 @@ export function showPrompt(message: string, options: PromptOptions = {}): Promis
         document.removeEventListener('keydown', handleKeydown);
       }
     };
+
+    const cancelBtn = createButton(cancelText, () => {
+      hideContainer();
+      onClose?.();
+      resolve(null);
+      document.removeEventListener('keydown', handleKeydown);
+    }, { variant: 'default', minWidth: '80px' });
+
+    const confirmBtn = createButton(confirmText, () => {
+      hideContainer();
+      onClose?.();
+      resolve(input.value);
+      document.removeEventListener('keydown', handleKeydown);
+    }, { variant: 'primary', minWidth: '80px' });
+
+    footer.appendChild(cancelBtn);
+    footer.appendChild(confirmBtn);
+    modal.appendChild(footer);
+
+    container.appendChild(modal);
+    showContainer();
+
+    // Focus input
+    input.focus();
+    input.select();
+
     document.addEventListener('keydown', handleKeydown);
   });
 }

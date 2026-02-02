@@ -469,4 +469,71 @@ describe('MediabunnyFrameExtractor', () => {
       expect(result).toBeNull();
     });
   });
+
+  describe('UnsupportedCodecException', () => {
+    it('MFE-U090: UnsupportedCodecException should be exported', async () => {
+      const { UnsupportedCodecException } = await import('./MediabunnyFrameExtractor');
+      expect(UnsupportedCodecException).toBeDefined();
+    });
+
+    it('MFE-U091: UnsupportedCodecException should contain codec info', async () => {
+      const { UnsupportedCodecException } = await import('./MediabunnyFrameExtractor');
+
+      const error = new UnsupportedCodecException('apch', 'test.mov');
+      expect(error.codec).toBe('apch');
+      expect(error.codecFamily).toBe('prores');
+      expect(error.codecError).toBeDefined();
+      expect(error.codecError.title).toContain('ProRes');
+    });
+
+    it('MFE-U092: UnsupportedCodecException message should be descriptive', async () => {
+      const { UnsupportedCodecException } = await import('./MediabunnyFrameExtractor');
+
+      const error = new UnsupportedCodecException('dnxhd', 'test.mxf');
+      expect(error.message).toContain('DNxHD');
+      expect(error.message.length).toBeGreaterThan(10);
+    });
+
+    it('MFE-U093: UnsupportedCodecException should handle null codec', async () => {
+      const { UnsupportedCodecException } = await import('./MediabunnyFrameExtractor');
+
+      const error = new UnsupportedCodecException(null);
+      expect(error.codec).toBe(null);
+      expect(error.codecFamily).toBe('unknown');
+    });
+  });
+
+  describe('Metadata codec info', () => {
+    it('MFE-U100: metadata should include codecFamily after load', async () => {
+      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
+
+      if (!MediabunnyFrameExtractor.isSupported()) {
+        return;
+      }
+
+      const extractor = new MediabunnyFrameExtractor();
+      const mockFile = new File(['test'], 'test.mp4', { type: 'video/mp4' });
+      await extractor.load(mockFile, 24);
+
+      const metadata = extractor.getMetadata();
+      expect(metadata).toBeDefined();
+      expect(metadata?.codecFamily).toBeDefined();
+    });
+
+    it('MFE-U101: metadata should include isProfessionalCodec flag', async () => {
+      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
+
+      if (!MediabunnyFrameExtractor.isSupported()) {
+        return;
+      }
+
+      const extractor = new MediabunnyFrameExtractor();
+      const mockFile = new File(['test'], 'test.mp4', { type: 'video/mp4' });
+      await extractor.load(mockFile, 24);
+
+      const metadata = extractor.getMetadata();
+      expect(metadata?.isProfessionalCodec).toBeDefined();
+      expect(typeof metadata?.isProfessionalCodec).toBe('boolean');
+    });
+  });
 });

@@ -10,7 +10,8 @@ import {
   releaseDistantFrames,
   disposeSequence,
 } from '../../utils/SequenceLoader';
-import { VideoSourceNode } from '../../nodes/sources/VideoSourceNode';
+import { VideoSourceNode, type VideoLoadResult } from '../../nodes/sources/VideoSourceNode';
+import type { UnsupportedCodecError, CodecFamily } from '../../utils/CodecUtils';
 import {
   Annotation,
   PenStroke,
@@ -46,6 +47,16 @@ export interface GTOComponentDTO {
 export interface ParsedAnnotations {
   annotations: Annotation[];
   effects?: Partial<PaintEffects>;
+}
+
+/**
+ * Information about an unsupported video codec
+ */
+export interface UnsupportedCodecInfo {
+  filename: string;
+  codec: string | null;
+  codecFamily: CodecFamily;
+  error: UnsupportedCodecError;
 }
 
 export interface GTOViewSettings {
@@ -143,6 +154,8 @@ export interface SessionEvents extends EventMap {
   frameIncrementChanged: number;
   // Audio playback events
   audioError: AudioPlaybackError;
+  // Codec events
+  unsupportedCodec: UnsupportedCodecInfo;
 }
 
 export type LoopMode = 'once' | 'loop' | 'pingpong';
@@ -2629,7 +2642,18 @@ export class Session extends EventEmitter<SessionEvents> {
 
     // Create VideoSourceNode for frame-accurate extraction
     const videoSourceNode = new VideoSourceNode(file.name);
-    await videoSourceNode.loadFile(file, this._fps);
+    const loadResult = await videoSourceNode.loadFile(file, this._fps);
+
+    // Check for unsupported codec and emit event if detected
+    if (loadResult.unsupportedCodecError) {
+      this.emit('unsupportedCodec', {
+        filename: file.name,
+        codec: loadResult.codec ?? null,
+        codecFamily: loadResult.codecFamily ?? 'unknown',
+        error: loadResult.unsupportedCodecError,
+      });
+      // Continue loading - HTML video fallback may still work
+    }
 
     const metadata = videoSourceNode.getMetadata();
     const duration = metadata.duration;
