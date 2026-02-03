@@ -37,6 +37,7 @@ import { PrerenderBufferManager } from '../../utils/PrerenderBufferManager';
 import { getThemeManager } from '../../utils/ThemeManager';
 import { setupHiDPICanvas, resetCanvasFromHiDPI } from '../../utils/HiDPICanvas';
 import { getSharedOCIOProcessor } from '../../color/OCIOProcessor';
+import { DisplayColorState, DEFAULT_DISPLAY_COLOR_STATE, applyDisplayColorManagementToImageData, isDisplayStateActive } from '../../color/DisplayTransfer';
 
 // Extracted effect processing utilities
 import { applyHighlightsShadows, applyVibrance, applyClarity, applySharpenCPU, applyToneMapping } from './ViewerEffects';
@@ -296,6 +297,9 @@ export class Viewer {
 
   // Background pattern state (for alpha visualization)
   private backgroundPatternState: BackgroundPatternState = { ...DEFAULT_BACKGROUND_PATTERN_STATE };
+
+  // Display color management state (final pipeline stage)
+  private displayColorState: DisplayColorState = { ...DEFAULT_DISPLAY_COLOR_STATE };
 
   // Sub-frame interpolator for slow-motion blending
   private frameInterpolator = new FrameInterpolator();
@@ -2391,10 +2395,11 @@ export class Viewer {
     const hasClippingOverlay = this.clippingOverlay.isEnabled();
     const hasToneMapping = this.isToneMappingEnabled();
     const hasInversion = this.colorInversionEnabled;
+    const hasDisplayColorMgmt = isDisplayStateActive(this.displayColorState);
 
     // Early return if no pixel effects are active
     // Note: OCIO is handled via GPU-accelerated 3D LUT in the main render pipeline (applyOCIOToCanvas)
-    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasHueRotation && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasZebras && !hasClippingOverlay && !hasToneMapping && !hasInversion) {
+    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasHueRotation && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasZebras && !hasClippingOverlay && !hasToneMapping && !hasInversion && !hasDisplayColorMgmt) {
       return;
     }
 
@@ -2477,6 +2482,11 @@ export class Viewer {
     // Apply channel isolation (before false color so we can see individual channel exposure)
     if (hasChannel) {
       applyChannelIsolation(imageData, this.channelMode);
+    }
+
+    // Apply display color management (final pipeline stage before diagnostic overlays)
+    if (hasDisplayColorMgmt) {
+      applyDisplayColorManagementToImageData(imageData, this.displayColorState);
     }
 
     // Apply false color display (replaces all color information for exposure analysis)
@@ -2675,6 +2685,23 @@ export class Viewer {
   resetBackgroundPatternState(): void {
     this.backgroundPatternState = { ...DEFAULT_BACKGROUND_PATTERN_STATE };
     this.updateCSSBackground();
+    this.scheduleRender();
+  }
+
+  // Display color management methods
+  setDisplayColorState(state: DisplayColorState): void {
+    this.displayColorState = { ...state };
+    this.notifyEffectsChanged();
+    this.scheduleRender();
+  }
+
+  getDisplayColorState(): DisplayColorState {
+    return { ...this.displayColorState };
+  }
+
+  resetDisplayColorState(): void {
+    this.displayColorState = { ...DEFAULT_DISPLAY_COLOR_STATE };
+    this.notifyEffectsChanged();
     this.scheduleRender();
   }
 

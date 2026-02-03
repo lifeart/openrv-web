@@ -32,6 +32,7 @@ import { PARControl } from './ui/components/PARControl';
 import { BackgroundPatternControl } from './ui/components/BackgroundPatternControl';
 import { OCIOControl } from './ui/components/OCIOControl';
 import { OCIOState } from './color/OCIOConfig';
+import { DisplayProfileControl } from './ui/components/DisplayProfileControl';
 import { exportSequence } from './utils/SequenceExporter';
 import { showAlert, showModal, closeModal, showConfirm } from './ui/components/shared/Modal';
 import { SessionSerializer } from './core/session/SessionSerializer';
@@ -96,6 +97,7 @@ export class App {
   private parControl: PARControl;
   private backgroundPatternControl: BackgroundPatternControl;
   private ocioControl: OCIOControl;
+  private displayProfileControl: DisplayProfileControl;
   private animationId: number | null = null;
   private boundHandleResize: () => void;
   private boundHandleVisibilityChange: () => void;
@@ -337,6 +339,13 @@ export class App {
       this.updateOCIOPipeline(state);
       this.scheduleUpdateScopes();
       this.syncGTOStore();
+    });
+
+    // Display profile control (display color management - final pipeline stage)
+    this.displayProfileControl = new DisplayProfileControl();
+    this.displayProfileControl.on('displayStateChanged', (state) => {
+      this.viewer.setDisplayColorState(state);
+      this.scheduleUpdateScopes();
     });
 
     // Presentation mode
@@ -600,6 +609,9 @@ export class App {
 
     // Initialize OCIO pipeline from persisted state (if OCIO was enabled before page reload)
     this.updateOCIOPipeline(this.ocioControl.getState());
+
+    // Initialize display profile from persisted state
+    this.viewer.setDisplayColorState(this.displayProfileControl.getState());
 
     // Initialize auto-save and check for recovery
     await this.initAutoSave();
@@ -891,6 +903,7 @@ export class App {
     viewContent.appendChild(this.hslQualifierControl.render());
     viewContent.appendChild(this.parControl.render());
     viewContent.appendChild(this.backgroundPatternControl.render());
+    viewContent.appendChild(this.displayProfileControl.render());
 
     // Trigger re-render when false color state changes
     this.viewer.getFalseColor().on('stateChanged', () => {
@@ -1410,6 +1423,7 @@ export class App {
       'panel.vectorscope': () => this.scopesControl.toggleScope('vectorscope'),
       'panel.histogram': () => this.scopesControl.toggleScope('histogram'),
       'panel.ocio': () => this.ocioControl.toggle(),
+      'display.cycleProfile': () => this.displayProfileControl.cycleProfile(),
       'transform.rotateLeft': () => this.transformControl.rotateLeft(),
       'transform.rotateRight': () => this.transformControl.rotateRight(),
       'transform.flipHorizontal': () => this.transformControl.toggleFlipH(),
@@ -2103,7 +2117,7 @@ export class App {
       'SCOPES': ['panel.histogram', 'panel.waveform', 'panel.vectorscope'],
       'TIMELINE': ['timeline.setInPoint', 'timeline.setInPointAlt', 'timeline.setOutPoint', 'timeline.setOutPointAlt', 'timeline.resetInOut', 'timeline.toggleMark', 'timeline.cycleLoopMode'],
       'PAINT (Annotate tab)': ['paint.pan', 'paint.pen', 'paint.eraser', 'paint.text', 'paint.rectangle', 'paint.ellipse', 'paint.line', 'paint.arrow', 'paint.toggleBrush', 'paint.toggleGhost', 'paint.toggleHold', 'edit.undo', 'edit.redo'],
-      'COLOR': ['panel.color', 'panel.curves', 'panel.ocio'],
+      'COLOR': ['panel.color', 'panel.curves', 'panel.ocio', 'display.cycleProfile'],
       'WIPE COMPARISON': ['view.cycleWipeMode', 'view.toggleSplitScreen'],
       'AUDIO (Video only)': [], // Special case - not in DEFAULT_KEY_BINDINGS
       'EXPORT': ['export.quickExport', 'export.copyFrame'],
@@ -2989,6 +3003,7 @@ export class App {
     this.cropControl.dispose();
     this.cdlControl.dispose();
     this.colorInversionToggle.dispose();
+    this.displayProfileControl.dispose();
     this.curvesControl.dispose();
     this.lensControl.dispose();
     this.stackControl.dispose();

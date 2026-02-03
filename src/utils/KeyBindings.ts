@@ -417,6 +417,13 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     description: 'Toggle color inversion',
   },
 
+  // Display profile cycling
+  'display.cycleProfile': {
+    code: 'KeyD',
+    shift: true,
+    description: 'Cycle display profile (Linear/sRGB/Rec.709/Gamma 2.2/Gamma 2.4)',
+  },
+
   // HSL Qualifier (secondary color correction)
   'color.toggleHSLQualifier': {
     code: 'KeyH',
