@@ -2630,4 +2630,86 @@ describe('Session', () => {
       expect(mockVideoNodeA.stopPlaybackPreload).toHaveBeenCalled();
     });
   });
+
+  describe('preservesPitch', () => {
+    it('SES-PITCH-001: defaults to true', () => {
+      expect(session.preservesPitch).toBe(true);
+    });
+
+    it('SES-PITCH-002: can be set to false', () => {
+      session.preservesPitch = false;
+      expect(session.preservesPitch).toBe(false);
+    });
+
+    it('SES-PITCH-003: can be toggled back to true', () => {
+      session.preservesPitch = false;
+      session.preservesPitch = true;
+      expect(session.preservesPitch).toBe(true);
+    });
+
+    it('SES-PITCH-004: emits preservesPitchChanged event', () => {
+      const handler = vi.fn();
+      session.on('preservesPitchChanged', handler);
+
+      session.preservesPitch = false;
+      expect(handler).toHaveBeenCalledWith(false);
+
+      session.preservesPitch = true;
+      expect(handler).toHaveBeenCalledWith(true);
+    });
+
+    it('SES-PITCH-005: does not emit event when value unchanged', () => {
+      const handler = vi.fn();
+      session.on('preservesPitchChanged', handler);
+
+      // Set to same value
+      session.preservesPitch = true;
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('SES-PITCH-006: applies to video element when set', () => {
+      const video = createMockVideo();
+      session.setSources([{
+        type: 'video',
+        name: 'test.mp4',
+        url: 'blob:test',
+        width: 1920,
+        height: 1080,
+        duration: 100,
+        fps: 24,
+        element: video,
+      }]);
+
+      // Default should be true
+      session.preservesPitch = false;
+      expect(video.preservesPitch).toBe(false);
+
+      session.preservesPitch = true;
+      expect(video.preservesPitch).toBe(true);
+    });
+
+    it('SES-PITCH-007: is included in getPlaybackState', () => {
+      const state = session.getPlaybackState();
+      expect(state.preservesPitch).toBe(true);
+
+      session.preservesPitch = false;
+      const state2 = session.getPlaybackState();
+      expect(state2.preservesPitch).toBe(false);
+    });
+
+    it('SES-PITCH-008: is restored by setPlaybackState', () => {
+      session.preservesPitch = true;
+      session.setPlaybackState({ preservesPitch: false });
+      expect(session.preservesPitch).toBe(false);
+
+      session.setPlaybackState({ preservesPitch: true });
+      expect(session.preservesPitch).toBe(true);
+    });
+
+    it('SES-PITCH-009: setPlaybackState without preservesPitch does not change it', () => {
+      session.preservesPitch = false;
+      session.setPlaybackState({ volume: 0.5 });
+      expect(session.preservesPitch).toBe(false);
+    });
+  });
 });

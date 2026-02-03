@@ -60,4 +60,23 @@ export class AudioAPI {
   toggleMute(): void {
     this.session.toggleMute();
   }
+
+  /**
+   * Enable or disable pitch correction for non-1x playback speeds.
+   * When enabled, audio pitch stays the same regardless of playback speed.
+   * @param preserve true to preserve pitch (default), false for natural pitch shift
+   */
+  setPreservesPitch(preserve: boolean): void {
+    if (typeof preserve !== 'boolean') {
+      throw new Error('setPreservesPitch() requires a boolean value');
+    }
+    this.session.preservesPitch = preserve;
+  }
+
+  /**
+   * Check if pitch correction is enabled
+   */
+  getPreservesPitch(): boolean {
+    return this.session.preservesPitch;
+  }
 }

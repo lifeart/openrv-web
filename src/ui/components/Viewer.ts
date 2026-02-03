@@ -71,6 +71,7 @@ import {
   isViewerContentElement as isViewerContentElementUtil,
   getPixelCoordinates,
   getPixelColor,
+  interpolateZoom,
 } from './ViewerInteraction';
 import {
   drawWithTransform as drawWithTransformUtil,
@@ -123,6 +124,17 @@ export class Viewer {
   private panX = 0;
   private panY = 0;
   private zoom = 1;
+
+  // Smooth zoom animation state
+  private zoomAnimationId: number | null = null;
+  private zoomAnimationStartTime = 0;
+  private zoomAnimationStartZoom = 1;
+  private zoomAnimationTargetZoom = 1;
+  private zoomAnimationDuration = 0;
+  private zoomAnimationStartPanX = 0;
+  private zoomAnimationStartPanY = 0;
+  private zoomAnimationTargetPanX = 0;
+  private zoomAnimationTargetPanY = 0;
 
   // Interaction state
   private isPanning = false;
@@ -999,6 +1011,9 @@ export class Viewer {
     const pointers = Array.from(this.activePointers.values());
     if (pointers.length !== 2) return;
 
+    // Cancel any smooth zoom animation - pinch zoom should be instant
+    this.cancelZoomAnimation();
+
     this.initialPinchDistance = calculatePinchDistance(pointers);
     this.initialZoom = this.zoom;
 
@@ -1030,6 +1045,9 @@ export class Viewer {
 
   private onWheel = (e: WheelEvent): void => {
     e.preventDefault();
+
+    // Cancel any smooth zoom animation - wheel zoom should be instant for responsiveness
+    this.cancelZoomAnimation();
 
     const rect = this.container.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
@@ -1247,17 +1265,139 @@ export class Viewer {
   }
 
   fitToWindow(): void {
+    this.cancelZoomAnimation();
     this.panX = 0;
     this.panY = 0;
     this.zoom = 1;
     this.scheduleRender();
   }
 
+  /**
+   * Fit to window with a smooth animated transition.
+   */
+  smoothFitToWindow(): void {
+    this.smoothZoomTo(1, 200, 0, 0);
+  }
+
   setZoom(level: number): void {
+    this.cancelZoomAnimation();
     this.zoom = level;
     this.panX = 0;
     this.panY = 0;
     this.scheduleRender();
+  }
+
+  /**
+   * Set zoom with a smooth animated transition.
+   */
+  smoothSetZoom(level: number): void {
+    this.smoothZoomTo(level, 200, 0, 0);
+  }
+
+  /**
+   * Animate zoom smoothly to a target level over a given duration.
+   * Uses requestAnimationFrame with ease-out cubic interpolation.
+   * Also animates pan position to the target values.
+   * @param targetZoom - The target zoom level
+   * @param duration - Animation duration in milliseconds (default 200)
+   * @param targetPanX - Target pan X position (default: current panX)
+   * @param targetPanY - Target pan Y position (default: current panY)
+   */
+  smoothZoomTo(
+    targetZoom: number,
+    duration: number = 200,
+    targetPanX?: number,
+    targetPanY?: number
+  ): void {
+    // Cancel any in-progress zoom animation
+    this.cancelZoomAnimation();
+
+    // If duration is 0 or negligible, apply instantly
+    if (duration <= 0) {
+      this.zoom = targetZoom;
+      if (targetPanX !== undefined) this.panX = targetPanX;
+      if (targetPanY !== undefined) this.panY = targetPanY;
+      this.scheduleRender();
+      return;
+    }
+
+    // If already at target, no animation needed
+    const panXTarget = targetPanX !== undefined ? targetPanX : this.panX;
+    const panYTarget = targetPanY !== undefined ? targetPanY : this.panY;
+    if (
+      Math.abs(this.zoom - targetZoom) < 0.001 &&
+      Math.abs(this.panX - panXTarget) < 0.5 &&
+      Math.abs(this.panY - panYTarget) < 0.5
+    ) {
+      this.zoom = targetZoom;
+      this.panX = panXTarget;
+      this.panY = panYTarget;
+      this.scheduleRender();
+      return;
+    }
+
+    this.zoomAnimationStartTime = performance.now();
+    this.zoomAnimationStartZoom = this.zoom;
+    this.zoomAnimationTargetZoom = targetZoom;
+    this.zoomAnimationDuration = duration;
+    this.zoomAnimationStartPanX = this.panX;
+    this.zoomAnimationStartPanY = this.panY;
+    this.zoomAnimationTargetPanX = panXTarget;
+    this.zoomAnimationTargetPanY = panYTarget;
+
+    const animate = (now: number): void => {
+      const elapsed = now - this.zoomAnimationStartTime;
+      const progress = Math.min(1, elapsed / this.zoomAnimationDuration);
+
+      this.zoom = interpolateZoom(
+        this.zoomAnimationStartZoom,
+        this.zoomAnimationTargetZoom,
+        progress
+      );
+      this.panX = interpolateZoom(
+        this.zoomAnimationStartPanX,
+        this.zoomAnimationTargetPanX,
+        progress
+      );
+      this.panY = interpolateZoom(
+        this.zoomAnimationStartPanY,
+        this.zoomAnimationTargetPanY,
+        progress
+      );
+
+      this.scheduleRender();
+
+      if (progress < 1) {
+        this.zoomAnimationId = requestAnimationFrame(animate);
+      } else {
+        // Ensure exact final values
+        this.zoom = this.zoomAnimationTargetZoom;
+        this.panX = this.zoomAnimationTargetPanX;
+        this.panY = this.zoomAnimationTargetPanY;
+        this.zoomAnimationId = null;
+        this.scheduleRender();
+      }
+    };
+
+    this.zoomAnimationId = requestAnimationFrame(animate);
+  }
+
+  /**
+   * Cancel any in-progress smooth zoom animation.
+   * The zoom remains at whatever intermediate value it reached.
+   */
+  cancelZoomAnimation(): void {
+    if (this.zoomAnimationId !== null) {
+      cancelAnimationFrame(this.zoomAnimationId);
+      this.zoomAnimationId = null;
+    }
+  }
+
+  /**
+   * Check if a smooth zoom animation is currently in progress.
+   */
+  isZoomAnimating(): boolean {
+    return this.zoomAnimationId !== null;
   }
 
   private updateCanvasPosition(): void {
@@ -3280,6 +3420,9 @@ export class Viewer {
   }
 
   dispose(): void {
+    // Cancel any in-progress zoom animation
+    this.cancelZoomAnimation();
+
     this.resizeObserver.disconnect();
     this.container.removeEventListener('pointerdown', this.onPointerDown);
     this.container.removeEventListener('pointermove', this.onPointerMove);

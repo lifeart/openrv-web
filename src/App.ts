@@ -229,9 +229,9 @@ export class App {
     this.zoomControl = new ZoomControl();
     this.zoomControl.on('zoomChanged', (zoom) => {
       if (zoom === 'fit') {
-        this.viewer.fitToWindow();
+        this.viewer.smoothFitToWindow();
       } else {
-        this.viewer.setZoom(zoom);
+        this.viewer.smoothSetZoom(zoom);
       }
     });
 
@@ -1363,11 +1363,11 @@ export class App {
         const currentIndex = modes.indexOf(this.session.loopMode);
         this.session.loopMode = modes[(currentIndex + 1) % modes.length]!;
       },
-      'view.fitToWindow': () => this.viewer.fitToWindow(),
-      'view.fitToWindowAlt': () => this.viewer.fitToWindow(),
+      'view.fitToWindow': () => this.viewer.smoothFitToWindow(),
+      'view.fitToWindowAlt': () => this.viewer.smoothFitToWindow(),
       'view.zoom50': () => {
         if (this.tabBar.activeTab === 'view') {
-          this.viewer.setZoom(0.5);
+          this.viewer.smoothSetZoom(0.5);
         }
       },
       'view.cycleWipeMode': () => this.compareControl.cycleWipeMode(),

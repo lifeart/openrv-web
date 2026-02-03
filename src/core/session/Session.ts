@@ -140,6 +140,7 @@ export interface SessionEvents extends EventMap {
   loopModeChanged: LoopMode;
   playDirectionChanged: number;
   playbackSpeedChanged: number;
+  preservesPitchChanged: boolean;
   marksChanged: ReadonlyMap<number, Marker>;
   annotationsLoaded: ParsedAnnotations;
   settingsLoaded: GTOViewSettings;
@@ -203,6 +204,7 @@ export class Session extends EventEmitter<SessionEvents> {
   private _volume = 0.7;
   private _muted = false;
   private _previousVolume = 0.7; // For unmute restore
+  private _preservesPitch = true; // Pitch correction at non-1x speeds (default: on)
 
   // Playback guard to prevent concurrent play() calls
   private _pendingPlayPromise: Promise<void> | null = null;
@@ -546,6 +548,61 @@ export class Session extends EventEmitter<SessionEvents> {
     }
     this.applyVolumeToVideo();
     this.emit('mutedChanged', this._muted);
+  }
+
+  /**
+   * Whether to preserve audio pitch when playing at non-1x speeds.
+   * When true, audio pitch stays the same regardless of playback speed.
+   * When false, audio pitch changes proportionally with speed (chipmunk/slow-mo effect).
+   * Default: true (most users expect pitch-corrected audio).
+   */
+  get preservesPitch(): boolean {
+    return this._preservesPitch;
+  }
+
+  set preservesPitch(value: boolean) {
+    if (value !== this._preservesPitch) {
+      this._preservesPitch = value;
+      this.applyPreservesPitchToVideo();
+      this.emit('preservesPitchChanged', this._preservesPitch);
+    }
+  }
+
+  /**
+   * Apply preservesPitch setting to the current video element.
+   * Handles vendor-prefixed properties for cross-browser support.
+   */
+  private applyPreservesPitchToVideo(): void {
+    const source = this.currentSource;
+    if (source?.type === 'video' && source.element instanceof HTMLVideoElement) {
+      const video = source.element as HTMLVideoElement;
+      video.preservesPitch = this._preservesPitch;
+      // Vendor-prefixed fallbacks for older browsers
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const videoAny = video as any;
+      if ('mozPreservesPitch' in video) {
+        videoAny.mozPreservesPitch = this._preservesPitch;
+      }
+      if ('webkitPreservesPitch' in video) {
+        videoAny.webkitPreservesPitch = this._preservesPitch;
+      }
+    }
+  }
+
+  /**
+   * Apply preservesPitch to a newly created video element.
+   */
+  private initVideoPreservesPitch(video: HTMLVideoElement): void {
+    video.preservesPitch = this._preservesPitch;
+    // Vendor-prefixed fallbacks for older browsers
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const videoAny = video as any;
+    if ('mozPreservesPitch' in video) {
+      videoAny.mozPreservesPitch = this._preservesPitch;
+    }
+    if ('webkitPreservesPitch' in video) {
+      videoAny.webkitPreservesPitch = this._preservesPitch;
+    }
   }
 
   private applyVolumeToVideo(): void {
@@ -1461,6 +1518,7 @@ export class Session extends EventEmitter<SessionEvents> {
           video.volume = this._muted ? 0 : this._volume;
           video.loop = false;
           video.playsInline = true;
+          this.initVideoPreservesPitch(video);
 
           await new Promise<void>((resolve, reject) => {
             video.oncanplay = () => {
@@ -1523,6 +1581,7 @@ export class Session extends EventEmitter<SessionEvents> {
           video.volume = this._muted ? 0 : this._volume;
           video.loop = false;
           video.playsInline = true;
+          this.initVideoPreservesPitch(video);
 
           await new Promise<void>((resolve, reject) => {
             video.oncanplay = () => {
@@ -2641,6 +2700,7 @@ export class Session extends EventEmitter<SessionEvents> {
       video.volume = this._muted ? 0 : this._volume;
       video.loop = false;
       video.playsInline = true; // Required for iOS and some browsers
+      this.initVideoPreservesPitch(video);
 
       // Use canplay event to ensure video data is ready
       video.oncanplay = () => {
@@ -2714,6 +2774,7 @@ export class Session extends EventEmitter<SessionEvents> {
     video.volume = this._muted ? 0 : this._volume;
     video.loop = false;
     video.playsInline = true;
+    this.initVideoPreservesPitch(video);
 
     await new Promise<void>((resolve, reject) => {
       video.oncanplay = () => {
@@ -3311,6 +3372,7 @@ export class Session extends EventEmitter<SessionEvents> {
     loopMode: LoopMode;
     volume: number;
     muted: boolean;
+    preservesPitch: boolean;
     marks: Marker[];
     currentSourceIndex: number;
   } {
@@ -3322,6 +3384,7 @@ export class Session extends EventEmitter<SessionEvents> {
       loopMode: this._loopMode,
       volume: this._volume,
       muted: this._muted,
+      preservesPitch: this._preservesPitch,
       marks: Array.from(this._marks.values()),
       currentSourceIndex: this._currentSourceIndex,
     };
@@ -3338,6 +3401,7 @@ export class Session extends EventEmitter<SessionEvents> {
     loopMode: LoopMode;
     volume: number;
     muted: boolean;
+    preservesPitch: boolean;
     marks: Marker[] | number[]; // Support both old and new format
     currentSourceIndex: number;
   }>): void {
@@ -3348,6 +3412,7 @@ export class Session extends EventEmitter<SessionEvents> {
     }
     if (state.volume !== undefined) this.volume = state.volume;
     if (state.muted !== undefined) this.muted = state.muted;
+    if (state.preservesPitch !== undefined) this.preservesPitch = state.preservesPitch;
     if (state.inPoint !== undefined) this.setInPoint(state.inPoint);
     if (state.outPoint !== undefined) this.setOutPoint(state.outPoint);
     if (state.currentFrame !== undefined) this.currentFrame = state.currentFrame;

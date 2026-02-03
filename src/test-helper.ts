@@ -80,6 +80,7 @@ export interface SessionState {
   loopMode: 'once' | 'loop' | 'pingpong';
   playDirection: number;
   playbackSpeed: number;
+  preservesPitch: boolean;
   volume: number;
   muted: boolean;
   fps: number;
@@ -373,6 +374,7 @@ export function exposeForTesting(app: App): void {
         loopMode: session.loopMode,
         playDirection: session.playDirection,
         playbackSpeed: session.playbackSpeed,
+        preservesPitch: session.preservesPitch,
         volume: session.volume,
         muted: session.muted,
         fps: session.fps,

@@ -220,3 +220,28 @@ export function getPixelColor(
     b: imageData.data[pixelIndex + 2]!,
   };
 }
+
+/**
+ * Ease-out cubic easing function.
+ * Starts fast, decelerates smoothly to rest.
+ * t should be in range [0, 1], output is in range [0, 1].
+ */
+export function easeOutCubic(t: number): number {
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  return 1 - Math.pow(1 - t, 3);
+}
+
+/**
+ * Interpolate between two zoom values using an easing function.
+ * Returns the intermediate zoom level at a given progress (0 to 1).
+ */
+export function interpolateZoom(
+  startZoom: number,
+  targetZoom: number,
+  progress: number,
+  easingFn: (t: number) => number = easeOutCubic
+): number {
+  const easedProgress = easingFn(Math.max(0, Math.min(1, progress)));
+  return startZoom + (targetZoom - startZoom) * easedProgress;
+}

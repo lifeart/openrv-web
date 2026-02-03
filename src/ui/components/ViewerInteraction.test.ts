@@ -12,6 +12,8 @@ import {
   isViewerContentElement,
   getPixelCoordinates,
   getPixelColor,
+  easeOutCubic,
+  interpolateZoom,
   PointerState,
 } from './ViewerInteraction';
 
@@ -479,6 +481,107 @@ describe('ViewerInteraction', () => {
       const bottomRight = getPixelColor(imageData, 9, 9);
       expect(bottomRight).not.toBeNull();
       expect(bottomRight!.r).toBe(200);
+    });
+  });
+
+  describe('easeOutCubic', () => {
+    it('returns 0 at t=0', () => {
+      expect(easeOutCubic(0)).toBe(0);
+    });
+
+    it('returns 1 at t=1', () => {
+      expect(easeOutCubic(1)).toBe(1);
+    });
+
+    it('clamps negative values to 0', () => {
+      expect(easeOutCubic(-0.5)).toBe(0);
+      expect(easeOutCubic(-1)).toBe(0);
+    });
+
+    it('clamps values above 1 to 1', () => {
+      expect(easeOutCubic(1.5)).toBe(1);
+      expect(easeOutCubic(2)).toBe(1);
+    });
+
+    it('returns 0.5 at approximately t=0.2063 (ease-out cubic midpoint)', () => {
+      // For ease-out cubic: f(t) = 1 - (1-t)^3
+      // f(t) = 0.5 when (1-t)^3 = 0.5, so t = 1 - 0.5^(1/3) ~ 0.2063
+      const t = 1 - Math.pow(0.5, 1 / 3);
+      expect(easeOutCubic(t)).toBeCloseTo(0.5, 4);
+    });
+
+    it('is monotonically increasing', () => {
+      let prev = 0;
+      for (let t = 0.1; t <= 1.0; t += 0.1) {
+        const val = easeOutCubic(t);
+        expect(val).toBeGreaterThanOrEqual(prev);
+        prev = val;
+      }
+    });
+
+    it('starts fast and decelerates (ease-out behavior)', () => {
+      // First quarter should cover more than 25% of the output range
+      const firstQuarter = easeOutCubic(0.25);
+      expect(firstQuarter).toBeGreaterThan(0.25);
+
+      // Last quarter should cover less than 25% of the output range
+      const threeQuarters = easeOutCubic(0.75);
+      const lastQuarterDelta = 1 - threeQuarters;
+      expect(lastQuarterDelta).toBeLessThan(0.25);
+    });
+
+    it('computes correct values for known inputs', () => {
+      // f(0.5) = 1 - (1-0.5)^3 = 1 - 0.125 = 0.875
+      expect(easeOutCubic(0.5)).toBeCloseTo(0.875, 10);
+
+      // f(0.25) = 1 - (1-0.25)^3 = 1 - 0.421875 = 0.578125
+      expect(easeOutCubic(0.25)).toBeCloseTo(0.578125, 10);
+    });
+  });
+
+  describe('interpolateZoom', () => {
+    it('returns startZoom at progress 0', () => {
+      expect(interpolateZoom(1.0, 2.0, 0)).toBe(1.0);
+    });
+
+    it('returns targetZoom at progress 1', () => {
+      expect(interpolateZoom(1.0, 2.0, 1)).toBe(2.0);
+    });
+
+    it('interpolates between start and target with easing', () => {
+      const mid = interpolateZoom(1.0, 2.0, 0.5);
+      // With ease-out cubic, progress 0.5 maps to eased ~0.875
+      // So result should be 1.0 + (2.0 - 1.0) * 0.875 = 1.875
+      expect(mid).toBeCloseTo(1.875, 4);
+    });
+
+    it('handles zoom out (target < start)', () => {
+      const result = interpolateZoom(2.0, 0.5, 1.0);
+      expect(result).toBeCloseTo(0.5, 4);
+    });
+
+    it('handles same start and target', () => {
+      expect(interpolateZoom(1.0, 1.0, 0.5)).toBe(1.0);
+    });
+
+    it('clamps progress to 0-1 range', () => {
+      // Negative progress should be treated as 0
+      expect(interpolateZoom(1.0, 2.0, -0.5)).toBe(1.0);
+
+      // Progress > 1 should be treated as 1
+      expect(interpolateZoom(1.0, 2.0, 1.5)).toBe(2.0);
+    });
+
+    it('accepts custom easing function', () => {
+      // Linear easing
+      const linear = (t: number) => t;
+      const mid = interpolateZoom(1.0, 3.0, 0.5, linear);
+      expect(mid).toBeCloseTo(2.0, 10);
+    });
+
+    it('works with large zoom ranges', () => {
+      const result = interpolateZoom(0.1, 10.0, 1.0);
+      expect(result).toBeCloseTo(10.0, 4);
     });
   });
 });

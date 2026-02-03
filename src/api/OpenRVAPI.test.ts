@@ -29,6 +29,7 @@ function createMockSession() {
   session._playbackSpeed = 1;
   session._volume = 0.7;
   session._muted = false;
+  session._preservesPitch = true;
   session._loopMode = 'loop';
   session._inPoint = 1;
   session._outPoint = 100;
@@ -68,6 +69,13 @@ function createMockSession() {
     set: (v: boolean) => {
       session._muted = v;
       session.emit('mutedChanged', session._muted);
+    },
+  });
+  Object.defineProperty(session, 'preservesPitch', {
+    get: () => session._preservesPitch,
+    set: (v: boolean) => {
+      session._preservesPitch = v;
+      session.emit('preservesPitchChanged', session._preservesPitch);
     },
   });
   Object.defineProperty(session, 'loopMode', {
@@ -617,6 +625,25 @@ describe('AudioAPI', () => {
   it('API-U047: toggleMute() toggles mute state', () => {
     audio.toggleMute();
     expect(session.toggleMute).toHaveBeenCalled();
+  });
+
+  it('API-U048: setPreservesPitch() sets pitch correction', () => {
+    audio.setPreservesPitch(false);
+    expect(session.preservesPitch).toBe(false);
+    audio.setPreservesPitch(true);
+    expect(session.preservesPitch).toBe(true);
+  });
+
+  it('API-U049: setPreservesPitch() validates boolean value', () => {
+    expect(() => audio.setPreservesPitch('yes' as any)).toThrow();
+    expect(() => audio.setPreservesPitch(1 as any)).toThrow();
+    expect(() => audio.setPreservesPitch(undefined as any)).toThrow();
+  });
+
+  it('API-U04A: getPreservesPitch() returns current state', () => {
+    expect(audio.getPreservesPitch()).toBe(true);
+    session._preservesPitch = false;
+    expect(audio.getPreservesPitch()).toBe(false);
   });
 });
 

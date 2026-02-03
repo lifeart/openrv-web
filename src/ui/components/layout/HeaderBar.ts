@@ -535,6 +535,48 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       menu.appendChild(item);
     }
 
+    // Separator before pitch correction toggle
+    const separator = document.createElement('div');
+    separator.style.cssText = `
+      height: 1px;
+      background: var(--border-primary);
+      margin: 4px 0;
+    `;
+    menu.appendChild(separator);
+
+    // Pitch correction toggle
+    const pitchItem = document.createElement('button');
+    pitchItem.dataset.testid = 'pitch-correction-toggle';
+    const pitchEnabled = this.session.preservesPitch;
+    pitchItem.textContent = `${pitchEnabled ? '\u2713 ' : '  '}Preserve Pitch`;
+    pitchItem.style.cssText = `
+      display: block;
+      width: 100%;
+      padding: 6px 12px;
+      background: transparent;
+      color: var(--text-primary);
+      border: none;
+      text-align: left;
+      cursor: pointer;
+      font-size: 12px;
+      font-family: monospace;
+    `;
+
+    pitchItem.addEventListener('mouseenter', () => {
+      pitchItem.style.background = 'var(--bg-hover)';
+    });
+
+    pitchItem.addEventListener('mouseleave', () => {
+      pitchItem.style.background = 'transparent';
+    });
+
+    pitchItem.addEventListener('click', () => {
+      this.session.preservesPitch = !this.session.preservesPitch;
+      removeMenu();
+    });
+
+    menu.appendChild(pitchItem);
+
     // Position the menu below the button
     const rect = anchor.getBoundingClientRect();
     menu.style.left = `${rect.left}px`;

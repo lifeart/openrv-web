@@ -618,6 +618,92 @@ describe('HeaderBar', () => {
     });
   });
 
+  describe('pitch correction toggle', () => {
+    it('HDR-U152: speed context menu contains pitch correction toggle', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const speedBtn = el.querySelector(
+        '[data-testid="playback-speed-button"]'
+      ) as HTMLButtonElement;
+
+      // Right-click to open context menu
+      speedBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+
+      const pitchToggle = document.querySelector('[data-testid="pitch-correction-toggle"]');
+      expect(pitchToggle).not.toBeNull();
+      expect(pitchToggle?.textContent).toContain('Preserve Pitch');
+
+      // Cleanup
+      document.getElementById('speed-preset-menu')?.remove();
+      document.body.removeChild(el);
+    });
+
+    it('HDR-U153: pitch correction toggle shows checkmark when enabled', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      // Default is preservesPitch = true
+      expect(session.preservesPitch).toBe(true);
+
+      const speedBtn = el.querySelector(
+        '[data-testid="playback-speed-button"]'
+      ) as HTMLButtonElement;
+
+      speedBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+
+      const pitchToggle = document.querySelector('[data-testid="pitch-correction-toggle"]');
+      expect(pitchToggle?.textContent).toContain('\u2713');
+
+      // Cleanup
+      document.getElementById('speed-preset-menu')?.remove();
+      document.body.removeChild(el);
+    });
+
+    it('HDR-U154: clicking pitch correction toggle changes session state', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      expect(session.preservesPitch).toBe(true);
+
+      const speedBtn = el.querySelector(
+        '[data-testid="playback-speed-button"]'
+      ) as HTMLButtonElement;
+
+      speedBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+
+      const pitchToggle = document.querySelector('[data-testid="pitch-correction-toggle"]') as HTMLButtonElement;
+      pitchToggle.click();
+
+      expect(session.preservesPitch).toBe(false);
+
+      // Cleanup - menu should already be removed by click handler
+      document.getElementById('speed-preset-menu')?.remove();
+      document.body.removeChild(el);
+    });
+
+    it('HDR-U155: pitch correction toggle shows no checkmark when disabled', () => {
+      session.preservesPitch = false;
+
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const speedBtn = el.querySelector(
+        '[data-testid="playback-speed-button"]'
+      ) as HTMLButtonElement;
+
+      speedBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+
+      const pitchToggle = document.querySelector('[data-testid="pitch-correction-toggle"]');
+      expect(pitchToggle?.textContent).not.toContain('\u2713');
+      expect(pitchToggle?.textContent).toContain('Preserve Pitch');
+
+      // Cleanup
+      document.getElementById('speed-preset-menu')?.remove();
+      document.body.removeChild(el);
+    });
+  });
+
   describe('session name display', () => {
     it('HDR-U160: has session name display element', () => {
       const el = headerBar.render();
