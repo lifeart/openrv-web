@@ -44,6 +44,7 @@ import {
   hueToRgb as sharedHueToRgb,
   rgbToHsl as sharedRgbToHsl,
   hslToRgb as sharedHslToRgb,
+  applyToneMappingToData,
 } from './effectProcessing.shared';
 
 /**
@@ -204,12 +205,13 @@ export class EffectProcessor {
     const hasHueRotation = !isIdentityHueRotation(state.colorAdjustments.hueRotation);
     const hasColorWheels = hasColorWheelAdjustments(state.colorWheelsState);
     const hasHSLQualifier = state.hslQualifierState.enabled;
+    const hasToneMapping = state.toneMappingState.enabled && state.toneMappingState.operator !== 'off';
     const hasInversion = state.colorInversionEnabled;
 
     // Early return if no pixel effects are active
     if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel &&
         !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasHueRotation &&
-        !hasColorWheels && !hasHSLQualifier && !hasInversion) {
+        !hasColorWheels && !hasHSLQualifier && !hasToneMapping && !hasInversion) {
       return;
     }
 
@@ -251,6 +253,11 @@ export class EffectProcessor {
     // Apply HSL Qualifier (secondary color correction - after primary corrections)
     if (hasHSLQualifier) {
       this.applyHSLQualifier(imageData, state.hslQualifierState);
+    }
+
+    // Apply tone mapping (after color adjustments, before channel isolation)
+    if (hasToneMapping) {
+      applyToneMappingToData(imageData.data, state.toneMappingState.operator);
     }
 
     // Apply color inversion (after all color corrections, before sharpen/channel isolation)

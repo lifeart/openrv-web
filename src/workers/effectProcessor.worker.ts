@@ -37,6 +37,8 @@ import {
   // Hue rotation
   buildHueRotationMatrix,
   isIdentityHueRotation,
+  // Tone mapping
+  applyToneMappingToData,
   // Types - main types
   type WorkerColorAdjustments as ColorAdjustments,
   type WorkerCDLValues as CDLValues,
@@ -693,6 +695,10 @@ function processEffects(
 
   const hasHueRotation = !isIdentityHueRotation(ca.hueRotation);
 
+  const hasToneMapping = state.toneMappingState &&
+    state.toneMappingState.enabled &&
+    state.toneMappingState.operator !== 'off';
+
   if (hasHS) applyHighlightsShadows(data, ca);
   if (hasVibrance) applyVibrance(data, ca);
   if (hasClarity) applyClarity(data, width, height, ca);
@@ -701,6 +707,7 @@ function processEffects(
   if (hasCDL) applyCDL(data, state.cdlValues);
   if (hasCurves) applyCurves(data, state.curvesData);
   if (hasHSLQualifier) applyHSLQualifier(data, state.hslQualifierState);
+  if (hasToneMapping) applyToneMappingToData(data, state.toneMappingState.operator);
   if (state.colorInversionEnabled) applyWorkerColorInversion(data);
   if (hasSharpen)
     applySharpen(data, width, height, state.filterSettings.sharpen / 100);

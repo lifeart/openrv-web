@@ -2411,11 +2411,6 @@ export class Viewer {
       });
     }
 
-    // Apply tone mapping (HDR to SDR conversion, applied early in pipeline)
-    if (hasToneMapping) {
-      applyToneMapping(imageData, this.toneMappingState.operator);
-    }
-
     // Apply vibrance (intelligent saturation - before CDL/curves for natural results)
     if (hasVibrance) {
       applyVibrance(imageData, {
@@ -2462,6 +2457,11 @@ export class Viewer {
     // Apply HSL Qualifier (secondary color correction - after primary corrections)
     if (hasHSLQualifier) {
       this.hslQualifier.apply(imageData);
+    }
+
+    // Apply tone mapping (after color adjustments, before channel isolation)
+    if (hasToneMapping) {
+      applyToneMapping(imageData, this.toneMappingState.operator);
     }
 
     // Apply color inversion (after all color corrections, before sharpen/channel isolation)

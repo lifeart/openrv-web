@@ -148,6 +148,14 @@ export interface WorkerHSLQualifierState {
 }
 
 /**
+ * Tone mapping state for worker processing
+ */
+export interface WorkerToneMappingState {
+  enabled: boolean;
+  operator: string; // 'off' | 'reinhard' | 'filmic' | 'aces'
+}
+
+/**
  * All effects state bundled together for worker processing
  */
 export interface WorkerEffectsState {
@@ -158,6 +166,7 @@ export interface WorkerEffectsState {
   channelMode: string;
   colorWheelsState: WorkerColorWheelsState;
   hslQualifierState: WorkerHSLQualifierState;
+  toneMappingState: WorkerToneMappingState;
   colorInversionEnabled: boolean;
 }
 
@@ -313,4 +322,100 @@ export function buildHueRotationMatrix(degrees: number): Float32Array {
 export function isIdentityHueRotation(degrees: number): boolean {
   const normalized = ((degrees % 360) + 360) % 360;
   return normalized === 0;
+}
+
+// ============================================================================
+// Tone Mapping Operators (CPU fallback)
+// ============================================================================
+
+/**
+ * Reinhard tone mapping operator (per-channel).
+ * Formula: output = input / (1 + input)
+ * Maps [0, infinity) to [0, 1).
+ */
+export function tonemapReinhardChannel(value: number): number {
+  if (!Number.isFinite(value) || value < 0) return 0;
+  return value / (1.0 + value);
+}
+
+/**
+ * Filmic tone mapping curve (Hable / Uncharted 2).
+ * Internal curve function used by tonemapFilmicChannel.
+ */
+export function filmicCurveShared(x: number): number {
+  const A = 0.15; // Shoulder strength
+  const B = 0.50; // Linear strength
+  const C = 0.10; // Linear angle
+  const D = 0.20; // Toe strength
+  const E = 0.02; // Toe numerator
+  const F = 0.30; // Toe denominator
+  return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
+}
+
+/**
+ * Filmic tone mapping operator (per-channel).
+ * Uses Hable curve with exposure bias 2.0 and white point 11.2.
+ */
+export function tonemapFilmicChannel(value: number): number {
+  if (!Number.isFinite(value) || value < 0) return 0;
+  const exposureBias = 2.0;
+  const curr = filmicCurveShared(exposureBias * value);
+  const whiteScale = 1.0 / filmicCurveShared(11.2);
+  return Math.max(0, curr * whiteScale);
+}
+
+/**
+ * ACES tone mapping operator (per-channel).
+ * Fitted approximation by Krzysztof Narkowicz.
+ * Formula: (x * (2.51x + 0.03)) / (x * (2.43x + 0.59) + 0.14)
+ */
+export function tonemapACESChannel(value: number): number {
+  if (!Number.isFinite(value) || value < 0) return 0;
+  const a = 2.51;
+  const b = 0.03;
+  const c = 2.43;
+  const d = 0.59;
+  const e = 0.14;
+  return Math.max(0, Math.min(1, (value * (a * value + b)) / (value * (c * value + d) + e)));
+}
+
+/**
+ * Apply tone mapping to a single channel value using the specified operator.
+ */
+export function applyToneMappingToChannel(value: number, operator: string): number {
+  switch (operator) {
+    case 'reinhard':
+      return tonemapReinhardChannel(value);
+    case 'filmic':
+      return tonemapFilmicChannel(value);
+    case 'aces':
+      return tonemapACESChannel(value);
+    default:
+      return value;
+  }
+}
+
+/**
+ * Apply tone mapping to a Uint8ClampedArray (RGBA pixel data) in-place.
+ * Converts 8-bit [0-255] to normalized [0-1], applies tone mapping, converts back.
+ * Alpha channel is preserved unchanged.
+ */
+export function applyToneMappingToData(data: Uint8ClampedArray, operator: string): void {
+  if (operator === 'off') return;
+
+  const len = data.length;
+  for (let i = 0; i < len; i += 4) {
+    let r = data[i]! / 255;
+    let g = data[i + 1]! / 255;
+    let b = data[i + 2]! / 255;
+
+    r = applyToneMappingToChannel(r, operator);
+    g = applyToneMappingToChannel(g, operator);
+    b = applyToneMappingToChannel(b, operator);
+
+    data[i] = Math.max(0, Math.min(255, Math.round(Number.isFinite(r) ? r * 255 : 0)));
+    data[i + 1] = Math.max(0, Math.min(255, Math.round(Number.isFinite(g) ? g * 255 : 0)));
+    data[i + 2] = Math.max(0, Math.min(255, Math.round(Number.isFinite(b) ? b * 255 : 0)));
+    // Alpha unchanged
+  }
 }
