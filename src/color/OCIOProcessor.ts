@@ -38,7 +38,32 @@ export interface MediaMetadata {
   manufacturer?: string;
   camera?: string;
   gammaProfile?: string;
+  /** EXR chromaticities metadata for color space hints */
+  chromaticities?: {
+    redX?: number;
+    redY?: number;
+    greenX?: number;
+    greenY?: number;
+    blueX?: number;
+    blueY?: number;
+    whiteX?: number;
+    whiteY?: number;
+  };
 }
+
+/**
+ * Map of file extensions to known color spaces
+ */
+const EXTENSION_COLOR_SPACE_MAP: Record<string, string> = {
+  '.dpx': 'ACEScct', // DPX/Cineon film scans - log encoding
+  '.cin': 'ACEScct',
+  '.cineon': 'ACEScct',
+  '.exr': 'Linear sRGB', // Default for EXR; may be overridden by metadata
+  '.hdr': 'Linear sRGB',
+  '.arw': 'Sony S-Log3', // Sony raw
+  '.ari': 'ARRI LogC3 (EI 800)', // ARRI raw
+  '.r3d': 'RED Log3G10', // RED raw
+};
 
 /**
  * OCIO Processor class
@@ -50,6 +75,11 @@ export class OCIOProcessor extends EventEmitter<OCIOProcessorEvents> {
   private transform: OCIOTransform | null = null;
   private bakedLUT: LUT3D | null = null;
   private lutDirty = true;
+
+  /** Per-source input color space tracking */
+  private perSourceInputColorSpace: Map<string, string> = new Map();
+  /** Currently active source ID */
+  private activeSourceId: string | null = null;
 
   constructor() {
     super();
@@ -78,6 +108,7 @@ export class OCIOProcessor extends EventEmitter<OCIOProcessorEvents> {
     // Check if transform-affecting properties changed
     if (
       oldState.inputColorSpace !== this.state.inputColorSpace ||
+      oldState.detectedColorSpace !== this.state.detectedColorSpace ||
       oldState.workingColorSpace !== this.state.workingColorSpace ||
       oldState.display !== this.state.display ||
       oldState.view !== this.state.view ||
@@ -257,6 +288,62 @@ export class OCIOProcessor extends EventEmitter<OCIOProcessorEvents> {
   }
 
   // ==========================================================================
+  // Per-Source Input Color Space
+  // ==========================================================================
+
+  /**
+   * Set the input color space for a specific source.
+   * This allows different sources to have different detected/assigned color spaces.
+   *
+   * @param sourceId - Unique identifier for the source
+   * @param colorSpace - Color space name to assign to this source
+   */
+  setSourceInputColorSpace(sourceId: string, colorSpace: string): void {
+    this.perSourceInputColorSpace.set(sourceId, colorSpace);
+
+    // If this is the active source, update the effective input color space
+    if (sourceId === this.activeSourceId) {
+      this.setState({ detectedColorSpace: colorSpace });
+    }
+  }
+
+  /**
+   * Get the input color space for a specific source.
+   *
+   * @param sourceId - Unique identifier for the source
+   * @returns The color space assigned to this source, or null if none assigned
+   */
+  getSourceInputColorSpace(sourceId: string): string | null {
+    return this.perSourceInputColorSpace.get(sourceId) ?? null;
+  }
+
+  /**
+   * Set the active source. Updates the effective input color space
+   * based on the per-source tracking.
+   *
+   * @param sourceId - Unique identifier for the source to make active
+   */
+  setActiveSource(sourceId: string): void {
+    this.activeSourceId = sourceId;
+
+    // Look up per-source color space and update detected
+    const perSourceCS = this.perSourceInputColorSpace.get(sourceId);
+    if (perSourceCS) {
+      this.setState({ detectedColorSpace: perSourceCS });
+    } else {
+      // Clear stale detected color space when source has no per-source assignment
+      this.setState({ detectedColorSpace: null });
+    }
+  }
+
+  /**
+   * Get the active source ID.
+   */
+  getActiveSourceId(): string | null {
+    return this.activeSourceId;
+  }
+
+  // ==========================================================================
   // Transform Building
   // ==========================================================================
 
@@ -270,13 +357,14 @@ export class OCIOProcessor extends EventEmitter<OCIOProcessorEvents> {
       inputSpace = this.state.detectedColorSpace ?? 'sRGB';
     }
 
-    // Create transform chain: input -> display
-    // In a full implementation, this would be: input -> working -> look -> display+view
+    // Create transform chain: input -> working -> [look] -> display+view
     this.transform = OCIOTransform.createDisplayTransform(
       inputSpace,
       this.state.workingColorSpace,
       this.state.display,
-      this.state.view
+      this.state.view,
+      this.state.look,
+      this.state.lookDirection
     );
 
     this.lutDirty = true;
@@ -342,6 +430,78 @@ export class OCIOProcessor extends EventEmitter<OCIOProcessorEvents> {
     // Check for sRGB
     if (metadata.transferCharacteristics?.toLowerCase().includes('srgb')) {
       return 'sRGB';
+    }
+
+    // Check EXR chromaticities metadata for color space hints
+    if (metadata.chromaticities) {
+      const detected = this.detectColorSpaceFromChromaticities(metadata.chromaticities);
+      if (detected) return detected;
+    }
+
+    return null;
+  }
+
+  /**
+   * Detect color space from file extension.
+   *
+   * @param ext - File extension including the dot (e.g., '.dpx', '.exr')
+   * @returns Detected color space name, or null if unknown
+   */
+  detectColorSpaceFromExtension(ext: string): string | null {
+    const normalizedExt = ext.toLowerCase().trim();
+    return EXTENSION_COLOR_SPACE_MAP[normalizedExt] ?? null;
+  }
+
+  /**
+   * Detect color space from EXR chromaticities metadata.
+   *
+   * Matches chromaticity values against known color space primaries
+   * with a tolerance to account for floating point precision.
+   */
+  private detectColorSpaceFromChromaticities(chromaticities: NonNullable<MediaMetadata['chromaticities']>): string | null {
+    const { redX, redY, greenX, greenY, blueX, blueY } = chromaticities;
+    if (redX === undefined || redY === undefined ||
+        greenX === undefined || greenY === undefined ||
+        blueX === undefined || blueY === undefined) {
+      return null;
+    }
+
+    const tolerance = 0.01;
+    const match = (a: number, b: number) => Math.abs(a - b) < tolerance;
+
+    // sRGB / BT.709 primaries
+    if (match(redX, 0.64) && match(redY, 0.33) &&
+        match(greenX, 0.30) && match(greenY, 0.60) &&
+        match(blueX, 0.15) && match(blueY, 0.06)) {
+      return 'Linear sRGB';
+    }
+
+    // ACES AP0 (ACES2065-1)
+    if (match(redX, 0.7347) && match(redY, 0.2653) &&
+        match(greenX, 0.0) && match(greenY, 1.0) &&
+        match(blueX, 0.0001) && match(blueY, -0.077)) {
+      return 'ACES2065-1';
+    }
+
+    // ACES AP1 (ACEScg)
+    if (match(redX, 0.713) && match(redY, 0.293) &&
+        match(greenX, 0.165) && match(greenY, 0.83) &&
+        match(blueX, 0.128) && match(blueY, 0.044)) {
+      return 'ACEScg';
+    }
+
+    // DCI-P3
+    if (match(redX, 0.68) && match(redY, 0.32) &&
+        match(greenX, 0.265) && match(greenY, 0.69) &&
+        match(blueX, 0.15) && match(blueY, 0.06)) {
+      return 'DCI-P3';
+    }
+
+    // Rec.2020
+    if (match(redX, 0.708) && match(redY, 0.292) &&
+        match(greenX, 0.170) && match(greenY, 0.797) &&
+        match(blueX, 0.131) && match(blueY, 0.046)) {
+      return 'Rec.2020';
     }
 
     return null;
@@ -476,6 +636,8 @@ export class OCIOProcessor extends EventEmitter<OCIOProcessorEvents> {
     this.transform = null;
     this.bakedLUT = null;
     this.lutDirty = true;
+    this.perSourceInputColorSpace.clear();
+    this.activeSourceId = null;
     this.removeAllListeners();
   }
 }

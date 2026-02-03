@@ -693,6 +693,88 @@ export function acesToneMapRGB(rgb: RGB): RGB {
 }
 
 // =============================================================================
+// Look Transforms (built-in approximations)
+// =============================================================================
+
+/**
+ * Filmic S-curve look transform.
+ * Applies an increased contrast S-curve with slightly warmer shadows
+ * and cooler highlights to simulate a classic filmic look.
+ */
+function filmicLookChannel(x: number): number {
+  // Handle edge cases
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+  // S-curve: steeper midtones, lifted shadows, compressed highlights
+  // Using a cubic Bezier-like S-curve approximation
+  const t = x;
+  const result = t * t * (3.0 - 2.0 * t) * 1.05 - 0.025;
+  return Math.max(0, Math.min(1, result));
+}
+
+/**
+ * Apply a built-in look transform to an RGB triplet.
+ *
+ * Built-in looks:
+ * - 'ACES 1.0': Reference rendering (passthrough - ACES RRT is handled by tonemap)
+ * - 'Filmic': Increased contrast S-curve for a cinematic look
+ * - 'None': Passthrough
+ *
+ * @param rgb - Input RGB triplet
+ * @param lookName - Name of the look to apply
+ * @param direction - 'forward' or 'inverse'
+ * @returns Transformed RGB triplet
+ */
+function applyLookTransform(rgb: RGB, lookName: string, direction: 'forward' | 'inverse'): RGB {
+  switch (lookName) {
+    case 'None':
+      return rgb;
+
+    case 'ACES 1.0':
+      // ACES reference rendering - the tone mapping is handled by the
+      // 'aces' tonemap step in the transform chain, so this is a passthrough
+      return rgb;
+
+    case 'Filmic': {
+      if (direction === 'forward') {
+        // Apply filmic S-curve with slight warm/cool split
+        return [
+          filmicLookChannel(rgb[0] * 1.02), // Slightly warm reds
+          filmicLookChannel(rgb[1]),
+          filmicLookChannel(rgb[2] * 0.98), // Slightly cool blues
+        ];
+      } else {
+        // Inverse is approximate (S-curve doesn't have a clean analytical inverse)
+        // Use a simple inverse approximation
+        const invFilmic = (x: number): number => {
+          if (x <= 0) return 0;
+          if (x >= 1) return 1;
+          // Newton's method approximate inverse of the S-curve
+          let t = x;
+          for (let iter = 0; iter < 4; iter++) {
+            const f = t * t * (3.0 - 2.0 * t) * 1.05 - 0.025 - x;
+            const df = (6.0 * t - 6.0 * t * t) * 1.05;
+            if (Math.abs(df) < 1e-10) break;
+            t -= f / df;
+            t = Math.max(0, Math.min(1, t));
+          }
+          return t;
+        };
+        return [
+          invFilmic(rgb[0]) / 1.02,
+          invFilmic(rgb[1]),
+          invFilmic(rgb[2]) / 0.98,
+        ];
+      }
+    }
+
+    default:
+      // Unknown look - passthrough
+      return rgb;
+  }
+}
+
+// =============================================================================
 // OCIOTransform Class
 // =============================================================================
 
@@ -720,7 +802,8 @@ type TransformStep =
   | { type: 'matrix'; matrix: Matrix3x3 }
   | { type: 'gamma_encode'; func: TransferFunctionName }
   | { type: 'gamma_decode'; func: TransferFunctionName }
-  | { type: 'tonemap'; func: 'aces' };
+  | { type: 'tonemap'; func: 'aces' }
+  | { type: 'look'; name: string; direction: 'forward' | 'inverse' };
 
 /**
  * Color space transform chain
@@ -1003,6 +1086,9 @@ export class OCIOTransform {
         case 'tonemap':
           rgb = acesToneMapRGB(rgb);
           break;
+        case 'look':
+          rgb = applyLookTransform(rgb, step.name, step.direction);
+          break;
       }
     }
 
@@ -1036,19 +1122,56 @@ export class OCIOTransform {
   }
 
   /**
-   * Create a display transform (input -> working -> display with view)
+   * Create a display transform (input -> working -> [look] -> display with view)
+   *
+   * Builds a full transform chain:
+   * 1. Input color space decode/linearize
+   * 2. Convert to working space (where grading/CDL operations happen)
+   * 3. Apply look transform (if any)
+   * 4. Convert from working space to display
+   * 5. Apply display gamma/tone mapping
    */
   static createDisplayTransform(
     inputSpace: string,
-    _workingSpace: string,
+    workingSpace: string,
     display: string,
-    _view: string
+    _view: string,
+    look?: string,
+    lookDirection?: 'forward' | 'inverse'
   ): OCIOTransform {
-    // For now, create a simple input -> display transform
-    // A full implementation would chain: input -> working -> look -> display+view
-    // Working space and view are stored for future use when we implement
-    // the full OCIO pipeline with grading operations
-    return new OCIOTransform(inputSpace, display);
+    // If input and display are the same (identity), use simple path
+    // Also if working space matches input, skip the intermediate step
+    if (
+      !workingSpace ||
+      inputSpace === display ||
+      workingSpace === inputSpace
+    ) {
+      // Simple path: input -> display (possibly with look)
+      if (look && look !== 'None') {
+        return OCIOTransform.createWithLook(inputSpace, display, _view, look, lookDirection ?? 'forward');
+      }
+      return new OCIOTransform(inputSpace, display);
+    }
+
+    // Full pipeline: input -> working -> [look] -> display
+    // Build a composite transform by chaining sub-transforms
+    const transform = new OCIOTransform(inputSpace, display);
+    transform.steps = []; // Clear auto-built steps
+
+    // Step 1: Input -> Working space
+    const inputToWorking = new OCIOTransform(inputSpace, workingSpace);
+    transform.steps.push(...inputToWorking.steps);
+
+    // Step 2: Apply look transform in working space
+    if (look && look !== 'None') {
+      transform.steps.push({ type: 'look', name: look, direction: lookDirection ?? 'forward' });
+    }
+
+    // Step 3: Working -> Display space
+    const workingToDisplay = new OCIOTransform(workingSpace, display);
+    transform.steps.push(...workingToDisplay.steps);
+
+    return transform;
   }
 
   /**
@@ -1058,13 +1181,26 @@ export class OCIOTransform {
     inputSpace: string,
     display: string,
     _view: string,
-    _look: string,
-    _direction: 'forward' | 'inverse'
+    look: string,
+    direction: 'forward' | 'inverse'
   ): OCIOTransform {
-    // Simplified: looks are not yet implemented
-    // Just create the base transform
-    // View, look, and direction are stored for future implementation
-    return new OCIOTransform(inputSpace, display);
+    const transform = new OCIOTransform(inputSpace, display);
+
+    // Insert look step before the final display encode (tonemap + gamma)
+    // Find the insertion point: before any tonemap or gamma_encode step
+    if (look && look !== 'None') {
+      let insertIdx = transform.steps.length;
+      for (let i = 0; i < transform.steps.length; i++) {
+        const step = transform.steps[i]!;
+        if (step.type === 'tonemap' || step.type === 'gamma_encode') {
+          insertIdx = i;
+          break;
+        }
+      }
+      transform.steps.splice(insertIdx, 0, { type: 'look', name: look, direction });
+    }
+
+    return transform;
   }
 }
 

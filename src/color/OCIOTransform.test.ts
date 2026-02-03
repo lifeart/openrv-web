@@ -998,4 +998,134 @@ describe('OCIOTransform', () => {
       });
     });
   });
+
+  // ==========================================================================
+  // Look Transform Tests (v2)
+  // ==========================================================================
+
+  describe('Look transforms', () => {
+    it('OCIO-V2-T001: createWithLook with None is same as basic transform', () => {
+      const basic = new OCIOTransform('ACEScg', 'sRGB');
+      const withNone = OCIOTransform.createWithLook('ACEScg', 'sRGB', 'ACES 1.0 SDR-video', 'None', 'forward');
+
+      const basicResult = basic.apply(0.18, 0.18, 0.18);
+      const noneResult = withNone.apply(0.18, 0.18, 0.18);
+
+      expect(noneResult[0]).toBeCloseTo(basicResult[0], 5);
+      expect(noneResult[1]).toBeCloseTo(basicResult[1], 5);
+      expect(noneResult[2]).toBeCloseTo(basicResult[2], 5);
+    });
+
+    it('OCIO-V2-T002: createWithLook with ACES 1.0 is same as basic transform', () => {
+      const basic = new OCIOTransform('ACEScg', 'sRGB');
+      const withAces = OCIOTransform.createWithLook('ACEScg', 'sRGB', 'ACES 1.0 SDR-video', 'ACES 1.0', 'forward');
+
+      const basicResult = basic.apply(0.18, 0.18, 0.18);
+      const acesResult = withAces.apply(0.18, 0.18, 0.18);
+
+      expect(acesResult[0]).toBeCloseTo(basicResult[0], 5);
+      expect(acesResult[1]).toBeCloseTo(basicResult[1], 5);
+      expect(acesResult[2]).toBeCloseTo(basicResult[2], 5);
+    });
+
+    it('OCIO-V2-T003: createWithLook with Filmic differs from basic transform', () => {
+      const basic = new OCIOTransform('ACEScg', 'sRGB');
+      const withFilmic = OCIOTransform.createWithLook('ACEScg', 'sRGB', 'ACES 1.0 SDR-video', 'Filmic', 'forward');
+
+      const basicResult = basic.apply(0.18, 0.18, 0.18);
+      const filmicResult = withFilmic.apply(0.18, 0.18, 0.18);
+
+      // Filmic look should produce different results
+      expect(filmicResult[0]).not.toBeCloseTo(basicResult[0], 3);
+    });
+
+    it('OCIO-V2-T004: Filmic look forward vs inverse differ', () => {
+      const forward = OCIOTransform.createWithLook('ACEScg', 'sRGB', 'ACES 1.0 SDR-video', 'Filmic', 'forward');
+      const inverse = OCIOTransform.createWithLook('ACEScg', 'sRGB', 'ACES 1.0 SDR-video', 'Filmic', 'inverse');
+
+      const fResult = forward.apply(0.5, 0.5, 0.5);
+      const iResult = inverse.apply(0.5, 0.5, 0.5);
+
+      expect(fResult[0]).not.toBeCloseTo(iResult[0], 3);
+    });
+
+    it('OCIO-V2-T005: Filmic look produces values in valid range', () => {
+      const withFilmic = OCIOTransform.createWithLook('ACEScg', 'sRGB', 'ACES 1.0 SDR-video', 'Filmic', 'forward');
+
+      const result = withFilmic.apply(0.18, 0.18, 0.18);
+      expect(result[0]).toBeGreaterThanOrEqual(0);
+      expect(result[0]).toBeLessThanOrEqual(1);
+      expect(result[1]).toBeGreaterThanOrEqual(0);
+      expect(result[1]).toBeLessThanOrEqual(1);
+      expect(result[2]).toBeGreaterThanOrEqual(0);
+      expect(result[2]).toBeLessThanOrEqual(1);
+    });
+
+    it('OCIO-V2-T006: unknown look name acts as passthrough', () => {
+      const basic = new OCIOTransform('ACEScg', 'sRGB');
+      const withUnknown = OCIOTransform.createWithLook('ACEScg', 'sRGB', 'ACES 1.0 SDR-video', 'UnknownLook', 'forward');
+
+      const basicResult = basic.apply(0.18, 0.18, 0.18);
+      const unknownResult = withUnknown.apply(0.18, 0.18, 0.18);
+
+      expect(unknownResult[0]).toBeCloseTo(basicResult[0], 5);
+      expect(unknownResult[1]).toBeCloseTo(basicResult[1], 5);
+      expect(unknownResult[2]).toBeCloseTo(basicResult[2], 5);
+    });
+  });
+
+  // ==========================================================================
+  // Display Transform with Working Space (v2)
+  // ==========================================================================
+
+  describe('Display transform with working space', () => {
+    it('OCIO-V2-T007: createDisplayTransform with working space produces valid output', () => {
+      const transform = OCIOTransform.createDisplayTransform(
+        'ARRI LogC3 (EI 800)', 'ACEScg', 'sRGB', 'ACES 1.0 SDR-video'
+      );
+
+      const result = transform.apply(0.41, 0.41, 0.41);
+      expect(Number.isFinite(result[0])).toBe(true);
+      expect(Number.isFinite(result[1])).toBe(true);
+      expect(Number.isFinite(result[2])).toBe(true);
+    });
+
+    it('OCIO-V2-T008: createDisplayTransform with look and working space', () => {
+      const withLook = OCIOTransform.createDisplayTransform(
+        'ARRI LogC3 (EI 800)', 'ACEScg', 'sRGB', 'ACES 1.0 SDR-video', 'Filmic', 'forward'
+      );
+      const withoutLook = OCIOTransform.createDisplayTransform(
+        'ARRI LogC3 (EI 800)', 'ACEScg', 'sRGB', 'ACES 1.0 SDR-video'
+      );
+
+      const lookResult = withLook.apply(0.41, 0.41, 0.41);
+      const noLookResult = withoutLook.apply(0.41, 0.41, 0.41);
+
+      // With look should differ from without
+      expect(lookResult[0]).not.toBeCloseTo(noLookResult[0], 3);
+    });
+
+    it('OCIO-V2-T009: identity when input equals display skips working space', () => {
+      const transform = OCIOTransform.createDisplayTransform(
+        'sRGB', 'ACEScg', 'sRGB', 'ACES 1.0 SDR-video'
+      );
+
+      // sRGB -> sRGB should be identity
+      const result = transform.apply(0.5, 0.3, 0.8);
+      expect(result[0]).toBeCloseTo(0.5, 4);
+      expect(result[1]).toBeCloseTo(0.3, 4);
+      expect(result[2]).toBeCloseTo(0.8, 4);
+    });
+
+    it('OCIO-V2-T010: createDisplayTransform handles black correctly', () => {
+      const transform = OCIOTransform.createDisplayTransform(
+        'ACEScg', 'ACEScg', 'sRGB', 'ACES 1.0 SDR-video'
+      );
+
+      const result = transform.apply(0, 0, 0);
+      expect(result[0]).toBeCloseTo(0, 3);
+      expect(result[1]).toBeCloseTo(0, 3);
+      expect(result[2]).toBeCloseTo(0, 3);
+    });
+  });
 });

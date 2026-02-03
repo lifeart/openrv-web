@@ -844,6 +844,19 @@ export class App {
       const source = this.session.currentSource;
       if (source) {
         this.cropControl.setSourceDimensions(source.width, source.height);
+
+        // Per-source OCIO color space detection
+        const processor = this.ocioControl.getProcessor();
+        const sourceId = source.name || `source_${this.session.currentSourceIndex}`;
+        processor.setActiveSource(sourceId);
+
+        // Detect color space from file extension
+        const lastDot = source.name ? source.name.lastIndexOf('.') : -1;
+        const ext = lastDot >= 0 ? source.name!.substring(lastDot).toLowerCase() : '';
+        const detectedFromExt = processor.detectColorSpaceFromExtension(ext);
+        if (detectedFromExt) {
+          processor.setSourceInputColorSpace(sourceId, detectedFromExt);
+        }
       }
       // GTO store and stack updates
       if (!this.session.gtoData) {
