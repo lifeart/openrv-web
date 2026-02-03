@@ -167,6 +167,11 @@ export class Viewer {
   // Resize observer
   private resizeObserver: ResizeObserver;
 
+  // Cached layout measurements - invalidated by ResizeObserver and at each render frame
+  private cachedContainerRect: DOMRect | null = null;
+  private cachedCanvasContainerRect: DOMRect | null = null;
+  private cachedImageCanvasRect: DOMRect | null = null;
+
   // Animation frame for smooth rendering
   private pendingRender = false;
 
@@ -555,6 +560,7 @@ export class Viewer {
 
     // Setup resize observer
     this.resizeObserver = new ResizeObserver(() => {
+      this.invalidateLayoutCache();
       this.scheduleRender();
     });
     this.resizeObserver.observe(this.container);
@@ -747,8 +753,8 @@ export class Viewer {
     }
     this.lastMouseMoveUpdate = now;
 
-    // Single layout read shared by both consumers
-    const canvasRect = this.imageCanvas.getBoundingClientRect();
+    // Single layout read shared by both consumers (cached per frame)
+    const canvasRect = this.getImageCanvasRect();
 
     // Compute canvas-relative pixel coordinates once
     const position = getPixelCoordinates(
@@ -876,7 +882,7 @@ export class Viewer {
   }
 
   private getCanvasPoint(clientX: number, clientY: number, pressure = 0.5): StrokePoint | null {
-    const rect = this.imageCanvas.getBoundingClientRect();
+    const rect = this.getImageCanvasRect();
     return getCanvasPointUtil(clientX, clientY, rect, this.displayWidth, this.displayHeight, pressure);
   }
 
@@ -1104,7 +1110,7 @@ export class Viewer {
     // Cancel any smooth zoom animation - wheel zoom should be instant for responsiveness
     this.cancelZoomAnimation();
 
-    const rect = this.container.getBoundingClientRect();
+    const rect = this.getContainerRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
@@ -1456,7 +1462,7 @@ export class Viewer {
   }
 
   private updateCanvasPosition(): void {
-    const containerRect = this.container.getBoundingClientRect();
+    const containerRect = this.getContainerRect();
     const containerWidth = containerRect.width;
     const containerHeight = containerRect.height;
 
@@ -1471,7 +1477,36 @@ export class Viewer {
     this.canvasContainer.style.transform = `translate(${centerX}px, ${centerY}px)`;
   }
 
+  private invalidateLayoutCache(): void {
+    this.cachedContainerRect = null;
+    this.cachedCanvasContainerRect = null;
+    this.cachedImageCanvasRect = null;
+  }
+
+  private getContainerRect(): DOMRect {
+    if (!this.cachedContainerRect) {
+      this.cachedContainerRect = this.container.getBoundingClientRect();
+    }
+    return this.cachedContainerRect;
+  }
+
+  private getCanvasContainerRect(): DOMRect {
+    if (!this.cachedCanvasContainerRect) {
+      this.cachedCanvasContainerRect = this.canvasContainer.getBoundingClientRect();
+    }
+    return this.cachedCanvasContainerRect;
+  }
+
+  private getImageCanvasRect(): DOMRect {
+    if (!this.cachedImageCanvasRect) {
+      this.cachedImageCanvasRect = this.imageCanvas.getBoundingClientRect();
+    }
+    return this.cachedImageCanvasRect;
+  }
+
   render(): void {
+    // Invalidate layout cache once per frame - measurements are cached within the frame
+    this.invalidateLayoutCache();
     this.renderImage();
 
     // If actively drawing, render with live stroke/shape; otherwise just paint
@@ -1490,8 +1525,8 @@ export class Viewer {
   private renderImage(): void {
     const source = this.session.currentSource;
 
-    // Get container size
-    const containerRect = this.container.getBoundingClientRect();
+    // Get container size (cached per frame)
+    const containerRect = this.getContainerRect();
     const containerWidth = containerRect.width || 640;
     const containerHeight = containerRect.height || 360;
 
@@ -3229,8 +3264,8 @@ export class Viewer {
   private updateWipeLine(): void {
     if (!this.wipeElements) return;
 
-    const containerRect = this.container.getBoundingClientRect();
-    const canvasRect = this.canvasContainer.getBoundingClientRect();
+    const containerRect = this.getContainerRect();
+    const canvasRect = this.getCanvasContainerRect();
 
     // If split screen mode is active, hide the wipe line (split screen has its own UI)
     if (isSplitScreenMode(this.wipeState.mode)) {
@@ -3262,8 +3297,8 @@ export class Viewer {
       return;
     }
 
-    const containerRect = this.container.getBoundingClientRect();
-    const canvasRect = this.canvasContainer.getBoundingClientRect();
+    const containerRect = this.getContainerRect();
+    const canvasRect = this.getCanvasContainerRect();
 
     // Safe to cast since we validated with isSplitScreenMode
     const splitState: SplitScreenState = {
@@ -3313,7 +3348,7 @@ export class Viewer {
   private handleWipePointerMove(e: PointerEvent): void {
     // Handle split screen dragging
     if (this.isDraggingSplit) {
-      const canvasRect = this.canvasContainer.getBoundingClientRect();
+      const canvasRect = this.getCanvasContainerRect();
       const splitState: SplitScreenState = {
         mode: this.wipeState.mode as 'splitscreen-h' | 'splitscreen-v',
         position: this.wipeState.position,
@@ -3333,7 +3368,7 @@ export class Viewer {
     // Handle regular wipe dragging
     if (!this.isDraggingWipe) return;
 
-    const canvasRect = this.canvasContainer.getBoundingClientRect();
+    const canvasRect = this.getCanvasContainerRect();
     this.wipeState.position = calculateWipePosition(
       e,
       this.wipeState,
