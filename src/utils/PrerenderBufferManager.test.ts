@@ -660,6 +660,43 @@ describe('Stale cache fallback during playback', () => {
     }
   });
 
+  it('PBM-059: stale cache hits are tracked separately from fresh hits', async () => {
+    const state1 = createDefaultEffectsState();
+    state1.colorAdjustments.highlights = 20;
+    manager.updateEffects(state1);
+    manager.setPlaybackState(true, 1);
+
+    manager.preloadAround(50);
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    // Get some fresh cache hits
+    let freshHitCount = 0;
+    for (let f = 48; f <= 55; f++) {
+      if (manager.getFrame(f)) freshHitCount++;
+    }
+
+    const statsBeforeChange = manager.getStats();
+    expect(statsBeforeChange.cacheHits).toBe(freshHitCount);
+    expect(statsBeforeChange.staleCacheHits).toBe(0);
+
+    // Change effects (soft invalidation during playback)
+    const state2 = createDefaultEffectsState();
+    state2.colorAdjustments.highlights = 40;
+    manager.updateEffects(state2);
+
+    // Now get stale hits
+    let staleHitCount = 0;
+    for (let f = 48; f <= 55; f++) {
+      if (manager.getFrame(f)) staleHitCount++;
+    }
+
+    const statsAfterChange = manager.getStats();
+    // Fresh hits should be unchanged (from before effects change)
+    expect(statsAfterChange.cacheHits).toBe(freshHitCount);
+    // Stale hits should now be tracked separately
+    expect(statsAfterChange.staleCacheHits).toBe(staleHitCount);
+  });
+
   it('PBM-055: updateEffects cancels pending requests on effects change', async () => {
     const state1 = createDefaultEffectsState();
     state1.colorAdjustments.highlights = 20;
@@ -720,8 +757,6 @@ describe('preloadAround deduplication', () => {
     manager.updateEffects(state);
 
     manager.preloadAround(50);
-    const statsAfterFirst = manager.getStats();
-    const firstPending = statsAfterFirst.pendingRequests;
 
     // Different frame should not be deduplicated
     manager.preloadAround(60);

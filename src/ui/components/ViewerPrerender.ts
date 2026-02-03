@@ -94,6 +94,7 @@ export interface PrerenderStats {
   memorySizeMB: number;
   cacheHits: number;
   cacheMisses: number;
+  staleCacheHits: number;
   hitRate: number;
 }
 
@@ -128,6 +129,7 @@ export function getPrerenderStats(
     memorySizeMB,
     cacheHits: stats.cacheHits,
     cacheMisses: stats.cacheMisses,
+    staleCacheHits: stats.staleCacheHits,
     hitRate: stats.hitRate,
   };
 }
