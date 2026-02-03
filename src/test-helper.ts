@@ -33,8 +33,21 @@ declare global {
       getStackState: () => StackState;
       getOCIOState: () => OCIOState;
       isUsingMediabunny: () => boolean;
+      getFullscreenState: () => FullscreenState;
+      getPresentationState: () => PresentationTestState;
     };
   }
+}
+
+export interface FullscreenState {
+  isFullscreen: boolean;
+  isSupported: boolean;
+}
+
+export interface PresentationTestState {
+  enabled: boolean;
+  cursorAutoHide: boolean;
+  cursorHideDelay: number;
 }
 
 export interface MarkerData {
@@ -744,6 +757,24 @@ export function exposeForTesting(app: App): void {
     isUsingMediabunny: (): boolean => {
       const session = appAny.session;
       return session?.isUsingMediabunny?.() ?? false;
+    },
+
+    getFullscreenState: (): FullscreenState => {
+      const fullscreenManager = appAny.fullscreenManager;
+      return {
+        isFullscreen: fullscreenManager?.isFullscreen ?? false,
+        isSupported: true,
+      };
+    },
+
+    getPresentationState: (): PresentationTestState => {
+      const presentationMode = appAny.presentationMode;
+      const state = presentationMode?.getState?.() ?? {};
+      return {
+        enabled: state.enabled ?? false,
+        cursorAutoHide: state.cursorAutoHide ?? true,
+        cursorHideDelay: state.cursorHideDelay ?? 3000,
+      };
     },
   };
 }

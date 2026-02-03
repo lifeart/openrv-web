@@ -51,6 +51,8 @@ import { SnapshotManager } from './core/session/SnapshotManager';
 import { SnapshotPanel } from './ui/components/SnapshotPanel';
 import { PlaylistManager } from './core/session/PlaylistManager';
 import { PlaylistPanel } from './ui/components/PlaylistPanel';
+import { FullscreenManager } from './utils/FullscreenManager';
+import { PresentationMode } from './utils/PresentationMode';
 
 export class App {
   private container: HTMLElement | null = null;
@@ -104,6 +106,8 @@ export class App {
   private snapshotPanel: SnapshotPanel;
   private playlistManager: PlaylistManager;
   private playlistPanel: PlaylistPanel;
+  private fullscreenManager!: FullscreenManager;
+  private presentationMode: PresentationMode;
 
   // History recording state
   private colorHistoryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -310,6 +314,21 @@ export class App {
       this.viewer.refresh();
       this.scheduleUpdateScopes();
       this.syncGTOStore();
+    });
+
+    // Presentation mode
+    this.presentationMode = new PresentationMode();
+    this.presentationMode.loadPreference();
+    this.presentationMode.on('stateChanged', (state) => {
+      this.headerBar.setPresentationState(state.enabled);
+    });
+
+    // Wire up fullscreen and presentation toggle from HeaderBar
+    this.headerBar.on('fullscreenToggle', () => {
+      this.fullscreenManager?.toggle();
+    });
+    this.headerBar.on('presentationToggle', () => {
+      this.presentationMode.toggle();
     });
 
     // Connect volume control (from HeaderBar) to session (bidirectional)
@@ -683,6 +702,21 @@ export class App {
     this.container.appendChild(viewerEl);
     this.container.appendChild(cacheIndicatorEl);
     this.container.appendChild(timelineEl);
+
+    // Initialize FullscreenManager with the app container
+    this.fullscreenManager = new FullscreenManager(this.container);
+    this.fullscreenManager.on('fullscreenChanged', (isFullscreen) => {
+      this.headerBar.setFullscreenState(isFullscreen);
+    });
+
+    // Set elements to hide in presentation mode
+    this.presentationMode.setElementsToHide([
+      headerBarEl,
+      tabBarEl,
+      contextToolbarEl,
+      cacheIndicatorEl,
+      timelineEl,
+    ]);
 
     // Add histogram overlay to viewer container
     this.viewer.getContainer().appendChild(this.histogram.render());
@@ -1401,6 +1435,11 @@ export class App {
         getThemeManager().cycleMode();
       },
       'panel.close': () => {
+        // ESC exits presentation mode first, then fullscreen
+        if (this.presentationMode.getState().enabled) {
+          this.presentationMode.toggle();
+          return;
+        }
         if (this.colorControls) {
           this.colorControls.hide();
         }
@@ -1419,6 +1458,12 @@ export class App {
       },
       'panel.playlist': () => {
         this.playlistPanel.toggle();
+      },
+      'view.toggleFullscreen': () => {
+        this.fullscreenManager?.toggle();
+      },
+      'view.togglePresentation': () => {
+        this.presentationMode.toggle();
       },
     };
 
@@ -2739,6 +2784,8 @@ export class App {
     this.snapshotManager.dispose();
     this.playlistPanel.dispose();
     this.playlistManager.dispose();
+    this.fullscreenManager?.dispose();
+    this.presentationMode.dispose();
     // Dispose auto-save manager (fire and forget - we can't await in dispose)
     this.autoSaveManager.dispose().catch(err => {
       console.error('Error disposing auto-save manager:', err);

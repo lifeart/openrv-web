@@ -291,6 +291,17 @@ export interface OCIOState {
   panelVisible: boolean;
 }
 
+export interface FullscreenState {
+  isFullscreen: boolean;
+  isSupported: boolean;
+}
+
+export interface PresentationState {
+  enabled: boolean;
+  cursorAutoHide: boolean;
+  cursorHideDelay: number;
+}
+
 /**
  * Get session state from the app
  */
@@ -673,6 +684,31 @@ export async function getOCIOState(page: Page): Promise<OCIOState> {
       look: 'None',
       lookDirection: 'forward',
       panelVisible: false,
+    };
+  });
+}
+
+/**
+ * Get fullscreen state from the app
+ */
+export async function getFullscreenState(page: Page): Promise<FullscreenState> {
+  return page.evaluate(() => {
+    return (window as any).__OPENRV_TEST__?.getFullscreenState() ?? {
+      isFullscreen: false,
+      isSupported: true,
+    };
+  });
+}
+
+/**
+ * Get presentation mode state from the app
+ */
+export async function getPresentationState(page: Page): Promise<PresentationState> {
+  return page.evaluate(() => {
+    return (window as any).__OPENRV_TEST__?.getPresentationState() ?? {
+      enabled: false,
+      cursorAutoHide: true,
+      cursorHideDelay: 3000,
     };
   });
 }

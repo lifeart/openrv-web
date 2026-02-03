@@ -470,6 +470,18 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     shift: true,
     description: 'Cycle theme'
   },
+
+  // Fullscreen / Presentation mode
+  'view.toggleFullscreen': {
+    code: 'F11',
+    description: 'Toggle fullscreen mode'
+  },
+  'view.togglePresentation': {
+    code: 'KeyP',
+    shift: true,
+    ctrl: true,
+    description: 'Toggle presentation mode'
+  },
 };
 /**
  * Get a human-readable description of a key combination
