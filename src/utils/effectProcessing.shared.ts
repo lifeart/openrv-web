@@ -58,6 +58,7 @@ export interface WorkerColorAdjustments {
   vibranceSkinProtection: boolean;
   contrast: number;
   clarity: number;
+  hueRotation: number;
   temperature: number;
   tint: number;
   brightness: number;
@@ -253,4 +254,63 @@ export function hslToRgb(h: number, s: number, l: number): { r: number; g: numbe
   }
 
   return { r, g, b };
+}
+
+// ============================================================================
+// Hue Rotation (luminance-preserving)
+// ============================================================================
+
+/**
+ * Build a 3x3 luminance-preserving hue rotation matrix.
+ * Uses Rodrigues rotation around (1,1,1)/sqrt(3) with a luminance shear
+ * correction to preserve Rec.709 luminance.
+ * Returns a 9-element Float32Array in column-major order (for WebGL mat3).
+ */
+export function buildHueRotationMatrix(degrees: number): Float32Array {
+  const rad = (degrees * Math.PI) / 180;
+  const cosA = Math.cos(rad);
+  const sinA = Math.sin(rad);
+  const sq3 = Math.sqrt(3);
+  const oo = 1 / 3;
+  const t = 1 - cosA;
+
+  // Rodrigues rotation around (1,1,1)/sqrt(3) (row-major)
+  const r00 = cosA + t * oo;
+  const r01 = t * oo - sinA / sq3;
+  const r02 = t * oo + sinA / sq3;
+  const r10 = t * oo + sinA / sq3;
+  const r11 = cosA + t * oo;
+  const r12 = t * oo - sinA / sq3;
+  const r20 = t * oo - sinA / sq3;
+  const r21 = t * oo + sinA / sq3;
+  const r22 = cosA + t * oo;
+
+  // Luminance shear correction: M = TInv * rot * T
+  const dR = LUMA_R - oo;
+  const dG = LUMA_G - oo;
+  const dB = LUMA_B - oo;
+
+  // P = rot * T: P[i][j] = r[i][j] + dj (row sums of rot = 1)
+  const p00 = r00 + dR, p01 = r01 + dG, p02 = r02 + dB;
+  const p10 = r10 + dR, p11 = r11 + dG, p12 = r12 + dB;
+  const p20 = r20 + dR, p21 = r21 + dG, p22 = r22 + dB;
+
+  // M = TInv * P: M[i][j] = P[i][j] - (dR*P[0][j] + dG*P[1][j] + dB*P[2][j])
+  const col0 = dR * p00 + dG * p10 + dB * p20;
+  const col1 = dR * p01 + dG * p11 + dB * p21;
+  const col2 = dR * p02 + dG * p12 + dB * p22;
+
+  return new Float32Array([
+    p00 - col0, p10 - col0, p20 - col0,
+    p01 - col1, p11 - col1, p21 - col1,
+    p02 - col2, p12 - col2, p22 - col2,
+  ]);
+}
+
+/**
+ * Check if hue rotation is at identity (no effect).
+ */
+export function isIdentityHueRotation(degrees: number): boolean {
+  const normalized = ((degrees % 360) + 360) % 360;
+  return normalized === 0;
 }

@@ -40,6 +40,7 @@ import { getSharedOCIOProcessor } from '../../color/OCIOProcessor';
 
 // Extracted effect processing utilities
 import { applyHighlightsShadows, applyVibrance, applyClarity, applySharpenCPU, applyToneMapping } from './ViewerEffects';
+import { applyHueRotation as applyHueRotationPixel, isIdentityHueRotation } from '../../color/HueRotation';
 import {
   createWipeUIElements,
   updateWipeLinePosition,
@@ -2382,6 +2383,7 @@ export class Viewer {
                                  this.colorAdjustments.whites !== 0 || this.colorAdjustments.blacks !== 0;
     const hasVibrance = this.colorAdjustments.vibrance !== 0;
     const hasClarity = this.colorAdjustments.clarity !== 0;
+    const hasHueRotation = !isIdentityHueRotation(this.colorAdjustments.hueRotation);
     const hasColorWheels = this.colorWheels.hasAdjustments();
     const hasHSLQualifier = this.hslQualifier.isEnabled();
     const hasFalseColor = this.falseColor.isEnabled();
@@ -2392,7 +2394,7 @@ export class Viewer {
 
     // Early return if no pixel effects are active
     // Note: OCIO is handled via GPU-accelerated 3D LUT in the main render pipeline (applyOCIOToCanvas)
-    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasZebras && !hasClippingOverlay && !hasToneMapping && !hasInversion) {
+    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasHueRotation && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasZebras && !hasClippingOverlay && !hasToneMapping && !hasInversion) {
       return;
     }
 
@@ -2425,6 +2427,21 @@ export class Viewer {
     // Apply clarity (local contrast enhancement in midtones)
     if (hasClarity) {
       applyClarity(imageData, this.colorAdjustments.clarity);
+    }
+
+    // Apply hue rotation (luminance-preserving, after basic adjustments, before CDL)
+    if (hasHueRotation) {
+      const data = imageData.data;
+      const len = data.length;
+      for (let i = 0; i < len; i += 4) {
+        const r = data[i]! / 255;
+        const g = data[i + 1]! / 255;
+        const b = data[i + 2]! / 255;
+        const [nr, ng, nb] = applyHueRotationPixel(r, g, b, this.colorAdjustments.hueRotation);
+        data[i] = Math.round(nr * 255);
+        data[i + 1] = Math.round(ng * 255);
+        data[i + 2] = Math.round(nb * 255);
+      }
     }
 
     // Apply color wheels (Lift/Gamma/Gain - after basic adjustments, before CDL)

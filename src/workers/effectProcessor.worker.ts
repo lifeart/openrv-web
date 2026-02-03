@@ -34,6 +34,9 @@ import {
   hueToRgb,
   rgbToHsl,
   hslToRgb,
+  // Hue rotation
+  buildHueRotationMatrix,
+  isIdentityHueRotation,
   // Types - main types
   type WorkerColorAdjustments as ColorAdjustments,
   type WorkerCDLValues as CDLValues,
@@ -642,6 +645,26 @@ function applyHSLQualifier(
   }
 }
 
+function applyWorkerHueRotation(data: Uint8ClampedArray, degrees: number): void {
+  const mat = buildHueRotationMatrix(degrees);
+  const len = data.length;
+
+  for (let i = 0; i < len; i += 4) {
+    const r = data[i]! / 255;
+    const g = data[i + 1]! / 255;
+    const b = data[i + 2]! / 255;
+
+    // mat is column-major: mat[0]=m00, mat[1]=m10, mat[2]=m20, etc.
+    const outR = mat[0]! * r + mat[3]! * g + mat[6]! * b;
+    const outG = mat[1]! * r + mat[4]! * g + mat[7]! * b;
+    const outB = mat[2]! * r + mat[5]! * g + mat[8]! * b;
+
+    data[i] = Math.max(0, Math.min(255, Math.round(outR * 255)));
+    data[i + 1] = Math.max(0, Math.min(255, Math.round(outG * 255)));
+    data[i + 2] = Math.max(0, Math.min(255, Math.round(outB * 255)));
+  }
+}
+
 // ============================================================================
 // Main Processing Function
 // ============================================================================
@@ -668,9 +691,12 @@ function processEffects(
   const hasHSLQualifier =
     state.hslQualifierState && state.hslQualifierState.enabled;
 
+  const hasHueRotation = !isIdentityHueRotation(ca.hueRotation);
+
   if (hasHS) applyHighlightsShadows(data, ca);
   if (hasVibrance) applyVibrance(data, ca);
   if (hasClarity) applyClarity(data, width, height, ca);
+  if (hasHueRotation) applyWorkerHueRotation(data, ca.hueRotation);
   if (hasColorWheels) applyColorWheels(data, state.colorWheelsState);
   if (hasCDL) applyCDL(data, state.cdlValues);
   if (hasCurves) applyCurves(data, state.curvesData);
