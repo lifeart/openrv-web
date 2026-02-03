@@ -41,6 +41,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private projectInput!: HTMLInputElement;
   private sessionNameDisplay!: HTMLElement;
   private autoSaveSlot!: HTMLElement;
+  private networkSlot!: HTMLElement;
   private fullscreenButton!: HTMLButtonElement;
   private presentationButton!: HTMLButtonElement;
 
@@ -164,6 +165,12 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
     // === UTILITY GROUP ===
     const utilityGroup = this.createGroup();
+
+    // Network sync slot (populated by App.ts)
+    this.networkSlot = document.createElement('div');
+    this.networkSlot.dataset.testid = 'network-slot';
+    this.networkSlot.style.cssText = 'display: flex; align-items: center;';
+    utilityGroup.appendChild(this.networkSlot);
 
     // Presentation mode button
     this.presentationButton = this.createIconButton('monitor', '', () => this.emit('presentationToggle', undefined), 'Presentation Mode (Ctrl+Shift+P)');
@@ -777,6 +784,14 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Clear existing content
     this.autoSaveSlot.innerHTML = '';
     this.autoSaveSlot.appendChild(element);
+  }
+
+  /**
+   * Set the network control element to display in the header utility group
+   */
+  setNetworkControl(element: HTMLElement): void {
+    this.networkSlot.innerHTML = '';
+    this.networkSlot.appendChild(element);
   }
 
   /**

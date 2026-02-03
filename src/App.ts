@@ -54,6 +54,8 @@ import { PlaylistManager } from './core/session/PlaylistManager';
 import { PlaylistPanel } from './ui/components/PlaylistPanel';
 import { FullscreenManager } from './utils/FullscreenManager';
 import { PresentationMode } from './utils/PresentationMode';
+import { NetworkSyncManager } from './network/NetworkSyncManager';
+import { NetworkControl } from './ui/components/NetworkControl';
 
 export class App {
   private container: HTMLElement | null = null;
@@ -110,6 +112,8 @@ export class App {
   private playlistPanel: PlaylistPanel;
   private fullscreenManager!: FullscreenManager;
   private presentationMode: PresentationMode;
+  private networkSyncManager: NetworkSyncManager;
+  private networkControl: NetworkControl;
 
   // History recording state
   private colorHistoryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -330,6 +334,11 @@ export class App {
     this.presentationMode.on('stateChanged', (state) => {
       this.headerBar.setPresentationState(state.enabled);
     });
+
+    // Network Sync
+    this.networkSyncManager = new NetworkSyncManager();
+    this.networkControl = new NetworkControl();
+    this.setupNetworkSync();
 
     // Wire up fullscreen and presentation toggle from HeaderBar
     this.headerBar.on('fullscreenToggle', () => {
@@ -1476,6 +1485,14 @@ export class App {
       'view.togglePresentation': () => {
         this.presentationMode.toggle();
       },
+      'network.togglePanel': () => {
+        this.networkControl.togglePanel();
+      },
+      'network.disconnect': () => {
+        if (this.networkSyncManager.isConnected) {
+          this.networkSyncManager.leaveRoom();
+        }
+      },
     };
 
     // Paint shortcuts that conflict with other shortcuts are handled by delegating handlers
@@ -1507,6 +1524,139 @@ export class App {
         this.keyboardManager.register(effectiveCombo, handler, defaultBinding.description);
       }
     }
+  }
+
+  /**
+   * Setup network sync: wire NetworkControl UI to NetworkSyncManager,
+   * and listen for incoming sync events to apply to Session/Viewer.
+   */
+  private setupNetworkSync(): void {
+    // Add NetworkControl to header bar
+    this.headerBar.setNetworkControl(this.networkControl.render());
+
+    // Wire UI events to manager
+    this.networkControl.on('createRoom', ({ userName }) => {
+      this.networkSyncManager.simulateRoomCreated();
+      const info = this.networkSyncManager.roomInfo;
+      if (info) {
+        this.networkControl.setConnectionState('connected');
+        this.networkControl.setRoomInfo(info);
+        this.networkControl.setUsers(info.users);
+      }
+    });
+
+    this.networkControl.on('joinRoom', ({ roomCode, userName }) => {
+      this.networkSyncManager.joinRoom(roomCode, userName);
+    });
+
+    this.networkControl.on('leaveRoom', () => {
+      this.networkSyncManager.leaveRoom();
+      this.networkControl.setConnectionState('disconnected');
+      this.networkControl.setRoomInfo(null);
+      this.networkControl.setUsers([]);
+    });
+
+    this.networkControl.on('syncSettingsChanged', (settings) => {
+      this.networkSyncManager.setSyncSettings(settings);
+    });
+
+    this.networkControl.on('copyLink', async (link) => {
+      try {
+        await navigator.clipboard.writeText(link);
+      } catch {
+        // Clipboard API may not be available
+      }
+    });
+
+    // Wire manager events to UI
+    this.networkSyncManager.on('connectionStateChanged', (state) => {
+      this.networkControl.setConnectionState(state);
+    });
+
+    this.networkSyncManager.on('roomCreated', (info) => {
+      this.networkControl.setRoomInfo(info);
+      this.networkControl.setUsers(info.users);
+    });
+
+    this.networkSyncManager.on('roomJoined', (info) => {
+      this.networkControl.setRoomInfo(info);
+      this.networkControl.setUsers(info.users);
+    });
+
+    this.networkSyncManager.on('usersChanged', (users) => {
+      this.networkControl.setUsers(users);
+    });
+
+    this.networkSyncManager.on('error', (err) => {
+      this.networkControl.showError(err.message);
+    });
+
+    this.networkSyncManager.on('rttUpdated', (rtt) => {
+      this.networkControl.setRTT(rtt);
+    });
+
+    // Wire incoming sync events to Session/Viewer
+    this.networkSyncManager.on('syncPlayback', (payload) => {
+      const sm = this.networkSyncManager.getSyncStateManager();
+      sm.beginApplyRemote();
+      try {
+        if (payload.isPlaying && !this.session.isPlaying) {
+          this.session.play();
+        } else if (!payload.isPlaying && this.session.isPlaying) {
+          this.session.pause();
+        }
+        if (sm.shouldApplyFrameSync(this.session.currentFrame, payload.currentFrame)) {
+          this.session.goToFrame(payload.currentFrame);
+        }
+        if (this.session.playbackSpeed !== payload.playbackSpeed) {
+          this.session.playbackSpeed = payload.playbackSpeed;
+        }
+      } finally {
+        sm.endApplyRemote();
+      }
+    });
+
+    this.networkSyncManager.on('syncFrame', (payload) => {
+      const sm = this.networkSyncManager.getSyncStateManager();
+      if (sm.shouldApplyFrameSync(this.session.currentFrame, payload.currentFrame)) {
+        sm.beginApplyRemote();
+        try {
+          this.session.goToFrame(payload.currentFrame);
+        } finally {
+          sm.endApplyRemote();
+        }
+      }
+    });
+
+    this.networkSyncManager.on('syncView', (payload) => {
+      const sm = this.networkSyncManager.getSyncStateManager();
+      sm.beginApplyRemote();
+      try {
+        this.viewer.setZoom(payload.zoom);
+      } finally {
+        sm.endApplyRemote();
+      }
+    });
+
+    // Send outgoing sync when local state changes
+    this.session.on('playbackChanged', (isPlaying) => {
+      if (this.networkSyncManager.isConnected && !this.networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
+        this.networkSyncManager.sendPlaybackSync({
+          isPlaying,
+          currentFrame: this.session.currentFrame,
+          playbackSpeed: this.session.playbackSpeed,
+          playDirection: this.session.playDirection,
+          loopMode: this.session.loopMode,
+          timestamp: Date.now(),
+        });
+      }
+    });
+
+    this.session.on('frameChanged', (frame) => {
+      if (this.networkSyncManager.isConnected && !this.networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
+        this.networkSyncManager.sendFrameSync(frame);
+      }
+    });
   }
 
   private goToNextAnnotation(): void {
@@ -2798,6 +2948,8 @@ export class App {
     this.playlistManager.dispose();
     this.fullscreenManager?.dispose();
     this.presentationMode.dispose();
+    this.networkSyncManager.dispose();
+    this.networkControl.dispose();
     // Dispose auto-save manager (fire and forget - we can't await in dispose)
     this.autoSaveManager.dispose().catch(err => {
       console.error('Error disposing auto-save manager:', err);

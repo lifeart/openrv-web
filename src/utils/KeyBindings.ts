@@ -495,6 +495,19 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     ctrl: true,
     description: 'Toggle presentation mode'
   },
+
+  // Network Sync
+  'network.togglePanel': {
+    code: 'KeyN',
+    shift: true,
+    description: 'Toggle network sync panel'
+  },
+  'network.disconnect': {
+    code: 'KeyN',
+    shift: true,
+    ctrl: true,
+    description: 'Quick disconnect from sync room'
+  },
 };
 /**
  * Get a human-readable description of a key combination

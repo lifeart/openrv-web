@@ -35,6 +35,7 @@ declare global {
       isUsingMediabunny: () => boolean;
       getFullscreenState: () => FullscreenState;
       getPresentationState: () => PresentationTestState;
+      getNetworkSyncState: () => NetworkSyncState;
     };
   }
 }
@@ -42,6 +43,19 @@ declare global {
 export interface FullscreenState {
   isFullscreen: boolean;
   isSupported: boolean;
+}
+
+export interface NetworkSyncState {
+  connectionState: 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error';
+  roomCode: string | null;
+  userCount: number;
+  isHost: boolean;
+  isPanelOpen: boolean;
+  syncPlayback: boolean;
+  syncView: boolean;
+  syncColor: boolean;
+  syncAnnotations: boolean;
+  rtt: number;
 }
 
 export interface PresentationTestState {
@@ -782,6 +796,24 @@ export function exposeForTesting(app: App): void {
         enabled: state.enabled ?? false,
         cursorAutoHide: state.cursorAutoHide ?? true,
         cursorHideDelay: state.cursorHideDelay ?? 3000,
+      };
+    },
+
+    getNetworkSyncState: (): NetworkSyncState => {
+      const networkControl = appAny.networkControl;
+      const networkSyncManager = appAny.networkSyncManager;
+      const controlState = networkControl?.getState?.() ?? {};
+      return {
+        connectionState: networkSyncManager?.connectionState ?? 'disconnected',
+        roomCode: networkSyncManager?.roomInfo?.roomCode ?? null,
+        userCount: networkSyncManager?.users?.length ?? 0,
+        isHost: networkSyncManager?.isHost ?? false,
+        isPanelOpen: controlState.isPanelOpen ?? false,
+        syncPlayback: networkSyncManager?.syncSettings?.playback ?? true,
+        syncView: networkSyncManager?.syncSettings?.view ?? true,
+        syncColor: networkSyncManager?.syncSettings?.color ?? false,
+        syncAnnotations: networkSyncManager?.syncSettings?.annotations ?? false,
+        rtt: networkSyncManager?.rtt ?? 0,
       };
     },
   };
