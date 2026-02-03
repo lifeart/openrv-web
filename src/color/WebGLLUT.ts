@@ -228,6 +228,11 @@ export class WebGLLUTProcessor {
   private floatFBO: WebGLFramebuffer | null = null;
   private floatOutputTexture: WebGLTexture | null = null;
 
+  // Texture dimension tracking to avoid redundant texParameteri calls
+  private imageTextureWidth: number = 0;
+  private imageTextureHeight: number = 0;
+  private imageTextureFilter: number = 0; // tracks current MIN_FILTER to detect apply vs applyFloat switches
+
   // Uniform locations
   private uImage: WebGLUniformLocation | null = null;
   private uLut: WebGLUniformLocation | null = null;
@@ -480,10 +485,16 @@ export class WebGLLUTProcessor {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.imageTexture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, imageData);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    // Only set texture params when dimensions or filter mode change (params are sticky on the texture object)
+    if (this.imageTextureWidth !== width || this.imageTextureHeight !== height || this.imageTextureFilter !== gl.LINEAR) {
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      this.imageTextureWidth = width;
+      this.imageTextureHeight = height;
+      this.imageTextureFilter = gl.LINEAR;
+    }
 
     // Bind LUT texture
     gl.activeTexture(gl.TEXTURE1);
@@ -563,10 +574,16 @@ export class WebGLLUTProcessor {
       gl.RGBA, this._activeType,
       this._activeType === gl.HALF_FLOAT ? convertToFloat16Array(data) : data
     );
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    // Only set texture params when dimensions or filter mode change (params are sticky on the texture object)
+    if (this.imageTextureWidth !== width || this.imageTextureHeight !== height || this.imageTextureFilter !== gl.NEAREST) {
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      this.imageTextureWidth = width;
+      this.imageTextureHeight = height;
+      this.imageTextureFilter = gl.NEAREST;
+    }
 
     // Bind LUT texture
     gl.activeTexture(gl.TEXTURE1);

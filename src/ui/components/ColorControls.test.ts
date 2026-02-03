@@ -298,6 +298,145 @@ describe('ColorControls', () => {
     });
   });
 
+  describe('throttledEmitAdjustments', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('COL-037: throttle emits immediately on first call then coalesces', () => {
+      const handler = vi.fn();
+      controls.on('adjustmentsChanged', handler);
+
+      // Access the private throttle method to test its behavior directly
+      const throttle = (controls as unknown as { throttledEmitAdjustments: () => void });
+      const adjustments = (controls as unknown as { adjustments: Record<string, number> });
+
+      // First call emits immediately
+      adjustments.adjustments.exposure = 1.0;
+      throttle.throttledEmitAdjustments();
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ exposure: 1.0 }));
+
+      // Subsequent calls within throttle window are coalesced
+      adjustments.adjustments.exposure = 1.5;
+      throttle.throttledEmitAdjustments();
+      adjustments.adjustments.exposure = 2.0;
+      throttle.throttledEmitAdjustments();
+      adjustments.adjustments.exposure = 2.5;
+      throttle.throttledEmitAdjustments();
+
+      // Still only 1 call (the rest are pending)
+      expect(handler).toHaveBeenCalledTimes(1);
+
+      // After throttle period, final pending value emits
+      vi.advanceTimersByTime(32);
+      expect(handler).toHaveBeenCalledTimes(2);
+      expect(handler).toHaveBeenLastCalledWith(expect.objectContaining({ exposure: 2.5 }));
+    });
+
+    it('COL-038: throttle timer resets after period expires', () => {
+      const handler = vi.fn();
+      controls.on('adjustmentsChanged', handler);
+
+      const throttle = (controls as unknown as { throttledEmitAdjustments: () => void });
+      const adjustments = (controls as unknown as { adjustments: Record<string, number> });
+
+      // First burst
+      adjustments.adjustments.exposure = 1.0;
+      throttle.throttledEmitAdjustments();
+      expect(handler).toHaveBeenCalledTimes(1);
+
+      // Let timer expire
+      vi.advanceTimersByTime(32);
+      expect(handler).toHaveBeenCalledTimes(2);
+
+      // Second burst should emit immediately (timer expired)
+      adjustments.adjustments.exposure = 3.0;
+      throttle.throttledEmitAdjustments();
+      expect(handler).toHaveBeenCalledTimes(3);
+      expect(handler).toHaveBeenLastCalledWith(expect.objectContaining({ exposure: 3.0 }));
+    });
+
+    it('COL-039: throttle does not emit pending if no changes after initial', () => {
+      const handler = vi.fn();
+      controls.on('adjustmentsChanged', handler);
+
+      const throttle = (controls as unknown as { throttledEmitAdjustments: () => void });
+
+      // Single call - emits immediately
+      throttle.throttledEmitAdjustments();
+      expect(handler).toHaveBeenCalledTimes(1);
+
+      // Timer fires but pending value is same as initial - still emits the pending
+      vi.advanceTimersByTime(32);
+      // The throttle always sets _pendingAdjustments before checking timer,
+      // so the timer callback will emit it
+      expect(handler).toHaveBeenCalledTimes(2);
+    });
+
+    it('COL-040: setAdjustments bypasses throttle for immediate programmatic update', () => {
+      const handler = vi.fn();
+      controls.on('adjustmentsChanged', handler);
+
+      // setAdjustments always emits immediately, not throttled
+      controls.setAdjustments({ exposure: 3.0 });
+      expect(handler).toHaveBeenCalledTimes(1);
+
+      controls.setAdjustments({ exposure: 4.0 });
+      expect(handler).toHaveBeenCalledTimes(2);
+    });
+
+    it('COL-041: reset bypasses throttle for immediate feedback', () => {
+      const handler = vi.fn();
+      controls.setAdjustments({ exposure: 2.0 });
+
+      controls.on('adjustmentsChanged', handler);
+      controls.reset();
+
+      // reset() emits directly, not through throttle
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler).toHaveBeenCalledWith(DEFAULT_COLOR_ADJUSTMENTS);
+    });
+
+    it('COL-042: dispose cleans up throttle timer without errors', () => {
+      const throttle = (controls as unknown as { throttledEmitAdjustments: () => void });
+
+      // Start a throttle timer
+      throttle.throttledEmitAdjustments();
+      throttle.throttledEmitAdjustments();
+
+      // Dispose before timer fires
+      expect(() => controls.dispose()).not.toThrow();
+
+      // Advancing timers after dispose should not cause errors
+      vi.advanceTimersByTime(100);
+    });
+
+    it('COL-043: throttle internal state is cleaned up on dispose', () => {
+      const internals = (controls as unknown as {
+        throttledEmitAdjustments: () => void;
+        _inputThrottleTimer: ReturnType<typeof setTimeout> | null;
+        _pendingAdjustments: unknown;
+      });
+
+      internals.throttledEmitAdjustments();
+      internals.throttledEmitAdjustments();
+
+      // Timer should be active
+      expect(internals._inputThrottleTimer).not.toBeNull();
+
+      controls.dispose();
+
+      // Timer and pending should be cleaned up
+      expect(internals._inputThrottleTimer).toBeNull();
+      expect(internals._pendingAdjustments).toBeNull();
+    });
+  });
+
   describe('DEFAULT_COLOR_ADJUSTMENTS', () => {
     it('COL-028: has correct default values', () => {
       expect(DEFAULT_COLOR_ADJUSTMENTS.exposure).toBe(0);

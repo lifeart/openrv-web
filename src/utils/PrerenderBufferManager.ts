@@ -108,6 +108,8 @@ export class PrerenderBufferManager {
   private playbackDirection: number = 1;
   private isPlaying: boolean = false;
   private totalFrames: number;
+  private lastPreloadCenter: number = -1;
+  private lastPreloadEffectsHash: string = '';
 
   private frameLoader: FrameLoader;
   private idleCallbackId: number | null = null;
@@ -121,6 +123,7 @@ export class PrerenderBufferManager {
   // Statistics
   private cacheHits: number = 0;
   private cacheMisses: number = 0;
+  private staleCacheHits: number = 0;
 
   // Callback for cache updates (for UI refresh)
   private onCacheUpdateCallback: (() => void) | null = null;
@@ -172,7 +175,9 @@ export class PrerenderBufferManager {
 
   /**
    * Get a pre-rendered frame from cache (synchronous)
-   * Returns null if frame is not in cache
+   * Returns null if frame is not in cache.
+   * During playback, returns stale cached frames as fallback to avoid
+   * dropping to expensive live rendering while effects are being updated.
    */
   getFrame(frameNumber: number): CachedFrame | null {
     if (frameNumber < 1 || frameNumber > this.totalFrames) {
@@ -180,8 +185,21 @@ export class PrerenderBufferManager {
     }
 
     const cached = this.cache.get(frameNumber);
-    if (cached && cached.effectsHash === this.currentEffectsHash) {
+    if (!cached) {
+      this.cacheMisses++;
+      return null;
+    }
+
+    if (cached.effectsHash === this.currentEffectsHash) {
       this.cacheHits++;
+      this.updateAccessOrder(frameNumber);
+      return cached;
+    }
+
+    // During playback, allow stale frames as fallback
+    // (better than dropping to live render which causes stuttering)
+    if (this.isPlaying) {
+      this.staleCacheHits++;
       this.updateAccessOrder(frameNumber);
       return cached;
     }
@@ -199,13 +217,38 @@ export class PrerenderBufferManager {
   }
 
   /**
-   * Update the effects state and invalidate cache if changed
+   * Update the effects state and invalidate cache if changed.
+   * During playback, performs a soft invalidation that keeps stale frames
+   * as fallback while new frames are pre-rendered in the background.
    */
   updateEffects(state: AllEffectsState): void {
     const newHash = computeEffectsHash(state);
 
     if (newHash !== this.currentEffectsHash) {
-      this.invalidateAll();
+      // Cancel pending prerender requests (they'd produce wrong results)
+      for (const request of this.pendingRequests.values()) {
+        request.cancelled = true;
+      }
+      this.pendingRequests.clear();
+      this.activeCount = 0;
+
+      if (this.idleCallbackId !== null) {
+        if (this.usingIdleCallback && typeof cancelIdleCallback !== 'undefined') {
+          cancelIdleCallback(this.idleCallbackId);
+        } else {
+          clearTimeout(this.idleCallbackId);
+        }
+        this.idleCallbackId = null;
+      }
+
+      if (!this.isPlaying) {
+        // When paused, do a hard invalidation (accuracy matters more)
+        this.cache.clear();
+        this.accessOrder.clear();
+      }
+      // During playback, keep stale cached frames as fallback
+      // (getFrame will return them with stale effectsHash)
+
       this.currentEffectsHash = newHash;
     }
 
@@ -250,6 +293,13 @@ export class PrerenderBufferManager {
     if (!this.currentEffectsState || !hasActiveEffects(this.currentEffectsState)) {
       return;
     }
+
+    // Skip if we already preloaded around this frame with the same effects
+    if (centerFrame === this.lastPreloadCenter && this.currentEffectsHash === this.lastPreloadEffectsHash) {
+      return;
+    }
+    this.lastPreloadCenter = centerFrame;
+    this.lastPreloadEffectsHash = this.currentEffectsHash;
 
     this.cancelDistantRequests(centerFrame);
 
@@ -545,7 +595,11 @@ export class PrerenderBufferManager {
 
   private completeRequest(request: PreloadRequest): void {
     this.pendingRequests.delete(request.frame);
-    this.activeCount--;
+    // Guard against going negative (can happen if updateEffects/invalidateAll
+    // resets activeCount while in-flight workers are still completing)
+    if (this.activeCount > 0) {
+      this.activeCount--;
+    }
 
     if (this.pendingRequests.size > 0 && this.activeCount < this.config.maxConcurrent) {
       this.scheduleBackgroundWork();
@@ -680,18 +734,20 @@ export class PrerenderBufferManager {
     activeRequests: number;
     cacheHits: number;
     cacheMisses: number;
+    staleCacheHits: number;
     hitRate: number;
     workersAvailable: boolean;
     numWorkers: number;
   } {
-    const totalRequests = this.cacheHits + this.cacheMisses;
+    const totalRequests = this.cacheHits + this.staleCacheHits + this.cacheMisses;
     return {
       cacheSize: this.cache.size,
       pendingRequests: this.pendingRequests.size,
       activeRequests: this.activeCount,
       cacheHits: this.cacheHits,
       cacheMisses: this.cacheMisses,
-      hitRate: totalRequests > 0 ? this.cacheHits / totalRequests : 0,
+      staleCacheHits: this.staleCacheHits,
+      hitRate: totalRequests > 0 ? (this.cacheHits + this.staleCacheHits) / totalRequests : 0,
       workersAvailable: this.workersAvailable,
       numWorkers: this.workersAvailable ? this.config.numWorkers : 0,
     };
@@ -700,6 +756,7 @@ export class PrerenderBufferManager {
   resetStats(): void {
     this.cacheHits = 0;
     this.cacheMisses = 0;
+    this.staleCacheHits = 0;
   }
 
   setTotalFrames(totalFrames: number): void {

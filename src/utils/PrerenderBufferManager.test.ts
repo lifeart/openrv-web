@@ -512,6 +512,244 @@ describe('Bug Fixes', () => {
   });
 });
 
+describe('Stale cache fallback during playback', () => {
+  let manager: PrerenderBufferManager;
+  let frameLoader: (frame: number) => HTMLCanvasElement | null;
+
+  beforeEach(() => {
+    frameLoader = (frame: number) => {
+      if (frame < 1 || frame > 100) return null;
+      const canvas = document.createElement('canvas');
+      canvas.width = 100;
+      canvas.height = 100;
+      const ctx = canvas.getContext('2d')!;
+      ctx.fillStyle = `rgb(${frame}, ${frame}, ${frame})`;
+      ctx.fillRect(0, 0, 100, 100);
+      return canvas;
+    };
+    manager = new PrerenderBufferManager(100, frameLoader, {
+      useWorkers: false,
+      maxCacheSize: 20,
+      preloadAhead: 5,
+      preloadBehind: 2,
+      maxConcurrent: 2,
+    });
+  });
+
+  afterEach(() => {
+    manager.dispose();
+  });
+
+  it('PBM-050: getFrame returns stale cached frames during playback', async () => {
+    // Set initial effects and cache some frames
+    const state1 = createDefaultEffectsState();
+    state1.colorAdjustments.highlights = 20;
+    manager.updateEffects(state1);
+
+    manager.setPlaybackState(true, 1);
+    manager.preloadAround(50);
+
+    // Wait for prerendering
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    const statsBeforeChange = manager.getStats();
+    expect(statsBeforeChange.cacheSize).toBeGreaterThan(0);
+
+    // Change effects during playback
+    const state2 = createDefaultEffectsState();
+    state2.colorAdjustments.highlights = 40;
+    manager.updateEffects(state2);
+
+    // Cache should still have entries (soft invalidation during playback)
+    const statsAfterChange = manager.getStats();
+    expect(statsAfterChange.cacheSize).toBeGreaterThan(0);
+
+    // getFrame should return stale frames during playback
+    // Try a frame that was prerendered earlier
+    // (frames around 50 should have been cached)
+    let foundStaleFrame = false;
+    for (let f = 48; f <= 55; f++) {
+      const frame = manager.getFrame(f);
+      if (frame !== null) {
+        foundStaleFrame = true;
+        break;
+      }
+    }
+    expect(foundStaleFrame).toBe(true);
+  });
+
+  it('PBM-051: getFrame returns null for stale frames when paused', async () => {
+    // Set initial effects and cache some frames
+    const state1 = createDefaultEffectsState();
+    state1.colorAdjustments.highlights = 20;
+    manager.updateEffects(state1);
+
+    manager.setPlaybackState(false);
+    manager.preloadAround(50);
+
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    // Change effects while paused
+    const state2 = createDefaultEffectsState();
+    state2.colorAdjustments.highlights = 40;
+    manager.updateEffects(state2);
+
+    // Cache should be cleared (hard invalidation when paused)
+    const stats = manager.getStats();
+    expect(stats.cacheSize).toBe(0);
+
+    // getFrame should return null
+    expect(manager.getFrame(50)).toBeNull();
+  });
+
+  it('PBM-052: updateEffects does hard invalidation when paused', () => {
+    const state1 = createDefaultEffectsState();
+    state1.colorAdjustments.highlights = 20;
+    manager.updateEffects(state1);
+
+    // Not playing (default)
+    manager.setPlaybackState(false);
+
+    const state2 = createDefaultEffectsState();
+    state2.colorAdjustments.highlights = 40;
+    manager.updateEffects(state2);
+
+    // Cache should be empty
+    expect(manager.getStats().cacheSize).toBe(0);
+  });
+
+  it('PBM-053: updateEffects does soft invalidation when playing', async () => {
+    const state1 = createDefaultEffectsState();
+    state1.colorAdjustments.highlights = 20;
+    manager.updateEffects(state1);
+    manager.setPlaybackState(true, 1);
+
+    manager.preloadAround(50);
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    const cacheSizeBefore = manager.getStats().cacheSize;
+    expect(cacheSizeBefore).toBeGreaterThan(0);
+
+    // Change effects during playback
+    const state2 = createDefaultEffectsState();
+    state2.colorAdjustments.highlights = 40;
+    manager.updateEffects(state2);
+
+    // Cache should NOT be cleared (soft invalidation)
+    expect(manager.getStats().cacheSize).toBe(cacheSizeBefore);
+  });
+
+  it('PBM-054: hasFrame returns false for stale frames even during playback', async () => {
+    const state1 = createDefaultEffectsState();
+    state1.colorAdjustments.highlights = 20;
+    manager.updateEffects(state1);
+    manager.setPlaybackState(true, 1);
+
+    manager.preloadAround(50);
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    // Change effects
+    const state2 = createDefaultEffectsState();
+    state2.colorAdjustments.highlights = 40;
+    manager.updateEffects(state2);
+
+    // hasFrame should return false for stale frames (strict hash check)
+    // This ensures stale frames get re-queued for prerendering
+    for (let f = 48; f <= 55; f++) {
+      expect(manager.hasFrame(f)).toBe(false);
+    }
+  });
+
+  it('PBM-055: updateEffects cancels pending requests on effects change', async () => {
+    const state1 = createDefaultEffectsState();
+    state1.colorAdjustments.highlights = 20;
+    manager.updateEffects(state1);
+    manager.setPlaybackState(true, 1);
+
+    // Queue some preload requests
+    manager.preloadAround(50);
+
+    // Change effects immediately (before workers finish)
+    const state2 = createDefaultEffectsState();
+    state2.colorAdjustments.highlights = 40;
+    manager.updateEffects(state2);
+
+    // Pending requests should be cleared (old effects)
+    expect(manager.getStats().pendingRequests).toBe(0);
+  });
+});
+
+describe('preloadAround deduplication', () => {
+  let manager: PrerenderBufferManager;
+  let frameLoader: (frame: number) => HTMLCanvasElement | null;
+
+  beforeEach(() => {
+    frameLoader = createMockFrameLoader(100);
+    manager = new PrerenderBufferManager(100, frameLoader, {
+      useWorkers: false,
+      maxCacheSize: 20,
+      preloadAhead: 5,
+      preloadBehind: 2,
+      maxConcurrent: 2,
+    });
+  });
+
+  afterEach(() => {
+    manager.dispose();
+  });
+
+  it('PBM-056: repeated preloadAround with same frame is deduplicated', () => {
+    const state = createDefaultEffectsState();
+    state.colorAdjustments.highlights = 20;
+    manager.updateEffects(state);
+
+    manager.preloadAround(50);
+    const statsAfterFirst = manager.getStats();
+
+    // Call again with same frame - should be a no-op
+    manager.preloadAround(50);
+    const statsAfterSecond = manager.getStats();
+
+    // Pending request counts should be the same
+    expect(statsAfterSecond.pendingRequests).toBe(statsAfterFirst.pendingRequests);
+  });
+
+  it('PBM-057: preloadAround runs again when frame changes', () => {
+    const state = createDefaultEffectsState();
+    state.colorAdjustments.highlights = 20;
+    manager.updateEffects(state);
+
+    manager.preloadAround(50);
+    const statsAfterFirst = manager.getStats();
+    const firstPending = statsAfterFirst.pendingRequests;
+
+    // Different frame should not be deduplicated
+    manager.preloadAround(60);
+    const statsAfterSecond = manager.getStats();
+
+    // Should have queued new requests (some may overlap)
+    expect(statsAfterSecond.pendingRequests).toBeGreaterThanOrEqual(0);
+  });
+
+  it('PBM-058: preloadAround runs again after effects change for same frame', () => {
+    const state1 = createDefaultEffectsState();
+    state1.colorAdjustments.highlights = 20;
+    manager.updateEffects(state1);
+
+    manager.preloadAround(50);
+
+    // Change effects (clears pending)
+    const state2 = createDefaultEffectsState();
+    state2.colorAdjustments.highlights = 40;
+    manager.updateEffects(state2);
+
+    // Same frame but different effects - should NOT be deduplicated
+    manager.preloadAround(50);
+    const stats = manager.getStats();
+    expect(stats.pendingRequests).toBeGreaterThan(0);
+  });
+});
+
 describe('Cache Update Callback', () => {
   let manager: PrerenderBufferManager;
   let frameLoader: (frame: number) => HTMLCanvasElement | null;

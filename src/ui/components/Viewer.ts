@@ -1678,6 +1678,9 @@ export class Viewer {
     // Try prerendered cache first during playback for smooth performance with effects
     if (this.session.isPlaying && this.prerenderBuffer) {
       const currentFrame = this.session.currentFrame;
+      // Always trigger preloading of nearby frames, even on cache miss.
+      // This ensures workers stay ahead of playback rather than lagging behind.
+      this.prerenderBuffer.preloadAround(currentFrame);
       const cached = this.prerenderBuffer.getFrame(currentFrame);
       if (cached) {
         // Draw cached pre-rendered frame scaled to display size
@@ -1692,8 +1695,6 @@ export class Viewer {
         }
         this.updateCanvasPosition();
         this.updateWipeLine();
-        // Trigger preloading of nearby frames
-        this.prerenderBuffer.preloadAround(currentFrame);
         return; // Skip live effect processing
       }
     }
@@ -3734,11 +3735,14 @@ export class Viewer {
       clearTimeout(this.effectsChangeDebounceTimer);
     }
 
+    // Use longer debounce during playback to avoid constant cache churn
+    const debounceMs = this.session.isPlaying ? 200 : EFFECTS_DEBOUNCE_MS;
+
     // Debounce the effect update to avoid excessive invalidations during rapid slider changes
     this.effectsChangeDebounceTimer = setTimeout(() => {
       this.effectsChangeDebounceTimer = null;
       this.doUpdateEffects();
-    }, EFFECTS_DEBOUNCE_MS);
+    }, debounceMs);
   }
 
   /**
@@ -3760,6 +3764,12 @@ export class Viewer {
     );
 
     this.prerenderBuffer.updateEffects(effectsState);
+
+    // After effects change, immediately start prerendering upcoming frames
+    // so the cache warms up before playback reaches them
+    if (this.session.isPlaying) {
+      this.prerenderBuffer.preloadAround(this.session.currentFrame);
+    }
   }
 
   /**

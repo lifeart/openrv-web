@@ -68,6 +68,10 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
   private lutNameLabel: HTMLSpanElement | null = null;
   private lutIntensitySlider: HTMLInputElement | null = null;
 
+  // Throttle state for slider input events
+  private _inputThrottleTimer: ReturnType<typeof setTimeout> | null = null;
+  private _pendingAdjustments: ColorAdjustments | null = null;
+
   constructor() {
     super();
 
@@ -365,6 +369,8 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     this.lutIntensitySlider.addEventListener('input', () => {
       this.lutIntensity = parseFloat(this.lutIntensitySlider!.value);
       intensityValue.textContent = `${Math.round(this.lutIntensity * 100)}%`;
+      // LUT intensity uses its own event, throttle not needed here
+      // as it doesn't go through the same heavy pipeline
       this.emit('lutIntensityChanged', this.lutIntensity);
     });
 
@@ -477,7 +483,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     this.sliders.set(config.key, slider);
     this.valueLabels.set(config.key, valueLabel);
 
-    // Event handling
+    // Event handling - throttled to avoid excessive render calls during drags
     slider.addEventListener('input', () => {
       const value = parseFloat(slider.value);
       this.adjustments[config.key] = value as never;
@@ -486,7 +492,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
       if (config.key === 'vibrance') {
         this.updateSkinProtectionIndicator();
       }
-      this.emit('adjustmentsChanged', { ...this.adjustments });
+      this.throttledEmitAdjustments();
     });
 
     // Double-click to reset individual slider
@@ -575,6 +581,24 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
         this.skinProtectionIndicator.textContent = '';
       }
     }
+  }
+
+  /**
+   * Throttle adjustment emissions to ~30fps during slider drags.
+   * Emits immediately on first call, then coalesces subsequent calls.
+   */
+  private throttledEmitAdjustments(): void {
+    this._pendingAdjustments = { ...this.adjustments };
+    if (this._inputThrottleTimer !== null) return;
+    // Emit immediately on first call
+    this.emit('adjustmentsChanged', { ...this.adjustments });
+    this._inputThrottleTimer = setTimeout(() => {
+      this._inputThrottleTimer = null;
+      if (this._pendingAdjustments) {
+        this.emit('adjustmentsChanged', this._pendingAdjustments);
+        this._pendingAdjustments = null;
+      }
+    }, 32); // ~30fps max update rate
   }
 
   toggle(): void {
@@ -680,6 +704,11 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
   }
 
   dispose(): void {
+    if (this._inputThrottleTimer !== null) {
+      clearTimeout(this._inputThrottleTimer);
+      this._inputThrottleTimer = null;
+    }
+    this._pendingAdjustments = null;
     this.sliders.clear();
     this.valueLabels.clear();
   }

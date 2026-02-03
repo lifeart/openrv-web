@@ -271,6 +271,106 @@ describe('WebGLLUTProcessor', () => {
     });
   });
 
+  describe('texture parameter caching', () => {
+    it('WLUT-012: texParameteri is called on first apply', () => {
+      const processor = new WebGLLUTProcessor();
+      processor.setLUT(createMockLUT());
+      const imageData = new ImageData(10, 10);
+
+      processor.apply(imageData, 1.0);
+
+      // texParameteri should have been called for both output texture and image texture
+      const texParamCalls = mockGl.texParameteri.mock.calls;
+      const minFilterCalls = texParamCalls.filter(
+        (call: number[]) => call[1] === mockGl.TEXTURE_MIN_FILTER
+      );
+      expect(minFilterCalls.length).toBeGreaterThan(0);
+    });
+
+    it('WLUT-013: texParameteri is skipped on subsequent apply with same dimensions', () => {
+      const processor = new WebGLLUTProcessor();
+      processor.setLUT(createMockLUT());
+
+      const imageData1 = new ImageData(10, 10);
+      processor.apply(imageData1, 1.0);
+
+      // Clear call count after first apply
+      mockGl.texParameteri.mockClear();
+
+      const imageData2 = new ImageData(10, 10);
+      processor.apply(imageData2, 1.0);
+
+      // texParameteri should NOT be called again for image texture (same dimensions)
+      // (output texture params are set in the resize block which also doesn't fire)
+      const texParamCalls = mockGl.texParameteri.mock.calls;
+      // Filter for TEXTURE_2D image texture param calls (not output texture which is in resize block)
+      expect(texParamCalls.length).toBe(0);
+    });
+
+    it('WLUT-014: texParameteri is called again when dimensions change', () => {
+      const processor = new WebGLLUTProcessor();
+      processor.setLUT(createMockLUT());
+
+      const imageData1 = new ImageData(10, 10);
+      processor.apply(imageData1, 1.0);
+
+      mockGl.texParameteri.mockClear();
+
+      // Different dimensions
+      const imageData2 = new ImageData(20, 20);
+      processor.apply(imageData2, 1.0);
+
+      // texParameteri should be called for new dimensions
+      const texParamCalls = mockGl.texParameteri.mock.calls;
+      expect(texParamCalls.length).toBeGreaterThan(0);
+    });
+
+    it('WLUT-015: filter mode is tracked between apply and applyFloat', () => {
+      const processor = new WebGLLUTProcessor();
+      processor.setLUT(createMockLUT());
+
+      // apply() uses LINEAR
+      const imageData = new ImageData(10, 10);
+      processor.apply(imageData, 1.0);
+
+      mockGl.texParameteri.mockClear();
+
+      // applyFloat() uses NEAREST - should set params even with same dimensions
+      const floatData = new Float32Array(10 * 10 * 4);
+      processor.applyFloat(floatData, 10, 10, 1.0);
+
+      // Since applyFloat uses NEAREST vs LINEAR, texParameteri must be called
+      const texParamCalls = mockGl.texParameteri.mock.calls;
+      const nearestCalls = texParamCalls.filter(
+        (call: number[]) => call[1] === mockGl.TEXTURE_MIN_FILTER && call[2] === mockGl.NEAREST
+      );
+      expect(nearestCalls.length).toBeGreaterThan(0);
+    });
+
+    it('WLUT-016: switching back from applyFloat to apply resets filter mode', () => {
+      const processor = new WebGLLUTProcessor();
+      processor.setLUT(createMockLUT());
+
+      // apply (LINEAR) → applyFloat (NEAREST) → apply (LINEAR)
+      const imageData = new ImageData(10, 10);
+      processor.apply(imageData, 1.0);
+
+      const floatData = new Float32Array(10 * 10 * 4);
+      processor.applyFloat(floatData, 10, 10, 1.0);
+
+      mockGl.texParameteri.mockClear();
+
+      // apply again - should re-set LINEAR since last was NEAREST
+      processor.apply(imageData, 1.0);
+
+      const texParamCalls = mockGl.texParameteri.mock.calls;
+      const linearCalls = texParamCalls.filter(
+        (call: number[]) => call[1] === mockGl.TEXTURE_MIN_FILTER && call[2] === mockGl.LINEAR
+      );
+      expect(linearCalls.length).toBeGreaterThan(0);
+    });
+  });
+
   describe('image orientation', () => {
     it('WLUT-011: preserves vertical orientation (top row stays at top)', () => {
       // Create a mock that returns a vertically asymmetric pattern
