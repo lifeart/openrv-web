@@ -336,6 +336,15 @@ export class LUTStageControl {
     try {
       const content = await file.text();
       const lut = parseLUT(file.name, content);
+      // GPU stages (file/look/display) only support 3D LUTs
+      const gpuStages: string[] = ['file', 'look', 'display'];
+      if (gpuStages.includes(this.config.stageId) && !isLUT3D(lut)) {
+        showAlert('GPU LUT stages only support 3D LUTs. Please load a 3D LUT file.', {
+          type: 'error',
+          title: 'Unsupported LUT Type',
+        });
+        return;
+      }
       this.setLUTName(file.name);
       this.callbacks.onLUTLoaded(lut, file.name);
     } catch (err) {

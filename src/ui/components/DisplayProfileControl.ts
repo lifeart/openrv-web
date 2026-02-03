@@ -12,7 +12,6 @@ import {
   DisplayTransferFunction,
   DEFAULT_DISPLAY_COLOR_STATE,
   PROFILE_LABELS,
-  PROFILE_FULL_LABELS,
   PROFILE_CYCLE_ORDER,
   isDisplayStateActive,
   saveDisplayProfile,

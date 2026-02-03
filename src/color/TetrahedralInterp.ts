@@ -155,8 +155,8 @@ export type InterpolationMethod = 'trilinear' | 'tetrahedral';
  */
 export function applyLUT3DToBuffer(
   data: Float32Array,
-  width: number,
-  height: number,
+  _width: number,
+  _height: number,
   lut: LUT3D,
   method: InterpolationMethod = 'tetrahedral'
 ): Float32Array {

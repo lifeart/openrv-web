@@ -114,8 +114,6 @@ export class GPULUTChain {
   private uniforms: Record<string, WebGLUniformLocation | null> = {};
 
   private isInitialized = false;
-  private canvasWidth = 0;
-  private canvasHeight = 0;
 
   constructor(gl: WebGL2RenderingContext) {
     this.gl = gl;
@@ -336,8 +334,6 @@ export class GPULUTChain {
     if (canvas.width !== width || canvas.height !== height) {
       canvas.width = width;
       canvas.height = height;
-      this.canvasWidth = width;
-      this.canvasHeight = height;
 
       // Recreate output texture
       if (this.outputTexture) {

@@ -10,8 +10,6 @@
 import { LUTPipeline } from '../../color/pipeline/LUTPipeline';
 import { LUTStageControl } from './LUTStageControl';
 import type { LUT } from '../../color/LUTLoader';
-import { isLUT3D } from '../../color/LUTLoader';
-import type { LUT3D } from '../../color/LUTLoader';
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 
 export interface LUTPipelinePanelEvents extends EventMap {

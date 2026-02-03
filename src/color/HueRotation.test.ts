@@ -90,12 +90,12 @@ describe('HueRotation', () => {
     });
 
     it('HRM-011: 120 degrees shifts red toward green', () => {
-      const [r, g, b] = applyHueRotation(1, 0, 0, 120);
+      const [r, g] = applyHueRotation(1, 0, 0, 120);
       expect(g).toBeGreaterThan(r);
     });
 
     it('HRM-012: 240 degrees shifts red toward blue', () => {
-      const [r, g, b] = applyHueRotation(1, 0, 0, 240);
+      const [r, , b] = applyHueRotation(1, 0, 0, 240);
       expect(b).toBeGreaterThan(r);
     });
 
