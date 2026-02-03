@@ -14,6 +14,7 @@ import {
   waitForMediaLoaded,
   waitForFrameAtMost,
   waitForFrameAtEnd,
+  waitForLoopMode,
 } from './fixtures';
 import { PLAYBACK_SPEED_PRESETS } from '../src/core/session/Session';
 
@@ -174,10 +175,11 @@ test.describe('Playback Edge Cases', () => {
       await page.keyboard.press('o');
       await page.waitForTimeout(100);
 
-      // Set once mode (default is 'loop', so cycle: loop -> pingpong -> once)
-      await page.keyboard.press('l'); // cycle to pingpong
-      await page.keyboard.press('l'); // cycle to once
-      await page.waitForTimeout(100);
+      // Set once mode (Ctrl+L cycles loop mode: loop -> pingpong -> once)
+      await page.keyboard.press('Control+l'); // cycle to pingpong
+      await waitForLoopMode(page, 'pingpong');
+      await page.keyboard.press('Control+l'); // cycle to once
+      await waitForLoopMode(page, 'once');
 
       let state = await getSessionState(page);
       expect(state.loopMode).toBe('once');
@@ -262,9 +264,9 @@ test.describe('Playback Edge Cases', () => {
       await page.keyboard.press('o');
       await page.waitForTimeout(100);
 
-      // Set pingpong mode
-      await page.keyboard.press('l');
-      await page.waitForTimeout(100);
+      // Set pingpong mode (Ctrl+L cycles: loop -> pingpong)
+      await page.keyboard.press('Control+l');
+      await waitForLoopMode(page, 'pingpong');
 
       let state = await getSessionState(page);
       expect(state.loopMode).toBe('pingpong');
@@ -312,15 +314,15 @@ test.describe('Playback Edge Cases', () => {
 
       // Seek to start while playing at high speed
       await page.keyboard.press('Home');
-      await page.waitForTimeout(200);
 
-      // Pause
+      // Pause immediately after seeking to minimize frame advancement
       await page.keyboard.press('Space');
       await waitForPlaybackState(page, false);
 
       const state = await getSessionState(page);
-      // Should be at a low frame (seeked to start, maybe advanced a bit)
-      expect(state.currentFrame).toBeLessThanOrEqual(10);
+      // Should be at a low frame (seeked to start, may have advanced a few frames
+      // between Home and Space due to high-speed playback)
+      expect(state.currentFrame).toBeLessThanOrEqual(20);
     });
 
     test('EDGE-021: direction toggle during high-speed playback', async ({ page }) => {

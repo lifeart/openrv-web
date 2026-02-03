@@ -5,6 +5,8 @@ import {
   getSessionState,
   captureViewerScreenshot,
   imagesAreDifferent,
+  waitForLoopMode,
+  waitForPlaybackState,
 } from './fixtures';
 
 /**
@@ -362,27 +364,27 @@ test.describe('Playback Controls', () => {
   });
 
   test.describe('Loop Modes', () => {
-    test('PLAY-030: should cycle loop mode with L key (once -> loop -> pingpong)', async ({ page }) => {
+    test('PLAY-030: should cycle loop mode with Ctrl+L key (loop -> pingpong -> once -> loop)', async ({ page }) => {
       let state = await getSessionState(page);
       expect(state.loopMode).toBe('loop'); // Default
 
-      // Press L to cycle to pingpong
-      await page.keyboard.press('l');
-      await page.waitForTimeout(100);
+      // Press Ctrl+L to cycle to pingpong
+      await page.keyboard.press('Control+l');
+      await waitForLoopMode(page, 'pingpong');
 
       state = await getSessionState(page);
       expect(state.loopMode).toBe('pingpong');
 
-      // Press L again to cycle to once
-      await page.keyboard.press('l');
-      await page.waitForTimeout(100);
+      // Press Ctrl+L again to cycle to once
+      await page.keyboard.press('Control+l');
+      await waitForLoopMode(page, 'once');
 
       state = await getSessionState(page);
       expect(state.loopMode).toBe('once');
 
-      // Press L again to cycle back to loop
-      await page.keyboard.press('l');
-      await page.waitForTimeout(100);
+      // Press Ctrl+L again to cycle back to loop
+      await page.keyboard.press('Control+l');
+      await waitForLoopMode(page, 'loop');
 
       state = await getSessionState(page);
       expect(state.loopMode).toBe('loop');
@@ -427,10 +429,11 @@ test.describe('Playback Controls', () => {
       await page.keyboard.press('o');
       await page.waitForTimeout(100);
 
-      // Set once mode
-      await page.keyboard.press('l'); // loop -> pingpong
-      await page.keyboard.press('l'); // pingpong -> once
-      await page.waitForTimeout(100);
+      // Set once mode (Ctrl+L cycles loop mode: loop -> pingpong -> once)
+      await page.keyboard.press('Control+l'); // loop -> pingpong
+      await waitForLoopMode(page, 'pingpong');
+      await page.keyboard.press('Control+l'); // pingpong -> once
+      await waitForLoopMode(page, 'once');
 
       let state = await getSessionState(page);
       expect(state.loopMode).toBe('once');
@@ -441,10 +444,10 @@ test.describe('Playback Controls', () => {
       await page.keyboard.press('ArrowRight');
       await page.waitForTimeout(100);
 
-      // Start playback
+      // Start playback and wait for it to stop (once mode)
       await page.keyboard.press('Space');
-      await page.waitForTimeout(800); // Enough time to reach end
-      await page.waitForTimeout(100);
+      await waitForPlaybackState(page, true);
+      await waitForPlaybackState(page, false, 5000);
 
       // Should stop playing at out point
       state = await getSessionState(page);
@@ -463,9 +466,9 @@ test.describe('Playback Controls', () => {
       await page.keyboard.press('o');
       await page.waitForTimeout(100);
 
-      // Set pingpong mode
-      await page.keyboard.press('l');
-      await page.waitForTimeout(100);
+      // Set pingpong mode (Ctrl+L cycles: loop -> pingpong)
+      await page.keyboard.press('Control+l');
+      await waitForLoopMode(page, 'pingpong');
 
       let state = await getSessionState(page);
       expect(state.loopMode).toBe('pingpong');
@@ -479,9 +482,10 @@ test.describe('Playback Controls', () => {
 
       // Start playback
       await page.keyboard.press('Space');
+      await waitForPlaybackState(page, true);
       await page.waitForTimeout(800);
       await page.keyboard.press('Space');
-      await page.waitForTimeout(100);
+      await waitForPlaybackState(page, false);
 
       // In pingpong mode, should still be within range
       state = await getSessionState(page);
@@ -499,9 +503,9 @@ test.describe('Playback Controls', () => {
       await page.keyboard.press('o'); // out at frame 4 (3 frame range)
       await page.waitForTimeout(100);
 
-      // Set pingpong mode
-      await page.keyboard.press('l');
-      await page.waitForTimeout(100);
+      // Set pingpong mode (Ctrl+L cycles: loop -> pingpong)
+      await page.keyboard.press('Control+l');
+      await waitForLoopMode(page, 'pingpong');
 
       let state = await getSessionState(page);
       expect(state.loopMode).toBe('pingpong');
@@ -756,10 +760,11 @@ test.describe('Playback Controls', () => {
 
   test.describe('Video Completion', () => {
     test('PLAY-070: play button should return to play state when video finishes in once mode', async ({ page }) => {
-      // Set once mode
-      await page.keyboard.press('l'); // loop -> pingpong
-      await page.keyboard.press('l'); // pingpong -> once
-      await page.waitForTimeout(100);
+      // Set once mode (Ctrl+L cycles loop mode: loop -> pingpong -> once)
+      await page.keyboard.press('Control+l'); // loop -> pingpong
+      await waitForLoopMode(page, 'pingpong');
+      await page.keyboard.press('Control+l'); // pingpong -> once
+      await waitForLoopMode(page, 'once');
 
       let state = await getSessionState(page);
       expect(state.loopMode).toBe('once');
@@ -790,14 +795,14 @@ test.describe('Playback Controls', () => {
 
       // Start playback
       await page.keyboard.press('Space');
-      await page.waitForTimeout(100);
+      await waitForPlaybackState(page, true);
 
       // Button should show "Pause" while playing
       const duringTitle = await playButton.getAttribute('title');
       expect(duringTitle).toMatch(/pause/i);
 
-      // Wait for playback to finish
-      await page.waitForTimeout(600);
+      // Wait for playback to finish (once mode should stop automatically)
+      await waitForPlaybackState(page, false, 5000);
 
       // After video finishes in once mode, button should return to "Play"
       state = await getSessionState(page);

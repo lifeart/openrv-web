@@ -1566,6 +1566,21 @@ export async function waitForFrameAtEnd(page: Page, timeout = TIMEOUT_MEDIUM): P
 }
 
 /**
+ * Wait for loop mode to change to the expected value.
+ * Prefer this over waitForTimeout for deterministic E2E tests.
+ */
+export async function waitForLoopMode(page: Page, loopMode: 'once' | 'loop' | 'pingpong', timeout = TIMEOUT_SHORT): Promise<void> {
+  await page.waitForFunction(
+    (expected) => {
+      const state = (window as any).__OPENRV_TEST__?.getSessionState();
+      return state?.loopMode === expected;
+    },
+    loopMode,
+    { timeout }
+  );
+}
+
+/**
  * Wait for buffering state to change to the expected value.
  */
 export async function waitForBufferingState(page: Page, isBuffering: boolean, timeout = TIMEOUT_MEDIUM): Promise<void> {
