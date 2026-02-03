@@ -387,6 +387,14 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     description: 'Toggle zebra stripes exposure warning'
   },
 
+  // Luminance visualization cycle
+  'view.cycleLuminanceVis': {
+    code: 'KeyV',
+    shift: true,
+    alt: true,
+    description: 'Cycle luminance visualization modes'
+  },
+
   // Color wheels
   'color.toggleColorWheels': {
     code: 'KeyW',

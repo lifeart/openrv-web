@@ -36,10 +36,21 @@ declare global {
       getFullscreenState: () => FullscreenState;
       getPresentationState: () => PresentationTestState;
       getNetworkSyncState: () => NetworkSyncState;
+      getLuminanceVisState: () => LuminanceVisTestState;
       simulateFullscreenEnter: () => void;
       simulateFullscreenExit: () => void;
     };
   }
+}
+
+export interface LuminanceVisTestState {
+  mode: 'off' | 'false-color' | 'hsv' | 'random-color' | 'contour';
+  falseColorPreset: 'standard' | 'arri' | 'red' | 'custom';
+  randomBandCount: number;
+  randomSeed: number;
+  contourLevels: number;
+  contourDesaturate: boolean;
+  contourLineColor: [number, number, number];
 }
 
 export interface FullscreenState {
@@ -804,6 +815,21 @@ export function exposeForTesting(app: App): void {
         enabled: state.enabled ?? false,
         cursorAutoHide: state.cursorAutoHide ?? true,
         cursorHideDelay: state.cursorHideDelay ?? 3000,
+      };
+    },
+
+    getLuminanceVisState: (): LuminanceVisTestState => {
+      const viewer = appAny.viewer;
+      const lumVis = viewer?.getLuminanceVisualization?.();
+      const state = lumVis?.getState?.() ?? {};
+      return {
+        mode: state.mode ?? 'off',
+        falseColorPreset: state.falseColorPreset ?? 'standard',
+        randomBandCount: state.randomBandCount ?? 16,
+        randomSeed: state.randomSeed ?? 42,
+        contourLevels: state.contourLevels ?? 10,
+        contourDesaturate: state.contourDesaturate ?? true,
+        contourLineColor: state.contourLineColor ?? [255, 255, 255],
       };
     },
 

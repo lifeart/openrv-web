@@ -24,6 +24,7 @@ import { ScopesControl } from './ui/components/ScopesControl';
 import { CompareControl } from './ui/components/CompareControl';
 import { SafeAreasControl } from './ui/components/SafeAreasControl';
 import { FalseColorControl } from './ui/components/FalseColorControl';
+import { LuminanceVisualizationControl } from './ui/components/LuminanceVisualizationControl';
 import { ToneMappingControl } from './ui/components/ToneMappingControl';
 import { ZebraControl } from './ui/components/ZebraControl';
 import { HSLQualifierControl } from './ui/components/HSLQualifierControl';
@@ -90,6 +91,7 @@ export class App {
   private compareControl: CompareControl;
   private safeAreasControl: SafeAreasControl;
   private falseColorControl: FalseColorControl;
+  private luminanceVisControl: LuminanceVisualizationControl;
   private toneMappingControl: ToneMappingControl;
   private zebraControl: ZebraControl;
   private hslQualifierControl: HSLQualifierControl;
@@ -307,6 +309,7 @@ export class App {
     // Safe Areas control
     this.safeAreasControl = new SafeAreasControl(this.viewer.getSafeAreasOverlay());
     this.falseColorControl = new FalseColorControl(this.viewer.getFalseColor());
+    this.luminanceVisControl = new LuminanceVisualizationControl(this.viewer.getLuminanceVisualization());
     this.toneMappingControl = new ToneMappingControl();
     this.toneMappingControl.on('stateChanged', (state) => {
       this.viewer.setToneMappingState(state);
@@ -898,6 +901,7 @@ export class App {
     // --- GROUP 4: Analysis Tools (SafeAreas, FalseColor, ToneMapping, Zebra, HSL, PAR) ---
     viewContent.appendChild(this.safeAreasControl.render());
     viewContent.appendChild(this.falseColorControl.render());
+    viewContent.appendChild(this.luminanceVisControl.render());
     viewContent.appendChild(this.toneMappingControl.render());
     viewContent.appendChild(this.zebraControl.render());
     viewContent.appendChild(this.hslQualifierControl.render());
@@ -909,6 +913,10 @@ export class App {
     this.viewer.getFalseColor().on('stateChanged', () => {
       this.viewer.refresh();
     });
+
+    // Add luminance visualization badge to canvas overlay
+    const lumVisBadge = this.luminanceVisControl.createBadge();
+    this.viewer.getCanvasContainer().appendChild(lumVisBadge);
 
     // Setup eyedropper for color picking from viewer
     this.hslQualifierControl.setEyedropperCallback((active) => {
@@ -1478,6 +1486,9 @@ export class App {
       },
       'color.toggleInversion': () => {
         this.colorInversionToggle.toggle();
+      },
+      'view.cycleLuminanceVis': () => {
+        this.viewer.getLuminanceVisualization().cycleMode();
       },
       'panel.history': () => {
         this.historyPanel.toggle();

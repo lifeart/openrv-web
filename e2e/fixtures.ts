@@ -309,6 +309,16 @@ export interface PresentationState {
   cursorHideDelay: number;
 }
 
+export interface LuminanceVisState {
+  mode: 'off' | 'false-color' | 'hsv' | 'random-color' | 'contour';
+  falseColorPreset: 'standard' | 'arri' | 'red' | 'custom';
+  randomBandCount: number;
+  randomSeed: number;
+  contourLevels: number;
+  contourDesaturate: boolean;
+  contourLineColor: [number, number, number];
+}
+
 /**
  * Get session state from the app
  */
@@ -739,6 +749,23 @@ export async function getPresentationState(page: Page): Promise<PresentationStat
       enabled: false,
       cursorAutoHide: true,
       cursorHideDelay: 3000,
+    };
+  });
+}
+
+/**
+ * Get luminance visualization state from the app
+ */
+export async function getLuminanceVisState(page: Page): Promise<LuminanceVisState> {
+  return page.evaluate(() => {
+    return (window as any).__OPENRV_TEST__?.getLuminanceVisState() ?? {
+      mode: 'off',
+      falseColorPreset: 'standard',
+      randomBandCount: 16,
+      randomSeed: 42,
+      contourLevels: 10,
+      contourDesaturate: true,
+      contourLineColor: [255, 255, 255],
     };
   });
 }

@@ -27,6 +27,7 @@ import { SafeAreasOverlay } from './SafeAreasOverlay';
 import { MatteOverlay } from './MatteOverlay';
 import { PixelProbe } from './PixelProbe';
 import { FalseColor } from './FalseColor';
+import { LuminanceVisualization } from './LuminanceVisualization';
 import { TimecodeOverlay } from './TimecodeOverlay';
 import { ZebraStripes } from './ZebraStripes';
 import { ColorWheels } from './ColorWheels';
@@ -250,6 +251,9 @@ export class Viewer {
   // False color display
   private falseColor: FalseColor;
 
+  // Luminance visualization modes (HSV, random color, contour, delegates false-color)
+  private luminanceVisualization: LuminanceVisualization;
+
   // Zebra stripes overlay
   private zebraStripes: ZebraStripes;
   private clippingOverlay: ClippingOverlay;
@@ -414,6 +418,12 @@ export class Viewer {
 
     // Create false color display
     this.falseColor = new FalseColor();
+
+    // Create luminance visualization (manages HSV, random color, contour, and delegates false-color)
+    this.luminanceVisualization = new LuminanceVisualization(this.falseColor);
+    this.luminanceVisualization.on('stateChanged', () => {
+      this.refresh();
+    });
 
     // Create zebra stripes overlay
     this.zebraStripes = new ZebraStripes();
@@ -2391,6 +2401,7 @@ export class Viewer {
     const hasColorWheels = this.colorWheels.hasAdjustments();
     const hasHSLQualifier = this.hslQualifier.isEnabled();
     const hasFalseColor = this.falseColor.isEnabled();
+    const hasLuminanceVis = this.luminanceVisualization.getMode() !== 'off' && this.luminanceVisualization.getMode() !== 'false-color';
     const hasZebras = this.zebraStripes.isEnabled();
     const hasClippingOverlay = this.clippingOverlay.isEnabled();
     const hasToneMapping = this.isToneMappingEnabled();
@@ -2399,7 +2410,7 @@ export class Viewer {
 
     // Early return if no pixel effects are active
     // Note: OCIO is handled via GPU-accelerated 3D LUT in the main render pipeline (applyOCIOToCanvas)
-    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasHueRotation && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasZebras && !hasClippingOverlay && !hasToneMapping && !hasInversion && !hasDisplayColorMgmt) {
+    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasHueRotation && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasLuminanceVis && !hasZebras && !hasClippingOverlay && !hasToneMapping && !hasInversion && !hasDisplayColorMgmt) {
       return;
     }
 
@@ -2489,21 +2500,24 @@ export class Viewer {
       applyDisplayColorManagementToImageData(imageData, this.displayColorState);
     }
 
-    // Apply false color display (replaces all color information for exposure analysis)
-    if (hasFalseColor) {
+    // Apply luminance visualization modes (HSV, random color, contour) or false color
+    // These replace pixel colors for analysis, so they're mutually exclusive
+    if (hasLuminanceVis) {
+      this.luminanceVisualization.apply(imageData);
+    } else if (hasFalseColor) {
       this.falseColor.apply(imageData);
     }
 
     // Apply zebra stripes (overlay on top of other effects for exposure warnings)
     // Note: Zebras work on original image luminance, so they're applied after false color
     // (typically you'd use one or the other, not both)
-    if (hasZebras && !hasFalseColor) {
+    if (hasZebras && !hasFalseColor && !hasLuminanceVis) {
       this.zebraStripes.apply(imageData);
     }
 
     // Apply clipping overlay (shows clipped highlights/shadows)
     // Applied last as it's a diagnostic overlay
-    if (hasClippingOverlay && !hasFalseColor && !hasZebras) {
+    if (hasClippingOverlay && !hasFalseColor && !hasLuminanceVis && !hasZebras) {
       this.clippingOverlay.apply(imageData);
     }
 
@@ -3714,6 +3728,7 @@ export class Viewer {
 
     // Cleanup overlays
     this.clippingOverlay.dispose();
+    this.luminanceVisualization.dispose();
     this.falseColor.dispose();
     this.zebraStripes.dispose();
     this.spotlightOverlay.dispose();
@@ -3857,6 +3872,13 @@ export class Viewer {
    */
   getFalseColor(): FalseColor {
     return this.falseColor;
+  }
+
+  /**
+   * Get the luminance visualization instance
+   */
+  getLuminanceVisualization(): LuminanceVisualization {
+    return this.luminanceVisualization;
   }
 
   /**
