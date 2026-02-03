@@ -56,6 +56,7 @@ import { FullscreenManager } from './utils/FullscreenManager';
 import { PresentationMode } from './utils/PresentationMode';
 import { NetworkSyncManager } from './network/NetworkSyncManager';
 import { NetworkControl } from './ui/components/NetworkControl';
+import type { OpenRVAPIConfig } from './api/OpenRVAPI';
 
 export class App {
   private container: HTMLElement | null = null;
@@ -2904,6 +2905,18 @@ export class App {
     } catch (err) {
       showAlert(`Failed to load project: ${err}`, { type: 'error', title: 'Load Error' });
     }
+  }
+
+  /**
+   * Get configuration for the public scripting API (window.openrv)
+   */
+  getAPIConfig(): OpenRVAPIConfig {
+    return {
+      session: this.session,
+      viewer: this.viewer,
+      colorControls: this.colorControls,
+      cdlControl: this.cdlControl,
+    };
   }
 
   dispose(): void {
