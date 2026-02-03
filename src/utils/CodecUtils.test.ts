@@ -16,7 +16,6 @@ import {
   createUnsupportedCodecError,
   isCodecError,
   extractCodecFromError,
-  type CodecFamily,
 } from './CodecUtils';
 
 describe('CodecUtils', () => {

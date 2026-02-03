@@ -66,25 +66,6 @@ export interface CodecSupportStatus {
 }
 
 /**
- * Known FourCC codes for professional codecs
- */
-const PRORES_FOURCC = new Set([
-  'apco', // ProRes Proxy
-  'apcs', // ProRes LT
-  'apcn', // ProRes Standard
-  'apch', // ProRes HQ
-  'ap4h', // ProRes 4444
-  'ap4x', // ProRes 4444 XQ
-  'aprn', // ProRes RAW
-  'aprh', // ProRes RAW HQ
-]);
-
-const DNXHD_FOURCC = new Set([
-  'AVdn', // DNxHD
-  'AVdh', // DNxHR (High Resolution)
-]);
-
-/**
  * Codec strings from WebCodecs that indicate ProRes
  */
 const PRORES_CODEC_STRINGS = [
@@ -324,7 +305,7 @@ function extractFourCC(codecString: string | null): string | null {
 
   // Try to find a 4-character FourCC code
   const fourccMatch = codecString.match(/\b([a-zA-Z0-9]{4})\b/);
-  return fourccMatch ? fourccMatch[1] : null;
+  return fourccMatch?.[1] ?? null;
 }
 
 /**
@@ -518,7 +499,7 @@ export function isCodecError(errorMessage: string): boolean {
 export function extractCodecFromError(errorMessage: string): string | null {
   // Try to extract codec string from error message
   const codecMatch = errorMessage.match(/codec[:\s]+([a-zA-Z0-9_.-]+)/i);
-  if (codecMatch) {
+  if (codecMatch?.[1]) {
     return codecMatch[1];
   }
 

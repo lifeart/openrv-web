@@ -106,6 +106,10 @@ export interface ViewerState {
     shadowsPercent: number;
     highlightsPercent: number;
   } | null;
+  // EXR layer state
+  exrLayerCount: number;
+  exrSelectedLayer: string | null;
+  exrAvailableLayers: string[];
 }
 
 export interface ColorState {
@@ -382,6 +386,10 @@ export function exposeForTesting(app: App): void {
         // Clipping overlay state
         clippingOverlayEnabled: viewer.getClippingOverlay?.()?.isEnabled?.() ?? false,
         histogramClipping: histogram?.getClipping?.() ?? null,
+        // EXR layer state (from channelSelect component)
+        exrLayerCount: appAny.channelSelect?.getEXRLayerState?.()?.availableLayers?.length ?? 0,
+        exrSelectedLayer: appAny.channelSelect?.getEXRLayerState?.()?.selectedLayer ?? null,
+        exrAvailableLayers: appAny.channelSelect?.getEXRLayerState?.()?.availableLayers?.map((l: any) => l.name) ?? [],
       };
     },
 

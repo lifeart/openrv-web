@@ -466,6 +466,10 @@ export class App {
       this.scheduleUpdateScopes();
       this.syncGTOStore();
     });
+    this.channelSelect.on('layerChanged', async (event) => {
+      // Handle EXR layer change
+      await this.handleEXRLayerChange(event.layer, event.remapping);
+    });
 
     // Initialize stereo control
     this.stereoControl = new StereoControl();
@@ -719,6 +723,8 @@ export class App {
       }
       this.updateStackControlSources();
       this.viewer.initPrerenderBuffer();
+      // Update EXR layer selector if this is an EXR file with multiple layers
+      this.updateEXRLayers();
       // Small delay to allow canvas to render before updating scopes
       setTimeout(() => {
         this.updateHistogram();
@@ -941,6 +947,9 @@ export class App {
     this.session.on('abSourceChanged', () => {
       const current = this.session.currentAB;
       this.compareControl.setABSource(current);
+      // Update EXR layer selector when switching between A/B sources
+      // since each source may have different layers (or none)
+      this.updateEXRLayers();
     });
 
     this.contextToolbar.setTabContent('view', viewContent);
@@ -1710,6 +1719,57 @@ export class App {
     const imageData = this.viewer.getImageData();
     if (imageData) {
       this.vectorscope.update(imageData);
+    }
+  }
+
+  /**
+   * Handle EXR layer change from ChannelSelect
+   */
+  private async handleEXRLayerChange(
+    layerName: string | null,
+    remapping: import('./formats/EXRDecoder').EXRChannelRemapping | null
+  ): Promise<void> {
+    const source = this.session.currentSource;
+    if (!source) return;
+
+    // Check if source has a FileSourceNode with EXR support
+    const fileSource = source.fileSourceNode;
+    if (!fileSource || typeof fileSource.setEXRLayer !== 'function') return;
+
+    try {
+      const changed = await fileSource.setEXRLayer(layerName, remapping ?? undefined);
+      if (changed) {
+        // Refresh the viewer
+        this.viewer.refresh();
+        this.scheduleUpdateScopes();
+      }
+    } catch (err) {
+      console.error('Failed to change EXR layer:', err);
+    }
+  }
+
+  /**
+   * Update EXR layer information in ChannelSelect when a file is loaded
+   */
+  private updateEXRLayers(): void {
+    const source = this.session.currentSource;
+    if (!source) {
+      this.channelSelect.clearEXRLayers();
+      return;
+    }
+
+    // Check if source has a FileSourceNode with EXR support
+    const fileSource = source.fileSourceNode;
+    if (!fileSource || typeof fileSource.getEXRLayers !== 'function') {
+      this.channelSelect.clearEXRLayers();
+      return;
+    }
+
+    const layers = fileSource.getEXRLayers();
+    if (layers && layers.length > 0) {
+      this.channelSelect.setEXRLayers(layers);
+    } else {
+      this.channelSelect.clearEXRLayers();
     }
   }
 

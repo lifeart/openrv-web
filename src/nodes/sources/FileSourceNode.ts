@@ -9,7 +9,14 @@ import { BaseSourceNode } from './BaseSourceNode';
 import { IPImage } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
 import { RegisterNode } from '../base/NodeFactory';
-import { decodeEXR, exrToIPImage, isEXRFile } from '../../formats/EXRDecoder';
+import {
+  decodeEXR,
+  exrToIPImage,
+  isEXRFile,
+  EXRLayerInfo,
+  EXRDecodeOptions,
+  EXRChannelRemapping,
+} from '../../formats/EXRDecoder';
 
 /**
  * Check if a filename has an EXR extension
@@ -26,6 +33,16 @@ export class FileSourceNode extends BaseSourceNode {
   private cachedIPImage: IPImage | null = null;
   private isEXR: boolean = false;
 
+  // EXR layer support
+  private exrBuffer: ArrayBuffer | null = null;
+  private exrLayers: EXRLayerInfo[] = [];
+  private currentExrLayer: string | null = null;
+  private currentExrRemapping: EXRChannelRemapping | null = null;
+
+  // Canvas cache for EXR rendering (avoids creating new canvas on every getCanvas() call)
+  private cachedCanvas: HTMLCanvasElement | null = null;
+  private canvasDirty: boolean = true;
+
   constructor(name?: string) {
     super('RVFileSource', name ?? 'File Source');
 
@@ -35,6 +52,7 @@ export class FileSourceNode extends BaseSourceNode {
     this.properties.add({ name: 'height', defaultValue: 0 });
     this.properties.add({ name: 'originalUrl', defaultValue: '' });
     this.properties.add({ name: 'isHDR', defaultValue: false });
+    this.properties.add({ name: 'exrLayer', defaultValue: null });
   }
 
   /**
@@ -99,21 +117,57 @@ export class FileSourceNode extends BaseSourceNode {
   }
 
   /**
+   * Get the width of the loaded image
+   */
+  get width(): number {
+    return this.metadata.width;
+  }
+
+  /**
+   * Get the height of the loaded image
+   */
+  get height(): number {
+    return this.metadata.height;
+  }
+
+  /**
+   * Load EXR file from ArrayBuffer (public wrapper)
+   */
+  async loadFromEXR(
+    buffer: ArrayBuffer,
+    name: string,
+    url: string,
+    originalUrl?: string,
+    options?: EXRDecodeOptions
+  ): Promise<void> {
+    return this.loadEXRFromBuffer(buffer, name, url, originalUrl, options);
+  }
+
+  /**
    * Load EXR file from ArrayBuffer
    */
   private async loadEXRFromBuffer(
     buffer: ArrayBuffer,
     name: string,
     url: string,
-    originalUrl?: string
+    originalUrl?: string,
+    options?: EXRDecodeOptions
   ): Promise<void> {
     // Verify it's actually an EXR file
     if (!isEXRFile(buffer)) {
       throw new Error('Invalid EXR file: wrong magic number');
     }
 
-    // Decode EXR
-    const result = await decodeEXR(buffer);
+    // Store the buffer for potential re-decoding with different layers
+    this.exrBuffer = buffer;
+
+    // Decode EXR with optional layer selection
+    const result = await decodeEXR(buffer, options);
+
+    // Store layer information
+    this.exrLayers = result.layers ?? [];
+    this.currentExrLayer = options?.layer ?? null;
+    this.currentExrRemapping = options?.channelRemapping ?? null;
 
     // Convert to IPImage
     this.cachedIPImage = exrToIPImage(result, originalUrl ?? url);
@@ -138,8 +192,61 @@ export class FileSourceNode extends BaseSourceNode {
     this.properties.setValue('width', result.width);
     this.properties.setValue('height', result.height);
     this.properties.setValue('isHDR', true);
+    this.properties.setValue('exrLayer', options?.layer ?? null);
 
+    // Mark canvas as dirty so it gets re-rendered on next getCanvas() call
+    this.canvasDirty = true;
     this.markDirty();
+  }
+
+  /**
+   * Get available EXR layers (only valid for EXR files)
+   */
+  getEXRLayers(): EXRLayerInfo[] {
+    return this.exrLayers;
+  }
+
+  /**
+   * Get the currently selected EXR layer
+   */
+  getCurrentEXRLayer(): string | null {
+    return this.currentExrLayer;
+  }
+
+  /**
+   * Set the EXR layer to display (reloads the EXR with the new layer)
+   * Returns true if the layer was changed, false if already selected or not an EXR
+   */
+  async setEXRLayer(layerName: string | null, remapping?: EXRChannelRemapping): Promise<boolean> {
+    if (!this.isEXR || !this.exrBuffer) {
+      return false;
+    }
+
+    // Check if we're actually changing anything
+    const sameLayer = this.currentExrLayer === layerName;
+    const sameRemapping = JSON.stringify(this.currentExrRemapping) === JSON.stringify(remapping ?? null);
+    if (sameLayer && sameRemapping) {
+      return false;
+    }
+
+    // Re-decode with the new layer/remapping
+    const options: EXRDecodeOptions = {};
+    if (layerName && layerName !== 'RGBA') {
+      options.layer = layerName;
+    }
+    if (remapping) {
+      options.channelRemapping = remapping;
+    }
+
+    await this.loadEXRFromBuffer(
+      this.exrBuffer,
+      this.metadata.name,
+      this.url,
+      this.properties.getValue<string>('originalUrl') || undefined,
+      Object.keys(options).length > 0 ? options : undefined
+    );
+
+    return true;
   }
 
   /**
@@ -176,6 +283,69 @@ export class FileSourceNode extends BaseSourceNode {
 
   getElement(_frame: number): HTMLImageElement | null {
     return this.image;
+  }
+
+  /**
+   * Get a canvas containing the rendered image data
+   * This is used for EXR files where there's no HTMLImageElement.
+   * The canvas is cached and only re-rendered when the image data changes.
+   */
+  getCanvas(): HTMLCanvasElement | null {
+    if (!this.cachedIPImage) {
+      return null;
+    }
+
+    // Return cached canvas if still valid
+    if (this.cachedCanvas && !this.canvasDirty) {
+      return this.cachedCanvas;
+    }
+
+    // Create or reuse canvas
+    if (!this.cachedCanvas) {
+      this.cachedCanvas = document.createElement('canvas');
+    }
+
+    const canvas = this.cachedCanvas;
+
+    // Resize canvas if dimensions changed
+    if (canvas.width !== this.cachedIPImage.width || canvas.height !== this.cachedIPImage.height) {
+      canvas.width = this.cachedIPImage.width;
+      canvas.height = this.cachedIPImage.height;
+    }
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    const imageData = ctx.createImageData(canvas.width, canvas.height);
+    const sourceData = this.cachedIPImage.getTypedArray();
+    const destData = imageData.data;
+
+    // Convert IPImage data to ImageData
+    if (this.cachedIPImage.dataType === 'uint8') {
+      // Direct copy for uint8 data
+      destData.set(sourceData);
+    } else if (this.cachedIPImage.dataType === 'float32') {
+      // Tone map float32 to uint8 (simple clamp for now)
+      const floatData = sourceData as Float32Array;
+      for (let i = 0; i < floatData.length; i++) {
+        // Apply simple exposure and gamma for display
+        const value = floatData[i] ?? 0;
+        const linear = Math.max(0, Math.min(1, value));
+        const gamma = Math.pow(linear, 1 / 2.2);
+        destData[i] = Math.round(gamma * 255);
+      }
+    } else {
+      // uint16 - normalize to 0-255
+      const uint16Data = sourceData as Uint16Array;
+      for (let i = 0; i < uint16Data.length; i++) {
+        const value = uint16Data[i] ?? 0;
+        destData[i] = Math.round((value / 65535) * 255);
+      }
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+    this.canvasDirty = false;
+    return canvas;
   }
 
   protected process(context: EvalContext, _inputs: (IPImage | null)[]): IPImage | null {
@@ -233,7 +403,12 @@ export class FileSourceNode extends BaseSourceNode {
     }
     this.image = null;
     this.cachedIPImage = null;
+    this.exrBuffer = null;
+    this.exrLayers = [];
     this.isEXR = false;
+    // Clean up cached canvas
+    this.cachedCanvas = null;
+    this.canvasDirty = true;
     super.dispose();
   }
 

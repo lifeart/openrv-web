@@ -8,8 +8,12 @@ import {
   exrToIPImage,
   isEXRFile,
   getEXRInfo,
+  extractLayerInfo,
+  resolveChannelMapping,
   EXRCompression,
   EXRPixelType,
+  EXRChannel,
+  EXRHeader,
 } from './EXRDecoder';
 
 // EXR magic number
@@ -739,6 +743,244 @@ describe('EXRDecoder', () => {
         }
       }
       expect(hasNaN).toBe(false);
+    });
+  });
+
+  describe('layer extraction', () => {
+    it('EXR-U150: should extract single RGBA layer from standard channels', () => {
+      const channels: EXRChannel[] = [
+        { name: 'R', pixelType: EXRPixelType.HALF, pLinear: 0, xSampling: 1, ySampling: 1 },
+        { name: 'G', pixelType: EXRPixelType.HALF, pLinear: 0, xSampling: 1, ySampling: 1 },
+        { name: 'B', pixelType: EXRPixelType.HALF, pLinear: 0, xSampling: 1, ySampling: 1 },
+        { name: 'A', pixelType: EXRPixelType.HALF, pLinear: 0, xSampling: 1, ySampling: 1 },
+      ];
+
+      const layers = extractLayerInfo(channels);
+
+      expect(layers.length).toBe(1);
+      expect(layers[0]!.name).toBe('RGBA');
+      expect(layers[0]!.channels).toContain('R');
+      expect(layers[0]!.channels).toContain('G');
+      expect(layers[0]!.channels).toContain('B');
+      expect(layers[0]!.channels).toContain('A');
+    });
+
+    it('EXR-U151: should extract multiple layers from prefixed channels', () => {
+      const channels: EXRChannel[] = [
+        { name: 'R', pixelType: EXRPixelType.HALF, pLinear: 0, xSampling: 1, ySampling: 1 },
+        { name: 'G', pixelType: EXRPixelType.HALF, pLinear: 0, xSampling: 1, ySampling: 1 },
+        { name: 'B', pixelType: EXRPixelType.HALF, pLinear: 0, xSampling: 1, ySampling: 1 },
+        { name: 'A', pixelType: EXRPixelType.HALF, pLinear: 0, xSampling: 1, ySampling: 1 },
+        { name: 'diffuse.R', pixelType: EXRPixelType.HALF, pLinear: 0, xSampling: 1, ySampling: 1 },
+        { name: 'diffuse.G', pixelType: EXRPixelType.HALF, pLinear: 0, xSampling: 1, ySampling: 1 },
+        { name: 'diffuse.B', pixelType: EXRPixelType.HALF, pLinear: 0, xSampling: 1, ySampling: 1 },
+        { name: 'specular.R', pixelType: EXRPixelType.HALF, pLinear: 0, xSampling: 1, ySampling: 1 },
+        { name: 'specular.G', pixelType: EXRPixelType.HALF, pLinear: 0, xSampling: 1, ySampling: 1 },
+        { name: 'specular.B', pixelType: EXRPixelType.HALF, pLinear: 0, xSampling: 1, ySampling: 1 },
+      ];
+
+      const layers = extractLayerInfo(channels);
+
+      expect(layers.length).toBe(3);
+      // RGBA layer should be first
+      expect(layers[0]!.name).toBe('RGBA');
+      // Other layers should be alphabetically sorted
+      expect(layers.find(l => l.name === 'diffuse')).toBeDefined();
+      expect(layers.find(l => l.name === 'specular')).toBeDefined();
+    });
+
+    it('EXR-U152: should track full channel names for layers', () => {
+      const channels: EXRChannel[] = [
+        { name: 'diffuse.R', pixelType: EXRPixelType.HALF, pLinear: 0, xSampling: 1, ySampling: 1 },
+        { name: 'diffuse.G', pixelType: EXRPixelType.HALF, pLinear: 0, xSampling: 1, ySampling: 1 },
+        { name: 'diffuse.B', pixelType: EXRPixelType.HALF, pLinear: 0, xSampling: 1, ySampling: 1 },
+      ];
+
+      const layers = extractLayerInfo(channels);
+      const diffuseLayer = layers.find(l => l.name === 'diffuse');
+
+      expect(diffuseLayer).toBeDefined();
+      expect(diffuseLayer!.channels).toEqual(['R', 'G', 'B']);
+      expect(diffuseLayer!.fullChannelNames).toContain('diffuse.R');
+      expect(diffuseLayer!.fullChannelNames).toContain('diffuse.G');
+      expect(diffuseLayer!.fullChannelNames).toContain('diffuse.B');
+    });
+
+    it('EXR-U153: should handle nested layer names', () => {
+      const channels: EXRChannel[] = [
+        { name: 'render.diffuse.R', pixelType: EXRPixelType.HALF, pLinear: 0, xSampling: 1, ySampling: 1 },
+        { name: 'render.diffuse.G', pixelType: EXRPixelType.HALF, pLinear: 0, xSampling: 1, ySampling: 1 },
+        { name: 'render.diffuse.B', pixelType: EXRPixelType.HALF, pLinear: 0, xSampling: 1, ySampling: 1 },
+      ];
+
+      const layers = extractLayerInfo(channels);
+
+      // Should use the full path up to the last dot as the layer name
+      expect(layers.length).toBe(1);
+      expect(layers[0]!.name).toBe('render.diffuse');
+      expect(layers[0]!.channels).toEqual(['R', 'G', 'B']);
+    });
+
+    it('EXR-U154: should return empty array for empty channel list', () => {
+      const layers = extractLayerInfo([]);
+      expect(layers).toEqual([]);
+    });
+  });
+
+  describe('channel remapping', () => {
+    // Helper to create a minimal header for testing
+    function createTestHeader(channels: string[]): EXRHeader {
+      return {
+        version: 2,
+        tiled: false,
+        longNames: false,
+        nonImage: false,
+        multiPart: false,
+        channels: channels.map(name => ({
+          name,
+          pixelType: EXRPixelType.HALF,
+          pLinear: 0,
+          xSampling: 1,
+          ySampling: 1,
+        })),
+        compression: EXRCompression.NONE,
+        dataWindow: { xMin: 0, yMin: 0, xMax: 1, yMax: 1 },
+        displayWindow: { xMin: 0, yMin: 0, xMax: 1, yMax: 1 },
+        lineOrder: 0,
+        pixelAspectRatio: 1,
+        attributes: new Map(),
+      };
+    }
+
+    it('EXR-U160: should map default RGBA channels', () => {
+      const header = createTestHeader(['R', 'G', 'B', 'A']);
+      const mapping = resolveChannelMapping(header);
+
+      expect(mapping.get('R')).toBe('R');
+      expect(mapping.get('G')).toBe('G');
+      expect(mapping.get('B')).toBe('B');
+      expect(mapping.get('A')).toBe('A');
+    });
+
+    it('EXR-U161: should map grayscale Y channel to RGB', () => {
+      const header = createTestHeader(['Y']);
+      const mapping = resolveChannelMapping(header);
+
+      // Y should be mapped to all RGB channels
+      expect(mapping.get('R')).toBe('Y');
+      expect(mapping.get('G')).toBe('Y');
+      expect(mapping.get('B')).toBe('Y');
+    });
+
+    it('EXR-U162: should map layer channels when layer is specified', () => {
+      const header = createTestHeader(['R', 'G', 'B', 'diffuse.R', 'diffuse.G', 'diffuse.B']);
+      const mapping = resolveChannelMapping(header, { layer: 'diffuse' });
+
+      expect(mapping.get('R')).toBe('diffuse.R');
+      expect(mapping.get('G')).toBe('diffuse.G');
+      expect(mapping.get('B')).toBe('diffuse.B');
+    });
+
+    it('EXR-U163: should apply custom channel remapping', () => {
+      const header = createTestHeader(['diffuse.R', 'diffuse.G', 'diffuse.B', 'specular.R']);
+      const mapping = resolveChannelMapping(header, {
+        channelRemapping: {
+          red: 'specular.R',
+          green: 'diffuse.G',
+          blue: 'diffuse.B',
+        },
+      });
+
+      expect(mapping.get('R')).toBe('specular.R');
+      expect(mapping.get('G')).toBe('diffuse.G');
+      expect(mapping.get('B')).toBe('diffuse.B');
+    });
+
+    it('EXR-U164: should handle missing channels gracefully', () => {
+      const header = createTestHeader(['R', 'G', 'B']); // No alpha
+      const mapping = resolveChannelMapping(header);
+
+      expect(mapping.get('R')).toBe('R');
+      expect(mapping.get('G')).toBe('G');
+      expect(mapping.get('B')).toBe('B');
+      expect(mapping.has('A')).toBe(false);
+    });
+
+    it('EXR-U165: should ignore non-existent channels in custom remapping', () => {
+      const header = createTestHeader(['R', 'G', 'B']);
+      const mapping = resolveChannelMapping(header, {
+        channelRemapping: {
+          red: 'R',
+          green: 'G',
+          blue: 'nonexistent.B', // This channel doesn't exist
+        },
+      });
+
+      expect(mapping.get('R')).toBe('R');
+      expect(mapping.get('G')).toBe('G');
+      expect(mapping.has('B')).toBe(false); // Should not map non-existent channel
+    });
+
+    it('EXR-U166: should use RGBA layer when layer is null', () => {
+      const header = createTestHeader(['R', 'G', 'B', 'diffuse.R', 'diffuse.G', 'diffuse.B']);
+      const mapping = resolveChannelMapping(header, { layer: undefined });
+
+      expect(mapping.get('R')).toBe('R');
+      expect(mapping.get('G')).toBe('G');
+      expect(mapping.get('B')).toBe('B');
+    });
+
+    it('EXR-U167: should handle single-channel layers as grayscale', () => {
+      const header = createTestHeader(['R', 'G', 'B', 'depth.Z']);
+      const mapping = resolveChannelMapping(header, { layer: 'depth' });
+
+      // Single channel should map to all RGB
+      expect(mapping.get('R')).toBe('depth.Z');
+      expect(mapping.get('G')).toBe('depth.Z');
+      expect(mapping.get('B')).toBe('depth.Z');
+    });
+  });
+
+  describe('decodeEXR with layers', () => {
+    it('EXR-U170: should include layer info in decode result', async () => {
+      const buffer = createTestEXR({
+        width: 2,
+        height: 2,
+        channels: ['R', 'G', 'B', 'A'],
+      });
+
+      const result = await decodeEXR(buffer);
+
+      expect(result.layers).toBeDefined();
+      expect(result.layers!.length).toBeGreaterThan(0);
+      expect(result.layers![0]!.name).toBe('RGBA');
+    });
+
+    it('EXR-U171: should return decoded layer name', async () => {
+      const buffer = createTestEXR({
+        width: 2,
+        height: 2,
+        channels: ['R', 'G', 'B', 'A'],
+      });
+
+      const result = await decodeEXR(buffer);
+
+      // When no layer specified, decodedLayer should be undefined
+      expect(result.decodedLayer).toBeUndefined();
+    });
+
+    it('EXR-U172: getEXRInfo should include layer information', () => {
+      const buffer = createTestEXR({
+        width: 4,
+        height: 4,
+        channels: ['R', 'G', 'B', 'A'],
+      });
+
+      const info = getEXRInfo(buffer);
+
+      expect(info).not.toBeNull();
+      expect(info!.layers).toBeDefined();
+      expect(info!.layers.length).toBeGreaterThan(0);
     });
   });
 });

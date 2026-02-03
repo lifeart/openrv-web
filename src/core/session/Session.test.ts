@@ -2209,7 +2209,10 @@ describe('Session', () => {
       videoNode.properties.setValue('url', 'blob:test');
 
       // Mock loadFile to avoid actual video loading
-      const loadFileSpy = vi.spyOn(videoNode, 'loadFile').mockResolvedValue();
+      const loadFileSpy = vi.spyOn(videoNode, 'loadFile').mockResolvedValue({
+        success: true,
+        useMediabunny: true,
+      });
       vi.spyOn(videoNode, 'getMetadata').mockReturnValue({
         name: 'test.mp4',
         width: 1920,
@@ -2330,7 +2333,10 @@ describe('Session', () => {
       videoNode.properties.setValue('file', mockFile);
       videoNode.properties.setValue('url', 'blob:test');
 
-      vi.spyOn(videoNode, 'loadFile').mockResolvedValue();
+      vi.spyOn(videoNode, 'loadFile').mockResolvedValue({
+        success: true,
+        useMediabunny: false,
+      });
       vi.spyOn(videoNode, 'getMetadata').mockReturnValue({
         name: 'test.mp4',
         width: 1920,

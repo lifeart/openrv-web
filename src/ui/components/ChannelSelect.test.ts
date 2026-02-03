@@ -12,6 +12,7 @@ import {
   applyChannelIsolation,
   getChannelValue,
 } from './ChannelSelect';
+import type { EXRLayerInfo } from '../../formats/EXRDecoder';
 
 describe('ChannelSelect', () => {
   let control: ChannelSelect;
@@ -521,5 +522,272 @@ describe('getChannelValue', () => {
     const imageData = createTestImageData();
     const expectedLuma = Math.round(0.2126 * 100 + 0.7152 * 150 + 0.0722 * 200);
     expect(getChannelValue(imageData, 0, 0, 'rgb')).toBe(expectedLuma);
+  });
+});
+
+describe('EXR Layer Support', () => {
+  let control: ChannelSelect;
+
+  beforeEach(() => {
+    control = new ChannelSelect();
+    document.body.appendChild(control.render());
+  });
+
+  afterEach(() => {
+    control.dispose();
+    document.body.innerHTML = '';
+  });
+
+  describe('setEXRLayers', () => {
+    it('CH-060: should not show layer selector for single RGBA layer', () => {
+      const layers: EXRLayerInfo[] = [
+        { name: 'RGBA', channels: ['R', 'G', 'B', 'A'], fullChannelNames: ['R', 'G', 'B', 'A'] },
+      ];
+
+      control.setEXRLayers(layers);
+
+      const layerSelector = document.querySelector('[data-testid="exr-layer-select"]');
+      // Should not be visible (display: none or not created)
+      expect(layerSelector === null || (layerSelector as HTMLElement).style.display === 'none').toBe(true);
+    });
+
+    it('CH-061: should show layer selector for multi-layer EXR', () => {
+      const layers: EXRLayerInfo[] = [
+        { name: 'RGBA', channels: ['R', 'G', 'B', 'A'], fullChannelNames: ['R', 'G', 'B', 'A'] },
+        { name: 'diffuse', channels: ['R', 'G', 'B'], fullChannelNames: ['diffuse.R', 'diffuse.G', 'diffuse.B'] },
+        { name: 'specular', channels: ['R', 'G', 'B'], fullChannelNames: ['specular.R', 'specular.G', 'specular.B'] },
+      ];
+
+      control.setEXRLayers(layers);
+
+      const layerSelector = document.querySelector('[data-testid="exr-layer-select"]');
+      expect(layerSelector).not.toBeNull();
+      expect((layerSelector as HTMLElement).style.display).not.toBe('none');
+    });
+
+    it('CH-062: should update available layers', () => {
+      const layers: EXRLayerInfo[] = [
+        { name: 'RGBA', channels: ['R', 'G', 'B', 'A'], fullChannelNames: ['R', 'G', 'B', 'A'] },
+        { name: 'diffuse', channels: ['R', 'G', 'B'], fullChannelNames: ['diffuse.R', 'diffuse.G', 'diffuse.B'] },
+      ];
+
+      control.setEXRLayers(layers);
+
+      const state = control.getEXRLayerState();
+      expect(state.availableLayers).toEqual(layers);
+    });
+  });
+
+  describe('clearEXRLayers', () => {
+    it('CH-063: should hide layer selector when cleared', () => {
+      // First set some layers
+      const layers: EXRLayerInfo[] = [
+        { name: 'RGBA', channels: ['R', 'G', 'B', 'A'], fullChannelNames: ['R', 'G', 'B', 'A'] },
+        { name: 'diffuse', channels: ['R', 'G', 'B'], fullChannelNames: ['diffuse.R', 'diffuse.G', 'diffuse.B'] },
+      ];
+      control.setEXRLayers(layers);
+
+      // Then clear
+      control.clearEXRLayers();
+
+      const state = control.getEXRLayerState();
+      expect(state.availableLayers).toEqual([]);
+      expect(state.selectedLayer).toBeNull();
+    });
+  });
+
+  describe('setEXRLayer', () => {
+    it('CH-064: should change selected layer and emit event', () => {
+      const layers: EXRLayerInfo[] = [
+        { name: 'RGBA', channels: ['R', 'G', 'B', 'A'], fullChannelNames: ['R', 'G', 'B', 'A'] },
+        { name: 'diffuse', channels: ['R', 'G', 'B'], fullChannelNames: ['diffuse.R', 'diffuse.G', 'diffuse.B'] },
+      ];
+      control.setEXRLayers(layers);
+
+      const handler = vi.fn();
+      control.on('layerChanged', handler);
+
+      control.setEXRLayer('diffuse');
+
+      expect(control.getEXRLayerState().selectedLayer).toBe('diffuse');
+      expect(handler).toHaveBeenCalledWith({
+        layer: 'diffuse',
+        remapping: null,
+      });
+    });
+
+    it('CH-065: should not emit event if layer unchanged', () => {
+      const layers: EXRLayerInfo[] = [
+        { name: 'RGBA', channels: ['R', 'G', 'B', 'A'], fullChannelNames: ['R', 'G', 'B', 'A'] },
+        { name: 'diffuse', channels: ['R', 'G', 'B'], fullChannelNames: ['diffuse.R', 'diffuse.G', 'diffuse.B'] },
+      ];
+      control.setEXRLayers(layers);
+      control.setEXRLayer('diffuse');
+
+      const handler = vi.fn();
+      control.on('layerChanged', handler);
+
+      control.setEXRLayer('diffuse'); // Same layer
+
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('CH-066: should reset to RGBA when null is passed', () => {
+      const layers: EXRLayerInfo[] = [
+        { name: 'RGBA', channels: ['R', 'G', 'B', 'A'], fullChannelNames: ['R', 'G', 'B', 'A'] },
+        { name: 'diffuse', channels: ['R', 'G', 'B'], fullChannelNames: ['diffuse.R', 'diffuse.G', 'diffuse.B'] },
+      ];
+      control.setEXRLayers(layers);
+      control.setEXRLayer('diffuse');
+
+      const handler = vi.fn();
+      control.on('layerChanged', handler);
+
+      control.setEXRLayer(null);
+
+      expect(control.getEXRLayerState().selectedLayer).toBeNull();
+      expect(handler).toHaveBeenCalledWith({
+        layer: null,
+        remapping: null,
+      });
+    });
+  });
+
+  describe('setChannelRemapping', () => {
+    it('CH-067: should set channel remapping and emit event', () => {
+      const layers: EXRLayerInfo[] = [
+        { name: 'RGBA', channels: ['R', 'G', 'B', 'A'], fullChannelNames: ['R', 'G', 'B', 'A'] },
+        { name: 'diffuse', channels: ['R', 'G', 'B'], fullChannelNames: ['diffuse.R', 'diffuse.G', 'diffuse.B'] },
+      ];
+      control.setEXRLayers(layers);
+
+      const handler = vi.fn();
+      control.on('layerChanged', handler);
+
+      const remapping = { red: 'diffuse.R', green: 'diffuse.G', blue: 'diffuse.B' };
+      control.setChannelRemapping(remapping);
+
+      expect(control.getEXRLayerState().channelRemapping).toEqual(remapping);
+      expect(handler).toHaveBeenCalledWith({
+        layer: null,
+        remapping,
+      });
+    });
+  });
+
+  describe('getEXRLayerState', () => {
+    it('CH-068: should return copy of state', () => {
+      const layers: EXRLayerInfo[] = [
+        { name: 'RGBA', channels: ['R', 'G', 'B', 'A'], fullChannelNames: ['R', 'G', 'B', 'A'] },
+        { name: 'diffuse', channels: ['R', 'G', 'B'], fullChannelNames: ['diffuse.R', 'diffuse.G', 'diffuse.B'] },
+      ];
+      control.setEXRLayers(layers);
+      control.setEXRLayer('diffuse');
+
+      const state = control.getEXRLayerState();
+
+      expect(state.availableLayers).toEqual(layers);
+      expect(state.selectedLayer).toBe('diffuse');
+      expect(state.channelRemapping).toBeNull();
+    });
+  });
+
+  describe('layer button UI', () => {
+    it('CH-069: should have correct testid on layer button', () => {
+      const layers: EXRLayerInfo[] = [
+        { name: 'RGBA', channels: ['R', 'G', 'B', 'A'], fullChannelNames: ['R', 'G', 'B', 'A'] },
+        { name: 'diffuse', channels: ['R', 'G', 'B'], fullChannelNames: ['diffuse.R', 'diffuse.G', 'diffuse.B'] },
+      ];
+      control.setEXRLayers(layers);
+
+      const layerButton = document.querySelector('[data-testid="exr-layer-button"]');
+      expect(layerButton).not.toBeNull();
+    });
+
+    it('CH-070: should open layer dropdown on click', () => {
+      const layers: EXRLayerInfo[] = [
+        { name: 'RGBA', channels: ['R', 'G', 'B', 'A'], fullChannelNames: ['R', 'G', 'B', 'A'] },
+        { name: 'diffuse', channels: ['R', 'G', 'B'], fullChannelNames: ['diffuse.R', 'diffuse.G', 'diffuse.B'] },
+      ];
+      control.setEXRLayers(layers);
+
+      const layerButton = document.querySelector('[data-testid="exr-layer-button"]') as HTMLButtonElement;
+      layerButton.click();
+
+      const dropdown = document.querySelector('[data-testid="exr-layer-dropdown"]');
+      expect(dropdown).not.toBeNull();
+    });
+
+    it('CH-071: should highlight layer button when non-default layer selected', () => {
+      const layers: EXRLayerInfo[] = [
+        { name: 'RGBA', channels: ['R', 'G', 'B', 'A'], fullChannelNames: ['R', 'G', 'B', 'A'] },
+        { name: 'diffuse', channels: ['R', 'G', 'B'], fullChannelNames: ['diffuse.R', 'diffuse.G', 'diffuse.B'] },
+      ];
+      control.setEXRLayers(layers);
+
+      // Select non-default layer
+      control.setEXRLayer('diffuse');
+
+      const layerButton = document.querySelector('[data-testid="exr-layer-button"]') as HTMLButtonElement;
+      // Should have accent styling when active
+      expect(layerButton.style.color).toBe('var(--accent-primary)');
+    });
+  });
+
+  describe('layer state reset on file change', () => {
+    it('CH-080: should reset selected layer when loading a new file with different layers', () => {
+      const layers1: EXRLayerInfo[] = [
+        { name: 'RGBA', channels: ['R', 'G', 'B', 'A'], fullChannelNames: ['R', 'G', 'B', 'A'] },
+        { name: 'diffuse', channels: ['R', 'G', 'B'], fullChannelNames: ['diffuse.R', 'diffuse.G', 'diffuse.B'] },
+      ];
+      control.setEXRLayers(layers1);
+      control.setEXRLayer('diffuse');
+      expect(control.getEXRLayerState().selectedLayer).toBe('diffuse');
+
+      // Load new file with different layers
+      const layers2: EXRLayerInfo[] = [
+        { name: 'RGBA', channels: ['R', 'G', 'B', 'A'], fullChannelNames: ['R', 'G', 'B', 'A'] },
+        { name: 'specular', channels: ['R', 'G', 'B'], fullChannelNames: ['specular.R', 'specular.G', 'specular.B'] },
+      ];
+      control.setEXRLayers(layers2);
+
+      // Selected layer should be reset to null (RGBA)
+      expect(control.getEXRLayerState().selectedLayer).toBeNull();
+    });
+
+    it('CH-081: should preserve selected layer when same layers are set', () => {
+      const layers: EXRLayerInfo[] = [
+        { name: 'RGBA', channels: ['R', 'G', 'B', 'A'], fullChannelNames: ['R', 'G', 'B', 'A'] },
+        { name: 'diffuse', channels: ['R', 'G', 'B'], fullChannelNames: ['diffuse.R', 'diffuse.G', 'diffuse.B'] },
+      ];
+      control.setEXRLayers(layers);
+      control.setEXRLayer('diffuse');
+
+      // Set same layers again (e.g., when switching between sources with same layer structure)
+      control.setEXRLayers(layers);
+
+      // Selected layer should be preserved
+      expect(control.getEXRLayerState().selectedLayer).toBe('diffuse');
+    });
+
+    it('CH-082: should reset channel remapping when loading a new file', () => {
+      const layers1: EXRLayerInfo[] = [
+        { name: 'RGBA', channels: ['R', 'G', 'B', 'A'], fullChannelNames: ['R', 'G', 'B', 'A'] },
+        { name: 'diffuse', channels: ['R', 'G', 'B'], fullChannelNames: ['diffuse.R', 'diffuse.G', 'diffuse.B'] },
+      ];
+      control.setEXRLayers(layers1);
+      control.setChannelRemapping({ red: 'diffuse.R', green: 'diffuse.G', blue: 'diffuse.B' });
+      expect(control.getEXRLayerState().channelRemapping).not.toBeNull();
+
+      // Load new file with different layers
+      const layers2: EXRLayerInfo[] = [
+        { name: 'RGBA', channels: ['R', 'G', 'B', 'A'], fullChannelNames: ['R', 'G', 'B', 'A'] },
+        { name: 'specular', channels: ['R', 'G', 'B'], fullChannelNames: ['specular.R', 'specular.G', 'specular.B'] },
+      ];
+      control.setEXRLayers(layers2);
+
+      // Remapping should be reset
+      expect(control.getEXRLayerState().channelRemapping).toBeNull();
+    });
   });
 });

@@ -8,6 +8,7 @@ export const SAMPLE_IMAGE = 'sample/test_image.png';
 export const SAMPLE_RV_SESSION = 'sample/test_session.rv';
 export const SAMPLE_EXR = 'sample/test_hdr.exr';
 export const SAMPLE_EXR_SMALL = 'sample/test_small.exr';
+export const SAMPLE_EXR_MULTILAYER = 'sample/test_multilayer.exr';
 
 // Types matching test-helper.ts
 export interface MarkerData {
@@ -79,6 +80,10 @@ export interface ViewerState {
     shadowsPercent: number;
     highlightsPercent: number;
   } | null;
+  // EXR layer state
+  exrLayerCount: number;
+  exrSelectedLayer: string | null;
+  exrAvailableLayers: string[];
 }
 
 export interface ColorState {
@@ -328,6 +333,9 @@ export async function getViewerState(page: Page): Promise<ViewerState> {
       differenceMatteHeatmap: false,
       clippingOverlayEnabled: false,
       histogramClipping: null,
+      exrLayerCount: 0,
+      exrSelectedLayer: null,
+      exrAvailableLayers: [],
     };
   });
 }

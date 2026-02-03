@@ -132,7 +132,8 @@ describe('OCIOControl', () => {
       expect(calls.length).toBeGreaterThan(0);
 
       const lastCall = calls[calls.length - 1];
-      const savedState = JSON.parse(lastCall[1]);
+      expect(lastCall).toBeDefined();
+      const savedState = JSON.parse(lastCall![1]);
       expect(savedState.enabled).toBe(true);
     });
 
@@ -145,7 +146,8 @@ describe('OCIOControl', () => {
         (call) => call[0] === 'openrv-ocio-state'
       );
       const lastCall = calls[calls.length - 1];
-      const savedState = JSON.parse(lastCall[1]);
+      expect(lastCall).toBeDefined();
+      const savedState = JSON.parse(lastCall![1]);
       expect(savedState.display).toBe('Rec.709');
       expect(savedState.view).toBe('Raw');
     });

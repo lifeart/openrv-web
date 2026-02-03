@@ -1319,6 +1319,9 @@ export class Viewer {
           return;
         }
       }
+    } else if (source?.fileSourceNode) {
+      // EXR file loaded through FileSourceNode
+      element = source.fileSourceNode.getCanvas() ?? undefined;
     } else {
       // Fallback: use HTMLVideoElement directly (no mediabunny)
       element = source?.element;

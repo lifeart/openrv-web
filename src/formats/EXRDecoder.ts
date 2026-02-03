@@ -94,6 +94,47 @@ export interface EXRDecodeResult {
   data: Float32Array;
   channels: number;
   header: EXRHeader;
+  /** Available layers in this EXR file */
+  layers?: EXRLayerInfo[];
+  /** The layer that was decoded (undefined = default RGBA) */
+  decodedLayer?: string;
+}
+
+/**
+ * Information about a layer/AOV in a multi-layer EXR file
+ */
+export interface EXRLayerInfo {
+  /** Layer name (e.g., "diffuse", "specular", "beauty") */
+  name: string;
+  /** Channel names within this layer (e.g., ["R", "G", "B", "A"]) */
+  channels: string[];
+  /** Full channel names (e.g., ["diffuse.R", "diffuse.G", "diffuse.B"]) */
+  fullChannelNames: string[];
+}
+
+/**
+ * Channel remapping configuration
+ * Allows mapping arbitrary EXR channels to RGBA output
+ */
+export interface EXRChannelRemapping {
+  /** Source channel name to map to Red output (e.g., "diffuse.R" or "specular.G") */
+  red?: string;
+  /** Source channel name to map to Green output */
+  green?: string;
+  /** Source channel name to map to Blue output */
+  blue?: string;
+  /** Source channel name to map to Alpha output */
+  alpha?: string;
+}
+
+/**
+ * Options for decoding EXR files
+ */
+export interface EXRDecodeOptions {
+  /** Specific layer to decode (e.g., "diffuse"). If not specified, decodes default RGBA. */
+  layer?: string;
+  /** Custom channel remapping configuration */
+  channelRemapping?: EXRChannelRemapping;
 }
 
 // Maximum supported image dimensions (prevent memory exhaustion)
@@ -647,47 +688,70 @@ function decompressPIZ(_compressedData: Uint8Array, _uncompressedSize: number): 
 }
 
 /**
- * Decode scanline image data
+ * Decode scanline image data with optional channel mapping
  */
 async function decodeScanlineImage(
   reader: EXRDataReader,
-  header: EXRHeader
+  header: EXRHeader,
+  channelMapping?: Map<string, string>
 ): Promise<Float32Array> {
   const dataWindow = header.dataWindow;
   const width = dataWindow.xMax - dataWindow.xMin + 1;
   const height = dataWindow.yMax - dataWindow.yMin + 1;
 
-  // Determine channels to extract (prioritize R, G, B, A)
-  const channelMap = new Map<string, EXRChannel>();
+  // Build channel lookup
+  const channelLookup = new Map<string, EXRChannel>();
   for (const ch of header.channels) {
-    channelMap.set(ch.name, ch);
+    channelLookup.set(ch.name, ch);
   }
 
-  const outputChannels = ['R', 'G', 'B', 'A'].filter((name) => channelMap.has(name));
-  if (outputChannels.length === 0) {
-    // Try Y for grayscale
-    if (channelMap.has('Y')) {
-      outputChannels.push('Y');
-    } else {
-      throw new Error('No supported channels found in EXR file');
+  // Determine output channel mapping
+  // If channelMapping provided, use it; otherwise use default RGBA
+  let outputMapping: Map<string, string>;
+  if (channelMapping && channelMapping.size > 0) {
+    outputMapping = channelMapping;
+  } else {
+    // Default mapping: R -> R, G -> G, B -> B, A -> A, or Y -> grayscale
+    outputMapping = new Map();
+    if (channelLookup.has('R')) outputMapping.set('R', 'R');
+    if (channelLookup.has('G')) outputMapping.set('G', 'G');
+    if (channelLookup.has('B')) outputMapping.set('B', 'B');
+    if (channelLookup.has('A')) outputMapping.set('A', 'A');
+    if (channelLookup.has('Y') && !channelLookup.has('R')) {
+      // Grayscale
+      outputMapping.set('R', 'Y');
+      outputMapping.set('G', 'Y');
+      outputMapping.set('B', 'Y');
     }
   }
 
-  const numOutputChannels = outputChannels.length >= 3 ? 4 : outputChannels.length; // Always output RGBA
+  if (outputMapping.size === 0) {
+    throw new Error('No supported channels found in EXR file');
+  }
+
+  // Always output 4 channels (RGBA)
+  const numOutputChannels = 4;
   const output = new Float32Array(width * height * numOutputChannels);
 
-  // Initialize alpha to 1 if not present
-  if (!channelMap.has('A') && numOutputChannels === 4) {
+  // Initialize alpha to 1 if not mapped
+  if (!outputMapping.has('A')) {
     for (let i = 3; i < output.length; i += 4) {
       output[i] = 1.0;
     }
   }
 
-  // Calculate bytes per pixel for each channel
-  const bytesPerChannel: number[] = [];
-  for (const name of outputChannels) {
-    const ch = channelMap.get(name)!;
-    bytesPerChannel.push(ch.pixelType === EXRPixelType.HALF ? 2 : 4);
+  // Create mapping from source channel name to output channel indices
+  // One source channel can map to multiple output channels (e.g., grayscale)
+  const sourceToOutputIndices = new Map<string, number[]>();
+  const outputChannelIndices: Record<string, number> = { R: 0, G: 1, B: 2, A: 3 };
+
+  for (const [outputCh, sourceCh] of outputMapping.entries()) {
+    const outputIdx = outputChannelIndices[outputCh];
+    if (outputIdx !== undefined) {
+      const existing = sourceToOutputIndices.get(sourceCh) || [];
+      existing.push(outputIdx);
+      sourceToOutputIndices.set(sourceCh, existing);
+    }
   }
 
   // Calculate scanline size in bytes
@@ -742,13 +806,12 @@ async function decodeScanlineImage(
         const channelBytes = ch.pixelType === EXRPixelType.HALF ? 2 : 4;
         const lineDataOffset = line * scanlineBytes + channelOffset;
 
-        // Find output channel index
-        const outputChIdx = outputChannels.indexOf(ch.name);
+        // Check if this source channel maps to any output channels
+        const outputIndices = sourceToOutputIndices.get(ch.name);
 
-        if (outputChIdx !== -1) {
+        if (outputIndices && outputIndices.length > 0) {
           for (let x = 0; x < width; x++) {
             const srcOffset = lineDataOffset + x * channelBytes;
-            const dstIdx = (outputY * width + x) * numOutputChannels + outputChIdx;
 
             let value: number;
             if (ch.pixelType === EXRPixelType.HALF) {
@@ -758,7 +821,11 @@ async function decodeScanlineImage(
               value = dataView.getFloat32(srcOffset, true);
             }
 
-            output[dstIdx] = value;
+            // Write to all mapped output channels
+            for (const outputIdx of outputIndices) {
+              const dstIdx = (outputY * width + x) * numOutputChannels + outputIdx;
+              output[dstIdx] = value;
+            }
           }
         }
 
@@ -772,8 +839,14 @@ async function decodeScanlineImage(
 
 /**
  * Main EXR decode function
+ *
+ * @param buffer - The EXR file data
+ * @param options - Optional decode settings for layer selection and channel remapping
  */
-export async function decodeEXR(buffer: ArrayBuffer): Promise<EXRDecodeResult> {
+export async function decodeEXR(
+  buffer: ArrayBuffer,
+  options?: EXRDecodeOptions
+): Promise<EXRDecodeResult> {
   // Validate buffer size
   if (!buffer || buffer.byteLength < 8) {
     throw new Error('Invalid EXR file: buffer too small (minimum 8 bytes for magic + version)');
@@ -807,12 +880,18 @@ export async function decodeEXR(buffer: ArrayBuffer): Promise<EXRDecodeResult> {
     );
   }
 
-  // Decode image data
-  const data = await decodeScanlineImage(reader, header);
+  // Resolve channel mapping based on options
+  const channelMapping = resolveChannelMapping(header, options);
+
+  // Decode image data with channel mapping
+  const data = await decodeScanlineImage(reader, header, channelMapping);
 
   const dataWindow = header.dataWindow;
   const width = dataWindow.xMax - dataWindow.xMin + 1;
   const height = dataWindow.yMax - dataWindow.yMin + 1;
+
+  // Extract layer info for the result
+  const layers = extractLayerInfo(header.channels);
 
   return {
     width,
@@ -820,6 +899,8 @@ export async function decodeEXR(buffer: ArrayBuffer): Promise<EXRDecodeResult> {
     data,
     channels: 4, // Always output RGBA
     header,
+    layers,
+    decodedLayer: options?.layer,
   };
 }
 
@@ -835,6 +916,11 @@ export function exrToIPImage(result: EXRDecodeResult, sourcePath?: string): IPIm
       pixelAspectRatio: result.header.pixelAspectRatio,
       dataWindow: result.header.dataWindow,
       displayWindow: result.header.displayWindow,
+      // Include layer information for UI
+      exrLayers: result.layers,
+      exrDecodedLayer: result.decodedLayer,
+      // Include all available channels
+      exrChannels: result.header.channels.map(ch => ch.name),
     },
   };
 
@@ -871,19 +957,157 @@ export function getEXRInfo(buffer: ArrayBuffer): {
   height: number;
   channels: string[];
   compression: string;
+  layers: EXRLayerInfo[];
 } | null {
   try {
     const reader = new EXRDataReader(buffer);
     const header = parseHeader(reader);
 
     const dataWindow = header.dataWindow;
+    const layers = extractLayerInfo(header.channels);
     return {
       width: dataWindow.xMax - dataWindow.xMin + 1,
       height: dataWindow.yMax - dataWindow.yMin + 1,
       channels: header.channels.map((ch) => ch.name),
       compression: EXRCompression[header.compression] || 'UNKNOWN',
+      layers,
     };
   } catch {
     return null;
   }
+}
+
+/**
+ * Extract layer information from EXR channels
+ *
+ * EXR files can have layered channels in the format "layer.channel"
+ * e.g., "diffuse.R", "diffuse.G", "diffuse.B", "specular.R", etc.
+ *
+ * Channels without a dot are considered part of the default layer
+ */
+export function extractLayerInfo(channels: EXRChannel[]): EXRLayerInfo[] {
+  const layerMap = new Map<string, EXRLayerInfo>();
+
+  for (const channel of channels) {
+    const dotIndex = channel.name.lastIndexOf('.');
+
+    let layerName: string;
+    let channelName: string;
+
+    if (dotIndex > 0) {
+      // Has layer prefix (e.g., "diffuse.R")
+      layerName = channel.name.substring(0, dotIndex);
+      channelName = channel.name.substring(dotIndex + 1);
+    } else {
+      // No layer prefix - this is the default/RGBA layer
+      layerName = 'RGBA';
+      channelName = channel.name;
+    }
+
+    let layerInfo = layerMap.get(layerName);
+    if (!layerInfo) {
+      layerInfo = {
+        name: layerName,
+        channels: [],
+        fullChannelNames: [],
+      };
+      layerMap.set(layerName, layerInfo);
+    }
+
+    layerInfo.channels.push(channelName);
+    layerInfo.fullChannelNames.push(channel.name);
+  }
+
+  // Sort layers alphabetically, but put RGBA first
+  const sortedLayers = Array.from(layerMap.values()).sort((a, b) => {
+    if (a.name === 'RGBA') return -1;
+    if (b.name === 'RGBA') return 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  return sortedLayers;
+}
+
+/**
+ * Get channels for a specific layer
+ */
+export function getChannelsForLayer(
+  allChannels: EXRChannel[],
+  layerName: string
+): EXRChannel[] {
+  if (layerName === 'RGBA') {
+    // Return channels without a dot prefix (default layer)
+    return allChannels.filter(ch => !ch.name.includes('.'));
+  }
+
+  // Return channels that match the layer prefix
+  const prefix = layerName + '.';
+  return allChannels.filter(ch => ch.name.startsWith(prefix));
+}
+
+/**
+ * Parse channel remapping or layer selection to get the channels to extract
+ * Returns a mapping of output channel (R/G/B/A) to input channel name
+ */
+export function resolveChannelMapping(
+  header: EXRHeader,
+  options?: EXRDecodeOptions
+): Map<string, string> {
+  const mapping = new Map<string, string>();
+  const channelMap = new Map<string, EXRChannel>();
+
+  // Build channel lookup
+  for (const ch of header.channels) {
+    channelMap.set(ch.name, ch);
+  }
+
+  if (options?.channelRemapping) {
+    // Custom channel remapping
+    const remap = options.channelRemapping;
+    if (remap.red && channelMap.has(remap.red)) mapping.set('R', remap.red);
+    if (remap.green && channelMap.has(remap.green)) mapping.set('G', remap.green);
+    if (remap.blue && channelMap.has(remap.blue)) mapping.set('B', remap.blue);
+    if (remap.alpha && channelMap.has(remap.alpha)) mapping.set('A', remap.alpha);
+  } else if (options?.layer && options.layer !== 'RGBA') {
+    // Layer selection - map layer.R -> R, layer.G -> G, etc.
+    const prefix = options.layer + '.';
+    const layerChannels = header.channels.filter(ch => ch.name.startsWith(prefix));
+
+    for (const ch of layerChannels) {
+      const suffix = ch.name.substring(prefix.length).toUpperCase();
+      // Map common suffixes to output channels
+      if (suffix === 'R' || suffix === 'RED') mapping.set('R', ch.name);
+      else if (suffix === 'G' || suffix === 'GREEN') mapping.set('G', ch.name);
+      else if (suffix === 'B' || suffix === 'BLUE') mapping.set('B', ch.name);
+      else if (suffix === 'A' || suffix === 'ALPHA') mapping.set('A', ch.name);
+      else if (suffix === 'Y' || suffix === 'LUMINANCE') {
+        // Grayscale - map to all RGB
+        mapping.set('R', ch.name);
+        mapping.set('G', ch.name);
+        mapping.set('B', ch.name);
+      }
+    }
+
+    // If layer has only one channel, treat it as grayscale
+    if (layerChannels.length === 1 && mapping.size === 0) {
+      const ch = layerChannels[0]!;
+      mapping.set('R', ch.name);
+      mapping.set('G', ch.name);
+      mapping.set('B', ch.name);
+    }
+  } else {
+    // Default RGBA mapping
+    if (channelMap.has('R')) mapping.set('R', 'R');
+    if (channelMap.has('G')) mapping.set('G', 'G');
+    if (channelMap.has('B')) mapping.set('B', 'B');
+    if (channelMap.has('A')) mapping.set('A', 'A');
+    if (channelMap.has('Y') && !channelMap.has('R')) {
+      // Grayscale image
+      mapping.set('R', 'Y');
+      mapping.set('G', 'Y');
+      mapping.set('B', 'Y');
+    }
+  }
+
+  return mapping;
 }

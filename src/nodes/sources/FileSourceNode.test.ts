@@ -511,4 +511,146 @@ describe('FileSourceNode', () => {
       expect(node.isHDR()).toBe(true);
     });
   });
+
+  describe('EXR canvas caching', () => {
+    it('FSN-040: getCanvas returns same canvas instance on repeated calls', async () => {
+      const exrBuffer = createTestEXR({ width: 4, height: 4 });
+      const file = new File([exrBuffer], 'test.exr', { type: 'image/x-exr' });
+
+      await node.loadFile(file);
+
+      // Get canvas multiple times
+      const canvas1 = node.getCanvas();
+      const canvas2 = node.getCanvas();
+      const canvas3 = node.getCanvas();
+
+      // Should return the same cached instance
+      expect(canvas1).toBe(canvas2);
+      expect(canvas2).toBe(canvas3);
+      expect(canvas1).not.toBeNull();
+    });
+
+    it('FSN-041: getCanvas returns null when no EXR loaded', () => {
+      expect(node.getCanvas()).toBeNull();
+    });
+
+    it('FSN-042: canvas is invalidated when layer changes', async () => {
+      // Create a multi-layer EXR for testing
+      const exrBuffer = createTestEXR({
+        width: 2,
+        height: 2,
+        channels: ['R', 'G', 'B', 'A', 'diffuse.R', 'diffuse.G', 'diffuse.B'],
+      });
+      const file = new File([exrBuffer], 'multilayer.exr', { type: 'image/x-exr' });
+
+      await node.loadFile(file);
+
+      const canvas1 = node.getCanvas();
+      expect(canvas1).not.toBeNull();
+
+      // Change layer (note: this triggers re-decode which updates cachedIPImage)
+      await node.setEXRLayer('diffuse');
+
+      // Canvas should be re-rendered (canvasDirty=true)
+      const canvas2 = node.getCanvas();
+
+      // Should still be the same canvas element (reused for memory efficiency)
+      expect(canvas2).toBe(canvas1);
+    });
+
+    it('FSN-043: dispose cleans up cached canvas', async () => {
+      const exrBuffer = createTestEXR({ width: 2, height: 2 });
+      const file = new File([exrBuffer], 'test.exr', { type: 'image/x-exr' });
+
+      await node.loadFile(file);
+      expect(node.getCanvas()).not.toBeNull();
+
+      node.dispose();
+      expect(node.getCanvas()).toBeNull();
+    });
+  });
+
+  describe('EXR layer support', () => {
+    it('FSN-050: getEXRLayers returns empty array for non-EXR', () => {
+      expect(node.getEXRLayers()).toEqual([]);
+    });
+
+    it('FSN-051: getEXRLayers returns layers for multi-layer EXR', async () => {
+      const exrBuffer = createTestEXR({
+        width: 2,
+        height: 2,
+        channels: ['R', 'G', 'B', 'A', 'diffuse.R', 'diffuse.G', 'diffuse.B'],
+      });
+      const file = new File([exrBuffer], 'multilayer.exr', { type: 'image/x-exr' });
+
+      await node.loadFile(file);
+
+      const layers = node.getEXRLayers();
+      expect(layers.length).toBeGreaterThan(0);
+      // Should have RGBA layer (default) and diffuse layer
+      const layerNames = layers.map(l => l.name);
+      expect(layerNames).toContain('RGBA');
+      expect(layerNames).toContain('diffuse');
+    });
+
+    it('FSN-052: getCurrentEXRLayer returns null initially', async () => {
+      const exrBuffer = createTestEXR({ width: 2, height: 2 });
+      const file = new File([exrBuffer], 'test.exr', { type: 'image/x-exr' });
+
+      await node.loadFile(file);
+      expect(node.getCurrentEXRLayer()).toBeNull();
+    });
+
+    it('FSN-053: setEXRLayer changes current layer', async () => {
+      const exrBuffer = createTestEXR({
+        width: 2,
+        height: 2,
+        channels: ['R', 'G', 'B', 'A', 'diffuse.R', 'diffuse.G', 'diffuse.B'],
+      });
+      const file = new File([exrBuffer], 'multilayer.exr', { type: 'image/x-exr' });
+
+      await node.loadFile(file);
+
+      const changed = await node.setEXRLayer('diffuse');
+      expect(changed).toBe(true);
+      expect(node.getCurrentEXRLayer()).toBe('diffuse');
+    });
+
+    it('FSN-054: setEXRLayer returns false for same layer', async () => {
+      const exrBuffer = createTestEXR({
+        width: 2,
+        height: 2,
+        channels: ['R', 'G', 'B', 'A', 'diffuse.R', 'diffuse.G', 'diffuse.B'],
+      });
+      const file = new File([exrBuffer], 'multilayer.exr', { type: 'image/x-exr' });
+
+      await node.loadFile(file);
+
+      await node.setEXRLayer('diffuse');
+      const changed = await node.setEXRLayer('diffuse');
+      expect(changed).toBe(false);
+    });
+
+    it('FSN-055: setEXRLayer returns false for non-EXR', async () => {
+      const changed = await node.setEXRLayer('diffuse');
+      expect(changed).toBe(false);
+    });
+
+    it('FSN-056: switching back to RGBA layer works', async () => {
+      const exrBuffer = createTestEXR({
+        width: 2,
+        height: 2,
+        channels: ['R', 'G', 'B', 'A', 'diffuse.R', 'diffuse.G', 'diffuse.B'],
+      });
+      const file = new File([exrBuffer], 'multilayer.exr', { type: 'image/x-exr' });
+
+      await node.loadFile(file);
+
+      await node.setEXRLayer('diffuse');
+      expect(node.getCurrentEXRLayer()).toBe('diffuse');
+
+      await node.setEXRLayer(null);
+      expect(node.getCurrentEXRLayer()).toBeNull();
+    });
+  });
 });

@@ -10,7 +10,8 @@ import {
   releaseDistantFrames,
   disposeSequence,
 } from '../../utils/SequenceLoader';
-import { VideoSourceNode, type VideoLoadResult } from '../../nodes/sources/VideoSourceNode';
+import { VideoSourceNode } from '../../nodes/sources/VideoSourceNode';
+import { FileSourceNode } from '../../nodes/sources/FileSourceNode';
 import type { UnsupportedCodecError, CodecFamily } from '../../utils/CodecUtils';
 import {
   Annotation,
@@ -175,6 +176,8 @@ export interface MediaSource {
   sequenceFrames?: SequenceFrame[];
   // Video source node for mediabunny frame extraction
   videoSourceNode?: VideoSourceNode;
+  // File source node for EXR files (supports layer selection)
+  fileSourceNode?: FileSourceNode;
 }
 
 // Common playback speed presets
@@ -2527,12 +2530,17 @@ export class Session extends EventEmitter<SessionEvents> {
         // Use loadVideoFile for mediabunny support (frame-accurate extraction)
         await this.loadVideoFile(file);
       } else if (type === 'image') {
-        const url = URL.createObjectURL(file);
-        try {
-          await this.loadImage(file.name, url);
-        } catch (err) {
-          URL.revokeObjectURL(url);
-          throw err;
+        // Check if it's an EXR file - use FileSourceNode for EXR support (layers, HDR)
+        if (/\.exr$/i.test(file.name)) {
+          await this.loadEXRFile(file);
+        } else {
+          const url = URL.createObjectURL(file);
+          try {
+            await this.loadImage(file.name, url);
+          } catch (err) {
+            URL.revokeObjectURL(url);
+            throw err;
+          }
         }
       }
     } catch (err) {
@@ -2582,6 +2590,45 @@ export class Session extends EventEmitter<SessionEvents> {
 
       img.src = url;
     });
+  }
+
+  /**
+   * Load an EXR file using FileSourceNode for full EXR support (layers, HDR)
+   */
+  async loadEXRFile(file: File): Promise<void> {
+    this._gtoData = null;
+
+    // Read file as ArrayBuffer
+    const buffer = await file.arrayBuffer();
+    const url = URL.createObjectURL(file);
+
+    try {
+      // Create FileSourceNode for EXR handling
+      const fileSourceNode = new FileSourceNode(file.name);
+      await fileSourceNode.loadFromEXR(buffer, file.name, url, url);
+
+      const source: MediaSource = {
+        type: 'image',
+        name: file.name,
+        url,
+        width: fileSourceNode.width,
+        height: fileSourceNode.height,
+        duration: 1,
+        fps: this._fps,
+        fileSourceNode,
+      };
+
+      this.addSource(source);
+      this._inPoint = 1;
+      this._outPoint = 1;
+      this._currentFrame = 1;
+
+      this.emit('sourceLoaded', source);
+      this.emit('durationChanged', 1);
+    } catch (err) {
+      URL.revokeObjectURL(url);
+      throw err;
+    }
   }
 
   async loadVideo(name: string, url: string): Promise<void> {

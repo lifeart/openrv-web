@@ -6,17 +6,36 @@
  * check for noise, artifacts, or alpha channel issues.
  *
  * Now uses a compact dropdown instead of 6 separate buttons.
+ *
+ * EXR Layer Support:
+ * When an EXR file is loaded with multiple layers/AOVs (e.g., diffuse, specular),
+ * an additional layer selector appears allowing users to switch between render passes.
  */
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 import { DropdownMenu } from './shared/DropdownMenu';
+import type { EXRLayerInfo, EXRChannelRemapping } from '../../formats/EXRDecoder';
 
 export type ChannelMode = 'rgb' | 'red' | 'green' | 'blue' | 'alpha' | 'luminance';
 
+/**
+ * State for EXR layer selection
+ */
+export interface EXRLayerState {
+  /** Available layers from the EXR file */
+  availableLayers: EXRLayerInfo[];
+  /** Currently selected layer (null = default RGBA) */
+  selectedLayer: string | null;
+  /** Optional custom channel remapping */
+  channelRemapping: EXRChannelRemapping | null;
+}
+
 export interface ChannelSelectEvents extends EventMap {
   channelChanged: ChannelMode;
+  /** Emitted when EXR layer selection changes */
+  layerChanged: { layer: string | null; remapping: EXRChannelRemapping | null };
 }
 
 export const CHANNEL_LABELS: Record<ChannelMode, string> = {
@@ -71,6 +90,16 @@ export class ChannelSelect extends EventEmitter<ChannelSelectEvents> {
   private dropdown: DropdownMenu;
   private currentChannel: ChannelMode = 'rgb';
 
+  // EXR layer support
+  private layerContainer: HTMLElement | null = null;
+  private layerButton: HTMLButtonElement | null = null;
+  private layerDropdown: DropdownMenu | null = null;
+  private exrLayerState: EXRLayerState = {
+    availableLayers: [],
+    selectedLayer: null,
+    channelRemapping: null,
+  };
+
   constructor() {
     super();
 
@@ -81,6 +110,7 @@ export class ChannelSelect extends EventEmitter<ChannelSelectEvents> {
       display: flex;
       align-items: center;
       position: relative;
+      gap: 4px;
     `;
 
     // Create dropdown menu
@@ -248,6 +278,221 @@ export class ChannelSelect extends EventEmitter<ChannelSelectEvents> {
 
   dispose(): void {
     this.dropdown.dispose();
+    this.layerDropdown?.dispose();
+  }
+
+  // ========== EXR Layer Support ==========
+
+  /**
+   * Set available EXR layers (called when an EXR file is loaded)
+   * If there are multiple layers, shows the layer selector UI
+   */
+  setEXRLayers(layers: EXRLayerInfo[]): void {
+    const previousLayers = this.exrLayerState.availableLayers;
+    this.exrLayerState.availableLayers = layers;
+
+    // Reset selected layer when loading a different file (layer list changed)
+    // This prevents stale layer selection from a previous file
+    const layersChanged = previousLayers.length !== layers.length ||
+      previousLayers.some((l, i) => layers[i]?.name !== l.name);
+
+    if (layersChanged) {
+      this.exrLayerState.selectedLayer = null;
+      this.exrLayerState.channelRemapping = null;
+    }
+
+    // Only show layer selector if there's more than one layer
+    // (single RGBA layer doesn't need selection)
+    const hasMultipleLayers = layers.length > 1;
+
+    if (hasMultipleLayers) {
+      this.showLayerSelector();
+    } else {
+      this.hideLayerSelector();
+    }
+  }
+
+  /**
+   * Clear EXR layers (called when switching to a non-EXR file)
+   */
+  clearEXRLayers(): void {
+    this.exrLayerState = {
+      availableLayers: [],
+      selectedLayer: null,
+      channelRemapping: null,
+    };
+    this.hideLayerSelector();
+  }
+
+  /**
+   * Get current EXR layer state
+   */
+  getEXRLayerState(): EXRLayerState {
+    return { ...this.exrLayerState };
+  }
+
+  /**
+   * Set the selected EXR layer
+   */
+  setEXRLayer(layerName: string | null): void {
+    if (this.exrLayerState.selectedLayer === layerName) return;
+
+    this.exrLayerState.selectedLayer = layerName;
+    this.updateLayerButtonLabel();
+    this.layerDropdown?.setSelectedValue(layerName ?? 'RGBA');
+
+    this.emit('layerChanged', {
+      layer: layerName,
+      remapping: this.exrLayerState.channelRemapping,
+    });
+  }
+
+  /**
+   * Set custom channel remapping for EXR
+   */
+  setChannelRemapping(remapping: EXRChannelRemapping | null): void {
+    this.exrLayerState.channelRemapping = remapping;
+
+    this.emit('layerChanged', {
+      layer: this.exrLayerState.selectedLayer,
+      remapping: remapping,
+    });
+  }
+
+  private showLayerSelector(): void {
+    if (this.layerContainer) {
+      // Update existing dropdown items
+      this.updateLayerDropdownItems();
+      this.layerContainer.style.display = 'flex';
+      return;
+    }
+
+    // Create layer container
+    this.layerContainer = document.createElement('div');
+    this.layerContainer.className = 'channel-select-layers';
+    this.layerContainer.dataset.testid = 'exr-layer-select';
+    this.layerContainer.style.cssText = `
+      display: flex;
+      align-items: center;
+      position: relative;
+    `;
+
+    // Create layer dropdown
+    this.layerDropdown = new DropdownMenu({
+      minWidth: '140px',
+      onSelect: (value) => {
+        this.setEXRLayer(value === 'RGBA' ? null : value);
+      },
+      onClose: () => {
+        this.updateLayerButtonLabel();
+      },
+    });
+
+    this.layerDropdown.getElement().dataset.testid = 'exr-layer-dropdown';
+
+    // Create layer button
+    this.layerButton = document.createElement('button');
+    this.layerButton.dataset.testid = 'exr-layer-button';
+    this.layerButton.title = 'Select EXR layer/AOV';
+    this.layerButton.style.cssText = `
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      padding: 6px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.12s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 70px;
+      gap: 4px;
+      outline: none;
+    `;
+
+    this.layerButton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.layerDropdown?.toggle(this.layerButton!);
+      this.updateLayerButtonStyle();
+    });
+
+    this.layerButton.addEventListener('mouseenter', () => {
+      if (!this.layerDropdown?.isVisible() && !this.exrLayerState.selectedLayer) {
+        this.layerButton!.style.background = 'var(--bg-hover)';
+        this.layerButton!.style.borderColor = 'var(--border-primary)';
+        this.layerButton!.style.color = 'var(--text-primary)';
+      }
+    });
+
+    this.layerButton.addEventListener('mouseleave', () => {
+      if (!this.layerDropdown?.isVisible() && !this.exrLayerState.selectedLayer) {
+        this.layerButton!.style.background = 'transparent';
+        this.layerButton!.style.borderColor = 'transparent';
+        this.layerButton!.style.color = 'var(--text-muted)';
+      }
+    });
+
+    applyA11yFocus(this.layerButton);
+
+    this.updateLayerDropdownItems();
+    this.updateLayerButtonLabel();
+
+    this.layerContainer.appendChild(this.layerButton);
+    this.container.appendChild(this.layerContainer);
+  }
+
+  private hideLayerSelector(): void {
+    if (this.layerContainer) {
+      this.layerContainer.style.display = 'none';
+    }
+  }
+
+  private updateLayerDropdownItems(): void {
+    if (!this.layerDropdown) return;
+
+    const items = this.exrLayerState.availableLayers.map((layer) => ({
+      value: layer.name,
+      label: layer.name,
+      // Show channel count as info
+      shortcut: layer.channels.length > 0 ? layer.channels.join('') : '',
+    }));
+
+    this.layerDropdown.setItems(items);
+    this.layerDropdown.setSelectedValue(this.exrLayerState.selectedLayer ?? 'RGBA');
+  }
+
+  private updateLayerButtonLabel(): void {
+    if (!this.layerButton) return;
+
+    const layerName = this.exrLayerState.selectedLayer ?? 'RGBA';
+    const truncatedName = layerName.length > 10 ? layerName.substring(0, 9) + '...' : layerName;
+
+    this.layerButton.innerHTML = `${getIconSvg('layers', 'sm')}<span>${truncatedName}</span><span style="font-size: 8px;">&#9660;</span>`;
+
+    // Update button style based on active state
+    if (this.exrLayerState.selectedLayer && this.exrLayerState.selectedLayer !== 'RGBA') {
+      this.layerButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+      this.layerButton.style.borderColor = 'var(--accent-primary)';
+      this.layerButton.style.color = 'var(--accent-primary)';
+    } else if (!this.layerDropdown?.isVisible()) {
+      this.layerButton.style.background = 'transparent';
+      this.layerButton.style.borderColor = 'transparent';
+      this.layerButton.style.color = 'var(--text-muted)';
+    }
+  }
+
+  private updateLayerButtonStyle(): void {
+    if (!this.layerButton || !this.layerDropdown) return;
+
+    if (this.layerDropdown.isVisible()) {
+      this.layerButton.style.background = 'var(--bg-hover)';
+      this.layerButton.style.borderColor = 'var(--border-primary)';
+    } else if (!this.exrLayerState.selectedLayer || this.exrLayerState.selectedLayer === 'RGBA') {
+      this.layerButton.style.background = 'transparent';
+      this.layerButton.style.borderColor = 'transparent';
+      this.layerButton.style.color = 'var(--text-muted)';
+    }
   }
 }
 
