@@ -10,7 +10,8 @@ import {
  * Pixel Probe Feature Tests
  *
  * These tests verify the pixel probe functionality,
- * including toggling, locking, and color value display.
+ * including toggling, locking, color value display,
+ * area averaging, source/rendered toggle, and alpha display.
  */
 
 test.describe('Pixel Probe Display', () => {
@@ -84,6 +85,24 @@ test.describe('Pixel Probe Display', () => {
     const state = await getPixelProbeState(page);
     expect(typeof state.x).toBe('number');
     expect(typeof state.y).toBe('number');
+  });
+
+  test('PP-E006: pixel probe shows alpha value', async ({ page }) => {
+    await page.keyboard.press('Shift+i');
+    await page.waitForTimeout(100);
+
+    // Move mouse over canvas to update probe values
+    const canvas = await getCanvas(page);
+    const box = await canvas.boundingBox();
+    if (box) {
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.waitForTimeout(100);
+    }
+
+    const state = await getPixelProbeState(page);
+    expect(typeof state.alpha).toBe('number');
+    expect(state.alpha).toBeGreaterThanOrEqual(0);
+    expect(state.alpha).toBeLessThanOrEqual(255);
   });
 });
 
@@ -207,5 +226,183 @@ test.describe('Pixel Probe State Persistence', () => {
 
     state = await getPixelProbeState(page);
     expect(state.enabled).toBe(true);
+  });
+});
+
+test.describe('Pixel Probe Sample Size (Area Averaging)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+    await loadVideoFile(page);
+    await page.keyboard.press('Shift+i');
+    await page.waitForTimeout(100);
+  });
+
+  test('PP-E040: default sample size is 1x1', async ({ page }) => {
+    const state = await getPixelProbeState(page);
+    expect(state.sampleSize).toBe(1);
+  });
+
+  test('PP-E041: sample size buttons are visible in overlay', async ({ page }) => {
+    const sampleSizeContainer = page.locator('[data-testid="pixel-probe-sample-size"]');
+    await expect(sampleSizeContainer).toBeVisible();
+
+    // Check that all sample size options are present
+    const button1x1 = sampleSizeContainer.locator('button[data-sample-size="1"]');
+    const button3x3 = sampleSizeContainer.locator('button[data-sample-size="3"]');
+    const button5x5 = sampleSizeContainer.locator('button[data-sample-size="5"]');
+    const button9x9 = sampleSizeContainer.locator('button[data-sample-size="9"]');
+
+    await expect(button1x1).toBeVisible();
+    await expect(button3x3).toBeVisible();
+    await expect(button5x5).toBeVisible();
+    await expect(button9x9).toBeVisible();
+  });
+
+  test('PP-E042: clicking 3x3 changes sample size', async ({ page }) => {
+    const button3x3 = page.locator('[data-testid="pixel-probe-sample-size"] button[data-sample-size="3"]');
+    await button3x3.click();
+    await page.waitForTimeout(100);
+
+    const state = await getPixelProbeState(page);
+    expect(state.sampleSize).toBe(3);
+  });
+
+  test('PP-E043: clicking 5x5 changes sample size', async ({ page }) => {
+    const button5x5 = page.locator('[data-testid="pixel-probe-sample-size"] button[data-sample-size="5"]');
+    await button5x5.click();
+    await page.waitForTimeout(100);
+
+    const state = await getPixelProbeState(page);
+    expect(state.sampleSize).toBe(5);
+  });
+
+  test('PP-E044: clicking 9x9 changes sample size', async ({ page }) => {
+    const button9x9 = page.locator('[data-testid="pixel-probe-sample-size"] button[data-sample-size="9"]');
+    await button9x9.click();
+    await page.waitForTimeout(100);
+
+    const state = await getPixelProbeState(page);
+    expect(state.sampleSize).toBe(9);
+  });
+
+  test('PP-E045: sample size persists when moving mouse', async ({ page }) => {
+    // Set sample size to 5x5
+    const button5x5 = page.locator('[data-testid="pixel-probe-sample-size"] button[data-sample-size="5"]');
+    await button5x5.click();
+    await page.waitForTimeout(100);
+
+    // Move mouse over canvas
+    const canvas = await getCanvas(page);
+    const box = await canvas.boundingBox();
+    if (box) {
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.waitForTimeout(100);
+    }
+
+    const state = await getPixelProbeState(page);
+    expect(state.sampleSize).toBe(5);
+  });
+});
+
+test.describe('Pixel Probe Source Mode (Source vs Rendered)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+    await loadVideoFile(page);
+    await page.keyboard.press('Shift+i');
+    await page.waitForTimeout(100);
+  });
+
+  test('PP-E050: default source mode is rendered', async ({ page }) => {
+    const state = await getPixelProbeState(page);
+    expect(state.sourceMode).toBe('rendered');
+  });
+
+  test('PP-E051: source mode buttons are visible in overlay', async ({ page }) => {
+    const sourceModeContainer = page.locator('[data-testid="pixel-probe-source-mode"]');
+    await expect(sourceModeContainer).toBeVisible();
+
+    // Check that both source mode options are present
+    const renderedButton = sourceModeContainer.locator('button[data-source-mode="rendered"]');
+    const sourceButton = sourceModeContainer.locator('button[data-source-mode="source"]');
+
+    await expect(renderedButton).toBeVisible();
+    await expect(sourceButton).toBeVisible();
+  });
+
+  test('PP-E052: clicking Source changes source mode', async ({ page }) => {
+    const sourceButton = page.locator('[data-testid="pixel-probe-source-mode"] button[data-source-mode="source"]');
+    await sourceButton.click();
+    await page.waitForTimeout(100);
+
+    const state = await getPixelProbeState(page);
+    expect(state.sourceMode).toBe('source');
+  });
+
+  test('PP-E053: clicking Rendered changes source mode back', async ({ page }) => {
+    // First switch to source
+    const sourceButton = page.locator('[data-testid="pixel-probe-source-mode"] button[data-source-mode="source"]');
+    await sourceButton.click();
+    await page.waitForTimeout(100);
+
+    // Then switch back to rendered
+    const renderedButton = page.locator('[data-testid="pixel-probe-source-mode"] button[data-source-mode="rendered"]');
+    await renderedButton.click();
+    await page.waitForTimeout(100);
+
+    const state = await getPixelProbeState(page);
+    expect(state.sourceMode).toBe('rendered');
+  });
+
+  test('PP-E054: source mode persists when moving mouse', async ({ page }) => {
+    // Set source mode
+    const sourceButton = page.locator('[data-testid="pixel-probe-source-mode"] button[data-source-mode="source"]');
+    await sourceButton.click();
+    await page.waitForTimeout(100);
+
+    // Move mouse over canvas
+    const canvas = await getCanvas(page);
+    const box = await canvas.boundingBox();
+    if (box) {
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.waitForTimeout(100);
+    }
+
+    const state = await getPixelProbeState(page);
+    expect(state.sourceMode).toBe('source');
+  });
+});
+
+test.describe('Pixel Probe UI Elements', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.waitForSelector('#app');
+    await waitForTestHelper(page);
+    await loadVideoFile(page);
+    await page.keyboard.press('Shift+i');
+    await page.waitForTimeout(100);
+  });
+
+  test('PP-E060: overlay shows color swatch', async ({ page }) => {
+    const swatch = page.locator('[data-testid="pixel-probe-swatch"]');
+    await expect(swatch).toBeVisible();
+  });
+
+  test('PP-E061: overlay shows coordinates', async ({ page }) => {
+    const coords = page.locator('[data-testid="pixel-probe-coords"]');
+    await expect(coords).toBeVisible();
+  });
+
+  test('PP-E062: overlay shows alpha value row', async ({ page }) => {
+    const alphaRow = page.locator('[data-testid="pixel-probe-alpha"]');
+    await expect(alphaRow).toBeVisible();
+  });
+
+  test('PP-E063: overlay shows RGB value row', async ({ page }) => {
+    const rgbRow = page.locator('[data-testid="pixel-probe-rgb"]');
+    await expect(rgbRow).toBeVisible();
   });
 });

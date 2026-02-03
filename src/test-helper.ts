@@ -137,7 +137,12 @@ export interface PixelProbeState {
   x: number;
   y: number;
   rgb: { r: number; g: number; b: number };
+  alpha: number;
+  hsl: { h: number; s: number; l: number };
   ire: number;
+  format: 'rgb' | 'rgb01' | 'hsl' | 'hex' | 'ire';
+  sampleSize: 1 | 3 | 5 | 9;
+  sourceMode: 'rendered' | 'source';
 }
 
 export interface FalseColorState {
@@ -426,7 +431,12 @@ export function exposeForTesting(app: App): void {
         x: state.x ?? 0,
         y: state.y ?? 0,
         rgb: state.rgb ?? { r: 0, g: 0, b: 0 },
+        alpha: state.alpha ?? 255,
+        hsl: state.hsl ?? { h: 0, s: 0, l: 0 },
         ire: state.ire ?? 0,
+        format: state.format ?? 'rgb',
+        sampleSize: state.sampleSize ?? 1,
+        sourceMode: state.sourceMode ?? 'rendered',
       };
     },
 

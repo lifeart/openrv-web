@@ -277,6 +277,14 @@ export class Viewer {
   private cursorColorCallback: ((color: { r: number; g: number; b: number } | null, position: { x: number; y: number } | null) => void) | null = null;
   private lastCursorColorUpdate = 0;
 
+  // Pixel probe throttling for performance
+  private lastProbeUpdate = 0;
+
+  // Cached source image canvas for pixel probe "source" mode
+  // Reused to avoid creating new canvases on every mouse move
+  private sourceImageCanvas: HTMLCanvasElement | null = null;
+  private sourceImageCtx: CanvasRenderingContext2D | null = null;
+
   // Theme change listener for runtime theme updates
   private boundOnThemeChange: (() => void) | null = null;
 
@@ -631,6 +639,13 @@ export class Viewer {
   private onMouseMoveForProbe = (e: MouseEvent): void => {
     if (!this.pixelProbe.isEnabled()) return;
 
+    // Throttle updates to ~60fps (16ms) for performance
+    const now = Date.now();
+    if (now - this.lastProbeUpdate < 16) {
+      return;
+    }
+    this.lastProbeUpdate = now;
+
     // Get canvas-relative coordinates
     const canvasRect = this.imageCanvas.getBoundingClientRect();
     const x = e.clientX - canvasRect.left;
@@ -647,8 +662,17 @@ export class Viewer {
     const canvasX = x * scaleX;
     const canvasY = y * scaleY;
 
-    // Get image data for pixel value
+    // Get image data for pixel value (rendered, after color pipeline)
     const imageData = this.getImageData();
+
+    // Get source image data (before color pipeline) for source mode
+    // Only fetch if source mode is selected to save performance
+    if (this.pixelProbe.getSourceMode() === 'source') {
+      const sourceImageData = this.getSourceImageData();
+      this.pixelProbe.setSourceImageData(sourceImageData);
+    } else {
+      this.pixelProbe.setSourceImageData(null);
+    }
 
     // Update pixel probe
     this.pixelProbe.updateFromCanvas(canvasX, canvasY, imageData, this.displayWidth, this.displayHeight);
@@ -3090,6 +3114,10 @@ export class Viewer {
 
     // Cleanup wipe elements
     this.wipeElements = null;
+
+    // Cleanup cached source image canvas
+    this.sourceImageCanvas = null;
+    this.sourceImageCtx = null;
   }
 
   /**
@@ -3106,6 +3134,63 @@ export class Viewer {
     if (displayWidth === 0 || displayHeight === 0) return null;
 
     return this.imageCtx.getImageData(0, 0, displayWidth, displayHeight);
+  }
+
+  /**
+   * Get source ImageData before color pipeline (for pixel probe "source" mode)
+   * Returns ImageData of the original source scaled to display dimensions
+   * Uses a cached canvas to avoid creating new canvases on every mouse move
+   */
+  getSourceImageData(): ImageData | null {
+    const source = this.session.currentSource;
+    if (!source) return null;
+
+    // Get the displayed dimensions
+    const displayWidth = this.imageCanvas.width;
+    const displayHeight = this.imageCanvas.height;
+
+    if (displayWidth === 0 || displayHeight === 0) return null;
+
+    // Get the source element
+    let element: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | undefined;
+    if (source.type === 'sequence') {
+      element = this.session.getSequenceFrameSync() ?? source.element;
+    } else if (source.type === 'video' && this.session.isUsingMediabunny()) {
+      const frameCanvas = this.session.getVideoFrameCanvas(this.session.currentFrame);
+      element = frameCanvas ?? source.element;
+    } else if (source.fileSourceNode) {
+      element = source.fileSourceNode.getCanvas() ?? undefined;
+    } else {
+      element = source.element;
+    }
+
+    if (!element) return null;
+
+    // Reuse cached canvas or create new one if dimensions changed
+    if (!this.sourceImageCanvas || !this.sourceImageCtx ||
+        this.sourceImageCanvas.width !== displayWidth ||
+        this.sourceImageCanvas.height !== displayHeight) {
+      this.sourceImageCanvas = document.createElement('canvas');
+      this.sourceImageCanvas.width = displayWidth;
+      this.sourceImageCanvas.height = displayHeight;
+      this.sourceImageCtx = this.sourceImageCanvas.getContext('2d', { willReadFrequently: true });
+    }
+
+    if (!this.sourceImageCtx) return null;
+
+    // Clear and draw source with transform but without color pipeline
+    this.sourceImageCtx.clearRect(0, 0, displayWidth, displayHeight);
+    this.sourceImageCtx.imageSmoothingEnabled = true;
+    this.sourceImageCtx.imageSmoothingQuality = 'high';
+
+    try {
+      // Apply geometric transform only
+      this.drawWithTransform(this.sourceImageCtx, element as CanvasImageSource, displayWidth, displayHeight);
+      return this.sourceImageCtx.getImageData(0, 0, displayWidth, displayHeight);
+    } catch {
+      // Handle potential CORS issues
+      return null;
+    }
   }
 
   /**

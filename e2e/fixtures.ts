@@ -114,7 +114,12 @@ export interface PixelProbeState {
   x: number;
   y: number;
   rgb: { r: number; g: number; b: number };
+  alpha: number;
+  hsl: { h: number; s: number; l: number };
   ire: number;
+  format: 'rgb' | 'rgb01' | 'hsl' | 'hex' | 'ire';
+  sampleSize: 1 | 3 | 5 | 9;
+  sourceMode: 'rendered' | 'source';
 }
 
 export interface FalseColorState {
@@ -408,7 +413,12 @@ export async function getPixelProbeState(page: Page): Promise<PixelProbeState> {
       x: 0,
       y: 0,
       rgb: { r: 0, g: 0, b: 0 },
+      alpha: 255,
+      hsl: { h: 0, s: 0, l: 0 },
       ire: 0,
+      format: 'rgb',
+      sampleSize: 1,
+      sourceMode: 'rendered',
     };
   });
 }
