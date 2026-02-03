@@ -19,7 +19,9 @@ import { loadImageFile, loadVideoFile, waitForTestHelper, captureViewerScreensho
  */
 async function openColorPanel(page: import('@playwright/test').Page) {
   await page.click('button[data-tab-id="color"]');
-  await page.waitForTimeout(200);
+  // Wait for the hue rotation slider to be visible (confirms panel is open and rendered)
+  const slider = page.locator('[data-testid="slider-hueRotation"]');
+  await expect(slider).toBeVisible();
 }
 
 /**
@@ -40,7 +42,15 @@ async function setHueRotationViaSlider(page: import('@playwright/test').Page, de
   await slider.fill(String(degrees));
   await slider.dispatchEvent('input');
   await slider.dispatchEvent('change');
-  await page.waitForTimeout(200);
+  // Wait for the slider value to actually update
+  await page.waitForFunction(
+    (expectedDegrees) => {
+      const sliderEl = document.querySelector('[data-testid="slider-hueRotation"]') as HTMLInputElement;
+      return sliderEl && parseFloat(sliderEl.value) === expectedDegrees;
+    },
+    degrees,
+    { timeout: 5000 }
+  );
 }
 
 test.describe('Hue Rotation Control', () => {
@@ -100,7 +110,6 @@ test.describe('Hue Rotation Control', () => {
     // Open color panel and set hue rotation via slider
     await openColorPanel(page);
     await setHueRotationViaSlider(page, 180);
-    await page.waitForTimeout(100);
 
     // Capture screenshot after hue rotation
     const after = await captureViewerScreenshot(page);
@@ -148,9 +157,23 @@ test.describe('Hue Rotation Control', () => {
     let value = await getHueRotationSliderValue(page);
     expect(value).toBe(90);
 
+    // Get current frame before navigation
+    const currentFrame = await page.evaluate(() => {
+      return (window as any).__OPENRV_TEST__?.getSessionState()?.currentFrame ?? 0;
+    });
+
     // Navigate to next frame using keyboard
     await page.keyboard.press('ArrowRight');
-    await page.waitForTimeout(200);
+
+    // Wait for frame to change
+    await page.waitForFunction(
+      (prevFrame) => {
+        const state = (window as any).__OPENRV_TEST__?.getSessionState();
+        return state?.currentFrame !== prevFrame;
+      },
+      currentFrame,
+      { timeout: 5000 }
+    );
 
     // Hue rotation should persist - verify via slider value
     value = await getHueRotationSliderValue(page);
@@ -173,7 +196,16 @@ test.describe('Hue Rotation Control', () => {
     // Click reset button in the color controls panel
     const resetButton = page.locator('.color-controls-panel button:has-text("Reset")');
     await resetButton.click();
-    await page.waitForTimeout(200);
+
+    // Wait for the slider value to be reset to 0
+    await page.waitForFunction(
+      () => {
+        const sliderEl = document.querySelector('[data-testid="slider-hueRotation"]') as HTMLInputElement;
+        return sliderEl && parseFloat(sliderEl.value) === 0;
+      },
+      undefined,
+      { timeout: 5000 }
+    );
 
     // Verify hue rotation was reset to 0 via slider value
     value = await getHueRotationSliderValue(page);

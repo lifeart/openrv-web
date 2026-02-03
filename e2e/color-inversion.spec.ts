@@ -30,7 +30,10 @@ test.describe('Color Inversion', () => {
     await loadVideoFile(page);
     // Switch to Color tab
     await page.locator('button:has-text("Color")').first().click();
-    await page.waitForTimeout(200);
+    await page.waitForFunction(() => {
+      const colorTab = document.querySelector('button:has-text("Color")');
+      return colorTab?.classList.contains('active') || colorTab?.getAttribute('aria-selected') === 'true';
+    });
   });
 
   test.describe('Toggle Visibility', () => {
@@ -72,7 +75,10 @@ test.describe('Color Inversion', () => {
     test('INV-012: Ctrl+I should work from any tab', async ({ page }) => {
       // Switch to View tab
       await page.locator('button:has-text("View")').first().click();
-      await page.waitForTimeout(200);
+      await page.waitForFunction(() => {
+        const viewTab = document.querySelector('button:has-text("View")');
+        return viewTab?.classList.contains('active') || viewTab?.getAttribute('aria-selected') === 'true';
+      });
 
       await page.keyboard.press('Control+i');
       await waitForInversion(page, true);
@@ -88,7 +94,10 @@ test.describe('Color Inversion', () => {
 
       await page.keyboard.press('Control+i');
       await waitForInversion(page, true);
-      await page.waitForTimeout(100); // Brief wait for render
+      // Wait for canvas to render the inversion effect
+      await page.waitForFunction(() => {
+        return window.__OPENRV_TEST__?.getViewerState()?.colorInversionEnabled === true;
+      }, { timeout: 2000 });
 
       const after = await captureViewerScreenshot(page);
       expect(imagesAreDifferent(before, after)).toBe(true);
@@ -100,12 +109,18 @@ test.describe('Color Inversion', () => {
       // Toggle on
       await page.keyboard.press('Control+i');
       await waitForInversion(page, true);
-      await page.waitForTimeout(100);
+      // Wait for canvas to render the inversion effect
+      await page.waitForFunction(() => {
+        return window.__OPENRV_TEST__?.getViewerState()?.colorInversionEnabled === true;
+      }, { timeout: 2000 });
 
       // Toggle off
       await page.keyboard.press('Control+i');
       await waitForInversion(page, false);
-      await page.waitForTimeout(100);
+      // Wait for canvas to render without inversion
+      await page.waitForFunction(() => {
+        return window.__OPENRV_TEST__?.getViewerState()?.colorInversionEnabled === false;
+      }, { timeout: 2000 });
 
       const restored = await captureViewerScreenshot(page);
       expect(imagesAreDifferent(original, restored)).toBe(false);
@@ -138,17 +153,27 @@ test.describe('Color Inversion', () => {
     test('INV-040: inversion should combine with exposure adjustment', async ({ page }) => {
       // Set exposure
       await page.keyboard.press('c');
-      await page.waitForTimeout(200);
+      // Wait for color controls panel to open
+      await page.waitForFunction(() => {
+        const panel = document.querySelector('.color-controls-panel');
+        return panel && (panel as HTMLElement).style.display !== 'none';
+      });
       const exposureSlider = page.locator('.color-controls-panel input[data-testid="slider-exposure"]');
       await exposureSlider.fill('2');
-      await page.waitForTimeout(200);
+      // Wait for exposure state to update
+      await page.waitForFunction(() => {
+        return window.__OPENRV_TEST__?.getColorState()?.exposure === 2;
+      }, { timeout: 2000 });
 
       const beforeInversion = await captureViewerScreenshot(page);
 
       // Enable inversion
       await page.keyboard.press('Control+i');
       await waitForInversion(page, true);
-      await page.waitForTimeout(100);
+      // Wait for canvas to render the inversion effect
+      await page.waitForFunction(() => {
+        return window.__OPENRV_TEST__?.getViewerState()?.colorInversionEnabled === true;
+      }, { timeout: 2000 });
 
       const afterInversion = await captureViewerScreenshot(page);
       expect(imagesAreDifferent(beforeInversion, afterInversion)).toBe(true);
@@ -163,11 +188,17 @@ test.describe('Color Inversion', () => {
 
       // Switch to View tab
       await page.locator('button:has-text("View")').first().click();
-      await page.waitForTimeout(200);
+      await page.waitForFunction(() => {
+        const viewTab = document.querySelector('button:has-text("View")');
+        return viewTab?.classList.contains('active') || viewTab?.getAttribute('aria-selected') === 'true';
+      });
 
       // Switch back to Color tab
       await page.locator('button:has-text("Color")').first().click();
-      await page.waitForTimeout(200);
+      await page.waitForFunction(() => {
+        const colorTab = document.querySelector('button:has-text("Color")');
+        return colorTab?.classList.contains('active') || colorTab?.getAttribute('aria-selected') === 'true';
+      });
 
       const state = await getViewerState(page);
       expect(state.colorInversionEnabled).toBe(true);
@@ -182,11 +213,18 @@ test.describe('Color Inversion', () => {
 
       // Open color panel and reset
       await page.keyboard.press('c');
-      await page.waitForTimeout(200);
+      // Wait for color controls panel to open
+      await page.waitForFunction(() => {
+        const panel = document.querySelector('.color-controls-panel');
+        return panel && (panel as HTMLElement).style.display !== 'none';
+      });
       const resetButton = page.locator('.color-controls-panel button:has-text("Reset")');
       if (await resetButton.isVisible()) {
         await resetButton.click();
-        await page.waitForTimeout(200);
+        // Wait for color state to reset (exposure should be 0)
+        await page.waitForFunction(() => {
+          return window.__OPENRV_TEST__?.getColorState()?.exposure === 0;
+        }, { timeout: 2000 });
       }
 
       // Inversion should still be active
@@ -199,11 +237,17 @@ test.describe('Color Inversion', () => {
 
       await page.keyboard.press('Control+i');
       await waitForInversion(page, true);
-      await page.waitForTimeout(100);
+      // Wait for canvas to render the inversion effect
+      await page.waitForFunction(() => {
+        return window.__OPENRV_TEST__?.getViewerState()?.colorInversionEnabled === true;
+      }, { timeout: 2000 });
 
       await page.keyboard.press('Control+i');
       await waitForInversion(page, false);
-      await page.waitForTimeout(100);
+      // Wait for canvas to render without inversion
+      await page.waitForFunction(() => {
+        return window.__OPENRV_TEST__?.getViewerState()?.colorInversionEnabled === false;
+      }, { timeout: 2000 });
 
       const restored = await captureViewerScreenshot(page);
       expect(imagesAreDifferent(original, restored)).toBe(false);

@@ -23,12 +23,51 @@ import {
  * - **Canvas visual verification** - OCIO transforms actually affect rendered output
  */
 
+/** Helper: Wait for OCIO enabled state to change */
+async function waitForOCIOEnabled(page: import('@playwright/test').Page, enabled: boolean, timeout = 5000): Promise<void> {
+  await page.waitForFunction(
+    (expected) => {
+      const state = (window as any).__OPENRV_TEST__?.getOCIOState();
+      return state?.enabled === expected;
+    },
+    enabled,
+    { timeout }
+  );
+}
+
+/** Helper: Wait for OCIO panel visibility */
+async function waitForOCIOPanel(page: import('@playwright/test').Page, visible: boolean, timeout = 5000): Promise<void> {
+  const panel = page.locator('[data-testid="ocio-panel"]');
+  if (visible) {
+    await expect(panel).toBeVisible({ timeout });
+  } else {
+    await expect(panel).not.toBeVisible({ timeout });
+  }
+}
+
+/** Helper: Wait for OCIO state property to match expected value */
+async function waitForOCIOState(
+  page: import('@playwright/test').Page,
+  property: string,
+  expectedValue: any,
+  timeout = 5000
+): Promise<void> {
+  await page.waitForFunction(
+    ({ prop, expected }) => {
+      const state = (window as any).__OPENRV_TEST__?.getOCIOState();
+      return state?.[prop] === expected;
+    },
+    { prop: property, expected: expectedValue },
+    { timeout }
+  );
+}
+
 /** Helper: open OCIO panel and enable the pipeline */
 async function enableOCIO(page: import('@playwright/test').Page): Promise<void> {
   await page.locator('[data-testid="ocio-panel-button"]').click();
-  await page.waitForTimeout(200);
+  await waitForOCIOPanel(page, true);
   await page.locator('[data-testid="ocio-enable-toggle"]').click();
-  await page.waitForTimeout(300);
+  await waitForOCIOEnabled(page, true);
 }
 
 /** Helper: select a dropdown option by clicking the trigger then the option text */
@@ -38,10 +77,10 @@ async function selectDropdownOption(
   optionText: string
 ): Promise<void> {
   await page.locator(`[data-testid="${triggerTestId}"]`).click();
-  await page.waitForTimeout(150);
   const dropdown = page.locator('.dropdown-menu').last();
+  await expect(dropdown).toBeVisible({ timeout: 5000 });
   await dropdown.locator('button', { hasText: optionText }).click();
-  await page.waitForTimeout(300);
+  await expect(dropdown).not.toBeVisible({ timeout: 5000 });
 }
 
 test.describe('OCIO Color Management', () => {
@@ -52,7 +91,8 @@ test.describe('OCIO Color Management', () => {
     await loadVideoFile(page);
     // Switch to Color tab
     await page.locator('button:has-text("Color")').first().click();
-    await page.waitForTimeout(200);
+    // Wait for Color tab to be active
+    await expect(page.locator('button:has-text("Color")').first()).toHaveAttribute('aria-selected', 'true', { timeout: 5000 });
   });
 
   test.describe('Panel Visibility', () => {
@@ -65,7 +105,6 @@ test.describe('OCIO Color Management', () => {
     test('OCIO-E002: clicking OCIO button should open panel', async ({ page }) => {
       const ocioButton = page.locator('[data-testid="ocio-panel-button"]');
       await ocioButton.click();
-      await page.waitForTimeout(200);
 
       const ocioPanel = page.locator('[data-testid="ocio-panel"]');
       await expect(ocioPanel).toBeVisible();
@@ -74,42 +113,36 @@ test.describe('OCIO Color Management', () => {
     test('OCIO-E003: Shift+O keyboard shortcut should toggle panel', async ({ page }) => {
       // Open panel with shortcut
       await page.keyboard.press('Shift+O');
-      await page.waitForTimeout(200);
 
       const ocioPanel = page.locator('[data-testid="ocio-panel"]');
       await expect(ocioPanel).toBeVisible();
 
       // Close with shortcut
       await page.keyboard.press('Shift+O');
-      await page.waitForTimeout(200);
       await expect(ocioPanel).not.toBeVisible();
     });
 
     test('OCIO-E004: close button should hide panel', async ({ page }) => {
       // Open panel
       await page.locator('[data-testid="ocio-panel-button"]').click();
-      await page.waitForTimeout(200);
 
       const ocioPanel = page.locator('[data-testid="ocio-panel"]');
       await expect(ocioPanel).toBeVisible();
 
       // Click close button
       await page.locator('[data-testid="ocio-panel-close"]').click();
-      await page.waitForTimeout(200);
       await expect(ocioPanel).not.toBeVisible();
     });
 
     test('OCIO-E005: clicking outside panel should close it', async ({ page }) => {
       // Open panel
       await page.locator('[data-testid="ocio-panel-button"]').click();
-      await page.waitForTimeout(200);
 
       const ocioPanel = page.locator('[data-testid="ocio-panel"]');
       await expect(ocioPanel).toBeVisible();
 
       // Click on the viewer area (outside panel)
       await page.locator('.viewer-container canvas').first().click({ position: { x: 10, y: 10 } });
-      await page.waitForTimeout(200);
       await expect(ocioPanel).not.toBeVisible();
     });
   });
@@ -145,7 +178,7 @@ test.describe('OCIO Color Management', () => {
     test('OCIO-E020: enable toggle should enable OCIO pipeline', async ({ page }) => {
       // Open panel
       await page.locator('[data-testid="ocio-panel-button"]').click();
-      await page.waitForTimeout(200);
+      await waitForOCIOPanel(page, true);
 
       let state = await getOCIOState(page);
       expect(state.enabled).toBe(false);
@@ -153,7 +186,7 @@ test.describe('OCIO Color Management', () => {
       // Enable OCIO
       const enableToggle = page.locator('[data-testid="ocio-enable-toggle"]');
       await enableToggle.click();
-      await page.waitForTimeout(200);
+      await waitForOCIOEnabled(page, true);
 
       state = await getOCIOState(page);
       expect(state.enabled).toBe(true);
@@ -164,10 +197,10 @@ test.describe('OCIO Color Management', () => {
 
       // Open panel and enable
       await ocioButton.click();
-      await page.waitForTimeout(200);
+      await waitForOCIOPanel(page, true);
 
       await page.locator('[data-testid="ocio-enable-toggle"]').click();
-      await page.waitForTimeout(200);
+      await waitForOCIOEnabled(page, true);
 
       // Button should have active style (highlighted border)
       const borderColor = await ocioButton.evaluate((el) =>
@@ -181,11 +214,10 @@ test.describe('OCIO Color Management', () => {
     test('OCIO-E030: config dropdown should show available configurations', async ({ page }) => {
       // Open panel
       await page.locator('[data-testid="ocio-panel-button"]').click();
-      await page.waitForTimeout(200);
+      await waitForOCIOPanel(page, true);
 
       // Click config dropdown
       await page.locator('[data-testid="ocio-config-select"]').click();
-      await page.waitForTimeout(200);
 
       // Should show ACES and sRGB options
       const dropdown = page.locator('.dropdown-menu');
@@ -197,11 +229,10 @@ test.describe('OCIO Color Management', () => {
     test('OCIO-E040: input color space dropdown should show available spaces', async ({ page }) => {
       // Open panel
       await page.locator('[data-testid="ocio-panel-button"]').click();
-      await page.waitForTimeout(200);
+      await waitForOCIOPanel(page, true);
 
       // Click input color space dropdown
       await page.locator('[data-testid="ocio-input-colorspace"]').click();
-      await page.waitForTimeout(200);
 
       // Should show dropdown
       const dropdown = page.locator('.dropdown-menu');
@@ -213,11 +244,10 @@ test.describe('OCIO Color Management', () => {
     test('OCIO-E050: display dropdown should show available displays', async ({ page }) => {
       // Open panel
       await page.locator('[data-testid="ocio-panel-button"]').click();
-      await page.waitForTimeout(200);
+      await waitForOCIOPanel(page, true);
 
       // Click display dropdown
       await page.locator('[data-testid="ocio-display-select"]').click();
-      await page.waitForTimeout(200);
 
       // Should show dropdown
       const dropdown = page.locator('.dropdown-menu');
@@ -229,11 +259,10 @@ test.describe('OCIO Color Management', () => {
     test('OCIO-E060: view dropdown should show available views', async ({ page }) => {
       // Open panel
       await page.locator('[data-testid="ocio-panel-button"]').click();
-      await page.waitForTimeout(200);
+      await waitForOCIOPanel(page, true);
 
       // Click view dropdown
       await page.locator('[data-testid="ocio-view-select"]').click();
-      await page.waitForTimeout(200);
 
       // Should show dropdown
       const dropdown = page.locator('.dropdown-menu');
@@ -245,11 +274,10 @@ test.describe('OCIO Color Management', () => {
     test('OCIO-E070: look dropdown should show available looks', async ({ page }) => {
       // Open panel
       await page.locator('[data-testid="ocio-panel-button"]').click();
-      await page.waitForTimeout(200);
+      await waitForOCIOPanel(page, true);
 
       // Click look dropdown
       await page.locator('[data-testid="ocio-look-select"]').click();
-      await page.waitForTimeout(200);
 
       // Should show dropdown
       const dropdown = page.locator('.dropdown-menu');
@@ -261,18 +289,18 @@ test.describe('OCIO Color Management', () => {
     test('OCIO-E080: reset button should restore defaults', async ({ page }) => {
       // Open panel
       await page.locator('[data-testid="ocio-panel-button"]').click();
-      await page.waitForTimeout(200);
+      await waitForOCIOPanel(page, true);
 
       // Enable OCIO and change some settings
       await page.locator('[data-testid="ocio-enable-toggle"]').click();
-      await page.waitForTimeout(200);
+      await waitForOCIOEnabled(page, true);
 
       let state = await getOCIOState(page);
       expect(state.enabled).toBe(true);
 
       // Click reset
       await page.locator('[data-testid="ocio-reset-button"]').click();
-      await page.waitForTimeout(200);
+      await waitForOCIOEnabled(page, false);
 
       state = await getOCIOState(page);
       expect(state.enabled).toBe(false);
@@ -284,7 +312,7 @@ test.describe('OCIO Color Management', () => {
     test('OCIO-E090: panel should display current configuration name', async ({ page }) => {
       // Open panel
       await page.locator('[data-testid="ocio-panel-button"]').click();
-      await page.waitForTimeout(200);
+      await waitForOCIOPanel(page, true);
 
       const panel = page.locator('[data-testid="ocio-panel"]');
       // Should contain config description
@@ -294,7 +322,7 @@ test.describe('OCIO Color Management', () => {
     test('OCIO-E091: panel should display section headers', async ({ page }) => {
       // Open panel
       await page.locator('[data-testid="ocio-panel-button"]').click();
-      await page.waitForTimeout(200);
+      await waitForOCIOPanel(page, true);
 
       const panel = page.locator('[data-testid="ocio-panel"]');
       await expect(panel).toContainText('Configuration');
@@ -307,7 +335,7 @@ test.describe('OCIO Color Management', () => {
     test('OCIO-E092: panel should display detected color space field', async ({ page }) => {
       // Open panel
       await page.locator('[data-testid="ocio-panel-button"]').click();
-      await page.waitForTimeout(200);
+      await waitForOCIOPanel(page, true);
 
       const detectedLabel = page.locator('[data-testid="ocio-detected-colorspace"]');
       await expect(detectedLabel).toBeVisible();
@@ -349,7 +377,7 @@ test.describe('OCIO Color Management', () => {
 
       // Disable OCIO
       await page.locator('[data-testid="ocio-enable-toggle"]').click();
-      await page.waitForTimeout(300);
+      await waitForOCIOEnabled(page, false);
 
       const state = await getOCIOState(page);
       expect(state.enabled).toBe(false);
@@ -477,6 +505,7 @@ test.describe('OCIO Color Management', () => {
       // Enable OCIO and change display to Rec.709
       await enableOCIO(page);
       await selectDropdownOption(page, 'ocio-display-select', 'Rec.709');
+      await waitForOCIOState(page, 'display', 'Rec.709');
 
       let state = await getOCIOState(page);
       expect(state.enabled).toBe(true);
@@ -484,7 +513,15 @@ test.describe('OCIO Color Management', () => {
 
       // Navigate to next frame
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(200);
+      // Wait for frame to change
+      await page.waitForFunction(
+        (initialFrame) => {
+          const state = (window as any).__OPENRV_TEST__?.getSessionState();
+          return state?.currentFrame !== initialFrame;
+        },
+        state.enabled ? 1 : 0,
+        { timeout: 5000 }
+      );
 
       // OCIO state should persist
       state = await getOCIOState(page);
@@ -499,19 +536,30 @@ test.describe('OCIO Color Management', () => {
       // Capture with OCIO enabled on current frame
       const screenshotFrame1 = await captureViewerScreenshot(page);
 
+      // Get initial frame
+      const initialState = await getOCIOState(page);
+
       // Navigate forward
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(200);
+      // Wait for frame to change
+      await page.waitForFunction(
+        (initialFrame) => {
+          const state = (window as any).__OPENRV_TEST__?.getSessionState();
+          return state?.currentFrame !== initialFrame;
+        },
+        initialState.enabled ? 1 : 0,
+        { timeout: 5000 }
+      );
 
       // Disable OCIO on the new frame to compare
       await page.locator('[data-testid="ocio-enable-toggle"]').click();
-      await page.waitForTimeout(300);
+      await waitForOCIOEnabled(page, false);
 
       const screenshotFrame2NoOCIO = await captureViewerScreenshot(page);
 
       // Re-enable OCIO
       await page.locator('[data-testid="ocio-enable-toggle"]').click();
-      await page.waitForTimeout(300);
+      await waitForOCIOEnabled(page, true);
 
       const screenshotFrame2WithOCIO = await captureViewerScreenshot(page);
 
@@ -528,14 +576,15 @@ test.describe('OCIO Color Management', () => {
       // Enable OCIO and change settings
       await enableOCIO(page);
       await selectDropdownOption(page, 'ocio-display-select', 'Rec.709');
-      await page.waitForTimeout(200);
+      await waitForOCIOState(page, 'display', 'Rec.709');
 
       const brightnessModified = await getCanvasBrightness(page);
       expect(brightnessOriginal).not.toBeCloseTo(brightnessModified, 0);
 
       // Click reset
       await page.locator('[data-testid="ocio-reset-button"]').click();
-      await page.waitForTimeout(300);
+      await waitForOCIOEnabled(page, false);
+      await waitForOCIOState(page, 'display', 'sRGB');
 
       // State should be back to defaults
       const state = await getOCIOState(page);
@@ -559,7 +608,7 @@ test.describe('OCIO Color Management', () => {
 
       // Switch to sRGB config
       await selectDropdownOption(page, 'ocio-config-select', 'sRGB');
-      await page.waitForTimeout(300);
+      await waitForOCIOState(page, 'configName', 'srgb');
 
       state = await getOCIOState(page);
       expect(state.configName).toBe('srgb');
@@ -579,11 +628,12 @@ test.describe('OCIO Color Management', () => {
 
       // Close OCIO panel first
       await page.locator('[data-testid="ocio-panel-close"]').click();
-      await page.waitForTimeout(100);
+      await waitForOCIOPanel(page, false);
 
       // Open color adjustments and increase exposure
       await page.keyboard.press('c');
-      await page.waitForTimeout(200);
+      const colorPanel = page.locator('.color-controls-panel');
+      await expect(colorPanel).toBeVisible({ timeout: 5000 });
 
       const exposureSlider = page.locator('.color-controls-panel label')
         .filter({ hasText: 'Exposure' })
@@ -593,7 +643,15 @@ test.describe('OCIO Color Management', () => {
       if (await exposureSlider.isVisible()) {
         await exposureSlider.fill('2');
         await exposureSlider.dispatchEvent('input');
-        await page.waitForTimeout(300);
+        // Wait for color state to update
+        await page.waitForFunction(
+          () => {
+            const state = (window as any).__OPENRV_TEST__?.getColorState();
+            return state?.exposure === 2;
+          },
+          undefined,
+          { timeout: 5000 }
+        );
       }
 
       const screenshotOCIOPlusExposure = await captureViewerScreenshot(page);
