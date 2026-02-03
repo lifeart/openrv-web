@@ -13,6 +13,7 @@ import type { CropState } from '../../ui/components/CropControl';
 import type { LensDistortionParams } from '../../transform/LensDistortion';
 import type { WipeState } from '../../ui/components/WipeControl';
 import type { StackLayer } from '../../ui/components/StackControl';
+import type { PARState } from '../../utils/PixelAspectRatio';
 import type { Annotation, PaintEffects } from '../../paint/types';
 import type { LoopMode, MediaType, Marker } from './Session';
 import type { PlaylistState } from './PlaylistManager';
@@ -111,6 +112,8 @@ export interface SessionState {
   lutPath?: string;
   /** LUT intensity blend */
   lutIntensity: number;
+  /** Pixel Aspect Ratio correction (optional, defaults to disabled square pixels) */
+  par?: PARState;
   /** Playlist state (optional) */
   playlist?: PlaylistState;
 }

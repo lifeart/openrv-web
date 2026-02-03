@@ -291,6 +291,11 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     ctrl: true,
     description: 'Toggle ghost frames (onion skin)'
   },
+  'view.togglePAR': {
+    code: 'KeyP',
+    shift: true,
+    description: 'Toggle pixel aspect ratio correction'
+  },
   'paint.toggleHold': {
     code: 'KeyX',
     description: 'Toggle hold mode'

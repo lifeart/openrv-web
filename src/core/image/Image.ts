@@ -4,6 +4,7 @@ export interface ImageMetadata {
   colorSpace?: string;
   frameNumber?: number;
   sourcePath?: string;
+  pixelAspectRatio?: number;
   attributes?: Record<string, unknown>;
 }
 

@@ -20,6 +20,7 @@ import { DEFAULT_TRANSFORM } from '../../ui/components/TransformControl';
 import { DEFAULT_CROP_STATE, DEFAULT_CROP_REGION } from '../../ui/components/CropControl';
 import { DEFAULT_LENS_PARAMS } from '../../transform/LensDistortion';
 import { DEFAULT_WIPE_STATE } from '../../ui/components/WipeControl';
+import { DEFAULT_PAR_STATE } from '../../utils/PixelAspectRatio';
 import type { Annotation, PaintEffects } from '../../paint/types';
 import { DEFAULT_PAINT_EFFECTS } from '../../paint/types';
 import { showFileReloadPrompt } from '../../ui/components/shared/Modal';
@@ -90,6 +91,7 @@ export class SessionSerializer {
       stack: viewer.getStackLayers(),
       lutPath: viewer.getLUT()?.title,
       lutIntensity: viewer.getLUTIntensity(),
+      par: viewer.getPARState(),
     };
   }
 
@@ -212,6 +214,9 @@ export class SessionSerializer {
     viewer.setWipeState(migrated.wipe);
     viewer.setStackLayers(migrated.stack);
     viewer.setLUTIntensity(migrated.lutIntensity);
+    if (migrated.par) {
+      viewer.setPARState(migrated.par);
+    }
     viewer.setZoom(migrated.view.zoom);
     viewer.setPan(migrated.view.panX, migrated.view.panY);
 
@@ -252,6 +257,7 @@ export class SessionSerializer {
     migrated.wipe = { ...DEFAULT_WIPE_STATE, ...migrated.wipe };
     migrated.stack = migrated.stack ?? [];
     migrated.lutIntensity = migrated.lutIntensity ?? 1.0;
+    migrated.par = migrated.par ? { ...DEFAULT_PAR_STATE, ...migrated.par } : undefined;
     migrated.paint = migrated.paint ?? {
       nextId: 0,
       show: true,

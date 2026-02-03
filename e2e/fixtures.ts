@@ -95,6 +95,10 @@ export interface ViewerState {
   uncropPaddingRight: number;
   uncropPaddingBottom: number;
   uncropPaddingLeft: number;
+  // PAR state
+  parEnabled: boolean;
+  parValue: number;
+  parPreset: string;
 }
 
 export interface ColorState {
@@ -359,6 +363,9 @@ export async function getViewerState(page: Page): Promise<ViewerState> {
       uncropPaddingRight: 0,
       uncropPaddingBottom: 0,
       uncropPaddingLeft: 0,
+      parEnabled: false,
+      parValue: 1.0,
+      parPreset: 'square',
     };
   });
 }

@@ -118,6 +118,10 @@ export interface ViewerState {
   uncropPaddingRight: number;
   uncropPaddingBottom: number;
   uncropPaddingLeft: number;
+  // PAR state
+  parEnabled: boolean;
+  parValue: number;
+  parPreset: string;
 }
 
 export interface ColorState {
@@ -411,6 +415,10 @@ export function exposeForTesting(app: App): void {
         uncropPaddingRight: viewer.uncropState?.paddingRight ?? 0,
         uncropPaddingBottom: viewer.uncropState?.paddingBottom ?? 0,
         uncropPaddingLeft: viewer.uncropState?.paddingLeft ?? 0,
+        // PAR state
+        parEnabled: viewer.parState?.enabled ?? false,
+        parValue: viewer.parState?.par ?? 1.0,
+        parPreset: viewer.parState?.preset ?? 'square',
       };
     },
 

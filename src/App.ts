@@ -28,6 +28,7 @@ import { ToneMappingControl } from './ui/components/ToneMappingControl';
 import { ZebraControl } from './ui/components/ZebraControl';
 import { HSLQualifierControl } from './ui/components/HSLQualifierControl';
 import { GhostFrameControl } from './ui/components/GhostFrameControl';
+import { PARControl } from './ui/components/PARControl';
 import { OCIOControl } from './ui/components/OCIOControl';
 import { exportSequence } from './utils/SequenceExporter';
 import { showAlert, showModal, closeModal, showConfirm } from './ui/components/shared/Modal';
@@ -84,6 +85,7 @@ export class App {
   private zebraControl: ZebraControl;
   private hslQualifierControl: HSLQualifierControl;
   private ghostFrameControl: GhostFrameControl;
+  private parControl: PARControl;
   private ocioControl: OCIOControl;
   private animationId: number | null = null;
   private boundHandleResize: () => void;
@@ -294,6 +296,12 @@ export class App {
     this.ghostFrameControl = new GhostFrameControl();
     this.ghostFrameControl.on('stateChanged', (state) => {
       this.viewer.setGhostFrameState(state);
+    });
+
+    // Pixel Aspect Ratio control
+    this.parControl = new PARControl();
+    this.parControl.on('stateChanged', (state) => {
+      this.viewer.setPARState(state);
     });
 
     // OCIO color management control
@@ -803,12 +811,13 @@ export class App {
     viewContent.appendChild(this.stackControl.render());
     viewContent.appendChild(ContextToolbar.createDivider());
 
-    // --- GROUP 4: Analysis Tools (SafeAreas, FalseColor, ToneMapping, Zebra, HSL) ---
+    // --- GROUP 4: Analysis Tools (SafeAreas, FalseColor, ToneMapping, Zebra, HSL, PAR) ---
     viewContent.appendChild(this.safeAreasControl.render());
     viewContent.appendChild(this.falseColorControl.render());
     viewContent.appendChild(this.toneMappingControl.render());
     viewContent.appendChild(this.zebraControl.render());
     viewContent.appendChild(this.hslQualifierControl.render());
+    viewContent.appendChild(this.parControl.render());
 
     // Trigger re-render when false color state changes
     this.viewer.getFalseColor().on('stateChanged', () => {
@@ -1315,6 +1324,7 @@ export class App {
       'view.toggleDifferenceMatte': () => this.compareControl.toggleDifferenceMatte(),
       'view.toggleSplitScreen': () => this.compareControl.toggleSplitScreen(),
       'view.toggleGhostFrames': () => this.ghostFrameControl.toggle(),
+      'view.togglePAR': () => this.parControl.toggle(),
       'panel.color': () => this.colorControls.toggle(),
       'panel.effects': () => this.filterControl.toggle(),
       'panel.curves': () => this.curvesControl.toggle(),
@@ -2718,6 +2728,7 @@ export class App {
     this.lensControl.dispose();
     this.stackControl.dispose();
     this.channelSelect.dispose();
+    this.parControl.dispose();
     this.stereoControl.dispose();
     this.histogram.dispose();
     this.waveform.dispose();

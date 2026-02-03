@@ -59,6 +59,7 @@ import {
 } from './ViewerSplitScreen';
 import { GhostFrameState, DEFAULT_GHOST_FRAME_STATE } from './GhostFrameControl';
 import { ToneMappingState, DEFAULT_TONE_MAPPING_STATE } from './ToneMappingControl';
+import { PARState, DEFAULT_PAR_STATE, isPARActive, calculatePARCorrectedWidth } from '../../utils/PixelAspectRatio';
 import {
   PointerState,
   getCanvasPoint as getCanvasPointUtil,
@@ -265,6 +266,9 @@ export class Viewer {
 
   // Tone mapping state
   private toneMappingState: ToneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
+
+  // Pixel Aspect Ratio state
+  private parState: PARState = { ...DEFAULT_PAR_STATE };
 
   // Prerender buffer for smooth playback with effects
   private prerenderBuffer: PrerenderBufferManager | null = null;
@@ -1385,8 +1389,12 @@ export class Viewer {
     // Calculate uncrop padding and effective virtual canvas size
     const uncropPad = this.getUncropPadding();
     const uncropActive = this.isUncropActive();
-    const virtualWidth = uncropActive ? this.sourceWidth + uncropPad.left + uncropPad.right : this.sourceWidth;
+    const baseWidth = uncropActive ? this.sourceWidth + uncropPad.left + uncropPad.right : this.sourceWidth;
     const virtualHeight = uncropActive ? this.sourceHeight + uncropPad.top + uncropPad.bottom : this.sourceHeight;
+
+    // Apply PAR correction: scale virtual width by pixel aspect ratio
+    const parActive = isPARActive(this.parState);
+    const virtualWidth = parActive ? calculatePARCorrectedWidth(baseWidth, this.parState.par) : baseWidth;
 
     const { width: displayWidth, height: displayHeight } = calculateDisplayDimensions(
       virtualWidth,
@@ -2348,6 +2356,21 @@ export class Viewer {
   resetToneMappingState(): void {
     this.toneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
     this.notifyEffectsChanged();
+    this.scheduleRender();
+  }
+
+  // Pixel Aspect Ratio methods
+  setPARState(state: PARState): void {
+    this.parState = { ...state };
+    this.scheduleRender();
+  }
+
+  getPARState(): PARState {
+    return { ...this.parState };
+  }
+
+  resetPARState(): void {
+    this.parState = { ...DEFAULT_PAR_STATE };
     this.scheduleRender();
   }
 
