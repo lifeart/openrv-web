@@ -1,0 +1,198 @@
+/**
+ * Cineon File Format Decoder
+ *
+ * Supports:
+ * - 10-bit packed data (Method A, same as DPX)
+ * - Big-endian byte order (standard Cineon)
+ * - RGB images (always 3 channels)
+ * - Log-to-linear conversion (applied by default)
+ *
+ * Cineon was developed by Kodak for digital film scanning.
+ * Data is stored in logarithmic (printing density) space.
+ */
+
+import { cineonLogToLinear as _cineonLogToLinear, type LogLinearOptions } from './LogLinear';
+import { unpackDPX10bit } from './DPXDecoder';
+
+// Re-export for backwards compatibility
+export { cineonLogToLinear } from './LogLinear';
+
+// Cineon magic number
+const CINEON_MAGIC = 0x802a5fd7;
+
+export interface CineonInfo {
+  width: number;
+  height: number;
+  bitDepth: number;
+  channels: number;
+  dataOffset: number;
+}
+
+export interface CineonDecodeResult {
+  width: number;
+  height: number;
+  data: Float32Array; // RGBA interleaved
+  channels: number; // always 4
+  colorSpace: 'linear' | 'log';
+  metadata: Record<string, unknown>;
+}
+
+/**
+ * Check if a buffer contains a Cineon file by checking magic number
+ */
+export function isCineonFile(buffer: ArrayBuffer): boolean {
+  if (buffer.byteLength < 4) {
+    return false;
+  }
+  const view = new DataView(buffer);
+  const magic = view.getUint32(0, false); // big-endian
+  return magic === CINEON_MAGIC;
+}
+
+/**
+ * Get basic info from Cineon header without fully decoding
+ */
+export function getCineonInfo(buffer: ArrayBuffer): CineonInfo | null {
+  try {
+    if (buffer.byteLength < 800) {
+      return null;
+    }
+
+    const view = new DataView(buffer);
+    const magic = view.getUint32(0, false);
+
+    if (magic !== CINEON_MAGIC) {
+      return null;
+    }
+
+    // Cineon header is always big-endian
+    const dataOffset = view.getUint32(4, false);
+    const width = view.getUint32(200, false);
+    const height = view.getUint32(204, false);
+    const bitDepth = view.getUint8(213);
+
+    // Cineon is always 3 channels (RGB)
+    const channels = 3;
+
+    return {
+      width,
+      height,
+      bitDepth,
+      channels,
+      dataOffset,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Convert component data to RGBA Float32Array
+ * Cineon is always RGB, so alpha is set to 1.0
+ */
+function toRGBA(data: Float32Array, width: number, height: number): Float32Array {
+  const totalPixels = width * height;
+  const result = new Float32Array(totalPixels * 4);
+
+  for (let i = 0; i < totalPixels; i++) {
+    const srcIdx = i * 3;
+    const dstIdx = i * 4;
+    result[dstIdx] = data[srcIdx] ?? 0;
+    result[dstIdx + 1] = data[srcIdx + 1] ?? 0;
+    result[dstIdx + 2] = data[srcIdx + 2] ?? 0;
+    result[dstIdx + 3] = 1.0;
+  }
+
+  return result;
+}
+
+/**
+ * Apply log-to-linear conversion on RGBA data (only on RGB, leave alpha)
+ */
+function applyLogToLinearRGBA(
+  data: Float32Array,
+  width: number,
+  height: number,
+  bitDepth: number,
+  options?: LogLinearOptions
+): void {
+  const totalPixels = width * height;
+  const maxCodeValue = (1 << bitDepth) - 1;
+
+  for (let i = 0; i < totalPixels; i++) {
+    const idx = i * 4;
+    for (let c = 0; c < 3; c++) {
+      const normalized = data[idx + c]!;
+      const codeValue = normalized * maxCodeValue;
+      data[idx + c] = _cineonLogToLinear(codeValue, options);
+    }
+    // Alpha stays as-is
+  }
+}
+
+/**
+ * Decode a Cineon file from an ArrayBuffer
+ *
+ * @param buffer - The Cineon file data
+ * @param options - Decode options
+ * @param options.applyLogToLinear - Whether to convert log data to linear (default: true for Cineon)
+ */
+export async function decodeCineon(
+  buffer: ArrayBuffer,
+  options?: { applyLogToLinear?: boolean; logLinearOptions?: LogLinearOptions }
+): Promise<CineonDecodeResult> {
+  const info = getCineonInfo(buffer);
+  if (!info) {
+    throw new Error('Invalid Cineon file');
+  }
+
+  const { width, height, bitDepth, channels, dataOffset } = info;
+
+  // Validate dimensions
+  if (width <= 0 || height <= 0 || width > 65536 || height > 65536) {
+    throw new Error(`Invalid Cineon dimensions: ${width}x${height}`);
+  }
+
+  // Cineon is always 10-bit packed
+  if (bitDepth !== 10) {
+    throw new Error(`Unsupported Cineon bit depth: ${bitDepth}. Only 10-bit is supported.`);
+  }
+
+  // Validate data offset
+  if (dataOffset >= buffer.byteLength) {
+    throw new Error(`Invalid Cineon file: data offset ${dataOffset} exceeds file size ${buffer.byteLength}`);
+  }
+
+  // Create DataView for pixel data
+  const pixelDataView = new DataView(buffer, dataOffset);
+
+  // Cineon is always big-endian, always 10-bit packed
+  const componentData = unpackDPX10bit(pixelDataView, width, height, channels, true);
+
+  // Convert to RGBA (Cineon is always RGB)
+  const rgbaData = toRGBA(componentData, width, height);
+
+  // Default: apply log-to-linear for Cineon (data is inherently log)
+  const shouldApplyLogToLinear = options?.applyLogToLinear !== false;
+  let colorSpace: 'linear' | 'log';
+
+  if (shouldApplyLogToLinear) {
+    applyLogToLinearRGBA(rgbaData, width, height, bitDepth, options?.logLinearOptions);
+    colorSpace = 'linear';
+  } else {
+    colorSpace = 'log';
+  }
+
+  return {
+    width,
+    height,
+    data: rgbaData,
+    channels: 4,
+    colorSpace,
+    metadata: {
+      format: 'cineon',
+      bitDepth,
+      originalChannels: channels,
+    },
+  };
+}

@@ -174,6 +174,11 @@ export interface ViewerState {
   backgroundCustomColor: string;
   // Color inversion state
   colorInversionEnabled: boolean;
+  // HDR format info
+  formatName: string | null;
+  bitDepth: number | null;
+  dataType: string | null;
+  colorSpace: string | null;
 }
 
 export interface ColorState {
@@ -483,6 +488,31 @@ export function exposeForTesting(app: App): void {
         backgroundCustomColor: viewer.backgroundPatternState?.customColor ?? '#1a1a1a',
         // Color inversion state
         colorInversionEnabled: viewer.colorInversionEnabled ?? false,
+        // HDR format info
+        formatName: (() => {
+          const source = appAny.session?.currentSource;
+          const fileSource = source?.getFileSource?.() ?? source;
+          return fileSource?.formatName ?? null;
+        })(),
+        bitDepth: (() => {
+          const source = appAny.session?.currentSource;
+          const fileSource = source?.getFileSource?.() ?? source;
+          const ipImage = fileSource?.cachedIPImage;
+          const attrs = ipImage?.metadata?.attributes;
+          return (attrs?.bitDepth as number) ?? (attrs?.bitsPerSample as number) ?? null;
+        })(),
+        dataType: (() => {
+          const source = appAny.session?.currentSource;
+          const fileSource = source?.getFileSource?.() ?? source;
+          const ipImage = fileSource?.cachedIPImage;
+          return ipImage?.dataType ?? null;
+        })(),
+        colorSpace: (() => {
+          const source = appAny.session?.currentSource;
+          const fileSource = source?.getFileSource?.() ?? source;
+          const ipImage = fileSource?.cachedIPImage;
+          return ipImage?.metadata?.colorSpace ?? null;
+        })(),
       };
     },
 

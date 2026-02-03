@@ -31,7 +31,7 @@ const FRAME_PATTERNS = [
 ];
 
 const IMAGE_EXTENSIONS = new Set([
-  'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'tiff', 'tif', 'exr'
+  'png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'tiff', 'tif', 'exr', 'dpx', 'cin', 'cineon'
 ]);
 
 /**
