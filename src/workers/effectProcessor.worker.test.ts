@@ -291,6 +291,7 @@ describe('Effect Processor Worker', () => {
         'vibranceSkinProtection',
         'contrast',
         'clarity',
+        'hueRotation',
         'temperature',
         'tint',
         'brightness',

@@ -83,6 +83,7 @@ function createDefaultColorAdjustments(): ColorAdjustments {
     vibrance: 0,
     vibranceSkinProtection: true,
     clarity: 0,
+    hueRotation: 0,
     temperature: 0,
     tint: 0,
     highlights: 0,

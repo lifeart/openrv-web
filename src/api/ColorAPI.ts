@@ -17,6 +17,7 @@ export interface PublicColorAdjustments {
   gamma: number;
   saturation: number;
   contrast: number;
+  hueRotation: number;
   temperature: number;
   tint: number;
   brightness: number;
@@ -49,7 +50,7 @@ export class ColorAPI {
     // Only allow valid numeric keys - use hasOwnProperty to prevent prototype pollution
     const validKeys: Array<keyof PublicColorAdjustments> = [
       'exposure', 'gamma', 'saturation', 'contrast',
-      'temperature', 'tint', 'brightness',
+      'hueRotation', 'temperature', 'tint', 'brightness',
       'highlights', 'shadows', 'whites', 'blacks',
     ];
 
@@ -75,6 +76,7 @@ export class ColorAPI {
       gamma: adj.gamma,
       saturation: adj.saturation,
       contrast: adj.contrast,
+      hueRotation: adj.hueRotation,
       temperature: adj.temperature,
       tint: adj.tint,
       brightness: adj.brightness,

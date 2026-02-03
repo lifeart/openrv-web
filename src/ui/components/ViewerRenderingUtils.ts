@@ -97,43 +97,57 @@ export interface FilterStringCache {
 function buildColorFilterArray(adjustments: ColorAdjustments): string[] {
   const filters: string[] = [];
 
-  // Brightness: CSS uses 1 = normal, we use -1 to +1 offset
-  const brightness = 1 + adjustments.brightness;
+  // Helper: only use a value if it is a finite number, otherwise fall back to default
+  const safe = (value: number, fallback: number): number =>
+    Number.isFinite(value) ? value : fallback;
+
+  const brightness = 1 + safe(adjustments.brightness, 0);
   if (brightness !== 1) {
     filters.push(`brightness(${brightness.toFixed(3)})`);
   }
 
   // Exposure: simulate with brightness (2^exposure)
-  if (adjustments.exposure !== 0) {
-    const exposureBrightness = Math.pow(2, adjustments.exposure);
+  const exposure = safe(adjustments.exposure, 0);
+  if (exposure !== 0) {
+    const exposureBrightness = Math.pow(2, exposure);
     filters.push(`brightness(${exposureBrightness.toFixed(3)})`);
   }
 
   // Contrast: CSS uses 1 = normal
-  if (adjustments.contrast !== 1) {
-    filters.push(`contrast(${adjustments.contrast.toFixed(3)})`);
+  const contrast = safe(adjustments.contrast, 1);
+  if (contrast !== 1) {
+    filters.push(`contrast(${contrast.toFixed(3)})`);
   }
 
   // Saturation: CSS uses 1 = normal
-  if (adjustments.saturation !== 1) {
-    filters.push(`saturate(${adjustments.saturation.toFixed(3)})`);
+  const saturation = safe(adjustments.saturation, 1);
+  if (saturation !== 1) {
+    filters.push(`saturate(${saturation.toFixed(3)})`);
+  }
+
+  // Hue rotation: global hue shift in degrees, normalize to [0, 360)
+  const hueRotation = safe(adjustments.hueRotation, 0);
+  const normalizedHue = ((hueRotation % 360) + 360) % 360;
+  if (normalizedHue !== 0) {
+    filters.push(`hue-rotate(${normalizedHue.toFixed(1)}deg)`);
   }
 
   // Temperature: approximate with hue-rotate and sepia
-  if (adjustments.temperature !== 0) {
-    const temp = adjustments.temperature;
-    if (temp > 0) {
-      const sepia = Math.min(temp / 200, 0.3);
+  const temperature = safe(adjustments.temperature, 0);
+  if (temperature !== 0) {
+    if (temperature > 0) {
+      const sepia = Math.min(temperature / 200, 0.3);
       filters.push(`sepia(${sepia.toFixed(3)})`);
     } else {
-      const hue = temp * 0.3;
+      const hue = temperature * 0.3;
       filters.push(`hue-rotate(${hue.toFixed(1)}deg)`);
     }
   }
 
   // Tint: approximate with hue-rotate
-  if (adjustments.tint !== 0) {
-    const hue = adjustments.tint * 0.5;
+  const tint = safe(adjustments.tint, 0);
+  if (tint !== 0) {
+    const hue = tint * 0.5;
     filters.push(`hue-rotate(${hue.toFixed(1)}deg)`);
   }
 
@@ -156,6 +170,7 @@ export function getCanvasFilterString(
       adjustments.exposure === cached.exposure &&
       adjustments.contrast === cached.contrast &&
       adjustments.saturation === cached.saturation &&
+      adjustments.hueRotation === cached.hueRotation &&
       adjustments.temperature === cached.temperature &&
       adjustments.tint === cached.tint
     ) {

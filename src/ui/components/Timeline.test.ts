@@ -223,4 +223,51 @@ describe('Timeline', () => {
       expect(container.style.userSelect).toBe('none');
     });
   });
+
+  describe('timecode display', () => {
+    it('TML-021: default display mode is frames', () => {
+      expect(timeline.timecodeDisplayMode).toBe('frames');
+    });
+
+    it('TML-022: can set display mode to timecode', () => {
+      timeline.timecodeDisplayMode = 'timecode';
+      expect(timeline.timecodeDisplayMode).toBe('timecode');
+    });
+
+    it('TML-023: can set display mode back to frames', () => {
+      timeline.timecodeDisplayMode = 'timecode';
+      timeline.timecodeDisplayMode = 'frames';
+      expect(timeline.timecodeDisplayMode).toBe('frames');
+    });
+
+    it('TML-024: toggleTimecodeDisplay switches from frames to timecode', () => {
+      expect(timeline.timecodeDisplayMode).toBe('frames');
+      timeline.toggleTimecodeDisplay();
+      expect(timeline.timecodeDisplayMode).toBe('timecode');
+    });
+
+    it('TML-025: toggleTimecodeDisplay switches from timecode back to frames', () => {
+      timeline.timecodeDisplayMode = 'timecode';
+      timeline.toggleTimecodeDisplay();
+      expect(timeline.timecodeDisplayMode).toBe('frames');
+    });
+
+    it('TML-026: setting display mode triggers redraw', () => {
+      timeline.drawCount = 0;
+      timeline.timecodeDisplayMode = 'timecode';
+      expect(timeline.drawCount).toBeGreaterThan(0);
+    });
+
+    it('TML-027: setting same display mode does not trigger redraw', () => {
+      timeline.drawCount = 0;
+      timeline.timecodeDisplayMode = 'frames'; // already 'frames'
+      expect(timeline.drawCount).toBe(0);
+    });
+
+    it('TML-028: toggle triggers redraw', () => {
+      timeline.drawCount = 0;
+      timeline.toggleTimecodeDisplay();
+      expect(timeline.drawCount).toBeGreaterThan(0);
+    });
+  });
 });

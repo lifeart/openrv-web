@@ -11,6 +11,7 @@ export interface ColorAdjustments {
   vibranceSkinProtection: boolean;  // Protect skin tones from vibrance (default: true)
   contrast: number;      // 0 to 2 (1 = normal)
   clarity: number;       // -100 to +100 (local contrast / midtone detail)
+  hueRotation: number;   // 0 to 360 degrees (global hue shift)
   temperature: number;   // -100 to +100 (kelvin shift)
   tint: number;          // -100 to +100 (green/magenta)
   brightness: number;    // -1 to +1
@@ -28,6 +29,7 @@ export const DEFAULT_COLOR_ADJUSTMENTS: ColorAdjustments = {
   vibranceSkinProtection: true,
   contrast: 1,
   clarity: 0,
+  hueRotation: 0,
   temperature: 0,
   tint: 0,
   brightness: 0,
@@ -152,6 +154,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
       { key: 'brightness', label: 'Brightness', min: -1, max: 1, step: 0.01, format: (v) => `${v > 0 ? '+' : ''}${(v * 100).toFixed(0)}%` },
       { key: 'contrast', label: 'Contrast', min: 0, max: 2, step: 0.01, format: (v) => `${(v * 100).toFixed(0)}%` },
       { key: 'clarity', label: 'Clarity', min: -100, max: 100, step: 1, format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}` },
+      { key: 'hueRotation', label: 'Hue Rotation', min: 0, max: 360, step: 1, format: (v) => `${v.toFixed(0)}\u00B0` },
       { key: 'gamma', label: 'Gamma', min: 0.1, max: 4, step: 0.01, format: (v) => v.toFixed(2) },
       { key: 'saturation', label: 'Saturation', min: 0, max: 2, step: 0.01, format: (v) => `${(v * 100).toFixed(0)}%` },
       { key: 'vibrance', label: 'Vibrance', min: -100, max: 100, step: 1, format: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}` },
@@ -623,6 +626,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
       brightness: (v) => `${v > 0 ? '+' : ''}${(v * 100).toFixed(0)}%`,
       contrast: (v) => `${(v * 100).toFixed(0)}%`,
       clarity: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
+      hueRotation: (v) => `${v.toFixed(0)}\u00B0`,
       gamma: (v) => v.toFixed(2),
       saturation: (v) => `${(v * 100).toFixed(0)}%`,
       vibrance: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
@@ -646,10 +650,18 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
   }
 
   setAdjustments(adjustments: Partial<ColorAdjustments>): void {
-    this.adjustments = { ...this.adjustments, ...adjustments };
+    // Sanitize numeric values: reject NaN/Infinity
+    const sanitized = { ...adjustments };
+    for (const [key, value] of Object.entries(sanitized)) {
+      if (typeof value === 'number' && !Number.isFinite(value)) {
+        (sanitized as Record<string, unknown>)[key] = DEFAULT_COLOR_ADJUSTMENTS[key as keyof ColorAdjustments];
+      }
+    }
+
+    this.adjustments = { ...this.adjustments, ...sanitized };
 
     // Update sliders (only for numeric adjustments)
-    for (const [key, value] of Object.entries(adjustments)) {
+    for (const [key, value] of Object.entries(sanitized)) {
       const slider = this.sliders.get(key as NumericAdjustmentKey);
       if (slider && typeof value === 'number') {
         slider.value = String(value);

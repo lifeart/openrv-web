@@ -223,6 +223,7 @@ function createMockColorControls() {
       vibranceSkinProtection: true,
       contrast: 1,
       clarity: 0,
+      hueRotation: 0,
       temperature: 0,
       tint: 0,
       brightness: 0,
@@ -237,7 +238,7 @@ function createMockColorControls() {
       this._adjustments = {
         exposure: 0, gamma: 1, saturation: 1, vibrance: 0,
         vibranceSkinProtection: true, contrast: 1, clarity: 0,
-        temperature: 0, tint: 0, brightness: 0,
+        hueRotation: 0, temperature: 0, tint: 0, brightness: 0,
         highlights: 0, shadows: 0, whites: 0, blacks: 0,
       };
     }),

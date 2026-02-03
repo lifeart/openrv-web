@@ -2,6 +2,7 @@ import { Session } from '../../core/session/Session';
 import { PaintEngine } from '../../paint/PaintEngine';
 import { WaveformRenderer } from '../../audio/WaveformRenderer';
 import { ThumbnailManager } from './ThumbnailManager';
+import { formatTimecode, formatFrameDisplay, TimecodeDisplayMode } from '../../utils/Timecode';
 
 export class Timeline {
   private container: HTMLElement;
@@ -13,6 +14,7 @@ export class Timeline {
   private waveformLoaded = false;
   private thumbnailManager: ThumbnailManager;
   private thumbnailsEnabled = true;
+  private _timecodeDisplayMode: TimecodeDisplayMode = 'frames';
 
   protected isDragging = false;
   protected width = 0;
@@ -223,6 +225,30 @@ export class Timeline {
   }
 
   /**
+   * Get the current timecode display mode
+   */
+  get timecodeDisplayMode(): TimecodeDisplayMode {
+    return this._timecodeDisplayMode;
+  }
+
+  /**
+   * Set the timecode display mode
+   */
+  set timecodeDisplayMode(mode: TimecodeDisplayMode) {
+    if (this._timecodeDisplayMode !== mode) {
+      this._timecodeDisplayMode = mode;
+      this.draw();
+    }
+  }
+
+  /**
+   * Toggle between frames and timecode display modes
+   */
+  toggleTimecodeDisplay(): void {
+    this.timecodeDisplayMode = this._timecodeDisplayMode === 'frames' ? 'timecode' : 'frames';
+  }
+
+  /**
    * Double-click to navigate to nearest annotated frame
    */
   private onDoubleClick = (e: MouseEvent): void => {
@@ -257,6 +283,18 @@ export class Timeline {
   }
 
   private onMouseDown = (e: MouseEvent): void => {
+    // Check if click is on the frame counter area (top region above the track)
+    const rect = this.canvas.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const x = e.clientX - rect.left;
+    const trackY = 35;
+
+    if (y < trackY && x > this.width * 0.25 && x < this.width * 0.75) {
+      // Click on frame counter area - toggle timecode display
+      this.toggleTimecodeDisplay();
+      return;
+    }
+
     this.isDragging = true;
     this.seekToPosition(e.clientX);
   };
@@ -469,25 +507,43 @@ export class Timeline {
     ctx.arc(playheadX, trackY - 6, 5, 0, Math.PI * 2);
     ctx.fill();
 
-    // Frame numbers
+    // Frame numbers / timecode
+    const fps = this.session.fps;
+    const isTimecode = this._timecodeDisplayMode === 'timecode';
     ctx.font = '12px -apple-system, BlinkMacSystemFont, monospace';
 
     // Left frame number (always 1)
     ctx.fillStyle = colors.textDim;
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
-    ctx.fillText('1', padding - 10, trackY + trackHeight / 2);
+    const leftLabel = isTimecode ? formatTimecode(1, fps) : '1';
+    ctx.fillText(leftLabel, padding - 10, trackY + trackHeight / 2);
 
     // Right frame number (full duration)
     ctx.textAlign = 'left';
-    ctx.fillText(String(duration), width - padding + 10, trackY + trackHeight / 2);
+    const rightLabel = isTimecode ? formatTimecode(duration, fps) : String(duration);
+    ctx.fillText(rightLabel, width - padding + 10, trackY + trackHeight / 2);
 
     // Current frame and in/out info (top center)
     ctx.fillStyle = colors.text;
     ctx.textAlign = 'center';
     ctx.font = 'bold 14px -apple-system, BlinkMacSystemFont, monospace';
-    const inOutInfo = inPoint !== 1 || outPoint !== duration ? ` [${inPoint}-${outPoint}]` : '';
-    ctx.fillText(`Frame ${currentFrame}${inOutInfo}`, width / 2, 18);
+    const frameLabel = formatFrameDisplay(currentFrame, fps, this._timecodeDisplayMode);
+    const inOutInfo = inPoint !== 1 || outPoint !== duration
+      ? isTimecode
+        ? ` [${formatTimecode(inPoint, fps)}-${formatTimecode(outPoint, fps)}]`
+        : ` [${inPoint}-${outPoint}]`
+      : '';
+    ctx.fillText(`${frameLabel}${inOutInfo}`, width / 2, 18);
+
+    // Draw timecode mode indicator (small label showing current mode)
+    const modeLabel = isTimecode ? 'TC' : 'F#';
+    ctx.font = '9px -apple-system, BlinkMacSystemFont, monospace';
+    ctx.fillStyle = colors.textDim;
+    ctx.textAlign = 'left';
+    // Position to the right of the frame display text
+    const frameLabelWidth = ctx.measureText(`${frameLabel}${inOutInfo}`).width;
+    ctx.fillText(modeLabel, width / 2 + frameLabelWidth / 2 + 6, 18);
 
     // Info text (bottom)
     ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';

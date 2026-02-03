@@ -79,6 +79,7 @@ function defaultAdjustments(): ColorAdjustments {
     vibrance: 0,
     vibranceSkinProtection: true,
     clarity: 0,
+    hueRotation: 0,
     temperature: 0,
     tint: 0,
     highlights: 0,
@@ -254,6 +255,86 @@ describe('ViewerRenderingUtils', () => {
       const result = getCanvasFilterString(adjustments, cache);
 
       expect(result).toContain('sepia(');
+    });
+
+    it('should build hue rotation filter', () => {
+      const adjustments = { ...defaultAdjustments(), hueRotation: 180 };
+      const cache: FilterStringCache = { filterString: null, cachedAdjustments: null };
+
+      const result = getCanvasFilterString(adjustments, cache);
+
+      expect(result).toContain('hue-rotate(180.0deg)');
+    });
+
+    it('should not include hue rotation filter when value is 0', () => {
+      const adjustments = { ...defaultAdjustments(), hueRotation: 0 };
+      const cache: FilterStringCache = { filterString: null, cachedAdjustments: null };
+
+      const result = getCanvasFilterString(adjustments, cache);
+
+      expect(result).toBe('none');
+    });
+
+    it('should normalize hue rotation of 360 to 0 (no filter)', () => {
+      const adjustments = { ...defaultAdjustments(), hueRotation: 360 };
+      const cache: FilterStringCache = { filterString: null, cachedAdjustments: null };
+
+      const result = getCanvasFilterString(adjustments, cache);
+
+      // 360 % 360 = 0, so no hue-rotate filter should be emitted
+      expect(result).toBe('none');
+    });
+
+    it('should normalize negative hue rotation to equivalent positive value', () => {
+      const adjustments = { ...defaultAdjustments(), hueRotation: -90 };
+      const cache: FilterStringCache = { filterString: null, cachedAdjustments: null };
+
+      const result = getCanvasFilterString(adjustments, cache);
+
+      // -90 normalizes to 270
+      expect(result).toContain('hue-rotate(270.0deg)');
+    });
+
+    it('should normalize hue rotation > 360 by wrapping', () => {
+      const adjustments = { ...defaultAdjustments(), hueRotation: 450 };
+      const cache: FilterStringCache = { filterString: null, cachedAdjustments: null };
+
+      const result = getCanvasFilterString(adjustments, cache);
+
+      // 450 % 360 = 90
+      expect(result).toContain('hue-rotate(90.0deg)');
+    });
+
+    it('should handle NaN hue rotation gracefully (no filter)', () => {
+      const adjustments = { ...defaultAdjustments(), hueRotation: NaN };
+      const cache: FilterStringCache = { filterString: null, cachedAdjustments: null };
+
+      const result = getCanvasFilterString(adjustments, cache);
+
+      // NaN falls back to 0, so no hue-rotate filter
+      expect(result).toBe('none');
+      expect(result).not.toContain('NaN');
+    });
+
+    it('should handle NaN brightness gracefully (no filter)', () => {
+      const adjustments = { ...defaultAdjustments(), brightness: NaN };
+      const cache: FilterStringCache = { filterString: null, cachedAdjustments: null };
+
+      const result = getCanvasFilterString(adjustments, cache);
+
+      // NaN brightness falls back to 0, so 1+0=1, no brightness filter
+      expect(result).toBe('none');
+      expect(result).not.toContain('NaN');
+    });
+
+    it('should handle NaN exposure gracefully (no filter)', () => {
+      const adjustments = { ...defaultAdjustments(), exposure: NaN };
+      const cache: FilterStringCache = { filterString: null, cachedAdjustments: null };
+
+      const result = getCanvasFilterString(adjustments, cache);
+
+      expect(result).toBe('none');
+      expect(result).not.toContain('NaN');
     });
 
     it('should build negative temperature filter with hue-rotate', () => {
