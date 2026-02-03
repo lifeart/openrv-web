@@ -310,6 +310,11 @@ export class Viewer {
   // Ghost frame (onion skin) state
   private ghostFrameState: GhostFrameState = { ...DEFAULT_GHOST_FRAME_STATE };
 
+  // Ghost frame canvas pool - reuse canvases instead of creating new ones each frame
+  private ghostFrameCanvasPool: { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D }[] = [];
+  private ghostFramePoolWidth = 0;
+  private ghostFramePoolHeight = 0;
+
   // Tone mapping state
   private toneMappingState: ToneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
 
@@ -2767,6 +2772,11 @@ export class Viewer {
   // Ghost frame (onion skin) methods
   setGhostFrameState(state: GhostFrameState): void {
     this.ghostFrameState = { ...state };
+    if (!state.enabled) {
+      this.ghostFrameCanvasPool = [];
+      this.ghostFramePoolWidth = 0;
+      this.ghostFramePoolHeight = 0;
+    }
     this.scheduleRender();
   }
 
@@ -2776,6 +2786,9 @@ export class Viewer {
 
   resetGhostFrameState(): void {
     this.ghostFrameState = { ...DEFAULT_GHOST_FRAME_STATE };
+    this.ghostFrameCanvasPool = [];
+    this.ghostFramePoolWidth = 0;
+    this.ghostFramePoolHeight = 0;
     this.scheduleRender();
   }
 
@@ -2961,6 +2974,39 @@ export class Viewer {
   }
 
   /**
+   * Get a canvas from the ghost frame pool, creating one if needed.
+   * All pooled canvases share the same dimensions; if the display size changes,
+   * the pool is re-sized.
+   */
+  private getGhostFrameCanvas(
+    index: number,
+    width: number,
+    height: number
+  ): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } | null {
+    // If display size changed, resize all existing pool entries
+    if (this.ghostFramePoolWidth !== width || this.ghostFramePoolHeight !== height) {
+      this.ghostFramePoolWidth = width;
+      this.ghostFramePoolHeight = height;
+      for (const entry of this.ghostFrameCanvasPool) {
+        entry.canvas.width = width;
+        entry.canvas.height = height;
+      }
+    }
+
+    // Create new entry if pool is not big enough
+    if (index >= this.ghostFrameCanvasPool.length) {
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      this.ghostFrameCanvasPool.push({ canvas, ctx });
+    }
+
+    return this.ghostFrameCanvasPool[index]!;
+  }
+
+  /**
    * Render ghost frames (onion skin overlay) behind the main frame.
    * Shows semi-transparent previous/next frames for animation review.
    */
@@ -2998,6 +3044,7 @@ export class Viewer {
     }
 
     // Render ghost frames
+    let poolIndex = 0;
     for (const { frame, distance, isBefore } of framesToRender) {
       // Calculate opacity with falloff
       const opacity = this.ghostFrameState.opacityBase *
@@ -3019,14 +3066,13 @@ export class Viewer {
           // Synchronous check for cached sequence frame
           const seqFrame = this.session.getSequenceFrameSync(frame);
           if (seqFrame) {
-            // Draw to temporary canvas
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = displayWidth;
-            tempCanvas.height = displayHeight;
-            const tempCtx = tempCanvas.getContext('2d');
-            if (tempCtx) {
-              tempCtx.drawImage(seqFrame, 0, 0, displayWidth, displayHeight);
-              frameCanvas = tempCanvas;
+            // Use pooled canvas instead of creating a new one
+            const poolEntry = this.getGhostFrameCanvas(poolIndex, displayWidth, displayHeight);
+            if (poolEntry) {
+              poolEntry.ctx.clearRect(0, 0, displayWidth, displayHeight);
+              poolEntry.ctx.drawImage(seqFrame, 0, 0, displayWidth, displayHeight);
+              frameCanvas = poolEntry.canvas;
+              poolIndex++;
             }
           }
         } else if (source.type === 'video') {
@@ -3060,6 +3106,11 @@ export class Viewer {
       }
 
       ctx.restore();
+    }
+
+    // Trim pool to actual number of canvases used
+    if (poolIndex < this.ghostFrameCanvasPool.length) {
+      this.ghostFrameCanvasPool.length = poolIndex;
     }
   }
 
@@ -3871,6 +3922,11 @@ export class Viewer {
       this.prerenderBuffer.dispose();
       this.prerenderBuffer = null;
     }
+
+    // Cleanup ghost frame canvas pool
+    this.ghostFrameCanvasPool = [];
+    this.ghostFramePoolWidth = 0;
+    this.ghostFramePoolHeight = 0;
 
     // Cleanup overlays
     this.clippingOverlay.dispose();
