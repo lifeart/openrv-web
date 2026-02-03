@@ -56,6 +56,53 @@ import {
 } from '../utils/effectProcessing.shared';
 
 // ============================================================================
+// Reusable clarity buffers - allocated once and reused across frames
+// ============================================================================
+
+let clarityOriginalBuffer: Uint8ClampedArray | null = null;
+let clarityBlurTempBuffer: Uint8ClampedArray | null = null;
+let clarityBlurResultBuffer: Uint8ClampedArray | null = null;
+let clarityBufferSize = 0;
+
+// ============================================================================
+// Reusable sharpen buffer - allocated once and reused across frames
+// ============================================================================
+
+let sharpenOriginalBuffer: Uint8ClampedArray | null = null;
+let sharpenBufferSize = 0;
+
+function ensureSharpenBuffer(size: number): void {
+  if (sharpenBufferSize !== size) {
+    sharpenOriginalBuffer = new Uint8ClampedArray(size);
+    sharpenBufferSize = size;
+  }
+}
+
+// Cached midtone mask (never changes, 256 entries)
+let midtoneMask: Float32Array | null = null;
+
+function ensureClarityBuffers(size: number): void {
+  if (clarityBufferSize !== size) {
+    clarityOriginalBuffer = new Uint8ClampedArray(size);
+    clarityBlurTempBuffer = new Uint8ClampedArray(size);
+    clarityBlurResultBuffer = new Uint8ClampedArray(size);
+    clarityBufferSize = size;
+  }
+}
+
+function getMidtoneMask(): Float32Array {
+  if (!midtoneMask) {
+    midtoneMask = new Float32Array(256);
+    for (let i = 0; i < 256; i++) {
+      const n = i / 255;
+      const dev = Math.abs(n - 0.5) * 2;
+      midtoneMask[i] = 1.0 - dev * dev;
+    }
+  }
+  return midtoneMask;
+}
+
+// ============================================================================
 // Effect Processing Functions
 // ============================================================================
 
@@ -181,15 +228,16 @@ function applyVibrance(data: Uint8ClampedArray, ca: ColorAdjustments): void {
   }
 }
 
-function applyGaussianBlur5x5(
+function applyGaussianBlur5x5InPlace(
   data: Uint8ClampedArray,
   width: number,
   height: number
-): Uint8ClampedArray {
-  const result = new Uint8ClampedArray(data.length);
-  const temp = new Uint8ClampedArray(data.length);
+): void {
+  const result = clarityBlurResultBuffer!;
+  const temp = clarityBlurTempBuffer!;
   const kernel = [1, 4, 6, 4, 1];
 
+  // Horizontal pass
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const idx = (y * width + x) * 4;
@@ -207,6 +255,7 @@ function applyGaussianBlur5x5(
     }
   }
 
+  // Vertical pass
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const idx = (y * width + x) * 4;
@@ -223,7 +272,6 @@ function applyGaussianBlur5x5(
       result[idx + 3] = temp[idx + 3]!;
     }
   }
-  return result;
 }
 
 function applyClarity(
@@ -233,26 +281,29 @@ function applyClarity(
   ca: ColorAdjustments
 ): void {
   const clarity = ca.clarity / 100;
-  const original = new Uint8ClampedArray(data);
-  const blurred = applyGaussianBlur5x5(original, width, height);
-
-  const midtoneMask = new Float32Array(256);
-  for (let i = 0; i < 256; i++) {
-    const n = i / 255;
-    const dev = Math.abs(n - 0.5) * 2;
-    midtoneMask[i] = 1.0 - dev * dev;
-  }
-
-  const effectScale = clarity * CLARITY_EFFECT_SCALE;
   const len = data.length;
+
+  // Ensure buffers are correctly sized (reuses if size matches)
+  ensureClarityBuffers(len);
+
+  const original = clarityOriginalBuffer!;
+  original.set(data);
+
+  // Blur writes into clarityBlurResultBuffer
+  applyGaussianBlur5x5InPlace(original, width, height);
+  const blurred = clarityBlurResultBuffer!;
+
+  // Use cached midtone mask
+  const mask = getMidtoneMask();
+  const effectScale = clarity * CLARITY_EFFECT_SCALE;
 
   for (let i = 0; i < len; i += 4) {
     const r = original[i]!,
       g = original[i + 1]!,
       b = original[i + 2]!;
     const lum = LUMA_R * r + LUMA_G * g + LUMA_B * b;
-    const mask = midtoneMask[Math.min(255, Math.max(0, Math.round(lum)))]!;
-    const adj = mask * effectScale;
+    const lumIndex = Math.min(255, Math.max(0, Math.round(lum)));
+    const adj = mask[lumIndex]! * effectScale;
 
     data[i] = Math.max(0, Math.min(255, r + (r - blurred[i]!) * adj));
     data[i + 1] = Math.max(0, Math.min(255, g + (g - blurred[i + 1]!) * adj));
@@ -493,7 +544,9 @@ function applySharpen(
   height: number,
   amount: number
 ): void {
-  const original = new Uint8ClampedArray(data);
+  ensureSharpenBuffer(data.length);
+  const original = sharpenOriginalBuffer!;
+  original.set(data);
   const kernel = [0, -1, 0, -1, 5, -1, 0, -1, 0];
   for (let y = 1; y < height - 1; y++) {
     for (let x = 1; x < width - 1; x++) {
