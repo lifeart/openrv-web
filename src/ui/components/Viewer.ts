@@ -60,7 +60,7 @@ import {
 import { GhostFrameState, DEFAULT_GHOST_FRAME_STATE } from './GhostFrameControl';
 import { ToneMappingState, DEFAULT_TONE_MAPPING_STATE } from './ToneMappingControl';
 import { PARState, DEFAULT_PAR_STATE, isPARActive, calculatePARCorrectedWidth } from '../../utils/PixelAspectRatio';
-import { BackgroundPatternState, DEFAULT_BACKGROUND_PATTERN_STATE, drawBackgroundPattern } from './BackgroundPatternControl';
+import { BackgroundPatternState, DEFAULT_BACKGROUND_PATTERN_STATE, drawBackgroundPattern, PATTERN_COLORS } from './BackgroundPatternControl';
 import { FrameInterpolator } from '../../utils/FrameInterpolator';
 import {
   PointerState,
@@ -2551,6 +2551,7 @@ export class Viewer {
   // Background pattern methods
   setBackgroundPatternState(state: BackgroundPatternState): void {
     this.backgroundPatternState = { ...state };
+    this.updateCSSBackground();
     this.scheduleRender();
   }
 
@@ -2560,7 +2561,61 @@ export class Viewer {
 
   resetBackgroundPatternState(): void {
     this.backgroundPatternState = { ...DEFAULT_BACKGROUND_PATTERN_STATE };
+    this.updateCSSBackground();
     this.scheduleRender();
+  }
+
+  /**
+   * Update CSS backgrounds on the viewer container and canvas to match
+   * the current background pattern. This ensures the pattern is visible
+   * in letterbox areas and around the canvas, not just on the canvas surface
+   * (which is covered by opaque content).
+   */
+  private updateCSSBackground(): void {
+    const { pattern, checkerSize, customColor } = this.backgroundPatternState;
+
+    if (pattern === 'black') {
+      // Restore theme default for container, keep canvas black
+      this.container.style.background = 'var(--viewer-bg)';
+      this.imageCanvas.style.background = '#000';
+      return;
+    }
+
+    let cssBg: string;
+
+    switch (pattern) {
+      case 'grey18':
+        cssBg = PATTERN_COLORS.grey18 ?? '#2e2e2e';
+        break;
+      case 'grey50':
+        cssBg = PATTERN_COLORS.grey50 ?? '#808080';
+        break;
+      case 'white':
+        cssBg = '#ffffff';
+        break;
+      case 'checker': {
+        const sizes = { small: 8, medium: 16, large: 32 };
+        const sz = sizes[checkerSize];
+        const light = PATTERN_COLORS.checkerLight ?? '#808080';
+        const dark = PATTERN_COLORS.checkerDark ?? '#404040';
+        cssBg = `repeating-conic-gradient(${dark} 0% 25%, ${light} 0% 50%) 0 0 / ${sz * 2}px ${sz * 2}px`;
+        break;
+      }
+      case 'crosshatch': {
+        const bg = PATTERN_COLORS.crosshatchBg ?? '#404040';
+        const line = PATTERN_COLORS.crosshatchLine ?? '#808080';
+        cssBg = `repeating-linear-gradient(45deg, transparent, transparent 5px, ${line} 5px, ${line} 6px), repeating-linear-gradient(-45deg, transparent, transparent 5px, ${line} 5px, ${line} 6px), ${bg}`;
+        break;
+      }
+      case 'custom':
+        cssBg = customColor || '#1a1a1a';
+        break;
+      default:
+        cssBg = '#000';
+    }
+
+    this.container.style.background = cssBg;
+    this.imageCanvas.style.background = cssBg;
   }
 
   /**
