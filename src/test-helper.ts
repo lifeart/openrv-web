@@ -36,6 +36,8 @@ declare global {
       getFullscreenState: () => FullscreenState;
       getPresentationState: () => PresentationTestState;
       getNetworkSyncState: () => NetworkSyncState;
+      simulateFullscreenEnter: () => void;
+      simulateFullscreenExit: () => void;
     };
   }
 }
@@ -817,6 +819,24 @@ export function exposeForTesting(app: App): void {
         syncAnnotations: networkSyncManager?.syncSettings?.annotations ?? false,
         rtt: networkSyncManager?.rtt ?? 0,
       };
+    },
+
+    simulateFullscreenEnter: (): void => {
+      const fullscreenManager = appAny.fullscreenManager;
+      if (fullscreenManager) {
+        // Simulate entering fullscreen by updating internal state and firing event
+        fullscreenManager._isFullscreen = true;
+        fullscreenManager.emit('fullscreenChanged', true);
+      }
+    },
+
+    simulateFullscreenExit: (): void => {
+      const fullscreenManager = appAny.fullscreenManager;
+      if (fullscreenManager) {
+        // Simulate exiting fullscreen by updating internal state and firing event
+        fullscreenManager._isFullscreen = false;
+        fullscreenManager.emit('fullscreenChanged', false);
+      }
     },
   };
 }

@@ -4,6 +4,12 @@ import {
   waitForTestHelper,
   getPresentationState,
   getFullscreenState,
+  simulateFullscreenEnter,
+  simulateFullscreenExit,
+  canvasHasContent,
+  getCanvasDimensions,
+  captureViewerScreenshot,
+  waitForPendingFramesBelow,
 } from './fixtures';
 
 test.describe('Fullscreen / Presentation Mode', () => {
@@ -27,13 +33,205 @@ test.describe('Fullscreen / Presentation Mode', () => {
     expect(title).toContain('Fullscreen');
   });
 
-  // Note: FS-002/003 (enter/exit fullscreen via button) cannot be reliably tested
-  // in headless Playwright as the Fullscreen API requires user gesture and may be
-  // blocked in headless browsers. These are tested via unit tests.
-
   test('FS-005: fullscreen state defaults to false', async ({ page }) => {
     const state = await getFullscreenState(page);
     expect(state.isFullscreen).toBe(false);
+  });
+
+  // === FULLSCREEN TOGGLE TESTS ===
+
+  test('FS-003: fullscreen enter/exit updates button tooltip', async ({ page }) => {
+    const button = page.locator('[data-testid="fullscreen-toggle-button"]');
+
+    // Initial: should say "Fullscreen"
+    await expect(button).toHaveAttribute('title', /^Fullscreen/);
+
+    // Enter fullscreen
+    await simulateFullscreenEnter(page);
+    await expect(button).toHaveAttribute('title', /Exit Fullscreen/);
+    const enterState = await getFullscreenState(page);
+    expect(enterState.isFullscreen).toBe(true);
+
+    // Exit fullscreen
+    await simulateFullscreenExit(page);
+    await expect(button).toHaveAttribute('title', /^Fullscreen/);
+    const exitState = await getFullscreenState(page);
+    expect(exitState.isFullscreen).toBe(false);
+  });
+
+  test('FS-006: viewer expands when viewport grows during fullscreen', async ({ page }) => {
+    // Default viewport: 1280x720
+    const viewerBefore = await page.locator('.viewer-container').boundingBox();
+    const canvasDimsBefore = await getCanvasDimensions(page);
+    expect(viewerBefore).not.toBeNull();
+
+    // Simulate entering fullscreen: state change + viewport grows to 1920x1080
+    await simulateFullscreenEnter(page);
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    // Wait for rAF resize dispatch + timeline debounce (150ms) to settle
+    await page.waitForTimeout(400);
+
+    const viewerAfter = await page.locator('.viewer-container').boundingBox();
+    expect(viewerAfter).not.toBeNull();
+
+    // Viewer container should have grown with the viewport
+    expect(viewerAfter!.width).toBeGreaterThan(viewerBefore!.width);
+    expect(viewerAfter!.height).toBeGreaterThan(viewerBefore!.height);
+
+    // Canvas buffer should have been resized to match new display dimensions
+    const canvasDimsAfter = await getCanvasDimensions(page);
+    expect(canvasDimsAfter.width).toBeGreaterThan(canvasDimsBefore.width);
+
+    // Canvas should still have rendered content (not blank)
+    expect(await canvasHasContent(page)).toBe(true);
+
+    // Restore viewport for cleanup
+    await simulateFullscreenExit(page);
+    await page.setViewportSize({ width: 1280, height: 720 });
+  });
+
+  test('FS-007: layout restores correctly after fullscreen exit', async ({ page }) => {
+    const headerBar = page.locator('.header-bar');
+    const viewer = page.locator('.viewer-container');
+    const timeline = page.locator('.timeline-container');
+
+    // Wait for background frame loading to finish so the UI is stable
+    await waitForPendingFramesBelow(page, 1).catch(() => {});
+    await page.waitForTimeout(200);
+
+    // Record baseline layout
+    const headerBefore = await headerBar.boundingBox();
+    const viewerBefore = await viewer.boundingBox();
+    const timelineBefore = await timeline.boundingBox();
+    const canvasDimsBefore = await getCanvasDimensions(page);
+
+    // Capture viewer canvas screenshot before fullscreen
+    const canvasBefore = await captureViewerScreenshot(page);
+    // Capture header bar screenshot (pure UI chrome, no dynamic content)
+    const headerScreenBefore = await headerBar.screenshot();
+
+    // Full cycle: enter fullscreen + grow viewport → exit + restore viewport
+    await simulateFullscreenEnter(page);
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await page.waitForTimeout(400);
+
+    await simulateFullscreenExit(page);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.waitForTimeout(400);
+
+    // Viewer canvas screenshot after should match before
+    const canvasAfter = await captureViewerScreenshot(page);
+    expect(canvasAfter.equals(canvasBefore)).toBe(true);
+
+    // Header bar screenshot should match (proves chrome UI restored)
+    const headerScreenAfter = await headerBar.screenshot();
+    expect(headerScreenAfter.equals(headerScreenBefore)).toBe(true);
+
+    // All elements should be visible
+    await expect(headerBar).toBeVisible();
+    await expect(viewer).toBeVisible();
+    await expect(timeline).toBeVisible();
+
+    // Layout should match baseline
+    const headerAfter = await headerBar.boundingBox();
+    const viewerAfter = await viewer.boundingBox();
+    const timelineAfter = await timeline.boundingBox();
+
+    // Header keeps its fixed height
+    expect(headerAfter!.height).toBe(headerBefore!.height);
+    // Viewer restores to original size
+    expect(viewerAfter!.width).toBeCloseTo(viewerBefore!.width, 0);
+    expect(viewerAfter!.height).toBeCloseTo(viewerBefore!.height, 0);
+    // Timeline keeps its fixed height
+    expect(timelineAfter!.height).toBe(timelineBefore!.height);
+
+    // Vertical ordering: header above viewer above timeline
+    expect(headerAfter!.y).toBeLessThan(viewerAfter!.y);
+    expect(viewerAfter!.y).toBeLessThan(timelineAfter!.y);
+
+    // Canvas buffer size should have been restored
+    const canvasDimsAfter = await getCanvasDimensions(page);
+    expect(canvasDimsAfter.width).toBe(canvasDimsBefore.width);
+
+    // Canvas should still have rendered content
+    expect(await canvasHasContent(page)).toBe(true);
+  });
+
+  test('FS-008: canvas renders correctly through viewport resize cycle', async ({ page }) => {
+    // Verify canvas has content at initial size
+    expect(await canvasHasContent(page)).toBe(true);
+    const dimsBefore = await getCanvasDimensions(page);
+
+    // Resize to several different viewport sizes (simulating fullscreen on different monitors)
+    const viewportSizes = [
+      { width: 1920, height: 1080 },
+      { width: 2560, height: 1440 },
+      { width: 800, height: 600 },
+    ];
+
+    for (const size of viewportSizes) {
+      await simulateFullscreenEnter(page);
+      await page.setViewportSize(size);
+      await page.waitForTimeout(400);
+
+      // Canvas should have content at each size
+      expect(await canvasHasContent(page)).toBe(true);
+
+      // Viewer should not collapse
+      const viewerBox = await page.locator('.viewer-container').boundingBox();
+      expect(viewerBox!.width).toBeGreaterThan(50);
+      expect(viewerBox!.height).toBeGreaterThan(50);
+
+      await simulateFullscreenExit(page);
+    }
+
+    // Restore original viewport
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.waitForTimeout(400);
+
+    // Canvas should still render after all the resizing
+    expect(await canvasHasContent(page)).toBe(true);
+
+    // Canvas buffer should return to original dimensions
+    const dimsAfter = await getCanvasDimensions(page);
+    expect(dimsAfter.width).toBe(dimsBefore.width);
+    expect(dimsAfter.height).toBe(dimsBefore.height);
+  });
+
+  test('FS-009: rapid viewport resize cycles do not break layout', async ({ page }) => {
+    const headerBar = page.locator('.header-bar');
+    const viewer = page.locator('.viewer-container');
+    const timeline = page.locator('.timeline-container');
+    const initialViewport = page.viewportSize()!;
+
+    // Rapidly cycle between two viewport sizes (simulating fast fullscreen toggles)
+    for (let i = 0; i < 5; i++) {
+      await page.setViewportSize({ width: 1920, height: 1080 });
+      await simulateFullscreenEnter(page);
+      await page.waitForTimeout(30);
+      await page.setViewportSize(initialViewport);
+      await simulateFullscreenExit(page);
+      await page.waitForTimeout(30);
+    }
+
+    // Wait for all pending rAF + timeline debounce to settle
+    await page.waitForTimeout(400);
+
+    // Final state should be non-fullscreen
+    const state = await getFullscreenState(page);
+    expect(state.isFullscreen).toBe(false);
+
+    // All elements visible, not collapsed
+    await expect(headerBar).toBeVisible();
+    await expect(viewer).toBeVisible();
+    await expect(timeline).toBeVisible();
+
+    const viewerBox = await viewer.boundingBox();
+    expect(viewerBox!.width).toBeGreaterThan(100);
+    expect(viewerBox!.height).toBeGreaterThan(100);
+
+    // Canvas should still render
+    expect(await canvasHasContent(page)).toBe(true);
   });
 
   // === PRESENTATION MODE BUTTON TESTS ===

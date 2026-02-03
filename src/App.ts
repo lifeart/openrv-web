@@ -725,6 +725,13 @@ export class App {
     this.fullscreenManager = new FullscreenManager(this.container);
     this.fullscreenManager.on('fullscreenChanged', (isFullscreen) => {
       this.headerBar.setFullscreenState(isFullscreen);
+      // Trigger layout recalculation after fullscreen change.
+      // Use rAF to wait for the browser to settle the layout, then
+      // dispatch a resize event so all components (viewer, timeline)
+      // that listen on window 'resize' recalculate their dimensions.
+      requestAnimationFrame(() => {
+        window.dispatchEvent(new Event('resize'));
+      });
     });
 
     // Set elements to hide in presentation mode

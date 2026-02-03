@@ -710,6 +710,24 @@ export async function getFullscreenState(page: Page): Promise<FullscreenState> {
 }
 
 /**
+ * Simulate entering fullscreen mode (for headless browser testing)
+ */
+export async function simulateFullscreenEnter(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    (window as any).__OPENRV_TEST__?.simulateFullscreenEnter();
+  });
+}
+
+/**
+ * Simulate exiting fullscreen mode (for headless browser testing)
+ */
+export async function simulateFullscreenExit(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    (window as any).__OPENRV_TEST__?.simulateFullscreenExit();
+  });
+}
+
+/**
  * Get presentation mode state from the app
  */
 export async function getPresentationState(page: Page): Promise<PresentationState> {
