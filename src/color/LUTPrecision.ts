@@ -64,8 +64,8 @@ export function comparePrecision(
       const error = Math.abs(refVal - actVal);
 
       maxError = Math.max(maxError, error);
-      maxErrorPerChannel[c] = Math.max(maxErrorPerChannel[c], error);
-      sumErrorPerChannel[c] += error;
+      maxErrorPerChannel[c] = Math.max(maxErrorPerChannel[c]!, error);
+      sumErrorPerChannel[c] = sumErrorPerChannel[c]! + error;
       sumSquaredError += error * error;
       totalSamples++;
     }

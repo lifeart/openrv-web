@@ -6,7 +6,6 @@
  * and ensures the cached frame is already in the working color space.
  */
 
-import type { LUT } from '../LUTLoader';
 import { applyLUTToImageData } from '../LUTLoader';
 import { LUTStage } from './LUTStage';
 import type { PreCacheStageState } from './LUTPipelineState';

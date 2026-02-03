@@ -20,7 +20,6 @@ import type {
   SerializableLUTStageState,
   SerializablePreCacheStageState,
   SerializableSourceLUTConfig,
-  LUTPipelineEvents,
 } from './LUTPipelineState';
 
 // Re-export defaults and types for convenient imports
