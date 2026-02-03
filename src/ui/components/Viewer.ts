@@ -9,6 +9,8 @@ import { FilterSettings, DEFAULT_FILTER_SETTINGS } from './FilterControl';
 import { CropState, CropRegion, DEFAULT_CROP_STATE, DEFAULT_CROP_REGION, ASPECT_RATIOS, MIN_CROP_FRACTION, UncropState, DEFAULT_UNCROP_STATE } from './CropControl';
 import { LUT3D } from '../../color/LUTLoader';
 import { WebGLLUTProcessor } from '../../color/WebGLLUT';
+import { LUTPipeline } from '../../color/pipeline/LUTPipeline';
+import { GPULUTChain } from '../../color/pipeline/GPULUTChain';
 import { CDLValues, DEFAULT_CDL, isDefaultCDL, applyCDLToImageData } from '../../color/CDL';
 import { ColorCurvesData, createDefaultCurvesData, isDefaultCurves, CurveLUTCache } from '../../color/ColorCurves';
 import { LensDistortionParams, DEFAULT_LENS_PARAMS, isDefaultLensParams, applyLensDistortion } from '../../transform/LensDistortion';
@@ -204,6 +206,10 @@ export class Viewer {
   private lutIntensity = 1.0;
   private lutIndicator: HTMLElement | null = null;
   private lutProcessor: WebGLLUTProcessor | null = null;
+
+  // Multi-point LUT pipeline
+  private lutPipeline: LUTPipeline = new LUTPipeline();
+  private gpuLUTChain: GPULUTChain | null = null;
 
   // OCIO GPU-accelerated color management
   private ocioLUTProcessor: WebGLLUTProcessor | null = null;
@@ -559,6 +565,25 @@ export class Viewer {
       console.warn('WebGL LUT processor not available, falling back to CPU:', e);
       this.lutProcessor = null;
     }
+
+    // Initialize multi-point LUT pipeline GPU chain
+    try {
+      const chainCanvas = document.createElement('canvas');
+      const chainGl = chainCanvas.getContext('webgl2', {
+        premultipliedAlpha: false,
+        preserveDrawingBuffer: false,
+      });
+      if (chainGl) {
+        this.gpuLUTChain = new GPULUTChain(chainGl);
+      }
+    } catch (e) {
+      console.warn('GPU LUT chain not available:', e);
+      this.gpuLUTChain = null;
+    }
+
+    // Register default source for LUT pipeline
+    this.lutPipeline.registerSource('default');
+    this.lutPipeline.setActiveSource('default');
 
     // Initialize dedicated OCIO WebGL LUT processor for GPU-accelerated color management
     try {
@@ -2092,6 +2117,16 @@ export class Viewer {
 
   getLUTIntensity(): number {
     return this.lutIntensity;
+  }
+
+  /** Get the multi-point LUT pipeline instance */
+  getLUTPipeline(): LUTPipeline {
+    return this.lutPipeline;
+  }
+
+  /** Get the GPU LUT chain (for multi-point rendering) */
+  getGPULUTChain(): GPULUTChain | null {
+    return this.gpuLUTChain;
   }
 
   /**
@@ -3700,6 +3735,12 @@ export class Viewer {
     if (this.lutProcessor) {
       this.lutProcessor.dispose();
       this.lutProcessor = null;
+    }
+
+    // Cleanup multi-point GPU LUT chain
+    if (this.gpuLUTChain) {
+      this.gpuLUTChain.dispose();
+      this.gpuLUTChain = null;
     }
 
     // Cleanup OCIO WebGL LUT processor
