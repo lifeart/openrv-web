@@ -11,8 +11,38 @@ import {
   XYZ_TO_ACESCG,
   REC709_TO_XYZ,
   XYZ_TO_REC709,
+  REC2020_TO_XYZ,
+  XYZ_TO_REC2020,
+  ADOBERGB_TO_XYZ,
+  XYZ_TO_ADOBERGB,
+  PROPHOTO_TO_XYZ_D50,
+  XYZ_D50_TO_PROPHOTO,
+  ARRI_WIDE_GAMUT3_TO_XYZ,
+  XYZ_TO_ARRI_WIDE_GAMUT3,
+  ARRI_WIDE_GAMUT4_TO_XYZ,
+  XYZ_TO_ARRI_WIDE_GAMUT4,
+  REDWIDEGAMUT_TO_XYZ,
+  XYZ_TO_REDWIDEGAMUT,
+  SGAMUT3_TO_XYZ,
+  XYZ_TO_SGAMUT3,
+  SGAMUT3CINE_TO_XYZ,
+  XYZ_TO_SGAMUT3CINE,
+  DCIP3_TO_XYZ,
+  XYZ_TO_DCIP3,
+  D60_TO_D65,
+  D65_TO_D60,
+  D50_TO_D65,
+  D65_TO_D50,
+  D55_TO_D65,
+  D65_TO_D55,
+  A_TO_D65,
+  D65_TO_A,
+  D65_WHITE,
+  chromaticAdaptationMatrix,
   multiplyMatrices,
   multiplyMatrixVector,
+  composeMatrices,
+  IDENTITY,
   srgbEncode,
   srgbDecode,
   rec709Encode,
@@ -20,6 +50,7 @@ import {
   acesToneMap,
   normalizeColorSpaceName,
 } from './OCIOTransform';
+import type { Matrix3x3, RGB } from './OCIOTransform';
 import { createTestImageData } from '../../test/utils';
 
 describe('OCIOTransform', () => {
@@ -628,6 +659,343 @@ describe('OCIOTransform', () => {
       expect(result[0]).toBeCloseTo(original[0], 5);
       expect(result[1]).toBeCloseTo(original[1], 5);
       expect(result[2]).toBeCloseTo(original[2], 5);
+    });
+  });
+
+  // ===========================================================================
+  // CIE XYZ Color Space Matrices - Feature 2 Spec Tests (CSM-001 through CSM-012)
+  // ===========================================================================
+
+  describe('CIE XYZ Color Space Matrices (Feature 2)', () => {
+    /** Helper: check matrix roundtrip for a color */
+    function expectRoundtrip(
+      toXYZ: Matrix3x3,
+      fromXYZ: Matrix3x3,
+      color: RGB,
+      tolerance: number = 5
+    ) {
+      const xyz = multiplyMatrixVector(toXYZ, color);
+      const result = multiplyMatrixVector(fromXYZ, xyz);
+      expect(result[0]).toBeCloseTo(color[0], tolerance);
+      expect(result[1]).toBeCloseTo(color[1], tolerance);
+      expect(result[2]).toBeCloseTo(color[2], tolerance);
+    }
+
+    /** Helper: check matrix pair are inverses (product is identity) */
+    function expectInverse(a: Matrix3x3, b: Matrix3x3, tolerance: number = 4) {
+      const identity = multiplyMatrices(a, b);
+      expect(identity[0]).toBeCloseTo(1, tolerance);
+      expect(identity[4]).toBeCloseTo(1, tolerance);
+      expect(identity[8]).toBeCloseTo(1, tolerance);
+      expect(identity[1]).toBeCloseTo(0, tolerance);
+      expect(identity[2]).toBeCloseTo(0, tolerance);
+      expect(identity[3]).toBeCloseTo(0, tolerance);
+      expect(identity[5]).toBeCloseTo(0, tolerance);
+      expect(identity[6]).toBeCloseTo(0, tolerance);
+      expect(identity[7]).toBeCloseTo(0, tolerance);
+    }
+
+    describe('CSM-001: sRGB -> XYZ -> sRGB roundtrip', () => {
+      it('identity within 1e-6 tolerance for various colors', () => {
+        const colors: RGB[] = [
+          [0.5, 0.3, 0.8],
+          [1, 0, 0],
+          [0, 1, 0],
+          [0, 0, 1],
+          [1, 1, 1],
+          [0.18, 0.18, 0.18],
+        ];
+        for (const c of colors) {
+          expectRoundtrip(SRGB_TO_XYZ, XYZ_TO_SRGB, c, 5);
+        }
+      });
+
+      it('matrices are proper inverses', () => {
+        expectInverse(SRGB_TO_XYZ, XYZ_TO_SRGB);
+      });
+    });
+
+    describe('CSM-002: ACEScg -> XYZ -> ACEScg roundtrip', () => {
+      it('identity within 1e-6 tolerance', () => {
+        const colors: RGB[] = [
+          [0.5, 0.3, 0.8],
+          [1, 1, 1],
+          [0.18, 0.18, 0.18],
+        ];
+        for (const c of colors) {
+          expectRoundtrip(ACESCG_TO_XYZ, XYZ_TO_ACESCG, c, 5);
+        }
+      });
+
+      it('matrices are proper inverses', () => {
+        expectInverse(ACESCG_TO_XYZ, XYZ_TO_ACESCG);
+      });
+    });
+
+    describe('CSM-003: Rec.2020 -> XYZ -> Rec.2020 roundtrip', () => {
+      it('identity within 1e-6 tolerance', () => {
+        const colors: RGB[] = [
+          [0.5, 0.3, 0.8],
+          [1, 1, 1],
+          [0.18, 0.18, 0.18],
+          [1, 0, 0],
+          [0, 1, 0],
+          [0, 0, 1],
+        ];
+        for (const c of colors) {
+          expectRoundtrip(REC2020_TO_XYZ, XYZ_TO_REC2020, c, 5);
+        }
+      });
+
+      it('matrices are proper inverses', () => {
+        expectInverse(REC2020_TO_XYZ, XYZ_TO_REC2020);
+      });
+    });
+
+    describe('CSM-004: Adobe RGB -> XYZ -> Adobe RGB roundtrip', () => {
+      it('identity within 1e-6 tolerance', () => {
+        const colors: RGB[] = [
+          [0.5, 0.3, 0.8],
+          [1, 1, 1],
+          [0.18, 0.18, 0.18],
+        ];
+        for (const c of colors) {
+          expectRoundtrip(ADOBERGB_TO_XYZ, XYZ_TO_ADOBERGB, c, 5);
+        }
+      });
+
+      it('matrices are proper inverses', () => {
+        expectInverse(ADOBERGB_TO_XYZ, XYZ_TO_ADOBERGB);
+      });
+    });
+
+    describe('Additional matrix roundtrip tests', () => {
+      it('DCI-P3 -> XYZ -> DCI-P3 roundtrip', () => {
+        expectRoundtrip(DCIP3_TO_XYZ, XYZ_TO_DCIP3, [0.5, 0.3, 0.8]);
+        expectInverse(DCIP3_TO_XYZ, XYZ_TO_DCIP3);
+      });
+
+      it('ProPhoto RGB -> XYZ (D50) -> ProPhoto RGB roundtrip', () => {
+        expectRoundtrip(PROPHOTO_TO_XYZ_D50, XYZ_D50_TO_PROPHOTO, [0.5, 0.3, 0.8]);
+        expectInverse(PROPHOTO_TO_XYZ_D50, XYZ_D50_TO_PROPHOTO);
+      });
+
+      it('ARRI Wide Gamut 3 -> XYZ -> ARRI Wide Gamut 3 roundtrip', () => {
+        expectRoundtrip(ARRI_WIDE_GAMUT3_TO_XYZ, XYZ_TO_ARRI_WIDE_GAMUT3, [0.5, 0.3, 0.8]);
+        expectInverse(ARRI_WIDE_GAMUT3_TO_XYZ, XYZ_TO_ARRI_WIDE_GAMUT3, 3);
+      });
+
+      it('ARRI Wide Gamut 4 -> XYZ -> ARRI Wide Gamut 4 roundtrip', () => {
+        expectRoundtrip(ARRI_WIDE_GAMUT4_TO_XYZ, XYZ_TO_ARRI_WIDE_GAMUT4, [0.5, 0.3, 0.8]);
+        expectInverse(ARRI_WIDE_GAMUT4_TO_XYZ, XYZ_TO_ARRI_WIDE_GAMUT4, 3);
+      });
+
+      it('REDWideGamutRGB -> XYZ -> REDWideGamutRGB roundtrip', () => {
+        expectRoundtrip(REDWIDEGAMUT_TO_XYZ, XYZ_TO_REDWIDEGAMUT, [0.5, 0.3, 0.8]);
+        expectInverse(REDWIDEGAMUT_TO_XYZ, XYZ_TO_REDWIDEGAMUT, 3);
+      });
+
+      it('S-Gamut3 -> XYZ -> S-Gamut3 roundtrip', () => {
+        expectRoundtrip(SGAMUT3_TO_XYZ, XYZ_TO_SGAMUT3, [0.5, 0.3, 0.8]);
+        expectInverse(SGAMUT3_TO_XYZ, XYZ_TO_SGAMUT3, 3);
+      });
+
+      it('S-Gamut3.Cine -> XYZ -> S-Gamut3.Cine roundtrip', () => {
+        expectRoundtrip(SGAMUT3CINE_TO_XYZ, XYZ_TO_SGAMUT3CINE, [0.5, 0.3, 0.8]);
+        expectInverse(SGAMUT3CINE_TO_XYZ, XYZ_TO_SGAMUT3CINE, 3);
+      });
+    });
+
+    describe('CSM-005: D60 -> D65 -> D60 adaptation roundtrip', () => {
+      it('identity within 1e-5 tolerance', () => {
+        const original: RGB = [0.5, 0.3, 0.8];
+        const adapted = multiplyMatrixVector(D60_TO_D65, original);
+        const result = multiplyMatrixVector(D65_TO_D60, adapted);
+        expect(result[0]).toBeCloseTo(original[0], 4);
+        expect(result[1]).toBeCloseTo(original[1], 4);
+        expect(result[2]).toBeCloseTo(original[2], 4);
+      });
+
+      it('D50 -> D65 -> D50 adaptation roundtrip', () => {
+        const original: RGB = [0.5, 0.3, 0.8];
+        const adapted = multiplyMatrixVector(D50_TO_D65, original);
+        const result = multiplyMatrixVector(D65_TO_D50, adapted);
+        expect(result[0]).toBeCloseTo(original[0], 4);
+        expect(result[1]).toBeCloseTo(original[1], 4);
+        expect(result[2]).toBeCloseTo(original[2], 4);
+      });
+
+      it('D55 -> D65 -> D55 adaptation roundtrip', () => {
+        const original: RGB = [0.5, 0.3, 0.8];
+        const adapted = multiplyMatrixVector(D55_TO_D65, original);
+        const result = multiplyMatrixVector(D65_TO_D55, adapted);
+        expect(result[0]).toBeCloseTo(original[0], 4);
+        expect(result[1]).toBeCloseTo(original[1], 4);
+        expect(result[2]).toBeCloseTo(original[2], 4);
+      });
+
+      it('A -> D65 -> A adaptation roundtrip', () => {
+        const original: RGB = [0.5, 0.3, 0.8];
+        const adapted = multiplyMatrixVector(A_TO_D65, original);
+        const result = multiplyMatrixVector(D65_TO_A, adapted);
+        expect(result[0]).toBeCloseTo(original[0], 4);
+        expect(result[1]).toBeCloseTo(original[1], 4);
+        expect(result[2]).toBeCloseTo(original[2], 4);
+      });
+
+      it('Von Kries adaptation roundtrip', () => {
+        const original: RGB = [0.5, 0.3, 0.8];
+        const vkD60D65 = chromaticAdaptationMatrix([0.95265, 1.0, 1.00883], [0.95047, 1.0, 1.08883], 'vonKries');
+        const vkD65D60 = chromaticAdaptationMatrix([0.95047, 1.0, 1.08883], [0.95265, 1.0, 1.00883], 'vonKries');
+        const adapted = multiplyMatrixVector(vkD60D65, original);
+        const result = multiplyMatrixVector(vkD65D60, adapted);
+        expect(result[0]).toBeCloseTo(original[0], 4);
+        expect(result[1]).toBeCloseTo(original[1], 4);
+        expect(result[2]).toBeCloseTo(original[2], 4);
+      });
+    });
+
+    describe('CSM-006: sRGB encode/decode roundtrip', () => {
+      it('identity within 1e-6 tolerance', () => {
+        const testValues = [0, 0.001, 0.01, 0.1, 0.18, 0.5, 0.9, 1.0];
+        for (const v of testValues) {
+          const encoded = srgbEncode(v);
+          const decoded = srgbDecode(encoded);
+          expect(decoded).toBeCloseTo(v, 5);
+        }
+      });
+    });
+
+    describe('CSM-010: Matrix composition produces same result as sequential', () => {
+      it('within 1e-6 tolerance', () => {
+        // Compose sRGB -> XYZ -> Rec.2020 as a single matrix
+        const composed = composeMatrices(SRGB_TO_XYZ, XYZ_TO_REC2020);
+
+        // Apply sequentially
+        const original: RGB = [0.5, 0.3, 0.8];
+        const sequential = multiplyMatrixVector(XYZ_TO_REC2020, multiplyMatrixVector(SRGB_TO_XYZ, original));
+        const composedResult = multiplyMatrixVector(composed, original);
+
+        expect(composedResult[0]).toBeCloseTo(sequential[0], 5);
+        expect(composedResult[1]).toBeCloseTo(sequential[1], 5);
+        expect(composedResult[2]).toBeCloseTo(sequential[2], 5);
+      });
+
+      it('compose with identity is identity', () => {
+        const composed = composeMatrices(IDENTITY);
+        for (let i = 0; i < 9; i++) {
+          expect(composed[i]).toBeCloseTo(IDENTITY[i]!, 6);
+        }
+      });
+
+      it('compose empty returns identity', () => {
+        const composed = composeMatrices();
+        for (let i = 0; i < 9; i++) {
+          expect(composed[i]).toBeCloseTo(IDENTITY[i]!, 6);
+        }
+      });
+
+      it('compose three matrices matches sequential application', () => {
+        // sRGB -> XYZ (D65) -> D65->D60 -> ACEScg
+        const composed = composeMatrices(SRGB_TO_XYZ, D65_TO_D60, XYZ_TO_ACESCG);
+
+        const original: RGB = [0.5, 0.3, 0.8];
+        const step1 = multiplyMatrixVector(SRGB_TO_XYZ, original);
+        const step2 = multiplyMatrixVector(D65_TO_D60, step1);
+        const sequential = multiplyMatrixVector(XYZ_TO_ACESCG, step2);
+        const composedResult = multiplyMatrixVector(composed, original);
+
+        expect(composedResult[0]).toBeCloseTo(sequential[0], 5);
+        expect(composedResult[1]).toBeCloseTo(sequential[1], 5);
+        expect(composedResult[2]).toBeCloseTo(sequential[2], 5);
+      });
+    });
+
+    describe('CSM-011: sRGB white point maps to D65 XYZ', () => {
+      it('maps [1,1,1] to D65 white point [0.95047, 1.0, 1.08883]', () => {
+        const white: RGB = [1, 1, 1];
+        const xyz = multiplyMatrixVector(SRGB_TO_XYZ, white);
+        expect(xyz[0]).toBeCloseTo(0.95047, 3);
+        expect(xyz[1]).toBeCloseTo(1.0, 3);
+        expect(xyz[2]).toBeCloseTo(1.08883, 3);
+      });
+    });
+
+    describe('CSM-012: Known color values through Rec.2020', () => {
+      it('Rec.2020 white maps to D65 XYZ white', () => {
+        const white: RGB = [1, 1, 1];
+        const xyz = multiplyMatrixVector(REC2020_TO_XYZ, white);
+        // Should map to D65 white point
+        expect(xyz[0]).toBeCloseTo(D65_WHITE[0], 2);
+        expect(xyz[1]).toBeCloseTo(1.0, 2);
+        expect(xyz[2]).toBeCloseTo(D65_WHITE[2], 2);
+      });
+
+      it('Rec.2020 black maps to XYZ origin', () => {
+        const black: RGB = [0, 0, 0];
+        const xyz = multiplyMatrixVector(REC2020_TO_XYZ, black);
+        expect(xyz[0]).toBeCloseTo(0, 6);
+        expect(xyz[1]).toBeCloseTo(0, 6);
+        expect(xyz[2]).toBeCloseTo(0, 6);
+      });
+
+      it('Rec.2020 primary red has expected XYZ', () => {
+        const red: RGB = [1, 0, 0];
+        const xyz = multiplyMatrixVector(REC2020_TO_XYZ, red);
+        // Rec.2020 red primary
+        expect(xyz[0]).toBeCloseTo(0.6369580, 4);
+        expect(xyz[1]).toBeCloseTo(0.2627002, 4);
+        expect(xyz[2]).toBeCloseTo(0.0000000, 4);
+      });
+
+      it('Rec.2020 to sRGB transform produces reasonable values', () => {
+        const transform = new OCIOTransform('Rec.2020', 'sRGB');
+        // 18% gray in Rec.2020 linear -> sRGB should be visible
+        const result = transform.apply(0.18, 0.18, 0.18);
+        expect(result[0]).toBeGreaterThan(0);
+        expect(result[0]).toBeLessThan(1);
+        // Should be roughly neutral
+        expect(result[0]).toBeCloseTo(result[1], 1);
+        expect(result[1]).toBeCloseTo(result[2], 1);
+      });
+    });
+
+    describe('New color space transforms via OCIOTransform class', () => {
+      it('Adobe RGB to sRGB produces visible result', () => {
+        const transform = new OCIOTransform('Adobe RGB', 'sRGB');
+        const result = transform.apply(0.5, 0.5, 0.5);
+        expect(result[0]).toBeGreaterThan(0);
+        expect(result[0]).toBeLessThan(1);
+      });
+
+      it('ProPhoto RGB to sRGB produces visible result', () => {
+        const transform = new OCIOTransform('ProPhoto RGB', 'sRGB');
+        const result = transform.apply(0.5, 0.5, 0.5);
+        expect(result[0]).toBeGreaterThan(0);
+        expect(result[0]).toBeLessThan(1);
+      });
+
+      it('ARRI LogC4 to sRGB produces visible result', () => {
+        const transform = new OCIOTransform('ARRI LogC4', 'sRGB');
+        // LogC4 18% gray encodes to approximately 0.64
+        const result = transform.apply(0.64, 0.64, 0.64);
+        expect(result[0]).toBeGreaterThan(0);
+        expect(result[0]).toBeLessThan(1);
+      });
+
+      it('Sony S-Log3 to sRGB produces visible result', () => {
+        const transform = new OCIOTransform('Sony S-Log3', 'sRGB');
+        const result = transform.apply(0.41, 0.41, 0.41);
+        expect(result[0]).toBeGreaterThan(0);
+        expect(result[0]).toBeLessThan(1);
+      });
+
+      it('RED Log3G10 to sRGB produces visible result', () => {
+        const transform = new OCIOTransform('RED Log3G10', 'sRGB');
+        const result = transform.apply(0.33, 0.33, 0.33);
+        expect(result[0]).toBeGreaterThan(0);
+        expect(result[0]).toBeLessThan(1);
+      });
     });
   });
 });

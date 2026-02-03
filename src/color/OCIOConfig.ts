@@ -201,6 +201,26 @@ const ACES_1_2_CONFIG: OCIOConfigDefinition = {
       isDisplaySpace: true,
     },
     {
+      name: 'Rec.2020',
+      description: 'ITU-R BT.2020 wide gamut HDR broadcast',
+      family: 'Display',
+      encoding: 'sdr-video',
+      isDisplaySpace: true,
+    },
+    {
+      name: 'Adobe RGB',
+      description: 'Adobe RGB (1998) photography workflow',
+      family: 'Utility',
+      encoding: 'sdr-video',
+    },
+    {
+      name: 'ProPhoto RGB',
+      description: 'ProPhoto RGB (ROMM RGB) wide gamut photography',
+      family: 'Utility',
+      encoding: 'scene-linear',
+      isWorkingSpace: true,
+    },
+    {
       name: 'Raw',
       description: 'Pass-through (no transform)',
       family: 'Utility',
@@ -218,6 +238,10 @@ const ACES_1_2_CONFIG: OCIOConfigDefinition = {
     },
     {
       name: 'DCI-P3',
+      views: ['ACES 1.0 SDR-video', 'Raw'],
+    },
+    {
+      name: 'Rec.2020',
       views: ['ACES 1.0 SDR-video', 'Raw'],
     },
   ],
