@@ -1,15 +1,33 @@
 /**
  * Luminance-preserving hue rotation matrix construction.
  *
- * Builds a 3x3 matrix that rotates hue while preserving Rec. 709 luminance.
- * Uses the Rodrigues rotation formula around (1,1,1)/sqrt(3) with a
- * luminance-correction shear (matching the OpenRV approach).
+ * This module re-exports the canonical hue rotation caching and identity
+ * functions from effectProcessing.shared.ts (the single source of truth,
+ * designed for worker import) and adds a CPU pixel-application helper.
  *
- * Properties:
+ * It also keeps a local `buildHueRotationMatrixMul` that uses an explicit
+ * matrix-multiplication approach (used by tests to cross-validate).
+ *
+ * Properties of the hue rotation matrix:
  * - Each row sums to 1 (grays are invariant)
  * - Luminance L = 0.2126*R + 0.7152*G + 0.0722*B is preserved
  * - At 0/360 degrees, the matrix is the identity
  */
+
+// Re-export canonical implementations from the shared module (single source of truth)
+export {
+  buildHueRotationMatrix,
+  getHueRotationMatrix,
+  clearHueRotationCache,
+  isIdentityHueRotation,
+} from '../utils/effectProcessing.shared';
+
+import { getHueRotationMatrix } from '../utils/effectProcessing.shared';
+
+// ============================================================================
+// Alternative matrix builder (matrix-multiplication approach)
+// Kept for cross-validation in tests; not used at runtime.
+// ============================================================================
 
 /** Rec. 709 luminance weights */
 const Wr = 0.2126;
@@ -28,31 +46,22 @@ function mul3(a: Mat3, b: Mat3): Mat3 {
 }
 
 /**
- * Build a 3x3 luminance-preserving hue rotation matrix.
+ * Build a 3x3 luminance-preserving hue rotation matrix using explicit
+ * matrix multiplication (alternative algorithm for cross-validation).
+ *
+ * NOTE: The canonical builder used at runtime is `buildHueRotationMatrix`
+ * from effectProcessing.shared.ts.
  *
  * @param degrees - Hue rotation in degrees
  * @returns A 9-element Float32Array in column-major order (for WebGL mat3)
  */
-export function buildHueRotationMatrix(degrees: number): Float32Array {
+export function buildHueRotationMatrixMul(degrees: number): Float32Array {
   const rad = (degrees * Math.PI) / 180;
   const cosA = Math.cos(rad);
   const sinA = Math.sin(rad);
 
-  // Rodrigues rotation formula for rotation around u = (1,1,1)/sqrt(3)
-  // R = cos(a)*I + (1-cos(a))*(u outer u) + sin(a)*[u]x
-  // where [u]x is the skew-symmetric cross-product matrix of u
-
   const sq3 = Math.sqrt(3);
-
-  // u outer u (each element = ui*uj = 1/3)
   const oo = 1 / 3;
-
-  // Skew-symmetric [u]x:
-  // |  0   -uz  uy |   | 0     -1/sq3  1/sq3 |
-  // |  uz   0  -ux | = | 1/sq3  0     -1/sq3 |
-  // | -uy  ux   0  |   |-1/sq3  1/sq3  0     |
-
-  // M_rot = cos(a)*I + (1-cos(a))*(u outer u) + sin(a)*[u]x
   const c = cosA;
   const s = sinA;
   const t = 1 - cosA;
@@ -63,16 +72,10 @@ export function buildHueRotationMatrix(degrees: number): Float32Array {
     t * oo - s / sq3,          t * oo + s / sq3,          c + t * oo,
   ];
 
-  // rot preserves (1,1,1) [row sums = 1] and equal-energy luminance.
-  // To preserve Rec.709 luminance, apply shear: M = TInv * rot * T
-  // T[i][j] = delta_ij + dj where dj = Wj - 1/3
-  // TInv[i][j] = delta_ij - dj
-
   const dR = Wr - 1 / 3;
   const dG = Wg - 1 / 3;
   const dB = Wb - 1 / 3;
 
-  // T in row-major
   const T: Mat3 = [
     1 + dR, dG,     dB,
     dR,     1 + dG, dB,
@@ -98,6 +101,8 @@ export function buildHueRotationMatrix(degrees: number): Float32Array {
 /**
  * Apply hue rotation to an RGB pixel (CPU path).
  *
+ * Uses the canonical cached matrix from effectProcessing.shared.ts.
+ *
  * @param r - Red channel [0, 1]
  * @param g - Green channel [0, 1]
  * @param b - Blue channel [0, 1]
@@ -107,7 +112,7 @@ export function buildHueRotationMatrix(degrees: number): Float32Array {
 export function applyHueRotation(
   r: number, g: number, b: number, degrees: number
 ): [number, number, number] {
-  const mat = buildHueRotationMatrix(degrees);
+  const mat = getHueRotationMatrix(degrees);
   // mat is column-major: mat[0]=m00, mat[1]=m10, mat[2]=m20, etc.
   const outR = mat[0]! * r + mat[3]! * g + mat[6]! * b;
   const outG = mat[1]! * r + mat[4]! * g + mat[7]! * b;
@@ -117,12 +122,4 @@ export function applyHueRotation(
     Math.max(0, Math.min(1, outG)),
     Math.max(0, Math.min(1, outB)),
   ];
-}
-
-/**
- * Check if hue rotation is at identity (no effect).
- */
-export function isIdentityHueRotation(degrees: number): boolean {
-  const normalized = ((degrees % 360) + 360) % 360;
-  return normalized === 0;
 }

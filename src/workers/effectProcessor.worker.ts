@@ -35,7 +35,7 @@ import {
   rgbToHsl,
   hslToRgb,
   // Hue rotation
-  buildHueRotationMatrix,
+  getHueRotationMatrix,
   isIdentityHueRotation,
   // Tone mapping
   applyToneMappingToData,
@@ -648,7 +648,7 @@ function applyHSLQualifier(
 }
 
 function applyWorkerHueRotation(data: Uint8ClampedArray, degrees: number): void {
-  const mat = buildHueRotationMatrix(degrees);
+  const mat = getHueRotationMatrix(degrees);
   const len = data.length;
 
   for (let i = 0; i < len; i += 4) {
