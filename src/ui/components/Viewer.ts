@@ -335,10 +335,9 @@ export class Viewer {
 
   // Cursor color callback for InfoPanel
   private cursorColorCallback: ((color: { r: number; g: number; b: number } | null, position: { x: number; y: number } | null) => void) | null = null;
-  private lastCursorColorUpdate = 0;
 
-  // Pixel probe throttling for performance
-  private lastProbeUpdate = 0;
+  // Shared throttle timestamp for merged mousemove handler (probe + cursor color)
+  private lastMouseMoveUpdate = 0;
 
   // Cached source image canvas for pixel probe "source" mode
   // Reused to avoid creating new canvases on every mouse move
@@ -722,71 +721,36 @@ export class Viewer {
     this.paintEngine.on('annotationsChanged', () => this.renderPaint());
     this.paintEngine.on('toolChanged', (tool) => this.updateCursor(tool));
 
-    // Pixel probe events - track mouse movement for color sampling
-    this.container.addEventListener('mousemove', this.onMouseMoveForProbe);
-    this.container.addEventListener('mousemove', this.onMouseMoveForCursorColor);
+    // Pixel probe + cursor color events - single handler for both consumers
+    this.container.addEventListener('mousemove', this.onMouseMoveForPixelSampling);
     this.container.addEventListener('mouseleave', this.onMouseLeaveForCursorColor);
     this.container.addEventListener('click', this.onClickForProbe);
   }
 
-  private onMouseMoveForProbe = (e: MouseEvent): void => {
-    if (!this.pixelProbe.isEnabled()) return;
-
-    // Throttle updates to ~60fps (16ms) for performance
-    const now = Date.now();
-    if (now - this.lastProbeUpdate < 16) {
-      return;
-    }
-    this.lastProbeUpdate = now;
-
-    // Get canvas-relative coordinates
-    const canvasRect = this.imageCanvas.getBoundingClientRect();
-    const x = e.clientX - canvasRect.left;
-    const y = e.clientY - canvasRect.top;
-
-    // Check if within canvas bounds
-    if (x < 0 || y < 0 || x > canvasRect.width || y > canvasRect.height) {
-      return;
-    }
-
-    // Scale to canvas pixel coordinates
-    const scaleX = this.displayWidth / canvasRect.width;
-    const scaleY = this.displayHeight / canvasRect.height;
-    const canvasX = x * scaleX;
-    const canvasY = y * scaleY;
-
-    // Get image data for pixel value (rendered, after color pipeline)
-    const imageData = this.getImageData();
-
-    // Get source image data (before color pipeline) for source mode
-    // Only fetch if source mode is selected to save performance
-    if (this.pixelProbe.getSourceMode() === 'source') {
-      const sourceImageData = this.getSourceImageData();
-      this.pixelProbe.setSourceImageData(sourceImageData);
-    } else {
-      this.pixelProbe.setSourceImageData(null);
-    }
-
-    // Update pixel probe
-    this.pixelProbe.updateFromCanvas(canvasX, canvasY, imageData, this.displayWidth, this.displayHeight);
-    this.pixelProbe.setOverlayPosition(e.clientX, e.clientY);
-  };
-
   /**
-   * Handle mouse move for cursor color callback (InfoPanel integration)
-   * Throttled to ~60fps for performance
+   * Merged mousemove handler for both pixel probe and cursor color consumers.
+   * Calls getBoundingClientRect() and getImageData() at most once per event,
+   * then dispatches results to both consumers as needed.
+   * Throttled to ~60fps (16ms) for performance.
    */
-  private onMouseMoveForCursorColor = (e: MouseEvent): void => {
-    if (!this.cursorColorCallback) return;
+  private onMouseMoveForPixelSampling = (e: MouseEvent): void => {
+    const probeEnabled = this.pixelProbe.isEnabled();
+    const cursorColorEnabled = !!this.cursorColorCallback;
 
-    // Throttle updates to ~60fps (16ms)
+    // Early exit if neither consumer is active
+    if (!probeEnabled && !cursorColorEnabled) return;
+
+    // Single throttle for both consumers
     const now = Date.now();
-    if (now - this.lastCursorColorUpdate < 16) {
+    if (now - this.lastMouseMoveUpdate < 16) {
       return;
     }
-    this.lastCursorColorUpdate = now;
+    this.lastMouseMoveUpdate = now;
 
+    // Single layout read shared by both consumers
     const canvasRect = this.imageCanvas.getBoundingClientRect();
+
+    // Compute canvas-relative pixel coordinates once
     const position = getPixelCoordinates(
       e.clientX,
       e.clientY,
@@ -795,24 +759,48 @@ export class Viewer {
       this.displayHeight
     );
 
+    // Handle out-of-bounds
     if (!position) {
-      this.cursorColorCallback(null, null);
+      if (cursorColorEnabled) {
+        this.cursorColorCallback!(null, null);
+      }
       return;
     }
 
+    // Single pixel read, shared by both consumers
     const imageData = this.getImageData();
-    if (!imageData) {
-      this.cursorColorCallback(null, null);
-      return;
+
+    // Dispatch to probe consumer
+    if (probeEnabled && imageData) {
+      // Get source image data (before color pipeline) for source mode
+      // Only fetch if source mode is selected to save performance
+      if (this.pixelProbe.getSourceMode() === 'source') {
+        const sourceImageData = this.getSourceImageData();
+        this.pixelProbe.setSourceImageData(sourceImageData);
+      } else {
+        this.pixelProbe.setSourceImageData(null);
+      }
+
+      this.pixelProbe.updateFromCanvas(
+        position.x, position.y, imageData,
+        this.displayWidth, this.displayHeight
+      );
+      this.pixelProbe.setOverlayPosition(e.clientX, e.clientY);
     }
 
-    const color = getPixelColor(imageData, position.x, position.y);
-    if (!color) {
-      this.cursorColorCallback(null, null);
-      return;
+    // Dispatch to cursor color consumer
+    if (cursorColorEnabled) {
+      if (!imageData) {
+        this.cursorColorCallback!(null, null);
+        return;
+      }
+      const color = getPixelColor(imageData, position.x, position.y);
+      if (!color) {
+        this.cursorColorCallback!(null, null);
+      } else {
+        this.cursorColorCallback!(color, position);
+      }
     }
-
-    this.cursorColorCallback(color, position);
   };
 
   /**
@@ -3797,8 +3785,9 @@ export class Viewer {
     this.container.removeEventListener('pointercancel', this.onPointerUp);
     this.container.removeEventListener('pointerleave', this.onPointerLeave);
     this.container.removeEventListener('wheel', this.onWheel);
-    this.container.removeEventListener('mousemove', this.onMouseMoveForCursorColor);
+    this.container.removeEventListener('mousemove', this.onMouseMoveForPixelSampling);
     this.container.removeEventListener('mouseleave', this.onMouseLeaveForCursorColor);
+    this.container.removeEventListener('click', this.onClickForProbe);
 
     // Clear cursor color callback
     this.cursorColorCallback = null;
