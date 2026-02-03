@@ -87,6 +87,14 @@ export interface ViewerState {
   exrLayerCount: number;
   exrSelectedLayer: string | null;
   exrAvailableLayers: string[];
+  // Uncrop state
+  uncropEnabled: boolean;
+  uncropPaddingMode: 'uniform' | 'per-side';
+  uncropPadding: number;
+  uncropPaddingTop: number;
+  uncropPaddingRight: number;
+  uncropPaddingBottom: number;
+  uncropPaddingLeft: number;
 }
 
 export interface ColorState {
@@ -344,6 +352,13 @@ export async function getViewerState(page: Page): Promise<ViewerState> {
       exrLayerCount: 0,
       exrSelectedLayer: null,
       exrAvailableLayers: [],
+      uncropEnabled: false,
+      uncropPaddingMode: 'uniform',
+      uncropPadding: 0,
+      uncropPaddingTop: 0,
+      uncropPaddingRight: 0,
+      uncropPaddingBottom: 0,
+      uncropPaddingLeft: 0,
     };
   });
 }

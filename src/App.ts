@@ -399,6 +399,10 @@ export class App {
     this.cropControl.on('panelToggled', (isOpen) => {
       this.viewer.setCropPanelOpen(isOpen);
     });
+    this.cropControl.on('uncropStateChanged', (state) => {
+      this.viewer.setUncropState(state);
+      this.syncGTOStore();
+    });
 
     // Handle crop region changes from Viewer (when user drags crop handles)
     this.viewer.setOnCropRegionChanged((region) => {

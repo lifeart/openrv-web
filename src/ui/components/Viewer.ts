@@ -6,7 +6,7 @@ import { ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from './ColorControls';
 import { WipeState, WipeMode } from './WipeControl';
 import { Transform2D, DEFAULT_TRANSFORM } from './TransformControl';
 import { FilterSettings, DEFAULT_FILTER_SETTINGS } from './FilterControl';
-import { CropState, CropRegion, DEFAULT_CROP_STATE, DEFAULT_CROP_REGION, ASPECT_RATIOS, MIN_CROP_FRACTION } from './CropControl';
+import { CropState, CropRegion, DEFAULT_CROP_STATE, DEFAULT_CROP_REGION, ASPECT_RATIOS, MIN_CROP_FRACTION, UncropState, DEFAULT_UNCROP_STATE } from './CropControl';
 import { LUT3D } from '../../color/LUTLoader';
 import { WebGLLUTProcessor } from '../../color/WebGLLUT';
 import { CDLValues, DEFAULT_CDL, isDefaultCDL, applyCDLToImageData } from '../../color/CDL';
@@ -199,6 +199,7 @@ export class Viewer {
 
   // Crop state
   private cropState: CropState = { ...DEFAULT_CROP_STATE, region: { ...DEFAULT_CROP_REGION } };
+  private uncropState: UncropState = { ...DEFAULT_UNCROP_STATE };
   private cropOverlay: HTMLCanvasElement | null = null;
   private cropCtx: CanvasRenderingContext2D | null = null;
   private isDraggingCrop = false;
@@ -1381,13 +1382,32 @@ export class Viewer {
     this.sourceWidth = source.width;
     this.sourceHeight = source.height;
 
+    // Calculate uncrop padding and effective virtual canvas size
+    const uncropPad = this.getUncropPadding();
+    const uncropActive = this.isUncropActive();
+    const virtualWidth = uncropActive ? this.sourceWidth + uncropPad.left + uncropPad.right : this.sourceWidth;
+    const virtualHeight = uncropActive ? this.sourceHeight + uncropPad.top + uncropPad.bottom : this.sourceHeight;
+
     const { width: displayWidth, height: displayHeight } = calculateDisplayDimensions(
-      this.sourceWidth,
-      this.sourceHeight,
+      virtualWidth,
+      virtualHeight,
       containerWidth,
       containerHeight,
       this.zoom
     );
+
+    // Scale factor from virtual source to display pixels
+    const uncropScaleX = uncropActive ? displayWidth / virtualWidth : 1;
+    const uncropScaleY = uncropActive ? displayHeight / virtualHeight : 1;
+    // Pixel offsets for the image within the expanded canvas
+    const uncropOffsetX = uncropActive ? Math.round(uncropPad.left * uncropScaleX) : 0;
+    const uncropOffsetY = uncropActive ? Math.round(uncropPad.top * uncropScaleY) : 0;
+    // Display dimensions of the source image (excluding padding) within the expanded canvas.
+    // Derive from displayWidth minus both padding offsets to avoid rounding gaps.
+    const uncropRightPadX = uncropActive ? Math.round(uncropPad.right * uncropScaleX) : 0;
+    const uncropBottomPadY = uncropActive ? Math.round(uncropPad.bottom * uncropScaleY) : 0;
+    const imageDisplayW = uncropActive ? Math.max(1, displayWidth - uncropOffsetX - uncropRightPadX) : displayWidth;
+    const imageDisplayH = uncropActive ? Math.max(1, displayHeight - uncropOffsetY - uncropBottomPadY) : displayHeight;
 
     // Update canvas size if needed
     if (this.displayWidth !== displayWidth || this.displayHeight !== displayHeight) {
@@ -1396,6 +1416,11 @@ export class Viewer {
 
     // Clear canvas
     this.imageCtx.clearRect(0, 0, displayWidth, displayHeight);
+
+    // When uncrop is active, fill the padding area with a subtle pattern
+    if (uncropActive) {
+      this.drawUncropBackground(displayWidth, displayHeight, uncropOffsetX, uncropOffsetY, imageDisplayW, imageDisplayH);
+    }
 
     // Enable high-quality image smoothing for best picture quality
     this.imageCtx.imageSmoothingEnabled = true;
@@ -1411,7 +1436,11 @@ export class Viewer {
       const cached = this.prerenderBuffer.getFrame(currentFrame);
       if (cached) {
         // Draw cached pre-rendered frame scaled to display size
-        this.imageCtx.drawImage(cached.canvas, 0, 0, displayWidth, displayHeight);
+        if (uncropActive) {
+          this.imageCtx.drawImage(cached.canvas, uncropOffsetX, uncropOffsetY, imageDisplayW, imageDisplayH);
+        } else {
+          this.imageCtx.drawImage(cached.canvas, 0, 0, displayWidth, displayHeight);
+        }
         // Apply crop clipping by clearing outside areas
         if (cropClipActive) {
           this.clearOutsideCropRegion(displayWidth, displayHeight);
@@ -1461,6 +1490,12 @@ export class Viewer {
       if (this.wipeState.mode !== 'off' && !isSplitScreenMode(this.wipeState.mode) && !(element instanceof HTMLCanvasElement) && !(typeof OffscreenCanvas !== 'undefined' && element instanceof OffscreenCanvas)) {
         // Wipe only works with HTMLImageElement/HTMLVideoElement
         this.renderWithWipe(element as HTMLImageElement | HTMLVideoElement, displayWidth, displayHeight);
+      } else if (uncropActive) {
+        // Uncrop: draw image at offset within expanded canvas
+        this.imageCtx.save();
+        this.imageCtx.translate(uncropOffsetX, uncropOffsetY);
+        this.drawWithTransform(this.imageCtx, element as CanvasImageSource, imageDisplayW, imageDisplayH);
+        this.imageCtx.restore();
       } else {
         // Normal rendering with transforms
         this.drawWithTransform(this.imageCtx, element as CanvasImageSource, displayWidth, displayHeight);
@@ -1472,7 +1507,14 @@ export class Viewer {
     if (!rendered) {
       const currentSource = this.session.currentSource;
       if (currentSource?.element) {
-        this.drawWithTransform(this.imageCtx, currentSource.element, displayWidth, displayHeight);
+        if (uncropActive) {
+          this.imageCtx.save();
+          this.imageCtx.translate(uncropOffsetX, uncropOffsetY);
+          this.drawWithTransform(this.imageCtx, currentSource.element, imageDisplayW, imageDisplayH);
+          this.imageCtx.restore();
+        } else {
+          this.drawWithTransform(this.imageCtx, currentSource.element, displayWidth, displayHeight);
+        }
       }
     }
 
@@ -1965,6 +2007,45 @@ export class Viewer {
     this.scheduleRender();
   }
 
+  // Uncrop methods
+  setUncropState(state: UncropState): void {
+    this.uncropState = { ...state };
+    this.scheduleRender();
+  }
+
+  getUncropState(): UncropState {
+    return { ...this.uncropState };
+  }
+
+  /**
+   * Check if uncrop is actively adding padding to the canvas.
+   */
+  isUncropActive(): boolean {
+    if (!this.uncropState.enabled) return false;
+    if (this.uncropState.paddingMode === 'uniform') {
+      return this.uncropState.padding > 0;
+    }
+    return this.uncropState.paddingTop > 0 || this.uncropState.paddingRight > 0 ||
+           this.uncropState.paddingBottom > 0 || this.uncropState.paddingLeft > 0;
+  }
+
+  /**
+   * Get effective padding in pixels for uncrop.
+   */
+  private getUncropPadding(): { top: number; right: number; bottom: number; left: number } {
+    if (!this.uncropState.enabled) return { top: 0, right: 0, bottom: 0, left: 0 };
+    if (this.uncropState.paddingMode === 'uniform') {
+      const p = Math.max(0, this.uncropState.padding);
+      return { top: p, right: p, bottom: p, left: p };
+    }
+    return {
+      top: Math.max(0, this.uncropState.paddingTop),
+      right: Math.max(0, this.uncropState.paddingRight),
+      bottom: Math.max(0, this.uncropState.paddingBottom),
+      left: Math.max(0, this.uncropState.paddingLeft),
+    };
+  }
+
   // CDL methods
   setCDL(cdl: CDLValues): void {
     this.cdlValues = JSON.parse(JSON.stringify(cdl));
@@ -2454,6 +2535,68 @@ export class Viewer {
     }
 
     return result;
+  }
+
+  /**
+   * Draw the uncrop padding background - a subtle checkerboard pattern
+   * to visually distinguish the padding area from the image content.
+   */
+  private drawUncropBackground(
+    displayWidth: number,
+    displayHeight: number,
+    imageX: number,
+    imageY: number,
+    imageW: number,
+    imageH: number
+  ): void {
+    const ctx = this.imageCtx;
+    const tileSize = 8;
+
+    // Resolve theme colors for checker pattern
+    const style = getComputedStyle(document.documentElement);
+    const darkColor = style.getPropertyValue('--bg-primary').trim() || '#1a1a1a';
+    const lightColor = style.getPropertyValue('--bg-tertiary').trim() || '#2d2d2d';
+
+    // Draw checkerboard in the padding areas (top, bottom, left, right strips)
+    const regions = [
+      // Top strip
+      { x: 0, y: 0, w: displayWidth, h: imageY },
+      // Bottom strip
+      { x: 0, y: imageY + imageH, w: displayWidth, h: displayHeight - (imageY + imageH) },
+      // Left strip (between top and bottom)
+      { x: 0, y: imageY, w: imageX, h: imageH },
+      // Right strip (between top and bottom)
+      { x: imageX + imageW, y: imageY, w: displayWidth - (imageX + imageW), h: imageH },
+    ];
+
+    for (const region of regions) {
+      if (region.w <= 0 || region.h <= 0) continue;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(region.x, region.y, region.w, region.h);
+      ctx.clip();
+
+      // Draw checkerboard
+      const startCol = Math.floor(region.x / tileSize);
+      const endCol = Math.ceil((region.x + region.w) / tileSize);
+      const startRow = Math.floor(region.y / tileSize);
+      const endRow = Math.ceil((region.y + region.h) / tileSize);
+
+      for (let row = startRow; row < endRow; row++) {
+        for (let col = startCol; col < endCol; col++) {
+          ctx.fillStyle = (row + col) % 2 === 0 ? darkColor : lightColor;
+          ctx.fillRect(col * tileSize, row * tileSize, tileSize, tileSize);
+        }
+      }
+      ctx.restore();
+    }
+
+    // Draw a subtle border around the image area to delineate it from padding
+    ctx.strokeStyle = style.getPropertyValue('--border-primary').trim() || '#444';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.strokeRect(imageX + 0.5, imageY + 0.5, imageW - 1, imageH - 1);
+    ctx.setLineDash([]);
   }
 
   private renderCropOverlay(): void {

@@ -110,6 +110,14 @@ export interface ViewerState {
   exrLayerCount: number;
   exrSelectedLayer: string | null;
   exrAvailableLayers: string[];
+  // Uncrop state
+  uncropEnabled: boolean;
+  uncropPaddingMode: 'uniform' | 'per-side';
+  uncropPadding: number;
+  uncropPaddingTop: number;
+  uncropPaddingRight: number;
+  uncropPaddingBottom: number;
+  uncropPaddingLeft: number;
 }
 
 export interface ColorState {
@@ -395,6 +403,14 @@ export function exposeForTesting(app: App): void {
         exrLayerCount: appAny.channelSelect?.getEXRLayerState?.()?.availableLayers?.length ?? 0,
         exrSelectedLayer: appAny.channelSelect?.getEXRLayerState?.()?.selectedLayer ?? null,
         exrAvailableLayers: appAny.channelSelect?.getEXRLayerState?.()?.availableLayers?.map((l: any) => l.name) ?? [],
+        // Uncrop state
+        uncropEnabled: viewer.uncropState?.enabled ?? false,
+        uncropPaddingMode: viewer.uncropState?.paddingMode ?? 'uniform',
+        uncropPadding: viewer.uncropState?.padding ?? 0,
+        uncropPaddingTop: viewer.uncropState?.paddingTop ?? 0,
+        uncropPaddingRight: viewer.uncropState?.paddingRight ?? 0,
+        uncropPaddingBottom: viewer.uncropState?.paddingBottom ?? 0,
+        uncropPaddingLeft: viewer.uncropState?.paddingLeft ?? 0,
       };
     },
 
