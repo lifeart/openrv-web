@@ -26,6 +26,28 @@ export interface SplitScreenUIElements {
 const LABEL_HIDE_THRESHOLD_LOW = 0.1;
 const LABEL_HIDE_THRESHOLD_HIGH = 0.9;
 
+// Base styles from createSplitScreenUIElements (minus display, cursor, and mode-varying properties)
+const SPLIT_LINE_BASE = 'position: absolute; z-index: 52; box-shadow: 0 0 8px rgba(var(--accent-primary-rgb), 0.6), 0 0 2px rgba(0, 0, 0, 0.8);';
+const SPLIT_LABEL_A_BASE = 'position: absolute; background: rgba(var(--accent-primary-rgb), 0.85); color: white; padding: 6px 12px; border-radius: 4px; font-size: 13px; font-weight: 700; z-index: 53; pointer-events: none; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);';
+const SPLIT_LABEL_B_BASE = 'position: absolute; background: rgba(255, 180, 50, 0.9); color: var(--bg-primary); padding: 6px 12px; border-radius: 4px; font-size: 13px; font-weight: 700; z-index: 53; pointer-events: none; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);';
+
+/**
+ * Batch-update split screen label styles (internal helper)
+ */
+function batchSplitLabelStyle(
+  label: HTMLElement,
+  baseStyles: string,
+  shouldHide: boolean,
+  left: number,
+  top: number
+): void {
+  if (shouldHide) {
+    label.style.display = 'none';
+  } else {
+    label.style.cssText = `${baseStyles} display: block; left: ${left}px; top: ${top}px;`;
+  }
+}
+
 /**
  * Create split screen UI elements (divider line and A/B labels)
  */
@@ -107,8 +129,6 @@ export function updateSplitScreenPosition(
     return;
   }
 
-  splitLine.style.display = 'block';
-
   const canvasLeft = canvasRect.left - containerRect.left;
   const canvasTop = canvasRect.top - containerRect.top;
   const position = state.position;
@@ -116,57 +136,47 @@ export function updateSplitScreenPosition(
   if (state.mode === 'splitscreen-h') {
     // Vertical line for horizontal split (A on left, B on right)
     const x = canvasLeft + displayWidth * position;
-    splitLine.style.width = '4px';
-    splitLine.style.height = `${displayHeight}px`;
-    splitLine.style.left = `${x - 2}px`;
-    splitLine.style.top = `${canvasTop}px`;
-    splitLine.style.cursor = 'ew-resize';
-    splitLine.style.background = 'linear-gradient(to bottom, var(--accent-primary), rgba(var(--accent-primary-rgb), 0.5))';
+    splitLine.style.cssText = `${SPLIT_LINE_BASE} display: block; width: 4px; height: ${displayHeight}px; left: ${x - 2}px; top: ${canvasTop}px; cursor: ew-resize; background: linear-gradient(to bottom, var(--accent-primary), rgba(var(--accent-primary-rgb), 0.5));`;
 
     // Position A label in bottom-left corner
-    if (position < LABEL_HIDE_THRESHOLD_LOW) {
-      labelA.style.display = 'none';
-    } else {
-      labelA.style.display = 'block';
-      labelA.style.left = `${canvasLeft + 12}px`;
-      labelA.style.top = `${canvasTop + displayHeight - 40}px`;
-    }
+    batchSplitLabelStyle(
+      labelA,
+      SPLIT_LABEL_A_BASE,
+      position < LABEL_HIDE_THRESHOLD_LOW,
+      canvasLeft + 12,
+      canvasTop + displayHeight - 40
+    );
 
     // Position B label in bottom-right corner
-    if (position > LABEL_HIDE_THRESHOLD_HIGH) {
-      labelB.style.display = 'none';
-    } else {
-      labelB.style.display = 'block';
-      labelB.style.left = `${canvasLeft + displayWidth - 40}px`;
-      labelB.style.top = `${canvasTop + displayHeight - 40}px`;
-    }
+    batchSplitLabelStyle(
+      labelB,
+      SPLIT_LABEL_B_BASE,
+      position > LABEL_HIDE_THRESHOLD_HIGH,
+      canvasLeft + displayWidth - 40,
+      canvasTop + displayHeight - 40
+    );
   } else if (state.mode === 'splitscreen-v') {
     // Horizontal line for vertical split (A on top, B on bottom)
     const y = canvasTop + displayHeight * position;
-    splitLine.style.width = `${displayWidth}px`;
-    splitLine.style.height = '4px';
-    splitLine.style.left = `${canvasLeft}px`;
-    splitLine.style.top = `${y - 2}px`;
-    splitLine.style.cursor = 'ns-resize';
-    splitLine.style.background = 'linear-gradient(to right, var(--accent-primary), rgba(var(--accent-primary-rgb), 0.5))';
+    splitLine.style.cssText = `${SPLIT_LINE_BASE} display: block; width: ${displayWidth}px; height: 4px; left: ${canvasLeft}px; top: ${y - 2}px; cursor: ns-resize; background: linear-gradient(to right, var(--accent-primary), rgba(var(--accent-primary-rgb), 0.5));`;
 
     // Position A label in top-left corner
-    if (position < LABEL_HIDE_THRESHOLD_LOW) {
-      labelA.style.display = 'none';
-    } else {
-      labelA.style.display = 'block';
-      labelA.style.left = `${canvasLeft + 12}px`;
-      labelA.style.top = `${canvasTop + 12}px`;
-    }
+    batchSplitLabelStyle(
+      labelA,
+      SPLIT_LABEL_A_BASE,
+      position < LABEL_HIDE_THRESHOLD_LOW,
+      canvasLeft + 12,
+      canvasTop + 12
+    );
 
     // Position B label in bottom-left corner
-    if (position > LABEL_HIDE_THRESHOLD_HIGH) {
-      labelB.style.display = 'none';
-    } else {
-      labelB.style.display = 'block';
-      labelB.style.left = `${canvasLeft + 12}px`;
-      labelB.style.top = `${canvasTop + displayHeight - 40}px`;
-    }
+    batchSplitLabelStyle(
+      labelB,
+      SPLIT_LABEL_B_BASE,
+      position > LABEL_HIDE_THRESHOLD_HIGH,
+      canvasLeft + 12,
+      canvasTop + displayHeight - 40
+    );
   }
 }
 

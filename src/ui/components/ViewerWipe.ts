@@ -74,29 +74,27 @@ export function createWipeUIElements(container: HTMLElement): WipeUIElements {
   return { wipeLine, wipeLabelA, wipeLabelB };
 }
 
+// Base styles from createWipeUIElements (minus display, cursor, and mode-varying properties)
+const WIPE_LINE_BASE = 'position: absolute; background: var(--accent-primary); z-index: 50; box-shadow: 0 0 4px rgba(var(--accent-primary-rgb), 0.5);';
+const WIPE_LABEL_A_BASE = 'position: absolute; background: rgba(0, 0, 0, 0.7); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; z-index: 51; pointer-events: none;';
+const WIPE_LABEL_B_BASE = 'position: absolute; background: rgba(var(--accent-primary-rgb), 0.7); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; z-index: 51; pointer-events: none;';
+
 /**
- * Update wipe label visibility based on position (internal helper)
+ * Batch-update wipe label styles (internal helper)
  */
-function updateWipeLabelVisibility(
+function batchWipeLabelStyle(
   label: HTMLElement | null,
-  position: number,
-  isLowBoundary: boolean,
-  left: string,
-  top: string
+  baseStyles: string,
+  shouldHide: boolean,
+  left: number,
+  top: number
 ): void {
   if (!label) return;
-
-  // Determine visibility based on position thresholds
-  const shouldHide = isLowBoundary
-    ? position < WIPE_LABEL_HIDE_THRESHOLD_LOW
-    : position > WIPE_LABEL_HIDE_THRESHOLD_HIGH;
 
   if (shouldHide) {
     label.style.display = 'none';
   } else {
-    label.style.display = 'block';
-    label.style.left = left;
-    label.style.top = top;
+    label.style.cssText = `${baseStyles} display: block; left: ${left}px; top: ${top}px;`;
   }
 }
 
@@ -120,8 +118,6 @@ export function updateWipeLinePosition(
     return;
   }
 
-  wipeLine.style.display = 'block';
-
   const canvasLeft = canvasRect.left - containerRect.left;
   const canvasTop = canvasRect.top - containerRect.top;
   const position = wipeState.position;
@@ -129,50 +125,42 @@ export function updateWipeLinePosition(
   if (wipeState.mode === 'horizontal') {
     // Vertical line for horizontal wipe
     const x = canvasLeft + displayWidth * position;
-    wipeLine.style.width = '3px';
-    wipeLine.style.height = `${displayHeight}px`;
-    wipeLine.style.left = `${x - 1}px`;
-    wipeLine.style.top = `${canvasTop}px`;
-    wipeLine.style.cursor = 'ew-resize';
+    wipeLine.style.cssText = `${WIPE_LINE_BASE} display: block; width: 3px; height: ${displayHeight}px; left: ${x - 1}px; top: ${canvasTop}px; cursor: ew-resize;`;
 
     // Position labels at bottom of each side, hide at boundaries
-    updateWipeLabelVisibility(
+    batchWipeLabelStyle(
       wipeLabelA,
-      position,
-      true, // isLowBoundary
-      `${canvasLeft + 10}px`,
-      `${canvasTop + displayHeight - 30}px`
+      WIPE_LABEL_A_BASE,
+      position < WIPE_LABEL_HIDE_THRESHOLD_LOW,
+      canvasLeft + 10,
+      canvasTop + displayHeight - 30
     );
-    updateWipeLabelVisibility(
+    batchWipeLabelStyle(
       wipeLabelB,
-      position,
-      false, // isLowBoundary
-      `${x + 10}px`,
-      `${canvasTop + displayHeight - 30}px`
+      WIPE_LABEL_B_BASE,
+      position > WIPE_LABEL_HIDE_THRESHOLD_HIGH,
+      x + 10,
+      canvasTop + displayHeight - 30
     );
   } else if (wipeState.mode === 'vertical') {
     // Horizontal line for vertical wipe
     const y = canvasTop + displayHeight * position;
-    wipeLine.style.width = `${displayWidth}px`;
-    wipeLine.style.height = '3px';
-    wipeLine.style.left = `${canvasLeft}px`;
-    wipeLine.style.top = `${y - 1}px`;
-    wipeLine.style.cursor = 'ns-resize';
+    wipeLine.style.cssText = `${WIPE_LINE_BASE} display: block; width: ${displayWidth}px; height: 3px; left: ${canvasLeft}px; top: ${y - 1}px; cursor: ns-resize;`;
 
     // Position labels on left side, hide at boundaries
-    updateWipeLabelVisibility(
+    batchWipeLabelStyle(
       wipeLabelA,
-      position,
-      true, // isLowBoundary
-      `${canvasLeft + 10}px`,
-      `${canvasTop + 10}px`
+      WIPE_LABEL_A_BASE,
+      position < WIPE_LABEL_HIDE_THRESHOLD_LOW,
+      canvasLeft + 10,
+      canvasTop + 10
     );
-    updateWipeLabelVisibility(
+    batchWipeLabelStyle(
       wipeLabelB,
-      position,
-      false, // isLowBoundary
-      `${canvasLeft + 10}px`,
-      `${y + 10}px`
+      WIPE_LABEL_B_BASE,
+      position > WIPE_LABEL_HIDE_THRESHOLD_HIGH,
+      canvasLeft + 10,
+      y + 10
     );
   }
 }
