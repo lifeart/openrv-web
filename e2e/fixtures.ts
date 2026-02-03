@@ -99,6 +99,10 @@ export interface ViewerState {
   parEnabled: boolean;
   parValue: number;
   parPreset: string;
+  // Background pattern state
+  backgroundPattern: 'black' | 'grey18' | 'grey50' | 'white' | 'checker' | 'crosshatch' | 'custom';
+  backgroundCheckerSize: 'small' | 'medium' | 'large';
+  backgroundCustomColor: string;
 }
 
 export interface ColorState {
@@ -377,6 +381,9 @@ export async function getViewerState(page: Page): Promise<ViewerState> {
       parEnabled: false,
       parValue: 1.0,
       parPreset: 'square',
+      backgroundPattern: 'black',
+      backgroundCheckerSize: 'medium',
+      backgroundCustomColor: '#1a1a1a',
     };
   });
 }

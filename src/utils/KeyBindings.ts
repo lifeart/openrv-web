@@ -471,6 +471,19 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     description: 'Cycle theme'
   },
 
+  // Background pattern
+  'view.cycleBackgroundPattern': {
+    code: 'KeyB',
+    shift: true,
+    description: 'Cycle background pattern (Black/Grey18/Grey50/Checker)'
+  },
+  'view.toggleCheckerboard': {
+    code: 'KeyB',
+    shift: true,
+    alt: true,
+    description: 'Toggle checkerboard background on/off'
+  },
+
   // Fullscreen / Presentation mode
   'view.toggleFullscreen': {
     code: 'F11',

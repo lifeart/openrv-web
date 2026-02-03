@@ -29,6 +29,7 @@ import { ZebraControl } from './ui/components/ZebraControl';
 import { HSLQualifierControl } from './ui/components/HSLQualifierControl';
 import { GhostFrameControl } from './ui/components/GhostFrameControl';
 import { PARControl } from './ui/components/PARControl';
+import { BackgroundPatternControl } from './ui/components/BackgroundPatternControl';
 import { OCIOControl } from './ui/components/OCIOControl';
 import { exportSequence } from './utils/SequenceExporter';
 import { showAlert, showModal, closeModal, showConfirm } from './ui/components/shared/Modal';
@@ -88,6 +89,7 @@ export class App {
   private hslQualifierControl: HSLQualifierControl;
   private ghostFrameControl: GhostFrameControl;
   private parControl: PARControl;
+  private backgroundPatternControl: BackgroundPatternControl;
   private ocioControl: OCIOControl;
   private animationId: number | null = null;
   private boundHandleResize: () => void;
@@ -306,6 +308,12 @@ export class App {
     this.parControl = new PARControl();
     this.parControl.on('stateChanged', (state) => {
       this.viewer.setPARState(state);
+    });
+
+    // Background Pattern control
+    this.backgroundPatternControl = new BackgroundPatternControl();
+    this.backgroundPatternControl.on('stateChanged', (state) => {
+      this.viewer.setBackgroundPatternState(state);
     });
 
     // OCIO color management control
@@ -852,6 +860,7 @@ export class App {
     viewContent.appendChild(this.zebraControl.render());
     viewContent.appendChild(this.hslQualifierControl.render());
     viewContent.appendChild(this.parControl.render());
+    viewContent.appendChild(this.backgroundPatternControl.render());
 
     // Trigger re-render when false color state changes
     this.viewer.getFalseColor().on('stateChanged', () => {
@@ -1359,6 +1368,8 @@ export class App {
       'view.toggleSplitScreen': () => this.compareControl.toggleSplitScreen(),
       'view.toggleGhostFrames': () => this.ghostFrameControl.toggle(),
       'view.togglePAR': () => this.parControl.toggle(),
+      'view.cycleBackgroundPattern': () => this.backgroundPatternControl.cyclePattern(),
+      'view.toggleCheckerboard': () => this.backgroundPatternControl.toggleCheckerboard(),
       'panel.color': () => this.colorControls.toggle(),
       'panel.effects': () => this.filterControl.toggle(),
       'panel.curves': () => this.curvesControl.toggle(),
@@ -2774,6 +2785,7 @@ export class App {
     this.stackControl.dispose();
     this.channelSelect.dispose();
     this.parControl.dispose();
+    this.backgroundPatternControl.dispose();
     this.stereoControl.dispose();
     this.histogram.dispose();
     this.waveform.dispose();

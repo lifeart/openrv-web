@@ -60,6 +60,7 @@ import {
 import { GhostFrameState, DEFAULT_GHOST_FRAME_STATE } from './GhostFrameControl';
 import { ToneMappingState, DEFAULT_TONE_MAPPING_STATE } from './ToneMappingControl';
 import { PARState, DEFAULT_PAR_STATE, isPARActive, calculatePARCorrectedWidth } from '../../utils/PixelAspectRatio';
+import { BackgroundPatternState, DEFAULT_BACKGROUND_PATTERN_STATE, drawBackgroundPattern } from './BackgroundPatternControl';
 import {
   PointerState,
   getCanvasPoint as getCanvasPointUtil,
@@ -269,6 +270,14 @@ export class Viewer {
 
   // Pixel Aspect Ratio state
   private parState: PARState = { ...DEFAULT_PAR_STATE };
+
+  // Background pattern state (for alpha visualization)
+  private backgroundPatternState: BackgroundPatternState = { ...DEFAULT_BACKGROUND_PATTERN_STATE };
+
+  // Temp canvas for compositing ImageData over background patterns
+  // (putImageData ignores compositing, so we draw to a temp canvas first, then drawImage)
+  private bgCompositeTempCanvas: HTMLCanvasElement | null = null;
+  private bgCompositeTempCtx: CanvasRenderingContext2D | null = null;
 
   // Prerender buffer for smooth playback with effects
   private prerenderBuffer: PrerenderBufferManager | null = null;
@@ -1425,6 +1434,11 @@ export class Viewer {
     // Clear canvas
     this.imageCtx.clearRect(0, 0, displayWidth, displayHeight);
 
+    // Draw background pattern (shows through transparent/alpha areas of the image)
+    if (this.backgroundPatternState.pattern !== 'black') {
+      drawBackgroundPattern(this.imageCtx, displayWidth, displayHeight, this.backgroundPatternState);
+    }
+
     // When uncrop is active, fill the padding area with a subtle pattern
     if (uncropActive) {
       this.drawUncropBackground(displayWidth, displayHeight, uncropOffsetX, uncropOffsetY, imageDisplayW, imageDisplayH);
@@ -1467,7 +1481,7 @@ export class Viewer {
       // Render difference between A and B sources
       const diffData = this.renderDifferenceMatte(displayWidth, displayHeight);
       if (diffData) {
-        this.imageCtx.putImageData(diffData, 0, 0);
+        this.compositeImageDataOverBackground(diffData, displayWidth, displayHeight);
         rendered = true;
       }
     }
@@ -1482,7 +1496,7 @@ export class Viewer {
       // Composite all stack layers
       const compositedData = this.compositeStackLayers(displayWidth, displayHeight);
       if (compositedData) {
-        this.imageCtx.putImageData(compositedData, 0, 0);
+        this.compositeImageDataOverBackground(compositedData, displayWidth, displayHeight);
         rendered = true;
       }
     }
@@ -2372,6 +2386,54 @@ export class Viewer {
   resetPARState(): void {
     this.parState = { ...DEFAULT_PAR_STATE };
     this.scheduleRender();
+  }
+
+  // Background pattern methods
+  setBackgroundPatternState(state: BackgroundPatternState): void {
+    this.backgroundPatternState = { ...state };
+    this.scheduleRender();
+  }
+
+  getBackgroundPatternState(): BackgroundPatternState {
+    return { ...this.backgroundPatternState };
+  }
+
+  resetBackgroundPatternState(): void {
+    this.backgroundPatternState = { ...DEFAULT_BACKGROUND_PATTERN_STATE };
+    this.scheduleRender();
+  }
+
+  /**
+   * Composite ImageData onto the canvas while preserving the background pattern.
+   * putImageData() ignores compositing and overwrites pixels directly, so we
+   * write to a temporary canvas first, then use drawImage() which respects
+   * alpha compositing and preserves the background pattern underneath.
+   */
+  private compositeImageDataOverBackground(imageData: ImageData, width: number, height: number): void {
+    if (this.backgroundPatternState.pattern === 'black') {
+      // No background pattern - putImageData is fine
+      this.imageCtx.putImageData(imageData, 0, 0);
+      return;
+    }
+
+    // Ensure temp canvas is the right size
+    if (!this.bgCompositeTempCanvas || !this.bgCompositeTempCtx) {
+      this.bgCompositeTempCanvas = document.createElement('canvas');
+      this.bgCompositeTempCtx = this.bgCompositeTempCanvas.getContext('2d');
+    }
+    if (!this.bgCompositeTempCtx) {
+      // Fallback if context creation fails
+      this.imageCtx.putImageData(imageData, 0, 0);
+      return;
+    }
+    if (this.bgCompositeTempCanvas.width !== width || this.bgCompositeTempCanvas.height !== height) {
+      this.bgCompositeTempCanvas.width = width;
+      this.bgCompositeTempCanvas.height = height;
+    }
+
+    // Write ImageData to temp canvas, then drawImage onto main canvas
+    this.bgCompositeTempCtx.putImageData(imageData, 0, 0);
+    this.imageCtx.drawImage(this.bgCompositeTempCanvas, 0, 0);
   }
 
   isToneMappingEnabled(): boolean {

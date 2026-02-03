@@ -21,6 +21,7 @@ import { DEFAULT_CROP_STATE, DEFAULT_CROP_REGION } from '../../ui/components/Cro
 import { DEFAULT_LENS_PARAMS } from '../../transform/LensDistortion';
 import { DEFAULT_WIPE_STATE } from '../../ui/components/WipeControl';
 import { DEFAULT_PAR_STATE } from '../../utils/PixelAspectRatio';
+import { DEFAULT_BACKGROUND_PATTERN_STATE } from '../../ui/components/BackgroundPatternControl';
 import type { Annotation, PaintEffects } from '../../paint/types';
 import { DEFAULT_PAINT_EFFECTS } from '../../paint/types';
 import { showFileReloadPrompt } from '../../ui/components/shared/Modal';
@@ -92,6 +93,7 @@ export class SessionSerializer {
       lutPath: viewer.getLUT()?.title,
       lutIntensity: viewer.getLUTIntensity(),
       par: viewer.getPARState(),
+      backgroundPattern: viewer.getBackgroundPatternState(),
     };
   }
 
@@ -217,6 +219,9 @@ export class SessionSerializer {
     if (migrated.par) {
       viewer.setPARState(migrated.par);
     }
+    if (migrated.backgroundPattern) {
+      viewer.setBackgroundPatternState(migrated.backgroundPattern);
+    }
     viewer.setZoom(migrated.view.zoom);
     viewer.setPan(migrated.view.panX, migrated.view.panY);
 
@@ -258,6 +263,9 @@ export class SessionSerializer {
     migrated.stack = migrated.stack ?? [];
     migrated.lutIntensity = migrated.lutIntensity ?? 1.0;
     migrated.par = migrated.par ? { ...DEFAULT_PAR_STATE, ...migrated.par } : undefined;
+    migrated.backgroundPattern = migrated.backgroundPattern
+      ? { ...DEFAULT_BACKGROUND_PATTERN_STATE, ...migrated.backgroundPattern }
+      : undefined;
     migrated.paint = migrated.paint ?? {
       nextId: 0,
       show: true,

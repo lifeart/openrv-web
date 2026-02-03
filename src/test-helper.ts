@@ -135,6 +135,10 @@ export interface ViewerState {
   parEnabled: boolean;
   parValue: number;
   parPreset: string;
+  // Background pattern state
+  backgroundPattern: 'black' | 'grey18' | 'grey50' | 'white' | 'checker' | 'crosshatch' | 'custom';
+  backgroundCheckerSize: 'small' | 'medium' | 'large';
+  backgroundCustomColor: string;
 }
 
 export interface ColorState {
@@ -432,6 +436,10 @@ export function exposeForTesting(app: App): void {
         parEnabled: viewer.parState?.enabled ?? false,
         parValue: viewer.parState?.par ?? 1.0,
         parPreset: viewer.parState?.preset ?? 'square',
+        // Background pattern state
+        backgroundPattern: viewer.backgroundPatternState?.pattern ?? 'black',
+        backgroundCheckerSize: viewer.backgroundPatternState?.checkerSize ?? 'medium',
+        backgroundCustomColor: viewer.backgroundPatternState?.customColor ?? '#1a1a1a',
       };
     },
 
