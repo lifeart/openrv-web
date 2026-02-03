@@ -2,9 +2,48 @@
  * WebGL-based 3D LUT Application
  *
  * Uses GPU acceleration for fast LUT processing with trilinear interpolation.
+ * Supports float texture precision when available (float32 > float16 > uint8 fallback).
  */
 
 import { LUT3D, createLUTTexture } from './LUTLoader';
+
+/**
+ * Convert Float32Array to Uint16Array of IEEE 754 half-float values
+ * for uploading as HALF_FLOAT texture data.
+ */
+function convertToFloat16Array(data: Float32Array): Uint16Array {
+  const output = new Uint16Array(data.length);
+  const buffer = new ArrayBuffer(4);
+  const view = new DataView(buffer);
+
+  for (let i = 0; i < data.length; i++) {
+    const val = data[i]!;
+    if (val === 0) { output[i] = 0; continue; }
+    if (!isFinite(val)) {
+      output[i] = val !== val ? 0x7E00 : (val > 0 ? 0x7C00 : 0xFC00);
+      continue;
+    }
+
+    view.setFloat32(0, val, true);
+    const bits = view.getUint32(0, true);
+    const sign = (bits >> 31) & 1;
+    const exp = (bits >> 23) & 0xFF;
+    const mantissa = bits & 0x7FFFFF;
+
+    if (exp === 0) { output[i] = sign << 15; continue; }
+
+    const newExp = exp - 127 + 15;
+    if (newExp >= 0x1F) { output[i] = (sign << 15) | 0x7C00; continue; }
+    if (newExp <= 0) {
+      if (newExp < -10) { output[i] = sign << 15; continue; }
+      output[i] = (sign << 15) | ((mantissa | 0x800000) >> (14 - newExp));
+      continue;
+    }
+    output[i] = (sign << 15) | (newExp << 10) | (mantissa >> 13);
+  }
+
+  return output;
+}
 
 // Vertex shader - simple fullscreen quad
 const VERTEX_SHADER = `#version 300 es
@@ -62,6 +101,108 @@ void main() {
 }
 `;
 
+/**
+ * Float precision capability detection result
+ */
+export interface FloatPrecisionCapabilities {
+  /** Can render to RGBA32F framebuffer */
+  float32Renderable: boolean;
+  /** Can filter RGBA32F textures with LINEAR */
+  float32Filterable: boolean;
+  /** Can render to RGBA16F framebuffer */
+  float16Renderable: boolean;
+  /** Can filter RGBA16F textures with LINEAR (WebGL2 always supports this) */
+  float16Filterable: boolean;
+  /** Best available precision for LUT processing */
+  bestPrecision: 'float32' | 'float16' | 'uint8';
+  /** Best available internal format enum value */
+  bestInternalFormat: number;
+  /** Best available type enum value */
+  bestType: number;
+}
+
+/**
+ * Precision mode for the LUT processor
+ */
+export type PrecisionMode = 'auto' | 'float32' | 'float16' | 'uint8';
+
+/**
+ * Detect float precision capabilities of a WebGL2 context.
+ */
+export function detectFloatPrecision(gl: WebGL2RenderingContext): FloatPrecisionCapabilities {
+  const extCBF = gl.getExtension('EXT_color_buffer_float');
+  const extFloatLinear = gl.getExtension('OES_texture_float_linear');
+
+  const float16Filterable = true; // WebGL2 always supports HALF_FLOAT filtering
+  const float32Filterable = !!extFloatLinear;
+
+  // Test RGBA32F framebuffer completeness
+  let float32Renderable = false;
+  if (extCBF) {
+    float32Renderable = testFramebufferCompleteness(gl, gl.RGBA32F, gl.FLOAT);
+  }
+
+  let float16Renderable = false;
+  if (extCBF) {
+    float16Renderable = testFramebufferCompleteness(gl, gl.RGBA16F, gl.HALF_FLOAT);
+  }
+
+  let bestPrecision: 'float32' | 'float16' | 'uint8';
+  let bestInternalFormat: number;
+  let bestType: number;
+
+  if (float32Renderable && float32Filterable) {
+    bestPrecision = 'float32';
+    bestInternalFormat = gl.RGBA32F;
+    bestType = gl.FLOAT;
+  } else if (float16Renderable && float16Filterable) {
+    bestPrecision = 'float16';
+    bestInternalFormat = gl.RGBA16F;
+    bestType = gl.HALF_FLOAT;
+  } else {
+    bestPrecision = 'uint8';
+    bestInternalFormat = gl.RGBA8;
+    bestType = gl.UNSIGNED_BYTE;
+  }
+
+  return {
+    float32Renderable,
+    float32Filterable,
+    float16Renderable,
+    float16Filterable,
+    bestPrecision,
+    bestInternalFormat,
+    bestType,
+  };
+}
+
+/**
+ * Test if a specific internal format can be used as a framebuffer color attachment.
+ */
+function testFramebufferCompleteness(
+  gl: WebGL2RenderingContext,
+  internalFormat: number,
+  type: number
+): boolean {
+  const tex = gl.createTexture();
+  const fbo = gl.createFramebuffer();
+
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, internalFormat, 1, 1, 0, gl.RGBA, type, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+
+  const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.deleteTexture(tex);
+  gl.deleteFramebuffer(fbo);
+
+  return status === gl.FRAMEBUFFER_COMPLETE;
+}
+
 export class WebGLLUTProcessor {
   private canvas: HTMLCanvasElement;
   private gl: WebGL2RenderingContext;
@@ -75,6 +216,17 @@ export class WebGLLUTProcessor {
 
   private currentLUT: LUT3D | null = null;
   private isInitialized = false;
+
+  // Float precision state
+  private _precisionMode: PrecisionMode = 'auto';
+  private _capabilities: FloatPrecisionCapabilities | null = null;
+  private _activePrecision: 'float32' | 'float16' | 'uint8' = 'uint8';
+  private _activeInternalFormat: number = 0;
+  private _activeType: number = 0;
+
+  // Float FBO resources
+  private floatFBO: WebGLFramebuffer | null = null;
+  private floatOutputTexture: WebGLTexture | null = null;
 
   // Uniform locations
   private uImage: WebGLUniformLocation | null = null;
@@ -96,7 +248,90 @@ export class WebGLLUTProcessor {
     }
 
     this.gl = gl;
+    this.detectPrecision();
     this.init();
+  }
+
+  /**
+   * Detect and resolve float precision capabilities
+   */
+  private detectPrecision(): void {
+    const gl = this.gl;
+    this._capabilities = detectFloatPrecision(gl);
+    this.resolvePrecision();
+  }
+
+  /**
+   * Resolve the active precision based on mode and capabilities
+   */
+  private resolvePrecision(): void {
+    const gl = this.gl;
+    const caps = this._capabilities;
+    if (!caps) {
+      this._activePrecision = 'uint8';
+      this._activeInternalFormat = gl.RGBA8;
+      this._activeType = gl.UNSIGNED_BYTE;
+      return;
+    }
+
+    if (this._precisionMode === 'auto') {
+      this._activePrecision = caps.bestPrecision;
+      this._activeInternalFormat = caps.bestInternalFormat;
+      this._activeType = caps.bestType;
+    } else if (this._precisionMode === 'float32') {
+      if (caps.float32Renderable && caps.float32Filterable) {
+        this._activePrecision = 'float32';
+        this._activeInternalFormat = gl.RGBA32F;
+        this._activeType = gl.FLOAT;
+      } else {
+        this._activePrecision = caps.bestPrecision;
+        this._activeInternalFormat = caps.bestInternalFormat;
+        this._activeType = caps.bestType;
+      }
+    } else if (this._precisionMode === 'float16') {
+      if (caps.float16Renderable && caps.float16Filterable) {
+        this._activePrecision = 'float16';
+        this._activeInternalFormat = gl.RGBA16F;
+        this._activeType = gl.HALF_FLOAT;
+      } else {
+        this._activePrecision = 'uint8';
+        this._activeInternalFormat = gl.RGBA8;
+        this._activeType = gl.UNSIGNED_BYTE;
+      }
+    } else {
+      this._activePrecision = 'uint8';
+      this._activeInternalFormat = gl.RGBA8;
+      this._activeType = gl.UNSIGNED_BYTE;
+    }
+  }
+
+  /**
+   * Get the current float precision capabilities
+   */
+  getCapabilities(): FloatPrecisionCapabilities | null {
+    return this._capabilities;
+  }
+
+  /**
+   * Get the active (resolved) precision
+   */
+  getActivePrecision(): 'float32' | 'float16' | 'uint8' {
+    return this._activePrecision;
+  }
+
+  /**
+   * Set the precision mode
+   */
+  setPrecisionMode(mode: PrecisionMode): void {
+    this._precisionMode = mode;
+    this.resolvePrecision();
+  }
+
+  /**
+   * Get the current precision mode
+   */
+  getPrecisionMode(): PrecisionMode {
+    return this._precisionMode;
   }
 
   private init(): void {
@@ -276,6 +511,147 @@ export class WebGLLUTProcessor {
   }
 
   /**
+   * Apply the LUT to a Float32Array image buffer using float precision.
+   * Returns a new Float32Array with the LUT applied. Preserves HDR values.
+   *
+   * @param data - RGBA interleaved Float32Array
+   * @param width - Image width
+   * @param height - Image height
+   * @param intensity - LUT intensity (0-1)
+   * @returns New Float32Array with LUT applied, or original if no LUT loaded
+   */
+  applyFloat(
+    data: Float32Array,
+    width: number,
+    height: number,
+    intensity: number = 1.0
+  ): Float32Array {
+    if (!this.isInitialized || !this.currentLUT || !this.lutTexture) {
+      return data;
+    }
+
+    const gl = this.gl;
+
+    // Use float precision if available, otherwise fall back
+    const useFloat = this._activePrecision !== 'uint8';
+
+    if (!useFloat) {
+      // Fall back to uint8 path via ImageData conversion
+      const pixelCount = width * height;
+      const imageDataArr = new Uint8ClampedArray(pixelCount * 4);
+      for (let i = 0; i < pixelCount * 4; i++) {
+        imageDataArr[i] = Math.max(0, Math.min(255, Math.round(data[i]! * 255)));
+      }
+      const imageData = new ImageData(imageDataArr, width, height);
+      const result = this.apply(imageData, intensity);
+      const output = new Float32Array(pixelCount * 4);
+      for (let i = 0; i < pixelCount * 4; i++) {
+        output[i] = result.data[i]! / 255;
+      }
+      return output;
+    }
+
+    // Ensure float FBO is set up
+    this.ensureFloatFBO(width, height);
+
+    // Upload source image as float texture using active precision format
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.imageTexture);
+    gl.texImage2D(
+      gl.TEXTURE_2D, 0, this._activeInternalFormat,
+      width, height, 0,
+      gl.RGBA, this._activeType,
+      this._activeType === gl.HALF_FLOAT ? convertToFloat16Array(data) : data
+    );
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+    // Bind LUT texture
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_3D, this.lutTexture);
+
+    // Use program and set uniforms
+    gl.useProgram(this.program);
+    gl.uniform1i(this.uImage, 0);
+    gl.uniform1i(this.uLut, 1);
+    gl.uniform1f(this.uIntensity, intensity);
+    gl.uniform3fv(this.uDomainMin, this.currentLUT.domainMin);
+    gl.uniform3fv(this.uDomainMax, this.currentLUT.domainMax);
+    gl.uniform1f(this.uLutSize, this.currentLUT.size);
+
+    // Render to float FBO
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.floatFBO);
+    gl.viewport(0, 0, width, height);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+    // Read back float result - always read as FLOAT since we need Float32Array output
+    // WebGL2 guarantees gl.FLOAT readback from float FBOs when EXT_color_buffer_float is present
+    const output = new Float32Array(width * height * 4);
+    gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, output);
+
+    // Check for GL errors from readPixels
+    const readErr = gl.getError();
+    if (readErr !== gl.NO_ERROR) {
+      // If float readback failed, try half-float and convert
+      console.warn('Float readPixels failed, falling back to uint8 path');
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      return data;
+    }
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return output;
+  }
+
+  /**
+   * Ensure float FBO exists at the correct dimensions.
+   */
+  private ensureFloatFBO(width: number, height: number): void {
+    const gl = this.gl;
+
+    if (this.canvas.width !== width || this.canvas.height !== height || !this.floatFBO) {
+      this.canvas.width = width;
+      this.canvas.height = height;
+
+      // Recreate float output texture
+      if (this.floatOutputTexture) gl.deleteTexture(this.floatOutputTexture);
+      this.floatOutputTexture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, this.floatOutputTexture);
+      gl.texImage2D(
+        gl.TEXTURE_2D, 0, this._activeInternalFormat,
+        width, height, 0,
+        gl.RGBA, this._activeType, null
+      );
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+      // Attach to FBO
+      if (!this.floatFBO) {
+        this.floatFBO = gl.createFramebuffer();
+        if (!this.floatFBO) {
+          console.error('Failed to create float framebuffer');
+          return;
+        }
+      }
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.floatFBO);
+      gl.framebufferTexture2D(
+        gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
+        gl.TEXTURE_2D, this.floatOutputTexture, 0
+      );
+
+      const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+      if (status !== gl.FRAMEBUFFER_COMPLETE) {
+        console.error('Float FBO incomplete, status:', status);
+      }
+
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    }
+  }
+
+  /**
    * Apply LUT directly to a canvas context
    */
   applyToCanvas(ctx: CanvasRenderingContext2D, width: number, height: number, intensity: number = 1.0): void {
@@ -315,6 +691,8 @@ export class WebGLLUTProcessor {
     if (this.lutTexture) gl.deleteTexture(this.lutTexture);
     if (this.outputTexture) gl.deleteTexture(this.outputTexture);
     if (this.framebuffer) gl.deleteFramebuffer(this.framebuffer);
+    if (this.floatOutputTexture) gl.deleteTexture(this.floatOutputTexture);
+    if (this.floatFBO) gl.deleteFramebuffer(this.floatFBO);
 
     this.isInitialized = false;
   }

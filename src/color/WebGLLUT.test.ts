@@ -40,6 +40,19 @@ function createMockWebGL2Context() {
     TRIANGLE_STRIP: 5,
     COLOR_ATTACHMENT0: 36064,
     FRAMEBUFFER_COMPLETE: 36053,
+    NO_ERROR: 0,
+    HALF_FLOAT: 0x140B,
+    RGBA32F: 0x8814,
+    RGBA16F: 0x881A,
+    RGBA8: 0x8058,
+    RGB32F: 0x8815,
+
+    getExtension: vi.fn((name: string) => {
+      if (name === 'EXT_color_buffer_float') return {};
+      if (name === 'OES_texture_float_linear') return {};
+      return null;
+    }),
+    getError: vi.fn(() => 0),
 
     createShader: vi.fn(() => {
       const shader = {};
