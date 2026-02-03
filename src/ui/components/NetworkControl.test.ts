@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NetworkControl } from './NetworkControl';
-import type { SyncUser, RoomInfo } from '../../network/types';
+import type { SyncUser } from '../../network/types';
 
 describe('NetworkControl', () => {
   let control: NetworkControl;

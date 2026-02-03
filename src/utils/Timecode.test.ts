@@ -2,7 +2,7 @@
  * Timecode Utility Unit Tests
  */
 import { describe, it, expect } from 'vitest';
-import { formatTimecode, formatFrameDisplay, TimecodeDisplayMode } from './Timecode';
+import { formatTimecode, formatFrameDisplay } from './Timecode';
 
 describe('formatTimecode', () => {
   describe('basic conversions at 24fps', () => {

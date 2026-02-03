@@ -260,15 +260,6 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
   }
 
   /**
-   * Save edited note
-   */
-  private saveNote(frame: number, note: string): void {
-    this.session.setMarkerNote(frame, note);
-    this.editingFrame = null;
-    this.render();
-  }
-
-  /**
    * Save marker edit with note and optional end frame
    */
   private saveMarkerEdit(frame: number, note: string, endFrame: number | undefined): void {

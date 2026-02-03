@@ -2,7 +2,7 @@
  * MessageProtocol Unit Tests
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import {
   generateMessageId,
   generateRoomCode,
@@ -14,9 +14,7 @@ import {
   createPlaybackSyncMessage,
   createFrameSyncMessage,
   createViewSyncMessage,
-  createColorSyncMessage,
   createAnnotationSyncMessage,
-  createStateRequestMessage,
   createStateResponseMessage,
   createPingMessage,
   createPongMessage,
@@ -28,7 +26,7 @@ import {
   validateViewPayload,
   validateColorPayload,
 } from './MessageProtocol';
-import type { SyncMessage, PlaybackSyncPayload, ViewSyncPayload } from './types';
+import type { PlaybackSyncPayload, ViewSyncPayload } from './types';
 
 describe('MessageProtocol', () => {
   describe('generateMessageId', () => {

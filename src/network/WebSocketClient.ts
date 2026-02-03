@@ -15,7 +15,6 @@ import {
   serializeMessage,
   deserializeMessage,
   createPingMessage,
-  validateMessage,
 } from './MessageProtocol';
 
 export class WebSocketClient extends EventEmitter<WebSocketClientEvents> {
@@ -25,7 +24,6 @@ export class WebSocketClient extends EventEmitter<WebSocketClientEvents> {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private heartbeatTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
-  private lastPingSentAt = 0;
   private _rtt = 0;
   private _isConnected = false;
   private _isReconnecting = false;
@@ -249,7 +247,6 @@ export class WebSocketClient extends EventEmitter<WebSocketClientEvents> {
   private sendPing(): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
 
-    this.lastPingSentAt = Date.now();
     const pingMessage = createPingMessage(this._roomId, this._userId);
     this.send(pingMessage);
   }

@@ -150,7 +150,6 @@ function getCanvasContext(
  */
 export class FrameInterpolator {
   private _enabled = false;
-  private _lastBlendedData: ImageData | null = null;
   private _lastBlendCanvas: HTMLCanvasElement | null = null;
   private _lastPosition: SubFramePosition | null = null;
 
@@ -225,7 +224,6 @@ export class FrameInterpolator {
     if (!ctx) return null;
 
     ctx.putImageData(blended, 0, 0);
-    this._lastBlendedData = blended;
     this._lastPosition = { ...position };
 
     return this._lastBlendCanvas;
@@ -235,7 +233,6 @@ export class FrameInterpolator {
    * Clear cached blend data.
    */
   clearCache(): void {
-    this._lastBlendedData = null;
     this._lastBlendCanvas = null;
     this._lastPosition = null;
   }

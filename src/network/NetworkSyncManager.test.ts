@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NetworkSyncManager } from './NetworkSyncManager';
-import type { ConnectionState, SyncUser, PlaybackSyncPayload } from './types';
+import type { ConnectionState, SyncUser } from './types';
 
 // Mock WebSocket (same as in WebSocketClient tests)
 vi.stubGlobal('WebSocket', class {

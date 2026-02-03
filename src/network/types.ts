@@ -188,6 +188,7 @@ export interface ErrorPayload {
 // ---- Events ----
 
 export interface NetworkSyncEvents {
+  [key: string]: unknown;
   connectionStateChanged: ConnectionState;
   roomCreated: RoomInfo;
   roomJoined: RoomInfo;
@@ -208,6 +209,7 @@ export interface NetworkSyncEvents {
 // ---- WebSocket Client Events ----
 
 export interface WebSocketClientEvents {
+  [key: string]: unknown;
   connected: void;
   disconnected: { code: number; reason: string };
   message: SyncMessage;
