@@ -154,9 +154,36 @@ function createMockSession() {
   session.toggleMute = vi.fn(() => {
     session.muted = !session._muted;
   });
-  session.setMarker = vi.fn((frame: number, note?: string, color?: string) => {
-    session._marks.set(frame, { frame, note: note ?? '', color: color ?? '#ff4444' });
+  session.setMarker = vi.fn((frame: number, note?: string, color?: string, endFrame?: number) => {
+    const marker: any = { frame, note: note ?? '', color: color ?? '#ff4444' };
+    if (endFrame !== undefined && endFrame > frame) {
+      marker.endFrame = endFrame;
+    }
+    session._marks.set(frame, marker);
     session.emit('marksChanged', session._marks);
+  });
+  session.setMarkerEndFrame = vi.fn((frame: number, endFrame: number | undefined) => {
+    const marker = session._marks.get(frame);
+    if (marker) {
+      if (endFrame !== undefined && endFrame > frame) {
+        marker.endFrame = endFrame;
+      } else {
+        delete marker.endFrame;
+      }
+      session.emit('marksChanged', session._marks);
+    }
+  });
+  session.getMarkerAtFrame = vi.fn((frame: number) => {
+    // Check exact match first
+    const exact = session._marks.get(frame);
+    if (exact) return exact;
+    // Check duration marker ranges
+    for (const marker of session._marks.values()) {
+      if (marker.endFrame !== undefined && frame >= marker.frame && frame <= marker.endFrame) {
+        return marker;
+      }
+    }
+    return undefined;
   });
   session.removeMark = vi.fn((frame: number) => {
     session._marks.delete(frame);
@@ -987,12 +1014,12 @@ describe('MarkersAPI', () => {
 
   it('API-U071: add() creates marker with defaults', () => {
     markers.add(10);
-    expect(session.setMarker).toHaveBeenCalledWith(10, '', '#ff4444');
+    expect(session.setMarker).toHaveBeenCalledWith(10, '', '#ff4444', undefined);
   });
 
   it('API-U072: add() accepts note and color', () => {
     markers.add(10, 'my note', '#00ff00');
-    expect(session.setMarker).toHaveBeenCalledWith(10, 'my note', '#00ff00');
+    expect(session.setMarker).toHaveBeenCalledWith(10, 'my note', '#00ff00', undefined);
   });
 
   it('API-U073: remove() deletes marker', () => {
@@ -1069,7 +1096,7 @@ describe('MarkersAPI', () => {
 
   it('API-U084: add() accepts frame number as float (rounds down)', () => {
     markers.add(10.7);
-    expect(session.setMarker).toHaveBeenCalledWith(10.7, '', '#ff4444');
+    expect(session.setMarker).toHaveBeenCalledWith(10.7, '', '#ff4444', undefined);
   });
 
   it('API-U085: getAll() returns empty array when no markers', () => {
@@ -1089,6 +1116,51 @@ describe('MarkersAPI', () => {
 
   it('API-U088: remove() on non-existent frame does not throw', () => {
     expect(() => markers.remove(999)).not.toThrow();
+  });
+
+  // Duration marker tests
+  it('API-U089: add() creates duration marker with endFrame', () => {
+    markers.add(10, 'range note', '#ff0000', 25);
+    expect(session.setMarker).toHaveBeenCalledWith(10, 'range note', '#ff0000', 25);
+  });
+
+  it('API-U090: add() rejects endFrame <= frame', () => {
+    expect(() => markers.add(10, '', '#ff0000', 10)).toThrow(/endFrame must be greater than frame/);
+    expect(() => markers.add(10, '', '#ff0000', 5)).toThrow(/endFrame must be greater than frame/);
+  });
+
+  it('API-U091: add() rejects NaN endFrame', () => {
+    expect(() => markers.add(10, '', '#ff0000', NaN)).toThrow(/endFrame must be a valid number/);
+  });
+
+  it('API-U092: getAll() returns endFrame for duration markers', () => {
+    session._marks.set(10, { frame: 10, note: '', color: '#ff0000', endFrame: 25 });
+    session._marks.set(30, { frame: 30, note: '', color: '#00ff00' });
+
+    const all = markers.getAll();
+    expect(all.length).toBe(2);
+    expect(all[0]!.endFrame).toBe(25);
+    expect(all[1]!.endFrame).toBeUndefined();
+  });
+
+  it('API-U093: get() returns endFrame for duration marker', () => {
+    session._marks.set(10, { frame: 10, note: 'range', color: '#ff0000', endFrame: 20 });
+    const marker = markers.get(10);
+    expect(marker).not.toBeNull();
+    expect(marker!.endFrame).toBe(20);
+  });
+
+  it('API-U094: get() does not return endFrame for point marker', () => {
+    session._marks.set(10, { frame: 10, note: '', color: '#ff0000' });
+    const marker = markers.get(10);
+    expect(marker).not.toBeNull();
+    expect(marker!.endFrame).toBeUndefined();
+  });
+
+  it('API-U095: add() creates duration marker and stores endFrame', () => {
+    markers.add(5, 'test', '#ff0000', 15);
+    const stored = session._marks.get(5);
+    expect(stored.endFrame).toBe(15);
   });
 });
 

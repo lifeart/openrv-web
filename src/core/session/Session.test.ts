@@ -590,6 +590,80 @@ describe('Session', () => {
       session.clearMarks();
       expect(session.marks.size).toBe(0);
     });
+
+    it('SES-025: setMarker() creates duration marker with endFrame', () => {
+      session.setMarker(10, 'range', '#ff0000', 25);
+      const marker = session.getMarker(10);
+      expect(marker).toBeDefined();
+      expect(marker!.frame).toBe(10);
+      expect(marker!.endFrame).toBe(25);
+      expect(marker!.note).toBe('range');
+    });
+
+    it('SES-026: setMarker() ignores endFrame <= frame', () => {
+      session.setMarker(10, '', '#ff0000', 10);
+      const marker = session.getMarker(10);
+      expect(marker).toBeDefined();
+      expect(marker!.endFrame).toBeUndefined();
+
+      session.setMarker(10, '', '#ff0000', 5);
+      const marker2 = session.getMarker(10);
+      expect(marker2!.endFrame).toBeUndefined();
+    });
+
+    it('SES-027: setMarkerEndFrame() converts point marker to duration', () => {
+      session.setMarker(10, 'test', '#ff0000');
+      expect(session.getMarker(10)!.endFrame).toBeUndefined();
+
+      session.setMarkerEndFrame(10, 20);
+      expect(session.getMarker(10)!.endFrame).toBe(20);
+    });
+
+    it('SES-028: setMarkerEndFrame(undefined) converts duration to point', () => {
+      session.setMarker(10, 'test', '#ff0000', 25);
+      expect(session.getMarker(10)!.endFrame).toBe(25);
+
+      session.setMarkerEndFrame(10, undefined);
+      expect(session.getMarker(10)!.endFrame).toBeUndefined();
+    });
+
+    it('SES-029: getMarkerAtFrame() returns marker when frame is within range', () => {
+      session.setMarker(10, 'range', '#ff0000', 30);
+      expect(session.getMarkerAtFrame(10)).toBeDefined();
+      expect(session.getMarkerAtFrame(20)).toBeDefined();
+      expect(session.getMarkerAtFrame(30)).toBeDefined();
+      expect(session.getMarkerAtFrame(31)).toBeUndefined();
+      expect(session.getMarkerAtFrame(9)).toBeUndefined();
+    });
+
+    it('SES-030: getMarkerAtFrame() returns exact match for point marker', () => {
+      session.setMarker(15, 'point', '#ff0000');
+      expect(session.getMarkerAtFrame(15)).toBeDefined();
+      expect(session.getMarkerAtFrame(16)).toBeUndefined();
+    });
+
+    it('SES-031: duration marker serialization preserves endFrame', () => {
+      session.setMarker(10, 'range', '#ff0000', 25);
+      const state = session.getPlaybackState();
+      expect(state.marks[0]!.endFrame).toBe(25);
+    });
+
+    it('SES-032: duration marker deserialization restores endFrame', () => {
+      session.setPlaybackState({
+        marks: [{ frame: 10, note: 'range', color: '#ff0000', endFrame: 25 }],
+      });
+      const marker = session.getMarker(10);
+      expect(marker).toBeDefined();
+      expect(marker!.endFrame).toBe(25);
+    });
+
+    it('SES-033: setMarkerEndFrame() emits marksChanged', () => {
+      session.setMarker(10, '', '#ff0000');
+      const listener = vi.fn();
+      session.on('marksChanged', listener);
+      session.setMarkerEndFrame(10, 20);
+      expect(listener).toHaveBeenCalled();
+    });
   });
 
   describe('frameCount', () => {
@@ -2710,6 +2784,58 @@ describe('Session', () => {
       session.preservesPitch = false;
       session.setPlaybackState({ volume: 0.5 });
       expect(session.preservesPitch).toBe(false);
+    });
+  });
+
+  describe('interpolation', () => {
+    it('SES-INTERP-001: default interpolation is disabled', () => {
+      expect(session.interpolationEnabled).toBe(false);
+    });
+
+    it('SES-INTERP-002: can enable interpolation', () => {
+      session.interpolationEnabled = true;
+      expect(session.interpolationEnabled).toBe(true);
+    });
+
+    it('SES-INTERP-003: can disable interpolation', () => {
+      session.interpolationEnabled = true;
+      session.interpolationEnabled = false;
+      expect(session.interpolationEnabled).toBe(false);
+    });
+
+    it('SES-INTERP-004: emits interpolationEnabledChanged event', () => {
+      const handler = vi.fn();
+      session.on('interpolationEnabledChanged', handler);
+      session.interpolationEnabled = true;
+      expect(handler).toHaveBeenCalledWith(true);
+      session.interpolationEnabled = false;
+      expect(handler).toHaveBeenCalledWith(false);
+    });
+
+    it('SES-INTERP-005: does not emit when value unchanged', () => {
+      const handler = vi.fn();
+      session.on('interpolationEnabledChanged', handler);
+      session.interpolationEnabled = false; // Already false
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('SES-INTERP-006: subFramePosition is null by default', () => {
+      expect(session.subFramePosition).toBeNull();
+    });
+
+    it('SES-INTERP-007: disabling clears subFramePosition', () => {
+      session.interpolationEnabled = true;
+      // SubFramePosition is managed internally by update(), so it starts null
+      session.interpolationEnabled = false;
+      expect(session.subFramePosition).toBeNull();
+    });
+
+    it('SES-INTERP-008: emits subFramePositionChanged null when disabling', () => {
+      session.interpolationEnabled = true;
+      const handler = vi.fn();
+      session.on('subFramePositionChanged', handler);
+      session.interpolationEnabled = false;
+      expect(handler).toHaveBeenCalledWith(null);
     });
   });
 });

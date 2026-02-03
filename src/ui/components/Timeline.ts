@@ -477,11 +477,35 @@ export class Timeline {
       if (marker.frame >= 1 && marker.frame <= duration) {
         const markX = frameToX(marker.frame);
         // Use marker's color if set, otherwise default to mark color
-        ctx.fillStyle = marker.color || colors.mark;
-        ctx.fillRect(markX - 1, trackY, 2, trackHeight);
+        const markerColor = marker.color || colors.mark;
+
+        if (marker.endFrame !== undefined && marker.endFrame > marker.frame) {
+          // Duration marker: draw colored span across the range
+          const endX = frameToX(Math.min(marker.endFrame, duration));
+
+          // Draw semi-transparent filled range
+          ctx.fillStyle = markerColor;
+          ctx.globalAlpha = 0.25;
+          ctx.fillRect(markX, trackY, endX - markX, trackHeight);
+          ctx.globalAlpha = 1.0;
+
+          // Draw solid start and end lines
+          ctx.fillStyle = markerColor;
+          ctx.fillRect(markX - 1, trackY, 2, trackHeight);
+          ctx.fillRect(endX - 1, trackY, 2, trackHeight);
+
+          // Draw top and bottom borders of the range
+          ctx.fillRect(markX, trackY, endX - markX, 1);
+          ctx.fillRect(markX, trackY + trackHeight - 1, endX - markX, 1);
+        } else {
+          // Point marker: draw single vertical line
+          ctx.fillStyle = markerColor;
+          ctx.fillRect(markX - 1, trackY, 2, trackHeight);
+        }
 
         // If marker has a note, draw a small indicator dot above
         if (marker.note) {
+          ctx.fillStyle = markerColor;
           ctx.beginPath();
           ctx.arc(markX, trackY - 8, 3, 0, Math.PI * 2);
           ctx.fill();

@@ -269,6 +269,21 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
   }
 
   /**
+   * Save marker edit with note and optional end frame
+   */
+  private saveMarkerEdit(frame: number, note: string, endFrame: number | undefined): void {
+    this.session.setMarkerNote(frame, note);
+    // Update end frame (handles validation: endFrame must be > frame)
+    if (endFrame !== undefined && !isNaN(endFrame) && endFrame > frame) {
+      this.session.setMarkerEndFrame(frame, endFrame);
+    } else {
+      this.session.setMarkerEndFrame(frame, undefined);
+    }
+    this.editingFrame = null;
+    this.render();
+  }
+
+  /**
    * Change marker color
    */
   private cycleMarkerColor(frame: number): void {
@@ -282,11 +297,10 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
   }
 
   /**
-   * Format frame number with timecode
+   * Format a single frame number to timecode
    */
-  private formatFrameInfo(frame: number): string {
+  private formatTimecodeForFrame(frame: number): string {
     const fps = this.session.fps || 24;
-    // Handle edge case where frame < 1
     const safeFrame = Math.max(1, frame);
     const totalSeconds = (safeFrame - 1) / fps;
     const hours = Math.floor(totalSeconds / 3600);
@@ -294,7 +308,19 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
     const seconds = Math.floor(totalSeconds % 60);
     const frames = Math.floor((safeFrame - 1) % fps);
 
-    const timecode = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}:${frames.toString().padStart(2, '0')}`;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}:${frames.toString().padStart(2, '0')}`;
+  }
+
+  /**
+   * Format frame number with timecode, supports range markers
+   */
+  private formatFrameInfo(frame: number, endFrame?: number): string {
+    const timecode = this.formatTimecodeForFrame(frame);
+    if (endFrame !== undefined && endFrame > frame) {
+      const endTimecode = this.formatTimecodeForFrame(endFrame);
+      const rangeLength = endFrame - frame + 1;
+      return `Frames ${frame}-${endFrame} (${rangeLength}f) [${timecode} - ${endTimecode}]`;
+    }
     return `Frame ${frame} (${timecode})`;
   }
 
@@ -328,7 +354,10 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
    * Create a single marker entry element
    */
   private createMarkerEntry(marker: Marker): HTMLElement {
-    const isCurrentFrame = marker.frame === this.session.currentFrame;
+    const currentFrame = this.session.currentFrame;
+    const isCurrentFrame = marker.frame === currentFrame ||
+      (marker.endFrame !== undefined && currentFrame >= marker.frame && currentFrame <= marker.endFrame);
+    const isDurationMarker = marker.endFrame !== undefined && marker.endFrame > marker.frame;
     const isEditing = this.editingFrame === marker.frame;
 
     const el = document.createElement('div');
@@ -358,7 +387,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
     colorBtn.style.cssText = `
       width: 16px;
       height: 16px;
-      border-radius: 50%;
+      border-radius: ${isDurationMarker ? '3px' : '50%'};
       background: ${marker.color};
       border: 2px solid rgba(255, 255, 255, 0.3);
       cursor: pointer;
@@ -372,7 +401,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
 
     // Frame info (clickable to navigate)
     const frameInfo = document.createElement('span');
-    frameInfo.textContent = this.formatFrameInfo(marker.frame);
+    frameInfo.textContent = this.formatFrameInfo(marker.frame, marker.endFrame);
     frameInfo.style.cssText = `
       flex: 1;
       cursor: pointer;
@@ -434,6 +463,70 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
     `;
 
     if (isEditing) {
+      // End frame input row for duration markers
+      const endFrameRow = document.createElement('div');
+      endFrameRow.style.cssText = `
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-bottom: 6px;
+      `;
+
+      const endFrameLabel = document.createElement('label');
+      endFrameLabel.textContent = 'End frame:';
+      endFrameLabel.style.cssText = `
+        font-size: 11px;
+        color: var(--text-secondary);
+        white-space: nowrap;
+      `;
+
+      const endFrameInput = document.createElement('input');
+      endFrameInput.type = 'number';
+      endFrameInput.min = String(marker.frame + 1);
+      endFrameInput.value = marker.endFrame !== undefined ? String(marker.endFrame) : '';
+      endFrameInput.placeholder = 'none (point marker)';
+      endFrameInput.dataset.testid = `marker-endframe-input-${marker.frame}`;
+      endFrameInput.style.cssText = `
+        width: 100px;
+        background: var(--bg-primary);
+        border: 1px solid var(--accent-primary);
+        border-radius: 4px;
+        color: var(--text-primary);
+        font-size: 11px;
+        padding: 4px 6px;
+        font-family: inherit;
+      `;
+      // Prevent keyboard shortcuts when typing in input
+      endFrameInput.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Escape') {
+          this.editingFrame = null;
+          this.render();
+        }
+      });
+
+      const clearEndBtn = document.createElement('button');
+      clearEndBtn.textContent = 'Clear';
+      clearEndBtn.dataset.testid = `marker-clear-endframe-${marker.frame}`;
+      clearEndBtn.title = 'Remove end frame (convert to point marker)';
+      clearEndBtn.style.cssText = `
+        background: none;
+        border: 1px solid var(--text-muted);
+        color: var(--text-muted);
+        padding: 3px 6px;
+        border-radius: 4px;
+        font-size: 10px;
+        cursor: pointer;
+      `;
+      clearEndBtn.addEventListener('click', () => {
+        endFrameInput.value = '';
+      });
+
+      endFrameRow.appendChild(endFrameLabel);
+      endFrameRow.appendChild(endFrameInput);
+      endFrameRow.appendChild(clearEndBtn);
+      noteRow.appendChild(endFrameRow);
+
       // Editable textarea
       const textarea = document.createElement('textarea');
       textarea.value = marker.note;
@@ -451,9 +544,16 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
         resize: vertical;
         font-family: inherit;
       `;
+
+      const saveHandler = () => {
+        const endVal = endFrameInput.value.trim();
+        const endFrame = endVal ? parseInt(endVal, 10) : undefined;
+        this.saveMarkerEdit(marker.frame, textarea.value, endFrame);
+      };
+
       textarea.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && e.ctrlKey) {
-          this.saveNote(marker.frame, textarea.value);
+          saveHandler();
         } else if (e.key === 'Escape') {
           this.editingFrame = null;
           this.render();
@@ -473,7 +573,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
         font-size: 11px;
         cursor: pointer;
       `;
-      saveBtn.addEventListener('click', () => this.saveNote(marker.frame, textarea.value));
+      saveBtn.addEventListener('click', saveHandler);
 
       noteRow.appendChild(textarea);
       noteRow.appendChild(saveBtn);
@@ -529,6 +629,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
 
   /**
    * Optimized highlight update - only updates visual highlight without full re-render
+   * Supports duration markers by highlighting entries whose range includes current frame
    */
   private updateHighlight(): void {
     const currentFrame = this.session.currentFrame;
@@ -536,31 +637,33 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
     // Skip if same frame
     if (this.lastHighlightedFrame === currentFrame) return;
 
-    // Update previous highlighted entry
-    if (this.lastHighlightedFrame !== null) {
-      const prevEntry = this.entriesContainer.querySelector(
-        `[data-frame="${this.lastHighlightedFrame}"]`
-      ) as HTMLElement | null;
-      if (prevEntry) {
-        prevEntry.style.background = '';
-        const frameInfo = prevEntry.querySelector('span');
-        if (frameInfo) {
-          frameInfo.style.color = 'var(--text-primary)';
-          frameInfo.style.fontWeight = '400';
-        }
-      }
-    }
-
-    // Update new highlighted entry
-    const currentEntry = this.entriesContainer.querySelector(
-      `[data-frame="${currentFrame}"]`
-    ) as HTMLElement | null;
-    if (currentEntry) {
-      currentEntry.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-      const frameInfo = currentEntry.querySelector('span');
+    // Clear all highlights first
+    const allEntries = this.entriesContainer.querySelectorAll('.marker-entry');
+    allEntries.forEach(entry => {
+      (entry as HTMLElement).style.background = '';
+      const frameInfo = (entry as HTMLElement).querySelector('span');
       if (frameInfo) {
-        frameInfo.style.color = 'var(--accent-primary)';
-        frameInfo.style.fontWeight = '600';
+        (frameInfo as HTMLElement).style.color = 'var(--text-primary)';
+        (frameInfo as HTMLElement).style.fontWeight = '400';
+      }
+    });
+
+    // Highlight entries that match current frame (exact or within range)
+    for (const marker of this.session.marks.values()) {
+      const isInRange = marker.frame === currentFrame ||
+        (marker.endFrame !== undefined && currentFrame >= marker.frame && currentFrame <= marker.endFrame);
+      if (isInRange) {
+        const entry = this.entriesContainer.querySelector(
+          `[data-frame="${marker.frame}"]`
+        ) as HTMLElement | null;
+        if (entry) {
+          entry.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+          const frameInfo = entry.querySelector('span');
+          if (frameInfo) {
+            frameInfo.style.color = 'var(--accent-primary)';
+            frameInfo.style.fontWeight = '600';
+          }
+        }
       }
     }
 

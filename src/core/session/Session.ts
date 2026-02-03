@@ -38,6 +38,9 @@ import type { StereoState } from '../../stereo/StereoRenderer';
 import { Graph } from '../graph/Graph';
 import { loadGTOGraph } from './GTOGraphLoader';
 import type { GTOParseResult } from './GTOGraphLoader';
+import type { SubFramePosition } from '../../utils/FrameInterpolator';
+
+export type { SubFramePosition };
 
 export interface GTOComponentDTO {
   property(name: string): {
@@ -79,6 +82,7 @@ export interface Marker {
   frame: number;
   note: string;
   color: string; // Hex color like '#ff0000'
+  endFrame?: number; // Optional end frame for duration/range markers
 }
 
 /**
@@ -158,6 +162,9 @@ export interface SessionEvents extends EventMap {
   audioError: AudioPlaybackError;
   // Codec events
   unsupportedCodec: UnsupportedCodecInfo;
+  // Sub-frame interpolation events
+  interpolationEnabledChanged: boolean;
+  subFramePositionChanged: SubFramePosition | null;
 }
 
 export type LoopMode = 'once' | 'loop' | 'pingpong';
@@ -205,6 +212,8 @@ export class Session extends EventEmitter<SessionEvents> {
   private _muted = false;
   private _previousVolume = 0.7; // For unmute restore
   private _preservesPitch = true; // Pitch correction at non-1x speeds (default: on)
+  private _interpolationEnabled = false; // Sub-frame interpolation for slow-motion (default: off)
+  private _subFramePosition: SubFramePosition | null = null; // Current sub-frame position (non-null during slow-mo with interpolation)
 
   // Playback guard to prevent concurrent play() calls
   private _pendingPlayPromise: Promise<void> | null = null;
@@ -569,6 +578,36 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   /**
+   * Whether sub-frame interpolation is enabled for slow-motion playback.
+   * When true and playing at speeds < 1x, adjacent frames are blended
+   * to produce smoother slow-motion output.
+   * Default: false (some users want to see exact discrete frames).
+   */
+  get interpolationEnabled(): boolean {
+    return this._interpolationEnabled;
+  }
+
+  set interpolationEnabled(value: boolean) {
+    if (value !== this._interpolationEnabled) {
+      this._interpolationEnabled = value;
+      if (!value) {
+        this._subFramePosition = null;
+        this.emit('subFramePositionChanged', null);
+      }
+      this.emit('interpolationEnabledChanged', this._interpolationEnabled);
+    }
+  }
+
+  /**
+   * Current sub-frame position during slow-motion playback.
+   * Non-null only when interpolation is enabled and playing at < 1x speed.
+   * Used by the Viewer to blend adjacent frames for smooth slow-motion.
+   */
+  get subFramePosition(): SubFramePosition | null {
+    return this._subFramePosition;
+  }
+
+  /**
    * Apply preservesPitch setting to the current video element.
    * Handles vendor-prefixed properties for cross-browser support.
    */
@@ -838,6 +877,12 @@ export class Session extends EventEmitter<SessionEvents> {
       // Also stop source B's playback preload (for split screen support)
       this.stopSourceBPlaybackPreload();
 
+      // Clear sub-frame position when paused
+      if (this._subFramePosition !== null) {
+        this._subFramePosition = null;
+        this.emit('subFramePositionChanged', null);
+      }
+
       this.emit('playbackChanged', false);
     }
   }
@@ -1014,14 +1059,53 @@ export class Session extends EventEmitter<SessionEvents> {
 
   /**
    * Add or update a marker at the specified frame
+   * If endFrame is provided, the marker spans a range from frame to endFrame
    */
-  setMarker(frame: number, note: string = '', color: string = MARKER_COLORS[0]): void {
-    this._marks.set(frame, {
+  setMarker(frame: number, note: string = '', color: string = MARKER_COLORS[0], endFrame?: number): void {
+    const marker: Marker = {
       frame,
       note,
       color,
-    });
+    };
+    if (endFrame !== undefined && endFrame > frame) {
+      marker.endFrame = endFrame;
+    }
+    this._marks.set(frame, marker);
     this.emit('marksChanged', this._marks);
+  }
+
+  /**
+   * Update the end frame for an existing marker (to convert to/from duration marker)
+   * Pass undefined to remove the end frame (convert back to point marker)
+   */
+  setMarkerEndFrame(frame: number, endFrame: number | undefined): void {
+    const marker = this._marks.get(frame);
+    if (marker) {
+      if (endFrame !== undefined && endFrame > frame) {
+        marker.endFrame = endFrame;
+      } else {
+        delete marker.endFrame;
+      }
+      this.emit('marksChanged', this._marks);
+    }
+  }
+
+  /**
+   * Check if a given frame falls within any duration marker's range
+   * Returns the marker if found, undefined otherwise
+   */
+  getMarkerAtFrame(frame: number): Marker | undefined {
+    // First check for exact match (point marker or start of range)
+    const exact = this._marks.get(frame);
+    if (exact) return exact;
+
+    // Then check if frame falls within any duration marker range
+    for (const marker of this._marks.values()) {
+      if (marker.endFrame !== undefined && frame >= marker.frame && frame <= marker.endFrame) {
+        return marker;
+      }
+    }
+    return undefined;
   }
 
   /**
@@ -1191,6 +1275,9 @@ export class Session extends EventEmitter<SessionEvents> {
         }
       }
 
+      // Compute sub-frame position for interpolation during slow-motion
+      this.updateSubFramePosition(frameDuration);
+
       // Sync HTMLVideoElement for audio (but not for frame display)
       // Only sync during forward playback with audio enabled
       if (this._audioSyncEnabled && source.element instanceof HTMLVideoElement) {
@@ -1251,6 +1338,9 @@ export class Session extends EventEmitter<SessionEvents> {
         this.advanceFrame(this._playDirection);
       }
 
+      // Compute sub-frame position for interpolation during slow-motion
+      this.updateSubFramePosition(frameDuration);
+
       // For video reverse playback without mediabunny, seek to the current frame
       if (source?.type === 'video' && source.element instanceof HTMLVideoElement) {
         const targetTime = (this._currentFrame - 1) / this._fps;
@@ -1287,6 +1377,48 @@ export class Session extends EventEmitter<SessionEvents> {
     }
 
     return nextFrame;
+  }
+
+  /**
+   * Update the sub-frame position for interpolation during slow-motion playback.
+   *
+   * When interpolation is enabled and playing at speeds < 1x, this computes
+   * the fractional position between the current frame and the next frame
+   * from the frame accumulator. The Viewer uses this to blend adjacent frames.
+   *
+   * At normal or fast speeds (>= 1x), sub-frame position is cleared since
+   * frames change fast enough that blending provides no visual benefit.
+   */
+  private updateSubFramePosition(frameDuration: number): void {
+    if (!this._interpolationEnabled || this._playbackSpeed >= 1) {
+      // Clear sub-frame position when not in slow-motion or disabled
+      if (this._subFramePosition !== null) {
+        this._subFramePosition = null;
+        this.emit('subFramePositionChanged', null);
+      }
+      return;
+    }
+
+    // Compute the fractional position between current frame and next
+    const ratio = Math.max(0, Math.min(1, this.frameAccumulator / frameDuration));
+    const nextFrame = this.computeNextFrame(this._playDirection);
+
+    const newPosition: SubFramePosition = {
+      baseFrame: this._currentFrame,
+      nextFrame,
+      ratio,
+    };
+
+    // Only emit if position changed meaningfully (avoid excessive events)
+    if (
+      !this._subFramePosition ||
+      this._subFramePosition.baseFrame !== newPosition.baseFrame ||
+      this._subFramePosition.nextFrame !== newPosition.nextFrame ||
+      Math.abs(this._subFramePosition.ratio - newPosition.ratio) > 0.005
+    ) {
+      this._subFramePosition = newPosition;
+      this.emit('subFramePositionChanged', this._subFramePosition);
+    }
   }
 
   private advanceFrame(direction: number): void {

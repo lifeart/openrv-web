@@ -61,6 +61,7 @@ import { GhostFrameState, DEFAULT_GHOST_FRAME_STATE } from './GhostFrameControl'
 import { ToneMappingState, DEFAULT_TONE_MAPPING_STATE } from './ToneMappingControl';
 import { PARState, DEFAULT_PAR_STATE, isPARActive, calculatePARCorrectedWidth } from '../../utils/PixelAspectRatio';
 import { BackgroundPatternState, DEFAULT_BACKGROUND_PATTERN_STATE, drawBackgroundPattern } from './BackgroundPatternControl';
+import { FrameInterpolator } from '../../utils/FrameInterpolator';
 import {
   PointerState,
   getCanvasPoint as getCanvasPointUtil,
@@ -285,6 +286,9 @@ export class Viewer {
 
   // Background pattern state (for alpha visualization)
   private backgroundPatternState: BackgroundPatternState = { ...DEFAULT_BACKGROUND_PATTERN_STATE };
+
+  // Sub-frame interpolator for slow-motion blending
+  private frameInterpolator = new FrameInterpolator();
 
   // Temp canvas for compositing ImageData over background patterns
   // (putImageData ignores compositing, so we draw to a temp canvas first, then drawImage)
@@ -1459,7 +1463,23 @@ export class Viewer {
       const currentFrame = this.session.currentFrame;
       const frameCanvas = this.session.getVideoFrameCanvas(currentFrame);
       if (frameCanvas) {
-        element = frameCanvas;
+        // Check if sub-frame interpolation is active (slow-motion blending)
+        const subFramePos = this.session.subFramePosition;
+        if (subFramePos && this.frameInterpolator.enabled && subFramePos.ratio > 0 && subFramePos.ratio < 1) {
+          const nextFrameCanvas = this.session.getVideoFrameCanvas(subFramePos.nextFrame);
+          if (nextFrameCanvas) {
+            const blendedCanvas = this.frameInterpolator.getBlendedFrame(frameCanvas, nextFrameCanvas, subFramePos);
+            if (blendedCanvas) {
+              element = blendedCanvas;
+            } else {
+              element = frameCanvas;
+            }
+          } else {
+            element = frameCanvas;
+          }
+        } else {
+          element = frameCanvas;
+        }
         this.hasDisplayedMediabunnyFrame = true;
         this.pendingVideoFrameFetch = null;
         this.pendingVideoFrameNumber = 0;
@@ -2544,6 +2564,27 @@ export class Viewer {
   }
 
   /**
+   * Enable or disable sub-frame interpolation for slow-motion playback.
+   * When enabled, adjacent frames are blended during slow-motion for smoother output.
+   * Also updates the Session's interpolation state.
+   */
+  setInterpolationEnabled(enabled: boolean): void {
+    this.frameInterpolator.enabled = enabled;
+    this.session.interpolationEnabled = enabled;
+    if (!enabled) {
+      this.frameInterpolator.clearCache();
+    }
+    this.scheduleRender();
+  }
+
+  /**
+   * Whether sub-frame interpolation is currently enabled.
+   */
+  getInterpolationEnabled(): boolean {
+    return this.frameInterpolator.enabled;
+  }
+
+  /**
    * Composite ImageData onto the canvas while preserving the background pattern.
    * putImageData() ignores compositing and overwrites pixels directly, so we
    * write to a temporary canvas first, then use drawImage() which respects
@@ -3441,6 +3482,9 @@ export class Viewer {
       getThemeManager().off('themeChanged', this.boundOnThemeChange);
       this.boundOnThemeChange = null;
     }
+
+    // Cleanup frame interpolator
+    this.frameInterpolator.dispose();
 
     // Cleanup WebGL LUT processor
     if (this.lutProcessor) {
