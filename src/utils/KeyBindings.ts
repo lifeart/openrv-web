@@ -344,6 +344,16 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     shift: true,
     description: 'Toggle stereo viewing mode'
   },
+  'stereo.eyeTransform': {
+    code: 'KeyE',
+    shift: true,
+    description: 'Toggle per-eye transform panel'
+  },
+  'stereo.cycleAlign': {
+    code: 'Digit4',
+    shift: true,
+    description: 'Cycle stereo alignment overlay mode'
+  },
 
   // Safe areas / guides
   'view.toggleGuides': {
@@ -387,6 +397,14 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     description: 'Toggle zebra stripes exposure warning'
   },
 
+  // Luminance visualization cycle
+  'view.cycleLuminanceVis': {
+    code: 'KeyV',
+    shift: true,
+    alt: true,
+    description: 'Cycle luminance visualization modes'
+  },
+
   // Color wheels
   'color.toggleColorWheels': {
     code: 'KeyW',
@@ -408,6 +426,20 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     shift: true,
     alt: true,
     description: 'Toggle tone mapping for HDR content'
+  },
+
+  // Color inversion
+  'color.toggleInversion': {
+    code: 'KeyI',
+    ctrl: true,
+    description: 'Toggle color inversion',
+  },
+
+  // Display profile cycling
+  'display.cycleProfile': {
+    code: 'KeyD',
+    shift: true,
+    description: 'Cycle display profile (Linear/sRGB/Rec.709/Gamma 2.2/Gamma 2.4)',
   },
 
   // HSL Qualifier (secondary color correction)

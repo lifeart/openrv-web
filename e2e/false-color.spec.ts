@@ -14,6 +14,24 @@ import {
  * including toggling, preset selection, and visual feedback.
  */
 
+// Helper to wait for false color enabled state to match expected value
+async function waitForFalseColorEnabled(page: import('@playwright/test').Page, enabled: boolean) {
+  await page.waitForFunction(
+    (expected) => (window as any).__OPENRV_TEST__?.getFalseColorState()?.enabled === expected,
+    enabled,
+    { timeout: 5000 },
+  );
+}
+
+// Helper to wait for false color preset to match expected value
+async function waitForFalseColorPreset(page: import('@playwright/test').Page, preset: string) {
+  await page.waitForFunction(
+    (expectedPreset) => (window as any).__OPENRV_TEST__?.getFalseColorState()?.preset === expectedPreset,
+    preset,
+    { timeout: 5000 },
+  );
+}
+
 test.describe('False Color Display', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
@@ -32,13 +50,13 @@ test.describe('False Color Display', () => {
     expect(state.enabled).toBe(false);
 
     await page.keyboard.press('Shift+Alt+f');
-    await page.waitForTimeout(100);
+    await waitForFalseColorEnabled(page, true);
 
     state = await getFalseColorState(page);
     expect(state.enabled).toBe(true);
 
     await page.keyboard.press('Shift+Alt+f');
-    await page.waitForTimeout(100);
+    await waitForFalseColorEnabled(page, false);
 
     state = await getFalseColorState(page);
     expect(state.enabled).toBe(false);
@@ -48,7 +66,7 @@ test.describe('False Color Display', () => {
     const before = await captureCanvasState(page);
 
     await page.keyboard.press('Shift+Alt+f');
-    await page.waitForTimeout(200);
+    await waitForFalseColorEnabled(page, true);
 
     const after = await captureCanvasState(page);
     expect(verifyCanvasChanged(before, after)).toBe(true);
@@ -59,14 +77,14 @@ test.describe('False Color Display', () => {
 
     // Enable false color
     await page.keyboard.press('Shift+Alt+f');
-    await page.waitForTimeout(200);
+    await waitForFalseColorEnabled(page, true);
 
     const withFalseColor = await captureCanvasState(page);
     expect(verifyCanvasChanged(original, withFalseColor)).toBe(true);
 
     // Disable false color
     await page.keyboard.press('Shift+Alt+f');
-    await page.waitForTimeout(200);
+    await waitForFalseColorEnabled(page, false);
 
     const restored = await captureCanvasState(page);
     // Canvas should be back to similar state (may have minor differences due to rendering)
@@ -82,7 +100,7 @@ test.describe('False Color Presets', () => {
     await loadVideoFile(page);
     // Enable false color
     await page.keyboard.press('Shift+Alt+f');
-    await page.waitForTimeout(100);
+    await waitForFalseColorEnabled(page, true);
   });
 
   test('FC-E010: default preset is standard', async ({ page }) => {
@@ -95,7 +113,7 @@ test.describe('False Color Presets', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.app?.falseColorControl?.setPreset('arri');
     });
-    await page.waitForTimeout(100);
+    await waitForFalseColorPreset(page, 'arri');
 
     let state = await getFalseColorState(page);
     expect(state.preset).toBe('arri');
@@ -103,7 +121,7 @@ test.describe('False Color Presets', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.app?.falseColorControl?.setPreset('red');
     });
-    await page.waitForTimeout(100);
+    await waitForFalseColorPreset(page, 'red');
 
     state = await getFalseColorState(page);
     expect(state.preset).toBe('red');
@@ -116,7 +134,7 @@ test.describe('False Color Presets', () => {
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.app?.falseColorControl?.setPreset('arri');
     });
-    await page.waitForTimeout(200);
+    await waitForFalseColorPreset(page, 'arri');
 
     const arriState = await captureCanvasState(page);
     expect(verifyCanvasChanged(standardState, arriState)).toBe(true);
@@ -134,7 +152,6 @@ test.describe('False Color UI Controls', () => {
   test('FC-E020: false color control button exists in View tab', async ({ page }) => {
     // Go to View tab
     await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(100);
 
     // Look for false color control or dropdown
     const control = page.locator('[data-testid="false-color-control"], button:has-text("False Color")');
@@ -144,7 +161,6 @@ test.describe('False Color UI Controls', () => {
   test('FC-E021: clicking false color control toggles feature', async ({ page }) => {
     // Go to View tab
     await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(100);
 
     let state = await getFalseColorState(page);
     expect(state.enabled).toBe(false);
@@ -152,7 +168,7 @@ test.describe('False Color UI Controls', () => {
     // Click the false color control
     const control = page.locator('[data-testid="false-color-control"], button:has-text("False Color")');
     await control.first().click();
-    await page.waitForTimeout(100);
+    await waitForFalseColorEnabled(page, true);
 
     state = await getFalseColorState(page);
     expect(state.enabled).toBe(true);
@@ -169,14 +185,21 @@ test.describe('False Color State Persistence', () => {
 
   test('FC-E030: false color state persists when changing frames', async ({ page }) => {
     await page.keyboard.press('Shift+Alt+f');
-    await page.waitForTimeout(100);
+    await waitForFalseColorEnabled(page, true);
 
     let state = await getFalseColorState(page);
     expect(state.enabled).toBe(true);
 
     // Navigate frames
     await page.keyboard.press('ArrowRight');
-    await page.waitForTimeout(100);
+    await page.waitForFunction(
+      () => {
+        const sessionState = (window as any).__OPENRV_TEST__?.getSessionState();
+        return sessionState?.currentFrame > 0;
+      },
+      undefined,
+      { timeout: 5000 },
+    );
 
     state = await getFalseColorState(page);
     expect(state.enabled).toBe(true);
@@ -184,20 +207,27 @@ test.describe('False Color State Persistence', () => {
 
   test('FC-E031: false color preset persists when changing frames', async ({ page }) => {
     await page.keyboard.press('Shift+Alt+f');
-    await page.waitForTimeout(100);
+    await waitForFalseColorEnabled(page, true);
 
     // Change preset
     await page.evaluate(() => {
       (window as any).__OPENRV_TEST__?.app?.falseColorControl?.setPreset('arri');
     });
-    await page.waitForTimeout(100);
+    await waitForFalseColorPreset(page, 'arri');
 
     let state = await getFalseColorState(page);
     expect(state.preset).toBe('arri');
 
     // Navigate frames
     await page.keyboard.press('ArrowRight');
-    await page.waitForTimeout(100);
+    await page.waitForFunction(
+      () => {
+        const sessionState = (window as any).__OPENRV_TEST__?.getSessionState();
+        return sessionState?.currentFrame > 0;
+      },
+      undefined,
+      { timeout: 5000 },
+    );
 
     state = await getFalseColorState(page);
     expect(state.preset).toBe('arri');
@@ -205,21 +235,23 @@ test.describe('False Color State Persistence', () => {
 
   test('FC-E032: false color state persists when changing tabs', async ({ page }) => {
     await page.keyboard.press('Shift+Alt+f');
-    await page.waitForTimeout(100);
+    await waitForFalseColorEnabled(page, true);
 
     let state = await getFalseColorState(page);
     expect(state.enabled).toBe(true);
 
     // Switch to Color tab
-    await page.click('button[data-tab-id="color"]');
-    await page.waitForTimeout(100);
+    const colorTab = page.locator('button[data-tab-id="color"]');
+    await colorTab.click();
+    await expect(colorTab).toBeVisible();
 
     state = await getFalseColorState(page);
     expect(state.enabled).toBe(true);
 
     // Switch back to View tab
-    await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(100);
+    const viewTab = page.locator('button[data-tab-id="view"]');
+    await viewTab.click();
+    await expect(viewTab).toBeVisible();
 
     state = await getFalseColorState(page);
     expect(state.enabled).toBe(true);

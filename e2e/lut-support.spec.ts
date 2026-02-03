@@ -24,18 +24,69 @@ import {
 const SAMPLE_LUT = 'sample/test_lut.cube';
 const INVALID_LUT = 'sample/invalid_lut.cube';
 
+// Helper to wait for LUT loaded state
+async function waitForLUTLoaded(page: import('@playwright/test').Page) {
+  await page.waitForFunction(
+    () => (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === true,
+    { timeout: 5000 },
+  );
+}
+
+// Helper to wait for LUT cleared state
+async function waitForLUTCleared(page: import('@playwright/test').Page) {
+  await page.waitForFunction(
+    () => (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === false,
+    { timeout: 5000 },
+  );
+}
+
+// Helper to wait for color panel to be ready
+async function waitForColorPanel(page: import('@playwright/test').Page) {
+  await page.click('button[data-tab-id="color"]');
+  await page.waitForFunction(
+    () => document.querySelector('button[data-tab-id="color"]')?.classList?.contains('active') ||
+          document.querySelector('[data-tab-id="color"][aria-selected="true"]') !== null,
+    { timeout: 5000 },
+  );
+  await page.keyboard.press('c');
+  await page.waitForFunction(
+    () => document.querySelector('.color-controls-panel') !== null,
+    { timeout: 5000 },
+  );
+}
+
+// Helper to wait for color state property to match expected value
+async function waitForColorStateValue(
+  page: import('@playwright/test').Page,
+  property: string,
+  expectedValue: any,
+) {
+  await page.waitForFunction(
+    ({ prop, expected }) => {
+      const state = (window as any).__OPENRV_TEST__?.getColorState();
+      return state && Math.abs(state[prop] - expected) < 0.01;
+    },
+    { prop: property, expected: expectedValue },
+    { timeout: 5000 },
+  );
+}
+
+// Helper to wait for histogram to be visible
+async function waitForHistogramVisible(page: import('@playwright/test').Page) {
+  await page.waitForFunction(
+    () => (window as any).__OPENRV_TEST__?.getViewerState()?.histogramVisible === true,
+    { timeout: 5000 },
+  );
+}
+
 test.describe('3D LUT Support', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await page.waitForSelector('#app');
     await waitForTestHelper(page);
     await loadVideoFile(page);
-    // Open Color panel
-    await page.click('button[data-tab-id="color"]');
-    await page.waitForTimeout(200);
-    // Open color controls panel
-    await page.keyboard.press('c');
-    await page.waitForTimeout(200);
+    // Open Color panel and color controls
+    await waitForColorPanel(page);
   });
 
   test.describe('LUT Loading', () => {
@@ -66,7 +117,7 @@ test.describe('3D LUT Support', () => {
 
       const lutPath = path.resolve(process.cwd(), SAMPLE_LUT);
       await fileInput.setInputFiles(lutPath);
-      await page.waitForTimeout(500);
+      await waitForLUTLoaded(page);
 
       // Verify LUT was loaded
       state = await getColorState(page);
@@ -87,7 +138,7 @@ test.describe('3D LUT Support', () => {
 
       const lutPath = path.resolve(process.cwd(), SAMPLE_LUT);
       await fileInput.setInputFiles(lutPath);
-      await page.waitForTimeout(500);
+      await waitForLUTLoaded(page);
 
       // Check for LUT name in UI
       // The LUT title is "Test LUT - Warm"
@@ -105,7 +156,7 @@ test.describe('3D LUT Support', () => {
 
       const lutPath = path.resolve(process.cwd(), SAMPLE_LUT);
       await fileInput.setInputFiles(lutPath);
-      await page.waitForTimeout(500);
+      await waitForLUTLoaded(page);
 
       // Verify LUT loaded
       let state = await getColorState(page);
@@ -126,7 +177,7 @@ test.describe('3D LUT Support', () => {
         // Set to 50%
         await intensityRow.fill('0.5');
         await intensityRow.dispatchEvent('input');
-        await page.waitForTimeout(200);
+        await waitForColorStateValue(page, 'lutIntensity', 0.5);
 
         state = await getColorState(page);
         expect(state.lutIntensity).toBeCloseTo(0.5, 1);
@@ -137,7 +188,7 @@ test.describe('3D LUT Support', () => {
         // Set to 0%
         await intensityRow.fill('0');
         await intensityRow.dispatchEvent('input');
-        await page.waitForTimeout(200);
+        await waitForColorStateValue(page, 'lutIntensity', 0);
 
         state = await getColorState(page);
         expect(state.lutIntensity).toBe(0);
@@ -157,7 +208,16 @@ test.describe('3D LUT Support', () => {
 
       const invalidLutPath = path.resolve(process.cwd(), INVALID_LUT);
       await fileInput.setInputFiles(invalidLutPath);
-      await page.waitForTimeout(500);
+
+      // Wait for error modal to appear or state to confirm no LUT loaded
+      await page.waitForFunction(
+        () => {
+          const hasError = document.querySelector('[class*="modal"], [role="dialog"], [class*="alert"]') !== null;
+          const state = (window as any).__OPENRV_TEST__?.getColorState();
+          return hasError || (state && state.hasLUT === false);
+        },
+        { timeout: 5000 },
+      );
 
       // Check for error dialog/alert
       const errorModal = page.locator('[class*="modal"], [role="dialog"], [class*="alert"]').first();
@@ -185,7 +245,7 @@ test.describe('3D LUT Support', () => {
 
       const lutPath = path.resolve(process.cwd(), SAMPLE_LUT);
       await fileInput.setInputFiles(lutPath);
-      await page.waitForTimeout(500);
+      await waitForLUTLoaded(page);
 
       let state = await getColorState(page);
       expect(state.hasLUT).toBe(true);
@@ -197,7 +257,7 @@ test.describe('3D LUT Support', () => {
       const clearButton = page.locator('.color-controls-panel button:has-text("✕"), .color-controls-panel button[title*="Remove LUT"]').first();
       if (await clearButton.isVisible()) {
         await clearButton.click();
-        await page.waitForTimeout(200);
+        await waitForLUTCleared(page);
 
         state = await getColorState(page);
         expect(state.hasLUT).toBe(false);
@@ -215,7 +275,7 @@ test.describe('3D LUT Support', () => {
     test('LUT-E006: LUT affects histogram/scopes when enabled', async ({ page }) => {
       // Enable histogram first
       await page.keyboard.press('h');
-      await page.waitForTimeout(300);
+      await waitForHistogramVisible(page);
 
       // Take screenshot with histogram (no LUT)
       const screenshotNoLUT = await captureViewerScreenshot(page);
@@ -229,7 +289,7 @@ test.describe('3D LUT Support', () => {
 
       const lutPath = path.resolve(process.cwd(), SAMPLE_LUT);
       await fileInput.setInputFiles(lutPath);
-      await page.waitForTimeout(500);
+      await waitForLUTLoaded(page);
 
       // Take screenshot with LUT (histogram should show different distribution)
       const screenshotWithLUT = await captureViewerScreenshot(page);
@@ -248,7 +308,7 @@ test.describe('3D LUT Support', () => {
 
       const lutPath = path.resolve(process.cwd(), SAMPLE_LUT);
       await fileInput.setInputFiles(lutPath);
-      await page.waitForTimeout(500);
+      await waitForLUTLoaded(page);
 
       let state = await getColorState(page);
       expect(state.hasLUT).toBe(true);
@@ -260,7 +320,7 @@ test.describe('3D LUT Support', () => {
       if (await intensityRow.isVisible()) {
         await intensityRow.fill('0');
         await intensityRow.dispatchEvent('input');
-        await page.waitForTimeout(200);
+        await waitForColorStateValue(page, 'lutIntensity', 0);
 
         state = await getColorState(page);
         expect(state.lutIntensity).toBe(0);
@@ -269,7 +329,7 @@ test.describe('3D LUT Support', () => {
         // Set back to 100%
         await intensityRow.fill('1');
         await intensityRow.dispatchEvent('input');
-        await page.waitForTimeout(200);
+        await waitForColorStateValue(page, 'lutIntensity', 1);
 
         state = await getColorState(page);
         expect(state.lutIntensity).toBe(1);
@@ -288,7 +348,7 @@ test.describe('3D LUT Support', () => {
 
       const lutPath = path.resolve(process.cwd(), SAMPLE_LUT);
       await fileInput.setInputFiles(lutPath);
-      await page.waitForTimeout(500);
+      await waitForLUTLoaded(page);
 
       const screenshotLUTOnly = await captureViewerScreenshot(page);
 
@@ -297,7 +357,7 @@ test.describe('3D LUT Support', () => {
       if (await exposureSlider.isVisible()) {
         await exposureSlider.fill('2');
         await exposureSlider.dispatchEvent('input');
-        await page.waitForTimeout(200);
+        await waitForColorStateValue(page, 'exposure', 2);
 
         const state = await getColorState(page);
         expect(state.exposure).toBeCloseTo(2, 1);
@@ -319,7 +379,7 @@ test.describe('3D LUT Support', () => {
 
       const lutPath = path.resolve(process.cwd(), SAMPLE_LUT);
       await fileInput.setInputFiles(lutPath);
-      await page.waitForTimeout(500);
+      await waitForLUTLoaded(page);
 
       const screenshotLUTOnly = await captureViewerScreenshot(page);
 
@@ -328,7 +388,7 @@ test.describe('3D LUT Support', () => {
       if (await saturationSlider.isVisible()) {
         await saturationSlider.fill('1.5');
         await saturationSlider.dispatchEvent('input');
-        await page.waitForTimeout(200);
+        await waitForColorStateValue(page, 'saturation', 1.5);
 
         const state = await getColorState(page);
         expect(state.saturation).toBeCloseTo(1.5, 1);
@@ -352,14 +412,17 @@ test.describe('3D LUT Support', () => {
 
       const lutPath = path.resolve(process.cwd(), SAMPLE_LUT);
       await fileInput.setInputFiles(lutPath);
-      await page.waitForTimeout(500);
+      await waitForLUTLoaded(page);
 
       let state = await getColorState(page);
       expect(state.hasLUT).toBe(true);
 
       // Navigate to different frame
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(200);
+      await page.waitForFunction(
+        () => (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === true,
+        { timeout: 5000 },
+      );
 
       // LUT should still be active
       state = await getColorState(page);
@@ -367,7 +430,10 @@ test.describe('3D LUT Support', () => {
 
       // Navigate back
       await page.keyboard.press('ArrowLeft');
-      await page.waitForTimeout(200);
+      await page.waitForFunction(
+        () => (window as any).__OPENRV_TEST__?.getColorState()?.hasLUT === true,
+        { timeout: 5000 },
+      );
 
       state = await getColorState(page);
       expect(state.hasLUT).toBe(true);
@@ -383,7 +449,7 @@ test.describe('3D LUT Support', () => {
 
       const lutPath = path.resolve(process.cwd(), SAMPLE_LUT);
       await fileInput.setInputFiles(lutPath);
-      await page.waitForTimeout(500);
+      await waitForLUTLoaded(page);
 
       // Set intensity to 50%
       const intensityRow = page.locator('.color-controls-panel').locator('label:has-text("Intensity")').locator('..').locator('input[type="range"]').first();
@@ -391,18 +457,24 @@ test.describe('3D LUT Support', () => {
       if (await intensityRow.isVisible()) {
         await intensityRow.fill('0.5');
         await intensityRow.dispatchEvent('input');
-        await page.waitForTimeout(200);
+        await waitForColorStateValue(page, 'lutIntensity', 0.5);
 
         let state = await getColorState(page);
         expect(state.lutIntensity).toBeCloseTo(0.5, 1);
 
         // Close panel
         await page.keyboard.press('c');
-        await page.waitForTimeout(100);
+        await page.waitForFunction(
+          () => document.querySelector('.color-controls-panel') === null,
+          { timeout: 2000 },
+        );
 
         // Reopen panel
         await page.keyboard.press('c');
-        await page.waitForTimeout(200);
+        await page.waitForFunction(
+          () => document.querySelector('.color-controls-panel') !== null,
+          { timeout: 2000 },
+        );
 
         // Intensity should be preserved
         state = await getColorState(page);

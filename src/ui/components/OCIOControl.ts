@@ -18,8 +18,10 @@ import {
   getDisplays,
   getViewsForDisplay,
   getLooks,
+  registerCustomConfig,
 } from '../../color/OCIOConfig';
 import { OCIOProcessor } from '../../color/OCIOProcessor';
+import { parseOCIOConfig } from '../../color/OCIOConfigParser';
 import { getIconSvg } from './shared/Icons';
 import { DropdownMenu } from './shared/DropdownMenu';
 
@@ -68,6 +70,9 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
 
   // Enable toggle
   private enableToggle: HTMLInputElement;
+
+  // Bound listener for outside-click cleanup
+  private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
 
   constructor(processor?: OCIOProcessor) {
     super();
@@ -175,7 +180,7 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
     });
 
     // Close panel on outside click
-    document.addEventListener('click', (e) => {
+    this.outsideClickHandler = (e: MouseEvent) => {
       if (
         this.isExpanded &&
         !this.container.contains(e.target as Node) &&
@@ -183,7 +188,8 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       ) {
         this.hide();
       }
-    });
+    };
+    document.addEventListener('click', this.outsideClickHandler);
   }
 
   /**
@@ -198,6 +204,41 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
     const configSection = this.createSection('Configuration');
     const configRow = this.createSelectRow('Config:', this.configLabel, 'ocio-config-select');
     configSection.appendChild(configRow);
+
+    // Load Config button
+    const loadConfigRow = document.createElement('div');
+    loadConfigRow.style.cssText = `
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+      margin-left: 90px;
+    `;
+    const loadConfigButton = document.createElement('button');
+    loadConfigButton.innerHTML = `${getIconSvg('upload', 'sm')}<span style="margin-left: 4px;">Load Config</span>`;
+    loadConfigButton.title = 'Load a custom .ocio config file';
+    loadConfigButton.dataset.testid = 'ocio-load-config';
+    loadConfigButton.style.cssText = `
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-primary);
+      color: var(--text-primary);
+      padding: 4px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      display: inline-flex;
+      align-items: center;
+    `;
+    loadConfigButton.addEventListener('mouseenter', () => {
+      loadConfigButton.style.background = 'var(--bg-hover)';
+    });
+    loadConfigButton.addEventListener('mouseleave', () => {
+      loadConfigButton.style.background = 'var(--bg-tertiary)';
+    });
+    loadConfigButton.addEventListener('click', () => this.handleLoadConfig());
+    loadConfigRow.appendChild(loadConfigButton);
+    configSection.appendChild(loadConfigRow);
+
     this.panel.appendChild(configSection);
 
     // Input section
@@ -478,22 +519,81 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
    * Setup dropdown event handlers
    */
   private setupDropdownHandlers(): void {
-    // Config dropdown
+    // Recreate dropdowns with onSelect handlers
+    this.configDropdown.dispose();
+    this.inputColorSpaceDropdown.dispose();
+    this.workingColorSpaceDropdown.dispose();
+    this.displayDropdown.dispose();
+    this.viewDropdown.dispose();
+    this.lookDropdown.dispose();
+    this.lookDirectionDropdown.dispose();
+
+    this.configDropdown = new DropdownMenu({
+      minWidth: '200px',
+      onSelect: (value) => {
+        this.processor.loadConfig(value);
+      },
+    });
+    this.inputColorSpaceDropdown = new DropdownMenu({
+      minWidth: '200px',
+      onSelect: (value) => {
+        this.processor.setInputColorSpace(value);
+      },
+    });
+    this.workingColorSpaceDropdown = new DropdownMenu({
+      minWidth: '200px',
+      onSelect: (value) => {
+        this.processor.setWorkingColorSpace(value);
+      },
+    });
+    this.displayDropdown = new DropdownMenu({
+      minWidth: '150px',
+      onSelect: (value) => {
+        this.processor.setDisplay(value);
+      },
+    });
+    this.viewDropdown = new DropdownMenu({
+      minWidth: '180px',
+      onSelect: (value) => {
+        this.processor.setView(value);
+      },
+    });
+    this.lookDropdown = new DropdownMenu({
+      minWidth: '150px',
+      onSelect: (value) => {
+        this.processor.setLook(value);
+      },
+    });
+    this.lookDirectionDropdown = new DropdownMenu({
+      minWidth: '120px',
+      onSelect: (value) => {
+        this.processor.setLookDirection(value as 'forward' | 'inverse');
+      },
+    });
+
+    // Config dropdown items
     this.configDropdown.setItems(
       getAvailableConfigs().map((c) => ({
         value: c.name,
         label: c.description,
       }))
     );
+    this.configDropdown.setSelectedValue(this.processor.getState().configName);
+
+    // Look direction items
+    this.lookDirectionDropdown.setItems([
+      { value: 'forward', label: 'Forward' },
+      { value: 'inverse', label: 'Inverse' },
+    ]);
+
+    // Attach click handlers to buttons
     const configButton = (this.configLabel as HTMLSpanElement & { _button?: HTMLButtonElement })._button;
     if (configButton) {
       configButton.addEventListener('click', () => {
         this.configDropdown.toggle(configButton);
       });
     }
-    this.configDropdown.setSelectedValue(this.processor.getState().configName);
 
-    // Input color space dropdown
     const inputButton = (this.inputColorSpaceLabel as HTMLSpanElement & { _button?: HTMLButtonElement })._button;
     if (inputButton) {
       inputButton.addEventListener('click', () => {
@@ -502,7 +602,6 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       });
     }
 
-    // Working color space dropdown
     const workingButton = (this.workingColorSpaceLabel as HTMLSpanElement & { _button?: HTMLButtonElement })._button;
     if (workingButton) {
       workingButton.addEventListener('click', () => {
@@ -511,7 +610,6 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       });
     }
 
-    // Display dropdown
     const displayButton = (this.displayLabel as HTMLSpanElement & { _button?: HTMLButtonElement })._button;
     if (displayButton) {
       displayButton.addEventListener('click', () => {
@@ -520,7 +618,6 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       });
     }
 
-    // View dropdown
     const viewButton = (this.viewLabel as HTMLSpanElement & { _button?: HTMLButtonElement })._button;
     if (viewButton) {
       viewButton.addEventListener('click', () => {
@@ -529,7 +626,6 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       });
     }
 
-    // Look dropdown
     const lookButton = (this.lookLabel as HTMLSpanElement & { _button?: HTMLButtonElement })._button;
     if (lookButton) {
       lookButton.addEventListener('click', () => {
@@ -538,77 +634,12 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       });
     }
 
-    // Look direction dropdown
-    this.lookDirectionDropdown.setItems([
-      { value: 'forward', label: 'Forward' },
-      { value: 'inverse', label: 'Inverse' },
-    ]);
     const directionButton = (this.lookDirectionLabel as HTMLSpanElement & { _button?: HTMLButtonElement })._button;
     if (directionButton) {
       directionButton.addEventListener('click', () => {
         this.lookDirectionDropdown.toggle(directionButton);
       });
     }
-
-    // Connect dropdown selections to processor
-    this.configDropdown = new DropdownMenu({
-      minWidth: '200px',
-      onSelect: (value) => {
-        this.processor.loadConfig(value);
-      },
-    });
-    this.configDropdown.setItems(
-      getAvailableConfigs().map((c) => ({
-        value: c.name,
-        label: c.description,
-      }))
-    );
-
-    this.inputColorSpaceDropdown = new DropdownMenu({
-      minWidth: '200px',
-      onSelect: (value) => {
-        this.processor.setInputColorSpace(value);
-      },
-    });
-
-    this.workingColorSpaceDropdown = new DropdownMenu({
-      minWidth: '200px',
-      onSelect: (value) => {
-        this.processor.setWorkingColorSpace(value);
-      },
-    });
-
-    this.displayDropdown = new DropdownMenu({
-      minWidth: '150px',
-      onSelect: (value) => {
-        this.processor.setDisplay(value);
-      },
-    });
-
-    this.viewDropdown = new DropdownMenu({
-      minWidth: '180px',
-      onSelect: (value) => {
-        this.processor.setView(value);
-      },
-    });
-
-    this.lookDropdown = new DropdownMenu({
-      minWidth: '150px',
-      onSelect: (value) => {
-        this.processor.setLook(value);
-      },
-    });
-
-    this.lookDirectionDropdown = new DropdownMenu({
-      minWidth: '120px',
-      onSelect: (value) => {
-        this.processor.setLookDirection(value as 'forward' | 'inverse');
-      },
-    });
-    this.lookDirectionDropdown.setItems([
-      { value: 'forward', label: 'Forward' },
-      { value: 'inverse', label: 'Inverse' },
-    ]);
   }
 
   /**
@@ -719,6 +750,67 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
   }
 
   // ==========================================================================
+  // Custom Config Loading
+  // ==========================================================================
+
+  /**
+   * Handle loading a custom .ocio config file via file upload dialog.
+   */
+  private handleLoadConfig(): void {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.ocio,.OCIO';
+    input.style.display = 'none';
+
+    input.addEventListener('change', () => {
+      const file = input.files?.[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const configText = reader.result as string;
+          const configName = file.name.replace(/\.ocio$/i, '').replace(/[^a-zA-Z0-9_.-]/g, '_');
+          const config = parseOCIOConfig(configText, configName);
+
+          // Register the custom config
+          registerCustomConfig(config);
+
+          // Update the config dropdown with new items
+          this.refreshConfigDropdown();
+
+          // Load the new config in the processor
+          this.processor.loadConfig(config.name);
+        } catch (error) {
+          console.error('Failed to load OCIO config:', error);
+          // Show a simple visual indication of error
+          const msg = error instanceof Error ? error.message : 'Unknown error';
+          console.warn(`OCIO config load failed: ${msg}`);
+        }
+      };
+      reader.readAsText(file);
+
+      // Clean up
+      input.remove();
+    });
+
+    document.body.appendChild(input);
+    input.click();
+  }
+
+  /**
+   * Refresh the config dropdown items to include any newly registered custom configs.
+   */
+  private refreshConfigDropdown(): void {
+    this.configDropdown.setItems(
+      getAvailableConfigs().map((c) => ({
+        value: c.name,
+        label: c.description,
+      }))
+    );
+  }
+
+  // ==========================================================================
   // Public API
   // ==========================================================================
 
@@ -822,10 +914,22 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
-        const state = JSON.parse(stored) as Partial<OCIOState>;
-        // Validate the loaded state has expected properties before applying
-        if (typeof state === 'object' && state !== null) {
-          this.processor.setState(state);
+        const raw = JSON.parse(stored);
+        if (typeof raw !== 'object' || raw === null) return;
+
+        // Only apply known, correctly-typed properties
+        const safe: Partial<OCIOState> = {};
+        if (typeof raw.enabled === 'boolean') safe.enabled = raw.enabled;
+        if (typeof raw.configName === 'string') safe.configName = raw.configName;
+        if (typeof raw.inputColorSpace === 'string') safe.inputColorSpace = raw.inputColorSpace;
+        if (typeof raw.workingColorSpace === 'string') safe.workingColorSpace = raw.workingColorSpace;
+        if (typeof raw.display === 'string') safe.display = raw.display;
+        if (typeof raw.view === 'string') safe.view = raw.view;
+        if (typeof raw.look === 'string') safe.look = raw.look;
+        if (raw.lookDirection === 'forward' || raw.lookDirection === 'inverse') safe.lookDirection = raw.lookDirection;
+
+        if (Object.keys(safe).length > 0) {
+          this.processor.setState(safe);
         }
       }
     } catch {
@@ -849,6 +953,12 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
    * Dispose of resources
    */
   dispose(): void {
+    // Remove global document click listener
+    if (this.outsideClickHandler) {
+      document.removeEventListener('click', this.outsideClickHandler);
+      this.outsideClickHandler = null;
+    }
+
     this.configDropdown.dispose();
     this.inputColorSpaceDropdown.dispose();
     this.workingColorSpaceDropdown.dispose();

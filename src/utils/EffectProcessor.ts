@@ -18,6 +18,8 @@ import { CDLValues, DEFAULT_CDL, isDefaultCDL, applyCDLToImageData } from '../co
 import { ColorCurvesData, createDefaultCurvesData, isDefaultCurves, CurveLUTCache } from '../color/ColorCurves';
 import { FilterSettings, DEFAULT_FILTER_SETTINGS } from '../ui/components/FilterControl';
 import { ChannelMode, applyChannelIsolation } from '../ui/components/ChannelSelect';
+import { applyColorInversion } from '../color/Inversion';
+import { applyHueRotation, isIdentityHueRotation } from '../color/HueRotation';
 import { ColorWheelsState, DEFAULT_COLOR_WHEELS_STATE } from '../ui/components/ColorWheels';
 import { HSLQualifierState, DEFAULT_HSL_QUALIFIER_STATE } from '../ui/components/HSLQualifier';
 import { ToneMappingState, DEFAULT_TONE_MAPPING_STATE } from '../ui/components/ToneMappingControl';
@@ -42,6 +44,7 @@ import {
   hueToRgb as sharedHueToRgb,
   rgbToHsl as sharedRgbToHsl,
   hslToRgb as sharedHslToRgb,
+  applyToneMappingToData,
 } from './effectProcessing.shared';
 
 /**
@@ -56,6 +59,7 @@ export interface AllEffectsState {
   colorWheelsState: ColorWheelsState;
   hslQualifierState: HSLQualifierState;
   toneMappingState: ToneMappingState;
+  colorInversionEnabled: boolean;
 }
 
 /**
@@ -71,6 +75,7 @@ export function createDefaultEffectsState(): AllEffectsState {
     colorWheelsState: JSON.parse(JSON.stringify(DEFAULT_COLOR_WHEELS_STATE)),
     hslQualifierState: JSON.parse(JSON.stringify(DEFAULT_HSL_QUALIFIER_STATE)),
     toneMappingState: { ...DEFAULT_TONE_MAPPING_STATE },
+    colorInversionEnabled: false,
   };
 }
 
@@ -89,6 +94,7 @@ export function computeEffectsHash(state: AllEffectsState): string {
     wheels: state.colorWheelsState,
     hsl: state.hslQualifierState,
     tm: state.toneMappingState,
+    inv: state.colorInversionEnabled,
   });
 
   // Simple hash function (djb2)
@@ -114,13 +120,15 @@ export function hasActiveEffects(state: AllEffectsState): boolean {
                                state.colorAdjustments.blacks !== 0;
   const hasVibrance = state.colorAdjustments.vibrance !== 0;
   const hasClarity = state.colorAdjustments.clarity !== 0;
+  const hasHueRotation = !isIdentityHueRotation(state.colorAdjustments.hueRotation);
   const hasColorWheels = hasColorWheelAdjustments(state.colorWheelsState);
   const hasHSLQualifier = state.hslQualifierState.enabled;
   const hasToneMapping = state.toneMappingState.enabled && state.toneMappingState.operator !== 'off';
+  const hasInversion = state.colorInversionEnabled;
 
   return hasCDL || hasCurves || hasSharpen || hasChannel ||
-         hasHighlightsShadows || hasVibrance || hasClarity ||
-         hasColorWheels || hasHSLQualifier || hasToneMapping;
+         hasHighlightsShadows || hasVibrance || hasClarity || hasHueRotation ||
+         hasColorWheels || hasHSLQualifier || hasToneMapping || hasInversion;
 }
 
 /**
@@ -194,13 +202,16 @@ export class EffectProcessor {
                                  state.colorAdjustments.blacks !== 0;
     const hasVibrance = state.colorAdjustments.vibrance !== 0;
     const hasClarity = state.colorAdjustments.clarity !== 0;
+    const hasHueRotation = !isIdentityHueRotation(state.colorAdjustments.hueRotation);
     const hasColorWheels = hasColorWheelAdjustments(state.colorWheelsState);
     const hasHSLQualifier = state.hslQualifierState.enabled;
+    const hasToneMapping = state.toneMappingState.enabled && state.toneMappingState.operator !== 'off';
+    const hasInversion = state.colorInversionEnabled;
 
     // Early return if no pixel effects are active
     if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel &&
-        !hasHighlightsShadows && !hasVibrance && !hasClarity &&
-        !hasColorWheels && !hasHSLQualifier) {
+        !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasHueRotation &&
+        !hasColorWheels && !hasHSLQualifier && !hasToneMapping && !hasInversion) {
       return;
     }
 
@@ -217,6 +228,11 @@ export class EffectProcessor {
     // Apply clarity (local contrast enhancement in midtones)
     if (hasClarity) {
       this.applyClarity(imageData, width, height, state.colorAdjustments);
+    }
+
+    // Apply hue rotation (luminance-preserving, after basic adjustments, before CDL)
+    if (hasHueRotation) {
+      this.applyHueRotationEffect(imageData, state.colorAdjustments.hueRotation);
     }
 
     // Apply color wheels (Lift/Gamma/Gain - after basic adjustments, before CDL)
@@ -237,6 +253,16 @@ export class EffectProcessor {
     // Apply HSL Qualifier (secondary color correction - after primary corrections)
     if (hasHSLQualifier) {
       this.applyHSLQualifier(imageData, state.hslQualifierState);
+    }
+
+    // Apply tone mapping (after color adjustments, before channel isolation)
+    if (hasToneMapping) {
+      applyToneMappingToData(imageData.data, state.toneMappingState.operator);
+    }
+
+    // Apply color inversion (after all color corrections, before sharpen/channel isolation)
+    if (hasInversion) {
+      applyColorInversion(imageData);
     }
 
     // Apply sharpen filter
@@ -508,6 +534,26 @@ export class EffectProcessor {
         }
         result[idx + 3] = temp[idx + 3]!;
       }
+    }
+  }
+
+  /**
+   * Apply luminance-preserving hue rotation to ImageData.
+   */
+  private applyHueRotationEffect(imageData: ImageData, degrees: number): void {
+    const data = imageData.data;
+    const len = data.length;
+
+    for (let i = 0; i < len; i += 4) {
+      const r = data[i]! / 255;
+      const g = data[i + 1]! / 255;
+      const b = data[i + 2]! / 255;
+
+      const [nr, ng, nb] = applyHueRotation(r, g, b, degrees);
+
+      data[i] = Math.round(nr * 255);
+      data[i + 1] = Math.round(ng * 255);
+      data[i + 2] = Math.round(nb * 255);
     }
   }
 

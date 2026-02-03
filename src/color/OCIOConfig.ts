@@ -201,6 +201,26 @@ const ACES_1_2_CONFIG: OCIOConfigDefinition = {
       isDisplaySpace: true,
     },
     {
+      name: 'Rec.2020',
+      description: 'ITU-R BT.2020 wide gamut HDR broadcast',
+      family: 'Display',
+      encoding: 'sdr-video',
+      isDisplaySpace: true,
+    },
+    {
+      name: 'Adobe RGB',
+      description: 'Adobe RGB (1998) photography workflow',
+      family: 'Utility',
+      encoding: 'sdr-video',
+    },
+    {
+      name: 'ProPhoto RGB',
+      description: 'ProPhoto RGB (ROMM RGB) wide gamut photography',
+      family: 'Utility',
+      encoding: 'scene-linear',
+      isWorkingSpace: true,
+    },
+    {
       name: 'Raw',
       description: 'Pass-through (no transform)',
       family: 'Utility',
@@ -218,6 +238,10 @@ const ACES_1_2_CONFIG: OCIOConfigDefinition = {
     },
     {
       name: 'DCI-P3',
+      views: ['ACES 1.0 SDR-video', 'Raw'],
+    },
+    {
+      name: 'Rec.2020',
       views: ['ACES 1.0 SDR-video', 'Raw'],
     },
   ],
@@ -312,6 +336,11 @@ const BUILTIN_CONFIGS: Record<string, OCIOConfigDefinition> = {
 };
 
 /**
+ * Custom (user-loaded) configurations
+ */
+const CUSTOM_CONFIGS: Record<string, OCIOConfigDefinition> = {};
+
+/**
  * Get a built-in OCIO configuration by name
  *
  * @param name - Configuration name ('aces_1.2', 'srgb')
@@ -321,10 +350,13 @@ const BUILTIN_CONFIGS: Record<string, OCIOConfigDefinition> = {
 export function getBuiltinConfig(name: string): OCIOConfigDefinition {
   // Normalize name (allow both 'aces_1.2' and 'aces_1_2')
   const normalizedName = name.replace(/\./g, '_');
-  const config = BUILTIN_CONFIGS[normalizedName];
+
+  // Check built-in configs first, then custom configs
+  const config = BUILTIN_CONFIGS[normalizedName] ?? CUSTOM_CONFIGS[normalizedName] ?? CUSTOM_CONFIGS[name];
 
   if (!config) {
-    const available = Object.keys(BUILTIN_CONFIGS).join(', ');
+    const allKeys = [...Object.keys(BUILTIN_CONFIGS), ...Object.keys(CUSTOM_CONFIGS)];
+    const available = allKeys.join(', ');
     throw new Error(`Unknown OCIO config: ${name}. Available: ${available}`);
   }
 
@@ -335,10 +367,15 @@ export function getBuiltinConfig(name: string): OCIOConfigDefinition {
  * Get list of available built-in configurations
  */
 export function getAvailableConfigs(): Array<{ name: string; description: string }> {
-  return Object.values(BUILTIN_CONFIGS).map((config) => ({
+  const builtins = Object.values(BUILTIN_CONFIGS).map((config) => ({
     name: config.name,
     description: config.description,
   }));
+  const customs = Object.values(CUSTOM_CONFIGS).map((config) => ({
+    name: config.name,
+    description: config.description,
+  }));
+  return [...builtins, ...customs];
 }
 
 /**
@@ -395,6 +432,34 @@ export function isDefaultOCIOState(state: OCIOState): boolean {
     state.workingColorSpace === DEFAULT_OCIO_STATE.workingColorSpace &&
     state.display === DEFAULT_OCIO_STATE.display &&
     state.view === DEFAULT_OCIO_STATE.view &&
-    state.look === DEFAULT_OCIO_STATE.look
+    state.look === DEFAULT_OCIO_STATE.look &&
+    state.lookDirection === DEFAULT_OCIO_STATE.lookDirection
   );
+}
+
+/**
+ * Register a custom OCIO configuration.
+ * Custom configs are available alongside built-in configs.
+ *
+ * @param config - The configuration definition to register
+ */
+export function registerCustomConfig(config: OCIOConfigDefinition): void {
+  const normalizedName = config.name.replace(/\./g, '_');
+  CUSTOM_CONFIGS[normalizedName] = config;
+  // Also store under original name for direct lookup
+  if (normalizedName !== config.name) {
+    CUSTOM_CONFIGS[config.name] = config;
+  }
+}
+
+/**
+ * Remove a custom OCIO configuration by name.
+ *
+ * @param name - The name of the custom config to remove
+ */
+export function removeCustomConfig(name: string): void {
+  const normalizedName = name.replace(/\./g, '_');
+  delete CUSTOM_CONFIGS[normalizedName];
+  // Also try the original name in case it was stored without normalization
+  delete CUSTOM_CONFIGS[name];
 }

@@ -695,4 +695,225 @@ describe('OCIOProcessor', () => {
       expect(state.detectedColorSpace).toBe('ARRI LogC3 (EI 800)');
     });
   });
+
+  // ==========================================================================
+  // Per-Source Input Color Space (v2)
+  // ==========================================================================
+
+  describe('Per-source input color space', () => {
+    it('OCIO-V2-P001: setSourceInputColorSpace stores per-source color space', () => {
+      processor.setSourceInputColorSpace('source1', 'ACEScg');
+      expect(processor.getSourceInputColorSpace('source1')).toBe('ACEScg');
+    });
+
+    it('OCIO-V2-P002: getSourceInputColorSpace returns null for unknown source', () => {
+      expect(processor.getSourceInputColorSpace('unknown')).toBe(null);
+    });
+
+    it('OCIO-V2-P003: setActiveSource updates detected color space', () => {
+      processor.setSourceInputColorSpace('source1', 'ARRI LogC3 (EI 800)');
+      processor.setSourceInputColorSpace('source2', 'Sony S-Log3');
+
+      processor.setActiveSource('source1');
+      expect(processor.getState().detectedColorSpace).toBe('ARRI LogC3 (EI 800)');
+
+      processor.setActiveSource('source2');
+      expect(processor.getState().detectedColorSpace).toBe('Sony S-Log3');
+    });
+
+    it('OCIO-V2-P004: setSourceInputColorSpace updates state for active source', () => {
+      processor.setActiveSource('source1');
+      processor.setSourceInputColorSpace('source1', 'RED Log3G10');
+      expect(processor.getState().detectedColorSpace).toBe('RED Log3G10');
+    });
+
+    it('OCIO-V2-P005: setSourceInputColorSpace does not update state for inactive source', () => {
+      processor.setActiveSource('source1');
+      processor.setSourceInputColorSpace('source1', 'sRGB');
+      processor.setSourceInputColorSpace('source2', 'ACEScg');
+      // Active source is still source1, so detected should be sRGB
+      expect(processor.getState().detectedColorSpace).toBe('sRGB');
+    });
+
+    it('OCIO-V2-P006: getActiveSourceId returns current active source', () => {
+      expect(processor.getActiveSourceId()).toBe(null);
+      processor.setActiveSource('mySource');
+      expect(processor.getActiveSourceId()).toBe('mySource');
+    });
+
+    it('OCIO-V2-P007: dispose clears per-source state', () => {
+      processor.setSourceInputColorSpace('source1', 'ACEScg');
+      processor.setActiveSource('source1');
+      processor.dispose();
+      expect(processor.getSourceInputColorSpace('source1')).toBe(null);
+      expect(processor.getActiveSourceId()).toBe(null);
+    });
+  });
+
+  // ==========================================================================
+  // Extension-based Color Space Detection (v2)
+  // ==========================================================================
+
+  describe('Extension-based color space detection', () => {
+    it('OCIO-V2-P008: detects ACEScct from .dpx extension', () => {
+      expect(processor.detectColorSpaceFromExtension('.dpx')).toBe('ACEScct');
+    });
+
+    it('OCIO-V2-P009: detects ACEScct from .cin extension', () => {
+      expect(processor.detectColorSpaceFromExtension('.cin')).toBe('ACEScct');
+    });
+
+    it('OCIO-V2-P010: detects ACEScct from .cineon extension', () => {
+      expect(processor.detectColorSpaceFromExtension('.cineon')).toBe('ACEScct');
+    });
+
+    it('OCIO-V2-P011: detects Linear sRGB from .exr extension', () => {
+      expect(processor.detectColorSpaceFromExtension('.exr')).toBe('Linear sRGB');
+    });
+
+    it('OCIO-V2-P012: detects Linear sRGB from .hdr extension', () => {
+      expect(processor.detectColorSpaceFromExtension('.hdr')).toBe('Linear sRGB');
+    });
+
+    it('OCIO-V2-P013: returns null for unknown extension', () => {
+      expect(processor.detectColorSpaceFromExtension('.jpg')).toBe(null);
+      expect(processor.detectColorSpaceFromExtension('.png')).toBe(null);
+      expect(processor.detectColorSpaceFromExtension('.unknown')).toBe(null);
+    });
+
+    it('OCIO-V2-P014: extension detection is case insensitive', () => {
+      expect(processor.detectColorSpaceFromExtension('.DPX')).toBe('ACEScct');
+      expect(processor.detectColorSpaceFromExtension('.EXR')).toBe('Linear sRGB');
+    });
+
+    it('OCIO-V2-P015: detects camera raw extensions', () => {
+      expect(processor.detectColorSpaceFromExtension('.arw')).toBe('Sony S-Log3');
+      expect(processor.detectColorSpaceFromExtension('.ari')).toBe('ARRI LogC3 (EI 800)');
+      expect(processor.detectColorSpaceFromExtension('.r3d')).toBe('RED Log3G10');
+    });
+  });
+
+  // ==========================================================================
+  // EXR Chromaticities Detection (v2)
+  // ==========================================================================
+
+  describe('EXR chromaticities detection', () => {
+    it('OCIO-V2-P016: detects sRGB/BT.709 primaries', () => {
+      const result = processor.detectColorSpace({
+        chromaticities: {
+          redX: 0.64, redY: 0.33,
+          greenX: 0.30, greenY: 0.60,
+          blueX: 0.15, blueY: 0.06,
+        },
+      });
+      expect(result).toBe('Linear sRGB');
+    });
+
+    it('OCIO-V2-P017: detects ACES AP1 (ACEScg) primaries', () => {
+      const result = processor.detectColorSpace({
+        chromaticities: {
+          redX: 0.713, redY: 0.293,
+          greenX: 0.165, greenY: 0.83,
+          blueX: 0.128, blueY: 0.044,
+        },
+      });
+      expect(result).toBe('ACEScg');
+    });
+
+    it('OCIO-V2-P018: detects DCI-P3 primaries', () => {
+      const result = processor.detectColorSpace({
+        chromaticities: {
+          redX: 0.68, redY: 0.32,
+          greenX: 0.265, greenY: 0.69,
+          blueX: 0.15, blueY: 0.06,
+        },
+      });
+      expect(result).toBe('DCI-P3');
+    });
+
+    it('OCIO-V2-P019: returns null for unknown chromaticities', () => {
+      const result = processor.detectColorSpace({
+        chromaticities: {
+          redX: 0.5, redY: 0.5,
+          greenX: 0.5, greenY: 0.5,
+          blueX: 0.5, blueY: 0.5,
+        },
+      });
+      expect(result).toBe(null);
+    });
+
+    it('OCIO-V2-P020: returns null for incomplete chromaticities', () => {
+      const result = processor.detectColorSpace({
+        chromaticities: {
+          redX: 0.64, redY: 0.33,
+        },
+      });
+      expect(result).toBe(null);
+    });
+
+    it('OCIO-V2-P021: camera detection takes priority over chromaticities', () => {
+      const result = processor.detectColorSpace({
+        manufacturer: 'ARRI',
+        gammaProfile: 'LogC4',
+        chromaticities: {
+          redX: 0.64, redY: 0.33,
+          greenX: 0.30, greenY: 0.60,
+          blueX: 0.15, blueY: 0.06,
+        },
+      });
+      expect(result).toBe('ARRI LogC4');
+    });
+  });
+
+  // ==========================================================================
+  // Working Space and Look in Transform Chain (v2)
+  // ==========================================================================
+
+  describe('Working space and look in transform chain', () => {
+    it('OCIO-V2-P022: transform includes look when set', () => {
+      processor.setEnabled(true);
+      processor.setInputColorSpace('ACEScg');
+      processor.setLook('Filmic');
+
+      const result1 = processor.transformColor(0.18, 0.18, 0.18);
+
+      processor.setLook('None');
+      const result2 = processor.transformColor(0.18, 0.18, 0.18);
+
+      // Results should differ when look is applied vs. None
+      // (Filmic look modifies the S-curve)
+      expect(result1[0]).not.toBeCloseTo(result2[0], 3);
+    });
+
+    it('OCIO-V2-P023: look direction inverse differs from forward', () => {
+      processor.setEnabled(true);
+      processor.setInputColorSpace('ACEScg');
+      processor.setLook('Filmic');
+
+      processor.setLookDirection('forward');
+      const forward = processor.transformColor(0.5, 0.5, 0.5);
+
+      processor.setLookDirection('inverse');
+      const inverse = processor.transformColor(0.5, 0.5, 0.5);
+
+      // Forward and inverse should produce different results
+      expect(forward[0]).not.toBeCloseTo(inverse[0], 3);
+    });
+
+    it('OCIO-V2-P024: ACES 1.0 look is passthrough (reference)', () => {
+      processor.setEnabled(true);
+      processor.setInputColorSpace('ACEScg');
+
+      processor.setLook('None');
+      const withNone = processor.transformColor(0.18, 0.18, 0.18);
+
+      processor.setLook('ACES 1.0');
+      const withAces = processor.transformColor(0.18, 0.18, 0.18);
+
+      // ACES 1.0 look is a passthrough, should match None
+      expect(withAces[0]).toBeCloseTo(withNone[0], 5);
+      expect(withAces[1]).toBeCloseTo(withNone[1], 5);
+      expect(withAces[2]).toBeCloseTo(withNone[2], 5);
+    });
+  });
 });

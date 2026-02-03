@@ -19,15 +19,34 @@ import {
  */
 
 /**
+ * Wait for tone mapping state to match expected values
+ */
+async function waitForToneMappingState(
+  page: import('@playwright/test').Page,
+  expected: { enabled?: boolean; operator?: string },
+) {
+  await page.waitForFunction(
+    (exp) => {
+      const state = window.__OPENRV_TEST__?.getToneMappingState();
+      if (!state) return false;
+      if (exp.enabled !== undefined && state.enabled !== exp.enabled) return false;
+      if (exp.operator !== undefined && state.operator !== exp.operator) return false;
+      return true;
+    },
+    expected,
+    { timeout: 5000 },
+  );
+}
+
+/**
  * Helper: Navigate to View tab and open the tone mapping dropdown.
  * Returns after the dropdown is visible.
  */
 async function openToneMappingDropdown(page: import('@playwright/test').Page) {
   await page.click('button[data-tab-id="view"]');
-  await page.waitForTimeout(100);
   const control = page.locator('[data-testid="tone-mapping-control-button"]');
+  await expect(control).toBeVisible();
   await control.click();
-  await page.waitForTimeout(100);
   const dropdown = page.locator('[data-testid="tone-mapping-dropdown"]');
   await expect(dropdown).toBeVisible();
 }
@@ -42,7 +61,8 @@ async function selectOperatorViaUI(
 ) {
   await openToneMappingDropdown(page);
   await page.click(`[data-testid="tone-mapping-operator-${operator}"]`);
-  await page.waitForTimeout(100);
+  const expectedEnabled = operator !== 'off';
+  await waitForToneMappingState(page, { enabled: expectedEnabled, operator });
 }
 
 test.describe('Tone Mapping Display', () => {
@@ -64,13 +84,13 @@ test.describe('Tone Mapping Display', () => {
     expect(state.enabled).toBe(false);
 
     await page.keyboard.press('Shift+Alt+j');
-    await page.waitForTimeout(100);
+    await waitForToneMappingState(page, { enabled: true });
 
     state = await getToneMappingState(page);
     expect(state.enabled).toBe(true);
 
     await page.keyboard.press('Shift+Alt+j');
-    await page.waitForTimeout(100);
+    await waitForToneMappingState(page, { enabled: false });
 
     state = await getToneMappingState(page);
     expect(state.enabled).toBe(false);
@@ -90,14 +110,12 @@ test.describe('Tone Mapping Display', () => {
 
     // Enable tone mapping with aces via dropdown UI
     await selectOperatorViaUI(page, 'aces');
-    await page.waitForTimeout(200);
 
     const withToneMapping = await captureCanvasState(page);
     // Canvas should have changed (though may be subtle for SDR content)
 
     // Disable tone mapping by selecting 'off' via dropdown UI
     await selectOperatorViaUI(page, 'off');
-    await page.waitForTimeout(200);
 
     const restored = await captureCanvasState(page);
     // Canvas should be back to similar state
@@ -162,17 +180,14 @@ test.describe('Tone Mapping Operators', () => {
   test('TM-E015: different operators produce different visuals', async ({ page }) => {
     // Capture with reinhard via UI
     await selectOperatorViaUI(page, 'reinhard');
-    await page.waitForTimeout(200);
     const reinhardState = await captureCanvasState(page);
 
     // Capture with filmic via UI
     await selectOperatorViaUI(page, 'filmic');
-    await page.waitForTimeout(200);
     const filmicState = await captureCanvasState(page);
 
     // Capture with aces via UI
     await selectOperatorViaUI(page, 'aces');
-    await page.waitForTimeout(200);
     const acesState = await captureCanvasState(page);
 
     // Different operators should produce different results
@@ -194,7 +209,6 @@ test.describe('Tone Mapping UI Controls', () => {
   test('TM-E020: tone mapping control button exists in View tab', async ({ page }) => {
     // Go to View tab
     await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(100);
 
     // Look for tone mapping control
     const control = page.locator('[data-testid="tone-mapping-control-button"]');
@@ -204,12 +218,11 @@ test.describe('Tone Mapping UI Controls', () => {
   test('TM-E021: clicking tone mapping control opens dropdown', async ({ page }) => {
     // Go to View tab
     await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(100);
 
     // Click the tone mapping control
     const control = page.locator('[data-testid="tone-mapping-control-button"]');
+    await expect(control).toBeVisible();
     await control.click();
-    await page.waitForTimeout(100);
 
     // Dropdown should be visible
     const dropdown = page.locator('[data-testid="tone-mapping-dropdown"]');
@@ -219,12 +232,11 @@ test.describe('Tone Mapping UI Controls', () => {
   test('TM-E022: dropdown has operator buttons', async ({ page }) => {
     // Go to View tab
     await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(100);
 
     // Click the tone mapping control to open dropdown
     const control = page.locator('[data-testid="tone-mapping-control-button"]');
+    await expect(control).toBeVisible();
     await control.click();
-    await page.waitForTimeout(100);
 
     // Check for operator buttons
     await expect(page.locator('[data-testid="tone-mapping-operator-off"]')).toBeVisible();
@@ -236,17 +248,16 @@ test.describe('Tone Mapping UI Controls', () => {
   test('TM-E023: clicking operator button in dropdown changes operator', async ({ page }) => {
     // Go to View tab
     await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(100);
 
     // Click the tone mapping control to open dropdown
     const control = page.locator('[data-testid="tone-mapping-control-button"]');
+    await expect(control).toBeVisible();
     await control.click();
-    await page.waitForTimeout(100);
 
     // Click the filmic operator button
     const filmicBtn = page.locator('[data-testid="tone-mapping-operator-filmic"]');
     await filmicBtn.click();
-    await page.waitForTimeout(100);
+    await waitForToneMappingState(page, { enabled: true, operator: 'filmic' });
 
     const state = await getToneMappingState(page);
     expect(state.operator).toBe('filmic');
@@ -256,12 +267,11 @@ test.describe('Tone Mapping UI Controls', () => {
   test('TM-E024: dropdown has enable checkbox', async ({ page }) => {
     // Go to View tab
     await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(100);
 
     // Click the tone mapping control to open dropdown
     const control = page.locator('[data-testid="tone-mapping-control-button"]');
+    await expect(control).toBeVisible();
     await control.click();
-    await page.waitForTimeout(100);
 
     // Check for enable checkbox
     const checkbox = page.locator('[data-testid="tone-mapping-enable-checkbox"]');
@@ -287,7 +297,7 @@ test.describe('Tone Mapping State Persistence', () => {
 
     // Navigate frames
     await page.keyboard.press('ArrowRight');
-    await page.waitForTimeout(100);
+    await waitForToneMappingState(page, { enabled: true, operator: 'reinhard' });
 
     state = await getToneMappingState(page);
     expect(state.enabled).toBe(true);
@@ -304,7 +314,7 @@ test.describe('Tone Mapping State Persistence', () => {
     // Navigate frames
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('ArrowRight');
-    await page.waitForTimeout(100);
+    await waitForToneMappingState(page, { operator: 'aces' });
 
     state = await getToneMappingState(page);
     expect(state.operator).toBe('aces');
@@ -320,7 +330,7 @@ test.describe('Tone Mapping State Persistence', () => {
 
     // Switch to Color tab
     await page.click('button[data-tab-id="color"]');
-    await page.waitForTimeout(100);
+    await waitForToneMappingState(page, { enabled: true, operator: 'filmic' });
 
     state = await getToneMappingState(page);
     expect(state.enabled).toBe(true);
@@ -328,7 +338,7 @@ test.describe('Tone Mapping State Persistence', () => {
 
     // Switch back to View tab
     await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(100);
+    await waitForToneMappingState(page, { enabled: true, operator: 'filmic' });
 
     state = await getToneMappingState(page);
     expect(state.enabled).toBe(true);
@@ -350,14 +360,18 @@ test.describe('Tone Mapping Integration', () => {
 
     // Open Color panel and adjust exposure slider via UI
     await page.click('button[data-tab-id="color"]');
-    await page.waitForTimeout(100);
+    const exposureSlider = page.locator('[data-testid="slider-exposure"]');
+    await expect(exposureSlider).toBeVisible();
 
     // Find the exposure slider and set it to a non-default value
-    const exposureSlider = page.locator('[data-testid="slider-exposure"]');
     await exposureSlider.fill('1');
     await exposureSlider.dispatchEvent('input');
     await exposureSlider.dispatchEvent('change');
-    await page.waitForTimeout(100);
+    await page.waitForFunction(
+      () => window.__OPENRV_TEST__?.getViewerState()?.colorAdjustments?.exposure === 1,
+      undefined,
+      { timeout: 5000 },
+    );
 
     // Both should still be active
     const toneMappingState = await getToneMappingState(page);
@@ -371,14 +385,14 @@ test.describe('Tone Mapping Integration', () => {
 
     // Toggle on using keyboard shortcut
     await page.keyboard.press('Shift+Alt+j');
-    await page.waitForTimeout(100);
+    await waitForToneMappingState(page, { enabled: true });
 
     state = await getToneMappingState(page);
     expect(state.enabled).toBe(true);
 
     // Toggle off using keyboard shortcut
     await page.keyboard.press('Shift+Alt+j');
-    await page.waitForTimeout(100);
+    await waitForToneMappingState(page, { enabled: false });
 
     state = await getToneMappingState(page);
     expect(state.enabled).toBe(false);
@@ -399,7 +413,7 @@ test.describe('Tone Mapping Integration', () => {
     await expect(checkbox).toBeChecked();
     // Uncheck it to disable tone mapping
     await checkbox.uncheck();
-    await page.waitForTimeout(100);
+    await waitForToneMappingState(page, { enabled: false });
 
     const stateAfterUncheck = await getToneMappingState(page);
     expect(stateAfterUncheck.enabled).toBe(false);

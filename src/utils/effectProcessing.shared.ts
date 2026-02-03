@@ -58,6 +58,7 @@ export interface WorkerColorAdjustments {
   vibranceSkinProtection: boolean;
   contrast: number;
   clarity: number;
+  hueRotation: number;
   temperature: number;
   tint: number;
   brightness: number;
@@ -147,6 +148,14 @@ export interface WorkerHSLQualifierState {
 }
 
 /**
+ * Tone mapping state for worker processing
+ */
+export interface WorkerToneMappingState {
+  enabled: boolean;
+  operator: string; // 'off' | 'reinhard' | 'filmic' | 'aces'
+}
+
+/**
  * All effects state bundled together for worker processing
  */
 export interface WorkerEffectsState {
@@ -157,6 +166,8 @@ export interface WorkerEffectsState {
   channelMode: string;
   colorWheelsState: WorkerColorWheelsState;
   hslQualifierState: WorkerHSLQualifierState;
+  toneMappingState: WorkerToneMappingState;
+  colorInversionEnabled: boolean;
 }
 
 // ============================================================================
@@ -252,4 +263,159 @@ export function hslToRgb(h: number, s: number, l: number): { r: number; g: numbe
   }
 
   return { r, g, b };
+}
+
+// ============================================================================
+// Hue Rotation (luminance-preserving)
+// ============================================================================
+
+/**
+ * Build a 3x3 luminance-preserving hue rotation matrix.
+ * Uses Rodrigues rotation around (1,1,1)/sqrt(3) with a luminance shear
+ * correction to preserve Rec.709 luminance.
+ * Returns a 9-element Float32Array in column-major order (for WebGL mat3).
+ */
+export function buildHueRotationMatrix(degrees: number): Float32Array {
+  const rad = (degrees * Math.PI) / 180;
+  const cosA = Math.cos(rad);
+  const sinA = Math.sin(rad);
+  const sq3 = Math.sqrt(3);
+  const oo = 1 / 3;
+  const t = 1 - cosA;
+
+  // Rodrigues rotation around (1,1,1)/sqrt(3) (row-major)
+  const r00 = cosA + t * oo;
+  const r01 = t * oo - sinA / sq3;
+  const r02 = t * oo + sinA / sq3;
+  const r10 = t * oo + sinA / sq3;
+  const r11 = cosA + t * oo;
+  const r12 = t * oo - sinA / sq3;
+  const r20 = t * oo - sinA / sq3;
+  const r21 = t * oo + sinA / sq3;
+  const r22 = cosA + t * oo;
+
+  // Luminance shear correction: M = TInv * rot * T
+  const dR = LUMA_R - oo;
+  const dG = LUMA_G - oo;
+  const dB = LUMA_B - oo;
+
+  // P = rot * T: P[i][j] = r[i][j] + dj (row sums of rot = 1)
+  const p00 = r00 + dR, p01 = r01 + dG, p02 = r02 + dB;
+  const p10 = r10 + dR, p11 = r11 + dG, p12 = r12 + dB;
+  const p20 = r20 + dR, p21 = r21 + dG, p22 = r22 + dB;
+
+  // M = TInv * P: M[i][j] = P[i][j] - (dR*P[0][j] + dG*P[1][j] + dB*P[2][j])
+  const col0 = dR * p00 + dG * p10 + dB * p20;
+  const col1 = dR * p01 + dG * p11 + dB * p21;
+  const col2 = dR * p02 + dG * p12 + dB * p22;
+
+  return new Float32Array([
+    p00 - col0, p10 - col0, p20 - col0,
+    p01 - col1, p11 - col1, p21 - col1,
+    p02 - col2, p12 - col2, p22 - col2,
+  ]);
+}
+
+/**
+ * Check if hue rotation is at identity (no effect).
+ */
+export function isIdentityHueRotation(degrees: number): boolean {
+  const normalized = ((degrees % 360) + 360) % 360;
+  return normalized === 0;
+}
+
+// ============================================================================
+// Tone Mapping Operators (CPU fallback)
+// ============================================================================
+
+/**
+ * Reinhard tone mapping operator (per-channel).
+ * Formula: output = input / (1 + input)
+ * Maps [0, infinity) to [0, 1).
+ */
+export function tonemapReinhardChannel(value: number): number {
+  if (!Number.isFinite(value) || value < 0) return 0;
+  return value / (1.0 + value);
+}
+
+/**
+ * Filmic tone mapping curve (Hable / Uncharted 2).
+ * Internal curve function used by tonemapFilmicChannel.
+ */
+export function filmicCurveShared(x: number): number {
+  const A = 0.15; // Shoulder strength
+  const B = 0.50; // Linear strength
+  const C = 0.10; // Linear angle
+  const D = 0.20; // Toe strength
+  const E = 0.02; // Toe numerator
+  const F = 0.30; // Toe denominator
+  return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
+}
+
+/**
+ * Filmic tone mapping operator (per-channel).
+ * Uses Hable curve with exposure bias 2.0 and white point 11.2.
+ */
+export function tonemapFilmicChannel(value: number): number {
+  if (!Number.isFinite(value) || value < 0) return 0;
+  const exposureBias = 2.0;
+  const curr = filmicCurveShared(exposureBias * value);
+  const whiteScale = 1.0 / filmicCurveShared(11.2);
+  return Math.max(0, curr * whiteScale);
+}
+
+/**
+ * ACES tone mapping operator (per-channel).
+ * Fitted approximation by Krzysztof Narkowicz.
+ * Formula: (x * (2.51x + 0.03)) / (x * (2.43x + 0.59) + 0.14)
+ */
+export function tonemapACESChannel(value: number): number {
+  if (!Number.isFinite(value) || value < 0) return 0;
+  const a = 2.51;
+  const b = 0.03;
+  const c = 2.43;
+  const d = 0.59;
+  const e = 0.14;
+  return Math.max(0, Math.min(1, (value * (a * value + b)) / (value * (c * value + d) + e)));
+}
+
+/**
+ * Apply tone mapping to a single channel value using the specified operator.
+ */
+export function applyToneMappingToChannel(value: number, operator: string): number {
+  switch (operator) {
+    case 'reinhard':
+      return tonemapReinhardChannel(value);
+    case 'filmic':
+      return tonemapFilmicChannel(value);
+    case 'aces':
+      return tonemapACESChannel(value);
+    default:
+      return value;
+  }
+}
+
+/**
+ * Apply tone mapping to a Uint8ClampedArray (RGBA pixel data) in-place.
+ * Converts 8-bit [0-255] to normalized [0-1], applies tone mapping, converts back.
+ * Alpha channel is preserved unchanged.
+ */
+export function applyToneMappingToData(data: Uint8ClampedArray, operator: string): void {
+  if (operator === 'off') return;
+
+  const len = data.length;
+  for (let i = 0; i < len; i += 4) {
+    let r = data[i]! / 255;
+    let g = data[i + 1]! / 255;
+    let b = data[i + 2]! / 255;
+
+    r = applyToneMappingToChannel(r, operator);
+    g = applyToneMappingToChannel(g, operator);
+    b = applyToneMappingToChannel(b, operator);
+
+    data[i] = Math.max(0, Math.min(255, Math.round(Number.isFinite(r) ? r * 255 : 0)));
+    data[i + 1] = Math.max(0, Math.min(255, Math.round(Number.isFinite(g) ? g * 255 : 0)));
+    data[i + 2] = Math.max(0, Math.min(255, Math.round(Number.isFinite(b) ? b * 255 : 0)));
+    // Alpha unchanged
+  }
 }

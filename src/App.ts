@@ -16,6 +16,8 @@ import { LensControl } from './ui/components/LensControl';
 import { StackControl } from './ui/components/StackControl';
 import { ChannelSelect } from './ui/components/ChannelSelect';
 import { StereoControl } from './ui/components/StereoControl';
+import { StereoEyeTransformControl } from './ui/components/StereoEyeTransformControl';
+import { StereoAlignControl } from './ui/components/StereoAlignControl';
 import { Histogram } from './ui/components/Histogram';
 import { Waveform } from './ui/components/Waveform';
 import { Vectorscope } from './ui/components/Vectorscope';
@@ -24,6 +26,7 @@ import { ScopesControl } from './ui/components/ScopesControl';
 import { CompareControl } from './ui/components/CompareControl';
 import { SafeAreasControl } from './ui/components/SafeAreasControl';
 import { FalseColorControl } from './ui/components/FalseColorControl';
+import { LuminanceVisualizationControl } from './ui/components/LuminanceVisualizationControl';
 import { ToneMappingControl } from './ui/components/ToneMappingControl';
 import { ZebraControl } from './ui/components/ZebraControl';
 import { HSLQualifierControl } from './ui/components/HSLQualifierControl';
@@ -31,6 +34,8 @@ import { GhostFrameControl } from './ui/components/GhostFrameControl';
 import { PARControl } from './ui/components/PARControl';
 import { BackgroundPatternControl } from './ui/components/BackgroundPatternControl';
 import { OCIOControl } from './ui/components/OCIOControl';
+import { OCIOState } from './color/OCIOConfig';
+import { DisplayProfileControl } from './ui/components/DisplayProfileControl';
 import { exportSequence } from './utils/SequenceExporter';
 import { showAlert, showModal, closeModal, showConfirm } from './ui/components/shared/Modal';
 import { SessionSerializer } from './core/session/SessionSerializer';
@@ -56,6 +61,7 @@ import { FullscreenManager } from './utils/FullscreenManager';
 import { PresentationMode } from './utils/PresentationMode';
 import { NetworkSyncManager } from './network/NetworkSyncManager';
 import { NetworkControl } from './ui/components/NetworkControl';
+import { ColorInversionToggle } from './ui/components/ColorInversionToggle';
 import type { OpenRVAPIConfig } from './api/OpenRVAPI';
 
 export class App {
@@ -79,6 +85,8 @@ export class App {
   private stackControl: StackControl;
   private channelSelect: ChannelSelect;
   private stereoControl: StereoControl;
+  private stereoEyeTransformControl: StereoEyeTransformControl;
+  private stereoAlignControl: StereoAlignControl;
   private histogram: Histogram;
   private waveform: Waveform;
   private vectorscope: Vectorscope;
@@ -87,6 +95,7 @@ export class App {
   private compareControl: CompareControl;
   private safeAreasControl: SafeAreasControl;
   private falseColorControl: FalseColorControl;
+  private luminanceVisControl: LuminanceVisualizationControl;
   private toneMappingControl: ToneMappingControl;
   private zebraControl: ZebraControl;
   private hslQualifierControl: HSLQualifierControl;
@@ -94,6 +103,7 @@ export class App {
   private parControl: PARControl;
   private backgroundPatternControl: BackgroundPatternControl;
   private ocioControl: OCIOControl;
+  private displayProfileControl: DisplayProfileControl;
   private animationId: number | null = null;
   private boundHandleResize: () => void;
   private boundHandleVisibilityChange: () => void;
@@ -115,6 +125,7 @@ export class App {
   private presentationMode: PresentationMode;
   private networkSyncManager: NetworkSyncManager;
   private networkControl: NetworkControl;
+  private colorInversionToggle: ColorInversionToggle;
 
   // History recording state
   private colorHistoryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -159,6 +170,13 @@ export class App {
 
     this.paintToolbar = new PaintToolbar(this.paintEngine);
     this.colorControls = new ColorControls();
+    this.colorInversionToggle = new ColorInversionToggle();
+
+    // Connect color inversion toggle to viewer
+    this.colorInversionToggle.on('inversionChanged', (enabled) => {
+      this.viewer.setColorInversion(enabled);
+      this.scheduleUpdateScopes();
+    });
 
     // Initialize color history with current (default) state
     this.colorHistoryPrevious = this.colorControls.getAdjustments();
@@ -295,6 +313,7 @@ export class App {
     // Safe Areas control
     this.safeAreasControl = new SafeAreasControl(this.viewer.getSafeAreasOverlay());
     this.falseColorControl = new FalseColorControl(this.viewer.getFalseColor());
+    this.luminanceVisControl = new LuminanceVisualizationControl(this.viewer.getLuminanceVisualization());
     this.toneMappingControl = new ToneMappingControl();
     this.toneMappingControl.on('stateChanged', (state) => {
       this.viewer.setToneMappingState(state);
@@ -323,10 +342,17 @@ export class App {
 
     // OCIO color management control
     this.ocioControl = new OCIOControl();
-    this.ocioControl.on('stateChanged', () => {
-      this.viewer.refresh();
+    this.ocioControl.on('stateChanged', (state) => {
+      this.updateOCIOPipeline(state);
       this.scheduleUpdateScopes();
       this.syncGTOStore();
+    });
+
+    // Display profile control (display color management - final pipeline stage)
+    this.displayProfileControl = new DisplayProfileControl();
+    this.displayProfileControl.on('displayStateChanged', (state) => {
+      this.viewer.setDisplayColorState(state);
+      this.scheduleUpdateScopes();
     });
 
     // Presentation mode
@@ -526,6 +552,31 @@ export class App {
       this.viewer.setStereoState(state);
       this.scheduleUpdateScopes();
       this.syncGTOStore();
+      // Hide per-eye controls when stereo is turned off
+      if (state.mode === 'off') {
+        this.stereoEyeTransformControl.hidePanel();
+        this.stereoEyeTransformControl.reset();
+        this.stereoAlignControl.reset();
+        this.viewer.resetStereoEyeTransforms();
+        this.viewer.resetStereoAlignMode();
+      }
+      // Update visibility of per-eye controls
+      this.updateStereoEyeControlsVisibility();
+    });
+
+    // Initialize per-eye transform control
+    this.stereoEyeTransformControl = new StereoEyeTransformControl();
+    this.stereoEyeTransformControl.on('transformChanged', (state) => {
+      this.viewer.setStereoEyeTransforms(state);
+      this.scheduleUpdateScopes();
+      this.syncGTOStore();
+    });
+
+    // Initialize stereo alignment control
+    this.stereoAlignControl = new StereoAlignControl();
+    this.stereoAlignControl.on('alignModeChanged', (mode) => {
+      this.viewer.setStereoAlignMode(mode);
+      this.scheduleUpdateScopes();
     });
 
     // Initialize histogram
@@ -587,6 +638,12 @@ export class App {
     this.createLayout();
     this.bindEvents();
     this.start();
+
+    // Initialize OCIO pipeline from persisted state (if OCIO was enabled before page reload)
+    this.updateOCIOPipeline(this.ocioControl.getState());
+
+    // Initialize display profile from persisted state
+    this.viewer.setDisplayColorState(this.displayProfileControl.getState());
 
     // Initialize auto-save and check for recovery
     await this.initAutoSave();
@@ -787,6 +844,19 @@ export class App {
       const source = this.session.currentSource;
       if (source) {
         this.cropControl.setSourceDimensions(source.width, source.height);
+
+        // Per-source OCIO color space detection
+        const processor = this.ocioControl.getProcessor();
+        const sourceId = source.name || `source_${this.session.currentSourceIndex}`;
+        processor.setActiveSource(sourceId);
+
+        // Detect color space from file extension
+        const lastDot = source.name ? source.name.lastIndexOf('.') : -1;
+        const ext = lastDot >= 0 ? source.name!.substring(lastDot).toLowerCase() : '';
+        const detectedFromExt = processor.detectColorSpaceFromExtension(ext);
+        if (detectedFromExt) {
+          processor.setSourceInputColorSpace(sourceId, detectedFromExt);
+        }
       }
       // GTO store and stack updates
       if (!this.session.gtoData) {
@@ -862,6 +932,8 @@ export class App {
     // --- GROUP 2: Comparison (Compare + Stereo + Ghost) ---
     viewContent.appendChild(this.compareControl.render());
     viewContent.appendChild(this.stereoControl.render());
+    viewContent.appendChild(this.stereoEyeTransformControl.render());
+    viewContent.appendChild(this.stereoAlignControl.render());
     viewContent.appendChild(this.ghostFrameControl.render());
     viewContent.appendChild(ContextToolbar.createDivider());
 
@@ -873,16 +945,22 @@ export class App {
     // --- GROUP 4: Analysis Tools (SafeAreas, FalseColor, ToneMapping, Zebra, HSL, PAR) ---
     viewContent.appendChild(this.safeAreasControl.render());
     viewContent.appendChild(this.falseColorControl.render());
+    viewContent.appendChild(this.luminanceVisControl.render());
     viewContent.appendChild(this.toneMappingControl.render());
     viewContent.appendChild(this.zebraControl.render());
     viewContent.appendChild(this.hslQualifierControl.render());
     viewContent.appendChild(this.parControl.render());
     viewContent.appendChild(this.backgroundPatternControl.render());
+    viewContent.appendChild(this.displayProfileControl.render());
 
     // Trigger re-render when false color state changes
     this.viewer.getFalseColor().on('stateChanged', () => {
       this.viewer.refresh();
     });
+
+    // Add luminance visualization badge to canvas overlay
+    const lumVisBadge = this.luminanceVisControl.createBadge();
+    this.viewer.getCanvasContainer().appendChild(lumVisBadge);
 
     // Setup eyedropper for color picking from viewer
     this.hslQualifierControl.setEyedropperCallback((active) => {
@@ -1027,6 +1105,9 @@ export class App {
 
     this.contextToolbar.setTabContent('view', viewContent);
 
+    // Initially hide per-eye controls (shown when stereo mode is activated)
+    this.updateStereoEyeControlsVisibility();
+
     // === COLOR TAB ===
     const colorContent = document.createElement('div');
     colorContent.style.cssText = 'display: flex; align-items: center; gap: 6px;';
@@ -1035,6 +1116,8 @@ export class App {
     colorContent.appendChild(this.colorControls.render());
     colorContent.appendChild(ContextToolbar.createDivider());
     colorContent.appendChild(this.cdlControl.render());
+    colorContent.appendChild(ContextToolbar.createDivider());
+    colorContent.appendChild(this.colorInversionToggle.render());
     colorContent.appendChild(ContextToolbar.createDivider());
 
     // Curves toggle button
@@ -1279,6 +1362,12 @@ export class App {
       if (settings.stereo) {
         this.stereoControl.setState(settings.stereo);
       }
+      if (settings.stereoEyeTransform) {
+        this.stereoEyeTransformControl.setState(settings.stereoEyeTransform);
+      }
+      if (settings.stereoAlignMode) {
+        this.stereoAlignControl.setMode(settings.stereoAlignMode);
+      }
       if (settings.scopes) {
         const applyScope = (scope: 'histogram' | 'waveform' | 'vectorscope', visible: boolean): void => {
           if (scope === 'histogram') {
@@ -1395,6 +1484,7 @@ export class App {
       'panel.vectorscope': () => this.scopesControl.toggleScope('vectorscope'),
       'panel.histogram': () => this.scopesControl.toggleScope('histogram'),
       'panel.ocio': () => this.ocioControl.toggle(),
+      'display.cycleProfile': () => this.displayProfileControl.cycleProfile(),
       'transform.rotateLeft': () => this.transformControl.rotateLeft(),
       'transform.rotateRight': () => this.transformControl.rotateRight(),
       'transform.flipHorizontal': () => this.transformControl.toggleFlipH(),
@@ -1428,6 +1518,8 @@ export class App {
       'channel.luminance': () => this.channelSelect.handleKeyboard('L', true),
       'channel.none': () => this.channelSelect.handleKeyboard('N', true),
       'stereo.toggle': () => this.stereoControl.handleKeyboard('3', true),
+      'stereo.eyeTransform': () => this.stereoEyeTransformControl.handleKeyboard('E', true),
+      'stereo.cycleAlign': () => this.stereoAlignControl.handleKeyboard('4', true),
       'view.toggleGuides': () => this.safeAreasControl.getOverlay().toggle(),
       'view.togglePixelProbe': () => this.viewer.getPixelProbe().toggle(),
       'view.toggleFalseColor': () => this.viewer.getFalseColor().toggle(),
@@ -1446,6 +1538,12 @@ export class App {
       },
       'color.toggleHSLQualifier': () => {
         this.viewer.getHSLQualifier().toggle();
+      },
+      'color.toggleInversion': () => {
+        this.colorInversionToggle.toggle();
+      },
+      'view.cycleLuminanceVis': () => {
+        this.viewer.getLuminanceVisualization().cycleMode();
       },
       'panel.history': () => {
         this.historyPanel.toggle();
@@ -1476,6 +1574,10 @@ export class App {
           if (this.cropControl.getCropState().enabled) {
             this.cropControl.toggle();
           }
+        }
+        // Close stereo eye transform panel
+        if (this.stereoEyeTransformControl.isPanelVisible()) {
+          this.stereoEyeTransformControl.hidePanel();
         }
       },
       'snapshot.create': () => {
@@ -1898,6 +2000,14 @@ export class App {
    * Uses requestAnimationFrame to ensure updates happen after the render cycle.
    */
   private pendingScopeUpdate = false;
+  private updateStereoEyeControlsVisibility(): void {
+    const isStereoActive = this.stereoControl.isActive();
+    const eyeTransformEl = this.stereoEyeTransformControl.render();
+    const alignEl = this.stereoAlignControl.render();
+    eyeTransformEl.style.display = isStereoActive ? 'inline-flex' : 'none';
+    alignEl.style.display = isStereoActive ? 'inline-flex' : 'none';
+  }
+
   private scheduleUpdateScopes(): void {
     if (this.pendingScopeUpdate) return;
     this.pendingScopeUpdate = true;
@@ -2085,14 +2195,14 @@ export class App {
       'SCOPES': ['panel.histogram', 'panel.waveform', 'panel.vectorscope'],
       'TIMELINE': ['timeline.setInPoint', 'timeline.setInPointAlt', 'timeline.setOutPoint', 'timeline.setOutPointAlt', 'timeline.resetInOut', 'timeline.toggleMark', 'timeline.cycleLoopMode'],
       'PAINT (Annotate tab)': ['paint.pan', 'paint.pen', 'paint.eraser', 'paint.text', 'paint.rectangle', 'paint.ellipse', 'paint.line', 'paint.arrow', 'paint.toggleBrush', 'paint.toggleGhost', 'paint.toggleHold', 'edit.undo', 'edit.redo'],
-      'COLOR': ['panel.color', 'panel.curves', 'panel.ocio'],
+      'COLOR': ['panel.color', 'panel.curves', 'panel.ocio', 'display.cycleProfile'],
       'WIPE COMPARISON': ['view.cycleWipeMode', 'view.toggleSplitScreen'],
       'AUDIO (Video only)': [], // Special case - not in DEFAULT_KEY_BINDINGS
       'EXPORT': ['export.quickExport', 'export.copyFrame'],
       'ANNOTATIONS': ['annotation.previous', 'annotation.next'],
       'TRANSFORM': ['transform.rotateLeft', 'transform.rotateRight', 'transform.flipHorizontal', 'transform.flipVertical'],
       'PANELS': ['panel.effects', 'panel.crop', 'panel.close'],
-      'STEREO': ['stereo.toggle']
+      'STEREO': ['stereo.toggle', 'stereo.eyeTransform', 'stereo.cycleAlign']
     };
 
     // Add special audio shortcuts
@@ -2667,6 +2777,26 @@ export class App {
     document.addEventListener('keydown', handleKeyDown);
   }
 
+  /**
+   * Update the OCIO rendering pipeline when OCIO state changes.
+   *
+   * Bakes the current OCIO transform chain into a 3D LUT for GPU-accelerated
+   * processing and sends it to the Viewer for real-time display.
+   */
+  private updateOCIOPipeline(state: OCIOState): void {
+    const processor = this.ocioControl.getProcessor();
+
+    if (state.enabled) {
+      // Bake the OCIO transform chain into a 3D LUT for GPU acceleration
+      // Size 33 provides a good balance of accuracy vs. memory/performance
+      const bakedLUT = processor.bakeTo3DLUT(33);
+      this.viewer.setOCIOBakedLUT(bakedLUT, true);
+    } else {
+      // Disable OCIO - clear the baked LUT
+      this.viewer.setOCIOBakedLUT(null, false);
+    }
+  }
+
   private syncGTOStore(): void {
     if (!this.gtoStore) return;
     this.gtoStore.updateFromState({
@@ -2950,6 +3080,8 @@ export class App {
     this.filterControl.dispose();
     this.cropControl.dispose();
     this.cdlControl.dispose();
+    this.colorInversionToggle.dispose();
+    this.displayProfileControl.dispose();
     this.curvesControl.dispose();
     this.lensControl.dispose();
     this.stackControl.dispose();
@@ -2957,6 +3089,8 @@ export class App {
     this.parControl.dispose();
     this.backgroundPatternControl.dispose();
     this.stereoControl.dispose();
+    this.stereoEyeTransformControl.dispose();
+    this.stereoAlignControl.dispose();
     this.histogram.dispose();
     this.waveform.dispose();
     this.vectorscope.dispose();

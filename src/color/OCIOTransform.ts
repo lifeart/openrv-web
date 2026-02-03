@@ -5,6 +5,19 @@
  * standard XYZ-based transformations with chromatic adaptation.
  */
 
+import {
+  pqEncode, pqDecode,
+  hlgEncode, hlgDecode,
+  logC3Encode, logC3Decode,
+  logC4Encode, logC4Decode,
+  log3G10Encode, log3G10Decode,
+  slog3Encode, slog3Decode,
+  gamma22Encode, gamma22Decode,
+  gamma24Encode, gamma24Decode,
+  gamma26Encode, gamma26Decode,
+  acescctEncode, acescctDecode,
+} from './TransferFunctions';
+
 /**
  * 3x3 matrix type for color transforms
  */
@@ -34,6 +47,15 @@ export const D65_WHITE: RGB = [0.95047, 1.0, 1.08883];
 
 /** D60 white point (ACES standard) */
 export const D60_WHITE: RGB = [0.95265, 1.0, 1.00883];
+
+/** D50 white point (ICC Profile connection space) */
+export const D50_WHITE: RGB = [0.96422, 1.0, 0.82521];
+
+/** D55 white point */
+export const D55_WHITE: RGB = [0.95682, 1.0, 0.92149];
+
+/** Illuminant A (tungsten, ~2856K) */
+export const A_WHITE: RGB = [1.09850, 1.0, 0.35585];
 
 // =============================================================================
 // Color Space to XYZ Matrices
@@ -120,6 +142,138 @@ export const XYZ_TO_DCIP3: Matrix3x3 = [
   -0.0761724, 0.9568845,
 ];
 
+/**
+ * Rec.2020 to XYZ (D65) - ITU-R BT.2020
+ * Wide gamut HDR broadcast
+ */
+export const REC2020_TO_XYZ: Matrix3x3 = [
+  0.6369580, 0.1446169, 0.1688810,
+  0.2627002, 0.6779981, 0.0593017,
+  0.0000000, 0.0280727, 1.0609851,
+];
+
+/**
+ * XYZ (D65) to Rec.2020
+ * Inverse of REC2020_TO_XYZ
+ */
+export const XYZ_TO_REC2020: Matrix3x3 = [
+  1.7166512, -0.3556708, -0.2533663,
+  -0.6666844, 1.6164812, 0.0157685,
+  0.0176399, -0.0427706, 0.9421031,
+];
+
+/**
+ * Adobe RGB to XYZ (D65)
+ * Photography workflow
+ */
+export const ADOBERGB_TO_XYZ: Matrix3x3 = [
+  0.5767309, 0.1855540, 0.1881852,
+  0.2973769, 0.6273491, 0.0752741,
+  0.0270343, 0.0706872, 0.9911085,
+];
+
+/**
+ * XYZ (D65) to Adobe RGB
+ * Computed inverse of ADOBERGB_TO_XYZ
+ */
+export const XYZ_TO_ADOBERGB: Matrix3x3 = invertMatrix(ADOBERGB_TO_XYZ);
+
+/**
+ * ProPhoto RGB to XYZ (D50)
+ * Wide gamut photography - note: native white point is D50
+ */
+export const PROPHOTO_TO_XYZ_D50: Matrix3x3 = [
+  0.7976749, 0.1351917, 0.0313534,
+  0.2880402, 0.7118741, 0.0000857,
+  0.0000000, 0.0000000, 0.8252100,
+];
+
+/**
+ * XYZ (D50) to ProPhoto RGB
+ * Computed inverse of PROPHOTO_TO_XYZ_D50
+ */
+export const XYZ_D50_TO_PROPHOTO: Matrix3x3 = invertMatrix(PROPHOTO_TO_XYZ_D50);
+
+/**
+ * ARRI Wide Gamut 3 to XYZ (D65)
+ * ARRI ALEXA camera native color space
+ */
+export const ARRI_WIDE_GAMUT3_TO_XYZ: Matrix3x3 = [
+  0.6380064, 0.2147038, 0.0975898,
+  0.2919938, 0.8238408, -0.1158345,
+  0.0027928, -0.0678150, 1.1530222,
+];
+
+/**
+ * XYZ (D65) to ARRI Wide Gamut 3
+ * Computed inverse of ARRI_WIDE_GAMUT3_TO_XYZ
+ */
+export const XYZ_TO_ARRI_WIDE_GAMUT3: Matrix3x3 = invertMatrix(ARRI_WIDE_GAMUT3_TO_XYZ);
+
+/**
+ * ARRI Wide Gamut 4 to XYZ (D65)
+ * ARRI ALEXA 35 camera native color space
+ */
+export const ARRI_WIDE_GAMUT4_TO_XYZ: Matrix3x3 = [
+  0.704858320407232, 0.129760295170463, 0.115837311473977,
+  0.254524176404027, 0.781477732712002, -0.036001909116029,
+  0.000000000000000, 0.000000000000000, 1.089057750759878,
+];
+
+/**
+ * XYZ (D65) to ARRI Wide Gamut 4
+ * Computed inverse of ARRI_WIDE_GAMUT4_TO_XYZ
+ */
+export const XYZ_TO_ARRI_WIDE_GAMUT4: Matrix3x3 = invertMatrix(ARRI_WIDE_GAMUT4_TO_XYZ);
+
+/**
+ * REDWideGamutRGB to XYZ (D65)
+ * RED camera native color space
+ */
+export const REDWIDEGAMUT_TO_XYZ: Matrix3x3 = [
+  0.7352752, 0.0684739, 0.1465509,
+  0.2869164, 0.8429858, -0.1299022,
+  -0.0797972, -0.0347107, 1.2025079,
+];
+
+/**
+ * XYZ (D65) to REDWideGamutRGB
+ * Computed inverse of REDWIDEGAMUT_TO_XYZ
+ */
+export const XYZ_TO_REDWIDEGAMUT: Matrix3x3 = invertMatrix(REDWIDEGAMUT_TO_XYZ);
+
+/**
+ * Sony S-Gamut3 to XYZ (D65)
+ * Sony camera native color space
+ */
+export const SGAMUT3_TO_XYZ: Matrix3x3 = [
+  0.7064827, 0.1288010, 0.1151722,
+  0.2709797, 0.7866064, -0.0575861,
+  -0.0096778, 0.0046000, 1.0941356,
+];
+
+/**
+ * XYZ (D65) to Sony S-Gamut3
+ * Computed inverse of SGAMUT3_TO_XYZ
+ */
+export const XYZ_TO_SGAMUT3: Matrix3x3 = invertMatrix(SGAMUT3_TO_XYZ);
+
+/**
+ * Sony S-Gamut3.Cine to XYZ (D65)
+ * Sony cinema-optimized camera space
+ */
+export const SGAMUT3CINE_TO_XYZ: Matrix3x3 = [
+  0.5990839, 0.2489255, 0.1024065,
+  0.2150758, 0.8850685, -0.1001443,
+  -0.0320658, -0.0276540, 1.1477198,
+];
+
+/**
+ * XYZ (D65) to Sony S-Gamut3.Cine
+ * Computed inverse of SGAMUT3CINE_TO_XYZ
+ */
+export const XYZ_TO_SGAMUT3CINE: Matrix3x3 = invertMatrix(SGAMUT3CINE_TO_XYZ);
+
 // =============================================================================
 // Bradford Chromatic Adaptation
 // =============================================================================
@@ -140,15 +294,46 @@ const BRADFORD_INV: Matrix3x3 = [
 ];
 
 /**
+ * Von Kries cone response matrix
+ */
+const VON_KRIES: Matrix3x3 = [
+  0.4002400, 0.7076000, -0.0808100,
+  -0.2263000, 1.1653200, 0.0457000,
+  0.0000000, 0.0000000, 0.9182200,
+];
+
+/**
+ * Inverse Von Kries cone response matrix
+ */
+const VON_KRIES_INV: Matrix3x3 = [
+  1.8599364, -1.1293816, 0.2198974,
+  0.3611914, 0.6388125, -0.0000064,
+  0.0000000, 0.0000000, 1.0890636,
+];
+
+/**
+ * Chromatic adaptation method
+ */
+export type AdaptationMethod = 'bradford' | 'vonKries';
+
+/**
  * Compute chromatic adaptation matrix from source to destination white point
+ * @param srcWhite - Source illuminant white point in XYZ
+ * @param dstWhite - Destination illuminant white point in XYZ
+ * @param method - Adaptation method ('bradford' or 'vonKries'), defaults to 'bradford'
  */
 export function chromaticAdaptationMatrix(
   srcWhite: RGB,
-  dstWhite: RGB
+  dstWhite: RGB,
+  method: AdaptationMethod = 'bradford'
 ): Matrix3x3 {
-  // Convert white points to cone response (Bradford)
-  const srcCone = multiplyMatrixVector(BRADFORD, srcWhite);
-  const dstCone = multiplyMatrixVector(BRADFORD, dstWhite);
+  // Select cone response matrices based on method
+  const coneMatrix = method === 'vonKries' ? VON_KRIES : BRADFORD;
+  const coneMatrixInv = method === 'vonKries' ? VON_KRIES_INV : BRADFORD_INV;
+
+  // Convert white points to cone response
+  const srcCone = multiplyMatrixVector(coneMatrix, srcWhite);
+  const dstCone = multiplyMatrixVector(coneMatrix, dstWhite);
 
   // Protect against division by zero with a small epsilon
   const EPSILON = 1e-10;
@@ -172,9 +357,9 @@ export function chromaticAdaptationMatrix(
     safeDivide(dstCone[2], srcCone[2]),
   ];
 
-  // M_adapt = Bradford_inv * Scale * Bradford
-  const temp = multiplyMatrices(scale, BRADFORD);
-  return multiplyMatrices(BRADFORD_INV, temp);
+  // M_adapt = ConeInv * Scale * Cone
+  const temp = multiplyMatrices(scale, coneMatrix);
+  return multiplyMatrices(coneMatrixInv, temp);
 }
 
 /**
@@ -186,6 +371,36 @@ export const D60_TO_D65: Matrix3x3 = chromaticAdaptationMatrix(D60_WHITE, D65_WH
  * Pre-computed D65 to D60 adaptation matrix
  */
 export const D65_TO_D60: Matrix3x3 = chromaticAdaptationMatrix(D65_WHITE, D60_WHITE);
+
+/**
+ * Pre-computed D50 to D65 adaptation matrix (for ProPhoto RGB)
+ */
+export const D50_TO_D65: Matrix3x3 = chromaticAdaptationMatrix(D50_WHITE, D65_WHITE);
+
+/**
+ * Pre-computed D65 to D50 adaptation matrix
+ */
+export const D65_TO_D50: Matrix3x3 = chromaticAdaptationMatrix(D65_WHITE, D50_WHITE);
+
+/**
+ * Pre-computed D55 to D65 adaptation matrix
+ */
+export const D55_TO_D65: Matrix3x3 = chromaticAdaptationMatrix(D55_WHITE, D65_WHITE);
+
+/**
+ * Pre-computed D65 to D55 adaptation matrix
+ */
+export const D65_TO_D55: Matrix3x3 = chromaticAdaptationMatrix(D65_WHITE, D55_WHITE);
+
+/**
+ * Pre-computed A to D65 adaptation matrix (tungsten to daylight)
+ */
+export const A_TO_D65: Matrix3x3 = chromaticAdaptationMatrix(A_WHITE, D65_WHITE);
+
+/**
+ * Pre-computed D65 to A adaptation matrix
+ */
+export const D65_TO_A: Matrix3x3 = chromaticAdaptationMatrix(D65_WHITE, A_WHITE);
 
 // =============================================================================
 // Matrix Operations
@@ -223,6 +438,49 @@ export function multiplyMatrixVector(m: Matrix3x3, v: RGB): RGB {
  * Identity matrix
  */
 export const IDENTITY: Matrix3x3 = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+
+/**
+ * Compute the inverse of a 3x3 matrix
+ * @throws Error if the matrix is singular (determinant is zero)
+ */
+export function invertMatrix(m: Matrix3x3): Matrix3x3 {
+  const [a, b, c, d, e, f, g, h, i] = m;
+  const det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+  if (Math.abs(det) < 1e-15) {
+    throw new Error('Matrix is singular and cannot be inverted');
+  }
+  const invDet = 1 / det;
+  return [
+    (e * i - f * h) * invDet,
+    (c * h - b * i) * invDet,
+    (b * f - c * e) * invDet,
+    (f * g - d * i) * invDet,
+    (a * i - c * g) * invDet,
+    (c * d - a * f) * invDet,
+    (d * h - e * g) * invDet,
+    (b * g - a * h) * invDet,
+    (a * e - b * d) * invDet,
+  ];
+}
+
+/**
+ * Compose multiple 3x3 matrices into a single matrix.
+ * Applies matrices in order: result = matrices[n-1] * ... * matrices[1] * matrices[0]
+ * This means matrices[0] is applied first to a vector.
+ *
+ * @param matrices - Array of matrices to compose (applied left to right on vectors)
+ * @returns Single composed matrix
+ */
+export function composeMatrices(...matrices: Matrix3x3[]): Matrix3x3 {
+  if (matrices.length === 0) {
+    return IDENTITY;
+  }
+  let result = matrices[0]!;
+  for (let i = 1; i < matrices.length; i++) {
+    result = multiplyMatrices(matrices[i]!, result);
+  }
+  return result;
+}
 
 // =============================================================================
 // Transfer Functions (Gamma)
@@ -331,6 +589,76 @@ export function rec709DecodeRGB(rgb: RGB): RGB {
 }
 
 // =============================================================================
+// Transfer Function Dispatch (connects to TransferFunctions.ts)
+// =============================================================================
+
+/** Map of transfer function name to encode function */
+const ENCODE_FUNCTIONS: Record<string, (v: number) => number> = {
+  pq: pqEncode,
+  hlg: hlgEncode,
+  logC3: logC3Encode,
+  logC4: logC4Encode,
+  log3G10: log3G10Encode,
+  slog3: slog3Encode,
+  gamma22: gamma22Encode,
+  gamma24: gamma24Encode,
+  gamma26: gamma26Encode,
+  acescct: acescctEncode,
+};
+
+/** Map of transfer function name to decode function */
+const DECODE_FUNCTIONS: Record<string, (v: number) => number> = {
+  pq: pqDecode,
+  hlg: hlgDecode,
+  logC3: logC3Decode,
+  logC4: logC4Decode,
+  log3G10: log3G10Decode,
+  slog3: slog3Decode,
+  gamma22: gamma22Decode,
+  gamma24: gamma24Decode,
+  gamma26: gamma26Decode,
+  acescct: acescctDecode,
+};
+
+/**
+ * Apply transfer function encode to an RGB triplet by name.
+ */
+function applyTransferEncodeRGB(func: TransferFunctionName, rgb: RGB): RGB {
+  switch (func) {
+    case 'srgb':
+      return srgbEncodeRGB(rgb);
+    case 'rec709':
+      return rec709EncodeRGB(rgb);
+    default: {
+      const encodeFn = ENCODE_FUNCTIONS[func];
+      if (encodeFn) {
+        return [encodeFn(rgb[0]), encodeFn(rgb[1]), encodeFn(rgb[2])];
+      }
+      return rgb;
+    }
+  }
+}
+
+/**
+ * Apply transfer function decode to an RGB triplet by name.
+ */
+function applyTransferDecodeRGB(func: TransferFunctionName, rgb: RGB): RGB {
+  switch (func) {
+    case 'srgb':
+      return srgbDecodeRGB(rgb);
+    case 'rec709':
+      return rec709DecodeRGB(rgb);
+    default: {
+      const decodeFn = DECODE_FUNCTIONS[func];
+      if (decodeFn) {
+        return [decodeFn(rgb[0]), decodeFn(rgb[1]), decodeFn(rgb[2])];
+      }
+      return rgb;
+    }
+  }
+}
+
+// =============================================================================
 // ACES Tone Mapping (RRT + ODT approximation)
 // =============================================================================
 
@@ -365,17 +693,117 @@ export function acesToneMapRGB(rgb: RGB): RGB {
 }
 
 // =============================================================================
+// Look Transforms (built-in approximations)
+// =============================================================================
+
+/**
+ * Filmic S-curve look transform.
+ * Applies an increased contrast S-curve with slightly warmer shadows
+ * and cooler highlights to simulate a classic filmic look.
+ */
+function filmicLookChannel(x: number): number {
+  // Handle edge cases
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+  // S-curve: steeper midtones, lifted shadows, compressed highlights
+  // Using a cubic Bezier-like S-curve approximation
+  const t = x;
+  const result = t * t * (3.0 - 2.0 * t) * 1.05 - 0.025;
+  return Math.max(0, Math.min(1, result));
+}
+
+/**
+ * Apply a built-in look transform to an RGB triplet.
+ *
+ * Built-in looks:
+ * - 'ACES 1.0': Reference rendering (passthrough - ACES RRT is handled by tonemap)
+ * - 'Filmic': Increased contrast S-curve for a cinematic look
+ * - 'None': Passthrough
+ *
+ * @param rgb - Input RGB triplet
+ * @param lookName - Name of the look to apply
+ * @param direction - 'forward' or 'inverse'
+ * @returns Transformed RGB triplet
+ */
+function applyLookTransform(rgb: RGB, lookName: string, direction: 'forward' | 'inverse'): RGB {
+  switch (lookName) {
+    case 'None':
+      return rgb;
+
+    case 'ACES 1.0':
+      // ACES reference rendering - the tone mapping is handled by the
+      // 'aces' tonemap step in the transform chain, so this is a passthrough
+      return rgb;
+
+    case 'Filmic': {
+      if (direction === 'forward') {
+        // Apply filmic S-curve with slight warm/cool split
+        return [
+          filmicLookChannel(rgb[0] * 1.02), // Slightly warm reds
+          filmicLookChannel(rgb[1]),
+          filmicLookChannel(rgb[2] * 0.98), // Slightly cool blues
+        ];
+      } else {
+        // Inverse is approximate (S-curve doesn't have a clean analytical inverse)
+        // Use a simple inverse approximation
+        const invFilmic = (x: number): number => {
+          if (x <= 0) return 0;
+          if (x >= 1) return 1;
+          // Newton's method approximate inverse of the S-curve
+          let t = x;
+          for (let iter = 0; iter < 4; iter++) {
+            const f = t * t * (3.0 - 2.0 * t) * 1.05 - 0.025 - x;
+            const df = (6.0 * t - 6.0 * t * t) * 1.05;
+            if (Math.abs(df) < 1e-10) break;
+            t -= f / df;
+            t = Math.max(0, Math.min(1, t));
+          }
+          return t;
+        };
+        return [
+          invFilmic(rgb[0]) / 1.02,
+          invFilmic(rgb[1]),
+          invFilmic(rgb[2]) / 0.98,
+        ];
+      }
+    }
+
+    default:
+      // Unknown look - passthrough
+      return rgb;
+  }
+}
+
+// =============================================================================
 // OCIOTransform Class
 // =============================================================================
+
+/**
+ * Supported transfer function names
+ */
+export type TransferFunctionName =
+  | 'srgb'
+  | 'rec709'
+  | 'pq'
+  | 'hlg'
+  | 'logC3'
+  | 'logC4'
+  | 'log3G10'
+  | 'slog3'
+  | 'gamma22'
+  | 'gamma24'
+  | 'gamma26'
+  | 'acescct';
 
 /**
  * Transform step type
  */
 type TransformStep =
   | { type: 'matrix'; matrix: Matrix3x3 }
-  | { type: 'gamma_encode'; func: 'srgb' | 'rec709' }
-  | { type: 'gamma_decode'; func: 'srgb' | 'rec709' }
-  | { type: 'tonemap'; func: 'aces' };
+  | { type: 'gamma_encode'; func: TransferFunctionName }
+  | { type: 'gamma_decode'; func: TransferFunctionName }
+  | { type: 'tonemap'; func: 'aces' }
+  | { type: 'look'; name: string; direction: 'forward' | 'inverse' };
 
 /**
  * Color space transform chain
@@ -534,6 +962,98 @@ export class OCIOTransform {
       return;
     }
 
+    // Rec.2020 to sRGB
+    if (input === 'Rec.2020' && output === 'sRGB') {
+      this.steps.push({ type: 'matrix', matrix: REC2020_TO_XYZ });
+      this.steps.push({ type: 'matrix', matrix: XYZ_TO_SRGB });
+      this.steps.push({ type: 'gamma_encode', func: 'srgb' });
+      return;
+    }
+
+    // sRGB to Rec.2020
+    if (input === 'sRGB' && output === 'Rec.2020') {
+      this.steps.push({ type: 'gamma_decode', func: 'srgb' });
+      this.steps.push({ type: 'matrix', matrix: SRGB_TO_XYZ });
+      this.steps.push({ type: 'matrix', matrix: XYZ_TO_REC2020 });
+      return;
+    }
+
+    // Adobe RGB to sRGB
+    if (input === 'Adobe RGB' && output === 'sRGB') {
+      this.steps.push({ type: 'gamma_decode', func: 'gamma22' });
+      this.steps.push({ type: 'matrix', matrix: ADOBERGB_TO_XYZ });
+      this.steps.push({ type: 'matrix', matrix: XYZ_TO_SRGB });
+      this.steps.push({ type: 'gamma_encode', func: 'srgb' });
+      return;
+    }
+
+    // sRGB to Adobe RGB
+    if (input === 'sRGB' && output === 'Adobe RGB') {
+      this.steps.push({ type: 'gamma_decode', func: 'srgb' });
+      this.steps.push({ type: 'matrix', matrix: SRGB_TO_XYZ });
+      this.steps.push({ type: 'matrix', matrix: XYZ_TO_ADOBERGB });
+      this.steps.push({ type: 'gamma_encode', func: 'gamma22' });
+      return;
+    }
+
+    // ProPhoto RGB to sRGB (with D50->D65 adaptation)
+    if (input === 'ProPhoto RGB' && output === 'sRGB') {
+      this.steps.push({ type: 'matrix', matrix: PROPHOTO_TO_XYZ_D50 });
+      this.steps.push({ type: 'matrix', matrix: D50_TO_D65 });
+      this.steps.push({ type: 'matrix', matrix: XYZ_TO_SRGB });
+      this.steps.push({ type: 'gamma_encode', func: 'srgb' });
+      return;
+    }
+
+    // sRGB to ProPhoto RGB
+    if (input === 'sRGB' && output === 'ProPhoto RGB') {
+      this.steps.push({ type: 'gamma_decode', func: 'srgb' });
+      this.steps.push({ type: 'matrix', matrix: SRGB_TO_XYZ });
+      this.steps.push({ type: 'matrix', matrix: D65_TO_D50 });
+      this.steps.push({ type: 'matrix', matrix: XYZ_D50_TO_PROPHOTO });
+      return;
+    }
+
+    // ARRI LogC3 to sRGB
+    if (input === 'ARRI LogC3 (EI 800)' && output === 'sRGB') {
+      this.steps.push({ type: 'gamma_decode', func: 'logC3' });
+      this.steps.push({ type: 'matrix', matrix: ARRI_WIDE_GAMUT3_TO_XYZ });
+      this.steps.push({ type: 'matrix', matrix: XYZ_TO_SRGB });
+      this.steps.push({ type: 'tonemap', func: 'aces' });
+      this.steps.push({ type: 'gamma_encode', func: 'srgb' });
+      return;
+    }
+
+    // ARRI LogC4 to sRGB
+    if (input === 'ARRI LogC4' && output === 'sRGB') {
+      this.steps.push({ type: 'gamma_decode', func: 'logC4' });
+      this.steps.push({ type: 'matrix', matrix: ARRI_WIDE_GAMUT4_TO_XYZ });
+      this.steps.push({ type: 'matrix', matrix: XYZ_TO_SRGB });
+      this.steps.push({ type: 'tonemap', func: 'aces' });
+      this.steps.push({ type: 'gamma_encode', func: 'srgb' });
+      return;
+    }
+
+    // Sony S-Log3 to sRGB
+    if (input === 'Sony S-Log3' && output === 'sRGB') {
+      this.steps.push({ type: 'gamma_decode', func: 'slog3' });
+      this.steps.push({ type: 'matrix', matrix: SGAMUT3CINE_TO_XYZ });
+      this.steps.push({ type: 'matrix', matrix: XYZ_TO_SRGB });
+      this.steps.push({ type: 'tonemap', func: 'aces' });
+      this.steps.push({ type: 'gamma_encode', func: 'srgb' });
+      return;
+    }
+
+    // RED Log3G10 to sRGB
+    if (input === 'RED Log3G10' && output === 'sRGB') {
+      this.steps.push({ type: 'gamma_decode', func: 'log3G10' });
+      this.steps.push({ type: 'matrix', matrix: REDWIDEGAMUT_TO_XYZ });
+      this.steps.push({ type: 'matrix', matrix: XYZ_TO_SRGB });
+      this.steps.push({ type: 'tonemap', func: 'aces' });
+      this.steps.push({ type: 'gamma_encode', func: 'srgb' });
+      return;
+    }
+
     // Default: no transform (identity)
     // In a full implementation, we would have more transforms
   }
@@ -558,13 +1078,16 @@ export class OCIOTransform {
           rgb = multiplyMatrixVector(step.matrix, rgb);
           break;
         case 'gamma_encode':
-          rgb = step.func === 'srgb' ? srgbEncodeRGB(rgb) : rec709EncodeRGB(rgb);
+          rgb = applyTransferEncodeRGB(step.func, rgb);
           break;
         case 'gamma_decode':
-          rgb = step.func === 'srgb' ? srgbDecodeRGB(rgb) : rec709DecodeRGB(rgb);
+          rgb = applyTransferDecodeRGB(step.func, rgb);
           break;
         case 'tonemap':
           rgb = acesToneMapRGB(rgb);
+          break;
+        case 'look':
+          rgb = applyLookTransform(rgb, step.name, step.direction);
           break;
       }
     }
@@ -599,19 +1122,56 @@ export class OCIOTransform {
   }
 
   /**
-   * Create a display transform (input -> working -> display with view)
+   * Create a display transform (input -> working -> [look] -> display with view)
+   *
+   * Builds a full transform chain:
+   * 1. Input color space decode/linearize
+   * 2. Convert to working space (where grading/CDL operations happen)
+   * 3. Apply look transform (if any)
+   * 4. Convert from working space to display
+   * 5. Apply display gamma/tone mapping
    */
   static createDisplayTransform(
     inputSpace: string,
-    _workingSpace: string,
+    workingSpace: string,
     display: string,
-    _view: string
+    _view: string,
+    look?: string,
+    lookDirection?: 'forward' | 'inverse'
   ): OCIOTransform {
-    // For now, create a simple input -> display transform
-    // A full implementation would chain: input -> working -> look -> display+view
-    // Working space and view are stored for future use when we implement
-    // the full OCIO pipeline with grading operations
-    return new OCIOTransform(inputSpace, display);
+    // If input and display are the same (identity), use simple path
+    // Also if working space matches input, skip the intermediate step
+    if (
+      !workingSpace ||
+      inputSpace === display ||
+      workingSpace === inputSpace
+    ) {
+      // Simple path: input -> display (possibly with look)
+      if (look && look !== 'None') {
+        return OCIOTransform.createWithLook(inputSpace, display, _view, look, lookDirection ?? 'forward');
+      }
+      return new OCIOTransform(inputSpace, display);
+    }
+
+    // Full pipeline: input -> working -> [look] -> display
+    // Build a composite transform by chaining sub-transforms
+    const transform = new OCIOTransform(inputSpace, display);
+    transform.steps = []; // Clear auto-built steps
+
+    // Step 1: Input -> Working space
+    const inputToWorking = new OCIOTransform(inputSpace, workingSpace);
+    transform.steps.push(...inputToWorking.steps);
+
+    // Step 2: Apply look transform in working space
+    if (look && look !== 'None') {
+      transform.steps.push({ type: 'look', name: look, direction: lookDirection ?? 'forward' });
+    }
+
+    // Step 3: Working -> Display space
+    const workingToDisplay = new OCIOTransform(workingSpace, display);
+    transform.steps.push(...workingToDisplay.steps);
+
+    return transform;
   }
 
   /**
@@ -621,13 +1181,26 @@ export class OCIOTransform {
     inputSpace: string,
     display: string,
     _view: string,
-    _look: string,
-    _direction: 'forward' | 'inverse'
+    look: string,
+    direction: 'forward' | 'inverse'
   ): OCIOTransform {
-    // Simplified: looks are not yet implemented
-    // Just create the base transform
-    // View, look, and direction are stored for future implementation
-    return new OCIOTransform(inputSpace, display);
+    const transform = new OCIOTransform(inputSpace, display);
+
+    // Insert look step before the final display encode (tonemap + gamma)
+    // Find the insertion point: before any tonemap or gamma_encode step
+    if (look && look !== 'None') {
+      let insertIdx = transform.steps.length;
+      for (let i = 0; i < transform.steps.length; i++) {
+        const step = transform.steps[i]!;
+        if (step.type === 'tonemap' || step.type === 'gamma_encode') {
+          insertIdx = i;
+          break;
+        }
+      }
+      transform.steps.splice(insertIdx, 0, { type: 'look', name: look, direction });
+    }
+
+    return transform;
   }
 }
 

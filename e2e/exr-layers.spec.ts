@@ -29,7 +29,15 @@ test.describe('EXR Layer Selection', () => {
       const filePath = path.resolve(process.cwd(), SAMPLE_EXR_MULTILAYER);
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(filePath);
-      await page.waitForTimeout(1000);
+
+      // Wait for EXR layers to be detected
+      await page.waitForFunction(
+        () => {
+          const state = window.__OPENRV_TEST__?.getViewerState();
+          return state?.exrLayerCount > 1;
+        },
+        { timeout: 5000 }
+      );
 
       // Check viewer state for layer info
       const viewerState = await getViewerState(page);
@@ -46,7 +54,15 @@ test.describe('EXR Layer Selection', () => {
       const filePath = path.resolve(process.cwd(), SAMPLE_EXR_MULTILAYER);
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(filePath);
-      await page.waitForTimeout(1000);
+
+      // Wait for EXR layers to be detected
+      await page.waitForFunction(
+        () => {
+          const state = window.__OPENRV_TEST__?.getViewerState();
+          return state?.exrLayerCount > 1;
+        },
+        { timeout: 5000 }
+      );
 
       const viewerState = await getViewerState(page);
 
@@ -61,7 +77,15 @@ test.describe('EXR Layer Selection', () => {
       const filePath = path.resolve(process.cwd(), SAMPLE_EXR_MULTILAYER);
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(filePath);
-      await page.waitForTimeout(1000);
+
+      // Wait for EXR layers to be detected
+      await page.waitForFunction(
+        () => {
+          const state = window.__OPENRV_TEST__?.getViewerState();
+          return state?.exrLayerCount > 1;
+        },
+        { timeout: 5000 }
+      );
 
       // Layer selector should be visible
       const layerSelector = page.locator('[data-testid="exr-layer-select"]');
@@ -73,7 +97,15 @@ test.describe('EXR Layer Selection', () => {
       const filePath = path.resolve(process.cwd(), 'sample/test_hdr.exr');
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(filePath);
-      await page.waitForTimeout(1000);
+
+      // Wait for media to load
+      await page.waitForFunction(
+        () => {
+          const state = window.__OPENRV_TEST__?.getSessionState();
+          return state?.hasMedia === true;
+        },
+        { timeout: 5000 }
+      );
 
       // Layer selector should not be visible
       const layerSelector = page.locator('[data-testid="exr-layer-select"]');
@@ -85,12 +117,19 @@ test.describe('EXR Layer Selection', () => {
       const filePath = path.resolve(process.cwd(), SAMPLE_EXR_MULTILAYER);
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(filePath);
-      await page.waitForTimeout(1000);
+
+      // Wait for EXR layers to be detected
+      await page.waitForFunction(
+        () => {
+          const state = window.__OPENRV_TEST__?.getViewerState();
+          return state?.exrLayerCount > 1;
+        },
+        { timeout: 5000 }
+      );
 
       // Click the layer button
       const layerButton = page.locator('[data-testid="exr-layer-button"]');
       await layerButton.click();
-      await page.waitForTimeout(100);
 
       // Dropdown should be visible
       const dropdown = page.locator('[data-testid="exr-layer-dropdown"]');
@@ -102,15 +141,25 @@ test.describe('EXR Layer Selection', () => {
       const filePath = path.resolve(process.cwd(), SAMPLE_EXR_MULTILAYER);
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(filePath);
-      await page.waitForTimeout(1000);
+
+      // Wait for EXR layers to be detected
+      await page.waitForFunction(
+        () => {
+          const state = window.__OPENRV_TEST__?.getViewerState();
+          return state?.exrLayerCount > 1;
+        },
+        { timeout: 5000 }
+      );
 
       // Click the layer button to open dropdown
       const layerButton = page.locator('[data-testid="exr-layer-button"]');
       await layerButton.click();
-      await page.waitForTimeout(100);
+
+      // Dropdown should be visible
+      const dropdown = page.locator('[data-testid="exr-layer-dropdown"]');
+      await expect(dropdown).toBeVisible();
 
       // Check for layer options
-      const dropdown = page.locator('[data-testid="exr-layer-dropdown"]');
       const options = dropdown.locator('button[role="option"]');
 
       // Should have at least RGBA, diffuse, specular
@@ -130,16 +179,32 @@ test.describe('EXR Layer Selection', () => {
       const filePath = path.resolve(process.cwd(), SAMPLE_EXR_MULTILAYER);
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(filePath);
-      await page.waitForTimeout(1000);
+
+      // Wait for EXR layers to be detected
+      await page.waitForFunction(
+        () => {
+          const state = window.__OPENRV_TEST__?.getViewerState();
+          return state?.exrLayerCount > 1;
+        },
+        { timeout: 5000 }
+      );
 
       // Open dropdown and select diffuse
       const layerButton = page.locator('[data-testid="exr-layer-button"]');
       await layerButton.click();
-      await page.waitForTimeout(100);
 
       const dropdown = page.locator('[data-testid="exr-layer-dropdown"]');
+      await expect(dropdown).toBeVisible();
       await dropdown.getByText('diffuse').click();
-      await page.waitForTimeout(500); // Wait for layer to load
+
+      // Wait for layer selection to update
+      await page.waitForFunction(
+        () => {
+          const state = window.__OPENRV_TEST__?.getViewerState();
+          return state?.exrSelectedLayer === 'diffuse';
+        },
+        { timeout: 5000 }
+      );
 
       // Check state
       const viewerState = await getViewerState(page);
@@ -151,7 +216,15 @@ test.describe('EXR Layer Selection', () => {
       const filePath = path.resolve(process.cwd(), SAMPLE_EXR_MULTILAYER);
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(filePath);
-      await page.waitForTimeout(1000);
+
+      // Wait for EXR layers to be detected
+      await page.waitForFunction(
+        () => {
+          const state = window.__OPENRV_TEST__?.getViewerState();
+          return state?.exrLayerCount > 1;
+        },
+        { timeout: 5000 }
+      );
 
       // Capture RGBA view
       const rgbaScreenshot = await captureViewerScreenshot(page);
@@ -159,11 +232,19 @@ test.describe('EXR Layer Selection', () => {
       // Select diffuse layer
       const layerButton = page.locator('[data-testid="exr-layer-button"]');
       await layerButton.click();
-      await page.waitForTimeout(100);
 
       const dropdown = page.locator('[data-testid="exr-layer-dropdown"]');
+      await expect(dropdown).toBeVisible();
       await dropdown.getByText('diffuse').click();
-      await page.waitForTimeout(500);
+
+      // Wait for layer selection to update
+      await page.waitForFunction(
+        () => {
+          const state = window.__OPENRV_TEST__?.getViewerState();
+          return state?.exrSelectedLayer === 'diffuse';
+        },
+        { timeout: 5000 }
+      );
 
       // Capture diffuse view
       const diffuseScreenshot = await captureViewerScreenshot(page);
@@ -177,27 +258,51 @@ test.describe('EXR Layer Selection', () => {
       const filePath = path.resolve(process.cwd(), SAMPLE_EXR_MULTILAYER);
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(filePath);
-      await page.waitForTimeout(1000);
+
+      // Wait for EXR layers to be detected
+      await page.waitForFunction(
+        () => {
+          const state = window.__OPENRV_TEST__?.getViewerState();
+          return state?.exrLayerCount > 1;
+        },
+        { timeout: 5000 }
+      );
 
       // Select diffuse layer
       let layerButton = page.locator('[data-testid="exr-layer-button"]');
       await layerButton.click();
-      await page.waitForTimeout(100);
 
       let dropdown = page.locator('[data-testid="exr-layer-dropdown"]');
+      await expect(dropdown).toBeVisible();
       await dropdown.getByText('diffuse').click();
-      await page.waitForTimeout(500);
+
+      // Wait for layer selection to update
+      await page.waitForFunction(
+        () => {
+          const state = window.__OPENRV_TEST__?.getViewerState();
+          return state?.exrSelectedLayer === 'diffuse';
+        },
+        { timeout: 5000 }
+      );
 
       let viewerState = await getViewerState(page);
       expect(viewerState.exrSelectedLayer).toBe('diffuse');
 
       // Select RGBA layer
       await layerButton.click();
-      await page.waitForTimeout(100);
 
       dropdown = page.locator('[data-testid="exr-layer-dropdown"]');
+      await expect(dropdown).toBeVisible();
       await dropdown.getByText('RGBA').click();
-      await page.waitForTimeout(500);
+
+      // Wait for layer selection to update back to null (RGBA)
+      await page.waitForFunction(
+        () => {
+          const state = window.__OPENRV_TEST__?.getViewerState();
+          return state?.exrSelectedLayer === null;
+        },
+        { timeout: 5000 }
+      );
 
       viewerState = await getViewerState(page);
       expect(viewerState.exrSelectedLayer).toBeNull();
@@ -208,7 +313,15 @@ test.describe('EXR Layer Selection', () => {
       const filePath = path.resolve(process.cwd(), SAMPLE_EXR_MULTILAYER);
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(filePath);
-      await page.waitForTimeout(1000);
+
+      // Wait for EXR layers to be detected
+      await page.waitForFunction(
+        () => {
+          const state = window.__OPENRV_TEST__?.getViewerState();
+          return state?.exrLayerCount > 1;
+        },
+        { timeout: 5000 }
+      );
 
       const layerButton = page.locator('[data-testid="exr-layer-button"]');
 
@@ -218,11 +331,19 @@ test.describe('EXR Layer Selection', () => {
 
       // Select diffuse layer
       await layerButton.click();
-      await page.waitForTimeout(100);
 
       const dropdown = page.locator('[data-testid="exr-layer-dropdown"]');
+      await expect(dropdown).toBeVisible();
       await dropdown.getByText('diffuse').click();
-      await page.waitForTimeout(500);
+
+      // Wait for layer selection to update
+      await page.waitForFunction(
+        () => {
+          const state = window.__OPENRV_TEST__?.getViewerState();
+          return state?.exrSelectedLayer === 'diffuse';
+        },
+        { timeout: 5000 }
+      );
 
       // Should now have accent color
       const activeColor = await layerButton.evaluate(el => el.style.color);
@@ -236,23 +357,47 @@ test.describe('EXR Layer Selection', () => {
       const filePath = path.resolve(process.cwd(), SAMPLE_EXR_MULTILAYER);
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(filePath);
-      await page.waitForTimeout(1000);
+
+      // Wait for EXR layers to be detected
+      await page.waitForFunction(
+        () => {
+          const state = window.__OPENRV_TEST__?.getViewerState();
+          return state?.exrLayerCount > 1;
+        },
+        { timeout: 5000 }
+      );
 
       // Select diffuse layer
       const layerButton = page.locator('[data-testid="exr-layer-button"]');
       await layerButton.click();
-      await page.waitForTimeout(100);
 
       const dropdown = page.locator('[data-testid="exr-layer-dropdown"]');
+      await expect(dropdown).toBeVisible();
       await dropdown.getByText('diffuse').click();
-      await page.waitForTimeout(500);
+
+      // Wait for layer selection to update
+      await page.waitForFunction(
+        () => {
+          const state = window.__OPENRV_TEST__?.getViewerState();
+          return state?.exrSelectedLayer === 'diffuse';
+        },
+        { timeout: 5000 }
+      );
 
       // Capture diffuse RGB view
       const diffuseRgb = await captureViewerScreenshot(page);
 
       // Apply red channel isolation
       await page.keyboard.press('Shift+r');
-      await page.waitForTimeout(200);
+
+      // Wait for channel mode to change
+      await page.waitForFunction(
+        () => {
+          const state = window.__OPENRV_TEST__?.getViewerState();
+          return state?.channelMode === 'red';
+        },
+        { timeout: 5000 }
+      );
 
       // Capture diffuse red channel view
       const diffuseRed = await captureViewerScreenshot(page);
@@ -270,24 +415,56 @@ test.describe('EXR Layer Selection', () => {
       const filePath = path.resolve(process.cwd(), SAMPLE_EXR_MULTILAYER);
       const fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(filePath);
-      await page.waitForTimeout(1000);
+
+      // Wait for EXR layers to be detected
+      await page.waitForFunction(
+        () => {
+          const state = window.__OPENRV_TEST__?.getViewerState();
+          return state?.exrLayerCount > 1;
+        },
+        { timeout: 5000 }
+      );
 
       // Select specular layer
       const layerButton = page.locator('[data-testid="exr-layer-button"]');
       await layerButton.click();
-      await page.waitForTimeout(100);
 
       const dropdown = page.locator('[data-testid="exr-layer-dropdown"]');
+      await expect(dropdown).toBeVisible();
       await dropdown.getByText('specular').click();
-      await page.waitForTimeout(500);
+
+      // Wait for layer selection to update
+      await page.waitForFunction(
+        () => {
+          const state = window.__OPENRV_TEST__?.getViewerState();
+          return state?.exrSelectedLayer === 'specular';
+        },
+        { timeout: 5000 }
+      );
 
       // Apply channel isolation
       await page.keyboard.press('Shift+g'); // Green channel
-      await page.waitForTimeout(200);
+
+      // Wait for channel mode to change
+      await page.waitForFunction(
+        () => {
+          const state = window.__OPENRV_TEST__?.getViewerState();
+          return state?.channelMode === 'green';
+        },
+        { timeout: 5000 }
+      );
 
       // Reset to RGB
       await page.keyboard.press('Shift+n');
-      await page.waitForTimeout(200);
+
+      // Wait for channel mode to reset
+      await page.waitForFunction(
+        () => {
+          const state = window.__OPENRV_TEST__?.getViewerState();
+          return state?.channelMode === 'rgb';
+        },
+        { timeout: 5000 }
+      );
 
       // Layer selection should still be specular
       const viewerState = await getViewerState(page);
@@ -307,7 +484,15 @@ test.describe('EXR Layer Selection', () => {
       let filePath = path.resolve(process.cwd(), SAMPLE_EXR_MULTILAYER);
       let fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(filePath);
-      await page.waitForTimeout(1000);
+
+      // Wait for EXR layers to be detected
+      await page.waitForFunction(
+        () => {
+          const state = window.__OPENRV_TEST__?.getViewerState();
+          return state?.exrLayerCount > 1;
+        },
+        { timeout: 5000 }
+      );
 
       // Verify layers are detected
       let viewerState = await getViewerState(page);
@@ -322,7 +507,15 @@ test.describe('EXR Layer Selection', () => {
       filePath = path.resolve(process.cwd(), 'sample/test_image.png');
       fileInput = page.locator('input[type="file"]').first();
       await fileInput.setInputFiles(filePath);
-      await page.waitForTimeout(1000);
+
+      // Wait for media to load
+      await page.waitForFunction(
+        () => {
+          const state = window.__OPENRV_TEST__?.getSessionState();
+          return state?.hasMedia === true;
+        },
+        { timeout: 5000 }
+      );
 
       // Layers should be cleared since PNG has no layer support
       viewerState = await getViewerState(page);

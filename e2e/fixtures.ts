@@ -65,6 +65,11 @@ export interface ViewerState {
   stereoMode: 'off' | 'side-by-side' | 'over-under' | 'mirror' | 'anaglyph' | 'anaglyph-luminance' | 'checkerboard' | 'scanline';
   stereoEyeSwap: boolean;
   stereoOffset: number;
+  // Per-eye transform state
+  stereoEyeTransformLeft: { flipH: boolean; flipV: boolean; rotation: number; scale: number; translateX: number; translateY: number };
+  stereoEyeTransformRight: { flipH: boolean; flipV: boolean; rotation: number; scale: number; translateX: number; translateY: number };
+  stereoEyeTransformLinked: boolean;
+  stereoAlignMode: 'off' | 'grid' | 'crosshair' | 'difference' | 'edges';
   histogramVisible: boolean;
   histogramMode: 'rgb' | 'luminance' | 'separate';
   histogramLogScale: boolean;
@@ -104,6 +109,8 @@ export interface ViewerState {
   backgroundPattern: 'black' | 'grey18' | 'grey50' | 'white' | 'checker' | 'crosshatch' | 'custom';
   backgroundCheckerSize: 'small' | 'medium' | 'large';
   backgroundCustomColor: string;
+  // Color inversion state
+  colorInversionEnabled: boolean;
 }
 
 export interface ColorState {
@@ -307,6 +314,16 @@ export interface PresentationState {
   cursorHideDelay: number;
 }
 
+export interface LuminanceVisState {
+  mode: 'off' | 'false-color' | 'hsv' | 'random-color' | 'contour';
+  falseColorPreset: 'standard' | 'arri' | 'red' | 'custom';
+  randomBandCount: number;
+  randomSeed: number;
+  contourLevels: number;
+  contourDesaturate: boolean;
+  contourLineColor: [number, number, number];
+}
+
 /**
  * Get session state from the app
  */
@@ -358,6 +375,10 @@ export async function getViewerState(page: Page): Promise<ViewerState> {
       stereoMode: 'off',
       stereoEyeSwap: false,
       stereoOffset: 0,
+      stereoEyeTransformLeft: { flipH: false, flipV: false, rotation: 0, scale: 1.0, translateX: 0, translateY: 0 },
+      stereoEyeTransformRight: { flipH: false, flipV: false, rotation: 0, scale: 1.0, translateX: 0, translateY: 0 },
+      stereoEyeTransformLinked: false,
+      stereoAlignMode: 'off',
       histogramVisible: false,
       histogramMode: 'rgb',
       histogramLogScale: false,
@@ -386,6 +407,7 @@ export async function getViewerState(page: Page): Promise<ViewerState> {
       backgroundPattern: 'black',
       backgroundCheckerSize: 'medium',
       backgroundCustomColor: '#1a1a1a',
+      colorInversionEnabled: false,
     };
   });
 }
@@ -736,6 +758,23 @@ export async function getPresentationState(page: Page): Promise<PresentationStat
       enabled: false,
       cursorAutoHide: true,
       cursorHideDelay: 3000,
+    };
+  });
+}
+
+/**
+ * Get luminance visualization state from the app
+ */
+export async function getLuminanceVisState(page: Page): Promise<LuminanceVisState> {
+  return page.evaluate(() => {
+    return (window as any).__OPENRV_TEST__?.getLuminanceVisState() ?? {
+      mode: 'off',
+      falseColorPreset: 'standard',
+      randomBandCount: 16,
+      randomSeed: 42,
+      contourLevels: 10,
+      contourDesaturate: true,
+      contourLineColor: [255, 255, 255],
     };
   });
 }

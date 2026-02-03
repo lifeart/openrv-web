@@ -9,6 +9,8 @@ import { FilterSettings, DEFAULT_FILTER_SETTINGS } from './FilterControl';
 import { CropState, CropRegion, DEFAULT_CROP_STATE, DEFAULT_CROP_REGION, ASPECT_RATIOS, MIN_CROP_FRACTION, UncropState, DEFAULT_UNCROP_STATE } from './CropControl';
 import { LUT3D } from '../../color/LUTLoader';
 import { WebGLLUTProcessor } from '../../color/WebGLLUT';
+import { LUTPipeline } from '../../color/pipeline/LUTPipeline';
+import { GPULUTChain } from '../../color/pipeline/GPULUTChain';
 import { CDLValues, DEFAULT_CDL, isDefaultCDL, applyCDLToImageData } from '../../color/CDL';
 import { ColorCurvesData, createDefaultCurvesData, isDefaultCurves, CurveLUTCache } from '../../color/ColorCurves';
 import { LensDistortionParams, DEFAULT_LENS_PARAMS, isDefaultLensParams, applyLensDistortion } from '../../transform/LensDistortion';
@@ -19,13 +21,15 @@ import { compositeImageData, BlendMode } from '../../composite/BlendModes';
 import { showAlert } from './shared/Modal';
 import { getIconSvg } from './shared/Icons';
 import { ChannelMode, applyChannelIsolation } from './ChannelSelect';
-import { StereoState, DEFAULT_STEREO_STATE, isDefaultStereoState, applyStereoMode } from '../../stereo/StereoRenderer';
+import { applyColorInversion } from '../../color/Inversion';
+import { StereoState, DEFAULT_STEREO_STATE, isDefaultStereoState, applyStereoMode, applyStereoModeWithEyeTransforms, StereoEyeTransformState, StereoAlignMode, DEFAULT_STEREO_EYE_TRANSFORM_STATE, DEFAULT_STEREO_ALIGN_MODE, isDefaultStereoEyeTransformState } from '../../stereo/StereoRenderer';
 import { DifferenceMatteState, DEFAULT_DIFFERENCE_MATTE_STATE, applyDifferenceMatte } from './DifferenceMatteControl';
 import { WebGLSharpenProcessor } from '../../filters/WebGLSharpen';
 import { SafeAreasOverlay } from './SafeAreasOverlay';
 import { MatteOverlay } from './MatteOverlay';
 import { PixelProbe } from './PixelProbe';
 import { FalseColor } from './FalseColor';
+import { LuminanceVisualization } from './LuminanceVisualization';
 import { TimecodeOverlay } from './TimecodeOverlay';
 import { ZebraStripes } from './ZebraStripes';
 import { ColorWheels } from './ColorWheels';
@@ -36,9 +40,11 @@ import { PrerenderBufferManager } from '../../utils/PrerenderBufferManager';
 import { getThemeManager } from '../../utils/ThemeManager';
 import { setupHiDPICanvas, resetCanvasFromHiDPI } from '../../utils/HiDPICanvas';
 import { getSharedOCIOProcessor } from '../../color/OCIOProcessor';
+import { DisplayColorState, DEFAULT_DISPLAY_COLOR_STATE, applyDisplayColorManagementToImageData, isDisplayStateActive } from '../../color/DisplayTransfer';
 
 // Extracted effect processing utilities
 import { applyHighlightsShadows, applyVibrance, applyClarity, applySharpenCPU, applyToneMapping } from './ViewerEffects';
+import { applyHueRotation as applyHueRotationPixel, isIdentityHueRotation } from '../../color/HueRotation';
 import {
   createWipeUIElements,
   updateWipeLinePosition,
@@ -182,6 +188,9 @@ export class Viewer {
   // Color adjustments
   private colorAdjustments: ColorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
 
+  // Color inversion state
+  private colorInversionEnabled = false;
+
   // Wipe comparison
   private wipeState: WipeState = { mode: 'off', position: 0.5, showOriginal: 'left' };
   private wipeElements: WipeUIElements | null = null;
@@ -197,6 +206,15 @@ export class Viewer {
   private lutIntensity = 1.0;
   private lutIndicator: HTMLElement | null = null;
   private lutProcessor: WebGLLUTProcessor | null = null;
+
+  // Multi-point LUT pipeline
+  private lutPipeline: LUTPipeline = new LUTPipeline();
+  private gpuLUTChain: GPULUTChain | null = null;
+
+  // OCIO GPU-accelerated color management
+  private ocioLUTProcessor: WebGLLUTProcessor | null = null;
+  private ocioEnabled = false;
+  private ocioBakedLUT: LUT3D | null = null;
 
   // A/B Compare indicator
   private abIndicator: HTMLElement | null = null;
@@ -239,6 +257,9 @@ export class Viewer {
   // False color display
   private falseColor: FalseColor;
 
+  // Luminance visualization modes (HSV, random color, contour, delegates false-color)
+  private luminanceVisualization: LuminanceVisualization;
+
   // Zebra stripes overlay
   private zebraStripes: ZebraStripes;
   private clippingOverlay: ClippingOverlay;
@@ -272,6 +293,12 @@ export class Viewer {
   // Stereo viewing state
   private stereoState: StereoState = { ...DEFAULT_STEREO_STATE };
 
+  // Per-eye transform state
+  private stereoEyeTransformState: StereoEyeTransformState = { ...DEFAULT_STEREO_EYE_TRANSFORM_STATE, left: { ...DEFAULT_STEREO_EYE_TRANSFORM_STATE.left }, right: { ...DEFAULT_STEREO_EYE_TRANSFORM_STATE.right } };
+
+  // Stereo alignment overlay mode
+  private stereoAlignMode: StereoAlignMode = DEFAULT_STEREO_ALIGN_MODE;
+
   // Difference matte state
   private differenceMatteState: DifferenceMatteState = { ...DEFAULT_DIFFERENCE_MATTE_STATE };
 
@@ -286,6 +313,9 @@ export class Viewer {
 
   // Background pattern state (for alpha visualization)
   private backgroundPatternState: BackgroundPatternState = { ...DEFAULT_BACKGROUND_PATTERN_STATE };
+
+  // Display color management state (final pipeline stage)
+  private displayColorState: DisplayColorState = { ...DEFAULT_DISPLAY_COLOR_STATE };
 
   // Sub-frame interpolator for slow-motion blending
   private frameInterpolator = new FrameInterpolator();
@@ -400,6 +430,12 @@ export class Viewer {
 
     // Create false color display
     this.falseColor = new FalseColor();
+
+    // Create luminance visualization (manages HSV, random color, contour, and delegates false-color)
+    this.luminanceVisualization = new LuminanceVisualization(this.falseColor);
+    this.luminanceVisualization.on('stateChanged', () => {
+      this.refresh();
+    });
 
     // Create zebra stripes overlay
     this.zebraStripes = new ZebraStripes();
@@ -534,6 +570,33 @@ export class Viewer {
     } catch (e) {
       console.warn('WebGL LUT processor not available, falling back to CPU:', e);
       this.lutProcessor = null;
+    }
+
+    // Initialize multi-point LUT pipeline GPU chain
+    try {
+      const chainCanvas = document.createElement('canvas');
+      const chainGl = chainCanvas.getContext('webgl2', {
+        premultipliedAlpha: false,
+        preserveDrawingBuffer: false,
+      });
+      if (chainGl) {
+        this.gpuLUTChain = new GPULUTChain(chainGl);
+      }
+    } catch (e) {
+      console.warn('GPU LUT chain not available:', e);
+      this.gpuLUTChain = null;
+    }
+
+    // Register default source for LUT pipeline
+    this.lutPipeline.registerSource('default');
+    this.lutPipeline.setActiveSource('default');
+
+    // Initialize dedicated OCIO WebGL LUT processor for GPU-accelerated color management
+    try {
+      this.ocioLUTProcessor = new WebGLLUTProcessor();
+    } catch (e) {
+      console.warn('WebGL OCIO LUT processor not available, OCIO will use CPU fallback:', e);
+      this.ocioLUTProcessor = null;
     }
 
     // Initialize WebGL sharpen processor
@@ -1707,8 +1770,15 @@ export class Viewer {
 
     // Apply post-processing effects (stereo, lens, LUT, color, sharpen) regardless of stack mode
     // Apply stereo viewing mode (transforms layout for 3D viewing)
+    // Uses extended function when per-eye transforms or alignment overlays are active
     if (!isDefaultStereoState(this.stereoState)) {
-      this.applyStereoMode(this.imageCtx, displayWidth, displayHeight);
+      const hasEyeTransforms = !isDefaultStereoEyeTransformState(this.stereoEyeTransformState);
+      const hasAlignOverlay = this.stereoAlignMode !== 'off';
+      if (hasEyeTransforms || hasAlignOverlay) {
+        this.applyStereoModeWithEyeTransforms(this.imageCtx, displayWidth, displayHeight);
+      } else {
+        this.applyStereoMode(this.imageCtx, displayWidth, displayHeight);
+      }
     }
 
     // Apply lens distortion correction (geometric transform, applied first)
@@ -1719,6 +1789,12 @@ export class Viewer {
     // Apply 3D LUT (GPU-accelerated color grading)
     if (this.currentLUT && this.lutIntensity > 0) {
       this.applyLUTToCanvas(this.imageCtx, displayWidth, displayHeight);
+    }
+
+    // Apply OCIO display transform (GPU-accelerated via baked 3D LUT)
+    // This runs after user-loaded LUTs but before color adjustments/CDL/curves
+    if (this.ocioEnabled && this.ocioBakedLUT) {
+      this.applyOCIOToCanvas(this.imageCtx, displayWidth, displayHeight);
     }
 
     // Apply batched pixel-level effects (CDL, curves, sharpen, channel isolation)
@@ -2011,6 +2087,22 @@ export class Viewer {
     this.scheduleRender();
   }
 
+  // Color inversion methods
+  setColorInversion(enabled: boolean): void {
+    if (this.colorInversionEnabled === enabled) return;
+    this.colorInversionEnabled = enabled;
+    this.notifyEffectsChanged();
+    this.scheduleRender();
+  }
+
+  getColorInversion(): boolean {
+    return this.colorInversionEnabled;
+  }
+
+  toggleColorInversion(): void {
+    this.setColorInversion(!this.colorInversionEnabled);
+  }
+
   // LUT methods
   setLUT(lut: LUT3D | null): void {
     this.currentLUT = lut;
@@ -2038,6 +2130,16 @@ export class Viewer {
 
   getLUTIntensity(): number {
     return this.lutIntensity;
+  }
+
+  /** Get the multi-point LUT pipeline instance */
+  getLUTPipeline(): LUTPipeline {
+    return this.lutPipeline;
+  }
+
+  /** Get the GPU LUT chain (for multi-point rendering) */
+  getGPULUTChain(): GPULUTChain | null {
+    return this.gpuLUTChain;
   }
 
   /**
@@ -2084,6 +2186,63 @@ export class Viewer {
     }
     // Fallback: No CPU fallback implemented for performance reasons
     // The WebGL path handles all LUT processing
+  }
+
+  /**
+   * Apply OCIO display transform using GPU-accelerated baked 3D LUT.
+   *
+   * The OCIO transform chain (input -> working -> look -> display+view) is pre-baked
+   * into a 3D LUT by the OCIOProcessor, then applied here via the WebGL LUT pipeline
+   * for real-time performance.
+   */
+  private applyOCIOToCanvas(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+    if (!this.ocioBakedLUT) return;
+
+    // Use dedicated GPU LUT processor for OCIO
+    if (this.ocioLUTProcessor && this.ocioLUTProcessor.hasLUT()) {
+      this.ocioLUTProcessor.applyToCanvas(ctx, width, height, 1.0);
+      return;
+    }
+
+    // CPU fallback: apply OCIO transform via the shared processor
+    // This is slower but ensures OCIO always works even without GPU support
+    const ocioProcessor = getSharedOCIOProcessor();
+    if (ocioProcessor.isEnabled()) {
+      const imageData = ctx.getImageData(0, 0, width, height);
+      ocioProcessor.apply(imageData);
+      ctx.putImageData(imageData, 0, 0);
+    }
+  }
+
+  // ==========================================================================
+  // OCIO Color Management Methods
+  // ==========================================================================
+
+  /**
+   * Set the baked OCIO 3D LUT for GPU-accelerated display transform.
+   * Called by the App when the OCIOProcessor bakes a new transform.
+   *
+   * @param lut The baked 3D LUT from OCIOProcessor.bakeTo3DLUT(), or null to clear
+   * @param enabled Whether OCIO processing is enabled
+   */
+  setOCIOBakedLUT(lut: LUT3D | null, enabled: boolean): void {
+    this.ocioBakedLUT = lut;
+    this.ocioEnabled = enabled;
+
+    // Update the dedicated OCIO GPU LUT processor
+    if (this.ocioLUTProcessor) {
+      this.ocioLUTProcessor.setLUT(lut);
+    }
+
+    this.notifyEffectsChanged();
+    this.scheduleRender();
+  }
+
+  /**
+   * Get whether OCIO is currently enabled and active
+   */
+  isOCIOEnabled(): boolean {
+    return this.ocioEnabled && this.ocioBakedLUT !== null;
   }
 
   // Wipe comparison methods
@@ -2286,17 +2445,20 @@ export class Viewer {
                                  this.colorAdjustments.whites !== 0 || this.colorAdjustments.blacks !== 0;
     const hasVibrance = this.colorAdjustments.vibrance !== 0;
     const hasClarity = this.colorAdjustments.clarity !== 0;
+    const hasHueRotation = !isIdentityHueRotation(this.colorAdjustments.hueRotation);
     const hasColorWheels = this.colorWheels.hasAdjustments();
     const hasHSLQualifier = this.hslQualifier.isEnabled();
     const hasFalseColor = this.falseColor.isEnabled();
+    const hasLuminanceVis = this.luminanceVisualization.getMode() !== 'off' && this.luminanceVisualization.getMode() !== 'false-color';
     const hasZebras = this.zebraStripes.isEnabled();
     const hasClippingOverlay = this.clippingOverlay.isEnabled();
-    const ocioProcessor = getSharedOCIOProcessor();
-    const hasOCIO = ocioProcessor.isEnabled();
     const hasToneMapping = this.isToneMappingEnabled();
+    const hasInversion = this.colorInversionEnabled;
+    const hasDisplayColorMgmt = isDisplayStateActive(this.displayColorState);
 
     // Early return if no pixel effects are active
-    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasZebras && !hasClippingOverlay && !hasOCIO && !hasToneMapping) {
+    // Note: OCIO is handled via GPU-accelerated 3D LUT in the main render pipeline (applyOCIOToCanvas)
+    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasHueRotation && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasLuminanceVis && !hasZebras && !hasClippingOverlay && !hasToneMapping && !hasInversion && !hasDisplayColorMgmt) {
       return;
     }
 
@@ -2313,11 +2475,6 @@ export class Viewer {
       });
     }
 
-    // Apply tone mapping (HDR to SDR conversion, applied early in pipeline)
-    if (hasToneMapping) {
-      applyToneMapping(imageData, this.toneMappingState.operator);
-    }
-
     // Apply vibrance (intelligent saturation - before CDL/curves for natural results)
     if (hasVibrance) {
       applyVibrance(imageData, {
@@ -2329,6 +2486,21 @@ export class Viewer {
     // Apply clarity (local contrast enhancement in midtones)
     if (hasClarity) {
       applyClarity(imageData, this.colorAdjustments.clarity);
+    }
+
+    // Apply hue rotation (luminance-preserving, after basic adjustments, before CDL)
+    if (hasHueRotation) {
+      const data = imageData.data;
+      const len = data.length;
+      for (let i = 0; i < len; i += 4) {
+        const r = data[i]! / 255;
+        const g = data[i + 1]! / 255;
+        const b = data[i + 2]! / 255;
+        const [nr, ng, nb] = applyHueRotationPixel(r, g, b, this.colorAdjustments.hueRotation);
+        data[i] = Math.round(nr * 255);
+        data[i + 1] = Math.round(ng * 255);
+        data[i + 2] = Math.round(nb * 255);
+      }
     }
 
     // Apply color wheels (Lift/Gamma/Gain - after basic adjustments, before CDL)
@@ -2351,9 +2523,14 @@ export class Viewer {
       this.hslQualifier.apply(imageData);
     }
 
-    // Apply OCIO color transforms (display/view transform after grading)
-    if (hasOCIO) {
-      ocioProcessor.apply(imageData);
+    // Apply tone mapping (after color adjustments, before channel isolation)
+    if (hasToneMapping) {
+      applyToneMapping(imageData, this.toneMappingState.operator);
+    }
+
+    // Apply color inversion (after all color corrections, before sharpen/channel isolation)
+    if (hasInversion) {
+      applyColorInversion(imageData);
     }
 
     // Apply sharpen filter
@@ -2366,21 +2543,29 @@ export class Viewer {
       applyChannelIsolation(imageData, this.channelMode);
     }
 
-    // Apply false color display (replaces all color information for exposure analysis)
-    if (hasFalseColor) {
+    // Apply display color management (final pipeline stage before diagnostic overlays)
+    if (hasDisplayColorMgmt) {
+      applyDisplayColorManagementToImageData(imageData, this.displayColorState);
+    }
+
+    // Apply luminance visualization modes (HSV, random color, contour) or false color
+    // These replace pixel colors for analysis, so they're mutually exclusive
+    if (hasLuminanceVis) {
+      this.luminanceVisualization.apply(imageData);
+    } else if (hasFalseColor) {
       this.falseColor.apply(imageData);
     }
 
     // Apply zebra stripes (overlay on top of other effects for exposure warnings)
     // Note: Zebras work on original image luminance, so they're applied after false color
     // (typically you'd use one or the other, not both)
-    if (hasZebras && !hasFalseColor) {
+    if (hasZebras && !hasFalseColor && !hasLuminanceVis) {
       this.zebraStripes.apply(imageData);
     }
 
     // Apply clipping overlay (shows clipped highlights/shadows)
     // Applied last as it's a diagnostic overlay
-    if (hasClippingOverlay && !hasFalseColor && !hasZebras) {
+    if (hasClippingOverlay && !hasFalseColor && !hasLuminanceVis && !hasZebras) {
       this.clippingOverlay.apply(imageData);
     }
 
@@ -2475,6 +2660,64 @@ export class Viewer {
     ctx.putImageData(processedData, 0, 0);
   }
 
+  /**
+   * Apply stereo viewing mode with per-eye transforms and alignment overlay
+   */
+  private applyStereoModeWithEyeTransforms(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+    if (isDefaultStereoState(this.stereoState)) return;
+
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const processedData = applyStereoModeWithEyeTransforms(
+      imageData,
+      this.stereoState,
+      this.stereoEyeTransformState,
+      this.stereoAlignMode
+    );
+    ctx.putImageData(processedData, 0, 0);
+  }
+
+  // Per-eye transform methods
+  setStereoEyeTransforms(state: StereoEyeTransformState): void {
+    this.stereoEyeTransformState = {
+      left: { ...state.left },
+      right: { ...state.right },
+      linked: state.linked,
+    };
+    this.scheduleRender();
+  }
+
+  getStereoEyeTransforms(): StereoEyeTransformState {
+    return {
+      left: { ...this.stereoEyeTransformState.left },
+      right: { ...this.stereoEyeTransformState.right },
+      linked: this.stereoEyeTransformState.linked,
+    };
+  }
+
+  resetStereoEyeTransforms(): void {
+    this.stereoEyeTransformState = {
+      left: { ...DEFAULT_STEREO_EYE_TRANSFORM_STATE.left },
+      right: { ...DEFAULT_STEREO_EYE_TRANSFORM_STATE.right },
+      linked: false,
+    };
+    this.scheduleRender();
+  }
+
+  // Stereo alignment mode methods
+  setStereoAlignMode(mode: StereoAlignMode): void {
+    this.stereoAlignMode = mode;
+    this.scheduleRender();
+  }
+
+  getStereoAlignMode(): StereoAlignMode {
+    return this.stereoAlignMode;
+  }
+
+  resetStereoAlignMode(): void {
+    this.stereoAlignMode = DEFAULT_STEREO_ALIGN_MODE;
+    this.scheduleRender();
+  }
+
   // Difference matte methods
   setDifferenceMatteState(state: DifferenceMatteState): void {
     this.differenceMatteState = { ...state };
@@ -2562,6 +2805,23 @@ export class Viewer {
   resetBackgroundPatternState(): void {
     this.backgroundPatternState = { ...DEFAULT_BACKGROUND_PATTERN_STATE };
     this.updateCSSBackground();
+    this.scheduleRender();
+  }
+
+  // Display color management methods
+  setDisplayColorState(state: DisplayColorState): void {
+    this.displayColorState = { ...state };
+    this.notifyEffectsChanged();
+    this.scheduleRender();
+  }
+
+  getDisplayColorState(): DisplayColorState {
+    return { ...this.displayColorState };
+  }
+
+  resetDisplayColorState(): void {
+    this.displayColorState = { ...DEFAULT_DISPLAY_COLOR_STATE };
+    this.notifyEffectsChanged();
     this.scheduleRender();
   }
 
@@ -3495,7 +3755,8 @@ export class Viewer {
       this.channelMode,
       this.colorWheels,
       this.hslQualifier,
-      this.toneMappingState
+      this.toneMappingState,
+      this.colorInversionEnabled
     );
 
     this.prerenderBuffer.updateEffects(effectsState);
@@ -3547,6 +3808,18 @@ export class Viewer {
       this.lutProcessor = null;
     }
 
+    // Cleanup multi-point GPU LUT chain
+    if (this.gpuLUTChain) {
+      this.gpuLUTChain.dispose();
+      this.gpuLUTChain = null;
+    }
+
+    // Cleanup OCIO WebGL LUT processor
+    if (this.ocioLUTProcessor) {
+      this.ocioLUTProcessor.dispose();
+      this.ocioLUTProcessor = null;
+    }
+
     // Cleanup WebGL sharpen processor
     if (this.sharpenProcessor) {
       this.sharpenProcessor.dispose();
@@ -3567,6 +3840,7 @@ export class Viewer {
 
     // Cleanup overlays
     this.clippingOverlay.dispose();
+    this.luminanceVisualization.dispose();
     this.falseColor.dispose();
     this.zebraStripes.dispose();
     this.spotlightOverlay.dispose();
@@ -3710,6 +3984,13 @@ export class Viewer {
    */
   getFalseColor(): FalseColor {
     return this.falseColor;
+  }
+
+  /**
+   * Get the luminance visualization instance
+   */
+  getLuminanceVisualization(): LuminanceVisualization {
+    return this.luminanceVisualization;
   }
 
   /**

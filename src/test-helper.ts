@@ -36,10 +36,21 @@ declare global {
       getFullscreenState: () => FullscreenState;
       getPresentationState: () => PresentationTestState;
       getNetworkSyncState: () => NetworkSyncState;
+      getLuminanceVisState: () => LuminanceVisTestState;
       simulateFullscreenEnter: () => void;
       simulateFullscreenExit: () => void;
     };
   }
+}
+
+export interface LuminanceVisTestState {
+  mode: 'off' | 'false-color' | 'hsv' | 'random-color' | 'contour';
+  falseColorPreset: 'standard' | 'arri' | 'red' | 'custom';
+  randomBandCount: number;
+  randomSeed: number;
+  contourLevels: number;
+  contourDesaturate: boolean;
+  contourLineColor: [number, number, number];
 }
 
 export interface FullscreenState {
@@ -117,6 +128,11 @@ export interface ViewerState {
   stereoMode: 'off' | 'side-by-side' | 'over-under' | 'mirror' | 'anaglyph' | 'anaglyph-luminance' | 'checkerboard' | 'scanline';
   stereoEyeSwap: boolean;
   stereoOffset: number;
+  // Per-eye transform state
+  stereoEyeTransformLeft: { flipH: boolean; flipV: boolean; rotation: number; scale: number; translateX: number; translateY: number };
+  stereoEyeTransformRight: { flipH: boolean; flipV: boolean; rotation: number; scale: number; translateX: number; translateY: number };
+  stereoEyeTransformLinked: boolean;
+  stereoAlignMode: 'off' | 'grid' | 'crosshair' | 'difference' | 'edges';
   histogramVisible: boolean;
   histogramMode: 'rgb' | 'luminance' | 'separate';
   histogramLogScale: boolean;
@@ -156,6 +172,13 @@ export interface ViewerState {
   backgroundPattern: 'black' | 'grey18' | 'grey50' | 'white' | 'checker' | 'crosshatch' | 'custom';
   backgroundCheckerSize: 'small' | 'medium' | 'large';
   backgroundCustomColor: string;
+  // Color inversion state
+  colorInversionEnabled: boolean;
+  // HDR format info
+  formatName: string | null;
+  bitDepth: number | null;
+  dataType: string | null;
+  colorSpace: string | null;
 }
 
 export interface ColorState {
@@ -424,6 +447,11 @@ export function exposeForTesting(app: App): void {
         stereoMode: viewer.stereoState?.mode ?? 'off',
         stereoEyeSwap: viewer.stereoState?.eyeSwap ?? false,
         stereoOffset: viewer.stereoState?.offset ?? 0,
+        // Per-eye transform state
+        stereoEyeTransformLeft: viewer.stereoEyeTransformState ? { ...viewer.stereoEyeTransformState.left } : { flipH: false, flipV: false, rotation: 0, scale: 1.0, translateX: 0, translateY: 0 },
+        stereoEyeTransformRight: viewer.stereoEyeTransformState ? { ...viewer.stereoEyeTransformState.right } : { flipH: false, flipV: false, rotation: 0, scale: 1.0, translateX: 0, translateY: 0 },
+        stereoEyeTransformLinked: viewer.stereoEyeTransformState?.linked ?? false,
+        stereoAlignMode: viewer.stereoAlignMode ?? 'off',
         histogramVisible: histogram?.isVisible?.() ?? false,
         histogramMode: histogram?.getMode?.() ?? 'rgb',
         histogramLogScale: histogram?.isLogScale?.() ?? false,
@@ -458,6 +486,33 @@ export function exposeForTesting(app: App): void {
         backgroundPattern: viewer.backgroundPatternState?.pattern ?? 'black',
         backgroundCheckerSize: viewer.backgroundPatternState?.checkerSize ?? 'medium',
         backgroundCustomColor: viewer.backgroundPatternState?.customColor ?? '#1a1a1a',
+        // Color inversion state
+        colorInversionEnabled: viewer.colorInversionEnabled ?? false,
+        // HDR format info
+        formatName: (() => {
+          const source = appAny.session?.currentSource;
+          const fileSource = source?.getFileSource?.() ?? source;
+          return fileSource?.formatName ?? null;
+        })(),
+        bitDepth: (() => {
+          const source = appAny.session?.currentSource;
+          const fileSource = source?.getFileSource?.() ?? source;
+          const ipImage = fileSource?.cachedIPImage;
+          const attrs = ipImage?.metadata?.attributes;
+          return (attrs?.bitDepth as number) ?? (attrs?.bitsPerSample as number) ?? null;
+        })(),
+        dataType: (() => {
+          const source = appAny.session?.currentSource;
+          const fileSource = source?.getFileSource?.() ?? source;
+          const ipImage = fileSource?.cachedIPImage;
+          return ipImage?.dataType ?? null;
+        })(),
+        colorSpace: (() => {
+          const source = appAny.session?.currentSource;
+          const fileSource = source?.getFileSource?.() ?? source;
+          const ipImage = fileSource?.cachedIPImage;
+          return ipImage?.metadata?.colorSpace ?? null;
+        })(),
       };
     },
 
@@ -800,6 +855,21 @@ export function exposeForTesting(app: App): void {
         enabled: state.enabled ?? false,
         cursorAutoHide: state.cursorAutoHide ?? true,
         cursorHideDelay: state.cursorHideDelay ?? 3000,
+      };
+    },
+
+    getLuminanceVisState: (): LuminanceVisTestState => {
+      const viewer = appAny.viewer;
+      const lumVis = viewer?.getLuminanceVisualization?.();
+      const state = lumVis?.getState?.() ?? {};
+      return {
+        mode: state.mode ?? 'off',
+        falseColorPreset: state.falseColorPreset ?? 'standard',
+        randomBandCount: state.randomBandCount ?? 16,
+        randomSeed: state.randomSeed ?? 42,
+        contourLevels: state.contourLevels ?? 10,
+        contourDesaturate: state.contourDesaturate ?? true,
+        contourLineColor: state.contourLineColor ?? [255, 255, 255],
       };
     },
 

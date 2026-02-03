@@ -2,11 +2,11 @@
  * FileSourceNode - Source node for single image files
  *
  * Loads and provides a single image as source data.
- * Supports standard web formats (PNG, JPEG, WebP) and HDR formats (EXR).
+ * Supports standard web formats (PNG, JPEG, WebP) and HDR formats (EXR, DPX, Cineon, Float TIFF).
  */
 
 import { BaseSourceNode } from './BaseSourceNode';
-import { IPImage } from '../../core/image/Image';
+import { IPImage, ImageMetadata } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
 import { RegisterNode } from '../base/NodeFactory';
 import {
@@ -17,6 +17,9 @@ import {
   EXRDecodeOptions,
   EXRChannelRemapping,
 } from '../../formats/EXRDecoder';
+import { isDPXFile, decodeDPX } from '../../formats/DPXDecoder';
+import { isCineonFile, decodeCineon } from '../../formats/CineonDecoder';
+import { isTIFFFile, isFloatTIFF, decodeTIFFFloat } from '../../formats/TIFFFloatDecoder';
 
 /**
  * Check if a filename has an EXR extension
@@ -26,12 +29,38 @@ function isEXRExtension(filename: string): boolean {
   return ext === 'exr' || ext === 'sxr';
 }
 
+/**
+ * Check if a filename has a DPX extension
+ */
+function isDPXExtension(filename: string): boolean {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  return ext === 'dpx';
+}
+
+/**
+ * Check if a filename has a Cineon extension
+ */
+function isCineonExtension(filename: string): boolean {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  return ext === 'cin' || ext === 'cineon';
+}
+
+/**
+ * Check if a filename has a TIFF extension
+ */
+function isTIFFExtension(filename: string): boolean {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  return ext === 'tiff' || ext === 'tif';
+}
+
 @RegisterNode('RVFileSource')
 export class FileSourceNode extends BaseSourceNode {
   private image: HTMLImageElement | null = null;
   private url: string = '';
   private cachedIPImage: IPImage | null = null;
   private isEXR: boolean = false;
+  private _isHDRFormat: boolean = false;
+  private _formatName: string | null = null;
 
   // EXR layer support
   private exrBuffer: ArrayBuffer | null = null;
@@ -39,7 +68,7 @@ export class FileSourceNode extends BaseSourceNode {
   private currentExrLayer: string | null = null;
   private currentExrRemapping: EXRChannelRemapping | null = null;
 
-  // Canvas cache for EXR rendering (avoids creating new canvas on every getCanvas() call)
+  // Canvas cache for HDR rendering (avoids creating new canvas on every getCanvas() call)
   private cachedCanvas: HTMLCanvasElement | null = null;
   private canvasDirty: boolean = true;
 
@@ -56,6 +85,13 @@ export class FileSourceNode extends BaseSourceNode {
   }
 
   /**
+   * Get the detected format name for this source
+   */
+  get formatName(): string | null {
+    return this._formatName;
+  }
+
+  /**
    * Load image from URL
    */
   async load(url: string, name?: string, originalUrl?: string): Promise<void> {
@@ -67,6 +103,29 @@ export class FileSourceNode extends BaseSourceNode {
       return;
     }
 
+    // Check if this is a DPX or Cineon file (always HDR)
+    if (isDPXExtension(filename) || isCineonExtension(filename)) {
+      await this.loadHDRFromUrl(url, filename, originalUrl);
+      return;
+    }
+
+    // Check if this is a TIFF file - need to fetch and check if it's float
+    if (isTIFFExtension(filename)) {
+      try {
+        const response = await fetch(url);
+        if (response.ok) {
+          const buffer = await response.arrayBuffer();
+          if (isTIFFFile(buffer) && isFloatTIFF(buffer)) {
+            await this.loadHDRFromBuffer(buffer, filename, url, originalUrl);
+            return;
+          }
+        }
+        // Non-float TIFF or fetch failed - fall through to standard image loading
+      } catch {
+        // Fall through to standard image loading
+      }
+    }
+
     // Standard image loading via HTMLImageElement
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -76,6 +135,8 @@ export class FileSourceNode extends BaseSourceNode {
         this.image = img;
         this.url = url;
         this.isEXR = false;
+        this._isHDRFormat = false;
+        this._formatName = null;
         this.metadata = {
           name: filename,
           width: img.naturalWidth,
@@ -114,6 +175,19 @@ export class FileSourceNode extends BaseSourceNode {
 
     const buffer = await response.arrayBuffer();
     await this.loadEXRFromBuffer(buffer, name, url, originalUrl);
+  }
+
+  /**
+   * Load HDR format file (DPX, Cineon, Float TIFF) from URL
+   */
+  private async loadHDRFromUrl(url: string, name: string, originalUrl?: string): Promise<void> {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch HDR file: ${url}`);
+    }
+
+    const buffer = await response.arrayBuffer();
+    await this.loadHDRFromBuffer(buffer, name, url, originalUrl);
   }
 
   /**
@@ -175,6 +249,8 @@ export class FileSourceNode extends BaseSourceNode {
 
     this.url = url;
     this.isEXR = true;
+    this._isHDRFormat = true;
+    this._formatName = 'exr';
     this.image = null; // No HTMLImageElement for EXR
 
     this.metadata = {
@@ -193,6 +269,89 @@ export class FileSourceNode extends BaseSourceNode {
     this.properties.setValue('height', result.height);
     this.properties.setValue('isHDR', true);
     this.properties.setValue('exrLayer', options?.layer ?? null);
+
+    // Mark canvas as dirty so it gets re-rendered on next getCanvas() call
+    this.canvasDirty = true;
+    this.markDirty();
+  }
+
+  /**
+   * Load HDR format file (DPX, Cineon, Float TIFF) from ArrayBuffer
+   */
+  private async loadHDRFromBuffer(
+    buffer: ArrayBuffer,
+    name: string,
+    url: string,
+    originalUrl?: string
+  ): Promise<void> {
+    let decodeResult: {
+      width: number;
+      height: number;
+      data: Float32Array;
+      channels: number;
+      colorSpace: string;
+      metadata: Record<string, unknown>;
+    };
+    let formatName: string;
+
+    // Detect format by magic number
+    if (isDPXFile(buffer)) {
+      const result = await decodeDPX(buffer, { applyLogToLinear: true });
+      decodeResult = result;
+      formatName = 'dpx';
+    } else if (isCineonFile(buffer)) {
+      const result = await decodeCineon(buffer, { applyLogToLinear: true });
+      decodeResult = result;
+      formatName = 'cineon';
+    } else if (isTIFFFile(buffer) && isFloatTIFF(buffer)) {
+      const result = await decodeTIFFFloat(buffer);
+      decodeResult = result;
+      formatName = 'tiff';
+    } else {
+      throw new Error('Unsupported HDR format or invalid file');
+    }
+
+    // Convert decode result to IPImage
+    const metadata: ImageMetadata = {
+      colorSpace: decodeResult.colorSpace,
+      sourcePath: originalUrl ?? url,
+      attributes: {
+        ...(decodeResult.metadata as Record<string, unknown>),
+        formatName,
+      },
+    };
+
+    this.cachedIPImage = new IPImage({
+      width: decodeResult.width,
+      height: decodeResult.height,
+      channels: decodeResult.channels,
+      dataType: 'float32',
+      data: decodeResult.data.buffer as ArrayBuffer,
+      metadata,
+    });
+    this.cachedIPImage.metadata.frameNumber = 1;
+
+    this.url = url;
+    this.isEXR = false;
+    this._isHDRFormat = true;
+    this._formatName = formatName;
+    this.image = null;
+
+    this.metadata = {
+      name,
+      width: decodeResult.width,
+      height: decodeResult.height,
+      duration: 1,
+      fps: 24,
+    };
+
+    this.properties.setValue('url', url);
+    if (originalUrl) {
+      this.properties.setValue('originalUrl', originalUrl);
+    }
+    this.properties.setValue('width', decodeResult.width);
+    this.properties.setValue('height', decodeResult.height);
+    this.properties.setValue('isHDR', true);
 
     // Mark canvas as dirty so it gets re-rendered on next getCanvas() call
     this.canvasDirty = true;
@@ -261,14 +420,33 @@ export class FileSourceNode extends BaseSourceNode {
       return;
     }
 
+    // Check if this is a DPX or Cineon file (always HDR)
+    if (isDPXExtension(file.name) || isCineonExtension(file.name)) {
+      const buffer = await file.arrayBuffer();
+      const url = URL.createObjectURL(file);
+      await this.loadHDRFromBuffer(buffer, file.name, url);
+      return;
+    }
+
+    // Check if this is a TIFF file - only use HDR path for float TIFFs
+    if (isTIFFExtension(file.name)) {
+      const buffer = await file.arrayBuffer();
+      if (isTIFFFile(buffer) && isFloatTIFF(buffer)) {
+        const url = URL.createObjectURL(file);
+        await this.loadHDRFromBuffer(buffer, file.name, url);
+        return;
+      }
+      // Non-float TIFF - fall through to standard image loading (no URL leak)
+    }
+
     // Standard image loading
     const url = URL.createObjectURL(file);
     await this.load(url, file.name);
   }
 
   isReady(): boolean {
-    // For EXR files, check if we have cached IPImage
-    if (this.isEXR) {
+    // For HDR files (EXR, DPX, Cineon, Float TIFF), check if we have cached IPImage
+    if (this._isHDRFormat || this.isEXR) {
       return this.cachedIPImage !== null;
     }
     return this.image !== null && this.image.complete;
@@ -278,7 +456,7 @@ export class FileSourceNode extends BaseSourceNode {
    * Check if this source contains HDR (float) data
    */
   isHDR(): boolean {
-    return this.isEXR;
+    return this._isHDRFormat || this.isEXR;
   }
 
   getElement(_frame: number): HTMLImageElement | null {
@@ -287,7 +465,7 @@ export class FileSourceNode extends BaseSourceNode {
 
   /**
    * Get a canvas containing the rendered image data
-   * This is used for EXR files where there's no HTMLImageElement.
+   * This is used for HDR files where there's no HTMLImageElement.
    * The canvas is cached and only re-rendered when the image data changes.
    */
   getCanvas(): HTMLCanvasElement | null {
@@ -362,8 +540,8 @@ export class FileSourceNode extends BaseSourceNode {
       return this.cachedIPImage;
     }
 
-    // For EXR files, the IPImage is already created during load
-    if (this.isEXR) {
+    // For HDR files, the IPImage is already created during load
+    if (this._isHDRFormat || this.isEXR) {
       return this.cachedIPImage;
     }
 
@@ -406,6 +584,8 @@ export class FileSourceNode extends BaseSourceNode {
     this.exrBuffer = null;
     this.exrLayers = [];
     this.isEXR = false;
+    this._isHDRFormat = false;
+    this._formatName = null;
     // Clean up cached canvas
     this.cachedCanvas = null;
     this.canvasDirty = true;
@@ -421,7 +601,7 @@ export class FileSourceNode extends BaseSourceNode {
       url: this.properties.getValue<string>('originalUrl') || this.url,
       metadata: this.metadata,
       properties: this.properties.toJSON(),
-      isHDR: this.isEXR,
+      isHDR: this._isHDRFormat || this.isEXR,
     };
   }
 }

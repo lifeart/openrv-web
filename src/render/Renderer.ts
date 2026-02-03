@@ -2,6 +2,7 @@ import { IPImage, DataType } from '../core/image/Image';
 import { ShaderProgram } from './ShaderProgram';
 import { ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from '../ui/components/ColorControls';
 import { ToneMappingState, ToneMappingOperator, DEFAULT_TONE_MAPPING_STATE } from '../ui/components/ToneMappingControl';
+import { buildHueRotationMatrix, isIdentityHueRotation } from '../color/HueRotation';
 
 /**
  * Tone mapping operator integer codes for shader uniform
@@ -18,6 +19,9 @@ export class Renderer {
   private colorAdjustments: ColorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
   private gl: WebGL2RenderingContext | null = null;
   private canvas: HTMLCanvasElement | null = null;
+
+  // Color inversion state
+  private colorInversionEnabled = false;
 
   // Tone mapping state
   private toneMappingState: ToneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
@@ -95,8 +99,15 @@ export class Renderer {
       uniform float u_temperature;   // -100 to +100
       uniform float u_tint;          // -100 to +100
 
+      // Hue rotation: luminance-preserving 3x3 matrix
+      uniform mat3 u_hueRotationMatrix;
+      uniform bool u_hueRotationEnabled;
+
       // Tone mapping
       uniform int u_toneMappingOperator;  // 0=off, 1=reinhard, 2=filmic, 3=aces
+
+      // Color inversion
+      uniform bool u_invert;
 
       // Luminance coefficients (Rec. 709)
       const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
@@ -189,11 +200,21 @@ export class Renderer {
         float luma = dot(color.rgb, LUMA);
         color.rgb = mix(vec3(luma), color.rgb, u_saturation);
 
+        // 5b. Hue rotation (luminance-preserving matrix)
+        if (u_hueRotationEnabled) {
+          color.rgb = u_hueRotationMatrix * color.rgb;
+        }
+
         // 6. Tone mapping (applied before gamma for proper HDR handling)
         color.rgb = applyToneMapping(max(color.rgb, 0.0), u_toneMappingOperator);
 
         // 7. Gamma correction (display transform)
         color.rgb = pow(max(color.rgb, 0.0), vec3(1.0 / u_gamma));
+
+        // 8. Color inversion (after all corrections, before channel isolation)
+        if (u_invert) {
+          color.rgb = 1.0 - color.rgb;
+        }
 
         // Clamp final output
         color.rgb = clamp(color.rgb, 0.0, 1.0);
@@ -283,11 +304,24 @@ export class Renderer {
     this.displayShader.setUniform('u_temperature', this.colorAdjustments.temperature);
     this.displayShader.setUniform('u_tint', this.colorAdjustments.tint);
 
+    // Set hue rotation uniforms
+    const hueRotationDegrees = this.colorAdjustments.hueRotation;
+    if (isIdentityHueRotation(hueRotationDegrees)) {
+      this.displayShader.setUniformInt('u_hueRotationEnabled', 0);
+    } else {
+      this.displayShader.setUniformInt('u_hueRotationEnabled', 1);
+      const hueMatrix = buildHueRotationMatrix(hueRotationDegrees);
+      this.displayShader.setUniformMatrix3('u_hueRotationMatrix', hueMatrix);
+    }
+
     // Set tone mapping uniform
     const toneMappingCode = this.toneMappingState.enabled
       ? TONE_MAPPING_OPERATOR_CODES[this.toneMappingState.operator]
       : 0;
     this.displayShader.setUniformInt('u_toneMappingOperator', toneMappingCode);
+
+    // Set color inversion uniform
+    this.displayShader.setUniformInt('u_invert', this.colorInversionEnabled ? 1 : 0);
 
     this.displayShader.setUniform('u_texture', 0);
 
@@ -438,6 +472,14 @@ export class Renderer {
 
   resetColorAdjustments(): void {
     this.colorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
+  }
+
+  setColorInversion(enabled: boolean): void {
+    this.colorInversionEnabled = enabled;
+  }
+
+  getColorInversion(): boolean {
+    return this.colorInversionEnabled;
   }
 
   setToneMappingState(state: ToneMappingState): void {

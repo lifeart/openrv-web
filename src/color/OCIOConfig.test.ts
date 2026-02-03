@@ -2,7 +2,7 @@
  * OCIOConfig Unit Tests
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import {
   OCIOState,
   DEFAULT_OCIO_STATE,
@@ -14,7 +14,10 @@ import {
   getViewsForDisplay,
   getLooks,
   isDefaultOCIOState,
+  registerCustomConfig,
+  removeCustomConfig,
 } from './OCIOConfig';
+import type { OCIOConfigDefinition } from './OCIOConfig';
 
 describe('OCIOConfig', () => {
   describe('DEFAULT_OCIO_STATE', () => {
@@ -350,8 +353,8 @@ describe('OCIOConfig', () => {
         ...DEFAULT_OCIO_STATE,
         lookDirection: 'inverse',
       };
-      // lookDirection is not checked in isDefaultOCIOState
-      expect(isDefaultOCIOState(state)).toBe(true);
+      // lookDirection is checked in isDefaultOCIOState
+      expect(isDefaultOCIOState(state)).toBe(false);
     });
   });
 
@@ -415,6 +418,129 @@ describe('OCIOConfig', () => {
 
       expect(dataSpaces.length).toBe(1);
       expect(dataSpaces[0]!.name).toBe('Raw');
+    });
+  });
+
+  // ==========================================================================
+  // Custom Config Registration (v2)
+  // ==========================================================================
+
+  describe('Custom config registration', () => {
+    const testCustomConfig: OCIOConfigDefinition = {
+      name: 'test_custom',
+      version: '1.0',
+      description: 'Test custom config',
+      colorSpaces: [
+        {
+          name: 'Linear Custom',
+          description: 'Linear custom space',
+          family: 'Utility',
+          encoding: 'scene-linear',
+          isWorkingSpace: true,
+        },
+        {
+          name: 'Custom Display',
+          description: 'Custom display',
+          family: 'Display',
+          encoding: 'sdr-video',
+          isDisplaySpace: true,
+        },
+      ],
+      displays: [
+        { name: 'Custom Display', views: ['Standard'] },
+      ],
+      looks: [
+        { name: 'None', description: 'No look' },
+      ],
+      roles: {
+        default: 'Custom Display',
+        reference: 'Linear Custom',
+        colorPicking: 'Custom Display',
+        data: 'Raw',
+      },
+    };
+
+    // Clean up after each test to avoid polluting state
+    afterEach(() => {
+      removeCustomConfig('test_custom');
+      removeCustomConfig('test_another');
+    });
+
+    it('OCIO-V2-C001: registerCustomConfig makes config available via getBuiltinConfig', () => {
+      registerCustomConfig(testCustomConfig);
+      const config = getBuiltinConfig('test_custom');
+      expect(config.name).toBe('test_custom');
+      expect(config.description).toBe('Test custom config');
+    });
+
+    it('OCIO-V2-C002: registerCustomConfig adds to getAvailableConfigs', () => {
+      registerCustomConfig(testCustomConfig);
+      const configs = getAvailableConfigs();
+      expect(configs.some((c) => c.name === 'test_custom')).toBe(true);
+    });
+
+    it('OCIO-V2-C003: removeCustomConfig removes config', () => {
+      registerCustomConfig(testCustomConfig);
+      removeCustomConfig('test_custom');
+      expect(() => getBuiltinConfig('test_custom')).toThrow();
+    });
+
+    it('OCIO-V2-C004: removeCustomConfig does not affect built-in configs', () => {
+      removeCustomConfig('aces_1.2');
+      // Built-in should still be available
+      expect(() => getBuiltinConfig('aces_1.2')).not.toThrow();
+    });
+
+    it('OCIO-V2-C005: custom config color spaces accessible via getInputColorSpaces', () => {
+      registerCustomConfig(testCustomConfig);
+      const spaces = getInputColorSpaces('test_custom');
+      expect(spaces).toContain('Auto');
+      expect(spaces).toContain('Linear Custom');
+      expect(spaces).toContain('Custom Display');
+    });
+
+    it('OCIO-V2-C006: custom config working spaces accessible via getWorkingColorSpaces', () => {
+      registerCustomConfig(testCustomConfig);
+      const spaces = getWorkingColorSpaces('test_custom');
+      expect(spaces).toContain('Linear Custom');
+    });
+
+    it('OCIO-V2-C007: custom config displays accessible via getDisplays', () => {
+      registerCustomConfig(testCustomConfig);
+      const displays = getDisplays('test_custom');
+      expect(displays).toContain('Custom Display');
+    });
+
+    it('OCIO-V2-C008: custom config views accessible via getViewsForDisplay', () => {
+      registerCustomConfig(testCustomConfig);
+      const views = getViewsForDisplay('test_custom', 'Custom Display');
+      expect(views).toContain('Standard');
+    });
+
+    it('OCIO-V2-C009: multiple custom configs can coexist', () => {
+      registerCustomConfig(testCustomConfig);
+      registerCustomConfig({
+        ...testCustomConfig,
+        name: 'test_another',
+        description: 'Another custom config',
+      });
+      const configs = getAvailableConfigs();
+      expect(configs.some((c) => c.name === 'test_custom')).toBe(true);
+      expect(configs.some((c) => c.name === 'test_another')).toBe(true);
+    });
+
+    it('OCIO-V2-C010: built-in configs take priority over custom with same name', () => {
+      // Register a custom config with a normalized name that matches a built-in
+      registerCustomConfig({
+        ...testCustomConfig,
+        name: 'srgb',
+        description: 'My custom sRGB',
+      });
+      // Built-in srgb should still be returned (built-in takes priority)
+      const config = getBuiltinConfig('srgb');
+      expect(config.description).toBe('Simple sRGB workflow');
+      // Clean up
+      removeCustomConfig('srgb');
     });
   });
 });

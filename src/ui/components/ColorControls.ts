@@ -1,5 +1,6 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import { LUT3D, parseCubeLUT } from '../../color/LUTLoader';
+import { LUT3D, isLUT3D } from '../../color/LUTLoader';
+import { parseLUT } from '../../color/LUTFormatDetect';
 import { showAlert } from './shared/Modal';
 import { getIconSvg } from './shared/Icons';
 
@@ -242,8 +243,8 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
 
     // LUT load button
     const lutLoadBtn = document.createElement('button');
-    lutLoadBtn.textContent = 'Load .cube';
-    lutLoadBtn.title = 'Load a .cube LUT file';
+    lutLoadBtn.textContent = 'Load LUT';
+    lutLoadBtn.title = 'Load a LUT file (.cube, .3dl, .csp, .itx, .look, .lut, .nk, .mga)';
     lutLoadBtn.style.cssText = `
       background: var(--border-secondary);
       border: 1px solid var(--text-muted);
@@ -257,7 +258,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     // Hidden file input
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
-    fileInput.accept = '.cube';
+    fileInput.accept = '.cube,.3dl,.csp,.itx,.look,.lut,.nk,.mga';
     fileInput.style.display = 'none';
     fileInput.addEventListener('change', (e) => this.handleLUTFile(e));
 
@@ -380,7 +381,10 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
 
     try {
       const content = await file.text();
-      const lut = parseCubeLUT(content);
+      const lut = parseLUT(file.name, content);
+      if (!isLUT3D(lut)) {
+        throw new Error('1D LUTs are not supported. Please load a 3D LUT file.');
+      }
       this.setLUT(lut);
     } catch (err) {
       console.error('Failed to load LUT:', err);
