@@ -206,26 +206,64 @@ export function applyLUTsToImageData(imageData: ImageData, luts: CurveLUTs): voi
 }
 
 /**
+ * Compare two CurveChannels for structural equality
+ */
+function curveChannelEqual(a: CurveChannel, b: CurveChannel): boolean {
+  if (a.enabled !== b.enabled) return false;
+  if (a.points.length !== b.points.length) return false;
+  for (let i = 0; i < a.points.length; i++) {
+    if (a.points[i]!.x !== b.points[i]!.x || a.points[i]!.y !== b.points[i]!.y) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Compare two ColorCurvesData for structural equality
+ */
+function curvesEqual(a: ColorCurvesData, b: ColorCurvesData): boolean {
+  return (
+    curveChannelEqual(a.master, b.master) &&
+    curveChannelEqual(a.red, b.red) &&
+    curveChannelEqual(a.green, b.green) &&
+    curveChannelEqual(a.blue, b.blue)
+  );
+}
+
+/**
+ * Deep copy a ColorCurvesData so the cache holds its own snapshot
+ */
+function deepCopyCurves(curves: ColorCurvesData): ColorCurvesData {
+  return {
+    master: { enabled: curves.master.enabled, points: curves.master.points.map(p => ({ x: p.x, y: p.y })) },
+    red: { enabled: curves.red.enabled, points: curves.red.points.map(p => ({ x: p.x, y: p.y })) },
+    green: { enabled: curves.green.enabled, points: curves.green.points.map(p => ({ x: p.x, y: p.y })) },
+    blue: { enabled: curves.blue.enabled, points: curves.blue.points.map(p => ({ x: p.x, y: p.y })) },
+  };
+}
+
+/**
  * Cache for curve LUTs to avoid rebuilding every frame
- * Only rebuilds when curves actually change
+ * Only rebuilds when curves actually change.
+ * Uses structural comparison instead of JSON.stringify for cache invalidation.
  */
 export class CurveLUTCache {
   private cachedLUTs: CurveLUTs | null = null;
-  private cachedCurvesJSON: string | null = null;
+  private cachedCurves: ColorCurvesData | null = null;
 
   /**
    * Get LUTs for the given curves, rebuilding only if curves changed
    */
   getLUTs(curves: ColorCurvesData): CurveLUTs {
-    const curvesJSON = JSON.stringify(curves);
-
-    if (this.cachedLUTs && this.cachedCurvesJSON === curvesJSON) {
+    if (this.cachedLUTs && this.cachedCurves && curvesEqual(this.cachedCurves, curves)) {
       return this.cachedLUTs;
     }
 
     // Curves changed, rebuild LUTs
     this.cachedLUTs = buildAllCurveLUTs(curves);
-    this.cachedCurvesJSON = curvesJSON;
+    // Deep-copy the curves for future comparison
+    this.cachedCurves = deepCopyCurves(curves);
 
     return this.cachedLUTs;
   }
@@ -245,7 +283,7 @@ export class CurveLUTCache {
    */
   clear(): void {
     this.cachedLUTs = null;
-    this.cachedCurvesJSON = null;
+    this.cachedCurves = null;
   }
 }
 
