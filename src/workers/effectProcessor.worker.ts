@@ -675,9 +675,22 @@ function processEffects(
   if (hasCDL) applyCDL(data, state.cdlValues);
   if (hasCurves) applyCurves(data, state.curvesData);
   if (hasHSLQualifier) applyHSLQualifier(data, state.hslQualifierState);
+  if (state.colorInversionEnabled) applyWorkerColorInversion(data);
   if (hasSharpen)
     applySharpen(data, width, height, state.filterSettings.sharpen / 100);
   if (hasChannel) applyChannelIsolation(data, state.channelMode);
+}
+
+/**
+ * Apply color inversion (255 - value) to RGB channels, preserving alpha.
+ */
+function applyWorkerColorInversion(data: Uint8ClampedArray): void {
+  for (let i = 0; i < data.length; i += 4) {
+    data[i]     = 255 - data[i]!;     // R
+    data[i + 1] = 255 - data[i + 1]!; // G
+    data[i + 2] = 255 - data[i + 2]!; // B
+    // alpha unchanged
+  }
 }
 
 // ============================================================================

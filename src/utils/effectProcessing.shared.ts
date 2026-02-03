@@ -157,6 +157,7 @@ export interface WorkerEffectsState {
   channelMode: string;
   colorWheelsState: WorkerColorWheelsState;
   hslQualifierState: WorkerHSLQualifierState;
+  colorInversionEnabled: boolean;
 }
 
 // ============================================================================

@@ -65,7 +65,8 @@ export function buildEffectsState(
   channelMode: ChannelMode,
   colorWheels: ColorWheels,
   hslQualifier: HSLQualifier,
-  toneMappingState: ToneMappingState
+  toneMappingState: ToneMappingState,
+  colorInversionEnabled = false
 ): AllEffectsState {
   return {
     colorAdjustments: { ...colorAdjustments },
@@ -81,6 +82,7 @@ export function buildEffectsState(
     colorWheelsState: colorWheels.getState(),
     hslQualifierState: hslQualifier.getState(),
     toneMappingState: { ...toneMappingState },
+    colorInversionEnabled,
   };
 }
 

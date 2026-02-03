@@ -18,6 +18,7 @@ import { CDLValues, DEFAULT_CDL, isDefaultCDL, applyCDLToImageData } from '../co
 import { ColorCurvesData, createDefaultCurvesData, isDefaultCurves, CurveLUTCache } from '../color/ColorCurves';
 import { FilterSettings, DEFAULT_FILTER_SETTINGS } from '../ui/components/FilterControl';
 import { ChannelMode, applyChannelIsolation } from '../ui/components/ChannelSelect';
+import { applyColorInversion } from '../color/Inversion';
 import { ColorWheelsState, DEFAULT_COLOR_WHEELS_STATE } from '../ui/components/ColorWheels';
 import { HSLQualifierState, DEFAULT_HSL_QUALIFIER_STATE } from '../ui/components/HSLQualifier';
 import { ToneMappingState, DEFAULT_TONE_MAPPING_STATE } from '../ui/components/ToneMappingControl';
@@ -56,6 +57,7 @@ export interface AllEffectsState {
   colorWheelsState: ColorWheelsState;
   hslQualifierState: HSLQualifierState;
   toneMappingState: ToneMappingState;
+  colorInversionEnabled: boolean;
 }
 
 /**
@@ -71,6 +73,7 @@ export function createDefaultEffectsState(): AllEffectsState {
     colorWheelsState: JSON.parse(JSON.stringify(DEFAULT_COLOR_WHEELS_STATE)),
     hslQualifierState: JSON.parse(JSON.stringify(DEFAULT_HSL_QUALIFIER_STATE)),
     toneMappingState: { ...DEFAULT_TONE_MAPPING_STATE },
+    colorInversionEnabled: false,
   };
 }
 
@@ -89,6 +92,7 @@ export function computeEffectsHash(state: AllEffectsState): string {
     wheels: state.colorWheelsState,
     hsl: state.hslQualifierState,
     tm: state.toneMappingState,
+    inv: state.colorInversionEnabled,
   });
 
   // Simple hash function (djb2)
@@ -117,10 +121,11 @@ export function hasActiveEffects(state: AllEffectsState): boolean {
   const hasColorWheels = hasColorWheelAdjustments(state.colorWheelsState);
   const hasHSLQualifier = state.hslQualifierState.enabled;
   const hasToneMapping = state.toneMappingState.enabled && state.toneMappingState.operator !== 'off';
+  const hasInversion = state.colorInversionEnabled;
 
   return hasCDL || hasCurves || hasSharpen || hasChannel ||
          hasHighlightsShadows || hasVibrance || hasClarity ||
-         hasColorWheels || hasHSLQualifier || hasToneMapping;
+         hasColorWheels || hasHSLQualifier || hasToneMapping || hasInversion;
 }
 
 /**
@@ -196,11 +201,12 @@ export class EffectProcessor {
     const hasClarity = state.colorAdjustments.clarity !== 0;
     const hasColorWheels = hasColorWheelAdjustments(state.colorWheelsState);
     const hasHSLQualifier = state.hslQualifierState.enabled;
+    const hasInversion = state.colorInversionEnabled;
 
     // Early return if no pixel effects are active
     if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel &&
         !hasHighlightsShadows && !hasVibrance && !hasClarity &&
-        !hasColorWheels && !hasHSLQualifier) {
+        !hasColorWheels && !hasHSLQualifier && !hasInversion) {
       return;
     }
 
@@ -237,6 +243,11 @@ export class EffectProcessor {
     // Apply HSL Qualifier (secondary color correction - after primary corrections)
     if (hasHSLQualifier) {
       this.applyHSLQualifier(imageData, state.hslQualifierState);
+    }
+
+    // Apply color inversion (after all color corrections, before sharpen/channel isolation)
+    if (hasInversion) {
+      applyColorInversion(imageData);
     }
 
     // Apply sharpen filter

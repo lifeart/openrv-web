@@ -19,6 +19,9 @@ export class Renderer {
   private gl: WebGL2RenderingContext | null = null;
   private canvas: HTMLCanvasElement | null = null;
 
+  // Color inversion state
+  private colorInversionEnabled = false;
+
   // Tone mapping state
   private toneMappingState: ToneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
 
@@ -97,6 +100,9 @@ export class Renderer {
 
       // Tone mapping
       uniform int u_toneMappingOperator;  // 0=off, 1=reinhard, 2=filmic, 3=aces
+
+      // Color inversion
+      uniform bool u_invert;
 
       // Luminance coefficients (Rec. 709)
       const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
@@ -195,6 +201,11 @@ export class Renderer {
         // 7. Gamma correction (display transform)
         color.rgb = pow(max(color.rgb, 0.0), vec3(1.0 / u_gamma));
 
+        // 8. Color inversion (after all corrections, before channel isolation)
+        if (u_invert) {
+          color.rgb = 1.0 - color.rgb;
+        }
+
         // Clamp final output
         color.rgb = clamp(color.rgb, 0.0, 1.0);
 
@@ -288,6 +299,9 @@ export class Renderer {
       ? TONE_MAPPING_OPERATOR_CODES[this.toneMappingState.operator]
       : 0;
     this.displayShader.setUniformInt('u_toneMappingOperator', toneMappingCode);
+
+    // Set color inversion uniform
+    this.displayShader.setUniformInt('u_invert', this.colorInversionEnabled ? 1 : 0);
 
     this.displayShader.setUniform('u_texture', 0);
 
@@ -438,6 +452,14 @@ export class Renderer {
 
   resetColorAdjustments(): void {
     this.colorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
+  }
+
+  setColorInversion(enabled: boolean): void {
+    this.colorInversionEnabled = enabled;
+  }
+
+  getColorInversion(): boolean {
+    return this.colorInversionEnabled;
   }
 
   setToneMappingState(state: ToneMappingState): void {

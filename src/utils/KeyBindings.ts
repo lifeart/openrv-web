@@ -410,6 +410,13 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     description: 'Toggle tone mapping for HDR content'
   },
 
+  // Color inversion
+  'color.toggleInversion': {
+    code: 'KeyI',
+    ctrl: true,
+    description: 'Toggle color inversion',
+  },
+
   // HSL Qualifier (secondary color correction)
   'color.toggleHSLQualifier': {
     code: 'KeyH',
