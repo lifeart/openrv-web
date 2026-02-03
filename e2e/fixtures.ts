@@ -9,6 +9,9 @@ export const SAMPLE_RV_SESSION = 'sample/test_session.rv';
 export const SAMPLE_EXR = 'sample/test_hdr.exr';
 export const SAMPLE_EXR_SMALL = 'sample/test_small.exr';
 export const SAMPLE_EXR_MULTILAYER = 'sample/test_multilayer.exr';
+export const SAMPLE_SEQUENCE_DIR = 'sample/sequence';
+export const SAMPLE_SEQUENCE_PATTERN = 'frame_####.png';
+export const SAMPLE_SEQUENCE_FRAME = 'sample/sequence/frame_0001.png';
 
 // Types matching test-helper.ts
 export interface MarkerData {
@@ -777,6 +780,42 @@ export async function loadExrFile(page: Page): Promise<void> {
 
   // Wait for EXR to decode and render
   await page.waitForTimeout(1000);
+}
+
+/**
+ * Load a sequence of image files
+ */
+export async function loadSequenceFiles(page: Page): Promise<void> {
+  // Load all frames from the sequence directory
+  const sequenceDir = path.resolve(process.cwd(), SAMPLE_SEQUENCE_DIR);
+  const files = [];
+  for (let i = 1; i <= 10; i++) {
+    const frameNum = String(i).padStart(4, '0');
+    files.push(path.join(sequenceDir, `frame_${frameNum}.png`));
+  }
+
+  const fileInput = page.locator('input[type="file"]').first();
+  await fileInput.setInputFiles(files);
+
+  // Wait for sequence to load and render
+  await page.waitForTimeout(1000);
+}
+
+/**
+ * Load a single frame from a sequence (tests single-file inference)
+ * In practice, this should load only the one file,
+ * and the sequence inference happens when all files are available
+ */
+export async function loadSingleSequenceFrame(page: Page, frameNumber: number = 1): Promise<void> {
+  const sequenceDir = path.resolve(process.cwd(), SAMPLE_SEQUENCE_DIR);
+  const frameNum = String(frameNumber).padStart(4, '0');
+  const filePath = path.join(sequenceDir, `frame_${frameNum}.png`);
+
+  const fileInput = page.locator('input[type="file"]').first();
+  await fileInput.setInputFiles(filePath);
+
+  // Wait for file to load and render
+  await page.waitForTimeout(500);
 }
 
 /**

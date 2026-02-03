@@ -13,7 +13,7 @@ import { CDLValues, DEFAULT_CDL, isDefaultCDL, applyCDLToImageData } from '../..
 import { ColorCurvesData, createDefaultCurvesData, isDefaultCurves, CurveLUTCache } from '../../color/ColorCurves';
 import { LensDistortionParams, DEFAULT_LENS_PARAMS, isDefaultLensParams, applyLensDistortion } from '../../transform/LensDistortion';
 import { ExportFormat, exportCanvas as doExportCanvas, copyCanvasToClipboard } from '../../utils/FrameExporter';
-import { filterImageFiles } from '../../utils/SequenceLoader';
+import { filterImageFiles, getBestSequence } from '../../utils/SequenceLoader';
 import { StackLayer } from './StackControl';
 import { compositeImageData, BlendMode } from '../../composite/BlendModes';
 import { showAlert } from './shared/Modal';
@@ -1049,13 +1049,17 @@ export class Viewer {
     // Check if multiple image files were dropped - treat as sequence
     const imageFiles = filterImageFiles(fileArray);
     if (imageFiles.length > 1) {
-      try {
-        await this.session.loadSequence(imageFiles);
-        return;
-      } catch (err) {
-        console.error('Failed to load sequence:', err);
-        showAlert(`Failed to load sequence: ${err}`, { type: 'error', title: 'Load Error' });
-        return;
+      // Use getBestSequence to handle mixed sequences - picks the longest one
+      const bestSequence = getBestSequence(imageFiles);
+      if (bestSequence && bestSequence.length > 1) {
+        try {
+          await this.session.loadSequence(bestSequence);
+          return;
+        } catch (err) {
+          console.error('Failed to load sequence:', err);
+          showAlert(`Failed to load sequence: ${err}`, { type: 'error', title: 'Load Error' });
+          return;
+        }
       }
     }
 

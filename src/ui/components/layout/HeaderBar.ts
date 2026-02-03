@@ -7,7 +7,7 @@
 
 import { EventEmitter, EventMap } from '../../../utils/EventEmitter';
 import { Session, LoopMode, PLAYBACK_SPEED_PRESETS } from '../../../core/session/Session';
-import { filterImageFiles } from '../../../utils/SequenceLoader';
+import { filterImageFiles, inferSequenceFromSingleFile, getBestSequence } from '../../../utils/SequenceLoader';
 import { VolumeControl } from '../VolumeControl';
 import { ExportControl } from '../ExportControl';
 import { TimecodeDisplay } from '../TimecodeDisplay';
@@ -655,16 +655,40 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Check if multiple image files were selected - treat as sequence
     const imageFiles = filterImageFiles(fileArray);
     if (imageFiles.length > 1) {
+      // Try to find the best sequence from the selected files
+      const bestSequence = getBestSequence(imageFiles);
+      if (bestSequence && bestSequence.length > 1) {
+        try {
+          await this.session.loadSequence(bestSequence);
+          this.emit('fileLoaded', undefined);
+          input.value = '';
+          return;
+        } catch (err) {
+          console.error('Failed to load sequence:', err);
+          showAlert(`Failed to load sequence: ${err}`, { type: 'error', title: 'Load Error' });
+          input.value = '';
+          return;
+        }
+      }
+    }
+
+    // Single image file - try to infer a sequence from available files
+    if (imageFiles.length === 1) {
+      const singleFile = imageFiles[0]!;
       try {
-        await this.session.loadSequence(imageFiles);
-        this.emit('fileLoaded', undefined);
-        input.value = '';
-        return;
+        // Try to infer sequence from the single file and all available files
+        const sequenceInfo = await inferSequenceFromSingleFile(singleFile, fileArray);
+        if (sequenceInfo) {
+          // Successfully inferred a sequence
+          const sequenceFiles = sequenceInfo.frames.map(f => f.file);
+          await this.session.loadSequence(sequenceFiles);
+          this.emit('fileLoaded', undefined);
+          input.value = '';
+          return;
+        }
       } catch (err) {
-        console.error('Failed to load sequence:', err);
-        showAlert(`Failed to load sequence: ${err}`, { type: 'error', title: 'Load Error' });
-        input.value = '';
-        return;
+        console.error('Failed to infer sequence:', err);
+        // Fall through to single file loading
       }
     }
 
