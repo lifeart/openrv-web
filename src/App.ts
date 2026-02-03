@@ -31,6 +31,7 @@ import { GhostFrameControl } from './ui/components/GhostFrameControl';
 import { PARControl } from './ui/components/PARControl';
 import { BackgroundPatternControl } from './ui/components/BackgroundPatternControl';
 import { OCIOControl } from './ui/components/OCIOControl';
+import { OCIOState } from './color/OCIOConfig';
 import { exportSequence } from './utils/SequenceExporter';
 import { showAlert, showModal, closeModal, showConfirm } from './ui/components/shared/Modal';
 import { SessionSerializer } from './core/session/SessionSerializer';
@@ -56,6 +57,7 @@ import { FullscreenManager } from './utils/FullscreenManager';
 import { PresentationMode } from './utils/PresentationMode';
 import { NetworkSyncManager } from './network/NetworkSyncManager';
 import { NetworkControl } from './ui/components/NetworkControl';
+import { ColorInversionToggle } from './ui/components/ColorInversionToggle';
 import type { OpenRVAPIConfig } from './api/OpenRVAPI';
 
 export class App {
@@ -115,6 +117,7 @@ export class App {
   private presentationMode: PresentationMode;
   private networkSyncManager: NetworkSyncManager;
   private networkControl: NetworkControl;
+  private colorInversionToggle: ColorInversionToggle;
 
   // History recording state
   private colorHistoryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -159,6 +162,13 @@ export class App {
 
     this.paintToolbar = new PaintToolbar(this.paintEngine);
     this.colorControls = new ColorControls();
+    this.colorInversionToggle = new ColorInversionToggle();
+
+    // Connect color inversion toggle to viewer
+    this.colorInversionToggle.on('inversionChanged', (enabled) => {
+      this.viewer.setColorInversion(enabled);
+      this.scheduleUpdateScopes();
+    });
 
     // Initialize color history with current (default) state
     this.colorHistoryPrevious = this.colorControls.getAdjustments();
@@ -323,8 +333,8 @@ export class App {
 
     // OCIO color management control
     this.ocioControl = new OCIOControl();
-    this.ocioControl.on('stateChanged', () => {
-      this.viewer.refresh();
+    this.ocioControl.on('stateChanged', (state) => {
+      this.updateOCIOPipeline(state);
       this.scheduleUpdateScopes();
       this.syncGTOStore();
     });
@@ -587,6 +597,9 @@ export class App {
     this.createLayout();
     this.bindEvents();
     this.start();
+
+    // Initialize OCIO pipeline from persisted state (if OCIO was enabled before page reload)
+    this.updateOCIOPipeline(this.ocioControl.getState());
 
     // Initialize auto-save and check for recovery
     await this.initAutoSave();
@@ -1036,6 +1049,8 @@ export class App {
     colorContent.appendChild(ContextToolbar.createDivider());
     colorContent.appendChild(this.cdlControl.render());
     colorContent.appendChild(ContextToolbar.createDivider());
+    colorContent.appendChild(this.colorInversionToggle.render());
+    colorContent.appendChild(ContextToolbar.createDivider());
 
     // Curves toggle button
     const curvesButton = ContextToolbar.createButton('Curves', () => {
@@ -1446,6 +1461,9 @@ export class App {
       },
       'color.toggleHSLQualifier': () => {
         this.viewer.getHSLQualifier().toggle();
+      },
+      'color.toggleInversion': () => {
+        this.colorInversionToggle.toggle();
       },
       'panel.history': () => {
         this.historyPanel.toggle();
@@ -2667,6 +2685,26 @@ export class App {
     document.addEventListener('keydown', handleKeyDown);
   }
 
+  /**
+   * Update the OCIO rendering pipeline when OCIO state changes.
+   *
+   * Bakes the current OCIO transform chain into a 3D LUT for GPU-accelerated
+   * processing and sends it to the Viewer for real-time display.
+   */
+  private updateOCIOPipeline(state: OCIOState): void {
+    const processor = this.ocioControl.getProcessor();
+
+    if (state.enabled) {
+      // Bake the OCIO transform chain into a 3D LUT for GPU acceleration
+      // Size 33 provides a good balance of accuracy vs. memory/performance
+      const bakedLUT = processor.bakeTo3DLUT(33);
+      this.viewer.setOCIOBakedLUT(bakedLUT, true);
+    } else {
+      // Disable OCIO - clear the baked LUT
+      this.viewer.setOCIOBakedLUT(null, false);
+    }
+  }
+
   private syncGTOStore(): void {
     if (!this.gtoStore) return;
     this.gtoStore.updateFromState({
@@ -2950,6 +2988,7 @@ export class App {
     this.filterControl.dispose();
     this.cropControl.dispose();
     this.cdlControl.dispose();
+    this.colorInversionToggle.dispose();
     this.curvesControl.dispose();
     this.lensControl.dispose();
     this.stackControl.dispose();

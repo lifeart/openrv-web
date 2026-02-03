@@ -19,6 +19,7 @@ import { compositeImageData, BlendMode } from '../../composite/BlendModes';
 import { showAlert } from './shared/Modal';
 import { getIconSvg } from './shared/Icons';
 import { ChannelMode, applyChannelIsolation } from './ChannelSelect';
+import { applyColorInversion } from '../../color/Inversion';
 import { StereoState, DEFAULT_STEREO_STATE, isDefaultStereoState, applyStereoMode } from '../../stereo/StereoRenderer';
 import { DifferenceMatteState, DEFAULT_DIFFERENCE_MATTE_STATE, applyDifferenceMatte } from './DifferenceMatteControl';
 import { WebGLSharpenProcessor } from '../../filters/WebGLSharpen';
@@ -182,6 +183,9 @@ export class Viewer {
   // Color adjustments
   private colorAdjustments: ColorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
 
+  // Color inversion state
+  private colorInversionEnabled = false;
+
   // Wipe comparison
   private wipeState: WipeState = { mode: 'off', position: 0.5, showOriginal: 'left' };
   private wipeElements: WipeUIElements | null = null;
@@ -197,6 +201,11 @@ export class Viewer {
   private lutIntensity = 1.0;
   private lutIndicator: HTMLElement | null = null;
   private lutProcessor: WebGLLUTProcessor | null = null;
+
+  // OCIO GPU-accelerated color management
+  private ocioLUTProcessor: WebGLLUTProcessor | null = null;
+  private ocioEnabled = false;
+  private ocioBakedLUT: LUT3D | null = null;
 
   // A/B Compare indicator
   private abIndicator: HTMLElement | null = null;
@@ -534,6 +543,14 @@ export class Viewer {
     } catch (e) {
       console.warn('WebGL LUT processor not available, falling back to CPU:', e);
       this.lutProcessor = null;
+    }
+
+    // Initialize dedicated OCIO WebGL LUT processor for GPU-accelerated color management
+    try {
+      this.ocioLUTProcessor = new WebGLLUTProcessor();
+    } catch (e) {
+      console.warn('WebGL OCIO LUT processor not available, OCIO will use CPU fallback:', e);
+      this.ocioLUTProcessor = null;
     }
 
     // Initialize WebGL sharpen processor
@@ -1721,6 +1738,12 @@ export class Viewer {
       this.applyLUTToCanvas(this.imageCtx, displayWidth, displayHeight);
     }
 
+    // Apply OCIO display transform (GPU-accelerated via baked 3D LUT)
+    // This runs after user-loaded LUTs but before color adjustments/CDL/curves
+    if (this.ocioEnabled && this.ocioBakedLUT) {
+      this.applyOCIOToCanvas(this.imageCtx, displayWidth, displayHeight);
+    }
+
     // Apply batched pixel-level effects (CDL, curves, sharpen, channel isolation)
     // This uses a single getImageData/putImageData pair for better performance
     this.applyBatchedPixelEffects(this.imageCtx, displayWidth, displayHeight);
@@ -2011,6 +2034,22 @@ export class Viewer {
     this.scheduleRender();
   }
 
+  // Color inversion methods
+  setColorInversion(enabled: boolean): void {
+    if (this.colorInversionEnabled === enabled) return;
+    this.colorInversionEnabled = enabled;
+    this.notifyEffectsChanged();
+    this.scheduleRender();
+  }
+
+  getColorInversion(): boolean {
+    return this.colorInversionEnabled;
+  }
+
+  toggleColorInversion(): void {
+    this.setColorInversion(!this.colorInversionEnabled);
+  }
+
   // LUT methods
   setLUT(lut: LUT3D | null): void {
     this.currentLUT = lut;
@@ -2084,6 +2123,63 @@ export class Viewer {
     }
     // Fallback: No CPU fallback implemented for performance reasons
     // The WebGL path handles all LUT processing
+  }
+
+  /**
+   * Apply OCIO display transform using GPU-accelerated baked 3D LUT.
+   *
+   * The OCIO transform chain (input -> working -> look -> display+view) is pre-baked
+   * into a 3D LUT by the OCIOProcessor, then applied here via the WebGL LUT pipeline
+   * for real-time performance.
+   */
+  private applyOCIOToCanvas(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+    if (!this.ocioBakedLUT) return;
+
+    // Use dedicated GPU LUT processor for OCIO
+    if (this.ocioLUTProcessor && this.ocioLUTProcessor.hasLUT()) {
+      this.ocioLUTProcessor.applyToCanvas(ctx, width, height, 1.0);
+      return;
+    }
+
+    // CPU fallback: apply OCIO transform via the shared processor
+    // This is slower but ensures OCIO always works even without GPU support
+    const ocioProcessor = getSharedOCIOProcessor();
+    if (ocioProcessor.isEnabled()) {
+      const imageData = ctx.getImageData(0, 0, width, height);
+      ocioProcessor.apply(imageData);
+      ctx.putImageData(imageData, 0, 0);
+    }
+  }
+
+  // ==========================================================================
+  // OCIO Color Management Methods
+  // ==========================================================================
+
+  /**
+   * Set the baked OCIO 3D LUT for GPU-accelerated display transform.
+   * Called by the App when the OCIOProcessor bakes a new transform.
+   *
+   * @param lut The baked 3D LUT from OCIOProcessor.bakeTo3DLUT(), or null to clear
+   * @param enabled Whether OCIO processing is enabled
+   */
+  setOCIOBakedLUT(lut: LUT3D | null, enabled: boolean): void {
+    this.ocioBakedLUT = lut;
+    this.ocioEnabled = enabled;
+
+    // Update the dedicated OCIO GPU LUT processor
+    if (this.ocioLUTProcessor) {
+      this.ocioLUTProcessor.setLUT(lut);
+    }
+
+    this.notifyEffectsChanged();
+    this.scheduleRender();
+  }
+
+  /**
+   * Get whether OCIO is currently enabled and active
+   */
+  isOCIOEnabled(): boolean {
+    return this.ocioEnabled && this.ocioBakedLUT !== null;
   }
 
   // Wipe comparison methods
@@ -2291,12 +2387,12 @@ export class Viewer {
     const hasFalseColor = this.falseColor.isEnabled();
     const hasZebras = this.zebraStripes.isEnabled();
     const hasClippingOverlay = this.clippingOverlay.isEnabled();
-    const ocioProcessor = getSharedOCIOProcessor();
-    const hasOCIO = ocioProcessor.isEnabled();
     const hasToneMapping = this.isToneMappingEnabled();
+    const hasInversion = this.colorInversionEnabled;
 
     // Early return if no pixel effects are active
-    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasZebras && !hasClippingOverlay && !hasOCIO && !hasToneMapping) {
+    // Note: OCIO is handled via GPU-accelerated 3D LUT in the main render pipeline (applyOCIOToCanvas)
+    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasZebras && !hasClippingOverlay && !hasToneMapping && !hasInversion) {
       return;
     }
 
@@ -2351,9 +2447,9 @@ export class Viewer {
       this.hslQualifier.apply(imageData);
     }
 
-    // Apply OCIO color transforms (display/view transform after grading)
-    if (hasOCIO) {
-      ocioProcessor.apply(imageData);
+    // Apply color inversion (after all color corrections, before sharpen/channel isolation)
+    if (hasInversion) {
+      applyColorInversion(imageData);
     }
 
     // Apply sharpen filter
@@ -3495,7 +3591,8 @@ export class Viewer {
       this.channelMode,
       this.colorWheels,
       this.hslQualifier,
-      this.toneMappingState
+      this.toneMappingState,
+      this.colorInversionEnabled
     );
 
     this.prerenderBuffer.updateEffects(effectsState);
@@ -3545,6 +3642,12 @@ export class Viewer {
     if (this.lutProcessor) {
       this.lutProcessor.dispose();
       this.lutProcessor = null;
+    }
+
+    // Cleanup OCIO WebGL LUT processor
+    if (this.ocioLUTProcessor) {
+      this.ocioLUTProcessor.dispose();
+      this.ocioLUTProcessor = null;
     }
 
     // Cleanup WebGL sharpen processor

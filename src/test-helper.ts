@@ -156,6 +156,8 @@ export interface ViewerState {
   backgroundPattern: 'black' | 'grey18' | 'grey50' | 'white' | 'checker' | 'crosshatch' | 'custom';
   backgroundCheckerSize: 'small' | 'medium' | 'large';
   backgroundCustomColor: string;
+  // Color inversion state
+  colorInversionEnabled: boolean;
 }
 
 export interface ColorState {
@@ -458,6 +460,8 @@ export function exposeForTesting(app: App): void {
         backgroundPattern: viewer.backgroundPatternState?.pattern ?? 'black',
         backgroundCheckerSize: viewer.backgroundPatternState?.checkerSize ?? 'medium',
         backgroundCustomColor: viewer.backgroundPatternState?.customColor ?? '#1a1a1a',
+        // Color inversion state
+        colorInversionEnabled: viewer.colorInversionEnabled ?? false,
       };
     },
 

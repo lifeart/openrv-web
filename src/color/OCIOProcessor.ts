@@ -394,7 +394,11 @@ export class OCIOProcessor extends EventEmitter<OCIOProcessorEvents> {
   // ==========================================================================
 
   /**
-   * Bake the current transform to a 3D LUT
+   * Bake the current transform to a 3D LUT for GPU-accelerated processing.
+   *
+   * This always bakes the transform regardless of the enabled state,
+   * since the enabled/disabled decision is made at the Viewer level.
+   * The baked LUT can be passed to a WebGLLUTProcessor for real-time display.
    *
    * @param size LUT size (typically 17, 33, or 65). Must be >= 1 and <= 129.
    * @returns 3D LUT suitable for WebGL processing
@@ -415,7 +419,9 @@ export class OCIOProcessor extends EventEmitter<OCIOProcessorEvents> {
 
     const data = new Float32Array(size * size * size * 3);
 
-    // Generate LUT data
+    // Generate LUT data by applying the transform directly (bypassing enabled check)
+    // This ensures the baked LUT always contains the correct transform
+    const transform = this.transform;
     for (let b = 0; b < size; b++) {
       for (let g = 0; g < size; g++) {
         for (let r = 0; r < size; r++) {
@@ -424,7 +430,14 @@ export class OCIOProcessor extends EventEmitter<OCIOProcessorEvents> {
           const inG = g / (size - 1);
           const inB = b / (size - 1);
 
-          const [outR, outG, outB] = this.transformColor(inR, inG, inB);
+          let outR: number, outG: number, outB: number;
+          if (transform) {
+            [outR, outG, outB] = transform.apply(inR, inG, inB);
+          } else {
+            outR = inR;
+            outG = inG;
+            outB = inB;
+          }
 
           data[idx] = outR;
           data[idx + 1] = outG;

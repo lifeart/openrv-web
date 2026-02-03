@@ -104,6 +104,8 @@ export interface ViewerState {
   backgroundPattern: 'black' | 'grey18' | 'grey50' | 'white' | 'checker' | 'crosshatch' | 'custom';
   backgroundCheckerSize: 'small' | 'medium' | 'large';
   backgroundCustomColor: string;
+  // Color inversion state
+  colorInversionEnabled: boolean;
 }
 
 export interface ColorState {
@@ -386,6 +388,7 @@ export async function getViewerState(page: Page): Promise<ViewerState> {
       backgroundPattern: 'black',
       backgroundCheckerSize: 'medium',
       backgroundCustomColor: '#1a1a1a',
+      colorInversionEnabled: false,
     };
   });
 }
