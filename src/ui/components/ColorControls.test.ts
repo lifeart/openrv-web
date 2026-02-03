@@ -53,6 +53,10 @@ describe('ColorControls', () => {
     it('COL-008: default brightness is 0', () => {
       expect(controls.getAdjustments().brightness).toBe(0);
     });
+
+    it('COL-029: default hueRotation is 0', () => {
+      expect(controls.getAdjustments().hueRotation).toBe(0);
+    });
   });
 
   describe('getAdjustments', () => {
@@ -78,6 +82,39 @@ describe('ColorControls', () => {
       expect(adj.exposure).toBe(2);
       expect(adj.gamma).toBe(1.5);
       expect(adj.saturation).toBe(0.5);
+    });
+
+    it('COL-030: sets hueRotation adjustment', () => {
+      controls.setAdjustments({ hueRotation: 180 });
+      expect(controls.getAdjustments().hueRotation).toBe(180);
+      // Other values unchanged
+      expect(controls.getAdjustments().exposure).toBe(0);
+    });
+
+    it('COL-031: sets hueRotation to max value 360', () => {
+      controls.setAdjustments({ hueRotation: 360 });
+      expect(controls.getAdjustments().hueRotation).toBe(360);
+    });
+
+    it('COL-033: setAdjustments with NaN hueRotation falls back to default', () => {
+      controls.setAdjustments({ hueRotation: NaN });
+      expect(controls.getAdjustments().hueRotation).toBe(DEFAULT_COLOR_ADJUSTMENTS.hueRotation);
+    });
+
+    it('COL-034: setAdjustments with Infinity exposure falls back to default', () => {
+      controls.setAdjustments({ exposure: Infinity });
+      expect(controls.getAdjustments().exposure).toBe(DEFAULT_COLOR_ADJUSTMENTS.exposure);
+    });
+
+    it('COL-035: setAdjustments with -Infinity brightness falls back to default', () => {
+      controls.setAdjustments({ brightness: -Infinity });
+      expect(controls.getAdjustments().brightness).toBe(DEFAULT_COLOR_ADJUSTMENTS.brightness);
+    });
+
+    it('COL-036: setAdjustments with mixed valid and NaN values keeps valid ones', () => {
+      controls.setAdjustments({ hueRotation: NaN, exposure: 2.5 });
+      expect(controls.getAdjustments().hueRotation).toBe(DEFAULT_COLOR_ADJUSTMENTS.hueRotation);
+      expect(controls.getAdjustments().exposure).toBe(2.5);
     });
 
     it('COL-012: emits adjustmentsChanged event', () => {
@@ -106,6 +143,15 @@ describe('ColorControls', () => {
       controls.reset();
 
       expect(controls.getAdjustments()).toEqual(DEFAULT_COLOR_ADJUSTMENTS);
+    });
+
+    it('COL-032: reset restores hueRotation to default', () => {
+      controls.setAdjustments({ hueRotation: 270 });
+      expect(controls.getAdjustments().hueRotation).toBe(270);
+
+      controls.reset();
+
+      expect(controls.getAdjustments().hueRotation).toBe(0);
     });
 
     it('COL-014: reset emits adjustmentsChanged event', () => {
@@ -258,6 +304,7 @@ describe('ColorControls', () => {
       expect(DEFAULT_COLOR_ADJUSTMENTS.gamma).toBe(1);
       expect(DEFAULT_COLOR_ADJUSTMENTS.saturation).toBe(1);
       expect(DEFAULT_COLOR_ADJUSTMENTS.contrast).toBe(1);
+      expect(DEFAULT_COLOR_ADJUSTMENTS.hueRotation).toBe(0);
       expect(DEFAULT_COLOR_ADJUSTMENTS.temperature).toBe(0);
       expect(DEFAULT_COLOR_ADJUSTMENTS.tint).toBe(0);
       expect(DEFAULT_COLOR_ADJUSTMENTS.brightness).toBe(0);

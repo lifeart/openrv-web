@@ -1,4 +1,4 @@
-import { Session } from './core/session/Session';
+import { Session, type UnsupportedCodecInfo } from './core/session/Session';
 import { Viewer } from './ui/components/Viewer';
 import { Timeline } from './ui/components/Timeline';
 import { HeaderBar } from './ui/components/layout/HeaderBar';
@@ -24,9 +24,13 @@ import { ScopesControl } from './ui/components/ScopesControl';
 import { CompareControl } from './ui/components/CompareControl';
 import { SafeAreasControl } from './ui/components/SafeAreasControl';
 import { FalseColorControl } from './ui/components/FalseColorControl';
+import { ToneMappingControl } from './ui/components/ToneMappingControl';
 import { ZebraControl } from './ui/components/ZebraControl';
 import { HSLQualifierControl } from './ui/components/HSLQualifierControl';
 import { GhostFrameControl } from './ui/components/GhostFrameControl';
+import { PARControl } from './ui/components/PARControl';
+import { BackgroundPatternControl } from './ui/components/BackgroundPatternControl';
+import { OCIOControl } from './ui/components/OCIOControl';
 import { exportSequence } from './utils/SequenceExporter';
 import { showAlert, showModal, closeModal, showConfirm } from './ui/components/shared/Modal';
 import { SessionSerializer } from './core/session/SessionSerializer';
@@ -48,6 +52,11 @@ import { SnapshotManager } from './core/session/SnapshotManager';
 import { SnapshotPanel } from './ui/components/SnapshotPanel';
 import { PlaylistManager } from './core/session/PlaylistManager';
 import { PlaylistPanel } from './ui/components/PlaylistPanel';
+import { FullscreenManager } from './utils/FullscreenManager';
+import { PresentationMode } from './utils/PresentationMode';
+import { NetworkSyncManager } from './network/NetworkSyncManager';
+import { NetworkControl } from './ui/components/NetworkControl';
+import type { OpenRVAPIConfig } from './api/OpenRVAPI';
 
 export class App {
   private container: HTMLElement | null = null;
@@ -78,9 +87,13 @@ export class App {
   private compareControl: CompareControl;
   private safeAreasControl: SafeAreasControl;
   private falseColorControl: FalseColorControl;
+  private toneMappingControl: ToneMappingControl;
   private zebraControl: ZebraControl;
   private hslQualifierControl: HSLQualifierControl;
   private ghostFrameControl: GhostFrameControl;
+  private parControl: PARControl;
+  private backgroundPatternControl: BackgroundPatternControl;
+  private ocioControl: OCIOControl;
   private animationId: number | null = null;
   private boundHandleResize: () => void;
   private boundHandleVisibilityChange: () => void;
@@ -98,6 +111,10 @@ export class App {
   private snapshotPanel: SnapshotPanel;
   private playlistManager: PlaylistManager;
   private playlistPanel: PlaylistPanel;
+  private fullscreenManager!: FullscreenManager;
+  private presentationMode: PresentationMode;
+  private networkSyncManager: NetworkSyncManager;
+  private networkControl: NetworkControl;
 
   // History recording state
   private colorHistoryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -212,9 +229,9 @@ export class App {
     this.zoomControl = new ZoomControl();
     this.zoomControl.on('zoomChanged', (zoom) => {
       if (zoom === 'fit') {
-        this.viewer.fitToWindow();
+        this.viewer.smoothFitToWindow();
       } else {
-        this.viewer.setZoom(zoom);
+        this.viewer.smoothSetZoom(zoom);
       }
     });
 
@@ -278,6 +295,11 @@ export class App {
     // Safe Areas control
     this.safeAreasControl = new SafeAreasControl(this.viewer.getSafeAreasOverlay());
     this.falseColorControl = new FalseColorControl(this.viewer.getFalseColor());
+    this.toneMappingControl = new ToneMappingControl();
+    this.toneMappingControl.on('stateChanged', (state) => {
+      this.viewer.setToneMappingState(state);
+      this.scheduleUpdateScopes();
+    });
     this.zebraControl = new ZebraControl(this.viewer.getZebraStripes());
     this.hslQualifierControl = new HSLQualifierControl(this.viewer.getHSLQualifier());
 
@@ -285,6 +307,46 @@ export class App {
     this.ghostFrameControl = new GhostFrameControl();
     this.ghostFrameControl.on('stateChanged', (state) => {
       this.viewer.setGhostFrameState(state);
+    });
+
+    // Pixel Aspect Ratio control
+    this.parControl = new PARControl();
+    this.parControl.on('stateChanged', (state) => {
+      this.viewer.setPARState(state);
+    });
+
+    // Background Pattern control
+    this.backgroundPatternControl = new BackgroundPatternControl();
+    this.backgroundPatternControl.on('stateChanged', (state) => {
+      this.viewer.setBackgroundPatternState(state);
+    });
+
+    // OCIO color management control
+    this.ocioControl = new OCIOControl();
+    this.ocioControl.on('stateChanged', () => {
+      this.viewer.refresh();
+      this.scheduleUpdateScopes();
+      this.syncGTOStore();
+    });
+
+    // Presentation mode
+    this.presentationMode = new PresentationMode();
+    this.presentationMode.loadPreference();
+    this.presentationMode.on('stateChanged', (state) => {
+      this.headerBar.setPresentationState(state.enabled);
+    });
+
+    // Network Sync
+    this.networkSyncManager = new NetworkSyncManager();
+    this.networkControl = new NetworkControl();
+    this.setupNetworkSync();
+
+    // Wire up fullscreen and presentation toggle from HeaderBar
+    this.headerBar.on('fullscreenToggle', () => {
+      this.fullscreenManager?.toggle();
+    });
+    this.headerBar.on('presentationToggle', () => {
+      this.presentationMode.toggle();
     });
 
     // Connect volume control (from HeaderBar) to session (bidirectional)
@@ -382,6 +444,10 @@ export class App {
     this.cropControl.on('panelToggled', (isOpen) => {
       this.viewer.setCropPanelOpen(isOpen);
     });
+    this.cropControl.on('uncropStateChanged', (state) => {
+      this.viewer.setUncropState(state);
+      this.syncGTOStore();
+    });
 
     // Handle crop region changes from Viewer (when user drags crop handles)
     this.viewer.setOnCropRegionChanged((region) => {
@@ -448,6 +514,10 @@ export class App {
       this.viewer.setChannelMode(channel);
       this.scheduleUpdateScopes();
       this.syncGTOStore();
+    });
+    this.channelSelect.on('layerChanged', async (event) => {
+      // Handle EXR layer change
+      await this.handleEXRLayerChange(event.layer, event.remapping);
     });
 
     // Initialize stereo control
@@ -651,6 +721,28 @@ export class App {
     this.container.appendChild(cacheIndicatorEl);
     this.container.appendChild(timelineEl);
 
+    // Initialize FullscreenManager with the app container
+    this.fullscreenManager = new FullscreenManager(this.container);
+    this.fullscreenManager.on('fullscreenChanged', (isFullscreen) => {
+      this.headerBar.setFullscreenState(isFullscreen);
+      // Trigger layout recalculation after fullscreen change.
+      // Use rAF to wait for the browser to settle the layout, then
+      // dispatch a resize event so all components (viewer, timeline)
+      // that listen on window 'resize' recalculate their dimensions.
+      requestAnimationFrame(() => {
+        window.dispatchEvent(new Event('resize'));
+      });
+    });
+
+    // Set elements to hide in presentation mode
+    this.presentationMode.setElementsToHide([
+      headerBarEl,
+      tabBarEl,
+      contextToolbarEl,
+      cacheIndicatorEl,
+      timelineEl,
+    ]);
+
     // Add histogram overlay to viewer container
     this.viewer.getContainer().appendChild(this.histogram.render());
 
@@ -702,12 +794,19 @@ export class App {
       }
       this.updateStackControlSources();
       this.viewer.initPrerenderBuffer();
+      // Update EXR layer selector if this is an EXR file with multiple layers
+      this.updateEXRLayers();
       // Small delay to allow canvas to render before updating scopes
       setTimeout(() => {
         this.updateHistogram();
         this.updateWaveform();
         this.updateVectorscope();
       }, 100);
+    });
+
+    // Handle unsupported codec errors (ProRes, DNxHD, etc.)
+    this.session.on('unsupportedCodec', (info) => {
+      this.showUnsupportedCodecModal(info);
     });
 
     // Optimize scopes for playback: use aggressive subsampling during playback,
@@ -771,11 +870,14 @@ export class App {
     viewContent.appendChild(this.stackControl.render());
     viewContent.appendChild(ContextToolbar.createDivider());
 
-    // --- GROUP 4: Analysis Tools (SafeAreas, FalseColor, Zebra, HSL) ---
+    // --- GROUP 4: Analysis Tools (SafeAreas, FalseColor, ToneMapping, Zebra, HSL, PAR) ---
     viewContent.appendChild(this.safeAreasControl.render());
     viewContent.appendChild(this.falseColorControl.render());
+    viewContent.appendChild(this.toneMappingControl.render());
     viewContent.appendChild(this.zebraControl.render());
     viewContent.appendChild(this.hslQualifierControl.render());
+    viewContent.appendChild(this.parControl.render());
+    viewContent.appendChild(this.backgroundPatternControl.render());
 
     // Trigger re-render when false color state changes
     this.viewer.getFalseColor().on('stateChanged', () => {
@@ -918,6 +1020,9 @@ export class App {
     this.session.on('abSourceChanged', () => {
       const current = this.session.currentAB;
       this.compareControl.setABSource(current);
+      // Update EXR layer selector when switching between A/B sources
+      // since each source may have different layers (or none)
+      this.updateEXRLayers();
     });
 
     this.contextToolbar.setTabContent('view', viewContent);
@@ -925,6 +1030,8 @@ export class App {
     // === COLOR TAB ===
     const colorContent = document.createElement('div');
     colorContent.style.cssText = 'display: flex; align-items: center; gap: 6px;';
+    colorContent.appendChild(this.ocioControl.render());
+    colorContent.appendChild(ContextToolbar.createDivider());
     colorContent.appendChild(this.colorControls.render());
     colorContent.appendChild(ContextToolbar.createDivider());
     colorContent.appendChild(this.cdlControl.render());
@@ -1263,11 +1370,11 @@ export class App {
         const currentIndex = modes.indexOf(this.session.loopMode);
         this.session.loopMode = modes[(currentIndex + 1) % modes.length]!;
       },
-      'view.fitToWindow': () => this.viewer.fitToWindow(),
-      'view.fitToWindowAlt': () => this.viewer.fitToWindow(),
+      'view.fitToWindow': () => this.viewer.smoothFitToWindow(),
+      'view.fitToWindowAlt': () => this.viewer.smoothFitToWindow(),
       'view.zoom50': () => {
         if (this.tabBar.activeTab === 'view') {
-          this.viewer.setZoom(0.5);
+          this.viewer.smoothSetZoom(0.5);
         }
       },
       'view.cycleWipeMode': () => this.compareControl.cycleWipeMode(),
@@ -1277,6 +1384,9 @@ export class App {
       'view.toggleDifferenceMatte': () => this.compareControl.toggleDifferenceMatte(),
       'view.toggleSplitScreen': () => this.compareControl.toggleSplitScreen(),
       'view.toggleGhostFrames': () => this.ghostFrameControl.toggle(),
+      'view.togglePAR': () => this.parControl.toggle(),
+      'view.cycleBackgroundPattern': () => this.backgroundPatternControl.cyclePattern(),
+      'view.toggleCheckerboard': () => this.backgroundPatternControl.toggleCheckerboard(),
       'panel.color': () => this.colorControls.toggle(),
       'panel.effects': () => this.filterControl.toggle(),
       'panel.curves': () => this.curvesControl.toggle(),
@@ -1284,6 +1394,7 @@ export class App {
       'panel.waveform': () => this.scopesControl.toggleScope('waveform'),
       'panel.vectorscope': () => this.scopesControl.toggleScope('vectorscope'),
       'panel.histogram': () => this.scopesControl.toggleScope('histogram'),
+      'panel.ocio': () => this.ocioControl.toggle(),
       'transform.rotateLeft': () => this.transformControl.rotateLeft(),
       'transform.rotateRight': () => this.transformControl.rotateRight(),
       'transform.flipHorizontal': () => this.transformControl.toggleFlipH(),
@@ -1320,6 +1431,7 @@ export class App {
       'view.toggleGuides': () => this.safeAreasControl.getOverlay().toggle(),
       'view.togglePixelProbe': () => this.viewer.getPixelProbe().toggle(),
       'view.toggleFalseColor': () => this.viewer.getFalseColor().toggle(),
+      'view.toggleToneMapping': () => this.toneMappingControl.toggle(),
       'view.toggleTimecodeOverlay': () => this.viewer.getTimecodeOverlay().toggle(),
       'view.toggleZebraStripes': () => {
         const zebras = this.viewer.getZebraStripes();
@@ -1351,6 +1463,11 @@ export class App {
         getThemeManager().cycleMode();
       },
       'panel.close': () => {
+        // ESC exits presentation mode first, then fullscreen
+        if (this.presentationMode.getState().enabled) {
+          this.presentationMode.toggle();
+          return;
+        }
         if (this.colorControls) {
           this.colorControls.hide();
         }
@@ -1369,6 +1486,20 @@ export class App {
       },
       'panel.playlist': () => {
         this.playlistPanel.toggle();
+      },
+      'view.toggleFullscreen': () => {
+        this.fullscreenManager?.toggle();
+      },
+      'view.togglePresentation': () => {
+        this.presentationMode.toggle();
+      },
+      'network.togglePanel': () => {
+        this.networkControl.togglePanel();
+      },
+      'network.disconnect': () => {
+        if (this.networkSyncManager.isConnected) {
+          this.networkSyncManager.leaveRoom();
+        }
       },
     };
 
@@ -1401,6 +1532,139 @@ export class App {
         this.keyboardManager.register(effectiveCombo, handler, defaultBinding.description);
       }
     }
+  }
+
+  /**
+   * Setup network sync: wire NetworkControl UI to NetworkSyncManager,
+   * and listen for incoming sync events to apply to Session/Viewer.
+   */
+  private setupNetworkSync(): void {
+    // Add NetworkControl to header bar
+    this.headerBar.setNetworkControl(this.networkControl.render());
+
+    // Wire UI events to manager
+    this.networkControl.on('createRoom', () => {
+      this.networkSyncManager.simulateRoomCreated();
+      const info = this.networkSyncManager.roomInfo;
+      if (info) {
+        this.networkControl.setConnectionState('connected');
+        this.networkControl.setRoomInfo(info);
+        this.networkControl.setUsers(info.users);
+      }
+    });
+
+    this.networkControl.on('joinRoom', ({ roomCode, userName }) => {
+      this.networkSyncManager.joinRoom(roomCode, userName);
+    });
+
+    this.networkControl.on('leaveRoom', () => {
+      this.networkSyncManager.leaveRoom();
+      this.networkControl.setConnectionState('disconnected');
+      this.networkControl.setRoomInfo(null);
+      this.networkControl.setUsers([]);
+    });
+
+    this.networkControl.on('syncSettingsChanged', (settings) => {
+      this.networkSyncManager.setSyncSettings(settings);
+    });
+
+    this.networkControl.on('copyLink', async (link) => {
+      try {
+        await navigator.clipboard.writeText(link);
+      } catch {
+        // Clipboard API may not be available
+      }
+    });
+
+    // Wire manager events to UI
+    this.networkSyncManager.on('connectionStateChanged', (state) => {
+      this.networkControl.setConnectionState(state);
+    });
+
+    this.networkSyncManager.on('roomCreated', (info) => {
+      this.networkControl.setRoomInfo(info);
+      this.networkControl.setUsers(info.users);
+    });
+
+    this.networkSyncManager.on('roomJoined', (info) => {
+      this.networkControl.setRoomInfo(info);
+      this.networkControl.setUsers(info.users);
+    });
+
+    this.networkSyncManager.on('usersChanged', (users) => {
+      this.networkControl.setUsers(users);
+    });
+
+    this.networkSyncManager.on('error', (err) => {
+      this.networkControl.showError(err.message);
+    });
+
+    this.networkSyncManager.on('rttUpdated', (rtt) => {
+      this.networkControl.setRTT(rtt);
+    });
+
+    // Wire incoming sync events to Session/Viewer
+    this.networkSyncManager.on('syncPlayback', (payload) => {
+      const sm = this.networkSyncManager.getSyncStateManager();
+      sm.beginApplyRemote();
+      try {
+        if (payload.isPlaying && !this.session.isPlaying) {
+          this.session.play();
+        } else if (!payload.isPlaying && this.session.isPlaying) {
+          this.session.pause();
+        }
+        if (sm.shouldApplyFrameSync(this.session.currentFrame, payload.currentFrame)) {
+          this.session.goToFrame(payload.currentFrame);
+        }
+        if (this.session.playbackSpeed !== payload.playbackSpeed) {
+          this.session.playbackSpeed = payload.playbackSpeed;
+        }
+      } finally {
+        sm.endApplyRemote();
+      }
+    });
+
+    this.networkSyncManager.on('syncFrame', (payload) => {
+      const sm = this.networkSyncManager.getSyncStateManager();
+      if (sm.shouldApplyFrameSync(this.session.currentFrame, payload.currentFrame)) {
+        sm.beginApplyRemote();
+        try {
+          this.session.goToFrame(payload.currentFrame);
+        } finally {
+          sm.endApplyRemote();
+        }
+      }
+    });
+
+    this.networkSyncManager.on('syncView', (payload) => {
+      const sm = this.networkSyncManager.getSyncStateManager();
+      sm.beginApplyRemote();
+      try {
+        this.viewer.setZoom(payload.zoom);
+      } finally {
+        sm.endApplyRemote();
+      }
+    });
+
+    // Send outgoing sync when local state changes
+    this.session.on('playbackChanged', (isPlaying) => {
+      if (this.networkSyncManager.isConnected && !this.networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
+        this.networkSyncManager.sendPlaybackSync({
+          isPlaying,
+          currentFrame: this.session.currentFrame,
+          playbackSpeed: this.session.playbackSpeed,
+          playDirection: this.session.playDirection,
+          loopMode: this.session.loopMode,
+          timestamp: Date.now(),
+        });
+      }
+    });
+
+    this.session.on('frameChanged', (frame) => {
+      if (this.networkSyncManager.isConnected && !this.networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
+        this.networkSyncManager.sendFrameSync(frame);
+      }
+    });
   }
 
   private goToNextAnnotation(): void {
@@ -1687,6 +1951,57 @@ export class App {
   }
 
   /**
+   * Handle EXR layer change from ChannelSelect
+   */
+  private async handleEXRLayerChange(
+    layerName: string | null,
+    remapping: import('./formats/EXRDecoder').EXRChannelRemapping | null
+  ): Promise<void> {
+    const source = this.session.currentSource;
+    if (!source) return;
+
+    // Check if source has a FileSourceNode with EXR support
+    const fileSource = source.fileSourceNode;
+    if (!fileSource || typeof fileSource.setEXRLayer !== 'function') return;
+
+    try {
+      const changed = await fileSource.setEXRLayer(layerName, remapping ?? undefined);
+      if (changed) {
+        // Refresh the viewer
+        this.viewer.refresh();
+        this.scheduleUpdateScopes();
+      }
+    } catch (err) {
+      console.error('Failed to change EXR layer:', err);
+    }
+  }
+
+  /**
+   * Update EXR layer information in ChannelSelect when a file is loaded
+   */
+  private updateEXRLayers(): void {
+    const source = this.session.currentSource;
+    if (!source) {
+      this.channelSelect.clearEXRLayers();
+      return;
+    }
+
+    // Check if source has a FileSourceNode with EXR support
+    const fileSource = source.fileSourceNode;
+    if (!fileSource || typeof fileSource.getEXRLayers !== 'function') {
+      this.channelSelect.clearEXRLayers();
+      return;
+    }
+
+    const layers = fileSource.getEXRLayers();
+    if (layers && layers.length > 0) {
+      this.channelSelect.setEXRLayers(layers);
+    } else {
+      this.channelSelect.clearEXRLayers();
+    }
+  }
+
+  /**
    * Update info panel with current session data
    */
   private updateInfoPanel(): void {
@@ -1770,7 +2085,7 @@ export class App {
       'SCOPES': ['panel.histogram', 'panel.waveform', 'panel.vectorscope'],
       'TIMELINE': ['timeline.setInPoint', 'timeline.setInPointAlt', 'timeline.setOutPoint', 'timeline.setOutPointAlt', 'timeline.resetInOut', 'timeline.toggleMark', 'timeline.cycleLoopMode'],
       'PAINT (Annotate tab)': ['paint.pan', 'paint.pen', 'paint.eraser', 'paint.text', 'paint.rectangle', 'paint.ellipse', 'paint.line', 'paint.arrow', 'paint.toggleBrush', 'paint.toggleGhost', 'paint.toggleHold', 'edit.undo', 'edit.redo'],
-      'COLOR': ['panel.color', 'panel.curves'],
+      'COLOR': ['panel.color', 'panel.curves', 'panel.ocio'],
       'WIPE COMPARISON': ['view.cycleWipeMode', 'view.toggleSplitScreen'],
       'AUDIO (Video only)': [], // Special case - not in DEFAULT_KEY_BINDINGS
       'EXPORT': ['export.quickExport', 'export.copyFrame'],
@@ -1926,6 +2241,136 @@ export class App {
     content.appendChild(resetAllContainer);
 
     showModal(content, { title: 'Keyboard Shortcuts', width: '700px' });
+  }
+
+  /**
+   * Show a modal explaining that the video codec is not supported in browsers
+   */
+  private showUnsupportedCodecModal(info: UnsupportedCodecInfo): void {
+    const content = document.createElement('div');
+    content.dataset.testid = 'unsupported-codec-modal-content';
+    content.setAttribute('role', 'alert');
+    content.setAttribute('aria-live', 'assertive');
+    content.setAttribute('aria-label', `Unsupported codec error: ${info.error.title}`);
+    content.style.cssText = `
+      max-height: 70vh;
+      overflow-y: auto;
+      padding: 8px;
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text-primary);
+    `;
+
+    // Warning icon and message
+    const warningSection = document.createElement('div');
+    warningSection.style.cssText = `
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding: 12px;
+      background: rgba(var(--warning), 0.1);
+      border: 1px solid var(--warning);
+      border-radius: 6px;
+    `;
+
+    const warningIcon = document.createElement('div');
+    warningIcon.textContent = '\u26A0';
+    warningIcon.style.cssText = 'font-size: 24px; line-height: 1;';
+
+    const warningText = document.createElement('div');
+    warningText.innerHTML = `
+      <strong>${info.error.title}</strong><br>
+      ${info.error.message}
+    `;
+
+    warningSection.appendChild(warningIcon);
+    warningSection.appendChild(warningText);
+    content.appendChild(warningSection);
+
+    // Escape filename for security (prevent XSS) - used in multiple places below
+    const escapedFilename = info.filename.replace(/[&<>"']/g, (char) => {
+      const entities: Record<string, string> = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      };
+      return entities[char] || char;
+    });
+
+    // File info
+    const fileSection = document.createElement('div');
+    fileSection.style.cssText = 'margin-bottom: 16px;';
+    fileSection.innerHTML = `
+      <div style="margin-bottom: 8px;"><strong>File Details:</strong></div>
+      <div style="background: var(--bg-hover); padding: 10px; border-radius: 4px; font-family: monospace; font-size: 12px;">
+        <div>File: ${escapedFilename}</div>
+        <div>Codec: ${info.error.codecInfo.displayName}</div>
+        ${info.error.codecInfo.fourcc ? `<div>FourCC: ${info.error.codecInfo.fourcc}</div>` : ''}
+      </div>
+    `;
+    content.appendChild(fileSection);
+
+    // Why section
+    const whySection = document.createElement('div');
+    whySection.style.cssText = 'margin-bottom: 16px;';
+    whySection.innerHTML = `
+      <div style="margin-bottom: 8px;"><strong>Why does this happen?</strong></div>
+      <ul style="margin: 0; padding-left: 20px; color: var(--text-secondary);">
+        <li>ProRes and DNxHD are professional editing codecs</li>
+        <li>Web browsers support consumer codecs (H.264, VP9, AV1)</li>
+        <li>Professional codecs require native applications or transcoding</li>
+      </ul>
+    `;
+    content.appendChild(whySection);
+
+    // Solution section
+    const solutionSection = document.createElement('div');
+    solutionSection.style.cssText = 'margin-bottom: 8px;';
+    solutionSection.innerHTML = `
+      <div style="margin-bottom: 8px;"><strong>How to view this file:</strong></div>
+      <div style="background: var(--bg-secondary); padding: 12px; border-radius: 4px; border: 1px solid var(--border-primary);">
+        <div style="margin-bottom: 8px; color: var(--text-secondary);">Transcode to a web-compatible format using FFmpeg:</div>
+        <code
+          role="region"
+          aria-label="FFmpeg command to transcode video"
+          tabindex="0"
+          style="
+            display: block;
+            background: var(--bg-primary);
+            padding: 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            color: var(--accent-primary);
+          ">ffmpeg -i "${escapedFilename}" -c:v libx264 -crf 18 -preset slow -c:a aac output.mp4</code>
+      </div>
+    `;
+    content.appendChild(solutionSection);
+
+    // Note about HTML fallback
+    const noteSection = document.createElement('div');
+    noteSection.style.cssText = `
+      margin-top: 16px;
+      padding: 10px;
+      background: var(--bg-tertiary);
+      border-radius: 4px;
+      font-size: 12px;
+      color: var(--text-muted);
+    `;
+    noteSection.innerHTML = `
+      <strong>Note:</strong> The file may partially load if your browser has native support,
+      but frame-accurate playback and scrubbing will not be available.
+    `;
+    content.appendChild(noteSection);
+
+    showModal(content, {
+      title: info.error.title,
+      width: '550px',
+    });
   }
 
   private showCustomKeyBindings(): void {
@@ -2469,6 +2914,18 @@ export class App {
     }
   }
 
+  /**
+   * Get configuration for the public scripting API (window.openrv)
+   */
+  getAPIConfig(): OpenRVAPIConfig {
+    return {
+      session: this.session,
+      viewer: this.viewer,
+      colorControls: this.colorControls,
+      cdlControl: this.cdlControl,
+    };
+  }
+
   dispose(): void {
     if (this.animationId !== null) {
       cancelAnimationFrame(this.animationId);
@@ -2497,6 +2954,8 @@ export class App {
     this.lensControl.dispose();
     this.stackControl.dispose();
     this.channelSelect.dispose();
+    this.parControl.dispose();
+    this.backgroundPatternControl.dispose();
     this.stereoControl.dispose();
     this.histogram.dispose();
     this.waveform.dispose();
@@ -2507,6 +2966,10 @@ export class App {
     this.snapshotManager.dispose();
     this.playlistPanel.dispose();
     this.playlistManager.dispose();
+    this.fullscreenManager?.dispose();
+    this.presentationMode.dispose();
+    this.networkSyncManager.dispose();
+    this.networkControl.dispose();
     // Dispose auto-save manager (fire and forget - we can't await in dispose)
     this.autoSaveManager.dispose().catch(err => {
       console.error('Error disposing auto-save manager:', err);

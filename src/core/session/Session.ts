@@ -11,6 +11,8 @@ import {
   disposeSequence,
 } from '../../utils/SequenceLoader';
 import { VideoSourceNode } from '../../nodes/sources/VideoSourceNode';
+import { FileSourceNode } from '../../nodes/sources/FileSourceNode';
+import type { UnsupportedCodecError, CodecFamily } from '../../utils/CodecUtils';
 import {
   Annotation,
   PenStroke,
@@ -36,6 +38,9 @@ import type { StereoState } from '../../stereo/StereoRenderer';
 import { Graph } from '../graph/Graph';
 import { loadGTOGraph } from './GTOGraphLoader';
 import type { GTOParseResult } from './GTOGraphLoader';
+import type { SubFramePosition } from '../../utils/FrameInterpolator';
+
+export type { SubFramePosition };
 
 export interface GTOComponentDTO {
   property(name: string): {
@@ -46,6 +51,16 @@ export interface GTOComponentDTO {
 export interface ParsedAnnotations {
   annotations: Annotation[];
   effects?: Partial<PaintEffects>;
+}
+
+/**
+ * Information about an unsupported video codec
+ */
+export interface UnsupportedCodecInfo {
+  filename: string;
+  codec: string | null;
+  codecFamily: CodecFamily;
+  error: UnsupportedCodecError;
 }
 
 export interface GTOViewSettings {
@@ -67,6 +82,7 @@ export interface Marker {
   frame: number;
   note: string;
   color: string; // Hex color like '#ff0000'
+  endFrame?: number; // Optional end frame for duration/range markers
 }
 
 /**
@@ -128,6 +144,7 @@ export interface SessionEvents extends EventMap {
   loopModeChanged: LoopMode;
   playDirectionChanged: number;
   playbackSpeedChanged: number;
+  preservesPitchChanged: boolean;
   marksChanged: ReadonlyMap<number, Marker>;
   annotationsLoaded: ParsedAnnotations;
   settingsLoaded: GTOViewSettings;
@@ -143,6 +160,11 @@ export interface SessionEvents extends EventMap {
   frameIncrementChanged: number;
   // Audio playback events
   audioError: AudioPlaybackError;
+  // Codec events
+  unsupportedCodec: UnsupportedCodecInfo;
+  // Sub-frame interpolation events
+  interpolationEnabledChanged: boolean;
+  subFramePositionChanged: SubFramePosition | null;
 }
 
 export type LoopMode = 'once' | 'loop' | 'pingpong';
@@ -162,6 +184,8 @@ export interface MediaSource {
   sequenceFrames?: SequenceFrame[];
   // Video source node for mediabunny frame extraction
   videoSourceNode?: VideoSourceNode;
+  // File source node for EXR files (supports layer selection)
+  fileSourceNode?: FileSourceNode;
 }
 
 // Common playback speed presets
@@ -187,6 +211,9 @@ export class Session extends EventEmitter<SessionEvents> {
   private _volume = 0.7;
   private _muted = false;
   private _previousVolume = 0.7; // For unmute restore
+  private _preservesPitch = true; // Pitch correction at non-1x speeds (default: on)
+  private _interpolationEnabled = false; // Sub-frame interpolation for slow-motion (default: off)
+  private _subFramePosition: SubFramePosition | null = null; // Current sub-frame position (non-null during slow-mo with interpolation)
 
   // Playback guard to prevent concurrent play() calls
   private _pendingPlayPromise: Promise<void> | null = null;
@@ -532,6 +559,91 @@ export class Session extends EventEmitter<SessionEvents> {
     this.emit('mutedChanged', this._muted);
   }
 
+  /**
+   * Whether to preserve audio pitch when playing at non-1x speeds.
+   * When true, audio pitch stays the same regardless of playback speed.
+   * When false, audio pitch changes proportionally with speed (chipmunk/slow-mo effect).
+   * Default: true (most users expect pitch-corrected audio).
+   */
+  get preservesPitch(): boolean {
+    return this._preservesPitch;
+  }
+
+  set preservesPitch(value: boolean) {
+    if (value !== this._preservesPitch) {
+      this._preservesPitch = value;
+      this.applyPreservesPitchToVideo();
+      this.emit('preservesPitchChanged', this._preservesPitch);
+    }
+  }
+
+  /**
+   * Whether sub-frame interpolation is enabled for slow-motion playback.
+   * When true and playing at speeds < 1x, adjacent frames are blended
+   * to produce smoother slow-motion output.
+   * Default: false (some users want to see exact discrete frames).
+   */
+  get interpolationEnabled(): boolean {
+    return this._interpolationEnabled;
+  }
+
+  set interpolationEnabled(value: boolean) {
+    if (value !== this._interpolationEnabled) {
+      this._interpolationEnabled = value;
+      if (!value) {
+        this._subFramePosition = null;
+        this.emit('subFramePositionChanged', null);
+      }
+      this.emit('interpolationEnabledChanged', this._interpolationEnabled);
+    }
+  }
+
+  /**
+   * Current sub-frame position during slow-motion playback.
+   * Non-null only when interpolation is enabled and playing at < 1x speed.
+   * Used by the Viewer to blend adjacent frames for smooth slow-motion.
+   */
+  get subFramePosition(): SubFramePosition | null {
+    return this._subFramePosition;
+  }
+
+  /**
+   * Apply preservesPitch setting to the current video element.
+   * Handles vendor-prefixed properties for cross-browser support.
+   */
+  private applyPreservesPitchToVideo(): void {
+    const source = this.currentSource;
+    if (source?.type === 'video' && source.element instanceof HTMLVideoElement) {
+      const video = source.element as HTMLVideoElement;
+      video.preservesPitch = this._preservesPitch;
+      // Vendor-prefixed fallbacks for older browsers
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const videoAny = video as any;
+      if ('mozPreservesPitch' in video) {
+        videoAny.mozPreservesPitch = this._preservesPitch;
+      }
+      if ('webkitPreservesPitch' in video) {
+        videoAny.webkitPreservesPitch = this._preservesPitch;
+      }
+    }
+  }
+
+  /**
+   * Apply preservesPitch to a newly created video element.
+   */
+  private initVideoPreservesPitch(video: HTMLVideoElement): void {
+    video.preservesPitch = this._preservesPitch;
+    // Vendor-prefixed fallbacks for older browsers
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const videoAny = video as any;
+    if ('mozPreservesPitch' in video) {
+      videoAny.mozPreservesPitch = this._preservesPitch;
+    }
+    if ('webkitPreservesPitch' in video) {
+      videoAny.webkitPreservesPitch = this._preservesPitch;
+    }
+  }
+
   private applyVolumeToVideo(): void {
     const source = this.currentSource;
     if (source?.type === 'video' && source.element instanceof HTMLVideoElement) {
@@ -765,6 +877,12 @@ export class Session extends EventEmitter<SessionEvents> {
       // Also stop source B's playback preload (for split screen support)
       this.stopSourceBPlaybackPreload();
 
+      // Clear sub-frame position when paused
+      if (this._subFramePosition !== null) {
+        this._subFramePosition = null;
+        this.emit('subFramePositionChanged', null);
+      }
+
       this.emit('playbackChanged', false);
     }
   }
@@ -941,14 +1059,53 @@ export class Session extends EventEmitter<SessionEvents> {
 
   /**
    * Add or update a marker at the specified frame
+   * If endFrame is provided, the marker spans a range from frame to endFrame
    */
-  setMarker(frame: number, note: string = '', color: string = MARKER_COLORS[0]): void {
-    this._marks.set(frame, {
+  setMarker(frame: number, note: string = '', color: string = MARKER_COLORS[0], endFrame?: number): void {
+    const marker: Marker = {
       frame,
       note,
       color,
-    });
+    };
+    if (endFrame !== undefined && endFrame > frame) {
+      marker.endFrame = endFrame;
+    }
+    this._marks.set(frame, marker);
     this.emit('marksChanged', this._marks);
+  }
+
+  /**
+   * Update the end frame for an existing marker (to convert to/from duration marker)
+   * Pass undefined to remove the end frame (convert back to point marker)
+   */
+  setMarkerEndFrame(frame: number, endFrame: number | undefined): void {
+    const marker = this._marks.get(frame);
+    if (marker) {
+      if (endFrame !== undefined && endFrame > frame) {
+        marker.endFrame = endFrame;
+      } else {
+        delete marker.endFrame;
+      }
+      this.emit('marksChanged', this._marks);
+    }
+  }
+
+  /**
+   * Check if a given frame falls within any duration marker's range
+   * Returns the marker if found, undefined otherwise
+   */
+  getMarkerAtFrame(frame: number): Marker | undefined {
+    // First check for exact match (point marker or start of range)
+    const exact = this._marks.get(frame);
+    if (exact) return exact;
+
+    // Then check if frame falls within any duration marker range
+    for (const marker of this._marks.values()) {
+      if (marker.endFrame !== undefined && frame >= marker.frame && frame <= marker.endFrame) {
+        return marker;
+      }
+    }
+    return undefined;
   }
 
   /**
@@ -1118,6 +1275,9 @@ export class Session extends EventEmitter<SessionEvents> {
         }
       }
 
+      // Compute sub-frame position for interpolation during slow-motion
+      this.updateSubFramePosition(frameDuration);
+
       // Sync HTMLVideoElement for audio (but not for frame display)
       // Only sync during forward playback with audio enabled
       if (this._audioSyncEnabled && source.element instanceof HTMLVideoElement) {
@@ -1178,6 +1338,9 @@ export class Session extends EventEmitter<SessionEvents> {
         this.advanceFrame(this._playDirection);
       }
 
+      // Compute sub-frame position for interpolation during slow-motion
+      this.updateSubFramePosition(frameDuration);
+
       // For video reverse playback without mediabunny, seek to the current frame
       if (source?.type === 'video' && source.element instanceof HTMLVideoElement) {
         const targetTime = (this._currentFrame - 1) / this._fps;
@@ -1214,6 +1377,48 @@ export class Session extends EventEmitter<SessionEvents> {
     }
 
     return nextFrame;
+  }
+
+  /**
+   * Update the sub-frame position for interpolation during slow-motion playback.
+   *
+   * When interpolation is enabled and playing at speeds < 1x, this computes
+   * the fractional position between the current frame and the next frame
+   * from the frame accumulator. The Viewer uses this to blend adjacent frames.
+   *
+   * At normal or fast speeds (>= 1x), sub-frame position is cleared since
+   * frames change fast enough that blending provides no visual benefit.
+   */
+  private updateSubFramePosition(frameDuration: number): void {
+    if (!this._interpolationEnabled || this._playbackSpeed >= 1) {
+      // Clear sub-frame position when not in slow-motion or disabled
+      if (this._subFramePosition !== null) {
+        this._subFramePosition = null;
+        this.emit('subFramePositionChanged', null);
+      }
+      return;
+    }
+
+    // Compute the fractional position between current frame and next
+    const ratio = Math.max(0, Math.min(1, this.frameAccumulator / frameDuration));
+    const nextFrame = this.computeNextFrame(this._playDirection);
+
+    const newPosition: SubFramePosition = {
+      baseFrame: this._currentFrame,
+      nextFrame,
+      ratio,
+    };
+
+    // Only emit if position changed meaningfully (avoid excessive events)
+    if (
+      !this._subFramePosition ||
+      this._subFramePosition.baseFrame !== newPosition.baseFrame ||
+      this._subFramePosition.nextFrame !== newPosition.nextFrame ||
+      Math.abs(this._subFramePosition.ratio - newPosition.ratio) > 0.005
+    ) {
+      this._subFramePosition = newPosition;
+      this.emit('subFramePositionChanged', this._subFramePosition);
+    }
   }
 
   private advanceFrame(direction: number): void {
@@ -1445,6 +1650,7 @@ export class Session extends EventEmitter<SessionEvents> {
           video.volume = this._muted ? 0 : this._volume;
           video.loop = false;
           video.playsInline = true;
+          this.initVideoPreservesPitch(video);
 
           await new Promise<void>((resolve, reject) => {
             video.oncanplay = () => {
@@ -1507,6 +1713,7 @@ export class Session extends EventEmitter<SessionEvents> {
           video.volume = this._muted ? 0 : this._volume;
           video.loop = false;
           video.playsInline = true;
+          this.initVideoPreservesPitch(video);
 
           await new Promise<void>((resolve, reject) => {
             video.oncanplay = () => {
@@ -2514,12 +2721,17 @@ export class Session extends EventEmitter<SessionEvents> {
         // Use loadVideoFile for mediabunny support (frame-accurate extraction)
         await this.loadVideoFile(file);
       } else if (type === 'image') {
-        const url = URL.createObjectURL(file);
-        try {
-          await this.loadImage(file.name, url);
-        } catch (err) {
-          URL.revokeObjectURL(url);
-          throw err;
+        // Check if it's an EXR file - use FileSourceNode for EXR support (layers, HDR)
+        if (/\.exr$/i.test(file.name)) {
+          await this.loadEXRFile(file);
+        } else {
+          const url = URL.createObjectURL(file);
+          try {
+            await this.loadImage(file.name, url);
+          } catch (err) {
+            URL.revokeObjectURL(url);
+            throw err;
+          }
         }
       }
     } catch (err) {
@@ -2571,6 +2783,45 @@ export class Session extends EventEmitter<SessionEvents> {
     });
   }
 
+  /**
+   * Load an EXR file using FileSourceNode for full EXR support (layers, HDR)
+   */
+  async loadEXRFile(file: File): Promise<void> {
+    this._gtoData = null;
+
+    // Read file as ArrayBuffer
+    const buffer = await file.arrayBuffer();
+    const url = URL.createObjectURL(file);
+
+    try {
+      // Create FileSourceNode for EXR handling
+      const fileSourceNode = new FileSourceNode(file.name);
+      await fileSourceNode.loadFromEXR(buffer, file.name, url, url);
+
+      const source: MediaSource = {
+        type: 'image',
+        name: file.name,
+        url,
+        width: fileSourceNode.width,
+        height: fileSourceNode.height,
+        duration: 1,
+        fps: this._fps,
+        fileSourceNode,
+      };
+
+      this.addSource(source);
+      this._inPoint = 1;
+      this._outPoint = 1;
+      this._currentFrame = 1;
+
+      this.emit('sourceLoaded', source);
+      this.emit('durationChanged', 1);
+    } catch (err) {
+      URL.revokeObjectURL(url);
+      throw err;
+    }
+  }
+
   async loadVideo(name: string, url: string): Promise<void> {
     this._gtoData = null;
     return new Promise((resolve, reject) => {
@@ -2581,6 +2832,7 @@ export class Session extends EventEmitter<SessionEvents> {
       video.volume = this._muted ? 0 : this._volume;
       video.loop = false;
       video.playsInline = true; // Required for iOS and some browsers
+      this.initVideoPreservesPitch(video);
 
       // Use canplay event to ensure video data is ready
       video.oncanplay = () => {
@@ -2629,7 +2881,18 @@ export class Session extends EventEmitter<SessionEvents> {
 
     // Create VideoSourceNode for frame-accurate extraction
     const videoSourceNode = new VideoSourceNode(file.name);
-    await videoSourceNode.loadFile(file, this._fps);
+    const loadResult = await videoSourceNode.loadFile(file, this._fps);
+
+    // Check for unsupported codec and emit event if detected
+    if (loadResult.unsupportedCodecError) {
+      this.emit('unsupportedCodec', {
+        filename: file.name,
+        codec: loadResult.codec ?? null,
+        codecFamily: loadResult.codecFamily ?? 'unknown',
+        error: loadResult.unsupportedCodecError,
+      });
+      // Continue loading - HTML video fallback may still work
+    }
 
     const metadata = videoSourceNode.getMetadata();
     const duration = metadata.duration;
@@ -2643,6 +2906,7 @@ export class Session extends EventEmitter<SessionEvents> {
     video.volume = this._muted ? 0 : this._volume;
     video.loop = false;
     video.playsInline = true;
+    this.initVideoPreservesPitch(video);
 
     await new Promise<void>((resolve, reject) => {
       video.oncanplay = () => {
@@ -3240,6 +3504,7 @@ export class Session extends EventEmitter<SessionEvents> {
     loopMode: LoopMode;
     volume: number;
     muted: boolean;
+    preservesPitch: boolean;
     marks: Marker[];
     currentSourceIndex: number;
   } {
@@ -3251,6 +3516,7 @@ export class Session extends EventEmitter<SessionEvents> {
       loopMode: this._loopMode,
       volume: this._volume,
       muted: this._muted,
+      preservesPitch: this._preservesPitch,
       marks: Array.from(this._marks.values()),
       currentSourceIndex: this._currentSourceIndex,
     };
@@ -3267,6 +3533,7 @@ export class Session extends EventEmitter<SessionEvents> {
     loopMode: LoopMode;
     volume: number;
     muted: boolean;
+    preservesPitch: boolean;
     marks: Marker[] | number[]; // Support both old and new format
     currentSourceIndex: number;
   }>): void {
@@ -3277,6 +3544,7 @@ export class Session extends EventEmitter<SessionEvents> {
     }
     if (state.volume !== undefined) this.volume = state.volume;
     if (state.muted !== undefined) this.muted = state.muted;
+    if (state.preservesPitch !== undefined) this.preservesPitch = state.preservesPitch;
     if (state.inPoint !== undefined) this.setInPoint(state.inPoint);
     if (state.outPoint !== undefined) this.setOutPoint(state.outPoint);
     if (state.currentFrame !== undefined) this.currentFrame = state.currentFrame;

@@ -6,6 +6,12 @@ export const SAMPLE_VIDEO = 'sample/2d56d82687b78171f50c496bab002bc18d53149b.mp4
 export const SAMPLE_VIDEO2 = 'sample/3ef76c68a6da876ad221431399e0cfe434fbaee5.mp4';
 export const SAMPLE_IMAGE = 'sample/test_image.png';
 export const SAMPLE_RV_SESSION = 'sample/test_session.rv';
+export const SAMPLE_EXR = 'sample/test_hdr.exr';
+export const SAMPLE_EXR_SMALL = 'sample/test_small.exr';
+export const SAMPLE_EXR_MULTILAYER = 'sample/test_multilayer.exr';
+export const SAMPLE_SEQUENCE_DIR = 'sample/sequence';
+export const SAMPLE_SEQUENCE_PATTERN = 'frame_####.png';
+export const SAMPLE_SEQUENCE_FRAME = 'sample/sequence/frame_0001.png';
 
 // Types matching test-helper.ts
 export interface MarkerData {
@@ -24,6 +30,7 @@ export interface SessionState {
   loopMode: 'once' | 'loop' | 'pingpong';
   playDirection: number;
   playbackSpeed: number;
+  preservesPitch: boolean;
   volume: number;
   muted: boolean;
   fps: number;
@@ -77,6 +84,26 @@ export interface ViewerState {
     shadowsPercent: number;
     highlightsPercent: number;
   } | null;
+  // EXR layer state
+  exrLayerCount: number;
+  exrSelectedLayer: string | null;
+  exrAvailableLayers: string[];
+  // Uncrop state
+  uncropEnabled: boolean;
+  uncropPaddingMode: 'uniform' | 'per-side';
+  uncropPadding: number;
+  uncropPaddingTop: number;
+  uncropPaddingRight: number;
+  uncropPaddingBottom: number;
+  uncropPaddingLeft: number;
+  // PAR state
+  parEnabled: boolean;
+  parValue: number;
+  parPreset: string;
+  // Background pattern state
+  backgroundPattern: 'black' | 'grey18' | 'grey50' | 'white' | 'checker' | 'crosshatch' | 'custom';
+  backgroundCheckerSize: 'small' | 'medium' | 'large';
+  backgroundCustomColor: string;
 }
 
 export interface ColorState {
@@ -104,12 +131,22 @@ export interface PixelProbeState {
   x: number;
   y: number;
   rgb: { r: number; g: number; b: number };
+  alpha: number;
+  hsl: { h: number; s: number; l: number };
   ire: number;
+  format: 'rgb' | 'rgb01' | 'hsl' | 'hex' | 'ire';
+  sampleSize: 1 | 3 | 5 | 9;
+  sourceMode: 'rendered' | 'source';
 }
 
 export interface FalseColorState {
   enabled: boolean;
   preset: 'standard' | 'arri' | 'red' | 'custom';
+}
+
+export interface ToneMappingState {
+  enabled: boolean;
+  operator: 'off' | 'reinhard' | 'filmic' | 'aces';
 }
 
 export interface SafeAreasState {
@@ -246,6 +283,30 @@ export interface StackState {
   isPanelOpen: boolean;
 }
 
+export interface OCIOState {
+  enabled: boolean;
+  configName: string;
+  inputColorSpace: string;
+  detectedColorSpace: string | null;
+  workingColorSpace: string;
+  display: string;
+  view: string;
+  look: string;
+  lookDirection: 'forward' | 'inverse';
+  panelVisible: boolean;
+}
+
+export interface FullscreenState {
+  isFullscreen: boolean;
+  isSupported: boolean;
+}
+
+export interface PresentationState {
+  enabled: boolean;
+  cursorAutoHide: boolean;
+  cursorHideDelay: number;
+}
+
 /**
  * Get session state from the app
  */
@@ -261,6 +322,7 @@ export async function getSessionState(page: Page): Promise<SessionState> {
       loopMode: 'loop',
       playDirection: 1,
       playbackSpeed: 1,
+      preservesPitch: true,
       volume: 0.7,
       muted: false,
       fps: 24,
@@ -308,6 +370,22 @@ export async function getViewerState(page: Page): Promise<ViewerState> {
       differenceMatteHeatmap: false,
       clippingOverlayEnabled: false,
       histogramClipping: null,
+      exrLayerCount: 0,
+      exrSelectedLayer: null,
+      exrAvailableLayers: [],
+      uncropEnabled: false,
+      uncropPaddingMode: 'uniform',
+      uncropPadding: 0,
+      uncropPaddingTop: 0,
+      uncropPaddingRight: 0,
+      uncropPaddingBottom: 0,
+      uncropPaddingLeft: 0,
+      parEnabled: false,
+      parValue: 1.0,
+      parPreset: 'square',
+      backgroundPattern: 'black',
+      backgroundCheckerSize: 'medium',
+      backgroundCustomColor: '#1a1a1a',
     };
   });
 }
@@ -377,7 +455,12 @@ export async function getPixelProbeState(page: Page): Promise<PixelProbeState> {
       x: 0,
       y: 0,
       rgb: { r: 0, g: 0, b: 0 },
+      alpha: 255,
+      hsl: { h: 0, s: 0, l: 0 },
       ire: 0,
+      format: 'rgb',
+      sampleSize: 1,
+      sourceMode: 'rendered',
     };
   });
 }
@@ -390,6 +473,18 @@ export async function getFalseColorState(page: Page): Promise<FalseColorState> {
     return window.__OPENRV_TEST__?.getFalseColorState() ?? {
       enabled: false,
       preset: 'standard',
+    };
+  });
+}
+
+/**
+ * Get tone mapping state from the app
+ */
+export async function getToneMappingState(page: Page): Promise<ToneMappingState> {
+  return page.evaluate(() => {
+    return window.__OPENRV_TEST__?.getToneMappingState() ?? {
+      enabled: false,
+      operator: 'off',
     };
   });
 }
@@ -583,6 +678,69 @@ export async function getStackState(page: Page): Promise<StackState> {
 }
 
 /**
+ * Get OCIO color management state from the app
+ */
+export async function getOCIOState(page: Page): Promise<OCIOState> {
+  return page.evaluate(() => {
+    return (window as any).__OPENRV_TEST__?.getOCIOState() ?? {
+      enabled: false,
+      configName: 'aces_1.2',
+      inputColorSpace: 'Auto',
+      detectedColorSpace: null,
+      workingColorSpace: 'ACEScg',
+      display: 'sRGB',
+      view: 'ACES 1.0 SDR-video',
+      look: 'None',
+      lookDirection: 'forward',
+      panelVisible: false,
+    };
+  });
+}
+
+/**
+ * Get fullscreen state from the app
+ */
+export async function getFullscreenState(page: Page): Promise<FullscreenState> {
+  return page.evaluate(() => {
+    return (window as any).__OPENRV_TEST__?.getFullscreenState() ?? {
+      isFullscreen: false,
+      isSupported: true,
+    };
+  });
+}
+
+/**
+ * Simulate entering fullscreen mode (for headless browser testing)
+ */
+export async function simulateFullscreenEnter(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    (window as any).__OPENRV_TEST__?.simulateFullscreenEnter();
+  });
+}
+
+/**
+ * Simulate exiting fullscreen mode (for headless browser testing)
+ */
+export async function simulateFullscreenExit(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    (window as any).__OPENRV_TEST__?.simulateFullscreenExit();
+  });
+}
+
+/**
+ * Get presentation mode state from the app
+ */
+export async function getPresentationState(page: Page): Promise<PresentationState> {
+  return page.evaluate(() => {
+    return (window as any).__OPENRV_TEST__?.getPresentationState() ?? {
+      enabled: false,
+      cursorAutoHide: true,
+      cursorHideDelay: 3000,
+    };
+  });
+}
+
+/**
  * Get transform state from the app
  */
 export async function getTransformState(page: Page): Promise<TransformState> {
@@ -704,6 +862,55 @@ export async function loadRvSession(page: Page): Promise<void> {
 
   // Wait for session to load
   await page.waitForTimeout(1000);
+}
+
+/**
+ * Load an EXR (HDR) image file
+ */
+export async function loadExrFile(page: Page): Promise<void> {
+  const filePath = path.resolve(process.cwd(), SAMPLE_EXR);
+
+  const fileInput = page.locator('input[type="file"]').first();
+  await fileInput.setInputFiles(filePath);
+
+  // Wait for EXR to decode and render
+  await page.waitForTimeout(1000);
+}
+
+/**
+ * Load a sequence of image files
+ */
+export async function loadSequenceFiles(page: Page): Promise<void> {
+  // Load all frames from the sequence directory
+  const sequenceDir = path.resolve(process.cwd(), SAMPLE_SEQUENCE_DIR);
+  const files = [];
+  for (let i = 1; i <= 10; i++) {
+    const frameNum = String(i).padStart(4, '0');
+    files.push(path.join(sequenceDir, `frame_${frameNum}.png`));
+  }
+
+  const fileInput = page.locator('input[type="file"]').first();
+  await fileInput.setInputFiles(files);
+
+  // Wait for sequence to load and render
+  await page.waitForTimeout(1000);
+}
+
+/**
+ * Load a single frame from a sequence (tests single-file inference)
+ * In practice, this should load only the one file,
+ * and the sequence inference happens when all files are available
+ */
+export async function loadSingleSequenceFrame(page: Page, frameNumber: number = 1): Promise<void> {
+  const sequenceDir = path.resolve(process.cwd(), SAMPLE_SEQUENCE_DIR);
+  const frameNum = String(frameNumber).padStart(4, '0');
+  const filePath = path.join(sequenceDir, `frame_${frameNum}.png`);
+
+  const fileInput = page.locator('input[type="file"]').first();
+  await fileInput.setInputFiles(filePath);
+
+  // Wait for file to load and render
+  await page.waitForTimeout(500);
 }
 
 /**
@@ -1209,6 +1416,7 @@ export async function getExtendedSessionState(page: Page): Promise<SessionState 
       loopMode: 'loop',
       playDirection: 1,
       playbackSpeed: 1,
+      preservesPitch: true,
       volume: 0.7,
       muted: false,
       fps: 24,
@@ -1374,6 +1582,21 @@ export async function waitForFrameAtEnd(page: Page, timeout = TIMEOUT_MEDIUM): P
       return state?.currentFrame === state?.frameCount;
     },
     undefined,
+    { timeout }
+  );
+}
+
+/**
+ * Wait for loop mode to change to the expected value.
+ * Prefer this over waitForTimeout for deterministic E2E tests.
+ */
+export async function waitForLoopMode(page: Page, loopMode: 'once' | 'loop' | 'pingpong', timeout = TIMEOUT_SHORT): Promise<void> {
+  await page.waitForFunction(
+    (expected) => {
+      const state = (window as any).__OPENRV_TEST__?.getSessionState();
+      return state?.loopMode === expected;
+    },
+    loopMode,
     { timeout }
   );
 }

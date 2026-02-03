@@ -144,6 +144,21 @@
         display: flex;
         flex-direction: column;
       }
+
+      /* Preserve flex layout during fullscreen */
+      #app:fullscreen {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+
+      #app:-webkit-full-screen {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
     </style>
   </head>
   <body>

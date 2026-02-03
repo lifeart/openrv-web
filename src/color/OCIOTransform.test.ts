@@ -1,0 +1,633 @@
+/**
+ * OCIOTransform Unit Tests
+ */
+
+import { describe, it, expect } from 'vitest';
+import {
+  OCIOTransform,
+  SRGB_TO_XYZ,
+  XYZ_TO_SRGB,
+  ACESCG_TO_XYZ,
+  XYZ_TO_ACESCG,
+  REC709_TO_XYZ,
+  XYZ_TO_REC709,
+  multiplyMatrices,
+  multiplyMatrixVector,
+  srgbEncode,
+  srgbDecode,
+  rec709Encode,
+  rec709Decode,
+  acesToneMap,
+  normalizeColorSpaceName,
+} from './OCIOTransform';
+import { createTestImageData } from '../../test/utils';
+
+describe('OCIOTransform', () => {
+  describe('Matrix constants', () => {
+    it('OCIO-T001: sRGB matrices are inverses', () => {
+      // Multiply SRGB_TO_XYZ by XYZ_TO_SRGB should give identity
+      const identity = multiplyMatrices(SRGB_TO_XYZ, XYZ_TO_SRGB);
+      // Check diagonal elements are close to 1
+      expect(identity[0]).toBeCloseTo(1, 4);
+      expect(identity[4]).toBeCloseTo(1, 4);
+      expect(identity[8]).toBeCloseTo(1, 4);
+      // Check off-diagonal elements are close to 0
+      expect(identity[1]).toBeCloseTo(0, 4);
+      expect(identity[2]).toBeCloseTo(0, 4);
+      expect(identity[3]).toBeCloseTo(0, 4);
+    });
+
+    it('OCIO-T002: ACEScg matrices are inverses', () => {
+      const identity = multiplyMatrices(ACESCG_TO_XYZ, XYZ_TO_ACESCG);
+      expect(identity[0]).toBeCloseTo(1, 4);
+      expect(identity[4]).toBeCloseTo(1, 4);
+      expect(identity[8]).toBeCloseTo(1, 4);
+    });
+
+    it('OCIO-T003: Rec.709 matrices are inverses', () => {
+      const identity = multiplyMatrices(REC709_TO_XYZ, XYZ_TO_REC709);
+      expect(identity[0]).toBeCloseTo(1, 4);
+      expect(identity[4]).toBeCloseTo(1, 4);
+      expect(identity[8]).toBeCloseTo(1, 4);
+    });
+  });
+
+  describe('multiplyMatrices', () => {
+    it('OCIO-T004: multiplies identity correctly', () => {
+      const identity: [number, number, number, number, number, number, number, number, number] = [
+        1, 0, 0,
+        0, 1, 0,
+        0, 0, 1,
+      ];
+      const result = multiplyMatrices(SRGB_TO_XYZ, identity);
+      for (let i = 0; i < 9; i++) {
+        expect(result[i]!).toBeCloseTo(SRGB_TO_XYZ[i]!, 6);
+      }
+    });
+  });
+
+  describe('multiplyMatrixVector', () => {
+    it('OCIO-T005: transforms white correctly', () => {
+      // White in sRGB (1,1,1) should give D65 white point in XYZ
+      const white: [number, number, number] = [1, 1, 1];
+      const xyz = multiplyMatrixVector(SRGB_TO_XYZ, white);
+      // D65 white point is approximately (0.95047, 1.0, 1.08883)
+      expect(xyz[0]).toBeCloseTo(0.95047, 2);
+      expect(xyz[1]).toBeCloseTo(1.0, 2);
+      expect(xyz[2]).toBeCloseTo(1.08883, 2);
+    });
+
+    it('OCIO-T006: transforms black correctly', () => {
+      const black: [number, number, number] = [0, 0, 0];
+      const xyz = multiplyMatrixVector(SRGB_TO_XYZ, black);
+      expect(xyz[0]).toBeCloseTo(0, 6);
+      expect(xyz[1]).toBeCloseTo(0, 6);
+      expect(xyz[2]).toBeCloseTo(0, 6);
+    });
+
+    it('OCIO-T007: round-trip preserves color', () => {
+      const original: [number, number, number] = [0.5, 0.3, 0.8];
+      const xyz = multiplyMatrixVector(SRGB_TO_XYZ, original);
+      const result = multiplyMatrixVector(XYZ_TO_SRGB, xyz);
+      expect(result[0]).toBeCloseTo(original[0], 5);
+      expect(result[1]).toBeCloseTo(original[1], 5);
+      expect(result[2]).toBeCloseTo(original[2], 5);
+    });
+  });
+
+  describe('sRGB transfer functions', () => {
+    it('OCIO-T008: srgbDecode handles black', () => {
+      expect(srgbDecode(0)).toBe(0);
+    });
+
+    it('OCIO-T009: srgbDecode handles white', () => {
+      expect(srgbDecode(1)).toBeCloseTo(1, 6);
+    });
+
+    it('OCIO-T010: srgbEncode handles black', () => {
+      expect(srgbEncode(0)).toBe(0);
+    });
+
+    it('OCIO-T011: srgbEncode handles white', () => {
+      expect(srgbEncode(1)).toBeCloseTo(1, 6);
+    });
+
+    it('OCIO-T012: sRGB round-trip preserves values', () => {
+      const testValues = [0, 0.01, 0.1, 0.18, 0.5, 0.9, 1];
+      for (const v of testValues) {
+        const encoded = srgbEncode(srgbDecode(v));
+        expect(encoded).toBeCloseTo(v, 5);
+      }
+    });
+
+    it('OCIO-T013: srgbDecode applies gamma > 1 to midtones', () => {
+      // Linear is darker than sRGB, so decoded value should be less
+      const srgbMid = 0.5;
+      const linear = srgbDecode(srgbMid);
+      expect(linear).toBeLessThan(srgbMid);
+    });
+
+    it('OCIO-T014: srgbEncode applies gamma < 1 to midtones', () => {
+      // sRGB is brighter than linear, so encoded value should be more
+      const linearMid = 0.18; // 18% gray
+      const srgbVal = srgbEncode(linearMid);
+      expect(srgbVal).toBeGreaterThan(linearMid);
+    });
+  });
+
+  describe('Rec.709 transfer functions', () => {
+    it('OCIO-T015: rec709Decode handles extremes', () => {
+      expect(rec709Decode(0)).toBe(0);
+      expect(rec709Decode(1)).toBeCloseTo(1, 6);
+    });
+
+    it('OCIO-T016: rec709Encode handles extremes', () => {
+      expect(rec709Encode(0)).toBe(0);
+      expect(rec709Encode(1)).toBeCloseTo(1, 6);
+    });
+
+    it('OCIO-T017: Rec.709 round-trip preserves values', () => {
+      const testValues = [0, 0.01, 0.1, 0.5, 0.9, 1];
+      for (const v of testValues) {
+        const encoded = rec709Encode(rec709Decode(v));
+        expect(encoded).toBeCloseTo(v, 5);
+      }
+    });
+  });
+
+  describe('acesToneMap', () => {
+    it('OCIO-T018: passes black unchanged', () => {
+      expect(acesToneMap(0)).toBe(0);
+    });
+
+    it('OCIO-T019: maps mid-gray reasonably', () => {
+      // 0.18 linear should map to something visible
+      const result = acesToneMap(0.18);
+      expect(result).toBeGreaterThan(0);
+      expect(result).toBeLessThan(1);
+    });
+
+    it('OCIO-T020: compresses highlights', () => {
+      // Values > 1 should compress towards 1
+      const bright = acesToneMap(2);
+      expect(bright).toBeLessThan(2);
+      expect(bright).toBeGreaterThan(0.5);
+    });
+
+    it('OCIO-T021: handles very bright values', () => {
+      const veryBright = acesToneMap(10);
+      // Very bright values should be clamped or compressed to near 1
+      expect(veryBright).toBeLessThanOrEqual(1);
+      expect(veryBright).toBeGreaterThan(0.8);
+    });
+
+    it('OCIO-T022: is monotonic', () => {
+      // Brighter input should produce brighter output
+      let prev = 0;
+      for (let i = 0; i <= 10; i += 0.5) {
+        const curr = acesToneMap(i);
+        expect(curr).toBeGreaterThanOrEqual(prev);
+        prev = curr;
+      }
+    });
+  });
+
+  describe('OCIOTransform class', () => {
+    it('OCIO-T023: creates transform for same color space (identity)', () => {
+      const transform = new OCIOTransform('sRGB', 'sRGB');
+      // Identity should preserve color
+      const result = transform.apply(0.5, 0.5, 0.5);
+      expect(result[0]).toBeCloseTo(0.5, 2);
+      expect(result[1]).toBeCloseTo(0.5, 2);
+      expect(result[2]).toBeCloseTo(0.5, 2);
+    });
+
+    it('OCIO-T024: transforms ACEScg to sRGB', () => {
+      const transform = new OCIOTransform('ACEScg', 'sRGB');
+      // ACEScg 18% gray should map to something visible
+      const result = transform.apply(0.18, 0.18, 0.18);
+      expect(result[0]).toBeGreaterThan(0);
+      expect(result[0]).toBeLessThan(1);
+      // Should be roughly neutral
+      expect(result[0]).toBeCloseTo(result[1], 1);
+      expect(result[1]).toBeCloseTo(result[2], 1);
+    });
+
+    it('OCIO-T025: transforms sRGB to ACEScg', () => {
+      const transform = new OCIOTransform('sRGB', 'ACEScg');
+      const result = transform.apply(0.5, 0.5, 0.5);
+      // Linear values should be darker than sRGB
+      expect(result[0]).toBeGreaterThan(0);
+      expect(result[0]).toBeLessThan(0.5);
+    });
+
+    it('OCIO-T026: handles ARRI LogC3 input', () => {
+      const transform = new OCIOTransform('ARRI LogC3 (EI 800)', 'sRGB');
+      // LogC 18% gray equivalent (~0.39)
+      const result = transform.apply(0.39, 0.39, 0.39);
+      expect(result[0]).toBeGreaterThan(0);
+      expect(result[0]).toBeLessThan(1);
+    });
+
+    it('OCIO-T027: clamps output to valid range', () => {
+      const transform = new OCIOTransform('ACEScg', 'sRGB');
+      // Very bright values should clamp
+      const result = transform.apply(10, 10, 10);
+      expect(result[0]).toBeLessThanOrEqual(1);
+      expect(result[1]).toBeLessThanOrEqual(1);
+      expect(result[2]).toBeLessThanOrEqual(1);
+    });
+
+    it('OCIO-T028: preserves black point', () => {
+      const transform = new OCIOTransform('ACEScg', 'sRGB');
+      const result = transform.apply(0, 0, 0);
+      expect(result[0]).toBeCloseTo(0, 4);
+      expect(result[1]).toBeCloseTo(0, 4);
+      expect(result[2]).toBeCloseTo(0, 4);
+    });
+  });
+
+  describe('applyToImageData', () => {
+    it('OCIO-T029: transforms all pixels', () => {
+      const transform = new OCIOTransform('ACEScg', 'sRGB');
+      const imageData = createTestImageData(10, 10, { r: 128, g: 128, b: 128 });
+      const originalR = imageData.data[0];
+
+      transform.applyToImageData(imageData);
+
+      // Should have changed
+      expect(imageData.data[0]).not.toBe(originalR);
+    });
+
+    it('OCIO-T030: preserves alpha channel', () => {
+      const transform = new OCIOTransform('ACEScg', 'sRGB');
+      const imageData = createTestImageData(10, 10, { r: 128, g: 128, b: 128, a: 200 });
+
+      transform.applyToImageData(imageData);
+
+      // Alpha should be unchanged
+      expect(imageData.data[3]).toBe(200);
+    });
+
+    it('OCIO-T031: identity transform preserves image', () => {
+      const transform = new OCIOTransform('sRGB', 'sRGB');
+      const imageData = createTestImageData(10, 10, { r: 128, g: 100, b: 200 });
+
+      transform.applyToImageData(imageData);
+
+      // Should be close to original (small rounding differences possible)
+      expect(Math.abs(imageData.data[0]! - 128)).toBeLessThan(2);
+      expect(Math.abs(imageData.data[1]! - 100)).toBeLessThan(2);
+      expect(Math.abs(imageData.data[2]! - 200)).toBeLessThan(2);
+    });
+  });
+
+  describe('createDisplayTransform', () => {
+    it('OCIO-T032: creates valid transform', () => {
+      const transform = OCIOTransform.createDisplayTransform(
+        'ACEScg',
+        'ACEScg',
+        'sRGB',
+        'ACES 1.0 SDR-video'
+      );
+      expect(transform).toBeInstanceOf(OCIOTransform);
+    });
+
+    it('OCIO-T033: applies to colors correctly', () => {
+      const transform = OCIOTransform.createDisplayTransform(
+        'ACEScg',
+        'ACEScg',
+        'sRGB',
+        'ACES 1.0 SDR-video'
+      );
+      const result = transform.apply(0.18, 0.18, 0.18);
+      expect(result[0]).toBeGreaterThan(0);
+      expect(result[0]).toBeLessThan(1);
+    });
+  });
+
+  describe('createWithLook', () => {
+    it('OCIO-T034: creates transform without look', () => {
+      const transform = OCIOTransform.createWithLook(
+        'ACEScg',
+        'sRGB',
+        'Standard',
+        'None',
+        'forward'
+      );
+      expect(transform).toBeInstanceOf(OCIOTransform);
+    });
+
+    it('OCIO-T035: creates transform with look name', () => {
+      const transform = OCIOTransform.createWithLook(
+        'ACEScg',
+        'sRGB',
+        'Standard',
+        'Filmic',
+        'forward'
+      );
+      expect(transform).toBeInstanceOf(OCIOTransform);
+    });
+  });
+
+  describe('normalizeColorSpaceName', () => {
+    it('OCIO-T036: removes parenthetical info', () => {
+      expect(normalizeColorSpaceName('ARRI LogC3 (EI 800)')).toBe('ARRI LogC3');
+    });
+
+    it('OCIO-T037: trims whitespace', () => {
+      expect(normalizeColorSpaceName('  sRGB  ')).toBe('sRGB');
+    });
+
+    it('OCIO-T038: normalizes multiple spaces', () => {
+      expect(normalizeColorSpaceName('Linear  sRGB')).toBe('Linear sRGB');
+    });
+
+    it('OCIO-T039: handles simple names', () => {
+      expect(normalizeColorSpaceName('sRGB')).toBe('sRGB');
+      expect(normalizeColorSpaceName('ACEScg')).toBe('ACEScg');
+    });
+  });
+
+  // =========================================================================
+  // Edge Case Tests - NaN, Infinity, and Out-of-Gamut Values
+  // =========================================================================
+
+  describe('Edge cases: NaN and Infinity handling', () => {
+    describe('sRGB transfer functions with special values', () => {
+      it('OCIO-T040: srgbEncode handles NaN', () => {
+        expect(srgbEncode(NaN)).toBe(0);
+      });
+
+      it('OCIO-T041: srgbEncode handles positive Infinity', () => {
+        expect(srgbEncode(Infinity)).toBe(1);
+      });
+
+      it('OCIO-T042: srgbEncode handles negative Infinity', () => {
+        expect(srgbEncode(-Infinity)).toBe(0);
+      });
+
+      it('OCIO-T043: srgbDecode handles NaN', () => {
+        expect(srgbDecode(NaN)).toBe(0);
+      });
+
+      it('OCIO-T044: srgbDecode handles positive Infinity', () => {
+        expect(srgbDecode(Infinity)).toBe(1);
+      });
+
+      it('OCIO-T045: srgbDecode handles negative Infinity', () => {
+        expect(srgbDecode(-Infinity)).toBe(0);
+      });
+    });
+
+    describe('Rec.709 transfer functions with special values', () => {
+      it('OCIO-T046: rec709Encode handles NaN', () => {
+        expect(rec709Encode(NaN)).toBe(0);
+      });
+
+      it('OCIO-T047: rec709Encode handles positive Infinity', () => {
+        expect(rec709Encode(Infinity)).toBe(1);
+      });
+
+      it('OCIO-T048: rec709Encode handles negative Infinity', () => {
+        expect(rec709Encode(-Infinity)).toBe(0);
+      });
+
+      it('OCIO-T049: rec709Decode handles NaN', () => {
+        expect(rec709Decode(NaN)).toBe(0);
+      });
+
+      it('OCIO-T050: rec709Decode handles positive Infinity', () => {
+        expect(rec709Decode(Infinity)).toBe(1);
+      });
+
+      it('OCIO-T051: rec709Decode handles negative Infinity', () => {
+        expect(rec709Decode(-Infinity)).toBe(0);
+      });
+    });
+
+    describe('ACES tone map with special values', () => {
+      it('OCIO-T052: acesToneMap handles NaN', () => {
+        expect(acesToneMap(NaN)).toBe(0);
+      });
+
+      it('OCIO-T053: acesToneMap handles positive Infinity', () => {
+        expect(acesToneMap(Infinity)).toBe(1);
+      });
+
+      it('OCIO-T054: acesToneMap handles negative Infinity', () => {
+        expect(acesToneMap(-Infinity)).toBe(0);
+      });
+
+      it('OCIO-T055: acesToneMap handles negative values', () => {
+        expect(acesToneMap(-0.5)).toBe(0);
+        expect(acesToneMap(-1)).toBe(0);
+      });
+    });
+
+    describe('OCIOTransform with special input values', () => {
+      it('OCIO-T056: handles NaN input values', () => {
+        const transform = new OCIOTransform('ACEScg', 'sRGB');
+        const result = transform.apply(NaN, 0.5, 0.5);
+        // NaN should be sanitized to 0
+        expect(Number.isNaN(result[0])).toBe(false);
+        expect(Number.isNaN(result[1])).toBe(false);
+        expect(Number.isNaN(result[2])).toBe(false);
+      });
+
+      it('OCIO-T057: handles Infinity input values', () => {
+        const transform = new OCIOTransform('ACEScg', 'sRGB');
+        const result = transform.apply(Infinity, 0.5, 0.5);
+        // Infinity should be clamped
+        expect(Number.isFinite(result[0])).toBe(true);
+        expect(Number.isFinite(result[1])).toBe(true);
+        expect(Number.isFinite(result[2])).toBe(true);
+      });
+
+      it('OCIO-T058: handles negative Infinity input values', () => {
+        const transform = new OCIOTransform('ACEScg', 'sRGB');
+        const result = transform.apply(-Infinity, 0.5, 0.5);
+        expect(Number.isFinite(result[0])).toBe(true);
+        expect(Number.isFinite(result[1])).toBe(true);
+        expect(Number.isFinite(result[2])).toBe(true);
+      });
+
+      it('OCIO-T059: handles all NaN input', () => {
+        const transform = new OCIOTransform('sRGB', 'Linear sRGB');
+        const result = transform.apply(NaN, NaN, NaN);
+        expect(result[0]).toBe(0);
+        expect(result[1]).toBe(0);
+        expect(result[2]).toBe(0);
+      });
+    });
+  });
+
+  describe('Edge cases: Negative and out-of-gamut colors', () => {
+    it('OCIO-T060: srgbEncode handles negative values (extended range)', () => {
+      const result = srgbEncode(-0.5);
+      // Should be negative (mirrored)
+      expect(result).toBeLessThan(0);
+      // And symmetric: encode(-x) = -encode(x)
+      expect(result).toBeCloseTo(-srgbEncode(0.5), 5);
+    });
+
+    it('OCIO-T061: srgbDecode handles negative values (extended range)', () => {
+      const result = srgbDecode(-0.5);
+      expect(result).toBeLessThan(0);
+      expect(result).toBeCloseTo(-srgbDecode(0.5), 5);
+    });
+
+    it('OCIO-T062: rec709Encode handles negative values (extended range)', () => {
+      const result = rec709Encode(-0.5);
+      expect(result).toBeLessThan(0);
+      expect(result).toBeCloseTo(-rec709Encode(0.5), 5);
+    });
+
+    it('OCIO-T063: rec709Decode handles negative values (extended range)', () => {
+      const result = rec709Decode(-0.5);
+      expect(result).toBeLessThan(0);
+      expect(result).toBeCloseTo(-rec709Decode(0.5), 5);
+    });
+
+    it('OCIO-T064: sRGB extended range round-trip preserves values', () => {
+      const testValues = [-1, -0.5, -0.1, 0.1, 0.5, 1];
+      for (const v of testValues) {
+        const encoded = srgbEncode(srgbDecode(v));
+        expect(encoded).toBeCloseTo(v, 5);
+      }
+    });
+
+    it('OCIO-T065: transform handles out-of-gamut colors', () => {
+      const transform = new OCIOTransform('ACEScg', 'sRGB');
+      // Very saturated color that may be out of sRGB gamut
+      const result = transform.apply(2, -0.5, 0.1);
+      // Should not produce NaN or Infinity
+      expect(Number.isFinite(result[0])).toBe(true);
+      expect(Number.isFinite(result[1])).toBe(true);
+      expect(Number.isFinite(result[2])).toBe(true);
+    });
+
+    it('OCIO-T066: transform clamps to valid range in applyToImageData', () => {
+      const transform = new OCIOTransform('ACEScg', 'sRGB');
+      // Create image with values that will transform to out-of-range
+      const imageData = createTestImageData(2, 2, { r: 255, g: 0, b: 0 });
+      transform.applyToImageData(imageData);
+
+      // All values should be clamped to 0-255
+      for (let i = 0; i < imageData.data.length; i++) {
+        expect(imageData.data[i]).toBeGreaterThanOrEqual(0);
+        expect(imageData.data[i]).toBeLessThanOrEqual(255);
+      }
+    });
+  });
+
+  describe('Edge cases: Very large and very small values', () => {
+    it('OCIO-T067: handles very large positive values', () => {
+      const transform = new OCIOTransform('ACEScg', 'sRGB');
+      const result = transform.apply(1e6, 1e6, 1e6);
+      expect(Number.isFinite(result[0])).toBe(true);
+      expect(Number.isFinite(result[1])).toBe(true);
+      expect(Number.isFinite(result[2])).toBe(true);
+    });
+
+    it('OCIO-T068: handles very small positive values', () => {
+      const transform = new OCIOTransform('ACEScg', 'sRGB');
+      const result = transform.apply(1e-10, 1e-10, 1e-10);
+      expect(Number.isFinite(result[0])).toBe(true);
+      expect(Number.isFinite(result[1])).toBe(true);
+      expect(Number.isFinite(result[2])).toBe(true);
+      // Should be very close to 0
+      expect(result[0]).toBeCloseTo(0, 3);
+    });
+
+    it('OCIO-T069: handles values at sRGB linear threshold', () => {
+      // Test values right at the linear/gamma threshold (0.0031308)
+      const nearThreshold = 0.0031308;
+
+      const encoded1 = srgbEncode(nearThreshold - 0.0001);
+      const encoded2 = srgbEncode(nearThreshold + 0.0001);
+
+      // Both should be finite and relatively close
+      expect(Number.isFinite(encoded1)).toBe(true);
+      expect(Number.isFinite(encoded2)).toBe(true);
+      expect(Math.abs(encoded1 - encoded2)).toBeLessThan(0.01);
+    });
+
+    it('OCIO-T070: handles values at Rec.709 linear threshold', () => {
+      // Test values right at the linear/gamma threshold (0.018)
+      const nearThreshold = 0.018;
+
+      const encoded1 = rec709Encode(nearThreshold - 0.001);
+      const encoded2 = rec709Encode(nearThreshold + 0.001);
+
+      expect(Number.isFinite(encoded1)).toBe(true);
+      expect(Number.isFinite(encoded2)).toBe(true);
+      expect(Math.abs(encoded1 - encoded2)).toBeLessThan(0.02);
+    });
+  });
+
+  describe('Edge cases: Empty and degenerate transforms', () => {
+    it('OCIO-T071: Raw passthrough preserves all values', () => {
+      const transform = new OCIOTransform('Raw', 'sRGB');
+      // Raw should pass through unchanged
+      const result = transform.apply(0.123, 0.456, 0.789);
+      expect(result[0]).toBeCloseTo(0.123, 5);
+      expect(result[1]).toBeCloseTo(0.456, 5);
+      expect(result[2]).toBeCloseTo(0.789, 5);
+    });
+
+    it('OCIO-T072: sRGB to Raw passthrough', () => {
+      const transform = new OCIOTransform('sRGB', 'Raw');
+      const result = transform.apply(0.5, 0.5, 0.5);
+      expect(result[0]).toBeCloseTo(0.5, 5);
+      expect(result[1]).toBeCloseTo(0.5, 5);
+      expect(result[2]).toBeCloseTo(0.5, 5);
+    });
+
+    it('OCIO-T073: Unknown color space results in identity transform', () => {
+      // Unknown spaces should just pass through
+      const transform = new OCIOTransform('UnknownSpace', 'AnotherUnknown');
+      const result = transform.apply(0.3, 0.6, 0.9);
+      expect(result[0]).toBeCloseTo(0.3, 5);
+      expect(result[1]).toBeCloseTo(0.6, 5);
+      expect(result[2]).toBeCloseTo(0.9, 5);
+    });
+  });
+
+  describe('Matrix math edge cases', () => {
+    it('OCIO-T074: multiplyMatrixVector handles zero vector', () => {
+      const zero: [number, number, number] = [0, 0, 0];
+      const result = multiplyMatrixVector(SRGB_TO_XYZ, zero);
+      expect(result[0]).toBe(0);
+      expect(result[1]).toBe(0);
+      expect(result[2]).toBe(0);
+    });
+
+    it('OCIO-T075: multiplyMatrices with identity is idempotent', () => {
+      const identity: [number, number, number, number, number, number, number, number, number] = [
+        1, 0, 0,
+        0, 1, 0,
+        0, 0, 1,
+      ];
+      const result1 = multiplyMatrices(identity, identity);
+      const result2 = multiplyMatrices(result1, identity);
+
+      for (let i = 0; i < 9; i++) {
+        expect(result1[i]).toBeCloseTo(result2[i]!, 10);
+      }
+    });
+
+    it('OCIO-T076: matrix chain maintains precision', () => {
+      // Chain multiple transforms and verify we don't accumulate too much error
+      const original: [number, number, number] = [0.5, 0.3, 0.8];
+
+      // sRGB -> XYZ -> sRGB should be identity
+      const xyz = multiplyMatrixVector(SRGB_TO_XYZ, original);
+      const result = multiplyMatrixVector(XYZ_TO_SRGB, xyz);
+
+      expect(result[0]).toBeCloseTo(original[0], 5);
+      expect(result[1]).toBeCloseTo(original[1], 5);
+      expect(result[2]).toBeCloseTo(original[2], 5);
+    });
+  });
+});

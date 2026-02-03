@@ -2,12 +2,15 @@
  * PixelProbe - Displays pixel values at cursor position
  *
  * Features:
- * - Show RGB values (0-255 and 0.0-1.0)
+ * - Show RGB/RGBA values (0-255 and 0.0-1.0)
  * - Show HSL values
  * - Show pixel coordinates
  * - Click to lock/unlock position
  * - Copy values to clipboard
  * - Color swatch preview
+ * - Area averaging (1x1, 3x3, 5x5, 9x9)
+ * - Source vs Rendered toggle
+ * - Alpha channel display
  */
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
@@ -18,15 +21,24 @@ export interface PixelProbeEvents extends EventMap {
   valueCopied: string;
 }
 
+/** Available sample sizes for area averaging */
+export type SampleSize = 1 | 3 | 5 | 9;
+
+/** Source mode for pixel values */
+export type SourceMode = 'rendered' | 'source';
+
 export interface PixelProbeState {
   enabled: boolean;
   locked: boolean;
   x: number;
   y: number;
   rgb: { r: number; g: number; b: number };
+  alpha: number; // Alpha channel value 0-255
   hsl: { h: number; s: number; l: number };
   ire: number; // Luminance in IRE units (0-100)
   format: 'rgb' | 'rgb01' | 'hsl' | 'hex' | 'ire';
+  sampleSize: SampleSize;
+  sourceMode: SourceMode;
 }
 
 export const DEFAULT_PIXEL_PROBE_STATE: PixelProbeState = {
@@ -35,26 +47,87 @@ export const DEFAULT_PIXEL_PROBE_STATE: PixelProbeState = {
   x: 0,
   y: 0,
   rgb: { r: 0, g: 0, b: 0 },
+  alpha: 255,
   hsl: { h: 0, s: 0, l: 0 },
   ire: 0,
   format: 'rgb',
+  sampleSize: 1,
+  sourceMode: 'rendered',
 };
+
+/**
+ * Calculate the average RGBA values over an NxN area centered at (x, y).
+ * Exported for unit testing.
+ */
+export function calculateAreaAverage(
+  imageData: ImageData,
+  centerX: number,
+  centerY: number,
+  sampleSize: SampleSize
+): { r: number; g: number; b: number; a: number } {
+  const { width, height, data } = imageData;
+  const halfSize = Math.floor(sampleSize / 2);
+
+  let totalR = 0;
+  let totalG = 0;
+  let totalB = 0;
+  let totalA = 0;
+  let count = 0;
+
+  for (let dy = -halfSize; dy <= halfSize; dy++) {
+    for (let dx = -halfSize; dx <= halfSize; dx++) {
+      const px = centerX + dx;
+      const py = centerY + dy;
+
+      // Skip out-of-bounds pixels
+      if (px < 0 || px >= width || py < 0 || py >= height) {
+        continue;
+      }
+
+      const idx = (py * width + px) * 4;
+      totalR += data[idx] ?? 0;
+      totalG += data[idx + 1] ?? 0;
+      totalB += data[idx + 2] ?? 0;
+      totalA += data[idx + 3] ?? 0;
+      count++;
+    }
+  }
+
+  if (count === 0) {
+    return { r: 0, g: 0, b: 0, a: 0 };
+  }
+
+  return {
+    r: Math.round(totalR / count),
+    g: Math.round(totalG / count),
+    b: Math.round(totalB / count),
+    a: Math.round(totalA / count),
+  };
+}
 
 export class PixelProbe extends EventEmitter<PixelProbeEvents> {
   private container: HTMLElement;
   private overlay: HTMLElement;
   private state: PixelProbeState = { ...DEFAULT_PIXEL_PROBE_STATE };
 
+  // Source image data for "source" mode (before color pipeline)
+  private sourceImageData: ImageData | null = null;
+
   // UI elements (initialized in createOverlayContent)
   private swatch!: HTMLElement;
   private coordsLabel!: HTMLElement;
   private rgbLabel!: HTMLElement;
   private rgb01Label!: HTMLElement;
+  private alphaLabel!: HTMLElement;
   private hslLabel!: HTMLElement;
   private hexLabel!: HTMLElement;
   private ireLabel!: HTMLElement;
   private lockIndicator!: HTMLElement;
+  private sampleSizeLabel!: HTMLElement;
+  private sourceModeLabel!: HTMLElement;
   private formatButtons: Map<string, HTMLButtonElement> = new Map();
+  private sampleSizeButtons: Map<SampleSize, HTMLButtonElement> = new Map();
+  private sourceModeButtons: Map<SourceMode, HTMLButtonElement> = new Map();
 
   constructor() {
     super();
@@ -83,7 +156,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       font-size: 11px;
       color: var(--text-primary);
-      min-width: 180px;
+      min-width: 200px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.4);
       pointer-events: auto;
     `;
@@ -119,6 +192,12 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     header.appendChild(this.lockIndicator);
     this.overlay.appendChild(header);
 
+    // Sample size row
+    this.createSampleSizeRow();
+
+    // Source/Rendered toggle row
+    this.createSourceModeRow();
+
     // Color swatch and coordinates row
     const swatchRow = document.createElement('div');
     swatchRow.style.cssText = `
@@ -130,6 +209,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
 
     this.swatch = document.createElement('div');
     this.swatch.className = 'pixel-swatch';
+    this.swatch.dataset.testid = 'pixel-probe-swatch';
     this.swatch.style.cssText = `
       width: 32px;
       height: 32px;
@@ -139,6 +219,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     `;
 
     this.coordsLabel = document.createElement('div');
+    this.coordsLabel.dataset.testid = 'pixel-probe-coords';
     this.coordsLabel.style.cssText = `
       font-family: monospace;
       color: var(--text-secondary);
@@ -164,6 +245,9 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     // RGB row (0.0-1.0)
     this.rgb01Label = this.createValueRow(valuesContainer, 'RGB01', '(0.00, 0.00, 0.00)', 'rgb01');
 
+    // Alpha row
+    this.alphaLabel = this.createValueRow(valuesContainer, 'Alpha', '255 (1.000)', 'alpha');
+
     // HSL row
     this.hslLabel = this.createValueRow(valuesContainer, 'HSL', 'hsl(0°, 0%, 0%)', 'hsl');
 
@@ -177,23 +261,27 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
 
     // Format buttons
     const formatRow = document.createElement('div');
+    formatRow.setAttribute('role', 'group');
+    formatRow.setAttribute('aria-label', 'Color format selection');
     formatRow.style.cssText = `
       display: flex;
       gap: 4px;
     `;
 
-    const formats: Array<{ key: PixelProbeState['format']; label: string }> = [
-      { key: 'rgb', label: 'RGB' },
-      { key: 'rgb01', label: '0-1' },
-      { key: 'hsl', label: 'HSL' },
-      { key: 'hex', label: 'HEX' },
-      { key: 'ire', label: 'IRE' },
+    const formats: Array<{ key: PixelProbeState['format']; label: string; ariaLabel: string }> = [
+      { key: 'rgb', label: 'RGB', ariaLabel: 'RGB format (0-255)' },
+      { key: 'rgb01', label: '0-1', ariaLabel: 'RGB format (0.0-1.0)' },
+      { key: 'hsl', label: 'HSL', ariaLabel: 'HSL format (Hue, Saturation, Lightness)' },
+      { key: 'hex', label: 'HEX', ariaLabel: 'Hexadecimal color format' },
+      { key: 'ire', label: 'IRE', ariaLabel: 'IRE luminance units' },
     ];
 
     for (const fmt of formats) {
       const btn = document.createElement('button');
       btn.textContent = fmt.label;
       btn.dataset.format = fmt.key;
+      btn.setAttribute('aria-label', fmt.ariaLabel);
+      btn.setAttribute('aria-pressed', fmt.key === this.state.format ? 'true' : 'false');
       btn.style.cssText = `
         flex: 1;
         padding: 4px 6px;
@@ -234,6 +322,143 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     this.overlay.appendChild(hint);
   }
 
+  private createSampleSizeRow(): void {
+    const row = document.createElement('div');
+    row.style.cssText = `
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 8px;
+    `;
+
+    this.sampleSizeLabel = document.createElement('span');
+    this.sampleSizeLabel.textContent = 'Sample:';
+    this.sampleSizeLabel.style.cssText = `
+      color: var(--text-secondary);
+      font-size: 10px;
+    `;
+
+    const buttonsContainer = document.createElement('div');
+    buttonsContainer.setAttribute('role', 'group');
+    buttonsContainer.setAttribute('aria-label', 'Sample size selection');
+    buttonsContainer.style.cssText = `
+      display: flex;
+      gap: 3px;
+    `;
+    buttonsContainer.dataset.testid = 'pixel-probe-sample-size';
+
+    const sampleSizes: Array<{ size: SampleSize; label: string }> = [
+      { size: 1, label: '1x1' },
+      { size: 3, label: '3x3' },
+      { size: 5, label: '5x5' },
+      { size: 9, label: '9x9' },
+    ];
+
+    for (const { size, label } of sampleSizes) {
+      const btn = document.createElement('button');
+      btn.textContent = label;
+      btn.dataset.sampleSize = size.toString();
+      btn.setAttribute('aria-label', `Sample ${label} pixels`);
+      btn.setAttribute('aria-pressed', size === this.state.sampleSize ? 'true' : 'false');
+      btn.style.cssText = `
+        padding: 3px 6px;
+        border: 1px solid var(--border-secondary);
+        border-radius: 3px;
+        background: var(--bg-secondary);
+        color: var(--text-secondary);
+        font-size: 10px;
+        cursor: pointer;
+      `;
+      btn.addEventListener('click', () => this.setSampleSize(size));
+      btn.addEventListener('mouseenter', () => {
+        if (this.state.sampleSize !== size) {
+          btn.style.background = 'var(--border-primary)';
+        }
+      });
+      btn.addEventListener('mouseleave', () => {
+        if (this.state.sampleSize !== size) {
+          btn.style.background = 'var(--bg-secondary)';
+        }
+      });
+      this.sampleSizeButtons.set(size, btn);
+      buttonsContainer.appendChild(btn);
+    }
+
+    row.appendChild(this.sampleSizeLabel);
+    row.appendChild(buttonsContainer);
+    this.overlay.appendChild(row);
+
+    this.updateSampleSizeButtons();
+  }
+
+  private createSourceModeRow(): void {
+    const row = document.createElement('div');
+    row.style.cssText = `
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 8px;
+    `;
+
+    this.sourceModeLabel = document.createElement('span');
+    this.sourceModeLabel.textContent = 'Values:';
+    this.sourceModeLabel.style.cssText = `
+      color: var(--text-secondary);
+      font-size: 10px;
+    `;
+
+    const buttonsContainer = document.createElement('div');
+    buttonsContainer.setAttribute('role', 'group');
+    buttonsContainer.setAttribute('aria-label', 'Value source selection');
+    buttonsContainer.style.cssText = `
+      display: flex;
+      gap: 3px;
+    `;
+    buttonsContainer.dataset.testid = 'pixel-probe-source-mode';
+
+    const modes: Array<{ mode: SourceMode; label: string; title: string }> = [
+      { mode: 'rendered', label: 'Rendered', title: 'Show values after color pipeline (graded)' },
+      { mode: 'source', label: 'Source', title: 'Show original source values (before grading)' },
+    ];
+
+    for (const { mode, label, title } of modes) {
+      const btn = document.createElement('button');
+      btn.textContent = label;
+      btn.title = title;
+      btn.dataset.sourceMode = mode;
+      btn.setAttribute('aria-label', title);
+      btn.setAttribute('aria-pressed', mode === this.state.sourceMode ? 'true' : 'false');
+      btn.style.cssText = `
+        padding: 3px 8px;
+        border: 1px solid var(--border-secondary);
+        border-radius: 3px;
+        background: var(--bg-secondary);
+        color: var(--text-secondary);
+        font-size: 10px;
+        cursor: pointer;
+      `;
+      btn.addEventListener('click', () => this.setSourceMode(mode));
+      btn.addEventListener('mouseenter', () => {
+        if (this.state.sourceMode !== mode) {
+          btn.style.background = 'var(--border-primary)';
+        }
+      });
+      btn.addEventListener('mouseleave', () => {
+        if (this.state.sourceMode !== mode) {
+          btn.style.background = 'var(--bg-secondary)';
+        }
+      });
+      this.sourceModeButtons.set(mode, btn);
+      buttonsContainer.appendChild(btn);
+    }
+
+    row.appendChild(this.sourceModeLabel);
+    row.appendChild(buttonsContainer);
+    this.overlay.appendChild(row);
+
+    this.updateSourceModeButtons();
+  }
+
   private createValueRow(
     container: HTMLElement,
     label: string,
@@ -268,6 +493,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
 
     const valueEl = document.createElement('span');
     valueEl.textContent = initialValue;
+    valueEl.dataset.testid = `pixel-probe-${copyKey}`;
     valueEl.style.cssText = `
       font-family: monospace;
       color: var(--text-primary);
@@ -278,6 +504,13 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     container.appendChild(row);
 
     return valueEl;
+  }
+
+  /**
+   * Set source image data for "source" mode (before color pipeline)
+   */
+  setSourceImageData(imageData: ImageData | null): void {
+    this.sourceImageData = imageData;
   }
 
   /**
@@ -296,13 +529,30 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     const px = Math.max(0, Math.min(displayWidth - 1, Math.floor(x)));
     const py = Math.max(0, Math.min(displayHeight - 1, Math.floor(y)));
 
-    // Get pixel value
-    let r = 0, g = 0, b = 0;
-    if (imageData) {
-      const idx = (py * displayWidth + px) * 4;
-      r = imageData.data[idx] ?? 0;
-      g = imageData.data[idx + 1] ?? 0;
-      b = imageData.data[idx + 2] ?? 0;
+    // Choose image data based on source mode
+    const activeImageData =
+      this.state.sourceMode === 'source' && this.sourceImageData
+        ? this.sourceImageData
+        : imageData;
+
+    // Get pixel value (with area averaging if sampleSize > 1)
+    let r = 0, g = 0, b = 0, a = 255;
+    if (activeImageData) {
+      if (this.state.sampleSize > 1) {
+        const avg = calculateAreaAverage(activeImageData, px, py, this.state.sampleSize);
+        r = avg.r;
+        g = avg.g;
+        b = avg.b;
+        a = avg.a;
+      } else {
+        // Use activeImageData.width for correct index calculation
+        // This ensures correct behavior when imageData dimensions differ from display dimensions
+        const idx = (py * activeImageData.width + px) * 4;
+        r = activeImageData.data[idx] ?? 0;
+        g = activeImageData.data[idx + 1] ?? 0;
+        b = activeImageData.data[idx + 2] ?? 0;
+        a = activeImageData.data[idx + 3] ?? 255;
+      }
     }
 
     // Calculate luminance in IRE units (0-100)
@@ -314,6 +564,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     this.state.x = px;
     this.state.y = py;
     this.state.rgb = { r, g, b };
+    this.state.alpha = a;
     this.state.hsl = this.rgbToHsl(r, g, b);
     this.state.ire = ire;
 
@@ -324,13 +575,31 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
    * Update display with current values
    */
   private updateDisplay(): void {
-    const { x, y, rgb, hsl, ire } = this.state;
+    const { x, y, rgb, alpha, hsl, ire, sampleSize } = this.state;
 
-    // Update coordinates
-    this.coordsLabel.textContent = `X: ${x}, Y: ${y}`;
+    // Update coordinates with sample size indicator
+    const sampleLabel = sampleSize > 1 ? ` (${sampleSize}x${sampleSize} avg)` : '';
+    this.coordsLabel.textContent = `X: ${x}, Y: ${y}${sampleLabel}`;
 
-    // Update swatch
-    this.swatch.style.background = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
+    // Update swatch (with alpha)
+    if (alpha < 255) {
+      // Show checkerboard for transparency
+      // The semi-transparent color must be on TOP (first in list) so checkerboard shows through
+      this.swatch.style.background = `
+        linear-gradient(rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha / 255}), rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha / 255})),
+        linear-gradient(45deg, #666 25%, transparent 25%),
+        linear-gradient(-45deg, #666 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #666 75%),
+        linear-gradient(-45deg, transparent 75%, #666 75%),
+        #333
+      `;
+      this.swatch.style.backgroundSize = '100% 100%, 8px 8px, 8px 8px, 8px 8px, 8px 8px, 100% 100%';
+      this.swatch.style.backgroundPosition = '0 0, 0 0, 0 4px, 4px -4px, -4px 0px, 0 0';
+    } else {
+      this.swatch.style.background = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
+      this.swatch.style.backgroundSize = '';
+      this.swatch.style.backgroundPosition = '';
+    }
 
     // Update RGB (0-255)
     this.rgbLabel.textContent = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
@@ -340,6 +609,10 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     const g01 = (rgb.g / 255).toFixed(3);
     const b01 = (rgb.b / 255).toFixed(3);
     this.rgb01Label.textContent = `(${r01}, ${g01}, ${b01})`;
+
+    // Update Alpha
+    const a01 = (alpha / 255).toFixed(3);
+    this.alphaLabel.textContent = `${alpha} (${a01})`;
 
     // Update HSL
     this.hslLabel.textContent = `hsl(${hsl.h}°, ${hsl.s}%, ${hsl.l}%)`;
@@ -401,7 +674,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
    * Copy value to clipboard
    */
   private async copyValue(format: string): Promise<void> {
-    const { rgb, hsl, ire } = this.state;
+    const { rgb, alpha, hsl, ire } = this.state;
     let value = '';
 
     switch (format) {
@@ -410,6 +683,9 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
         break;
       case 'rgb01':
         value = `${(rgb.r / 255).toFixed(3)}, ${(rgb.g / 255).toFixed(3)}, ${(rgb.b / 255).toFixed(3)}`;
+        break;
+      case 'alpha':
+        value = `${alpha} (${(alpha / 255).toFixed(3)})`;
         break;
       case 'hsl':
         value = `hsl(${hsl.h}, ${hsl.s}%, ${hsl.l}%)`;
@@ -430,6 +706,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
       const labels: Record<string, HTMLElement> = {
         rgb: this.rgbLabel,
         rgb01: this.rgb01Label,
+        alpha: this.alphaLabel,
         hsl: this.hslLabel,
         hex: this.hexLabel,
         ire: this.ireLabel,
@@ -458,7 +735,75 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
 
   private updateFormatButtons(): void {
     for (const [key, btn] of this.formatButtons) {
-      if (key === this.state.format) {
+      const isSelected = key === this.state.format;
+      btn.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+      if (isSelected) {
+        btn.style.background = 'var(--accent-primary)';
+        btn.style.borderColor = 'var(--accent-primary)';
+        btn.style.color = 'var(--text-on-accent)';
+      } else {
+        btn.style.background = 'var(--bg-secondary)';
+        btn.style.borderColor = 'var(--border-secondary)';
+        btn.style.color = 'var(--text-secondary)';
+      }
+    }
+  }
+
+  /**
+   * Set sample size for area averaging
+   */
+  setSampleSize(size: SampleSize): void {
+    if (this.state.sampleSize === size) return;
+    this.state.sampleSize = size;
+    this.updateSampleSizeButtons();
+    this.emit('stateChanged', { ...this.state });
+  }
+
+  /**
+   * Get current sample size
+   */
+  getSampleSize(): SampleSize {
+    return this.state.sampleSize;
+  }
+
+  private updateSampleSizeButtons(): void {
+    for (const [size, btn] of this.sampleSizeButtons) {
+      const isSelected = size === this.state.sampleSize;
+      btn.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+      if (isSelected) {
+        btn.style.background = 'var(--accent-primary)';
+        btn.style.borderColor = 'var(--accent-primary)';
+        btn.style.color = 'var(--text-on-accent)';
+      } else {
+        btn.style.background = 'var(--bg-secondary)';
+        btn.style.borderColor = 'var(--border-secondary)';
+        btn.style.color = 'var(--text-secondary)';
+      }
+    }
+  }
+
+  /**
+   * Set source mode (rendered vs source)
+   */
+  setSourceMode(mode: SourceMode): void {
+    if (this.state.sourceMode === mode) return;
+    this.state.sourceMode = mode;
+    this.updateSourceModeButtons();
+    this.emit('stateChanged', { ...this.state });
+  }
+
+  /**
+   * Get current source mode
+   */
+  getSourceMode(): SourceMode {
+    return this.state.sourceMode;
+  }
+
+  private updateSourceModeButtons(): void {
+    for (const [mode, btn] of this.sourceModeButtons) {
+      const isSelected = mode === this.state.sourceMode;
+      btn.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+      if (isSelected) {
         btn.style.background = 'var(--accent-primary)';
         btn.style.borderColor = 'var(--accent-primary)';
         btn.style.color = 'var(--text-on-accent)';
@@ -592,5 +937,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
       this.overlay.parentNode.removeChild(this.overlay);
     }
     this.formatButtons.clear();
+    this.sampleSizeButtons.clear();
+    this.sourceModeButtons.clear();
   }
 }

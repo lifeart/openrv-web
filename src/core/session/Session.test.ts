@@ -590,6 +590,80 @@ describe('Session', () => {
       session.clearMarks();
       expect(session.marks.size).toBe(0);
     });
+
+    it('SES-025: setMarker() creates duration marker with endFrame', () => {
+      session.setMarker(10, 'range', '#ff0000', 25);
+      const marker = session.getMarker(10);
+      expect(marker).toBeDefined();
+      expect(marker!.frame).toBe(10);
+      expect(marker!.endFrame).toBe(25);
+      expect(marker!.note).toBe('range');
+    });
+
+    it('SES-026: setMarker() ignores endFrame <= frame', () => {
+      session.setMarker(10, '', '#ff0000', 10);
+      const marker = session.getMarker(10);
+      expect(marker).toBeDefined();
+      expect(marker!.endFrame).toBeUndefined();
+
+      session.setMarker(10, '', '#ff0000', 5);
+      const marker2 = session.getMarker(10);
+      expect(marker2!.endFrame).toBeUndefined();
+    });
+
+    it('SES-027: setMarkerEndFrame() converts point marker to duration', () => {
+      session.setMarker(10, 'test', '#ff0000');
+      expect(session.getMarker(10)!.endFrame).toBeUndefined();
+
+      session.setMarkerEndFrame(10, 20);
+      expect(session.getMarker(10)!.endFrame).toBe(20);
+    });
+
+    it('SES-028: setMarkerEndFrame(undefined) converts duration to point', () => {
+      session.setMarker(10, 'test', '#ff0000', 25);
+      expect(session.getMarker(10)!.endFrame).toBe(25);
+
+      session.setMarkerEndFrame(10, undefined);
+      expect(session.getMarker(10)!.endFrame).toBeUndefined();
+    });
+
+    it('SES-029: getMarkerAtFrame() returns marker when frame is within range', () => {
+      session.setMarker(10, 'range', '#ff0000', 30);
+      expect(session.getMarkerAtFrame(10)).toBeDefined();
+      expect(session.getMarkerAtFrame(20)).toBeDefined();
+      expect(session.getMarkerAtFrame(30)).toBeDefined();
+      expect(session.getMarkerAtFrame(31)).toBeUndefined();
+      expect(session.getMarkerAtFrame(9)).toBeUndefined();
+    });
+
+    it('SES-030: getMarkerAtFrame() returns exact match for point marker', () => {
+      session.setMarker(15, 'point', '#ff0000');
+      expect(session.getMarkerAtFrame(15)).toBeDefined();
+      expect(session.getMarkerAtFrame(16)).toBeUndefined();
+    });
+
+    it('SES-031: duration marker serialization preserves endFrame', () => {
+      session.setMarker(10, 'range', '#ff0000', 25);
+      const state = session.getPlaybackState();
+      expect(state.marks[0]!.endFrame).toBe(25);
+    });
+
+    it('SES-032: duration marker deserialization restores endFrame', () => {
+      session.setPlaybackState({
+        marks: [{ frame: 10, note: 'range', color: '#ff0000', endFrame: 25 }],
+      });
+      const marker = session.getMarker(10);
+      expect(marker).toBeDefined();
+      expect(marker!.endFrame).toBe(25);
+    });
+
+    it('SES-033: setMarkerEndFrame() emits marksChanged', () => {
+      session.setMarker(10, '', '#ff0000');
+      const listener = vi.fn();
+      session.on('marksChanged', listener);
+      session.setMarkerEndFrame(10, 20);
+      expect(listener).toHaveBeenCalled();
+    });
   });
 
   describe('frameCount', () => {
@@ -2209,7 +2283,10 @@ describe('Session', () => {
       videoNode.properties.setValue('url', 'blob:test');
 
       // Mock loadFile to avoid actual video loading
-      const loadFileSpy = vi.spyOn(videoNode, 'loadFile').mockResolvedValue();
+      const loadFileSpy = vi.spyOn(videoNode, 'loadFile').mockResolvedValue({
+        success: true,
+        useMediabunny: true,
+      });
       vi.spyOn(videoNode, 'getMetadata').mockReturnValue({
         name: 'test.mp4',
         width: 1920,
@@ -2330,7 +2407,10 @@ describe('Session', () => {
       videoNode.properties.setValue('file', mockFile);
       videoNode.properties.setValue('url', 'blob:test');
 
-      vi.spyOn(videoNode, 'loadFile').mockResolvedValue();
+      vi.spyOn(videoNode, 'loadFile').mockResolvedValue({
+        success: true,
+        useMediabunny: false,
+      });
       vi.spyOn(videoNode, 'getMetadata').mockReturnValue({
         name: 'test.mp4',
         width: 1920,
@@ -2622,6 +2702,140 @@ describe('Session', () => {
 
       expect(mockVideoNodeA.startPlaybackPreload).toHaveBeenCalled();
       expect(mockVideoNodeA.stopPlaybackPreload).toHaveBeenCalled();
+    });
+  });
+
+  describe('preservesPitch', () => {
+    it('SES-PITCH-001: defaults to true', () => {
+      expect(session.preservesPitch).toBe(true);
+    });
+
+    it('SES-PITCH-002: can be set to false', () => {
+      session.preservesPitch = false;
+      expect(session.preservesPitch).toBe(false);
+    });
+
+    it('SES-PITCH-003: can be toggled back to true', () => {
+      session.preservesPitch = false;
+      session.preservesPitch = true;
+      expect(session.preservesPitch).toBe(true);
+    });
+
+    it('SES-PITCH-004: emits preservesPitchChanged event', () => {
+      const handler = vi.fn();
+      session.on('preservesPitchChanged', handler);
+
+      session.preservesPitch = false;
+      expect(handler).toHaveBeenCalledWith(false);
+
+      session.preservesPitch = true;
+      expect(handler).toHaveBeenCalledWith(true);
+    });
+
+    it('SES-PITCH-005: does not emit event when value unchanged', () => {
+      const handler = vi.fn();
+      session.on('preservesPitchChanged', handler);
+
+      // Set to same value
+      session.preservesPitch = true;
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('SES-PITCH-006: applies to video element when set', () => {
+      const video = createMockVideo();
+      session.setSources([{
+        type: 'video',
+        name: 'test.mp4',
+        url: 'blob:test',
+        width: 1920,
+        height: 1080,
+        duration: 100,
+        fps: 24,
+        element: video,
+      }]);
+
+      // Default should be true
+      session.preservesPitch = false;
+      expect(video.preservesPitch).toBe(false);
+
+      session.preservesPitch = true;
+      expect(video.preservesPitch).toBe(true);
+    });
+
+    it('SES-PITCH-007: is included in getPlaybackState', () => {
+      const state = session.getPlaybackState();
+      expect(state.preservesPitch).toBe(true);
+
+      session.preservesPitch = false;
+      const state2 = session.getPlaybackState();
+      expect(state2.preservesPitch).toBe(false);
+    });
+
+    it('SES-PITCH-008: is restored by setPlaybackState', () => {
+      session.preservesPitch = true;
+      session.setPlaybackState({ preservesPitch: false });
+      expect(session.preservesPitch).toBe(false);
+
+      session.setPlaybackState({ preservesPitch: true });
+      expect(session.preservesPitch).toBe(true);
+    });
+
+    it('SES-PITCH-009: setPlaybackState without preservesPitch does not change it', () => {
+      session.preservesPitch = false;
+      session.setPlaybackState({ volume: 0.5 });
+      expect(session.preservesPitch).toBe(false);
+    });
+  });
+
+  describe('interpolation', () => {
+    it('SES-INTERP-001: default interpolation is disabled', () => {
+      expect(session.interpolationEnabled).toBe(false);
+    });
+
+    it('SES-INTERP-002: can enable interpolation', () => {
+      session.interpolationEnabled = true;
+      expect(session.interpolationEnabled).toBe(true);
+    });
+
+    it('SES-INTERP-003: can disable interpolation', () => {
+      session.interpolationEnabled = true;
+      session.interpolationEnabled = false;
+      expect(session.interpolationEnabled).toBe(false);
+    });
+
+    it('SES-INTERP-004: emits interpolationEnabledChanged event', () => {
+      const handler = vi.fn();
+      session.on('interpolationEnabledChanged', handler);
+      session.interpolationEnabled = true;
+      expect(handler).toHaveBeenCalledWith(true);
+      session.interpolationEnabled = false;
+      expect(handler).toHaveBeenCalledWith(false);
+    });
+
+    it('SES-INTERP-005: does not emit when value unchanged', () => {
+      const handler = vi.fn();
+      session.on('interpolationEnabledChanged', handler);
+      session.interpolationEnabled = false; // Already false
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('SES-INTERP-006: subFramePosition is null by default', () => {
+      expect(session.subFramePosition).toBeNull();
+    });
+
+    it('SES-INTERP-007: disabling clears subFramePosition', () => {
+      session.interpolationEnabled = true;
+      // SubFramePosition is managed internally by update(), so it starts null
+      session.interpolationEnabled = false;
+      expect(session.subFramePosition).toBeNull();
+    });
+
+    it('SES-INTERP-008: emits subFramePositionChanged null when disabling', () => {
+      session.interpolationEnabled = true;
+      const handler = vi.fn();
+      session.on('subFramePositionChanged', handler);
+      session.interpolationEnabled = false;
+      expect(handler).toHaveBeenCalledWith(null);
     });
   });
 });

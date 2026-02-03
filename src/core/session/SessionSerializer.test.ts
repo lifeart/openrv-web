@@ -517,6 +517,8 @@ function createMockComponents(): SessionComponents {
       getStackLayers: vi.fn().mockReturnValue([]),
       getLUT: vi.fn().mockReturnValue(undefined),
       getLUTIntensity: vi.fn().mockReturnValue(1.0),
+      getPARState: vi.fn().mockReturnValue({ enabled: false, par: 1.0, preset: 'square' }),
+      getBackgroundPatternState: vi.fn().mockReturnValue({ pattern: 'black', checkerSize: 'medium', customColor: '#1a1a1a' }),
       setColorAdjustments: vi.fn(),
       setCDL: vi.fn(),
       setFilterSettings: vi.fn(),
@@ -526,6 +528,8 @@ function createMockComponents(): SessionComponents {
       setWipeState: vi.fn(),
       setStackLayers: vi.fn(),
       setLUTIntensity: vi.fn(),
+      setPARState: vi.fn(),
+      setBackgroundPatternState: vi.fn(),
       setZoom: vi.fn(),
       setPan: vi.fn()
     }

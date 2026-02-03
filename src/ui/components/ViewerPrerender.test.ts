@@ -14,6 +14,7 @@ import { ColorCurvesData } from '../../color/ColorCurves';
 import { ChannelMode } from './ChannelSelect';
 import { ColorWheels } from './ColorWheels';
 import { HSLQualifier } from './HSLQualifier';
+import { ToneMappingState, DEFAULT_TONE_MAPPING_STATE } from './ToneMappingControl';
 
 // Mock image element
 function createMockImage(): HTMLImageElement {
@@ -82,6 +83,7 @@ function createDefaultColorAdjustments(): ColorAdjustments {
     vibrance: 0,
     vibranceSkinProtection: true,
     clarity: 0,
+    hueRotation: 0,
     temperature: 0,
     tint: 0,
     highlights: 0,
@@ -144,6 +146,11 @@ function createMockHSLQualifier(): HSLQualifier {
       luminance: { low: 0, high: 1 },
     }),
   } as unknown as HSLQualifier;
+}
+
+// Create default tone mapping state
+function createDefaultToneMappingState(): ToneMappingState {
+  return { ...DEFAULT_TONE_MAPPING_STATE };
 }
 
 // Create mock PrerenderBufferManager
@@ -321,6 +328,7 @@ describe('ViewerPrerender', () => {
       const channelMode: ChannelMode = 'rgb';
       const colorWheels = createMockColorWheels();
       const hslQualifier = createMockHSLQualifier();
+      const toneMappingState = createDefaultToneMappingState();
 
       const result = buildEffectsState(
         colorAdjustments,
@@ -329,7 +337,8 @@ describe('ViewerPrerender', () => {
         filterSettings,
         channelMode,
         colorWheels,
-        hslQualifier
+        hslQualifier,
+        toneMappingState
       );
 
       expect(result.colorAdjustments).toEqual(colorAdjustments);
@@ -338,6 +347,7 @@ describe('ViewerPrerender', () => {
       expect(result.channelMode).toBe('rgb');
       expect(colorWheels.getState).toHaveBeenCalled();
       expect(hslQualifier.getState).toHaveBeenCalled();
+      expect(result.toneMappingState).toEqual(toneMappingState);
     });
 
     it('should create deep copy of color adjustments', () => {
@@ -351,7 +361,8 @@ describe('ViewerPrerender', () => {
         createDefaultFilterSettings(),
         'rgb',
         createMockColorWheels(),
-        createMockHSLQualifier()
+        createMockHSLQualifier(),
+        createDefaultToneMappingState()
       );
 
       // Modify original - should not affect result
@@ -370,7 +381,8 @@ describe('ViewerPrerender', () => {
         createDefaultFilterSettings(),
         'rgb',
         createMockColorWheels(),
-        createMockHSLQualifier()
+        createMockHSLQualifier(),
+        createDefaultToneMappingState()
       );
 
       // Modify original - should not affect result
@@ -389,7 +401,8 @@ describe('ViewerPrerender', () => {
         createDefaultFilterSettings(),
         'rgb',
         createMockColorWheels(),
-        createMockHSLQualifier()
+        createMockHSLQualifier(),
+        createDefaultToneMappingState()
       );
 
       // Modify original - should not affect result
@@ -408,11 +421,31 @@ describe('ViewerPrerender', () => {
           createDefaultFilterSettings(),
           mode,
           createMockColorWheels(),
-          createMockHSLQualifier()
+          createMockHSLQualifier(),
+          createDefaultToneMappingState()
         );
 
         expect(result.channelMode).toBe(mode);
       }
+    });
+
+    it('should create deep copy of tone mapping state', () => {
+      const toneMappingState: ToneMappingState = { enabled: true, operator: 'reinhard' };
+
+      const result = buildEffectsState(
+        createDefaultColorAdjustments(),
+        createDefaultCDLValues(),
+        createDefaultCurvesData(),
+        createDefaultFilterSettings(),
+        'rgb',
+        createMockColorWheels(),
+        createMockHSLQualifier(),
+        toneMappingState
+      );
+
+      // Modify original - should not affect result
+      toneMappingState.operator = 'aces';
+      expect(result.toneMappingState.operator).toBe('reinhard');
     });
   });
 

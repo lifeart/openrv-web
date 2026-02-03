@@ -161,6 +161,11 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyH',
     description: 'Toggle histogram'
   },
+  'panel.ocio': {
+    code: 'KeyO',
+    shift: true,
+    description: 'Toggle OCIO color management panel'
+  },
 
   // Transform controls
   'transform.rotateLeft': {
@@ -286,6 +291,11 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     ctrl: true,
     description: 'Toggle ghost frames (onion skin)'
   },
+  'view.togglePAR': {
+    code: 'KeyP',
+    shift: true,
+    description: 'Toggle pixel aspect ratio correction'
+  },
   'paint.toggleHold': {
     code: 'KeyX',
     description: 'Toggle hold mode'
@@ -392,6 +402,14 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     description: 'Toggle spotlight focus tool'
   },
 
+  // Tone mapping for HDR content
+  'view.toggleToneMapping': {
+    code: 'KeyJ',
+    shift: true,
+    alt: true,
+    description: 'Toggle tone mapping for HDR content'
+  },
+
   // HSL Qualifier (secondary color correction)
   'color.toggleHSLQualifier': {
     code: 'KeyH',
@@ -451,6 +469,44 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyT',
     shift: true,
     description: 'Cycle theme'
+  },
+
+  // Background pattern
+  'view.cycleBackgroundPattern': {
+    code: 'KeyB',
+    shift: true,
+    description: 'Cycle background pattern (Black/Grey18/Grey50/Checker)'
+  },
+  'view.toggleCheckerboard': {
+    code: 'KeyB',
+    shift: true,
+    alt: true,
+    description: 'Toggle checkerboard background on/off'
+  },
+
+  // Fullscreen / Presentation mode
+  'view.toggleFullscreen': {
+    code: 'F11',
+    description: 'Toggle fullscreen mode'
+  },
+  'view.togglePresentation': {
+    code: 'KeyP',
+    shift: true,
+    ctrl: true,
+    description: 'Toggle presentation mode'
+  },
+
+  // Network Sync
+  'network.togglePanel': {
+    code: 'KeyN',
+    shift: true,
+    description: 'Toggle network sync panel'
+  },
+  'network.disconnect': {
+    code: 'KeyN',
+    shift: true,
+    ctrl: true,
+    description: 'Quick disconnect from sync room'
   },
 };
 /**

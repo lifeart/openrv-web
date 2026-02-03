@@ -14,6 +14,32 @@ export interface CropState {
   aspectRatio: string | null;  // null = free, "16:9", "4:3", "1:1", etc.
 }
 
+/** Padding mode for uncrop: uniform applies same padding on all sides, per-side allows individual control */
+export type UncropPaddingMode = 'uniform' | 'per-side';
+
+/** Canvas extension (uncrop) state - allows the image to be inset into a larger virtual canvas */
+export interface UncropState {
+  enabled: boolean;
+  paddingMode: UncropPaddingMode;
+  /** Uniform padding in pixels (used when paddingMode is 'uniform') */
+  padding: number;
+  /** Per-side padding in pixels (used when paddingMode is 'per-side') */
+  paddingTop: number;
+  paddingRight: number;
+  paddingBottom: number;
+  paddingLeft: number;
+}
+
+export const DEFAULT_UNCROP_STATE: UncropState = {
+  enabled: false,
+  paddingMode: 'uniform',
+  padding: 0,
+  paddingTop: 0,
+  paddingRight: 0,
+  paddingBottom: 0,
+  paddingLeft: 0,
+};
+
 export const DEFAULT_CROP_REGION: CropRegion = {
   x: 0,
   y: 0,
@@ -31,6 +57,7 @@ export interface CropControlEvents extends EventMap {
   cropStateChanged: CropState;
   cropModeToggled: boolean;
   panelToggled: boolean;
+  uncropStateChanged: UncropState;
 }
 
 export const ASPECT_RATIOS: { label: string; value: string | null; ratio: number | null }[] = [
@@ -45,12 +72,22 @@ export const ASPECT_RATIOS: { label: string; value: string | null; ratio: number
 /** Minimum crop region fraction (5% of image dimension) */
 export const MIN_CROP_FRACTION = 0.05;
 
+/** Maximum allowed uncrop padding in pixels per side */
+export const MAX_UNCROP_PADDING = 2000;
+
+/** Clamp a padding value to the valid range [0, MAX_UNCROP_PADDING] */
+function clampPadding(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(MAX_UNCROP_PADDING, Math.round(value)));
+}
+
 export class CropControl extends EventEmitter<CropControlEvents> {
   private container: HTMLElement;
   private cropButton: HTMLButtonElement;
   private panel: HTMLElement;
   private isPanelOpen = false;
   private state: CropState = { ...DEFAULT_CROP_STATE };
+  private uncropState: UncropState = { ...DEFAULT_UNCROP_STATE };
 
   // Source dimensions for correct aspect ratio computation in normalized coords
   private sourceWidth = 1;
@@ -60,6 +97,18 @@ export class CropControl extends EventEmitter<CropControlEvents> {
   private toggleSwitch: HTMLButtonElement | null = null;
   private dimensionsLabel: HTMLElement | null = null;
   private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
+
+  // Uncrop UI elements
+  private uncropToggleSwitch: HTMLButtonElement | null = null;
+  private uncropPaddingModeSelect: HTMLSelectElement | null = null;
+  private uncropUniformInput: HTMLInputElement | null = null;
+  private uncropTopInput: HTMLInputElement | null = null;
+  private uncropRightInput: HTMLInputElement | null = null;
+  private uncropBottomInput: HTMLInputElement | null = null;
+  private uncropLeftInput: HTMLInputElement | null = null;
+  private uncropPerSideContainer: HTMLElement | null = null;
+  private uncropUniformContainer: HTMLElement | null = null;
+  private uncropCanvasLabel: HTMLElement | null = null;
 
   constructor() {
     super();
@@ -305,12 +354,342 @@ export class CropControl extends EventEmitter<CropControlEvents> {
     `;
     instructions.textContent = 'Drag on the image to set crop region. Hold Shift to constrain aspect ratio.';
     this.panel.appendChild(instructions);
+
+    // --- Uncrop / Canvas Extension Section ---
+    this.createUncropSection();
+  }
+
+  private createUncropSection(): void {
+    // Divider
+    const divider = document.createElement('div');
+    divider.style.cssText = `
+      height: 1px;
+      background: var(--border-primary);
+      margin: 12px 0;
+    `;
+    this.panel.appendChild(divider);
+
+    // Section title
+    const sectionTitle = document.createElement('div');
+    sectionTitle.textContent = 'Canvas Extension (Uncrop)';
+    sectionTitle.style.cssText = 'color: var(--text-primary); font-size: 12px; font-weight: 500; margin-bottom: 8px;';
+    this.panel.appendChild(sectionTitle);
+
+    // Enable toggle
+    const uncropToggleRow = document.createElement('div');
+    uncropToggleRow.style.cssText = `
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    `;
+
+    const uncropLabel = document.createElement('span');
+    uncropLabel.textContent = 'Enable Uncrop';
+    uncropLabel.style.cssText = 'color: var(--text-secondary); font-size: 12px;';
+
+    this.uncropToggleSwitch = document.createElement('button');
+    this.uncropToggleSwitch.dataset.testid = 'uncrop-toggle';
+    this.uncropToggleSwitch.setAttribute('role', 'switch');
+    this.uncropToggleSwitch.setAttribute('aria-checked', String(this.uncropState.enabled));
+    this.uncropToggleSwitch.setAttribute('aria-label', 'Enable Canvas Extension');
+    this.uncropToggleSwitch.textContent = this.uncropState.enabled ? 'ON' : 'OFF';
+    this.uncropToggleSwitch.style.cssText = `
+      background: ${this.uncropState.enabled ? 'var(--accent-primary)' : 'var(--border-secondary)'};
+      border: none;
+      color: #fff;
+      padding: 4px 12px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 11px;
+      min-width: 40px;
+      transition: background 0.15s ease;
+    `;
+    this.uncropToggleSwitch.addEventListener('click', () => {
+      this.uncropState.enabled = !this.uncropState.enabled;
+      this.syncUncropToggle();
+      this.emitUncropChange();
+    });
+
+    uncropToggleRow.appendChild(uncropLabel);
+    uncropToggleRow.appendChild(this.uncropToggleSwitch);
+    this.panel.appendChild(uncropToggleRow);
+
+    // Padding mode selector
+    const modeRow = document.createElement('div');
+    modeRow.style.cssText = 'margin-bottom: 8px;';
+
+    const modeLabel = document.createElement('div');
+    modeLabel.textContent = 'Padding Mode';
+    modeLabel.style.cssText = 'color: var(--text-secondary); font-size: 12px; margin-bottom: 4px;';
+
+    this.uncropPaddingModeSelect = document.createElement('select');
+    this.uncropPaddingModeSelect.dataset.testid = 'uncrop-padding-mode';
+    this.uncropPaddingModeSelect.setAttribute('aria-label', 'Padding Mode');
+    this.uncropPaddingModeSelect.style.cssText = `
+      width: 100%;
+      background: var(--border-primary);
+      border: 1px solid var(--border-secondary);
+      color: var(--text-primary);
+      padding: 6px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+    `;
+
+    const uniformOpt = document.createElement('option');
+    uniformOpt.value = 'uniform';
+    uniformOpt.textContent = 'Uniform';
+    this.uncropPaddingModeSelect.appendChild(uniformOpt);
+
+    const perSideOpt = document.createElement('option');
+    perSideOpt.value = 'per-side';
+    perSideOpt.textContent = 'Per Side';
+    this.uncropPaddingModeSelect.appendChild(perSideOpt);
+
+    this.uncropPaddingModeSelect.value = this.uncropState.paddingMode;
+    this.uncropPaddingModeSelect.addEventListener('change', () => {
+      this.uncropState.paddingMode = this.uncropPaddingModeSelect!.value as UncropPaddingMode;
+      this.syncUncropPaddingVisibility();
+      this.emitUncropChange();
+    });
+
+    modeRow.appendChild(modeLabel);
+    modeRow.appendChild(this.uncropPaddingModeSelect);
+    this.panel.appendChild(modeRow);
+
+    // Uniform padding input
+    this.uncropUniformContainer = document.createElement('div');
+    this.uncropUniformContainer.dataset.testid = 'uncrop-uniform-container';
+    this.uncropUniformContainer.style.cssText = 'margin-bottom: 8px;';
+
+    const uniformLabel = document.createElement('div');
+    uniformLabel.textContent = 'Padding (px)';
+    uniformLabel.style.cssText = 'color: var(--text-secondary); font-size: 12px; margin-bottom: 4px;';
+
+    this.uncropUniformInput = document.createElement('input');
+    this.uncropUniformInput.type = 'number';
+    this.uncropUniformInput.min = '0';
+    this.uncropUniformInput.max = String(MAX_UNCROP_PADDING);
+    this.uncropUniformInput.step = '10';
+    this.uncropUniformInput.value = String(this.uncropState.padding);
+    this.uncropUniformInput.dataset.testid = 'uncrop-uniform-padding';
+    this.uncropUniformInput.setAttribute('aria-label', 'Uniform padding in pixels');
+    this.uncropUniformInput.style.cssText = `
+      width: 100%;
+      background: var(--border-primary);
+      border: 1px solid var(--border-secondary);
+      color: var(--text-primary);
+      padding: 6px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      box-sizing: border-box;
+    `;
+    this.uncropUniformInput.addEventListener('input', () => {
+      const val = clampPadding(parseInt(this.uncropUniformInput!.value, 10) || 0);
+      this.uncropState.padding = val;
+      // Sync the displayed value if it was clamped (e.g. negative or above max)
+      if (this.uncropUniformInput!.value !== String(val)) {
+        this.uncropUniformInput!.value = String(val);
+      }
+      this.updateUncropCanvasLabel();
+      this.emitUncropChange();
+    });
+
+    this.uncropUniformContainer.appendChild(uniformLabel);
+    this.uncropUniformContainer.appendChild(this.uncropUniformInput);
+    this.panel.appendChild(this.uncropUniformContainer);
+
+    // Per-side padding inputs
+    this.uncropPerSideContainer = document.createElement('div');
+    this.uncropPerSideContainer.dataset.testid = 'uncrop-perside-container';
+    this.uncropPerSideContainer.style.cssText = 'margin-bottom: 8px; display: none;';
+
+    const createSideInput = (label: string, testId: string, initialValue: number): HTMLInputElement => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px;';
+
+      const lbl = document.createElement('span');
+      lbl.textContent = label;
+      lbl.style.cssText = 'color: var(--text-secondary); font-size: 11px; min-width: 50px;';
+
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.min = '0';
+      input.max = String(MAX_UNCROP_PADDING);
+      input.step = '10';
+      input.value = String(initialValue);
+      input.dataset.testid = testId;
+      input.setAttribute('aria-label', `${label} padding in pixels`);
+      input.style.cssText = `
+        width: 80px;
+        background: var(--border-primary);
+        border: 1px solid var(--border-secondary);
+        color: var(--text-primary);
+        padding: 4px 6px;
+        border-radius: 4px;
+        font-size: 11px;
+        box-sizing: border-box;
+      `;
+
+      row.appendChild(lbl);
+      row.appendChild(input);
+      this.uncropPerSideContainer!.appendChild(row);
+      return input;
+    };
+
+    this.uncropTopInput = createSideInput('Top', 'uncrop-padding-top', this.uncropState.paddingTop);
+    this.uncropRightInput = createSideInput('Right', 'uncrop-padding-right', this.uncropState.paddingRight);
+    this.uncropBottomInput = createSideInput('Bottom', 'uncrop-padding-bottom', this.uncropState.paddingBottom);
+    this.uncropLeftInput = createSideInput('Left', 'uncrop-padding-left', this.uncropState.paddingLeft);
+
+    const perSideInputHandler = () => {
+      this.uncropState.paddingTop = clampPadding(parseInt(this.uncropTopInput!.value, 10) || 0);
+      this.uncropState.paddingRight = clampPadding(parseInt(this.uncropRightInput!.value, 10) || 0);
+      this.uncropState.paddingBottom = clampPadding(parseInt(this.uncropBottomInput!.value, 10) || 0);
+      this.uncropState.paddingLeft = clampPadding(parseInt(this.uncropLeftInput!.value, 10) || 0);
+      // Sync displayed values if they were clamped
+      if (this.uncropTopInput!.value !== String(this.uncropState.paddingTop)) {
+        this.uncropTopInput!.value = String(this.uncropState.paddingTop);
+      }
+      if (this.uncropRightInput!.value !== String(this.uncropState.paddingRight)) {
+        this.uncropRightInput!.value = String(this.uncropState.paddingRight);
+      }
+      if (this.uncropBottomInput!.value !== String(this.uncropState.paddingBottom)) {
+        this.uncropBottomInput!.value = String(this.uncropState.paddingBottom);
+      }
+      if (this.uncropLeftInput!.value !== String(this.uncropState.paddingLeft)) {
+        this.uncropLeftInput!.value = String(this.uncropState.paddingLeft);
+      }
+      this.updateUncropCanvasLabel();
+      this.emitUncropChange();
+    };
+    this.uncropTopInput.addEventListener('input', perSideInputHandler);
+    this.uncropRightInput.addEventListener('input', perSideInputHandler);
+    this.uncropBottomInput.addEventListener('input', perSideInputHandler);
+    this.uncropLeftInput.addEventListener('input', perSideInputHandler);
+
+    this.panel.appendChild(this.uncropPerSideContainer);
+
+    // Canvas dimensions label
+    this.uncropCanvasLabel = document.createElement('div');
+    this.uncropCanvasLabel.dataset.testid = 'uncrop-canvas-dimensions';
+    this.uncropCanvasLabel.style.cssText = `
+      color: var(--text-secondary);
+      font-size: 11px;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+      margin-bottom: 4px;
+    `;
+    this.updateUncropCanvasLabel();
+    this.panel.appendChild(this.uncropCanvasLabel);
+
+    // Reset uncrop button
+    const resetUncropBtn = document.createElement('button');
+    resetUncropBtn.textContent = 'Reset Uncrop';
+    resetUncropBtn.dataset.testid = 'uncrop-reset';
+    resetUncropBtn.style.cssText = `
+      width: 100%;
+      background: var(--border-secondary);
+      border: none;
+      color: var(--text-primary);
+      padding: 6px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+    `;
+    resetUncropBtn.addEventListener('click', () => this.resetUncrop());
+    resetUncropBtn.addEventListener('mouseenter', () => { resetUncropBtn.style.background = 'var(--text-muted)'; });
+    resetUncropBtn.addEventListener('mouseleave', () => { resetUncropBtn.style.background = 'var(--border-secondary)'; });
+    this.panel.appendChild(resetUncropBtn);
+
+    // Initial visibility sync
+    this.syncUncropPaddingVisibility();
+  }
+
+  private syncUncropToggle(): void {
+    if (this.uncropToggleSwitch) {
+      this.uncropToggleSwitch.textContent = this.uncropState.enabled ? 'ON' : 'OFF';
+      this.uncropToggleSwitch.style.background = this.uncropState.enabled ? 'var(--accent-primary)' : 'var(--border-secondary)';
+      this.uncropToggleSwitch.setAttribute('aria-checked', String(this.uncropState.enabled));
+    }
+  }
+
+  private syncUncropPaddingVisibility(): void {
+    if (this.uncropUniformContainer && this.uncropPerSideContainer) {
+      if (this.uncropState.paddingMode === 'uniform') {
+        this.uncropUniformContainer.style.display = 'block';
+        this.uncropPerSideContainer.style.display = 'none';
+      } else {
+        this.uncropUniformContainer.style.display = 'none';
+        this.uncropPerSideContainer.style.display = 'block';
+      }
+    }
+  }
+
+  private syncUncropInputs(): void {
+    if (this.uncropUniformInput) {
+      this.uncropUniformInput.value = String(this.uncropState.padding);
+    }
+    if (this.uncropTopInput) this.uncropTopInput.value = String(this.uncropState.paddingTop);
+    if (this.uncropRightInput) this.uncropRightInput.value = String(this.uncropState.paddingRight);
+    if (this.uncropBottomInput) this.uncropBottomInput.value = String(this.uncropState.paddingBottom);
+    if (this.uncropLeftInput) this.uncropLeftInput.value = String(this.uncropState.paddingLeft);
+    if (this.uncropPaddingModeSelect) {
+      this.uncropPaddingModeSelect.value = this.uncropState.paddingMode;
+    }
+    this.syncUncropPaddingVisibility();
+    this.syncUncropToggle();
+    this.updateUncropCanvasLabel();
+  }
+
+  private updateUncropCanvasLabel(): void {
+    if (!this.uncropCanvasLabel) return;
+    const dims = this.getUncropCanvasDimensions();
+    this.uncropCanvasLabel.textContent = `Canvas: ${dims.width} x ${dims.height} px`;
+  }
+
+  private emitUncropChange(): void {
+    this.updateUncropCanvasLabel();
+    this.emit('uncropStateChanged', { ...this.uncropState });
+  }
+
+  /**
+   * Calculate the effective padding values in pixels based on the current mode.
+   */
+  getEffectivePadding(): { top: number; right: number; bottom: number; left: number } {
+    if (this.uncropState.paddingMode === 'uniform') {
+      const p = this.uncropState.padding;
+      return { top: p, right: p, bottom: p, left: p };
+    }
+    return {
+      top: this.uncropState.paddingTop,
+      right: this.uncropState.paddingRight,
+      bottom: this.uncropState.paddingBottom,
+      left: this.uncropState.paddingLeft,
+    };
+  }
+
+  /**
+   * Calculate the total canvas dimensions when uncrop is applied.
+   * Returns source dimensions plus padding on all sides.
+   */
+  getUncropCanvasDimensions(): { width: number; height: number } {
+    if (!this.uncropState.enabled) {
+      return { width: Math.round(this.sourceWidth), height: Math.round(this.sourceHeight) };
+    }
+    const pad = this.getEffectivePadding();
+    return {
+      width: Math.round(this.sourceWidth + pad.left + pad.right),
+      height: Math.round(this.sourceHeight + pad.top + pad.bottom),
+    };
   }
 
   setSourceDimensions(width: number, height: number): void {
     this.sourceWidth = (Number.isFinite(width) && width > 0) ? width : 1;
     this.sourceHeight = (Number.isFinite(height) && height > 0) ? height : 1;
     this.updateDimensionsLabel();
+    this.updateUncropCanvasLabel();
   }
 
   private applyAspectRatio(): void {
@@ -495,6 +874,9 @@ export class CropControl extends EventEmitter<CropControlEvents> {
     this.syncToggleSwitch();
     this.updateButtonState();
     this.emitChange();
+
+    // Also reset uncrop
+    this.resetUncrop();
   }
 
   /**
@@ -532,6 +914,38 @@ export class CropControl extends EventEmitter<CropControlEvents> {
 
   getCropState(): CropState {
     return { ...this.state, region: { ...this.state.region } };
+  }
+
+  // --- Uncrop public API ---
+
+  getUncropState(): UncropState {
+    return { ...this.uncropState };
+  }
+
+  setUncropState(state: UncropState): void {
+    this.uncropState = {
+      enabled: state.enabled,
+      paddingMode: state.paddingMode,
+      padding: clampPadding(state.padding),
+      paddingTop: clampPadding(state.paddingTop),
+      paddingRight: clampPadding(state.paddingRight),
+      paddingBottom: clampPadding(state.paddingBottom),
+      paddingLeft: clampPadding(state.paddingLeft),
+    };
+    this.syncUncropInputs();
+    this.emitUncropChange();
+  }
+
+  toggleUncrop(): void {
+    this.uncropState.enabled = !this.uncropState.enabled;
+    this.syncUncropToggle();
+    this.emitUncropChange();
+  }
+
+  resetUncrop(): void {
+    this.uncropState = { ...DEFAULT_UNCROP_STATE };
+    this.syncUncropInputs();
+    this.emitUncropChange();
   }
 
   getAspectRatio(): number | null {

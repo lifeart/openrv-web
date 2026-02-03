@@ -7,7 +7,7 @@
 
 import { EventEmitter, EventMap } from '../../../utils/EventEmitter';
 import { Session, LoopMode, PLAYBACK_SPEED_PRESETS } from '../../../core/session/Session';
-import { filterImageFiles } from '../../../utils/SequenceLoader';
+import { filterImageFiles, inferSequenceFromSingleFile, getBestSequence } from '../../../utils/SequenceLoader';
 import { VolumeControl } from '../VolumeControl';
 import { ExportControl } from '../ExportControl';
 import { TimecodeDisplay } from '../TimecodeDisplay';
@@ -21,6 +21,8 @@ export interface HeaderBarEvents extends EventMap {
   fileLoaded: void;
   saveProject: void;
   openProject: File;
+  fullscreenToggle: void;
+  presentationToggle: void;
 }
 
 export class HeaderBar extends EventEmitter<HeaderBarEvents> {
@@ -39,6 +41,9 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private projectInput!: HTMLInputElement;
   private sessionNameDisplay!: HTMLElement;
   private autoSaveSlot!: HTMLElement;
+  private networkSlot!: HTMLElement;
+  private fullscreenButton!: HTMLButtonElement;
+  private presentationButton!: HTMLButtonElement;
 
   constructor(session: Session) {
     super();
@@ -160,6 +165,22 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
     // === UTILITY GROUP ===
     const utilityGroup = this.createGroup();
+
+    // Network sync slot (populated by App.ts)
+    this.networkSlot = document.createElement('div');
+    this.networkSlot.dataset.testid = 'network-slot';
+    this.networkSlot.style.cssText = 'display: flex; align-items: center;';
+    utilityGroup.appendChild(this.networkSlot);
+
+    // Presentation mode button
+    this.presentationButton = this.createIconButton('monitor', '', () => this.emit('presentationToggle', undefined), 'Presentation Mode (Ctrl+Shift+P)');
+    this.presentationButton.dataset.testid = 'presentation-mode-button';
+    utilityGroup.appendChild(this.presentationButton);
+
+    // Fullscreen button
+    this.fullscreenButton = this.createIconButton('maximize', '', () => this.emit('fullscreenToggle', undefined), 'Fullscreen (F11)');
+    this.fullscreenButton.dataset.testid = 'fullscreen-toggle-button';
+    utilityGroup.appendChild(this.fullscreenButton);
 
     // Volume control
     utilityGroup.appendChild(this.volumeControl.render());
@@ -309,6 +330,9 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       'skip-forward': '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,4 15,12 5,20"/><line x1="19" y1="4" x2="19" y2="20" stroke="currentColor" stroke-width="2"/></svg>',
       'help': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
       'keyboard': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"/><path d="m6 8h.01"/><path d="m10 8h.01"/><path d="m14 8h.01"/><path d="m18 8h.01"/><path d="m8 12h.01"/><path d="m12 12h.01"/><path d="m16 12h.01"/><path d="m7 16h10"/></svg>',
+      'maximize': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>',
+      'minimize': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>',
+      'monitor': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
     };
     return icons[name] || '';
   }
@@ -511,6 +535,48 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       menu.appendChild(item);
     }
 
+    // Separator before pitch correction toggle
+    const separator = document.createElement('div');
+    separator.style.cssText = `
+      height: 1px;
+      background: var(--border-primary);
+      margin: 4px 0;
+    `;
+    menu.appendChild(separator);
+
+    // Pitch correction toggle
+    const pitchItem = document.createElement('button');
+    pitchItem.dataset.testid = 'pitch-correction-toggle';
+    const pitchEnabled = this.session.preservesPitch;
+    pitchItem.textContent = `${pitchEnabled ? '\u2713 ' : '  '}Preserve Pitch`;
+    pitchItem.style.cssText = `
+      display: block;
+      width: 100%;
+      padding: 6px 12px;
+      background: transparent;
+      color: var(--text-primary);
+      border: none;
+      text-align: left;
+      cursor: pointer;
+      font-size: 12px;
+      font-family: monospace;
+    `;
+
+    pitchItem.addEventListener('mouseenter', () => {
+      pitchItem.style.background = 'var(--bg-hover)';
+    });
+
+    pitchItem.addEventListener('mouseleave', () => {
+      pitchItem.style.background = 'transparent';
+    });
+
+    pitchItem.addEventListener('click', () => {
+      this.session.preservesPitch = !this.session.preservesPitch;
+      removeMenu();
+    });
+
+    menu.appendChild(pitchItem);
+
     // Position the menu below the button
     const rect = anchor.getBoundingClientRect();
     menu.style.left = `${rect.left}px`;
@@ -655,16 +721,40 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Check if multiple image files were selected - treat as sequence
     const imageFiles = filterImageFiles(fileArray);
     if (imageFiles.length > 1) {
+      // Try to find the best sequence from the selected files
+      const bestSequence = getBestSequence(imageFiles);
+      if (bestSequence && bestSequence.length > 1) {
+        try {
+          await this.session.loadSequence(bestSequence);
+          this.emit('fileLoaded', undefined);
+          input.value = '';
+          return;
+        } catch (err) {
+          console.error('Failed to load sequence:', err);
+          showAlert(`Failed to load sequence: ${err}`, { type: 'error', title: 'Load Error' });
+          input.value = '';
+          return;
+        }
+      }
+    }
+
+    // Single image file - try to infer a sequence from available files
+    if (imageFiles.length === 1) {
+      const singleFile = imageFiles[0]!;
       try {
-        await this.session.loadSequence(imageFiles);
-        this.emit('fileLoaded', undefined);
-        input.value = '';
-        return;
+        // Try to infer sequence from the single file and all available files
+        const sequenceInfo = await inferSequenceFromSingleFile(singleFile, fileArray);
+        if (sequenceInfo) {
+          // Successfully inferred a sequence
+          const sequenceFiles = sequenceInfo.frames.map(f => f.file);
+          await this.session.loadSequence(sequenceFiles);
+          this.emit('fileLoaded', undefined);
+          input.value = '';
+          return;
+        }
       } catch (err) {
-        console.error('Failed to load sequence:', err);
-        showAlert(`Failed to load sequence: ${err}`, { type: 'error', title: 'Load Error' });
-        input.value = '';
-        return;
+        console.error('Failed to infer sequence:', err);
+        // Fall through to single file loading
       }
     }
 
@@ -739,9 +829,42 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   }
 
   /**
+   * Set the network control element to display in the header utility group
+   */
+  setNetworkControl(element: HTMLElement): void {
+    this.networkSlot.innerHTML = '';
+    this.networkSlot.appendChild(element);
+  }
+
+  /**
    * Get the auto-save indicator slot element
    */
   getAutoSaveSlot(): HTMLElement {
     return this.autoSaveSlot;
+  }
+
+  /**
+   * Update the fullscreen button icon based on fullscreen state
+   */
+  setFullscreenState(isFullscreen: boolean): void {
+    const icon = isFullscreen ? 'minimize' : 'maximize';
+    const tooltip = isFullscreen ? 'Exit Fullscreen (Esc)' : 'Fullscreen (F11)';
+    this.fullscreenButton.innerHTML = this.getIcon(icon);
+    this.fullscreenButton.title = tooltip;
+  }
+
+  /**
+   * Update the presentation mode button active state
+   */
+  setPresentationState(isEnabled: boolean): void {
+    if (isEnabled) {
+      this.presentationButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+      this.presentationButton.style.borderColor = 'var(--accent-primary)';
+      this.presentationButton.style.color = 'var(--accent-primary)';
+    } else {
+      this.presentationButton.style.background = 'transparent';
+      this.presentationButton.style.borderColor = 'transparent';
+      this.presentationButton.style.color = 'var(--text-secondary)';
+    }
   }
 }

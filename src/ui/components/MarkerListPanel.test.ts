@@ -409,4 +409,104 @@ describe('MarkerListPanel', () => {
       expect(panel.getState().visible).toBe(false);
     });
   });
+
+  describe('duration markers', () => {
+    it('MARK-U110: displays duration marker with frame range info', () => {
+      session.setMarker(10, 'Duration note', MARKER_COLORS[0], 25);
+      panel.show();
+      const entry = panel.getElement().querySelector('[data-testid="marker-entry-10"]');
+      expect(entry).not.toBeNull();
+      const frameInfo = entry?.querySelector('span');
+      expect(frameInfo?.textContent).toContain('Frames 10-25');
+      expect(frameInfo?.textContent).toContain('16f');
+    });
+
+    it('MARK-U111: duration marker has square color indicator', () => {
+      session.setMarker(10, '', MARKER_COLORS[0], 30);
+      panel.show();
+      const colorBtn = panel.getElement().querySelector('[data-testid="marker-color-10"]') as HTMLElement;
+      expect(colorBtn?.style.borderRadius).toBe('3px');
+    });
+
+    it('MARK-U112: point marker has round color indicator', () => {
+      session.setMarker(10, '', MARKER_COLORS[0]);
+      panel.show();
+      const colorBtn = panel.getElement().querySelector('[data-testid="marker-color-10"]') as HTMLElement;
+      expect(colorBtn?.style.borderRadius).toBe('50%');
+    });
+
+    it('MARK-U113: highlights duration marker when current frame is within range', () => {
+      session.setMarker(10, '', MARKER_COLORS[0], 30);
+      session.currentFrame = 20; // Within range 10-30
+      panel.show();
+      const entry = panel.getElement().querySelector('[data-testid="marker-entry-10"]') as HTMLElement;
+      expect(entry?.style.cssText).toContain('rgba(var(--accent-primary-rgb)');
+    });
+
+    it('MARK-U114: does not highlight duration marker when current frame is outside range', () => {
+      session.setMarker(10, '', MARKER_COLORS[0], 30);
+      session.currentFrame = 35; // Outside range 10-30
+      panel.show();
+      const entry = panel.getElement().querySelector('[data-testid="marker-entry-10"]') as HTMLElement;
+      expect(entry?.style.cssText).not.toContain('rgba(var(--accent-primary-rgb)');
+    });
+
+    it('MARK-U115: editing shows end frame input', () => {
+      session.setMarker(10, 'Test', MARKER_COLORS[0], 25);
+      panel.show();
+
+      const editBtn = panel.getElement().querySelector('[data-testid="marker-edit-10"]') as HTMLElement;
+      editBtn.click();
+
+      const endFrameInput = panel.getElement().querySelector('[data-testid="marker-endframe-input-10"]') as HTMLInputElement;
+      expect(endFrameInput).not.toBeNull();
+      expect(endFrameInput.value).toBe('25');
+    });
+
+    it('MARK-U116: editing shows empty end frame input for point marker', () => {
+      session.setMarker(10, 'Test', MARKER_COLORS[0]);
+      panel.show();
+
+      const editBtn = panel.getElement().querySelector('[data-testid="marker-edit-10"]') as HTMLElement;
+      editBtn.click();
+
+      const endFrameInput = panel.getElement().querySelector('[data-testid="marker-endframe-input-10"]') as HTMLInputElement;
+      expect(endFrameInput).not.toBeNull();
+      expect(endFrameInput.value).toBe('');
+    });
+
+    it('MARK-U117: saving with end frame converts point marker to duration marker', () => {
+      session.setMarker(10, 'Test', MARKER_COLORS[0]);
+      panel.show();
+
+      const editBtn = panel.getElement().querySelector('[data-testid="marker-edit-10"]') as HTMLElement;
+      editBtn.click();
+
+      const endFrameInput = panel.getElement().querySelector('[data-testid="marker-endframe-input-10"]') as HTMLInputElement;
+      endFrameInput.value = '30';
+
+      const saveBtn = panel.getElement().querySelector('[data-testid="marker-save-10"]') as HTMLElement;
+      saveBtn.click();
+
+      const marker = session.getMarker(10);
+      expect(marker?.endFrame).toBe(30);
+    });
+
+    it('MARK-U118: saving with cleared end frame converts duration to point marker', () => {
+      session.setMarker(10, 'Test', MARKER_COLORS[0], 25);
+      panel.show();
+
+      const editBtn = panel.getElement().querySelector('[data-testid="marker-edit-10"]') as HTMLElement;
+      editBtn.click();
+
+      const endFrameInput = panel.getElement().querySelector('[data-testid="marker-endframe-input-10"]') as HTMLInputElement;
+      endFrameInput.value = '';
+
+      const saveBtn = panel.getElement().querySelector('[data-testid="marker-save-10"]') as HTMLElement;
+      saveBtn.click();
+
+      const marker = session.getMarker(10);
+      expect(marker?.endFrame).toBeUndefined();
+    });
+  });
 });

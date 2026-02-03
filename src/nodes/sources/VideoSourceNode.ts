@@ -12,12 +12,25 @@ import type { EvalContext } from '../../core/graph/Graph';
 import { RegisterNode } from '../base/NodeFactory';
 import {
   MediabunnyFrameExtractor,
+  UnsupportedCodecException,
   type FrameResult,
 } from '../../utils/MediabunnyFrameExtractor';
 import { FramePreloadManager, type PreloadConfig } from '../../utils/FramePreloadManager';
+import type { CodecFamily, UnsupportedCodecError } from '../../utils/CodecUtils';
 
 /** Frame extraction mode */
 export type FrameExtractionMode = 'mediabunny' | 'html-video' | 'auto';
+
+/**
+ * Result of loading a video file
+ */
+export interface VideoLoadResult {
+  success: boolean;
+  useMediabunny: boolean;
+  codec?: string | null;
+  codecFamily?: CodecFamily;
+  unsupportedCodecError?: UnsupportedCodecError;
+}
 
 @RegisterNode('RVVideoSource')
 export class VideoSourceNode extends BaseSourceNode {
@@ -140,13 +153,18 @@ export class VideoSourceNode extends BaseSourceNode {
 
   /**
    * Try to initialize mediabunny frame extractor
+   * Returns VideoLoadResult with codec information
    */
-  private async tryInitMediabunny(file: File | Blob, fps: number): Promise<boolean> {
+  private async tryInitMediabunny(file: File | Blob, fps: number): Promise<VideoLoadResult> {
     // Check if WebCodecs is supported
     if (!MediabunnyFrameExtractor.isSupported()) {
       this.useMediabunny = false;
       this.properties.setValue('useMediabunny', false);
-      return false;
+      return {
+        success: true, // HTML video fallback is available
+        useMediabunny: false,
+        codec: null,
+      };
     }
 
     try {
@@ -164,8 +182,36 @@ export class VideoSourceNode extends BaseSourceNode {
       // Initialize preload manager with optimized config for video playback
       this.initPreloadManager(metadata.frameCount);
 
-      return true;
+      return {
+        success: true,
+        useMediabunny: true,
+        codec: metadata.codec,
+        codecFamily: metadata.codecFamily,
+      };
     } catch (error) {
+      // Check if this is an unsupported codec error
+      if (error instanceof UnsupportedCodecException) {
+        console.warn(
+          `Unsupported professional codec detected: ${error.codecError.codecInfo.displayName}`,
+          error.codecError.message
+        );
+        this.lastUnsupportedCodecError = error.codecError;
+        this.frameExtractor?.dispose();
+        this.frameExtractor = null;
+        this.useMediabunny = false;
+        this.properties.setValue('useMediabunny', false);
+        this.properties.setValue('codec', error.codec ?? 'unknown');
+
+        return {
+          success: false,
+          useMediabunny: false,
+          codec: error.codec,
+          codecFamily: error.codecFamily,
+          unsupportedCodecError: error.codecError,
+        };
+      }
+
+      // Generic error - try fallback
       console.warn(
         'Mediabunny initialization failed, using HTML video fallback:',
         error
@@ -176,7 +222,12 @@ export class VideoSourceNode extends BaseSourceNode {
       this.preloadManager = null;
       this.useMediabunny = false;
       this.properties.setValue('useMediabunny', false);
-      return false;
+
+      return {
+        success: true, // HTML video fallback may work
+        useMediabunny: false,
+        codec: null,
+      };
     }
   }
 
@@ -220,11 +271,16 @@ export class VideoSourceNode extends BaseSourceNode {
     );
   }
 
+  // Store last unsupported codec error for retrieval
+  private lastUnsupportedCodecError: UnsupportedCodecError | null = null;
+
   /**
    * Load from File object
+   * Returns VideoLoadResult with information about codec support
    */
-  async loadFile(file: File, fps: number = 24): Promise<void> {
+  async loadFile(file: File, fps: number = 24): Promise<VideoLoadResult> {
     this.file = file;
+    this.lastUnsupportedCodecError = null;
     const url = URL.createObjectURL(file);
 
     // Load HTML video first
@@ -232,8 +288,22 @@ export class VideoSourceNode extends BaseSourceNode {
 
     // Try mediabunny initialization
     if (this.extractionMode !== 'html-video') {
-      await this.tryInitMediabunny(file, fps);
+      const result = await this.tryInitMediabunny(file, fps);
+      return result;
     }
+
+    return {
+      success: true,
+      useMediabunny: false,
+      codec: null,
+    };
+  }
+
+  /**
+   * Get last unsupported codec error (if any)
+   */
+  getUnsupportedCodecError(): UnsupportedCodecError | null {
+    return this.lastUnsupportedCodecError;
   }
 
   /**

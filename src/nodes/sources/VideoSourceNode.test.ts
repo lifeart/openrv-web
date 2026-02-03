@@ -151,4 +151,15 @@ describe('VideoSourceNode', () => {
       vi.restoreAllMocks();
     });
   });
+
+  describe('codec error handling', () => {
+    it('VSN-009: getUnsupportedCodecError returns null initially', () => {
+      expect(node.getUnsupportedCodecError()).toBeNull();
+    });
+
+    it('VSN-010: has codec property', () => {
+      expect(node.properties.has('codec')).toBe(true);
+      expect(node.properties.getValue('codec')).toBe('');
+    });
+  });
 });

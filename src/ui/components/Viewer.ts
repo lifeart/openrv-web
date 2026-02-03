@@ -6,14 +6,14 @@ import { ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from './ColorControls';
 import { WipeState, WipeMode } from './WipeControl';
 import { Transform2D, DEFAULT_TRANSFORM } from './TransformControl';
 import { FilterSettings, DEFAULT_FILTER_SETTINGS } from './FilterControl';
-import { CropState, CropRegion, DEFAULT_CROP_STATE, DEFAULT_CROP_REGION, ASPECT_RATIOS, MIN_CROP_FRACTION } from './CropControl';
+import { CropState, CropRegion, DEFAULT_CROP_STATE, DEFAULT_CROP_REGION, ASPECT_RATIOS, MIN_CROP_FRACTION, UncropState, DEFAULT_UNCROP_STATE } from './CropControl';
 import { LUT3D } from '../../color/LUTLoader';
 import { WebGLLUTProcessor } from '../../color/WebGLLUT';
 import { CDLValues, DEFAULT_CDL, isDefaultCDL, applyCDLToImageData } from '../../color/CDL';
 import { ColorCurvesData, createDefaultCurvesData, isDefaultCurves, CurveLUTCache } from '../../color/ColorCurves';
 import { LensDistortionParams, DEFAULT_LENS_PARAMS, isDefaultLensParams, applyLensDistortion } from '../../transform/LensDistortion';
 import { ExportFormat, exportCanvas as doExportCanvas, copyCanvasToClipboard } from '../../utils/FrameExporter';
-import { filterImageFiles } from '../../utils/SequenceLoader';
+import { filterImageFiles, getBestSequence } from '../../utils/SequenceLoader';
 import { StackLayer } from './StackControl';
 import { compositeImageData, BlendMode } from '../../composite/BlendModes';
 import { showAlert } from './shared/Modal';
@@ -35,9 +35,10 @@ import { HSLQualifier } from './HSLQualifier';
 import { PrerenderBufferManager } from '../../utils/PrerenderBufferManager';
 import { getThemeManager } from '../../utils/ThemeManager';
 import { setupHiDPICanvas, resetCanvasFromHiDPI } from '../../utils/HiDPICanvas';
+import { getSharedOCIOProcessor } from '../../color/OCIOProcessor';
 
 // Extracted effect processing utilities
-import { applyHighlightsShadows, applyVibrance, applyClarity, applySharpenCPU } from './ViewerEffects';
+import { applyHighlightsShadows, applyVibrance, applyClarity, applySharpenCPU, applyToneMapping } from './ViewerEffects';
 import {
   createWipeUIElements,
   updateWipeLinePosition,
@@ -57,6 +58,10 @@ import {
   isSplitScreenMode,
 } from './ViewerSplitScreen';
 import { GhostFrameState, DEFAULT_GHOST_FRAME_STATE } from './GhostFrameControl';
+import { ToneMappingState, DEFAULT_TONE_MAPPING_STATE } from './ToneMappingControl';
+import { PARState, DEFAULT_PAR_STATE, isPARActive, calculatePARCorrectedWidth } from '../../utils/PixelAspectRatio';
+import { BackgroundPatternState, DEFAULT_BACKGROUND_PATTERN_STATE, drawBackgroundPattern, PATTERN_COLORS } from './BackgroundPatternControl';
+import { FrameInterpolator } from '../../utils/FrameInterpolator';
 import {
   PointerState,
   getCanvasPoint as getCanvasPointUtil,
@@ -67,6 +72,7 @@ import {
   isViewerContentElement as isViewerContentElementUtil,
   getPixelCoordinates,
   getPixelColor,
+  interpolateZoom,
 } from './ViewerInteraction';
 import {
   drawWithTransform as drawWithTransformUtil,
@@ -119,6 +125,17 @@ export class Viewer {
   private panX = 0;
   private panY = 0;
   private zoom = 1;
+
+  // Smooth zoom animation state
+  private zoomAnimationId: number | null = null;
+  private zoomAnimationStartTime = 0;
+  private zoomAnimationStartZoom = 1;
+  private zoomAnimationTargetZoom = 1;
+  private zoomAnimationDuration = 0;
+  private zoomAnimationStartPanX = 0;
+  private zoomAnimationStartPanY = 0;
+  private zoomAnimationTargetPanX = 0;
+  private zoomAnimationTargetPanY = 0;
 
   // Interaction state
   private isPanning = false;
@@ -197,6 +214,7 @@ export class Viewer {
 
   // Crop state
   private cropState: CropState = { ...DEFAULT_CROP_STATE, region: { ...DEFAULT_CROP_REGION } };
+  private uncropState: UncropState = { ...DEFAULT_UNCROP_STATE };
   private cropOverlay: HTMLCanvasElement | null = null;
   private cropCtx: CanvasRenderingContext2D | null = null;
   private isDraggingCrop = false;
@@ -260,6 +278,23 @@ export class Viewer {
   // Ghost frame (onion skin) state
   private ghostFrameState: GhostFrameState = { ...DEFAULT_GHOST_FRAME_STATE };
 
+  // Tone mapping state
+  private toneMappingState: ToneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
+
+  // Pixel Aspect Ratio state
+  private parState: PARState = { ...DEFAULT_PAR_STATE };
+
+  // Background pattern state (for alpha visualization)
+  private backgroundPatternState: BackgroundPatternState = { ...DEFAULT_BACKGROUND_PATTERN_STATE };
+
+  // Sub-frame interpolator for slow-motion blending
+  private frameInterpolator = new FrameInterpolator();
+
+  // Temp canvas for compositing ImageData over background patterns
+  // (putImageData ignores compositing, so we draw to a temp canvas first, then drawImage)
+  private bgCompositeTempCanvas: HTMLCanvasElement | null = null;
+  private bgCompositeTempCtx: CanvasRenderingContext2D | null = null;
+
   // Prerender buffer for smooth playback with effects
   private prerenderBuffer: PrerenderBufferManager | null = null;
   private prerenderCacheUpdateCallback: (() => void) | null = null;
@@ -271,6 +306,14 @@ export class Viewer {
   // Cursor color callback for InfoPanel
   private cursorColorCallback: ((color: { r: number; g: number; b: number } | null, position: { x: number; y: number } | null) => void) | null = null;
   private lastCursorColorUpdate = 0;
+
+  // Pixel probe throttling for performance
+  private lastProbeUpdate = 0;
+
+  // Cached source image canvas for pixel probe "source" mode
+  // Reused to avoid creating new canvases on every mouse move
+  private sourceImageCanvas: HTMLCanvasElement | null = null;
+  private sourceImageCtx: CanvasRenderingContext2D | null = null;
 
   // Theme change listener for runtime theme updates
   private boundOnThemeChange: (() => void) | null = null;
@@ -626,6 +669,13 @@ export class Viewer {
   private onMouseMoveForProbe = (e: MouseEvent): void => {
     if (!this.pixelProbe.isEnabled()) return;
 
+    // Throttle updates to ~60fps (16ms) for performance
+    const now = Date.now();
+    if (now - this.lastProbeUpdate < 16) {
+      return;
+    }
+    this.lastProbeUpdate = now;
+
     // Get canvas-relative coordinates
     const canvasRect = this.imageCanvas.getBoundingClientRect();
     const x = e.clientX - canvasRect.left;
@@ -642,8 +692,17 @@ export class Viewer {
     const canvasX = x * scaleX;
     const canvasY = y * scaleY;
 
-    // Get image data for pixel value
+    // Get image data for pixel value (rendered, after color pipeline)
     const imageData = this.getImageData();
+
+    // Get source image data (before color pipeline) for source mode
+    // Only fetch if source mode is selected to save performance
+    if (this.pixelProbe.getSourceMode() === 'source') {
+      const sourceImageData = this.getSourceImageData();
+      this.pixelProbe.setSourceImageData(sourceImageData);
+    } else {
+      this.pixelProbe.setSourceImageData(null);
+    }
 
     // Update pixel probe
     this.pixelProbe.updateFromCanvas(canvasX, canvasY, imageData, this.displayWidth, this.displayHeight);
@@ -956,6 +1015,9 @@ export class Viewer {
     const pointers = Array.from(this.activePointers.values());
     if (pointers.length !== 2) return;
 
+    // Cancel any smooth zoom animation - pinch zoom should be instant
+    this.cancelZoomAnimation();
+
     this.initialPinchDistance = calculatePinchDistance(pointers);
     this.initialZoom = this.zoom;
 
@@ -987,6 +1049,9 @@ export class Viewer {
 
   private onWheel = (e: WheelEvent): void => {
     e.preventDefault();
+
+    // Cancel any smooth zoom animation - wheel zoom should be instant for responsiveness
+    this.cancelZoomAnimation();
 
     const rect = this.container.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
@@ -1044,13 +1109,17 @@ export class Viewer {
     // Check if multiple image files were dropped - treat as sequence
     const imageFiles = filterImageFiles(fileArray);
     if (imageFiles.length > 1) {
-      try {
-        await this.session.loadSequence(imageFiles);
-        return;
-      } catch (err) {
-        console.error('Failed to load sequence:', err);
-        showAlert(`Failed to load sequence: ${err}`, { type: 'error', title: 'Load Error' });
-        return;
+      // Use getBestSequence to handle mixed sequences - picks the longest one
+      const bestSequence = getBestSequence(imageFiles);
+      if (bestSequence && bestSequence.length > 1) {
+        try {
+          await this.session.loadSequence(bestSequence);
+          return;
+        } catch (err) {
+          console.error('Failed to load sequence:', err);
+          showAlert(`Failed to load sequence: ${err}`, { type: 'error', title: 'Load Error' });
+          return;
+        }
       }
     }
 
@@ -1200,17 +1269,139 @@ export class Viewer {
   }
 
   fitToWindow(): void {
+    this.cancelZoomAnimation();
     this.panX = 0;
     this.panY = 0;
     this.zoom = 1;
     this.scheduleRender();
   }
 
+  /**
+   * Fit to window with a smooth animated transition.
+   */
+  smoothFitToWindow(): void {
+    this.smoothZoomTo(1, 200, 0, 0);
+  }
+
   setZoom(level: number): void {
+    this.cancelZoomAnimation();
     this.zoom = level;
     this.panX = 0;
     this.panY = 0;
     this.scheduleRender();
+  }
+
+  /**
+   * Set zoom with a smooth animated transition.
+   */
+  smoothSetZoom(level: number): void {
+    this.smoothZoomTo(level, 200, 0, 0);
+  }
+
+  /**
+   * Animate zoom smoothly to a target level over a given duration.
+   * Uses requestAnimationFrame with ease-out cubic interpolation.
+   * Also animates pan position to the target values.
+   * @param targetZoom - The target zoom level
+   * @param duration - Animation duration in milliseconds (default 200)
+   * @param targetPanX - Target pan X position (default: current panX)
+   * @param targetPanY - Target pan Y position (default: current panY)
+   */
+  smoothZoomTo(
+    targetZoom: number,
+    duration: number = 200,
+    targetPanX?: number,
+    targetPanY?: number
+  ): void {
+    // Cancel any in-progress zoom animation
+    this.cancelZoomAnimation();
+
+    // If duration is 0 or negligible, apply instantly
+    if (duration <= 0) {
+      this.zoom = targetZoom;
+      if (targetPanX !== undefined) this.panX = targetPanX;
+      if (targetPanY !== undefined) this.panY = targetPanY;
+      this.scheduleRender();
+      return;
+    }
+
+    // If already at target, no animation needed
+    const panXTarget = targetPanX !== undefined ? targetPanX : this.panX;
+    const panYTarget = targetPanY !== undefined ? targetPanY : this.panY;
+    if (
+      Math.abs(this.zoom - targetZoom) < 0.001 &&
+      Math.abs(this.panX - panXTarget) < 0.5 &&
+      Math.abs(this.panY - panYTarget) < 0.5
+    ) {
+      this.zoom = targetZoom;
+      this.panX = panXTarget;
+      this.panY = panYTarget;
+      this.scheduleRender();
+      return;
+    }
+
+    this.zoomAnimationStartTime = performance.now();
+    this.zoomAnimationStartZoom = this.zoom;
+    this.zoomAnimationTargetZoom = targetZoom;
+    this.zoomAnimationDuration = duration;
+    this.zoomAnimationStartPanX = this.panX;
+    this.zoomAnimationStartPanY = this.panY;
+    this.zoomAnimationTargetPanX = panXTarget;
+    this.zoomAnimationTargetPanY = panYTarget;
+
+    const animate = (now: number): void => {
+      const elapsed = now - this.zoomAnimationStartTime;
+      const progress = Math.min(1, elapsed / this.zoomAnimationDuration);
+
+      this.zoom = interpolateZoom(
+        this.zoomAnimationStartZoom,
+        this.zoomAnimationTargetZoom,
+        progress
+      );
+      this.panX = interpolateZoom(
+        this.zoomAnimationStartPanX,
+        this.zoomAnimationTargetPanX,
+        progress
+      );
+      this.panY = interpolateZoom(
+        this.zoomAnimationStartPanY,
+        this.zoomAnimationTargetPanY,
+        progress
+      );
+
+      this.scheduleRender();
+
+      if (progress < 1) {
+        this.zoomAnimationId = requestAnimationFrame(animate);
+      } else {
+        // Ensure exact final values
+        this.zoom = this.zoomAnimationTargetZoom;
+        this.panX = this.zoomAnimationTargetPanX;
+        this.panY = this.zoomAnimationTargetPanY;
+        this.zoomAnimationId = null;
+        this.scheduleRender();
+      }
+    };
+
+    this.zoomAnimationId = requestAnimationFrame(animate);
+  }
+
+  /**
+   * Cancel any in-progress smooth zoom animation.
+   * The zoom remains at whatever intermediate value it reached.
+   */
+  cancelZoomAnimation(): void {
+    if (this.zoomAnimationId !== null) {
+      cancelAnimationFrame(this.zoomAnimationId);
+      this.zoomAnimationId = null;
+    }
+  }
+
+  /**
+   * Check if a smooth zoom animation is currently in progress.
+   */
+  isZoomAnimating(): boolean {
+    return this.zoomAnimationId !== null;
   }
 
   private updateCanvasPosition(): void {
@@ -1272,7 +1463,23 @@ export class Viewer {
       const currentFrame = this.session.currentFrame;
       const frameCanvas = this.session.getVideoFrameCanvas(currentFrame);
       if (frameCanvas) {
-        element = frameCanvas;
+        // Check if sub-frame interpolation is active (slow-motion blending)
+        const subFramePos = this.session.subFramePosition;
+        if (subFramePos && this.frameInterpolator.enabled && subFramePos.ratio > 0 && subFramePos.ratio < 1) {
+          const nextFrameCanvas = this.session.getVideoFrameCanvas(subFramePos.nextFrame);
+          if (nextFrameCanvas) {
+            const blendedCanvas = this.frameInterpolator.getBlendedFrame(frameCanvas, nextFrameCanvas, subFramePos);
+            if (blendedCanvas) {
+              element = blendedCanvas;
+            } else {
+              element = frameCanvas;
+            }
+          } else {
+            element = frameCanvas;
+          }
+        } else {
+          element = frameCanvas;
+        }
         this.hasDisplayedMediabunnyFrame = true;
         this.pendingVideoFrameFetch = null;
         this.pendingVideoFrameNumber = 0;
@@ -1314,6 +1521,9 @@ export class Viewer {
           return;
         }
       }
+    } else if (source?.fileSourceNode) {
+      // EXR file loaded through FileSourceNode
+      element = source.fileSourceNode.getCanvas() ?? undefined;
     } else {
       // Fallback: use HTMLVideoElement directly (no mediabunny)
       element = source?.element;
@@ -1345,13 +1555,36 @@ export class Viewer {
     this.sourceWidth = source.width;
     this.sourceHeight = source.height;
 
+    // Calculate uncrop padding and effective virtual canvas size
+    const uncropPad = this.getUncropPadding();
+    const uncropActive = this.isUncropActive();
+    const baseWidth = uncropActive ? this.sourceWidth + uncropPad.left + uncropPad.right : this.sourceWidth;
+    const virtualHeight = uncropActive ? this.sourceHeight + uncropPad.top + uncropPad.bottom : this.sourceHeight;
+
+    // Apply PAR correction: scale virtual width by pixel aspect ratio
+    const parActive = isPARActive(this.parState);
+    const virtualWidth = parActive ? calculatePARCorrectedWidth(baseWidth, this.parState.par) : baseWidth;
+
     const { width: displayWidth, height: displayHeight } = calculateDisplayDimensions(
-      this.sourceWidth,
-      this.sourceHeight,
+      virtualWidth,
+      virtualHeight,
       containerWidth,
       containerHeight,
       this.zoom
     );
+
+    // Scale factor from virtual source to display pixels
+    const uncropScaleX = uncropActive ? displayWidth / virtualWidth : 1;
+    const uncropScaleY = uncropActive ? displayHeight / virtualHeight : 1;
+    // Pixel offsets for the image within the expanded canvas
+    const uncropOffsetX = uncropActive ? Math.round(uncropPad.left * uncropScaleX) : 0;
+    const uncropOffsetY = uncropActive ? Math.round(uncropPad.top * uncropScaleY) : 0;
+    // Display dimensions of the source image (excluding padding) within the expanded canvas.
+    // Derive from displayWidth minus both padding offsets to avoid rounding gaps.
+    const uncropRightPadX = uncropActive ? Math.round(uncropPad.right * uncropScaleX) : 0;
+    const uncropBottomPadY = uncropActive ? Math.round(uncropPad.bottom * uncropScaleY) : 0;
+    const imageDisplayW = uncropActive ? Math.max(1, displayWidth - uncropOffsetX - uncropRightPadX) : displayWidth;
+    const imageDisplayH = uncropActive ? Math.max(1, displayHeight - uncropOffsetY - uncropBottomPadY) : displayHeight;
 
     // Update canvas size if needed
     if (this.displayWidth !== displayWidth || this.displayHeight !== displayHeight) {
@@ -1360,6 +1593,16 @@ export class Viewer {
 
     // Clear canvas
     this.imageCtx.clearRect(0, 0, displayWidth, displayHeight);
+
+    // Draw background pattern (shows through transparent/alpha areas of the image)
+    if (this.backgroundPatternState.pattern !== 'black') {
+      drawBackgroundPattern(this.imageCtx, displayWidth, displayHeight, this.backgroundPatternState);
+    }
+
+    // When uncrop is active, fill the padding area with a subtle pattern
+    if (uncropActive) {
+      this.drawUncropBackground(displayWidth, displayHeight, uncropOffsetX, uncropOffsetY, imageDisplayW, imageDisplayH);
+    }
 
     // Enable high-quality image smoothing for best picture quality
     this.imageCtx.imageSmoothingEnabled = true;
@@ -1375,7 +1618,11 @@ export class Viewer {
       const cached = this.prerenderBuffer.getFrame(currentFrame);
       if (cached) {
         // Draw cached pre-rendered frame scaled to display size
-        this.imageCtx.drawImage(cached.canvas, 0, 0, displayWidth, displayHeight);
+        if (uncropActive) {
+          this.imageCtx.drawImage(cached.canvas, uncropOffsetX, uncropOffsetY, imageDisplayW, imageDisplayH);
+        } else {
+          this.imageCtx.drawImage(cached.canvas, 0, 0, displayWidth, displayHeight);
+        }
         // Apply crop clipping by clearing outside areas
         if (cropClipActive) {
           this.clearOutsideCropRegion(displayWidth, displayHeight);
@@ -1394,7 +1641,7 @@ export class Viewer {
       // Render difference between A and B sources
       const diffData = this.renderDifferenceMatte(displayWidth, displayHeight);
       if (diffData) {
-        this.imageCtx.putImageData(diffData, 0, 0);
+        this.compositeImageDataOverBackground(diffData, displayWidth, displayHeight);
         rendered = true;
       }
     }
@@ -1409,7 +1656,7 @@ export class Viewer {
       // Composite all stack layers
       const compositedData = this.compositeStackLayers(displayWidth, displayHeight);
       if (compositedData) {
-        this.imageCtx.putImageData(compositedData, 0, 0);
+        this.compositeImageDataOverBackground(compositedData, displayWidth, displayHeight);
         rendered = true;
       }
     }
@@ -1425,6 +1672,12 @@ export class Viewer {
       if (this.wipeState.mode !== 'off' && !isSplitScreenMode(this.wipeState.mode) && !(element instanceof HTMLCanvasElement) && !(typeof OffscreenCanvas !== 'undefined' && element instanceof OffscreenCanvas)) {
         // Wipe only works with HTMLImageElement/HTMLVideoElement
         this.renderWithWipe(element as HTMLImageElement | HTMLVideoElement, displayWidth, displayHeight);
+      } else if (uncropActive) {
+        // Uncrop: draw image at offset within expanded canvas
+        this.imageCtx.save();
+        this.imageCtx.translate(uncropOffsetX, uncropOffsetY);
+        this.drawWithTransform(this.imageCtx, element as CanvasImageSource, imageDisplayW, imageDisplayH);
+        this.imageCtx.restore();
       } else {
         // Normal rendering with transforms
         this.drawWithTransform(this.imageCtx, element as CanvasImageSource, displayWidth, displayHeight);
@@ -1436,7 +1689,14 @@ export class Viewer {
     if (!rendered) {
       const currentSource = this.session.currentSource;
       if (currentSource?.element) {
-        this.drawWithTransform(this.imageCtx, currentSource.element, displayWidth, displayHeight);
+        if (uncropActive) {
+          this.imageCtx.save();
+          this.imageCtx.translate(uncropOffsetX, uncropOffsetY);
+          this.drawWithTransform(this.imageCtx, currentSource.element, imageDisplayW, imageDisplayH);
+          this.imageCtx.restore();
+        } else {
+          this.drawWithTransform(this.imageCtx, currentSource.element, displayWidth, displayHeight);
+        }
       }
     }
 
@@ -1929,6 +2189,45 @@ export class Viewer {
     this.scheduleRender();
   }
 
+  // Uncrop methods
+  setUncropState(state: UncropState): void {
+    this.uncropState = { ...state };
+    this.scheduleRender();
+  }
+
+  getUncropState(): UncropState {
+    return { ...this.uncropState };
+  }
+
+  /**
+   * Check if uncrop is actively adding padding to the canvas.
+   */
+  isUncropActive(): boolean {
+    if (!this.uncropState.enabled) return false;
+    if (this.uncropState.paddingMode === 'uniform') {
+      return this.uncropState.padding > 0;
+    }
+    return this.uncropState.paddingTop > 0 || this.uncropState.paddingRight > 0 ||
+           this.uncropState.paddingBottom > 0 || this.uncropState.paddingLeft > 0;
+  }
+
+  /**
+   * Get effective padding in pixels for uncrop.
+   */
+  private getUncropPadding(): { top: number; right: number; bottom: number; left: number } {
+    if (!this.uncropState.enabled) return { top: 0, right: 0, bottom: 0, left: 0 };
+    if (this.uncropState.paddingMode === 'uniform') {
+      const p = Math.max(0, this.uncropState.padding);
+      return { top: p, right: p, bottom: p, left: p };
+    }
+    return {
+      top: Math.max(0, this.uncropState.paddingTop),
+      right: Math.max(0, this.uncropState.paddingRight),
+      bottom: Math.max(0, this.uncropState.paddingBottom),
+      left: Math.max(0, this.uncropState.paddingLeft),
+    };
+  }
+
   // CDL methods
   setCDL(cdl: CDLValues): void {
     this.cdlValues = JSON.parse(JSON.stringify(cdl));
@@ -1992,9 +2291,12 @@ export class Viewer {
     const hasFalseColor = this.falseColor.isEnabled();
     const hasZebras = this.zebraStripes.isEnabled();
     const hasClippingOverlay = this.clippingOverlay.isEnabled();
+    const ocioProcessor = getSharedOCIOProcessor();
+    const hasOCIO = ocioProcessor.isEnabled();
+    const hasToneMapping = this.isToneMappingEnabled();
 
     // Early return if no pixel effects are active
-    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasZebras && !hasClippingOverlay) {
+    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasZebras && !hasClippingOverlay && !hasOCIO && !hasToneMapping) {
       return;
     }
 
@@ -2009,6 +2311,11 @@ export class Viewer {
         whites: this.colorAdjustments.whites,
         blacks: this.colorAdjustments.blacks,
       });
+    }
+
+    // Apply tone mapping (HDR to SDR conversion, applied early in pipeline)
+    if (hasToneMapping) {
+      applyToneMapping(imageData, this.toneMappingState.operator);
     }
 
     // Apply vibrance (intelligent saturation - before CDL/curves for natural results)
@@ -2042,6 +2349,11 @@ export class Viewer {
     // Apply HSL Qualifier (secondary color correction - after primary corrections)
     if (hasHSLQualifier) {
       this.hslQualifier.apply(imageData);
+    }
+
+    // Apply OCIO color transforms (display/view transform after grading)
+    if (hasOCIO) {
+      ocioProcessor.apply(imageData);
     }
 
     // Apply sharpen filter
@@ -2202,6 +2514,166 @@ export class Viewer {
 
   isGhostFrameEnabled(): boolean {
     return this.ghostFrameState.enabled;
+  }
+
+  // Tone mapping methods
+  setToneMappingState(state: ToneMappingState): void {
+    this.toneMappingState = { ...state };
+    this.notifyEffectsChanged();
+    this.scheduleRender();
+  }
+
+  getToneMappingState(): ToneMappingState {
+    return { ...this.toneMappingState };
+  }
+
+  resetToneMappingState(): void {
+    this.toneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
+    this.notifyEffectsChanged();
+    this.scheduleRender();
+  }
+
+  // Pixel Aspect Ratio methods
+  setPARState(state: PARState): void {
+    this.parState = { ...state };
+    this.scheduleRender();
+  }
+
+  getPARState(): PARState {
+    return { ...this.parState };
+  }
+
+  resetPARState(): void {
+    this.parState = { ...DEFAULT_PAR_STATE };
+    this.scheduleRender();
+  }
+
+  // Background pattern methods
+  setBackgroundPatternState(state: BackgroundPatternState): void {
+    this.backgroundPatternState = { ...state };
+    this.updateCSSBackground();
+    this.scheduleRender();
+  }
+
+  getBackgroundPatternState(): BackgroundPatternState {
+    return { ...this.backgroundPatternState };
+  }
+
+  resetBackgroundPatternState(): void {
+    this.backgroundPatternState = { ...DEFAULT_BACKGROUND_PATTERN_STATE };
+    this.updateCSSBackground();
+    this.scheduleRender();
+  }
+
+  /**
+   * Update CSS backgrounds on the viewer container and canvas to match
+   * the current background pattern. This ensures the pattern is visible
+   * in letterbox areas and around the canvas, not just on the canvas surface
+   * (which is covered by opaque content).
+   */
+  private updateCSSBackground(): void {
+    const { pattern, checkerSize, customColor } = this.backgroundPatternState;
+
+    if (pattern === 'black') {
+      // Restore theme default for container, keep canvas black
+      this.container.style.background = 'var(--viewer-bg)';
+      this.imageCanvas.style.background = '#000';
+      return;
+    }
+
+    let cssBg: string;
+
+    switch (pattern) {
+      case 'grey18':
+        cssBg = PATTERN_COLORS.grey18 ?? '#2e2e2e';
+        break;
+      case 'grey50':
+        cssBg = PATTERN_COLORS.grey50 ?? '#808080';
+        break;
+      case 'white':
+        cssBg = '#ffffff';
+        break;
+      case 'checker': {
+        const sizes = { small: 8, medium: 16, large: 32 };
+        const sz = sizes[checkerSize];
+        const light = PATTERN_COLORS.checkerLight ?? '#808080';
+        const dark = PATTERN_COLORS.checkerDark ?? '#404040';
+        cssBg = `repeating-conic-gradient(${dark} 0% 25%, ${light} 0% 50%) 0 0 / ${sz * 2}px ${sz * 2}px`;
+        break;
+      }
+      case 'crosshatch': {
+        const bg = PATTERN_COLORS.crosshatchBg ?? '#404040';
+        const line = PATTERN_COLORS.crosshatchLine ?? '#808080';
+        cssBg = `repeating-linear-gradient(45deg, transparent, transparent 5px, ${line} 5px, ${line} 6px), repeating-linear-gradient(-45deg, transparent, transparent 5px, ${line} 5px, ${line} 6px), ${bg}`;
+        break;
+      }
+      case 'custom':
+        cssBg = customColor || '#1a1a1a';
+        break;
+      default:
+        cssBg = '#000';
+    }
+
+    this.container.style.background = cssBg;
+    this.imageCanvas.style.background = cssBg;
+  }
+
+  /**
+   * Enable or disable sub-frame interpolation for slow-motion playback.
+   * When enabled, adjacent frames are blended during slow-motion for smoother output.
+   * Also updates the Session's interpolation state.
+   */
+  setInterpolationEnabled(enabled: boolean): void {
+    this.frameInterpolator.enabled = enabled;
+    this.session.interpolationEnabled = enabled;
+    if (!enabled) {
+      this.frameInterpolator.clearCache();
+    }
+    this.scheduleRender();
+  }
+
+  /**
+   * Whether sub-frame interpolation is currently enabled.
+   */
+  getInterpolationEnabled(): boolean {
+    return this.frameInterpolator.enabled;
+  }
+
+  /**
+   * Composite ImageData onto the canvas while preserving the background pattern.
+   * putImageData() ignores compositing and overwrites pixels directly, so we
+   * write to a temporary canvas first, then use drawImage() which respects
+   * alpha compositing and preserves the background pattern underneath.
+   */
+  private compositeImageDataOverBackground(imageData: ImageData, width: number, height: number): void {
+    if (this.backgroundPatternState.pattern === 'black') {
+      // No background pattern - putImageData is fine
+      this.imageCtx.putImageData(imageData, 0, 0);
+      return;
+    }
+
+    // Ensure temp canvas is the right size
+    if (!this.bgCompositeTempCanvas || !this.bgCompositeTempCtx) {
+      this.bgCompositeTempCanvas = document.createElement('canvas');
+      this.bgCompositeTempCtx = this.bgCompositeTempCanvas.getContext('2d');
+    }
+    if (!this.bgCompositeTempCtx) {
+      // Fallback if context creation fails
+      this.imageCtx.putImageData(imageData, 0, 0);
+      return;
+    }
+    if (this.bgCompositeTempCanvas.width !== width || this.bgCompositeTempCanvas.height !== height) {
+      this.bgCompositeTempCanvas.width = width;
+      this.bgCompositeTempCanvas.height = height;
+    }
+
+    // Write ImageData to temp canvas, then drawImage onto main canvas
+    this.bgCompositeTempCtx.putImageData(imageData, 0, 0);
+    this.imageCtx.drawImage(this.bgCompositeTempCanvas, 0, 0);
+  }
+
+  isToneMappingEnabled(): boolean {
+    return this.toneMappingState.enabled && this.toneMappingState.operator !== 'off';
   }
 
   /**
@@ -2384,6 +2856,68 @@ export class Viewer {
     }
 
     return result;
+  }
+
+  /**
+   * Draw the uncrop padding background - a subtle checkerboard pattern
+   * to visually distinguish the padding area from the image content.
+   */
+  private drawUncropBackground(
+    displayWidth: number,
+    displayHeight: number,
+    imageX: number,
+    imageY: number,
+    imageW: number,
+    imageH: number
+  ): void {
+    const ctx = this.imageCtx;
+    const tileSize = 8;
+
+    // Resolve theme colors for checker pattern
+    const style = getComputedStyle(document.documentElement);
+    const darkColor = style.getPropertyValue('--bg-primary').trim() || '#1a1a1a';
+    const lightColor = style.getPropertyValue('--bg-tertiary').trim() || '#2d2d2d';
+
+    // Draw checkerboard in the padding areas (top, bottom, left, right strips)
+    const regions = [
+      // Top strip
+      { x: 0, y: 0, w: displayWidth, h: imageY },
+      // Bottom strip
+      { x: 0, y: imageY + imageH, w: displayWidth, h: displayHeight - (imageY + imageH) },
+      // Left strip (between top and bottom)
+      { x: 0, y: imageY, w: imageX, h: imageH },
+      // Right strip (between top and bottom)
+      { x: imageX + imageW, y: imageY, w: displayWidth - (imageX + imageW), h: imageH },
+    ];
+
+    for (const region of regions) {
+      if (region.w <= 0 || region.h <= 0) continue;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(region.x, region.y, region.w, region.h);
+      ctx.clip();
+
+      // Draw checkerboard
+      const startCol = Math.floor(region.x / tileSize);
+      const endCol = Math.ceil((region.x + region.w) / tileSize);
+      const startRow = Math.floor(region.y / tileSize);
+      const endRow = Math.ceil((region.y + region.h) / tileSize);
+
+      for (let row = startRow; row < endRow; row++) {
+        for (let col = startCol; col < endCol; col++) {
+          ctx.fillStyle = (row + col) % 2 === 0 ? darkColor : lightColor;
+          ctx.fillRect(col * tileSize, row * tileSize, tileSize, tileSize);
+        }
+      }
+      ctx.restore();
+    }
+
+    // Draw a subtle border around the image area to delineate it from padding
+    ctx.strokeStyle = style.getPropertyValue('--border-primary').trim() || '#444';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.strokeRect(imageX + 0.5, imageY + 0.5, imageW - 1, imageH - 1);
+    ctx.setLineDash([]);
   }
 
   private renderCropOverlay(): void {
@@ -2960,7 +3494,8 @@ export class Viewer {
       this.filterSettings,
       this.channelMode,
       this.colorWheels,
-      this.hslQualifier
+      this.hslQualifier,
+      this.toneMappingState
     );
 
     this.prerenderBuffer.updateEffects(effectsState);
@@ -2981,6 +3516,9 @@ export class Viewer {
   }
 
   dispose(): void {
+    // Cancel any in-progress zoom animation
+    this.cancelZoomAnimation();
+
     this.resizeObserver.disconnect();
     this.container.removeEventListener('pointerdown', this.onPointerDown);
     this.container.removeEventListener('pointermove', this.onPointerMove);
@@ -2999,6 +3537,9 @@ export class Viewer {
       getThemeManager().off('themeChanged', this.boundOnThemeChange);
       this.boundOnThemeChange = null;
     }
+
+    // Cleanup frame interpolator
+    this.frameInterpolator.dispose();
 
     // Cleanup WebGL LUT processor
     if (this.lutProcessor) {
@@ -3043,6 +3584,10 @@ export class Viewer {
 
     // Cleanup wipe elements
     this.wipeElements = null;
+
+    // Cleanup cached source image canvas
+    this.sourceImageCanvas = null;
+    this.sourceImageCtx = null;
   }
 
   /**
@@ -3059,6 +3604,63 @@ export class Viewer {
     if (displayWidth === 0 || displayHeight === 0) return null;
 
     return this.imageCtx.getImageData(0, 0, displayWidth, displayHeight);
+  }
+
+  /**
+   * Get source ImageData before color pipeline (for pixel probe "source" mode)
+   * Returns ImageData of the original source scaled to display dimensions
+   * Uses a cached canvas to avoid creating new canvases on every mouse move
+   */
+  getSourceImageData(): ImageData | null {
+    const source = this.session.currentSource;
+    if (!source) return null;
+
+    // Get the displayed dimensions
+    const displayWidth = this.imageCanvas.width;
+    const displayHeight = this.imageCanvas.height;
+
+    if (displayWidth === 0 || displayHeight === 0) return null;
+
+    // Get the source element
+    let element: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | undefined;
+    if (source.type === 'sequence') {
+      element = this.session.getSequenceFrameSync() ?? source.element;
+    } else if (source.type === 'video' && this.session.isUsingMediabunny()) {
+      const frameCanvas = this.session.getVideoFrameCanvas(this.session.currentFrame);
+      element = frameCanvas ?? source.element;
+    } else if (source.fileSourceNode) {
+      element = source.fileSourceNode.getCanvas() ?? undefined;
+    } else {
+      element = source.element;
+    }
+
+    if (!element) return null;
+
+    // Reuse cached canvas or create new one if dimensions changed
+    if (!this.sourceImageCanvas || !this.sourceImageCtx ||
+        this.sourceImageCanvas.width !== displayWidth ||
+        this.sourceImageCanvas.height !== displayHeight) {
+      this.sourceImageCanvas = document.createElement('canvas');
+      this.sourceImageCanvas.width = displayWidth;
+      this.sourceImageCanvas.height = displayHeight;
+      this.sourceImageCtx = this.sourceImageCanvas.getContext('2d', { willReadFrequently: true });
+    }
+
+    if (!this.sourceImageCtx) return null;
+
+    // Clear and draw source with transform but without color pipeline
+    this.sourceImageCtx.clearRect(0, 0, displayWidth, displayHeight);
+    this.sourceImageCtx.imageSmoothingEnabled = true;
+    this.sourceImageCtx.imageSmoothingQuality = 'high';
+
+    try {
+      // Apply geometric transform only
+      this.drawWithTransform(this.sourceImageCtx, element as CanvasImageSource, displayWidth, displayHeight);
+      return this.sourceImageCtx.getImageData(0, 0, displayWidth, displayHeight);
+    } catch {
+      // Handle potential CORS issues
+      return null;
+    }
   }
 
   /**

@@ -354,6 +354,105 @@ describe('Modal keyboard handling', () => {
   });
 });
 
+describe('Modal event listener cleanup', () => {
+  afterEach(() => {
+    closeModal();
+  });
+
+  it('MODAL-U056: alert removes keydown listener when OK clicked', async () => {
+    const originalAddEventListener = document.addEventListener;
+    const originalRemoveEventListener = document.removeEventListener;
+    let addCount = 0;
+    let removeCount = 0;
+
+    document.addEventListener = vi.fn((...args) => {
+      if (args[0] === 'keydown') addCount++;
+      return originalAddEventListener.apply(document, args as Parameters<typeof document.addEventListener>);
+    }) as typeof document.addEventListener;
+
+    document.removeEventListener = vi.fn((...args) => {
+      if (args[0] === 'keydown') removeCount++;
+      return originalRemoveEventListener.apply(document, args as Parameters<typeof document.removeEventListener>);
+    }) as typeof document.removeEventListener;
+
+    const promise = showAlert('Test');
+    expect(addCount).toBe(1);
+
+    const container = document.getElementById('modal-container');
+    const okButton = Array.from(container?.querySelectorAll('button') || [])
+      .find(btn => btn.textContent === 'OK');
+    okButton?.click();
+
+    await promise;
+    expect(removeCount).toBe(1);
+
+    document.addEventListener = originalAddEventListener;
+    document.removeEventListener = originalRemoveEventListener;
+  });
+
+  it('MODAL-U057: confirm removes keydown listener when Cancel clicked', async () => {
+    const originalAddEventListener = document.addEventListener;
+    const originalRemoveEventListener = document.removeEventListener;
+    let addCount = 0;
+    let removeCount = 0;
+
+    document.addEventListener = vi.fn((...args) => {
+      if (args[0] === 'keydown') addCount++;
+      return originalAddEventListener.apply(document, args as Parameters<typeof document.addEventListener>);
+    }) as typeof document.addEventListener;
+
+    document.removeEventListener = vi.fn((...args) => {
+      if (args[0] === 'keydown') removeCount++;
+      return originalRemoveEventListener.apply(document, args as Parameters<typeof document.removeEventListener>);
+    }) as typeof document.removeEventListener;
+
+    const promise = showConfirm('Test');
+    expect(addCount).toBe(1);
+
+    const container = document.getElementById('modal-container');
+    const cancelButton = Array.from(container?.querySelectorAll('button') || [])
+      .find(btn => btn.textContent === 'Cancel');
+    cancelButton?.click();
+
+    await promise;
+    expect(removeCount).toBe(1);
+
+    document.addEventListener = originalAddEventListener;
+    document.removeEventListener = originalRemoveEventListener;
+  });
+
+  it('MODAL-U058: prompt removes keydown listener when OK clicked', async () => {
+    const originalAddEventListener = document.addEventListener;
+    const originalRemoveEventListener = document.removeEventListener;
+    let addCount = 0;
+    let removeCount = 0;
+
+    document.addEventListener = vi.fn((...args) => {
+      if (args[0] === 'keydown') addCount++;
+      return originalAddEventListener.apply(document, args as Parameters<typeof document.addEventListener>);
+    }) as typeof document.addEventListener;
+
+    document.removeEventListener = vi.fn((...args) => {
+      if (args[0] === 'keydown') removeCount++;
+      return originalRemoveEventListener.apply(document, args as Parameters<typeof document.removeEventListener>);
+    }) as typeof document.removeEventListener;
+
+    const promise = showPrompt('Test');
+    expect(addCount).toBe(1);
+
+    const container = document.getElementById('modal-container');
+    const okButton = Array.from(container?.querySelectorAll('button') || [])
+      .find(btn => btn.textContent === 'OK');
+    okButton?.click();
+
+    await promise;
+    expect(removeCount).toBe(1);
+
+    document.addEventListener = originalAddEventListener;
+    document.removeEventListener = originalRemoveEventListener;
+  });
+});
+
 describe('Modal options', () => {
   afterEach(() => {
     closeModal();

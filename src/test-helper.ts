@@ -17,6 +17,7 @@ declare global {
       getPaintState: () => PaintState;
       getPixelProbeState: () => PixelProbeState;
       getFalseColorState: () => FalseColorState;
+      getToneMappingState: () => ToneMappingTestState;
       getSafeAreasState: () => SafeAreasState;
       getTimecodeOverlayState: () => TimecodeOverlayState;
       getZebraStripesState: () => ZebraStripesState;
@@ -30,9 +31,39 @@ declare global {
       getMatteState: () => MatteState;
       getSessionMetadataState: () => SessionMetadataState;
       getStackState: () => StackState;
+      getOCIOState: () => OCIOState;
       isUsingMediabunny: () => boolean;
+      getFullscreenState: () => FullscreenState;
+      getPresentationState: () => PresentationTestState;
+      getNetworkSyncState: () => NetworkSyncState;
+      simulateFullscreenEnter: () => void;
+      simulateFullscreenExit: () => void;
     };
   }
+}
+
+export interface FullscreenState {
+  isFullscreen: boolean;
+  isSupported: boolean;
+}
+
+export interface NetworkSyncState {
+  connectionState: 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error';
+  roomCode: string | null;
+  userCount: number;
+  isHost: boolean;
+  isPanelOpen: boolean;
+  syncPlayback: boolean;
+  syncView: boolean;
+  syncColor: boolean;
+  syncAnnotations: boolean;
+  rtt: number;
+}
+
+export interface PresentationTestState {
+  enabled: boolean;
+  cursorAutoHide: boolean;
+  cursorHideDelay: number;
 }
 
 export interface MarkerData {
@@ -51,6 +82,7 @@ export interface SessionState {
   loopMode: 'once' | 'loop' | 'pingpong';
   playDirection: number;
   playbackSpeed: number;
+  preservesPitch: boolean;
   volume: number;
   muted: boolean;
   fps: number;
@@ -104,6 +136,26 @@ export interface ViewerState {
     shadowsPercent: number;
     highlightsPercent: number;
   } | null;
+  // EXR layer state
+  exrLayerCount: number;
+  exrSelectedLayer: string | null;
+  exrAvailableLayers: string[];
+  // Uncrop state
+  uncropEnabled: boolean;
+  uncropPaddingMode: 'uniform' | 'per-side';
+  uncropPadding: number;
+  uncropPaddingTop: number;
+  uncropPaddingRight: number;
+  uncropPaddingBottom: number;
+  uncropPaddingLeft: number;
+  // PAR state
+  parEnabled: boolean;
+  parValue: number;
+  parPreset: string;
+  // Background pattern state
+  backgroundPattern: 'black' | 'grey18' | 'grey50' | 'white' | 'checker' | 'crosshatch' | 'custom';
+  backgroundCheckerSize: 'small' | 'medium' | 'large';
+  backgroundCustomColor: string;
 }
 
 export interface ColorState {
@@ -131,12 +183,22 @@ export interface PixelProbeState {
   x: number;
   y: number;
   rgb: { r: number; g: number; b: number };
+  alpha: number;
+  hsl: { h: number; s: number; l: number };
   ire: number;
+  format: 'rgb' | 'rgb01' | 'hsl' | 'hex' | 'ire';
+  sampleSize: 1 | 3 | 5 | 9;
+  sourceMode: 'rendered' | 'source';
 }
 
 export interface FalseColorState {
   enabled: boolean;
   preset: 'standard' | 'arri' | 'red' | 'custom';
+}
+
+export interface ToneMappingTestState {
+  enabled: boolean;
+  operator: 'off' | 'reinhard' | 'filmic' | 'aces';
 }
 
 export interface SafeAreasState {
@@ -280,6 +342,19 @@ export interface StackState {
   isPanelOpen: boolean;
 }
 
+export interface OCIOState {
+  enabled: boolean;
+  configName: string;
+  inputColorSpace: string;
+  detectedColorSpace: string | null;
+  workingColorSpace: string;
+  display: string;
+  view: string;
+  look: string;
+  lookDirection: 'forward' | 'inverse';
+  panelVisible: boolean;
+}
+
 export function exposeForTesting(app: App): void {
   // Access private properties through any cast (for testing only)
   const appAny = app as any;
@@ -301,6 +376,7 @@ export function exposeForTesting(app: App): void {
         loopMode: session.loopMode,
         playDirection: session.playDirection,
         playbackSpeed: session.playbackSpeed,
+        preservesPitch: session.preservesPitch,
         volume: session.volume,
         muted: session.muted,
         fps: session.fps,
@@ -362,6 +438,26 @@ export function exposeForTesting(app: App): void {
         // Clipping overlay state
         clippingOverlayEnabled: viewer.getClippingOverlay?.()?.isEnabled?.() ?? false,
         histogramClipping: histogram?.getClipping?.() ?? null,
+        // EXR layer state (from channelSelect component)
+        exrLayerCount: appAny.channelSelect?.getEXRLayerState?.()?.availableLayers?.length ?? 0,
+        exrSelectedLayer: appAny.channelSelect?.getEXRLayerState?.()?.selectedLayer ?? null,
+        exrAvailableLayers: appAny.channelSelect?.getEXRLayerState?.()?.availableLayers?.map((l: any) => l.name) ?? [],
+        // Uncrop state
+        uncropEnabled: viewer.uncropState?.enabled ?? false,
+        uncropPaddingMode: viewer.uncropState?.paddingMode ?? 'uniform',
+        uncropPadding: viewer.uncropState?.padding ?? 0,
+        uncropPaddingTop: viewer.uncropState?.paddingTop ?? 0,
+        uncropPaddingRight: viewer.uncropState?.paddingRight ?? 0,
+        uncropPaddingBottom: viewer.uncropState?.paddingBottom ?? 0,
+        uncropPaddingLeft: viewer.uncropState?.paddingLeft ?? 0,
+        // PAR state
+        parEnabled: viewer.parState?.enabled ?? false,
+        parValue: viewer.parState?.par ?? 1.0,
+        parPreset: viewer.parState?.preset ?? 'square',
+        // Background pattern state
+        backgroundPattern: viewer.backgroundPatternState?.pattern ?? 'black',
+        backgroundCheckerSize: viewer.backgroundPatternState?.checkerSize ?? 'medium',
+        backgroundCustomColor: viewer.backgroundPatternState?.customColor ?? '#1a1a1a',
       };
     },
 
@@ -398,7 +494,12 @@ export function exposeForTesting(app: App): void {
         x: state.x ?? 0,
         y: state.y ?? 0,
         rgb: state.rgb ?? { r: 0, g: 0, b: 0 },
+        alpha: state.alpha ?? 255,
+        hsl: state.hsl ?? { h: 0, s: 0, l: 0 },
         ire: state.ire ?? 0,
+        format: state.format ?? 'rgb',
+        sampleSize: state.sampleSize ?? 1,
+        sourceMode: state.sourceMode ?? 'rendered',
       };
     },
 
@@ -409,6 +510,15 @@ export function exposeForTesting(app: App): void {
       return {
         enabled: state.enabled ?? false,
         preset: state.preset ?? 'standard',
+      };
+    },
+
+    getToneMappingState: (): ToneMappingTestState => {
+      const toneMappingControl = appAny.toneMappingControl;
+      const state = toneMappingControl?.getState?.() ?? {};
+      return {
+        enabled: state.enabled ?? false,
+        operator: state.operator ?? 'off',
       };
     },
 
@@ -653,9 +763,80 @@ export function exposeForTesting(app: App): void {
       };
     },
 
+    getOCIOState: (): OCIOState => {
+      const ocioControl = appAny.ocioControl;
+      const state = ocioControl?.getState?.() ?? {};
+      return {
+        enabled: state.enabled ?? false,
+        configName: state.configName ?? 'aces_1.2',
+        inputColorSpace: state.inputColorSpace ?? 'Auto',
+        detectedColorSpace: state.detectedColorSpace ?? null,
+        workingColorSpace: state.workingColorSpace ?? 'ACEScg',
+        display: state.display ?? 'sRGB',
+        view: state.view ?? 'ACES 1.0 SDR-video',
+        look: state.look ?? 'None',
+        lookDirection: state.lookDirection ?? 'forward',
+        panelVisible: ocioControl?.isExpanded ?? false,
+      };
+    },
+
     isUsingMediabunny: (): boolean => {
       const session = appAny.session;
       return session?.isUsingMediabunny?.() ?? false;
+    },
+
+    getFullscreenState: (): FullscreenState => {
+      const fullscreenManager = appAny.fullscreenManager;
+      return {
+        isFullscreen: fullscreenManager?.isFullscreen ?? false,
+        isSupported: true,
+      };
+    },
+
+    getPresentationState: (): PresentationTestState => {
+      const presentationMode = appAny.presentationMode;
+      const state = presentationMode?.getState?.() ?? {};
+      return {
+        enabled: state.enabled ?? false,
+        cursorAutoHide: state.cursorAutoHide ?? true,
+        cursorHideDelay: state.cursorHideDelay ?? 3000,
+      };
+    },
+
+    getNetworkSyncState: (): NetworkSyncState => {
+      const networkControl = appAny.networkControl;
+      const networkSyncManager = appAny.networkSyncManager;
+      const controlState = networkControl?.getState?.() ?? {};
+      return {
+        connectionState: networkSyncManager?.connectionState ?? 'disconnected',
+        roomCode: networkSyncManager?.roomInfo?.roomCode ?? null,
+        userCount: networkSyncManager?.users?.length ?? 0,
+        isHost: networkSyncManager?.isHost ?? false,
+        isPanelOpen: controlState.isPanelOpen ?? false,
+        syncPlayback: networkSyncManager?.syncSettings?.playback ?? true,
+        syncView: networkSyncManager?.syncSettings?.view ?? true,
+        syncColor: networkSyncManager?.syncSettings?.color ?? false,
+        syncAnnotations: networkSyncManager?.syncSettings?.annotations ?? false,
+        rtt: networkSyncManager?.rtt ?? 0,
+      };
+    },
+
+    simulateFullscreenEnter: (): void => {
+      const fullscreenManager = appAny.fullscreenManager;
+      if (fullscreenManager) {
+        // Simulate entering fullscreen by updating internal state and firing event
+        fullscreenManager._isFullscreen = true;
+        fullscreenManager.emit('fullscreenChanged', true);
+      }
+    },
+
+    simulateFullscreenExit: (): void => {
+      const fullscreenManager = appAny.fullscreenManager;
+      if (fullscreenManager) {
+        // Simulate exiting fullscreen by updating internal state and firing event
+        fullscreenManager._isFullscreen = false;
+        fullscreenManager.emit('fullscreenChanged', false);
+      }
     },
   };
 }

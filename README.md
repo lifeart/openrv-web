@@ -11,16 +11,26 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 
 ### Media Support
 - Single images (PNG, JPEG, WebP, EXR)
+- **EXR Format Support** - full HDR image loading via WebAssembly decoder
+  - Float32 texture support for HDR precision
+  - Multi-layer EXR with AOV (Arbitrary Output Variable) selection
+  - Channel remapping (custom channel-to-RGBA mapping)
+  - Layer selection UI for multi-layer files (diffuse, specular, normals, depth, etc.)
 - Video files (MP4, WebM)
+  - **ProRes/DNxHD Codec Detection** - identifies unsupported professional codecs and provides FFmpeg transcoding guidance
 - Image sequences (numbered files like `frame_001.png`, `file.0001.exr`)
   - **Missing frame detection** - automatically detect and indicate gaps in sequences
   - Visual overlay for missing frames during playback
+  - **Pattern notation support** - `%04d` (printf), `####` (hash), and `@` notation parsing
+  - **Single-file sequence inference** - drop one frame, automatically detect full sequence from directory
+  - **Directory scanning** - discover all sequences in a folder, select best match
 - RV/GTO session files with full graph reconstruction
 - **Enhanced marker support** - notes and colors preserved through GTO round-trip
 
 ### Color Tools
 - Exposure, gamma, saturation, contrast, brightness
 - Color temperature and tint
+- **Hue Rotation** - global hue shift control
 - **Vibrance** with skin tone protection (hue 20-50° protected)
 - **Clarity/Local Contrast** - enhance midtone detail without affecting highlights/shadows
 - **Highlight/Shadow recovery** - recover detail in blown highlights and crushed shadows
@@ -46,10 +56,32 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
   - Sony S-Log3
   - RED Log3G10
   - GLSL shader generation for GPU processing
+- **OCIO Color Management** - OpenColorIO-style color pipeline
+  - Built-in config presets (ACES 1.2, sRGB)
+  - Input color space selection with auto-detection from metadata
+  - Working color space (ACEScg, Rec.709, Linear sRGB)
+  - Display and view transforms (sRGB, Rec.709, DCI-P3)
+  - Look transforms with forward/inverse direction
+  - Integration with existing LUT and log curve infrastructure
+  - Toggle via Shift+O keyboard shortcut
+- **Tone Mapping for HDR** - operators for mapping HDR content to SDR displays
+  - Reinhard operator (preserves highlight detail)
+  - Filmic operator (S-curve with shoulder and toe)
+  - ACES filmic tone mapping
+  - Toggle via Shift+Alt+J keyboard shortcut
 
 ### Transform & Effects
 - Rotation (90°/180°/270°) and flip (H/V)
 - Crop tool with aspect ratio presets and rule-of-thirds guides
+- **Uncrop / Canvas Extension** - add padding around image for composition reference
+  - Uniform padding mode (equal on all sides)
+  - Per-side padding controls (top, right, bottom, left)
+  - Customizable fill color
+- **Pixel Aspect Ratio (PAR) Support** - correct anamorphic squeeze for proper display
+  - Auto-detection from image/video metadata
+  - Presets for common PARs (DV NTSC, DV PAL, HD Anamorphic, 2:1 Anamorphic, etc.)
+  - Manual PAR value entry
+  - Toggle via Shift+P keyboard shortcut
 - Lens distortion correction (barrel/pincushion)
 - Blur and sharpen filters
 - **Noise Reduction** - edge-preserving bilateral filter
@@ -90,6 +122,9 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
   - **YCbCr Parade** - visualize Y (luma), Cb (blue difference), Cr (red difference) using BT.709 coefficients
 - Vectorscope with zoom levels
 - **Pixel Probe / Color Sampler** - click to sample RGB/HSL/IRE values at any pixel
+  - **Area averaging** - configurable sample size (1x1, 3x3, 5x5, 9x9)
+  - **Source vs Rendered toggle** - view pre- or post-color-pipeline values
+  - **Alpha channel display** - shows alpha in both 0-255 and 0.0-1.0 formats
 - **False Color Display** - exposure visualization with ARRI, RED, and custom presets
 - **Zebra Stripes** - animated diagonal stripes for exposure warnings
   - High zebras (>95% IRE) - right-leaning red stripes
@@ -100,7 +135,7 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
   - Rule of Thirds grid
   - Center crosshair
   - Aspect ratio overlays (16:9, 2.39:1, etc.)
-- **Timecode Overlay** - on-screen SMPTE timecode display
+- **Timecode Overlay** - on-screen SMPTE timecode display (HH:MM:SS:FF format)
 
 ### Annotations
 - Pen tool with pressure sensitivity
@@ -123,8 +158,12 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
   - Progressive loading without blocking UI
   - Automatic recalculation on resize
 - In/out points and **markers with notes** (color-coded, with text annotations)
+  - **Duration Markers** - markers spanning frame ranges for segment annotation
 - Loop modes (once, loop, ping-pong)
 - **Playback speed control** (0.1x to 8x) with J/K/L shortcuts
+  - **Audio pitch correction** - preserves pitch at non-1x playback speeds
+- **Sub-frame Interpolation** - alpha blending between frames for smooth slow motion
+- **Smooth Zoom Animation** - requestAnimationFrame-based zoom with ease-out cubic easing
 - **Cache indicator** showing cached frames and memory usage
 - **Prerender Buffer** - background processing of effects for smooth playback
 - **Multi-Clip Playlist** - manage and play multiple clips in sequence
@@ -152,6 +191,14 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 
 ### UI/UX
 - **Dark/Light Theme** with auto (system) mode and Shift+T shortcut
+- **Fullscreen Mode** - native browser fullscreen via F11 or toolbar button
+- **Presentation Mode** - clean display with all UI hidden and cursor auto-hide on inactivity (Ctrl+Shift+P)
+- **Background Pattern Selector** - configurable viewer background for alpha transparency visualization
+  - Checkerboard (classic alpha pattern)
+  - Grey 18%, Grey 50%, White, Black
+  - Crosshatch pattern
+  - Custom color picker
+  - Toggle via Shift+B (cycle) or Shift+Alt+B (quick checkerboard toggle)
 - **History Panel** - visual undo/redo with jump to any state
 - **Floating Info Panel** - filename, resolution, frame, FPS, and cursor color readout
 - **Hi-DPI/Retina Display Support** - crisp rendering on high-density displays (2x, 3x DPR)
@@ -204,6 +251,28 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
   - Context menu for delete operations
   - Real-time event emission for cut changes
 
+### Scripting API
+- **Public JavaScript API** (`window.openrv`) for programmatic control from browser console or external scripts
+  - **Playback control**: `play()`, `pause()`, `toggle()`, `stop()`, `seek(frame)`, `step(direction)`, `setSpeed()`, `getSpeed()`, `isPlaying()`, `getCurrentFrame()`
+  - **Media info**: `getCurrentSource()`, `getDuration()`, `getFPS()`, `getResolution()`
+  - **Audio control**: `setVolume()`, `getVolume()`, `mute()`, `unmute()`, `isMuted()`
+  - **Loop control**: `setMode()`, `getMode()`, `setInPoint()`, `setOutPoint()`, `clearInOut()`
+  - **View control**: `setZoom()`, `getZoom()`, `fitToWindow()`, `setPan()`, `setChannel()`
+  - **Color control**: `setAdjustments()`, `getAdjustments()`, `reset()`, `setCDL()`, `loadLUT()`
+  - **Markers**: `add()`, `remove()`, `getAll()`, `clear()`, `goToNext()`, `goToPrevious()`
+  - **Events**: `on()`, `off()`, `once()` for frameChange, play, pause, sourceLoaded, error, etc.
+  - Version and readiness: `openrv.version`, `openrv.isReady()`
+  - Input validation and error handling on all methods
+
+### Network Sync (Infrastructure)
+- **WebSocket-based sync client** for real-time collaboration between viewers
+  - Room creation and joining with unique room codes
+  - User presence indicators (connected users list)
+  - Configurable sync elements: playback, view (pan/zoom), color adjustments, annotations
+  - Host/participant role distinction
+  - Reconnection handling with exponential backoff
+  - Keyboard shortcut: Shift+N to toggle network panel
+
 ## Installation
 
 ```bash
@@ -252,6 +321,11 @@ pnpm dev
 | `Shift+=` / `Shift+-` | Fine zoom in/out |
 | `1-5` | Switch tabs (View, Color, Effects, Transform, Annotate) |
 | `0` | Set zoom to 50% |
+| `F11` | Toggle fullscreen mode |
+| `Ctrl+Shift+P` | Toggle presentation mode (clean display, cursor auto-hide) |
+| `Shift+B` | Cycle background pattern (checker, grey, white, etc.) |
+| `Shift+Alt+B` | Toggle checkerboard background |
+| `Shift+P` | Toggle pixel aspect ratio correction |
 
 #### A/B Compare
 | Key | Action |
@@ -300,6 +374,8 @@ pnpm dev
 |-----|--------|
 | `C` | Toggle color panel |
 | `U` | Toggle curves panel |
+| `Shift+O` | Toggle OCIO color management panel |
+| `Shift+Alt+J` | Toggle tone mapping |
 | `Shift+Alt+E` | Toggle effects/filter panel |
 | `Shift+K` | Toggle crop mode |
 | `Shift+H` | Toggle HSL Qualifier |
@@ -339,6 +415,7 @@ pnpm dev
 | `Shift+Alt+H` | Toggle history panel |
 | `Shift+Alt+I` | Toggle info panel |
 | `Shift+Alt+M` | Toggle markers panel |
+| `Shift+N` | Toggle network sync panel |
 | `Ctrl+Shift+S` | Create quick snapshot |
 | `Ctrl+Shift+Alt+S` | Toggle snapshots panel |
 | `Shift+Alt+P` | Toggle playlist panel |
@@ -359,40 +436,65 @@ pnpm dev
 
 ```
 src/
+├── api/                # Public scripting API (window.openrv)
+│   ├── OpenRVAPI.ts    # Main API class and initialization
+│   ├── PlaybackAPI.ts  # Playback control methods
+│   ├── MediaAPI.ts     # Media/source information
+│   ├── AudioAPI.ts     # Volume and audio control
+│   ├── LoopAPI.ts      # Loop mode and in/out points
+│   ├── ViewAPI.ts      # Zoom, pan, channel control
+│   ├── ColorAPI.ts     # Color adjustment methods
+│   ├── MarkersAPI.ts   # Marker management
+│   ├── EventsAPI.ts    # Event subscription system
+│   └── index.ts        # API export and registration
 ├── core/
 │   ├── graph/          # Node graph system (Graph, Property, Signal)
-│   ├── image/          # IPImage data structure
+│   ├── image/          # IPImage data structure (with PAR metadata)
 │   └── session/        # Session management, GTO loading, serialization, auto-save
 │       ├── SnapshotManager.ts  # IndexedDB-based session snapshots
 │       └── PlaylistManager.ts  # Multi-clip playlist with EDL export
+├── formats/
+│   └── EXRDecoder.ts   # WebAssembly EXR decoder with multi-layer support
 ├── nodes/
 │   ├── base/           # IPNode, NodeFactory with @RegisterNode decorator
 │   ├── sources/        # FileSourceNode, VideoSourceNode, SequenceSourceNode
 │   └── groups/         # SequenceGroup, StackGroup, SwitchGroup, etc.
-├── render/             # WebGL2 renderer and shaders
+├── render/             # WebGL2 renderer and shaders (incl. tone mapping)
 │   └── TextureCacheManager.ts  # LRU texture cache for GPU performance
 ├── ui/
 │   ├── components/     # Viewer, Timeline, Toolbar, Controls, TimelineEditor
-│   │   ├── ViewerSplitScreen.ts   # Split screen A/B comparison
-│   │   ├── ThumbnailManager.ts    # Timeline thumbnail generation and caching
-│   │   ├── GhostFrameControl.ts   # Ghost frames / onion skin control
-│   │   ├── SnapshotPanel.ts       # Session snapshot management UI
-│   │   └── PlaylistPanel.ts       # Multi-clip playlist UI
+│   │   ├── ViewerSplitScreen.ts        # Split screen A/B comparison
+│   │   ├── ThumbnailManager.ts         # Timeline thumbnail generation and caching
+│   │   ├── GhostFrameControl.ts        # Ghost frames / onion skin control
+│   │   ├── SnapshotPanel.ts            # Session snapshot management UI
+│   │   ├── PlaylistPanel.ts            # Multi-clip playlist UI
+│   │   ├── ChannelSelect.ts            # Channel isolation with EXR layer selection
+│   │   ├── BackgroundPatternControl.ts # Viewer background patterns (checker, grey, etc.)
+│   │   ├── PARControl.ts              # Pixel aspect ratio controls
+│   │   ├── CropControl.ts             # Crop and uncrop/canvas extension
+│   │   └── OCIOControl.ts             # OCIO color management UI
 │   └── shared/         # Button, Modal, Panel utilities
 ├── paint/              # Annotation engine
 ├── audio/              # Audio playback and waveform rendering
 │   ├── AudioPlaybackManager.ts # Web Audio API playback with fallbacks
 │   └── WaveformRenderer.ts     # Waveform extraction and rendering
 ├── color/              # CDL, LUT loader (1D & 3D), WebGL LUT processor
-│   └── LogCurves.ts    # Camera log curve presets (Cineon, LogC, S-Log3, etc.)
+│   ├── LogCurves.ts    # Camera log curve presets (Cineon, LogC, S-Log3, etc.)
+│   └── ocio/           # OCIO color management (config, transforms, processor)
 ├── filters/            # Image processing filters
 │   ├── NoiseReduction.ts       # Bilateral filter (CPU implementation)
 │   └── WebGLNoiseReduction.ts  # GPU-accelerated bilateral filter
+├── network/            # Network sync infrastructure (WebSocket client, rooms)
 ├── stereo/             # Stereoscopic 3D viewing modes
 ├── transform/          # Lens distortion
 ├── composite/          # Blend modes
 ├── scopes/             # GPU-accelerated scopes (Histogram, Waveform, Vectorscope)
 ├── utils/              # EventEmitter, FrameExporter, SequenceLoader, HiDPICanvas
+│   ├── CodecUtils.ts             # Codec detection (ProRes, DNxHD, etc.)
+│   ├── PixelAspectRatio.ts       # PAR detection and correction
+│   ├── FullscreenManager.ts      # Fullscreen API wrapper
+│   ├── PresentationMode.ts       # Presentation mode (UI hide, cursor auto-hide)
+│   ├── FrameInterpolator.ts      # Sub-frame interpolation for slow motion
 │   ├── EffectProcessor.ts        # CPU effect processing (highlights, vibrance, clarity, etc.)
 │   ├── PrerenderBufferManager.ts # Prerender cache for smooth playback with effects
 │   ├── WorkerPool.ts             # Generic worker pool for parallel processing
@@ -468,7 +570,7 @@ const rootNode = session.graphParseResult?.rootNode;
 # Type check
 pnpm typecheck
 
-# Run unit tests (4850+ tests)
+# Run unit tests (5500+ tests)
 pnpm test
 
 # Run e2e tests (requires dev server running)
@@ -484,35 +586,42 @@ pnpm preview
 
 ### Test Coverage
 
-The codebase includes comprehensive test coverage with **4850+ unit tests** across 122 test files and **50+ e2e test suites**:
+The codebase includes comprehensive test coverage with **5500+ unit tests** across 140+ test files and **70+ e2e test suites**:
 
 - **Color Tools**: ColorWheels (46 tests), FalseColor (30 tests), HSLQualifier (57 tests), Curves, CDL, LogCurves (27 tests)
-- **Analysis**: ZebraStripes (49 tests), PixelProbe (45 tests), ClippingOverlay (48 tests), Waveform (50 tests), Histogram (45 tests), Vectorscope (49 tests)
+- **OCIO**: OCIOConfig, OCIOTransform, OCIOProcessor (color space transforms, config parsing)
+- **Tone Mapping**: Reinhard, Filmic, ACES operator tests
+- **Analysis**: ZebraStripes (49 tests), PixelProbe (45+ tests), ClippingOverlay (48 tests), Waveform (50 tests), Histogram (45 tests), Vectorscope (49 tests)
 - **Overlays**: TimecodeOverlay (50 tests), SafeAreasOverlay (46 tests), SpotlightOverlay (62 tests)
-- **UI Components**: ThemeControl, HistoryPanel, InfoPanel, Modal, Button, CurveEditor (33 tests), AutoSaveIndicator (35 tests), TimelineEditor (25 tests), ThumbnailManager (12 tests)
-- **Core**: Session, Graph, GTO loading/export, SequenceLoader, AutoSaveManager (28 tests), SessionSerializer (35 tests), SnapshotManager (16 tests), PlaylistManager (34 tests)
+- **UI Components**: ThemeControl, HistoryPanel, InfoPanel, Modal, Button, CurveEditor (33 tests), AutoSaveIndicator (35 tests), TimelineEditor (25 tests), ThumbnailManager (12 tests), BackgroundPatternControl (32 tests), PARControl (13 tests)
+- **Core**: Session, Graph, GTO loading/export, SequenceLoader (88 tests), AutoSaveManager (28 tests), SessionSerializer (35 tests), SnapshotManager (16 tests), PlaylistManager (34 tests)
+- **Formats**: EXRDecoder (multi-layer, channel remapping), ChannelSelect (EXR layer UI)
 - **Render**: TextureCacheManager (22 tests)
 - **Export**: AnnotationJSONExporter (19 tests), AnnotationPDFExporter (21 tests)
 - **Audio**: AudioPlaybackManager (36 tests), WaveformRenderer (35 tests)
 - **Filters**: NoiseReduction (18 tests), WebGLNoiseReduction
 - **Overlays**: MissingFrameOverlay (16 tests), WatermarkOverlay, WatermarkControl
-- **Utilities**: HiDPICanvas (32 tests), EffectProcessor (51 tests), WorkerPool (28 tests), PrerenderBufferManager (36 tests), SequenceLoader (missing frame detection)
+- **Utilities**: HiDPICanvas (32 tests), EffectProcessor (51 tests), WorkerPool (28 tests), PrerenderBufferManager (36 tests), PixelAspectRatio (28 tests), FullscreenManager (13 tests), PresentationMode (20 tests), FrameInterpolator, CodecUtils, ViewerInteraction
+- **API**: OpenRVAPI (80+ tests covering all sub-modules: Playback, Media, Audio, Loop, View, Color, Markers, Events)
 
-**E2E Tests** (50+ test suites):
+**E2E Tests** (70+ test suites):
 - **Core**: App initialization, tab navigation, media loading, playback controls, session recovery, page visibility handling
 - **Audio**: Volume control, mute/unmute, audio sync, error recovery, keyboard shortcuts (21 tests)
-- **View**: Grayscale toggle (Shift+L/Y), channel isolation
+- **View**: Grayscale toggle (Shift+L/Y), channel isolation, EXR layers, background patterns (14 tests), fullscreen/presentation
 - **GTO**: Round-trip verification (markers, frame ranges, matte, paint effects, metadata, custom nodes)
 - **Scopes**: Histogram, Waveform, Vectorscope, Parade scope
-- **Color**: Color controls, Curves, Vibrance, Highlight/Shadow recovery, Log curves
-- **View**: Pixel probe, False color, Zebra stripes, Safe areas, Spotlight, Info panel
+- **Color**: Color controls, Curves, Vibrance, Highlight/Shadow recovery, Log curves, OCIO
+- **View**: Pixel probe, False color, Zebra stripes, Safe areas, Spotlight, Info panel, Pixel aspect ratio (11 tests)
 - **Comparison**: A/B compare, Wipe modes, Difference matte
 - **Compositing**: Stack Control - layer management, blend modes, opacity, visibility, reordering (44 tests)
-- **Transform**: Rotation, Flip, Crop
+- **Transform**: Rotation, Flip, Crop, Uncrop (9 tests)
 - **Annotations**: Paint tools, Paint coordinates, Text formatting, JSON/PDF export
 - **Export**: Frame export, Sequence export, Annotation export
 - **Timeline**: EDL editing, cut manipulation
 - **Auto-Save**: Indicator display, status changes, styling, animations (14 tests)
+- **Sequences**: Image sequence loading, pattern detection (11 tests)
+- **Codecs**: Unsupported codec detection and transcoding guidance
+- **Scripting API**: window.openrv API testing
 
 ### Hi-DPI Canvas Support
 
@@ -593,9 +702,11 @@ export class MyGroupNode extends BaseGroupNode {
 - **Vite** - Fast bundler with HMR
 - **Vitest** - Unit testing framework
 - **Playwright** - End-to-end testing
-- **WebGL2** - GPU-accelerated rendering
+- **WebGL2** - GPU-accelerated rendering (tone mapping, LUT processing, color transforms)
+- **WebAssembly** - High-performance EXR decoding
 - **WebCodecs API** - Frame-accurate video decoding via [mediabunny](https://github.com/nickarora/mediabunny)
-- **Web Audio API** - Audio playback, waveform generation, and volume control
+- **Web Audio API** - Audio playback, waveform generation, volume control, and pitch correction
+- **Fullscreen API** - Native fullscreen and presentation modes
 - **Mediabunny** - Also used for audio extraction fallback when native fetch is blocked by CORS
 - **gto-js** - RV/GTO file parsing
 - **gl-matrix** - Matrix/vector math
