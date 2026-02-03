@@ -12,7 +12,38 @@ import {
  *
  * These tests verify the tone mapping functionality for HDR content,
  * including toggling, operator selection, and visual feedback.
+ *
+ * All state changes are performed through real UI interactions
+ * (clicking buttons, using keyboard shortcuts). page.evaluate()
+ * is only used for state verification (reading state to assert).
  */
+
+/**
+ * Helper: Navigate to View tab and open the tone mapping dropdown.
+ * Returns after the dropdown is visible.
+ */
+async function openToneMappingDropdown(page: import('@playwright/test').Page) {
+  await page.click('button[data-tab-id="view"]');
+  await page.waitForTimeout(100);
+  const control = page.locator('[data-testid="tone-mapping-control-button"]');
+  await control.click();
+  await page.waitForTimeout(100);
+  const dropdown = page.locator('[data-testid="tone-mapping-dropdown"]');
+  await expect(dropdown).toBeVisible();
+}
+
+/**
+ * Helper: Select a tone mapping operator via the dropdown UI.
+ * Opens the View tab, opens the dropdown, then clicks the operator button.
+ */
+async function selectOperatorViaUI(
+  page: import('@playwright/test').Page,
+  operator: 'off' | 'reinhard' | 'filmic' | 'aces',
+) {
+  await openToneMappingDropdown(page);
+  await page.click(`[data-testid="tone-mapping-operator-${operator}"]`);
+  await page.waitForTimeout(100);
+}
 
 test.describe('Tone Mapping Display', () => {
   test.beforeEach(async ({ page }) => {
@@ -46,13 +77,10 @@ test.describe('Tone Mapping Display', () => {
   });
 
   test('TM-E003: enabling tone mapping with operator changes canvas appearance', async ({ page }) => {
-    // First select a non-off operator, which auto-enables
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.toneMappingControl?.setOperator('reinhard');
-    });
-    await page.waitForTimeout(100);
+    // Select reinhard operator via the dropdown UI, which auto-enables tone mapping
+    await selectOperatorViaUI(page, 'reinhard');
 
-    let state = await getToneMappingState(page);
+    const state = await getToneMappingState(page);
     expect(state.enabled).toBe(true);
     expect(state.operator).toBe('reinhard');
   });
@@ -60,19 +88,15 @@ test.describe('Tone Mapping Display', () => {
   test('TM-E004: disabling tone mapping restores original appearance', async ({ page }) => {
     const original = await captureCanvasState(page);
 
-    // Enable tone mapping with an operator
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.toneMappingControl?.setOperator('aces');
-    });
+    // Enable tone mapping with aces via dropdown UI
+    await selectOperatorViaUI(page, 'aces');
     await page.waitForTimeout(200);
 
     const withToneMapping = await captureCanvasState(page);
     // Canvas should have changed (though may be subtle for SDR content)
 
-    // Disable tone mapping
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.toneMappingControl?.setOperator('off');
-    });
+    // Disable tone mapping by selecting 'off' via dropdown UI
+    await selectOperatorViaUI(page, 'off');
     await page.waitForTimeout(200);
 
     const restored = await captureCanvasState(page);
@@ -97,10 +121,7 @@ test.describe('Tone Mapping Operators', () => {
   });
 
   test('TM-E011: selecting reinhard operator updates state', async ({ page }) => {
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.toneMappingControl?.setOperator('reinhard');
-    });
-    await page.waitForTimeout(100);
+    await selectOperatorViaUI(page, 'reinhard');
 
     const state = await getToneMappingState(page);
     expect(state.operator).toBe('reinhard');
@@ -108,10 +129,7 @@ test.describe('Tone Mapping Operators', () => {
   });
 
   test('TM-E012: selecting filmic operator updates state', async ({ page }) => {
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.toneMappingControl?.setOperator('filmic');
-    });
-    await page.waitForTimeout(100);
+    await selectOperatorViaUI(page, 'filmic');
 
     const state = await getToneMappingState(page);
     expect(state.operator).toBe('filmic');
@@ -119,10 +137,7 @@ test.describe('Tone Mapping Operators', () => {
   });
 
   test('TM-E013: selecting aces operator updates state', async ({ page }) => {
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.toneMappingControl?.setOperator('aces');
-    });
-    await page.waitForTimeout(100);
+    await selectOperatorViaUI(page, 'aces');
 
     const state = await getToneMappingState(page);
     expect(state.operator).toBe('aces');
@@ -130,20 +145,14 @@ test.describe('Tone Mapping Operators', () => {
   });
 
   test('TM-E014: selecting off operator auto-disables', async ({ page }) => {
-    // First enable with an operator
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.toneMappingControl?.setOperator('reinhard');
-    });
-    await page.waitForTimeout(100);
+    // First enable with reinhard via UI
+    await selectOperatorViaUI(page, 'reinhard');
 
     let state = await getToneMappingState(page);
     expect(state.enabled).toBe(true);
 
-    // Now select off
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.toneMappingControl?.setOperator('off');
-    });
-    await page.waitForTimeout(100);
+    // Now select off via UI
+    await selectOperatorViaUI(page, 'off');
 
     state = await getToneMappingState(page);
     expect(state.operator).toBe('off');
@@ -151,24 +160,18 @@ test.describe('Tone Mapping Operators', () => {
   });
 
   test('TM-E015: different operators produce different visuals', async ({ page }) => {
-    // Capture with reinhard
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.toneMappingControl?.setOperator('reinhard');
-    });
+    // Capture with reinhard via UI
+    await selectOperatorViaUI(page, 'reinhard');
     await page.waitForTimeout(200);
     const reinhardState = await captureCanvasState(page);
 
-    // Capture with filmic
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.toneMappingControl?.setOperator('filmic');
-    });
+    // Capture with filmic via UI
+    await selectOperatorViaUI(page, 'filmic');
     await page.waitForTimeout(200);
     const filmicState = await captureCanvasState(page);
 
-    // Capture with aces
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.toneMappingControl?.setOperator('aces');
-    });
+    // Capture with aces via UI
+    await selectOperatorViaUI(page, 'aces');
     await page.waitForTimeout(200);
     const acesState = await captureCanvasState(page);
 
@@ -275,11 +278,8 @@ test.describe('Tone Mapping State Persistence', () => {
   });
 
   test('TM-E030: tone mapping state persists when changing frames', async ({ page }) => {
-    // Enable tone mapping with reinhard
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.toneMappingControl?.setOperator('reinhard');
-    });
-    await page.waitForTimeout(100);
+    // Enable tone mapping with reinhard via UI
+    await selectOperatorViaUI(page, 'reinhard');
 
     let state = await getToneMappingState(page);
     expect(state.enabled).toBe(true);
@@ -295,11 +295,8 @@ test.describe('Tone Mapping State Persistence', () => {
   });
 
   test('TM-E031: tone mapping operator persists when changing frames', async ({ page }) => {
-    // Enable tone mapping with aces
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.toneMappingControl?.setOperator('aces');
-    });
-    await page.waitForTimeout(100);
+    // Enable tone mapping with aces via UI
+    await selectOperatorViaUI(page, 'aces');
 
     let state = await getToneMappingState(page);
     expect(state.operator).toBe('aces');
@@ -314,11 +311,8 @@ test.describe('Tone Mapping State Persistence', () => {
   });
 
   test('TM-E032: tone mapping state persists when changing tabs', async ({ page }) => {
-    // Enable tone mapping with filmic
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.toneMappingControl?.setOperator('filmic');
-    });
-    await page.waitForTimeout(100);
+    // Enable tone mapping with filmic via UI
+    await selectOperatorViaUI(page, 'filmic');
 
     let state = await getToneMappingState(page);
     expect(state.enabled).toBe(true);
@@ -351,18 +345,18 @@ test.describe('Tone Mapping Integration', () => {
   });
 
   test('TM-E040: tone mapping works with color adjustments', async ({ page }) => {
-    // Enable tone mapping
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.toneMappingControl?.setOperator('reinhard');
-    });
+    // Enable tone mapping via UI
+    await selectOperatorViaUI(page, 'reinhard');
+
+    // Open Color panel and adjust exposure slider via UI
+    await page.click('button[data-tab-id="color"]');
     await page.waitForTimeout(100);
 
-    // Adjust exposure
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.colorControls?.setAdjustments({
-        exposure: 1.0,
-      });
-    });
+    // Find the exposure slider and set it to a non-default value
+    const exposureSlider = page.locator('[data-testid="slider-exposure"]');
+    await exposureSlider.fill('1');
+    await exposureSlider.dispatchEvent('input');
+    await exposureSlider.dispatchEvent('change');
     await page.waitForTimeout(100);
 
     // Both should still be active
@@ -371,40 +365,45 @@ test.describe('Tone Mapping Integration', () => {
     expect(toneMappingState.operator).toBe('reinhard');
   });
 
-  test('TM-E041: toggle method works correctly', async ({ page }) => {
+  test('TM-E041: toggle via keyboard shortcut works correctly', async ({ page }) => {
     let state = await getToneMappingState(page);
     expect(state.enabled).toBe(false);
 
-    // Toggle on
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.toneMappingControl?.toggle();
-    });
+    // Toggle on using keyboard shortcut
+    await page.keyboard.press('Shift+Alt+j');
     await page.waitForTimeout(100);
 
     state = await getToneMappingState(page);
     expect(state.enabled).toBe(true);
 
-    // Toggle off
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.toneMappingControl?.toggle();
-    });
+    // Toggle off using keyboard shortcut
+    await page.keyboard.press('Shift+Alt+j');
     await page.waitForTimeout(100);
 
     state = await getToneMappingState(page);
     expect(state.enabled).toBe(false);
   });
 
-  test('TM-E042: setState method works correctly', async ({ page }) => {
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.toneMappingControl?.setState({
-        enabled: true,
-        operator: 'aces',
-      });
-    });
-    await page.waitForTimeout(100);
+  test('TM-E042: enable checkbox and operator selection work together', async ({ page }) => {
+    // Open dropdown and select aces operator via UI
+    await selectOperatorViaUI(page, 'aces');
 
     const state = await getToneMappingState(page);
     expect(state.enabled).toBe(true);
     expect(state.operator).toBe('aces');
+
+    // Now open dropdown again and uncheck the enable checkbox
+    await openToneMappingDropdown(page);
+    const checkbox = page.locator('[data-testid="tone-mapping-enable-checkbox"]');
+    // The checkbox should be checked since tone mapping is enabled
+    await expect(checkbox).toBeChecked();
+    // Uncheck it to disable tone mapping
+    await checkbox.uncheck();
+    await page.waitForTimeout(100);
+
+    const stateAfterUncheck = await getToneMappingState(page);
+    expect(stateAfterUncheck.enabled).toBe(false);
+    // Operator should still be aces even though disabled
+    expect(stateAfterUncheck.operator).toBe('aces');
   });
 });

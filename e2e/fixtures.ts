@@ -30,6 +30,7 @@ export interface SessionState {
   loopMode: 'once' | 'loop' | 'pingpong';
   playDirection: number;
   playbackSpeed: number;
+  preservesPitch: boolean;
   volume: number;
   muted: boolean;
   fps: number;
@@ -321,6 +322,7 @@ export async function getSessionState(page: Page): Promise<SessionState> {
       loopMode: 'loop',
       playDirection: 1,
       playbackSpeed: 1,
+      preservesPitch: true,
       volume: 0.7,
       muted: false,
       fps: 24,
@@ -1396,6 +1398,7 @@ export async function getExtendedSessionState(page: Page): Promise<SessionState 
       loopMode: 'loop',
       playDirection: 1,
       playbackSpeed: 1,
+      preservesPitch: true,
       volume: 0.7,
       muted: false,
       fps: 24,

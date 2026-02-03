@@ -18,7 +18,7 @@ test.describe('Smooth Zoom Animation', () => {
   test('SZ-002: fit to window shortcut resets zoom', async ({ page }) => {
     await loadImageFile(page);
 
-    // First zoom in
+    // First zoom in using mouse wheel (real user interaction)
     const canvas = page.locator('canvas').first();
     const box = await canvas.boundingBox();
     expect(box).not.toBeNull();
@@ -62,21 +62,16 @@ test.describe('Smooth Zoom Animation', () => {
     }
   });
 
-  // SZ-004: Zoom level updates after smooth animation completes
+  // SZ-004: Smooth zoom to 50% via keyboard shortcut
   test('SZ-004: smooth zoom to 50% via keyboard', async ({ page }) => {
     await loadImageFile(page);
 
-    // The '5' key is mapped to view.zoomToHalf (smoothSetZoom(0.5))
-    // Verify zoom level changes after pressing the shortcut
-    const initialState = await getViewerState(page);
+    // Switch to the View tab first (zoom50 shortcut requires View tab to be active)
+    await page.click('button[data-tab-id="view"]');
+    await page.waitForTimeout(100);
 
-    // Press keyboard shortcut for specific zoom levels
-    // Note: The actual shortcut depends on the app key mapping
-    // Test that zoom can be changed programmatically
-    await page.evaluate(() => {
-      const app = (window as any).__OPENRV_TEST__?.app;
-      app?.viewer?.smoothSetZoom?.(0.5);
-    });
+    // Press '0' key which is mapped to view.zoom50 (smoothSetZoom(0.5))
+    await page.keyboard.press('0');
 
     // Wait for smooth animation to complete
     await page.waitForTimeout(500);
@@ -156,7 +151,7 @@ test.describe('Smooth Zoom Animation', () => {
     }
   });
 
-  // SZ-008: smoothFitToWindow resets pan
+  // SZ-008: Fit to window resets pan via keyboard shortcut
   test('SZ-008: fit to window resets pan to zero', async ({ page }) => {
     await loadImageFile(page);
 
@@ -169,11 +164,8 @@ test.describe('Smooth Zoom Animation', () => {
       await page.waitForTimeout(300);
     }
 
-    // Fit to window
-    await page.evaluate(() => {
-      const app = (window as any).__OPENRV_TEST__?.app;
-      app?.viewer?.smoothFitToWindow?.();
-    });
+    // Fit to window using 'f' keyboard shortcut (real user interaction)
+    await page.keyboard.press('f');
     await page.waitForTimeout(500);
 
     const state = await getViewerState(page);

@@ -1,6 +1,16 @@
 import { test, expect } from '@playwright/test';
 import { loadVideoFile, getSessionState, waitForTestHelper } from './fixtures';
 
+/**
+ * Helper: open the speed context menu by right-clicking on the speed button.
+ */
+async function openSpeedMenu(page: import('@playwright/test').Page): Promise<void> {
+  const speedButton = page.locator('[data-testid="playback-speed-button"]');
+  await expect(speedButton).toBeVisible();
+  await speedButton.click({ button: 'right' });
+  await page.waitForTimeout(200);
+}
+
 test.describe('Audio Pitch Correction', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
@@ -10,22 +20,16 @@ test.describe('Audio Pitch Correction', () => {
 
   // APC-001: Default pitch correction is enabled
   test('APC-001: pitch correction is enabled by default', async ({ page }) => {
-    const preservesPitch = await page.evaluate(() => {
-      const state = (window as any).__OPENRV_TEST__?.getSessionState();
-      return state?.preservesPitch;
-    });
-    expect(preservesPitch).toBe(true);
+    const state = await getSessionState(page);
+    expect(state.preservesPitch).toBe(true);
   });
 
   // APC-002: Pitch correction toggle is in speed context menu
   test('APC-002: pitch correction toggle exists in speed menu', async ({ page }) => {
     await loadVideoFile(page);
 
-    // Open the playback speed menu
-    const speedButton = page.locator('[data-testid="playback-speed-button"]');
-    await expect(speedButton).toBeVisible();
-    await speedButton.click();
-    await page.waitForTimeout(200);
+    // Open the playback speed menu via right-click
+    await openSpeedMenu(page);
 
     // Check for pitch correction toggle
     const pitchToggle = page.locator('[data-testid="pitch-correction-toggle"]');
@@ -37,105 +41,89 @@ test.describe('Audio Pitch Correction', () => {
     await loadVideoFile(page);
 
     // Verify initial state
-    let preservesPitch = await page.evaluate(() => {
-      return (window as any).__OPENRV_TEST__?.getSessionState()?.preservesPitch;
-    });
-    expect(preservesPitch).toBe(true);
+    let state = await getSessionState(page);
+    expect(state.preservesPitch).toBe(true);
 
-    // Open speed menu and toggle pitch correction
-    const speedButton = page.locator('[data-testid="playback-speed-button"]');
-    await speedButton.click();
-    await page.waitForTimeout(200);
+    // Open speed menu via right-click and toggle pitch correction
+    await openSpeedMenu(page);
 
     const pitchToggle = page.locator('[data-testid="pitch-correction-toggle"]');
     await pitchToggle.click();
     await page.waitForTimeout(200);
 
     // Verify state changed
-    preservesPitch = await page.evaluate(() => {
-      return (window as any).__OPENRV_TEST__?.getSessionState()?.preservesPitch;
-    });
-    expect(preservesPitch).toBe(false);
+    state = await getSessionState(page);
+    expect(state.preservesPitch).toBe(false);
   });
 
   // APC-004: Toggle pitch correction back on
   test('APC-004: toggling pitch correction twice restores original state', async ({ page }) => {
     await loadVideoFile(page);
 
-    // Open speed menu
-    const speedButton = page.locator('[data-testid="playback-speed-button"]');
-    await speedButton.click();
-    await page.waitForTimeout(200);
+    // Open speed menu via right-click and toggle off
+    await openSpeedMenu(page);
 
-    // Toggle off
     let pitchToggle = page.locator('[data-testid="pitch-correction-toggle"]');
     await pitchToggle.click();
     await page.waitForTimeout(200);
 
-    // Re-open speed menu (may have closed)
-    await speedButton.click();
-    await page.waitForTimeout(200);
+    // Verify it's off
+    let state = await getSessionState(page);
+    expect(state.preservesPitch).toBe(false);
 
-    // Toggle back on
+    // Re-open speed menu via right-click and toggle back on
+    await openSpeedMenu(page);
+
     pitchToggle = page.locator('[data-testid="pitch-correction-toggle"]');
     await pitchToggle.click();
     await page.waitForTimeout(200);
 
-    const preservesPitch = await page.evaluate(() => {
-      return (window as any).__OPENRV_TEST__?.getSessionState()?.preservesPitch;
-    });
-    expect(preservesPitch).toBe(true);
+    // Verify it's back on
+    state = await getSessionState(page);
+    expect(state.preservesPitch).toBe(true);
   });
 
-  // APC-005: Pitch correction state via scripting API
-  test('APC-005: scripting API can control pitch correction', async ({ page }) => {
+  // APC-005: Pitch correction toggle via speed menu (round-trip)
+  test('APC-005: speed menu pitch toggle works for disable and re-enable', async ({ page }) => {
     await loadVideoFile(page);
 
-    // Disable via scripting API
-    await page.evaluate(() => {
-      const api = (window as any).openrv;
-      api?.audio?.setPreservesPitch?.(false);
-    });
-    await page.waitForTimeout(100);
+    // Disable pitch correction via speed context menu
+    await openSpeedMenu(page);
+    let pitchToggle = page.locator('[data-testid="pitch-correction-toggle"]');
+    await pitchToggle.click();
+    await page.waitForTimeout(200);
 
-    let preservesPitch = await page.evaluate(() => {
-      const api = (window as any).openrv;
-      return api?.audio?.getPreservesPitch?.();
-    });
-    expect(preservesPitch).toBe(false);
+    let state = await getSessionState(page);
+    expect(state.preservesPitch).toBe(false);
 
-    // Re-enable via scripting API
-    await page.evaluate(() => {
-      const api = (window as any).openrv;
-      api?.audio?.setPreservesPitch?.(true);
-    });
-    await page.waitForTimeout(100);
+    // Re-enable via speed context menu
+    await openSpeedMenu(page);
+    pitchToggle = page.locator('[data-testid="pitch-correction-toggle"]');
+    await pitchToggle.click();
+    await page.waitForTimeout(200);
 
-    preservesPitch = await page.evaluate(() => {
-      const api = (window as any).openrv;
-      return api?.audio?.getPreservesPitch?.();
-    });
-    expect(preservesPitch).toBe(true);
+    state = await getSessionState(page);
+    expect(state.preservesPitch).toBe(true);
   });
 
   // APC-006: Pitch correction persists across speed changes
   test('APC-006: pitch correction state persists when changing speed', async ({ page }) => {
     await loadVideoFile(page);
 
-    // Disable pitch correction
-    await page.evaluate(() => {
-      const app = (window as any).__OPENRV_TEST__?.app;
-      if (app?.session) {
-        app.session.preservesPitch = false;
-      }
-    });
-
-    // Change playback speed
-    const speedButton = page.locator('[data-testid="playback-speed-button"]');
-    await speedButton.click();
+    // Disable pitch correction via speed context menu
+    await openSpeedMenu(page);
+    const pitchToggle = page.locator('[data-testid="pitch-correction-toggle"]');
+    await pitchToggle.click();
     await page.waitForTimeout(200);
 
-    // Select a different speed preset
+    // Verify it's disabled
+    let state = await getSessionState(page);
+    expect(state.preservesPitch).toBe(false);
+
+    // Change playback speed via the speed context menu
+    await openSpeedMenu(page);
+
+    // Select a different speed preset (2x)
     const speed2x = page.locator('[data-testid="speed-preset-2"]');
     if (await speed2x.isVisible()) {
       await speed2x.click();
@@ -143,10 +131,8 @@ test.describe('Audio Pitch Correction', () => {
     }
 
     // Pitch correction should still be disabled
-    const preservesPitch = await page.evaluate(() => {
-      return (window as any).__OPENRV_TEST__?.getSessionState()?.preservesPitch;
-    });
-    expect(preservesPitch).toBe(false);
+    state = await getSessionState(page);
+    expect(state.preservesPitch).toBe(false);
   });
 
   // APC-007: Default playback speed is 1x

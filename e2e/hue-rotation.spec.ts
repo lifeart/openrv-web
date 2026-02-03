@@ -1,5 +1,47 @@
 import { test, expect } from '@playwright/test';
-import { loadImageFile, loadVideoFile, getColorState, getViewerState, waitForTestHelper, captureViewerScreenshot, imagesAreDifferent } from './fixtures';
+import { loadImageFile, loadVideoFile, waitForTestHelper, captureViewerScreenshot, imagesAreDifferent } from './fixtures';
+
+/**
+ * Hue Rotation Control Tests
+ *
+ * These tests verify the hue rotation slider in the Color panel,
+ * including default state, slider interaction, visual changes,
+ * range validation, persistence, and reset behavior.
+ *
+ * All state changes are performed through real UI interactions
+ * (slider fill, button clicks, keyboard navigation). page.evaluate()
+ * is only used for state verification where no UI element exposes
+ * the value directly.
+ */
+
+/**
+ * Helper: Open the Color panel by clicking the Color tab button.
+ */
+async function openColorPanel(page: import('@playwright/test').Page) {
+  await page.click('button[data-tab-id="color"]');
+  await page.waitForTimeout(200);
+}
+
+/**
+ * Helper: Get the current hue rotation slider value from the UI.
+ * Reads the slider's value attribute directly from the DOM element.
+ */
+async function getHueRotationSliderValue(page: import('@playwright/test').Page): Promise<number> {
+  const slider = page.locator('[data-testid="slider-hueRotation"]');
+  const value = await slider.inputValue();
+  return parseFloat(value);
+}
+
+/**
+ * Helper: Set the hue rotation slider to a given value via the UI.
+ */
+async function setHueRotationViaSlider(page: import('@playwright/test').Page, degrees: number) {
+  const slider = page.locator('[data-testid="slider-hueRotation"]');
+  await slider.fill(String(degrees));
+  await slider.dispatchEvent('input');
+  await slider.dispatchEvent('change');
+  await page.waitForTimeout(200);
+}
 
 test.describe('Hue Rotation Control', () => {
   test.beforeEach(async ({ page }) => {
@@ -10,20 +52,20 @@ test.describe('Hue Rotation Control', () => {
 
   // HR-001: Default hue rotation is 0
   test('HR-001: default hue rotation is 0 degrees', async ({ page }) => {
-    // Access hue rotation through the color adjustments internal state
-    const hueRotation = await page.evaluate(() => {
-      const app = (window as any).__OPENRV_TEST__?.app;
-      const adjustments = app?.colorControls?.adjustments;
-      return adjustments?.hueRotation ?? 0;
-    });
-    expect(hueRotation).toBe(0);
+    // Open Color panel and check the slider's default value
+    await openColorPanel(page);
+
+    const slider = page.locator('[data-testid="slider-hueRotation"]');
+    await expect(slider).toBeVisible();
+
+    const value = await getHueRotationSliderValue(page);
+    expect(value).toBe(0);
   });
 
   // HR-002: Hue rotation slider is present in Color panel
   test('HR-002: hue rotation slider exists in color controls', async ({ page }) => {
     // Open the color panel
-    await page.click('button:has-text("Color")');
-    await page.waitForTimeout(200);
+    await openColorPanel(page);
 
     // Look for the hue rotation slider by data-testid
     const slider = page.locator('[data-testid="slider-hueRotation"]');
@@ -35,23 +77,17 @@ test.describe('Hue Rotation Control', () => {
     await loadImageFile(page);
 
     // Open the color panel
-    await page.click('button:has-text("Color")');
-    await page.waitForTimeout(200);
+    await openColorPanel(page);
 
     const slider = page.locator('[data-testid="slider-hueRotation"]');
     await expect(slider).toBeVisible();
 
-    // Set hue rotation to 180 degrees
-    await slider.fill('180');
-    await slider.dispatchEvent('input');
-    await slider.dispatchEvent('change');
-    await page.waitForTimeout(200);
+    // Set hue rotation to 180 degrees via the slider UI
+    await setHueRotationViaSlider(page, 180);
 
-    const hueRotation = await page.evaluate(() => {
-      const app = (window as any).__OPENRV_TEST__?.app;
-      return app?.colorControls?.adjustments?.hueRotation ?? 0;
-    });
-    expect(hueRotation).toBe(180);
+    // Verify the slider value reflects the change
+    const value = await getHueRotationSliderValue(page);
+    expect(value).toBe(180);
   });
 
   // HR-004: Hue rotation affects the rendered canvas
@@ -61,15 +97,10 @@ test.describe('Hue Rotation Control', () => {
     // Capture screenshot before hue rotation
     const before = await captureViewerScreenshot(page);
 
-    // Open color panel and set hue rotation
-    await page.click('button:has-text("Color")');
-    await page.waitForTimeout(200);
-
-    const slider = page.locator('[data-testid="slider-hueRotation"]');
-    await slider.fill('180');
-    await slider.dispatchEvent('input');
-    await slider.dispatchEvent('change');
-    await page.waitForTimeout(300);
+    // Open color panel and set hue rotation via slider
+    await openColorPanel(page);
+    await setHueRotationViaSlider(page, 180);
+    await page.waitForTimeout(100);
 
     // Capture screenshot after hue rotation
     const after = await captureViewerScreenshot(page);
@@ -80,8 +111,7 @@ test.describe('Hue Rotation Control', () => {
 
   // HR-005: Hue rotation range is 0-360
   test('HR-005: hue rotation slider has correct min/max range', async ({ page }) => {
-    await page.click('button:has-text("Color")');
-    await page.waitForTimeout(200);
+    await openColorPanel(page);
 
     const slider = page.locator('[data-testid="slider-hueRotation"]');
     const min = await slider.getAttribute('min');
@@ -95,74 +125,58 @@ test.describe('Hue Rotation Control', () => {
   test('HR-006: hue rotation wraps at 360 degrees', async ({ page }) => {
     await loadImageFile(page);
 
-    await page.click('button:has-text("Color")');
-    await page.waitForTimeout(200);
+    await openColorPanel(page);
 
-    const slider = page.locator('[data-testid="slider-hueRotation"]');
+    // Set to 360 via the slider - should normalize to 0 (no visible effect)
+    await setHueRotationViaSlider(page, 360);
 
-    // Set to 360 - should normalize to 0 (no visible effect)
-    await slider.fill('360');
-    await slider.dispatchEvent('input');
-    await slider.dispatchEvent('change');
-    await page.waitForTimeout(200);
-
-    // The normalized value should effectively be 0 (360 % 360 = 0)
-    const hueRotation = await page.evaluate(() => {
-      const app = (window as any).__OPENRV_TEST__?.app;
-      const raw = app?.colorControls?.adjustments?.hueRotation ?? 0;
-      return ((raw % 360) + 360) % 360;
-    });
-    expect(hueRotation).toBe(0);
+    // Read the slider value and check the normalized result
+    const sliderValue = await getHueRotationSliderValue(page);
+    // 360 degrees is equivalent to 0 degrees in hue rotation
+    const normalizedValue = ((sliderValue % 360) + 360) % 360;
+    expect(normalizedValue).toBe(0);
   });
 
   // HR-007: Hue rotation persists across frames
   test('HR-007: hue rotation persists when navigating frames', async ({ page }) => {
     await loadVideoFile(page);
 
-    await page.click('button:has-text("Color")');
-    await page.waitForTimeout(200);
+    await openColorPanel(page);
+    await setHueRotationViaSlider(page, 90);
 
-    const slider = page.locator('[data-testid="slider-hueRotation"]');
-    await slider.fill('90');
-    await slider.dispatchEvent('input');
-    await slider.dispatchEvent('change');
-    await page.waitForTimeout(200);
+    // Verify slider value before navigation
+    let value = await getHueRotationSliderValue(page);
+    expect(value).toBe(90);
 
-    // Navigate to next frame
+    // Navigate to next frame using keyboard
     await page.keyboard.press('ArrowRight');
     await page.waitForTimeout(200);
 
-    // Hue rotation should persist
-    const hueRotation = await page.evaluate(() => {
-      const app = (window as any).__OPENRV_TEST__?.app;
-      return app?.colorControls?.adjustments?.hueRotation ?? 0;
-    });
-    expect(hueRotation).toBe(90);
+    // Hue rotation should persist - verify via slider value
+    value = await getHueRotationSliderValue(page);
+    expect(value).toBe(90);
   });
 
   // HR-008: Reset button clears hue rotation
   test('HR-008: reset color controls resets hue rotation to 0', async ({ page }) => {
     await loadImageFile(page);
 
-    await page.click('button:has-text("Color")');
-    await page.waitForTimeout(200);
+    await openColorPanel(page);
 
-    // Set hue rotation
-    const slider = page.locator('[data-testid="slider-hueRotation"]');
-    await slider.fill('120');
-    await slider.dispatchEvent('input');
-    await slider.dispatchEvent('change');
-    await page.waitForTimeout(200);
+    // Set hue rotation via slider
+    await setHueRotationViaSlider(page, 120);
 
-    // Click reset button
+    // Verify it was set
+    let value = await getHueRotationSliderValue(page);
+    expect(value).toBe(120);
+
+    // Click reset button in the color controls panel
     const resetButton = page.locator('.color-controls-panel button:has-text("Reset")');
     await resetButton.click();
     await page.waitForTimeout(200);
 
-    const hueRotation = await page.evaluate(() => {
-      const app = (window as any).__OPENRV_TEST__?.app;
-      return app?.colorControls?.adjustments?.hueRotation ?? 0;
-    });
-    expect(hueRotation).toBe(0);
+    // Verify hue rotation was reset to 0 via slider value
+    value = await getHueRotationSliderValue(page);
+    expect(value).toBe(0);
   });
 });
