@@ -14,6 +14,31 @@
  * Reference: OpenRV StereoIPNode.cpp
  */
 
+import {
+  StereoEyeTransformState,
+  StereoAlignMode,
+  isDefaultStereoEyeTransformState,
+  applyEyeTransform,
+} from './StereoEyeTransform';
+import { applyAlignmentOverlay } from './StereoAlignOverlay';
+
+// Re-export types from StereoEyeTransform for convenience
+export type {
+  EyeTransform,
+  StereoEyeTransformState,
+  StereoAlignMode,
+} from './StereoEyeTransform';
+export {
+  DEFAULT_EYE_TRANSFORM,
+  DEFAULT_STEREO_EYE_TRANSFORM_STATE,
+  DEFAULT_STEREO_ALIGN_MODE,
+  STEREO_ALIGN_MODES,
+  isDefaultEyeTransform,
+  isDefaultStereoEyeTransformState,
+  applyEyeTransform,
+} from './StereoEyeTransform';
+export { applyAlignmentOverlay } from './StereoAlignOverlay';
+
 export type StereoMode =
   | 'off'
   | 'side-by-side'
@@ -82,6 +107,80 @@ export function applyStereoMode(
     default:
       return sourceData;
   }
+}
+
+/**
+ * Apply stereo rendering with per-eye transforms and alignment overlay.
+ *
+ * This extends the basic applyStereoMode with:
+ * 1. Per-eye transforms applied between eye extraction and composite
+ * 2. Alignment overlay applied after composite
+ *
+ * Returns the processed ImageData and optionally the transformed left/right eye buffers
+ * (needed for difference/edge alignment modes).
+ */
+export function applyStereoModeWithEyeTransforms(
+  sourceData: ImageData,
+  state: StereoState,
+  eyeTransformState?: StereoEyeTransformState,
+  alignMode?: StereoAlignMode,
+  inputFormat: StereoInputFormat = 'side-by-side'
+): ImageData {
+  if (state.mode === 'off') {
+    return sourceData;
+  }
+
+  const { width, height } = sourceData;
+
+  // Extract left and right eye images based on input format
+  const { left, right } = extractStereoEyes(sourceData, inputFormat, state.eyeSwap);
+
+  // Apply offset to the right eye
+  const offsetRight = state.offset !== 0 ? applyHorizontalOffset(right, state.offset) : right;
+
+  // Apply per-eye transforms (NEW step)
+  let transformedLeft = left;
+  let transformedRight = offsetRight;
+  if (eyeTransformState && !isDefaultStereoEyeTransformState(eyeTransformState)) {
+    transformedLeft = applyEyeTransform(left, eyeTransformState.left);
+    transformedRight = applyEyeTransform(offsetRight, eyeTransformState.right);
+  }
+
+  // Apply the selected stereo mode (composite)
+  let result: ImageData;
+  switch (state.mode) {
+    case 'side-by-side':
+      result = renderSideBySide(transformedLeft, transformedRight, width, height);
+      break;
+    case 'over-under':
+      result = renderOverUnder(transformedLeft, transformedRight, width, height);
+      break;
+    case 'mirror':
+      result = renderMirror(transformedLeft, transformedRight, width, height);
+      break;
+    case 'anaglyph':
+      result = renderAnaglyph(transformedLeft, transformedRight, false);
+      break;
+    case 'anaglyph-luminance':
+      result = renderAnaglyph(transformedLeft, transformedRight, true);
+      break;
+    case 'checkerboard':
+      result = renderCheckerboard(transformedLeft, transformedRight);
+      break;
+    case 'scanline':
+      result = renderScanline(transformedLeft, transformedRight);
+      break;
+    default:
+      result = sourceData;
+      break;
+  }
+
+  // Apply alignment overlay (NEW step)
+  if (alignMode && alignMode !== 'off') {
+    result = applyAlignmentOverlay(result, alignMode, transformedLeft, transformedRight);
+  }
+
+  return result;
 }
 
 /**

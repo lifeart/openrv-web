@@ -128,6 +128,11 @@ export interface ViewerState {
   stereoMode: 'off' | 'side-by-side' | 'over-under' | 'mirror' | 'anaglyph' | 'anaglyph-luminance' | 'checkerboard' | 'scanline';
   stereoEyeSwap: boolean;
   stereoOffset: number;
+  // Per-eye transform state
+  stereoEyeTransformLeft: { flipH: boolean; flipV: boolean; rotation: number; scale: number; translateX: number; translateY: number };
+  stereoEyeTransformRight: { flipH: boolean; flipV: boolean; rotation: number; scale: number; translateX: number; translateY: number };
+  stereoEyeTransformLinked: boolean;
+  stereoAlignMode: 'off' | 'grid' | 'crosshair' | 'difference' | 'edges';
   histogramVisible: boolean;
   histogramMode: 'rgb' | 'luminance' | 'separate';
   histogramLogScale: boolean;
@@ -437,6 +442,11 @@ export function exposeForTesting(app: App): void {
         stereoMode: viewer.stereoState?.mode ?? 'off',
         stereoEyeSwap: viewer.stereoState?.eyeSwap ?? false,
         stereoOffset: viewer.stereoState?.offset ?? 0,
+        // Per-eye transform state
+        stereoEyeTransformLeft: viewer.stereoEyeTransformState ? { ...viewer.stereoEyeTransformState.left } : { flipH: false, flipV: false, rotation: 0, scale: 1.0, translateX: 0, translateY: 0 },
+        stereoEyeTransformRight: viewer.stereoEyeTransformState ? { ...viewer.stereoEyeTransformState.right } : { flipH: false, flipV: false, rotation: 0, scale: 1.0, translateX: 0, translateY: 0 },
+        stereoEyeTransformLinked: viewer.stereoEyeTransformState?.linked ?? false,
+        stereoAlignMode: viewer.stereoAlignMode ?? 'off',
         histogramVisible: histogram?.isVisible?.() ?? false,
         histogramMode: histogram?.getMode?.() ?? 'rgb',
         histogramLogScale: histogram?.isLogScale?.() ?? false,

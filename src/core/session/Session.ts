@@ -35,6 +35,7 @@ import type { ScopesState } from '../../ui/components/ScopesControl';
 import type { CDLValues } from '../../color/CDL';
 import type { LensDistortionParams } from '../../transform/LensDistortion';
 import type { StereoState } from '../../stereo/StereoRenderer';
+import type { StereoEyeTransformState, StereoAlignMode } from '../../stereo/StereoEyeTransform';
 import { Graph } from '../graph/Graph';
 import { loadGTOGraph } from './GTOGraphLoader';
 import type { GTOParseResult } from './GTOGraphLoader';
@@ -72,6 +73,8 @@ export interface GTOViewSettings {
   crop?: CropState;
   channelMode?: ChannelMode;
   stereo?: StereoState;
+  stereoEyeTransform?: StereoEyeTransformState;
+  stereoAlignMode?: StereoAlignMode;
   scopes?: ScopesState;
 }
 

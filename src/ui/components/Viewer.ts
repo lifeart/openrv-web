@@ -22,7 +22,7 @@ import { showAlert } from './shared/Modal';
 import { getIconSvg } from './shared/Icons';
 import { ChannelMode, applyChannelIsolation } from './ChannelSelect';
 import { applyColorInversion } from '../../color/Inversion';
-import { StereoState, DEFAULT_STEREO_STATE, isDefaultStereoState, applyStereoMode } from '../../stereo/StereoRenderer';
+import { StereoState, DEFAULT_STEREO_STATE, isDefaultStereoState, applyStereoMode, applyStereoModeWithEyeTransforms, StereoEyeTransformState, StereoAlignMode, DEFAULT_STEREO_EYE_TRANSFORM_STATE, DEFAULT_STEREO_ALIGN_MODE, isDefaultStereoEyeTransformState } from '../../stereo/StereoRenderer';
 import { DifferenceMatteState, DEFAULT_DIFFERENCE_MATTE_STATE, applyDifferenceMatte } from './DifferenceMatteControl';
 import { WebGLSharpenProcessor } from '../../filters/WebGLSharpen';
 import { SafeAreasOverlay } from './SafeAreasOverlay';
@@ -292,6 +292,12 @@ export class Viewer {
 
   // Stereo viewing state
   private stereoState: StereoState = { ...DEFAULT_STEREO_STATE };
+
+  // Per-eye transform state
+  private stereoEyeTransformState: StereoEyeTransformState = { ...DEFAULT_STEREO_EYE_TRANSFORM_STATE, left: { ...DEFAULT_STEREO_EYE_TRANSFORM_STATE.left }, right: { ...DEFAULT_STEREO_EYE_TRANSFORM_STATE.right } };
+
+  // Stereo alignment overlay mode
+  private stereoAlignMode: StereoAlignMode = DEFAULT_STEREO_ALIGN_MODE;
 
   // Difference matte state
   private differenceMatteState: DifferenceMatteState = { ...DEFAULT_DIFFERENCE_MATTE_STATE };
@@ -1764,8 +1770,15 @@ export class Viewer {
 
     // Apply post-processing effects (stereo, lens, LUT, color, sharpen) regardless of stack mode
     // Apply stereo viewing mode (transforms layout for 3D viewing)
+    // Uses extended function when per-eye transforms or alignment overlays are active
     if (!isDefaultStereoState(this.stereoState)) {
-      this.applyStereoMode(this.imageCtx, displayWidth, displayHeight);
+      const hasEyeTransforms = !isDefaultStereoEyeTransformState(this.stereoEyeTransformState);
+      const hasAlignOverlay = this.stereoAlignMode !== 'off';
+      if (hasEyeTransforms || hasAlignOverlay) {
+        this.applyStereoModeWithEyeTransforms(this.imageCtx, displayWidth, displayHeight);
+      } else {
+        this.applyStereoMode(this.imageCtx, displayWidth, displayHeight);
+      }
     }
 
     // Apply lens distortion correction (geometric transform, applied first)
@@ -2645,6 +2658,64 @@ export class Viewer {
     const imageData = ctx.getImageData(0, 0, width, height);
     const processedData = applyStereoMode(imageData, this.stereoState);
     ctx.putImageData(processedData, 0, 0);
+  }
+
+  /**
+   * Apply stereo viewing mode with per-eye transforms and alignment overlay
+   */
+  private applyStereoModeWithEyeTransforms(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+    if (isDefaultStereoState(this.stereoState)) return;
+
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const processedData = applyStereoModeWithEyeTransforms(
+      imageData,
+      this.stereoState,
+      this.stereoEyeTransformState,
+      this.stereoAlignMode
+    );
+    ctx.putImageData(processedData, 0, 0);
+  }
+
+  // Per-eye transform methods
+  setStereoEyeTransforms(state: StereoEyeTransformState): void {
+    this.stereoEyeTransformState = {
+      left: { ...state.left },
+      right: { ...state.right },
+      linked: state.linked,
+    };
+    this.scheduleRender();
+  }
+
+  getStereoEyeTransforms(): StereoEyeTransformState {
+    return {
+      left: { ...this.stereoEyeTransformState.left },
+      right: { ...this.stereoEyeTransformState.right },
+      linked: this.stereoEyeTransformState.linked,
+    };
+  }
+
+  resetStereoEyeTransforms(): void {
+    this.stereoEyeTransformState = {
+      left: { ...DEFAULT_STEREO_EYE_TRANSFORM_STATE.left },
+      right: { ...DEFAULT_STEREO_EYE_TRANSFORM_STATE.right },
+      linked: false,
+    };
+    this.scheduleRender();
+  }
+
+  // Stereo alignment mode methods
+  setStereoAlignMode(mode: StereoAlignMode): void {
+    this.stereoAlignMode = mode;
+    this.scheduleRender();
+  }
+
+  getStereoAlignMode(): StereoAlignMode {
+    return this.stereoAlignMode;
+  }
+
+  resetStereoAlignMode(): void {
+    this.stereoAlignMode = DEFAULT_STEREO_ALIGN_MODE;
+    this.scheduleRender();
   }
 
   // Difference matte methods

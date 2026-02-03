@@ -16,6 +16,8 @@ import { LensControl } from './ui/components/LensControl';
 import { StackControl } from './ui/components/StackControl';
 import { ChannelSelect } from './ui/components/ChannelSelect';
 import { StereoControl } from './ui/components/StereoControl';
+import { StereoEyeTransformControl } from './ui/components/StereoEyeTransformControl';
+import { StereoAlignControl } from './ui/components/StereoAlignControl';
 import { Histogram } from './ui/components/Histogram';
 import { Waveform } from './ui/components/Waveform';
 import { Vectorscope } from './ui/components/Vectorscope';
@@ -83,6 +85,8 @@ export class App {
   private stackControl: StackControl;
   private channelSelect: ChannelSelect;
   private stereoControl: StereoControl;
+  private stereoEyeTransformControl: StereoEyeTransformControl;
+  private stereoAlignControl: StereoAlignControl;
   private histogram: Histogram;
   private waveform: Waveform;
   private vectorscope: Vectorscope;
@@ -548,6 +552,31 @@ export class App {
       this.viewer.setStereoState(state);
       this.scheduleUpdateScopes();
       this.syncGTOStore();
+      // Hide per-eye controls when stereo is turned off
+      if (state.mode === 'off') {
+        this.stereoEyeTransformControl.hidePanel();
+        this.stereoEyeTransformControl.reset();
+        this.stereoAlignControl.reset();
+        this.viewer.resetStereoEyeTransforms();
+        this.viewer.resetStereoAlignMode();
+      }
+      // Update visibility of per-eye controls
+      this.updateStereoEyeControlsVisibility();
+    });
+
+    // Initialize per-eye transform control
+    this.stereoEyeTransformControl = new StereoEyeTransformControl();
+    this.stereoEyeTransformControl.on('transformChanged', (state) => {
+      this.viewer.setStereoEyeTransforms(state);
+      this.scheduleUpdateScopes();
+      this.syncGTOStore();
+    });
+
+    // Initialize stereo alignment control
+    this.stereoAlignControl = new StereoAlignControl();
+    this.stereoAlignControl.on('alignModeChanged', (mode) => {
+      this.viewer.setStereoAlignMode(mode);
+      this.scheduleUpdateScopes();
     });
 
     // Initialize histogram
@@ -890,6 +919,8 @@ export class App {
     // --- GROUP 2: Comparison (Compare + Stereo + Ghost) ---
     viewContent.appendChild(this.compareControl.render());
     viewContent.appendChild(this.stereoControl.render());
+    viewContent.appendChild(this.stereoEyeTransformControl.render());
+    viewContent.appendChild(this.stereoAlignControl.render());
     viewContent.appendChild(this.ghostFrameControl.render());
     viewContent.appendChild(ContextToolbar.createDivider());
 
@@ -1060,6 +1091,9 @@ export class App {
     });
 
     this.contextToolbar.setTabContent('view', viewContent);
+
+    // Initially hide per-eye controls (shown when stereo mode is activated)
+    this.updateStereoEyeControlsVisibility();
 
     // === COLOR TAB ===
     const colorContent = document.createElement('div');
@@ -1315,6 +1349,12 @@ export class App {
       if (settings.stereo) {
         this.stereoControl.setState(settings.stereo);
       }
+      if (settings.stereoEyeTransform) {
+        this.stereoEyeTransformControl.setState(settings.stereoEyeTransform);
+      }
+      if (settings.stereoAlignMode) {
+        this.stereoAlignControl.setMode(settings.stereoAlignMode);
+      }
       if (settings.scopes) {
         const applyScope = (scope: 'histogram' | 'waveform' | 'vectorscope', visible: boolean): void => {
           if (scope === 'histogram') {
@@ -1465,6 +1505,8 @@ export class App {
       'channel.luminance': () => this.channelSelect.handleKeyboard('L', true),
       'channel.none': () => this.channelSelect.handleKeyboard('N', true),
       'stereo.toggle': () => this.stereoControl.handleKeyboard('3', true),
+      'stereo.eyeTransform': () => this.stereoEyeTransformControl.handleKeyboard('E', true),
+      'stereo.cycleAlign': () => this.stereoAlignControl.handleKeyboard('4', true),
       'view.toggleGuides': () => this.safeAreasControl.getOverlay().toggle(),
       'view.togglePixelProbe': () => this.viewer.getPixelProbe().toggle(),
       'view.toggleFalseColor': () => this.viewer.getFalseColor().toggle(),
@@ -1519,6 +1561,10 @@ export class App {
           if (this.cropControl.getCropState().enabled) {
             this.cropControl.toggle();
           }
+        }
+        // Close stereo eye transform panel
+        if (this.stereoEyeTransformControl.isPanelVisible()) {
+          this.stereoEyeTransformControl.hidePanel();
         }
       },
       'snapshot.create': () => {
@@ -1941,6 +1987,14 @@ export class App {
    * Uses requestAnimationFrame to ensure updates happen after the render cycle.
    */
   private pendingScopeUpdate = false;
+  private updateStereoEyeControlsVisibility(): void {
+    const isStereoActive = this.stereoControl.isActive();
+    const eyeTransformEl = this.stereoEyeTransformControl.render();
+    const alignEl = this.stereoAlignControl.render();
+    eyeTransformEl.style.display = isStereoActive ? 'inline-flex' : 'none';
+    alignEl.style.display = isStereoActive ? 'inline-flex' : 'none';
+  }
+
   private scheduleUpdateScopes(): void {
     if (this.pendingScopeUpdate) return;
     this.pendingScopeUpdate = true;
@@ -2135,7 +2189,7 @@ export class App {
       'ANNOTATIONS': ['annotation.previous', 'annotation.next'],
       'TRANSFORM': ['transform.rotateLeft', 'transform.rotateRight', 'transform.flipHorizontal', 'transform.flipVertical'],
       'PANELS': ['panel.effects', 'panel.crop', 'panel.close'],
-      'STEREO': ['stereo.toggle']
+      'STEREO': ['stereo.toggle', 'stereo.eyeTransform', 'stereo.cycleAlign']
     };
 
     // Add special audio shortcuts
@@ -3022,6 +3076,8 @@ export class App {
     this.parControl.dispose();
     this.backgroundPatternControl.dispose();
     this.stereoControl.dispose();
+    this.stereoEyeTransformControl.dispose();
+    this.stereoAlignControl.dispose();
     this.histogram.dispose();
     this.waveform.dispose();
     this.vectorscope.dispose();

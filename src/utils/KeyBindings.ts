@@ -344,6 +344,16 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     shift: true,
     description: 'Toggle stereo viewing mode'
   },
+  'stereo.eyeTransform': {
+    code: 'KeyE',
+    shift: true,
+    description: 'Toggle per-eye transform panel'
+  },
+  'stereo.cycleAlign': {
+    code: 'Digit4',
+    shift: true,
+    description: 'Cycle stereo alignment overlay mode'
+  },
 
   // Safe areas / guides
   'view.toggleGuides': {

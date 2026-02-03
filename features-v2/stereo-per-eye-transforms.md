@@ -32,9 +32,9 @@ OpenRV supports per-eye geometric transformations for stereo alignment correctio
 These transforms are applied before the stereo composite step, operating on individual eye buffers.
 
 ## Status
-- [x] Not implemented
+- [ ] Not implemented
 - [ ] Partially implemented
-- [ ] Fully implemented
+- [x] Fully implemented
 
 ## Dependencies
 This feature depends on the existing Stereo 3D Viewing implementation:
