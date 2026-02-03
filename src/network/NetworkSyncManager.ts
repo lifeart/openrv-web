@@ -256,7 +256,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> {
   private setupWebSocketEvents(): void {
     const unsub1 = this.wsClient.on('message', (message) => this.handleMessage(message));
 
-    const unsub2 = this.wsClient.on('disconnected', ({ code: _code, reason: _reason }) => {
+    const unsub2 = this.wsClient.on('disconnected', () => {
       if (this._connectionState === 'connected') {
         this.setConnectionState('reconnecting');
         this.emit('toastMessage', {
@@ -266,7 +266,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> {
       }
     });
 
-    const unsub3 = this.wsClient.on('reconnecting', ({ attempt: _attempt, maxAttempts: _maxAttempts }) => {
+    const unsub3 = this.wsClient.on('reconnecting', () => {
       this.setConnectionState('reconnecting');
     });
 
@@ -521,7 +521,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> {
     const user: SyncUser = {
       id: generateMessageId(),
       name: userName,
-      color: USER_COLORS[this._roomInfo.users.length % USER_COLORS.length] as string,
+      color: USER_COLORS[this._roomInfo.users.length % USER_COLORS.length] ?? USER_COLORS[0],
       isHost: false,
       joinedAt: Date.now(),
     };

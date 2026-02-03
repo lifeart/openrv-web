@@ -1536,7 +1536,7 @@ export class App {
     this.headerBar.setNetworkControl(this.networkControl.render());
 
     // Wire UI events to manager
-    this.networkControl.on('createRoom', ({ userName: _userName }) => {
+    this.networkControl.on('createRoom', () => {
       this.networkSyncManager.simulateRoomCreated();
       const info = this.networkSyncManager.roomInfo;
       if (info) {

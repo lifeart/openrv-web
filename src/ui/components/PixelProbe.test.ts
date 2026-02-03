@@ -837,7 +837,7 @@ describe('calculateAreaAverage', () => {
       data[idx] = 255;
       data[idx + 1] = 255;
       data[idx + 2] = 255;
-      data[idx + 3] = alphaValues[i]!;
+      data[idx + 3] = alphaValues[i] ?? 0;
     }
     const imageData = new ImageData(data, 3, 3);
 

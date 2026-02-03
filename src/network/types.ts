@@ -5,6 +5,8 @@
  * multiple OpenRV Web clients viewing the same media.
  */
 
+import type { EventMap } from '../utils/EventEmitter';
+
 // ---- Connection States ----
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error';
@@ -187,8 +189,7 @@ export interface ErrorPayload {
 
 // ---- Events ----
 
-export interface NetworkSyncEvents {
-  [key: string]: unknown;
+export interface NetworkSyncEvents extends EventMap {
   connectionStateChanged: ConnectionState;
   roomCreated: RoomInfo;
   roomJoined: RoomInfo;
@@ -208,8 +209,7 @@ export interface NetworkSyncEvents {
 
 // ---- WebSocket Client Events ----
 
-export interface WebSocketClientEvents {
-  [key: string]: unknown;
+export interface WebSocketClientEvents extends EventMap {
   connected: void;
   disconnected: { code: number; reason: string };
   message: SyncMessage;
