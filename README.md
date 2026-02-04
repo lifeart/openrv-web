@@ -69,6 +69,14 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
   - Filmic operator (S-curve with shoulder and toe)
   - ACES filmic tone mapping
   - Toggle via Shift+Alt+J keyboard shortcut
+- **HDR & Wide Color Gamut Output** - progressive enhancement for HDR-capable displays
+  - **Display P3 gamut** - automatic Wide Color Gamut output on supported displays (Chrome 104+, Safari 15.1+)
+  - **HDR extended range** - HLG and PQ output modes for HDR displays (experimental, Chrome)
+  - **Display capabilities detection** - centralized runtime detection of P3, HDR, and WebGPU support
+  - **User gamut preference** - force sRGB or Display P3 output via Display Profile settings
+  - **HDR-aware scopes** - waveform, histogram, and vectorscope extend beyond 1.0 for HDR content
+  - **WebGPU backend** - renderer abstraction with WebGPU migration path (rgba16float, extended tone mapping)
+  - Full backward compatibility - all features are opt-in, fallback to sRGB on unsupported browsers
 
 ### Transform & Effects
 - Rotation (90°/180°/270°) and flip (H/V)
@@ -460,6 +468,8 @@ src/
 │   ├── sources/        # FileSourceNode, VideoSourceNode, SequenceSourceNode
 │   └── groups/         # SequenceGroup, StackGroup, SwitchGroup, etc.
 ├── render/             # WebGL2 renderer and shaders (incl. tone mapping)
+│   ├── RendererBackend.ts      # Renderer abstraction (WebGL2/WebGPU backends)
+│   ├── WebGPUBackend.ts        # WebGPU HDR renderer (rgba16float, extended tone mapping)
 │   └── TextureCacheManager.ts  # LRU texture cache for GPU performance
 ├── ui/
 │   ├── components/     # Viewer, Timeline, Toolbar, Controls, TimelineEditor
@@ -480,6 +490,9 @@ src/
 │   └── WaveformRenderer.ts     # Waveform extraction and rendering
 ├── color/              # CDL, LUT loader (1D & 3D), WebGL LUT processor
 │   ├── LogCurves.ts    # Camera log curve presets (Cineon, LogC, S-Log3, etc.)
+│   ├── DisplayCapabilities.ts # HDR/P3/WebGPU display capability detection
+│   ├── HDRPixelData.ts        # HDR-aware pixel value access wrapper
+│   ├── SafeCanvasContext.ts   # Safe canvas context creation with P3/HDR fallback
 │   └── ocio/           # OCIO color management (config, transforms, processor)
 ├── filters/            # Image processing filters
 │   ├── NoiseReduction.ts       # Bilateral filter (CPU implementation)
