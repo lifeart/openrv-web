@@ -133,6 +133,9 @@ export function detectDisplayCapabilities(): DisplayCapabilities {
   } catch { /* stays false */ }
 
   // --- WebGL2 P3, HLG, and PQ support (single context) ---
+  // Note: HLG/PQ detection on detached canvases may report false even
+  // when the live DOM canvas supports them. The Viewer tries again on
+  // the real canvas at render time. displayHDR (matchMedia) is reliable.
   try {
     const c = document.createElement('canvas');
     c.width = c.height = 1;
@@ -179,7 +182,23 @@ export function detectDisplayCapabilities(): DisplayCapabilities {
     caps.activeColorSpace = 'display-p3';
   }
 
-  // activeHDRMode stays 'sdr' in Phase 1
+  // Derive activeHDRMode based on detected capabilities
+  if (caps.webglHLG) {
+    caps.activeHDRMode = 'hlg';
+  } else if (caps.webglPQ) {
+    caps.activeHDRMode = 'pq';
+  }
+
+  console.log('[DisplayCapabilities]', {
+    displayGamut: caps.displayGamut,
+    displayHDR: caps.displayHDR,
+    webglP3: caps.webglP3,
+    webglHLG: caps.webglHLG,
+    webglPQ: caps.webglPQ,
+    canvasHLG: caps.canvasHLG,
+    canvasFloat16: caps.canvasFloat16,
+    activeHDRMode: caps.activeHDRMode,
+  });
 
   return caps;
 }

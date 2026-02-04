@@ -64,20 +64,32 @@ export function parseGainmapJPEG(buffer: ArrayBuffer): GainmapInfo | null {
   const baseImage = images[0]!;
   const gainmapImage = images[1]!;
 
+  console.log(`[GainmapJPEG] MPF found: ${images.length} images`);
+  console.log(`[GainmapJPEG] Base image: offset=${baseImage.offset}, size=${baseImage.size}`);
+  console.log(`[GainmapJPEG] Gainmap: offset=${gainmapImage.offset}, size=${gainmapImage.size}`);
+
   // Extract headroom from XMP metadata
   // First try the primary image's XMP (Apple format)
   let headroom = extractHeadroomFromXMP(buffer, 0, undefined);
+  let headroomSource = 'primary XMP';
   if (headroom === null && gainmapImage.offset > 0 && gainmapImage.size > 0) {
     // Try the gainmap image's own XMP (Google Ultra HDR format)
     headroom = extractHeadroomFromXMP(buffer, gainmapImage.offset, gainmapImage.offset + gainmapImage.size);
+    headroomSource = 'gainmap XMP';
   }
+  if (headroom === null) {
+    headroomSource = 'default';
+  }
+
+  const finalHeadroom = headroom ?? 2.0;
+  console.log(`[GainmapJPEG] Headroom: ${finalHeadroom} (source: ${headroomSource})`);
 
   return {
     baseImageOffset: baseImage.offset,
     baseImageLength: baseImage.size,
     gainmapOffset: gainmapImage.offset,
     gainmapLength: gainmapImage.size,
-    headroom: headroom ?? 2.0,  // Default if neither XMP contains headroom
+    headroom: finalHeadroom,
   };
 }
 
@@ -95,8 +107,14 @@ export async function decodeGainmapToFloat32(
   channels: number;
 }> {
   // Slice out the base JPEG and gainmap JPEG blobs
+  // For the first image (offset 0), use gainmap offset as the end boundary.
+  // MPF size fields can underreport the first image's actual size (missing EOI marker),
+  // and JPEG decoders ignore trailing bytes after EOI, so this is safe.
+  const baseEnd = info.baseImageOffset === 0 && info.gainmapOffset > info.baseImageLength
+    ? info.gainmapOffset
+    : info.baseImageOffset + info.baseImageLength;
   const baseBlob = new Blob(
-    [buffer.slice(info.baseImageOffset, info.baseImageOffset + info.baseImageLength)],
+    [buffer.slice(info.baseImageOffset, baseEnd)],
     { type: 'image/jpeg' }
   );
   const gainmapBlob = new Blob(
@@ -131,17 +149,22 @@ export async function decodeGainmapToFloat32(
   baseBitmap.close();
 
   // Gainmap may be smaller - scale up to base image size
+  const gainmapOrigWidth = gainmapBitmap.width;
+  const gainmapOrigHeight = gainmapBitmap.height;
   const gainCanvas = createCanvas(width, height);
   const gainCtx = gainCanvas.getContext('2d')!;
   gainCtx.drawImage(gainmapBitmap, 0, 0, width, height);
   const gainData = gainCtx.getImageData(0, 0, width, height).data;
   gainmapBitmap.close();
 
+  console.log(`[GainmapJPEG] Decoding: base=${width}x${height}, gainmap=${gainmapOrigWidth}x${gainmapOrigHeight} (scaled to base), headroom=${info.headroom}`);
+
   // Apply HDR reconstruction per-pixel
   // HDR_linear = sRGB_to_linear(base) * exp2(gainmap_gray * headroom)
   const pixelCount = width * height;
   const result = new Float32Array(pixelCount * 4); // RGBA
   const headroom = info.headroom;
+  let maxValue = 0;
 
   for (let i = 0; i < pixelCount; i++) {
     const srcIdx = i * 4;
@@ -162,7 +185,12 @@ export async function decodeGainmapToFloat32(
     result[dstIdx + 1] = g * gain;
     result[dstIdx + 2] = b * gain;
     result[dstIdx + 3] = 1.0; // Full alpha
+
+    const pixelMax = Math.max(r * gain, g * gain, b * gain);
+    if (pixelMax > maxValue) maxValue = pixelMax;
   }
+
+  console.log(`[GainmapJPEG] HDR reconstruction complete: ${pixelCount} pixels, peak value=${maxValue.toFixed(3)}`);
 
   return { width, height, data: result, channels: 4 };
 }

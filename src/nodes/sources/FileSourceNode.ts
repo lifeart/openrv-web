@@ -187,7 +187,8 @@ export class FileSourceNode extends BaseSourceNode {
           });
         }
         // Fetch failed - fall through to standard image loading
-      } catch {
+      } catch (err) {
+        console.warn('[FileSource] JPEG gainmap loading failed, falling back to standard loading:', err);
         // Fall through to standard image loading
       }
     }
@@ -434,7 +435,9 @@ export class FileSourceNode extends BaseSourceNode {
     url: string,
     originalUrl?: string
   ): Promise<void> {
+    console.log(`[FileSource] Loading JPEG gainmap: ${name}, headroom=${info.headroom}`);
     const result = await decodeGainmapToFloat32(buffer, info);
+    console.log(`[FileSource] Gainmap decoded: ${result.width}x${result.height}, float32, ${result.channels}ch`);
 
     const metadata: ImageMetadata = {
       colorSpace: 'linear',
@@ -574,7 +577,8 @@ export class FileSourceNode extends BaseSourceNode {
             return;
           }
         }
-      } catch {
+      } catch (err) {
+        console.warn('[FileSource] JPEG gainmap decode failed, falling back to standard loading:', err);
         // Fall through to standard JPEG loading
       }
     }
@@ -643,14 +647,16 @@ export class FileSourceNode extends BaseSourceNode {
       // Direct copy for uint8 data
       destData.set(sourceData);
     } else if (this.cachedIPImage.dataType === 'float32') {
-      // Tone map float32 to uint8 (simple clamp for now)
+      // Simple clamp for 2D canvas fallback path.
+      // The WebGL Renderer handles proper HDR tone mapping via GPU shaders.
       const floatData = sourceData as Float32Array;
-      for (let i = 0; i < floatData.length; i++) {
-        // Apply simple exposure and gamma for display
-        const value = floatData[i] ?? 0;
-        const linear = Math.max(0, Math.min(1, value));
-        const gamma = Math.pow(linear, 1 / 2.2);
-        destData[i] = Math.round(gamma * 255);
+      for (let i = 0; i < floatData.length; i += 4) {
+        for (let c = 0; c < 3; c++) {
+          const v = Math.max(0, Math.min(1, floatData[i + c] ?? 0));
+          destData[i + c] = Math.round(Math.pow(v, 1 / 2.2) * 255);
+        }
+        // Alpha channel: pass through
+        destData[i + 3] = Math.round(Math.min(1, Math.max(0, floatData[i + 3] ?? 1)) * 255);
       }
     } else {
       // uint16 - normalize to 0-255
@@ -664,6 +670,13 @@ export class FileSourceNode extends BaseSourceNode {
     ctx.putImageData(imageData, 0, 0);
     this.canvasDirty = false;
     return canvas;
+  }
+
+  /**
+   * Get the cached IPImage directly (for WebGL HDR rendering path)
+   */
+  getIPImage(): IPImage | null {
+    return this.cachedIPImage;
   }
 
   protected process(context: EvalContext, _inputs: (IPImage | null)[]): IPImage | null {

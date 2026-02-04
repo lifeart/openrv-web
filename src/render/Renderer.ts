@@ -54,14 +54,20 @@ export class Renderer implements RendererBackend {
   initialize(canvas: HTMLCanvasElement, capabilities?: DisplayCapabilities): void {
     this.canvas = canvas;
 
-    const gl = canvas.getContext('webgl2', {
-      alpha: false,
-      antialias: false,
-      depth: false,
-      stencil: false,
-      powerPreference: 'high-performance',
-      preserveDrawingBuffer: false,
-    });
+    // For HDR displays, use default context attributes — the reference
+    // ccameron-chromium HDR examples use plain getContext('webgl2') with
+    // no custom attributes. alpha:false can prevent HDR compositing.
+    const wantHDR = capabilities?.displayHDR === true;
+    const gl = wantHDR
+      ? canvas.getContext('webgl2')
+      : canvas.getContext('webgl2', {
+          alpha: false,
+          antialias: false,
+          depth: false,
+          stencil: false,
+          powerPreference: 'high-performance',
+          preserveDrawingBuffer: false,
+        });
 
     if (!gl) {
       throw new Error('WebGL2 not supported');
@@ -69,8 +75,41 @@ export class Renderer implements RendererBackend {
 
     this.gl = gl;
 
-    // Progressive enhancement: upgrade to Display P3 if supported
-    if (capabilities?.webglP3) {
+    // Set drawingBufferColorSpace IMMEDIATELY after getContext, before any
+    // shader compilation or buffer creation. Chrome may lock the color space
+    // once GL state is created. The reference example sets it right away.
+    if (wantHDR && 'drawingBufferColorSpace' in gl) {
+      const glExt = gl as unknown as { drawingBufferColorSpace: string };
+      // Try HLG first, then PQ
+      try {
+        glExt.drawingBufferColorSpace = 'rec2100-hlg';
+        if (glExt.drawingBufferColorSpace === 'rec2100-hlg') {
+          this.hdrOutputMode = 'hlg';
+          console.log('[Renderer] HDR output: rec2100-hlg');
+        } else {
+          glExt.drawingBufferColorSpace = 'rec2100-pq';
+          if (glExt.drawingBufferColorSpace === 'rec2100-pq') {
+            this.hdrOutputMode = 'pq';
+            console.log('[Renderer] HDR output: rec2100-pq');
+          } else {
+            // Fall back to P3
+            if (capabilities?.webglP3) {
+              glExt.drawingBufferColorSpace = 'display-p3';
+            }
+            console.log(`[Renderer] HDR color spaces not accepted, drawingBufferColorSpace='${glExt.drawingBufferColorSpace}'`);
+          }
+        }
+      } catch {
+        // rec2100-hlg/pq not in PredefinedColorSpace enum — expected on most browsers.
+        // Fall back to P3 if possible.
+        try {
+          if (capabilities?.webglP3) {
+            (gl as unknown as { drawingBufferColorSpace: string }).drawingBufferColorSpace = 'display-p3';
+          }
+        } catch { /* ignore */ }
+        console.log(`[Renderer] HDR color spaces not available, using ${capabilities?.webglP3 ? 'display-p3' : 'srgb'}`);
+      }
+    } else if (capabilities?.webglP3) {
       try {
         (gl as WebGL2RenderingContext & { drawingBufferColorSpace: string }).drawingBufferColorSpace = 'display-p3';
       } catch {
@@ -657,23 +696,30 @@ export class Renderer implements RendererBackend {
   setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq', capabilities: DisplayCapabilities): boolean {
     if (!this.gl) return false;
 
-    if (mode === 'hlg' && !capabilities.webglHLG) return false;
-    if (mode === 'pq' && !capabilities.webglPQ) return false;
-
     const previousMode = this.hdrOutputMode;
     try {
       const glExt = this.gl as unknown as Omit<WebGL2RenderingContext, 'drawingBufferColorSpace'> & { drawingBufferColorSpace: string };
+      let targetColorSpace: string;
       switch (mode) {
         case 'hlg':
-          glExt.drawingBufferColorSpace = 'rec2100-hlg';
+          targetColorSpace = 'rec2100-hlg';
           break;
         case 'pq':
-          glExt.drawingBufferColorSpace = 'rec2100-pq';
+          targetColorSpace = 'rec2100-pq';
           break;
         default:
-          // Revert to P3 or sRGB
-          glExt.drawingBufferColorSpace = capabilities.webglP3 ? 'display-p3' : 'srgb';
+          targetColorSpace = capabilities.webglP3 ? 'display-p3' : 'srgb';
       }
+
+      glExt.drawingBufferColorSpace = targetColorSpace;
+
+      // Verify the assignment stuck (browser silently ignores unsupported values)
+      if (mode !== 'sdr' && glExt.drawingBufferColorSpace !== targetColorSpace) {
+        console.warn(`[Renderer] drawingBufferColorSpace='${targetColorSpace}' not supported (got '${glExt.drawingBufferColorSpace}')`);
+        this.hdrOutputMode = previousMode;
+        return false;
+      }
+
       this.hdrOutputMode = mode;
 
       // Attempt to configure HDR metadata when entering HDR mode
