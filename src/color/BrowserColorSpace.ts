@@ -8,6 +8,8 @@
  * - Estimated bit depth
  */
 
+import type { DisplayCapabilities } from './DisplayCapabilities';
+
 /**
  * Browser color space detection result
  */
@@ -96,4 +98,11 @@ export function colorSpaceLabel(colorSpace: string): string {
     case 'display-p3': return 'Display P3';
     default: return colorSpace || 'Unknown';
   }
+}
+
+/**
+ * Get the active output color space label based on display capabilities.
+ */
+export function getActiveOutputColorSpace(caps: DisplayCapabilities): string {
+  return caps.webglP3 ? 'display-p3' : 'srgb';
 }

@@ -13,6 +13,7 @@ import {
   isFullCropRegion,
   getEffectiveDimensions,
 } from './ViewerRenderingUtils';
+import { safeCanvasContext2D } from '../../color/SafeCanvasContext';
 
 /**
  * Shared helper: draw an element onto a context with transform and/or crop applied.
@@ -44,7 +45,7 @@ function drawElementWithTransformAndCrop(
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = effectiveWidth;
     tempCanvas.height = effectiveHeight;
-    const tempCtx = tempCanvas.getContext('2d');
+    const tempCtx = safeCanvasContext2D(tempCanvas, {});
     if (tempCtx) {
       // Enable high-quality image smoothing for temp canvas too
       tempCtx.imageSmoothingEnabled = true;
@@ -147,8 +148,7 @@ export function createExportCanvas(
   const canvas = document.createElement('canvas');
   canvas.width = outputWidth;
   canvas.height = outputHeight;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return null;
+  const ctx = safeCanvasContext2D(canvas, {});
 
   // Apply color filters
   ctx.filter = filterString;
@@ -254,10 +254,7 @@ export async function renderFrameToCanvas(
     const canvas = document.createElement('canvas');
     canvas.width = outputWidth;
     canvas.height = outputHeight;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      return null;
-    }
+    const ctx = safeCanvasContext2D(canvas, {});
 
     // Apply color filters
     ctx.filter = filterString;
@@ -316,8 +313,7 @@ export function renderSourceToImageData(
   const tempCanvas = document.createElement('canvas');
   tempCanvas.width = width;
   tempCanvas.height = height;
-  const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
-  if (!tempCtx) return null;
+  const tempCtx = safeCanvasContext2D(tempCanvas, { willReadFrequently: true });
 
   // Enable high-quality image smoothing for best picture quality
   tempCtx.imageSmoothingEnabled = true;

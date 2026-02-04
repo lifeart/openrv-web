@@ -45,6 +45,7 @@ export interface DisplayColorState {
   displayGamma: number;       // 0.1 to 4.0, default 1.0
   displayBrightness: number;  // 0.0 to 2.0, default 1.0
   customGamma: number;        // 0.1 to 10.0, default 2.2
+  outputGamut?: 'auto' | 'srgb' | 'display-p3';  // default: 'auto'
 }
 
 /**
@@ -55,6 +56,7 @@ export const DEFAULT_DISPLAY_COLOR_STATE: DisplayColorState = {
   displayGamma: 1.0,
   displayBrightness: 1.0,
   customGamma: 2.2,
+  outputGamut: 'auto',
 };
 
 /**
@@ -260,6 +262,7 @@ export function loadDisplayProfile(): DisplayColorState | null {
         displayGamma: Math.max(0.1, Math.min(4.0, parsed.displayGamma)),
         displayBrightness: Math.max(0.0, Math.min(2.0, parsed.displayBrightness)),
         customGamma: Math.max(0.1, Math.min(10.0, parsed.customGamma)),
+        outputGamut: ['auto', 'srgb', 'display-p3'].includes(parsed.outputGamut) ? parsed.outputGamut : undefined,
       };
     }
   } catch {

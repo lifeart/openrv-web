@@ -3,6 +3,7 @@ import { ShaderProgram } from './ShaderProgram';
 import { ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from '../ui/components/ColorControls';
 import { ToneMappingState, ToneMappingOperator, DEFAULT_TONE_MAPPING_STATE } from '../ui/components/ToneMappingControl';
 import { getHueRotationMatrix, isIdentityHueRotation } from '../color/HueRotation';
+import type { DisplayCapabilities } from '../color/DisplayCapabilities';
 
 /**
  * Tone mapping operator integer codes for shader uniform
@@ -36,7 +37,7 @@ export class Renderer {
   // Current texture
   private currentTexture: WebGLTexture | null = null;
 
-  initialize(canvas: HTMLCanvasElement): void {
+  initialize(canvas: HTMLCanvasElement, capabilities?: DisplayCapabilities): void {
     this.canvas = canvas;
 
     const gl = canvas.getContext('webgl2', {
@@ -53,6 +54,15 @@ export class Renderer {
     }
 
     this.gl = gl;
+
+    // Progressive enhancement: upgrade to Display P3 if supported
+    if (capabilities?.webglP3) {
+      try {
+        (gl as WebGL2RenderingContext & { drawingBufferColorSpace: string }).drawingBufferColorSpace = 'display-p3';
+      } catch {
+        // Browser doesn't support setting drawingBufferColorSpace
+      }
+    }
 
     // Check for required extensions
     const requiredExtensions = ['EXT_color_buffer_float', 'OES_texture_float_linear'];

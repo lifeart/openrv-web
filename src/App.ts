@@ -36,6 +36,7 @@ import { BackgroundPatternControl } from './ui/components/BackgroundPatternContr
 import { OCIOControl } from './ui/components/OCIOControl';
 import { OCIOState } from './color/OCIOConfig';
 import { DisplayProfileControl } from './ui/components/DisplayProfileControl';
+import { detectDisplayCapabilities, type DisplayCapabilities } from './color/DisplayCapabilities';
 import { exportSequence } from './utils/SequenceExporter';
 import { showAlert, showModal, closeModal, showConfirm } from './ui/components/shared/Modal';
 import { SessionSerializer } from './core/session/SessionSerializer';
@@ -135,14 +136,20 @@ export class App {
   // Layer counter - only increments, never decreases (even when layers are removed)
   private nextLayerNumber = 1;
 
+  // Display capabilities for wide color gamut / HDR support
+  private displayCapabilities: DisplayCapabilities;
+
   constructor() {
+    // Detect display capabilities at startup (P3, HDR, WebGPU)
+    this.displayCapabilities = detectDisplayCapabilities();
+
     // Bind event handlers for proper cleanup
     this.boundHandleResize = () => this.viewer.resize();
     this.boundHandleVisibilityChange = this.handleVisibilityChange.bind(this);
 
     this.session = new Session();
     this.paintEngine = new PaintEngine();
-    this.viewer = new Viewer(this.session, this.paintEngine);
+    this.viewer = new Viewer(this.session, this.paintEngine, this.displayCapabilities);
     this.timeline = new Timeline(this.session, this.paintEngine);
     this.cacheIndicator = new CacheIndicator(this.session, this.viewer);
 
@@ -349,7 +356,7 @@ export class App {
     });
 
     // Display profile control (display color management - final pipeline stage)
-    this.displayProfileControl = new DisplayProfileControl();
+    this.displayProfileControl = new DisplayProfileControl(this.displayCapabilities);
     this.displayProfileControl.on('displayStateChanged', (state) => {
       this.viewer.setDisplayColorState(state);
       this.scheduleUpdateScopes();
