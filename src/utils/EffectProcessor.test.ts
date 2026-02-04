@@ -11,7 +11,7 @@ import {
   hasActiveEffects,
 } from './EffectProcessor';
 import { createTestImageData, createGradientImageData, isGrayscale } from '../../test/utils';
-import { DEFAULT_COLOR_ADJUSTMENTS } from '../ui/components/ColorControls';
+import { ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from '../ui/components/ColorControls';
 import { DEFAULT_FILTER_SETTINGS } from '../ui/components/FilterControl';
 
 describe('EffectProcessor', () => {
@@ -202,7 +202,11 @@ describe('EffectProcessor', () => {
     it('EP-061: hash changes for each color adjustment property individually', () => {
       const baseHash = computeEffectsHash(defaultState);
 
-      const props: (keyof typeof defaultState.colorAdjustments)[] = [
+      type NumericColorKey = {
+        [K in keyof ColorAdjustments]: ColorAdjustments[K] extends number ? K : never;
+      }[keyof ColorAdjustments];
+
+      const props: NumericColorKey[] = [
         'exposure', 'gamma', 'saturation', 'vibrance', 'contrast',
         'clarity', 'hueRotation', 'temperature', 'tint', 'brightness',
         'highlights', 'shadows', 'whites', 'blacks',
@@ -210,7 +214,7 @@ describe('EffectProcessor', () => {
 
       for (const prop of props) {
         const s = createDefaultEffectsState();
-        (s.colorAdjustments as Record<string, unknown>)[prop] = 42;
+        s.colorAdjustments[prop] = 42;
         expect(computeEffectsHash(s)).not.toBe(baseHash);
       }
     });

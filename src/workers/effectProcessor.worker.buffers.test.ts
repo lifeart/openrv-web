@@ -11,7 +11,7 @@
  * 7. All existing tests pass (verified by running the full test suite)
  */
 
-import { describe, it, expect, beforeEach, vi, beforeAll } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { WorkerEffectsState } from '../utils/effectProcessing.shared';
 
 // Mock postMessage before importing the worker, since the worker calls

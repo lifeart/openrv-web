@@ -612,7 +612,7 @@ describe('ColorCurves', () => {
       const cache = new CurveLUTCache();
       // Verify the cache does not have a cachedCurvesJSON property
       // (which would indicate it is using JSON.stringify)
-      const cacheAny = cache as Record<string, unknown>;
+      const cacheAny = cache as unknown as Record<string, unknown>;
       expect(cacheAny['cachedCurvesJSON']).toBeUndefined();
       // It should have cachedCurves (structural comparison) instead
       expect('cachedCurves' in cacheAny || true).toBe(true);

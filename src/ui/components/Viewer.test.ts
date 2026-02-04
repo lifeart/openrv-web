@@ -14,6 +14,73 @@ import { DEFAULT_LENS_PARAMS } from '../../transform/LensDistortion';
 import type { LUT3D } from '../../color/LUTLoader';
 import type { StackLayer } from './StackControl';
 import type { MediaSource } from '../../core/session/Session';
+import type { CropRegion, CropState } from './CropControl';
+import type { PixelProbe } from './PixelProbe';
+
+// Type-safe accessor for private Viewer internals used in tests.
+// This avoids `as any` casts while keeping tests readable.
+type CropDragHandle = 'tl' | 'tr' | 'bl' | 'br' | 'top' | 'bottom' | 'left' | 'right' | 'move' | null;
+
+interface TestableViewer {
+  // DOM elements
+  container: HTMLElement;
+  canvasContainer: HTMLElement;
+  imageCanvas: HTMLCanvasElement;
+
+  // Session reference (writable for mocking – loosely typed so tests can supply partial mocks)
+  session: Partial<Session> & { currentSource?: MediaSource | null };
+
+  // Crop internals
+  isCropPanelOpen: boolean;
+  cropRegionChangedCallback: ((region: CropRegion) => void) | null;
+  isDraggingCrop: boolean;
+  cropDragHandle: CropDragHandle;
+  cropDragStart: { x: number; y: number; region: CropRegion } | null;
+  cropState: CropState;
+  cropOverlay: HTMLCanvasElement | { getBoundingClientRect: () => DOMRect } | null;
+
+  // Crop methods
+  handleCropPointerUp(): void;
+  getCropHandleAtPoint(clientX: number, clientY: number): CropDragHandle;
+  handleCropPointerDown(e: PointerEvent): boolean;
+  updateCropCursor(handle: CropDragHandle): void;
+  handleCropPointerMove(e: PointerEvent): void;
+  constrainToAspectRatio(region: CropRegion, handle: CropDragHandle): CropRegion;
+
+  // Layout cache internals
+  cachedContainerRect: DOMRect | null;
+  cachedCanvasContainerRect: DOMRect | null;
+  cachedImageCanvasRect: DOMRect | null;
+  invalidateLayoutCache(): void;
+  getContainerRect(): DOMRect;
+  getCanvasContainerRect(): DOMRect;
+  getImageCanvasRect(): DOMRect;
+  resizeObserver: ResizeObserver;
+
+  // Display dimensions
+  displayWidth: number;
+  displayHeight: number;
+
+  // Mouse / pixel probe internals
+  pixelProbe: PixelProbe;
+  lastMouseMoveUpdate: number;
+  cursorColorCallback: ((color: { r: number; g: number; b: number } | null, position: { x: number; y: number } | null) => void) | null;
+
+  // These should NOT exist (verified in tests)
+  lastProbeUpdate?: undefined;
+  lastCursorColorUpdate?: undefined;
+
+  // Ghost frame canvas pool
+  ghostFrameCanvasPool: { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D }[];
+  ghostFramePoolWidth: number;
+  ghostFramePoolHeight: number;
+  getGhostFrameCanvas(index: number, width: number, height: number): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } | null;
+}
+
+/** Cast a Viewer to its testable internals for accessing private members in tests. */
+function testable(viewer: Viewer): TestableViewer {
+  return viewer as unknown as TestableViewer;
+}
 
 // Mock WebGLLUTProcessor
 vi.mock('../../color/WebGLLUT', () => ({
@@ -367,22 +434,22 @@ describe('Viewer', () => {
 
     it('VWR-100: setCropPanelOpen stores panel state', () => {
       viewer.setCropPanelOpen(true);
-      expect((viewer as any).isCropPanelOpen).toBe(true);
+      expect(testable(viewer).isCropPanelOpen).toBe(true);
 
       viewer.setCropPanelOpen(false);
-      expect((viewer as any).isCropPanelOpen).toBe(false);
+      expect(testable(viewer).isCropPanelOpen).toBe(false);
     });
 
     it('VWR-101: setOnCropRegionChanged stores callback', () => {
       const callback = vi.fn();
       viewer.setOnCropRegionChanged(callback);
-      expect((viewer as any).cropRegionChangedCallback).toBe(callback);
+      expect(testable(viewer).cropRegionChangedCallback).toBe(callback);
     });
 
     it('VWR-102: setOnCropRegionChanged(null) clears callback', () => {
       viewer.setOnCropRegionChanged(vi.fn());
       viewer.setOnCropRegionChanged(null);
-      expect((viewer as any).cropRegionChangedCallback).toBeNull();
+      expect(testable(viewer).cropRegionChangedCallback).toBeNull();
     });
 
     it('VWR-103: handleCropPointerUp invokes callback with region copy', () => {
@@ -392,50 +459,50 @@ describe('Viewer', () => {
       // Setup crop state
       viewer.setCropEnabled(true);
       viewer.setCropRegion({ x: 0.1, y: 0.2, width: 0.5, height: 0.4 });
-      (viewer as any).isDraggingCrop = true;
+      testable(viewer).isDraggingCrop = true;
 
-      (viewer as any).handleCropPointerUp();
+      testable(viewer).handleCropPointerUp();
 
       expect(callback).toHaveBeenCalledWith({ x: 0.1, y: 0.2, width: 0.5, height: 0.4 });
       // Should be a copy
       const callArg = callback.mock.calls[0][0];
-      expect(callArg).not.toBe((viewer as any).cropState.region);
+      expect(callArg).not.toBe(testable(viewer).cropState.region);
     });
 
     it('VWR-104: handleCropPointerUp does not invoke callback when not dragging', () => {
       const callback = vi.fn();
       viewer.setOnCropRegionChanged(callback);
-      (viewer as any).isDraggingCrop = false;
+      testable(viewer).isDraggingCrop = false;
 
-      (viewer as any).handleCropPointerUp();
+      testable(viewer).handleCropPointerUp();
 
       expect(callback).not.toHaveBeenCalled();
     });
 
     it('VWR-105: handleCropPointerUp resets drag state', () => {
       viewer.setCropEnabled(true);
-      (viewer as any).isDraggingCrop = true;
-      (viewer as any).cropDragHandle = 'br';
-      (viewer as any).cropDragStart = { x: 0.5, y: 0.5, region: { x: 0, y: 0, width: 1, height: 1 } };
+      testable(viewer).isDraggingCrop = true;
+      testable(viewer).cropDragHandle = 'br';
+      testable(viewer).cropDragStart = { x: 0.5, y: 0.5, region: { x: 0, y: 0, width: 1, height: 1 } };
 
-      (viewer as any).handleCropPointerUp();
+      testable(viewer).handleCropPointerUp();
 
-      expect((viewer as any).isDraggingCrop).toBe(false);
-      expect((viewer as any).cropDragHandle).toBeNull();
-      expect((viewer as any).cropDragStart).toBeNull();
+      expect(testable(viewer).isDraggingCrop).toBe(false);
+      expect(testable(viewer).cropDragHandle).toBeNull();
+      expect(testable(viewer).cropDragStart).toBeNull();
     });
 
     it('VWR-106: getCropHandleAtPoint returns null when crop disabled', () => {
       viewer.setCropEnabled(false);
       viewer.setCropPanelOpen(true);
-      const result = (viewer as any).getCropHandleAtPoint(100, 100);
+      const result = testable(viewer).getCropHandleAtPoint(100, 100);
       expect(result).toBeNull();
     });
 
     it('VWR-107: getCropHandleAtPoint returns null when panel closed', () => {
       viewer.setCropEnabled(true);
       viewer.setCropPanelOpen(false);
-      const result = (viewer as any).getCropHandleAtPoint(100, 100);
+      const result = testable(viewer).getCropHandleAtPoint(100, 100);
       expect(result).toBeNull();
     });
 
@@ -443,7 +510,7 @@ describe('Viewer', () => {
       viewer.setCropEnabled(false);
       viewer.setCropPanelOpen(true);
       const event = { clientX: 50, clientY: 50, pointerId: 1 } as unknown as PointerEvent;
-      const result = (viewer as any).handleCropPointerDown(event);
+      const result = testable(viewer).handleCropPointerDown(event);
       expect(result).toBe(false);
     });
 
@@ -451,46 +518,46 @@ describe('Viewer', () => {
       viewer.setCropEnabled(true);
       viewer.setCropPanelOpen(false);
       const event = { clientX: 50, clientY: 50, pointerId: 1 } as unknown as PointerEvent;
-      const result = (viewer as any).handleCropPointerDown(event);
+      const result = testable(viewer).handleCropPointerDown(event);
       expect(result).toBe(false);
     });
 
     it('VWR-110: updateCropCursor sets correct cursor for corners', () => {
-      (viewer as any).updateCropCursor('tl');
-      expect((viewer as any).container.style.cursor).toBe('nwse-resize');
+      testable(viewer).updateCropCursor('tl');
+      expect(testable(viewer).container.style.cursor).toBe('nwse-resize');
 
-      (viewer as any).updateCropCursor('br');
-      expect((viewer as any).container.style.cursor).toBe('nwse-resize');
+      testable(viewer).updateCropCursor('br');
+      expect(testable(viewer).container.style.cursor).toBe('nwse-resize');
 
-      (viewer as any).updateCropCursor('tr');
-      expect((viewer as any).container.style.cursor).toBe('nesw-resize');
+      testable(viewer).updateCropCursor('tr');
+      expect(testable(viewer).container.style.cursor).toBe('nesw-resize');
 
-      (viewer as any).updateCropCursor('bl');
-      expect((viewer as any).container.style.cursor).toBe('nesw-resize');
+      testable(viewer).updateCropCursor('bl');
+      expect(testable(viewer).container.style.cursor).toBe('nesw-resize');
     });
 
     it('VWR-111: updateCropCursor sets correct cursor for edges', () => {
-      (viewer as any).updateCropCursor('top');
-      expect((viewer as any).container.style.cursor).toBe('ns-resize');
+      testable(viewer).updateCropCursor('top');
+      expect(testable(viewer).container.style.cursor).toBe('ns-resize');
 
-      (viewer as any).updateCropCursor('bottom');
-      expect((viewer as any).container.style.cursor).toBe('ns-resize');
+      testable(viewer).updateCropCursor('bottom');
+      expect(testable(viewer).container.style.cursor).toBe('ns-resize');
 
-      (viewer as any).updateCropCursor('left');
-      expect((viewer as any).container.style.cursor).toBe('ew-resize');
+      testable(viewer).updateCropCursor('left');
+      expect(testable(viewer).container.style.cursor).toBe('ew-resize');
 
-      (viewer as any).updateCropCursor('right');
-      expect((viewer as any).container.style.cursor).toBe('ew-resize');
+      testable(viewer).updateCropCursor('right');
+      expect(testable(viewer).container.style.cursor).toBe('ew-resize');
     });
 
     it('VWR-112: updateCropCursor sets move cursor for move handle', () => {
-      (viewer as any).updateCropCursor('move');
-      expect((viewer as any).container.style.cursor).toBe('move');
+      testable(viewer).updateCropCursor('move');
+      expect(testable(viewer).container.style.cursor).toBe('move');
     });
 
     it('VWR-113: updateCropCursor sets default cursor for null', () => {
-      (viewer as any).updateCropCursor(null);
-      expect((viewer as any).container.style.cursor).toBe('default');
+      testable(viewer).updateCropCursor(null);
+      expect(testable(viewer).container.style.cursor).toBe('default');
     });
 
     it('VWR-114: handleCropPointerMove updates region for br handle', () => {
@@ -499,12 +566,12 @@ describe('Viewer', () => {
       viewer.setCropPanelOpen(true);
 
       // Simulate drag start state
-      (viewer as any).isDraggingCrop = true;
-      (viewer as any).cropDragHandle = 'br';
-      (viewer as any).cropOverlay = {
+      testable(viewer).isDraggingCrop = true;
+      testable(viewer).cropDragHandle = 'br';
+      testable(viewer).cropOverlay = {
         getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON: () => {} }),
       };
-      (viewer as any).cropDragStart = {
+      testable(viewer).cropDragStart = {
         x: 1.0,
         y: 1.0,
         region: { x: 0, y: 0, width: 1, height: 1 },
@@ -512,9 +579,9 @@ describe('Viewer', () => {
 
       // Simulate drag to shrink (move br corner inward by 0.2)
       const event = { clientX: 640, clientY: 480 } as unknown as PointerEvent;
-      (viewer as any).handleCropPointerMove(event);
+      testable(viewer).handleCropPointerMove(event);
 
-      const region = (viewer as any).cropState.region;
+      const region = testable(viewer).cropState.region;
       expect(region.width).toBeCloseTo(0.8, 1);
       expect(region.height).toBeCloseTo(0.8, 1);
     });
@@ -524,12 +591,12 @@ describe('Viewer', () => {
       viewer.setCropRegion({ x: 0.5, y: 0.5, width: 0.3, height: 0.3 });
       viewer.setCropPanelOpen(true);
 
-      (viewer as any).isDraggingCrop = true;
-      (viewer as any).cropDragHandle = 'move';
-      (viewer as any).cropOverlay = {
+      testable(viewer).isDraggingCrop = true;
+      testable(viewer).cropDragHandle = 'move';
+      testable(viewer).cropOverlay = {
         getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON: () => {} }),
       };
-      (viewer as any).cropDragStart = {
+      testable(viewer).cropDragStart = {
         x: 0.65,
         y: 0.65,
         region: { x: 0.5, y: 0.5, width: 0.3, height: 0.3 },
@@ -537,9 +604,9 @@ describe('Viewer', () => {
 
       // Try to drag way beyond bounds
       const event = { clientX: 800, clientY: 600 } as unknown as PointerEvent;
-      (viewer as any).handleCropPointerMove(event);
+      testable(viewer).handleCropPointerMove(event);
 
-      const region = (viewer as any).cropState.region;
+      const region = testable(viewer).cropState.region;
       // x + width should not exceed 1
       expect(region.x + region.width).toBeLessThanOrEqual(1.001);
       expect(region.y + region.height).toBeLessThanOrEqual(1.001);
@@ -550,12 +617,12 @@ describe('Viewer', () => {
       viewer.setCropRegion({ x: 0, y: 0, width: 0.5, height: 0.5 });
       viewer.setCropPanelOpen(true);
 
-      (viewer as any).isDraggingCrop = true;
-      (viewer as any).cropDragHandle = 'br';
-      (viewer as any).cropOverlay = {
+      testable(viewer).isDraggingCrop = true;
+      testable(viewer).cropDragHandle = 'br';
+      testable(viewer).cropOverlay = {
         getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON: () => {} }),
       };
-      (viewer as any).cropDragStart = {
+      testable(viewer).cropDragStart = {
         x: 0.5,
         y: 0.5,
         region: { x: 0, y: 0, width: 0.5, height: 0.5 },
@@ -563,9 +630,9 @@ describe('Viewer', () => {
 
       // Drag br corner to origin (try to make region 0-width)
       const event = { clientX: 0, clientY: 0 } as unknown as PointerEvent;
-      (viewer as any).handleCropPointerMove(event);
+      testable(viewer).handleCropPointerMove(event);
 
-      const region = (viewer as any).cropState.region;
+      const region = testable(viewer).cropState.region;
       expect(region.width).toBeGreaterThanOrEqual(0.05);
       expect(region.height).toBeGreaterThanOrEqual(0.05);
     });
@@ -575,12 +642,12 @@ describe('Viewer', () => {
       viewer.setCropRegion({ x: 0, y: 0, width: 1, height: 1 });
       viewer.setCropPanelOpen(true);
 
-      (viewer as any).isDraggingCrop = true;
-      (viewer as any).cropDragHandle = 'tl';
-      (viewer as any).cropOverlay = {
+      testable(viewer).isDraggingCrop = true;
+      testable(viewer).cropDragHandle = 'tl';
+      testable(viewer).cropOverlay = {
         getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON: () => {} }),
       };
-      (viewer as any).cropDragStart = {
+      testable(viewer).cropDragStart = {
         x: 0,
         y: 0,
         region: { x: 0, y: 0, width: 1, height: 1 },
@@ -588,9 +655,9 @@ describe('Viewer', () => {
 
       // Drag tl corner inward by 0.2
       const event = { clientX: 160, clientY: 120 } as unknown as PointerEvent;
-      (viewer as any).handleCropPointerMove(event);
+      testable(viewer).handleCropPointerMove(event);
 
-      const region = (viewer as any).cropState.region;
+      const region = testable(viewer).cropState.region;
       expect(region.x).toBeCloseTo(0.2, 1);
       expect(region.y).toBeCloseTo(0.2, 1);
       expect(region.width).toBeCloseTo(0.8, 1);
@@ -602,12 +669,12 @@ describe('Viewer', () => {
       viewer.setCropRegion({ x: 0, y: 0, width: 1, height: 1 });
       viewer.setCropPanelOpen(true);
 
-      (viewer as any).isDraggingCrop = true;
-      (viewer as any).cropDragHandle = 'right';
-      (viewer as any).cropOverlay = {
+      testable(viewer).isDraggingCrop = true;
+      testable(viewer).cropDragHandle = 'right';
+      testable(viewer).cropOverlay = {
         getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600, right: 800, bottom: 600, x: 0, y: 0, toJSON: () => {} }),
       };
-      (viewer as any).cropDragStart = {
+      testable(viewer).cropDragStart = {
         x: 1.0,
         y: 0.5,
         region: { x: 0, y: 0, width: 1, height: 1 },
@@ -615,9 +682,9 @@ describe('Viewer', () => {
 
       // Drag right edge inward by 0.3
       const event = { clientX: 560, clientY: 300 } as unknown as PointerEvent;
-      (viewer as any).handleCropPointerMove(event);
+      testable(viewer).handleCropPointerMove(event);
 
-      const region = (viewer as any).cropState.region;
+      const region = testable(viewer).cropState.region;
       expect(region.width).toBeCloseTo(0.7, 1);
       expect(region.height).toBeCloseTo(1, 1); // height unchanged
     });
@@ -631,13 +698,13 @@ describe('Viewer', () => {
       });
 
       // Mock source
-      (viewer as any).session = {
+      testable(viewer).session = {
         ...session,
-        currentSource: { width: 1920, height: 1080 },
+        currentSource: { type: 'image' as const, name: 'test', url: '', width: 1920, height: 1080, duration: 1, fps: 24 },
       };
 
       const input = { x: 0, y: 0, width: 0.6, height: 0.8 };
-      const result = (viewer as any).constrainToAspectRatio(input, 'br');
+      const result = testable(viewer).constrainToAspectRatio(input, 'br');
 
       // For 1:1 pixel ratio on 1920x1080, normalizedRatio = 1 / (1920/1080) ≈ 0.5625
       const sourceAspect = 1920 / 1080;
@@ -654,13 +721,13 @@ describe('Viewer', () => {
         aspectRatio: '16:9',
       });
 
-      (viewer as any).session = {
+      testable(viewer).session = {
         ...session,
-        currentSource: { width: 1920, height: 1080 },
+        currentSource: { type: 'image' as const, name: 'test', url: '', width: 1920, height: 1080, duration: 1, fps: 24 },
       };
 
       const input = { x: 0.8, y: 0.8, width: 0.5, height: 0.5 };
-      const result = (viewer as any).constrainToAspectRatio(input, 'br');
+      const result = testable(viewer).constrainToAspectRatio(input, 'br');
 
       // Result should be within bounds
       expect(result.x + result.width).toBeLessThanOrEqual(1.001);
@@ -675,7 +742,7 @@ describe('Viewer', () => {
       });
 
       const input = { x: 0.1, y: 0.2, width: 0.5, height: 0.4 };
-      const result = (viewer as any).constrainToAspectRatio(input, 'br');
+      const result = testable(viewer).constrainToAspectRatio(input, 'br');
 
       expect(result).toEqual(input);
     });
@@ -687,10 +754,10 @@ describe('Viewer', () => {
         aspectRatio: '16:9',
       });
 
-      (viewer as any).session = { ...session, currentSource: null };
+      testable(viewer).session = { ...session, currentSource: null };
 
       const input = { x: 0.1, y: 0.2, width: 0.5, height: 0.4 };
-      const result = (viewer as any).constrainToAspectRatio(input, 'br');
+      const result = testable(viewer).constrainToAspectRatio(input, 'br');
 
       // sourceWidth/height defaults to ?? 1 so it should still work
       // but the logic handles null with ?? 1
@@ -847,14 +914,14 @@ describe('Viewer', () => {
   describe('layout cache (performance/02)', () => {
     it('VWR-055: cached rect properties are null after invalidation', () => {
       // The constructor may populate caches via render(), so invalidate first
-      (viewer as any).invalidateLayoutCache();
-      expect((viewer as any).cachedContainerRect).toBeNull();
-      expect((viewer as any).cachedCanvasContainerRect).toBeNull();
-      expect((viewer as any).cachedImageCanvasRect).toBeNull();
+      testable(viewer).invalidateLayoutCache();
+      expect(testable(viewer).cachedContainerRect).toBeNull();
+      expect(testable(viewer).cachedCanvasContainerRect).toBeNull();
+      expect(testable(viewer).cachedImageCanvasRect).toBeNull();
     });
 
     it('VWR-056: getContainerRect returns a DOMRect', () => {
-      const rect = (viewer as any).getContainerRect();
+      const rect = testable(viewer).getContainerRect();
       expect(rect).toBeDefined();
       expect(typeof rect.width).toBe('number');
       expect(typeof rect.height).toBe('number');
@@ -863,62 +930,62 @@ describe('Viewer', () => {
     });
 
     it('VWR-057: getCanvasContainerRect returns a DOMRect', () => {
-      const rect = (viewer as any).getCanvasContainerRect();
+      const rect = testable(viewer).getCanvasContainerRect();
       expect(rect).toBeDefined();
       expect(typeof rect.width).toBe('number');
       expect(typeof rect.height).toBe('number');
     });
 
     it('VWR-058: getImageCanvasRect returns a DOMRect', () => {
-      const rect = (viewer as any).getImageCanvasRect();
+      const rect = testable(viewer).getImageCanvasRect();
       expect(rect).toBeDefined();
       expect(typeof rect.width).toBe('number');
       expect(typeof rect.height).toBe('number');
     });
 
     it('VWR-059: getContainerRect returns same cached object on repeated calls', () => {
-      const rect1 = (viewer as any).getContainerRect();
-      const rect2 = (viewer as any).getContainerRect();
+      const rect1 = testable(viewer).getContainerRect();
+      const rect2 = testable(viewer).getContainerRect();
       expect(rect1).toBe(rect2);
     });
 
     it('VWR-060: getCanvasContainerRect returns same cached object on repeated calls', () => {
-      const rect1 = (viewer as any).getCanvasContainerRect();
-      const rect2 = (viewer as any).getCanvasContainerRect();
+      const rect1 = testable(viewer).getCanvasContainerRect();
+      const rect2 = testable(viewer).getCanvasContainerRect();
       expect(rect1).toBe(rect2);
     });
 
     it('VWR-061: getImageCanvasRect returns same cached object on repeated calls', () => {
-      const rect1 = (viewer as any).getImageCanvasRect();
-      const rect2 = (viewer as any).getImageCanvasRect();
+      const rect1 = testable(viewer).getImageCanvasRect();
+      const rect2 = testable(viewer).getImageCanvasRect();
       expect(rect1).toBe(rect2);
     });
 
     it('VWR-062: invalidateLayoutCache clears all cached rects', () => {
       // Populate caches
-      (viewer as any).getContainerRect();
-      (viewer as any).getCanvasContainerRect();
-      (viewer as any).getImageCanvasRect();
+      testable(viewer).getContainerRect();
+      testable(viewer).getCanvasContainerRect();
+      testable(viewer).getImageCanvasRect();
 
-      expect((viewer as any).cachedContainerRect).not.toBeNull();
-      expect((viewer as any).cachedCanvasContainerRect).not.toBeNull();
-      expect((viewer as any).cachedImageCanvasRect).not.toBeNull();
+      expect(testable(viewer).cachedContainerRect).not.toBeNull();
+      expect(testable(viewer).cachedCanvasContainerRect).not.toBeNull();
+      expect(testable(viewer).cachedImageCanvasRect).not.toBeNull();
 
       // Invalidate
-      (viewer as any).invalidateLayoutCache();
+      testable(viewer).invalidateLayoutCache();
 
-      expect((viewer as any).cachedContainerRect).toBeNull();
-      expect((viewer as any).cachedCanvasContainerRect).toBeNull();
-      expect((viewer as any).cachedImageCanvasRect).toBeNull();
+      expect(testable(viewer).cachedContainerRect).toBeNull();
+      expect(testable(viewer).cachedCanvasContainerRect).toBeNull();
+      expect(testable(viewer).cachedImageCanvasRect).toBeNull();
     });
 
     it('VWR-063: render() invalidates layout cache at start', () => {
       // Populate caches
-      (viewer as any).getContainerRect();
-      (viewer as any).getCanvasContainerRect();
-      (viewer as any).getImageCanvasRect();
+      testable(viewer).getContainerRect();
+      testable(viewer).getCanvasContainerRect();
+      testable(viewer).getImageCanvasRect();
 
-      const invalidateSpy = vi.spyOn(viewer as any, 'invalidateLayoutCache');
+      const invalidateSpy = vi.spyOn(testable(viewer), 'invalidateLayoutCache');
 
       viewer.render();
 
@@ -927,19 +994,18 @@ describe('Viewer', () => {
     });
 
     it('VWR-064: after invalidation, getter returns a new object', () => {
-      const rect1 = (viewer as any).getContainerRect();
-      (viewer as any).invalidateLayoutCache();
-      const rect2 = (viewer as any).getContainerRect();
+      const rect1 = testable(viewer).getContainerRect();
+      testable(viewer).invalidateLayoutCache();
+      const rect2 = testable(viewer).getContainerRect();
       // After invalidation, a fresh getBoundingClientRect call is made,
       // so the object reference should differ
       expect(rect1).not.toBe(rect2);
     });
 
     it('VWR-065: ResizeObserver callback invalidates layout cache', () => {
-      const invalidateSpy = vi.spyOn(viewer as any, 'invalidateLayoutCache');
+      const invalidateSpy = vi.spyOn(testable(viewer), 'invalidateLayoutCache');
 
       // Trigger the ResizeObserver callback
-      const resizeObserver = (viewer as any).resizeObserver as ResizeObserver;
       // ResizeObserver in jsdom/happy-dom may not fire, so we call the callback directly
       // The constructor stores the callback; we can invoke it via the observer's internals
       // Instead, we verify the ResizeObserver was set up with invalidateLayoutCache
@@ -950,36 +1016,36 @@ describe('Viewer', () => {
       // Access the callback that was passed to ResizeObserver
       // Since we can't easily access it, let's verify the wiring by checking
       // that invalidateLayoutCache is called when we manually trigger it
-      (viewer as any).invalidateLayoutCache();
+      testable(viewer).invalidateLayoutCache();
       expect(invalidateSpy).toHaveBeenCalled();
 
       invalidateSpy.mockRestore();
     });
 
     it('VWR-066: getBoundingClientRect is called at most once per element within a frame', () => {
-      const container = (viewer as any).container as HTMLElement;
-      const canvasContainer = (viewer as any).canvasContainer as HTMLElement;
-      const imageCanvas = (viewer as any).imageCanvas as HTMLCanvasElement;
+      const container = testable(viewer).container as HTMLElement;
+      const canvasContainer = testable(viewer).canvasContainer as HTMLElement;
+      const imageCanvas = testable(viewer).imageCanvas as HTMLCanvasElement;
 
       const containerSpy = vi.spyOn(container, 'getBoundingClientRect');
       const canvasContainerSpy = vi.spyOn(canvasContainer, 'getBoundingClientRect');
       const imageCanvasSpy = vi.spyOn(imageCanvas, 'getBoundingClientRect');
 
       // Invalidate to start fresh
-      (viewer as any).invalidateLayoutCache();
+      testable(viewer).invalidateLayoutCache();
 
       // Call each getter multiple times (simulating multiple call sites in a frame)
-      (viewer as any).getContainerRect();
-      (viewer as any).getContainerRect();
-      (viewer as any).getContainerRect();
+      testable(viewer).getContainerRect();
+      testable(viewer).getContainerRect();
+      testable(viewer).getContainerRect();
 
-      (viewer as any).getCanvasContainerRect();
-      (viewer as any).getCanvasContainerRect();
+      testable(viewer).getCanvasContainerRect();
+      testable(viewer).getCanvasContainerRect();
 
-      (viewer as any).getImageCanvasRect();
-      (viewer as any).getImageCanvasRect();
-      (viewer as any).getImageCanvasRect();
-      (viewer as any).getImageCanvasRect();
+      testable(viewer).getImageCanvasRect();
+      testable(viewer).getImageCanvasRect();
+      testable(viewer).getImageCanvasRect();
+      testable(viewer).getImageCanvasRect();
 
       // Each underlying getBoundingClientRect should have been called exactly once
       expect(containerSpy).toHaveBeenCalledTimes(1);
@@ -992,12 +1058,12 @@ describe('Viewer', () => {
     });
 
     it('VWR-067: renderImage uses cached getContainerRect instead of direct getBoundingClientRect', () => {
-      const getContainerRectSpy = vi.spyOn(viewer as any, 'getContainerRect');
-      const container = (viewer as any).container as HTMLElement;
+      const getContainerRectSpy = vi.spyOn(testable(viewer), 'getContainerRect');
+      const container = testable(viewer).container as HTMLElement;
       const directSpy = vi.spyOn(container, 'getBoundingClientRect');
 
       // Invalidate and render
-      (viewer as any).invalidateLayoutCache();
+      testable(viewer).invalidateLayoutCache();
       viewer.render();
 
       // getContainerRect should have been called (by renderImage)
@@ -1029,18 +1095,18 @@ describe('Viewer', () => {
     });
 
     it('VWR-201: getBoundingClientRect called at most once per mousemove event via cached getImageCanvasRect', () => {
-      const imageCanvas = (viewer as any).imageCanvas as HTMLCanvasElement;
+      const imageCanvas = testable(viewer).imageCanvas as HTMLCanvasElement;
       const rectSpy = vi.spyOn(imageCanvas, 'getBoundingClientRect');
 
       // Enable both consumers
-      (viewer as any).pixelProbe.enable();
+      testable(viewer).pixelProbe.enable();
       const cursorCallback = vi.fn();
       viewer.onCursorColorChange(cursorCallback);
 
       // Reset throttle so handler runs
-      (viewer as any).lastMouseMoveUpdate = 0;
+      testable(viewer).lastMouseMoveUpdate = 0;
       // Invalidate layout cache so getBoundingClientRect is called fresh
-      (viewer as any).invalidateLayoutCache();
+      testable(viewer).invalidateLayoutCache();
 
       const container = viewer.getContainer();
       container.dispatchEvent(new MouseEvent('mousemove', {
@@ -1059,24 +1125,24 @@ describe('Viewer', () => {
       const getImageDataSpy = vi.spyOn(viewer, 'getImageData');
 
       // Enable both consumers
-      (viewer as any).pixelProbe.enable();
+      testable(viewer).pixelProbe.enable();
       const cursorCallback = vi.fn();
       viewer.onCursorColorChange(cursorCallback);
 
       // Reset throttle
-      (viewer as any).lastMouseMoveUpdate = 0;
+      testable(viewer).lastMouseMoveUpdate = 0;
 
       // Mock the canvas rect so coordinates are in-bounds
-      const imageCanvas = (viewer as any).imageCanvas as HTMLCanvasElement;
+      const imageCanvas = testable(viewer).imageCanvas as HTMLCanvasElement;
       vi.spyOn(imageCanvas, 'getBoundingClientRect').mockReturnValue({
         left: 0, top: 0, width: 200, height: 200,
         right: 200, bottom: 200, x: 0, y: 0,
         toJSON: () => ({}),
       } as DOMRect);
       // Set displayWidth/displayHeight so getPixelCoordinates produces valid position
-      (viewer as any).displayWidth = 200;
-      (viewer as any).displayHeight = 200;
-      (viewer as any).invalidateLayoutCache();
+      testable(viewer).displayWidth = 200;
+      testable(viewer).displayHeight = 200;
+      testable(viewer).invalidateLayoutCache();
 
       const container = viewer.getContainer();
       container.dispatchEvent(new MouseEvent('mousemove', {
@@ -1095,11 +1161,11 @@ describe('Viewer', () => {
       const getImageDataSpy = vi.spyOn(viewer, 'getImageData');
 
       // Ensure neither consumer is active
-      (viewer as any).pixelProbe.disable();
+      testable(viewer).pixelProbe.disable();
       viewer.onCursorColorChange(null);
 
       // Reset throttle
-      (viewer as any).lastMouseMoveUpdate = 0;
+      testable(viewer).lastMouseMoveUpdate = 0;
 
       const container = viewer.getContainer();
       container.dispatchEvent(new MouseEvent('mousemove', {
@@ -1116,11 +1182,11 @@ describe('Viewer', () => {
 
     it('VWR-204: probe works independently when cursor color callback is null', () => {
       // Enable only probe, disable cursor color
-      (viewer as any).pixelProbe.enable();
+      testable(viewer).pixelProbe.enable();
       viewer.onCursorColorChange(null);
 
       // Reset throttle
-      (viewer as any).lastMouseMoveUpdate = 0;
+      testable(viewer).lastMouseMoveUpdate = 0;
 
       const container = viewer.getContainer();
       // Should not throw
@@ -1137,11 +1203,11 @@ describe('Viewer', () => {
       const cursorCallback = vi.fn();
 
       // Enable only cursor color
-      (viewer as any).pixelProbe.disable();
+      testable(viewer).pixelProbe.disable();
       viewer.onCursorColorChange(cursorCallback);
 
       // Reset throttle
-      (viewer as any).lastMouseMoveUpdate = 0;
+      testable(viewer).lastMouseMoveUpdate = 0;
 
       const container = viewer.getContainer();
       container.dispatchEvent(new MouseEvent('mousemove', {
@@ -1158,10 +1224,10 @@ describe('Viewer', () => {
       const getImageDataSpy = vi.spyOn(viewer, 'getImageData');
 
       // Enable a consumer
-      (viewer as any).pixelProbe.enable();
+      testable(viewer).pixelProbe.enable();
 
       // Reset throttle
-      (viewer as any).lastMouseMoveUpdate = 0;
+      testable(viewer).lastMouseMoveUpdate = 0;
 
       const container = viewer.getContainer();
 
@@ -1217,37 +1283,37 @@ describe('Viewer', () => {
       expect(mouseleaveRemoves.length).toBe(1);
 
       // cursorColorCallback should be cleared
-      expect((viewer as any).cursorColorCallback).toBeNull();
+      expect(testable(viewer).cursorColorCallback).toBeNull();
 
       removeSpy.mockRestore();
     });
 
     it('VWR-209: uses single shared throttle timestamp (no separate probe/cursor timestamps)', () => {
       // Verify single shared throttle timestamp exists
-      expect((viewer as any).lastMouseMoveUpdate).toBeDefined();
-      expect(typeof (viewer as any).lastMouseMoveUpdate).toBe('number');
+      expect(testable(viewer).lastMouseMoveUpdate).toBeDefined();
+      expect(typeof testable(viewer).lastMouseMoveUpdate).toBe('number');
 
       // Verify old separate timestamps do not exist
-      expect((viewer as any).lastProbeUpdate).toBeUndefined();
-      expect((viewer as any).lastCursorColorUpdate).toBeUndefined();
+      expect(testable(viewer).lastProbeUpdate).toBeUndefined();
+      expect(testable(viewer).lastCursorColorUpdate).toBeUndefined();
     });
 
     it('VWR-210: out-of-bounds mousemove calls cursor color callback with null', () => {
       const cursorCallback = vi.fn();
       viewer.onCursorColorChange(cursorCallback);
-      (viewer as any).pixelProbe.disable();
+      testable(viewer).pixelProbe.disable();
 
       // Reset throttle
-      (viewer as any).lastMouseMoveUpdate = 0;
+      testable(viewer).lastMouseMoveUpdate = 0;
 
       // Mock canvas rect to a specific area
-      const imageCanvas = (viewer as any).imageCanvas as HTMLCanvasElement;
+      const imageCanvas = testable(viewer).imageCanvas as HTMLCanvasElement;
       vi.spyOn(imageCanvas, 'getBoundingClientRect').mockReturnValue({
         left: 100, top: 100, width: 200, height: 200,
         right: 300, bottom: 300, x: 100, y: 100,
         toJSON: () => ({}),
       } as DOMRect);
-      (viewer as any).invalidateLayoutCache();
+      testable(viewer).invalidateLayoutCache();
 
       const container = viewer.getContainer();
       container.dispatchEvent(new MouseEvent('mousemove', {
@@ -1262,74 +1328,74 @@ describe('Viewer', () => {
 
   describe('ghost frame canvas pool (performance/03)', () => {
     it('VWR-300: pool is lazily initialized (empty at startup)', () => {
-      const pool = (viewer as any).ghostFrameCanvasPool;
+      const pool = testable(viewer).ghostFrameCanvasPool;
       expect(pool).toEqual([]);
-      expect((viewer as any).ghostFramePoolWidth).toBe(0);
-      expect((viewer as any).ghostFramePoolHeight).toBe(0);
+      expect(testable(viewer).ghostFramePoolWidth).toBe(0);
+      expect(testable(viewer).ghostFramePoolHeight).toBe(0);
     });
 
     it('VWR-301: getGhostFrameCanvas creates canvas on first call', () => {
-      const result = (viewer as any).getGhostFrameCanvas(0, 800, 600);
+      const result = testable(viewer).getGhostFrameCanvas(0, 800, 600);
       expect(result).not.toBeNull();
-      expect(result.canvas).toBeInstanceOf(HTMLCanvasElement);
-      expect(result.canvas.width).toBe(800);
-      expect(result.canvas.height).toBe(600);
-      expect(result.ctx).toBeDefined();
-      expect((viewer as any).ghostFrameCanvasPool.length).toBe(1);
+      expect(result!.canvas).toBeInstanceOf(HTMLCanvasElement);
+      expect(result!.canvas.width).toBe(800);
+      expect(result!.canvas.height).toBe(600);
+      expect(result!.ctx).toBeDefined();
+      expect(testable(viewer).ghostFrameCanvasPool.length).toBe(1);
     });
 
     it('VWR-302: getGhostFrameCanvas reuses existing canvas (no new creation)', () => {
-      const first = (viewer as any).getGhostFrameCanvas(0, 800, 600);
-      const second = (viewer as any).getGhostFrameCanvas(0, 800, 600);
-      expect(second.canvas).toBe(first.canvas);
-      expect(second.ctx).toBe(first.ctx);
-      expect((viewer as any).ghostFrameCanvasPool.length).toBe(1);
+      const first = testable(viewer).getGhostFrameCanvas(0, 800, 600);
+      const second = testable(viewer).getGhostFrameCanvas(0, 800, 600);
+      expect(second!.canvas).toBe(first!.canvas);
+      expect(second!.ctx).toBe(first!.ctx);
+      expect(testable(viewer).ghostFrameCanvasPool.length).toBe(1);
     });
 
     it('VWR-303: getGhostFrameCanvas grows pool for new indices', () => {
-      (viewer as any).getGhostFrameCanvas(0, 800, 600);
-      (viewer as any).getGhostFrameCanvas(1, 800, 600);
-      (viewer as any).getGhostFrameCanvas(2, 800, 600);
-      expect((viewer as any).ghostFrameCanvasPool.length).toBe(3);
-      const pool = (viewer as any).ghostFrameCanvasPool;
-      expect(pool[0].canvas).not.toBe(pool[1].canvas);
-      expect(pool[1].canvas).not.toBe(pool[2].canvas);
+      testable(viewer).getGhostFrameCanvas(0, 800, 600);
+      testable(viewer).getGhostFrameCanvas(1, 800, 600);
+      testable(viewer).getGhostFrameCanvas(2, 800, 600);
+      expect(testable(viewer).ghostFrameCanvasPool.length).toBe(3);
+      const pool = testable(viewer).ghostFrameCanvasPool;
+      expect(pool[0]!.canvas).not.toBe(pool[1]!.canvas);
+      expect(pool[1]!.canvas).not.toBe(pool[2]!.canvas);
     });
 
     it('VWR-304: pool resizes all canvases when display dimensions change', () => {
-      (viewer as any).getGhostFrameCanvas(0, 800, 600);
-      (viewer as any).getGhostFrameCanvas(1, 800, 600);
+      testable(viewer).getGhostFrameCanvas(0, 800, 600);
+      testable(viewer).getGhostFrameCanvas(1, 800, 600);
       // Request with new dimensions
-      (viewer as any).getGhostFrameCanvas(0, 1920, 1080);
-      const pool = (viewer as any).ghostFrameCanvasPool;
-      expect(pool[0].canvas.width).toBe(1920);
-      expect(pool[0].canvas.height).toBe(1080);
-      expect(pool[1].canvas.width).toBe(1920);
-      expect(pool[1].canvas.height).toBe(1080);
-      expect((viewer as any).ghostFramePoolWidth).toBe(1920);
-      expect((viewer as any).ghostFramePoolHeight).toBe(1080);
+      testable(viewer).getGhostFrameCanvas(0, 1920, 1080);
+      const pool = testable(viewer).ghostFrameCanvasPool;
+      expect(pool[0]!.canvas.width).toBe(1920);
+      expect(pool[0]!.canvas.height).toBe(1080);
+      expect(pool[1]!.canvas.width).toBe(1920);
+      expect(pool[1]!.canvas.height).toBe(1080);
+      expect(testable(viewer).ghostFramePoolWidth).toBe(1920);
+      expect(testable(viewer).ghostFramePoolHeight).toBe(1080);
     });
 
     it('VWR-305: pool is trimmed when frame count decreases', () => {
       for (let i = 0; i < 5; i++) {
-        (viewer as any).getGhostFrameCanvas(i, 100, 100);
+        testable(viewer).getGhostFrameCanvas(i, 100, 100);
       }
-      expect((viewer as any).ghostFrameCanvasPool.length).toBe(5);
+      expect(testable(viewer).ghostFrameCanvasPool.length).toBe(5);
 
       // Simulate the trim logic from renderGhostFrames (line 3112-3113):
       // if (poolIndex < this.ghostFrameCanvasPool.length) pool.length = poolIndex
-      const pool = (viewer as any).ghostFrameCanvasPool;
+      const pool = testable(viewer).ghostFrameCanvasPool;
       const poolIndex = 2;
       if (poolIndex < pool.length) {
         pool.length = poolIndex;
       }
-      expect((viewer as any).ghostFrameCanvasPool.length).toBe(2);
+      expect(testable(viewer).ghostFrameCanvasPool.length).toBe(2);
     });
 
     it('VWR-306: pool is cleared when ghost frames disabled via setGhostFrameState', () => {
-      (viewer as any).getGhostFrameCanvas(0, 800, 600);
-      (viewer as any).getGhostFrameCanvas(1, 800, 600);
-      expect((viewer as any).ghostFrameCanvasPool.length).toBe(2);
+      testable(viewer).getGhostFrameCanvas(0, 800, 600);
+      testable(viewer).getGhostFrameCanvas(1, 800, 600);
+      expect(testable(viewer).ghostFrameCanvasPool.length).toBe(2);
 
       viewer.setGhostFrameState({
         enabled: false,
@@ -1339,39 +1405,39 @@ describe('Viewer', () => {
         opacityFalloff: 0.7,
         colorTint: false,
       });
-      expect((viewer as any).ghostFrameCanvasPool).toEqual([]);
-      expect((viewer as any).ghostFramePoolWidth).toBe(0);
-      expect((viewer as any).ghostFramePoolHeight).toBe(0);
+      expect(testable(viewer).ghostFrameCanvasPool).toEqual([]);
+      expect(testable(viewer).ghostFramePoolWidth).toBe(0);
+      expect(testable(viewer).ghostFramePoolHeight).toBe(0);
     });
 
     it('VWR-307: pool is cleared on resetGhostFrameState', () => {
-      (viewer as any).getGhostFrameCanvas(0, 800, 600);
-      expect((viewer as any).ghostFrameCanvasPool.length).toBe(1);
+      testable(viewer).getGhostFrameCanvas(0, 800, 600);
+      expect(testable(viewer).ghostFrameCanvasPool.length).toBe(1);
 
       viewer.resetGhostFrameState();
-      expect((viewer as any).ghostFrameCanvasPool).toEqual([]);
-      expect((viewer as any).ghostFramePoolWidth).toBe(0);
-      expect((viewer as any).ghostFramePoolHeight).toBe(0);
+      expect(testable(viewer).ghostFrameCanvasPool).toEqual([]);
+      expect(testable(viewer).ghostFramePoolWidth).toBe(0);
+      expect(testable(viewer).ghostFramePoolHeight).toBe(0);
     });
 
     it('VWR-308: pool is cleaned up in dispose()', () => {
-      (viewer as any).getGhostFrameCanvas(0, 800, 600);
-      (viewer as any).getGhostFrameCanvas(1, 800, 600);
-      expect((viewer as any).ghostFrameCanvasPool.length).toBe(2);
+      testable(viewer).getGhostFrameCanvas(0, 800, 600);
+      testable(viewer).getGhostFrameCanvas(1, 800, 600);
+      expect(testable(viewer).ghostFrameCanvasPool.length).toBe(2);
 
       viewer.dispose();
-      expect((viewer as any).ghostFrameCanvasPool).toEqual([]);
-      expect((viewer as any).ghostFramePoolWidth).toBe(0);
-      expect((viewer as any).ghostFramePoolHeight).toBe(0);
+      expect(testable(viewer).ghostFrameCanvasPool).toEqual([]);
+      expect(testable(viewer).ghostFramePoolWidth).toBe(0);
+      expect(testable(viewer).ghostFramePoolHeight).toBe(0);
     });
 
     it('VWR-309: clearRect is called before canvas reuse in renderGhostFrames', () => {
-      const entry = (viewer as any).getGhostFrameCanvas(0, 200, 200);
+      const entry = testable(viewer).getGhostFrameCanvas(0, 200, 200);
       expect(entry).not.toBeNull();
-      const spy = vi.spyOn(entry.ctx, 'clearRect');
+      const spy = vi.spyOn(entry!.ctx, 'clearRect');
 
       // Simulate what renderGhostFrames does: clearRect before drawImage
-      entry.ctx.clearRect(0, 0, 200, 200);
+      entry!.ctx.clearRect(0, 0, 200, 200);
       expect(spy).toHaveBeenCalledWith(0, 0, 200, 200);
       spy.mockRestore();
     });
@@ -1380,16 +1446,16 @@ describe('Viewer', () => {
       const createSpy = vi.spyOn(document, 'createElement');
 
       // First call creates a canvas
-      (viewer as any).getGhostFrameCanvas(0, 800, 600);
+      testable(viewer).getGhostFrameCanvas(0, 800, 600);
       const createCount1 = createSpy.mock.calls.filter(
-        (c: [string]) => c[0] === 'canvas'
+        (c) => c[0] === 'canvas'
       ).length;
       expect(createCount1).toBe(1);
 
       // Second call with same index reuses -- no new createElement('canvas')
-      (viewer as any).getGhostFrameCanvas(0, 800, 600);
+      testable(viewer).getGhostFrameCanvas(0, 800, 600);
       const createCount2 = createSpy.mock.calls.filter(
-        (c: [string]) => c[0] === 'canvas'
+        (c) => c[0] === 'canvas'
       ).length;
       expect(createCount2).toBe(1); // still 1
 
@@ -1418,10 +1484,10 @@ describe('Viewer', () => {
       const mockCanvas = document.createElement('canvas');
       vi.spyOn(mockCanvas, 'getContext').mockReturnValue(null);
       const createSpy = vi.spyOn(document, 'createElement').mockReturnValue(
-        mockCanvas as any
+        mockCanvas as unknown as HTMLElement
       );
 
-      const result = (viewer as any).getGhostFrameCanvas(0, 800, 600);
+      const result = testable(viewer).getGhostFrameCanvas(0, 800, 600);
       expect(result).toBeNull();
 
       createSpy.mockRestore();
@@ -1430,7 +1496,7 @@ describe('Viewer', () => {
     it('VWR-313: pool not populated for video source path', () => {
       // The video path in renderGhostFrames uses getVideoFrameCanvas directly,
       // never calls getGhostFrameCanvas, so pool stays empty for video sources.
-      expect((viewer as any).ghostFrameCanvasPool.length).toBe(0);
+      expect(testable(viewer).ghostFrameCanvasPool.length).toBe(0);
       viewer.setGhostFrameState({
         enabled: true,
         framesBefore: 2,
@@ -1440,29 +1506,29 @@ describe('Viewer', () => {
         colorTint: false,
       });
       // Pool should still be empty since no actual rendering occurred
-      expect((viewer as any).ghostFrameCanvasPool.length).toBe(0);
+      expect(testable(viewer).ghostFrameCanvasPool.length).toBe(0);
     });
 
     it('VWR-314: pool dimensions are updated when size changes', () => {
-      (viewer as any).getGhostFrameCanvas(0, 640, 480);
-      expect((viewer as any).ghostFramePoolWidth).toBe(640);
-      expect((viewer as any).ghostFramePoolHeight).toBe(480);
+      testable(viewer).getGhostFrameCanvas(0, 640, 480);
+      expect(testable(viewer).ghostFramePoolWidth).toBe(640);
+      expect(testable(viewer).ghostFramePoolHeight).toBe(480);
 
-      (viewer as any).getGhostFrameCanvas(0, 1280, 720);
-      expect((viewer as any).ghostFramePoolWidth).toBe(1280);
-      expect((viewer as any).ghostFramePoolHeight).toBe(720);
+      testable(viewer).getGhostFrameCanvas(0, 1280, 720);
+      expect(testable(viewer).ghostFramePoolWidth).toBe(1280);
+      expect(testable(viewer).ghostFramePoolHeight).toBe(720);
     });
 
     it('VWR-315: no getContext call during steady-state reuse', () => {
       // First call creates canvas and calls getContext
-      (viewer as any).getGhostFrameCanvas(0, 800, 600);
+      testable(viewer).getGhostFrameCanvas(0, 800, 600);
 
       // Spy on getContext of the pooled canvas
-      const poolEntry = (viewer as any).ghostFrameCanvasPool[0];
-      const ctxSpy = vi.spyOn(poolEntry.canvas, 'getContext');
+      const poolEntry = testable(viewer).ghostFrameCanvasPool[0];
+      const ctxSpy = vi.spyOn(poolEntry!.canvas, 'getContext');
 
       // Re-request same index - should reuse without calling getContext
-      (viewer as any).getGhostFrameCanvas(0, 800, 600);
+      testable(viewer).getGhostFrameCanvas(0, 800, 600);
       expect(ctxSpy).not.toHaveBeenCalled();
 
       ctxSpy.mockRestore();
