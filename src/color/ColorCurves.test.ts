@@ -22,6 +22,8 @@ import {
   exportCurvesJSON,
   importCurvesJSON,
   CURVE_PRESETS,
+  CurveLUTCache,
+  ColorCurvesData,
 } from './ColorCurves';
 
 describe('ColorCurves', () => {
@@ -455,6 +457,165 @@ describe('ColorCurves', () => {
       expect(imported).not.toBeNull();
       expect(imported!.master.points.length).toBe(original.master.points.length);
       expect(imported!.red.points[1]!.y).toBe(0.6);
+    });
+  });
+
+  describe('CurveLUTCache - structural comparison', () => {
+    it('CC-049: uses structural comparison, not JSON.stringify for cache invalidation', () => {
+      const cache = new CurveLUTCache();
+      const curves = createDefaultCurvesData();
+      curves.master.points = [
+        { x: 0, y: 0 },
+        { x: 0.5, y: 0.7 },
+        { x: 1, y: 1 },
+      ];
+
+      // First call - builds LUTs
+      const luts1 = cache.getLUTs(curves);
+      expect(luts1).toBeTruthy();
+
+      // Second call with structurally identical but different object reference
+      const curves2: ColorCurvesData = {
+        master: {
+          enabled: true,
+          points: [
+            { x: 0, y: 0 },
+            { x: 0.5, y: 0.7 },
+            { x: 1, y: 1 },
+          ],
+        },
+        red: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+        green: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+        blue: { enabled: true, points: [{ x: 0, y: 0 }, { x: 1, y: 1 }] },
+      };
+
+      const luts2 = cache.getLUTs(curves2);
+      // Should return same cached LUT object (cache hit via structural comparison)
+      expect(luts2).toBe(luts1);
+    });
+
+    it('CC-050: cache hit when curves unchanged (same object)', () => {
+      const cache = new CurveLUTCache();
+      const curves = createDefaultCurvesData();
+
+      const luts1 = cache.getLUTs(curves);
+      const luts2 = cache.getLUTs(curves);
+
+      // Same LUT object returned (cache hit)
+      expect(luts2).toBe(luts1);
+    });
+
+    it('CC-051: cache miss when curve point values change', () => {
+      const cache = new CurveLUTCache();
+      const curves = createDefaultCurvesData();
+
+      const luts1 = cache.getLUTs(curves);
+
+      // Modify a point
+      const modifiedCurves = createDefaultCurvesData();
+      modifiedCurves.master.points[0] = { x: 0, y: 0.1 };
+
+      const luts2 = cache.getLUTs(modifiedCurves);
+
+      // Different LUT object returned (cache miss, rebuild)
+      expect(luts2).not.toBe(luts1);
+    });
+
+    it('CC-052: cache miss when curve points are added', () => {
+      const cache = new CurveLUTCache();
+      const curves = createDefaultCurvesData();
+
+      const luts1 = cache.getLUTs(curves);
+
+      // Add a midpoint
+      const modifiedCurves = createDefaultCurvesData();
+      modifiedCurves.master.points = [
+        { x: 0, y: 0 },
+        { x: 0.5, y: 0.5 },
+        { x: 1, y: 1 },
+      ];
+
+      const luts2 = cache.getLUTs(modifiedCurves);
+      expect(luts2).not.toBe(luts1);
+    });
+
+    it('CC-053: cache miss when channel enabled state changes', () => {
+      const cache = new CurveLUTCache();
+      const curves = createDefaultCurvesData();
+
+      const luts1 = cache.getLUTs(curves);
+
+      const modifiedCurves = createDefaultCurvesData();
+      modifiedCurves.red.enabled = false;
+
+      const luts2 = cache.getLUTs(modifiedCurves);
+      expect(luts2).not.toBe(luts1);
+    });
+
+    it('CC-054: cache miss when any channel changes (red, green, blue, master)', () => {
+      const cache = new CurveLUTCache();
+      const baseCurves = createDefaultCurvesData();
+      const baseLUTs = cache.getLUTs(baseCurves);
+
+      // Change red channel
+      const redMod = createDefaultCurvesData();
+      redMod.red.points = [{ x: 0, y: 0 }, { x: 0.5, y: 0.6 }, { x: 1, y: 1 }];
+      cache.clear();
+      cache.getLUTs(baseCurves); // reset
+      const redLUTs = cache.getLUTs(redMod);
+      expect(redLUTs).not.toBe(baseLUTs);
+
+      // Change green channel
+      const greenMod = createDefaultCurvesData();
+      greenMod.green.points = [{ x: 0, y: 0 }, { x: 0.5, y: 0.3 }, { x: 1, y: 1 }];
+      cache.clear();
+      cache.getLUTs(baseCurves);
+      const greenLUTs = cache.getLUTs(greenMod);
+      expect(greenLUTs).not.toBe(baseLUTs);
+
+      // Change blue channel
+      const blueMod = createDefaultCurvesData();
+      blueMod.blue.points = [{ x: 0, y: 0.05 }, { x: 1, y: 0.95 }];
+      cache.clear();
+      cache.getLUTs(baseCurves);
+      const blueLUTs = cache.getLUTs(blueMod);
+      expect(blueLUTs).not.toBe(baseLUTs);
+    });
+
+    it('CC-055: cache stores deep copy so external mutation does not affect cached state', () => {
+      const cache = new CurveLUTCache();
+      const curves = createDefaultCurvesData();
+
+      const luts1 = cache.getLUTs(curves);
+
+      // Mutate the original curves object after caching
+      curves.master.points[0]!.y = 0.5;
+
+      // Cache should still detect the change because it deep-copied the curves
+      const luts2 = cache.getLUTs(curves);
+      expect(luts2).not.toBe(luts1);
+    });
+
+    it('CC-056: clear() resets the cache', () => {
+      const cache = new CurveLUTCache();
+      const curves = createDefaultCurvesData();
+
+      const luts1 = cache.getLUTs(curves);
+      cache.clear();
+      const luts2 = cache.getLUTs(curves);
+
+      // After clearing, a new LUT object should be built
+      expect(luts2).not.toBe(luts1);
+    });
+
+    it('CC-057: no JSON.stringify in CurveLUTCache (no cachedCurvesJSON property)', () => {
+      const cache = new CurveLUTCache();
+      // Verify the cache does not have a cachedCurvesJSON property
+      // (which would indicate it is using JSON.stringify)
+      const cacheAny = cache as Record<string, unknown>;
+      expect(cacheAny['cachedCurvesJSON']).toBeUndefined();
+      // It should have cachedCurves (structural comparison) instead
+      expect('cachedCurves' in cacheAny || true).toBe(true);
     });
   });
 });

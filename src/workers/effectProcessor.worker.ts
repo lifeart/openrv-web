@@ -808,3 +808,35 @@ workerSelf.onmessage = function (event: MessageEvent<ProcessMessage>) {
 
 // Signal ready
 workerSelf.postMessage({ type: 'ready' });
+
+// ============================================================================
+// Test-only exports for verifying buffer reuse behavior
+// ============================================================================
+
+export const __test__ = {
+  ensureClarityBuffers,
+  ensureSharpenBuffer,
+  getMidtoneMask,
+  applyClarity,
+  applySharpen,
+  applyGaussianBlur5x5InPlace,
+  processEffects,
+  getBufferState: () => ({
+    clarityOriginalBuffer,
+    clarityBlurTempBuffer,
+    clarityBlurResultBuffer,
+    clarityBufferSize,
+    sharpenOriginalBuffer,
+    sharpenBufferSize,
+    midtoneMask,
+  }),
+  resetBuffers: () => {
+    clarityOriginalBuffer = null;
+    clarityBlurTempBuffer = null;
+    clarityBlurResultBuffer = null;
+    clarityBufferSize = 0;
+    sharpenOriginalBuffer = null;
+    sharpenBufferSize = 0;
+    midtoneMask = null;
+  },
+};
