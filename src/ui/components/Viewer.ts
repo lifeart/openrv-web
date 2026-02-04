@@ -368,7 +368,7 @@ export class Viewer {
     this.canvasColorSpace = this.capabilities?.canvasP3 ? 'display-p3' : undefined;
     this.session = session;
     this.paintEngine = paintEngine;
-    this.paintRenderer = new PaintRenderer();
+    this.paintRenderer = new PaintRenderer(this.canvasColorSpace);
 
     // Create container
     this.container = document.createElement('div');
@@ -3752,7 +3752,7 @@ export class Viewer {
     return copyCanvasToClipboard(canvas);
   }
 
-  createExportCanvas(includeAnnotations: boolean): HTMLCanvasElement | null {
+  createExportCanvas(includeAnnotations: boolean, colorSpace?: 'srgb' | 'display-p3'): HTMLCanvasElement | null {
     const cropRegion = this.cropState.enabled ? this.cropState.region : undefined;
     return createExportCanvasUtil(
       this.session,
@@ -3761,7 +3761,8 @@ export class Viewer {
       this.getCanvasFilterString(),
       includeAnnotations,
       this.transform,
-      cropRegion
+      cropRegion,
+      colorSpace
     );
   }
 

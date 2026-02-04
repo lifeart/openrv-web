@@ -11,7 +11,7 @@ import {
   captureVideoFrame,
   DEFAULT_EXPORT_OPTIONS,
 } from './FrameExporter';
-import type { ExportFormat } from './FrameExporter';
+import type { ExportFormat, ExportOptions } from './FrameExporter';
 
 describe('FrameExporter', () => {
   describe('DEFAULT_EXPORT_OPTIONS', () => {
@@ -365,6 +365,83 @@ describe('FrameExporter', () => {
 
         toBlobSpy.mockRestore();
       });
+    });
+  });
+
+  // ====================================================================
+  // Phase 3: P3 ICC profile tagging
+  // ====================================================================
+  describe('P3 color space export', () => {
+    it('P3-040: ExportOptions accepts colorSpace property', () => {
+      const opts: ExportOptions = {
+        ...DEFAULT_EXPORT_OPTIONS,
+        colorSpace: 'display-p3',
+      };
+      expect(opts.colorSpace).toBe('display-p3');
+    });
+
+    it('P3-041: ExportOptions defaults without colorSpace (backward compatible)', () => {
+      const opts: ExportOptions = { ...DEFAULT_EXPORT_OPTIONS };
+      expect(opts.colorSpace).toBeUndefined();
+    });
+
+    it('P3-042: exportMergedCanvases works without colorSpace option', () => {
+      const canvas1 = document.createElement('canvas');
+      canvas1.width = 10;
+      canvas1.height = 10;
+
+      const mockLink = {
+        href: '',
+        download: '',
+        style: { display: '' },
+        click: vi.fn(),
+      };
+
+      vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+        if (tag === 'a') return mockLink as unknown as HTMLAnchorElement;
+        if (tag === 'canvas') {
+          return document.createElementNS('http://www.w3.org/1999/xhtml', 'canvas') as HTMLCanvasElement;
+        }
+        return document.createElementNS('http://www.w3.org/1999/xhtml', tag) as HTMLElement;
+      });
+      vi.spyOn(document.body, 'appendChild').mockImplementation(() => mockLink as unknown as HTMLElement);
+      vi.spyOn(document.body, 'removeChild').mockImplementation(() => mockLink as unknown as HTMLElement);
+
+      expect(() => {
+        exportMergedCanvases([canvas1], 10, 10);
+      }).not.toThrow();
+
+      vi.restoreAllMocks();
+    });
+
+    it('P3-043: exportMergedCanvases works with display-p3 colorSpace option', () => {
+      const canvas1 = document.createElement('canvas');
+      canvas1.width = 10;
+      canvas1.height = 10;
+
+      const mockLink = {
+        href: '',
+        download: '',
+        style: { display: '' },
+        click: vi.fn(),
+      };
+
+      vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+        if (tag === 'a') return mockLink as unknown as HTMLAnchorElement;
+        if (tag === 'canvas') {
+          return document.createElementNS('http://www.w3.org/1999/xhtml', 'canvas') as HTMLCanvasElement;
+        }
+        return document.createElementNS('http://www.w3.org/1999/xhtml', tag) as HTMLElement;
+      });
+      vi.spyOn(document.body, 'appendChild').mockImplementation(() => mockLink as unknown as HTMLElement);
+      vi.spyOn(document.body, 'removeChild').mockImplementation(() => mockLink as unknown as HTMLElement);
+
+      // Should not throw even if display-p3 is not supported
+      expect(() => {
+        exportMergedCanvases([canvas1], 10, 10, { colorSpace: 'display-p3' });
+      }).not.toThrow();
+
+      vi.restoreAllMocks();
     });
   });
 });

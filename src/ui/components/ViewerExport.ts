@@ -136,7 +136,8 @@ export function createExportCanvas(
   filterString: string,
   includeAnnotations: boolean,
   transform?: Transform2D,
-  cropRegion?: CropRegion
+  cropRegion?: CropRegion,
+  colorSpace?: 'srgb' | 'display-p3'
 ): HTMLCanvasElement | null {
   const source = session.currentSource;
   if (!source?.element) return null;
@@ -145,10 +146,11 @@ export function createExportCanvas(
     computeExportParams(source.width, source.height, transform, cropRegion);
 
   // Create canvas at output resolution (cropped or full)
+  // When colorSpace is 'display-p3', the exported PNG will be tagged with a P3 ICC profile.
   const canvas = document.createElement('canvas');
   canvas.width = outputWidth;
   canvas.height = outputHeight;
-  const ctx = safeCanvasContext2D(canvas, {});
+  const ctx = safeCanvasContext2D(canvas, {}, colorSpace === 'display-p3' ? 'display-p3' : undefined);
 
   // Apply color filters
   ctx.filter = filterString;
@@ -202,7 +204,8 @@ export async function renderFrameToCanvas(
   transform: Transform2D,
   filterString: string,
   includeAnnotations: boolean,
-  cropRegion?: CropRegion
+  cropRegion?: CropRegion,
+  colorSpace?: 'srgb' | 'display-p3'
 ): Promise<HTMLCanvasElement | null> {
   const source = session.currentSource;
   if (!source) return null;
@@ -251,10 +254,11 @@ export async function renderFrameToCanvas(
       computeExportParams(source.width, source.height, transform, cropRegion);
 
     // Create canvas at output resolution (cropped or full)
+    // When colorSpace is 'display-p3', the exported PNG will be tagged with a P3 ICC profile.
     const canvas = document.createElement('canvas');
     canvas.width = outputWidth;
     canvas.height = outputHeight;
-    const ctx = safeCanvasContext2D(canvas, {});
+    const ctx = safeCanvasContext2D(canvas, {}, colorSpace === 'display-p3' ? 'display-p3' : undefined);
 
     // Apply color filters
     ctx.filter = filterString;
