@@ -3,6 +3,11 @@ import { ShaderProgram } from './ShaderProgram';
 import { ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from '../ui/components/ColorControls';
 import { ToneMappingState, ToneMappingOperator, DEFAULT_TONE_MAPPING_STATE } from '../ui/components/ToneMappingControl';
 import { getHueRotationMatrix, isIdentityHueRotation } from '../color/HueRotation';
+import type { DisplayCapabilities } from '../color/DisplayCapabilities';
+import type { RendererBackend, TextureHandle } from './RendererBackend';
+
+// Re-export the interface and types so existing consumers can import from here
+export type { RendererBackend, TextureHandle } from './RendererBackend';
 
 /**
  * Tone mapping operator integer codes for shader uniform
@@ -14,7 +19,14 @@ export const TONE_MAPPING_OPERATOR_CODES: Record<ToneMappingOperator, number> = 
   'aces': 3,
 };
 
-export class Renderer {
+/**
+ * WebGL2-based renderer backend.
+ *
+ * This is the original Renderer class, now implementing the RendererBackend
+ * interface. All behavior is identical to the pre-Phase 4 implementation.
+ * Also exported as WebGL2Backend for clarity in backend selection.
+ */
+export class Renderer implements RendererBackend {
   // Color adjustments state
   private colorAdjustments: ColorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
   private gl: WebGL2RenderingContext | null = null;
@@ -26,6 +38,9 @@ export class Renderer {
   // Tone mapping state
   private toneMappingState: ToneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
 
+  // HDR output mode
+  private hdrOutputMode: 'sdr' | 'hlg' | 'pq' = 'sdr';
+
   // Shaders
   private displayShader: ShaderProgram | null = null;
 
@@ -36,7 +51,7 @@ export class Renderer {
   // Current texture
   private currentTexture: WebGLTexture | null = null;
 
-  initialize(canvas: HTMLCanvasElement): void {
+  initialize(canvas: HTMLCanvasElement, capabilities?: DisplayCapabilities): void {
     this.canvas = canvas;
 
     const gl = canvas.getContext('webgl2', {
@@ -54,6 +69,15 @@ export class Renderer {
 
     this.gl = gl;
 
+    // Progressive enhancement: upgrade to Display P3 if supported
+    if (capabilities?.webglP3) {
+      try {
+        (gl as WebGL2RenderingContext & { drawingBufferColorSpace: string }).drawingBufferColorSpace = 'display-p3';
+      } catch {
+        // Browser doesn't support setting drawingBufferColorSpace
+      }
+    }
+
     // Check for required extensions
     const requiredExtensions = ['EXT_color_buffer_float', 'OES_texture_float_linear'];
     for (const ext of requiredExtensions) {
@@ -64,6 +88,17 @@ export class Renderer {
 
     this.initShaders();
     this.initQuad();
+  }
+
+  /**
+   * Async initialization (no-op for WebGL2).
+   *
+   * WebGL2 is fully initialized synchronously in initialize(). This method
+   * exists to satisfy the RendererBackend interface so that callers can use
+   * a uniform `await backend.initAsync()` pattern across all backends.
+   */
+  async initAsync(): Promise<void> {
+    // No-op: WebGL2 initialization is fully synchronous.
   }
 
   private initShaders(): void {
@@ -108,6 +143,9 @@ export class Renderer {
 
       // Color inversion
       uniform bool u_invert;
+
+      // HDR output mode: 0=SDR (clamp), 1=HDR passthrough
+      uniform int u_outputMode;
 
       // Luminance coefficients (Rec. 709)
       const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
@@ -216,8 +254,12 @@ export class Renderer {
           color.rgb = 1.0 - color.rgb;
         }
 
-        // Clamp final output
-        color.rgb = clamp(color.rgb, 0.0, 1.0);
+        // Final output
+        if (u_outputMode == 0) {
+          // SDR: clamp to [0,1] — identical to current behavior
+          color.rgb = clamp(color.rgb, 0.0, 1.0);
+        }
+        // else: HDR — let values >1.0 pass through to the HDR drawing buffer
 
         fragColor = color;
       }
@@ -322,6 +364,9 @@ export class Renderer {
 
     // Set color inversion uniform
     this.displayShader.setUniformInt('u_invert', this.colorInversionEnabled ? 1 : 0);
+
+    // Set HDR output mode uniform
+    this.displayShader.setUniformInt('u_outputMode', this.hdrOutputMode === 'sdr' ? 0 : 1);
 
     this.displayShader.setUniform('u_texture', 0);
 
@@ -450,12 +495,14 @@ export class Renderer {
     return { internalFormat, format, type };
   }
 
-  createTexture(): WebGLTexture | null {
+  createTexture(): TextureHandle {
     return this.gl?.createTexture() ?? null;
   }
 
-  deleteTexture(texture: WebGLTexture): void {
-    this.gl?.deleteTexture(texture);
+  deleteTexture(texture: TextureHandle): void {
+    if (texture) {
+      this.gl?.deleteTexture(texture);
+    }
   }
 
   getContext(): WebGL2RenderingContext | null {
@@ -494,6 +541,56 @@ export class Renderer {
     this.toneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
   }
 
+  setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq', capabilities: DisplayCapabilities): boolean {
+    if (!this.gl) return false;
+
+    if (mode === 'hlg' && !capabilities.webglHLG) return false;
+    if (mode === 'pq' && !capabilities.webglPQ) return false;
+
+    const previousMode = this.hdrOutputMode;
+    try {
+      const glExt = this.gl as unknown as Omit<WebGL2RenderingContext, 'drawingBufferColorSpace'> & { drawingBufferColorSpace: string };
+      switch (mode) {
+        case 'hlg':
+          glExt.drawingBufferColorSpace = 'rec2100-hlg';
+          break;
+        case 'pq':
+          glExt.drawingBufferColorSpace = 'rec2100-pq';
+          break;
+        default:
+          // Revert to P3 or sRGB
+          glExt.drawingBufferColorSpace = capabilities.webglP3 ? 'display-p3' : 'srgb';
+      }
+      this.hdrOutputMode = mode;
+
+      // Attempt to configure HDR metadata when entering HDR mode
+      if (mode !== 'sdr') {
+        this.tryConfigureHDRMetadata();
+      }
+
+      return true;
+    } catch {
+      // Ensure hdrOutputMode is rolled back to its previous value
+      this.hdrOutputMode = previousMode;
+      return false;
+    }
+  }
+
+  getHDROutputMode(): 'sdr' | 'hlg' | 'pq' {
+    return this.hdrOutputMode;
+  }
+
+  private tryConfigureHDRMetadata(): void {
+    if (!this.canvas) return;
+    if ('configureHighDynamicRange' in this.canvas) {
+      try {
+        (this.canvas as HTMLCanvasElement & { configureHighDynamicRange: (opts: { mode: string }) => void }).configureHighDynamicRange({ mode: 'default' });
+      } catch {
+        // Not supported — continue without metadata
+      }
+    }
+  }
+
   dispose(): void {
     if (!this.gl) return;
 
@@ -508,3 +605,10 @@ export class Renderer {
     this.canvas = null;
   }
 }
+
+/**
+ * Alias for the Renderer class, for use in backend selection logic.
+ * Semantically identical to Renderer; this name clarifies intent when
+ * used alongside WebGPUBackend.
+ */
+export const WebGL2Backend = Renderer;

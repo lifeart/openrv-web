@@ -66,6 +66,11 @@ export class Histogram extends EventEmitter<HistogramEvents> {
   private highlightIndicator: HTMLElement | null = null;
   private boundOnThemeChange: (() => void) | null = null;
 
+  // HDR mode state
+  private hdrActive = false;
+  private hdrHeadroom: number | null = null;
+  private scaleLabels: HTMLElement | null = null;
+
   constructor() {
     super();
 
@@ -142,19 +147,19 @@ export class Histogram extends EventEmitter<HistogramEvents> {
     `;
 
     // Scale labels row
-    const scaleRow = document.createElement('div');
-    scaleRow.style.cssText = `
+    this.scaleLabels = document.createElement('div');
+    this.scaleLabels.style.cssText = `
       display: flex;
       justify-content: space-between;
       font-size: 9px;
       color: var(--text-secondary);
     `;
-    scaleRow.innerHTML = `
+    this.scaleLabels.innerHTML = `
       <span>0</span>
       <span>128</span>
       <span>255</span>
     `;
-    footer.appendChild(scaleRow);
+    footer.appendChild(this.scaleLabels);
 
     // Clipping indicators row
     this.clippingIndicators = document.createElement('div');
@@ -360,6 +365,125 @@ export class Histogram extends EventEmitter<HistogramEvents> {
     const gpuProcessor = getSharedScopesProcessor();
     if (gpuProcessor) {
       gpuProcessor.setPlaybackMode(isPlaying);
+    }
+  }
+
+  /**
+   * Set HDR mode for histogram rendering.
+   * When active, histogram bins represent the range [0, maxValue] instead of [0, 1.0].
+   * This allows visualization of HDR values that extend beyond the SDR range.
+   *
+   * @param active - Whether HDR mode is active
+   * @param headroom - Optional HDR headroom (peak / SDR reference). Defaults to 4.0 when active.
+   */
+  setHDRMode(active: boolean, headroom?: number): void {
+    this.hdrActive = active;
+    this.hdrHeadroom = headroom ?? null;
+    this.updateScaleLabels();
+    if (this.data) {
+      this.draw();
+    }
+  }
+
+  /**
+   * Get the effective max value for histogram bin range.
+   * Returns 1.0 in SDR mode, or the HDR headroom (default 4.0) in HDR mode.
+   */
+  getMaxValue(): number {
+    return this.hdrActive ? (this.hdrHeadroom ?? 4.0) : 1.0;
+  }
+
+  /**
+   * Check if HDR mode is active
+   */
+  isHDRActive(): boolean {
+    return this.hdrActive;
+  }
+
+  /**
+   * Calculate histogram from ImageData with HDR support.
+   * When HDR mode is active, pixel values are mapped into bins covering [0, maxValue]
+   * where maxValue = headroom (default 4.0). Values beyond maxValue are clamped to the last bin.
+   */
+  calculateHDR(imageData: ImageData): HistogramData {
+    const isFloat = !(imageData.data instanceof Uint8ClampedArray);
+    if (!this.hdrActive || !isFloat) {
+      // In SDR mode or with Uint8 data, use standard calculation
+      return this.calculate(imageData);
+    }
+
+    // Float16/Float32 path -- cast to ArrayLike<number> for type-safe access
+    const floatData = imageData.data as unknown as ArrayLike<number>;
+    const red = new Uint32Array(HISTOGRAM_BINS);
+    const green = new Uint32Array(HISTOGRAM_BINS);
+    const blue = new Uint32Array(HISTOGRAM_BINS);
+    const luminance = new Uint32Array(HISTOGRAM_BINS);
+
+    const len = floatData.length;
+    const pixelCount = len / 4;
+    const maxVal = this.getMaxValue();
+    const binScale = (HISTOGRAM_BINS - 1) / maxVal;
+
+    for (let i = 0; i < len; i += 4) {
+      const r = floatData[i] ?? 0;
+      const g = floatData[i + 1] ?? 0;
+      const b = floatData[i + 2] ?? 0;
+
+      // Map floating-point values [0, maxVal] to bin indices [0, 255]
+      const rBin = Math.min(HISTOGRAM_BINS - 1, Math.max(0, Math.round(r * binScale)));
+      const gBin = Math.min(HISTOGRAM_BINS - 1, Math.max(0, Math.round(g * binScale)));
+      const bBin = Math.min(HISTOGRAM_BINS - 1, Math.max(0, Math.round(b * binScale)));
+
+      red[rBin]!++;
+      green[gBin]!++;
+      blue[bBin]!++;
+
+      // Calculate luminance using Rec.709 coefficients
+      const luma = LUMINANCE_COEFFICIENTS.r * r +
+        LUMINANCE_COEFFICIENTS.g * g +
+        LUMINANCE_COEFFICIENTS.b * b;
+      const lumaBin = Math.min(HISTOGRAM_BINS - 1, Math.max(0, Math.round(luma * binScale)));
+      luminance[lumaBin]!++;
+    }
+
+    // Find max value for normalization
+    let maxBinValue = 0;
+    for (let i = 0; i < HISTOGRAM_BINS; i++) {
+      maxBinValue = Math.max(maxBinValue, red[i]!, green[i]!, blue[i]!, luminance[i]!);
+    }
+
+    // Calculate clipping statistics
+    const shadows = luminance[0] ?? 0;
+    const highlights = luminance[HISTOGRAM_BINS - 1] ?? 0;
+    const clipping = {
+      shadows,
+      highlights,
+      shadowsPercent: pixelCount > 0 ? (shadows / pixelCount) * 100 : 0,
+      highlightsPercent: pixelCount > 0 ? (highlights / pixelCount) * 100 : 0,
+    };
+
+    this.data = { red, green, blue, luminance, maxValue: maxBinValue, pixelCount, clipping };
+    return this.data;
+  }
+
+  /**
+   * Update scale labels to reflect HDR range
+   */
+  private updateScaleLabels(): void {
+    if (!this.scaleLabels) return;
+    const maxVal = this.getMaxValue();
+    if (this.hdrActive) {
+      this.scaleLabels.innerHTML = `
+      <span>0</span>
+      <span>${(maxVal / 2).toFixed(1)}</span>
+      <span>${maxVal.toFixed(1)}</span>
+    `;
+    } else {
+      this.scaleLabels.innerHTML = `
+      <span>0</span>
+      <span>128</span>
+      <span>255</span>
+    `;
     }
   }
 
@@ -666,6 +790,7 @@ export class Histogram extends EventEmitter<HistogramEvents> {
     this.clippingIndicators = null;
     this.shadowIndicator = null;
     this.highlightIndicator = null;
+    this.scaleLabels = null;
     this.draggableContainer.dispose();
   }
 }

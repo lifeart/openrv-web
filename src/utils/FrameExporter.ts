@@ -10,6 +10,14 @@ export interface ExportOptions {
   quality: number;  // 0-1 for JPEG/WebP
   includeAnnotations: boolean;
   filename?: string;
+  /**
+   * When set to 'display-p3', the export pipeline will tag the output
+   * with a P3 ICC profile (if supported by the export format and browser).
+   * PNG and JPEG support ICC profile tagging via canvas.toBlob/toDataURL
+   * when the canvas has a P3 color space.
+   * Defaults to 'srgb' for backward compatibility.
+   */
+  colorSpace?: 'srgb' | 'display-p3';
 }
 
 export const DEFAULT_EXPORT_OPTIONS: ExportOptions = {
@@ -57,11 +65,22 @@ export function exportMergedCanvases(
   height: number,
   options: Partial<ExportOptions> = {}
 ): void {
-  // Create temporary canvas for merging
+  // Create temporary canvas for merging, preserving color space if specified
   const mergedCanvas = document.createElement('canvas');
   mergedCanvas.width = width;
   mergedCanvas.height = height;
-  const ctx = mergedCanvas.getContext('2d');
+
+  const colorSpace = options.colorSpace;
+  let ctx: CanvasRenderingContext2D | null;
+  if (colorSpace === 'display-p3') {
+    try {
+      ctx = mergedCanvas.getContext('2d', { colorSpace: 'display-p3' } as CanvasRenderingContext2DSettings);
+    } catch {
+      ctx = mergedCanvas.getContext('2d');
+    }
+  } else {
+    ctx = mergedCanvas.getContext('2d');
+  }
 
   if (!ctx) {
     console.error('Failed to create merge canvas context');

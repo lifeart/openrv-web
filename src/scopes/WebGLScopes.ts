@@ -98,6 +98,7 @@ uniform sampler2D u_image;
 uniform vec2 u_imageSize; // Dimensions of the analysis image (texture)
 uniform int u_mode; // 0=Luma, 1=RGB, 2=Parade, 3=YCbCr
 uniform int u_channel;
+uniform float u_waveformMaxValue; // Max value for Y-axis scaling (1.0 for SDR, >1.0 for HDR)
 
 const vec3 LUMA_COEFF = vec3(0.2126, 0.7152, 0.0722);
 
@@ -173,7 +174,9 @@ void main() {
     }
   }
 
-  gl_Position = vec4(xPos * 2.0 - 1.0, value * 2.0 - 1.0, 0.0, 1.0);
+  // Scale value by maxValue for HDR support (SDR: maxValue=1.0, no change)
+  float scaledValue = value / u_waveformMaxValue;
+  gl_Position = vec4(xPos * 2.0 - 1.0, scaledValue * 2.0 - 1.0, 0.0, 1.0);
   gl_PointSize = 1.0;
 }
 `;
@@ -198,6 +201,7 @@ precision highp float;
 uniform sampler2D u_image;
 uniform vec2 u_imageSize; // Dimensions of the analysis image (texture)
 uniform float u_zoom;
+uniform float u_saturationScale; // Scale factor for P3/Rec.2020 wider gamut (1.0 for sRGB)
 
 void main() {
   int pixelIndex = gl_VertexID;
@@ -220,7 +224,9 @@ void main() {
   float cb = -0.169 * color.r - 0.331 * color.g + 0.5 * color.b;
   float cr = 0.5 * color.r - 0.419 * color.g - 0.081 * color.b;
 
-  gl_Position = vec4(cb * 2.0 * u_zoom, cr * 2.0 * u_zoom, 0.0, 1.0);
+  // Apply saturation scale for wider gamuts (P3/Rec.2020 can have larger Cb/Cr values)
+  float scaledZoom = u_zoom * u_saturationScale;
+  gl_Position = vec4(cb * 2.0 * scaledZoom, cr * 2.0 * scaledZoom, 0.0, 1.0);
   gl_PointSize = 1.0;
 }
 `;
@@ -276,6 +282,10 @@ export class WebGLScopesProcessor {
   private lastCanvasWidth = 0;
   private lastCanvasHeight = 0;
 
+  // HDR mode state
+  private hdrActive = false;
+  private hdrHeadroom: number | null = null;
+
   // Histogram bar rendering uniforms
   private histogramUniforms!: {
     u_histogramData: WebGLUniformLocation | null;
@@ -291,6 +301,7 @@ export class WebGLScopesProcessor {
     u_mode: WebGLUniformLocation | null;
     u_channel: WebGLUniformLocation | null;
     u_opacity: WebGLUniformLocation | null;
+    u_waveformMaxValue: WebGLUniformLocation | null;
   };
 
   private vectorscopeUniforms!: {
@@ -298,6 +309,7 @@ export class WebGLScopesProcessor {
     u_imageSize: WebGLUniformLocation | null;
     u_zoom: WebGLUniformLocation | null;
     u_opacity: WebGLUniformLocation | null;
+    u_saturationScale: WebGLUniformLocation | null;
   };
 
   constructor() {
@@ -361,6 +373,7 @@ export class WebGLScopesProcessor {
       u_mode: gl.getUniformLocation(this.waveformProgram, 'u_mode'),
       u_channel: gl.getUniformLocation(this.waveformProgram, 'u_channel'),
       u_opacity: gl.getUniformLocation(this.waveformProgram, 'u_opacity'),
+      u_waveformMaxValue: gl.getUniformLocation(this.waveformProgram, 'u_waveformMaxValue'),
     };
 
     this.vectorscopeUniforms = {
@@ -368,6 +381,7 @@ export class WebGLScopesProcessor {
       u_imageSize: gl.getUniformLocation(this.vectorscopeProgram, 'u_imageSize'),
       u_zoom: gl.getUniformLocation(this.vectorscopeProgram, 'u_zoom'),
       u_opacity: gl.getUniformLocation(this.vectorscopeProgram, 'u_opacity'),
+      u_saturationScale: gl.getUniformLocation(this.vectorscopeProgram, 'u_saturationScale'),
     };
 
     this.imageTexture = gl.createTexture();
@@ -502,6 +516,26 @@ export class WebGLScopesProcessor {
    */
   setPlaybackMode(isPlaying: boolean): void {
     this.isPlaybackMode = isPlaying;
+  }
+
+  /**
+   * Set HDR mode for scope rendering.
+   * When active, scopes extend beyond the [0, 1] range to visualize HDR values.
+   *
+   * @param active - Whether HDR mode is active
+   * @param headroom - Optional HDR headroom (peak / SDR reference). Defaults to 4.0 when active.
+   */
+  setHDRMode(active: boolean, headroom?: number): void {
+    this.hdrActive = active;
+    this.hdrHeadroom = headroom ?? null;
+  }
+
+  /**
+   * Get the effective max value for scope rendering.
+   * Returns 1.0 in SDR mode, or the HDR headroom (default 4.0) in HDR mode.
+   */
+  getMaxValue(): number {
+    return this.hdrActive ? (this.hdrHeadroom ?? 4.0) : 1.0;
   }
 
   private bindResources(): void {
@@ -651,6 +685,8 @@ export class WebGLScopesProcessor {
     gl.uniform2f(this.waveformUniforms.u_imageSize!, this.analysisWidth, this.analysisHeight);
     // Opacity tuned to match CPU rendering brightness
     gl.uniform1f(this.waveformUniforms.u_opacity!, 0.08);
+    // HDR: scale Y-axis to [0, maxValue] instead of [0, 1]
+    gl.uniform1f(this.waveformUniforms.u_waveformMaxValue!, this.getMaxValue());
 
     if (mode === 'luma') {
       gl.uniform1i(this.waveformUniforms.u_mode!, 0);
@@ -703,6 +739,10 @@ export class WebGLScopesProcessor {
     gl.uniform1f(this.vectorscopeUniforms.u_zoom!, zoom);
     // Opacity tuned to match CPU rendering brightness
     gl.uniform1f(this.vectorscopeUniforms.u_opacity!, 0.15);
+    // HDR: adjust saturation scale for wider gamuts (P3/Rec.2020 have larger Cb/Cr extents)
+    // In SDR mode (maxValue=1.0) this is 1.0 and has no effect
+    const saturationScale = this.hdrActive ? 1.0 / this.getMaxValue() : 1.0;
+    gl.uniform1f(this.vectorscopeUniforms.u_saturationScale!, saturationScale);
 
     gl.drawArrays(gl.POINTS, 0, this.vertexCount);
 

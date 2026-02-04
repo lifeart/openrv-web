@@ -11,6 +11,7 @@ import {
   LineJoin,
   LineCap,
 } from './types';
+import { safeCanvasContext2D } from '../color/SafeCanvasContext';
 
 export interface RenderOptions {
   width: number;  // Canvas width in pixels
@@ -24,10 +25,21 @@ export class PaintRenderer {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
 
-  constructor() {
+  /**
+   * Create a PaintRenderer.
+   * @param colorSpace - Optional color space to match the image canvas.
+   *   When provided, the paint canvas uses the same color space as the
+   *   image canvas so compositing is correct. Color picker values remain
+   *   in sRGB gamut; the browser automatically converts CSS color values
+   *   when drawn to a P3/HDR canvas.
+   */
+  constructor(colorSpace?: 'srgb' | 'display-p3') {
     this.canvas = document.createElement('canvas');
-    const ctx = this.canvas.getContext('2d');
-    if (!ctx) throw new Error('Failed to get 2D context');
+    const ctx = safeCanvasContext2D(
+      this.canvas,
+      {},
+      colorSpace === 'display-p3' ? 'display-p3' : undefined,
+    );
     this.ctx = ctx;
   }
 

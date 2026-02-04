@@ -41,6 +41,8 @@ import { getThemeManager } from '../../utils/ThemeManager';
 import { setupHiDPICanvas, resetCanvasFromHiDPI } from '../../utils/HiDPICanvas';
 import { getSharedOCIOProcessor } from '../../color/OCIOProcessor';
 import { DisplayColorState, DEFAULT_DISPLAY_COLOR_STATE, applyDisplayColorManagementToImageData, isDisplayStateActive } from '../../color/DisplayTransfer';
+import type { DisplayCapabilities } from '../../color/DisplayCapabilities';
+import { safeCanvasContext2D } from '../../color/SafeCanvasContext';
 
 // Extracted effect processing utilities
 import { applyHighlightsShadows, applyVibrance, applyClarity, applySharpenCPU, applyToneMapping } from './ViewerEffects';
@@ -357,10 +359,16 @@ export class Viewer {
   // Theme change listener for runtime theme updates
   private boundOnThemeChange: (() => void) | null = null;
 
-  constructor(session: Session, paintEngine: PaintEngine) {
+  // Display capabilities for wide color gamut / HDR support
+  private capabilities: DisplayCapabilities | undefined;
+  private canvasColorSpace: 'display-p3' | undefined;
+
+  constructor(session: Session, paintEngine: PaintEngine, capabilities?: DisplayCapabilities) {
+    this.capabilities = capabilities;
+    this.canvasColorSpace = this.capabilities?.canvasP3 ? 'display-p3' : undefined;
     this.session = session;
     this.paintEngine = paintEngine;
-    this.paintRenderer = new PaintRenderer();
+    this.paintRenderer = new PaintRenderer(this.canvasColorSpace);
 
     // Create container
     this.container = document.createElement('div');
@@ -415,7 +423,7 @@ export class Viewer {
       pointer-events: none;
     `;
     this.canvasContainer.appendChild(this.cropOverlay);
-    this.cropCtx = this.cropOverlay.getContext('2d');
+    this.cropCtx = safeCanvasContext2D(this.cropOverlay, {}, this.canvasColorSpace);
 
     // Create safe areas overlay
     this.safeAreasOverlay = new SafeAreasOverlay();
@@ -482,12 +490,11 @@ export class Viewer {
     });
 
     // Use willReadFrequently for better getImageData performance during effect processing
-    const imageCtx = this.imageCanvas.getContext('2d', { alpha: false, willReadFrequently: true });
-    if (!imageCtx) throw new Error('Failed to get image 2D context');
+    // Use P3 color space when available for wider gamut output
+    const imageCtx = safeCanvasContext2D(this.imageCanvas, { alpha: false, willReadFrequently: true }, this.canvasColorSpace);
     this.imageCtx = imageCtx;
 
-    const paintCtx = this.paintCanvas.getContext('2d');
-    if (!paintCtx) throw new Error('Failed to get paint 2D context');
+    const paintCtx = safeCanvasContext2D(this.paintCanvas, {}, this.canvasColorSpace);
     this.paintCtx = paintCtx;
 
     // Create wipe UI elements (line and labels)
@@ -2813,6 +2820,14 @@ export class Viewer {
     this.scheduleRender();
   }
 
+  // HDR output mode (delegates to renderer when available)
+  setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq'): void {
+    // Store mode for reference; the renderer handles the actual WebGL state.
+    // This is a no-op in the 2D canvas Viewer but keeps the API surface consistent
+    // so App.ts can call viewer.setHDROutputMode(mode) uniformly.
+    void mode;
+  }
+
   // Pixel Aspect Ratio methods
   setPARState(state: PARState): void {
     this.parState = { ...state };
@@ -2952,7 +2967,7 @@ export class Viewer {
     // Ensure temp canvas is the right size
     if (!this.bgCompositeTempCanvas || !this.bgCompositeTempCtx) {
       this.bgCompositeTempCanvas = document.createElement('canvas');
-      this.bgCompositeTempCtx = this.bgCompositeTempCanvas.getContext('2d');
+      this.bgCompositeTempCtx = safeCanvasContext2D(this.bgCompositeTempCanvas, {}, this.canvasColorSpace);
     }
     if (!this.bgCompositeTempCtx) {
       // Fallback if context creation fails
@@ -2998,9 +3013,12 @@ export class Viewer {
       const canvas = document.createElement('canvas');
       canvas.width = width;
       canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return null;
-      this.ghostFrameCanvasPool.push({ canvas, ctx });
+      try {
+        const ctx = safeCanvasContext2D(canvas, {}, this.canvasColorSpace);
+        this.ghostFrameCanvasPool.push({ canvas, ctx });
+      } catch {
+        return null;
+      }
     }
 
     return this.ghostFrameCanvasPool[index]!;
@@ -3734,7 +3752,7 @@ export class Viewer {
     return copyCanvasToClipboard(canvas);
   }
 
-  createExportCanvas(includeAnnotations: boolean): HTMLCanvasElement | null {
+  createExportCanvas(includeAnnotations: boolean, colorSpace?: 'srgb' | 'display-p3'): HTMLCanvasElement | null {
     const cropRegion = this.cropState.enabled ? this.cropState.region : undefined;
     return createExportCanvasUtil(
       this.session,
@@ -3743,7 +3761,8 @@ export class Viewer {
       this.getCanvasFilterString(),
       includeAnnotations,
       this.transform,
-      cropRegion
+      cropRegion,
+      colorSpace
     );
   }
 
@@ -4007,7 +4026,7 @@ export class Viewer {
       this.sourceImageCanvas = document.createElement('canvas');
       this.sourceImageCanvas.width = displayWidth;
       this.sourceImageCanvas.height = displayHeight;
-      this.sourceImageCtx = this.sourceImageCanvas.getContext('2d', { willReadFrequently: true });
+      this.sourceImageCtx = safeCanvasContext2D(this.sourceImageCanvas, { willReadFrequently: true }, this.canvasColorSpace);
     }
 
     if (!this.sourceImageCtx) return null;

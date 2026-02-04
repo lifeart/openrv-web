@@ -22,7 +22,10 @@ import {
   gamutLabel,
   colorSpaceLabel,
   BrowserColorSpaceInfo,
+  getActiveOutputColorSpace,
 } from '../../color/BrowserColorSpace';
+import type { DisplayCapabilities } from '../../color/DisplayCapabilities';
+import { DEFAULT_CAPABILITIES, resolveActiveColorSpace } from '../../color/DisplayCapabilities';
 import { getIconSvg } from './shared/Icons';
 
 /**
@@ -64,6 +67,9 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
   private state: DisplayColorState;
   private browserInfo: BrowserColorSpaceInfo;
 
+  // Display capabilities reference
+  private displayCapabilities: DisplayCapabilities;
+
   // DOM references for updating
   private profileRadios: Map<DisplayTransferFunction, HTMLElement> = new Map();
   private gammaSlider: HTMLInputElement | null = null;
@@ -72,12 +78,15 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
   private brightnessValueLabel: HTMLSpanElement | null = null;
   private detectedColorSpaceLabel: HTMLSpanElement | null = null;
   private detectedGamutLabel: HTMLSpanElement | null = null;
+  private activeOutputLabel: HTMLSpanElement | null = null;
+  private gamutPreferenceRadios: Map<string, HTMLElement> = new Map();
 
   // Bound handlers for cleanup
   private boundHandleOutsideClick: (e: MouseEvent) => void;
 
-  constructor() {
+  constructor(capabilities?: DisplayCapabilities) {
     super();
+    this.displayCapabilities = capabilities ?? { ...DEFAULT_CAPABILITIES };
 
     // Load persisted state or use defaults
     const persisted = loadDisplayProfile();
@@ -253,7 +262,41 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
     gamutRow.appendChild(this.detectedGamutLabel);
     infoSection.appendChild(gamutRow);
 
+    // Active output color space row
+    const activeOutputRow = document.createElement('div');
+    activeOutputRow.style.cssText = 'display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); padding: 2px 0;';
+    const activeOutputLabelEl = document.createElement('span');
+    activeOutputLabelEl.textContent = 'Active Output:';
+    this.activeOutputLabel = document.createElement('span');
+    this.activeOutputLabel.dataset.testid = 'display-active-output';
+    const activeOutput = getActiveOutputColorSpace(this.displayCapabilities);
+    this.activeOutputLabel.textContent = activeOutput === 'display-p3' ? 'P3' : 'sRGB';
+    activeOutputRow.appendChild(activeOutputLabelEl);
+    activeOutputRow.appendChild(this.activeOutputLabel);
+    infoSection.appendChild(activeOutputRow);
+
     this.panel.appendChild(infoSection);
+
+    // Color Gamut preference section
+    const gamutPrefSection = this.createSection('Color Gamut', 'display-gamut-preference');
+    const gamutPrefGroup = document.createElement('div');
+    gamutPrefGroup.setAttribute('role', 'radiogroup');
+    gamutPrefGroup.setAttribute('aria-label', 'Color gamut preference');
+    gamutPrefGroup.style.cssText = 'display: flex; flex-direction: column; gap: 2px;';
+
+    const gamutOptions: Array<{ id: 'auto' | 'srgb' | 'display-p3'; label: string; testId: string }> = [
+      { id: 'auto', label: 'Auto', testId: 'gamut-pref-auto' },
+      { id: 'srgb', label: 'sRGB', testId: 'gamut-pref-srgb' },
+      { id: 'display-p3', label: 'Display P3', testId: 'gamut-pref-p3' },
+    ];
+
+    const currentGamutPref = this.state.outputGamut ?? 'auto';
+    for (const opt of gamutOptions) {
+      const row = this.createGamutPreferenceRow(opt, currentGamutPref);
+      gamutPrefGroup.appendChild(row);
+    }
+    gamutPrefSection.appendChild(gamutPrefGroup);
+    this.panel.appendChild(gamutPrefSection);
 
     // Reset button
     const resetButton = document.createElement('button');
@@ -422,6 +465,86 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
     return row;
   }
 
+  private createGamutPreferenceRow(
+    opt: { id: 'auto' | 'srgb' | 'display-p3'; label: string; testId: string },
+    currentValue: string,
+  ): HTMLElement {
+    const row = document.createElement('div');
+    row.dataset.testid = opt.testId;
+    row.setAttribute('role', 'radio');
+    row.setAttribute('aria-checked', String(currentValue === opt.id));
+    row.setAttribute('tabindex', '0');
+    row.style.cssText = `
+      display: flex;
+      align-items: center;
+      padding: 5px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--text-primary);
+      transition: background 0.1s;
+    `;
+
+    if (currentValue === opt.id) {
+      row.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+    }
+
+    const indicator = document.createElement('span');
+    indicator.style.cssText = `
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 2px solid var(--text-muted);
+      margin-right: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    `;
+    if (currentValue === opt.id) {
+      indicator.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:var(--accent-primary);display:block;"></span>';
+      indicator.style.borderColor = 'var(--accent-primary)';
+    }
+
+    const label = document.createElement('span');
+    label.textContent = opt.label;
+
+    row.appendChild(indicator);
+    row.appendChild(label);
+
+    row.addEventListener('click', () => {
+      this.setOutputGamut(opt.id);
+    });
+    row.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        this.setOutputGamut(opt.id);
+      }
+    });
+    row.addEventListener('mouseenter', () => {
+      const current = this.state.outputGamut ?? 'auto';
+      if (current !== opt.id) {
+        row.style.background = 'var(--bg-hover)';
+      }
+    });
+    row.addEventListener('mouseleave', () => {
+      const current = this.state.outputGamut ?? 'auto';
+      if (current !== opt.id) {
+        row.style.background = 'transparent';
+      } else {
+        row.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+      }
+    });
+
+    this.gamutPreferenceRadios.set(opt.id, row);
+    return row;
+  }
+
+  private setOutputGamut(gamut: 'auto' | 'srgb' | 'display-p3'): void {
+    if (this.state.outputGamut === gamut) return;
+    this.setState({ outputGamut: gamut });
+  }
+
   // ==========================================================================
   // State Management
   // ==========================================================================
@@ -499,6 +622,30 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
     }
     if (this.brightnessValueLabel) {
       this.brightnessValueLabel.textContent = this.state.displayBrightness.toFixed(2);
+    }
+
+    // Update gamut preference radio buttons
+    const currentGamutPref = this.state.outputGamut ?? 'auto';
+    for (const [id, row] of this.gamutPreferenceRadios) {
+      const isActive = currentGamutPref === id;
+      row.setAttribute('aria-checked', String(isActive));
+      row.style.background = isActive ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent';
+      const indicator = row.querySelector('span') as HTMLSpanElement;
+      if (indicator) {
+        if (isActive) {
+          indicator.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:var(--accent-primary);display:block;"></span>';
+          indicator.style.borderColor = 'var(--accent-primary)';
+        } else {
+          indicator.innerHTML = '';
+          indicator.style.borderColor = 'var(--text-muted)';
+        }
+      }
+    }
+
+    // Update active output label based on current gamut preference and capabilities
+    if (this.activeOutputLabel) {
+      const resolved = resolveActiveColorSpace(this.displayCapabilities, currentGamutPref);
+      this.activeOutputLabel.textContent = resolved === 'display-p3' ? 'P3' : 'sRGB';
     }
   }
 

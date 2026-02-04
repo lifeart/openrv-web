@@ -593,4 +593,120 @@ describe('WebGLScopesProcessor', () => {
       expect(processor.isReady()).toBe(true);
     });
   });
+
+  // ====================================================================
+  // Phase 3: HDR mode support
+  // ====================================================================
+  describe('HDR mode', () => {
+    it('P3-020: getMaxValue returns 1.0 by default (SDR mode)', () => {
+      const processor = new WebGLScopesProcessor();
+      expect(processor.getMaxValue()).toBe(1.0);
+    });
+
+    it('P3-021: getMaxValue returns headroom when HDR mode is active', () => {
+      const processor = new WebGLScopesProcessor();
+      processor.setHDRMode(true, 4.0);
+      expect(processor.getMaxValue()).toBe(4.0);
+    });
+
+    it('P3-022: getMaxValue returns default 4.0 when HDR active without explicit headroom', () => {
+      const processor = new WebGLScopesProcessor();
+      processor.setHDRMode(true);
+      expect(processor.getMaxValue()).toBe(4.0);
+    });
+
+    it('P3-023: getMaxValue returns 1.0 after disabling HDR mode', () => {
+      const processor = new WebGLScopesProcessor();
+      processor.setHDRMode(true, 6.0);
+      expect(processor.getMaxValue()).toBe(6.0);
+
+      processor.setHDRMode(false);
+      expect(processor.getMaxValue()).toBe(1.0);
+    });
+
+    it('P3-024: waveform sets u_waveformMaxValue uniform to 1.0 in SDR mode', () => {
+      const processor = new WebGLScopesProcessor();
+      processor.setImage(new ImageData(10, 10));
+      mockGl.uniform1f.mockClear();
+
+      processor.renderWaveform(mockOutputCanvas, 'luma');
+
+      const maxValueCall = mockGl.uniform1f.mock.calls.find(
+        (call) => call[0]?.name === 'u_waveformMaxValue'
+      );
+      expect(maxValueCall).toBeDefined();
+      expect(maxValueCall![1]).toBe(1.0);
+    });
+
+    it('P3-025: waveform sets u_waveformMaxValue uniform to headroom in HDR mode', () => {
+      const processor = new WebGLScopesProcessor();
+      processor.setHDRMode(true, 4.0);
+      processor.setImage(new ImageData(10, 10));
+      mockGl.uniform1f.mockClear();
+
+      processor.renderWaveform(mockOutputCanvas, 'luma');
+
+      const maxValueCall = mockGl.uniform1f.mock.calls.find(
+        (call) => call[0]?.name === 'u_waveformMaxValue'
+      );
+      expect(maxValueCall).toBeDefined();
+      expect(maxValueCall![1]).toBe(4.0);
+    });
+
+    it('P3-026: vectorscope sets u_saturationScale to 1.0 in SDR mode', () => {
+      const processor = new WebGLScopesProcessor();
+      processor.setImage(new ImageData(10, 10));
+      mockGl.uniform1f.mockClear();
+
+      processor.renderVectorscope(mockOutputCanvas, 1.0);
+
+      const satScaleCall = mockGl.uniform1f.mock.calls.find(
+        (call) => call[0]?.name === 'u_saturationScale'
+      );
+      expect(satScaleCall).toBeDefined();
+      expect(satScaleCall![1]).toBe(1.0);
+    });
+
+    it('P3-027: vectorscope adjusts u_saturationScale in HDR mode', () => {
+      const processor = new WebGLScopesProcessor();
+      processor.setHDRMode(true, 4.0);
+      processor.setImage(new ImageData(10, 10));
+      mockGl.uniform1f.mockClear();
+
+      processor.renderVectorscope(mockOutputCanvas, 1.0);
+
+      const satScaleCall = mockGl.uniform1f.mock.calls.find(
+        (call) => call[0]?.name === 'u_saturationScale'
+      );
+      expect(satScaleCall).toBeDefined();
+      // saturationScale = 1.0 / maxValue = 1.0 / 4.0 = 0.25
+      expect(satScaleCall![1]).toBeCloseTo(0.25, 6);
+    });
+
+    it('P3-028: SDR mode behavior is identical to pre-Phase-3 (backward compatible)', () => {
+      const processor = new WebGLScopesProcessor();
+      // Default state: hdrActive=false
+      expect(processor.getMaxValue()).toBe(1.0);
+
+      processor.setImage(new ImageData(10, 10));
+      mockGl.uniform1f.mockClear();
+
+      processor.renderWaveform(mockOutputCanvas, 'luma');
+
+      // u_waveformMaxValue should be 1.0 (no scaling)
+      const waveformMaxCall = mockGl.uniform1f.mock.calls.find(
+        (call) => call[0]?.name === 'u_waveformMaxValue'
+      );
+      expect(waveformMaxCall![1]).toBe(1.0);
+
+      mockGl.uniform1f.mockClear();
+      processor.renderVectorscope(mockOutputCanvas, 1.0);
+
+      // u_saturationScale should be 1.0 (no scaling)
+      const satScaleCall = mockGl.uniform1f.mock.calls.find(
+        (call) => call[0]?.name === 'u_saturationScale'
+      );
+      expect(satScaleCall![1]).toBe(1.0);
+    });
+  });
 });

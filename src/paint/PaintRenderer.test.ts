@@ -688,4 +688,34 @@ describe('PaintRenderer', () => {
       }).not.toThrow();
     });
   });
+
+  // ====================================================================
+  // Phase 3: Color space support
+  // ====================================================================
+  describe('color space support', () => {
+    it('P3-030: constructs without colorSpace (backward compatible)', () => {
+      const r = new PaintRenderer();
+      expect(r.getCanvas()).toBeInstanceOf(HTMLCanvasElement);
+    });
+
+    it('P3-031: constructs with srgb colorSpace', () => {
+      const r = new PaintRenderer('srgb');
+      expect(r.getCanvas()).toBeInstanceOf(HTMLCanvasElement);
+    });
+
+    it('P3-032: constructs with display-p3 colorSpace without throwing', () => {
+      // In jsdom, display-p3 may not be supported, but safeCanvasContext2D
+      // falls back gracefully
+      const r = new PaintRenderer('display-p3');
+      expect(r.getCanvas()).toBeInstanceOf(HTMLCanvasElement);
+    });
+
+    it('P3-033: canvas works normally regardless of colorSpace', () => {
+      const r = new PaintRenderer('display-p3');
+      r.resize(100, 100);
+      r.clear();
+      // Should not throw
+      expect(r.getCanvas().width).toBe(100);
+    });
+  });
 });
