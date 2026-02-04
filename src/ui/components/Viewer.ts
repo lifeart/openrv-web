@@ -167,6 +167,11 @@ export class Viewer {
   // Resize observer
   private resizeObserver: ResizeObserver;
 
+  // Cached layout measurements - invalidated by ResizeObserver and at each render frame
+  private cachedContainerRect: DOMRect | null = null;
+  private cachedCanvasContainerRect: DOMRect | null = null;
+  private cachedImageCanvasRect: DOMRect | null = null;
+
   // Animation frame for smooth rendering
   private pendingRender = false;
 
@@ -305,6 +310,11 @@ export class Viewer {
   // Ghost frame (onion skin) state
   private ghostFrameState: GhostFrameState = { ...DEFAULT_GHOST_FRAME_STATE };
 
+  // Ghost frame canvas pool - reuse canvases instead of creating new ones each frame
+  private ghostFrameCanvasPool: { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D }[] = [];
+  private ghostFramePoolWidth = 0;
+  private ghostFramePoolHeight = 0;
+
   // Tone mapping state
   private toneMappingState: ToneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
 
@@ -335,10 +345,9 @@ export class Viewer {
 
   // Cursor color callback for InfoPanel
   private cursorColorCallback: ((color: { r: number; g: number; b: number } | null, position: { x: number; y: number } | null) => void) | null = null;
-  private lastCursorColorUpdate = 0;
 
-  // Pixel probe throttling for performance
-  private lastProbeUpdate = 0;
+  // Shared throttle timestamp for merged mousemove handler (probe + cursor color)
+  private lastMouseMoveUpdate = 0;
 
   // Cached source image canvas for pixel probe "source" mode
   // Reused to avoid creating new canvases on every mouse move
@@ -556,6 +565,7 @@ export class Viewer {
 
     // Setup resize observer
     this.resizeObserver = new ResizeObserver(() => {
+      this.invalidateLayoutCache();
       this.scheduleRender();
     });
     this.resizeObserver.observe(this.container);
@@ -722,71 +732,36 @@ export class Viewer {
     this.paintEngine.on('annotationsChanged', () => this.renderPaint());
     this.paintEngine.on('toolChanged', (tool) => this.updateCursor(tool));
 
-    // Pixel probe events - track mouse movement for color sampling
-    this.container.addEventListener('mousemove', this.onMouseMoveForProbe);
-    this.container.addEventListener('mousemove', this.onMouseMoveForCursorColor);
+    // Pixel probe + cursor color events - single handler for both consumers
+    this.container.addEventListener('mousemove', this.onMouseMoveForPixelSampling);
     this.container.addEventListener('mouseleave', this.onMouseLeaveForCursorColor);
     this.container.addEventListener('click', this.onClickForProbe);
   }
 
-  private onMouseMoveForProbe = (e: MouseEvent): void => {
-    if (!this.pixelProbe.isEnabled()) return;
-
-    // Throttle updates to ~60fps (16ms) for performance
-    const now = Date.now();
-    if (now - this.lastProbeUpdate < 16) {
-      return;
-    }
-    this.lastProbeUpdate = now;
-
-    // Get canvas-relative coordinates
-    const canvasRect = this.imageCanvas.getBoundingClientRect();
-    const x = e.clientX - canvasRect.left;
-    const y = e.clientY - canvasRect.top;
-
-    // Check if within canvas bounds
-    if (x < 0 || y < 0 || x > canvasRect.width || y > canvasRect.height) {
-      return;
-    }
-
-    // Scale to canvas pixel coordinates
-    const scaleX = this.displayWidth / canvasRect.width;
-    const scaleY = this.displayHeight / canvasRect.height;
-    const canvasX = x * scaleX;
-    const canvasY = y * scaleY;
-
-    // Get image data for pixel value (rendered, after color pipeline)
-    const imageData = this.getImageData();
-
-    // Get source image data (before color pipeline) for source mode
-    // Only fetch if source mode is selected to save performance
-    if (this.pixelProbe.getSourceMode() === 'source') {
-      const sourceImageData = this.getSourceImageData();
-      this.pixelProbe.setSourceImageData(sourceImageData);
-    } else {
-      this.pixelProbe.setSourceImageData(null);
-    }
-
-    // Update pixel probe
-    this.pixelProbe.updateFromCanvas(canvasX, canvasY, imageData, this.displayWidth, this.displayHeight);
-    this.pixelProbe.setOverlayPosition(e.clientX, e.clientY);
-  };
-
   /**
-   * Handle mouse move for cursor color callback (InfoPanel integration)
-   * Throttled to ~60fps for performance
+   * Merged mousemove handler for both pixel probe and cursor color consumers.
+   * Calls getBoundingClientRect() and getImageData() at most once per event,
+   * then dispatches results to both consumers as needed.
+   * Throttled to ~60fps (16ms) for performance.
    */
-  private onMouseMoveForCursorColor = (e: MouseEvent): void => {
-    if (!this.cursorColorCallback) return;
+  private onMouseMoveForPixelSampling = (e: MouseEvent): void => {
+    const probeEnabled = this.pixelProbe.isEnabled();
+    const cursorColorEnabled = !!this.cursorColorCallback;
 
-    // Throttle updates to ~60fps (16ms)
+    // Early exit if neither consumer is active
+    if (!probeEnabled && !cursorColorEnabled) return;
+
+    // Single throttle for both consumers
     const now = Date.now();
-    if (now - this.lastCursorColorUpdate < 16) {
+    if (now - this.lastMouseMoveUpdate < 16) {
       return;
     }
-    this.lastCursorColorUpdate = now;
+    this.lastMouseMoveUpdate = now;
 
-    const canvasRect = this.imageCanvas.getBoundingClientRect();
+    // Single layout read shared by both consumers (cached per frame)
+    const canvasRect = this.getImageCanvasRect();
+
+    // Compute canvas-relative pixel coordinates once
     const position = getPixelCoordinates(
       e.clientX,
       e.clientY,
@@ -795,24 +770,48 @@ export class Viewer {
       this.displayHeight
     );
 
+    // Handle out-of-bounds
     if (!position) {
-      this.cursorColorCallback(null, null);
+      if (cursorColorEnabled) {
+        this.cursorColorCallback!(null, null);
+      }
       return;
     }
 
+    // Single pixel read, shared by both consumers
     const imageData = this.getImageData();
-    if (!imageData) {
-      this.cursorColorCallback(null, null);
-      return;
+
+    // Dispatch to probe consumer
+    if (probeEnabled && imageData) {
+      // Get source image data (before color pipeline) for source mode
+      // Only fetch if source mode is selected to save performance
+      if (this.pixelProbe.getSourceMode() === 'source') {
+        const sourceImageData = this.getSourceImageData();
+        this.pixelProbe.setSourceImageData(sourceImageData);
+      } else {
+        this.pixelProbe.setSourceImageData(null);
+      }
+
+      this.pixelProbe.updateFromCanvas(
+        position.x, position.y, imageData,
+        this.displayWidth, this.displayHeight
+      );
+      this.pixelProbe.setOverlayPosition(e.clientX, e.clientY);
     }
 
-    const color = getPixelColor(imageData, position.x, position.y);
-    if (!color) {
-      this.cursorColorCallback(null, null);
-      return;
+    // Dispatch to cursor color consumer
+    if (cursorColorEnabled) {
+      if (!imageData) {
+        this.cursorColorCallback!(null, null);
+        return;
+      }
+      const color = getPixelColor(imageData, position.x, position.y);
+      if (!color) {
+        this.cursorColorCallback!(null, null);
+      } else {
+        this.cursorColorCallback!(color, position);
+      }
     }
-
-    this.cursorColorCallback(color, position);
   };
 
   /**
@@ -888,7 +887,7 @@ export class Viewer {
   }
 
   private getCanvasPoint(clientX: number, clientY: number, pressure = 0.5): StrokePoint | null {
-    const rect = this.imageCanvas.getBoundingClientRect();
+    const rect = this.getImageCanvasRect();
     return getCanvasPointUtil(clientX, clientY, rect, this.displayWidth, this.displayHeight, pressure);
   }
 
@@ -1116,7 +1115,7 @@ export class Viewer {
     // Cancel any smooth zoom animation - wheel zoom should be instant for responsiveness
     this.cancelZoomAnimation();
 
-    const rect = this.container.getBoundingClientRect();
+    const rect = this.getContainerRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
@@ -1468,7 +1467,7 @@ export class Viewer {
   }
 
   private updateCanvasPosition(): void {
-    const containerRect = this.container.getBoundingClientRect();
+    const containerRect = this.getContainerRect();
     const containerWidth = containerRect.width;
     const containerHeight = containerRect.height;
 
@@ -1483,7 +1482,36 @@ export class Viewer {
     this.canvasContainer.style.transform = `translate(${centerX}px, ${centerY}px)`;
   }
 
+  private invalidateLayoutCache(): void {
+    this.cachedContainerRect = null;
+    this.cachedCanvasContainerRect = null;
+    this.cachedImageCanvasRect = null;
+  }
+
+  private getContainerRect(): DOMRect {
+    if (!this.cachedContainerRect) {
+      this.cachedContainerRect = this.container.getBoundingClientRect();
+    }
+    return this.cachedContainerRect;
+  }
+
+  private getCanvasContainerRect(): DOMRect {
+    if (!this.cachedCanvasContainerRect) {
+      this.cachedCanvasContainerRect = this.canvasContainer.getBoundingClientRect();
+    }
+    return this.cachedCanvasContainerRect;
+  }
+
+  private getImageCanvasRect(): DOMRect {
+    if (!this.cachedImageCanvasRect) {
+      this.cachedImageCanvasRect = this.imageCanvas.getBoundingClientRect();
+    }
+    return this.cachedImageCanvasRect;
+  }
+
   render(): void {
+    // Invalidate layout cache once per frame - measurements are cached within the frame
+    this.invalidateLayoutCache();
     this.renderImage();
 
     // If actively drawing, render with live stroke/shape; otherwise just paint
@@ -1502,8 +1530,8 @@ export class Viewer {
   private renderImage(): void {
     const source = this.session.currentSource;
 
-    // Get container size
-    const containerRect = this.container.getBoundingClientRect();
+    // Get container size (cached per frame)
+    const containerRect = this.getContainerRect();
     const containerWidth = containerRect.width || 640;
     const containerHeight = containerRect.height || 360;
 
@@ -2744,6 +2772,11 @@ export class Viewer {
   // Ghost frame (onion skin) methods
   setGhostFrameState(state: GhostFrameState): void {
     this.ghostFrameState = { ...state };
+    if (!state.enabled) {
+      this.ghostFrameCanvasPool = [];
+      this.ghostFramePoolWidth = 0;
+      this.ghostFramePoolHeight = 0;
+    }
     this.scheduleRender();
   }
 
@@ -2753,6 +2786,9 @@ export class Viewer {
 
   resetGhostFrameState(): void {
     this.ghostFrameState = { ...DEFAULT_GHOST_FRAME_STATE };
+    this.ghostFrameCanvasPool = [];
+    this.ghostFramePoolWidth = 0;
+    this.ghostFramePoolHeight = 0;
     this.scheduleRender();
   }
 
@@ -2938,6 +2974,39 @@ export class Viewer {
   }
 
   /**
+   * Get a canvas from the ghost frame pool, creating one if needed.
+   * All pooled canvases share the same dimensions; if the display size changes,
+   * the pool is re-sized.
+   */
+  private getGhostFrameCanvas(
+    index: number,
+    width: number,
+    height: number
+  ): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } | null {
+    // If display size changed, resize all existing pool entries
+    if (this.ghostFramePoolWidth !== width || this.ghostFramePoolHeight !== height) {
+      this.ghostFramePoolWidth = width;
+      this.ghostFramePoolHeight = height;
+      for (const entry of this.ghostFrameCanvasPool) {
+        entry.canvas.width = width;
+        entry.canvas.height = height;
+      }
+    }
+
+    // Create new entry if pool is not big enough
+    if (index >= this.ghostFrameCanvasPool.length) {
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return null;
+      this.ghostFrameCanvasPool.push({ canvas, ctx });
+    }
+
+    return this.ghostFrameCanvasPool[index]!;
+  }
+
+  /**
    * Render ghost frames (onion skin overlay) behind the main frame.
    * Shows semi-transparent previous/next frames for animation review.
    */
@@ -2975,6 +3044,7 @@ export class Viewer {
     }
 
     // Render ghost frames
+    let poolIndex = 0;
     for (const { frame, distance, isBefore } of framesToRender) {
       // Calculate opacity with falloff
       const opacity = this.ghostFrameState.opacityBase *
@@ -2996,14 +3066,13 @@ export class Viewer {
           // Synchronous check for cached sequence frame
           const seqFrame = this.session.getSequenceFrameSync(frame);
           if (seqFrame) {
-            // Draw to temporary canvas
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = displayWidth;
-            tempCanvas.height = displayHeight;
-            const tempCtx = tempCanvas.getContext('2d');
-            if (tempCtx) {
-              tempCtx.drawImage(seqFrame, 0, 0, displayWidth, displayHeight);
-              frameCanvas = tempCanvas;
+            // Use pooled canvas instead of creating a new one
+            const poolEntry = this.getGhostFrameCanvas(poolIndex, displayWidth, displayHeight);
+            if (poolEntry) {
+              poolEntry.ctx.clearRect(0, 0, displayWidth, displayHeight);
+              poolEntry.ctx.drawImage(seqFrame, 0, 0, displayWidth, displayHeight);
+              frameCanvas = poolEntry.canvas;
+              poolIndex++;
             }
           }
         } else if (source.type === 'video') {
@@ -3037,6 +3106,11 @@ export class Viewer {
       }
 
       ctx.restore();
+    }
+
+    // Trim pool to actual number of canvases used
+    if (poolIndex < this.ghostFrameCanvasPool.length) {
+      this.ghostFrameCanvasPool.length = poolIndex;
     }
   }
 
@@ -3241,8 +3315,8 @@ export class Viewer {
   private updateWipeLine(): void {
     if (!this.wipeElements) return;
 
-    const containerRect = this.container.getBoundingClientRect();
-    const canvasRect = this.canvasContainer.getBoundingClientRect();
+    const containerRect = this.getContainerRect();
+    const canvasRect = this.getCanvasContainerRect();
 
     // If split screen mode is active, hide the wipe line (split screen has its own UI)
     if (isSplitScreenMode(this.wipeState.mode)) {
@@ -3274,8 +3348,8 @@ export class Viewer {
       return;
     }
 
-    const containerRect = this.container.getBoundingClientRect();
-    const canvasRect = this.canvasContainer.getBoundingClientRect();
+    const containerRect = this.getContainerRect();
+    const canvasRect = this.getCanvasContainerRect();
 
     // Safe to cast since we validated with isSplitScreenMode
     const splitState: SplitScreenState = {
@@ -3325,7 +3399,7 @@ export class Viewer {
   private handleWipePointerMove(e: PointerEvent): void {
     // Handle split screen dragging
     if (this.isDraggingSplit) {
-      const canvasRect = this.canvasContainer.getBoundingClientRect();
+      const canvasRect = this.getCanvasContainerRect();
       const splitState: SplitScreenState = {
         mode: this.wipeState.mode as 'splitscreen-h' | 'splitscreen-v',
         position: this.wipeState.position,
@@ -3345,7 +3419,7 @@ export class Viewer {
     // Handle regular wipe dragging
     if (!this.isDraggingWipe) return;
 
-    const canvasRect = this.canvasContainer.getBoundingClientRect();
+    const canvasRect = this.getCanvasContainerRect();
     this.wipeState.position = calculateWipePosition(
       e,
       this.wipeState,
@@ -3797,8 +3871,9 @@ export class Viewer {
     this.container.removeEventListener('pointercancel', this.onPointerUp);
     this.container.removeEventListener('pointerleave', this.onPointerLeave);
     this.container.removeEventListener('wheel', this.onWheel);
-    this.container.removeEventListener('mousemove', this.onMouseMoveForCursorColor);
+    this.container.removeEventListener('mousemove', this.onMouseMoveForPixelSampling);
     this.container.removeEventListener('mouseleave', this.onMouseLeaveForCursorColor);
+    this.container.removeEventListener('click', this.onClickForProbe);
 
     // Clear cursor color callback
     this.cursorColorCallback = null;
@@ -3847,6 +3922,11 @@ export class Viewer {
       this.prerenderBuffer.dispose();
       this.prerenderBuffer = null;
     }
+
+    // Cleanup ghost frame canvas pool
+    this.ghostFrameCanvasPool = [];
+    this.ghostFramePoolWidth = 0;
+    this.ghostFramePoolHeight = 0;
 
     // Cleanup overlays
     this.clippingOverlay.dispose();

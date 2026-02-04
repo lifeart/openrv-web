@@ -269,6 +269,10 @@ export function hslToRgb(h: number, s: number, l: number): { r: number; g: numbe
 // Hue Rotation (luminance-preserving)
 // ============================================================================
 
+// Cache for hue rotation matrix - keyed by degrees value
+let cachedHueRotationDegrees: number | null = null;
+let cachedHueRotationMatrix: Float32Array | null = null;
+
 /**
  * Build a 3x3 luminance-preserving hue rotation matrix.
  * Uses Rodrigues rotation around (1,1,1)/sqrt(3) with a luminance shear
@@ -314,6 +318,34 @@ export function buildHueRotationMatrix(degrees: number): Float32Array {
     p01 - col1, p11 - col1, p21 - col1,
     p02 - col2, p12 - col2, p22 - col2,
   ]);
+}
+
+/**
+ * Get a cached hue rotation matrix for the given angle.
+ * Returns the same Float32Array reference if the angle hasn't changed.
+ *
+ * IMPORTANT: Callers must NOT modify the returned Float32Array.
+ */
+export function getHueRotationMatrix(degrees: number): Float32Array {
+  // Normalize to handle equivalent angles
+  const normalized = ((degrees % 360) + 360) % 360;
+
+  if (cachedHueRotationMatrix !== null && cachedHueRotationDegrees === normalized) {
+    return cachedHueRotationMatrix;
+  }
+
+  cachedHueRotationDegrees = normalized;
+  cachedHueRotationMatrix = buildHueRotationMatrix(normalized);
+  return cachedHueRotationMatrix;
+}
+
+/**
+ * Clear the hue rotation matrix cache.
+ * Primarily for testing purposes.
+ */
+export function clearHueRotationCache(): void {
+  cachedHueRotationDegrees = null;
+  cachedHueRotationMatrix = null;
 }
 
 /**

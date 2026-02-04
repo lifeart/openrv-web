@@ -15,7 +15,7 @@
 
 import { ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from '../ui/components/ColorControls';
 import { CDLValues, DEFAULT_CDL, isDefaultCDL, applyCDLToImageData } from '../color/CDL';
-import { ColorCurvesData, createDefaultCurvesData, isDefaultCurves, CurveLUTCache } from '../color/ColorCurves';
+import { ColorCurvesData, createDefaultCurvesData, isDefaultCurves, CurveLUTCache, CurveChannel } from '../color/ColorCurves';
 import { FilterSettings, DEFAULT_FILTER_SETTINGS } from '../ui/components/FilterControl';
 import { ChannelMode, applyChannelIsolation } from '../ui/components/ChannelSelect';
 import { applyColorInversion } from '../color/Inversion';
@@ -80,30 +80,111 @@ export function createDefaultEffectsState(): AllEffectsState {
 }
 
 /**
- * Compute a hash/fingerprint of the effects state for cache invalidation
+ * Compute a hash/fingerprint of the effects state for cache invalidation.
+ * Uses direct numeric hashing (djb2) over all effect properties instead of
+ * JSON.stringify, avoiding large temporary string allocations every frame.
  */
 export function computeEffectsHash(state: AllEffectsState): string {
-  // Use a simple string representation for hashing
-  // This is fast enough for our use case
-  const str = JSON.stringify({
-    ca: state.colorAdjustments,
-    cdl: state.cdlValues,
-    curves: state.curvesData,
-    filter: state.filterSettings,
-    channel: state.channelMode,
-    wheels: state.colorWheelsState,
-    hsl: state.hslQualifierState,
-    tm: state.toneMappingState,
-    inv: state.colorInversionEnabled,
-  });
-
-  // Simple hash function (djb2)
   let hash = 5381;
-  for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) + hash) + str.charCodeAt(i);
-    hash |= 0; // Convert to 32-bit signed integer
+
+  // Hash helper for numbers - converts to fixed-point integer then mixes into hash
+  const hashNum = (n: number): void => {
+    const bits = (n * 1000000) | 0; // Fixed-point to integer
+    hash = ((hash << 5) + hash + bits) | 0;
+  };
+
+  // Hash helper for booleans
+  const hashBool = (b: boolean): void => {
+    hash = ((hash << 5) + hash + (b ? 1 : 0)) | 0;
+  };
+
+  // Hash helper for strings (channel mode, tone mapping operator, etc.)
+  const hashStr = (s: string): void => {
+    for (let i = 0; i < s.length; i++) {
+      hash = ((hash << 5) + hash + s.charCodeAt(i)) | 0;
+    }
+  };
+
+  // Hash helper for a curve channel
+  const hashCurveChannel = (ch: CurveChannel): void => {
+    hashBool(ch.enabled);
+    hashNum(ch.points.length);
+    for (const p of ch.points) {
+      hashNum(p.x);
+      hashNum(p.y);
+    }
+  };
+
+  // Color adjustments (all fields from ColorAdjustments interface)
+  const ca = state.colorAdjustments;
+  hashNum(ca.exposure);
+  hashNum(ca.gamma);
+  hashNum(ca.saturation);
+  hashNum(ca.vibrance);
+  hashBool(ca.vibranceSkinProtection);
+  hashNum(ca.contrast);
+  hashNum(ca.clarity);
+  hashNum(ca.hueRotation);
+  hashNum(ca.temperature);
+  hashNum(ca.tint);
+  hashNum(ca.brightness);
+  hashNum(ca.highlights);
+  hashNum(ca.shadows);
+  hashNum(ca.whites);
+  hashNum(ca.blacks);
+
+  // CDL values
+  const cdl = state.cdlValues;
+  hashNum(cdl.slope.r); hashNum(cdl.slope.g); hashNum(cdl.slope.b);
+  hashNum(cdl.offset.r); hashNum(cdl.offset.g); hashNum(cdl.offset.b);
+  hashNum(cdl.power.r); hashNum(cdl.power.g); hashNum(cdl.power.b);
+  hashNum(cdl.saturation);
+
+  // Curves data
+  hashCurveChannel(state.curvesData.master);
+  hashCurveChannel(state.curvesData.red);
+  hashCurveChannel(state.curvesData.green);
+  hashCurveChannel(state.curvesData.blue);
+
+  // Filter settings
+  hashNum(state.filterSettings.blur);
+  hashNum(state.filterSettings.sharpen);
+
+  // Channel mode (string)
+  hashStr(state.channelMode);
+
+  // Color wheels
+  const wheels = state.colorWheelsState;
+  for (const wheel of [wheels.lift, wheels.gamma, wheels.gain, wheels.master] as const) {
+    hashNum(wheel.r); hashNum(wheel.g); hashNum(wheel.b); hashNum(wheel.y);
   }
-  return (hash >>> 0).toString(36); // Convert to unsigned for consistent string
+  hashBool(wheels.linked);
+
+  // HSL qualifier
+  const hsl = state.hslQualifierState;
+  hashBool(hsl.enabled);
+  // Hue range
+  hashNum(hsl.hue.center); hashNum(hsl.hue.width); hashNum(hsl.hue.softness);
+  // Saturation range
+  hashNum(hsl.saturation.center); hashNum(hsl.saturation.width); hashNum(hsl.saturation.softness);
+  // Luminance range
+  hashNum(hsl.luminance.center); hashNum(hsl.luminance.width); hashNum(hsl.luminance.softness);
+  // Correction
+  hashNum(hsl.correction.hueShift);
+  hashNum(hsl.correction.saturationScale);
+  hashNum(hsl.correction.luminanceScale);
+  hashBool(hsl.invert);
+  hashBool(hsl.mattePreview);
+
+  // Tone mapping
+  const tm = state.toneMappingState;
+  hashBool(tm.enabled);
+  hashStr(tm.operator);
+
+  // Color inversion
+  hashBool(state.colorInversionEnabled);
+
+  return (hash >>> 0).toString(36);
 }
 
 /**

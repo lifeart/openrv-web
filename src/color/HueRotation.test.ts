@@ -1,8 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import {
   buildHueRotationMatrix,
+  getHueRotationMatrix,
+  clearHueRotationCache,
   applyHueRotation,
   isIdentityHueRotation,
+  buildHueRotationMatrixMul,
 } from './HueRotation';
 
 const Wr = 0.2126;
@@ -146,6 +149,118 @@ describe('HueRotation', () => {
         expect(g).toBeLessThanOrEqual(1);
         expect(b).toBeGreaterThanOrEqual(0);
         expect(b).toBeLessThanOrEqual(1);
+      }
+    });
+  });
+
+  describe('getHueRotationMatrix (caching)', () => {
+    beforeEach(() => {
+      clearHueRotationCache();
+    });
+
+    it('HRM-C01: returns correct values matching buildHueRotationMatrix', () => {
+      const cached = getHueRotationMatrix(45);
+      const direct = buildHueRotationMatrix(45);
+      for (let i = 0; i < 9; i++) {
+        expect(cached[i]).toBeCloseTo(direct[i]!, 6);
+      }
+    });
+
+    it('HRM-C02: returns same reference on repeated calls with same angle (cache hit)', () => {
+      const first = getHueRotationMatrix(45);
+      const second = getHueRotationMatrix(45);
+      expect(second).toBe(first); // reference equality - same object
+    });
+
+    it('HRM-C03: returns different reference when angle changes (cache invalidation)', () => {
+      const first = getHueRotationMatrix(45);
+      const second = getHueRotationMatrix(90);
+      expect(second).not.toBe(first);
+      // Also verify values are correct for the new angle
+      const direct90 = buildHueRotationMatrix(90);
+      for (let i = 0; i < 9; i++) {
+        expect(second[i]).toBeCloseTo(direct90[i]!, 6);
+      }
+    });
+
+    it('HRM-C04: normalizes 360 to 0 (cache hit for equivalent angles)', () => {
+      const mat0 = getHueRotationMatrix(0);
+      const mat360 = getHueRotationMatrix(360);
+      expect(mat360).toBe(mat0); // same reference because 360 normalizes to 0
+    });
+
+    it('HRM-C05: normalizes -90 to 270 (cache hit for equivalent negative angles)', () => {
+      const mat270 = getHueRotationMatrix(270);
+      const matNeg90 = getHueRotationMatrix(-90);
+      expect(matNeg90).toBe(mat270); // same reference
+    });
+
+    it('HRM-C06: normalizes 720 to 0', () => {
+      const mat0 = getHueRotationMatrix(0);
+      const mat720 = getHueRotationMatrix(720);
+      expect(mat720).toBe(mat0);
+    });
+
+    it('HRM-C07: clearHueRotationCache forces recomputation', () => {
+      const first = getHueRotationMatrix(45);
+      clearHueRotationCache();
+      const second = getHueRotationMatrix(45);
+      // After clearing, a new Float32Array is allocated (different reference)
+      expect(second).not.toBe(first);
+      // But values should still be identical
+      for (let i = 0; i < 9; i++) {
+        expect(second[i]).toBeCloseTo(first[i]!, 6);
+      }
+    });
+
+    it('HRM-C08: no new Float32Array allocation on cache hit', () => {
+      // Call once to populate cache
+      const first = getHueRotationMatrix(60);
+      // Call multiple times - all should return exact same object
+      for (let j = 0; j < 5; j++) {
+        expect(getHueRotationMatrix(60)).toBe(first);
+      }
+    });
+
+    it('HRM-C09: returns Float32Array of length 9', () => {
+      const mat = getHueRotationMatrix(45);
+      expect(mat).toBeInstanceOf(Float32Array);
+      expect(mat.length).toBe(9);
+    });
+  });
+
+  describe('buildHueRotationMatrixMul (cross-validation)', () => {
+    it('HRM-X01: matches buildHueRotationMatrix for 0 degrees', () => {
+      const canonical = buildHueRotationMatrix(0);
+      const mul = buildHueRotationMatrixMul(0);
+      for (let i = 0; i < 9; i++) {
+        expect(mul[i]).toBeCloseTo(canonical[i]!, 5);
+      }
+    });
+
+    it('HRM-X02: matches buildHueRotationMatrix for 90 degrees', () => {
+      const canonical = buildHueRotationMatrix(90);
+      const mul = buildHueRotationMatrixMul(90);
+      for (let i = 0; i < 9; i++) {
+        expect(mul[i]).toBeCloseTo(canonical[i]!, 5);
+      }
+    });
+
+    it('HRM-X03: matches buildHueRotationMatrix for 180 degrees', () => {
+      const canonical = buildHueRotationMatrix(180);
+      const mul = buildHueRotationMatrixMul(180);
+      for (let i = 0; i < 9; i++) {
+        expect(mul[i]).toBeCloseTo(canonical[i]!, 5);
+      }
+    });
+
+    it('HRM-X04: matches buildHueRotationMatrix for arbitrary angles', () => {
+      for (const angle of [30, 45, 137, 200, 270, 315]) {
+        const canonical = buildHueRotationMatrix(angle);
+        const mul = buildHueRotationMatrixMul(angle);
+        for (let i = 0; i < 9; i++) {
+          expect(mul[i]).toBeCloseTo(canonical[i]!, 4);
+        }
       }
     });
   });

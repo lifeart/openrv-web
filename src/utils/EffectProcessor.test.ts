@@ -11,7 +11,7 @@ import {
   hasActiveEffects,
 } from './EffectProcessor';
 import { createTestImageData, createGradientImageData, isGrayscale } from '../../test/utils';
-import { DEFAULT_COLOR_ADJUSTMENTS } from '../ui/components/ColorControls';
+import { ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from '../ui/components/ColorControls';
 import { DEFAULT_FILTER_SETTINGS } from '../ui/components/FilterControl';
 
 describe('EffectProcessor', () => {
@@ -74,6 +74,156 @@ describe('EffectProcessor', () => {
       const channelState = createDefaultEffectsState();
       channelState.channelMode = 'red';
       expect(computeEffectsHash(channelState)).not.toBe(baseHash);
+    });
+
+    it('EP-052: small property changes produce different hashes (no false cache hits)', () => {
+      const state1 = createDefaultEffectsState();
+      const state2 = createDefaultEffectsState();
+      state1.colorAdjustments.brightness = 0.5;
+      state2.colorAdjustments.brightness = 0.501;
+
+      expect(computeEffectsHash(state1)).not.toBe(computeEffectsHash(state2));
+    });
+
+    it('EP-053: hash is deterministic (same input always produces same output)', () => {
+      const state = createDefaultEffectsState();
+      state.colorAdjustments.exposure = 1.5;
+      state.cdlValues.slope.r = 1.2;
+      state.channelMode = 'luminance';
+
+      const hash1 = computeEffectsHash(state);
+      const hash2 = computeEffectsHash(state);
+      const hash3 = computeEffectsHash(state);
+
+      expect(hash1).toBe(hash2);
+      expect(hash2).toBe(hash3);
+    });
+
+    it('EP-054: hash changes when color wheels change', () => {
+      const baseHash = computeEffectsHash(defaultState);
+
+      const s = createDefaultEffectsState();
+      s.colorWheelsState.lift.r = 0.1;
+      expect(computeEffectsHash(s)).not.toBe(baseHash);
+
+      const s2 = createDefaultEffectsState();
+      s2.colorWheelsState.gamma.g = 0.2;
+      expect(computeEffectsHash(s2)).not.toBe(baseHash);
+
+      const s3 = createDefaultEffectsState();
+      s3.colorWheelsState.gain.b = 0.3;
+      expect(computeEffectsHash(s3)).not.toBe(baseHash);
+
+      const s4 = createDefaultEffectsState();
+      s4.colorWheelsState.master.y = 0.1;
+      expect(computeEffectsHash(s4)).not.toBe(baseHash);
+
+      const s5 = createDefaultEffectsState();
+      s5.colorWheelsState.linked = true;
+      expect(computeEffectsHash(s5)).not.toBe(baseHash);
+    });
+
+    it('EP-055: hash changes when HSL qualifier changes', () => {
+      const baseHash = computeEffectsHash(defaultState);
+
+      const s = createDefaultEffectsState();
+      s.hslQualifierState.enabled = true;
+      expect(computeEffectsHash(s)).not.toBe(baseHash);
+
+      const s2 = createDefaultEffectsState();
+      s2.hslQualifierState.hue.center = 120;
+      expect(computeEffectsHash(s2)).not.toBe(baseHash);
+
+      const s3 = createDefaultEffectsState();
+      s3.hslQualifierState.correction.hueShift = 45;
+      expect(computeEffectsHash(s3)).not.toBe(baseHash);
+
+      const s4 = createDefaultEffectsState();
+      s4.hslQualifierState.invert = true;
+      expect(computeEffectsHash(s4)).not.toBe(baseHash);
+
+      const s5 = createDefaultEffectsState();
+      s5.hslQualifierState.mattePreview = true;
+      expect(computeEffectsHash(s5)).not.toBe(baseHash);
+    });
+
+    it('EP-056: hash changes when tone mapping changes', () => {
+      const baseHash = computeEffectsHash(defaultState);
+
+      const s = createDefaultEffectsState();
+      s.toneMappingState.enabled = true;
+      expect(computeEffectsHash(s)).not.toBe(baseHash);
+
+      const s2 = createDefaultEffectsState();
+      s2.toneMappingState.operator = 'reinhard';
+      expect(computeEffectsHash(s2)).not.toBe(baseHash);
+    });
+
+    it('EP-057: hash changes when filter settings change', () => {
+      const baseHash = computeEffectsHash(defaultState);
+
+      const s = createDefaultEffectsState();
+      s.filterSettings.blur = 5;
+      expect(computeEffectsHash(s)).not.toBe(baseHash);
+
+      const s2 = createDefaultEffectsState();
+      s2.filterSettings.sharpen = 50;
+      expect(computeEffectsHash(s2)).not.toBe(baseHash);
+    });
+
+    it('EP-058: hash changes when color inversion toggles', () => {
+      const baseHash = computeEffectsHash(defaultState);
+
+      const s = createDefaultEffectsState();
+      s.colorInversionEnabled = true;
+      expect(computeEffectsHash(s)).not.toBe(baseHash);
+    });
+
+    it('EP-059: hash does not use JSON.stringify (no large string allocation)', () => {
+      // Verify the function does not contain JSON.stringify by checking that
+      // the hash is a short base-36 string, not a long JSON string
+      const state = createDefaultEffectsState();
+      const hash = computeEffectsHash(state);
+
+      // The djb2 hash produces an unsigned 32-bit integer in base36
+      // which is at most 7 characters (2^32 = 4294967296, in base36 = "1z141z3")
+      expect(hash.length).toBeLessThanOrEqual(7);
+      expect(/^[0-9a-z]+$/.test(hash)).toBe(true);
+    });
+
+    it('EP-060: hash handles edge cases - default state hashes consistently', () => {
+      const s1 = createDefaultEffectsState();
+      const s2 = createDefaultEffectsState();
+
+      // Multiple fresh default states should hash identically
+      expect(computeEffectsHash(s1)).toBe(computeEffectsHash(s2));
+    });
+
+    it('EP-061: hash changes for each color adjustment property individually', () => {
+      const baseHash = computeEffectsHash(defaultState);
+
+      type NumericColorKey = {
+        [K in keyof ColorAdjustments]: ColorAdjustments[K] extends number ? K : never;
+      }[keyof ColorAdjustments];
+
+      const props: NumericColorKey[] = [
+        'exposure', 'gamma', 'saturation', 'vibrance', 'contrast',
+        'clarity', 'hueRotation', 'temperature', 'tint', 'brightness',
+        'highlights', 'shadows', 'whites', 'blacks',
+      ];
+
+      for (const prop of props) {
+        const s = createDefaultEffectsState();
+        s.colorAdjustments[prop] = 42;
+        expect(computeEffectsHash(s)).not.toBe(baseHash);
+      }
+    });
+
+    it('EP-062: hash changes for vibranceSkinProtection toggle', () => {
+      const baseHash = computeEffectsHash(defaultState);
+      const s = createDefaultEffectsState();
+      s.colorAdjustments.vibranceSkinProtection = !defaultState.colorAdjustments.vibranceSkinProtection;
+      expect(computeEffectsHash(s)).not.toBe(baseHash);
     });
   });
 

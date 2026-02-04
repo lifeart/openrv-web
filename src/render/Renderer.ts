@@ -2,7 +2,7 @@ import { IPImage, DataType } from '../core/image/Image';
 import { ShaderProgram } from './ShaderProgram';
 import { ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from '../ui/components/ColorControls';
 import { ToneMappingState, ToneMappingOperator, DEFAULT_TONE_MAPPING_STATE } from '../ui/components/ToneMappingControl';
-import { buildHueRotationMatrix, isIdentityHueRotation } from '../color/HueRotation';
+import { getHueRotationMatrix, isIdentityHueRotation } from '../color/HueRotation';
 
 /**
  * Tone mapping operator integer codes for shader uniform
@@ -310,7 +310,7 @@ export class Renderer {
       this.displayShader.setUniformInt('u_hueRotationEnabled', 0);
     } else {
       this.displayShader.setUniformInt('u_hueRotationEnabled', 1);
-      const hueMatrix = buildHueRotationMatrix(hueRotationDegrees);
+      const hueMatrix = getHueRotationMatrix(hueRotationDegrees);
       this.displayShader.setUniformMatrix3('u_hueRotationMatrix', hueMatrix);
     }
 
