@@ -7,6 +7,8 @@
  * to the standard sRGB context.
  */
 
+import type { DisplayCapabilities } from './DisplayCapabilities';
+
 /**
  * Create a 2D canvas context, optionally requesting a non-sRGB color space.
  *
@@ -32,4 +34,50 @@ export function safeCanvasContext2D(
   const ctx = canvas.getContext('2d', baseOptions);
   if (!ctx) throw new Error('Failed to create 2D canvas context');
   return ctx;
+}
+
+/**
+ * Create a viewer canvas with the best available color space for the given HDR mode.
+ *
+ * Tries HDR (rec2100-hlg with float16) first if requested and supported,
+ * then falls back to Display P3 if supported, then standard sRGB.
+ *
+ * @param caps - Display capabilities detected at startup
+ * @param hdrMode - Requested HDR output mode ('sdr', 'hlg', or 'pq')
+ * @returns An object with the created canvas and its 2D context
+ */
+export function createViewerCanvas(
+  caps: DisplayCapabilities,
+  hdrMode: 'sdr' | 'hlg' | 'pq',
+): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
+  const canvas = document.createElement('canvas');
+  const baseOpts: CanvasRenderingContext2DSettings = { alpha: false, willReadFrequently: true };
+
+  // Try HDR first (if requested and supported)
+  if (hdrMode === 'hlg' && caps.canvasHLG) {
+    try {
+      const ctx = canvas.getContext('2d', {
+        ...baseOpts,
+        colorSpace: 'rec2100-hlg',
+        pixelFormat: 'float16',
+      } as unknown as CanvasRenderingContext2DSettings);
+      if (ctx) return { canvas, ctx };
+    } catch { /* fall through */ }
+  }
+
+  // Try P3 (if supported)
+  if (caps.canvasP3) {
+    try {
+      const ctx = canvas.getContext('2d', {
+        ...baseOpts,
+        colorSpace: 'display-p3',
+      } as CanvasRenderingContext2DSettings);
+      if (ctx) return { canvas, ctx };
+    } catch { /* fall through */ }
+  }
+
+  // Final fallback: standard sRGB
+  const ctx = canvas.getContext('2d', baseOpts);
+  if (!ctx) throw new Error('Failed to create 2D canvas context');
+  return { canvas, ctx };
 }

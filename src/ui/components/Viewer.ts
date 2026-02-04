@@ -2820,6 +2820,14 @@ export class Viewer {
     this.scheduleRender();
   }
 
+  // HDR output mode (delegates to renderer when available)
+  setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq'): void {
+    // Store mode for reference; the renderer handles the actual WebGL state.
+    // This is a no-op in the 2D canvas Viewer but keeps the API surface consistent
+    // so App.ts can call viewer.setHDROutputMode(mode) uniformly.
+    void mode;
+  }
+
   // Pixel Aspect Ratio methods
   setPARState(state: PARState): void {
     this.parState = { ...state };

@@ -321,10 +321,13 @@ export class App {
     this.safeAreasControl = new SafeAreasControl(this.viewer.getSafeAreasOverlay());
     this.falseColorControl = new FalseColorControl(this.viewer.getFalseColor());
     this.luminanceVisControl = new LuminanceVisualizationControl(this.viewer.getLuminanceVisualization());
-    this.toneMappingControl = new ToneMappingControl();
+    this.toneMappingControl = new ToneMappingControl(this.displayCapabilities);
     this.toneMappingControl.on('stateChanged', (state) => {
       this.viewer.setToneMappingState(state);
       this.scheduleUpdateScopes();
+    });
+    this.toneMappingControl.on('hdrModeChanged', (mode) => {
+      this.viewer.setHDROutputMode(mode);
     });
     this.zebraControl = new ZebraControl(this.viewer.getZebraStripes());
     this.hslQualifierControl = new HSLQualifierControl(this.viewer.getHSLQualifier());

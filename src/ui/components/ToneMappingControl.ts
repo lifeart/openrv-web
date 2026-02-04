@@ -9,6 +9,7 @@
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
+import type { DisplayCapabilities } from '../../color/DisplayCapabilities';
 
 /**
  * Tone mapping operator types
@@ -51,10 +52,16 @@ export const TONE_MAPPING_OPERATORS: ToneMappingOperatorInfo[] = [
 ];
 
 /**
+ * HDR output mode type
+ */
+export type HDROutputMode = 'sdr' | 'hlg' | 'pq';
+
+/**
  * Events emitted by ToneMappingControl
  */
 export interface ToneMappingControlEvents extends EventMap {
   stateChanged: ToneMappingState;
+  hdrModeChanged: HDROutputMode;
 }
 
 /**
@@ -69,8 +76,15 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
   private boundHandleReposition: () => void;
   private state: ToneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
 
-  constructor() {
+  // HDR output mode
+  private capabilities: DisplayCapabilities | undefined;
+  private hdrOutputMode: HDROutputMode = 'sdr';
+  private hdrSection: HTMLElement | null = null;
+  private hdrModeButtons: Map<HDROutputMode, HTMLButtonElement> = new Map();
+
+  constructor(capabilities?: DisplayCapabilities) {
     super();
+    this.capabilities = capabilities;
     this.boundHandleReposition = () => this.positionDropdown();
 
     // Create container
@@ -262,9 +276,148 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
     operatorSection.appendChild(operatorList);
     this.dropdown.appendChild(operatorSection);
 
+    // HDR Output section (only shown when HDR is available)
+    this.createHDRSection();
+
     // Initial update
     this.updateOperatorButtons();
     this.updateButtonState();
+  }
+
+  private createHDRSection(): void {
+    const caps = this.capabilities;
+    // Only show when displayHDR is true AND at least one of webglHLG/webglPQ is true
+    if (!caps || !caps.displayHDR || (!caps.webglHLG && !caps.webglPQ)) return;
+
+    this.hdrSection = document.createElement('div');
+    this.hdrSection.dataset.testid = 'hdr-output-section';
+    this.hdrSection.style.cssText = `
+      margin-bottom: 10px;
+      border-top: 1px solid var(--border-secondary);
+      padding-top: 8px;
+    `;
+
+    const hdrLabel = document.createElement('div');
+    hdrLabel.textContent = 'HDR Output';
+    hdrLabel.style.cssText = `
+      color: var(--text-secondary);
+      font-size: 10px;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    `;
+    this.hdrSection.appendChild(hdrLabel);
+
+    const hdrList = document.createElement('div');
+    hdrList.style.cssText = `
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    `;
+
+    const hdrModes: { key: HDROutputMode; label: string; description: string; available: boolean }[] = [
+      { key: 'sdr', label: 'SDR', description: 'Standard dynamic range', available: true },
+      { key: 'hlg', label: 'HLG', description: 'Hybrid Log-Gamma (rec2100-hlg)', available: caps.webglHLG },
+      { key: 'pq', label: 'PQ', description: 'Perceptual Quantizer (rec2100-pq)', available: caps.webglPQ },
+    ];
+
+    for (const mode of hdrModes) {
+      if (!mode.available) continue;
+
+      const btn = document.createElement('button');
+      btn.dataset.hdrMode = mode.key;
+      btn.dataset.testid = `hdr-mode-${mode.key}`;
+      btn.setAttribute('role', 'menuitemradio');
+      btn.setAttribute('aria-checked', this.hdrOutputMode === mode.key ? 'true' : 'false');
+      btn.setAttribute('aria-label', `${mode.label}: ${mode.description}`);
+      btn.style.cssText = `
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 6px 8px;
+        border: 1px solid var(--border-secondary);
+        border-radius: 3px;
+        background: var(--bg-secondary);
+        color: var(--text-secondary);
+        font-size: 11px;
+        cursor: pointer;
+        transition: all 0.1s ease;
+        text-align: left;
+      `;
+
+      const labelSpan = document.createElement('span');
+      labelSpan.textContent = mode.label;
+      labelSpan.style.cssText = 'font-weight: 500; color: var(--text-primary);';
+
+      const descSpan = document.createElement('span');
+      descSpan.textContent = mode.description;
+      descSpan.style.cssText = 'font-size: 9px; color: var(--text-secondary); margin-top: 2px;';
+
+      btn.appendChild(labelSpan);
+      btn.appendChild(descSpan);
+
+      btn.addEventListener('click', () => {
+        this.setHDROutputMode(mode.key);
+      });
+
+      btn.addEventListener('mouseenter', () => {
+        if (this.hdrOutputMode !== mode.key) {
+          btn.style.background = 'var(--border-primary)';
+        }
+      });
+
+      btn.addEventListener('mouseleave', () => {
+        if (this.hdrOutputMode !== mode.key) {
+          btn.style.background = 'var(--bg-secondary)';
+        }
+      });
+
+      this.hdrModeButtons.set(mode.key, btn);
+      hdrList.appendChild(btn);
+    }
+
+    this.hdrSection.appendChild(hdrList);
+    this.dropdown.appendChild(this.hdrSection);
+    this.updateHDRModeButtons();
+  }
+
+  private updateHDRModeButtons(): void {
+    for (const [key, btn] of this.hdrModeButtons) {
+      const isSelected = key === this.hdrOutputMode;
+      btn.setAttribute('aria-checked', isSelected ? 'true' : 'false');
+
+      if (isSelected) {
+        btn.style.background = 'var(--accent-primary)';
+        btn.style.borderColor = 'var(--accent-primary)';
+        const labelSpan = btn.querySelector('span:first-child') as HTMLSpanElement;
+        const descSpan = btn.querySelector('span:last-child') as HTMLSpanElement;
+        if (labelSpan) labelSpan.style.color = '#fff';
+        if (descSpan) descSpan.style.color = 'rgba(255, 255, 255, 0.8)';
+      } else {
+        btn.style.background = 'var(--bg-secondary)';
+        btn.style.borderColor = 'var(--border-secondary)';
+        const labelSpan = btn.querySelector('span:first-child') as HTMLSpanElement;
+        const descSpan = btn.querySelector('span:last-child') as HTMLSpanElement;
+        if (labelSpan) labelSpan.style.color = 'var(--text-primary)';
+        if (descSpan) descSpan.style.color = 'var(--text-secondary)';
+      }
+    }
+  }
+
+  /**
+   * Set HDR output mode
+   */
+  setHDROutputMode(mode: HDROutputMode): void {
+    if (this.hdrOutputMode === mode) return;
+    this.hdrOutputMode = mode;
+    this.updateHDRModeButtons();
+    this.emit('hdrModeChanged', mode);
+  }
+
+  /**
+   * Get current HDR output mode
+   */
+  getHDROutputMode(): HDROutputMode {
+    return this.hdrOutputMode;
   }
 
   private updateButtonState(): void {
@@ -450,5 +603,6 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
     window.removeEventListener('resize', this.boundHandleReposition);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     this.operatorButtons.clear();
+    this.hdrModeButtons.clear();
   }
 }

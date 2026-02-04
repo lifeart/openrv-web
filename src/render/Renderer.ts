@@ -27,6 +27,9 @@ export class Renderer {
   // Tone mapping state
   private toneMappingState: ToneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
 
+  // HDR output mode
+  private hdrOutputMode: 'sdr' | 'hlg' | 'pq' = 'sdr';
+
   // Shaders
   private displayShader: ShaderProgram | null = null;
 
@@ -118,6 +121,9 @@ export class Renderer {
 
       // Color inversion
       uniform bool u_invert;
+
+      // HDR output mode: 0=SDR (clamp), 1=HDR passthrough
+      uniform int u_outputMode;
 
       // Luminance coefficients (Rec. 709)
       const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
@@ -226,8 +232,12 @@ export class Renderer {
           color.rgb = 1.0 - color.rgb;
         }
 
-        // Clamp final output
-        color.rgb = clamp(color.rgb, 0.0, 1.0);
+        // Final output
+        if (u_outputMode == 0) {
+          // SDR: clamp to [0,1] — identical to current behavior
+          color.rgb = clamp(color.rgb, 0.0, 1.0);
+        }
+        // else: HDR — let values >1.0 pass through to the HDR drawing buffer
 
         fragColor = color;
       }
@@ -332,6 +342,9 @@ export class Renderer {
 
     // Set color inversion uniform
     this.displayShader.setUniformInt('u_invert', this.colorInversionEnabled ? 1 : 0);
+
+    // Set HDR output mode uniform
+    this.displayShader.setUniformInt('u_outputMode', this.hdrOutputMode === 'sdr' ? 0 : 1);
 
     this.displayShader.setUniform('u_texture', 0);
 
@@ -502,6 +515,56 @@ export class Renderer {
 
   resetToneMappingState(): void {
     this.toneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
+  }
+
+  setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq', capabilities: DisplayCapabilities): boolean {
+    if (!this.gl) return false;
+
+    if (mode === 'hlg' && !capabilities.webglHLG) return false;
+    if (mode === 'pq' && !capabilities.webglPQ) return false;
+
+    const previousMode = this.hdrOutputMode;
+    try {
+      const glExt = this.gl as unknown as Omit<WebGL2RenderingContext, 'drawingBufferColorSpace'> & { drawingBufferColorSpace: string };
+      switch (mode) {
+        case 'hlg':
+          glExt.drawingBufferColorSpace = 'rec2100-hlg';
+          break;
+        case 'pq':
+          glExt.drawingBufferColorSpace = 'rec2100-pq';
+          break;
+        default:
+          // Revert to P3 or sRGB
+          glExt.drawingBufferColorSpace = capabilities.webglP3 ? 'display-p3' : 'srgb';
+      }
+      this.hdrOutputMode = mode;
+
+      // Attempt to configure HDR metadata when entering HDR mode
+      if (mode !== 'sdr') {
+        this.tryConfigureHDRMetadata();
+      }
+
+      return true;
+    } catch {
+      // Ensure hdrOutputMode is rolled back to its previous value
+      this.hdrOutputMode = previousMode;
+      return false;
+    }
+  }
+
+  getHDROutputMode(): 'sdr' | 'hlg' | 'pq' {
+    return this.hdrOutputMode;
+  }
+
+  private tryConfigureHDRMetadata(): void {
+    if (!this.canvas) return;
+    if ('configureHighDynamicRange' in this.canvas) {
+      try {
+        (this.canvas as HTMLCanvasElement & { configureHighDynamicRange: (opts: { mode: string }) => void }).configureHighDynamicRange({ mode: 'default' });
+      } catch {
+        // Not supported — continue without metadata
+      }
+    }
   }
 
   dispose(): void {
