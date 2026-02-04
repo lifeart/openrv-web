@@ -25,7 +25,7 @@ import {
   getActiveOutputColorSpace,
 } from '../../color/BrowserColorSpace';
 import type { DisplayCapabilities } from '../../color/DisplayCapabilities';
-import { DEFAULT_CAPABILITIES } from '../../color/DisplayCapabilities';
+import { DEFAULT_CAPABILITIES, resolveActiveColorSpace } from '../../color/DisplayCapabilities';
 import { getIconSvg } from './shared/Icons';
 
 /**
@@ -640,6 +640,12 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
           indicator.style.borderColor = 'var(--text-muted)';
         }
       }
+    }
+
+    // Update active output label based on current gamut preference and capabilities
+    if (this.activeOutputLabel) {
+      const resolved = resolveActiveColorSpace(this.displayCapabilities, currentGamutPref);
+      this.activeOutputLabel.textContent = resolved === 'display-p3' ? 'P3' : 'sRGB';
     }
   }
 
