@@ -147,6 +147,9 @@ export class Renderer implements RendererBackend {
       // HDR output mode: 0=SDR (clamp), 1=HDR passthrough
       uniform int u_outputMode;
 
+      // Input transfer function: 0=sRGB/linear, 1=HLG, 2=PQ
+      uniform int u_inputTransfer;
+
       // Luminance coefficients (Rec. 709)
       const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 
@@ -219,8 +222,69 @@ export class Renderer implements RendererBackend {
         return color;  // operator == 0 (off)
       }
 
+      // --- Input EOTF functions (signal to linear) ---
+
+      // HLG OETF^-1 (Rec. 2100 HLG, signal -> relative scene light)
+      // Reference: ITU-R BT.2100-2, Table 5
+      float hlgOETFInverse(float e) {
+        const float a = 0.17883277;
+        const float b = 0.28466892; // 1.0 - 4.0 * a
+        const float c = 0.55991073; // 0.5 - a * ln(4.0 * a)
+        if (e <= 0.5) {
+          return (e * e) / 3.0;
+        } else {
+          return (exp((e - c) / a) + b) / 12.0;
+        }
+      }
+
+      vec3 hlgToLinear(vec3 signal) {
+        // Apply inverse OETF per channel, then OOTF (gamma 1.2 for 1000 cd/m²)
+        vec3 scene = vec3(
+          hlgOETFInverse(signal.r),
+          hlgOETFInverse(signal.g),
+          hlgOETFInverse(signal.b)
+        );
+        // HLG OOTF: Lw = Ys^(gamma-1) * scene, where gamma ≈ 1.2
+        float ys = dot(scene, LUMA);
+        float ootfGain = pow(max(ys, 1e-6), 0.2); // gamma - 1 = 0.2
+        return scene * ootfGain;
+      }
+
+      // PQ EOTF (SMPTE ST 2084, signal -> linear cd/m² normalized to 1.0 = 10000 cd/m²)
+      // Reference: SMPTE ST 2084:2014
+      float pqEOTF(float n) {
+        const float m1 = 0.1593017578125;  // 2610/16384
+        const float m2 = 78.84375;          // 2523/32 * 128
+        const float c1 = 0.8359375;         // 3424/4096
+        const float c2 = 18.8515625;        // 2413/128
+        const float c3 = 18.6875;           // 2392/128
+
+        float nm1 = pow(max(n, 0.0), 1.0 / m2);
+        float num = max(nm1 - c1, 0.0);
+        float den = c2 - c3 * nm1;
+        return pow(num / max(den, 1e-6), 1.0 / m1);
+      }
+
+      vec3 pqToLinear(vec3 signal) {
+        // PQ encodes absolute luminance; 1.0 = 10000 cd/m²
+        // Normalize so SDR white (203 cd/m²) → 1.0
+        const float pqNormFactor = 10000.0 / 203.0;
+        return vec3(
+          pqEOTF(signal.r),
+          pqEOTF(signal.g),
+          pqEOTF(signal.b)
+        ) * pqNormFactor;
+      }
+
       void main() {
         vec4 color = texture(u_texture, v_texCoord);
+
+        // 0. Input EOTF: convert from transfer function to linear light
+        if (u_inputTransfer == 1) {
+          color.rgb = hlgToLinear(color.rgb);
+        } else if (u_inputTransfer == 2) {
+          color.rgb = pqToLinear(color.rgb);
+        }
 
         // 1. Exposure (in stops, applied in linear space)
         color.rgb *= pow(2.0, u_exposure);
@@ -368,6 +432,15 @@ export class Renderer implements RendererBackend {
     // Set HDR output mode uniform
     this.displayShader.setUniformInt('u_outputMode', this.hdrOutputMode === 'sdr' ? 0 : 1);
 
+    // Set input transfer function uniform based on image metadata
+    let inputTransferCode = 0; // 0 = sRGB/linear (default)
+    if (image.metadata.transferFunction === 'hlg') {
+      inputTransferCode = 1;
+    } else if (image.metadata.transferFunction === 'pq') {
+      inputTransferCode = 2;
+    }
+    this.displayShader.setUniformInt('u_inputTransfer', inputTransferCode);
+
     this.displayShader.setUniform('u_texture', 0);
 
     // Bind texture
@@ -398,10 +471,50 @@ export class Renderer implements RendererBackend {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
-    // Determine format based on image properties
+    // VideoFrame direct GPU upload path (HDR video)
+    if (image.videoFrame) {
+      try {
+        // Set unpackColorSpace for best color fidelity
+        try {
+          (gl as unknown as Record<string, string>).unpackColorSpace = 'display-p3';
+        } catch {
+          // Browser doesn't support unpackColorSpace
+        }
+
+        gl.texImage2D(
+          gl.TEXTURE_2D,
+          0,
+          gl.RGBA16F,    // 16-bit float internal format for HDR
+          gl.RGBA,
+          gl.HALF_FLOAT,
+          image.videoFrame // VideoFrame is a valid TexImageSource
+        );
+
+        // Release VRAM - VideoFrame is consumed
+        image.close();
+
+        // Reset unpackColorSpace back to sRGB
+        try {
+          (gl as unknown as Record<string, string>).unpackColorSpace = 'srgb';
+        } catch { /* ignore */ }
+
+        image.textureNeedsUpdate = false;
+        return;
+      } catch {
+        // VideoFrame texImage2D not supported - fall through to SDR path
+        console.warn('VideoFrame texImage2D failed, falling back to typed array upload');
+        image.close();
+
+        // Reset unpackColorSpace back to sRGB
+        try {
+          (gl as unknown as Record<string, string>).unpackColorSpace = 'srgb';
+        } catch { /* ignore */ }
+      }
+    }
+
+    // Standard TypedArray upload path
     const { internalFormat, format, type } = this.getTextureFormat(image.dataType, image.channels);
 
-    // Upload data
     gl.texImage2D(
       gl.TEXTURE_2D,
       0,

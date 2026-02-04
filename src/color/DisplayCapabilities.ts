@@ -34,6 +34,10 @@ export interface DisplayCapabilities {
   webgpuAvailable: boolean;
   webgpuHDR: boolean;         // webgpuHDR requires async adapter request, deferred to Phase 4
 
+  // VideoFrame
+  /** True if VideoFrame API is available (for HDR video texImage2D upload) */
+  videoFrameTexImage: boolean;
+
   // Derived
   activeColorSpace: 'srgb' | 'display-p3';
   activeHDRMode: 'sdr' | 'hlg' | 'pq' | 'none';
@@ -60,6 +64,8 @@ export const DEFAULT_CAPABILITIES: DisplayCapabilities = {
 
   webgpuAvailable: false,
   webgpuHDR: false,
+
+  videoFrameTexImage: false,
 
   activeColorSpace: 'srgb',
   activeHDRMode: 'sdr',
@@ -160,6 +166,11 @@ export function detectDisplayCapabilities(): DisplayCapabilities {
   // --- WebGPU availability ---
   try {
     caps.webgpuAvailable = typeof navigator !== 'undefined' && 'gpu' in navigator;
+  } catch { /* stays false */ }
+
+  // --- VideoFrame availability ---
+  try {
+    caps.videoFrameTexImage = typeof VideoFrame !== 'undefined';
   } catch { /* stays false */ }
 
   // --- Derived: activeColorSpace ---

@@ -7,7 +7,7 @@
  */
 
 import { BaseSourceNode } from './BaseSourceNode';
-import { IPImage } from '../../core/image/Image';
+import { IPImage, type TransferFunction, type ColorPrimaries } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
 import { RegisterNode } from '../base/NodeFactory';
 import {
@@ -15,6 +15,7 @@ import {
   UnsupportedCodecException,
   type FrameResult,
 } from '../../utils/MediabunnyFrameExtractor';
+import type { VideoSample } from 'mediabunny';
 import { FramePreloadManager, type PreloadConfig } from '../../utils/FramePreloadManager';
 import type { CodecFamily, UnsupportedCodecError } from '../../utils/CodecUtils';
 
@@ -48,6 +49,15 @@ export class VideoSourceNode extends BaseSourceNode {
   // Frame preload manager for intelligent caching and preloading
   private preloadManager: FramePreloadManager<FrameResult> | null = null;
   private pendingFrameRequest: Promise<FrameResult | null> | null = null;
+
+  // HDR async request and cached sample (separate from SDR pendingFrameRequest)
+  private pendingHDRRequest: Promise<VideoSample | null> | null = null;
+  private pendingHDRSample: VideoSample | null = null;
+  private pendingHDRFrame: number = -1;
+
+  // HDR state
+  private isHDRVideo: boolean = false;
+  private videoColorSpace: VideoColorSpaceInit | null = null;
 
   // Playback state
   private playbackDirection: number = 1;
@@ -174,6 +184,10 @@ export class VideoSourceNode extends BaseSourceNode {
       this.useMediabunny = true;
       this.properties.setValue('useMediabunny', true);
       this.properties.setValue('codec', metadata.codec ?? 'unknown');
+
+      // Propagate HDR metadata
+      this.isHDRVideo = metadata.isHDR;
+      this.videoColorSpace = metadata.colorSpace;
 
       // Update duration from mediabunny (more accurate)
       this.metadata.duration = metadata.frameCount;
@@ -582,6 +596,29 @@ export class VideoSourceNode extends BaseSourceNode {
   protected process(context: EvalContext, _inputs: (IPImage | null)[]): IPImage | null {
     // If using mediabunny, try to get from cache first
     if (this.useMediabunny && this.frameExtractor && this.preloadManager) {
+      // HDR path: try to get HDR sample asynchronously
+      if (this.isHDRVideo) {
+        // Return cached HDR sample if we already have one for this frame
+        if (this.pendingHDRSample && this.pendingHDRFrame === context.frame) {
+          const image = this.hdrSampleToIPImage(this.pendingHDRSample, context.frame);
+          return image;
+        }
+
+        // Start async HDR frame request (uses its own pendingHDRRequest, not shared pendingFrameRequest)
+        if (!this.pendingHDRRequest) {
+          this.pendingHDRRequest = this.frameExtractor.getFrameHDR(context.frame).then((sample) => {
+            this.pendingHDRRequest = null;
+            if (sample) {
+              this.pendingHDRSample = sample;
+              this.pendingHDRFrame = context.frame;
+              this.markDirty();
+            }
+            return sample;
+          });
+        }
+        // Fall through to SDR cached frame or HTML video fallback while waiting
+      }
+
       const cached = this.preloadManager.getCachedFrame(context.frame);
       if (cached) {
         return this.frameResultToIPImage(cached, context.frame);
@@ -639,6 +676,66 @@ export class VideoSourceNode extends BaseSourceNode {
   }
 
   /**
+   * Map VideoColorSpaceInit.transfer to our TransferFunction type
+   */
+  private mapTransferFunction(transfer?: string): TransferFunction {
+    switch (transfer) {
+      case 'hlg':
+      case 'arib-std-b67':
+        return 'hlg';
+      case 'pq':
+      case 'smpte2084':
+        return 'pq';
+      default:
+        return 'srgb';
+    }
+  }
+
+  /**
+   * Map VideoColorSpaceInit.primaries to our ColorPrimaries type
+   */
+  private mapColorPrimaries(primaries?: string): ColorPrimaries {
+    switch (primaries) {
+      case 'bt2020':
+        return 'bt2020';
+      default:
+        return 'bt709';
+    }
+  }
+
+  /**
+   * Convert a VideoSample to an HDR IPImage with VideoFrame attached
+   */
+  private hdrSampleToIPImage(sample: { toVideoFrame(): VideoFrame }, frame: number): IPImage {
+    const videoFrame = sample.toVideoFrame();
+
+    const transferFunction = this.mapTransferFunction(this.videoColorSpace?.transfer ?? undefined);
+    const colorPrimaries = this.mapColorPrimaries(this.videoColorSpace?.primaries ?? undefined);
+
+    // Create IPImage with VideoFrame attached (minimal data buffer)
+    // The VideoFrame is the actual pixel source; data is a placeholder
+    return new IPImage({
+      width: videoFrame.displayWidth,
+      height: videoFrame.displayHeight,
+      channels: 4,
+      dataType: 'float32',
+      data: new ArrayBuffer(4), // minimal placeholder; VideoFrame is the pixel source
+      videoFrame,
+      metadata: {
+        sourcePath: this.url,
+        frameNumber: frame,
+        transferFunction,
+        colorPrimaries,
+        colorSpace: colorPrimaries === 'bt2020' ? 'rec2020' : 'rec709',
+        attributes: {
+          hdr: true,
+          videoColorSpace: this.videoColorSpace,
+        },
+      },
+    });
+  }
+
+  /**
    * Convert FrameResult to IPImage
    */
   private frameResultToIPImage(result: FrameResult, frame: number): IPImage {
@@ -674,10 +771,37 @@ export class VideoSourceNode extends BaseSourceNode {
   }
 
   /**
+   * Check if this video source has HDR content
+   */
+  isHDR(): boolean {
+    return this.isHDRVideo;
+  }
+
+  /**
+   * Get the video's HDR color space info
+   */
+  getVideoColorSpace(): VideoColorSpaceInit | null {
+    return this.videoColorSpace;
+  }
+
+  /**
    * Get frame as IPImage (async, uses mediabunny when available)
+   * For HDR video, attempts to get VideoFrame-backed IPImage first
    */
   async getFrameIPImage(frame: number): Promise<IPImage | null> {
     if (this.useMediabunny && this.frameExtractor) {
+      // HDR path: try to get HDR sample with VideoFrame
+      if (this.isHDRVideo) {
+        try {
+          const sample = await this.frameExtractor.getFrameHDR(frame);
+          if (sample) {
+            return this.hdrSampleToIPImage(sample, frame);
+          }
+        } catch {
+          // Fall through to SDR path
+        }
+      }
+
       const result = await this.getFrameAsync(frame);
       if (result) {
         return this.frameResultToIPImage(result, frame);
@@ -756,6 +880,11 @@ export class VideoSourceNode extends BaseSourceNode {
     }
     this.video = null;
     this.file = null;
+    this.isHDRVideo = false;
+    this.videoColorSpace = null;
+    this.pendingHDRRequest = null;
+    this.pendingHDRSample = null;
+    this.pendingHDRFrame = -1;
     super.dispose();
   }
 

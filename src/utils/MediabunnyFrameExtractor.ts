@@ -10,8 +10,10 @@ import {
   Input,
   BlobSource,
   CanvasSink,
+  VideoSampleSink,
   ALL_FORMATS,
   type InputVideoTrack,
+  type VideoSample,
 } from 'mediabunny';
 import {
   detectCodecFamily,
@@ -32,6 +34,10 @@ export interface VideoMetadata {
   canDecode: boolean;
   /** True if this is a professional codec (ProRes, DNxHD) that requires transcoding */
   isProfessionalCodec: boolean;
+  /** True if the video track has HDR (Dolby Vision, HLG, PQ) */
+  isHDR: boolean;
+  /** VideoColorSpaceInit from the video track (primaries, transfer, matrix, fullRange) */
+  colorSpace: VideoColorSpaceInit | null;
 }
 
 /**
@@ -82,6 +88,7 @@ export class MediabunnyFrameExtractor {
   private input: Input | null = null;
   private videoTrack: InputVideoTrack | null = null;
   private canvasSink: CanvasSink | null = null;
+  private videoSampleSink: VideoSampleSink | null = null;
   private metadata: VideoMetadata | null = null;
   private fps: number = 24;
 
@@ -178,12 +185,38 @@ export class MediabunnyFrameExtractor {
       // Calculate frame count based on duration and fps
       const frameCount = Math.ceil(duration * fps);
 
-      // Create canvas sink for frame extraction
+      // Detect HDR capabilities
+      let isHDR = false;
+      let videoColorSpace: VideoColorSpaceInit | null = null;
+      try {
+        if (typeof this.videoTrack.hasHighDynamicRange === 'function') {
+          const hdrResult = this.videoTrack.hasHighDynamicRange();
+          isHDR = hdrResult instanceof Promise ? await hdrResult : hdrResult;
+        }
+        if (typeof this.videoTrack.getColorSpace === 'function') {
+          const csResult = this.videoTrack.getColorSpace();
+          videoColorSpace = csResult instanceof Promise ? await csResult : csResult;
+        }
+      } catch {
+        // HDR detection not available in this version of mediabunny
+      }
+
+      // Create canvas sink for frame extraction (always needed for SDR fallback & thumbnails)
       this.canvasSink = new CanvasSink(this.videoTrack, {
         width: this.videoTrack.displayWidth,
         height: this.videoTrack.displayHeight,
         fit: 'contain', // Required when both width and height are provided
       });
+
+      // Create VideoSampleSink for HDR frame extraction when HDR is detected
+      if (isHDR) {
+        try {
+          this.videoSampleSink = new VideoSampleSink(this.videoTrack);
+        } catch {
+          console.warn('VideoSampleSink creation failed, HDR frames will use SDR fallback');
+          isHDR = false;
+        }
+      }
 
       this.metadata = {
         width: this.videoTrack.displayWidth,
@@ -195,6 +228,8 @@ export class MediabunnyFrameExtractor {
         codecFamily,
         canDecode,
         isProfessionalCodec: isProfessionalCodec(codecFamily),
+        isHDR,
+        colorSpace: videoColorSpace,
       };
 
       return this.metadata;
@@ -314,6 +349,17 @@ export class MediabunnyFrameExtractor {
           height: this.videoTrack.displayHeight,
           fit: 'contain', // Required when both width and height are provided
         });
+
+        // Recreate VideoSampleSink for HDR
+        if (this.metadata?.isHDR) {
+          try {
+            this.videoSampleSink = new VideoSampleSink(this.videoTrack);
+          } catch {
+            console.warn('VideoSampleSink recreation failed after frame index build, falling back to SDR');
+            this.videoSampleSink = null;
+            this.metadata.isHDR = false;
+          }
+        }
       }
 
       this.frameIndexBuilt = true;
@@ -466,6 +512,77 @@ export class MediabunnyFrameExtractor {
       // Signal that we're done, allowing the next queued operation to proceed
       resolveOurs!();
     }
+  }
+
+  /**
+   * Extract a single HDR frame by frame number (1-based) using VideoSampleSink.
+   * Returns a VideoSample that can produce a VideoFrame for direct GPU upload.
+   * Falls back to null if VideoSampleSink is not available.
+   */
+  async getFrameHDR(frame: number, signal?: AbortSignal): Promise<VideoSample | null> {
+    if (!this.videoSampleSink || !this.metadata?.isHDR) {
+      return null;
+    }
+
+    const abortSignal = signal ?? this.abortController.signal;
+    if (abortSignal.aborted) {
+      return null;
+    }
+
+    // Build frame index if not already built
+    await this.buildFrameIndex();
+
+    if (abortSignal.aborted) {
+      return null;
+    }
+
+    // Clamp frame to valid range
+    const maxFrame = this.metadata.frameCount;
+    const clampedFrame = Math.max(1, Math.min(frame, maxFrame));
+
+    const expectedTimestamp = this.frameIndex.get(clampedFrame);
+    if (expectedTimestamp === undefined) {
+      return null;
+    }
+
+    // Queue this extraction for serialization
+    let resolveOurs: () => void;
+    const ourTurn = new Promise<void>((resolve) => {
+      resolveOurs = resolve;
+    });
+
+    const previousQueue = this.extractionQueue;
+    this.extractionQueue = ourTurn;
+
+    try {
+      await previousQueue;
+
+      if (abortSignal.aborted) {
+        return null;
+      }
+
+      const sample = await this.videoSampleSink.getSample(expectedTimestamp);
+      return sample ?? null;
+    } catch (error) {
+      console.warn(`HDR frame ${clampedFrame} extraction failed:`, error);
+      return null;
+    } finally {
+      resolveOurs!();
+    }
+  }
+
+  /**
+   * Check if HDR frame extraction is available
+   */
+  isHDR(): boolean {
+    return this.metadata?.isHDR ?? false;
+  }
+
+  /**
+   * Get the video color space information
+   */
+  getColorSpace(): VideoColorSpaceInit | null {
+    return this.metadata?.colorSpace ?? null;
   }
 
   /**
@@ -703,6 +820,7 @@ export class MediabunnyFrameExtractor {
     }
     this.videoTrack = null;
     this.canvasSink = null;
+    this.videoSampleSink = null;
     this.metadata = null;
   }
 }

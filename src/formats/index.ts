@@ -33,3 +33,9 @@ export {
   type FormatName,
   type FormatDecoder,
 } from './DecoderRegistry';
+export {
+  isGainmapJPEG,
+  parseGainmapJPEG,
+  decodeGainmapToFloat32,
+  type GainmapInfo,
+} from './JPEGGainmapDecoder';

@@ -1,10 +1,15 @@
 export type DataType = 'uint8' | 'uint16' | 'float32';
 
+export type TransferFunction = 'srgb' | 'hlg' | 'pq';
+export type ColorPrimaries = 'bt709' | 'bt2020';
+
 export interface ImageMetadata {
   colorSpace?: string;
   frameNumber?: number;
   sourcePath?: string;
   pixelAspectRatio?: number;
+  transferFunction?: TransferFunction;
+  colorPrimaries?: ColorPrimaries;
   attributes?: Record<string, unknown>;
 }
 
@@ -15,6 +20,7 @@ export interface IPImageOptions {
   dataType: DataType;
   data?: ArrayBuffer;
   metadata?: ImageMetadata;
+  videoFrame?: VideoFrame;
 }
 
 export class IPImage {
@@ -24,6 +30,9 @@ export class IPImage {
   readonly dataType: DataType;
   readonly data: ArrayBuffer;
   readonly metadata: ImageMetadata;
+
+  /** Browser VideoFrame for direct GPU upload (HDR video path) */
+  videoFrame: VideoFrame | null;
 
   // WebGL texture handle (set by renderer)
   texture: WebGLTexture | null = null;
@@ -35,6 +44,7 @@ export class IPImage {
     this.channels = options.channels;
     this.dataType = options.dataType;
     this.metadata = options.metadata ?? {};
+    this.videoFrame = options.videoFrame ?? null;
 
     if (options.data) {
       this.data = options.data;
@@ -87,6 +97,21 @@ export class IPImage {
     }
 
     this.textureNeedsUpdate = true;
+  }
+
+  /**
+   * Release the VideoFrame if present. Must be called when the image
+   * is no longer needed to avoid VRAM leaks.
+   */
+  close(): void {
+    if (this.videoFrame) {
+      try {
+        this.videoFrame.close();
+      } catch {
+        // Already closed
+      }
+      this.videoFrame = null;
+    }
   }
 
   clone(): IPImage {
