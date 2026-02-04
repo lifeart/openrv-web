@@ -4,6 +4,10 @@ import { ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from '../ui/components/Co
 import { ToneMappingState, ToneMappingOperator, DEFAULT_TONE_MAPPING_STATE } from '../ui/components/ToneMappingControl';
 import { getHueRotationMatrix, isIdentityHueRotation } from '../color/HueRotation';
 import type { DisplayCapabilities } from '../color/DisplayCapabilities';
+import type { RendererBackend, TextureHandle } from './RendererBackend';
+
+// Re-export the interface and types so existing consumers can import from here
+export type { RendererBackend, TextureHandle } from './RendererBackend';
 
 /**
  * Tone mapping operator integer codes for shader uniform
@@ -15,7 +19,14 @@ export const TONE_MAPPING_OPERATOR_CODES: Record<ToneMappingOperator, number> = 
   'aces': 3,
 };
 
-export class Renderer {
+/**
+ * WebGL2-based renderer backend.
+ *
+ * This is the original Renderer class, now implementing the RendererBackend
+ * interface. All behavior is identical to the pre-Phase 4 implementation.
+ * Also exported as WebGL2Backend for clarity in backend selection.
+ */
+export class Renderer implements RendererBackend {
   // Color adjustments state
   private colorAdjustments: ColorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
   private gl: WebGL2RenderingContext | null = null;
@@ -77,6 +88,17 @@ export class Renderer {
 
     this.initShaders();
     this.initQuad();
+  }
+
+  /**
+   * Async initialization (no-op for WebGL2).
+   *
+   * WebGL2 is fully initialized synchronously in initialize(). This method
+   * exists to satisfy the RendererBackend interface so that callers can use
+   * a uniform `await backend.initAsync()` pattern across all backends.
+   */
+  async initAsync(): Promise<void> {
+    // No-op: WebGL2 initialization is fully synchronous.
   }
 
   private initShaders(): void {
@@ -473,12 +495,14 @@ export class Renderer {
     return { internalFormat, format, type };
   }
 
-  createTexture(): WebGLTexture | null {
+  createTexture(): TextureHandle {
     return this.gl?.createTexture() ?? null;
   }
 
-  deleteTexture(texture: WebGLTexture): void {
-    this.gl?.deleteTexture(texture);
+  deleteTexture(texture: TextureHandle): void {
+    if (texture) {
+      this.gl?.deleteTexture(texture);
+    }
   }
 
   getContext(): WebGL2RenderingContext | null {
@@ -581,3 +605,10 @@ export class Renderer {
     this.canvas = null;
   }
 }
+
+/**
+ * Alias for the Renderer class, for use in backend selection logic.
+ * Semantically identical to Renderer; this name clarifies intent when
+ * used alongside WebGPUBackend.
+ */
+export const WebGL2Backend = Renderer;
