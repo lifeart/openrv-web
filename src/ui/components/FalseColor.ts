@@ -267,6 +267,13 @@ export class FalseColor extends EventEmitter<FalseColorEvents> {
   }
 
   /**
+   * Get the raw color LUT (256*3 RGB Uint8Array) for GPU upload.
+   */
+  getColorLUT(): Uint8Array {
+    return this.colorLUT;
+  }
+
+  /**
    * Get color legend for UI display
    */
   getLegend(): Array<{ color: string; label: string }> {

@@ -12,7 +12,7 @@ import { WebGLLUTProcessor } from '../../color/WebGLLUT';
 import { LUTPipeline } from '../../color/pipeline/LUTPipeline';
 import { GPULUTChain } from '../../color/pipeline/GPULUTChain';
 import { CDLValues, DEFAULT_CDL, isDefaultCDL, applyCDLToImageData } from '../../color/CDL';
-import { ColorCurvesData, createDefaultCurvesData, isDefaultCurves, CurveLUTCache } from '../../color/ColorCurves';
+import { ColorCurvesData, createDefaultCurvesData, isDefaultCurves, CurveLUTCache, buildAllCurveLUTs } from '../../color/ColorCurves';
 import { LensDistortionParams, DEFAULT_LENS_PARAMS, isDefaultLensParams, applyLensDistortion } from '../../transform/LensDistortion';
 import { ExportFormat, exportCanvas as doExportCanvas, copyCanvasToClipboard } from '../../utils/FrameExporter';
 import { filterImageFiles, getBestSequence } from '../../utils/SequenceLoader';
@@ -802,7 +802,54 @@ export class Viewer {
       return;
     }
 
-    // Single pixel read, shared by both consumers
+    // HDR path: use WebGL readPixelFloat for accurate HDR values
+    if (this.hdrRenderActive && this.glRenderer) {
+      const sampleSize = this.pixelProbe.getSampleSize();
+      const halfSize = Math.floor(sampleSize / 2);
+      const rx = Math.max(0, Math.floor(position.x) - halfSize);
+      const ry = Math.max(0, Math.floor(position.y) - halfSize);
+      const rw = Math.min(sampleSize, this.displayWidth - rx);
+      const rh = Math.min(sampleSize, this.displayHeight - ry);
+      const pixels = this.glRenderer.readPixelFloat(rx, ry, rw, rh);
+
+      if (probeEnabled) {
+        if (pixels && pixels.length >= 4) {
+          // Average all pixels in the sample area
+          const count = rw * rh;
+          let tr = 0, tg = 0, tb = 0, ta = 0;
+          for (let i = 0; i < count; i++) {
+            tr += pixels[i * 4]!;
+            tg += pixels[i * 4 + 1]!;
+            tb += pixels[i * 4 + 2]!;
+            ta += pixels[i * 4 + 3]!;
+          }
+          this.pixelProbe.updateFromHDRValues(
+            position.x, position.y,
+            tr / count, tg / count, tb / count, ta / count,
+            this.displayWidth, this.displayHeight
+          );
+        }
+        this.pixelProbe.setOverlayPosition(e.clientX, e.clientY);
+      }
+
+      if (cursorColorEnabled) {
+        if (pixels && pixels.length >= 4) {
+          // Use center pixel for cursor color
+          const centerIdx = (Math.floor(rh / 2) * rw + Math.floor(rw / 2)) * 4;
+          const color = {
+            r: Math.round(Math.max(0, Math.min(255, pixels[centerIdx]! * 255))),
+            g: Math.round(Math.max(0, Math.min(255, pixels[centerIdx + 1]! * 255))),
+            b: Math.round(Math.max(0, Math.min(255, pixels[centerIdx + 2]! * 255))),
+          };
+          this.cursorColorCallback!(color, position);
+        } else {
+          this.cursorColorCallback!(null, null);
+        }
+      }
+      return;
+    }
+
+    // SDR path: read from 2D canvas
     const imageData = this.getImageData();
 
     // Dispatch to probe consumer
@@ -1604,6 +1651,17 @@ export class Viewer {
       renderer.setToneMappingState(this.toneMappingState);
     }
     renderer.setColorInversion(this.colorInversionEnabled);
+
+    // Sync background pattern
+    renderer.setBackgroundPattern(this.backgroundPatternState);
+
+    // Sync 2D effects into GPU shader
+    renderer.setCDL(this.cdlValues);
+    renderer.setCurvesLUT(isDefaultCurves(this.curvesData) ? null : buildAllCurveLUTs(this.curvesData));
+    renderer.setColorWheels(this.colorWheels.getState());
+    renderer.setFalseColor(this.falseColor.isEnabled(), this.falseColor.getColorLUT());
+    renderer.setZebraStripes(this.zebraStripes.getState());
+    renderer.setChannelMode(this.channelMode);
 
     // Render
     renderer.clear(0, 0, 0, 1);

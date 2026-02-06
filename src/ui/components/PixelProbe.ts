@@ -113,6 +113,9 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
   // Source image data for "source" mode (before color pipeline)
   private sourceImageData: ImageData | null = null;
 
+  // HDR float values (may exceed 0-1 range), set by updateFromHDRValues
+  private hdrFloats: { r: number; g: number; b: number; a: number } | null = null;
+
   // UI elements (initialized in createOverlayContent)
   private swatch!: HTMLElement;
   private coordsLabel!: HTMLElement;
@@ -568,6 +571,52 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     this.state.hsl = this.rgbToHsl(r, g, b);
     this.state.ire = ire;
 
+    // Clear HDR floats since we're using 8-bit path
+    this.hdrFloats = null;
+
+    this.updateDisplay();
+  }
+
+  /**
+   * Update pixel values from HDR float data (values may exceed 0-1 range).
+   * Called when the HDR WebGL path is active.
+   */
+  updateFromHDRValues(
+    x: number,
+    y: number,
+    r: number,
+    g: number,
+    b: number,
+    a: number,
+    displayWidth: number,
+    displayHeight: number
+  ): void {
+    if (!this.state.enabled || this.state.locked) return;
+
+    const px = Math.max(0, Math.min(displayWidth - 1, Math.floor(x)));
+    const py = Math.max(0, Math.min(displayHeight - 1, Math.floor(y)));
+
+    // Convert float values (0.0-1.0+ range) to 0-255 for legacy display formats
+    // but preserve the raw floats for RGB01 display
+    const r255 = Math.round(Math.max(0, Math.min(255, r * 255)));
+    const g255 = Math.round(Math.max(0, Math.min(255, g * 255)));
+    const b255 = Math.round(Math.max(0, Math.min(255, b * 255)));
+    const a255 = Math.round(Math.max(0, Math.min(255, a * 255)));
+
+    // Calculate luminance in IRE units using float values
+    const luminanceFloat = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    const ire = Math.round(Math.max(0, Math.min(100, luminanceFloat * 100)));
+
+    this.state.x = px;
+    this.state.y = py;
+    this.state.rgb = { r: r255, g: g255, b: b255 };
+    this.state.alpha = a255;
+    this.state.hsl = this.rgbToHsl(r255, g255, b255);
+    this.state.ire = ire;
+
+    // Store raw float values for HDR-aware display
+    this.hdrFloats = { r, g, b, a };
+
     this.updateDisplay();
   }
 
@@ -604,11 +653,19 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     // Update RGB (0-255)
     this.rgbLabel.textContent = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
 
-    // Update RGB (0-1)
-    const r01 = (rgb.r / 255).toFixed(3);
-    const g01 = (rgb.g / 255).toFixed(3);
-    const b01 = (rgb.b / 255).toFixed(3);
-    this.rgb01Label.textContent = `(${r01}, ${g01}, ${b01})`;
+    // Update RGB (0-1) — use raw HDR floats when available for values > 1.0
+    if (this.hdrFloats) {
+      const r01 = this.hdrFloats.r.toFixed(3);
+      const g01 = this.hdrFloats.g.toFixed(3);
+      const b01 = this.hdrFloats.b.toFixed(3);
+      const isHDR = this.hdrFloats.r > 1.0 || this.hdrFloats.g > 1.0 || this.hdrFloats.b > 1.0;
+      this.rgb01Label.textContent = `(${r01}, ${g01}, ${b01})${isHDR ? ' HDR' : ''}`;
+    } else {
+      const r01 = (rgb.r / 255).toFixed(3);
+      const g01 = (rgb.g / 255).toFixed(3);
+      const b01 = (rgb.b / 255).toFixed(3);
+      this.rgb01Label.textContent = `(${r01}, ${g01}, ${b01})`;
+    }
 
     // Update Alpha
     const a01 = (alpha / 255).toFixed(3);
@@ -682,7 +739,11 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
         value = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
         break;
       case 'rgb01':
-        value = `${(rgb.r / 255).toFixed(3)}, ${(rgb.g / 255).toFixed(3)}, ${(rgb.b / 255).toFixed(3)}`;
+        if (this.hdrFloats) {
+          value = `${this.hdrFloats.r.toFixed(3)}, ${this.hdrFloats.g.toFixed(3)}, ${this.hdrFloats.b.toFixed(3)}`;
+        } else {
+          value = `${(rgb.r / 255).toFixed(3)}, ${(rgb.g / 255).toFixed(3)}, ${(rgb.b / 255).toFixed(3)}`;
+        }
         break;
       case 'alpha':
         value = `${alpha} (${(alpha / 255).toFixed(3)})`;
