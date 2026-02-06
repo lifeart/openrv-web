@@ -45,6 +45,7 @@ export class ThumbnailManager {
   private onThumbnailReady: (() => void) | null = null;
   private pendingRetries: PendingFrame[] = [];
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private _loadingPaused = false;
 
   // Thumbnail sizing
   private slotHeight = 20;
@@ -59,6 +60,38 @@ export class ThumbnailManager {
    */
   setOnThumbnailReady(callback: () => void): void {
     this.onThumbnailReady = callback;
+  }
+
+  /**
+   * Whether thumbnail loading is currently paused (e.g. during playback)
+   */
+  get isLoadingPaused(): boolean {
+    return this._loadingPaused;
+  }
+
+  /**
+   * Pause all thumbnail loading. Aborts pending loads and stops the retry timer.
+   * Called during playback to prevent frame extraction contention.
+   */
+  pauseLoading(): void {
+    this._loadingPaused = true;
+    this.abortPending();
+    this.clearRetryTimer();
+    this.pendingRetries = [];
+  }
+
+  /**
+   * Resume thumbnail loading after playback stops.
+   * Restarts loading for all visible slots that are not yet cached.
+   */
+  resumeLoading(): void {
+    this._loadingPaused = false;
+    // Restart loading for visible range
+    if (this.slots.length > 0 && this.sourceId) {
+      this.loadThumbnails().catch((err) => {
+        console.warn('Failed to resume thumbnail loading:', err);
+      });
+    }
   }
 
   /**
@@ -147,6 +180,8 @@ export class ThumbnailManager {
    * Load thumbnails for all calculated slots
    */
   async loadThumbnails(): Promise<void> {
+    if (this._loadingPaused) return;
+
     const source = this.session.currentSource;
     if (!source) return;
 
@@ -201,6 +236,7 @@ export class ThumbnailManager {
    * Load a single thumbnail for a frame
    */
   private async loadThumbnail(frame: number, signal: AbortSignal): Promise<void> {
+    if (this._loadingPaused) return;
     if (signal.aborted) return;
 
     try {
@@ -227,27 +263,16 @@ export class ThumbnailManager {
         if (signal.aborted) return;
         sourceElement = frameImage;
       } else if (source.type === 'video') {
-        // For video, try to get cached frame from mediabunny first
+        // For video, only use cached mediabunny frames.
+        // Never use the HTMLVideoElement directly — it causes contention with
+        // audio sync and the mediabunny extraction queue during playback.
         const frameCanvas = this.session.getVideoFrameCanvas(frame);
         if (frameCanvas) {
           sourceElement = frameCanvas;
         } else {
-          // Fallback: seek video to the correct frame and capture
-          const video = source.element;
-          if (video instanceof HTMLVideoElement) {
-            const fps = source.fps ?? 24;
-            const targetTime = (frame - 1) / fps;
-
-            // Only use video element if it's close to target time (within 0.5 seconds)
-            // Otherwise queue for retry later
-            if (Math.abs(video.currentTime - targetTime) < 0.5) {
-              sourceElement = video;
-            } else {
-              // Queue for retry - the video may seek to this frame later
-              this.queueRetry(frame);
-              return;
-            }
-          }
+          // No cached frame available — queue for retry (retries are paused during playback)
+          this.queueRetry(frame);
+          return;
         }
       } else if (source.type === 'image') {
         sourceElement = source.element ?? null;
@@ -393,6 +418,16 @@ export class ThumbnailManager {
   }
 
   /**
+   * Clear the retry timer if active
+   */
+  private clearRetryTimer(): void {
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
+  }
+
+  /**
    * Queue a frame for retry loading later
    */
   private queueRetry(frame: number): void {
@@ -410,6 +445,7 @@ export class ThumbnailManager {
    * Schedule retry processing
    */
   private scheduleRetry(): void {
+    if (this._loadingPaused) return;
     if (this.retryTimer || this.pendingRetries.length === 0) return;
 
     this.retryTimer = setTimeout(() => {
@@ -422,6 +458,7 @@ export class ThumbnailManager {
    * Process pending retry queue
    */
   private async processRetries(): Promise<void> {
+    if (this._loadingPaused) return;
     if (!this.abortController || this.pendingRetries.length === 0) return;
 
     const signal = this.abortController.signal;
@@ -454,10 +491,8 @@ export class ThumbnailManager {
 
   dispose(): void {
     this.clear();
-    if (this.retryTimer) {
-      clearTimeout(this.retryTimer);
-      this.retryTimer = null;
-    }
+    this.clearRetryTimer();
     this.pendingRetries = [];
+    this._loadingPaused = false;
   }
 }

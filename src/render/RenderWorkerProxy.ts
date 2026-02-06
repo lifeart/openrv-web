@@ -213,6 +213,13 @@ export class RenderWorkerProxy implements RendererBackend {
 
     this.disposed = true;
 
+    // Clean up any pending bitmap to avoid GPU memory leak
+    if (this.pendingBitmap) {
+      this.pendingBitmap.then(bmp => { if (bmp) bmp.close(); }).catch(() => {});
+      this.pendingBitmap = null;
+      this.pendingBitmapSource = null;
+    }
+
     // Terminate worker
     if (this.worker) {
       this.worker.removeEventListener('message', this.handleWorkerMessage);
@@ -389,6 +396,10 @@ export class RenderWorkerProxy implements RendererBackend {
    */
   prepareFrame(source: HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | HTMLImageElement): void {
     if (this.disposed || this.pendingBitmapSource === source) return;
+    // Close previously pending bitmap to avoid GPU memory leak
+    if (this.pendingBitmap) {
+      this.pendingBitmap.then(bmp => { if (bmp) bmp.close(); }).catch(() => {});
+    }
     this.pendingBitmapSource = source;
     this.pendingBitmap = createImageBitmap(source).catch(() => null) as Promise<ImageBitmap>;
   }

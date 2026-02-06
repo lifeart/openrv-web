@@ -1192,27 +1192,32 @@ export class Renderer implements RendererBackend {
     }
 
     // --- Bind effect textures ---
+    // IMPORTANT: Always set sampler uniform-to-unit bindings unconditionally,
+    // even when the effect is disabled. In WebGL2, all sampler uniforms default
+    // to texture unit 0. If a sampler3D (u_lut3D) and a sampler2D (u_texture)
+    // both point to unit 0, glDrawArrays fails with GL_INVALID_OPERATION:
+    // "Two textures of different types use the same sampler location."
 
     // Texture unit 1: curves LUT
+    this.displayShader.setUniformInt('u_curvesLUT', 1);
     if (this.curvesEnabled) {
       this.ensureCurvesLUTTexture();
-      this.displayShader.setUniformInt('u_curvesLUT', 1);
       gl.activeTexture(gl.TEXTURE1);
       gl.bindTexture(gl.TEXTURE_2D, this.curvesLUTTexture);
     }
 
     // Texture unit 2: false color LUT
+    this.displayShader.setUniformInt('u_falseColorLUT', 2);
     if (this.falseColorEnabled) {
       this.ensureFalseColorLUTTexture();
-      this.displayShader.setUniformInt('u_falseColorLUT', 2);
       gl.activeTexture(gl.TEXTURE2);
       gl.bindTexture(gl.TEXTURE_2D, this.falseColorLUTTexture);
     }
 
     // Texture unit 3: 3D LUT
+    this.displayShader.setUniformInt('u_lut3D', 3);
     if (this.lut3DEnabled) {
       this.ensureLUT3DTexture();
-      this.displayShader.setUniformInt('u_lut3D', 3);
       gl.activeTexture(gl.TEXTURE3);
       gl.bindTexture(gl.TEXTURE_3D, this.lut3DTexture);
     }
@@ -1553,10 +1558,28 @@ export class Renderer implements RendererBackend {
   readPixelFloat(x: number, y: number, width: number, height: number): Float32Array | null {
     const gl = this.gl;
     if (!gl || !this.canvas) return null;
-    const pixels = new Float32Array(width * height * 4);
     const glY = this.canvas.height - y - height; // WebGL Y is flipped
-    gl.readPixels(x, glY, width, height, gl.RGBA, gl.FLOAT, pixels);
-    return gl.getError() === gl.NO_ERROR ? pixels : null;
+    const count = width * height * 4;
+
+    // Query the implementation-supported readPixels type for the current framebuffer.
+    const readType = gl.getParameter(gl.IMPLEMENTATION_COLOR_READ_TYPE) as number;
+
+    if (readType === gl.FLOAT) {
+      // HDR float framebuffer — read directly into Float32Array
+      const pixels = new Float32Array(count);
+      gl.readPixels(x, glY, width, height, gl.RGBA, gl.FLOAT, pixels);
+      return gl.getError() === gl.NO_ERROR ? pixels : null;
+    }
+
+    // Default (8-bit) framebuffer — read as UNSIGNED_BYTE then convert to float
+    const bytes = new Uint8Array(count);
+    gl.readPixels(x, glY, width, height, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
+    if (gl.getError() !== gl.NO_ERROR) return null;
+    const pixels = new Float32Array(count);
+    for (let i = 0; i < count; i++) {
+      pixels[i] = bytes[i]! / 255;
+    }
+    return pixels;
   }
 
   // --- Phase 3: Effect setters ---
@@ -1819,6 +1842,14 @@ export class Renderer implements RendererBackend {
 
     // Set all shared effect uniforms and bind textures
     this.setAllEffectUniforms();
+
+    // SDR input is already gamma-encoded; skip display transfer to avoid double encoding.
+    // The display transfer (sRGB OETF) is only needed for HDR content that was linearized
+    // by the input EOTF. For SDR, the gamma adjustment slider still works via the
+    // u_displayTransfer==0 fallback path: pow(color, 1/u_gamma).
+    // Note: u_displayGamma and u_displayBrightness are NOT overridden here — those are
+    // user-adjustable display calibration parameters that should take effect for all content.
+    this.displayShader.setUniformInt('u_displayTransfer', 0);
 
     // Bind SDR texture to unit 0
     this.displayShader.setUniformInt('u_texture', 0);

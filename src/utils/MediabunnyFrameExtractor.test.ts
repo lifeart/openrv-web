@@ -619,4 +619,151 @@ describe('MediabunnyFrameExtractor', () => {
       expect(typeof metadata?.isProfessionalCodec).toBe('boolean');
     });
   });
+
+  // REGRESSION TESTS for frame count accuracy and timestamp clamping fixes
+  describe('frame count accuracy regression tests', () => {
+    it('MFE-FC-001: frame count uses Math.round instead of Math.ceil', async () => {
+      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
+
+      if (!MediabunnyFrameExtractor.isSupported()) {
+        return;
+      }
+
+      // Mock computeDuration to return exact 10.0 seconds
+      const mockInput = {
+        getPrimaryVideoTrack: vi.fn().mockResolvedValue({
+          displayWidth: 1920,
+          displayHeight: 1080,
+          codec: 'avc1',
+          canDecode: vi.fn().mockResolvedValue(true),
+        }),
+        computeDuration: vi.fn().mockResolvedValue(10.0), // Exactly 10 seconds
+        dispose: vi.fn(),
+      };
+
+      const { Input } = await import('mediabunny');
+      vi.mocked(Input).mockReturnValue(mockInput as never);
+
+      const extractor = new MediabunnyFrameExtractor();
+      const mockFile = new File(['test'], 'test.mp4', { type: 'video/mp4' });
+      const metadata = await extractor.load(mockFile, 24);
+
+      // 10.0 * 24 = 240.0 -> Math.round(240.0) = 240 (not Math.ceil which would also be 240)
+      expect(metadata.frameCount).toBe(240);
+    });
+
+    it('MFE-FC-002: frame count with fractional result rounds correctly', async () => {
+      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
+
+      if (!MediabunnyFrameExtractor.isSupported()) {
+        return;
+      }
+
+      // Mock computeDuration to return 10.02 seconds (slightly over)
+      const mockInput = {
+        getPrimaryVideoTrack: vi.fn().mockResolvedValue({
+          displayWidth: 1920,
+          displayHeight: 1080,
+          codec: 'avc1',
+          canDecode: vi.fn().mockResolvedValue(true),
+        }),
+        computeDuration: vi.fn().mockResolvedValue(10.02), // 10.02 seconds
+        dispose: vi.fn(),
+      };
+
+      const { Input } = await import('mediabunny');
+      vi.mocked(Input).mockReturnValue(mockInput as never);
+
+      const extractor = new MediabunnyFrameExtractor();
+      const mockFile = new File(['test'], 'test.mp4', { type: 'video/mp4' });
+      const metadata = await extractor.load(mockFile, 24);
+
+      // 10.02 * 24 = 240.48 -> Math.round(240.48) = 240 (Math.ceil would give 241)
+      expect(metadata.frameCount).toBe(240);
+    });
+
+    it('MFE-FC-003: frame count rounds up when fractional part >= 0.5', async () => {
+      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
+
+      if (!MediabunnyFrameExtractor.isSupported()) {
+        return;
+      }
+
+      // Mock computeDuration to return duration that gives >= 0.5 fractional frames
+      const mockInput = {
+        getPrimaryVideoTrack: vi.fn().mockResolvedValue({
+          displayWidth: 1920,
+          displayHeight: 1080,
+          codec: 'avc1',
+          canDecode: vi.fn().mockResolvedValue(true),
+        }),
+        computeDuration: vi.fn().mockResolvedValue(10.03), // 10.03 * 24 = 240.72
+        dispose: vi.fn(),
+      };
+
+      const { Input } = await import('mediabunny');
+      vi.mocked(Input).mockReturnValue(mockInput as never);
+
+      const extractor = new MediabunnyFrameExtractor();
+      const mockFile = new File(['test'], 'test.mp4', { type: 'video/mp4' });
+      const metadata = await extractor.load(mockFile, 24);
+
+      // 10.03 * 24 = 240.72 -> Math.round(240.72) = 241
+      expect(metadata.frameCount).toBe(241);
+    });
+  });
+
+  describe('timestamp clamping regression test', () => {
+    it('MFE-TS-001: getFrame clamps endTimestamp to video duration', async () => {
+      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
+
+      if (!MediabunnyFrameExtractor.isSupported()) {
+        return;
+      }
+
+      let capturedEndTimestamp: number | null = null;
+
+      // Mock CanvasSink to capture the endTimestamp argument
+      const mockCanvasSink = {
+        canvases: vi.fn((startTimestamp: number, endTimestamp: number) => {
+          capturedEndTimestamp = endTimestamp;
+          return {
+            [Symbol.asyncIterator]: async function* () {
+              yield { canvas: document.createElement('canvas'), timestamp: startTimestamp, duration: 0.041 };
+            },
+          };
+        }),
+      };
+
+      const mockInput = {
+        getPrimaryVideoTrack: vi.fn().mockResolvedValue({
+          displayWidth: 1920,
+          displayHeight: 1080,
+          codec: 'avc1',
+          canDecode: vi.fn().mockResolvedValue(true),
+        }),
+        computeDuration: vi.fn().mockResolvedValue(10.0), // 10 second video
+        dispose: vi.fn(),
+      };
+
+      const { Input, CanvasSink } = await import('mediabunny');
+      vi.mocked(Input).mockReturnValue(mockInput as never);
+      vi.mocked(CanvasSink).mockReturnValue(mockCanvasSink as never);
+
+      const extractor = new MediabunnyFrameExtractor();
+      const mockFile = new File(['test'], 'test.mp4', { type: 'video/mp4' });
+      await extractor.load(mockFile, 24);
+
+      // Build frame index first
+      await extractor.getActualFrameCount();
+
+      // Try to get the last frame (which might have expectedTimestamp very close to duration)
+      // The endTimestamp should be clamped to video duration (10.0)
+      await extractor.getFrame(1); // Frame 1, timestamp 0
+
+      // Verify endTimestamp was clamped
+      expect(capturedEndTimestamp).toBeDefined();
+      expect(capturedEndTimestamp).toBeLessThanOrEqual(10.0);
+    });
+  });
 });

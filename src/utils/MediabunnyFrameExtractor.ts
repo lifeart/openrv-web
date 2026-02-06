@@ -183,7 +183,7 @@ export class MediabunnyFrameExtractor {
       const duration = await this.input.computeDuration();
 
       // Calculate frame count based on duration and fps
-      const frameCount = Math.ceil(duration * fps);
+      const frameCount = Math.round(duration * fps);
 
       // Detect HDR capabilities
       let isHDR = false;
@@ -445,7 +445,8 @@ export class MediabunnyFrameExtractor {
       // Get the frame at this exact timestamp
       // Use a wider window to ensure we capture the frame even with slight timing differences
       const startTimestamp = Math.max(0, expectedTimestamp - 0.001);
-      const endTimestamp = expectedTimestamp + 0.05; // Wider window for seeking tolerance
+      const videoDuration = this.metadata?.duration ?? Infinity;
+      const endTimestamp = Math.min(expectedTimestamp + 0.05, videoDuration); // Clamp to video duration to prevent hanging past end
 
       let result: FrameResult | null = null;
       let bestMatch: { canvas: HTMLCanvasElement; timestamp: number; duration: number } | null = null;

@@ -6,6 +6,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Renderer } from './Renderer';
+import { IPImage } from '../core/image/Image';
 import type { DisplayCapabilities } from '../color/DisplayCapabilities';
 import { DEFAULT_CAPABILITIES } from '../color/DisplayCapabilities';
 
@@ -621,5 +622,438 @@ describe('Renderer Phase 1B: New GPU Shader Effects', () => {
     const result = renderer.renderSDRFrame(sourceCanvas);
 
     expect(result).toBeInstanceOf(HTMLCanvasElement);
+  });
+});
+
+/**
+ * Regression tests for double-gamma SDR brightness bug.
+ *
+ * Bug: SDR video content appeared too bright because renderSDRFrame() applied
+ * display transfer (sRGB OETF) to already gamma-encoded SDR input via
+ * u_displayTransfer = 1, causing double gamma encoding.
+ *
+ * Fix: renderSDRFrame() overrides u_displayTransfer to 0 after
+ * setAllEffectUniforms(), so that SDR input bypasses the display transfer.
+ * The HDR path (renderImage()) must NOT override u_displayTransfer.
+ */
+describe('Renderer SDR Display Transfer Override (regression)', () => {
+  /**
+   * Create a mock GL context that tracks the LAST value set for
+   * u_displayTransfer via uniform1i.
+   */
+  function createDisplayTransferTrackingGL(): {
+    gl: WebGL2RenderingContext;
+    getDisplayTransferCalls: () => Array<number>;
+  } {
+    const locationToName = new Map<object, string>();
+    const displayTransferCalls: Array<number> = [];
+
+    const gl = {
+      canvas: document.createElement('canvas'),
+      drawingBufferColorSpace: 'srgb',
+      getExtension: vi.fn(() => null),
+      createProgram: vi.fn(() => ({})),
+      attachShader: vi.fn(),
+      linkProgram: vi.fn(),
+      getProgramParameter: vi.fn(() => true),
+      getProgramInfoLog: vi.fn(() => ''),
+      deleteShader: vi.fn(),
+      createShader: vi.fn(() => ({})),
+      shaderSource: vi.fn(),
+      compileShader: vi.fn(),
+      getShaderParameter: vi.fn(() => true),
+      getShaderInfoLog: vi.fn(() => ''),
+      createVertexArray: vi.fn(() => ({})),
+      bindVertexArray: vi.fn(),
+      createBuffer: vi.fn(() => ({})),
+      bindBuffer: vi.fn(),
+      bufferData: vi.fn(),
+      enableVertexAttribArray: vi.fn(),
+      vertexAttribPointer: vi.fn(),
+      getUniformLocation: vi.fn((_program: WebGLProgram, name: string) => {
+        const sentinel = { __uniformName: name };
+        locationToName.set(sentinel, name);
+        return sentinel;
+      }),
+      getAttribLocation: vi.fn(() => 0),
+      useProgram: vi.fn(),
+      uniform1f: vi.fn(),
+      uniform1i: vi.fn((location: object, value: number) => {
+        const name = locationToName.get(location);
+        if (name === 'u_displayTransfer') {
+          displayTransferCalls.push(value);
+        }
+      }),
+      uniform1fv: vi.fn(),
+      uniform2fv: vi.fn(),
+      uniform3fv: vi.fn(),
+      uniform4fv: vi.fn(),
+      uniformMatrix3fv: vi.fn(),
+      uniformMatrix4fv: vi.fn(),
+      activeTexture: vi.fn(),
+      bindTexture: vi.fn(),
+      drawArrays: vi.fn(),
+      viewport: vi.fn(),
+      clearColor: vi.fn(),
+      clear: vi.fn(),
+      createTexture: vi.fn(() => ({})),
+      deleteTexture: vi.fn(),
+      deleteVertexArray: vi.fn(),
+      deleteBuffer: vi.fn(),
+      deleteProgram: vi.fn(),
+      texParameteri: vi.fn(),
+      texImage2D: vi.fn(),
+      texImage3D: vi.fn(),
+      texStorage3D: vi.fn(),
+      isContextLost: vi.fn(() => false),
+      // Constants
+      VERTEX_SHADER: 0x8b31,
+      FRAGMENT_SHADER: 0x8b30,
+      LINK_STATUS: 0x8b82,
+      COMPILE_STATUS: 0x8b81,
+      ARRAY_BUFFER: 0x8892,
+      STATIC_DRAW: 0x88e4,
+      FLOAT: 0x1406,
+      TEXTURE_2D: 0x0de1,
+      TEXTURE_3D: 0x806f,
+      TEXTURE0: 0x84c0,
+      TEXTURE1: 0x84c1,
+      TEXTURE2: 0x84c2,
+      TEXTURE3: 0x84c3,
+      TRIANGLE_STRIP: 0x0005,
+      COLOR_BUFFER_BIT: 0x4000,
+      TEXTURE_WRAP_S: 0x2802,
+      TEXTURE_WRAP_T: 0x2803,
+      TEXTURE_WRAP_R: 0x8072,
+      TEXTURE_MIN_FILTER: 0x2801,
+      TEXTURE_MAG_FILTER: 0x2800,
+      CLAMP_TO_EDGE: 0x812f,
+      LINEAR: 0x2601,
+      RGBA8: 0x8058,
+      RGBA: 0x1908,
+      UNSIGNED_BYTE: 0x1401,
+      RGB32F: 0x8815,
+      RGB: 0x1907,
+    } as unknown as WebGL2RenderingContext;
+
+    return { gl, getDisplayTransferCalls: () => displayTransferCalls };
+  }
+
+  /** Initialize a Renderer with the display-transfer tracking mock. */
+  function initWithDisplayTransferTracking(renderer: Renderer): ReturnType<typeof createDisplayTransferTrackingGL> {
+    const tracking = createDisplayTransferTrackingGL();
+    const canvas = document.createElement('canvas');
+
+    const originalGetContext = canvas.getContext.bind(canvas);
+    canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+      if (contextId === 'webgl2') return tracking.gl;
+      return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
+    }) as typeof canvas.getContext;
+
+    renderer.initialize(canvas);
+    return tracking;
+  }
+
+  it('REN-SDR-DT-001: renderSDRFrame sets u_displayTransfer to 0', () => {
+    const renderer = new Renderer();
+    const { getDisplayTransferCalls } = initWithDisplayTransferTracking(renderer);
+    const sourceCanvas = document.createElement('canvas');
+
+    renderer.resize(100, 100);
+    renderer.renderSDRFrame(sourceCanvas);
+
+    const calls = getDisplayTransferCalls();
+    // The LAST value set for u_displayTransfer must be 0 (skip display transfer for SDR).
+    // setAllEffectUniforms() sets it to this.displayTransferCode (default 1),
+    // then the fix overrides it to 0.
+    expect(calls.length).toBeGreaterThanOrEqual(1);
+    expect(calls[calls.length - 1]).toBe(0);
+  });
+
+  it('REN-SDR-DT-002: renderSDRFrame overrides display transfer even when displayTransferCode is non-zero', () => {
+    const renderer = new Renderer();
+    const { getDisplayTransferCalls } = initWithDisplayTransferTracking(renderer);
+    const sourceCanvas = document.createElement('canvas');
+
+    // Set display color state with gamma 2.2 transfer (code 3)
+    renderer.setDisplayColorState({
+      transferFunction: 3,
+      displayGamma: 1.0,
+      displayBrightness: 1.0,
+      customGamma: 2.2,
+    });
+
+    renderer.resize(100, 100);
+    renderer.renderSDRFrame(sourceCanvas);
+
+    const calls = getDisplayTransferCalls();
+    // setAllEffectUniforms() sets u_displayTransfer to 3 (gamma 2.2),
+    // but the SDR override must set it back to 0.
+    expect(calls.length).toBeGreaterThanOrEqual(2);
+    // First call from setAllEffectUniforms should be 3
+    expect(calls[0]).toBe(3);
+    // Last call (the override) must be 0
+    expect(calls[calls.length - 1]).toBe(0);
+  });
+
+  it('REN-SDR-DT-003: renderImage (HDR path) uses displayTransferCode, does not override to 0', () => {
+    const renderer = new Renderer();
+    const { getDisplayTransferCalls } = initWithDisplayTransferTracking(renderer);
+
+    // Set display color state with gamma 2.2 transfer (code 3)
+    renderer.setDisplayColorState({
+      transferFunction: 3,
+      displayGamma: 1.0,
+      displayBrightness: 1.0,
+      customGamma: 2.2,
+    });
+
+    renderer.resize(100, 100);
+
+    // Create a minimal IPImage for the HDR render path
+    const image = new IPImage({
+      width: 10,
+      height: 10,
+      channels: 4,
+      dataType: 'uint8',
+    });
+
+    renderer.renderImage(image);
+
+    const calls = getDisplayTransferCalls();
+    // renderImage should NOT override u_displayTransfer to 0.
+    // The last value should be 3 (from setAllEffectUniforms using displayTransferCode).
+    expect(calls.length).toBeGreaterThanOrEqual(1);
+    expect(calls[calls.length - 1]).toBe(3);
+  });
+});
+
+/**
+ * Regression tests for WebGL texture sampler unit assignments.
+ *
+ * Bug: GL_INVALID_OPERATION: glDrawArrays: Two textures of different types
+ * use the same sampler location.
+ *
+ * Root cause: sampler uniforms (u_lut3D, u_curvesLUT, u_falseColorLUT)
+ * defaulted to texture unit 0 when their features were disabled, conflicting
+ * with u_texture (sampler2D) also on unit 0.
+ *
+ * Fix: always call setUniformInt for every sampler uniform to assign unique
+ * texture units, regardless of whether the associated feature is enabled.
+ */
+describe('Renderer Sampler Unit Assignment (regression)', () => {
+  /** The four sampler uniforms that must each have a unique texture unit. */
+  const SAMPLER_UNIFORMS = ['u_texture', 'u_curvesLUT', 'u_falseColorLUT', 'u_lut3D'] as const;
+
+  /**
+   * Create a mock GL context that tracks uniform1i calls with named locations.
+   *
+   * getUniformLocation returns a sentinel object tagged with the uniform name,
+   * so we can later map each uniform1i(location, unit) call back to the
+   * uniform name that was being assigned.
+   */
+  function createTrackingMockGL(): {
+    gl: WebGL2RenderingContext;
+    getSamplerUnitAssignments: () => Map<string, number>;
+  } {
+    // Map from sentinel object -> uniform name
+    const locationToName = new Map<object, string>();
+    // All uniform1i calls recorded as [name, value]
+    const uniform1iCalls: Array<[string, number]> = [];
+
+    const gl = {
+      canvas: document.createElement('canvas'),
+      drawingBufferColorSpace: 'srgb',
+      getExtension: vi.fn(() => null),
+      createProgram: vi.fn(() => ({})),
+      attachShader: vi.fn(),
+      linkProgram: vi.fn(),
+      getProgramParameter: vi.fn(() => true),
+      getProgramInfoLog: vi.fn(() => ''),
+      deleteShader: vi.fn(),
+      createShader: vi.fn(() => ({})),
+      shaderSource: vi.fn(),
+      compileShader: vi.fn(),
+      getShaderParameter: vi.fn(() => true),
+      getShaderInfoLog: vi.fn(() => ''),
+      createVertexArray: vi.fn(() => ({})),
+      bindVertexArray: vi.fn(),
+      createBuffer: vi.fn(() => ({})),
+      bindBuffer: vi.fn(),
+      bufferData: vi.fn(),
+      enableVertexAttribArray: vi.fn(),
+      vertexAttribPointer: vi.fn(),
+      getUniformLocation: vi.fn((_program: WebGLProgram, name: string) => {
+        const sentinel = { __uniformName: name };
+        locationToName.set(sentinel, name);
+        return sentinel;
+      }),
+      getAttribLocation: vi.fn(() => 0),
+      useProgram: vi.fn(),
+      uniform1f: vi.fn(),
+      uniform1i: vi.fn((location: object, value: number) => {
+        const name = locationToName.get(location);
+        if (name) {
+          uniform1iCalls.push([name, value]);
+        }
+      }),
+      uniform1fv: vi.fn(),
+      uniform2fv: vi.fn(),
+      uniform3fv: vi.fn(),
+      uniform4fv: vi.fn(),
+      uniformMatrix3fv: vi.fn(),
+      uniformMatrix4fv: vi.fn(),
+      activeTexture: vi.fn(),
+      bindTexture: vi.fn(),
+      drawArrays: vi.fn(),
+      viewport: vi.fn(),
+      clearColor: vi.fn(),
+      clear: vi.fn(),
+      createTexture: vi.fn(() => ({})),
+      deleteTexture: vi.fn(),
+      deleteVertexArray: vi.fn(),
+      deleteBuffer: vi.fn(),
+      deleteProgram: vi.fn(),
+      texParameteri: vi.fn(),
+      texImage2D: vi.fn(),
+      texImage3D: vi.fn(),
+      texStorage3D: vi.fn(),
+      isContextLost: vi.fn(() => false),
+      // Constants
+      VERTEX_SHADER: 0x8b31,
+      FRAGMENT_SHADER: 0x8b30,
+      LINK_STATUS: 0x8b82,
+      COMPILE_STATUS: 0x8b81,
+      ARRAY_BUFFER: 0x8892,
+      STATIC_DRAW: 0x88e4,
+      FLOAT: 0x1406,
+      TEXTURE_2D: 0x0de1,
+      TEXTURE_3D: 0x806f,
+      TEXTURE0: 0x84c0,
+      TEXTURE1: 0x84c1,
+      TEXTURE2: 0x84c2,
+      TEXTURE3: 0x84c3,
+      TRIANGLE_STRIP: 0x0005,
+      COLOR_BUFFER_BIT: 0x4000,
+      TEXTURE_WRAP_S: 0x2802,
+      TEXTURE_WRAP_T: 0x2803,
+      TEXTURE_WRAP_R: 0x8072,
+      TEXTURE_MIN_FILTER: 0x2801,
+      TEXTURE_MAG_FILTER: 0x2800,
+      CLAMP_TO_EDGE: 0x812f,
+      LINEAR: 0x2601,
+      RGBA8: 0x8058,
+      RGBA: 0x1908,
+      UNSIGNED_BYTE: 0x1401,
+      RGB32F: 0x8815,
+      RGB: 0x1907,
+    } as unknown as WebGL2RenderingContext;
+
+    /**
+     * Extract sampler uniform assignments from recorded uniform1i calls.
+     * Returns a Map from sampler uniform name to the LAST assigned texture unit.
+     * (Last wins, since the code may set the same uniform multiple times.)
+     */
+    function getSamplerUnitAssignments(): Map<string, number> {
+      const assignments = new Map<string, number>();
+      for (const [name, value] of uniform1iCalls) {
+        if (SAMPLER_UNIFORMS.includes(name as typeof SAMPLER_UNIFORMS[number])) {
+          assignments.set(name, value);
+        }
+      }
+      return assignments;
+    }
+
+    return { gl, getSamplerUnitAssignments };
+  }
+
+  /** Initialize a Renderer with our tracking mock GL. */
+  function initWithTrackingGL(renderer: Renderer): ReturnType<typeof createTrackingMockGL> {
+    const tracking = createTrackingMockGL();
+    const canvas = document.createElement('canvas');
+
+    const originalGetContext = canvas.getContext.bind(canvas);
+    canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+      if (contextId === 'webgl2') return tracking.gl;
+      return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
+    }) as typeof canvas.getContext;
+
+    renderer.initialize(canvas);
+    return tracking;
+  }
+
+  it('REN-SAM-001: all sampler uniforms are assigned to distinct texture units', () => {
+    const renderer = new Renderer();
+    const { getSamplerUnitAssignments } = initWithTrackingGL(renderer);
+    const sourceCanvas = document.createElement('canvas');
+
+    renderer.resize(100, 100);
+    renderer.renderSDRFrame(sourceCanvas);
+
+    const assignments = getSamplerUnitAssignments();
+
+    // All four sampler uniforms must have been assigned
+    for (const name of SAMPLER_UNIFORMS) {
+      expect(assignments.has(name), `sampler uniform "${name}" must be assigned a texture unit`).toBe(true);
+    }
+
+    // All assigned texture units must be unique (no duplicates)
+    const units = [...assignments.values()];
+    const uniqueUnits = new Set(units);
+    expect(
+      uniqueUnits.size,
+      `Expected ${units.length} unique texture units but found ${uniqueUnits.size}. ` +
+      `Assignments: ${JSON.stringify(Object.fromEntries(assignments))}`,
+    ).toBe(units.length);
+  });
+
+  it('REN-SAM-002: sampler units are always set even when features are disabled', () => {
+    const renderer = new Renderer();
+    const { getSamplerUnitAssignments } = initWithTrackingGL(renderer);
+    const sourceCanvas = document.createElement('canvas');
+
+    // Explicitly leave all features disabled (default state):
+    // - curvesEnabled = false
+    // - falseColorEnabled = false
+    // - lut3DEnabled = false
+    renderer.resize(100, 100);
+    renderer.renderSDRFrame(sourceCanvas);
+
+    const assignments = getSamplerUnitAssignments();
+
+    // Even with all features disabled, every sampler uniform must be assigned
+    expect(assignments.has('u_texture'), 'u_texture must be assigned when all features disabled').toBe(true);
+    expect(assignments.has('u_curvesLUT'), 'u_curvesLUT must be assigned when curves disabled').toBe(true);
+    expect(assignments.has('u_falseColorLUT'), 'u_falseColorLUT must be assigned when false color disabled').toBe(true);
+    expect(assignments.has('u_lut3D'), 'u_lut3D must be assigned when 3D LUT disabled').toBe(true);
+  });
+
+  it('REN-SAM-003: u_lut3D (sampler3D) never shares a unit with any sampler2D uniform', () => {
+    const renderer = new Renderer();
+    const { getSamplerUnitAssignments } = initWithTrackingGL(renderer);
+    const sourceCanvas = document.createElement('canvas');
+
+    renderer.resize(100, 100);
+    renderer.renderSDRFrame(sourceCanvas);
+
+    const assignments = getSamplerUnitAssignments();
+    const lut3DUnit = assignments.get('u_lut3D');
+
+    expect(lut3DUnit, 'u_lut3D must have a texture unit assigned').not.toBeUndefined();
+
+    // u_lut3D (sampler3D) must not share a unit with any sampler2D uniform
+    const sampler2DUniforms = ['u_texture', 'u_curvesLUT', 'u_falseColorLUT'] as const;
+    for (const name of sampler2DUniforms) {
+      const unit = assignments.get(name);
+      expect(
+        unit,
+        `${name} must have a texture unit assigned`,
+      ).not.toBeUndefined();
+      expect(
+        unit,
+        `u_lut3D (sampler3D, unit ${lut3DUnit}) must not share a texture unit ` +
+        `with ${name} (sampler2D, unit ${unit}). This causes GL_INVALID_OPERATION.`,
+      ).not.toBe(lut3DUnit);
+    }
   });
 });

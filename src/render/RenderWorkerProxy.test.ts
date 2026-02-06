@@ -475,4 +475,93 @@ describe('RenderWorkerProxy', () => {
       expect(msg).toBeTruthy();
     });
   });
+
+  // =============================================================================
+  // Regression tests for ImageBitmap lifecycle fix
+  // =============================================================================
+
+  describe('ImageBitmap lifecycle (regression)', () => {
+    it('RWP-BMP-001: prepareFrame called twice rapidly only keeps the latest bitmap', async () => {
+      // Create two mock canvas elements to simulate rapid frame switches
+      const canvas1 = document.createElement('canvas');
+      canvas1.width = 100;
+      canvas1.height = 100;
+
+      const canvas2 = document.createElement('canvas');
+      canvas2.width = 200;
+      canvas2.height = 200;
+
+      // Track if the first bitmap gets closed
+      const mockBitmap1 = createMockBitmap(100, 100);
+      const closeSpy1 = vi.spyOn(mockBitmap1, 'close');
+
+      const mockBitmap2 = createMockBitmap(200, 200);
+
+      // Override createImageBitmap to return our tracked bitmaps
+      const originalCreateImageBitmap = globalThis.createImageBitmap;
+      let callCount = 0;
+      (globalThis as any).createImageBitmap = vi.fn(async (source: any) => {
+        callCount++;
+        if (callCount === 1) return mockBitmap1;
+        if (callCount === 2) return mockBitmap2;
+        return createMockBitmap(source?.width ?? 100, source?.height ?? 100);
+      });
+
+      try {
+        // Call prepareFrame twice rapidly
+        proxy.prepareFrame(canvas1);
+        proxy.prepareFrame(canvas2);
+
+        // Wait for async bitmap creation to complete
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        // The first bitmap should have been closed to prevent memory leak
+        expect(closeSpy1).toHaveBeenCalled();
+
+        // Get the prepared bitmap - should be the second one
+        const bitmap = await proxy.getPreparedBitmap();
+        expect(bitmap).toBe(mockBitmap2);
+        expect(bitmap?.width).toBe(200);
+      } finally {
+        // Restore original createImageBitmap
+        (globalThis as any).createImageBitmap = originalCreateImageBitmap;
+      }
+    });
+
+    it('RWP-BMP-002: dispose cleans up pending bitmap (no dangling references)', async () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 100;
+      canvas.height = 100;
+
+      // Create a mock bitmap with a close spy
+      const mockBitmap = createMockBitmap(100, 100);
+      const closeSpy = vi.spyOn(mockBitmap, 'close');
+
+      // Override createImageBitmap
+      const originalCreateImageBitmap = globalThis.createImageBitmap;
+      (globalThis as any).createImageBitmap = vi.fn(async () => mockBitmap);
+
+      try {
+        // Prepare a frame but don't wait for it
+        proxy.prepareFrame(canvas);
+
+        // Immediately dispose (simulating cleanup before bitmap is consumed)
+        proxy.dispose();
+
+        // Wait for async operations to settle
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        // The pending bitmap should have been closed during dispose
+        expect(closeSpy).toHaveBeenCalled();
+
+        // Verify internal state is cleared (pendingBitmap should be null)
+        // This is tested indirectly by verifying getPreparedBitmap returns null
+        const bitmap = await proxy.getPreparedBitmap();
+        expect(bitmap).toBeNull();
+      } finally {
+        // Restore original createImageBitmap
+        (globalThis as any).createImageBitmap = originalCreateImageBitmap;
+      }
+    });
+  });
 });
