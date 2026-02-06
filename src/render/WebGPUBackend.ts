@@ -72,7 +72,7 @@ export class WebGPUBackend implements RendererBackend {
   // --- GPU handles ---
   private device: WGPUDevice | null = null;
   private gpuContext: WGPUCanvasContext | null = null;
-  private canvas: HTMLCanvasElement | null = null;
+  private canvas: HTMLCanvasElement | OffscreenCanvas | null = null;
 
   // --- State (mirrors WebGL2Backend for identical behavior) ---
   private colorAdjustments: ColorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
@@ -94,7 +94,7 @@ export class WebGPUBackend implements RendererBackend {
    *
    * Throws if WebGPU is not available or the canvas context cannot be created.
    */
-  initialize(canvas: HTMLCanvasElement, _capabilities?: DisplayCapabilities): void {
+  initialize(canvas: HTMLCanvasElement | OffscreenCanvas, _capabilities?: DisplayCapabilities): void {
     this.canvas = canvas;
 
     // Synchronous guard: navigator.gpu must exist
@@ -103,7 +103,8 @@ export class WebGPUBackend implements RendererBackend {
     }
 
     // Attempt to get a 'webgpu' context to verify support.
-    const ctx = canvas.getContext('webgpu' as string);
+    // WebGPU only works with HTMLCanvasElement, not OffscreenCanvas.
+    const ctx = (canvas as HTMLCanvasElement).getContext('webgpu' as string);
     if (!ctx) {
       throw new Error('WebGPU canvas context not available');
     }
@@ -320,6 +321,9 @@ export class WebGPUBackend implements RendererBackend {
   }
 
   getCanvasElement(): HTMLCanvasElement | null {
-    return this.canvas;
+    if (typeof HTMLCanvasElement !== 'undefined' && this.canvas instanceof HTMLCanvasElement) {
+      return this.canvas;
+    }
+    return null;
   }
 }

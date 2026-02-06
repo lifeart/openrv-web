@@ -58,7 +58,7 @@ export class Renderer implements RendererBackend {
   // Color adjustments state
   private colorAdjustments: ColorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
   private gl: WebGL2RenderingContext | null = null;
-  private canvas: HTMLCanvasElement | null = null;
+  private canvas: HTMLCanvasElement | OffscreenCanvas | null = null;
 
   // Color inversion state
   private colorInversionEnabled = false;
@@ -172,7 +172,7 @@ export class Renderer implements RendererBackend {
   private hslInvert = false;
   private hslMattePreview = false;
 
-  initialize(canvas: HTMLCanvasElement, capabilities?: DisplayCapabilities): void {
+  initialize(canvas: HTMLCanvasElement | OffscreenCanvas, capabilities?: DisplayCapabilities): void {
     this.canvas = canvas;
 
     // For HDR displays, request preserveDrawingBuffer so readPixels works after compositing.
@@ -1830,14 +1830,19 @@ export class Renderer implements RendererBackend {
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.bindVertexArray(null);
 
-    return this.canvas;
+    return this.getCanvasElement();
   }
 
   /**
    * Get the underlying canvas element used for rendering.
    */
   getCanvasElement(): HTMLCanvasElement | null {
-    return this.canvas;
+    // Return as HTMLCanvasElement for interface compatibility.
+    // When used with OffscreenCanvas in a worker, HTMLCanvasElement may not exist.
+    if (typeof HTMLCanvasElement !== 'undefined' && this.canvas instanceof HTMLCanvasElement) {
+      return this.canvas;
+    }
+    return null;
   }
 
   dispose(): void {

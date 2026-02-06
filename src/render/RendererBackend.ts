@@ -37,7 +37,7 @@ export interface RendererBackend {
   // --- Lifecycle ---
 
   /** Initialize the backend with a canvas element and optional capabilities. */
-  initialize(canvas: HTMLCanvasElement, capabilities?: DisplayCapabilities): void;
+  initialize(canvas: HTMLCanvasElement | OffscreenCanvas, capabilities?: DisplayCapabilities): void;
 
   /**
    * Perform any async initialization required by the backend.
@@ -186,4 +186,24 @@ export interface RendererBackend {
 
   /** Get the underlying canvas element used for rendering. */
   getCanvasElement(): HTMLCanvasElement | null;
+
+  // --- Phase 4: Async/OffscreenCanvas methods (optional) ---
+
+  /** Whether this backend renders asynchronously (worker-based). */
+  readonly isAsync?: boolean;
+
+  /** Initialize with an OffscreenCanvas (for worker-based backends). */
+  initializeOffscreen?(canvas: OffscreenCanvas, capabilities?: DisplayCapabilities): Promise<void>;
+
+  /**
+   * Render an SDR frame asynchronously.
+   * Returns a promise that resolves when rendering is complete.
+   * The result is automatically composited to the visible canvas.
+   */
+  renderSDRFrameAsync?(
+    source: HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | HTMLImageElement | ImageBitmap,
+  ): Promise<void>;
+
+  /** Read pixel data asynchronously (for worker-based backends). */
+  readPixelFloatAsync?(x: number, y: number, w: number, h: number): Promise<Float32Array | null>;
 }

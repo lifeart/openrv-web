@@ -44,6 +44,7 @@ import { DisplayColorState, DEFAULT_DISPLAY_COLOR_STATE, DISPLAY_TRANSFER_CODES,
 import type { DisplayCapabilities } from '../../color/DisplayCapabilities';
 import { safeCanvasContext2D } from '../../color/SafeCanvasContext';
 import { Renderer } from '../../render/Renderer';
+import { RenderWorkerProxy } from '../../render/RenderWorkerProxy';
 import type { IPImage } from '../../core/image/Image';
 
 // Extracted effect processing utilities
@@ -372,6 +373,10 @@ export class Viewer {
 
   // WebGL SDR rendering (Phase 1A: GPU shader pipeline for SDR sources)
   private sdrWebGLRenderActive = false;
+
+  // Phase 4: OffscreenCanvas worker proxy
+  private renderWorkerProxy: RenderWorkerProxy | null = null;
+  private isAsyncRenderer = false;
 
   constructor(session: Session, paintEngine: PaintEngine, capabilities?: DisplayCapabilities) {
     this.capabilities = capabilities;
@@ -764,6 +769,16 @@ export class Viewer {
         const fps = this.session.fps || 24;
         this.prerenderBuffer.updateDynamicPreloadAhead(fps);
       }
+
+      // Phase 4: Pre-create ImageBitmap for double-buffer pattern.
+      // This starts bitmap creation before the next RAF, avoiding blocking.
+      if (this.isAsyncRenderer && this.renderWorkerProxy) {
+        const source = this.session.currentSource;
+        if (source?.element && !(source.fileSourceNode?.isHDR())) {
+          this.renderWorkerProxy.prepareFrame(source.element as unknown as HTMLImageElement);
+        }
+      }
+
       this.scheduleRender();
     });
 
@@ -825,6 +840,20 @@ export class Viewer {
       const ry = Math.max(0, Math.floor(position.y) - halfSize);
       const rw = Math.min(sampleSize, this.displayWidth - rx);
       const rh = Math.min(sampleSize, this.displayHeight - ry);
+
+      // Phase 4: Use async readback when worker renderer is active
+      if (this.isAsyncRenderer && this.renderWorkerProxy) {
+        this.renderWorkerProxy.readPixelFloatAsync(rx, ry, rw, rh).then((pixels) => {
+          this.handlePixelProbeData(pixels, position, rw, rh, probeEnabled, cursorColorEnabled, e);
+        }).catch(() => {
+          // Readback failed — ignore silently
+        });
+        if (probeEnabled) {
+          this.pixelProbe.setOverlayPosition(e.clientX, e.clientY);
+        }
+        return;
+      }
+
       const pixels = this.glRenderer.readPixelFloat(rx, ry, rw, rh);
 
       if (probeEnabled) {
@@ -908,6 +937,53 @@ export class Viewer {
       this.cursorColorCallback(null, null);
     }
   };
+
+  /**
+   * Process pixel probe data from either sync or async readback.
+   * Used by both the sync and async (worker) paths.
+   */
+  private handlePixelProbeData(
+    pixels: Float32Array | null,
+    position: { x: number; y: number },
+    rw: number,
+    rh: number,
+    probeEnabled: boolean,
+    cursorColorEnabled: boolean,
+    e: MouseEvent,
+  ): void {
+    if (probeEnabled) {
+      if (pixels && pixels.length >= 4) {
+        const count = rw * rh;
+        let tr = 0, tg = 0, tb = 0, ta = 0;
+        for (let i = 0; i < count; i++) {
+          tr += pixels[i * 4]!;
+          tg += pixels[i * 4 + 1]!;
+          tb += pixels[i * 4 + 2]!;
+          ta += pixels[i * 4 + 3]!;
+        }
+        this.pixelProbe.updateFromHDRValues(
+          position.x, position.y,
+          tr / count, tg / count, tb / count, ta / count,
+          this.displayWidth, this.displayHeight
+        );
+      }
+      this.pixelProbe.setOverlayPosition(e.clientX, e.clientY);
+    }
+
+    if (cursorColorEnabled) {
+      if (pixels && pixels.length >= 4) {
+        const centerIdx = (Math.floor(rh / 2) * rw + Math.floor(rw / 2)) * 4;
+        const color = {
+          r: Math.round(Math.max(0, Math.min(255, pixels[centerIdx]! * 255))),
+          g: Math.round(Math.max(0, Math.min(255, pixels[centerIdx + 1]! * 255))),
+          b: Math.round(Math.max(0, Math.min(255, pixels[centerIdx + 2]! * 255))),
+        };
+        this.cursorColorCallback!(color, position);
+      } else {
+        this.cursorColorCallback!(null, null);
+      }
+    }
+  }
 
   private onClickForProbe = (e: MouseEvent): void => {
     if (!this.pixelProbe.isEnabled()) return;
@@ -1616,18 +1692,103 @@ export class Viewer {
   private ensureGLRenderer(): Renderer | null {
     if (this.glRenderer) return this.glRenderer;
     if (!this.glCanvas) return null;
+
+    // Phase 4: Try OffscreenCanvas worker first for main-thread isolation.
+    // Only attempt once — if worker proxy already failed, skip directly to sync renderer.
+    if (!this.renderWorkerProxy && !this.isAsyncRenderer) {
+      try {
+        if (typeof OffscreenCanvas !== 'undefined' &&
+            'transferControlToOffscreen' in this.glCanvas &&
+            typeof Worker !== 'undefined') {
+          const proxy = new RenderWorkerProxy();
+          proxy.initialize(this.glCanvas, this.capabilities);
+          // initAsync runs in background — the proxy buffers messages until ready
+          proxy.initAsync().then(() => {
+            console.log(`[Viewer] Render worker initialized, HDR output: ${proxy.getHDROutputMode()}`);
+          }).catch((err) => {
+            console.warn('[Viewer] Render worker init failed, falling back to sync:', err);
+            this.fallbackToSyncRenderer();
+          });
+
+          // Set up context loss/restore callbacks
+          proxy.setOnContextLost(() => {
+            console.warn('[Viewer] Worker WebGL context lost');
+            if (this.hdrRenderActive) {
+              this.deactivateHDRMode();
+            }
+            if (this.sdrWebGLRenderActive) {
+              this.deactivateSDRWebGLMode();
+            }
+          });
+          proxy.setOnContextRestored(() => {
+            console.log('[Viewer] Worker WebGL context restored');
+          });
+
+          this.renderWorkerProxy = proxy;
+          this.isAsyncRenderer = true;
+          // glCanvas has been transferred — we cannot create a sync renderer on it anymore.
+          // The proxy acts as the renderer for state setters.
+          // For RendererBackend compatibility, create a facade Renderer that delegates.
+          // For now, we use the proxy as a "renderer" by wrapping it.
+          this.glRenderer = proxy as unknown as Renderer;
+          return this.glRenderer;
+        }
+      } catch (e) {
+        console.warn('[Viewer] OffscreenCanvas worker setup failed, using sync renderer:', e);
+        // Fall through to sync renderer. Need a fresh canvas since transferControlToOffscreen
+        // may have been called (irreversible). Recreate glCanvas.
+        this.recreateGLCanvas();
+      }
+    }
+
+    // Sync renderer fallback (tier 2)
     try {
       const renderer = new Renderer();
       // initialize() sets drawingBufferColorSpace to rec2100-hlg/pq immediately
       // after context creation (before shaders/buffers) when displayHDR is true.
       renderer.initialize(this.glCanvas, this.capabilities);
       const hdrMode = renderer.getHDROutputMode();
-      console.log(`[Viewer] WebGL renderer initialized, HDR output: ${hdrMode}`);
+      console.log(`[Viewer] WebGL renderer initialized (sync), HDR output: ${hdrMode}`);
       this.glRenderer = renderer;
       return renderer;
     } catch (e) {
       console.warn('[Viewer] WebGL renderer init failed:', e);
       return null;
+    }
+  }
+
+  /**
+   * Fall back from async worker renderer to synchronous main-thread renderer.
+   * Used when the worker fails to initialize or crashes.
+   */
+  private fallbackToSyncRenderer(): void {
+    if (this.renderWorkerProxy) {
+      this.renderWorkerProxy.dispose();
+      this.renderWorkerProxy = null;
+    }
+    this.isAsyncRenderer = false;
+    this.glRenderer = null;
+
+    // Recreate glCanvas since the original was transferred
+    this.recreateGLCanvas();
+  }
+
+  /**
+   * Recreate the GL canvas element (needed after transferControlToOffscreen fails
+   * or worker dies, since the transfer is irreversible).
+   */
+  private recreateGLCanvas(): void {
+    if (this.glCanvas && this.glCanvas.parentNode) {
+      const parent = this.glCanvas.parentNode;
+      const nextSibling = this.glCanvas.nextSibling;
+      parent.removeChild(this.glCanvas);
+      this.glCanvas = document.createElement('canvas');
+      this.glCanvas.style.cssText = 'position:absolute;top:0;left:0;display:none;';
+      if (nextSibling) {
+        parent.insertBefore(this.glCanvas, nextSibling);
+      } else {
+        parent.appendChild(this.glCanvas);
+      }
     }
   }
 
@@ -4509,9 +4670,19 @@ export class Viewer {
     this.cropDragPointerId = null;
     this.cropRegionChangedCallback = null;
 
+    // Cleanup render worker proxy (Phase 4)
+    if (this.renderWorkerProxy) {
+      this.renderWorkerProxy.dispose();
+      this.renderWorkerProxy = null;
+      this.isAsyncRenderer = false;
+    }
+
     // Cleanup WebGL HDR renderer
     if (this.glRenderer) {
-      this.glRenderer.dispose();
+      // Only dispose if not the worker proxy (already disposed above)
+      if (!this.isAsyncRenderer) {
+        this.glRenderer.dispose();
+      }
       this.glRenderer = null;
     }
     this.glCanvas = null;
