@@ -726,7 +726,7 @@ export class Session extends EventEmitter<SessionEvents> {
 
         // Only play audio for forward playback
         if (this._playDirection === 1) {
-          this._pendingPlayPromise = this.safeVideoPlay(video);
+          this.safeVideoPlay(video);
         } else {
           // Mute during reverse
           video.muted = true;
@@ -736,7 +736,7 @@ export class Session extends EventEmitter<SessionEvents> {
     } else if (source?.type === 'video' && source.element instanceof HTMLVideoElement) {
       // Fallback to native video playback (only for forward)
       if (this._playDirection === 1) {
-        this._pendingPlayPromise = this.safeVideoPlay(source.element);
+        this.safeVideoPlay(source.element);
       } else {
         // For reverse playback, keep video paused - we'll seek frame by frame
         source.element.pause();
@@ -861,6 +861,9 @@ export class Session extends EventEmitter<SessionEvents> {
   pause(): void {
     if (this._isPlaying) {
       this._isPlaying = false;
+
+      // Clear pending play promise so play() can be called again
+      this._pendingPlayPromise = null;
 
       // Reset buffering state
       this.resetBufferingState();

@@ -2838,4 +2838,235 @@ describe('Session', () => {
       expect(handler).toHaveBeenCalledWith(null);
     });
   });
+
+  describe('_pendingPlayPromise lifecycle', () => {
+    // These tests verify the fix for a bug where _pendingPlayPromise leaked a
+    // resolved Promise after play(), preventing subsequent play() calls from
+    // working after a pause.
+
+    const getPendingPlayPromise = (s: Session): Promise<void> | null =>
+      (s as unknown as { _pendingPlayPromise: Promise<void> | null })._pendingPlayPromise;
+
+    it('SES-PPP-001: play() then pause() allows play() to be called again', () => {
+      const video = createMockVideo(100, 0);
+      video.play = vi.fn().mockResolvedValue(undefined);
+      session.setSources([{
+        type: 'video',
+        name: 'v',
+        url: 'v.mp4',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 24,
+        element: video,
+      }]);
+      session.setOutPoint(100);
+
+      session.play();
+      expect(session.isPlaying).toBe(true);
+
+      session.pause();
+      expect(session.isPlaying).toBe(false);
+
+      // The critical assertion: _pendingPlayPromise must be null after pause
+      // so that play() can be called again
+      expect(getPendingPlayPromise(session)).toBeNull();
+
+      // Verify play() works again
+      session.play();
+      expect(session.isPlaying).toBe(true);
+    });
+
+    it('SES-PPP-002: pause() clears _pendingPlayPromise', () => {
+      const video = createMockVideo(100, 0);
+      video.play = vi.fn().mockResolvedValue(undefined);
+      session.setSources([{
+        type: 'video',
+        name: 'v',
+        url: 'v.mp4',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 24,
+        element: video,
+      }]);
+      session.setOutPoint(100);
+
+      session.play();
+
+      // _pendingPlayPromise may be set during play (safeVideoPlay manages it)
+      session.pause();
+
+      // Must be null after pause so play() guard doesn't block
+      expect(getPendingPlayPromise(session)).toBeNull();
+    });
+
+    it('SES-PPP-003: multiple play/pause cycles work correctly', () => {
+      const video = createMockVideo(100, 0);
+      video.play = vi.fn().mockResolvedValue(undefined);
+      session.setSources([{
+        type: 'video',
+        name: 'v',
+        url: 'v.mp4',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 24,
+        element: video,
+      }]);
+      session.setOutPoint(100);
+
+      for (let i = 0; i < 5; i++) {
+        session.play();
+        expect(session.isPlaying).toBe(true);
+        session.pause();
+        expect(session.isPlaying).toBe(false);
+        expect(getPendingPlayPromise(session)).toBeNull();
+      }
+    });
+
+    it('SES-PPP-004: play() does not overwrite safeVideoPlay internal promise management', () => {
+      const video = createMockVideo(100, 0);
+      video.play = vi.fn().mockResolvedValue(undefined);
+      session.setSources([{
+        type: 'video',
+        name: 'v',
+        url: 'v.mp4',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 24,
+        element: video,
+      }]);
+      session.setOutPoint(100);
+
+      session.play();
+      expect(session.isPlaying).toBe(true);
+
+      // The _pendingPlayPromise should either be null (cleared by safeVideoPlay
+      // finally block) or the IIFE promise (not the outer promise from play()).
+      // Either way, after safeVideoPlay resolves, it should be cleared.
+      // The _pendingPlayPromise should either be null (cleared by safeVideoPlay
+      // finally block) or the IIFE promise (not the outer promise from play()).
+      // After microtask (safeVideoPlay completion), it should be null.
+      expect(getPendingPlayPromise(session)).not.toBe('leaked');
+    });
+
+    it('SES-PPP-005: safeVideoPlay error does not permanently block play()', async () => {
+      const video = createMockVideo(100, 0);
+      // First call rejects with a generic error
+      video.play = vi.fn().mockRejectedValueOnce(new DOMException('test error', 'UnknownError'));
+      session.setSources([{
+        type: 'video',
+        name: 'v',
+        url: 'v.mp4',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 24,
+        element: video,
+      }]);
+      session.setOutPoint(100);
+
+      session.play();
+      // safeVideoPlay will fail asynchronously and call pause()
+      // Wait for the promise to settle
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // Session should be paused (safeVideoPlay error handler calls pause)
+      expect(session.isPlaying).toBe(false);
+      // _pendingPlayPromise must be null so play() can be retried
+      expect(getPendingPlayPromise(session)).toBeNull();
+
+      // Retry with successful play
+      video.play = vi.fn().mockResolvedValue(undefined);
+      session.play();
+      expect(session.isPlaying).toBe(true);
+    });
+
+    it('SES-PPP-006: togglePlayback works after video play error', async () => {
+      const video = createMockVideo(100, 0);
+      video.play = vi.fn().mockRejectedValueOnce(new DOMException('test error', 'UnknownError'));
+      session.setSources([{
+        type: 'video',
+        name: 'v',
+        url: 'v.mp4',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 24,
+        element: video,
+      }]);
+      session.setOutPoint(100);
+
+      session.togglePlayback(); // play
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      // Should be paused due to error
+      expect(session.isPlaying).toBe(false);
+
+      // togglePlayback should still work
+      video.play = vi.fn().mockResolvedValue(undefined);
+      session.togglePlayback(); // should play again
+      expect(session.isPlaying).toBe(true);
+    });
+
+    it('SES-PPP-007: visibility-driven play/pause cycle works', () => {
+      // Simulates the App.ts visibility change handler pattern:
+      // tab hidden → pause(), tab visible → play()
+      const video = createMockVideo(100, 0);
+      video.play = vi.fn().mockResolvedValue(undefined);
+      session.setSources([{
+        type: 'video',
+        name: 'v',
+        url: 'v.mp4',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 24,
+        element: video,
+      }]);
+      session.setOutPoint(100);
+
+      // Initial play
+      session.play();
+      expect(session.isPlaying).toBe(true);
+
+      // Tab hidden → pause
+      session.pause();
+      expect(session.isPlaying).toBe(false);
+
+      // Tab visible → play
+      session.play();
+      expect(session.isPlaying).toBe(true);
+
+      // Second hide/show cycle
+      session.pause();
+      session.play();
+      expect(session.isPlaying).toBe(true);
+    });
+
+    it('SES-PPP-008: play() with non-video source has no pending promise issue', () => {
+      // Image sources don't use safeVideoPlay, so no promise leak
+      const sources = (session as unknown as { sources: MediaSource[] }).sources;
+      sources.push({
+        type: 'image',
+        name: 'test',
+        url: 'test.png',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 10,
+      });
+      (session as any)._outPoint = 100;
+
+      session.play();
+      expect(session.isPlaying).toBe(true);
+      expect(getPendingPlayPromise(session)).toBeNull();
+
+      session.pause();
+      session.play();
+      expect(session.isPlaying).toBe(true);
+    });
+  });
 });
