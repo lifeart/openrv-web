@@ -29,3 +29,10 @@ Thumbs.db
 *.log
 npm-debug.log*
 pnpm-debug.log*
+
+
+sample/chef-with-trumpet.heic
+sample/cosmos-hlg.avif
+sample/cosmos-pq.avif
+sample/IMG_5220.MOV
+sample/Ultra_HDR_Samples_Originals_06.jpg
