@@ -16,6 +16,7 @@ import type { ZebraState } from '../ui/components/ZebraStripes';
 import type { BackgroundPatternState } from '../ui/components/BackgroundPatternControl';
 import type { CurveLUTs } from '../color/ColorCurves';
 import type { ChannelMode } from '../ui/components/ChannelSelect';
+import type { HSLQualifierState } from '../ui/components/HSLQualifier';
 
 /**
  * Opaque texture handle.
@@ -154,4 +155,35 @@ export interface RendererBackend {
 
   /** Set the display color management state (transfer function, gamma, brightness). */
   setDisplayColorState(state: { transferFunction: number; displayGamma: number; displayBrightness: number; customGamma: number }): void;
+
+  // --- Phase 1B: New GPU shader effects ---
+
+  /** Set highlights/shadows/whites/blacks adjustment values (range: -100 to +100 each). */
+  setHighlightsShadows(highlights: number, shadows: number, whites: number, blacks: number): void;
+
+  /** Set vibrance amount (-100 to +100) and skin protection toggle. */
+  setVibrance(vibrance: number, skinProtection: boolean): void;
+
+  /** Set clarity (local contrast) amount (-100 to +100). */
+  setClarity(clarity: number): void;
+
+  /** Set sharpen (unsharp mask) amount (0 to 100). */
+  setSharpen(amount: number): void;
+
+  /** Set HSL qualifier (secondary color correction) state. */
+  setHSLQualifier(state: HSLQualifierState): void;
+
+  // --- SDR frame rendering (Phase 1A) ---
+
+  /**
+   * Render an SDR source through the full GPU shader pipeline.
+   * Accepts HTMLVideoElement, HTMLCanvasElement, OffscreenCanvas, or HTMLImageElement.
+   * Returns the WebGL canvas element for compositing, or null if WebGL is unavailable.
+   */
+  renderSDRFrame(
+    source: HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | HTMLImageElement,
+  ): HTMLCanvasElement | null;
+
+  /** Get the underlying canvas element used for rendering. */
+  getCanvasElement(): HTMLCanvasElement | null;
 }

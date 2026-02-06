@@ -75,6 +75,22 @@ interface TestableViewer {
   ghostFramePoolWidth: number;
   ghostFramePoolHeight: number;
   getGhostFrameCanvas(index: number, width: number, height: number): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } | null;
+
+  // SDR WebGL rendering (Phase 1A + 1B)
+  sdrWebGLRenderActive: boolean;
+  hdrRenderActive: boolean;
+  glCanvas: HTMLCanvasElement | null;
+  glRenderer: unknown;
+  hasGPUShaderEffectsActive(): boolean;
+  hasCPUOnlyEffectsActive(): boolean;
+  colorAdjustments: import('./ColorControls').ColorAdjustments;
+  colorInversionEnabled: boolean;
+  channelMode: import('./ChannelSelect').ChannelMode;
+  toneMappingState: import('./ToneMappingControl').ToneMappingState;
+  filterSettings: import('./FilterControl').FilterSettings;
+
+  // Phase 2A/2B: Prerender buffer
+  prerenderBuffer: import('../../utils/PrerenderBufferManager').PrerenderBufferManager | null;
 }
 
 /** Cast a Viewer to its testable internals for accessing private members in tests. */
@@ -1532,6 +1548,254 @@ describe('Viewer', () => {
       expect(ctxSpy).not.toHaveBeenCalled();
 
       ctxSpy.mockRestore();
+    });
+  });
+
+  describe('SDR WebGL rendering (Phase 1A + 1B)', () => {
+    it('VWR-320: sdrWebGLRenderActive starts as false', () => {
+      expect(testable(viewer).sdrWebGLRenderActive).toBe(false);
+    });
+
+    it('VWR-321: hasGPUShaderEffectsActive returns false with default adjustments', () => {
+      expect(testable(viewer).hasGPUShaderEffectsActive()).toBe(false);
+    });
+
+    it('VWR-322: hasGPUShaderEffectsActive returns true when exposure is non-zero', () => {
+      viewer.setColorAdjustments({ ...DEFAULT_COLOR_ADJUSTMENTS, exposure: 1 });
+      expect(testable(viewer).hasGPUShaderEffectsActive()).toBe(true);
+    });
+
+    it('VWR-323: hasGPUShaderEffectsActive returns true when gamma is not 1', () => {
+      viewer.setColorAdjustments({ ...DEFAULT_COLOR_ADJUSTMENTS, gamma: 2.2 });
+      expect(testable(viewer).hasGPUShaderEffectsActive()).toBe(true);
+    });
+
+    it('VWR-324: hasGPUShaderEffectsActive returns true when saturation is not 1', () => {
+      viewer.setColorAdjustments({ ...DEFAULT_COLOR_ADJUSTMENTS, saturation: 0.5 });
+      expect(testable(viewer).hasGPUShaderEffectsActive()).toBe(true);
+    });
+
+    it('VWR-325: hasGPUShaderEffectsActive returns true when contrast is not 1', () => {
+      viewer.setColorAdjustments({ ...DEFAULT_COLOR_ADJUSTMENTS, contrast: 1.5 });
+      expect(testable(viewer).hasGPUShaderEffectsActive()).toBe(true);
+    });
+
+    it('VWR-326: hasGPUShaderEffectsActive returns true when brightness is non-zero', () => {
+      viewer.setColorAdjustments({ ...DEFAULT_COLOR_ADJUSTMENTS, brightness: 0.1 });
+      expect(testable(viewer).hasGPUShaderEffectsActive()).toBe(true);
+    });
+
+    it('VWR-327: hasGPUShaderEffectsActive returns true when temperature is non-zero', () => {
+      viewer.setColorAdjustments({ ...DEFAULT_COLOR_ADJUSTMENTS, temperature: 50 });
+      expect(testable(viewer).hasGPUShaderEffectsActive()).toBe(true);
+    });
+
+    it('VWR-328: hasGPUShaderEffectsActive returns true when tint is non-zero', () => {
+      viewer.setColorAdjustments({ ...DEFAULT_COLOR_ADJUSTMENTS, tint: -25 });
+      expect(testable(viewer).hasGPUShaderEffectsActive()).toBe(true);
+    });
+
+    it('VWR-329: hasGPUShaderEffectsActive returns true when hue rotation is non-zero', () => {
+      viewer.setColorAdjustments({ ...DEFAULT_COLOR_ADJUSTMENTS, hueRotation: 90 });
+      expect(testable(viewer).hasGPUShaderEffectsActive()).toBe(true);
+    });
+
+    it('VWR-330: hasGPUShaderEffectsActive returns true when color inversion is enabled', () => {
+      viewer.setColorInversion(true);
+      expect(testable(viewer).hasGPUShaderEffectsActive()).toBe(true);
+    });
+
+    it('VWR-331: hasGPUShaderEffectsActive returns true when channel mode is not rgb', () => {
+      viewer.setChannelMode('red');
+      expect(testable(viewer).hasGPUShaderEffectsActive()).toBe(true);
+    });
+
+    it('VWR-332: hasGPUShaderEffectsActive returns true when tone mapping is enabled', () => {
+      viewer.setToneMappingState({ enabled: true, operator: 'aces' });
+      expect(testable(viewer).hasGPUShaderEffectsActive()).toBe(true);
+    });
+
+    it('VWR-333: hasCPUOnlyEffectsActive returns false with default adjustments', () => {
+      expect(testable(viewer).hasCPUOnlyEffectsActive()).toBe(false);
+    });
+
+    // Phase 1B: highlights/shadows/whites/blacks/vibrance/clarity/sharpen are now GPU shader effects
+    it('VWR-334: highlights are GPU shader effects (not CPU-only)', () => {
+      viewer.setColorAdjustments({ ...DEFAULT_COLOR_ADJUSTMENTS, highlights: 50 });
+      expect(testable(viewer).hasCPUOnlyEffectsActive()).toBe(false);
+      expect(testable(viewer).hasGPUShaderEffectsActive()).toBe(true);
+    });
+
+    it('VWR-335: shadows are GPU shader effects (not CPU-only)', () => {
+      viewer.setColorAdjustments({ ...DEFAULT_COLOR_ADJUSTMENTS, shadows: -30 });
+      expect(testable(viewer).hasCPUOnlyEffectsActive()).toBe(false);
+      expect(testable(viewer).hasGPUShaderEffectsActive()).toBe(true);
+    });
+
+    it('VWR-336: vibrance is a GPU shader effect (not CPU-only)', () => {
+      viewer.setColorAdjustments({ ...DEFAULT_COLOR_ADJUSTMENTS, vibrance: 50 });
+      expect(testable(viewer).hasCPUOnlyEffectsActive()).toBe(false);
+      expect(testable(viewer).hasGPUShaderEffectsActive()).toBe(true);
+    });
+
+    it('VWR-337: clarity is a GPU shader effect (not CPU-only)', () => {
+      viewer.setColorAdjustments({ ...DEFAULT_COLOR_ADJUSTMENTS, clarity: 25 });
+      expect(testable(viewer).hasCPUOnlyEffectsActive()).toBe(false);
+      expect(testable(viewer).hasGPUShaderEffectsActive()).toBe(true);
+    });
+
+    it('VWR-338: sharpen is a GPU shader effect (not CPU-only)', () => {
+      viewer.setFilterSettings({ blur: 0, sharpen: 50 });
+      expect(testable(viewer).hasCPUOnlyEffectsActive()).toBe(false);
+      expect(testable(viewer).hasGPUShaderEffectsActive()).toBe(true);
+    });
+
+    it('VWR-339: whites are GPU shader effects (not CPU-only)', () => {
+      viewer.setColorAdjustments({ ...DEFAULT_COLOR_ADJUSTMENTS, whites: 30 });
+      expect(testable(viewer).hasCPUOnlyEffectsActive()).toBe(false);
+      expect(testable(viewer).hasGPUShaderEffectsActive()).toBe(true);
+    });
+
+    it('VWR-340: blacks are GPU shader effects (not CPU-only)', () => {
+      viewer.setColorAdjustments({ ...DEFAULT_COLOR_ADJUSTMENTS, blacks: -20 });
+      expect(testable(viewer).hasCPUOnlyEffectsActive()).toBe(false);
+      expect(testable(viewer).hasGPUShaderEffectsActive()).toBe(true);
+    });
+
+    it('VWR-346: hasCPUOnlyEffectsActive returns true when blur is active', () => {
+      viewer.setFilterSettings({ blur: 5, sharpen: 0 });
+      expect(testable(viewer).hasCPUOnlyEffectsActive()).toBe(true);
+    });
+
+    it('VWR-341: glCanvas starts as hidden (display:none)', () => {
+      const glCanvas = testable(viewer).glCanvas;
+      expect(glCanvas).toBeInstanceOf(HTMLCanvasElement);
+      expect(glCanvas!.style.display).toBe('none');
+    });
+
+    it('VWR-342: hdrRenderActive starts as false', () => {
+      expect(testable(viewer).hdrRenderActive).toBe(false);
+    });
+
+    it('VWR-343: hasGPUShaderEffectsActive returns true for Phase 1B GPU effects (highlights, vibrance)', () => {
+      // Phase 1B: highlights and vibrance are now GPU shader effects
+      viewer.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        highlights: 50,
+        vibrance: 30,
+      });
+      expect(testable(viewer).hasGPUShaderEffectsActive()).toBe(true);
+      expect(testable(viewer).hasCPUOnlyEffectsActive()).toBe(false);
+    });
+
+    it('VWR-344: both GPU effects and blur (CPU-only) can be active simultaneously', () => {
+      viewer.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        exposure: 2,
+        highlights: 50,
+      });
+      viewer.setFilterSettings({ blur: 5, sharpen: 0 });
+      expect(testable(viewer).hasGPUShaderEffectsActive()).toBe(true);
+      expect(testable(viewer).hasCPUOnlyEffectsActive()).toBe(true);
+    });
+
+    it('VWR-345: render does not throw when SDR WebGL conditions are met but WebGL is unavailable', () => {
+      // Set a GPU effect so the SDR path would be attempted
+      viewer.setColorAdjustments({ ...DEFAULT_COLOR_ADJUSTMENTS, exposure: 1 });
+      // WebGL init will fail in test env (no real WebGL) but should not throw
+      expect(() => {
+        viewer.render();
+      }).not.toThrow();
+    });
+  });
+
+  describe('Phase 2A: Async fallback during playback', () => {
+    it('VWR-350: prerenderBuffer is initially null', () => {
+      expect(testable(viewer).prerenderBuffer).toBeNull();
+    });
+
+    it('VWR-351: initPrerenderBuffer creates buffer when session has frames', () => {
+      // Mock session with frames
+      const tv = testable(viewer);
+      tv.session = {
+        ...tv.session,
+        frameCount: 100,
+        currentFrame: 1,
+        isPlaying: false,
+        currentSource: null,
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+
+      viewer.initPrerenderBuffer();
+      expect(tv.prerenderBuffer).not.toBeNull();
+    });
+
+    it('VWR-352: initPrerenderBuffer does not create buffer for 0 frames', () => {
+      const tv = testable(viewer);
+      tv.session = {
+        ...tv.session,
+        frameCount: 0,
+        currentFrame: 0,
+        isPlaying: false,
+        currentSource: null,
+      } as TestableViewer['session'];
+
+      viewer.initPrerenderBuffer();
+      expect(tv.prerenderBuffer).toBeNull();
+    });
+
+    it('VWR-353: onFrameProcessed callback is wired up on initPrerenderBuffer', () => {
+      const tv = testable(viewer);
+      tv.session = {
+        ...tv.session,
+        frameCount: 100,
+        currentFrame: 1,
+        isPlaying: false,
+        currentSource: null,
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+
+      viewer.initPrerenderBuffer();
+      expect(tv.prerenderBuffer).not.toBeNull();
+      expect(tv.prerenderBuffer!.onFrameProcessed).toBeInstanceOf(Function);
+    });
+
+    it('VWR-354: preloadForFrame delegates to prerenderBuffer', () => {
+      const tv = testable(viewer);
+      tv.session = {
+        ...tv.session,
+        frameCount: 100,
+        currentFrame: 1,
+        isPlaying: false,
+        currentSource: null,
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+
+      viewer.initPrerenderBuffer();
+      expect(tv.prerenderBuffer).not.toBeNull();
+
+      // Should not throw even though no effects are active
+      expect(() => {
+        viewer.preloadForFrame(50);
+      }).not.toThrow();
+    });
+
+    it('VWR-355: preloadForFrame is safe when prerenderBuffer is null', () => {
+      // No initPrerenderBuffer called, so buffer is null
+      expect(() => {
+        viewer.preloadForFrame(50);
+      }).not.toThrow();
+    });
+
+    it('VWR-356: render does not throw during playback with no cached frame', () => {
+      // Simulates the Phase 2A async fallback scenario:
+      // playing + prerenderBuffer active but cache miss = show raw frame
+      expect(() => {
+        viewer.render();
+      }).not.toThrow();
     });
   });
 });

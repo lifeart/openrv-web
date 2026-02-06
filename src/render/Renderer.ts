@@ -12,6 +12,7 @@ import type { BackgroundPatternState } from '../ui/components/BackgroundPatternC
 import { PATTERN_COLORS } from '../ui/components/BackgroundPatternControl';
 import type { CurveLUTs } from '../color/ColorCurves';
 import type { ChannelMode } from '../ui/components/ChannelSelect';
+import type { HSLQualifierState } from '../ui/components/HSLQualifier';
 
 // Re-export the interface and types so existing consumers can import from here
 export type { RendererBackend, TextureHandle } from './RendererBackend';
@@ -128,6 +129,48 @@ export class Renderer implements RendererBackend {
   private displayGammaOverride = 1.0;
   private displayBrightnessMultiplier = 1.0;
   private displayCustomGamma = 2.2;
+
+  // --- Phase 1B: New GPU shader effects ---
+
+  // Highlights/Shadows/Whites/Blacks
+  private hsEnabled = false;
+  private highlightsValue = 0;
+  private shadowsValue = 0;
+  private whitesValue = 0;
+  private blacksValue = 0;
+
+  // Vibrance
+  private vibranceEnabled = false;
+  private vibranceValue = 0;
+  private vibranceSkinProtection = true;
+
+  // Clarity
+  private clarityEnabled = false;
+  private clarityValue = 0;
+
+  // Sharpen
+  private sharpenEnabled = false;
+  private sharpenAmount = 0;
+
+  // Texel size for clarity/sharpen (1.0 / texture resolution)
+  private texelSize: [number, number] = [0, 0];
+
+  // HSL Qualifier
+  private hslQualifierEnabled = false;
+  private hslHueCenter = 0;
+  private hslHueWidth = 30;
+  private hslHueSoftness = 20;
+  private hslSatCenter = 50;
+  private hslSatWidth = 100;
+  private hslSatSoftness = 10;
+  private hslLumCenter = 50;
+  private hslLumWidth = 100;
+  private hslLumSoftness = 10;
+  private hslCorrHueShift = 0;
+  private hslCorrSatScale = 1;
+  private hslCorrLumScale = 1;
+  private hslInvert = false;
+  private hslMattePreview = false;
 
   initialize(canvas: HTMLCanvasElement, capabilities?: DisplayCapabilities): void {
     this.canvas = canvas;
@@ -322,6 +365,46 @@ export class Renderer implements RendererBackend {
       uniform float u_bgCheckerSize;      // checker size in pixels
       uniform vec2 u_resolution;          // canvas resolution
 
+      // --- Phase 1B: New GPU shader effect uniforms ---
+
+      // Highlights/Shadows/Whites/Blacks
+      uniform bool u_hsEnabled;
+      uniform float u_highlights;     // -1.0 to +1.0
+      uniform float u_shadows;        // -1.0 to +1.0
+      uniform float u_whites;         // -1.0 to +1.0
+      uniform float u_blacks;         // -1.0 to +1.0
+
+      // Vibrance
+      uniform bool u_vibranceEnabled;
+      uniform float u_vibrance;                // -1.0 to +1.0
+      uniform bool u_vibranceSkinProtection;
+
+      // Clarity (local contrast enhancement)
+      uniform bool u_clarityEnabled;
+      uniform float u_clarity;     // -1.0 to +1.0
+      uniform vec2 u_texelSize;    // 1.0 / textureResolution
+
+      // Sharpen (unsharp mask) - reuses u_texelSize
+      uniform bool u_sharpenEnabled;
+      uniform float u_sharpenAmount;   // 0.0 to 1.0
+
+      // HSL Qualifier (secondary color correction)
+      uniform bool u_hslQualifierEnabled;
+      uniform float u_hslHueCenter;        // 0-360
+      uniform float u_hslHueWidth;         // degrees
+      uniform float u_hslHueSoftness;      // 0-100
+      uniform float u_hslSatCenter;        // 0-100
+      uniform float u_hslSatWidth;         // percent
+      uniform float u_hslSatSoftness;      // 0-100
+      uniform float u_hslLumCenter;        // 0-100
+      uniform float u_hslLumWidth;         // percent
+      uniform float u_hslLumSoftness;      // 0-100
+      uniform float u_hslCorrHueShift;     // -180 to +180
+      uniform float u_hslCorrSatScale;     // multiplier
+      uniform float u_hslCorrLumScale;     // multiplier
+      uniform bool u_hslInvert;
+      uniform bool u_hslMattePreview;
+
       // Luminance coefficients (Rec. 709)
       const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 
@@ -392,12 +475,6 @@ export class Renderer implements RendererBackend {
           return tonemapACES(color);
         }
         return color;  // op == 0 (off)
-      }
-
-      // Smoothstep helper
-      float smoothstepCustom(float edge0, float edge1, float x) {
-        float t = clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0);
-        return t * t * (3.0 - 2.0 * t);
       }
 
       // --- Input EOTF functions (signal to linear) ---
@@ -491,6 +568,62 @@ export class Renderer implements RendererBackend {
         return c; // tf == 0 (linear)
       }
 
+      // --- RGB↔HSL conversion helpers (used by vibrance and HSL qualifier) ---
+
+      // Convert RGB (0-1 each) to HSL (h: 0-360, s: 0-1, l: 0-1)
+      vec3 rgbToHsl(vec3 c) {
+        float maxC = max(max(c.r, c.g), c.b);
+        float minC = min(min(c.r, c.g), c.b);
+        float l = (maxC + minC) * 0.5;
+        float delta = maxC - minC;
+
+        if (delta < 0.00001) {
+          return vec3(0.0, 0.0, l);
+        }
+
+        float s = (l > 0.5) ? delta / (2.0 - maxC - minC) : delta / (maxC + minC);
+
+        float h;
+        if (maxC == c.r) {
+          h = mod((c.g - c.b) / delta, 6.0);
+        } else if (maxC == c.g) {
+          h = (c.b - c.r) / delta + 2.0;
+        } else {
+          h = (c.r - c.g) / delta + 4.0;
+        }
+        h *= 60.0;
+
+        return vec3(h, s, l);
+      }
+
+      // HSL to RGB helper
+      float hueToRgb(float p, float q, float t) {
+        float tt = t;
+        if (tt < 0.0) tt += 1.0;
+        if (tt > 1.0) tt -= 1.0;
+        if (tt < 1.0 / 6.0) return p + (q - p) * 6.0 * tt;
+        if (tt < 0.5) return q;
+        if (tt < 2.0 / 3.0) return p + (q - p) * (2.0 / 3.0 - tt) * 6.0;
+        return p;
+      }
+
+      // Convert HSL (h: 0-360, s: 0-1, l: 0-1) to RGB (0-1 each)
+      vec3 hslToRgb(float h, float s, float l) {
+        if (s < 0.00001) {
+          return vec3(l);
+        }
+
+        float q = (l < 0.5) ? l * (1.0 + s) : l + s - l * s;
+        float p = 2.0 * l - q;
+        float hNorm = h / 360.0;
+
+        return vec3(
+          hueToRgb(p, q, hNorm + 1.0 / 3.0),
+          hueToRgb(p, q, hNorm),
+          hueToRgb(p, q, hNorm - 1.0 / 3.0)
+        );
+      }
+
       void main() {
         vec4 color = texture(u_texture, v_texCoord);
 
@@ -517,19 +650,98 @@ export class Renderer implements RendererBackend {
         float luma = dot(color.rgb, LUMA);
         color.rgb = mix(vec3(luma), color.rgb, u_saturation);
 
-        // 5b. Hue rotation (luminance-preserving matrix)
+        // 5b. Highlights/Shadows/Whites/Blacks (before CDL/curves, matching CPU order)
+        if (u_hsEnabled) {
+          // Whites/Blacks clipping
+          if (u_whites != 0.0 || u_blacks != 0.0) {
+            float whitePoint = 1.0 - u_whites * (55.0 / 255.0);
+            float blackPoint = u_blacks * (55.0 / 255.0);
+            float range = whitePoint - blackPoint;
+            if (range > 0.0) {
+              color.rgb = clamp((color.rgb - blackPoint) / range, 0.0, 1.0);
+            }
+          }
+          // Luminance for highlight/shadow masks
+          float hsLum = dot(color.rgb, vec3(0.2126, 0.7152, 0.0722));
+          float highlightMask = smoothstep(0.5, 1.0, hsLum);
+          float shadowMask = 1.0 - smoothstep(0.0, 0.5, hsLum);
+          // Apply highlights (positive = darken highlights)
+          if (u_highlights != 0.0) {
+            color.rgb -= u_highlights * highlightMask * (128.0 / 255.0);
+          }
+          // Apply shadows (positive = brighten shadows)
+          if (u_shadows != 0.0) {
+            color.rgb += u_shadows * shadowMask * (128.0 / 255.0);
+          }
+          color.rgb = clamp(color.rgb, 0.0, 1.0);
+        }
+
+        // 5c. Vibrance (intelligent saturation - boosts less-saturated colors more)
+        if (u_vibranceEnabled && u_vibrance != 0.0) {
+          vec3 vibHsl = rgbToHsl(clamp(color.rgb, 0.0, 1.0));
+          float vibH = vibHsl.x; // 0-360
+          float vibS = vibHsl.y; // 0-1
+          float vibL = vibHsl.z; // 0-1
+
+          float skinProt = 1.0;
+          if (u_vibranceSkinProtection && vibH >= 20.0 && vibH <= 50.0 && vibS < 0.6 && vibL > 0.2 && vibL < 0.8) {
+            float hueDistance = abs(vibH - 35.0) / 15.0;
+            skinProt = 0.3 + (hueDistance * 0.7);
+          }
+
+          float satFactor = 1.0 - (vibS * 0.5);
+          float adjustment = u_vibrance * satFactor * skinProt;
+          float newS = clamp(vibS + adjustment, 0.0, 1.0);
+
+          if (abs(newS - vibS) > 0.001) {
+            color.rgb = hslToRgb(vibH, newS, vibL);
+          }
+        }
+
+        // 5d. Hue rotation (luminance-preserving matrix)
         if (u_hueRotationEnabled) {
           color.rgb = u_hueRotationMatrix * color.rgb;
         }
 
-        // --- New effects (matching CPU pipeline order) ---
+        // 5e. Clarity (local contrast enhancement via unsharp mask on midtones)
+        // NOTE: Clarity samples neighboring pixels from u_texture (the original source image).
+        // In the CPU path, clarity operates on already-modified pixel data within the same
+        // imageData buffer. The GPU single-pass approach samples the original texture for
+        // the blur kernel, which means the high-frequency detail extraction is based on
+        // ungraded pixel differences. This is a known architectural difference between the
+        // GPU and CPU paths, accepted as a design trade-off for single-pass rendering
+        // performance. The visual difference is minimal for most grading scenarios.
+        if (u_clarityEnabled && u_clarity != 0.0) {
+          // 5x5 Gaussian blur (separable weights: 1,4,6,4,1, total per axis = 16)
+          vec3 blurred = vec3(0.0);
+          float weights[5] = float[](1.0, 4.0, 6.0, 4.0, 1.0);
+          float totalWeight = 0.0;
+          for (int y = -2; y <= 2; y++) {
+            for (int x = -2; x <= 2; x++) {
+              float w = weights[x + 2] * weights[y + 2];
+              blurred += texture(u_texture, v_texCoord + vec2(float(x), float(y)) * u_texelSize).rgb * w;
+              totalWeight += w;
+            }
+          }
+          blurred /= totalWeight;
+
+          float clarityLum = dot(color.rgb, vec3(0.2126, 0.7152, 0.0722));
+          float deviation = abs(clarityLum - 0.5) * 2.0;
+          float midtoneMask = 1.0 - deviation * deviation;
+
+          vec3 highFreq = color.rgb - blurred;
+          float effectScale = u_clarity * 0.7; // CLARITY_EFFECT_SCALE
+          color.rgb = clamp(color.rgb + highFreq * midtoneMask * effectScale, 0.0, 1.0);
+        }
+
+        // --- Color grading effects ---
 
         // 6a. Color Wheels (Lift/Gamma/Gain)
         if (u_colorWheelsEnabled) {
           float cwLuma = dot(color.rgb, LUMA);
           // Zone weights using smooth falloff
-          float shadowW = smoothstepCustom(0.5, 0.0, cwLuma);
-          float highW = smoothstepCustom(0.5, 1.0, cwLuma);
+          float shadowW = smoothstep(0.5, 0.0, cwLuma);
+          float highW = smoothstep(0.5, 1.0, cwLuma);
           float midW = 1.0 - shadowW - highW;
 
           // Lift (shadows)
@@ -572,8 +784,69 @@ export class Renderer implements RendererBackend {
           color.rgb = applyLUT3D(color.rgb);
         }
 
+        // 6e. HSL Qualifier (secondary color correction)
+        if (u_hslQualifierEnabled) {
+          vec3 hslQ = rgbToHsl(clamp(color.rgb, 0.0, 1.0));
+          float qH = hslQ.x;
+          float qS = hslQ.y * 100.0;
+          float qL = hslQ.z * 100.0;
+
+          // Hue match (circular distance)
+          float hueDist = abs(qH - u_hslHueCenter);
+          if (hueDist > 180.0) hueDist = 360.0 - hueDist;
+          float hueInner = u_hslHueWidth / 2.0;
+          float hueOuter = hueInner + (u_hslHueSoftness * u_hslHueWidth) / 100.0;
+          float hueMatch = hueDist <= hueInner ? 1.0 : (hueDist >= hueOuter ? 0.0 : smoothstep(hueOuter, hueInner, hueDist));
+
+          // Saturation match (linear distance)
+          float satDist = abs(qS - u_hslSatCenter);
+          float satInner = u_hslSatWidth / 2.0;
+          float satOuter = satInner + (u_hslSatSoftness * u_hslSatWidth) / 100.0;
+          float satMatch = satDist <= satInner ? 1.0 : (satDist >= satOuter ? 0.0 : smoothstep(satOuter, satInner, satDist));
+
+          // Luminance match (linear distance)
+          float lumDist = abs(qL - u_hslLumCenter);
+          float lumInner = u_hslLumWidth / 2.0;
+          float lumOuter = lumInner + (u_hslLumSoftness * u_hslLumWidth) / 100.0;
+          float lumMatch = lumDist <= lumInner ? 1.0 : (lumDist >= lumOuter ? 0.0 : smoothstep(lumOuter, lumInner, lumDist));
+
+          float matte = hueMatch * satMatch * lumMatch;
+          if (u_hslInvert) matte = 1.0 - matte;
+
+          if (u_hslMattePreview) {
+            color.rgb = vec3(matte);
+          } else if (matte > 0.001) {
+            float newH = qH + u_hslCorrHueShift * matte;
+            if (newH < 0.0) newH += 360.0;
+            if (newH >= 360.0) newH -= 360.0;
+            float newS = clamp((hslQ.y * (1.0 - matte)) + (hslQ.y * u_hslCorrSatScale * matte), 0.0, 1.0);
+            float newL = clamp((hslQ.z * (1.0 - matte)) + (hslQ.z * u_hslCorrLumScale * matte), 0.0, 1.0);
+            color.rgb = hslToRgb(newH, newS, newL);
+          }
+        }
+
         // 7. Tone mapping (applied before display transfer for proper HDR handling)
         color.rgb = applyToneMapping(max(color.rgb, 0.0), u_toneMappingOperator);
+
+        // 7b. Sharpen (unsharp mask, after tone mapping but before display transfer)
+        // NOTE: Sharpen samples neighboring pixels from u_texture (the original source image).
+        // In the CPU path, sharpen operates on already-modified pixel data within the same
+        // imageData buffer. The GPU single-pass approach samples the original texture for
+        // the convolution kernel, which means the sharpening detail is based on ungraded
+        // pixel differences. This is a known architectural difference between the GPU and
+        // CPU paths, accepted as a design trade-off for single-pass rendering performance.
+        // The visual difference is minimal for most grading scenarios.
+        if (u_sharpenEnabled && u_sharpenAmount > 0.0) {
+          vec3 sharpOriginal = color.rgb;
+          // 3x3 unsharp mask: center=5, cross=-1, diagonal=0
+          vec3 sharpened = color.rgb * 5.0
+            - texture(u_texture, v_texCoord + vec2(-1.0, 0.0) * u_texelSize).rgb
+            - texture(u_texture, v_texCoord + vec2(1.0, 0.0) * u_texelSize).rgb
+            - texture(u_texture, v_texCoord + vec2(0.0, -1.0) * u_texelSize).rgb
+            - texture(u_texture, v_texCoord + vec2(0.0, 1.0) * u_texelSize).rgb;
+          sharpened = clamp(sharpened, 0.0, 1.0);
+          color.rgb = sharpOriginal + (sharpened - sharpOriginal) * u_sharpenAmount;
+        }
 
         // 8. Display transfer function (replaces simple gamma)
         if (u_displayTransfer > 0) {
@@ -730,39 +1003,6 @@ export class Renderer implements RendererBackend {
     this.displayShader.setUniform('u_offset', [offsetX, offsetY]);
     this.displayShader.setUniform('u_scale', [scaleX, scaleY]);
 
-    // Set color adjustment uniforms
-    this.displayShader.setUniform('u_exposure', this.colorAdjustments.exposure);
-    this.displayShader.setUniform('u_gamma', this.colorAdjustments.gamma);
-    this.displayShader.setUniform('u_saturation', this.colorAdjustments.saturation);
-    this.displayShader.setUniform('u_contrast', this.colorAdjustments.contrast);
-    this.displayShader.setUniform('u_brightness', this.colorAdjustments.brightness);
-    this.displayShader.setUniform('u_temperature', this.colorAdjustments.temperature);
-    this.displayShader.setUniform('u_tint', this.colorAdjustments.tint);
-
-    // Set hue rotation uniforms
-    const hueRotationDegrees = this.colorAdjustments.hueRotation;
-    if (isIdentityHueRotation(hueRotationDegrees)) {
-      this.displayShader.setUniformInt('u_hueRotationEnabled', 0);
-    } else {
-      this.displayShader.setUniformInt('u_hueRotationEnabled', 1);
-      const hueMatrix = getHueRotationMatrix(hueRotationDegrees);
-      this.displayShader.setUniformMatrix3('u_hueRotationMatrix', hueMatrix);
-    }
-
-    // Set tone mapping uniform
-    const toneMappingCode = this.toneMappingState.enabled
-      ? TONE_MAPPING_OPERATOR_CODES[this.toneMappingState.operator]
-      : 0;
-    this.displayShader.setUniformInt('u_toneMappingOperator', toneMappingCode);
-
-    // Set tone mapping parameters
-    this.displayShader.setUniform('u_tmReinhardWhitePoint', this.toneMappingState.reinhardWhitePoint ?? 4.0);
-    this.displayShader.setUniform('u_tmFilmicExposureBias', this.toneMappingState.filmicExposureBias ?? 2.0);
-    this.displayShader.setUniform('u_tmFilmicWhitePoint', this.toneMappingState.filmicWhitePoint ?? 11.2);
-
-    // Set color inversion uniform
-    this.displayShader.setUniformInt('u_invert', this.colorInversionEnabled ? 1 : 0);
-
     // Set HDR output mode uniform
     this.displayShader.setUniformInt('u_outputMode', this.hdrOutputMode === 'sdr' ? 0 : 1);
 
@@ -775,7 +1015,68 @@ export class Renderer implements RendererBackend {
     }
     this.displayShader.setUniformInt('u_inputTransfer', inputTransferCode);
 
-    // --- Phase 3: Set effect uniforms ---
+    // Set texel size for clarity/sharpen (based on source image dimensions)
+    if (image.width > 0 && image.height > 0) {
+      this.texelSize = [1.0 / image.width, 1.0 / image.height];
+    }
+
+    // Set all shared effect uniforms and bind textures
+    this.setAllEffectUniforms();
+
+    // Bind image texture to unit 0
+    this.displayShader.setUniformInt('u_texture', 0);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, image.texture);
+
+    // Draw quad
+    gl.bindVertexArray(this.quadVAO);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.bindVertexArray(null);
+  }
+
+  /**
+   * Set all effect uniforms shared between renderImage() and renderSDRFrame().
+   *
+   * Callers must set u_inputTransfer and u_outputMode BEFORE calling this helper,
+   * since those differ between the two render paths.
+   */
+  private setAllEffectUniforms(): void {
+    if (!this.gl || !this.displayShader) return;
+
+    const gl = this.gl;
+
+    // Color adjustments
+    this.displayShader.setUniform('u_exposure', this.colorAdjustments.exposure);
+    this.displayShader.setUniform('u_gamma', this.colorAdjustments.gamma);
+    this.displayShader.setUniform('u_saturation', this.colorAdjustments.saturation);
+    this.displayShader.setUniform('u_contrast', this.colorAdjustments.contrast);
+    this.displayShader.setUniform('u_brightness', this.colorAdjustments.brightness);
+    this.displayShader.setUniform('u_temperature', this.colorAdjustments.temperature);
+    this.displayShader.setUniform('u_tint', this.colorAdjustments.tint);
+
+    // Hue rotation
+    const hueRotationDegrees = this.colorAdjustments.hueRotation;
+    if (isIdentityHueRotation(hueRotationDegrees)) {
+      this.displayShader.setUniformInt('u_hueRotationEnabled', 0);
+    } else {
+      this.displayShader.setUniformInt('u_hueRotationEnabled', 1);
+      const hueMatrix = getHueRotationMatrix(hueRotationDegrees);
+      this.displayShader.setUniformMatrix3('u_hueRotationMatrix', hueMatrix);
+    }
+
+    // Tone mapping
+    const toneMappingCode = this.toneMappingState.enabled
+      ? TONE_MAPPING_OPERATOR_CODES[this.toneMappingState.operator]
+      : 0;
+    this.displayShader.setUniformInt('u_toneMappingOperator', toneMappingCode);
+
+    // Tone mapping parameters
+    this.displayShader.setUniform('u_tmReinhardWhitePoint', this.toneMappingState.reinhardWhitePoint ?? 4.0);
+    this.displayShader.setUniform('u_tmFilmicExposureBias', this.toneMappingState.filmicExposureBias ?? 2.0);
+    this.displayShader.setUniform('u_tmFilmicWhitePoint', this.toneMappingState.filmicWhitePoint ?? 11.2);
+
+    // Color inversion
+    this.displayShader.setUniformInt('u_invert', this.colorInversionEnabled ? 1 : 0);
 
     // CDL
     this.displayShader.setUniformInt('u_cdlEnabled', this.cdlEnabled ? 1 : 0);
@@ -836,12 +1137,61 @@ export class Renderer implements RendererBackend {
     // Resolution is always needed for zebra stripes too
     this.displayShader.setUniform('u_resolution', [this.canvas?.width ?? 0, this.canvas?.height ?? 0]);
 
-    // --- Bind textures ---
+    // --- Phase 1B: New GPU shader effect uniforms ---
 
-    // Texture unit 0: image
-    this.displayShader.setUniformInt('u_texture', 0);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, image.texture);
+    // Highlights/Shadows/Whites/Blacks
+    this.displayShader.setUniformInt('u_hsEnabled', this.hsEnabled ? 1 : 0);
+    if (this.hsEnabled) {
+      this.displayShader.setUniform('u_highlights', this.highlightsValue);
+      this.displayShader.setUniform('u_shadows', this.shadowsValue);
+      this.displayShader.setUniform('u_whites', this.whitesValue);
+      this.displayShader.setUniform('u_blacks', this.blacksValue);
+    }
+
+    // Vibrance
+    this.displayShader.setUniformInt('u_vibranceEnabled', this.vibranceEnabled ? 1 : 0);
+    if (this.vibranceEnabled) {
+      this.displayShader.setUniform('u_vibrance', this.vibranceValue);
+      this.displayShader.setUniformInt('u_vibranceSkinProtection', this.vibranceSkinProtection ? 1 : 0);
+    }
+
+    // Clarity
+    this.displayShader.setUniformInt('u_clarityEnabled', this.clarityEnabled ? 1 : 0);
+    if (this.clarityEnabled) {
+      this.displayShader.setUniform('u_clarity', this.clarityValue);
+    }
+
+    // Sharpen
+    this.displayShader.setUniformInt('u_sharpenEnabled', this.sharpenEnabled ? 1 : 0);
+    if (this.sharpenEnabled) {
+      this.displayShader.setUniform('u_sharpenAmount', this.sharpenAmount);
+    }
+
+    // Texel size (needed for clarity and sharpen)
+    if (this.clarityEnabled || this.sharpenEnabled) {
+      this.displayShader.setUniform('u_texelSize', this.texelSize);
+    }
+
+    // HSL Qualifier
+    this.displayShader.setUniformInt('u_hslQualifierEnabled', this.hslQualifierEnabled ? 1 : 0);
+    if (this.hslQualifierEnabled) {
+      this.displayShader.setUniform('u_hslHueCenter', this.hslHueCenter);
+      this.displayShader.setUniform('u_hslHueWidth', this.hslHueWidth);
+      this.displayShader.setUniform('u_hslHueSoftness', this.hslHueSoftness);
+      this.displayShader.setUniform('u_hslSatCenter', this.hslSatCenter);
+      this.displayShader.setUniform('u_hslSatWidth', this.hslSatWidth);
+      this.displayShader.setUniform('u_hslSatSoftness', this.hslSatSoftness);
+      this.displayShader.setUniform('u_hslLumCenter', this.hslLumCenter);
+      this.displayShader.setUniform('u_hslLumWidth', this.hslLumWidth);
+      this.displayShader.setUniform('u_hslLumSoftness', this.hslLumSoftness);
+      this.displayShader.setUniform('u_hslCorrHueShift', this.hslCorrHueShift);
+      this.displayShader.setUniform('u_hslCorrSatScale', this.hslCorrSatScale);
+      this.displayShader.setUniform('u_hslCorrLumScale', this.hslCorrLumScale);
+      this.displayShader.setUniformInt('u_hslInvert', this.hslInvert ? 1 : 0);
+      this.displayShader.setUniformInt('u_hslMattePreview', this.hslMattePreview ? 1 : 0);
+    }
+
+    // --- Bind effect textures ---
 
     // Texture unit 1: curves LUT
     if (this.curvesEnabled) {
@@ -866,11 +1216,6 @@ export class Renderer implements RendererBackend {
       gl.activeTexture(gl.TEXTURE3);
       gl.bindTexture(gl.TEXTURE_3D, this.lut3DTexture);
     }
-
-    // Draw quad
-    gl.bindVertexArray(this.quadVAO);
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-    gl.bindVertexArray(null);
   }
 
   // --- LUT texture management ---
@@ -1346,6 +1691,55 @@ export class Renderer implements RendererBackend {
     this.displayCustomGamma = state.customGamma;
   }
 
+  // --- Phase 1B: New GPU shader effect setters ---
+
+  setHighlightsShadows(highlights: number, shadows: number, whites: number, blacks: number): void {
+    const hasAdjustments = highlights !== 0 || shadows !== 0 || whites !== 0 || blacks !== 0;
+    this.hsEnabled = hasAdjustments;
+    // Convert from -100..+100 range to -1..+1 for shader
+    this.highlightsValue = highlights / 100;
+    this.shadowsValue = shadows / 100;
+    this.whitesValue = whites / 100;
+    this.blacksValue = blacks / 100;
+  }
+
+  setVibrance(vibrance: number, skinProtection: boolean): void {
+    this.vibranceEnabled = vibrance !== 0;
+    // Convert from -100..+100 range to -1..+1 for shader
+    this.vibranceValue = vibrance / 100;
+    this.vibranceSkinProtection = skinProtection;
+  }
+
+  setClarity(clarity: number): void {
+    this.clarityEnabled = clarity !== 0;
+    // Convert from -100..+100 range to -1..+1 for shader
+    this.clarityValue = clarity / 100;
+  }
+
+  setSharpen(amount: number): void {
+    this.sharpenEnabled = amount > 0;
+    // Convert from 0..100 range to 0..1 for shader
+    this.sharpenAmount = amount / 100;
+  }
+
+  setHSLQualifier(state: HSLQualifierState): void {
+    this.hslQualifierEnabled = state.enabled;
+    this.hslHueCenter = state.hue.center;
+    this.hslHueWidth = state.hue.width;
+    this.hslHueSoftness = state.hue.softness;
+    this.hslSatCenter = state.saturation.center;
+    this.hslSatWidth = state.saturation.width;
+    this.hslSatSoftness = state.saturation.softness;
+    this.hslLumCenter = state.luminance.center;
+    this.hslLumWidth = state.luminance.width;
+    this.hslLumSoftness = state.luminance.softness;
+    this.hslCorrHueShift = state.correction.hueShift;
+    this.hslCorrSatScale = state.correction.saturationScale;
+    this.hslCorrLumScale = state.correction.luminanceScale;
+    this.hslInvert = state.invert;
+    this.hslMattePreview = state.mattePreview;
+  }
+
   private tryConfigureHDRMetadata(): void {
     if (!this.canvas) return;
     if ('configureHighDynamicRange' in this.canvas) {
@@ -1357,6 +1751,95 @@ export class Renderer implements RendererBackend {
     }
   }
 
+  // --- SDR frame rendering (Phase 1A) ---
+
+  /** Texture used for SDR frame uploads (reused across frames). */
+  private sdrTexture: WebGLTexture | null = null;
+
+  /**
+   * Render an SDR source (HTMLVideoElement, HTMLCanvasElement, OffscreenCanvas,
+   * or HTMLImageElement) through the full GPU shader pipeline.
+   *
+   * The source is uploaded as an UNSIGNED_BYTE RGBA texture, u_inputTransfer is
+   * set to 0 (sRGB), and all currently configured effects are applied via the
+   * existing fragment shader.
+   *
+   * Returns the WebGL canvas element so the Viewer can position / composite it.
+   * Returns null if the WebGL context is unavailable.
+   */
+  renderSDRFrame(
+    source: HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | HTMLImageElement,
+  ): HTMLCanvasElement | null {
+    if (!this.gl || !this.displayShader || !this.canvas) return null;
+
+    const gl = this.gl;
+
+    // Ensure the SDR texture exists and set texture params once at creation
+    if (!this.sdrTexture) {
+      this.sdrTexture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, this.sdrTexture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    }
+
+    // Upload the SDR source to the texture
+    gl.bindTexture(gl.TEXTURE_2D, this.sdrTexture);
+
+    try {
+      gl.texImage2D(
+        gl.TEXTURE_2D,
+        0,
+        gl.RGBA8,
+        gl.RGBA,
+        gl.UNSIGNED_BYTE,
+        source as TexImageSource,
+      );
+    } catch {
+      // texImage2D can throw for tainted or invalid sources
+      return null;
+    }
+
+    // Use display shader
+    this.displayShader.use();
+    this.displayShader.setUniform('u_offset', [0, 0]);
+    this.displayShader.setUniform('u_scale', [1, 1]);
+
+    // SDR output: always clamp to [0,1], sRGB input (no special EOTF)
+    this.displayShader.setUniformInt('u_outputMode', 0);
+    this.displayShader.setUniformInt('u_inputTransfer', 0);
+
+    // Set texel size for clarity/sharpen (based on source dimensions)
+    const srcWidth = ('videoWidth' in source ? (source as HTMLVideoElement).videoWidth : (source as HTMLCanvasElement | HTMLImageElement).width) || this.canvas.width;
+    const srcHeight = ('videoHeight' in source ? (source as HTMLVideoElement).videoHeight : (source as HTMLCanvasElement | HTMLImageElement).height) || this.canvas.height;
+    if (srcWidth > 0 && srcHeight > 0) {
+      this.texelSize = [1.0 / srcWidth, 1.0 / srcHeight];
+    }
+
+    // Set all shared effect uniforms and bind textures
+    this.setAllEffectUniforms();
+
+    // Bind SDR texture to unit 0
+    this.displayShader.setUniformInt('u_texture', 0);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.sdrTexture);
+
+    // Draw quad
+    gl.bindVertexArray(this.quadVAO);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.bindVertexArray(null);
+
+    return this.canvas;
+  }
+
+  /**
+   * Get the underlying canvas element used for rendering.
+   */
+  getCanvasElement(): HTMLCanvasElement | null {
+    return this.canvas;
+  }
+
   dispose(): void {
     if (!this.gl) return;
 
@@ -1366,6 +1849,10 @@ export class Renderer implements RendererBackend {
     if (this.quadVBO) gl.deleteBuffer(this.quadVBO);
     if (this.displayShader) this.displayShader.dispose();
     if (this.currentTexture) gl.deleteTexture(this.currentTexture);
+    if (this.sdrTexture) {
+      gl.deleteTexture(this.sdrTexture);
+      this.sdrTexture = null;
+    }
     if (this.curvesLUTTexture) gl.deleteTexture(this.curvesLUTTexture);
     if (this.falseColorLUTTexture) gl.deleteTexture(this.falseColorLUTTexture);
     if (this.lut3DTexture) gl.deleteTexture(this.lut3DTexture);

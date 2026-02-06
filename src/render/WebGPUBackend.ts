@@ -27,6 +27,7 @@ import type { ZebraState } from '../ui/components/ZebraStripes';
 import type { BackgroundPatternState } from '../ui/components/BackgroundPatternControl';
 import type { CurveLUTs } from '../color/ColorCurves';
 import type { ChannelMode } from '../ui/components/ChannelSelect';
+import type { HSLQualifierState } from '../ui/components/HSLQualifier';
 
 // ---------------------------------------------------------------------------
 // WebGPU type shims (experimental API, not in TS DOM lib)
@@ -302,4 +303,23 @@ export class WebGPUBackend implements RendererBackend {
 
   // --- Display color management ---
   setDisplayColorState(_state: { transferFunction: number; displayGamma: number; displayBrightness: number; customGamma: number }): void { /* STUB */ }
+
+  // --- Phase 1B: New GPU shader effects (stubs) ---
+  setHighlightsShadows(_highlights: number, _shadows: number, _whites: number, _blacks: number): void { /* STUB */ }
+  setVibrance(_vibrance: number, _skinProtection: boolean): void { /* STUB */ }
+  setClarity(_clarity: number): void { /* STUB */ }
+  setSharpen(_amount: number): void { /* STUB */ }
+  setHSLQualifier(_state: HSLQualifierState): void { /* STUB */ }
+
+  // --- SDR frame rendering (Phase 1A) ---
+  renderSDRFrame(
+    _source: HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | HTMLImageElement,
+  ): HTMLCanvasElement | null {
+    // STUB: WebGPU SDR rendering not yet implemented
+    return null;
+  }
+
+  getCanvasElement(): HTMLCanvasElement | null {
+    return this.canvas;
+  }
 }
