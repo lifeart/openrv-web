@@ -868,6 +868,18 @@ export class App {
           processor.setSourceInputColorSpace(sourceId, detectedFromExt);
         }
       }
+      // Auto-configure display pipeline for HDR content.
+      // Always set ACES + gamma 2.2 as the SDR tone-mapped baseline.
+      // If the WebGL renderer achieves true HDR output (rec2100-hlg/pq),
+      // renderHDRWithWebGL() will override these with linear passthrough.
+      const isHDR = source?.fileSourceNode?.isHDR?.() || source?.videoSourceNode?.isHDR?.();
+      if (isHDR) {
+        const formatName = source?.fileSourceNode?.formatName ?? 'unknown';
+        console.log(`[HDR] Detected HDR content (format: ${formatName}), applying ACES + gamma 2.2`);
+        this.toneMappingControl.setState({ enabled: true, operator: 'aces' });
+        this.colorControls.setAdjustments({ gamma: 2.2 });
+      }
+
       // GTO store and stack updates
       if (!this.session.gtoData) {
         this.gtoStore = null;

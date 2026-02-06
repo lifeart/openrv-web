@@ -448,6 +448,158 @@ describe('IPImage', () => {
     });
   });
 
+  describe('videoFrame support', () => {
+    it('defaults videoFrame to null when not provided', () => {
+      const image = new IPImage({
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'uint8',
+      });
+
+      expect(image.videoFrame).toBeNull();
+    });
+
+    it('stores videoFrame when provided', () => {
+      // Create a mock VideoFrame-like object
+      const mockVideoFrame = {
+        displayWidth: 1920,
+        displayHeight: 1080,
+        close: () => {},
+      } as unknown as VideoFrame;
+
+      const image = new IPImage({
+        width: 1920,
+        height: 1080,
+        channels: 4,
+        dataType: 'float32',
+        videoFrame: mockVideoFrame,
+      });
+
+      expect(image.videoFrame).toBe(mockVideoFrame);
+    });
+
+    it('close() releases videoFrame', () => {
+      let closeCalled = false;
+      const mockVideoFrame = {
+        displayWidth: 1920,
+        displayHeight: 1080,
+        close: () => { closeCalled = true; },
+      } as unknown as VideoFrame;
+
+      const image = new IPImage({
+        width: 1920,
+        height: 1080,
+        channels: 4,
+        dataType: 'float32',
+        videoFrame: mockVideoFrame,
+      });
+
+      expect(image.videoFrame).not.toBeNull();
+      image.close();
+      expect(closeCalled).toBe(true);
+      expect(image.videoFrame).toBeNull();
+    });
+
+    it('close() is safe to call when no videoFrame', () => {
+      const image = new IPImage({
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'uint8',
+      });
+
+      // Should not throw
+      image.close();
+      expect(image.videoFrame).toBeNull();
+    });
+
+    it('close() handles already-closed videoFrame gracefully', () => {
+      const mockVideoFrame = {
+        displayWidth: 10,
+        displayHeight: 10,
+        close: () => { throw new Error('Already closed'); },
+      } as unknown as VideoFrame;
+
+      const image = new IPImage({
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'float32',
+        videoFrame: mockVideoFrame,
+      });
+
+      // Should not throw
+      image.close();
+      expect(image.videoFrame).toBeNull();
+    });
+
+    it('clone does not copy videoFrame (not cloneable)', () => {
+      const mockVideoFrame = {
+        displayWidth: 10,
+        displayHeight: 10,
+        close: () => {},
+      } as unknown as VideoFrame;
+
+      const image = new IPImage({
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'float32',
+        videoFrame: mockVideoFrame,
+      });
+
+      const cloned = image.clone();
+      // Clone should not carry the VideoFrame (it's a GPU resource)
+      expect(cloned.videoFrame).toBeNull();
+    });
+  });
+
+  describe('HDR metadata', () => {
+    it('stores transferFunction in metadata', () => {
+      const image = new IPImage({
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'float32',
+        metadata: {
+          transferFunction: 'hlg',
+          colorPrimaries: 'bt2020',
+        },
+      });
+
+      expect(image.metadata.transferFunction).toBe('hlg');
+      expect(image.metadata.colorPrimaries).toBe('bt2020');
+    });
+
+    it('supports pq transfer function', () => {
+      const image = new IPImage({
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'float32',
+        metadata: {
+          transferFunction: 'pq',
+          colorPrimaries: 'bt2020',
+        },
+      });
+
+      expect(image.metadata.transferFunction).toBe('pq');
+    });
+
+    it('defaults to no transferFunction', () => {
+      const image = new IPImage({
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'uint8',
+      });
+
+      expect(image.metadata.transferFunction).toBeUndefined();
+      expect(image.metadata.colorPrimaries).toBeUndefined();
+    });
+  });
+
   describe('edge cases', () => {
     it('handles 1x1 image', () => {
       const image = new IPImage({

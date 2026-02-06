@@ -21,6 +21,12 @@ import { ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from '../ui/components/Co
 import { ToneMappingState, DEFAULT_TONE_MAPPING_STATE } from '../ui/components/ToneMappingControl';
 import type { DisplayCapabilities } from '../color/DisplayCapabilities';
 import type { RendererBackend, TextureHandle } from './RendererBackend';
+import type { CDLValues } from '../color/CDL';
+import type { ColorWheelsState } from '../ui/components/ColorWheels';
+import type { ZebraState } from '../ui/components/ZebraStripes';
+import type { BackgroundPatternState } from '../ui/components/BackgroundPatternControl';
+import type { CurveLUTs } from '../color/ColorCurves';
+import type { ChannelMode } from '../ui/components/ChannelSelect';
 
 // ---------------------------------------------------------------------------
 // WebGPU type shims (experimental API, not in TS DOM lib)
@@ -279,4 +285,15 @@ export class WebGPUBackend implements RendererBackend {
   hasExtendedToneMapping(): boolean {
     return this.extendedToneMapping;
   }
+
+  // --- HDR effects stubs (Phase 1-3: not yet implemented for WebGPU) ---
+
+  setBackgroundPattern(_state: BackgroundPatternState): void { /* STUB */ }
+  readPixelFloat(_x: number, _y: number, _width: number, _height: number): Float32Array | null { return null; }
+  setCDL(_cdl: CDLValues): void { /* STUB */ }
+  setCurvesLUT(_luts: CurveLUTs | null): void { /* STUB */ }
+  setColorWheels(_state: ColorWheelsState): void { /* STUB */ }
+  setFalseColor(_enabled: boolean, _lut: Uint8Array | null): void { /* STUB */ }
+  setZebraStripes(_state: ZebraState): void { /* STUB */ }
+  setChannelMode(_mode: ChannelMode): void { /* STUB */ }
 }

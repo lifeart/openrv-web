@@ -34,6 +34,10 @@ export interface DisplayCapabilities {
   webgpuAvailable: boolean;
   webgpuHDR: boolean;         // webgpuHDR requires async adapter request, deferred to Phase 4
 
+  // VideoFrame
+  /** True if VideoFrame API is available (for HDR video texImage2D upload) */
+  videoFrameTexImage: boolean;
+
   // Derived
   activeColorSpace: 'srgb' | 'display-p3';
   activeHDRMode: 'sdr' | 'hlg' | 'pq' | 'none';
@@ -60,6 +64,8 @@ export const DEFAULT_CAPABILITIES: DisplayCapabilities = {
 
   webgpuAvailable: false,
   webgpuHDR: false,
+
+  videoFrameTexImage: false,
 
   activeColorSpace: 'srgb',
   activeHDRMode: 'sdr',
@@ -127,6 +133,9 @@ export function detectDisplayCapabilities(): DisplayCapabilities {
   } catch { /* stays false */ }
 
   // --- WebGL2 P3, HLG, and PQ support (single context) ---
+  // Note: HLG/PQ detection on detached canvases may report false even
+  // when the live DOM canvas supports them. The Viewer tries again on
+  // the real canvas at render time. displayHDR (matchMedia) is reliable.
   try {
     const c = document.createElement('canvas');
     c.width = c.height = 1;
@@ -162,13 +171,34 @@ export function detectDisplayCapabilities(): DisplayCapabilities {
     caps.webgpuAvailable = typeof navigator !== 'undefined' && 'gpu' in navigator;
   } catch { /* stays false */ }
 
+  // --- VideoFrame availability ---
+  try {
+    caps.videoFrameTexImage = typeof VideoFrame !== 'undefined';
+  } catch { /* stays false */ }
+
   // --- Derived: activeColorSpace ---
   // Use P3 if both the display supports it and the canvas/webgl can output it
   if (caps.webglP3 && (caps.displayGamut === 'p3' || caps.displayGamut === 'rec2020')) {
     caps.activeColorSpace = 'display-p3';
   }
 
-  // activeHDRMode stays 'sdr' in Phase 1
+  // Derive activeHDRMode based on detected capabilities
+  if (caps.webglHLG) {
+    caps.activeHDRMode = 'hlg';
+  } else if (caps.webglPQ) {
+    caps.activeHDRMode = 'pq';
+  }
+
+  console.log('[DisplayCapabilities]', {
+    displayGamut: caps.displayGamut,
+    displayHDR: caps.displayHDR,
+    webglP3: caps.webglP3,
+    webglHLG: caps.webglHLG,
+    webglPQ: caps.webglPQ,
+    canvasHLG: caps.canvasHLG,
+    canvasFloat16: caps.canvasFloat16,
+    activeHDRMode: caps.activeHDRMode,
+  });
 
   return caps;
 }

@@ -12,7 +12,7 @@ import { WebGLLUTProcessor } from '../../color/WebGLLUT';
 import { LUTPipeline } from '../../color/pipeline/LUTPipeline';
 import { GPULUTChain } from '../../color/pipeline/GPULUTChain';
 import { CDLValues, DEFAULT_CDL, isDefaultCDL, applyCDLToImageData } from '../../color/CDL';
-import { ColorCurvesData, createDefaultCurvesData, isDefaultCurves, CurveLUTCache } from '../../color/ColorCurves';
+import { ColorCurvesData, createDefaultCurvesData, isDefaultCurves, CurveLUTCache, buildAllCurveLUTs } from '../../color/ColorCurves';
 import { LensDistortionParams, DEFAULT_LENS_PARAMS, isDefaultLensParams, applyLensDistortion } from '../../transform/LensDistortion';
 import { ExportFormat, exportCanvas as doExportCanvas, copyCanvasToClipboard } from '../../utils/FrameExporter';
 import { filterImageFiles, getBestSequence } from '../../utils/SequenceLoader';
@@ -43,6 +43,8 @@ import { getSharedOCIOProcessor } from '../../color/OCIOProcessor';
 import { DisplayColorState, DEFAULT_DISPLAY_COLOR_STATE, applyDisplayColorManagementToImageData, isDisplayStateActive } from '../../color/DisplayTransfer';
 import type { DisplayCapabilities } from '../../color/DisplayCapabilities';
 import { safeCanvasContext2D } from '../../color/SafeCanvasContext';
+import { Renderer } from '../../render/Renderer';
+import type { IPImage } from '../../core/image/Image';
 
 // Extracted effect processing utilities
 import { applyHighlightsShadows, applyVibrance, applyClarity, applySharpenCPU, applyToneMapping } from './ViewerEffects';
@@ -363,6 +365,11 @@ export class Viewer {
   private capabilities: DisplayCapabilities | undefined;
   private canvasColorSpace: 'display-p3' | undefined;
 
+  // WebGL HDR rendering
+  private glCanvas: HTMLCanvasElement | null = null;
+  private glRenderer: Renderer | null = null;
+  private hdrRenderActive = false;
+
   constructor(session: Session, paintEngine: PaintEngine, capabilities?: DisplayCapabilities) {
     this.capabilities = capabilities;
     this.canvasColorSpace = this.capabilities?.canvasP3 ? 'display-p3' : undefined;
@@ -403,6 +410,11 @@ export class Viewer {
       background: #000;
     `;
     this.canvasContainer.appendChild(this.imageCanvas);
+
+    // Create WebGL canvas for HDR rendering (between image canvas and paint canvas)
+    this.glCanvas = document.createElement('canvas');
+    this.glCanvas.style.cssText = 'position:absolute;top:0;left:0;display:none;';
+    this.canvasContainer.appendChild(this.glCanvas);
 
     // Create paint canvas (top layer, overlaid)
     this.paintCanvas = document.createElement('canvas');
@@ -659,6 +671,11 @@ export class Viewer {
       resetCanvasFromHiDPI(this.cropOverlay, this.cropCtx, width, height);
     }
 
+    // Resize WebGL canvas if HDR mode is active
+    if (this.glCanvas && this.hdrRenderActive && this.glRenderer) {
+      this.glRenderer.resize(width, height);
+    }
+
     this.updateOverlayDimensions();
     this.updateCanvasPosition();
   }
@@ -785,7 +802,54 @@ export class Viewer {
       return;
     }
 
-    // Single pixel read, shared by both consumers
+    // HDR path: use WebGL readPixelFloat for accurate HDR values
+    if (this.hdrRenderActive && this.glRenderer) {
+      const sampleSize = this.pixelProbe.getSampleSize();
+      const halfSize = Math.floor(sampleSize / 2);
+      const rx = Math.max(0, Math.floor(position.x) - halfSize);
+      const ry = Math.max(0, Math.floor(position.y) - halfSize);
+      const rw = Math.min(sampleSize, this.displayWidth - rx);
+      const rh = Math.min(sampleSize, this.displayHeight - ry);
+      const pixels = this.glRenderer.readPixelFloat(rx, ry, rw, rh);
+
+      if (probeEnabled) {
+        if (pixels && pixels.length >= 4) {
+          // Average all pixels in the sample area
+          const count = rw * rh;
+          let tr = 0, tg = 0, tb = 0, ta = 0;
+          for (let i = 0; i < count; i++) {
+            tr += pixels[i * 4]!;
+            tg += pixels[i * 4 + 1]!;
+            tb += pixels[i * 4 + 2]!;
+            ta += pixels[i * 4 + 3]!;
+          }
+          this.pixelProbe.updateFromHDRValues(
+            position.x, position.y,
+            tr / count, tg / count, tb / count, ta / count,
+            this.displayWidth, this.displayHeight
+          );
+        }
+        this.pixelProbe.setOverlayPosition(e.clientX, e.clientY);
+      }
+
+      if (cursorColorEnabled) {
+        if (pixels && pixels.length >= 4) {
+          // Use center pixel for cursor color
+          const centerIdx = (Math.floor(rh / 2) * rw + Math.floor(rw / 2)) * 4;
+          const color = {
+            r: Math.round(Math.max(0, Math.min(255, pixels[centerIdx]! * 255))),
+            g: Math.round(Math.max(0, Math.min(255, pixels[centerIdx + 1]! * 255))),
+            b: Math.round(Math.max(0, Math.min(255, pixels[centerIdx + 2]! * 255))),
+          };
+          this.cursorColorCallback!(color, position);
+        } else {
+          this.cursorColorCallback!(null, null);
+        }
+      }
+      return;
+    }
+
+    // SDR path: read from 2D canvas
     const imageData = this.getImageData();
 
     // Dispatch to probe consumer
@@ -1534,8 +1598,101 @@ export class Viewer {
     this.renderCropOverlay();
   }
 
+  private ensureGLRenderer(): Renderer | null {
+    if (this.glRenderer) return this.glRenderer;
+    if (!this.glCanvas) return null;
+    try {
+      const renderer = new Renderer();
+      // initialize() sets drawingBufferColorSpace to rec2100-hlg/pq immediately
+      // after context creation (before shaders/buffers) when displayHDR is true.
+      renderer.initialize(this.glCanvas, this.capabilities);
+      const hdrMode = renderer.getHDROutputMode();
+      console.log(`[Viewer] WebGL renderer initialized, HDR output: ${hdrMode}`);
+      this.glRenderer = renderer;
+      return renderer;
+    } catch (e) {
+      console.warn('[Viewer] WebGL renderer init failed:', e);
+      return null;
+    }
+  }
+
+  private renderHDRWithWebGL(
+    image: IPImage,
+    displayWidth: number,
+    displayHeight: number,
+  ): boolean {
+    const renderer = this.ensureGLRenderer();
+    if (!renderer || !this.glCanvas) return false;
+
+    // Activate WebGL canvas
+    if (!this.hdrRenderActive) {
+      this.glCanvas.style.display = 'block';
+      this.imageCanvas.style.visibility = 'hidden';
+      this.hdrRenderActive = true;
+    }
+
+    // Resize if needed
+    if (this.glCanvas.width !== displayWidth || this.glCanvas.height !== displayHeight) {
+      renderer.resize(displayWidth, displayHeight);
+    }
+
+    // Sync state from Viewer → Renderer
+    const isHDROutput = renderer.getHDROutputMode() !== 'sdr';
+    if (isHDROutput) {
+      // HDR output: values > 1.0 pass through to the rec2100-hlg/pq drawing buffer.
+      // - No tone mapping: the HDR display handles the extended luminance range
+      // - Gamma = 1 (linear): the browser applies the HLG/PQ OETF automatically
+      // Other adjustments (exposure, temperature, saturation, etc.) still apply.
+      renderer.setColorAdjustments({ ...this.colorAdjustments, gamma: 1 });
+      renderer.setToneMappingState({ enabled: false, operator: 'off' });
+    } else {
+      // SDR output: tone mapping compresses HDR→SDR, gamma encodes linear→sRGB
+      renderer.setColorAdjustments(this.colorAdjustments);
+      renderer.setToneMappingState(this.toneMappingState);
+    }
+    renderer.setColorInversion(this.colorInversionEnabled);
+
+    // Sync background pattern
+    renderer.setBackgroundPattern(this.backgroundPatternState);
+
+    // Sync 2D effects into GPU shader
+    renderer.setCDL(this.cdlValues);
+    renderer.setCurvesLUT(isDefaultCurves(this.curvesData) ? null : buildAllCurveLUTs(this.curvesData));
+    renderer.setColorWheels(this.colorWheels.getState());
+    renderer.setFalseColor(this.falseColor.isEnabled(), this.falseColor.getColorLUT());
+    renderer.setZebraStripes(this.zebraStripes.getState());
+    renderer.setChannelMode(this.channelMode);
+
+    // Render
+    renderer.clear(0, 0, 0, 1);
+    renderer.renderImage(image, 0, 0, 1, 1);
+
+    // CSS transform for rotation/flip
+    const { rotation, flipH, flipV } = this.transform;
+    const transforms: string[] = [];
+    if (rotation) transforms.push(`rotate(${rotation}deg)`);
+    if (flipH) transforms.push('scaleX(-1)');
+    if (flipV) transforms.push('scaleY(-1)');
+    this.glCanvas.style.transform = transforms.length ? transforms.join(' ') : '';
+
+    return true;
+  }
+
+  private deactivateHDRMode(): void {
+    if (!this.glCanvas) return;
+    this.glCanvas.style.display = 'none';
+    this.imageCanvas.style.visibility = 'visible';
+    this.hdrRenderActive = false;
+  }
+
   private renderImage(): void {
     const source = this.session.currentSource;
+
+    // Deactivate HDR mode if current source isn't HDR
+    const isCurrentHDR = source?.fileSourceNode?.isHDR() === true;
+    if (this.hdrRenderActive && !isCurrentHDR) {
+      this.deactivateHDRMode();
+    }
 
     // Get container size (cached per frame)
     const containerRect = this.getContainerRect();
@@ -1620,14 +1777,20 @@ export class Viewer {
         }
       }
     } else if (source?.fileSourceNode) {
-      // EXR file loaded through FileSourceNode
-      element = source.fileSourceNode.getCanvas() ?? undefined;
+      // HDR files: prefer WebGL rendering path (handled below after display dimensions are computed)
+      // Set canvas fallback in case WebGL path fails or source isn't HDR
+      if (!source.fileSourceNode.isHDR()) {
+        element = source.fileSourceNode.getCanvas() ?? undefined;
+      }
+      // For HDR: element stays undefined here; we intercept after displayWidth/Height are calculated
     } else {
       // Fallback: use HTMLVideoElement directly (no mediabunny)
       element = source?.element;
     }
 
-    if (!source || !element) {
+    // HDR sources may have no element (they render via WebGL); treat them as valid
+    const hdrFileSource = source?.fileSourceNode?.isHDR() ? source.fileSourceNode : null;
+    if (!source || (!element && !hdrFileSource)) {
       // Placeholder mode
       this.sourceWidth = 640;
       this.sourceHeight = 360;
@@ -1687,6 +1850,24 @@ export class Viewer {
     // Update canvas size if needed
     if (this.displayWidth !== displayWidth || this.displayHeight !== displayHeight) {
       this.setCanvasSize(displayWidth, displayHeight);
+    }
+
+    // HDR WebGL rendering path: render via GPU shader pipeline and skip 2D canvas
+    if (hdrFileSource) {
+      const ipImage = hdrFileSource.getIPImage();
+      if (ipImage && this.renderHDRWithWebGL(ipImage, displayWidth, displayHeight)) {
+        this.updateCanvasPosition();
+        this.updateWipeLine();
+        return; // HDR path complete, skip 2D
+      }
+      // WebGL failed — fall back to 2D canvas
+      element = hdrFileSource.getCanvas() ?? undefined;
+      if (!element) {
+        this.drawPlaceholder();
+        this.updateCanvasPosition();
+        this.updateWipeLine();
+        return;
+      }
     }
 
     // Clear canvas
@@ -2107,6 +2288,9 @@ export class Viewer {
 
   setColorAdjustments(adjustments: ColorAdjustments): void {
     this.colorAdjustments = { ...adjustments };
+    if (this.glRenderer) {
+      this.glRenderer.setColorAdjustments(adjustments);
+    }
     this.applyColorFilters();
     this.notifyEffectsChanged();
     this.scheduleRender();
@@ -2127,6 +2311,9 @@ export class Viewer {
   setColorInversion(enabled: boolean): void {
     if (this.colorInversionEnabled === enabled) return;
     this.colorInversionEnabled = enabled;
+    if (this.glRenderer) {
+      this.glRenderer.setColorInversion(enabled);
+    }
     this.notifyEffectsChanged();
     this.scheduleRender();
   }
@@ -2806,6 +2993,9 @@ export class Viewer {
   // Tone mapping methods
   setToneMappingState(state: ToneMappingState): void {
     this.toneMappingState = { ...state };
+    if (this.glRenderer) {
+      this.glRenderer.setToneMappingState(state);
+    }
     this.notifyEffectsChanged();
     this.scheduleRender();
   }
@@ -2822,10 +3012,9 @@ export class Viewer {
 
   // HDR output mode (delegates to renderer when available)
   setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq'): void {
-    // Store mode for reference; the renderer handles the actual WebGL state.
-    // This is a no-op in the 2D canvas Viewer but keeps the API surface consistent
-    // so App.ts can call viewer.setHDROutputMode(mode) uniformly.
-    void mode;
+    if (this.glRenderer && this.capabilities) {
+      this.glRenderer.setHDROutputMode(mode, this.capabilities);
+    }
   }
 
   // Pixel Aspect Ratio methods
@@ -3724,6 +3913,11 @@ export class Viewer {
   }
 
   private applyColorFilters(): void {
+    if (this.hdrRenderActive) {
+      // In HDR mode, CSS filters are skipped — the WebGL shader handles all adjustments
+      this.canvasContainer.style.filter = 'none';
+      return;
+    }
     const filterString = buildContainerFilterString(this.colorAdjustments, this.filterSettings.blur);
     this.canvasContainer.style.filter = filterString;
   }
@@ -3964,6 +4158,13 @@ export class Viewer {
     this.cropDragStart = null;
     this.cropDragPointerId = null;
     this.cropRegionChangedCallback = null;
+
+    // Cleanup WebGL HDR renderer
+    if (this.glRenderer) {
+      this.glRenderer.dispose();
+      this.glRenderer = null;
+    }
+    this.glCanvas = null;
 
     // Cleanup wipe elements
     this.wipeElements = null;

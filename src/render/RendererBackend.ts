@@ -10,6 +10,12 @@ import type { IPImage } from '../core/image/Image';
 import type { ColorAdjustments } from '../ui/components/ColorControls';
 import type { ToneMappingState } from '../ui/components/ToneMappingControl';
 import type { DisplayCapabilities } from '../color/DisplayCapabilities';
+import type { CDLValues } from '../color/CDL';
+import type { ColorWheelsState } from '../ui/components/ColorWheels';
+import type { ZebraState } from '../ui/components/ZebraStripes';
+import type { BackgroundPatternState } from '../ui/components/BackgroundPatternControl';
+import type { CurveLUTs } from '../color/ColorCurves';
+import type { ChannelMode } from '../ui/components/ChannelSelect';
 
 /**
  * Opaque texture handle.
@@ -112,4 +118,30 @@ export interface RendererBackend {
 
   /** Get the underlying WebGL2 context, or null for non-WebGL backends. */
   getContext(): WebGL2RenderingContext | null;
+
+  // --- HDR effects (Phase 1-3) ---
+
+  /** Set background pattern for alpha compositing in HDR mode. */
+  setBackgroundPattern(state: BackgroundPatternState): void;
+
+  /** Read float pixel values from the WebGL framebuffer. Returns null if not supported. */
+  readPixelFloat(x: number, y: number, width: number, height: number): Float32Array | null;
+
+  /** Set CDL (Color Decision List) values. */
+  setCDL(cdl: CDLValues): void;
+
+  /** Set curves LUT data (256-entry per channel). Null disables curves. */
+  setCurvesLUT(luts: CurveLUTs | null): void;
+
+  /** Set color wheels (Lift/Gamma/Gain) state. */
+  setColorWheels(state: ColorWheelsState): void;
+
+  /** Set false color enabled state and LUT data (256*3 RGB Uint8Array). */
+  setFalseColor(enabled: boolean, lut: Uint8Array | null): void;
+
+  /** Set zebra stripes state. */
+  setZebraStripes(state: ZebraState): void;
+
+  /** Set channel isolation mode. */
+  setChannelMode(mode: ChannelMode): void;
 }

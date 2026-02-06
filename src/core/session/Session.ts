@@ -2724,18 +2724,9 @@ export class Session extends EventEmitter<SessionEvents> {
         // Use loadVideoFile for mediabunny support (frame-accurate extraction)
         await this.loadVideoFile(file);
       } else if (type === 'image') {
-        // Check if it's an EXR file - use FileSourceNode for EXR support (layers, HDR)
-        if (/\.exr$/i.test(file.name)) {
-          await this.loadEXRFile(file);
-        } else {
-          const url = URL.createObjectURL(file);
-          try {
-            await this.loadImage(file.name, url);
-          } catch (err) {
-            URL.revokeObjectURL(url);
-            throw err;
-          }
-        }
+        // Route through FileSourceNode for HDR format detection
+        // (EXR layers, DPX/Cineon, float TIFF, JPEG gainmap/Ultra HDR)
+        await this.loadImageFile(file);
       }
     } catch (err) {
       throw err;
@@ -2784,6 +2775,51 @@ export class Session extends EventEmitter<SessionEvents> {
 
       img.src = url;
     });
+  }
+
+  /**
+   * Load an image file using FileSourceNode for HDR format detection.
+   * Handles EXR, DPX, Cineon, float TIFF, JPEG gainmap/Ultra HDR,
+   * and falls back to standard loading for regular images.
+   */
+  async loadImageFile(file: File): Promise<void> {
+    this._gtoData = null;
+
+    try {
+      const fileSourceNode = new FileSourceNode(file.name);
+      await fileSourceNode.loadFile(file);
+
+      console.log(`[Session] Image loaded via FileSourceNode: ${file.name}, isHDR=${fileSourceNode.isHDR()}, format=${fileSourceNode.formatName ?? 'standard'}`);
+
+      const source: MediaSource = {
+        type: 'image',
+        name: file.name,
+        url: fileSourceNode.properties.getValue<string>('url') || '',
+        width: fileSourceNode.width,
+        height: fileSourceNode.height,
+        duration: 1,
+        fps: this._fps,
+        fileSourceNode,
+      };
+
+      this.addSource(source);
+      this._inPoint = 1;
+      this._outPoint = 1;
+      this._currentFrame = 1;
+
+      this.emit('sourceLoaded', source);
+      this.emit('durationChanged', 1);
+    } catch (err) {
+      // Fallback to simple HTMLImageElement loading
+      console.warn(`[Session] FileSourceNode loading failed for ${file.name}, falling back to HTMLImageElement:`, err);
+      const url = URL.createObjectURL(file);
+      try {
+        await this.loadImage(file.name, url);
+      } catch (fallbackErr) {
+        URL.revokeObjectURL(url);
+        throw fallbackErr;
+      }
+    }
   }
 
   /**

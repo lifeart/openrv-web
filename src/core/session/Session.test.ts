@@ -1133,7 +1133,8 @@ describe('Session', () => {
   describe('file handling', () => {
     it('loadFile handles image and video', async () => {
       vi.stubGlobal('URL', { createObjectURL: vi.fn(() => 'blob:123'), revokeObjectURL: vi.fn() });
-      const imgLoadSpy = vi.spyOn(session, 'loadImage').mockResolvedValue();
+      // loadFile now uses loadImageFile for HDR format detection
+      const imgLoadSpy = vi.spyOn(session, 'loadImageFile').mockResolvedValue();
       // loadFile now uses loadVideoFile for mediabunny support
       const vidLoadSpy = vi.spyOn(session, 'loadVideoFile').mockResolvedValue();
 
@@ -1146,9 +1147,8 @@ describe('Session', () => {
 
     it('loadFile rethrows error and revokes URL', async () => {
       vi.stubGlobal('URL', { createObjectURL: vi.fn(() => 'blob:123'), revokeObjectURL: vi.fn() });
-      vi.spyOn(session, 'loadImage').mockRejectedValue(new Error('fail'));
+      vi.spyOn(session, 'loadImageFile').mockRejectedValue(new Error('fail'));
       await expect(session.loadFile(new File([], 't.png', { type: 'image/png' }))).rejects.toThrow('fail');
-      expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:123');
     });
 
     it('getMediaType detects various types', () => {

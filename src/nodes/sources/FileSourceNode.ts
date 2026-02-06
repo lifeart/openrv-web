@@ -20,6 +20,7 @@ import {
 import { isDPXFile, decodeDPX } from '../../formats/DPXDecoder';
 import { isCineonFile, decodeCineon } from '../../formats/CineonDecoder';
 import { isTIFFFile, isFloatTIFF, decodeTIFFFloat } from '../../formats/TIFFFloatDecoder';
+import { isGainmapJPEG, parseGainmapJPEG, decodeGainmapToFloat32 } from '../../formats/JPEGGainmapDecoder';
 
 /**
  * Check if a filename has an EXR extension
@@ -51,6 +52,14 @@ function isCineonExtension(filename: string): boolean {
 function isTIFFExtension(filename: string): boolean {
   const ext = filename.split('.').pop()?.toLowerCase();
   return ext === 'tiff' || ext === 'tif';
+}
+
+/**
+ * Check if a filename has a JPEG extension
+ */
+function isJPEGExtension(filename: string): boolean {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  return ext === 'jpg' || ext === 'jpeg' || ext === 'jpe';
 }
 
 @RegisterNode('RVFileSource')
@@ -122,6 +131,64 @@ export class FileSourceNode extends BaseSourceNode {
         }
         // Non-float TIFF or fetch failed - fall through to standard image loading
       } catch {
+        // Fall through to standard image loading
+      }
+    }
+
+    // Check if this is a JPEG HDR file with gainmap
+    if (isJPEGExtension(filename)) {
+      try {
+        const response = await fetch(url);
+        if (response.ok) {
+          const buffer = await response.arrayBuffer();
+          if (isGainmapJPEG(buffer)) {
+            const info = parseGainmapJPEG(buffer);
+            if (info) {
+              await this.loadGainmapJPEG(buffer, info, filename, url, originalUrl);
+              return;
+            }
+          }
+          // Not a gainmap JPEG - use blob URL from already-fetched data to avoid re-fetch
+          const blob = new Blob([buffer], { type: 'image/jpeg' });
+          const blobUrl = URL.createObjectURL(blob);
+          return new Promise<void>((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+              URL.revokeObjectURL(blobUrl);
+              this.image = img;
+              this.url = url;
+              this.isEXR = false;
+              this._isHDRFormat = false;
+              this._formatName = null;
+              this.metadata = {
+                name: filename,
+                width: img.naturalWidth,
+                height: img.naturalHeight,
+                duration: 1,
+                fps: 24,
+              };
+              this.properties.setValue('url', url);
+              if (originalUrl) {
+                this.properties.setValue('originalUrl', originalUrl);
+              }
+              this.properties.setValue('width', img.naturalWidth);
+              this.properties.setValue('height', img.naturalHeight);
+              this.properties.setValue('isHDR', false);
+              this.markDirty();
+              this.cachedIPImage = null;
+              resolve();
+            };
+            img.onerror = () => {
+              URL.revokeObjectURL(blobUrl);
+              reject(new Error(`Failed to load image: ${url}`));
+            };
+            img.src = blobUrl;
+          });
+        }
+        // Fetch failed - fall through to standard image loading
+      } catch (err) {
+        console.warn('[FileSource] JPEG gainmap loading failed, falling back to standard loading:', err);
         // Fall through to standard image loading
       }
     }
@@ -359,6 +426,65 @@ export class FileSourceNode extends BaseSourceNode {
   }
 
   /**
+   * Load JPEG HDR file with gainmap
+   */
+  private async loadGainmapJPEG(
+    buffer: ArrayBuffer,
+    info: import('../../formats/JPEGGainmapDecoder').GainmapInfo,
+    name: string,
+    url: string,
+    originalUrl?: string
+  ): Promise<void> {
+    console.log(`[FileSource] Loading JPEG gainmap: ${name}, headroom=${info.headroom}`);
+    const result = await decodeGainmapToFloat32(buffer, info);
+    console.log(`[FileSource] Gainmap decoded: ${result.width}x${result.height}, float32, ${result.channels}ch`);
+
+    const metadata: ImageMetadata = {
+      colorSpace: 'linear',
+      sourcePath: originalUrl ?? url,
+      attributes: {
+        formatName: 'jpeg-gainmap',
+        headroom: info.headroom,
+      },
+    };
+
+    this.cachedIPImage = new IPImage({
+      width: result.width,
+      height: result.height,
+      channels: result.channels,
+      dataType: 'float32',
+      data: result.data.buffer as ArrayBuffer,
+      metadata,
+    });
+    this.cachedIPImage.metadata.frameNumber = 1;
+
+    this.url = url;
+    this.isEXR = false;
+    this._isHDRFormat = true;
+    this._formatName = 'jpeg-gainmap';
+    this.image = null;
+
+    this.metadata = {
+      name,
+      width: result.width,
+      height: result.height,
+      duration: 1,
+      fps: 24,
+    };
+
+    this.properties.setValue('url', url);
+    if (originalUrl) {
+      this.properties.setValue('originalUrl', originalUrl);
+    }
+    this.properties.setValue('width', result.width);
+    this.properties.setValue('height', result.height);
+    this.properties.setValue('isHDR', true);
+
+    this.canvasDirty = true;
+    this.markDirty();
+  }
+
+  /**
    * Get available EXR layers (only valid for EXR files)
    */
   getEXRLayers(): EXRLayerInfo[] {
@@ -439,6 +565,24 @@ export class FileSourceNode extends BaseSourceNode {
       // Non-float TIFF - fall through to standard image loading (no URL leak)
     }
 
+    // Check if this is a JPEG HDR file with gainmap
+    if (isJPEGExtension(file.name)) {
+      try {
+        const buffer = await file.arrayBuffer();
+        if (isGainmapJPEG(buffer)) {
+          const info = parseGainmapJPEG(buffer);
+          if (info) {
+            const url = URL.createObjectURL(file);
+            await this.loadGainmapJPEG(buffer, info, file.name, url);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('[FileSource] JPEG gainmap decode failed, falling back to standard loading:', err);
+        // Fall through to standard JPEG loading
+      }
+    }
+
     // Standard image loading
     const url = URL.createObjectURL(file);
     await this.load(url, file.name);
@@ -503,14 +647,16 @@ export class FileSourceNode extends BaseSourceNode {
       // Direct copy for uint8 data
       destData.set(sourceData);
     } else if (this.cachedIPImage.dataType === 'float32') {
-      // Tone map float32 to uint8 (simple clamp for now)
+      // Simple clamp for 2D canvas fallback path.
+      // The WebGL Renderer handles proper HDR tone mapping via GPU shaders.
       const floatData = sourceData as Float32Array;
-      for (let i = 0; i < floatData.length; i++) {
-        // Apply simple exposure and gamma for display
-        const value = floatData[i] ?? 0;
-        const linear = Math.max(0, Math.min(1, value));
-        const gamma = Math.pow(linear, 1 / 2.2);
-        destData[i] = Math.round(gamma * 255);
+      for (let i = 0; i < floatData.length; i += 4) {
+        for (let c = 0; c < 3; c++) {
+          const v = Math.max(0, Math.min(1, floatData[i + c] ?? 0));
+          destData[i + c] = Math.round(Math.pow(v, 1 / 2.2) * 255);
+        }
+        // Alpha channel: pass through
+        destData[i + 3] = Math.round(Math.min(1, Math.max(0, floatData[i + 3] ?? 1)) * 255);
       }
     } else {
       // uint16 - normalize to 0-255
@@ -524,6 +670,13 @@ export class FileSourceNode extends BaseSourceNode {
     ctx.putImageData(imageData, 0, 0);
     this.canvasDirty = false;
     return canvas;
+  }
+
+  /**
+   * Get the cached IPImage directly (for WebGL HDR rendering path)
+   */
+  getIPImage(): IPImage | null {
+    return this.cachedIPImage;
   }
 
   protected process(context: EvalContext, _inputs: (IPImage | null)[]): IPImage | null {

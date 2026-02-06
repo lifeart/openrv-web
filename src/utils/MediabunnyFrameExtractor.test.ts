@@ -33,6 +33,9 @@ vi.mock('mediabunny', () => {
         }),
       };
     }),
+    VideoSampleSink: vi.fn().mockImplementation(() => ({
+      getSample: vi.fn().mockResolvedValue(null),
+    })),
     ALL_FORMATS: [],
   };
 });
@@ -500,6 +503,86 @@ describe('MediabunnyFrameExtractor', () => {
       const error = new UnsupportedCodecException(null);
       expect(error.codec).toBe(null);
       expect(error.codecFamily).toBe('unknown');
+    });
+  });
+
+  describe('HDR detection', () => {
+    it('should include isHDR in metadata after load', async () => {
+      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
+
+      if (!MediabunnyFrameExtractor.isSupported()) {
+        return;
+      }
+
+      const extractor = new MediabunnyFrameExtractor();
+      const mockFile = new File(['test'], 'test.mp4', { type: 'video/mp4' });
+      await extractor.load(mockFile, 24);
+
+      const metadata = extractor.getMetadata();
+      expect(metadata).toBeDefined();
+      expect(typeof metadata?.isHDR).toBe('boolean');
+    });
+
+    it('should include colorSpace in metadata after load', async () => {
+      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
+
+      if (!MediabunnyFrameExtractor.isSupported()) {
+        return;
+      }
+
+      const extractor = new MediabunnyFrameExtractor();
+      const mockFile = new File(['test'], 'test.mp4', { type: 'video/mp4' });
+      await extractor.load(mockFile, 24);
+
+      const metadata = extractor.getMetadata();
+      expect(metadata).toBeDefined();
+      // colorSpace can be null for SDR videos
+      expect(metadata?.colorSpace === null || typeof metadata?.colorSpace === 'object').toBe(true);
+    });
+
+    it('isHDR should return false for non-HDR videos', async () => {
+      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
+
+      if (!MediabunnyFrameExtractor.isSupported()) {
+        return;
+      }
+
+      const extractor = new MediabunnyFrameExtractor();
+      const mockFile = new File(['test'], 'test.mp4', { type: 'video/mp4' });
+      await extractor.load(mockFile, 24);
+
+      // Mock video track doesn't have hasHighDynamicRange, so isHDR should be false
+      expect(extractor.isHDR()).toBe(false);
+    });
+
+    it('getColorSpace should return null for non-HDR videos', async () => {
+      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
+
+      if (!MediabunnyFrameExtractor.isSupported()) {
+        return;
+      }
+
+      const extractor = new MediabunnyFrameExtractor();
+      const mockFile = new File(['test'], 'test.mp4', { type: 'video/mp4' });
+      await extractor.load(mockFile, 24);
+
+      expect(extractor.getColorSpace()).toBeNull();
+    });
+
+    it('getFrameHDR should return null when not HDR', async () => {
+      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
+
+      if (!MediabunnyFrameExtractor.isSupported()) {
+        return;
+      }
+
+      const extractor = new MediabunnyFrameExtractor();
+      const mockFile = new File(['test'], 'test.mp4', { type: 'video/mp4' });
+      await extractor.load(mockFile, 24);
+
+      // Non-HDR video should return null from getFrameHDR
+      const result = await extractor.getFrameHDR(1);
+      expect(result).toBeNull();
     });
   });
 
