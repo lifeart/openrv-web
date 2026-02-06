@@ -16,6 +16,7 @@ import type { ZebraState } from '../ui/components/ZebraStripes';
 import type { BackgroundPatternState } from '../ui/components/BackgroundPatternControl';
 import type { CurveLUTs } from '../color/ColorCurves';
 import type { ChannelMode } from '../ui/components/ChannelSelect';
+import type { HSLQualifierState } from '../ui/components/HSLQualifier';
 
 /**
  * Opaque texture handle.
@@ -36,7 +37,7 @@ export interface RendererBackend {
   // --- Lifecycle ---
 
   /** Initialize the backend with a canvas element and optional capabilities. */
-  initialize(canvas: HTMLCanvasElement, capabilities?: DisplayCapabilities): void;
+  initialize(canvas: HTMLCanvasElement | OffscreenCanvas, capabilities?: DisplayCapabilities): void;
 
   /**
    * Perform any async initialization required by the backend.
@@ -154,4 +155,55 @@ export interface RendererBackend {
 
   /** Set the display color management state (transfer function, gamma, brightness). */
   setDisplayColorState(state: { transferFunction: number; displayGamma: number; displayBrightness: number; customGamma: number }): void;
+
+  // --- Phase 1B: New GPU shader effects ---
+
+  /** Set highlights/shadows/whites/blacks adjustment values (range: -100 to +100 each). */
+  setHighlightsShadows(highlights: number, shadows: number, whites: number, blacks: number): void;
+
+  /** Set vibrance amount (-100 to +100) and skin protection toggle. */
+  setVibrance(vibrance: number, skinProtection: boolean): void;
+
+  /** Set clarity (local contrast) amount (-100 to +100). */
+  setClarity(clarity: number): void;
+
+  /** Set sharpen (unsharp mask) amount (0 to 100). */
+  setSharpen(amount: number): void;
+
+  /** Set HSL qualifier (secondary color correction) state. */
+  setHSLQualifier(state: HSLQualifierState): void;
+
+  // --- SDR frame rendering (Phase 1A) ---
+
+  /**
+   * Render an SDR source through the full GPU shader pipeline.
+   * Accepts HTMLVideoElement, HTMLCanvasElement, OffscreenCanvas, or HTMLImageElement.
+   * Returns the WebGL canvas element for compositing, or null if WebGL is unavailable.
+   */
+  renderSDRFrame(
+    source: HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | HTMLImageElement,
+  ): HTMLCanvasElement | null;
+
+  /** Get the underlying canvas element used for rendering. */
+  getCanvasElement(): HTMLCanvasElement | null;
+
+  // --- Phase 4: Async/OffscreenCanvas methods (optional) ---
+
+  /** Whether this backend renders asynchronously (worker-based). */
+  readonly isAsync?: boolean;
+
+  /** Initialize with an OffscreenCanvas (for worker-based backends). */
+  initializeOffscreen?(canvas: OffscreenCanvas, capabilities?: DisplayCapabilities): Promise<void>;
+
+  /**
+   * Render an SDR frame asynchronously.
+   * Returns a promise that resolves when rendering is complete.
+   * The result is automatically composited to the visible canvas.
+   */
+  renderSDRFrameAsync?(
+    source: HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | HTMLImageElement | ImageBitmap,
+  ): Promise<void>;
+
+  /** Read pixel data asynchronously (for worker-based backends). */
+  readPixelFloatAsync?(x: number, y: number, w: number, h: number): Promise<Float32Array | null>;
 }

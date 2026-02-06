@@ -246,6 +246,10 @@ export class Session extends EventEmitter<SessionEvents> {
 
   // Starvation tracking - timestamp when starvation started
   private _starvationStartTime = 0;
+  // Consecutive starvation skip counter - pauses playback if too many skips cascade
+  private _consecutiveStarvationSkips = 0;
+  // Maximum consecutive starvation skips before forcing a pause
+  private static readonly MAX_CONSECUTIVE_STARVATION_SKIPS = 2;
 
   // Effective FPS tracking
   private fpsFrameCount = 0;
@@ -794,6 +798,44 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   /**
+   * Trigger preloading of upcoming frames after a starvation-induced pause.
+   *
+   * This requests the next ~10 frames so the cache is primed when the user
+   * presses play again, reducing the chance of another immediate starvation.
+   * Requests go through preloadManager which handles coalescing and cancellation.
+   * Fire-and-forget: errors are logged at debug level and otherwise ignored.
+   */
+  private triggerStarvationRecoveryPreload(
+    videoSourceNode: import('../../nodes/sources/VideoSourceNode').VideoSourceNode,
+    fromFrame: number,
+    direction: number
+  ): void {
+    const RECOVERY_BUFFER_SIZE = 10;
+    const duration = this._outPoint - this._inPoint + 1;
+    const bufferSize = Math.min(RECOVERY_BUFFER_SIZE, duration);
+
+    const framesToBuffer: number[] = [];
+    for (let i = 0; i < bufferSize; i++) {
+      const frame = fromFrame + (i * direction);
+      if (frame >= this._inPoint && frame <= this._outPoint) {
+        framesToBuffer.push(frame);
+      }
+    }
+
+    if (framesToBuffer.length === 0) return;
+
+    Promise.allSettled(
+      framesToBuffer.map(frame => videoSourceNode.getFrameAsync(frame))
+    ).then(results => {
+      for (const result of results) {
+        if (result.status === 'rejected' && result.reason?.name !== 'AbortError') {
+          console.debug('Starvation recovery preload error:', result.reason);
+        }
+      }
+    });
+  }
+
+  /**
    * Safely play a video element with proper promise handling
    */
   private async safeVideoPlay(video: HTMLVideoElement): Promise<void> {
@@ -860,6 +902,7 @@ export class Session extends EventEmitter<SessionEvents> {
 
   pause(): void {
     if (this._isPlaying) {
+      this._pendingPlayPromise = null;
       this._isPlaying = false;
 
       // Clear pending play promise so play() can be called again
@@ -913,6 +956,7 @@ export class Session extends EventEmitter<SessionEvents> {
   private resetBufferingState(): void {
     this._bufferingCount = 0;
     this._starvationStartTime = 0;
+    this._consecutiveStarvationSkips = 0;
     if (this._isBuffering) {
       this._isBuffering = false;
       this.emit('buffering', false);
@@ -1225,6 +1269,7 @@ export class Session extends EventEmitter<SessionEvents> {
         if (source.videoSourceNode.hasFrameCached(nextFrame)) {
           // Reset starvation tracking on successful frame
           this._starvationStartTime = 0;
+          this._consecutiveStarvationSkips = 0;
           this.frameAccumulator -= frameDuration;
           this.advanceFrame(this._playDirection);
           // Update source B's playback buffer for split screen support
@@ -1239,14 +1284,62 @@ export class Session extends EventEmitter<SessionEvents> {
             this._starvationStartTime = performance.now();
           }
 
-          // Check for starvation timeout - if waiting too long, skip the frame
+          // Check for starvation timeout
           const starvationDuration = performance.now() - this._starvationStartTime;
           if (starvationDuration > STARVATION_TIMEOUT_MS) {
+            this._consecutiveStarvationSkips++;
+
+            // If consecutive skips exceed threshold, pause to prevent cascade freeze
+            if (this._consecutiveStarvationSkips >= Session.MAX_CONSECUTIVE_STARVATION_SKIPS) {
+              console.warn(
+                `Playback paused: frame buffer underrun (frame ${nextFrame}, ` +
+                `${this._consecutiveStarvationSkips} consecutive starvation timeouts)`
+              );
+              // IMMEDIATELY pause audio to prevent loop/restart during the pause transition
+              if (source.element instanceof HTMLVideoElement) {
+                source.element.pause();
+              }
+              // Trigger prebuffering of upcoming frames before pausing
+              // so the system can recover faster when the user presses play again
+              this.triggerStarvationRecoveryPreload(source.videoSourceNode, nextFrame, this._playDirection);
+              this._starvationStartTime = 0;
+              this._consecutiveStarvationSkips = 0;
+              this.pause();
+              return; // Exit update loop entirely - we've paused
+            }
+
+            // Check if starvation is at end-of-video (within 2 frames of out point)
+            // This prevents blind advanceFrame which would wrap to beginning
+            // and cause audio to restart from the start
+            const isNearEnd = this._playDirection > 0
+              ? nextFrame >= this._outPoint - 2
+              : nextFrame <= this._inPoint + 2;
+            if (isNearEnd) {
+              if (this._loopMode === 'loop') {
+                // Properly loop: reset both frame AND audio to beginning
+                this._currentFrame = this._playDirection > 0 ? this._inPoint : this._outPoint;
+                this._consecutiveStarvationSkips = 0;
+                this._starvationStartTime = 0;
+                // Sync audio to the loop point
+                if (source.element instanceof HTMLVideoElement) {
+                  const video = source.element;
+                  video.currentTime = (this._currentFrame - 1) / this._fps;
+                }
+                this.emit('frameChanged', this._currentFrame);
+                this.frameAccumulator -= frameDuration;
+                continue;
+              } else {
+                // 'once' or 'pingpong' at end: just stop playback
+                this.pause();
+                return;
+              }
+            }
+
+            // Under the threshold: skip the frame and try the next one
             console.warn(`Frame ${nextFrame} starvation timeout (${Math.round(starvationDuration)}ms) - skipping frame`);
             this._starvationStartTime = 0;
             this.frameAccumulator -= frameDuration;
             this.advanceFrame(this._playDirection);
-            // Emit a starvation event for UI notification (uses existing buffering event)
             continue; // Try the next frame
           }
 
@@ -1291,19 +1384,11 @@ export class Session extends EventEmitter<SessionEvents> {
         const targetTime = (this._currentFrame - 1) / this._fps;
 
         // Only sync if significantly out of sync (for audio purposes)
-        // Use a larger threshold (0.5s) to avoid stuttering from frequent seeks
+        // Use a larger threshold (1.0s) to reduce frequency of seeks
         const drift = Math.abs(video.currentTime - targetTime);
-        if (drift > 0.5) {
-          // Pause, seek, then resume to avoid audio glitches
-          const wasPlaying = !video.paused;
-          if (wasPlaying) {
-            video.pause();
-          }
+        if (drift > 1.0) {
+          // Just seek without pause/play to minimize audio disruption
           video.currentTime = targetTime;
-          if (wasPlaying) {
-            // Use safe play to handle any errors
-            this.safeVideoPlay(video);
-          }
         }
       }
     } else if (source?.type === 'video' && source.element instanceof HTMLVideoElement && this._playDirection === 1) {
@@ -1489,7 +1574,9 @@ export class Session extends EventEmitter<SessionEvents> {
       }
 
       // Sync HTMLVideoElement for audio purposes
-      if (source.element instanceof HTMLVideoElement) {
+      // During mediabunny playback, let the video element play freely for audio.
+      // Only seek when not playing (scrubbing) to avoid audio disruption.
+      if (source.element instanceof HTMLVideoElement && !this._isPlaying) {
         const targetTime = (this._currentFrame - 1) / this._fps;
         if (Math.abs(source.element.currentTime - targetTime) > 0.1) {
           source.element.currentTime = targetTime;

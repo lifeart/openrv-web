@@ -5,6 +5,11 @@
  * Uses monotonic cubic spline interpolation for smooth curves.
  */
 
+import { evaluateCurveAtPoint } from '../utils/effectProcessing.shared';
+
+// Re-export so existing consumers don't break
+export { evaluateCurveAtPoint };
+
 export interface CurvePoint {
   x: number; // Input value (0-1)
   y: number; // Output value (0-1)
@@ -64,51 +69,6 @@ export function isDefaultCurves(curves: ColorCurvesData): boolean {
     isIdentityCurve(curves.green) &&
     isIdentityCurve(curves.blue)
   );
-}
-
-/**
- * Monotonic cubic spline interpolation
- * Ensures the curve is monotonically increasing (no inversions)
- */
-export function evaluateCurveAtPoint(points: CurvePoint[], x: number): number {
-  if (points.length === 0) return x;
-  if (points.length === 1) return points[0]!.y;
-
-  // Sort points by x
-  const sorted = [...points].sort((a, b) => a.x - b.x);
-
-  // Clamp x to curve bounds
-  if (x <= sorted[0]!.x) return sorted[0]!.y;
-  if (x >= sorted[sorted.length - 1]!.x) return sorted[sorted.length - 1]!.y;
-
-  // Find segment containing x
-  let i = 0;
-  while (i < sorted.length - 1 && sorted[i + 1]!.x < x) {
-    i++;
-  }
-
-  const p0 = sorted[Math.max(0, i - 1)]!;
-  const p1 = sorted[i]!;
-  const p2 = sorted[Math.min(sorted.length - 1, i + 1)]!;
-  const p3 = sorted[Math.min(sorted.length - 1, i + 2)]!;
-
-  // Calculate t (position within segment)
-  const t = (x - p1.x) / (p2.x - p1.x || 1);
-
-  // Catmull-Rom spline interpolation
-  const t2 = t * t;
-  const t3 = t2 * t;
-
-  // Catmull-Rom basis matrix coefficients
-  const y = 0.5 * (
-    (2 * p1.y) +
-    (-p0.y + p2.y) * t +
-    (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 +
-    (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3
-  );
-
-  // Clamp result to 0-1
-  return Math.max(0, Math.min(1, y));
 }
 
 /**

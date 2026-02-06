@@ -27,6 +27,7 @@ import type { ZebraState } from '../ui/components/ZebraStripes';
 import type { BackgroundPatternState } from '../ui/components/BackgroundPatternControl';
 import type { CurveLUTs } from '../color/ColorCurves';
 import type { ChannelMode } from '../ui/components/ChannelSelect';
+import type { HSLQualifierState } from '../ui/components/HSLQualifier';
 
 // ---------------------------------------------------------------------------
 // WebGPU type shims (experimental API, not in TS DOM lib)
@@ -71,7 +72,7 @@ export class WebGPUBackend implements RendererBackend {
   // --- GPU handles ---
   private device: WGPUDevice | null = null;
   private gpuContext: WGPUCanvasContext | null = null;
-  private canvas: HTMLCanvasElement | null = null;
+  private canvas: HTMLCanvasElement | OffscreenCanvas | null = null;
 
   // --- State (mirrors WebGL2Backend for identical behavior) ---
   private colorAdjustments: ColorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
@@ -93,7 +94,7 @@ export class WebGPUBackend implements RendererBackend {
    *
    * Throws if WebGPU is not available or the canvas context cannot be created.
    */
-  initialize(canvas: HTMLCanvasElement, _capabilities?: DisplayCapabilities): void {
+  initialize(canvas: HTMLCanvasElement | OffscreenCanvas, _capabilities?: DisplayCapabilities): void {
     this.canvas = canvas;
 
     // Synchronous guard: navigator.gpu must exist
@@ -102,7 +103,8 @@ export class WebGPUBackend implements RendererBackend {
     }
 
     // Attempt to get a 'webgpu' context to verify support.
-    const ctx = canvas.getContext('webgpu' as string);
+    // WebGPU only works with HTMLCanvasElement, not OffscreenCanvas.
+    const ctx = (canvas as HTMLCanvasElement).getContext('webgpu' as string);
     if (!ctx) {
       throw new Error('WebGPU canvas context not available');
     }
@@ -302,4 +304,26 @@ export class WebGPUBackend implements RendererBackend {
 
   // --- Display color management ---
   setDisplayColorState(_state: { transferFunction: number; displayGamma: number; displayBrightness: number; customGamma: number }): void { /* STUB */ }
+
+  // --- Phase 1B: New GPU shader effects (stubs) ---
+  setHighlightsShadows(_highlights: number, _shadows: number, _whites: number, _blacks: number): void { /* STUB */ }
+  setVibrance(_vibrance: number, _skinProtection: boolean): void { /* STUB */ }
+  setClarity(_clarity: number): void { /* STUB */ }
+  setSharpen(_amount: number): void { /* STUB */ }
+  setHSLQualifier(_state: HSLQualifierState): void { /* STUB */ }
+
+  // --- SDR frame rendering (Phase 1A) ---
+  renderSDRFrame(
+    _source: HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | HTMLImageElement,
+  ): HTMLCanvasElement | null {
+    // STUB: WebGPU SDR rendering not yet implemented
+    return null;
+  }
+
+  getCanvasElement(): HTMLCanvasElement | null {
+    if (typeof HTMLCanvasElement !== 'undefined' && this.canvas instanceof HTMLCanvasElement) {
+      return this.canvas;
+    }
+    return null;
+  }
 }

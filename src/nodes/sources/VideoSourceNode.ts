@@ -378,6 +378,11 @@ export class VideoSourceNode extends BaseSourceNode {
     this.metadata.duration = count;
     this.properties.setValue('duration', count);
 
+    // Update preload manager so it doesn't try to load ghost frames
+    if (this.preloadManager) {
+      this.preloadManager.setTotalFrames(count);
+    }
+
     return count;
   }
 

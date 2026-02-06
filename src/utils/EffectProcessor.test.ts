@@ -911,5 +911,278 @@ describe('EffectProcessor', () => {
         expect(imageData.data).toEqual(originalData);
       });
     });
+
+    describe('Merged Per-Pixel Effects & Vibrance 3D LUT', () => {
+      it('EP-080: merged effects produce results within tolerance of expectations', () => {
+        // Test that the merged loop produces reasonable results for highlights+vibrance+CDL combined
+        const imageData = createTestImageData(10, 10, { r: 200, g: 100, b: 100 });
+        const state = createDefaultEffectsState();
+        state.colorAdjustments.highlights = 30;
+        state.colorAdjustments.vibrance = 20;
+        state.cdlValues.slope = { r: 1.1, g: 1.0, b: 1.0 };
+
+        processor.applyEffects(imageData, 10, 10, state);
+
+        // Verify all pixel values are valid (no NaN, no out-of-range)
+        for (let i = 0; i < imageData.data.length; i += 4) {
+          expect(Number.isFinite(imageData.data[i]!)).toBe(true);
+          expect(Number.isFinite(imageData.data[i + 1]!)).toBe(true);
+          expect(Number.isFinite(imageData.data[i + 2]!)).toBe(true);
+          expect(imageData.data[i]!).toBeGreaterThanOrEqual(0);
+          expect(imageData.data[i]!).toBeLessThanOrEqual(255);
+          expect(imageData.data[i + 1]!).toBeGreaterThanOrEqual(0);
+          expect(imageData.data[i + 1]!).toBeLessThanOrEqual(255);
+          expect(imageData.data[i + 2]!).toBeGreaterThanOrEqual(0);
+          expect(imageData.data[i + 2]!).toBeLessThanOrEqual(255);
+        }
+
+        // Highlights should have reduced bright values, and CDL slope>1 on red should boost it
+        // The red channel with slope 1.1 should generally be higher than unmodified green
+        // (exact values depend on interaction between effects but direction should hold)
+        expect(imageData.data[0]).not.toBe(200); // Changed from original
+      });
+
+      it('EP-081: vibrance 3D LUT produces results within tolerance of direct computation', () => {
+        // Compare vibrance via 3D LUT (merged path) to expected vibrance behavior
+        const imageDataLUT = createTestImageData(10, 10, { r: 200, g: 100, b: 100 });
+        const state = createDefaultEffectsState();
+        state.colorAdjustments.vibrance = 50;
+
+        processor.applyEffects(imageDataLUT, 10, 10, state);
+
+        // The vibrance should boost saturation for less-saturated colors
+        // Red (200,100,100) is moderately saturated, so vibrance should push it further from gray
+        const r = imageDataLUT.data[0]!;
+        const g = imageDataLUT.data[1]!;
+        const b = imageDataLUT.data[2]!;
+
+        // Original avg = (200+100+100)/3 = 133.3, spread = 100
+        // After positive vibrance, spread should be maintained or increased
+        const spread = Math.max(r, g, b) - Math.min(r, g, b);
+        expect(spread).toBeGreaterThan(50); // Still has meaningful saturation
+
+        // Verify the 3D LUT doesn't produce artifacts (all values valid)
+        for (let i = 0; i < imageDataLUT.data.length; i += 4) {
+          expect(imageDataLUT.data[i]!).toBeGreaterThanOrEqual(0);
+          expect(imageDataLUT.data[i]!).toBeLessThanOrEqual(255);
+        }
+      });
+
+      it('EP-082: vibrance 3D LUT cache invalidation on parameter change', () => {
+        // Access static vibrance LUT cache
+        const EP = EffectProcessor as unknown as {
+          vibrance3DLUT: Float32Array | null;
+          vibrance3DLUTParams: { vibrance: number; skinProtection: boolean } | null;
+        };
+
+        // Clear cache
+        EP.vibrance3DLUT = null;
+        EP.vibrance3DLUTParams = null;
+
+        // First call builds LUT
+        const state1 = createDefaultEffectsState();
+        state1.colorAdjustments.vibrance = 30;
+        const img1 = createTestImageData(5, 5, { r: 150, g: 100, b: 80 });
+        processor.applyEffects(img1, 5, 5, state1);
+
+        expect(EP.vibrance3DLUT).not.toBeNull();
+        expect(EP.vibrance3DLUTParams!.vibrance).toBe(30);
+        const lut1 = EP.vibrance3DLUT;
+
+        // Same params - should reuse LUT
+        const img2 = createTestImageData(5, 5, { r: 150, g: 100, b: 80 });
+        processor.applyEffects(img2, 5, 5, state1);
+        expect(EP.vibrance3DLUT).toBe(lut1);
+
+        // Different vibrance - should rebuild LUT
+        const state2 = createDefaultEffectsState();
+        state2.colorAdjustments.vibrance = 60;
+        const img3 = createTestImageData(5, 5, { r: 150, g: 100, b: 80 });
+        processor.applyEffects(img3, 5, 5, state2);
+        expect(EP.vibrance3DLUTParams!.vibrance).toBe(60);
+        expect(EP.vibrance3DLUT).not.toBe(lut1);
+
+        // Different skin protection - should rebuild LUT
+        const lut3 = EP.vibrance3DLUT;
+        const state3 = createDefaultEffectsState();
+        state3.colorAdjustments.vibrance = 60;
+        state3.colorAdjustments.vibranceSkinProtection = !state2.colorAdjustments.vibranceSkinProtection;
+        const img4 = createTestImageData(5, 5, { r: 150, g: 100, b: 80 });
+        processor.applyEffects(img4, 5, 5, state3);
+        expect(EP.vibrance3DLUT).not.toBe(lut3);
+      });
+
+      it('EP-083: merged loop handles all effects active simultaneously', () => {
+        const imageData = createTestImageData(10, 10, { r: 128, g: 128, b: 128 });
+        const state = createDefaultEffectsState();
+
+        // Enable ALL per-pixel effects
+        state.colorAdjustments.highlights = 10;
+        state.colorAdjustments.shadows = 10;
+        state.colorAdjustments.whites = 5;
+        state.colorAdjustments.blacks = 5;
+        state.colorAdjustments.vibrance = 20;
+        state.colorAdjustments.hueRotation = 30;
+        state.colorWheelsState.master = { r: 0.1, g: 0, b: 0, y: 0 };
+        state.cdlValues.slope = { r: 1.05, g: 1.0, b: 0.95 };
+        state.curvesData.master.points = [
+          { x: 0, y: 0 },
+          { x: 0.5, y: 0.55 },
+          { x: 1, y: 1 },
+        ];
+        state.hslQualifierState.enabled = true;
+        state.hslQualifierState.hue = { center: 0, width: 180, softness: 50 };
+        state.hslQualifierState.saturation = { center: 50, width: 100, softness: 50 };
+        state.hslQualifierState.luminance = { center: 50, width: 100, softness: 50 };
+        state.hslQualifierState.correction = { hueShift: 5, saturationScale: 1.1, luminanceScale: 1.0 };
+        state.toneMappingState.enabled = true;
+        state.toneMappingState.operator = 'reinhard';
+        state.colorInversionEnabled = true;
+
+        // Should not throw
+        expect(() => {
+          processor.applyEffects(imageData, 10, 10, state);
+        }).not.toThrow();
+
+        // All values should be valid
+        for (let i = 0; i < imageData.data.length; i += 4) {
+          expect(Number.isFinite(imageData.data[i]!)).toBe(true);
+          expect(Number.isFinite(imageData.data[i + 1]!)).toBe(true);
+          expect(Number.isFinite(imageData.data[i + 2]!)).toBe(true);
+          expect(imageData.data[i]!).toBeGreaterThanOrEqual(0);
+          expect(imageData.data[i]!).toBeLessThanOrEqual(255);
+        }
+      });
+
+      it('EP-084: merged loop handles individual effects in isolation', () => {
+        // Each effect needs pixel values that will produce visible changes.
+        // Highlights need bright pixels (luminance > 0.5), shadows need dark pixels, etc.
+        const defaultPixel = { r: 200, g: 100, b: 100 };
+        const brightPixel = { r: 220, g: 200, b: 200 }; // luminance > 0.5 for highlights
+        const darkPixel = { r: 40, g: 30, b: 30 }; // luminance < 0.5 for shadows
+
+        const testEffects: Array<{ name: string; pixel?: { r: number; g: number; b: number }; setup: (s: AllEffectsState) => void }> = [
+          { name: 'highlights', pixel: brightPixel, setup: (s) => { s.colorAdjustments.highlights = 80; } },
+          { name: 'shadows', pixel: darkPixel, setup: (s) => { s.colorAdjustments.shadows = 80; } },
+          { name: 'whites', setup: (s) => { s.colorAdjustments.whites = 50; } },
+          { name: 'blacks', setup: (s) => { s.colorAdjustments.blacks = 50; } },
+          { name: 'vibrance', setup: (s) => { s.colorAdjustments.vibrance = 50; } },
+          { name: 'hueRotation', setup: (s) => { s.colorAdjustments.hueRotation = 90; } },
+          { name: 'colorWheels', setup: (s) => { s.colorWheelsState.master = { r: 0.5, g: 0, b: 0, y: 0 }; } },
+          { name: 'cdl', setup: (s) => { s.cdlValues.slope = { r: 2, g: 1, b: 1 }; } },
+          { name: 'curves', setup: (s) => {
+            s.curvesData.master.points = [{ x: 0, y: 0 }, { x: 0.5, y: 0.7 }, { x: 1, y: 1 }];
+          }},
+          { name: 'hslQualifier', setup: (s) => {
+            s.hslQualifierState.enabled = true;
+            s.hslQualifierState.hue = { center: 0, width: 60, softness: 20 };
+            s.hslQualifierState.saturation = { center: 100, width: 100, softness: 20 };
+            s.hslQualifierState.luminance = { center: 50, width: 100, softness: 20 };
+            s.hslQualifierState.correction = { hueShift: 120, saturationScale: 1, luminanceScale: 1 };
+          }},
+          { name: 'toneMapping', setup: (s) => {
+            s.toneMappingState.enabled = true;
+            s.toneMappingState.operator = 'aces';
+          }},
+          { name: 'colorInversion', setup: (s) => { s.colorInversionEnabled = true; } },
+          { name: 'channelIsolation', setup: (s) => { s.channelMode = 'red'; } },
+        ];
+
+        for (const effect of testEffects) {
+          const pixel = effect.pixel ?? defaultPixel;
+          const imageData = createTestImageData(5, 5, pixel);
+          const originalData = new Uint8ClampedArray(imageData.data);
+          const state = createDefaultEffectsState();
+          effect.setup(state);
+
+          expect(() => {
+            processor.applyEffects(imageData, 5, 5, state);
+          }).not.toThrow();
+
+          // The image should be modified (effect was applied)
+          let changed = false;
+          for (let i = 0; i < imageData.data.length; i++) {
+            if (imageData.data[i] !== originalData[i]) {
+              changed = true;
+              break;
+            }
+          }
+          expect(changed, `Effect "${effect.name}" should modify the image`).toBe(true);
+
+          // All values should be valid
+          for (let i = 0; i < imageData.data.length; i += 4) {
+            expect(Number.isFinite(imageData.data[i]!)).toBe(true);
+            expect(imageData.data[i]!).toBeGreaterThanOrEqual(0);
+            expect(imageData.data[i]!).toBeLessThanOrEqual(255);
+          }
+        }
+      });
+
+      it('EP-085: clarity and sharpen still work correctly as separate passes', () => {
+        // Clarity - inter-pixel dependency, applied as Pass 1
+        const clarityImg = createGradientImageData(20, 20);
+        const clarityOriginal = new Uint8ClampedArray(clarityImg.data);
+        const clarityState = createDefaultEffectsState();
+        clarityState.colorAdjustments.clarity = 50;
+
+        processor.applyEffects(clarityImg, 20, 20, clarityState);
+
+        // Clarity should modify the image
+        let clarityChanged = false;
+        for (let i = 0; i < clarityImg.data.length; i++) {
+          if (clarityImg.data[i] !== clarityOriginal[i]) {
+            clarityChanged = true;
+            break;
+          }
+        }
+        expect(clarityChanged).toBe(true);
+
+        // Sharpen - inter-pixel dependency, applied as Pass 3
+        const sharpenImg = createGradientImageData(20, 20);
+        const sharpenOriginal = new Uint8ClampedArray(sharpenImg.data);
+        const sharpenState = createDefaultEffectsState();
+        sharpenState.filterSettings.sharpen = 50;
+
+        processor.applyEffects(sharpenImg, 20, 20, sharpenState);
+
+        // Sharpen should modify the image
+        let sharpenChanged = false;
+        for (let i = 0; i < sharpenImg.data.length; i++) {
+          if (sharpenImg.data[i] !== sharpenOriginal[i]) {
+            sharpenChanged = true;
+            break;
+          }
+        }
+        expect(sharpenChanged).toBe(true);
+
+        // Clarity + per-pixel effects + sharpen combined
+        const combinedImg = createGradientImageData(20, 20);
+        const combinedState = createDefaultEffectsState();
+        combinedState.colorAdjustments.clarity = 30;
+        combinedState.colorAdjustments.highlights = 20;
+        combinedState.filterSettings.sharpen = 30;
+
+        expect(() => {
+          processor.applyEffects(combinedImg, 20, 20, combinedState);
+        }).not.toThrow();
+
+        // All values should be valid
+        for (let i = 0; i < combinedImg.data.length; i += 4) {
+          expect(Number.isFinite(combinedImg.data[i]!)).toBe(true);
+          expect(combinedImg.data[i]!).toBeGreaterThanOrEqual(0);
+          expect(combinedImg.data[i]!).toBeLessThanOrEqual(255);
+        }
+      });
+
+      it('EP-086: empty/no-effect state produces unchanged pixel data', () => {
+        const imageData = createTestImageData(10, 10, { r: 128, g: 64, b: 192 });
+        const originalData = new Uint8ClampedArray(imageData.data);
+
+        processor.applyEffects(imageData, 10, 10, defaultState);
+
+        // Pixel data should be completely unchanged
+        expect(imageData.data).toEqual(originalData);
+      });
+    });
   });
 });

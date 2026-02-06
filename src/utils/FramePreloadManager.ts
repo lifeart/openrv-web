@@ -548,6 +548,14 @@ export class FramePreloadManager<T> {
   }
 
   /**
+   * Update total frames count (e.g., after building accurate frame index)
+   * This corrects the initial estimate from Math.round(duration * fps)
+   */
+  setTotalFrames(count: number): void {
+    this.totalFrames = count;
+  }
+
+  /**
    * Get max cache size
    */
   getMaxCacheSize(): number {

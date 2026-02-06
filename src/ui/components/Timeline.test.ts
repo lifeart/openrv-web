@@ -122,6 +122,22 @@ describe('Timeline', () => {
       expect(timeline.drawCount).toBeGreaterThan(0);
     });
 
+    it('TML-029: pauses thumbnail loading when playback starts', () => {
+      const thumbManager = (timeline as any).thumbnailManager;
+      const pauseSpy = vi.spyOn(thumbManager, 'pauseLoading');
+
+      session.emit('playbackChanged', true);
+      expect(pauseSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('TML-030: resumes thumbnail loading when playback stops', () => {
+      const thumbManager = (timeline as any).thumbnailManager;
+      const resumeSpy = vi.spyOn(thumbManager, 'resumeLoading');
+
+      session.emit('playbackChanged', false);
+      expect(resumeSpy).toHaveBeenCalledTimes(1);
+    });
+
     it('TML-008: responds to durationChanged event', () => {
       timeline.drawCount = 0;
       session.emit('durationChanged', 100);
@@ -268,6 +284,127 @@ describe('Timeline', () => {
       timeline.drawCount = 0;
       timeline.toggleTimecodeDisplay();
       expect(timeline.drawCount).toBeGreaterThan(0);
+    });
+  });
+
+  describe('regression tests for pause-during-playback fix', () => {
+    describe('TML-REG-001: Rapid play/pause toggling', () => {
+      it('should call pauseLoading/resumeLoading on ThumbnailManager for each toggle', () => {
+        const thumbManager = (timeline as any).thumbnailManager;
+        const pauseSpy = vi.spyOn(thumbManager, 'pauseLoading');
+        const resumeSpy = vi.spyOn(thumbManager, 'resumeLoading');
+
+        // Initial state: not playing
+        expect(session.isPlaying).toBe(false);
+
+        // Toggle 1: Start playing
+        session.emit('playbackChanged', true);
+        expect(pauseSpy).toHaveBeenCalledTimes(1);
+        expect(resumeSpy).toHaveBeenCalledTimes(0);
+
+        // Toggle 2: Stop playing
+        session.emit('playbackChanged', false);
+        expect(pauseSpy).toHaveBeenCalledTimes(1);
+        expect(resumeSpy).toHaveBeenCalledTimes(1);
+
+        // Toggle 3: Start playing again
+        session.emit('playbackChanged', true);
+        expect(pauseSpy).toHaveBeenCalledTimes(2);
+        expect(resumeSpy).toHaveBeenCalledTimes(1);
+
+        // Toggle 4: Stop playing again
+        session.emit('playbackChanged', false);
+        expect(pauseSpy).toHaveBeenCalledTimes(2);
+        expect(resumeSpy).toHaveBeenCalledTimes(2);
+
+        // Toggle 5: Rapid sequence - play
+        session.emit('playbackChanged', true);
+        expect(pauseSpy).toHaveBeenCalledTimes(3);
+        expect(resumeSpy).toHaveBeenCalledTimes(2);
+
+        // Toggle 6: Rapid sequence - pause
+        session.emit('playbackChanged', false);
+        expect(pauseSpy).toHaveBeenCalledTimes(3);
+        expect(resumeSpy).toHaveBeenCalledTimes(3);
+      });
+
+      it('should maintain correct paused state through multiple toggles', () => {
+        const thumbManager = (timeline as any).thumbnailManager;
+
+        // Start with not playing
+        expect(thumbManager.isLoadingPaused).toBe(false);
+
+        // Play
+        session.emit('playbackChanged', true);
+        expect(thumbManager.isLoadingPaused).toBe(true);
+
+        // Pause
+        session.emit('playbackChanged', false);
+        expect(thumbManager.isLoadingPaused).toBe(false);
+
+        // Play
+        session.emit('playbackChanged', true);
+        expect(thumbManager.isLoadingPaused).toBe(true);
+
+        // Pause
+        session.emit('playbackChanged', false);
+        expect(thumbManager.isLoadingPaused).toBe(false);
+      });
+
+      it('should not break thumbnail loading after many rapid toggles', async () => {
+        const thumbManager = (timeline as any).thumbnailManager;
+
+        // Perform many rapid toggles
+        for (let i = 0; i < 20; i++) {
+          session.emit('playbackChanged', true);
+          session.emit('playbackChanged', false);
+        }
+
+        // Final state should be not playing
+        expect(thumbManager.isLoadingPaused).toBe(false);
+
+        // ThumbnailManager should still be functional
+        expect(() => {
+          thumbManager.pauseLoading();
+          thumbManager.resumeLoading();
+        }).not.toThrow();
+      });
+
+      it('should handle interleaved playback events correctly', () => {
+        const thumbManager = (timeline as any).thumbnailManager;
+        const pauseSpy = vi.spyOn(thumbManager, 'pauseLoading');
+        const resumeSpy = vi.spyOn(thumbManager, 'resumeLoading');
+
+        // Simulate a scenario where playback events come in rapid succession
+        session.emit('playbackChanged', true);
+        session.emit('playbackChanged', true); // Duplicate play event
+        session.emit('playbackChanged', false);
+        session.emit('playbackChanged', false); // Duplicate pause event
+
+        // Should have called pause twice and resume twice (even if redundant)
+        expect(pauseSpy).toHaveBeenCalledTimes(2);
+        expect(resumeSpy).toHaveBeenCalledTimes(2);
+
+        // Final state should be not paused
+        expect(thumbManager.isLoadingPaused).toBe(false);
+      });
+
+      it('should still trigger redraw on each playbackChanged event', () => {
+        timeline.drawCount = 0;
+
+        // Each playback change should trigger draw
+        session.emit('playbackChanged', true);
+        const afterFirstToggle = timeline.drawCount;
+        expect(afterFirstToggle).toBeGreaterThan(0);
+
+        session.emit('playbackChanged', false);
+        const afterSecondToggle = timeline.drawCount;
+        expect(afterSecondToggle).toBeGreaterThan(afterFirstToggle);
+
+        session.emit('playbackChanged', true);
+        const afterThirdToggle = timeline.drawCount;
+        expect(afterThirdToggle).toBeGreaterThan(afterSecondToggle);
+      });
     });
   });
 });

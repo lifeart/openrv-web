@@ -106,7 +106,14 @@ export class Timeline {
 
     // Listen to session changes
     this.session.on('frameChanged', () => this.draw());
-    this.session.on('playbackChanged', () => this.draw());
+    this.session.on('playbackChanged', (isPlaying) => {
+      if (isPlaying) {
+        this.thumbnailManager.pauseLoading();
+      } else {
+        this.thumbnailManager.resumeLoading();
+      }
+      this.draw();
+    });
     this.session.on('durationChanged', () => {
       this.recalculateThumbnails();
       this.draw();

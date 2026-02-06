@@ -44,6 +44,7 @@ import { DisplayColorState, DEFAULT_DISPLAY_COLOR_STATE, DISPLAY_TRANSFER_CODES,
 import type { DisplayCapabilities } from '../../color/DisplayCapabilities';
 import { safeCanvasContext2D } from '../../color/SafeCanvasContext';
 import { Renderer } from '../../render/Renderer';
+import { RenderWorkerProxy } from '../../render/RenderWorkerProxy';
 import type { IPImage } from '../../core/image/Image';
 
 // Extracted effect processing utilities
@@ -370,6 +371,13 @@ export class Viewer {
   private glRenderer: Renderer | null = null;
   private hdrRenderActive = false;
 
+  // WebGL SDR rendering (Phase 1A: GPU shader pipeline for SDR sources)
+  private sdrWebGLRenderActive = false;
+
+  // Phase 4: OffscreenCanvas worker proxy
+  private renderWorkerProxy: RenderWorkerProxy | null = null;
+  private isAsyncRenderer = false;
+
   constructor(session: Session, paintEngine: PaintEngine, capabilities?: DisplayCapabilities) {
     this.capabilities = capabilities;
     this.canvasColorSpace = this.capabilities?.canvasP3 ? 'display-p3' : undefined;
@@ -671,8 +679,8 @@ export class Viewer {
       resetCanvasFromHiDPI(this.cropOverlay, this.cropCtx, width, height);
     }
 
-    // Resize WebGL canvas if HDR mode is active
-    if (this.glCanvas && this.hdrRenderActive && this.glRenderer) {
+    // Resize WebGL canvas if HDR or SDR WebGL mode is active
+    if (this.glCanvas && (this.hdrRenderActive || this.sdrWebGLRenderActive) && this.glRenderer) {
       this.glRenderer.resize(width, height);
     }
 
@@ -750,7 +758,29 @@ export class Viewer {
       this.lastSourceBFrameCanvas = null;
       this.scheduleRender();
     });
-    this.session.on('frameChanged', () => this.scheduleRender());
+    this.session.on('frameChanged', () => {
+      // Phase 2B: Proactively preload for the NEXT frame before it is rendered,
+      // giving the worker pool a head start on processing upcoming frames
+      if (this.session.isPlaying && this.prerenderBuffer) {
+        const direction = this.session.playDirection || 1;
+        const nextFrame = this.session.currentFrame + direction;
+        this.prerenderBuffer.preloadAround(nextFrame);
+        // Auto-tune preload-ahead window based on frame processing times and FPS
+        const fps = this.session.fps || 24;
+        this.prerenderBuffer.updateDynamicPreloadAhead(fps);
+      }
+
+      // Phase 4: Pre-create ImageBitmap for double-buffer pattern.
+      // This starts bitmap creation before the next RAF, avoiding blocking.
+      if (this.isAsyncRenderer && this.renderWorkerProxy) {
+        const source = this.session.currentSource;
+        if (source?.element && !(source.fileSourceNode?.isHDR())) {
+          this.renderWorkerProxy.prepareFrame(source.element as unknown as HTMLImageElement);
+        }
+      }
+
+      this.scheduleRender();
+    });
 
     // Paint events
     this.paintEngine.on('annotationsChanged', () => this.renderPaint());
@@ -802,14 +832,28 @@ export class Viewer {
       return;
     }
 
-    // HDR path: use WebGL readPixelFloat for accurate HDR values
-    if (this.hdrRenderActive && this.glRenderer) {
+    // HDR/SDR WebGL path: use WebGL readPixelFloat for accurate values
+    if ((this.hdrRenderActive || this.sdrWebGLRenderActive) && this.glRenderer) {
       const sampleSize = this.pixelProbe.getSampleSize();
       const halfSize = Math.floor(sampleSize / 2);
       const rx = Math.max(0, Math.floor(position.x) - halfSize);
       const ry = Math.max(0, Math.floor(position.y) - halfSize);
       const rw = Math.min(sampleSize, this.displayWidth - rx);
       const rh = Math.min(sampleSize, this.displayHeight - ry);
+
+      // Phase 4: Use async readback when worker renderer is active
+      if (this.isAsyncRenderer && this.renderWorkerProxy) {
+        this.renderWorkerProxy.readPixelFloatAsync(rx, ry, rw, rh).then((pixels) => {
+          this.handlePixelProbeData(pixels, position, rw, rh, probeEnabled, cursorColorEnabled, e);
+        }).catch(() => {
+          // Readback failed — ignore silently
+        });
+        if (probeEnabled) {
+          this.pixelProbe.setOverlayPosition(e.clientX, e.clientY);
+        }
+        return;
+      }
+
       const pixels = this.glRenderer.readPixelFloat(rx, ry, rw, rh);
 
       if (probeEnabled) {
@@ -893,6 +937,53 @@ export class Viewer {
       this.cursorColorCallback(null, null);
     }
   };
+
+  /**
+   * Process pixel probe data from either sync or async readback.
+   * Used by both the sync and async (worker) paths.
+   */
+  private handlePixelProbeData(
+    pixels: Float32Array | null,
+    position: { x: number; y: number },
+    rw: number,
+    rh: number,
+    probeEnabled: boolean,
+    cursorColorEnabled: boolean,
+    e: MouseEvent,
+  ): void {
+    if (probeEnabled) {
+      if (pixels && pixels.length >= 4) {
+        const count = rw * rh;
+        let tr = 0, tg = 0, tb = 0, ta = 0;
+        for (let i = 0; i < count; i++) {
+          tr += pixels[i * 4]!;
+          tg += pixels[i * 4 + 1]!;
+          tb += pixels[i * 4 + 2]!;
+          ta += pixels[i * 4 + 3]!;
+        }
+        this.pixelProbe.updateFromHDRValues(
+          position.x, position.y,
+          tr / count, tg / count, tb / count, ta / count,
+          this.displayWidth, this.displayHeight
+        );
+      }
+      this.pixelProbe.setOverlayPosition(e.clientX, e.clientY);
+    }
+
+    if (cursorColorEnabled) {
+      if (pixels && pixels.length >= 4) {
+        const centerIdx = (Math.floor(rh / 2) * rw + Math.floor(rw / 2)) * 4;
+        const color = {
+          r: Math.round(Math.max(0, Math.min(255, pixels[centerIdx]! * 255))),
+          g: Math.round(Math.max(0, Math.min(255, pixels[centerIdx + 1]! * 255))),
+          b: Math.round(Math.max(0, Math.min(255, pixels[centerIdx + 2]! * 255))),
+        };
+        this.cursorColorCallback!(color, position);
+      } else {
+        this.cursorColorCallback!(null, null);
+      }
+    }
+  }
 
   private onClickForProbe = (e: MouseEvent): void => {
     if (!this.pixelProbe.isEnabled()) return;
@@ -1601,19 +1692,151 @@ export class Viewer {
   private ensureGLRenderer(): Renderer | null {
     if (this.glRenderer) return this.glRenderer;
     if (!this.glCanvas) return null;
+
+    // Phase 4: Try OffscreenCanvas worker first for main-thread isolation.
+    // Only attempt once — if worker proxy already failed, skip directly to sync renderer.
+    if (!this.renderWorkerProxy && !this.isAsyncRenderer) {
+      try {
+        if (typeof OffscreenCanvas !== 'undefined' &&
+            'transferControlToOffscreen' in this.glCanvas &&
+            typeof Worker !== 'undefined') {
+          const proxy = new RenderWorkerProxy();
+          proxy.initialize(this.glCanvas, this.capabilities);
+          // initAsync runs in background — the proxy buffers messages until ready
+          proxy.initAsync().then(() => {
+            console.log(`[Viewer] Render worker initialized, HDR output: ${proxy.getHDROutputMode()}`);
+          }).catch((err) => {
+            console.warn('[Viewer] Render worker init failed, falling back to sync:', err);
+            this.fallbackToSyncRenderer();
+          });
+
+          // Set up context loss/restore callbacks
+          proxy.setOnContextLost(() => {
+            console.warn('[Viewer] Worker WebGL context lost');
+            if (this.hdrRenderActive) {
+              this.deactivateHDRMode();
+            }
+            if (this.sdrWebGLRenderActive) {
+              this.deactivateSDRWebGLMode();
+            }
+          });
+          proxy.setOnContextRestored(() => {
+            console.log('[Viewer] Worker WebGL context restored');
+          });
+
+          this.renderWorkerProxy = proxy;
+          this.isAsyncRenderer = true;
+          // glCanvas has been transferred — we cannot create a sync renderer on it anymore.
+          // The proxy acts as the renderer for state setters.
+          // For RendererBackend compatibility, create a facade Renderer that delegates.
+          // For now, we use the proxy as a "renderer" by wrapping it.
+          this.glRenderer = proxy as unknown as Renderer;
+          return this.glRenderer;
+        }
+      } catch (e) {
+        console.warn('[Viewer] OffscreenCanvas worker setup failed, using sync renderer:', e);
+        // Fall through to sync renderer. Need a fresh canvas since transferControlToOffscreen
+        // may have been called (irreversible). Recreate glCanvas.
+        this.recreateGLCanvas();
+      }
+    }
+
+    // Sync renderer fallback (tier 2)
     try {
       const renderer = new Renderer();
       // initialize() sets drawingBufferColorSpace to rec2100-hlg/pq immediately
       // after context creation (before shaders/buffers) when displayHDR is true.
       renderer.initialize(this.glCanvas, this.capabilities);
       const hdrMode = renderer.getHDROutputMode();
-      console.log(`[Viewer] WebGL renderer initialized, HDR output: ${hdrMode}`);
+      console.log(`[Viewer] WebGL renderer initialized (sync), HDR output: ${hdrMode}`);
       this.glRenderer = renderer;
       return renderer;
     } catch (e) {
       console.warn('[Viewer] WebGL renderer init failed:', e);
       return null;
     }
+  }
+
+  /**
+   * Fall back from async worker renderer to synchronous main-thread renderer.
+   * Used when the worker fails to initialize or crashes.
+   */
+  private fallbackToSyncRenderer(): void {
+    if (this.renderWorkerProxy) {
+      this.renderWorkerProxy.dispose();
+      this.renderWorkerProxy = null;
+    }
+    this.isAsyncRenderer = false;
+    this.glRenderer = null;
+
+    // Recreate glCanvas since the original was transferred
+    this.recreateGLCanvas();
+  }
+
+  /**
+   * Recreate the GL canvas element (needed after transferControlToOffscreen fails
+   * or worker dies, since the transfer is irreversible).
+   */
+  private recreateGLCanvas(): void {
+    if (this.glCanvas && this.glCanvas.parentNode) {
+      const parent = this.glCanvas.parentNode;
+      const nextSibling = this.glCanvas.nextSibling;
+      parent.removeChild(this.glCanvas);
+      this.glCanvas = document.createElement('canvas');
+      this.glCanvas.style.cssText = 'position:absolute;top:0;left:0;display:none;';
+      if (nextSibling) {
+        parent.insertBefore(this.glCanvas, nextSibling);
+      } else {
+        parent.appendChild(this.glCanvas);
+      }
+    }
+  }
+
+  /**
+   * Sync shared Viewer state (effects, LUT, background pattern, etc.) to the GL
+   * renderer. Called by both renderHDRWithWebGL() and renderSDRWithWebGL() to
+   * avoid duplicating the state transfer code.
+   *
+   * Basic color adjustments (exposure, gamma, saturation, contrast, brightness,
+   * temperature, tint) and tone mapping are NOT synced here because HDR and SDR
+   * paths override them differently. Extended adjustments (highlights/shadows,
+   * vibrance, clarity, sharpen, HSL qualifier) ARE synced here since they use
+   * the same values regardless of HDR/SDR mode.
+   */
+  private syncRendererState(renderer: Renderer): void {
+    renderer.setColorInversion(this.colorInversionEnabled);
+
+    // Background pattern
+    renderer.setBackgroundPattern(this.backgroundPatternState);
+
+    // 2D effects
+    renderer.setCDL(this.cdlValues);
+    renderer.setCurvesLUT(isDefaultCurves(this.curvesData) ? null : buildAllCurveLUTs(this.curvesData));
+    renderer.setColorWheels(this.colorWheels.getState());
+    renderer.setFalseColor(this.falseColor.isEnabled(), this.falseColor.getColorLUT());
+    renderer.setZebraStripes(this.zebraStripes.getState());
+    renderer.setChannelMode(this.channelMode);
+    renderer.setDisplayColorState({
+      transferFunction: DISPLAY_TRANSFER_CODES[this.displayColorState.transferFunction],
+      displayGamma: this.displayColorState.displayGamma,
+      displayBrightness: this.displayColorState.displayBrightness,
+      customGamma: this.displayColorState.customGamma,
+    });
+
+    // 3D LUT
+    if (this.currentLUT && this.lutIntensity > 0) {
+      renderer.setLUT(this.currentLUT.data, this.currentLUT.size, this.lutIntensity);
+    } else {
+      renderer.setLUT(null, 0, 0);
+    }
+
+    // Phase 1B: New GPU shader effects
+    const adj = this.colorAdjustments;
+    renderer.setHighlightsShadows(adj.highlights, adj.shadows, adj.whites, adj.blacks);
+    renderer.setVibrance(adj.vibrance, adj.vibranceSkinProtection);
+    renderer.setClarity(adj.clarity);
+    renderer.setSharpen(this.filterSettings.sharpen);
+    renderer.setHSLQualifier(this.hslQualifier.getState());
   }
 
   private renderHDRWithWebGL(
@@ -1636,7 +1859,7 @@ export class Viewer {
       renderer.resize(displayWidth, displayHeight);
     }
 
-    // Sync state from Viewer → Renderer
+    // Sync color adjustments and tone mapping (HDR-specific overrides)
     const isHDROutput = renderer.getHDROutputMode() !== 'sdr';
     if (isHDROutput) {
       // HDR output: values > 1.0 pass through to the rec2100-hlg/pq drawing buffer.
@@ -1650,31 +1873,9 @@ export class Viewer {
       renderer.setColorAdjustments(this.colorAdjustments);
       renderer.setToneMappingState(this.toneMappingState);
     }
-    renderer.setColorInversion(this.colorInversionEnabled);
 
-    // Sync background pattern
-    renderer.setBackgroundPattern(this.backgroundPatternState);
-
-    // Sync 2D effects into GPU shader
-    renderer.setCDL(this.cdlValues);
-    renderer.setCurvesLUT(isDefaultCurves(this.curvesData) ? null : buildAllCurveLUTs(this.curvesData));
-    renderer.setColorWheels(this.colorWheels.getState());
-    renderer.setFalseColor(this.falseColor.isEnabled(), this.falseColor.getColorLUT());
-    renderer.setZebraStripes(this.zebraStripes.getState());
-    renderer.setChannelMode(this.channelMode);
-    renderer.setDisplayColorState({
-      transferFunction: DISPLAY_TRANSFER_CODES[this.displayColorState.transferFunction],
-      displayGamma: this.displayColorState.displayGamma,
-      displayBrightness: this.displayColorState.displayBrightness,
-      customGamma: this.displayColorState.customGamma,
-    });
-
-    // Sync single-pass 3D LUT into GPU shader
-    if (this.currentLUT && this.lutIntensity > 0) {
-      renderer.setLUT(this.currentLUT.data, this.currentLUT.size, this.lutIntensity);
-    } else {
-      renderer.setLUT(null, 0, 0);
-    }
+    // Sync shared state (effects, LUT, background pattern, etc.)
+    this.syncRendererState(renderer);
 
     // Render
     renderer.clear(0, 0, 0, 1);
@@ -1698,13 +1899,169 @@ export class Viewer {
     this.hdrRenderActive = false;
   }
 
+  private deactivateSDRWebGLMode(): void {
+    if (!this.glCanvas) return;
+    this.glCanvas.style.display = 'none';
+    this.imageCanvas.style.visibility = 'visible';
+    this.sdrWebGLRenderActive = false;
+    // Restore CSS filters for the 2D canvas path
+    this.applyColorFilters();
+  }
+
+  /**
+   * Check if any GPU-supported shader effects are active that justify routing
+   * SDR content through the WebGL pipeline instead of the 2D canvas path.
+   *
+   * Effects supported in the GPU shader:
+   * - exposure, gamma, saturation, contrast, brightness, temperature, tint
+   * - hue rotation, tone mapping, color inversion, channel isolation
+   * - CDL, curves, color wheels, false color, zebra stripes, 3D LUT
+   * - display color management, background pattern
+   * - highlights/shadows/whites/blacks, vibrance, clarity, sharpen
+   * - HSL qualifier (secondary color correction)
+   */
+  private hasGPUShaderEffectsActive(): boolean {
+    const adj = this.colorAdjustments;
+    // Basic color adjustments
+    if (adj.exposure !== 0) return true;
+    if (adj.gamma !== 1) return true;
+    if (adj.saturation !== 1) return true;
+    if (adj.contrast !== 1) return true;
+    if (adj.brightness !== 0) return true;
+    if (adj.temperature !== 0) return true;
+    if (adj.tint !== 0) return true;
+    if (!isIdentityHueRotation(adj.hueRotation)) return true;
+
+    // Tone mapping
+    if (this.isToneMappingEnabled()) return true;
+
+    // Color inversion
+    if (this.colorInversionEnabled) return true;
+
+    // Channel isolation
+    if (this.channelMode !== 'rgb') return true;
+
+    // CDL
+    if (!isDefaultCDL(this.cdlValues)) return true;
+
+    // Curves
+    if (!isDefaultCurves(this.curvesData)) return true;
+
+    // Color wheels
+    if (this.colorWheels.hasAdjustments()) return true;
+
+    // False color
+    if (this.falseColor.isEnabled()) return true;
+
+    // Zebra stripes
+    if (this.zebraStripes.isEnabled()) return true;
+
+    // 3D LUT
+    if (this.currentLUT && this.lutIntensity > 0) return true;
+
+    // Display color management
+    if (isDisplayStateActive(this.displayColorState)) return true;
+
+    // Phase 1B: New GPU shader effects
+    // Highlights/shadows/whites/blacks
+    if (adj.highlights !== 0 || adj.shadows !== 0 || adj.whites !== 0 || adj.blacks !== 0) return true;
+    // Vibrance
+    if (adj.vibrance !== 0) return true;
+    // Clarity
+    if (adj.clarity !== 0) return true;
+    // Sharpen
+    if (this.filterSettings.sharpen > 0) return true;
+    // HSL qualifier
+    if (this.hslQualifier.isEnabled()) return true;
+
+    return false;
+  }
+
+  /**
+   * Check if any CPU-only effects are active that are not in the GPU shader.
+   * When these are active, the SDR path must fall back to the 2D canvas + pixel
+   * processing pipeline to get correct results.
+   *
+   * After Phase 1B, the only remaining CPU-only effect is blur (applied via CSS
+   * filter which doesn't work with the GL canvas).
+   */
+  private hasCPUOnlyEffectsActive(): boolean {
+    // Blur (applied via CSS filter which doesn't work with the GL canvas)
+    if (this.filterSettings.blur > 0) return true;
+    return false;
+  }
+
+  /**
+   * Render an SDR source through the WebGL shader pipeline for GPU-accelerated
+   * effects processing. This avoids the slow CPU pixel processing path for
+   * effects that are supported in the fragment shader.
+   *
+   * Returns true if the SDR content was rendered via WebGL, false if the caller
+   * should fall back to the 2D canvas path.
+   */
+  private renderSDRWithWebGL(
+    source: HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | HTMLImageElement,
+    displayWidth: number,
+    displayHeight: number,
+  ): boolean {
+    const renderer = this.ensureGLRenderer();
+    if (!renderer || !this.glCanvas) return false;
+
+    // Activate WebGL canvas (show GL canvas, hide 2D canvas)
+    if (!this.sdrWebGLRenderActive) {
+      this.glCanvas.style.display = 'block';
+      this.imageCanvas.style.visibility = 'hidden';
+      this.sdrWebGLRenderActive = true;
+      this.applyColorFilters();
+    }
+
+    // Resize if needed
+    if (this.glCanvas.width !== displayWidth || this.glCanvas.height !== displayHeight) {
+      renderer.resize(displayWidth, displayHeight);
+    }
+
+    // Sync color adjustments and tone mapping (SDR: use as configured)
+    renderer.setColorAdjustments(this.colorAdjustments);
+    renderer.setToneMappingState(this.toneMappingState);
+
+    // Sync shared state (effects, LUT, background pattern, etc.)
+    this.syncRendererState(renderer);
+
+    // Render
+    renderer.clear(0, 0, 0, 1);
+    const result = renderer.renderSDRFrame(source);
+
+    if (!result) {
+      // WebGL rendering failed - deactivate and let caller fall back to 2D canvas
+      this.deactivateSDRWebGLMode();
+      return false;
+    }
+
+    // CSS transform for rotation/flip
+    const { rotation, flipH, flipV } = this.transform;
+    const transforms: string[] = [];
+    if (rotation) transforms.push(`rotate(${rotation}deg)`);
+    if (flipH) transforms.push('scaleX(-1)');
+    if (flipV) transforms.push('scaleY(-1)');
+    this.glCanvas.style.transform = transforms.length ? transforms.join(' ') : '';
+
+    return true;
+  }
+
   private renderImage(): void {
     const source = this.session.currentSource;
 
-    // Deactivate HDR mode if current source isn't HDR
+    // Deactivate HDR mode if current source isn't HDR, or if OCIO is active
+    // (OCIO requires the 2D canvas path since the GL shader has no OCIO support)
     const isCurrentHDR = source?.fileSourceNode?.isHDR() === true;
-    if (this.hdrRenderActive && !isCurrentHDR) {
+    const ocioActive = this.ocioEnabled && this.ocioBakedLUT !== null;
+    if (this.hdrRenderActive && (!isCurrentHDR || ocioActive)) {
       this.deactivateHDRMode();
+    }
+
+    // Deactivate SDR WebGL mode if current source is HDR (HDR path takes over)
+    if (isCurrentHDR && this.sdrWebGLRenderActive) {
+      this.deactivateSDRWebGLMode();
     }
 
     // Get container size (cached per frame)
@@ -1865,8 +2222,11 @@ export class Viewer {
       this.setCanvasSize(displayWidth, displayHeight);
     }
 
-    // HDR WebGL rendering path: render via GPU shader pipeline and skip 2D canvas
-    if (hdrFileSource) {
+    // HDR WebGL rendering path: render via GPU shader pipeline and skip 2D canvas.
+    // When OCIO is active, skip the WebGL path and fall through to the 2D canvas
+    // where applyOCIOToCanvas() can apply the baked LUT as a post-process (the GL
+    // shader does not support OCIO transforms, mirroring the SDR WebGL guard).
+    if (hdrFileSource && !(this.ocioEnabled && this.ocioBakedLUT)) {
       const ipImage = hdrFileSource.getIPImage();
       if (ipImage && this.renderHDRWithWebGL(ipImage, displayWidth, displayHeight)) {
         this.updateCanvasPosition();
@@ -1881,6 +2241,57 @@ export class Viewer {
         this.updateWipeLine();
         return;
       }
+    } else if (hdrFileSource) {
+      // OCIO is active — bypass WebGL and use 2D canvas so OCIO LUT can be applied
+      element = hdrFileSource.getCanvas() ?? undefined;
+      if (!element) {
+        this.drawPlaceholder();
+        this.updateCanvasPosition();
+        this.updateWipeLine();
+        return;
+      }
+    }
+
+    // SDR WebGL rendering path: route SDR sources through GPU shader pipeline
+    // when GPU-supported effects are active and no CPU-only effects need the 2D path.
+    // Conditions: element is available, not HDR, GPU effects active, no CPU-only effects,
+    // no active crop clipping (not yet handled in GL shader), and no complex features
+    // that require the 2D canvas (wipe, split screen, stack, difference matte, uncrop,
+    // stereo, lens distortion, ghost frames, OCIO).
+    const cropClipActiveForSDR = this.cropState.enabled && !isFullCropRegion(this.cropState.region);
+    const sdrWebGLEligible =
+      element &&
+      !isCurrentHDR &&
+      !cropClipActiveForSDR &&
+      this.hasGPUShaderEffectsActive() &&
+      !this.hasCPUOnlyEffectsActive() &&
+      !uncropActive &&
+      this.wipeState.mode === 'off' &&
+      !this.isStackEnabled() &&
+      !this.differenceMatteState.enabled &&
+      !this.ghostFrameState.enabled &&
+      isDefaultStereoState(this.stereoState) &&
+      isDefaultLensParams(this.lensParams) &&
+      !(this.ocioEnabled && this.ocioBakedLUT) &&
+      (element instanceof HTMLImageElement ||
+       element instanceof HTMLVideoElement ||
+       element instanceof HTMLCanvasElement ||
+       (typeof OffscreenCanvas !== 'undefined' && element instanceof OffscreenCanvas));
+
+    if (sdrWebGLEligible) {
+      if (this.renderSDRWithWebGL(
+        element as HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | HTMLImageElement,
+        displayWidth,
+        displayHeight,
+      )) {
+        this.updateCanvasPosition();
+        this.updateWipeLine();
+        return; // SDR WebGL path complete, skip 2D processing
+      }
+      // renderSDRWithWebGL failed — fall through to 2D canvas path
+    } else if (this.sdrWebGLRenderActive) {
+      // Transitioning away from SDR WebGL: deactivate and restore 2D canvas path
+      this.deactivateSDRWebGLMode();
     }
 
     // Clear canvas
@@ -1907,17 +2318,60 @@ export class Viewer {
     // Try prerendered cache first during playback for smooth performance with effects
     if (this.session.isPlaying && this.prerenderBuffer) {
       const currentFrame = this.session.currentFrame;
-      // Always trigger preloading of nearby frames, even on cache miss.
-      // This ensures workers stay ahead of playback rather than lagging behind.
-      this.prerenderBuffer.preloadAround(currentFrame);
+      // Note: preloadAround() is already called from the frameChanged handler,
+      // so we don't duplicate it here. Only queuePriorityFrame() is called on cache miss.
       const cached = this.prerenderBuffer.getFrame(currentFrame);
       if (cached) {
+        // Clear canvas before drawing cached frame (prevents stale pixels at edges)
+        this.imageCtx.clearRect(0, 0, displayWidth, displayHeight);
+
+        // Draw background pattern (shows through transparent/alpha areas)
+        if (this.backgroundPatternState.pattern !== 'black') {
+          drawBackgroundPattern(this.imageCtx, displayWidth, displayHeight, this.backgroundPatternState);
+        }
+
+        // When uncrop is active, fill the padding area with a subtle pattern
+        if (uncropActive) {
+          this.drawUncropBackground(displayWidth, displayHeight, uncropOffsetX, uncropOffsetY, imageDisplayW, imageDisplayH);
+        }
+
         // Draw cached pre-rendered frame scaled to display size
         if (uncropActive) {
           this.imageCtx.drawImage(cached.canvas, uncropOffsetX, uncropOffsetY, imageDisplayW, imageDisplayH);
         } else {
           this.imageCtx.drawImage(cached.canvas, 0, 0, displayWidth, displayHeight);
         }
+
+        // After drawing cached frame, apply effects not handled by worker
+        // Render ghost frames (onion skin) on top of the main frame
+        if (this.ghostFrameState.enabled) {
+          this.renderGhostFrames(displayWidth, displayHeight);
+        }
+
+        // Apply stereo viewing mode (transforms layout for 3D viewing)
+        if (!isDefaultStereoState(this.stereoState)) {
+          const hasEyeTransforms = !isDefaultStereoEyeTransformState(this.stereoEyeTransformState);
+          const hasAlignOverlay = this.stereoAlignMode !== 'off';
+          if (hasEyeTransforms || hasAlignOverlay) {
+            this.applyStereoModeWithEyeTransforms(this.imageCtx, displayWidth, displayHeight);
+          } else {
+            this.applyStereoMode(this.imageCtx, displayWidth, displayHeight);
+          }
+        }
+
+        // Apply lens distortion correction (geometric transform, applied before color effects)
+        if (!isDefaultLensParams(this.lensParams)) {
+          this.applyLensDistortionToCtx(this.imageCtx, displayWidth, displayHeight);
+        }
+        // Apply GPU-accelerated color effects
+        if (this.currentLUT && this.lutIntensity > 0) {
+          this.applyLUTToCanvas(this.imageCtx, displayWidth, displayHeight);
+        }
+        if (this.ocioEnabled && this.ocioBakedLUT) {
+          this.applyOCIOToCanvas(this.imageCtx, displayWidth, displayHeight);
+        }
+        // Apply lightweight diagnostic overlays and display management
+        this.applyLightweightEffects(this.imageCtx, displayWidth, displayHeight);
         // Apply crop clipping by clearing outside areas
         if (cropClipActive) {
           this.clearOutsideCropRegion(displayWidth, displayHeight);
@@ -1926,6 +2380,11 @@ export class Viewer {
         this.updateWipeLine();
         return; // Skip live effect processing
       }
+      // Phase 2A: On cache miss during playback, show raw frame without effects.
+      // Queue the frame for async processing in the background so it will be
+      // available on the next render pass. This avoids blocking the main thread
+      // with synchronous applyBatchedPixelEffects() during playback.
+      this.prerenderBuffer.queuePriorityFrame(currentFrame);
     }
 
     // Check if difference matte mode is enabled
@@ -2027,9 +2486,18 @@ export class Viewer {
       this.applyOCIOToCanvas(this.imageCtx, displayWidth, displayHeight);
     }
 
-    // Apply batched pixel-level effects (CDL, curves, sharpen, channel isolation)
-    // This uses a single getImageData/putImageData pair for better performance
-    this.applyBatchedPixelEffects(this.imageCtx, displayWidth, displayHeight);
+    // Apply batched pixel-level effects (highlights/shadows, vibrance, clarity,
+    // CDL, curves, HSL qualifier, sharpen, channel isolation, etc.)
+    // This uses a single getImageData/putImageData pair for better performance.
+    // Phase 2A: During playback with prerender buffer active, skip expensive CPU
+    // effects on cache miss (workers handle those). Still apply cheap diagnostic
+    // overlays and display color management for accurate monitoring.
+    if (this.session.isPlaying && this.prerenderBuffer) {
+      this.applyLightweightEffects(this.imageCtx, displayWidth, displayHeight);
+    } else {
+      // When paused/scrubbing, apply all effects synchronously for instant feedback
+      this.applyBatchedPixelEffects(this.imageCtx, displayWidth, displayHeight);
+    }
 
     // Apply crop clipping by clearing areas outside the crop region
     // Note: This is done AFTER all effects because putImageData() ignores ctx.clip()
@@ -2669,8 +3137,12 @@ export class Viewer {
 
   /**
    * Apply batched pixel-level effects to the canvas.
-   * Uses a single getImageData/putImageData pair for CDL, curves, sharpen, and channel isolation.
-   * This reduces GPU↔CPU transfers from 4 to 1.
+   * Uses a single getImageData/putImageData pair for all pixel-level effects:
+   * highlights/shadows, vibrance, clarity, hue rotation, color wheels, CDL,
+   * curves, HSL qualifier, tone mapping, color inversion, sharpen, channel
+   * isolation, display color management, false color, luminance visualization,
+   * zebra stripes, and clipping overlay.
+   * This reduces GPU-to-CPU transfers from N to 1.
    */
   private applyBatchedPixelEffects(ctx: CanvasRenderingContext2D, width: number, height: number): void {
     const hasCDL = !isDefaultCDL(this.cdlValues);
@@ -2801,6 +3273,59 @@ export class Viewer {
 
     // Apply clipping overlay (shows clipped highlights/shadows)
     // Applied last as it's a diagnostic overlay
+    if (hasClippingOverlay && !hasFalseColor && !hasLuminanceVis && !hasZebras) {
+      this.clippingOverlay.apply(imageData);
+    }
+
+    // Single putImageData call
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  /**
+   * Apply only lightweight diagnostic overlays and display color management.
+   * Used during playback with prerender buffer to maintain visual diagnostics
+   * without blocking on expensive CPU effects (handled by workers).
+   * These are all O(n) single-pass with no heavy computation (<5ms at 1080p).
+   */
+  private applyLightweightEffects(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+    const hasChannel = this.channelMode !== 'rgb';
+    const hasFalseColor = this.falseColor.isEnabled();
+    const hasLuminanceVis = this.luminanceVisualization.getMode() !== 'off' && this.luminanceVisualization.getMode() !== 'false-color';
+    const hasZebras = this.zebraStripes.isEnabled();
+    const hasClippingOverlay = this.clippingOverlay.isEnabled();
+    const hasDisplayColorMgmt = isDisplayStateActive(this.displayColorState);
+
+    // Early return if no lightweight effects are active
+    if (!hasChannel && !hasFalseColor && !hasLuminanceVis && !hasZebras && !hasClippingOverlay && !hasDisplayColorMgmt) {
+      return;
+    }
+
+    // Single getImageData call
+    const imageData = ctx.getImageData(0, 0, width, height);
+
+    // Channel isolation (fast channel swizzle)
+    if (hasChannel) {
+      applyChannelIsolation(imageData, this.channelMode);
+    }
+
+    // Display color management (final pipeline stage before diagnostic overlays)
+    if (hasDisplayColorMgmt) {
+      applyDisplayColorManagementToImageData(imageData, this.displayColorState);
+    }
+
+    // Luminance visualization or false color (mutually exclusive)
+    if (hasLuminanceVis) {
+      this.luminanceVisualization.apply(imageData);
+    } else if (hasFalseColor) {
+      this.falseColor.apply(imageData);
+    }
+
+    // Zebra stripes
+    if (hasZebras && !hasFalseColor && !hasLuminanceVis) {
+      this.zebraStripes.apply(imageData);
+    }
+
+    // Clipping overlay
     if (hasClippingOverlay && !hasFalseColor && !hasLuminanceVis && !hasZebras) {
       this.clippingOverlay.apply(imageData);
     }
@@ -3065,6 +3590,14 @@ export class Viewer {
   // Display color management methods
   setDisplayColorState(state: DisplayColorState): void {
     this.displayColorState = { ...state };
+    if (this.glRenderer) {
+      this.glRenderer.setDisplayColorState({
+        transferFunction: DISPLAY_TRANSFER_CODES[state.transferFunction],
+        displayGamma: state.displayGamma,
+        displayBrightness: state.displayBrightness,
+        customGamma: state.customGamma,
+      });
+    }
     this.notifyEffectsChanged();
     this.scheduleRender();
   }
@@ -3075,6 +3608,14 @@ export class Viewer {
 
   resetDisplayColorState(): void {
     this.displayColorState = { ...DEFAULT_DISPLAY_COLOR_STATE };
+    if (this.glRenderer) {
+      this.glRenderer.setDisplayColorState({
+        transferFunction: DISPLAY_TRANSFER_CODES[DEFAULT_DISPLAY_COLOR_STATE.transferFunction],
+        displayGamma: DEFAULT_DISPLAY_COLOR_STATE.displayGamma,
+        displayBrightness: DEFAULT_DISPLAY_COLOR_STATE.displayBrightness,
+        customGamma: DEFAULT_DISPLAY_COLOR_STATE.customGamma,
+      });
+    }
     this.notifyEffectsChanged();
     this.scheduleRender();
   }
@@ -3926,8 +4467,8 @@ export class Viewer {
   }
 
   private applyColorFilters(): void {
-    if (this.hdrRenderActive) {
-      // In HDR mode, CSS filters are skipped — the WebGL shader handles all adjustments
+    if (this.hdrRenderActive || this.sdrWebGLRenderActive) {
+      // In HDR/SDR WebGL mode, CSS filters are skipped — the WebGL shader handles all adjustments
       this.canvasContainer.style.filter = 'none';
       return;
     }
@@ -4020,6 +4561,13 @@ export class Viewer {
     if (this.prerenderCacheUpdateCallback) {
       this.prerenderBuffer.setOnCacheUpdate(this.prerenderCacheUpdateCallback);
     }
+    // Phase 2A: When a frame completes background processing, trigger re-render
+    // so the processed frame replaces the raw one being displayed
+    this.prerenderBuffer.onFrameProcessed = (frame: number) => {
+      if (this.session.currentFrame === frame && this.session.isPlaying) {
+        this.scheduleRender();
+      }
+    };
     this.notifyEffectsChanged();
   }
 
@@ -4068,7 +4616,10 @@ export class Viewer {
     // After effects change, immediately start prerendering upcoming frames
     // so the cache warms up before playback reaches them
     if (this.session.isPlaying) {
-      this.prerenderBuffer.preloadAround(this.session.currentFrame);
+      // Phase 2B: Queue current frame with highest priority so it processes first
+      const frame = this.session.currentFrame;
+      this.prerenderBuffer.queuePriorityFrame(frame);
+      this.prerenderBuffer.preloadAround(frame);
     }
   }
 
@@ -4078,11 +4629,23 @@ export class Viewer {
    */
   updatePrerenderPlaybackState(isPlaying: boolean, direction: number = 1): void {
     if (this.prerenderBuffer) {
-      this.prerenderBuffer.setPlaybackState(isPlaying, direction);
+      const fps = this.session.fps || 24;
+      this.prerenderBuffer.setPlaybackState(isPlaying, direction, fps);
       if (isPlaying) {
         // Start preloading around current frame
         this.prerenderBuffer.preloadAround(this.session.currentFrame);
       }
+    }
+  }
+
+  /**
+   * Phase 2B: Proactively preload frames around a target frame.
+   * Can be called from external code (e.g., Session) before the frame is rendered
+   * to give the worker pool a head start.
+   */
+  public preloadForFrame(frame: number): void {
+    if (this.prerenderBuffer) {
+      this.prerenderBuffer.preloadAround(frame);
     }
   }
 
@@ -4172,9 +4735,19 @@ export class Viewer {
     this.cropDragPointerId = null;
     this.cropRegionChangedCallback = null;
 
+    // Cleanup render worker proxy (Phase 4)
+    if (this.renderWorkerProxy) {
+      this.renderWorkerProxy.dispose();
+      this.renderWorkerProxy = null;
+      this.isAsyncRenderer = false;
+    }
+
     // Cleanup WebGL HDR renderer
     if (this.glRenderer) {
-      this.glRenderer.dispose();
+      // Only dispose if not the worker proxy (already disposed above)
+      if (!this.isAsyncRenderer) {
+        this.glRenderer.dispose();
+      }
       this.glRenderer = null;
     }
     this.glCanvas = null;

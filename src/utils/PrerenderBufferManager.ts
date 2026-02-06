@@ -60,6 +60,8 @@ interface PreloadRequest {
   priority: number;
   inProgress: boolean;
   cancelled: boolean;
+  startTime: number;
+  effectsHash: string;  // Captured at creation time to avoid race with async workers
   promise?: Promise<void>;
 }
 
@@ -127,6 +129,14 @@ export class PrerenderBufferManager {
 
   // Callback for cache updates (for UI refresh)
   private onCacheUpdateCallback: (() => void) | null = null;
+
+  // Phase 2A: Callback when a specific frame completes processing
+  onFrameProcessed: ((frame: number) => void) | null = null;
+
+  // Phase 2B: Frame processing time tracking for dynamic preload-ahead
+  private frameProcessingTimes: number[] = [];
+  private dynamicPreloadAhead: number = 30;
+  private lastFps: number = 0;
 
   constructor(
     totalFrames: number,
@@ -281,9 +291,50 @@ export class PrerenderBufferManager {
   /**
    * Set playback state for direction-aware preloading
    */
-  setPlaybackState(isPlaying: boolean, direction: number = 1): void {
+  setPlaybackState(isPlaying: boolean, direction: number = 1, fps: number = 0): void {
     this.isPlaying = isPlaying;
     this.playbackDirection = direction >= 0 ? 1 : -1;
+    if (fps > 0) {
+      this.lastFps = fps;
+    }
+  }
+
+  /**
+   * Queue a single frame for immediate processing with highest priority.
+   * Used for cache-miss frames during playback (Phase 2A).
+   */
+  queuePriorityFrame(frame: number): void {
+    if (!this.currentEffectsState || !hasActiveEffects(this.currentEffectsState)) {
+      return;
+    }
+    if (frame < 1 || frame > this.totalFrames) {
+      return;
+    }
+    if (this.hasFrame(frame)) {
+      return;
+    }
+    this.queuePreload(frame, 0); // priority 0 = highest
+    this.scheduleBackgroundWork();
+  }
+
+  /**
+   * Update the dynamic preload-ahead window based on average frame processing
+   * time and the target playback FPS.
+   */
+  updateDynamicPreloadAhead(fps: number): void {
+    if (this.frameProcessingTimes.length < 3) return;
+    const avgTime = this.frameProcessingTimes.reduce((a, b) => a + b, 0) / this.frameProcessingTimes.length;
+    const frameDuration = 1000 / fps;
+    // Need enough frames ahead to cover processing time * concurrent workers + buffer
+    const neededAhead = Math.ceil((avgTime / frameDuration) * this.config.maxConcurrent) + 10;
+    this.dynamicPreloadAhead = Math.max(30, Math.min(120, neededAhead));
+  }
+
+  /**
+   * Get the current dynamic preload-ahead value
+   */
+  getDynamicPreloadAhead(): number {
+    return this.dynamicPreloadAhead;
   }
 
   /**
@@ -323,7 +374,9 @@ export class PrerenderBufferManager {
 
   private calculatePlaybackPreloadList(centerFrame: number): Array<{ frame: number; priority: number }> {
     const list: Array<{ frame: number; priority: number }> = [];
-    const { preloadAhead, preloadBehind } = this.config;
+    // Use dynamic preload-ahead (Phase 2B) instead of static config value
+    const preloadAhead = this.dynamicPreloadAhead;
+    const { preloadBehind } = this.config;
     const dir = this.playbackDirection;
 
     for (let i = 1; i <= preloadAhead; i++) {
@@ -379,6 +432,8 @@ export class PrerenderBufferManager {
       priority,
       inProgress: false,
       cancelled: false,
+      startTime: 0, // Will be set when processing actually begins
+      effectsHash: this.currentEffectsHash, // Capture at creation time
     });
   }
 
@@ -437,6 +492,7 @@ export class PrerenderBufferManager {
    */
   private startPrerenderRequest(request: PreloadRequest): void {
     request.inProgress = true;
+    request.startTime = performance.now();
     this.activeCount++;
 
     if (this.workersAvailable && this.workerPool) {
@@ -547,7 +603,7 @@ export class PrerenderBufferManager {
 
             this.addToCache(request.frame, {
               canvas,
-              effectsHash: this.currentEffectsHash,
+              effectsHash: request.effectsHash,
               width,
               height,
             });
@@ -584,7 +640,7 @@ export class PrerenderBufferManager {
    */
   private prerenderOnMainThreadSync(request: PreloadRequest): void {
     try {
-      const result = this.prerenderFrame(request.frame);
+      const result = this.prerenderFrame(request.frame, request.effectsHash);
       if (result && !request.cancelled) {
         this.addToCache(request.frame, result);
       }
@@ -594,6 +650,19 @@ export class PrerenderBufferManager {
   }
 
   private completeRequest(request: PreloadRequest): void {
+    // Phase 2B: Track frame processing time for dynamic preload-ahead
+    if (request.startTime > 0 && !request.cancelled) {
+      const processingTime = performance.now() - request.startTime;
+      this.frameProcessingTimes.push(processingTime);
+      if (this.frameProcessingTimes.length > 20) {
+        this.frameProcessingTimes.shift();
+      }
+      // Auto-tune preload-ahead window based on accumulated timing data
+      if (this.frameProcessingTimes.length >= 3 && this.lastFps > 0) {
+        this.updateDynamicPreloadAhead(this.lastFps);
+      }
+    }
+
     this.pendingRequests.delete(request.frame);
     // Guard against going negative (can happen if updateEffects/invalidateAll
     // resets activeCount while in-flight workers are still completing)
@@ -606,7 +675,7 @@ export class PrerenderBufferManager {
     }
   }
 
-  private prerenderFrame(frameNumber: number): CachedFrame | null {
+  private prerenderFrame(frameNumber: number, effectsHash?: string): CachedFrame | null {
     if (!this.currentEffectsState) {
       return null;
     }
@@ -654,7 +723,7 @@ export class PrerenderBufferManager {
 
     return {
       canvas,
-      effectsHash: this.currentEffectsHash,
+      effectsHash: effectsHash ?? this.currentEffectsHash,
       width,
       height,
     };
@@ -666,6 +735,8 @@ export class PrerenderBufferManager {
     this.enforceMaxCacheSize();
     // Notify UI of cache update
     this.onCacheUpdateCallback?.();
+    // Phase 2A: Notify that a specific frame completed processing
+    this.onFrameProcessed?.(frame);
   }
 
   private updateAccessOrder(frame: number): void {
@@ -705,9 +776,11 @@ export class PrerenderBufferManager {
   }
 
   private evictDistantFrames(centerFrame: number): void {
-    const { maxCacheSize, preloadAhead, preloadBehind } = this.config;
+    const { maxCacheSize, preloadBehind } = this.config;
+    // Use the larger of static config and dynamic preload-ahead for keep range
+    const effectivePreloadAhead = Math.max(this.config.preloadAhead, this.dynamicPreloadAhead);
     // Keep frames within maxCacheSize distance, but at minimum the preload range + buffer
-    const keepRange = Math.max(maxCacheSize, preloadAhead + preloadBehind + 20);
+    const keepRange = Math.max(maxCacheSize, effectivePreloadAhead + preloadBehind + 20);
 
     const framesToEvict: number[] = [];
 
@@ -738,6 +811,7 @@ export class PrerenderBufferManager {
     hitRate: number;
     workersAvailable: boolean;
     numWorkers: number;
+    dynamicPreloadAhead: number;
   } {
     const totalRequests = this.cacheHits + this.staleCacheHits + this.cacheMisses;
     return {
@@ -750,6 +824,7 @@ export class PrerenderBufferManager {
       hitRate: totalRequests > 0 ? (this.cacheHits + this.staleCacheHits) / totalRequests : 0,
       workersAvailable: this.workersAvailable,
       numWorkers: this.workersAvailable ? this.config.numWorkers : 0,
+      dynamicPreloadAhead: this.dynamicPreloadAhead,
     };
   }
 

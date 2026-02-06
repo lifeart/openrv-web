@@ -14,12 +14,11 @@
  */
 
 import { ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from '../ui/components/ColorControls';
-import { CDLValues, DEFAULT_CDL, isDefaultCDL, applyCDLToImageData } from '../color/CDL';
-import { ColorCurvesData, createDefaultCurvesData, isDefaultCurves, CurveLUTCache, CurveChannel } from '../color/ColorCurves';
+import { CDLValues, DEFAULT_CDL, isDefaultCDL } from '../color/CDL';
+import { ColorCurvesData, createDefaultCurvesData, isDefaultCurves, CurveLUTCache, CurveChannel, CurveLUTs } from '../color/ColorCurves';
 import { FilterSettings, DEFAULT_FILTER_SETTINGS } from '../ui/components/FilterControl';
-import { ChannelMode, applyChannelIsolation } from '../ui/components/ChannelSelect';
-import { applyColorInversion } from '../color/Inversion';
-import { applyHueRotation, isIdentityHueRotation } from '../color/HueRotation';
+import { ChannelMode } from '../ui/components/ChannelSelect';
+import { isIdentityHueRotation } from '../color/HueRotation';
 import { ColorWheelsState, DEFAULT_COLOR_WHEELS_STATE } from '../ui/components/ColorWheels';
 import { HSLQualifierState, DEFAULT_HSL_QUALIFIER_STATE } from '../ui/components/HSLQualifier';
 import { ToneMappingState, DEFAULT_TONE_MAPPING_STATE } from '../ui/components/ToneMappingControl';
@@ -44,7 +43,8 @@ import {
   hueToRgb as sharedHueToRgb,
   rgbToHsl as sharedRgbToHsl,
   hslToRgb as sharedHslToRgb,
-  applyToneMappingToData,
+  applyToneMappingToChannel,
+  getHueRotationMatrix,
 } from './effectProcessing.shared';
 
 /**
@@ -238,6 +238,11 @@ export class EffectProcessor {
   // Cached midtone mask for clarity (static since it never changes)
   private static midtoneMask: Float32Array | null = null;
 
+  // Vibrance 3D LUT cache (static - shared across instances for same parameters)
+  private static vibrance3DLUT: Float32Array | null = null;
+  private static vibrance3DLUTParams: { vibrance: number; skinProtection: boolean } | null = null;
+  static readonly VIBRANCE_LUT_SIZE = 32; // 32x32x32 = 32K entries
+
   // Reusable buffers for clarity blur to avoid repeated allocations
   // These are instance-level to allow multiple processors with different image sizes
   private clarityOriginalBuffer: Uint8ClampedArray | null = null;
@@ -267,8 +272,94 @@ export class EffectProcessor {
   }
 
   /**
+   * Get cached vibrance 3D LUT. Builds/rebuilds if parameters change.
+   */
+  static getVibrance3DLUT(vibrance: number, skinProtection: boolean): Float32Array {
+    if (EffectProcessor.vibrance3DLUT && EffectProcessor.vibrance3DLUTParams &&
+        EffectProcessor.vibrance3DLUTParams.vibrance === vibrance &&
+        EffectProcessor.vibrance3DLUTParams.skinProtection === skinProtection) {
+      return EffectProcessor.vibrance3DLUT;
+    }
+
+    const size = EffectProcessor.VIBRANCE_LUT_SIZE;
+    const lut = new Float32Array(size * size * size * 3);
+    const vibranceNorm = vibrance / 100;
+
+    for (let ri = 0; ri < size; ri++) {
+      for (let gi = 0; gi < size; gi++) {
+        for (let bi = 0; bi < size; bi++) {
+          const r = ri / (size - 1);
+          const g = gi / (size - 1);
+          const b = bi / (size - 1);
+
+          const max = Math.max(r, g, b);
+          const min = Math.min(r, g, b);
+          const delta = max - min;
+
+          const l = (max + min) / 2;
+          let s = 0;
+          if (delta !== 0) {
+            s = l > 0.5 ? delta / (2 - max - min) : delta / (max + min);
+          }
+
+          let h = 0;
+          if (delta !== 0) {
+            if (max === r) {
+              h = ((g - b) / delta) % 6;
+              if (h < 0) h += 6;
+            } else if (max === g) {
+              h = (b - r) / delta + 2;
+            } else {
+              h = (r - g) / delta + 4;
+            }
+            h = h * 60;
+            if (h < 0) h += 360;
+          }
+
+          let skinProt = 1.0;
+          if (skinProtection && h >= 20 && h <= 50 && s < 0.6 && l > 0.2 && l < 0.8) {
+            const hueDist = Math.abs(h - SKIN_TONE_HUE_CENTER) / SKIN_TONE_HUE_RANGE;
+            skinProt = SKIN_PROTECTION_MIN + hueDist * (1.0 - SKIN_PROTECTION_MIN);
+          }
+
+          const satFactor = 1.0 - s * 0.5;
+          const adjustment = vibranceNorm * satFactor * skinProt;
+          const newS = Math.max(0, Math.min(1, s + adjustment));
+
+          let outR: number, outG: number, outB: number;
+          if (Math.abs(newS - s) < 0.001) {
+            outR = r; outG = g; outB = b;
+          } else if (newS === 0) {
+            outR = outG = outB = l;
+          } else {
+            const q = l < 0.5 ? l * (1 + newS) : l + newS - l * newS;
+            const p = 2 * l - q;
+            const hNorm = h / 360;
+            outR = sharedHueToRgb(p, q, hNorm + 1/3);
+            outG = sharedHueToRgb(p, q, hNorm);
+            outB = sharedHueToRgb(p, q, hNorm - 1/3);
+          }
+
+          const idx = (ri * size * size + gi * size + bi) * 3;
+          lut[idx] = outR;
+          lut[idx + 1] = outG;
+          lut[idx + 2] = outB;
+        }
+      }
+    }
+
+    EffectProcessor.vibrance3DLUT = lut;
+    EffectProcessor.vibrance3DLUTParams = { vibrance, skinProtection };
+    return lut;
+  }
+
+  /**
    * Apply all effects to ImageData in-place
-   * This is the main entry point for effect processing
+   * This is the main entry point for effect processing.
+   *
+   * Uses a merged single-pass approach for all per-pixel effects,
+   * keeping only clarity (5x5 Gaussian) and sharpen (3x3 convolution)
+   * as separate passes due to their inter-pixel dependencies.
    */
   applyEffects(
     imageData: ImageData,
@@ -292,205 +383,389 @@ export class EffectProcessor {
     const hasToneMapping = state.toneMappingState.enabled && state.toneMappingState.operator !== 'off';
     const hasInversion = state.colorInversionEnabled;
 
+    // Check if any per-pixel effects are active
+    const hasPerPixelEffects = hasHighlightsShadows || hasVibrance || hasHueRotation ||
+      hasColorWheels || hasCDL || hasCurves || hasHSLQualifier || hasToneMapping ||
+      hasInversion || hasChannel;
+
     // Early return if no pixel effects are active
-    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel &&
-        !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasHueRotation &&
-        !hasColorWheels && !hasHSLQualifier && !hasToneMapping && !hasInversion) {
+    if (!hasPerPixelEffects && !hasSharpen && !hasClarity) {
       return;
     }
 
-    // Apply highlight/shadow recovery (before other adjustments for best results)
-    if (hasHighlightsShadows) {
-      this.applyHighlightsShadows(imageData, state.colorAdjustments);
-    }
-
-    // Apply vibrance (intelligent saturation - before CDL/curves for natural results)
-    if (hasVibrance) {
-      this.applyVibrance(imageData, state.colorAdjustments);
-    }
-
-    // Apply clarity (local contrast enhancement in midtones)
+    // Pass 1: Clarity (inter-pixel dependency - must be separate, applied first)
     if (hasClarity) {
       this.applyClarity(imageData, width, height, state.colorAdjustments);
     }
 
-    // Apply hue rotation (luminance-preserving, after basic adjustments, before CDL)
-    if (hasHueRotation) {
-      this.applyHueRotationEffect(imageData, state.colorAdjustments.hueRotation);
+    // Pass 2: All per-pixel effects merged into a single loop
+    if (hasPerPixelEffects) {
+      this.applyMergedPerPixelEffects(imageData, width, height, state);
     }
 
-    // Apply color wheels (Lift/Gamma/Gain - after basic adjustments, before CDL)
-    if (hasColorWheels) {
-      this.applyColorWheels(imageData, state.colorWheelsState);
-    }
-
-    // Apply CDL color correction
-    if (hasCDL) {
-      applyCDLToImageData(imageData, state.cdlValues);
-    }
-
-    // Apply color curves
-    if (hasCurves) {
-      this.curveLUTCache.apply(imageData, state.curvesData);
-    }
-
-    // Apply HSL Qualifier (secondary color correction - after primary corrections)
-    if (hasHSLQualifier) {
-      this.applyHSLQualifier(imageData, state.hslQualifierState);
-    }
-
-    // Apply tone mapping (after color adjustments, before channel isolation)
-    if (hasToneMapping) {
-      applyToneMappingToData(imageData.data, state.toneMappingState.operator, {
-        reinhardWhitePoint: state.toneMappingState.reinhardWhitePoint,
-        filmicExposureBias: state.toneMappingState.filmicExposureBias,
-        filmicWhitePoint: state.toneMappingState.filmicWhitePoint,
-      });
-    }
-
-    // Apply color inversion (after all color corrections, before sharpen/channel isolation)
-    if (hasInversion) {
-      applyColorInversion(imageData);
-    }
-
-    // Apply sharpen filter
+    // Pass 3: Sharpen (inter-pixel dependency - must be separate, applied last)
     if (hasSharpen) {
       this.applySharpenCPU(imageData, width, height, state.filterSettings.sharpen / 100);
     }
-
-    // Apply channel isolation
-    if (hasChannel) {
-      applyChannelIsolation(imageData, state.channelMode);
-    }
   }
 
   /**
-   * Apply highlight/shadow recovery and whites/blacks clipping to ImageData.
+   * Apply all per-pixel effects in a single merged loop.
+   *
+   * Effects are applied in this order (matching the original separate-pass order):
+   * 1. Highlights/Shadows/Whites/Blacks
+   * 2. Vibrance (using 3D LUT with trilinear interpolation)
+   * 3. Hue Rotation (3x3 matrix multiply)
+   * 4. Color Wheels (zone weighting: lift/gamma/gain)
+   * 5. CDL (Slope/Offset/Power/Saturation)
+   * 6. Curves (1D LUT lookup)
+   * 7. HSL Qualifier (RGB->HSL matte + correction)
+   * 8. Tone Mapping (Reinhard/Filmic/ACES per-channel)
+   * 9. Color Inversion (1.0 - value)
+   * 10. Channel Isolation (channel select)
    */
-  private applyHighlightsShadows(imageData: ImageData, colorAdjustments: ColorAdjustments): void {
+  private applyMergedPerPixelEffects(
+    imageData: ImageData,
+    _width: number,
+    _height: number,
+    state: AllEffectsState
+  ): void {
     const data = imageData.data;
-    const highlights = colorAdjustments.highlights / 100;
-    const shadows = colorAdjustments.shadows / 100;
-    const whites = colorAdjustments.whites / 100;
-    const blacks = colorAdjustments.blacks / 100;
-
-    // Use cached LUTs for performance
-    const { highlightLUT, shadowLUT } = this.getHighlightShadowLUTs();
-
-    const whitePoint = 255 - whites * WHITES_BLACKS_RANGE;
-    const blackPoint = blacks * WHITES_BLACKS_RANGE;
-
     const len = data.length;
-    for (let i = 0; i < len; i += 4) {
-      let r = data[i]!;
-      let g = data[i + 1]!;
-      let b = data[i + 2]!;
 
-      // Apply whites/blacks clipping first
-      if (whites !== 0 || blacks !== 0) {
-        const range = whitePoint - blackPoint;
-        if (range > 0) {
-          r = Math.max(0, Math.min(255, ((r - blackPoint) / range) * 255));
-          g = Math.max(0, Math.min(255, ((g - blackPoint) / range) * 255));
-          b = Math.max(0, Math.min(255, ((b - blackPoint) / range) * 255));
+    // ---- Pre-compute flags ----
+    const ca = state.colorAdjustments;
+    const hasHS = ca.highlights !== 0 || ca.shadows !== 0 ||
+                  ca.whites !== 0 || ca.blacks !== 0;
+    const hasVibrance = ca.vibrance !== 0;
+    const hasHueRotation = !isIdentityHueRotation(ca.hueRotation);
+    const hasColorWheels = hasColorWheelAdjustments(state.colorWheelsState);
+    const hasCDL = !isDefaultCDL(state.cdlValues);
+    const hasCurves = !isDefaultCurves(state.curvesData);
+    const hasHSLQualifier = state.hslQualifierState.enabled;
+    const hasToneMapping = state.toneMappingState.enabled && state.toneMappingState.operator !== 'off';
+    const hasInversion = state.colorInversionEnabled;
+    const hasChannelIsolation = state.channelMode !== 'rgb';
+
+    // ---- Pre-compute values for highlights/shadows ----
+    const highlights = ca.highlights / 100;
+    const shadows = ca.shadows / 100;
+    const whites = ca.whites / 100;
+    const blacks = ca.blacks / 100;
+    const hsLUTs = hasHS ? this.getHighlightShadowLUTs() : null;
+    const whitePoint = hasHS ? 255 - whites * WHITES_BLACKS_RANGE : 0;
+    const blackPoint = hasHS ? blacks * WHITES_BLACKS_RANGE : 0;
+    const hasWhitesBlacks = whites !== 0 || blacks !== 0;
+    const hsRange = hasWhitesBlacks ? whitePoint - blackPoint : 0;
+
+    // ---- Pre-compute vibrance 3D LUT ----
+    const vibrance3DLUT = hasVibrance ?
+      EffectProcessor.getVibrance3DLUT(ca.vibrance, ca.vibranceSkinProtection) : null;
+    const lutSize = EffectProcessor.VIBRANCE_LUT_SIZE;
+    const lutScale = lutSize - 1;
+
+    // ---- Pre-compute hue rotation matrix ----
+    const hueMatrix = hasHueRotation ? getHueRotationMatrix(ca.hueRotation) : null;
+
+    // ---- Pre-compute color wheels state ----
+    const wheels = state.colorWheelsState;
+    const hasMaster = hasColorWheels && (wheels.master.r !== 0 || wheels.master.g !== 0 ||
+                      wheels.master.b !== 0 || wheels.master.y !== 0);
+    const hasLift = hasColorWheels && (wheels.lift.r !== 0 || wheels.lift.g !== 0 ||
+                    wheels.lift.b !== 0 || wheels.lift.y !== 0);
+    const hasGamma = hasColorWheels && (wheels.gamma.r !== 0 || wheels.gamma.g !== 0 ||
+                     wheels.gamma.b !== 0 || wheels.gamma.y !== 0);
+    const hasGain = hasColorWheels && (wheels.gain.r !== 0 || wheels.gain.g !== 0 ||
+                    wheels.gain.b !== 0 || wheels.gain.y !== 0);
+
+    // Pre-compute gamma exponents (only if gamma wheel is active)
+    const gammaR = hasGamma ? 1.0 - wheels.gamma.r * COLOR_WHEEL_GAMMA_FACTOR - wheels.gamma.y * COLOR_WHEEL_LIFT_FACTOR : 1.0;
+    const gammaG = hasGamma ? 1.0 - wheels.gamma.g * COLOR_WHEEL_GAMMA_FACTOR - wheels.gamma.y * COLOR_WHEEL_LIFT_FACTOR : 1.0;
+    const gammaB = hasGamma ? 1.0 - wheels.gamma.b * COLOR_WHEEL_GAMMA_FACTOR - wheels.gamma.y * COLOR_WHEEL_LIFT_FACTOR : 1.0;
+
+    // Pre-compute gain multipliers
+    const gainR = hasGain ? 1.0 + wheels.gain.r * COLOR_WHEEL_GAIN_FACTOR + wheels.gain.y * COLOR_WHEEL_GAIN_FACTOR : 1.0;
+    const gainG = hasGain ? 1.0 + wheels.gain.g * COLOR_WHEEL_GAIN_FACTOR + wheels.gain.y * COLOR_WHEEL_GAIN_FACTOR : 1.0;
+    const gainB = hasGain ? 1.0 + wheels.gain.b * COLOR_WHEEL_GAIN_FACTOR + wheels.gain.y * COLOR_WHEEL_GAIN_FACTOR : 1.0;
+
+    // ---- Pre-compute CDL values ----
+    const cdl = state.cdlValues;
+    const cdlHasSat = hasCDL && cdl.saturation !== 1;
+
+    // ---- Pre-compute curves LUTs ----
+    const curvesLUTs: CurveLUTs | null = hasCurves ? this.curveLUTCache.getLUTs(state.curvesData) : null;
+
+    // ---- Pre-compute HSL qualifier state ----
+    const hslState = state.hslQualifierState;
+
+    // ---- Pre-compute tone mapping params ----
+    const tmOperator = hasToneMapping ? state.toneMappingState.operator : '';
+    const tmParams = hasToneMapping ? {
+      reinhardWhitePoint: state.toneMappingState.reinhardWhitePoint,
+      filmicExposureBias: state.toneMappingState.filmicExposureBias,
+      filmicWhitePoint: state.toneMappingState.filmicWhitePoint,
+    } : undefined;
+
+    // ---- Pre-compute channel mode ----
+    const channelMode = state.channelMode;
+
+    // ============================================================
+    // Main pixel loop
+    // ============================================================
+    for (let i = 0; i < len; i += 4) {
+      let r = data[i]! / 255;
+      let g = data[i + 1]! / 255;
+      let b = data[i + 2]! / 255;
+
+      // ---- 1. Highlights/Shadows/Whites/Blacks ----
+      if (hasHS) {
+        // Work in 0-255 range for compatibility with LUT indices
+        let r255 = r * 255;
+        let g255 = g * 255;
+        let b255 = b * 255;
+
+        // Apply whites/blacks clipping first
+        if (hasWhitesBlacks && hsRange > 0) {
+          r255 = Math.max(0, Math.min(255, ((r255 - blackPoint) / hsRange) * 255));
+          g255 = Math.max(0, Math.min(255, ((g255 - blackPoint) / hsRange) * 255));
+          b255 = Math.max(0, Math.min(255, ((b255 - blackPoint) / hsRange) * 255));
+        }
+
+        const lum = LUMA_R * r255 + LUMA_G * g255 + LUMA_B * b255;
+        const lumIndex = Math.min(255, Math.max(0, Math.round(lum)));
+
+        if (highlights !== 0) {
+          const highlightAdjust = highlights * hsLUTs!.highlightLUT[lumIndex]! * HIGHLIGHT_SHADOW_RANGE;
+          r255 = Math.max(0, Math.min(255, r255 - highlightAdjust));
+          g255 = Math.max(0, Math.min(255, g255 - highlightAdjust));
+          b255 = Math.max(0, Math.min(255, b255 - highlightAdjust));
+        }
+
+        if (shadows !== 0) {
+          const shadowAdjust = shadows * hsLUTs!.shadowLUT[lumIndex]! * HIGHLIGHT_SHADOW_RANGE;
+          r255 = Math.max(0, Math.min(255, r255 + shadowAdjust));
+          g255 = Math.max(0, Math.min(255, g255 + shadowAdjust));
+          b255 = Math.max(0, Math.min(255, b255 + shadowAdjust));
+        }
+
+        r = r255 / 255;
+        g = g255 / 255;
+        b = b255 / 255;
+      }
+
+      // ---- 2. Vibrance (3D LUT with trilinear interpolation) ----
+      if (hasVibrance && vibrance3DLUT) {
+        const fr = Math.min(1, Math.max(0, r)) * lutScale;
+        const fg = Math.min(1, Math.max(0, g)) * lutScale;
+        const fb = Math.min(1, Math.max(0, b)) * lutScale;
+
+        const ir0 = Math.floor(fr);
+        const ig0 = Math.floor(fg);
+        const ib0 = Math.floor(fb);
+        const ir1 = Math.min(ir0 + 1, lutScale);
+        const ig1 = Math.min(ig0 + 1, lutScale);
+        const ib1 = Math.min(ib0 + 1, lutScale);
+
+        const dr = fr - ir0;
+        const dg = fg - ig0;
+        const db = fb - ib0;
+
+        // 8 corner indices
+        const c000 = (ir0 * lutSize * lutSize + ig0 * lutSize + ib0) * 3;
+        const c001 = (ir0 * lutSize * lutSize + ig0 * lutSize + ib1) * 3;
+        const c010 = (ir0 * lutSize * lutSize + ig1 * lutSize + ib0) * 3;
+        const c011 = (ir0 * lutSize * lutSize + ig1 * lutSize + ib1) * 3;
+        const c100 = (ir1 * lutSize * lutSize + ig0 * lutSize + ib0) * 3;
+        const c101 = (ir1 * lutSize * lutSize + ig0 * lutSize + ib1) * 3;
+        const c110 = (ir1 * lutSize * lutSize + ig1 * lutSize + ib0) * 3;
+        const c111 = (ir1 * lutSize * lutSize + ig1 * lutSize + ib1) * 3;
+
+        // Trilinear interpolation for each channel
+        for (let ch = 0; ch < 3; ch++) {
+          const v00 = vibrance3DLUT[c000 + ch]! * (1 - db) + vibrance3DLUT[c001 + ch]! * db;
+          const v01 = vibrance3DLUT[c010 + ch]! * (1 - db) + vibrance3DLUT[c011 + ch]! * db;
+          const v10 = vibrance3DLUT[c100 + ch]! * (1 - db) + vibrance3DLUT[c101 + ch]! * db;
+          const v11 = vibrance3DLUT[c110 + ch]! * (1 - db) + vibrance3DLUT[c111 + ch]! * db;
+          const v0 = v00 * (1 - dg) + v01 * dg;
+          const v1 = v10 * (1 - dg) + v11 * dg;
+          const result = v0 * (1 - dr) + v1 * dr;
+          if (ch === 0) r = result;
+          else if (ch === 1) g = result;
+          else b = result;
         }
       }
 
-      const lum = LUMA_R * r + LUMA_G * g + LUMA_B * b;
-      const lumIndex = Math.min(255, Math.max(0, Math.round(lum)));
-
-      const highlightMask = highlightLUT[lumIndex]!;
-      const shadowMask = shadowLUT[lumIndex]!;
-
-      if (highlights !== 0) {
-        const highlightAdjust = highlights * highlightMask * HIGHLIGHT_SHADOW_RANGE;
-        r = Math.max(0, Math.min(255, r - highlightAdjust));
-        g = Math.max(0, Math.min(255, g - highlightAdjust));
-        b = Math.max(0, Math.min(255, b - highlightAdjust));
+      // ---- 3. Hue Rotation (3x3 matrix multiply) ----
+      if (hasHueRotation && hueMatrix) {
+        // hueMatrix is column-major: mat[0]=m00, mat[1]=m10, mat[2]=m20, etc.
+        const nr = hueMatrix[0]! * r + hueMatrix[3]! * g + hueMatrix[6]! * b;
+        const ng = hueMatrix[1]! * r + hueMatrix[4]! * g + hueMatrix[7]! * b;
+        const nb = hueMatrix[2]! * r + hueMatrix[5]! * g + hueMatrix[8]! * b;
+        r = Math.max(0, Math.min(1, nr));
+        g = Math.max(0, Math.min(1, ng));
+        b = Math.max(0, Math.min(1, nb));
       }
 
-      if (shadows !== 0) {
-        const shadowAdjust = shadows * shadowMask * HIGHLIGHT_SHADOW_RANGE;
-        r = Math.max(0, Math.min(255, r + shadowAdjust));
-        g = Math.max(0, Math.min(255, g + shadowAdjust));
-        b = Math.max(0, Math.min(255, b + shadowAdjust));
-      }
+      // ---- 4. Color Wheels (zone weighting) ----
+      if (hasColorWheels) {
+        const luma = LUMA_R * r + LUMA_G * g + LUMA_B * b;
 
-      data[i] = r;
-      data[i + 1] = g;
-      data[i + 2] = b;
-    }
-  }
-
-  /**
-   * Apply vibrance effect to ImageData.
-   */
-  private applyVibrance(imageData: ImageData, colorAdjustments: ColorAdjustments): void {
-    const data = imageData.data;
-    const vibrance = colorAdjustments.vibrance / 100;
-    const len = data.length;
-
-    for (let i = 0; i < len; i += 4) {
-      const r = data[i]! / 255;
-      const g = data[i + 1]! / 255;
-      const b = data[i + 2]! / 255;
-
-      const max = Math.max(r, g, b);
-      const min = Math.min(r, g, b);
-      const delta = max - min;
-
-      const l = (max + min) / 2;
-      let s = 0;
-      if (delta !== 0) {
-        s = l > 0.5 ? delta / (2 - max - min) : delta / (max + min);
-      }
-
-      let h = 0;
-      if (delta !== 0) {
-        if (max === r) {
-          h = ((g - b) / delta) % 6;
-          if (h < 0) h += 6; // Fix negative modulo
-        } else if (max === g) {
-          h = (b - r) / delta + 2;
-        } else {
-          h = (r - g) / delta + 4;
+        // Apply Master
+        if (hasMaster) {
+          r = r + wheels.master.r * COLOR_WHEEL_MASTER_FACTOR + wheels.master.y;
+          g = g + wheels.master.g * COLOR_WHEEL_MASTER_FACTOR + wheels.master.y;
+          b = b + wheels.master.b * COLOR_WHEEL_MASTER_FACTOR + wheels.master.y;
         }
-        h = h * 60;
-        if (h < 0) h += 360;
+
+        // Calculate zone weights
+        const liftWeight = sharedSmoothstep(0.5, 0.33, luma) * sharedSmoothstep(0, 0.15, luma);
+        const gammaWeight = sharedBellCurve(luma, 0.5, 0.25);
+        const gainWeight = sharedSmoothstep(0.5, 0.67, luma) * sharedSmoothstep(1.0, 0.85, luma);
+
+        // Apply Lift (shadows)
+        if (hasLift && liftWeight > 0) {
+          r += (wheels.lift.r * COLOR_WHEEL_LIFT_FACTOR + wheels.lift.y * COLOR_WHEEL_LIFT_FACTOR) * liftWeight;
+          g += (wheels.lift.g * COLOR_WHEEL_LIFT_FACTOR + wheels.lift.y * COLOR_WHEEL_LIFT_FACTOR) * liftWeight;
+          b += (wheels.lift.b * COLOR_WHEEL_LIFT_FACTOR + wheels.lift.y * COLOR_WHEEL_LIFT_FACTOR) * liftWeight;
+        }
+
+        // Apply Gamma (midtones)
+        if (hasGamma && gammaWeight > 0) {
+          r = r * (1 - gammaWeight) + Math.pow(Math.max(0, r), gammaR) * gammaWeight;
+          g = g * (1 - gammaWeight) + Math.pow(Math.max(0, g), gammaG) * gammaWeight;
+          b = b * (1 - gammaWeight) + Math.pow(Math.max(0, b), gammaB) * gammaWeight;
+        }
+
+        // Apply Gain (highlights)
+        if (hasGain && gainWeight > 0) {
+          r = r * (1 - gainWeight) + r * gainR * gainWeight;
+          g = g * (1 - gainWeight) + g * gainG * gainWeight;
+          b = b * (1 - gainWeight) + b * gainB * gainWeight;
+        }
       }
 
-      // Skin tone protection
-      let skinProtection = 1.0;
-      if (colorAdjustments.vibranceSkinProtection && h >= 20 && h <= 50 && s < 0.6 && l > 0.2 && l < 0.8) {
-        const hueDistance = Math.abs(h - SKIN_TONE_HUE_CENTER) / SKIN_TONE_HUE_RANGE;
-        skinProtection = SKIN_PROTECTION_MIN + (hueDistance * (1.0 - SKIN_PROTECTION_MIN));
+      // ---- 5. CDL (Slope/Offset/Power/Saturation) ----
+      if (hasCDL) {
+        // CDL formula: out = clamp(max(0, in * slope + offset) ^ power)
+        r = Math.max(0, Math.min(1, r * cdl.slope.r + cdl.offset.r));
+        g = Math.max(0, Math.min(1, g * cdl.slope.g + cdl.offset.g));
+        b = Math.max(0, Math.min(1, b * cdl.slope.b + cdl.offset.b));
+
+        if (cdl.power.r !== 1.0 && r > 0) r = Math.pow(r, cdl.power.r);
+        if (cdl.power.g !== 1.0 && g > 0) g = Math.pow(g, cdl.power.g);
+        if (cdl.power.b !== 1.0 && b > 0) b = Math.pow(b, cdl.power.b);
+
+        r = Math.max(0, Math.min(1, r));
+        g = Math.max(0, Math.min(1, g));
+        b = Math.max(0, Math.min(1, b));
+
+        // Saturation adjustment
+        if (cdlHasSat) {
+          const luma = LUMA_R * r + LUMA_G * g + LUMA_B * b;
+          r = luma + (r - luma) * cdl.saturation;
+          g = luma + (g - luma) * cdl.saturation;
+          b = luma + (b - luma) * cdl.saturation;
+        }
       }
 
-      const satFactor = 1.0 - (s * 0.5);
-      const adjustment = vibrance * satFactor * skinProtection;
+      // ---- 6. Curves (1D LUT lookup) ----
+      if (hasCurves && curvesLUTs) {
+        // Convert to 0-255 for LUT lookup
+        let ri = Math.round(Math.min(255, Math.max(0, r * 255)));
+        let gi = Math.round(Math.min(255, Math.max(0, g * 255)));
+        let bi = Math.round(Math.min(255, Math.max(0, b * 255)));
 
-      let newS = s + adjustment;
-      newS = Math.max(0, Math.min(1, newS));
+        // Apply channel-specific curves first, then master
+        ri = curvesLUTs.red[ri]!;
+        gi = curvesLUTs.green[gi]!;
+        bi = curvesLUTs.blue[bi]!;
 
-      if (Math.abs(newS - s) < 0.001) continue;
+        ri = curvesLUTs.master[ri]!;
+        gi = curvesLUTs.master[gi]!;
+        bi = curvesLUTs.master[bi]!;
 
-      let newR: number, newG: number, newB: number;
-
-      if (newS === 0) {
-        newR = newG = newB = l;
-      } else {
-        const q = l < 0.5 ? l * (1 + newS) : l + newS - l * newS;
-        const p = 2 * l - q;
-        const hNorm = h / 360;
-
-        newR = this.hueToRgb(p, q, hNorm + 1/3);
-        newG = this.hueToRgb(p, q, hNorm);
-        newB = this.hueToRgb(p, q, hNorm - 1/3);
+        r = ri / 255;
+        g = gi / 255;
+        b = bi / 255;
       }
 
-      data[i] = Math.round(newR * 255);
-      data[i + 1] = Math.round(newG * 255);
-      data[i + 2] = Math.round(newB * 255);
+      // ---- 7. HSL Qualifier ----
+      if (hasHSLQualifier) {
+        const hsl = sharedRgbToHsl(r, g, b);
+
+        let matte = this.calculateHSLMatte(
+          hsl.h, hsl.s * 100, hsl.l * 100,
+          hslState.hue, hslState.saturation, hslState.luminance
+        );
+
+        if (hslState.invert) {
+          matte = 1 - matte;
+        }
+
+        if (hslState.mattePreview) {
+          r = g = b = matte;
+        } else if (matte > 0.001) {
+          const correctedHsl = this.applyHSLCorrection(
+            hsl.h, hsl.s, hsl.l, hslState.correction, matte
+          );
+          const corrected = sharedHslToRgb(correctedHsl.h, correctedHsl.s, correctedHsl.l);
+          r = corrected.r;
+          g = corrected.g;
+          b = corrected.b;
+        }
+      }
+
+      // ---- 8. Tone Mapping ----
+      if (hasToneMapping) {
+        r = applyToneMappingToChannel(r, tmOperator, tmParams);
+        g = applyToneMappingToChannel(g, tmOperator, tmParams);
+        b = applyToneMappingToChannel(b, tmOperator, tmParams);
+      }
+
+      // ---- 9. Color Inversion ----
+      if (hasInversion) {
+        r = 1.0 - r;
+        g = 1.0 - g;
+        b = 1.0 - b;
+      }
+
+      // ---- 10. Channel Isolation ----
+      if (hasChannelIsolation) {
+        switch (channelMode) {
+          case 'red': {
+            const val = r;
+            r = g = b = val;
+            break;
+          }
+          case 'green': {
+            const val = g;
+            r = g = b = val;
+            break;
+          }
+          case 'blue': {
+            const val = b;
+            r = g = b = val;
+            break;
+          }
+          case 'luminance': {
+            const luma = LUMA_R * r + LUMA_G * g + LUMA_B * b;
+            r = g = b = luma;
+            break;
+          }
+          case 'alpha': {
+            // Alpha channel isolation: show alpha as grayscale
+            const a = data[i + 3]! / 255;
+            r = g = b = a;
+            data[i + 3] = 255; // Make fully opaque
+            break;
+          }
+        }
+      }
+
+      // ---- Store result ----
+      data[i] = Math.round(Math.min(255, Math.max(0, r * 255)));
+      data[i + 1] = Math.round(Math.min(255, Math.max(0, g * 255)));
+      data[i + 2] = Math.round(Math.min(255, Math.max(0, b * 255)));
     }
   }
 
@@ -626,131 +901,6 @@ export class EffectProcessor {
   }
 
   /**
-   * Apply luminance-preserving hue rotation to ImageData.
-   */
-  private applyHueRotationEffect(imageData: ImageData, degrees: number): void {
-    const data = imageData.data;
-    const len = data.length;
-
-    for (let i = 0; i < len; i += 4) {
-      const r = data[i]! / 255;
-      const g = data[i + 1]! / 255;
-      const b = data[i + 2]! / 255;
-
-      const [nr, ng, nb] = applyHueRotation(r, g, b, degrees);
-
-      data[i] = Math.round(nr * 255);
-      data[i + 1] = Math.round(ng * 255);
-      data[i + 2] = Math.round(nb * 255);
-    }
-  }
-
-  /**
-   * Apply color wheel adjustments to ImageData
-   */
-  private applyColorWheels(imageData: ImageData, state: ColorWheelsState): void {
-    const data = imageData.data;
-    const len = data.length;
-
-    for (let i = 0; i < len; i += 4) {
-      let r = data[i]! / 255;
-      let g = data[i + 1]! / 255;
-      let b = data[i + 2]! / 255;
-
-      const luma = LUMA_R * r + LUMA_G * g + LUMA_B * b;
-
-      // Apply Master
-      if (state.master.r !== 0 || state.master.g !== 0 ||
-          state.master.b !== 0 || state.master.y !== 0) {
-        r = r + state.master.r * COLOR_WHEEL_MASTER_FACTOR + state.master.y;
-        g = g + state.master.g * COLOR_WHEEL_MASTER_FACTOR + state.master.y;
-        b = b + state.master.b * COLOR_WHEEL_MASTER_FACTOR + state.master.y;
-      }
-
-      // Calculate zone weights
-      const liftWeight = this.smoothstep(0.5, 0.33, luma) * this.smoothstep(0, 0.15, luma);
-      const gammaWeight = this.bellCurve(luma, 0.5, 0.25);
-      const gainWeight = this.smoothstep(0.5, 0.67, luma) * this.smoothstep(1.0, 0.85, luma);
-
-      // Apply Lift (shadows)
-      if (liftWeight > 0 && (state.lift.r !== 0 || state.lift.g !== 0 ||
-          state.lift.b !== 0 || state.lift.y !== 0)) {
-        r += (state.lift.r * COLOR_WHEEL_LIFT_FACTOR + state.lift.y * COLOR_WHEEL_LIFT_FACTOR) * liftWeight;
-        g += (state.lift.g * COLOR_WHEEL_LIFT_FACTOR + state.lift.y * COLOR_WHEEL_LIFT_FACTOR) * liftWeight;
-        b += (state.lift.b * COLOR_WHEEL_LIFT_FACTOR + state.lift.y * COLOR_WHEEL_LIFT_FACTOR) * liftWeight;
-      }
-
-      // Apply Gamma (midtones)
-      if (gammaWeight > 0 && (state.gamma.r !== 0 || state.gamma.g !== 0 ||
-          state.gamma.b !== 0 || state.gamma.y !== 0)) {
-        const gammaR = 1.0 - state.gamma.r * COLOR_WHEEL_GAMMA_FACTOR - state.gamma.y * COLOR_WHEEL_LIFT_FACTOR;
-        const gammaG = 1.0 - state.gamma.g * COLOR_WHEEL_GAMMA_FACTOR - state.gamma.y * COLOR_WHEEL_LIFT_FACTOR;
-        const gammaB = 1.0 - state.gamma.b * COLOR_WHEEL_GAMMA_FACTOR - state.gamma.y * COLOR_WHEEL_LIFT_FACTOR;
-
-        // Use Math.max(0, x) to prevent NaN from negative values after master adjustment
-        r = r * (1 - gammaWeight) + Math.pow(Math.max(0, r), gammaR) * gammaWeight;
-        g = g * (1 - gammaWeight) + Math.pow(Math.max(0, g), gammaG) * gammaWeight;
-        b = b * (1 - gammaWeight) + Math.pow(Math.max(0, b), gammaB) * gammaWeight;
-      }
-
-      // Apply Gain (highlights)
-      if (gainWeight > 0 && (state.gain.r !== 0 || state.gain.g !== 0 ||
-          state.gain.b !== 0 || state.gain.y !== 0)) {
-        const gainR = 1.0 + state.gain.r * COLOR_WHEEL_GAIN_FACTOR + state.gain.y * COLOR_WHEEL_GAIN_FACTOR;
-        const gainG = 1.0 + state.gain.g * COLOR_WHEEL_GAIN_FACTOR + state.gain.y * COLOR_WHEEL_GAIN_FACTOR;
-        const gainB = 1.0 + state.gain.b * COLOR_WHEEL_GAIN_FACTOR + state.gain.y * COLOR_WHEEL_GAIN_FACTOR;
-
-        r = r * (1 - gainWeight) + r * gainR * gainWeight;
-        g = g * (1 - gainWeight) + g * gainG * gainWeight;
-        b = b * (1 - gainWeight) + b * gainB * gainWeight;
-      }
-
-      data[i] = Math.max(0, Math.min(255, Math.round(r * 255)));
-      data[i + 1] = Math.max(0, Math.min(255, Math.round(g * 255)));
-      data[i + 2] = Math.max(0, Math.min(255, Math.round(b * 255)));
-    }
-  }
-
-  /**
-   * Apply HSL Qualifier to ImageData
-   */
-  private applyHSLQualifier(imageData: ImageData, state: HSLQualifierState): void {
-    if (!state.enabled) return;
-
-    const data = imageData.data;
-    const len = data.length;
-    const { hue, saturation, luminance, correction, invert, mattePreview } = state;
-
-    for (let i = 0; i < len; i += 4) {
-      const r = data[i]! / 255;
-      const g = data[i + 1]! / 255;
-      const b = data[i + 2]! / 255;
-
-      const { h, s, l } = this.rgbToHsl(r, g, b);
-
-      let matte = this.calculateHSLMatte(h, s * 100, l * 100, hue, saturation, luminance);
-
-      if (invert) {
-        matte = 1 - matte;
-      }
-
-      if (mattePreview) {
-        const gray = Math.round(matte * 255);
-        data[i] = gray;
-        data[i + 1] = gray;
-        data[i + 2] = gray;
-      } else if (matte > 0.001) {
-        const correctedHsl = this.applyHSLCorrection(h, s, l, correction, matte);
-        const corrected = this.hslToRgb(correctedHsl.h, correctedHsl.s, correctedHsl.l);
-
-        data[i] = Math.round(corrected.r * 255);
-        data[i + 1] = Math.round(corrected.g * 255);
-        data[i + 2] = Math.round(corrected.b * 255);
-      }
-    }
-  }
-
-  /**
    * CPU-based sharpen filter
    */
   private applySharpenCPU(imageData: ImageData, width: number, height: number, amount: number): void {
@@ -791,22 +941,6 @@ export class EffectProcessor {
 
   private smoothstep(edge0: number, edge1: number, x: number): number {
     return sharedSmoothstep(edge0, edge1, x);
-  }
-
-  private bellCurve(x: number, center: number, width: number): number {
-    return sharedBellCurve(x, center, width);
-  }
-
-  private hueToRgb(p: number, q: number, t: number): number {
-    return sharedHueToRgb(p, q, t);
-  }
-
-  private rgbToHsl(r: number, g: number, b: number): { h: number; s: number; l: number } {
-    return sharedRgbToHsl(r, g, b);
-  }
-
-  private hslToRgb(h: number, s: number, l: number): { r: number; g: number; b: number } {
-    return sharedHslToRgb(h, s, l);
   }
 
   private calculateHSLMatte(

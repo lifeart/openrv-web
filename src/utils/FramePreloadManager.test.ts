@@ -910,6 +910,116 @@ describe('FramePreloadManager', () => {
     });
   });
 
+  // REGRESSION TESTS for setTotalFrames method
+  describe('setTotalFrames regression tests', () => {
+    it('FPM-STF-001: setTotalFrames updates the total frame count', () => {
+      const manager = new FramePreloadManager(100, loader, disposer);
+
+      // Initially 100 frames
+      expect(manager.getTotalFrames()).toBe(100);
+
+      // Update to 70 frames (actual count after building index)
+      manager.setTotalFrames(70);
+
+      expect(manager.getTotalFrames()).toBe(70);
+    });
+
+    it('FPM-STF-002: after setTotalFrames, preloading does not request frames beyond new total', async () => {
+      const config: Partial<PreloadConfig> = {
+        scrubWindow: 10,
+        maxConcurrent: 10,
+      };
+      const manager = new FramePreloadManager(100, loader, disposer, config);
+
+      // Reduce total frames to 70 (simulating actual frame count)
+      manager.setTotalFrames(70);
+
+      // Preload around frame 65 (near the end)
+      manager.preloadAround(65);
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // Should NOT try to load frames beyond 70
+      expect(loader).not.toHaveBeenCalledWith(71, expect.any(AbortSignal));
+      expect(loader).not.toHaveBeenCalledWith(75, expect.any(AbortSignal));
+      expect(loader).not.toHaveBeenCalledWith(80, expect.any(AbortSignal));
+
+      // Should have loaded frames up to 70
+      expect(manager.hasFrame(70)).toBe(true);
+    });
+
+    it('FPM-STF-003: setTotalFrames with lower count does not corrupt existing cache', async () => {
+      const manager = new FramePreloadManager(100, loader, disposer);
+
+      // Load some frames
+      await manager.getFrame(10);
+      await manager.getFrame(20);
+      await manager.getFrame(30);
+      await manager.getFrame(40);
+
+      expect(manager.hasFrame(10)).toBe(true);
+      expect(manager.hasFrame(20)).toBe(true);
+      expect(manager.hasFrame(30)).toBe(true);
+      expect(manager.hasFrame(40)).toBe(true);
+
+      // Reduce total frames to 70
+      manager.setTotalFrames(70);
+
+      // All previously cached frames should still be accessible
+      expect(manager.hasFrame(10)).toBe(true);
+      expect(manager.hasFrame(20)).toBe(true);
+      expect(manager.hasFrame(30)).toBe(true);
+      expect(manager.hasFrame(40)).toBe(true);
+
+      // Can still access these frames
+      const frame10 = await manager.getFrame(10);
+      expect(frame10).toEqual({ frame: 10, data: 'frame-10' });
+    });
+
+    it('FPM-STF-004: getFrame returns null for frames beyond new total after setTotalFrames', async () => {
+      const manager = new FramePreloadManager(100, loader, disposer);
+
+      // Reduce total frames to 70
+      manager.setTotalFrames(70);
+
+      // Try to get frame beyond new total
+      const result = await manager.getFrame(75);
+
+      expect(result).toBeNull();
+      expect(loader).not.toHaveBeenCalledWith(75);
+    });
+
+    it('FPM-STF-005: setTotalFrames can increase total frame count', () => {
+      const manager = new FramePreloadManager(70, loader, disposer);
+
+      expect(manager.getTotalFrames()).toBe(70);
+
+      // Increase to 100 frames (edge case, but should work)
+      manager.setTotalFrames(100);
+
+      expect(manager.getTotalFrames()).toBe(100);
+    });
+
+    it('FPM-STF-006: setTotalFrames to exact cache boundary', async () => {
+      const config: Partial<PreloadConfig> = {
+        maxCacheSize: 100,
+      };
+      const manager = new FramePreloadManager(150, loader, disposer, config);
+
+      // Reduce total frames to exactly the cache size
+      manager.setTotalFrames(100);
+
+      // Should be able to cache all frames
+      for (let i = 1; i <= 100; i++) {
+        await manager.getFrame(i);
+      }
+
+      const stats = manager.getStats();
+      expect(stats.cacheSize).toBe(100);
+      expect(stats.evictionCount).toBe(0);
+    });
+  });
+
   describe('AbortController support', () => {
     it('FPM-060: abortPendingOperations cancels pending requests', async () => {
       const slowLoader = vi.fn(async (frame: number, signal?: AbortSignal) => {

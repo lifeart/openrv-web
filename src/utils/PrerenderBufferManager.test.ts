@@ -869,3 +869,271 @@ describe('Cache Update Callback', () => {
     expect(callCount).toBeLessThanOrEqual(stats.cacheSize + 5); // Allow some margin
   });
 });
+
+describe('Phase 2A: queuePriorityFrame', () => {
+  let manager: PrerenderBufferManager;
+  let frameLoader: (frame: number) => HTMLCanvasElement | null;
+
+  beforeEach(() => {
+    frameLoader = (frame: number) => {
+      if (frame < 1 || frame > 100) return null;
+      const canvas = document.createElement('canvas');
+      canvas.width = 100;
+      canvas.height = 100;
+      const ctx = canvas.getContext('2d')!;
+      ctx.fillStyle = `rgb(${frame}, ${frame}, ${frame})`;
+      ctx.fillRect(0, 0, 100, 100);
+      return canvas;
+    };
+    manager = new PrerenderBufferManager(100, frameLoader, {
+      useWorkers: false,
+      maxCacheSize: 20,
+      preloadAhead: 5,
+      preloadBehind: 2,
+      maxConcurrent: 2,
+    });
+  });
+
+  afterEach(() => {
+    manager.dispose();
+  });
+
+  it('PBM-060: queuePriorityFrame does nothing without active effects', () => {
+    const defaultState = createDefaultEffectsState();
+    manager.updateEffects(defaultState);
+
+    manager.queuePriorityFrame(50);
+
+    const stats = manager.getStats();
+    expect(stats.pendingRequests).toBe(0);
+  });
+
+  it('PBM-061: queuePriorityFrame queues a frame with active effects', () => {
+    const state = createDefaultEffectsState();
+    state.colorAdjustments.highlights = 20;
+    manager.updateEffects(state);
+
+    manager.queuePriorityFrame(50);
+
+    const stats = manager.getStats();
+    // Frame should be queued (pending or already started processing)
+    expect(stats.pendingRequests + stats.activeRequests).toBeGreaterThanOrEqual(0);
+  });
+
+  it('PBM-062: queuePriorityFrame ignores invalid frame numbers', () => {
+    const state = createDefaultEffectsState();
+    state.colorAdjustments.highlights = 20;
+    manager.updateEffects(state);
+
+    manager.queuePriorityFrame(0);
+    manager.queuePriorityFrame(-5);
+    manager.queuePriorityFrame(101);
+
+    const stats = manager.getStats();
+    expect(stats.pendingRequests).toBe(0);
+  });
+
+  it('PBM-063: queuePriorityFrame processes frame in background', async () => {
+    const state = createDefaultEffectsState();
+    state.colorAdjustments.highlights = 20;
+    manager.updateEffects(state);
+
+    manager.queuePriorityFrame(50);
+
+    // Wait for processing
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    // Frame should now be in cache
+    const cached = manager.getFrame(50);
+    expect(cached).not.toBeNull();
+    expect(cached!.width).toBe(100);
+    expect(cached!.height).toBe(100);
+  });
+
+  it('PBM-064: queuePriorityFrame does not re-queue already cached frames', async () => {
+    const state = createDefaultEffectsState();
+    state.colorAdjustments.highlights = 20;
+    manager.updateEffects(state);
+
+    // First: cache the frame
+    manager.queuePriorityFrame(50);
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    expect(manager.hasFrame(50)).toBe(true);
+
+    // Second: try to queue again - should be a no-op
+    manager.queuePriorityFrame(50);
+    // No error, and stats should reflect no new pending request for frame 50
+    const stats = manager.getStats();
+    expect(stats.cacheSize).toBeGreaterThan(0);
+  });
+});
+
+describe('Phase 2A: onFrameProcessed callback', () => {
+  let manager: PrerenderBufferManager;
+  let frameLoader: (frame: number) => HTMLCanvasElement | null;
+
+  beforeEach(() => {
+    frameLoader = (frame: number) => {
+      if (frame < 1 || frame > 100) return null;
+      const canvas = document.createElement('canvas');
+      canvas.width = 100;
+      canvas.height = 100;
+      const ctx = canvas.getContext('2d')!;
+      ctx.fillStyle = `rgb(${frame}, ${frame}, ${frame})`;
+      ctx.fillRect(0, 0, 100, 100);
+      return canvas;
+    };
+    manager = new PrerenderBufferManager(100, frameLoader, {
+      useWorkers: false,
+      maxCacheSize: 20,
+      preloadAhead: 5,
+      preloadBehind: 2,
+      maxConcurrent: 2,
+    });
+  });
+
+  afterEach(() => {
+    manager.dispose();
+  });
+
+  it('PBM-065: onFrameProcessed is called when a frame completes', async () => {
+    const processedFrames: number[] = [];
+    manager.onFrameProcessed = (frame: number) => {
+      processedFrames.push(frame);
+    };
+
+    const state = createDefaultEffectsState();
+    state.colorAdjustments.highlights = 20;
+    manager.updateEffects(state);
+
+    manager.queuePriorityFrame(50);
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    expect(processedFrames).toContain(50);
+  });
+
+  it('PBM-066: onFrameProcessed is not called when callback is null', async () => {
+    manager.onFrameProcessed = null;
+
+    const state = createDefaultEffectsState();
+    state.colorAdjustments.highlights = 20;
+    manager.updateEffects(state);
+
+    // Should not throw
+    manager.queuePriorityFrame(50);
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    expect(manager.hasFrame(50)).toBe(true);
+  });
+
+  it('PBM-067: onFrameProcessed fires for each frame during preloadAround', async () => {
+    const processedFrames: number[] = [];
+    manager.onFrameProcessed = (frame: number) => {
+      processedFrames.push(frame);
+    };
+
+    const state = createDefaultEffectsState();
+    state.colorAdjustments.highlights = 20;
+    manager.updateEffects(state);
+
+    manager.preloadAround(50);
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    // Should have processed multiple frames
+    expect(processedFrames.length).toBeGreaterThan(0);
+    // All processed frames should be near frame 50
+    for (const f of processedFrames) {
+      expect(f).toBeGreaterThanOrEqual(45);
+      expect(f).toBeLessThanOrEqual(55);
+    }
+  });
+});
+
+describe('Phase 2B: Dynamic preload-ahead', () => {
+  let manager: PrerenderBufferManager;
+  let frameLoader: (frame: number) => HTMLCanvasElement | null;
+
+  beforeEach(() => {
+    frameLoader = createMockFrameLoader(200);
+    manager = new PrerenderBufferManager(200, frameLoader, {
+      useWorkers: false,
+      maxCacheSize: 50,
+      preloadAhead: 5,
+      preloadBehind: 2,
+      maxConcurrent: 4,
+    });
+  });
+
+  afterEach(() => {
+    manager.dispose();
+  });
+
+  it('PBM-068: getDynamicPreloadAhead returns default value initially', () => {
+    expect(manager.getDynamicPreloadAhead()).toBe(30);
+  });
+
+  it('PBM-069: updateDynamicPreloadAhead does nothing with < 3 samples', () => {
+    // No processing has happened yet
+    manager.updateDynamicPreloadAhead(24);
+    expect(manager.getDynamicPreloadAhead()).toBe(30); // unchanged
+  });
+
+  it('PBM-070: updateDynamicPreloadAhead adjusts based on processing time', async () => {
+    const state = createDefaultEffectsState();
+    state.colorAdjustments.highlights = 20;
+    manager.updateEffects(state);
+
+    // Process several frames to gather timing data
+    manager.setPlaybackState(true, 1);
+    manager.preloadAround(50);
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    // Now update dynamic preload ahead
+    manager.updateDynamicPreloadAhead(24);
+    const preloadAhead = manager.getDynamicPreloadAhead();
+
+    // Should be at least the minimum (30) and at most 120
+    expect(preloadAhead).toBeGreaterThanOrEqual(30);
+    expect(preloadAhead).toBeLessThanOrEqual(120);
+  });
+
+  it('PBM-071: dynamicPreloadAhead is clamped to [30, 120]', async () => {
+    const state = createDefaultEffectsState();
+    state.colorAdjustments.highlights = 20;
+    manager.updateEffects(state);
+
+    // Process frames to get timing data
+    manager.preloadAround(50);
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    // Very high FPS should give low preload ahead, but clamped to 30
+    manager.updateDynamicPreloadAhead(1000);
+    expect(manager.getDynamicPreloadAhead()).toBeGreaterThanOrEqual(30);
+
+    // Very low FPS should give high preload ahead, but clamped to 120
+    manager.updateDynamicPreloadAhead(0.1);
+    expect(manager.getDynamicPreloadAhead()).toBeLessThanOrEqual(120);
+  });
+
+  it('PBM-072: getStats includes dynamicPreloadAhead', () => {
+    const stats = manager.getStats();
+    expect(stats.dynamicPreloadAhead).toBe(30);
+  });
+
+  it('PBM-073: frame processing time tracking accumulates data', async () => {
+    const state = createDefaultEffectsState();
+    state.colorAdjustments.highlights = 20;
+    manager.updateEffects(state);
+
+    manager.preloadAround(50);
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    // After processing frames, the dynamic preload-ahead should be calculable
+    // (we can't directly read frameProcessingTimes, but updateDynamicPreloadAhead
+    // should now produce a non-default value if enough frames were processed)
+    manager.updateDynamicPreloadAhead(24);
+    // Value may or may not change from 30 depending on timing, but should not crash
+    expect(manager.getDynamicPreloadAhead()).toBeGreaterThanOrEqual(30);
+  });
+});

@@ -251,6 +251,109 @@ describe('Session', () => {
     });
   });
 
+  describe('playback after pause (regression)', () => {
+    it('SES-PBP-001: play() works after pause() — play/pause/play ends with isPlaying true', async () => {
+      const video = createMockVideo(100, 0);
+      Object.setPrototypeOf(video, HTMLVideoElement.prototype);
+      video.play = vi.fn().mockResolvedValue(undefined);
+      video.pause = vi.fn();
+
+      session.setSources([{
+        type: 'video', name: 'v', url: 'v.mp4',
+        width: 100, height: 100, duration: 100, fps: 24, element: video,
+      }]);
+
+      // First play
+      session.play();
+      expect(session.isPlaying).toBe(true);
+
+      // Let safeVideoPlay promise resolve
+      await vi.waitFor(() => {
+        expect((session as any)._pendingPlayPromise).toBeNull();
+      });
+
+      // Pause
+      session.pause();
+      expect(session.isPlaying).toBe(false);
+      expect((session as any)._pendingPlayPromise).toBeNull();
+
+      // Second play should NOT be blocked by a stale _pendingPlayPromise
+      session.play();
+      expect(session.isPlaying).toBe(true);
+    });
+
+    it('SES-PBP-002: _pendingPlayPromise is cleared by pause()', async () => {
+      const video = createMockVideo(100, 0);
+      Object.setPrototypeOf(video, HTMLVideoElement.prototype);
+      // Use a deferred promise so safeVideoPlay is still pending when pause() is called
+      let resolvePlay!: () => void;
+      video.play = vi.fn().mockImplementation(() => new Promise<void>((r) => { resolvePlay = r; }));
+      video.pause = vi.fn();
+
+      session.setSources([{
+        type: 'video', name: 'v', url: 'v.mp4',
+        width: 100, height: 100, duration: 100, fps: 24, element: video,
+      }]);
+
+      // Start playing — safeVideoPlay sets _pendingPlayPromise
+      session.play();
+      expect(session.isPlaying).toBe(true);
+
+      // The promise should be set while video.play() is pending
+      // Wait a microtask for the async IIFE to reach the await
+      await Promise.resolve();
+      expect((session as any)._pendingPlayPromise).not.toBeNull();
+
+      // Pause should clear _pendingPlayPromise immediately
+      session.pause();
+      expect((session as any)._pendingPlayPromise).toBeNull();
+
+      // Resolve the deferred play to avoid unhandled rejection
+      resolvePlay();
+    });
+
+    it('SES-PBP-003: multiple rapid play/pause cycles work correctly', async () => {
+      const video = createMockVideo(100, 0);
+      Object.setPrototypeOf(video, HTMLVideoElement.prototype);
+      video.play = vi.fn().mockResolvedValue(undefined);
+      video.pause = vi.fn();
+
+      session.setSources([{
+        type: 'video', name: 'v', url: 'v.mp4',
+        width: 100, height: 100, duration: 100, fps: 24, element: video,
+      }]);
+
+      // Rapid cycle: play/pause/play/pause/play
+      session.play();
+      expect(session.isPlaying).toBe(true);
+
+      await vi.waitFor(() => {
+        expect((session as any)._pendingPlayPromise).toBeNull();
+      });
+
+      session.pause();
+      expect(session.isPlaying).toBe(false);
+
+      session.play();
+      expect(session.isPlaying).toBe(true);
+
+      await vi.waitFor(() => {
+        expect((session as any)._pendingPlayPromise).toBeNull();
+      });
+
+      session.pause();
+      expect(session.isPlaying).toBe(false);
+
+      // Final play — must succeed and not be blocked
+      session.play();
+      expect(session.isPlaying).toBe(true);
+
+      // Verify video.play was called for each play() invocation that
+      // reaches the video source path (3 times total)
+      expect(video.play).toHaveBeenCalledTimes(3);
+    });
+  });
+
   describe('frame navigation', () => {
     it('SES-013: goToFrame() updates currentFrame', () => {
       session.goToFrame(1);
@@ -3067,6 +3170,412 @@ describe('Session', () => {
       session.pause();
       session.play();
       expect(session.isPlaying).toBe(true);
+    });
+  });
+
+  // =============================================================================
+  // Regression tests for starvation cascade fix
+  // =============================================================================
+
+  describe('Starvation cascade prevention (regression)', () => {
+    it('SES-STARV-001: _consecutiveStarvationSkips exists and is initially 0', () => {
+      // Access private field via any cast to verify it exists and is initialized correctly
+      expect((session as any)._consecutiveStarvationSkips).toBe(0);
+    });
+
+    it('SES-STARV-002: triggerStarvationRecoveryPreload method exists and is callable', () => {
+      // Verify the method exists on the session instance
+      // This is a regression test to ensure the starvation recovery preload logic is present
+      expect(typeof (session as any).triggerStarvationRecoveryPreload).toBe('function');
+    });
+
+    it('SES-STARV-003: MAX_CONSECUTIVE_STARVATION_SKIPS is 2', () => {
+      // Access static constant via any cast
+      expect((Session as any).MAX_CONSECUTIVE_STARVATION_SKIPS).toBe(2);
+    });
+  });
+
+  // =============================================================================
+  // Regression tests for end-of-video starvation handling
+  // =============================================================================
+
+  describe('end-of-video starvation handling (regression)', () => {
+    // Helper to create mock VideoSourceNode with frame caching control
+    const createMockVideoSourceNode = (hasFrameCachedFn: (frame: number) => boolean = () => false) => ({
+      isUsingMediabunny: vi.fn(() => true),
+      hasFrameCached: vi.fn(hasFrameCachedFn),
+      getFrameAsync: vi.fn().mockResolvedValue(null),
+      preloadForPlayback: vi.fn().mockResolvedValue(undefined),
+      preloadFrames: vi.fn().mockResolvedValue(undefined),
+      setPlaybackDirection: vi.fn(),
+      startPlaybackPreload: vi.fn(),
+      stopPlaybackPreload: vi.fn(),
+      updatePlaybackBuffer: vi.fn(),
+    });
+
+    it('SES-EOV-001: When starvation occurs at a frame within 2 of _outPoint in loop mode, _currentFrame should wrap to _inPoint', () => {
+      // Setup: video source with frames 1-100, currently at frame 99 (within 2 of outPoint 100)
+      const mockVideoNode = createMockVideoSourceNode(() => false); // All frames NOT cached to trigger starvation
+      const video = createMockVideo(100 / 24, 0);
+      Object.setPrototypeOf(video, HTMLVideoElement.prototype);
+
+      session.setSources([{
+        type: 'video',
+        name: 'test.mp4',
+        url: 'test.mp4',
+        width: 1920,
+        height: 1080,
+        duration: 100,
+        fps: 24,
+        element: video,
+        videoSourceNode: mockVideoNode as any,
+      }]);
+
+      session.loopMode = 'loop';
+      session.goToFrame(99); // Near end
+      session.play();
+
+      const internal = session as any;
+      internal._playDirection = 1;
+      internal._starvationStartTime = performance.now() - 6000; // Exceed starvation timeout (5000ms)
+      internal.lastFrameTime = performance.now() - 100;
+      internal.frameAccumulator = 100; // Enough to trigger frame advance
+
+      // Execute update - should detect end-of-video starvation and loop
+      session.update();
+
+      // Verify frame wrapped to beginning (not cascaded starvation)
+      expect(session.currentFrame).toBe(1); // Wrapped to inPoint
+      expect(internal._consecutiveStarvationSkips).toBe(0); // Reset on loop
+    });
+
+    it('SES-EOV-002: When starvation occurs near end in loop mode, the HTMLVideoElement currentTime should be reset to match the new frame position', () => {
+      // Setup: video source at frame 98, close to outPoint 100
+      const mockVideoNode = createMockVideoSourceNode(() => false); // Trigger starvation
+      const video = createMockVideo(100 / 24, (98 - 1) / 24);
+      Object.setPrototypeOf(video, HTMLVideoElement.prototype);
+
+      session.setSources([{
+        type: 'video',
+        name: 'test.mp4',
+        url: 'test.mp4',
+        width: 1920,
+        height: 1080,
+        duration: 100,
+        fps: 24,
+        element: video,
+        videoSourceNode: mockVideoNode as any,
+      }]);
+
+      session.loopMode = 'loop';
+      session.goToFrame(98);
+      session.play();
+
+      const internal = session as any;
+      internal._playDirection = 1;
+      internal._starvationStartTime = performance.now() - 6000;
+      internal.lastFrameTime = performance.now() - 100;
+      internal.frameAccumulator = 100;
+
+      // Execute update - should loop and sync audio
+      session.update();
+
+      // Verify audio synced to loop point (frame 1 = time 0)
+      expect(video.currentTime).toBe(0); // (1 - 1) / 24
+      expect(session.currentFrame).toBe(1);
+    });
+
+    it('SES-EOV-003: When starvation occurs near end in once mode, playback should pause', () => {
+      // Setup: video source at frame 99, near outPoint 100
+      const mockVideoNode = createMockVideoSourceNode(() => false);
+      const video = createMockVideo(100 / 24, 0);
+      Object.setPrototypeOf(video, HTMLVideoElement.prototype);
+
+      session.setSources([{
+        type: 'video',
+        name: 'test.mp4',
+        url: 'test.mp4',
+        width: 1920,
+        height: 1080,
+        duration: 100,
+        fps: 24,
+        element: video,
+        videoSourceNode: mockVideoNode as any,
+      }]);
+
+      session.loopMode = 'once';
+      session.goToFrame(99);
+      session.play();
+
+      const internal = session as any;
+      internal._playDirection = 1;
+      internal._starvationStartTime = performance.now() - 6000;
+      internal.lastFrameTime = performance.now() - 100;
+      internal.frameAccumulator = 100;
+
+      // Execute update - should pause instead of looping
+      session.update();
+
+      // Verify playback paused (not looped)
+      expect(session.isPlaying).toBe(false);
+      expect(session.currentFrame).toBe(99); // Stayed at same frame
+    });
+
+    it('SES-EOV-004: When starvation cascade triggers pause (2 consecutive skips), the HTMLVideoElement should be paused immediately', () => {
+      // Setup: video source mid-sequence, trigger cascade pause
+      const mockVideoNode = createMockVideoSourceNode(() => false);
+      const video = createMockVideo(100 / 24, 0);
+      Object.setPrototypeOf(video, HTMLVideoElement.prototype);
+      video.pause = vi.fn();
+
+      session.setSources([{
+        type: 'video',
+        name: 'test.mp4',
+        url: 'test.mp4',
+        width: 1920,
+        height: 1080,
+        duration: 100,
+        fps: 24,
+        element: video,
+        videoSourceNode: mockVideoNode as any,
+      }]);
+
+      session.goToFrame(50); // Mid-sequence (not near end)
+      session.play();
+
+      const internal = session as any;
+      internal._playDirection = 1;
+      internal._consecutiveStarvationSkips = 1; // Already had 1 skip
+      internal._starvationStartTime = performance.now() - 6000; // Trigger another
+      internal.lastFrameTime = performance.now() - 100;
+      internal.frameAccumulator = 100;
+
+      // Execute update - should hit cascade threshold (2 skips) and pause immediately
+      session.update();
+
+      // Verify video.pause() was called before session.pause()
+      expect(video.pause).toHaveBeenCalled();
+      expect(session.isPlaying).toBe(false);
+      expect(internal._consecutiveStarvationSkips).toBe(0); // Reset after pause
+    });
+
+    it('SES-EOV-005: _consecutiveStarvationSkips resets to 0 after a successful frame render', () => {
+      // Setup: video source with one frame cached (to allow successful render)
+      let nextFrameToCheck = 51;
+      const mockVideoNode = createMockVideoSourceNode((frame) => frame === nextFrameToCheck);
+      const video = createMockVideo(100 / 24, 0);
+      Object.setPrototypeOf(video, HTMLVideoElement.prototype);
+
+      session.setSources([{
+        type: 'video',
+        name: 'test.mp4',
+        url: 'test.mp4',
+        width: 1920,
+        height: 1080,
+        duration: 100,
+        fps: 24,
+        element: video,
+        videoSourceNode: mockVideoNode as any,
+      }]);
+
+      session.goToFrame(50);
+      session.play();
+
+      const internal = session as any;
+      internal._playDirection = 1;
+      internal._consecutiveStarvationSkips = 1; // Had previous skip
+      internal.lastFrameTime = performance.now() - 100;
+      internal.frameAccumulator = 100;
+
+      // Execute update - frame 51 is cached, should render successfully
+      session.update();
+
+      // Verify skip counter reset on successful render
+      expect(internal._consecutiveStarvationSkips).toBe(0);
+      expect(session.currentFrame).toBe(51); // Advanced
+    });
+
+    it('SES-EOV-006: End-of-video starvation in reverse playback should handle properly (wrap to end or pause)', () => {
+      // Test reverse playback near inPoint
+      const mockVideoNode = createMockVideoSourceNode(() => false);
+      const video = createMockVideo(100 / 24, 0);
+      Object.setPrototypeOf(video, HTMLVideoElement.prototype);
+
+      session.setSources([{
+        type: 'video',
+        name: 'test.mp4',
+        url: 'test.mp4',
+        width: 1920,
+        height: 1080,
+        duration: 100,
+        fps: 24,
+        element: video,
+        videoSourceNode: mockVideoNode as any,
+      }]);
+
+      // Test reverse + loop mode: should wrap to outPoint
+      session.loopMode = 'loop';
+      session.goToFrame(2); // Near inPoint (within 2 frames)
+      session.play();
+
+      const internal = session as any;
+      internal._playDirection = -1; // Reverse
+      internal._starvationStartTime = performance.now() - 6000;
+      internal.lastFrameTime = performance.now() - 100;
+      internal.frameAccumulator = 100;
+
+      session.update();
+
+      // Should wrap to outPoint in reverse loop
+      expect(session.currentFrame).toBe(100); // Wrapped to outPoint
+      expect(video.currentTime).toBeCloseTo((100 - 1) / 24, 5); // Audio synced
+
+      // Test reverse + once mode: should pause
+      session.loopMode = 'once';
+      session.goToFrame(2);
+      session.play();
+      internal._playDirection = -1;
+      internal._starvationStartTime = performance.now() - 6000;
+      internal.lastFrameTime = performance.now() - 100;
+      internal.frameAccumulator = 100;
+
+      session.update();
+
+      expect(session.isPlaying).toBe(false); // Paused at beginning
+    });
+  });
+
+  describe('audio drift correction (regression)', () => {
+    it('SES-AUDIO-001: Audio drift threshold constant is 1.0 seconds', () => {
+      // Verify that the drift threshold is set to 1.0s (not 0.5s)
+      // The threshold is hardcoded in the update() method's drift check
+      const mockVideoNode = {
+        isUsingMediabunny: vi.fn(() => true),
+        hasFrameCached: vi.fn(() => true),
+        getFrameAsync: vi.fn().mockResolvedValue(null),
+        preloadForPlayback: vi.fn().mockResolvedValue(undefined),
+        preloadFrames: vi.fn().mockResolvedValue(undefined),
+        setPlaybackDirection: vi.fn(),
+        startPlaybackPreload: vi.fn(),
+        stopPlaybackPreload: vi.fn(),
+      } as any;
+      const video = createMockVideo(100, 0);
+      Object.setPrototypeOf(video, HTMLVideoElement.prototype);
+      video.play = vi.fn().mockResolvedValue(undefined);
+      video.pause = vi.fn();
+
+      session.setSources([{
+        type: 'video',
+        name: 'test.mp4',
+        url: 'test.mp4',
+        width: 1920,
+        height: 1080,
+        duration: 100,
+        fps: 24,
+        element: video,
+        videoSourceNode: mockVideoNode,
+      }]);
+
+      session.fps = 24;
+      session.goToFrame(24);
+      session.play();
+
+      const internal = session as any;
+      internal._playDirection = 1;
+      internal._audioSyncEnabled = true;
+
+      // Test case 1: drift just below threshold (0.99s) - should NOT trigger seek
+      // Frame 24 target = (24-1)/24 = 0.958333s
+      // After update(), frame advances to 25, target = (25-1)/24 = 1.0s
+      // Set video time to 1.99s, so drift after advance = |1.99 - 1.0| = 0.99s < 1.0
+      video._currentTime = 1.99;
+      const currentTimeBefore = video.currentTime;
+
+      // Set up for single frame advance
+      internal.lastFrameTime = performance.now();
+      internal.frameAccumulator = (1000 / 24); // Exactly one frame worth
+
+      session.update();
+
+      // Should NOT have seeked (drift < 1.0)
+      expect(video.currentTime).toBe(currentTimeBefore);
+      expect(session.currentFrame).toBe(25); // Frame advanced
+
+      // Test case 2: drift at threshold (1.0s exactly) - should trigger seek
+      // Current frame is 25, after update() will advance to 26
+      // Frame 26 target = (26-1)/24 = 1.041667s
+      // Set video time to 2.041667s, so drift after advance = |2.041667 - 1.041667| = 1.0s exactly
+      video._currentTime = 2.041667;
+      internal.lastFrameTime = performance.now();
+      internal.frameAccumulator = (1000 / 24); // Exactly one frame worth
+
+      session.update();
+
+      // Should have seeked (drift >= 1.0)
+      expect(video.currentTime).toBeCloseTo(1.041667, 5); // (26-1)/24
+      expect(session.currentFrame).toBe(26);
+    });
+
+    it('SES-AUDIO-002: Drift correction does not use video.pause()/video.play() cycle', () => {
+      // Verify that drift correction only sets currentTime without pause/play
+      const mockVideoNode = {
+        isUsingMediabunny: vi.fn(() => true),
+        hasFrameCached: vi.fn(() => true),
+        getFrameAsync: vi.fn().mockResolvedValue(null),
+        preloadForPlayback: vi.fn().mockResolvedValue(undefined),
+        preloadFrames: vi.fn().mockResolvedValue(undefined),
+        setPlaybackDirection: vi.fn(),
+        startPlaybackPreload: vi.fn(),
+        stopPlaybackPreload: vi.fn(),
+      } as any;
+      const video = createMockVideo(100, 0);
+      Object.setPrototypeOf(video, HTMLVideoElement.prototype);
+      video.play = vi.fn().mockResolvedValue(undefined);
+      video.pause = vi.fn();
+
+      session.setSources([{
+        type: 'video',
+        name: 'test.mp4',
+        url: 'test.mp4',
+        width: 1920,
+        height: 1080,
+        duration: 100,
+        fps: 24,
+        element: video,
+        videoSourceNode: mockVideoNode,
+      }]);
+
+      session.fps = 24;
+      session.goToFrame(24);
+      session.play();
+
+      const internal = session as any;
+      internal._playDirection = 1;
+      internal._audioSyncEnabled = true;
+
+      // Clear play/pause call counts from session.play()
+      video.play.mockClear();
+      video.pause.mockClear();
+
+      // Simulate significant drift (> 1.0s) to trigger correction
+      // Frame 24 will advance to 25 during update()
+      // Frame 25 target = (25-1)/24 = 1.0s
+      // Set video time to 3.5s, so drift = |3.5 - 1.0| = 2.5s > 1.0
+      video._currentTime = 3.5;
+
+      // Set up for single frame advance
+      internal.lastFrameTime = performance.now();
+      internal.frameAccumulator = (1000 / 24); // Exactly one frame worth
+
+      session.update();
+
+      // Drift correction should have set currentTime to match the advanced frame
+      expect(video.currentTime).toBeCloseTo(1.0, 5); // (25-1)/24
+      expect(session.currentFrame).toBe(25); // Frame advanced
+
+      // But pause() and play() should NOT have been called during drift correction
+      expect(video.pause).not.toHaveBeenCalled();
+      expect(video.play).not.toHaveBeenCalled();
     });
   });
 });
