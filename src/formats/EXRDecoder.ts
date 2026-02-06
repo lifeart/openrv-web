@@ -5,18 +5,19 @@
  * - Half-float (16-bit) and float (32-bit) pixel data
  * - RGBA, RGB, and Y (grayscale) channels
  * - Scanline images (tiled images not yet supported)
- * - Uncompressed (NONE), RLE, ZIP, and ZIPS compression
+ * - Uncompressed (NONE), RLE, ZIP, ZIPS, and PIZ compression
  * - Data window / display window handling
  *
  * Not yet supported:
  * - Tiled images
  * - Multi-part EXR files
- * - PIZ, PXR24, B44, B44A, DWAA, DWAB compression
+ * - PXR24, B44, B44A, DWAA, DWAB compression
  *
  * Based on the OpenEXR file format specification.
  */
 
 import { IPImage, ImageMetadata } from '../core/image/Image';
+import { decompressPIZ } from './EXRPIZCodec';
 
 // EXR magic number
 const EXR_MAGIC = 0x01312f76;
@@ -532,7 +533,8 @@ function parseBox2i(reader: EXRDataReader): EXRBox2i {
 async function decompressData(
   compressedData: Uint8Array,
   compression: EXRCompression,
-  uncompressedSize: number
+  uncompressedSize: number,
+  pizContext?: { width: number; numChannels: number; numLines: number; channelSizes: number[] }
 ): Promise<Uint8Array> {
   switch (compression) {
     case EXRCompression.NONE:
@@ -542,8 +544,19 @@ async function decompressData(
     case EXRCompression.ZIP:
       return await decompressZlib(compressedData, uncompressedSize);
 
-    case EXRCompression.PIZ:
-      return decompressPIZ(compressedData, uncompressedSize);
+    case EXRCompression.PIZ: {
+      if (!pizContext) {
+        throw new Error('PIZ decompression requires channel context information');
+      }
+      return decompressPIZ(
+        compressedData,
+        uncompressedSize,
+        pizContext.width,
+        pizContext.numChannels,
+        pizContext.numLines,
+        pizContext.channelSizes
+      );
+    }
 
     case EXRCompression.RLE:
       return decompressRLE(compressedData, uncompressedSize);
@@ -672,20 +685,6 @@ function decompressRLE(compressedData: Uint8Array, uncompressedSize: number): Ui
   return result;
 }
 
-/**
- * Decompress PIZ data (Wavelet compression)
- * This is a simplified implementation - PIZ uses Huffman + wavelet transform
- */
-function decompressPIZ(_compressedData: Uint8Array, _uncompressedSize: number): Uint8Array {
-  // PIZ compression is complex - it involves:
-  // 1. Huffman decoding
-  // 2. LUT lookup
-  // 3. Wavelet reconstruction
-
-  // For a complete implementation, you would need to port the OpenEXR PIZ codec
-  // This is a placeholder that indicates PIZ support is needed
-  throw new Error('PIZ compression support requires full wavelet decoder implementation. Please use uncompressed or ZIP compressed EXR files.');
-}
 
 /**
  * Decode scanline image data with optional channel mapping
@@ -761,11 +760,14 @@ async function decodeScanlineImage(
   }, 0);
 
   // Lines per block depends on compression
+  // TODO: PIZ codec needs a full rewrite — missing Huffman decompression,
+  // wrong pipeline order, and 1D-only wavelet (should be 2D).
   const linesPerBlock =
-    header.compression === EXRCompression.ZIP ||
     header.compression === EXRCompression.PIZ
-      ? 16
-      : 1;
+      ? 32
+      : header.compression === EXRCompression.ZIP
+        ? 16
+        : 1;
 
   // Read offset table (for scanline images)
   const numBlocks = Math.ceil(height / linesPerBlock);
@@ -789,7 +791,17 @@ async function decodeScanlineImage(
     if (header.compression === EXRCompression.NONE) {
       unpackedData = packedData;
     } else {
-      unpackedData = await decompressData(packedData, header.compression, uncompressedSize);
+      const pizContext = header.compression === EXRCompression.PIZ
+        ? {
+            width,
+            numChannels: header.channels.length,
+            numLines: blockLines,
+            channelSizes: header.channels.map(ch =>
+              ch.pixelType === EXRPixelType.HALF ? 2 : 4
+            ),
+          }
+        : undefined;
+      unpackedData = await decompressData(packedData, header.compression, uncompressedSize, pizContext);
     }
 
     // Parse channel data from unpacked scanlines
@@ -872,11 +884,12 @@ export async function decodeEXR(
     EXRCompression.RLE,
     EXRCompression.ZIPS,
     EXRCompression.ZIP,
+    EXRCompression.PIZ,
   ];
   if (!supportedCompression.includes(header.compression)) {
     const compressionName = EXRCompression[header.compression] || `unknown(${header.compression})`;
     throw new Error(
-      `Unsupported EXR compression type: ${compressionName}. Supported types: NONE, RLE, ZIP, ZIPS`
+      `Unsupported EXR compression type: ${compressionName}. Supported types: NONE, RLE, ZIP, ZIPS, PIZ`
     );
   }
 

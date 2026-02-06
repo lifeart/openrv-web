@@ -153,6 +153,9 @@ export interface WorkerHSLQualifierState {
 export interface WorkerToneMappingState {
   enabled: boolean;
   operator: string; // 'off' | 'reinhard' | 'filmic' | 'aces'
+  reinhardWhitePoint?: number;    // Extended Reinhard white point (default 4.0)
+  filmicExposureBias?: number;    // Filmic exposure bias (default 2.0)
+  filmicWhitePoint?: number;      // Filmic white point (default 11.2)
 }
 
 /**
@@ -362,12 +365,15 @@ export function isIdentityHueRotation(degrees: number): boolean {
 
 /**
  * Reinhard tone mapping operator (per-channel).
- * Formula: output = input / (1 + input)
- * Maps [0, infinity) to [0, 1).
+ * Extended Reinhard formula: L * (1 + L / (Lw^2)) / (1 + L)
+ * where Lw is the white point parameter.
+ * Maps [0, infinity) to [0, 1) with configurable highlight rolloff.
+ * Matches GPU shader: color * (1.0 + color / wp2) / (1.0 + color)
  */
-export function tonemapReinhardChannel(value: number): number {
+export function tonemapReinhardChannel(value: number, whitePoint = 4.0): number {
   if (!Number.isFinite(value) || value < 0) return 0;
-  return value / (1.0 + value);
+  const wp2 = whitePoint * whitePoint;
+  return value * (1.0 + value / wp2) / (1.0 + value);
 }
 
 /**
@@ -386,13 +392,13 @@ export function filmicCurveShared(x: number): number {
 
 /**
  * Filmic tone mapping operator (per-channel).
- * Uses Hable curve with exposure bias 2.0 and white point 11.2.
+ * Uses Hable/Uncharted 2 curve with configurable exposure bias and white point.
+ * Matches GPU shader: filmic(exposureBias * color) / filmic(whitePoint)
  */
-export function tonemapFilmicChannel(value: number): number {
+export function tonemapFilmicChannel(value: number, exposureBias = 2.0, whitePoint = 11.2): number {
   if (!Number.isFinite(value) || value < 0) return 0;
-  const exposureBias = 2.0;
   const curr = filmicCurveShared(exposureBias * value);
-  const whiteScale = 1.0 / filmicCurveShared(11.2);
+  const whiteScale = 1.0 / filmicCurveShared(whitePoint);
   return Math.max(0, curr * whiteScale);
 }
 
@@ -412,14 +418,24 @@ export function tonemapACESChannel(value: number): number {
 }
 
 /**
+ * Tone mapping parameters for CPU processing.
+ * Matches the GPU uniforms: u_tmReinhardWhitePoint, u_tmFilmicExposureBias, u_tmFilmicWhitePoint.
+ */
+export interface ToneMappingParams {
+  reinhardWhitePoint?: number;
+  filmicExposureBias?: number;
+  filmicWhitePoint?: number;
+}
+
+/**
  * Apply tone mapping to a single channel value using the specified operator.
  */
-export function applyToneMappingToChannel(value: number, operator: string): number {
+export function applyToneMappingToChannel(value: number, operator: string, params?: ToneMappingParams): number {
   switch (operator) {
     case 'reinhard':
-      return tonemapReinhardChannel(value);
+      return tonemapReinhardChannel(value, params?.reinhardWhitePoint);
     case 'filmic':
-      return tonemapFilmicChannel(value);
+      return tonemapFilmicChannel(value, params?.filmicExposureBias, params?.filmicWhitePoint);
     case 'aces':
       return tonemapACESChannel(value);
     default:
@@ -432,7 +448,7 @@ export function applyToneMappingToChannel(value: number, operator: string): numb
  * Converts 8-bit [0-255] to normalized [0-1], applies tone mapping, converts back.
  * Alpha channel is preserved unchanged.
  */
-export function applyToneMappingToData(data: Uint8ClampedArray, operator: string): void {
+export function applyToneMappingToData(data: Uint8ClampedArray, operator: string, params?: ToneMappingParams): void {
   if (operator === 'off') return;
 
   const len = data.length;
@@ -441,9 +457,9 @@ export function applyToneMappingToData(data: Uint8ClampedArray, operator: string
     let g = data[i + 1]! / 255;
     let b = data[i + 2]! / 255;
 
-    r = applyToneMappingToChannel(r, operator);
-    g = applyToneMappingToChannel(g, operator);
-    b = applyToneMappingToChannel(b, operator);
+    r = applyToneMappingToChannel(r, operator, params);
+    g = applyToneMappingToChannel(g, operator, params);
+    b = applyToneMappingToChannel(b, operator, params);
 
     data[i] = Math.max(0, Math.min(255, Math.round(Number.isFinite(r) ? r * 255 : 0)));
     data[i + 1] = Math.max(0, Math.min(255, Math.round(Number.isFinite(g) ? g * 255 : 0)));

@@ -1054,6 +1054,156 @@ export class OCIOTransform {
       return;
     }
 
+    // =========================================================================
+    // Reverse transforms: sRGB -> camera spaces
+    // =========================================================================
+
+    // sRGB to ARRI LogC3
+    if (input === 'sRGB' && output === 'ARRI LogC3 (EI 800)') {
+      this.steps.push({ type: 'gamma_decode', func: 'srgb' });
+      this.steps.push({ type: 'matrix', matrix: SRGB_TO_XYZ });
+      this.steps.push({ type: 'matrix', matrix: XYZ_TO_ARRI_WIDE_GAMUT3 });
+      this.steps.push({ type: 'gamma_encode', func: 'logC3' });
+      return;
+    }
+
+    // sRGB to ARRI LogC4
+    if (input === 'sRGB' && output === 'ARRI LogC4') {
+      this.steps.push({ type: 'gamma_decode', func: 'srgb' });
+      this.steps.push({ type: 'matrix', matrix: SRGB_TO_XYZ });
+      this.steps.push({ type: 'matrix', matrix: XYZ_TO_ARRI_WIDE_GAMUT4 });
+      this.steps.push({ type: 'gamma_encode', func: 'logC4' });
+      return;
+    }
+
+    // sRGB to Sony S-Log3
+    if (input === 'sRGB' && output === 'Sony S-Log3') {
+      this.steps.push({ type: 'gamma_decode', func: 'srgb' });
+      this.steps.push({ type: 'matrix', matrix: SRGB_TO_XYZ });
+      this.steps.push({ type: 'matrix', matrix: XYZ_TO_SGAMUT3CINE });
+      this.steps.push({ type: 'gamma_encode', func: 'slog3' });
+      return;
+    }
+
+    // sRGB to RED Log3G10
+    if (input === 'sRGB' && output === 'RED Log3G10') {
+      this.steps.push({ type: 'gamma_decode', func: 'srgb' });
+      this.steps.push({ type: 'matrix', matrix: SRGB_TO_XYZ });
+      this.steps.push({ type: 'matrix', matrix: XYZ_TO_REDWIDEGAMUT });
+      this.steps.push({ type: 'gamma_encode', func: 'log3G10' });
+      return;
+    }
+
+    // =========================================================================
+    // Cross-space transforms: ACEScg <-> camera spaces
+    // =========================================================================
+
+    // ACEScg to ARRI LogC3
+    if (input === 'ACEScg' && output === 'ARRI LogC3 (EI 800)') {
+      this.steps.push({ type: 'matrix', matrix: ACESCG_TO_XYZ });
+      this.steps.push({ type: 'matrix', matrix: D60_TO_D65 });
+      this.steps.push({ type: 'matrix', matrix: XYZ_TO_ARRI_WIDE_GAMUT3 });
+      this.steps.push({ type: 'gamma_encode', func: 'logC3' });
+      return;
+    }
+
+    // ARRI LogC3 to ACEScg
+    if (input === 'ARRI LogC3 (EI 800)' && output === 'ACEScg') {
+      this.steps.push({ type: 'gamma_decode', func: 'logC3' });
+      this.steps.push({ type: 'matrix', matrix: ARRI_WIDE_GAMUT3_TO_XYZ });
+      this.steps.push({ type: 'matrix', matrix: D65_TO_D60 });
+      this.steps.push({ type: 'matrix', matrix: XYZ_TO_ACESCG });
+      return;
+    }
+
+    // ACEScg to ARRI LogC4
+    if (input === 'ACEScg' && output === 'ARRI LogC4') {
+      this.steps.push({ type: 'matrix', matrix: ACESCG_TO_XYZ });
+      this.steps.push({ type: 'matrix', matrix: D60_TO_D65 });
+      this.steps.push({ type: 'matrix', matrix: XYZ_TO_ARRI_WIDE_GAMUT4 });
+      this.steps.push({ type: 'gamma_encode', func: 'logC4' });
+      return;
+    }
+
+    // ARRI LogC4 to ACEScg
+    if (input === 'ARRI LogC4' && output === 'ACEScg') {
+      this.steps.push({ type: 'gamma_decode', func: 'logC4' });
+      this.steps.push({ type: 'matrix', matrix: ARRI_WIDE_GAMUT4_TO_XYZ });
+      this.steps.push({ type: 'matrix', matrix: D65_TO_D60 });
+      this.steps.push({ type: 'matrix', matrix: XYZ_TO_ACESCG });
+      return;
+    }
+
+    // ACEScg to Sony S-Log3
+    if (input === 'ACEScg' && output === 'Sony S-Log3') {
+      this.steps.push({ type: 'matrix', matrix: ACESCG_TO_XYZ });
+      this.steps.push({ type: 'matrix', matrix: D60_TO_D65 });
+      this.steps.push({ type: 'matrix', matrix: XYZ_TO_SGAMUT3CINE });
+      this.steps.push({ type: 'gamma_encode', func: 'slog3' });
+      return;
+    }
+
+    // Sony S-Log3 to ACEScg
+    if (input === 'Sony S-Log3' && output === 'ACEScg') {
+      this.steps.push({ type: 'gamma_decode', func: 'slog3' });
+      this.steps.push({ type: 'matrix', matrix: SGAMUT3CINE_TO_XYZ });
+      this.steps.push({ type: 'matrix', matrix: D65_TO_D60 });
+      this.steps.push({ type: 'matrix', matrix: XYZ_TO_ACESCG });
+      return;
+    }
+
+    // ACEScg to RED Log3G10
+    if (input === 'ACEScg' && output === 'RED Log3G10') {
+      this.steps.push({ type: 'matrix', matrix: ACESCG_TO_XYZ });
+      this.steps.push({ type: 'matrix', matrix: D60_TO_D65 });
+      this.steps.push({ type: 'matrix', matrix: XYZ_TO_REDWIDEGAMUT });
+      this.steps.push({ type: 'gamma_encode', func: 'log3G10' });
+      return;
+    }
+
+    // RED Log3G10 to ACEScg
+    if (input === 'RED Log3G10' && output === 'ACEScg') {
+      this.steps.push({ type: 'gamma_decode', func: 'log3G10' });
+      this.steps.push({ type: 'matrix', matrix: REDWIDEGAMUT_TO_XYZ });
+      this.steps.push({ type: 'matrix', matrix: D65_TO_D60 });
+      this.steps.push({ type: 'matrix', matrix: XYZ_TO_ACESCG });
+      return;
+    }
+
+    // =========================================================================
+    // Rec.2020 cross-space transforms
+    // =========================================================================
+
+    // Rec.2020 to ACEScg
+    if (input === 'Rec.2020' && output === 'ACEScg') {
+      this.steps.push({ type: 'matrix', matrix: REC2020_TO_XYZ });
+      this.steps.push({ type: 'matrix', matrix: D65_TO_D60 });
+      this.steps.push({ type: 'matrix', matrix: XYZ_TO_ACESCG });
+      return;
+    }
+
+    // ACEScg to Rec.2020
+    if (input === 'ACEScg' && output === 'Rec.2020') {
+      this.steps.push({ type: 'matrix', matrix: ACESCG_TO_XYZ });
+      this.steps.push({ type: 'matrix', matrix: D60_TO_D65 });
+      this.steps.push({ type: 'matrix', matrix: XYZ_TO_REC2020 });
+      return;
+    }
+
+    // Rec.2020 to Linear sRGB
+    if (input === 'Rec.2020' && output === 'Linear sRGB') {
+      this.steps.push({ type: 'matrix', matrix: REC2020_TO_XYZ });
+      this.steps.push({ type: 'matrix', matrix: XYZ_TO_SRGB });
+      return;
+    }
+
+    // Linear sRGB to Rec.2020
+    if (input === 'Linear sRGB' && output === 'Rec.2020') {
+      this.steps.push({ type: 'matrix', matrix: SRGB_TO_XYZ });
+      this.steps.push({ type: 'matrix', matrix: XYZ_TO_REC2020 });
+      return;
+    }
+
     // Default: no transform (identity)
     // In a full implementation, we would have more transforms
   }

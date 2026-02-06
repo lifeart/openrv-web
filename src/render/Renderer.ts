@@ -115,6 +115,20 @@ export class Renderer implements RendererBackend {
 
   private channelModeCode = 0; // 0=rgb
 
+  // --- 3D LUT state (single-pass) ---
+  private lut3DTexture: WebGLTexture | null = null;
+  private lut3DEnabled = false;
+  private lut3DIntensity = 1.0;
+  private lut3DSize = 0;
+  private lut3DDirty = true;
+  private lut3DData: Float32Array | null = null;
+
+  // --- Display color management ---
+  private displayTransferCode = 1; // 0=linear, 1=srgb, 2=rec709, 3=gamma2.2, 4=gamma2.4, 5=custom
+  private displayGammaOverride = 1.0;
+  private displayBrightnessMultiplier = 1.0;
+  private displayCustomGamma = 2.2;
+
   initialize(canvas: HTMLCanvasElement, capabilities?: DisplayCapabilities): void {
     this.canvas = canvas;
 
@@ -222,6 +236,7 @@ export class Renderer implements RendererBackend {
 
     const fragSource = `#version 300 es
       precision highp float;
+      precision highp sampler3D;
       in vec2 v_texCoord;
       out vec4 fragColor;
       uniform sampler2D u_texture;
@@ -241,6 +256,9 @@ export class Renderer implements RendererBackend {
 
       // Tone mapping
       uniform int u_toneMappingOperator;  // 0=off, 1=reinhard, 2=filmic, 3=aces
+      uniform float u_tmReinhardWhitePoint;  // Reinhard white point (default 4.0)
+      uniform float u_tmFilmicExposureBias;  // Filmic exposure bias (default 2.0)
+      uniform float u_tmFilmicWhitePoint;    // Filmic white point (default 11.2)
 
       // Color inversion
       uniform bool u_invert;
@@ -285,6 +303,18 @@ export class Renderer implements RendererBackend {
       // Channel Isolation
       uniform int u_channelMode; // 0=rgb, 1=red, 2=green, 3=blue, 4=alpha, 5=luminance
 
+      // 3D LUT (single-pass float precision)
+      uniform sampler3D u_lut3D;
+      uniform bool u_lut3DEnabled;
+      uniform float u_lut3DIntensity;
+      uniform float u_lut3DSize;
+
+      // Display transfer function
+      uniform int u_displayTransfer;    // 0=linear, 1=sRGB, 2=rec709, 3=gamma2.2, 4=gamma2.4, 5=custom
+      uniform float u_displayGamma;     // display gamma override (1.0 = no override)
+      uniform float u_displayBrightness; // display brightness multiplier (1.0 = no change)
+      uniform float u_displayCustomGamma; // custom gamma value (only used when u_displayTransfer == 5)
+
       // Background pattern
       uniform int u_backgroundPattern;    // 0=none, 1=solid, 2=checker, 3=crosshatch
       uniform vec3 u_bgColor1;            // primary color
@@ -315,7 +345,8 @@ export class Renderer implements RendererBackend {
       // Simple global operator that preserves detail in highlights
       // Reference: Reinhard et al., "Photographic Tone Reproduction for Digital Images"
       vec3 tonemapReinhard(vec3 color) {
-        return color / (color + vec3(1.0));
+        float wp2 = u_tmReinhardWhitePoint * u_tmReinhardWhitePoint;
+        return color * (1.0 + color / wp2) / (1.0 + color);
       }
 
       // Filmic tone mapping (Uncharted 2 style)
@@ -332,9 +363,8 @@ export class Renderer implements RendererBackend {
       }
 
       vec3 tonemapFilmic(vec3 color) {
-        float exposureBias = 2.0;
-        vec3 curr = filmic(exposureBias * color);
-        vec3 whiteScale = vec3(1.0) / filmic(vec3(11.2));  // Linear white point
+        vec3 curr = filmic(u_tmFilmicExposureBias * color);
+        vec3 whiteScale = vec3(1.0) / filmic(vec3(u_tmFilmicWhitePoint));
         // Clamp to non-negative to match CPU implementation (filmic curve can produce slightly negative values)
         return max(curr * whiteScale, vec3(0.0));
       }
@@ -424,6 +454,43 @@ export class Renderer implements RendererBackend {
         ) * pqNormFactor;
       }
 
+      // Apply 3D LUT with trilinear interpolation
+      vec3 applyLUT3D(vec3 color) {
+        vec3 c = clamp(color, 0.0, 1.0);
+        float offset = 0.5 / u_lut3DSize;
+        float scale = (u_lut3DSize - 1.0) / u_lut3DSize;
+        vec3 lutCoord = c * scale + offset;
+        vec3 lutColor = texture(u_lut3D, lutCoord).rgb;
+        return mix(color, lutColor, u_lut3DIntensity);
+      }
+
+      // Display transfer functions (linear -> display encoded)
+      float displayTransferSRGB(float c) {
+        if (c <= 0.0031308) return c * 12.92;
+        return 1.055 * pow(c, 1.0 / 2.4) - 0.055;
+      }
+
+      float displayTransferRec709(float c) {
+        if (c < 0.018) return 4.5 * c;
+        return 1.099 * pow(c, 0.45) - 0.099;
+      }
+
+      vec3 applyDisplayTransfer(vec3 color, int tf) {
+        vec3 c = max(color, 0.0);
+        if (tf == 1) { // sRGB
+          return vec3(displayTransferSRGB(c.r), displayTransferSRGB(c.g), displayTransferSRGB(c.b));
+        } else if (tf == 2) { // Rec.709
+          return vec3(displayTransferRec709(c.r), displayTransferRec709(c.g), displayTransferRec709(c.b));
+        } else if (tf == 3) { // gamma 2.2
+          return pow(c, vec3(1.0 / 2.2));
+        } else if (tf == 4) { // gamma 2.4
+          return pow(c, vec3(1.0 / 2.4));
+        } else if (tf == 5) { // custom gamma
+          return pow(c, vec3(1.0 / u_displayCustomGamma));
+        }
+        return c; // tf == 0 (linear)
+      }
+
       void main() {
         vec4 color = texture(u_texture, v_texCoord);
 
@@ -500,11 +567,28 @@ export class Renderer implements RendererBackend {
           color.rgb = cc + excess;
         }
 
-        // 7. Tone mapping (applied before gamma for proper HDR handling)
+        // 6d. 3D LUT (single-pass, float precision)
+        if (u_lut3DEnabled) {
+          color.rgb = applyLUT3D(color.rgb);
+        }
+
+        // 7. Tone mapping (applied before display transfer for proper HDR handling)
         color.rgb = applyToneMapping(max(color.rgb, 0.0), u_toneMappingOperator);
 
-        // 8. Gamma correction (display transform)
-        color.rgb = pow(max(color.rgb, 0.0), vec3(1.0 / u_gamma));
+        // 8. Display transfer function (replaces simple gamma)
+        if (u_displayTransfer > 0) {
+          color.rgb = applyDisplayTransfer(color.rgb, u_displayTransfer);
+        } else {
+          color.rgb = pow(max(color.rgb, 0.0), vec3(1.0 / u_gamma));
+        }
+
+        // 8b. Display gamma override
+        if (u_displayGamma != 1.0) {
+          color.rgb = pow(max(color.rgb, 0.0), vec3(1.0 / u_displayGamma));
+        }
+
+        // 8c. Display brightness
+        color.rgb *= u_displayBrightness;
 
         // 9. Color inversion (after all corrections, before channel isolation)
         if (u_invert) {
@@ -671,6 +755,11 @@ export class Renderer implements RendererBackend {
       : 0;
     this.displayShader.setUniformInt('u_toneMappingOperator', toneMappingCode);
 
+    // Set tone mapping parameters
+    this.displayShader.setUniform('u_tmReinhardWhitePoint', this.toneMappingState.reinhardWhitePoint ?? 4.0);
+    this.displayShader.setUniform('u_tmFilmicExposureBias', this.toneMappingState.filmicExposureBias ?? 2.0);
+    this.displayShader.setUniform('u_tmFilmicWhitePoint', this.toneMappingState.filmicWhitePoint ?? 11.2);
+
     // Set color inversion uniform
     this.displayShader.setUniformInt('u_invert', this.colorInversionEnabled ? 1 : 0);
 
@@ -724,6 +813,19 @@ export class Renderer implements RendererBackend {
     // Channel mode
     this.displayShader.setUniformInt('u_channelMode', this.channelModeCode);
 
+    // 3D LUT
+    this.displayShader.setUniformInt('u_lut3DEnabled', this.lut3DEnabled ? 1 : 0);
+    if (this.lut3DEnabled) {
+      this.displayShader.setUniform('u_lut3DIntensity', this.lut3DIntensity);
+      this.displayShader.setUniform('u_lut3DSize', this.lut3DSize);
+    }
+
+    // Display transfer function
+    this.displayShader.setUniformInt('u_displayTransfer', this.displayTransferCode);
+    this.displayShader.setUniform('u_displayGamma', this.displayGammaOverride);
+    this.displayShader.setUniform('u_displayBrightness', this.displayBrightnessMultiplier);
+    this.displayShader.setUniform('u_displayCustomGamma', this.displayCustomGamma);
+
     // Background pattern
     this.displayShader.setUniformInt('u_backgroundPattern', this.bgPatternCode);
     if (this.bgPatternCode > 0) {
@@ -755,6 +857,14 @@ export class Renderer implements RendererBackend {
       this.displayShader.setUniformInt('u_falseColorLUT', 2);
       gl.activeTexture(gl.TEXTURE2);
       gl.bindTexture(gl.TEXTURE_2D, this.falseColorLUTTexture);
+    }
+
+    // Texture unit 3: 3D LUT
+    if (this.lut3DEnabled) {
+      this.ensureLUT3DTexture();
+      this.displayShader.setUniformInt('u_lut3D', 3);
+      gl.activeTexture(gl.TEXTURE3);
+      gl.bindTexture(gl.TEXTURE_3D, this.lut3DTexture);
     }
 
     // Draw quad
@@ -1179,6 +1289,63 @@ export class Renderer implements RendererBackend {
     this.channelModeCode = CHANNEL_MODE_CODES[mode] ?? 0;
   }
 
+  // --- 3D LUT (single-pass float precision pipeline) ---
+
+  setLUT(lutData: Float32Array | null, lutSize: number, intensity: number): void {
+    if (!lutData || lutSize === 0) {
+      this.lut3DEnabled = false;
+      this.lut3DData = null;
+      this.lut3DSize = 0;
+      return;
+    }
+    this.lut3DEnabled = true;
+    this.lut3DData = lutData;
+    this.lut3DSize = lutSize;
+    this.lut3DIntensity = intensity;
+    this.lut3DDirty = true;
+  }
+
+  private ensureLUT3DTexture(): void {
+    const gl = this.gl;
+    if (!gl) return;
+
+    if (!this.lut3DTexture) {
+      this.lut3DTexture = gl.createTexture();
+      this.lut3DDirty = true;
+    }
+
+    if (this.lut3DDirty && this.lut3DData && this.lut3DSize > 0) {
+      const size = this.lut3DSize;
+      // Convert RGB Float32 data to RGBA Float32 for WebGL (3D textures need RGBA)
+      const rgbaData = new Float32Array(size * size * size * 4);
+      for (let i = 0; i < size * size * size; i++) {
+        rgbaData[i * 4] = this.lut3DData[i * 3]!;
+        rgbaData[i * 4 + 1] = this.lut3DData[i * 3 + 1]!;
+        rgbaData[i * 4 + 2] = this.lut3DData[i * 3 + 2]!;
+        rgbaData[i * 4 + 3] = 1.0;
+      }
+
+      gl.activeTexture(gl.TEXTURE3);
+      gl.bindTexture(gl.TEXTURE_3D, this.lut3DTexture);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA32F, size, size, size, 0, gl.RGBA, gl.FLOAT, rgbaData);
+      this.lut3DDirty = false;
+    }
+  }
+
+  // --- Display color management ---
+
+  setDisplayColorState(state: { transferFunction: number; displayGamma: number; displayBrightness: number; customGamma: number }): void {
+    this.displayTransferCode = state.transferFunction;
+    this.displayGammaOverride = state.displayGamma;
+    this.displayBrightnessMultiplier = state.displayBrightness;
+    this.displayCustomGamma = state.customGamma;
+  }
+
   private tryConfigureHDRMetadata(): void {
     if (!this.canvas) return;
     if ('configureHighDynamicRange' in this.canvas) {
@@ -1201,6 +1368,7 @@ export class Renderer implements RendererBackend {
     if (this.currentTexture) gl.deleteTexture(this.currentTexture);
     if (this.curvesLUTTexture) gl.deleteTexture(this.curvesLUTTexture);
     if (this.falseColorLUTTexture) gl.deleteTexture(this.falseColorLUTTexture);
+    if (this.lut3DTexture) gl.deleteTexture(this.lut3DTexture);
 
     this.gl = null;
     this.canvas = null;

@@ -24,10 +24,13 @@ describe('Reinhard Tone Mapping', () => {
     expect(tonemapReinhardChannel(0)).toBe(0);
   });
 
-  it('HDRTM-U002: output is always less than 1.0 for finite input', () => {
-    const r = tonemapReinhardChannel(100);
-    expect(r).toBeLessThan(1.0);
-    expect(r).toBeGreaterThan(0.99);
+  it('HDRTM-U002: output equals 1.0 at white point and exceeds above', () => {
+    // Extended Reinhard: output = 1.0 at L = whitePoint
+    const atWhitePoint = tonemapReinhardChannel(4.0); // default wp=4.0
+    expect(atWhitePoint).toBeCloseTo(1.0, 10);
+    // Values above white point map above 1.0 (will be clamped by display)
+    const aboveWp = tonemapReinhardChannel(10.0);
+    expect(aboveWp).toBeGreaterThan(1.0);
   });
 
   it('HDRTM-U003: monotonically increasing', () => {
@@ -38,14 +41,17 @@ describe('Reinhard Tone Mapping', () => {
     }
   });
 
-  it('HDRTM-U004: basic reinhard formula c / (c + 1)', () => {
+  it('HDRTM-U004: extended reinhard formula L * (1 + L/Lw^2) / (1 + L)', () => {
     const input = 0.5;
-    const expected = input / (input + 1); // 0.5 / 1.5 = 0.333...
+    const wp = 4.0; // default white point
+    const wp2 = wp * wp;
+    const expected = input * (1.0 + input / wp2) / (1.0 + input);
     expect(tonemapReinhardChannel(input)).toBeCloseTo(expected, 10);
   });
 
-  it('HDRTM-U005: value 1.0 maps to 0.5', () => {
-    expect(tonemapReinhardChannel(1.0)).toBeCloseTo(0.5, 10);
+  it('HDRTM-U005: value 1.0 maps to ~0.53125 with default white point 4.0', () => {
+    // 1.0 * (1 + 1/16) / (1 + 1) = 1.0625 / 2.0 = 0.53125
+    expect(tonemapReinhardChannel(1.0)).toBeCloseTo(0.53125, 10);
   });
 
   it('HDRTM-U006: handles NaN input', () => {
@@ -61,13 +67,23 @@ describe('Reinhard Tone Mapping', () => {
   });
 
   it('HDRTM-U009: operates per-channel independently', () => {
+    const wp = 4.0;
+    const wp2 = wp * wp;
     const r = tonemapReinhardChannel(0.5);
     const g = tonemapReinhardChannel(1.0);
     const b = tonemapReinhardChannel(2.0);
-    // Each should be the same as individually computed
-    expect(r).toBeCloseTo(0.5 / 1.5, 10);
-    expect(g).toBeCloseTo(1.0 / 2.0, 10);
-    expect(b).toBeCloseTo(2.0 / 3.0, 10);
+    // Each should match extended reinhard: L * (1 + L/wp2) / (1 + L)
+    expect(r).toBeCloseTo(0.5 * (1.0 + 0.5 / wp2) / (1.0 + 0.5), 10);
+    expect(g).toBeCloseTo(1.0 * (1.0 + 1.0 / wp2) / (1.0 + 1.0), 10);
+    expect(b).toBeCloseTo(2.0 * (1.0 + 2.0 / wp2) / (1.0 + 2.0), 10);
+  });
+
+  it('HDRTM-U009b: custom white point is respected', () => {
+    const wp = 2.0;
+    const wp2 = wp * wp;
+    const input = 1.0;
+    const expected = input * (1.0 + input / wp2) / (1.0 + input);
+    expect(tonemapReinhardChannel(input, wp)).toBeCloseTo(expected, 10);
   });
 });
 
@@ -199,17 +215,18 @@ describe('Operator Comparison', () => {
     expect(tonemapACESChannel(0)).toBeCloseTo(0, 2);
   });
 
-  it('HDRTM-U062: all operators compress HDR range to SDR', () => {
+  it('HDRTM-U062: all operators compress HDR range toward SDR', () => {
     const hdrValue = 10.0;
     const rR = tonemapReinhardChannel(hdrValue);
     const rF = tonemapFilmicChannel(hdrValue);
     const rA = tonemapACESChannel(hdrValue);
 
-    expect(rR).toBeLessThanOrEqual(1.0);
+    // Extended Reinhard: values above white point (4.0) can exceed 1.0
+    expect(rR).toBeGreaterThan(1.0);
+    expect(rR).toBeLessThan(hdrValue); // but still compressed from input
     // Filmic Hable curve can slightly exceed 1.0 for very high inputs
     expect(rF).toBeLessThanOrEqual(1.2);
     expect(rA).toBeLessThanOrEqual(1.0);
-    expect(rR).toBeGreaterThan(0.9);
     expect(rF).toBeGreaterThan(0.9);
     expect(rA).toBeGreaterThan(0.9);
   });
@@ -279,10 +296,10 @@ describe('applyToneMappingToData', () => {
   it('reinhard compresses bright values', () => {
     const data = createPixelData(255, 255, 255);
     applyToneMappingToData(data, 'reinhard');
-    // 255/255=1.0, reinhard(1.0) = 0.5, 0.5*255 = 128
-    expect(data[0]).toBe(128);
-    expect(data[1]).toBe(128);
-    expect(data[2]).toBe(128);
+    // 255/255=1.0, extended reinhard with wp=4.0: 1.0*(1+1/16)/(1+1) = 0.53125, 0.53125*255 ~= 135
+    expect(data[0]).toBe(135);
+    expect(data[1]).toBe(135);
+    expect(data[2]).toBe(135);
   });
 
   it('preserves alpha channel', () => {
@@ -367,11 +384,38 @@ describe('applyToneMappingToData', () => {
 // ============================================================================
 
 describe('GPU/CPU Parity with shared functions', () => {
-  it('Reinhard matches GPU formula: c / (c + 1)', () => {
-    const testValues = [0, 0.25, 0.5, 0.75, 1.0];
+  it('Reinhard matches GPU formula: c * (1 + c/wp2) / (1 + c) with default wp=4.0', () => {
+    const testValues = [0, 0.25, 0.5, 0.75, 1.0, 2.0, 5.0];
+    const wp = 4.0;
+    const wp2 = wp * wp;
     for (const x of testValues) {
-      const gpuResult = x / (x + 1.0);
+      const gpuResult = x * (1.0 + x / wp2) / (1.0 + x);
       const cpuResult = tonemapReinhardChannel(x);
+      expect(cpuResult).toBeCloseTo(gpuResult, 10);
+    }
+  });
+
+  it('Reinhard matches GPU formula with custom white point', () => {
+    const testValues = [0, 0.25, 0.5, 0.75, 1.0, 2.0, 5.0];
+    const wp = 2.0;
+    const wp2 = wp * wp;
+    for (const x of testValues) {
+      const gpuResult = x * (1.0 + x / wp2) / (1.0 + x);
+      const cpuResult = tonemapReinhardChannel(x, wp);
+      expect(cpuResult).toBeCloseTo(gpuResult, 10);
+    }
+  });
+
+  it('Filmic matches GPU formula with custom parameters', () => {
+    const testValues = [0.1, 0.25, 0.5, 0.75, 1.0];
+    const exposureBias = 3.0;
+    const whitePoint = 8.0;
+    for (const x of testValues) {
+      // GPU: filmic(exposureBias * color) / filmic(whitePoint)
+      const A = 0.15, B = 0.50, C = 0.10, D = 0.20, E = 0.02, F = 0.30;
+      const filmicFn = (v: number) => ((v * (A * v + C * B) + D * E) / (v * (A * v + B) + D * F)) - E / F;
+      const gpuResult = Math.max(0, filmicFn(exposureBias * x) / filmicFn(whitePoint));
+      const cpuResult = tonemapFilmicChannel(x, exposureBias, whitePoint);
       expect(cpuResult).toBeCloseTo(gpuResult, 10);
     }
   });

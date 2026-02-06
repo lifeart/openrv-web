@@ -1,662 +1,338 @@
 /**
- * DisplayProfileControl - Display color management UI component
- *
- * Provides a dropdown panel for selecting display profiles and adjusting
- * display gamma and brightness. This is the final-stage display transform
- * applied after all content-level color corrections.
+ * DisplayProfileControl - Display color management transfer function selector
  */
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import {
-  DisplayColorState,
   DisplayTransferFunction,
+  DisplayColorState,
   DEFAULT_DISPLAY_COLOR_STATE,
-  PROFILE_LABELS,
+  PROFILE_FULL_LABELS,
   PROFILE_CYCLE_ORDER,
-  isDisplayStateActive,
   saveDisplayProfile,
   loadDisplayProfile,
+  isDisplayStateActive,
 } from '../../color/DisplayTransfer';
-import {
-  detectBrowserColorSpace,
-  gamutLabel,
-  colorSpaceLabel,
-  BrowserColorSpaceInfo,
-  getActiveOutputColorSpace,
-} from '../../color/BrowserColorSpace';
-import type { DisplayCapabilities } from '../../color/DisplayCapabilities';
-import { DEFAULT_CAPABILITIES, resolveActiveColorSpace } from '../../color/DisplayCapabilities';
 import { getIconSvg } from './shared/Icons';
 
-/**
- * DisplayProfileControl events
- */
 export interface DisplayProfileControlEvents extends EventMap {
-  displayStateChanged: DisplayColorState;
-  visibilityChanged: boolean;
+  stateChanged: DisplayColorState;
 }
 
-/**
- * Profile definition for the radio list
- */
-interface ProfileOption {
-  id: DisplayTransferFunction;
-  label: string;
-  testId: string;
-}
-
-const PROFILE_OPTIONS: ProfileOption[] = [
-  { id: 'linear', label: 'Linear (Bypass)', testId: 'display-profile-linear' },
-  { id: 'srgb', label: 'sRGB (IEC 61966-2-1)', testId: 'display-profile-srgb' },
-  { id: 'rec709', label: 'Rec. 709 OETF', testId: 'display-profile-rec709' },
-  { id: 'gamma2.2', label: 'Gamma 2.2', testId: 'display-profile-gamma22' },
-  { id: 'gamma2.4', label: 'Gamma 2.4', testId: 'display-profile-gamma24' },
-  { id: 'custom', label: 'Custom Gamma', testId: 'display-profile-custom' },
-];
-
-/**
- * Display Profile Control UI Component
- */
 export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEvents> {
   private container: HTMLElement;
-  private panel: HTMLElement;
+  private dropdown: HTMLElement;
+  private isDropdownOpen = false;
   private toggleButton: HTMLButtonElement;
-  private isExpanded = false;
-  private disposed = false;
-
+  private profileButtons: Map<DisplayTransferFunction, HTMLButtonElement> = new Map();
+  private boundHandleReposition: () => void;
   private state: DisplayColorState;
-  private browserInfo: BrowserColorSpaceInfo;
 
-  // Display capabilities reference
-  private displayCapabilities: DisplayCapabilities;
-
-  // DOM references for updating
-  private profileRadios: Map<DisplayTransferFunction, HTMLElement> = new Map();
+  // Slider elements
   private gammaSlider: HTMLInputElement | null = null;
-  private gammaValueLabel: HTMLSpanElement | null = null;
+  private gammaLabel: HTMLElement | null = null;
   private brightnessSlider: HTMLInputElement | null = null;
-  private brightnessValueLabel: HTMLSpanElement | null = null;
-  private detectedColorSpaceLabel: HTMLSpanElement | null = null;
-  private detectedGamutLabel: HTMLSpanElement | null = null;
-  private activeOutputLabel: HTMLSpanElement | null = null;
-  private gamutPreferenceRadios: Map<string, HTMLElement> = new Map();
+  private brightnessLabel: HTMLElement | null = null;
+  private customGammaSlider: HTMLInputElement | null = null;
+  private customGammaLabel: HTMLElement | null = null;
+  private customGammaSection: HTMLElement | null = null;
 
-  // Bound handlers for cleanup
-  private boundHandleOutsideClick: (e: MouseEvent) => void;
-
-  constructor(capabilities?: DisplayCapabilities) {
+  constructor() {
     super();
-    this.displayCapabilities = capabilities ?? { ...DEFAULT_CAPABILITIES };
+    this.boundHandleReposition = () => this.positionDropdown();
 
     // Load persisted state or use defaults
-    const persisted = loadDisplayProfile();
-    this.state = persisted ? { ...DEFAULT_DISPLAY_COLOR_STATE, ...persisted } : { ...DEFAULT_DISPLAY_COLOR_STATE };
+    this.state = loadDisplayProfile() ?? { ...DEFAULT_DISPLAY_COLOR_STATE };
 
-    // Detect browser capabilities
-    this.browserInfo = detectBrowserColorSpace();
-
-    // Create main container
+    // Create container
     this.container = document.createElement('div');
-    this.container.className = 'display-profile-container';
-    this.container.style.cssText = `
-      display: flex;
-      align-items: center;
-      position: relative;
-    `;
+    this.container.className = 'display-profile-control';
+    this.container.style.cssText = `position: relative; display: flex; align-items: center;`;
 
     // Create toggle button
     this.toggleButton = document.createElement('button');
+    this.toggleButton.className = 'display-profile-toggle';
     this.toggleButton.dataset.testid = 'display-profile-button';
-    this.toggleButton.title = 'Display profile (Shift+D)';
-    this.toggleButton.setAttribute('aria-label', 'Display profile');
+    this.toggleButton.innerHTML = `${getIconSvg('monitor', 'sm')} <span>Display</span> ${getIconSvg('chevron-down', 'sm')}`;
+    this.toggleButton.title = 'Display color profile (Shift+D)';
+    this.toggleButton.setAttribute('aria-label', 'Display color profile options');
+    this.toggleButton.setAttribute('aria-haspopup', 'menu');
+    this.toggleButton.setAttribute('aria-expanded', 'false');
     this.toggleButton.style.cssText = `
-      background: transparent;
-      border: 1px solid transparent;
-      color: var(--text-muted);
-      padding: 6px 10px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 12px;
-      transition: all 0.12s ease;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      outline: none;
+      display: flex; align-items: center; gap: 4px;
+      padding: 6px 10px; border: 1px solid transparent; border-radius: 4px;
+      background: transparent; color: var(--text-muted);
+      font-size: 12px; cursor: pointer; transition: all 0.12s ease;
     `;
 
-    this.updateButtonContent();
-    this.toggleButton.addEventListener('click', () => this.toggle());
+    this.toggleButton.addEventListener('click', (e) => { e.stopPropagation(); this.toggleDropdown(); });
     this.toggleButton.addEventListener('mouseenter', () => {
-      if (!this.isExpanded) {
+      if (!isDisplayStateActive(this.state)) {
         this.toggleButton.style.background = 'var(--bg-hover)';
         this.toggleButton.style.borderColor = 'var(--border-primary)';
         this.toggleButton.style.color = 'var(--text-primary)';
       }
     });
     this.toggleButton.addEventListener('mouseleave', () => {
-      if (!this.isExpanded) {
-        this.updateButtonStyle();
+      if (!isDisplayStateActive(this.state)) {
+        this.toggleButton.style.background = 'transparent';
+        this.toggleButton.style.borderColor = 'transparent';
+        this.toggleButton.style.color = 'var(--text-muted)';
       }
     });
+
     this.container.appendChild(this.toggleButton);
 
     // Create dropdown panel
-    this.panel = document.createElement('div');
-    this.panel.className = 'display-profile-panel';
-    this.panel.dataset.testid = 'display-profile-dropdown';
-    this.panel.setAttribute('role', 'dialog');
-    this.panel.setAttribute('aria-label', 'Display Profile Settings');
-    this.panel.setAttribute('aria-modal', 'false');
-    this.panel.style.cssText = `
-      position: fixed;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-primary);
-      border-radius: 6px;
-      padding: 12px;
-      width: 280px;
-      max-height: 80vh;
-      overflow-y: auto;
-      z-index: 9999;
-      display: none;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    this.dropdown = document.createElement('div');
+    this.dropdown.className = 'display-profile-dropdown';
+    this.dropdown.dataset.testid = 'display-profile-dropdown';
+    this.dropdown.setAttribute('role', 'menu');
+    this.dropdown.style.cssText = `
+      position: fixed; background: var(--bg-secondary);
+      border: 1px solid var(--border-primary); border-radius: 4px;
+      padding: 8px; min-width: 220px; z-index: 9999;
+      display: none; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
     `;
 
-    this.buildPanel();
-    this.updateButtonStyle();
-    this.updateUIFromState();
+    this.createDropdownContent();
+    this.container.appendChild(this.dropdown);
 
-    // Outside click handler
-    this.boundHandleOutsideClick = (e: MouseEvent) => {
-      if (
-        this.isExpanded &&
-        !this.container.contains(e.target as Node) &&
-        !this.panel.contains(e.target as Node)
-      ) {
-        this.hide();
-      }
-    };
-    document.addEventListener('click', this.boundHandleOutsideClick);
+    // Close on outside click
+    document.addEventListener('click', this.handleOutsideClick);
+
+    // Initial button state
+    this.updateButtonState();
   }
 
-  // ==========================================================================
-  // Panel Build
-  // ==========================================================================
-
-  private buildPanel(): void {
-    // Profile section
-    const profileSection = this.createSection('Display Profile', 'display-profile-section');
-    const radioGroup = document.createElement('div');
-    radioGroup.setAttribute('role', 'radiogroup');
-    radioGroup.setAttribute('aria-label', 'Display transfer function');
-    radioGroup.style.cssText = 'display: flex; flex-direction: column; gap: 2px;';
-
-    for (const opt of PROFILE_OPTIONS) {
-      const row = this.createProfileRow(opt);
-      radioGroup.appendChild(row);
-    }
-    profileSection.appendChild(radioGroup);
-    this.panel.appendChild(profileSection);
-
-    // Gamma section
-    const gammaSection = this.createSection('Display Gamma Override', 'display-gamma-section');
-    const { slider: gSlider, valueLabel: gValue } = this.createSlider(
-      'display-gamma-slider',
-      'display-gamma-value',
-      0.1,
-      4.0,
-      0.01,
-      this.state.displayGamma,
-      (v) => {
-        this.state.displayGamma = v;
-        this.emitChange();
-      },
-      'Display gamma override',
-    );
-    this.gammaSlider = gSlider;
-    this.gammaValueLabel = gValue;
-    gammaSection.appendChild(this.createSliderRow(gSlider, gValue));
-    this.panel.appendChild(gammaSection);
-
-    // Brightness section
-    const brightnessSection = this.createSection('Display Brightness', 'display-brightness-section');
-    const { slider: bSlider, valueLabel: bValue } = this.createSlider(
-      'display-brightness-slider',
-      'display-brightness-value',
-      0.0,
-      2.0,
-      0.01,
-      this.state.displayBrightness,
-      (v) => {
-        this.state.displayBrightness = v;
-        this.emitChange();
-      },
-      'Display brightness',
-    );
-    this.brightnessSlider = bSlider;
-    this.brightnessValueLabel = bValue;
-    brightnessSection.appendChild(this.createSliderRow(bSlider, bValue));
-    this.panel.appendChild(brightnessSection);
-
-    // Browser color space info
-    const infoSection = this.createSection('Detected Display', 'display-colorspace-info');
-
-    const csRow = document.createElement('div');
-    csRow.style.cssText = 'display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); padding: 2px 0;';
-    const csLabel = document.createElement('span');
-    csLabel.textContent = 'Color Space:';
-    this.detectedColorSpaceLabel = document.createElement('span');
-    this.detectedColorSpaceLabel.dataset.testid = 'display-detected-colorspace';
-    this.detectedColorSpaceLabel.textContent = colorSpaceLabel(this.browserInfo.colorSpace);
-    csRow.appendChild(csLabel);
-    csRow.appendChild(this.detectedColorSpaceLabel);
-    infoSection.appendChild(csRow);
-
-    const gamutRow = document.createElement('div');
-    gamutRow.style.cssText = 'display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); padding: 2px 0;';
-    const gamutLabelEl = document.createElement('span');
-    gamutLabelEl.textContent = 'Gamut:';
-    this.detectedGamutLabel = document.createElement('span');
-    this.detectedGamutLabel.dataset.testid = 'display-detected-gamut';
-    this.detectedGamutLabel.textContent = gamutLabel(this.browserInfo.gamut);
-    gamutRow.appendChild(gamutLabelEl);
-    gamutRow.appendChild(this.detectedGamutLabel);
-    infoSection.appendChild(gamutRow);
-
-    // Active output color space row
-    const activeOutputRow = document.createElement('div');
-    activeOutputRow.style.cssText = 'display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); padding: 2px 0;';
-    const activeOutputLabelEl = document.createElement('span');
-    activeOutputLabelEl.textContent = 'Active Output:';
-    this.activeOutputLabel = document.createElement('span');
-    this.activeOutputLabel.dataset.testid = 'display-active-output';
-    const activeOutput = getActiveOutputColorSpace(this.displayCapabilities);
-    this.activeOutputLabel.textContent = activeOutput === 'display-p3' ? 'P3' : 'sRGB';
-    activeOutputRow.appendChild(activeOutputLabelEl);
-    activeOutputRow.appendChild(this.activeOutputLabel);
-    infoSection.appendChild(activeOutputRow);
-
-    this.panel.appendChild(infoSection);
-
-    // Color Gamut preference section
-    const gamutPrefSection = this.createSection('Color Gamut', 'display-gamut-preference');
-    const gamutPrefGroup = document.createElement('div');
-    gamutPrefGroup.setAttribute('role', 'radiogroup');
-    gamutPrefGroup.setAttribute('aria-label', 'Color gamut preference');
-    gamutPrefGroup.style.cssText = 'display: flex; flex-direction: column; gap: 2px;';
-
-    const gamutOptions: Array<{ id: 'auto' | 'srgb' | 'display-p3'; label: string; testId: string }> = [
-      { id: 'auto', label: 'Auto', testId: 'gamut-pref-auto' },
-      { id: 'srgb', label: 'sRGB', testId: 'gamut-pref-srgb' },
-      { id: 'display-p3', label: 'Display P3', testId: 'gamut-pref-p3' },
-    ];
-
-    const currentGamutPref = this.state.outputGamut ?? 'auto';
-    for (const opt of gamutOptions) {
-      const row = this.createGamutPreferenceRow(opt, currentGamutPref);
-      gamutPrefGroup.appendChild(row);
-    }
-    gamutPrefSection.appendChild(gamutPrefGroup);
-    this.panel.appendChild(gamutPrefSection);
-
-    // Reset button
-    const resetButton = document.createElement('button');
-    resetButton.dataset.testid = 'display-profile-reset';
-    resetButton.textContent = 'Reset';
-    resetButton.style.cssText = `
-      width: 100%;
-      padding: 6px 0;
-      margin-top: 8px;
-      background: transparent;
-      border: 1px solid var(--border-primary);
-      border-radius: 4px;
-      color: var(--text-muted);
-      cursor: pointer;
-      font-size: 12px;
-      transition: all 0.12s ease;
-    `;
-    resetButton.addEventListener('mouseenter', () => {
-      resetButton.style.background = 'var(--bg-hover)';
-      resetButton.style.color = 'var(--text-primary)';
-    });
-    resetButton.addEventListener('mouseleave', () => {
-      resetButton.style.background = 'transparent';
-      resetButton.style.color = 'var(--text-muted)';
-    });
-    resetButton.addEventListener('click', () => this.reset());
-    this.panel.appendChild(resetButton);
-  }
-
-  private createSection(title: string, testId?: string): HTMLElement {
+  private createDropdownContent(): void {
+    // Transfer function section
     const section = document.createElement('div');
     section.style.cssText = 'margin-bottom: 10px;';
-    if (testId) {
-      section.dataset.testid = testId;
-    }
-    const heading = document.createElement('div');
-    heading.textContent = title;
-    heading.style.cssText = 'font-size: 11px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;';
-    section.appendChild(heading);
-    return section;
-  }
 
-  private createProfileRow(opt: ProfileOption): HTMLElement {
-    const row = document.createElement('div');
-    row.dataset.testid = opt.testId;
-    row.setAttribute('role', 'radio');
-    row.setAttribute('aria-checked', String(this.state.transferFunction === opt.id));
-    row.setAttribute('tabindex', '0');
-    row.style.cssText = `
-      display: flex;
-      align-items: center;
-      padding: 5px 8px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 12px;
-      color: var(--text-primary);
-      transition: background 0.1s;
+    const label = document.createElement('div');
+    label.textContent = 'Transfer Function';
+    label.style.cssText = 'color: var(--text-secondary); font-size: 10px; text-transform: uppercase; margin-bottom: 6px;';
+    section.appendChild(label);
+
+    const list = document.createElement('div');
+    list.style.cssText = 'display: flex; flex-direction: column; gap: 4px;';
+
+    const profiles: DisplayTransferFunction[] = ['linear', 'srgb', 'rec709', 'gamma2.2', 'gamma2.4', 'custom'];
+
+    for (const profile of profiles) {
+      const btn = document.createElement('button');
+      btn.dataset.profile = profile;
+      btn.dataset.testid = `display-profile-${profile}`;
+      btn.setAttribute('role', 'menuitemradio');
+      btn.setAttribute('aria-checked', this.state.transferFunction === profile ? 'true' : 'false');
+      btn.style.cssText = `
+        display: flex; flex-direction: column; align-items: flex-start;
+        padding: 6px 8px; border: 1px solid var(--border-secondary); border-radius: 3px;
+        background: var(--bg-secondary); color: var(--text-secondary);
+        font-size: 11px; cursor: pointer; transition: all 0.1s ease; text-align: left;
+      `;
+
+      const labelSpan = document.createElement('span');
+      labelSpan.textContent = PROFILE_FULL_LABELS[profile];
+      labelSpan.style.cssText = 'font-weight: 500; color: var(--text-primary);';
+      btn.appendChild(labelSpan);
+
+      btn.addEventListener('click', () => this.setTransferFunction(profile));
+      btn.addEventListener('mouseenter', () => {
+        if (this.state.transferFunction !== profile) btn.style.background = 'var(--border-primary)';
+      });
+      btn.addEventListener('mouseleave', () => {
+        if (this.state.transferFunction !== profile) btn.style.background = 'var(--bg-secondary)';
+      });
+
+      this.profileButtons.set(profile, btn);
+      list.appendChild(btn);
+    }
+
+    section.appendChild(list);
+    this.dropdown.appendChild(section);
+
+    // Custom gamma section (shown only when 'custom' is selected)
+    this.customGammaSection = document.createElement('div');
+    this.customGammaSection.dataset.testid = 'display-custom-gamma-section';
+    this.customGammaSection.style.cssText = 'margin-bottom: 10px; display: none;';
+    this.customGammaLabel = document.createElement('div');
+    this.customGammaLabel.style.cssText = 'color: var(--text-secondary); font-size: 10px; margin-bottom: 4px;';
+    this.customGammaLabel.textContent = `Custom Gamma: ${this.state.customGamma.toFixed(1)}`;
+    this.customGammaSlider = document.createElement('input');
+    this.customGammaSlider.type = 'range';
+    this.customGammaSlider.min = '0.1';
+    this.customGammaSlider.max = '10.0';
+    this.customGammaSlider.step = '0.1';
+    this.customGammaSlider.value = String(this.state.customGamma);
+    this.customGammaSlider.style.cssText = 'width: 100%;';
+    this.customGammaSlider.addEventListener('input', () => {
+      const val = parseFloat(this.customGammaSlider!.value);
+      this.state.customGamma = val;
+      this.customGammaLabel!.textContent = `Custom Gamma: ${val.toFixed(1)}`;
+      this.persistAndEmit();
+    });
+    this.customGammaSection.appendChild(this.customGammaLabel);
+    this.customGammaSection.appendChild(this.customGammaSlider);
+    this.dropdown.appendChild(this.customGammaSection);
+
+    // Display gamma slider
+    const gammaSection = document.createElement('div');
+    gammaSection.style.cssText = 'margin-bottom: 10px; border-top: 1px solid var(--border-secondary); padding-top: 8px;';
+    this.gammaLabel = document.createElement('div');
+    this.gammaLabel.style.cssText = 'color: var(--text-secondary); font-size: 10px; margin-bottom: 4px;';
+    this.gammaLabel.textContent = `Display Gamma: ${this.state.displayGamma.toFixed(1)}`;
+    this.gammaSlider = document.createElement('input');
+    this.gammaSlider.type = 'range';
+    this.gammaSlider.min = '0.1';
+    this.gammaSlider.max = '4.0';
+    this.gammaSlider.step = '0.1';
+    this.gammaSlider.value = String(this.state.displayGamma);
+    this.gammaSlider.dataset.testid = 'display-gamma-slider';
+    this.gammaSlider.style.cssText = 'width: 100%;';
+    this.gammaSlider.addEventListener('input', () => {
+      const val = parseFloat(this.gammaSlider!.value);
+      this.state.displayGamma = val;
+      this.gammaLabel!.textContent = `Display Gamma: ${val.toFixed(1)}`;
+      this.persistAndEmit();
+    });
+    gammaSection.appendChild(this.gammaLabel);
+    gammaSection.appendChild(this.gammaSlider);
+    this.dropdown.appendChild(gammaSection);
+
+    // Display brightness slider
+    const brightnessSection = document.createElement('div');
+    brightnessSection.style.cssText = 'margin-bottom: 10px;';
+    this.brightnessLabel = document.createElement('div');
+    this.brightnessLabel.style.cssText = 'color: var(--text-secondary); font-size: 10px; margin-bottom: 4px;';
+    this.brightnessLabel.textContent = `Display Brightness: ${this.state.displayBrightness.toFixed(1)}`;
+    this.brightnessSlider = document.createElement('input');
+    this.brightnessSlider.type = 'range';
+    this.brightnessSlider.min = '0.0';
+    this.brightnessSlider.max = '2.0';
+    this.brightnessSlider.step = '0.1';
+    this.brightnessSlider.value = String(this.state.displayBrightness);
+    this.brightnessSlider.dataset.testid = 'display-brightness-slider';
+    this.brightnessSlider.style.cssText = 'width: 100%;';
+    this.brightnessSlider.addEventListener('input', () => {
+      const val = parseFloat(this.brightnessSlider!.value);
+      this.state.displayBrightness = val;
+      this.brightnessLabel!.textContent = `Display Brightness: ${val.toFixed(1)}`;
+      this.persistAndEmit();
+    });
+    brightnessSection.appendChild(this.brightnessLabel);
+    brightnessSection.appendChild(this.brightnessSlider);
+    this.dropdown.appendChild(brightnessSection);
+
+    // Reset button
+    const resetBtn = document.createElement('button');
+    resetBtn.textContent = 'Reset to Defaults';
+    resetBtn.dataset.testid = 'display-profile-reset';
+    resetBtn.style.cssText = `
+      width: 100%; padding: 4px; border: 1px solid var(--border-secondary);
+      border-radius: 3px; background: var(--bg-secondary); color: var(--text-secondary);
+      font-size: 10px; cursor: pointer;
     `;
+    resetBtn.addEventListener('click', () => this.resetToDefaults());
+    this.dropdown.appendChild(resetBtn);
 
-    if (this.state.transferFunction === opt.id) {
-      row.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-    }
-
-    const indicator = document.createElement('span');
-    indicator.style.cssText = `
-      width: 14px;
-      height: 14px;
-      border-radius: 50%;
-      border: 2px solid var(--text-muted);
-      margin-right: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-    `;
-    if (this.state.transferFunction === opt.id) {
-      indicator.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:var(--accent-primary);display:block;"></span>';
-      indicator.style.borderColor = 'var(--accent-primary)';
-    }
-
-    const label = document.createElement('span');
-    label.textContent = opt.label;
-
-    row.appendChild(indicator);
-    row.appendChild(label);
-
-    row.addEventListener('click', () => {
-      this.setTransferFunction(opt.id);
-    });
-    row.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        this.setTransferFunction(opt.id);
-      }
-    });
-    row.addEventListener('mouseenter', () => {
-      if (this.state.transferFunction !== opt.id) {
-        row.style.background = 'var(--bg-hover)';
-      }
-    });
-    row.addEventListener('mouseleave', () => {
-      if (this.state.transferFunction !== opt.id) {
-        row.style.background = 'transparent';
-      } else {
-        row.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-      }
-    });
-
-    this.profileRadios.set(opt.id, row);
-    return row;
+    this.updateProfileButtons();
+    this.updateCustomGammaVisibility();
   }
 
-  private createSlider(
-    sliderId: string,
-    valueId: string,
-    min: number,
-    max: number,
-    step: number,
-    initial: number,
-    onChange: (value: number) => void,
-    ariaLabel?: string,
-  ): { slider: HTMLInputElement; valueLabel: HTMLSpanElement } {
-    const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.min = String(min);
-    slider.max = String(max);
-    slider.step = String(step);
-    slider.value = String(initial);
-    slider.dataset.testid = sliderId;
-    slider.setAttribute('role', 'slider');
-    slider.setAttribute('aria-valuemin', String(min));
-    slider.setAttribute('aria-valuemax', String(max));
-    slider.setAttribute('aria-valuenow', String(initial));
-    if (ariaLabel) slider.setAttribute('aria-label', ariaLabel);
-    slider.style.cssText = 'flex: 1; cursor: pointer;';
-
-    const valueLabel = document.createElement('span');
-    valueLabel.dataset.testid = valueId;
-    valueLabel.textContent = initial.toFixed(2);
-    valueLabel.style.cssText = 'min-width: 36px; text-align: right; font-size: 11px; font-family: monospace; color: var(--text-primary);';
-
-    slider.addEventListener('input', () => {
-      const v = parseFloat(slider.value);
-      valueLabel.textContent = v.toFixed(2);
-      slider.setAttribute('aria-valuenow', String(v));
-      onChange(v);
-    });
-
-    // Double-click to reset
-    slider.addEventListener('dblclick', () => {
-      const defaultVal = 1.0;
-      slider.value = String(defaultVal);
-      valueLabel.textContent = defaultVal.toFixed(2);
-      slider.setAttribute('aria-valuenow', String(defaultVal));
-      onChange(defaultVal);
-    });
-
-    return { slider, valueLabel };
-  }
-
-  private createSliderRow(slider: HTMLInputElement, valueLabel: HTMLSpanElement): HTMLElement {
-    const row = document.createElement('div');
-    row.style.cssText = 'display: flex; align-items: center; gap: 8px;';
-    row.appendChild(slider);
-    row.appendChild(valueLabel);
-    return row;
-  }
-
-  private createGamutPreferenceRow(
-    opt: { id: 'auto' | 'srgb' | 'display-p3'; label: string; testId: string },
-    currentValue: string,
-  ): HTMLElement {
-    const row = document.createElement('div');
-    row.dataset.testid = opt.testId;
-    row.setAttribute('role', 'radio');
-    row.setAttribute('aria-checked', String(currentValue === opt.id));
-    row.setAttribute('tabindex', '0');
-    row.style.cssText = `
-      display: flex;
-      align-items: center;
-      padding: 5px 8px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 12px;
-      color: var(--text-primary);
-      transition: background 0.1s;
-    `;
-
-    if (currentValue === opt.id) {
-      row.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-    }
-
-    const indicator = document.createElement('span');
-    indicator.style.cssText = `
-      width: 14px;
-      height: 14px;
-      border-radius: 50%;
-      border: 2px solid var(--text-muted);
-      margin-right: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-    `;
-    if (currentValue === opt.id) {
-      indicator.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:var(--accent-primary);display:block;"></span>';
-      indicator.style.borderColor = 'var(--accent-primary)';
-    }
-
-    const label = document.createElement('span');
-    label.textContent = opt.label;
-
-    row.appendChild(indicator);
-    row.appendChild(label);
-
-    row.addEventListener('click', () => {
-      this.setOutputGamut(opt.id);
-    });
-    row.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        this.setOutputGamut(opt.id);
-      }
-    });
-    row.addEventListener('mouseenter', () => {
-      const current = this.state.outputGamut ?? 'auto';
-      if (current !== opt.id) {
-        row.style.background = 'var(--bg-hover)';
-      }
-    });
-    row.addEventListener('mouseleave', () => {
-      const current = this.state.outputGamut ?? 'auto';
-      if (current !== opt.id) {
-        row.style.background = 'transparent';
-      } else {
-        row.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-      }
-    });
-
-    this.gamutPreferenceRadios.set(opt.id, row);
-    return row;
-  }
-
-  private setOutputGamut(gamut: 'auto' | 'srgb' | 'display-p3'): void {
-    if (this.state.outputGamut === gamut) return;
-    this.setState({ outputGamut: gamut });
-  }
-
-  // ==========================================================================
-  // State Management
-  // ==========================================================================
-
-  getState(): DisplayColorState {
-    return { ...this.state };
-  }
-
-  setState(partial: Partial<DisplayColorState>): void {
-    this.state = { ...this.state, ...partial };
-    this.updateUIFromState();
-    this.updateButtonStyle();
-    this.updateButtonContent();
-    saveDisplayProfile(this.state);
-    this.emit('displayStateChanged', this.getState());
-  }
+  // --- Methods ---
 
   setTransferFunction(tf: DisplayTransferFunction): void {
     if (this.state.transferFunction === tf) return;
-    this.setState({ transferFunction: tf });
+    this.state.transferFunction = tf;
+    this.updateProfileButtons();
+    this.updateCustomGammaVisibility();
+    this.updateButtonState();
+    this.persistAndEmit();
   }
 
-  setDisplayGamma(value: number): void {
-    const clamped = Math.min(4.0, Math.max(0.1, value));
-    this.setState({ displayGamma: clamped });
+  getState(): DisplayColorState { return { ...this.state }; }
+
+  setState(state: Partial<DisplayColorState>): void {
+    let changed = false;
+    if (state.transferFunction !== undefined && state.transferFunction !== this.state.transferFunction) {
+      this.state.transferFunction = state.transferFunction; changed = true;
+    }
+    if (state.displayGamma !== undefined && state.displayGamma !== this.state.displayGamma) {
+      this.state.displayGamma = state.displayGamma; changed = true;
+    }
+    if (state.displayBrightness !== undefined && state.displayBrightness !== this.state.displayBrightness) {
+      this.state.displayBrightness = state.displayBrightness; changed = true;
+    }
+    if (state.customGamma !== undefined && state.customGamma !== this.state.customGamma) {
+      this.state.customGamma = state.customGamma; changed = true;
+    }
+    if (changed) {
+      this.updateProfileButtons();
+      this.updateCustomGammaVisibility();
+      this.updateButtonState();
+      this.updateSliders();
+      this.persistAndEmit();
+    }
   }
 
-  setDisplayBrightness(value: number): void {
-    const clamped = Math.min(2.0, Math.max(0.0, value));
-    this.setState({ displayBrightness: clamped });
-  }
-
-  reset(): void {
+  resetToDefaults(): void {
     this.state = { ...DEFAULT_DISPLAY_COLOR_STATE };
-    this.updateUIFromState();
-    this.updateButtonStyle();
-    this.updateButtonContent();
+    this.updateProfileButtons();
+    this.updateCustomGammaVisibility();
+    this.updateButtonState();
+    this.updateSliders();
+    this.persistAndEmit();
+  }
+
+  cycleProfile(): void {
+    const idx = PROFILE_CYCLE_ORDER.indexOf(this.state.transferFunction);
+    const next = PROFILE_CYCLE_ORDER[(idx + 1) % PROFILE_CYCLE_ORDER.length]!;
+    this.setTransferFunction(next);
+  }
+
+  handleKeyboard(key: string, shiftKey: boolean): boolean {
+    if (shiftKey && key.toLowerCase() === 'd') {
+      this.cycleProfile();
+      return true;
+    }
+    return false;
+  }
+
+  render(): HTMLElement { return this.container; }
+
+  dispose(): void {
+    document.removeEventListener('click', this.handleOutsideClick);
+    window.removeEventListener('resize', this.boundHandleReposition);
+    window.removeEventListener('scroll', this.boundHandleReposition, true);
+    this.profileButtons.clear();
+  }
+
+  // --- Private helpers ---
+
+  private persistAndEmit(): void {
     saveDisplayProfile(this.state);
-    this.emit('displayStateChanged', this.getState());
+    this.emit('stateChanged', { ...this.state });
   }
 
-  // ==========================================================================
-  // UI Updates
-  // ==========================================================================
+  private updateSliders(): void {
+    if (this.gammaSlider) this.gammaSlider.value = String(this.state.displayGamma);
+    if (this.gammaLabel) this.gammaLabel.textContent = `Display Gamma: ${this.state.displayGamma.toFixed(1)}`;
+    if (this.brightnessSlider) this.brightnessSlider.value = String(this.state.displayBrightness);
+    if (this.brightnessLabel) this.brightnessLabel.textContent = `Display Brightness: ${this.state.displayBrightness.toFixed(1)}`;
+    if (this.customGammaSlider) this.customGammaSlider.value = String(this.state.customGamma);
+    if (this.customGammaLabel) this.customGammaLabel.textContent = `Custom Gamma: ${this.state.customGamma.toFixed(1)}`;
+  }
 
-  private updateUIFromState(): void {
-    // Update profile radio buttons
-    for (const [id, row] of this.profileRadios) {
-      const isActive = this.state.transferFunction === id;
-      row.setAttribute('aria-checked', String(isActive));
-      row.style.background = isActive ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent';
-      const indicator = row.querySelector('span') as HTMLSpanElement;
-      if (indicator) {
-        if (isActive) {
-          indicator.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:var(--accent-primary);display:block;"></span>';
-          indicator.style.borderColor = 'var(--accent-primary)';
-        } else {
-          indicator.innerHTML = '';
-          indicator.style.borderColor = 'var(--text-muted)';
-        }
-      }
-    }
-
-    // Update sliders
-    if (this.gammaSlider) {
-      this.gammaSlider.value = String(this.state.displayGamma);
-      this.gammaSlider.setAttribute('aria-valuenow', String(this.state.displayGamma));
-    }
-    if (this.gammaValueLabel) {
-      this.gammaValueLabel.textContent = this.state.displayGamma.toFixed(2);
-    }
-    if (this.brightnessSlider) {
-      this.brightnessSlider.value = String(this.state.displayBrightness);
-      this.brightnessSlider.setAttribute('aria-valuenow', String(this.state.displayBrightness));
-    }
-    if (this.brightnessValueLabel) {
-      this.brightnessValueLabel.textContent = this.state.displayBrightness.toFixed(2);
-    }
-
-    // Update gamut preference radio buttons
-    const currentGamutPref = this.state.outputGamut ?? 'auto';
-    for (const [id, row] of this.gamutPreferenceRadios) {
-      const isActive = currentGamutPref === id;
-      row.setAttribute('aria-checked', String(isActive));
-      row.style.background = isActive ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent';
-      const indicator = row.querySelector('span') as HTMLSpanElement;
-      if (indicator) {
-        if (isActive) {
-          indicator.innerHTML = '<span style="width:8px;height:8px;border-radius:50%;background:var(--accent-primary);display:block;"></span>';
-          indicator.style.borderColor = 'var(--accent-primary)';
-        } else {
-          indicator.innerHTML = '';
-          indicator.style.borderColor = 'var(--text-muted)';
-        }
-      }
-    }
-
-    // Update active output label based on current gamut preference and capabilities
-    if (this.activeOutputLabel) {
-      const resolved = resolveActiveColorSpace(this.displayCapabilities, currentGamutPref);
-      this.activeOutputLabel.textContent = resolved === 'display-p3' ? 'P3' : 'sRGB';
+  private updateCustomGammaVisibility(): void {
+    if (this.customGammaSection) {
+      this.customGammaSection.style.display = this.state.transferFunction === 'custom' ? 'block' : 'none';
     }
   }
 
-  private updateButtonContent(): void {
-    const label = PROFILE_LABELS[this.state.transferFunction] ?? 'sRGB';
-    this.toggleButton.innerHTML = `${getIconSvg('monitor', 'sm')}<span style="margin-left: 6px;">${label}</span>`;
-  }
-
-  private updateButtonStyle(): void {
-    const active = isDisplayStateActive(this.state);
-    if (active) {
+  private updateButtonState(): void {
+    if (isDisplayStateActive(this.state)) {
       this.toggleButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
       this.toggleButton.style.borderColor = 'var(--accent-primary)';
       this.toggleButton.style.color = 'var(--accent-primary)';
@@ -667,101 +343,54 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
     }
   }
 
-  private emitChange(): void {
-    this.updateButtonStyle();
-    this.updateButtonContent();
-    saveDisplayProfile(this.state);
-    this.emit('displayStateChanged', this.getState());
-  }
-
-  // ==========================================================================
-  // Toggle / Show / Hide
-  // ==========================================================================
-
-  toggle(): void {
-    if (this.isExpanded) {
-      this.hide();
-    } else {
-      this.show();
-    }
-  }
-
-  show(): void {
-    if (this.isExpanded) return;
-    this.isExpanded = true;
-
-    // Append panel to body if not already there
-    if (!this.panel.parentElement) {
-      document.body.appendChild(this.panel);
-    }
-
-    // Position below button
-    const rect = this.toggleButton.getBoundingClientRect();
-    this.panel.style.top = `${rect.bottom + 4}px`;
-    this.panel.style.left = `${Math.max(4, rect.left)}px`;
-    this.panel.style.display = 'block';
-
-    this.updateButtonStyle();
-    this.toggleButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-    this.toggleButton.style.borderColor = 'var(--accent-primary)';
-    this.toggleButton.style.color = 'var(--accent-primary)';
-
-    this.emit('visibilityChanged', true);
-  }
-
-  hide(): void {
-    if (!this.isExpanded) return;
-    this.isExpanded = false;
-    this.panel.style.display = 'none';
-    this.updateButtonStyle();
-    this.emit('visibilityChanged', false);
-  }
-
-  // ==========================================================================
-  // Keyboard Handling
-  // ==========================================================================
-
-  handleKeyDown(event: KeyboardEvent): void {
-    // Shift+D cycles display profiles
-    if (event.key === 'D' && event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
-      // Don't cycle if user is focused on a text input
-      const target = event.target as HTMLElement;
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
-        return;
+  private updateProfileButtons(): void {
+    for (const [key, btn] of this.profileButtons) {
+      const isSelected = key === this.state.transferFunction;
+      btn.setAttribute('aria-checked', isSelected ? 'true' : 'false');
+      if (isSelected) {
+        btn.style.background = 'var(--accent-primary)';
+        btn.style.borderColor = 'var(--accent-primary)';
+        const labelSpan = btn.querySelector('span') as HTMLSpanElement;
+        if (labelSpan) labelSpan.style.color = '#fff';
+      } else {
+        btn.style.background = 'var(--bg-secondary)';
+        btn.style.borderColor = 'var(--border-secondary)';
+        const labelSpan = btn.querySelector('span') as HTMLSpanElement;
+        if (labelSpan) labelSpan.style.color = 'var(--text-primary)';
       }
-      event.preventDefault();
-      this.cycleProfile();
-      return;
-    }
-
-    // Escape closes dropdown
-    if (event.key === 'Escape' && this.isExpanded) {
-      event.preventDefault();
-      this.hide();
     }
   }
 
-  cycleProfile(): void {
-    const currentIndex = PROFILE_CYCLE_ORDER.indexOf(this.state.transferFunction);
-    const nextIndex = (currentIndex + 1) % PROFILE_CYCLE_ORDER.length;
-    this.setTransferFunction(PROFILE_CYCLE_ORDER[nextIndex]!);
-  }
-
-  // ==========================================================================
-  // Render / Dispose
-  // ==========================================================================
-
-  render(): HTMLElement {
-    return this.container;
-  }
-
-  dispose(): void {
-    if (this.disposed) return;
-    this.disposed = true;
-    document.removeEventListener('click', this.boundHandleOutsideClick);
-    if (this.panel.parentElement) {
-      this.panel.parentElement.removeChild(this.panel);
+  private toggleDropdown(): void {
+    this.isDropdownOpen = !this.isDropdownOpen;
+    this.toggleButton.setAttribute('aria-expanded', this.isDropdownOpen ? 'true' : 'false');
+    if (this.isDropdownOpen) {
+      this.dropdown.style.display = 'block';
+      this.positionDropdown();
+      window.addEventListener('resize', this.boundHandleReposition);
+      window.addEventListener('scroll', this.boundHandleReposition, true);
+    } else {
+      this.dropdown.style.display = 'none';
+      window.removeEventListener('resize', this.boundHandleReposition);
+      window.removeEventListener('scroll', this.boundHandleReposition, true);
     }
-    this.removeAllListeners();
   }
+
+  private positionDropdown(): void {
+    const rect = this.toggleButton.getBoundingClientRect();
+    this.dropdown.style.top = `${rect.bottom + 4}px`;
+    this.dropdown.style.left = `${rect.left}px`;
+  }
+
+  private handleOutsideClick = (e: MouseEvent): void => {
+    if (!this.container.contains(e.target as Node)) {
+      if (this.isDropdownOpen) {
+        this.isDropdownOpen = false;
+        this.toggleButton.setAttribute('aria-expanded', 'false');
+        this.dropdown.style.display = 'none';
+        window.removeEventListener('resize', this.boundHandleReposition);
+        window.removeEventListener('scroll', this.boundHandleReposition, true);
+      }
+    }
+  };
 }

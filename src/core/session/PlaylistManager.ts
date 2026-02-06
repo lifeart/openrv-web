@@ -9,6 +9,7 @@
  */
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { parseOTIO } from '../../utils/OTIOParser';
 
 /** Represents a single clip in the playlist */
 export interface PlaylistClip {
@@ -490,6 +491,32 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> {
           this.addClip(resolved.index, sourceName, inPoint, outPoint);
           importedCount++;
         }
+      }
+    }
+
+    return importedCount;
+  }
+
+  /**
+   * Import from OTIO (OpenTimelineIO) format
+   * @param otioJson - Raw OTIO JSON string
+   * @param sourceResolver - Resolves clip name/url to a source index and frame count
+   * @returns Number of clips successfully imported
+   */
+  fromOTIO(
+    otioJson: string,
+    sourceResolver: (name: string, url?: string) => { index: number; frameCount: number } | null
+  ): number {
+    const result = parseOTIO(otioJson);
+    if (!result) return 0;
+
+    let importedCount = 0;
+
+    for (const clip of result.clips) {
+      const resolved = sourceResolver(clip.name, clip.sourceUrl);
+      if (resolved) {
+        this.addClip(resolved.index, clip.name, clip.inFrame, clip.outFrame);
+        importedCount++;
       }
     }
 

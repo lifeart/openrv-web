@@ -21,7 +21,7 @@ import {
   registerCustomConfig,
 } from '../../color/OCIOConfig';
 import { OCIOProcessor } from '../../color/OCIOProcessor';
-import { parseOCIOConfig } from '../../color/OCIOConfigParser';
+import { parseOCIOConfig, validateOCIOConfig } from '../../color/OCIOConfigParser';
 import { getIconSvg } from './shared/Icons';
 import { DropdownMenu } from './shared/DropdownMenu';
 
@@ -70,6 +70,12 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
 
   // Enable toggle
   private enableToggle: HTMLInputElement;
+
+  // Validation feedback element
+  private validationFeedback: HTMLElement | null = null;
+
+  // Timer ID for validation feedback auto-hide
+  private feedbackTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Bound listener for outside-click cleanup
   private outsideClickHandler: ((e: MouseEvent) => void) | null = null;
@@ -238,6 +244,64 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
     loadConfigButton.addEventListener('click', () => this.handleLoadConfig());
     loadConfigRow.appendChild(loadConfigButton);
     configSection.appendChild(loadConfigRow);
+
+    // Drag-and-drop zone
+    const dropZone = document.createElement('div');
+    dropZone.dataset.testid = 'ocio-drop-zone';
+    dropZone.style.cssText = `
+      margin: 6px 0 6px 90px;
+      padding: 12px;
+      border: 2px dashed var(--border-secondary);
+      border-radius: 6px;
+      text-align: center;
+      font-size: 10px;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    `;
+    dropZone.textContent = 'Drop .ocio file here';
+
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.style.borderColor = 'var(--accent-primary)';
+      dropZone.style.color = 'var(--accent-primary)';
+      dropZone.style.background = 'rgba(var(--accent-primary-rgb), 0.05)';
+    });
+    dropZone.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.style.borderColor = 'var(--border-secondary)';
+      dropZone.style.color = 'var(--text-muted)';
+      dropZone.style.background = 'transparent';
+    });
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.style.borderColor = 'var(--border-secondary)';
+      dropZone.style.color = 'var(--text-muted)';
+      dropZone.style.background = 'transparent';
+      const file = e.dataTransfer?.files[0];
+      if (file && /\.ocio$/i.test(file.name)) {
+        this.loadConfigFromFile(file);
+      } else {
+        this.showValidationFeedback('Please drop a .ocio file', 'error');
+      }
+    });
+    dropZone.addEventListener('click', () => this.handleLoadConfig());
+    configSection.appendChild(dropZone);
+
+    // Validation feedback area
+    this.validationFeedback = document.createElement('div');
+    this.validationFeedback.dataset.testid = 'ocio-validation-feedback';
+    this.validationFeedback.style.cssText = `
+      margin: 0 0 6px 90px;
+      padding: 6px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      display: none;
+    `;
+    configSection.appendChild(this.validationFeedback);
 
     this.panel.appendChild(configSection);
 
@@ -762,40 +826,104 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
     input.accept = '.ocio,.OCIO';
     input.style.display = 'none';
 
+    const cleanup = () => {
+      input.remove();
+    };
+
     input.addEventListener('change', () => {
       const file = input.files?.[0];
+      cleanup();
       if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = () => {
-        try {
-          const configText = reader.result as string;
-          const configName = file.name.replace(/\.ocio$/i, '').replace(/[^a-zA-Z0-9_.-]/g, '_');
-          const config = parseOCIOConfig(configText, configName);
-
-          // Register the custom config
-          registerCustomConfig(config);
-
-          // Update the config dropdown with new items
-          this.refreshConfigDropdown();
-
-          // Load the new config in the processor
-          this.processor.loadConfig(config.name);
-        } catch (error) {
-          console.error('Failed to load OCIO config:', error);
-          // Show a simple visual indication of error
-          const msg = error instanceof Error ? error.message : 'Unknown error';
-          console.warn(`OCIO config load failed: ${msg}`);
-        }
-      };
-      reader.readAsText(file);
-
-      // Clean up
-      input.remove();
+      this.loadConfigFromFile(file);
     });
+
+    // Remove the input from DOM if the user cancels the file dialog.
+    // The 'cancel' event fires when the dialog is dismissed without a selection.
+    input.addEventListener('cancel', cleanup);
 
     document.body.appendChild(input);
     input.click();
+  }
+
+  /**
+   * Load and validate an OCIO config from a File object (used by both file picker and drag-drop).
+   */
+  private loadConfigFromFile(file: File): void {
+    const reader = new FileReader();
+    reader.onerror = () => {
+      this.showValidationFeedback('Failed to read file', 'error');
+    };
+    reader.onload = () => {
+      try {
+        const configText = reader.result as string;
+
+        // Validate before parsing
+        const validation = validateOCIOConfig(configText);
+        if (!validation.valid) {
+          const errors = validation.errors.slice(0, 3).join('; ');
+          this.showValidationFeedback(`Invalid config: ${errors}`, 'error');
+          return;
+        }
+
+        // Show warnings if any
+        if (validation.warnings.length > 0) {
+          const warnings = validation.warnings.slice(0, 3).join('; ');
+          this.showValidationFeedback(`Loaded with warnings: ${warnings}`, 'warning');
+        }
+
+        const configName = file.name.replace(/\.ocio$/i, '').replace(/[^a-zA-Z0-9_.-]/g, '_');
+        const config = parseOCIOConfig(configText, configName);
+
+        // Register the custom config
+        registerCustomConfig(config);
+
+        // Update the config dropdown with new items
+        this.refreshConfigDropdown();
+
+        // Load the new config in the processor
+        this.processor.loadConfig(config.name);
+
+        if (validation.warnings.length === 0) {
+          this.showValidationFeedback(`Loaded "${file.name}" successfully`, 'success');
+        }
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : 'Unknown error';
+        this.showValidationFeedback(`Load failed: ${msg}`, 'error');
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  /**
+   * Show validation feedback message
+   */
+  private showValidationFeedback(message: string, type: 'success' | 'warning' | 'error'): void {
+    if (!this.validationFeedback) return;
+
+    const colors: Record<string, { bg: string; border: string; text: string }> = {
+      success: { bg: 'rgba(40, 167, 69, 0.1)', border: '#28a745', text: '#28a745' },
+      warning: { bg: 'rgba(255, 193, 7, 0.1)', border: '#ffc107', text: '#ffc107' },
+      error: { bg: 'rgba(220, 53, 69, 0.1)', border: '#dc3545', text: '#dc3545' },
+    };
+    const c = colors[type]!;
+    this.validationFeedback.textContent = message;
+    this.validationFeedback.style.display = 'block';
+    this.validationFeedback.style.background = c.bg;
+    this.validationFeedback.style.border = `1px solid ${c.border}`;
+    this.validationFeedback.style.color = c.text;
+
+    // Clear any existing timer to prevent stacking
+    if (this.feedbackTimer) {
+      clearTimeout(this.feedbackTimer);
+    }
+
+    // Auto-hide after 5 seconds
+    this.feedbackTimer = setTimeout(() => {
+      if (this.validationFeedback) {
+        this.validationFeedback.style.display = 'none';
+      }
+      this.feedbackTimer = null;
+    }, 5000);
   }
 
   /**

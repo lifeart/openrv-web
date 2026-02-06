@@ -39,6 +39,7 @@ export interface PixelProbeState {
   format: 'rgb' | 'rgb01' | 'hsl' | 'hex' | 'ire';
   sampleSize: SampleSize;
   sourceMode: SourceMode;
+  floatPrecision: 3 | 6;
 }
 
 export const DEFAULT_PIXEL_PROBE_STATE: PixelProbeState = {
@@ -53,6 +54,7 @@ export const DEFAULT_PIXEL_PROBE_STATE: PixelProbeState = {
   format: 'rgb',
   sampleSize: 1,
   sourceMode: 'rendered',
+  floatPrecision: 3,
 };
 
 /**
@@ -116,6 +118,10 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
   // HDR float values (may exceed 0-1 range), set by updateFromHDRValues
   private hdrFloats: { r: number; g: number; b: number; a: number } | null = null;
 
+  // HDR-specific properties
+  private colorSpaceInfo: string = 'sRGB';
+  private floatPrecision: 3 | 6 = 3;
+
   // UI elements (initialized in createOverlayContent)
   private swatch!: HTMLElement;
   private coordsLabel!: HTMLElement;
@@ -125,6 +131,9 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
   private hslLabel!: HTMLElement;
   private hexLabel!: HTMLElement;
   private ireLabel!: HTMLElement;
+  private colorSpaceLabel!: HTMLElement;
+  private nitsLabel!: HTMLElement;
+  private nitsRow!: HTMLElement;
   private lockIndicator!: HTMLElement;
   private sampleSizeLabel!: HTMLElement;
   private sourceModeLabel!: HTMLElement;
@@ -260,6 +269,49 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     // IRE row (luminance in IRE units)
     this.ireLabel = this.createValueRow(valuesContainer, 'IRE', '0 IRE', 'ire');
 
+    // Nits row (HDR luminance in cd/m²)
+    const nitsRow = document.createElement('div');
+    nitsRow.style.cssText = `
+      display: none;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 6px;
+      border-radius: 3px;
+      cursor: pointer;
+      transition: background 0.1s ease;
+    `;
+    nitsRow.addEventListener('mouseenter', () => {
+      nitsRow.style.background = 'var(--bg-hover)';
+    });
+    nitsRow.addEventListener('mouseleave', () => {
+      nitsRow.style.background = 'transparent';
+    });
+    nitsRow.addEventListener('click', () => this.copyValue('nits'));
+
+    const nitsLabelEl = document.createElement('span');
+    nitsLabelEl.textContent = 'Nits';
+    nitsLabelEl.style.cssText = `
+      width: 40px;
+      color: var(--text-secondary);
+      font-size: 10px;
+    `;
+
+    this.nitsLabel = document.createElement('span');
+    this.nitsLabel.textContent = '0 cd/m\u00B2';
+    this.nitsLabel.dataset.testid = 'pixel-probe-nits';
+    this.nitsLabel.style.cssText = `
+      font-family: monospace;
+      color: var(--text-primary);
+    `;
+
+    nitsRow.appendChild(nitsLabelEl);
+    nitsRow.appendChild(this.nitsLabel);
+    valuesContainer.appendChild(nitsRow);
+    this.nitsRow = nitsRow;
+
+    // Color space row
+    this.colorSpaceLabel = this.createValueRow(valuesContainer, 'Space', 'sRGB', 'colorspace');
+
     this.overlay.appendChild(valuesContainer);
 
     // Format buttons
@@ -309,6 +361,32 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
       this.formatButtons.set(fmt.key, btn);
       formatRow.appendChild(btn);
     }
+
+    // Float precision toggle button
+    const precisionBtn = document.createElement('button');
+    precisionBtn.textContent = 'P3/P6';
+    precisionBtn.dataset.testid = 'pixel-probe-precision-toggle';
+    precisionBtn.setAttribute('aria-label', 'Toggle float precision between 3 and 6 decimal places');
+    precisionBtn.style.cssText = `
+      flex: 1;
+      padding: 4px 6px;
+      border: 1px solid var(--border-secondary);
+      border-radius: 3px;
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+      font-size: 10px;
+      cursor: pointer;
+    `;
+    precisionBtn.addEventListener('click', () => {
+      this.setFloatPrecision(this.floatPrecision === 3 ? 6 : 3);
+    });
+    precisionBtn.addEventListener('mouseenter', () => {
+      precisionBtn.style.background = 'var(--border-primary)';
+    });
+    precisionBtn.addEventListener('mouseleave', () => {
+      precisionBtn.style.background = 'var(--bg-secondary)';
+    });
+    formatRow.appendChild(precisionBtn);
 
     this.overlay.appendChild(formatRow);
     this.updateFormatButtons();
@@ -655,15 +733,30 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
 
     // Update RGB (0-1) — use raw HDR floats when available for values > 1.0
     if (this.hdrFloats) {
-      const r01 = this.hdrFloats.r.toFixed(3);
-      const g01 = this.hdrFloats.g.toFixed(3);
-      const b01 = this.hdrFloats.b.toFixed(3);
+      const precision = this.floatPrecision;
+      const r01 = this.hdrFloats.r.toFixed(precision);
+      const g01 = this.hdrFloats.g.toFixed(precision);
+      const b01 = this.hdrFloats.b.toFixed(precision);
       const isHDR = this.hdrFloats.r > 1.0 || this.hdrFloats.g > 1.0 || this.hdrFloats.b > 1.0;
-      this.rgb01Label.textContent = `(${r01}, ${g01}, ${b01})${isHDR ? ' HDR' : ''}`;
+
+      // Color-code out-of-range values
+      const rColor = this.hdrFloats.r > 1.0 ? 'color: red;' : this.hdrFloats.r < 0.0 ? 'color: #6699FF;' : '';
+      const gColor = this.hdrFloats.g > 1.0 ? 'color: red;' : this.hdrFloats.g < 0.0 ? 'color: #6699FF;' : '';
+      const bColor = this.hdrFloats.b > 1.0 ? 'color: red;' : this.hdrFloats.b < 0.0 ? 'color: #6699FF;' : '';
+
+      if (rColor || gColor || bColor) {
+        const rSpan = rColor ? `<span style="${rColor}">${r01}</span>` : r01;
+        const gSpan = gColor ? `<span style="${gColor}">${g01}</span>` : g01;
+        const bSpan = bColor ? `<span style="${bColor}">${b01}</span>` : b01;
+        this.rgb01Label.innerHTML = `(${rSpan}, ${gSpan}, ${bSpan})${isHDR ? ' HDR' : ''}`;
+      } else {
+        this.rgb01Label.textContent = `(${r01}, ${g01}, ${b01})${isHDR ? ' HDR' : ''}`;
+      }
     } else {
-      const r01 = (rgb.r / 255).toFixed(3);
-      const g01 = (rgb.g / 255).toFixed(3);
-      const b01 = (rgb.b / 255).toFixed(3);
+      const precision = this.floatPrecision;
+      const r01 = (rgb.r / 255).toFixed(precision);
+      const g01 = (rgb.g / 255).toFixed(precision);
+      const b01 = (rgb.b / 255).toFixed(precision);
       this.rgb01Label.textContent = `(${r01}, ${g01}, ${b01})`;
     }
 
@@ -679,6 +772,23 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
 
     // Update IRE (luminance in broadcast units)
     this.ireLabel.textContent = `${ire} IRE`;
+
+    // Update Nits (HDR luminance in cd/m²)
+    if (this.hdrFloats) {
+      this.nitsRow.style.display = 'flex';
+      const luminance = 0.2126 * this.hdrFloats.r + 0.7152 * this.hdrFloats.g + 0.0722 * this.hdrFloats.b;
+      const nits = luminance * 203;
+      if (nits >= 1000) {
+        this.nitsLabel.textContent = `${(nits / 1000).toFixed(2)} K cd/m\u00B2`;
+      } else {
+        this.nitsLabel.textContent = `${Math.round(nits)} cd/m\u00B2`;
+      }
+    } else {
+      this.nitsRow.style.display = 'none';
+    }
+
+    // Update color space
+    this.colorSpaceLabel.textContent = this.colorSpaceInfo;
   }
 
   /**
@@ -734,15 +844,17 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     const { rgb, alpha, hsl, ire } = this.state;
     let value = '';
 
+    const precision = this.floatPrecision;
+
     switch (format) {
       case 'rgb':
         value = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
         break;
       case 'rgb01':
         if (this.hdrFloats) {
-          value = `${this.hdrFloats.r.toFixed(3)}, ${this.hdrFloats.g.toFixed(3)}, ${this.hdrFloats.b.toFixed(3)}`;
+          value = `${this.hdrFloats.r.toFixed(precision)}, ${this.hdrFloats.g.toFixed(precision)}, ${this.hdrFloats.b.toFixed(precision)}`;
         } else {
-          value = `${(rgb.r / 255).toFixed(3)}, ${(rgb.g / 255).toFixed(3)}, ${(rgb.b / 255).toFixed(3)}`;
+          value = `${(rgb.r / 255).toFixed(precision)}, ${(rgb.g / 255).toFixed(precision)}, ${(rgb.b / 255).toFixed(precision)}`;
         }
         break;
       case 'alpha':
@@ -756,6 +868,16 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
         break;
       case 'ire':
         value = `${ire} IRE`;
+        break;
+      case 'nits':
+        if (this.hdrFloats) {
+          const luminance = 0.2126 * this.hdrFloats.r + 0.7152 * this.hdrFloats.g + 0.0722 * this.hdrFloats.b;
+          const nits = luminance * 203;
+          value = nits >= 1000 ? `${(nits / 1000).toFixed(2)} K cd/m\u00B2` : `${Math.round(nits)} cd/m\u00B2`;
+        }
+        break;
+      case 'colorspace':
+        value = this.colorSpaceInfo;
         break;
     }
 
@@ -771,6 +893,8 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
         hsl: this.hslLabel,
         hex: this.hexLabel,
         ire: this.ireLabel,
+        nits: this.nitsLabel,
+        colorspace: this.colorSpaceLabel,
       };
       const label = labels[format];
       if (label) {
@@ -874,6 +998,31 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
         btn.style.color = 'var(--text-secondary)';
       }
     }
+  }
+
+  /**
+   * Set the color space info string displayed in the Space row
+   */
+  setColorSpace(info: string): void {
+    this.colorSpaceInfo = info;
+    this.colorSpaceLabel.textContent = info;
+  }
+
+  /**
+   * Get current float precision
+   */
+  getFloatPrecision(): 3 | 6 {
+    return this.floatPrecision;
+  }
+
+  /**
+   * Set float precision for display (3 or 6 decimal places)
+   */
+  setFloatPrecision(precision: 3 | 6): void {
+    this.floatPrecision = precision;
+    this.state.floatPrecision = precision;
+    this.updateDisplay();
+    this.emit('stateChanged', { ...this.state });
   }
 
   /**

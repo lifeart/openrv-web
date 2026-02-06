@@ -400,6 +400,10 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
 
   // Annotation management
   addAnnotation(annotation: Annotation): void {
+    // Assign a new unique ID if none is provided (e.g., during merge import)
+    if (!annotation.id) {
+      annotation.id = String(this.state.nextId++);
+    }
     const frame = annotation.frame;
     if (!this.state.annotations.has(frame)) {
       this.state.annotations.set(frame, []);

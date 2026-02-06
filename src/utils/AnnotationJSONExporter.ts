@@ -192,3 +192,79 @@ export function parseAnnotationsJSON(jsonString: string): AnnotationExportData |
     return null;
   }
 }
+
+/**
+ * Options for applying imported annotations
+ */
+export interface AnnotationApplyOptions {
+  /** How to apply: 'replace' clears existing annotations first, 'merge' adds to existing */
+  mode: 'replace' | 'merge';
+  /** Frame offset to shift all imported annotations by (default: 0) */
+  frameOffset?: number;
+}
+
+const DEFAULT_APPLY_OPTIONS: AnnotationApplyOptions = {
+  mode: 'replace',
+  frameOffset: 0,
+};
+
+/**
+ * Apply parsed annotation data to a PaintEngine
+ *
+ * @param paintEngine - The paint engine to apply annotations to
+ * @param data - Parsed annotation data from parseAnnotationsJSON()
+ * @param options - Apply options (replace/merge mode, frame offset)
+ * @returns Number of annotations applied
+ */
+export function applyAnnotationsJSON(
+  paintEngine: PaintEngine,
+  data: AnnotationExportData,
+  options?: Partial<AnnotationApplyOptions>
+): number {
+  const opts: AnnotationApplyOptions = { ...DEFAULT_APPLY_OPTIONS, ...options };
+  const frameOffset = opts.frameOffset ?? 0;
+
+  if (opts.mode === 'replace') {
+    paintEngine.clearAll();
+  }
+
+  // Collect all annotations with offset applied, reassigning IDs to avoid collisions
+  const allAnnotations: Annotation[] = [];
+
+  for (const [frameStr, annotations] of Object.entries(data.frames)) {
+    const originalFrame = Number(frameStr);
+    const targetFrame = originalFrame + frameOffset;
+
+    for (const annotation of annotations) {
+      // Clone the annotation with updated frame and new unique frame target
+      const imported: Annotation = {
+        ...annotation,
+        frame: targetFrame,
+        startFrame: (annotation.startFrame ?? originalFrame) + frameOffset,
+      };
+      allAnnotations.push(imported);
+    }
+  }
+
+  // Apply effects if present
+  const effects = data.effects ?? undefined;
+
+  // Use loadFromAnnotations which handles ID collision avoidance
+  // In merge mode, we need to add individually to preserve existing annotations
+  if (opts.mode === 'merge') {
+    for (const annotation of allAnnotations) {
+      // Strip the id so addAnnotation assigns a new unique one,
+      // avoiding ID collisions with existing annotations
+      const { id: _stripId, ...withoutId } = annotation;
+      paintEngine.addAnnotation(withoutId as Annotation);
+    }
+    if (effects) {
+      paintEngine.setHoldMode(effects.hold);
+      paintEngine.setGhostMode(effects.ghost, effects.ghostBefore, effects.ghostAfter);
+    }
+  } else {
+    paintEngine.loadFromAnnotations(allAnnotations, effects);
+  }
+
+  return allAnnotations.length;
+}

@@ -180,6 +180,9 @@ export function computeEffectsHash(state: AllEffectsState): string {
   const tm = state.toneMappingState;
   hashBool(tm.enabled);
   hashStr(tm.operator);
+  hashNum(tm.reinhardWhitePoint ?? 4.0);
+  hashNum(tm.filmicExposureBias ?? 2.0);
+  hashNum(tm.filmicWhitePoint ?? 11.2);
 
   // Color inversion
   hashBool(state.colorInversionEnabled);
@@ -338,7 +341,11 @@ export class EffectProcessor {
 
     // Apply tone mapping (after color adjustments, before channel isolation)
     if (hasToneMapping) {
-      applyToneMappingToData(imageData.data, state.toneMappingState.operator);
+      applyToneMappingToData(imageData.data, state.toneMappingState.operator, {
+        reinhardWhitePoint: state.toneMappingState.reinhardWhitePoint,
+        filmicExposureBias: state.toneMappingState.filmicExposureBias,
+        filmicWhitePoint: state.toneMappingState.filmicWhitePoint,
+      });
     }
 
     // Apply color inversion (after all color corrections, before sharpen/channel isolation)
