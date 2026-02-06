@@ -826,6 +826,146 @@ describe('Renderer SDR Display Transfer Override (regression)', () => {
     expect(calls.length).toBeGreaterThanOrEqual(1);
     expect(calls[calls.length - 1]).toBe(3);
   });
+
+  it('REN-SDR-DT-004: renderSDRFrame retains user-set u_displayGamma and u_displayBrightness values', () => {
+    // Create a mock GL context that tracks uniform1f calls for displayGamma and displayBrightness
+    function createDisplayUniformTrackingGL(): {
+      gl: WebGL2RenderingContext;
+      getUniform1fCalls: () => Map<string, number[]>;
+    } {
+      const locationToName = new Map<object, string>();
+      const uniform1fCalls = new Map<string, number[]>();
+
+      const gl = {
+        canvas: document.createElement('canvas'),
+        drawingBufferColorSpace: 'srgb',
+        getExtension: vi.fn(() => null),
+        createProgram: vi.fn(() => ({})),
+        attachShader: vi.fn(),
+        linkProgram: vi.fn(),
+        getProgramParameter: vi.fn(() => true),
+        getProgramInfoLog: vi.fn(() => ''),
+        deleteShader: vi.fn(),
+        createShader: vi.fn(() => ({})),
+        shaderSource: vi.fn(),
+        compileShader: vi.fn(),
+        getShaderParameter: vi.fn(() => true),
+        getShaderInfoLog: vi.fn(() => ''),
+        createVertexArray: vi.fn(() => ({})),
+        bindVertexArray: vi.fn(),
+        createBuffer: vi.fn(() => ({})),
+        bindBuffer: vi.fn(),
+        bufferData: vi.fn(),
+        enableVertexAttribArray: vi.fn(),
+        vertexAttribPointer: vi.fn(),
+        getUniformLocation: vi.fn((_program: WebGLProgram, name: string) => {
+          const sentinel = { __uniformName: name };
+          locationToName.set(sentinel, name);
+          return sentinel;
+        }),
+        getAttribLocation: vi.fn(() => 0),
+        useProgram: vi.fn(),
+        uniform1f: vi.fn((location: object, value: number) => {
+          const name = locationToName.get(location);
+          if (name === 'u_displayGamma' || name === 'u_displayBrightness') {
+            if (!uniform1fCalls.has(name)) {
+              uniform1fCalls.set(name, []);
+            }
+            uniform1fCalls.get(name)!.push(value);
+          }
+        }),
+        uniform1i: vi.fn(),
+        uniform2fv: vi.fn(),
+        uniform3fv: vi.fn(),
+        uniformMatrix3fv: vi.fn(),
+        activeTexture: vi.fn(),
+        bindTexture: vi.fn(),
+        pixelStorei: vi.fn(),
+        createTexture: vi.fn(() => ({})),
+        deleteTexture: vi.fn(),
+        clear: vi.fn(),
+        clearColor: vi.fn(),
+        viewport: vi.fn(),
+        drawArrays: vi.fn(),
+        deleteBuffer: vi.fn(),
+        deleteVertexArray: vi.fn(),
+        deleteProgram: vi.fn(),
+        texParameteri: vi.fn(),
+        texImage2D: vi.fn(),
+        texImage3D: vi.fn(),
+        texStorage3D: vi.fn(),
+        isContextLost: vi.fn(() => false),
+        // Constants
+        VERTEX_SHADER: 0x8b31,
+        FRAGMENT_SHADER: 0x8b30,
+        LINK_STATUS: 0x8b82,
+        COMPILE_STATUS: 0x8b81,
+        ARRAY_BUFFER: 0x8892,
+        STATIC_DRAW: 0x88e4,
+        FLOAT: 0x1406,
+        TEXTURE_2D: 0x0de1,
+        TEXTURE_3D: 0x806f,
+        TEXTURE0: 0x84c0,
+        TEXTURE1: 0x84c1,
+        TEXTURE2: 0x84c2,
+        TEXTURE3: 0x84c3,
+        TRIANGLE_STRIP: 0x0005,
+        COLOR_BUFFER_BIT: 0x4000,
+        TEXTURE_WRAP_S: 0x2802,
+        TEXTURE_WRAP_T: 0x2803,
+        TEXTURE_WRAP_R: 0x8072,
+        TEXTURE_MIN_FILTER: 0x2801,
+        TEXTURE_MAG_FILTER: 0x2800,
+        CLAMP_TO_EDGE: 0x812f,
+        LINEAR: 0x2601,
+        RGBA8: 0x8058,
+        RGBA: 0x1908,
+        UNSIGNED_BYTE: 0x1401,
+        RGB32F: 0x8815,
+        RGB: 0x1907,
+      } as unknown as WebGL2RenderingContext;
+
+      return { gl, getUniform1fCalls: () => uniform1fCalls };
+    }
+
+    const renderer = new Renderer();
+    const { gl, getUniform1fCalls } = createDisplayUniformTrackingGL();
+    const canvas = document.createElement('canvas');
+
+    const originalGetContext = canvas.getContext.bind(canvas);
+    canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+      if (contextId === 'webgl2') return gl;
+      return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
+    }) as typeof canvas.getContext;
+
+    renderer.initialize(canvas);
+
+    // Set display color state with non-default displayGamma and displayBrightness
+    renderer.setDisplayColorState({
+      transferFunction: 0, // sRGB
+      displayGamma: 1.5, // Non-default value
+      displayBrightness: 1.2, // Non-default value
+      customGamma: 2.2,
+    });
+
+    const sourceCanvas = document.createElement('canvas');
+    renderer.resize(100, 100);
+    renderer.renderSDRFrame(sourceCanvas);
+
+    const calls = getUniform1fCalls();
+
+    // Verify u_displayGamma was set with the user value (1.5), not overridden to 1.0
+    const gammaVals = calls.get('u_displayGamma');
+    expect(gammaVals).toBeDefined();
+    expect(gammaVals!.length).toBeGreaterThanOrEqual(1);
+    expect(gammaVals![gammaVals!.length - 1]).toBe(1.5);
+
+    // Verify u_displayBrightness was set with the user value (1.2), not overridden to 1.0
+    const brightnessVals = calls.get('u_displayBrightness');
+    expect(brightnessVals).toBeDefined();
+    expect(brightnessVals!.length).toBeGreaterThanOrEqual(1);
+    expect(brightnessVals![brightnessVals!.length - 1]).toBe(1.2);
+  });
 });
 
 /**

@@ -2051,9 +2051,11 @@ export class Viewer {
   private renderImage(): void {
     const source = this.session.currentSource;
 
-    // Deactivate HDR mode if current source isn't HDR
+    // Deactivate HDR mode if current source isn't HDR, or if OCIO is active
+    // (OCIO requires the 2D canvas path since the GL shader has no OCIO support)
     const isCurrentHDR = source?.fileSourceNode?.isHDR() === true;
-    if (this.hdrRenderActive && !isCurrentHDR) {
+    const ocioActive = this.ocioEnabled && this.ocioBakedLUT !== null;
+    if (this.hdrRenderActive && (!isCurrentHDR || ocioActive)) {
       this.deactivateHDRMode();
     }
 
@@ -2220,8 +2222,11 @@ export class Viewer {
       this.setCanvasSize(displayWidth, displayHeight);
     }
 
-    // HDR WebGL rendering path: render via GPU shader pipeline and skip 2D canvas
-    if (hdrFileSource) {
+    // HDR WebGL rendering path: render via GPU shader pipeline and skip 2D canvas.
+    // When OCIO is active, skip the WebGL path and fall through to the 2D canvas
+    // where applyOCIOToCanvas() can apply the baked LUT as a post-process (the GL
+    // shader does not support OCIO transforms, mirroring the SDR WebGL guard).
+    if (hdrFileSource && !(this.ocioEnabled && this.ocioBakedLUT)) {
       const ipImage = hdrFileSource.getIPImage();
       if (ipImage && this.renderHDRWithWebGL(ipImage, displayWidth, displayHeight)) {
         this.updateCanvasPosition();
@@ -2229,6 +2234,15 @@ export class Viewer {
         return; // HDR path complete, skip 2D
       }
       // WebGL failed — fall back to 2D canvas
+      element = hdrFileSource.getCanvas() ?? undefined;
+      if (!element) {
+        this.drawPlaceholder();
+        this.updateCanvasPosition();
+        this.updateWipeLine();
+        return;
+      }
+    } else if (hdrFileSource) {
+      // OCIO is active — bypass WebGL and use 2D canvas so OCIO LUT can be applied
       element = hdrFileSource.getCanvas() ?? undefined;
       if (!element) {
         this.drawPlaceholder();

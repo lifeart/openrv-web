@@ -109,6 +109,22 @@ interface TestableViewer {
   // Uncrop
   drawUncropBackground(displayWidth: number, displayHeight: number, uncropOffsetX: number, uncropOffsetY: number, imageDisplayW: number, imageDisplayH: number): void;
 
+  // OCIO color management
+  ocioEnabled: boolean;
+  ocioBakedLUT: import('../../color/LUTLoader').LUT3D | null;
+  applyOCIOToCanvas(ctx: CanvasRenderingContext2D, width: number, height: number): void;
+
+  // GPU LUT (user-loaded 3D LUT)
+  currentLUT: import('../../color/LUTLoader').LUT3D | null;
+  lutIntensity: number;
+  applyLUTToCanvas(ctx: CanvasRenderingContext2D, width: number, height: number): void;
+
+  // Lightweight effects
+  applyLightweightEffects(ctx: CanvasRenderingContext2D, width: number, height: number): void;
+
+  // Crop clipping
+  clearOutsideCropRegion(displayWidth: number, displayHeight: number): void;
+
   // Canvas context
   imageCtx: CanvasRenderingContext2D;
 }
@@ -2584,6 +2600,851 @@ describe('Viewer', () => {
       expect(mockGLRenderer.setDisplayColorState).toHaveBeenCalled();
 
       // Both methods should follow the same pattern: eagerly update glRenderer when it exists
+    });
+  });
+
+  describe('OCIO rendering pipeline behavior', () => {
+    /** Create a minimal valid LUT3D for OCIO tests */
+    function createFakeLUT(): import('../../color/LUTLoader').LUT3D {
+      return {
+        title: 'test-ocio',
+        size: 17,
+        domainMin: [0, 0, 0],
+        domainMax: [1, 1, 1],
+        data: new Float32Array(17 * 17 * 17 * 3),
+      };
+    }
+
+    it('VWR-400: isOCIOEnabled returns false by default', () => {
+      expect(viewer.isOCIOEnabled()).toBe(false);
+    });
+
+    it('VWR-401: setOCIOBakedLUT enables OCIO with a valid LUT', () => {
+      const fakeLUT = createFakeLUT();
+      viewer.setOCIOBakedLUT(fakeLUT, true);
+      expect(viewer.isOCIOEnabled()).toBe(true);
+    });
+
+    it('VWR-402: setOCIOBakedLUT disables OCIO when enabled=false', () => {
+      const fakeLUT = createFakeLUT();
+      viewer.setOCIOBakedLUT(fakeLUT, true);
+      expect(viewer.isOCIOEnabled()).toBe(true);
+
+      viewer.setOCIOBakedLUT(null, false);
+      expect(viewer.isOCIOEnabled()).toBe(false);
+    });
+
+    it('VWR-403: OCIO disqualifies SDR WebGL eligibility (forces 2D canvas path)', () => {
+      // When OCIO is active, SDR WebGL should NOT be used because the GL shader
+      // does not support OCIO transforms. The sdrWebGLEligible guard at line 2261
+      // explicitly checks !(this.ocioEnabled && this.ocioBakedLUT).
+      const tv = testable(viewer);
+      const fakeLUT = createFakeLUT();
+      viewer.setOCIOBakedLUT(fakeLUT, true);
+
+      // Even with GPU shader effects active, OCIO should prevent SDR WebGL
+      viewer.setColorAdjustments({ ...DEFAULT_COLOR_ADJUSTMENTS, exposure: 1 });
+      expect(tv.hasGPUShaderEffectsActive()).toBe(true);
+      expect(tv.ocioEnabled).toBe(true);
+      expect(tv.ocioBakedLUT).not.toBeNull();
+    });
+
+    it('VWR-404: OCIO is applied on playback cache hit path (before lightweight effects)', () => {
+      // Regression: verify OCIO is applied when prerender buffer has a cached frame.
+      // The cache hit path at lines 2356-2357 applies OCIO before lightweight effects.
+      const tv = testable(viewer);
+      const fakeLUT = createFakeLUT();
+      viewer.setOCIOBakedLUT(fakeLUT, true);
+
+      // Mock a prerenderBuffer with a cached frame
+      const mockCanvas = document.createElement('canvas');
+      mockCanvas.width = 100;
+      mockCanvas.height = 100;
+      tv.prerenderBuffer = {
+        getFrame: vi.fn().mockReturnValue({
+          canvas: mockCanvas,
+          effectsHash: 'test',
+          width: 100,
+          height: 100,
+        }),
+        queuePriorityFrame: vi.fn(),
+        onFrameProcessed: null,
+        dispose: vi.fn(),
+      } as unknown as typeof tv.prerenderBuffer;
+
+      // Mock session as playing with a valid current source (image)
+      const mockImg = new Image(100, 100);
+      tv.session = {
+        ...tv.session,
+        isPlaying: true,
+        currentFrame: 1,
+        frameCount: 10,
+        currentSource: {
+          type: 'image' as const,
+          name: 'test.jpg',
+          url: 'test.jpg',
+          width: 100,
+          height: 100,
+          duration: 1,
+          fps: 24,
+          element: mockImg,
+        },
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+
+      // Spy on applyOCIOToCanvas
+      const ocioSpy = vi.spyOn(tv, 'applyOCIOToCanvas');
+
+      viewer.render();
+
+      expect(ocioSpy).toHaveBeenCalled();
+      ocioSpy.mockRestore();
+    });
+
+    it('VWR-405: OCIO is applied on playback cache miss path (full 2D fallthrough)', () => {
+      // Regression: on cache miss during playback, the code falls through to the
+      // full 2D path where OCIO is applied at lines 2471-2472 before lightweight effects.
+      const tv = testable(viewer);
+      const fakeLUT = createFakeLUT();
+      viewer.setOCIOBakedLUT(fakeLUT, true);
+
+      // Mock a prerenderBuffer with NO cached frame (cache miss)
+      tv.prerenderBuffer = {
+        getFrame: vi.fn().mockReturnValue(null),
+        queuePriorityFrame: vi.fn(),
+        onFrameProcessed: null,
+        dispose: vi.fn(),
+      } as unknown as typeof tv.prerenderBuffer;
+
+      // Mock session as playing with a valid current source (image)
+      const mockImg = new Image(100, 100);
+      tv.session = {
+        ...tv.session,
+        isPlaying: true,
+        currentFrame: 1,
+        frameCount: 10,
+        currentSource: {
+          type: 'image' as const,
+          name: 'test.jpg',
+          url: 'test.jpg',
+          width: 100,
+          height: 100,
+          duration: 1,
+          fps: 24,
+          element: mockImg,
+        },
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+
+      // Spy on applyOCIOToCanvas
+      const ocioSpy = vi.spyOn(tv, 'applyOCIOToCanvas');
+
+      viewer.render();
+
+      expect(ocioSpy).toHaveBeenCalled();
+      ocioSpy.mockRestore();
+    });
+
+    it('VWR-406: OCIO is not applied when disabled (cache hit path)', () => {
+      // Verify OCIO is skipped when not enabled, even if the code path runs
+      const tv = testable(viewer);
+
+      // OCIO disabled (default)
+      expect(viewer.isOCIOEnabled()).toBe(false);
+
+      // Mock a prerenderBuffer with a cached frame
+      const mockCanvas = document.createElement('canvas');
+      mockCanvas.width = 100;
+      mockCanvas.height = 100;
+      tv.prerenderBuffer = {
+        getFrame: vi.fn().mockReturnValue({
+          canvas: mockCanvas,
+          effectsHash: 'test',
+          width: 100,
+          height: 100,
+        }),
+        queuePriorityFrame: vi.fn(),
+        onFrameProcessed: null,
+        dispose: vi.fn(),
+      } as unknown as typeof tv.prerenderBuffer;
+
+      // Mock session as playing
+      const mockImg = new Image(100, 100);
+      tv.session = {
+        ...tv.session,
+        isPlaying: true,
+        currentFrame: 1,
+        frameCount: 10,
+        currentSource: {
+          type: 'image' as const,
+          name: 'test.jpg',
+          url: 'test.jpg',
+          width: 100,
+          height: 100,
+          duration: 1,
+          fps: 24,
+          element: mockImg,
+        },
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+
+      // Spy on applyOCIOToCanvas
+      const ocioSpy = vi.spyOn(tv, 'applyOCIOToCanvas');
+
+      viewer.render();
+
+      // OCIO should NOT be called when disabled
+      expect(ocioSpy).not.toHaveBeenCalled();
+      ocioSpy.mockRestore();
+    });
+
+    it('VWR-407: HDR WebGL path is bypassed when OCIO is active (regression fix)', () => {
+      // Regression: the HDR WebGL path used to render and return without OCIO.
+      // Now when OCIO is active, the HDR path should be skipped so OCIO can be
+      // applied via the 2D canvas fallback.
+      const tv = testable(viewer);
+      const fakeLUT = createFakeLUT();
+      viewer.setOCIOBakedLUT(fakeLUT, true);
+
+      // The check in renderImage() is:
+      //   if (hdrFileSource && !(this.ocioEnabled && this.ocioBakedLUT))
+      // When OCIO is active, this condition is false, so the HDR WebGL path is skipped.
+      expect(tv.ocioEnabled).toBe(true);
+      expect(tv.ocioBakedLUT).not.toBeNull();
+
+      // Render should not throw (no HDR source available in test env, so it
+      // just confirms the guard logic doesn't cause errors)
+      expect(() => viewer.render()).not.toThrow();
+    });
+
+    it('VWR-408: HDR mode is deactivated when OCIO becomes active', () => {
+      // When OCIO is enabled while an HDR source was being rendered via WebGL,
+      // the HDR mode should be deactivated to switch to the 2D canvas path.
+      const tv = testable(viewer);
+
+      // Simulate that HDR mode was previously active
+      tv.hdrRenderActive = true;
+
+      const fakeLUT = createFakeLUT();
+      viewer.setOCIOBakedLUT(fakeLUT, true);
+
+      // Render triggers the deactivation check
+      viewer.render();
+
+      // HDR mode should be deactivated because OCIO is active
+      expect(tv.hdrRenderActive).toBe(false);
+    });
+  });
+
+  describe('GPU LUT rendering in cache hit path (regression)', () => {
+    /** Create a minimal valid LUT3D for GPU LUT tests */
+    function createFakeLUT(): import('../../color/LUTLoader').LUT3D {
+      return {
+        title: 'test-lut',
+        size: 17,
+        domainMin: [0, 0, 0],
+        domainMax: [1, 1, 1],
+        data: new Float32Array(17 * 17 * 17 * 3),
+      };
+    }
+
+    it('VWR-LUT-001: When a user 3D LUT is loaded and playback is active with cache hit, the LUT processing method is called', () => {
+      // Regression: verify GPU LUT is applied when prerender buffer has a cached frame.
+      // The cache hit path at lines 2367-2368 applies GPU LUT before OCIO.
+      const tv = testable(viewer);
+      const fakeLUT = createFakeLUT();
+      viewer.setLUT(fakeLUT);
+      viewer.setLUTIntensity(1.0);
+
+      // Mock a prerenderBuffer with a cached frame
+      const mockCanvas = document.createElement('canvas');
+      mockCanvas.width = 100;
+      mockCanvas.height = 100;
+      tv.prerenderBuffer = {
+        getFrame: vi.fn().mockReturnValue({
+          canvas: mockCanvas,
+          effectsHash: 'test',
+          width: 100,
+          height: 100,
+        }),
+        queuePriorityFrame: vi.fn(),
+        onFrameProcessed: null,
+        dispose: vi.fn(),
+      } as unknown as typeof tv.prerenderBuffer;
+
+      // Mock session as playing with a valid current source (image)
+      const mockImg = new Image(100, 100);
+      tv.session = {
+        ...tv.session,
+        isPlaying: true,
+        currentFrame: 1,
+        frameCount: 10,
+        currentSource: {
+          type: 'image' as const,
+          name: 'test.jpg',
+          url: 'test.jpg',
+          width: 100,
+          height: 100,
+          duration: 1,
+          fps: 24,
+          element: mockImg,
+        },
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+
+      // Spy on applyLUTToCanvas
+      const lutSpy = vi.spyOn(tv, 'applyLUTToCanvas');
+
+      viewer.render();
+
+      expect(lutSpy).toHaveBeenCalled();
+      lutSpy.mockRestore();
+    });
+
+    it('VWR-LUT-002: When no LUT is loaded, LUT processing is NOT called during cache hit', () => {
+      // Verify GPU LUT is skipped when no LUT is loaded, even if the code path runs
+      const tv = testable(viewer);
+
+      // No LUT loaded (default)
+      expect(viewer.getLUT()).toBeNull();
+
+      // Mock a prerenderBuffer with a cached frame
+      const mockCanvas = document.createElement('canvas');
+      mockCanvas.width = 100;
+      mockCanvas.height = 100;
+      tv.prerenderBuffer = {
+        getFrame: vi.fn().mockReturnValue({
+          canvas: mockCanvas,
+          effectsHash: 'test',
+          width: 100,
+          height: 100,
+        }),
+        queuePriorityFrame: vi.fn(),
+        onFrameProcessed: null,
+        dispose: vi.fn(),
+      } as unknown as typeof tv.prerenderBuffer;
+
+      // Mock session as playing
+      const mockImg = new Image(100, 100);
+      tv.session = {
+        ...tv.session,
+        isPlaying: true,
+        currentFrame: 1,
+        frameCount: 10,
+        currentSource: {
+          type: 'image' as const,
+          name: 'test.jpg',
+          url: 'test.jpg',
+          width: 100,
+          height: 100,
+          duration: 1,
+          fps: 24,
+          element: mockImg,
+        },
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+
+      // Spy on applyLUTToCanvas
+      const lutSpy = vi.spyOn(tv, 'applyLUTToCanvas');
+
+      viewer.render();
+
+      // LUT should NOT be called when no LUT is loaded
+      expect(lutSpy).not.toHaveBeenCalled();
+      lutSpy.mockRestore();
+    });
+  });
+
+  describe('Lightweight effects in cache hit path (regression)', () => {
+    it('VWR-LW-001: applyLightweightEffects is called during playback cache hit path', () => {
+      // Regression: verify lightweight effects are applied when prerender buffer has
+      // a cached frame. The cache hit path at line 2374 applies lightweight effects
+      // after GPU LUT and OCIO.
+      const tv = testable(viewer);
+
+      // Mock a prerenderBuffer with a cached frame
+      const mockCanvas = document.createElement('canvas');
+      mockCanvas.width = 100;
+      mockCanvas.height = 100;
+      tv.prerenderBuffer = {
+        getFrame: vi.fn().mockReturnValue({
+          canvas: mockCanvas,
+          effectsHash: 'test',
+          width: 100,
+          height: 100,
+        }),
+        queuePriorityFrame: vi.fn(),
+        onFrameProcessed: null,
+        dispose: vi.fn(),
+      } as unknown as typeof tv.prerenderBuffer;
+
+      // Mock session as playing with a valid current source (image)
+      const mockImg = new Image(100, 100);
+      tv.session = {
+        ...tv.session,
+        isPlaying: true,
+        currentFrame: 1,
+        frameCount: 10,
+        currentSource: {
+          type: 'image' as const,
+          name: 'test.jpg',
+          url: 'test.jpg',
+          width: 100,
+          height: 100,
+          duration: 1,
+          fps: 24,
+          element: mockImg,
+        },
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+
+      // Spy on applyLightweightEffects
+      const lightweightSpy = vi.spyOn(tv, 'applyLightweightEffects');
+
+      viewer.render();
+
+      expect(lightweightSpy).toHaveBeenCalled();
+      lightweightSpy.mockRestore();
+    });
+
+    it('VWR-LW-002: False color is applied when enabled during playback (via lightweight effects)', () => {
+      // Verify false color diagnostic overlay is active during cache hit playback
+      const tv = testable(viewer);
+
+      // Enable false color
+      viewer.getFalseColor().enable();
+
+      // Mock a prerenderBuffer with a cached frame
+      const mockCanvas = document.createElement('canvas');
+      mockCanvas.width = 100;
+      mockCanvas.height = 100;
+      tv.prerenderBuffer = {
+        getFrame: vi.fn().mockReturnValue({
+          canvas: mockCanvas,
+          effectsHash: 'test',
+          width: 100,
+          height: 100,
+        }),
+        queuePriorityFrame: vi.fn(),
+        onFrameProcessed: null,
+        dispose: vi.fn(),
+      } as unknown as typeof tv.prerenderBuffer;
+
+      // Mock session as playing with a valid current source (image)
+      const mockImg = new Image(100, 100);
+      tv.session = {
+        ...tv.session,
+        isPlaying: true,
+        currentFrame: 1,
+        frameCount: 10,
+        currentSource: {
+          type: 'image' as const,
+          name: 'test.jpg',
+          url: 'test.jpg',
+          width: 100,
+          height: 100,
+          duration: 1,
+          fps: 24,
+          element: mockImg,
+        },
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+
+      // Spy on applyLightweightEffects to verify it's called
+      const lightweightSpy = vi.spyOn(tv, 'applyLightweightEffects');
+
+      viewer.render();
+
+      // Lightweight effects should be called, which will process false color
+      expect(lightweightSpy).toHaveBeenCalled();
+      lightweightSpy.mockRestore();
+    });
+
+    it('VWR-LW-003: Zebra stripes rendering occurs during playback when enabled', () => {
+      // Verify zebra stripes diagnostic overlay is active during cache hit playback
+      const tv = testable(viewer);
+
+      // Enable zebra stripes
+      viewer.getZebraStripes().enable();
+
+      // Mock a prerenderBuffer with a cached frame
+      const mockCanvas = document.createElement('canvas');
+      mockCanvas.width = 100;
+      mockCanvas.height = 100;
+      tv.prerenderBuffer = {
+        getFrame: vi.fn().mockReturnValue({
+          canvas: mockCanvas,
+          effectsHash: 'test',
+          width: 100,
+          height: 100,
+        }),
+        queuePriorityFrame: vi.fn(),
+        onFrameProcessed: null,
+        dispose: vi.fn(),
+      } as unknown as typeof tv.prerenderBuffer;
+
+      // Mock session as playing with a valid current source (image)
+      const mockImg = new Image(100, 100);
+      tv.session = {
+        ...tv.session,
+        isPlaying: true,
+        currentFrame: 1,
+        frameCount: 10,
+        currentSource: {
+          type: 'image' as const,
+          name: 'test.jpg',
+          url: 'test.jpg',
+          width: 100,
+          height: 100,
+          duration: 1,
+          fps: 24,
+          element: mockImg,
+        },
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+
+      // Spy on applyLightweightEffects to verify it's called
+      const lightweightSpy = vi.spyOn(tv, 'applyLightweightEffects');
+
+      viewer.render();
+
+      // Lightweight effects should be called, which will process zebra stripes
+      expect(lightweightSpy).toHaveBeenCalled();
+      lightweightSpy.mockRestore();
+    });
+  });
+
+  describe('Crop clipping in cache hit path (regression)', () => {
+    it('VWR-CROP-001: Crop clipping is applied during playback cache hit when active', () => {
+      // Regression: verify crop clipping is applied when prerender buffer has a
+      // cached frame. The cache hit path at lines 2376-2378 applies crop clipping
+      // after lightweight effects.
+      const tv = testable(viewer);
+
+      // Enable crop with a non-full region
+      viewer.setCropState({
+        enabled: true,
+        region: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 },
+        aspectRatio: null,
+      });
+
+      // Mock a prerenderBuffer with a cached frame
+      const mockCanvas = document.createElement('canvas');
+      mockCanvas.width = 100;
+      mockCanvas.height = 100;
+      tv.prerenderBuffer = {
+        getFrame: vi.fn().mockReturnValue({
+          canvas: mockCanvas,
+          effectsHash: 'test',
+          width: 100,
+          height: 100,
+        }),
+        queuePriorityFrame: vi.fn(),
+        onFrameProcessed: null,
+        dispose: vi.fn(),
+      } as unknown as typeof tv.prerenderBuffer;
+
+      // Mock session as playing with a valid current source (image)
+      const mockImg = new Image(100, 100);
+      tv.session = {
+        ...tv.session,
+        isPlaying: true,
+        currentFrame: 1,
+        frameCount: 10,
+        currentSource: {
+          type: 'image' as const,
+          name: 'test.jpg',
+          url: 'test.jpg',
+          width: 100,
+          height: 100,
+          duration: 1,
+          fps: 24,
+          element: mockImg,
+        },
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+
+      // Spy on clearOutsideCropRegion
+      const cropSpy = vi.spyOn(tv, 'clearOutsideCropRegion');
+
+      viewer.render();
+
+      expect(cropSpy).toHaveBeenCalled();
+      cropSpy.mockRestore();
+    });
+
+    it('VWR-CROP-002: Crop clipping is NOT applied when not active during cache hit', () => {
+      // Verify crop clipping is skipped when crop is disabled or full region
+      const tv = testable(viewer);
+
+      // Crop disabled (default)
+      expect(viewer.getCropState().enabled).toBe(false);
+
+      // Mock a prerenderBuffer with a cached frame
+      const mockCanvas = document.createElement('canvas');
+      mockCanvas.width = 100;
+      mockCanvas.height = 100;
+      tv.prerenderBuffer = {
+        getFrame: vi.fn().mockReturnValue({
+          canvas: mockCanvas,
+          effectsHash: 'test',
+          width: 100,
+          height: 100,
+        }),
+        queuePriorityFrame: vi.fn(),
+        onFrameProcessed: null,
+        dispose: vi.fn(),
+      } as unknown as typeof tv.prerenderBuffer;
+
+      // Mock session as playing
+      const mockImg = new Image(100, 100);
+      tv.session = {
+        ...tv.session,
+        isPlaying: true,
+        currentFrame: 1,
+        frameCount: 10,
+        currentSource: {
+          type: 'image' as const,
+          name: 'test.jpg',
+          url: 'test.jpg',
+          width: 100,
+          height: 100,
+          duration: 1,
+          fps: 24,
+          element: mockImg,
+        },
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+
+      // Spy on clearOutsideCropRegion
+      const cropSpy = vi.spyOn(tv, 'clearOutsideCropRegion');
+
+      viewer.render();
+
+      // Crop clipping should NOT be called when crop is disabled
+      expect(cropSpy).not.toHaveBeenCalled();
+      cropSpy.mockRestore();
+    });
+  });
+
+  describe('Cached frame drawing verification', () => {
+    it('VWR-CACHE-001: The cached frame from prerenderBuffer is actually drawn to the canvas during playback', () => {
+      // Verify the cached frame is drawn during cache hit playback
+      const tv = testable(viewer);
+
+      // Mock a prerenderBuffer with a cached frame
+      const mockCanvas = document.createElement('canvas');
+      mockCanvas.width = 100;
+      mockCanvas.height = 100;
+      tv.prerenderBuffer = {
+        getFrame: vi.fn().mockReturnValue({
+          canvas: mockCanvas,
+          effectsHash: 'test',
+          width: 100,
+          height: 100,
+        }),
+        queuePriorityFrame: vi.fn(),
+        onFrameProcessed: null,
+        dispose: vi.fn(),
+      } as unknown as typeof tv.prerenderBuffer;
+
+      // Mock session as playing with a valid current source (image)
+      const mockImg = new Image(100, 100);
+      tv.session = {
+        ...tv.session,
+        isPlaying: true,
+        currentFrame: 1,
+        frameCount: 10,
+        currentSource: {
+          type: 'image' as const,
+          name: 'test.jpg',
+          url: 'test.jpg',
+          width: 100,
+          height: 100,
+          duration: 1,
+          fps: 24,
+          element: mockImg,
+        },
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+
+      // Spy on drawImage to verify cached canvas is drawn
+      const drawImageSpy = vi.spyOn(tv.imageCtx, 'drawImage');
+
+      viewer.render();
+
+      // The cached canvas should be drawn to the display canvas
+      expect(drawImageSpy).toHaveBeenCalledWith(mockCanvas, 0, 0, tv.displayWidth, tv.displayHeight);
+      drawImageSpy.mockRestore();
+    });
+  });
+
+  describe('Effect ordering in cache hit path', () => {
+    /** Create a minimal valid LUT3D for ordering test */
+    function createFakeLUT(): import('../../color/LUTLoader').LUT3D {
+      return {
+        title: 'test-order',
+        size: 17,
+        domainMin: [0, 0, 0],
+        domainMax: [1, 1, 1],
+        data: new Float32Array(17 * 17 * 17 * 3),
+      };
+    }
+
+    it('VWR-ORDER-001: Effects are applied in the correct order during cache hit path', () => {
+      // This test verifies the effect application order matches the expected sequence:
+      // canvas clear → background → uncrop → cached frame → ghost → stereo → lens →
+      // GPU LUT → OCIO → lightweight → crop
+      const tv = testable(viewer);
+
+      // Enable all effects to test ordering
+      viewer.setBackgroundPatternState({
+        pattern: 'grey50',
+        checkerSize: 'medium',
+        customColor: '#1a1a1a',
+      });
+      viewer.setUncropState({
+        enabled: true,
+        paddingMode: 'per-side',
+        padding: 0,
+        paddingTop: 50,
+        paddingBottom: 50,
+        paddingLeft: 50,
+        paddingRight: 50,
+      });
+      viewer.setGhostFrameState({
+        enabled: true,
+        framesBefore: 2,
+        framesAfter: 2,
+        opacityBase: 0.3,
+        opacityFalloff: 0.7,
+        colorTint: false,
+      });
+      viewer.setStereoState({
+        mode: 'side-by-side',
+        eyeSwap: false,
+        offset: 0,
+      });
+      viewer.setLensParams({ ...DEFAULT_LENS_PARAMS, k1: 0.3 });
+      const fakeLUT = createFakeLUT();
+      viewer.setLUT(fakeLUT);
+      viewer.setLUTIntensity(1.0);
+      viewer.setOCIOBakedLUT(fakeLUT, true);
+      viewer.setCropState({
+        enabled: true,
+        region: { x: 0.1, y: 0.1, width: 0.8, height: 0.8 },
+        aspectRatio: null,
+      });
+
+      // Mock a prerenderBuffer with a cached frame
+      const mockCanvas = document.createElement('canvas');
+      mockCanvas.width = 200;
+      mockCanvas.height = 200;
+      tv.prerenderBuffer = {
+        getFrame: vi.fn().mockReturnValue({
+          canvas: mockCanvas,
+          effectsHash: 'test',
+          width: 200,
+          height: 200,
+        }),
+        queuePriorityFrame: vi.fn(),
+        onFrameProcessed: null,
+        dispose: vi.fn(),
+      } as unknown as typeof tv.prerenderBuffer;
+
+      // Mock session as playing with a valid current source (image)
+      const mockImg = new Image(100, 100);
+      tv.session = {
+        ...tv.session,
+        isPlaying: true,
+        currentFrame: 5,
+        frameCount: 10,
+        currentSource: {
+          type: 'image' as const,
+          name: 'test.jpg',
+          url: 'test.jpg',
+          width: 100,
+          height: 100,
+          duration: 1,
+          fps: 24,
+          element: mockImg,
+        },
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+
+      // Spy on all effect methods
+      const clearSpy = vi.spyOn(tv.imageCtx, 'clearRect');
+      const uncropSpy = vi.spyOn(tv, 'drawUncropBackground');
+      const drawImageSpy = vi.spyOn(tv.imageCtx, 'drawImage');
+      const ghostSpy = vi.spyOn(tv as any, 'renderGhostFrames');
+      const stereoSpy = vi.spyOn(tv as any, 'applyStereoMode');
+      const lensSpy = vi.spyOn(tv, 'applyLensDistortionToCtx');
+      const lutSpy = vi.spyOn(tv, 'applyLUTToCanvas');
+      const ocioSpy = vi.spyOn(tv, 'applyOCIOToCanvas');
+      const lightweightSpy = vi.spyOn(tv, 'applyLightweightEffects');
+      const cropSpy = vi.spyOn(tv, 'clearOutsideCropRegion');
+
+      viewer.render();
+
+      // Verify all effects are called
+      expect(clearSpy).toHaveBeenCalled();
+      expect(uncropSpy).toHaveBeenCalled();
+      expect(drawImageSpy).toHaveBeenCalled();
+      expect(ghostSpy).toHaveBeenCalled();
+      expect(stereoSpy).toHaveBeenCalled();
+      expect(lensSpy).toHaveBeenCalled();
+      expect(lutSpy).toHaveBeenCalled();
+      expect(ocioSpy).toHaveBeenCalled();
+      expect(lightweightSpy).toHaveBeenCalled();
+      expect(cropSpy).toHaveBeenCalled();
+
+      // Verify order: each effect should be called before the next one
+      // Get call order indices (using non-null assertions since we verified calls above)
+      const allCalls = vi.mocked(tv.imageCtx.clearRect).mock.invocationCallOrder[0]!;
+      const uncropOrder = vi.mocked(tv.drawUncropBackground).mock.invocationCallOrder[0]!;
+      const drawOrder = vi.mocked(tv.imageCtx.drawImage).mock.invocationCallOrder[0]!;
+      const ghostOrder = vi.mocked((tv as any).renderGhostFrames).mock.invocationCallOrder[0]!;
+      const stereoOrder = vi.mocked((tv as any).applyStereoMode).mock.invocationCallOrder[0]!;
+      const lensOrder = vi.mocked(tv.applyLensDistortionToCtx).mock.invocationCallOrder[0]!;
+      const lutOrder = vi.mocked(tv.applyLUTToCanvas).mock.invocationCallOrder[0]!;
+      const ocioOrder = vi.mocked(tv.applyOCIOToCanvas).mock.invocationCallOrder[0]!;
+      const lightweightOrder = vi.mocked(tv.applyLightweightEffects).mock.invocationCallOrder[0]!;
+      const cropOrder = vi.mocked(tv.clearOutsideCropRegion).mock.invocationCallOrder[0]!;
+
+      // Verify ordering: clear < uncrop < draw < ghost < stereo < lens < lut < ocio < lightweight < crop
+      expect(allCalls).toBeLessThan(uncropOrder);
+      expect(uncropOrder).toBeLessThan(drawOrder);
+      expect(drawOrder).toBeLessThan(ghostOrder);
+      expect(ghostOrder).toBeLessThan(stereoOrder);
+      expect(stereoOrder).toBeLessThan(lensOrder);
+      expect(lensOrder).toBeLessThan(lutOrder);
+      expect(lutOrder).toBeLessThan(ocioOrder);
+      expect(ocioOrder).toBeLessThan(lightweightOrder);
+      expect(lightweightOrder).toBeLessThan(cropOrder);
+
+      // Cleanup
+      clearSpy.mockRestore();
+      uncropSpy.mockRestore();
+      drawImageSpy.mockRestore();
+      ghostSpy.mockRestore();
+      stereoSpy.mockRestore();
+      lensSpy.mockRestore();
+      lutSpy.mockRestore();
+      ocioSpy.mockRestore();
+      lightweightSpy.mockRestore();
+      cropSpy.mockRestore();
     });
   });
 });

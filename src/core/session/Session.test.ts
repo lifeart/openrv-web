@@ -3444,4 +3444,138 @@ describe('Session', () => {
       expect(session.isPlaying).toBe(false); // Paused at beginning
     });
   });
+
+  describe('audio drift correction (regression)', () => {
+    it('SES-AUDIO-001: Audio drift threshold constant is 1.0 seconds', () => {
+      // Verify that the drift threshold is set to 1.0s (not 0.5s)
+      // The threshold is hardcoded in the update() method's drift check
+      const mockVideoNode = {
+        isUsingMediabunny: vi.fn(() => true),
+        hasFrameCached: vi.fn(() => true),
+        getFrameAsync: vi.fn().mockResolvedValue(null),
+        preloadForPlayback: vi.fn().mockResolvedValue(undefined),
+        preloadFrames: vi.fn().mockResolvedValue(undefined),
+        setPlaybackDirection: vi.fn(),
+        startPlaybackPreload: vi.fn(),
+        stopPlaybackPreload: vi.fn(),
+      } as any;
+      const video = createMockVideo(100, 0);
+      Object.setPrototypeOf(video, HTMLVideoElement.prototype);
+      video.play = vi.fn().mockResolvedValue(undefined);
+      video.pause = vi.fn();
+
+      session.setSources([{
+        type: 'video',
+        name: 'test.mp4',
+        url: 'test.mp4',
+        width: 1920,
+        height: 1080,
+        duration: 100,
+        fps: 24,
+        element: video,
+        videoSourceNode: mockVideoNode,
+      }]);
+
+      session.fps = 24;
+      session.goToFrame(24);
+      session.play();
+
+      const internal = session as any;
+      internal._playDirection = 1;
+      internal._audioSyncEnabled = true;
+
+      // Test case 1: drift just below threshold (0.99s) - should NOT trigger seek
+      // Frame 24 target = (24-1)/24 = 0.958333s
+      // After update(), frame advances to 25, target = (25-1)/24 = 1.0s
+      // Set video time to 1.99s, so drift after advance = |1.99 - 1.0| = 0.99s < 1.0
+      video._currentTime = 1.99;
+      const currentTimeBefore = video.currentTime;
+
+      // Set up for single frame advance
+      internal.lastFrameTime = performance.now();
+      internal.frameAccumulator = (1000 / 24); // Exactly one frame worth
+
+      session.update();
+
+      // Should NOT have seeked (drift < 1.0)
+      expect(video.currentTime).toBe(currentTimeBefore);
+      expect(session.currentFrame).toBe(25); // Frame advanced
+
+      // Test case 2: drift at threshold (1.0s exactly) - should trigger seek
+      // Current frame is 25, after update() will advance to 26
+      // Frame 26 target = (26-1)/24 = 1.041667s
+      // Set video time to 2.041667s, so drift after advance = |2.041667 - 1.041667| = 1.0s exactly
+      video._currentTime = 2.041667;
+      internal.lastFrameTime = performance.now();
+      internal.frameAccumulator = (1000 / 24); // Exactly one frame worth
+
+      session.update();
+
+      // Should have seeked (drift >= 1.0)
+      expect(video.currentTime).toBeCloseTo(1.041667, 5); // (26-1)/24
+      expect(session.currentFrame).toBe(26);
+    });
+
+    it('SES-AUDIO-002: Drift correction does not use video.pause()/video.play() cycle', () => {
+      // Verify that drift correction only sets currentTime without pause/play
+      const mockVideoNode = {
+        isUsingMediabunny: vi.fn(() => true),
+        hasFrameCached: vi.fn(() => true),
+        getFrameAsync: vi.fn().mockResolvedValue(null),
+        preloadForPlayback: vi.fn().mockResolvedValue(undefined),
+        preloadFrames: vi.fn().mockResolvedValue(undefined),
+        setPlaybackDirection: vi.fn(),
+        startPlaybackPreload: vi.fn(),
+        stopPlaybackPreload: vi.fn(),
+      } as any;
+      const video = createMockVideo(100, 0);
+      Object.setPrototypeOf(video, HTMLVideoElement.prototype);
+      video.play = vi.fn().mockResolvedValue(undefined);
+      video.pause = vi.fn();
+
+      session.setSources([{
+        type: 'video',
+        name: 'test.mp4',
+        url: 'test.mp4',
+        width: 1920,
+        height: 1080,
+        duration: 100,
+        fps: 24,
+        element: video,
+        videoSourceNode: mockVideoNode,
+      }]);
+
+      session.fps = 24;
+      session.goToFrame(24);
+      session.play();
+
+      const internal = session as any;
+      internal._playDirection = 1;
+      internal._audioSyncEnabled = true;
+
+      // Clear play/pause call counts from session.play()
+      video.play.mockClear();
+      video.pause.mockClear();
+
+      // Simulate significant drift (> 1.0s) to trigger correction
+      // Frame 24 will advance to 25 during update()
+      // Frame 25 target = (25-1)/24 = 1.0s
+      // Set video time to 3.5s, so drift = |3.5 - 1.0| = 2.5s > 1.0
+      video._currentTime = 3.5;
+
+      // Set up for single frame advance
+      internal.lastFrameTime = performance.now();
+      internal.frameAccumulator = (1000 / 24); // Exactly one frame worth
+
+      session.update();
+
+      // Drift correction should have set currentTime to match the advanced frame
+      expect(video.currentTime).toBeCloseTo(1.0, 5); // (25-1)/24
+      expect(session.currentFrame).toBe(25); // Frame advanced
+
+      // But pause() and play() should NOT have been called during drift correction
+      expect(video.pause).not.toHaveBeenCalled();
+      expect(video.play).not.toHaveBeenCalled();
+    });
+  });
 });
