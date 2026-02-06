@@ -175,16 +175,65 @@ RVSession
 ```
 openrv-web/
 ├── src/
+│   ├── api/                     # Public API layer
+│   │   ├── OpenRVAPI.ts         # Main API facade
+│   │   ├── AudioAPI.ts          # Audio control API
+│   │   ├── ColorAPI.ts          # Color adjustment API
+│   │   ├── EventsAPI.ts         # Event subscription API
+│   │   ├── LoopAPI.ts           # Loop mode API
+│   │   ├── MarkersAPI.ts        # Timeline markers API
+│   │   ├── MediaAPI.ts          # Media loading API
+│   │   ├── PlaybackAPI.ts       # Playback control API
+│   │   ├── ViewAPI.ts           # Viewer control API
+│   │   └── index.ts             # Module exports
+│   │
+│   ├── audio/                   # Audio handling
+│   │   ├── AudioPlaybackManager.ts # Web Audio API playback
+│   │   └── WaveformRenderer.ts  # Audio waveform rendering
+│   │
+│   ├── color/                   # Color science & processing
+│   │   ├── BrowserColorSpace.ts # Browser color space detection
+│   │   ├── CDL.ts               # ASC CDL color correction
+│   │   ├── ColorCurves.ts       # Curve-based color adjustments
+│   │   ├── DisplayCapabilities.ts # Display HDR feature detection
+│   │   ├── DisplayTransfer.ts   # Display transfer functions
+│   │   ├── HDRPixelData.ts      # HDR pixel data handling
+│   │   ├── HueRotation.ts       # Hue rotation matrix
+│   │   ├── Inversion.ts         # Color inversion
+│   │   ├── LogCurves.ts         # Log curve transforms
+│   │   ├── LUTFormatDetect.ts   # LUT file format detection
+│   │   ├── LUTFormats.ts        # LUT format parsers
+│   │   ├── LUTLoader.ts         # LUT file loading
+│   │   ├── LUTPrecision.ts      # LUT precision utilities
+│   │   ├── LUTUtils.ts          # LUT utility functions
+│   │   ├── OCIOConfig.ts        # OCIO config representation
+│   │   ├── OCIOConfigParser.ts  # OCIO config file parser
+│   │   ├── OCIOProcessor.ts     # OCIO color processing
+│   │   ├── OCIOTransform.ts     # OCIO transform operations
+│   │   ├── SafeCanvasContext.ts # Safe canvas context creation
+│   │   ├── TetrahedralInterp.ts # Tetrahedral LUT interpolation
+│   │   ├── TransferFunctions.ts # EOTF/OETF transfer functions
+│   │   ├── WebGLLUT.ts          # GPU-accelerated LUT processing
+│   │   └── pipeline/            # LUT pipeline system
+│   │       ├── GPULUTChain.ts   # GPU LUT chain processing
+│   │       ├── LUTPipeline.ts   # LUT pipeline orchestration
+│   │       ├── LUTPipelineState.ts # Pipeline state management
+│   │       ├── LUTStage.ts      # Individual LUT stage
+│   │       └── PreCacheLUTStage.ts # Pre-cached LUT stage
+│   │
+│   ├── composite/               # Compositing operations
+│   │   └── BlendModes.ts        # Blend mode implementations
+│   │
 │   ├── core/                    # Core infrastructure
-│   │   ├── graph/              # Node graph system
-│   │   │   ├── Graph.ts        # DAG graph management
-│   │   │   ├── Property.ts     # Property container
-│   │   │   └── Signal.ts       # Event/signal system
-│   │   ├── image/              # Image handling
-│   │   │   └── Image.ts        # IPImage data structure
-│   │   └── session/            # Session management
-│   │       ├── Session.ts      # Session state + GTO loading
-│   │       ├── SessionState.ts # Serializable state types
+│   │   ├── graph/               # Node graph system
+│   │   │   ├── Graph.ts         # DAG graph management
+│   │   │   ├── Property.ts      # Property container
+│   │   │   └── Signal.ts        # Event/signal system
+│   │   ├── image/               # Image handling
+│   │   │   └── Image.ts         # IPImage data structure (HDR VideoFrame support)
+│   │   └── session/             # Session management
+│   │       ├── Session.ts       # Session state + GTO loading
+│   │       ├── SessionState.ts  # Serializable state types
 │   │       ├── SessionSerializer.ts # .orvproject save/load
 │   │       ├── SessionGTOStore.ts # GTO property storage/retrieval
 │   │       ├── SessionGTOExporter.ts # Export session to GTO format
@@ -192,112 +241,201 @@ openrv-web/
 │   │       ├── AutoSaveManager.ts # Auto-save to IndexedDB
 │   │       ├── SnapshotManager.ts # Session version snapshots
 │   │       ├── PlaylistManager.ts # Multi-clip playlist management
-│   │       └── index.ts        # Module exports
+│   │       └── index.ts         # Module exports
+│   │
+│   ├── filters/                 # Image filter effects
+│   │   ├── NoiseReduction.ts    # Noise reduction filter
+│   │   ├── WebGLNoiseReduction.ts # GPU noise reduction
+│   │   └── WebGLSharpen.ts      # GPU unsharp mask sharpening
+│   │
+│   ├── formats/                 # File format decoders
+│   │   ├── CineonDecoder.ts     # Cineon format decoder
+│   │   ├── DPXDecoder.ts        # DPX format decoder
+│   │   ├── DecoderRegistry.ts   # Format decoder registry
+│   │   ├── EXRDecoder.ts        # OpenEXR decoder (via exr.js)
+│   │   ├── JPEGGainmapDecoder.ts # JPEG gainmap HDR decoder
+│   │   ├── LogLinear.ts         # Log-to-linear conversion
+│   │   ├── TIFFFloatDecoder.ts  # Float TIFF decoder
+│   │   └── index.ts             # Decoder registration + exports
+│   │
+│   ├── network/                 # Network synchronization
+│   │   ├── MessageProtocol.ts   # Sync message protocol
+│   │   ├── NetworkSyncManager.ts # Network sync orchestration
+│   │   ├── SyncStateManager.ts  # Synchronized state management
+│   │   ├── WebSocketClient.ts   # WebSocket client connection
+│   │   └── types.ts             # Network type definitions
 │   │
 │   ├── nodes/                   # Processing nodes
-│   │   ├── base/               # Base node types
-│   │   │   ├── IPNode.ts       # Abstract base (inputs/outputs/properties)
-│   │   │   └── NodeFactory.ts  # Node registry + @RegisterNode decorator
-│   │   ├── sources/            # Source nodes (implemented)
-│   │   │   ├── BaseSourceNode.ts   # Abstract source base
-│   │   │   ├── FileSourceNode.ts   # Single image (RVFileSource)
-│   │   │   ├── VideoSourceNode.ts  # Video file (RVVideoSource)
+│   │   ├── base/                # Base node types
+│   │   │   ├── IPNode.ts        # Abstract base (inputs/outputs/properties)
+│   │   │   └── NodeFactory.ts   # Node registry + @RegisterNode decorator
+│   │   ├── sources/             # Source nodes
+│   │   │   ├── BaseSourceNode.ts    # Abstract source base
+│   │   │   ├── FileSourceNode.ts    # Single image (RVFileSource)
+│   │   │   ├── VideoSourceNode.ts   # Video file (RVVideoSource)
 │   │   │   ├── SequenceSourceNode.ts # Image sequence (RVSequenceSource)
-│   │   │   └── index.ts            # Registration + exports
-│   │   ├── groups/             # Group/container nodes (implemented)
-│   │   │   ├── BaseGroupNode.ts    # Abstract group base
-│   │   │   ├── SequenceGroupNode.ts # Play inputs in sequence
-│   │   │   ├── StackGroupNode.ts   # Stack/composite with wipes
-│   │   │   ├── SwitchGroupNode.ts  # A/B switching
-│   │   │   ├── LayoutGroupNode.ts  # Tile/grid layout
-│   │   │   ├── FolderGroupNode.ts  # Organizational container
-│   │   │   ├── RetimeGroupNode.ts  # Speed/time remapping
-│   │   │   └── index.ts            # Registration + exports
-│   │   ├── color/              # Color nodes (future)
-│   │   ├── transform/          # Transform nodes (future)
-│   │   ├── filter/             # Filter nodes (future)
-│   │   └── output/             # Output nodes (future)
-│   │
-│   ├── render/                  # WebGL rendering
-│   │   ├── Renderer.ts         # Main renderer
-│   │   ├── ShaderProgram.ts    # Shader management
-│   │   ├── TextureManager.ts   # Texture handling
-│   │   ├── RenderPass.ts       # Render passes
-│   │   └── shaders/            # GLSL shaders
-│   │       ├── color/
-│   │       ├── filter/
-│   │       ├── composite/
-│   │       └── util/
-│   │
-│   ├── ui/                      # User interface
-│   │   ├── components/         # UI components
-│   │   │   ├── Viewer.ts       # Main viewer
-│   │   │   ├── Timeline.ts     # Timeline UI
-│   │   │   ├── Toolbar.ts      # Toolbars
-│   │   │   ├── Inspector.ts    # Property inspector
-│   │   │   ├── PixelInfo.ts    # Pixel inspector
-│   │   │   ├── Wipe.ts         # Wipe controls
-│   │   │   ├── StereoControl.ts # Stereo 3D mode controls
-│   │   │   ├── ChannelSelect.ts # Channel isolation (R/G/B/A/Luma)
-│   │   │   ├── Histogram.ts    # Histogram display
-│   │   │   ├── Waveform.ts     # Waveform monitor
-│   │   │   ├── Vectorscope.ts  # Vectorscope display
-│   │   │   ├── CurvesControl.ts # Color curves editor
-│   │   │   ├── ViewerSplitScreen.ts # Split screen A/B comparison
-│   │   │   ├── ThumbnailManager.ts # Timeline thumbnail generation
-│   │   │   ├── GhostFrameControl.ts # Ghost frames / onion skin
-│   │   │   ├── SnapshotPanel.ts # Session snapshot management
-│   │   │   └── PlaylistPanel.ts # Multi-clip playlist UI
-│   │   ├── controls/           # Input handling
-│   │   │   ├── PanZoom.ts      # Pan/zoom control
-│   │   │   ├── Keyboard.ts     # Keyboard shortcuts
-│   │   │   └── Mouse.ts        # Mouse handling
-│   │   └── overlays/           # Overlay rendering
-│   │       ├── Annotations.ts  # Paint/annotations
-│   │       ├── Grid.ts         # Grid overlay
-│   │       └── SafeZones.ts    # Safe zone guides
+│   │   │   └── index.ts             # Registration + exports
+│   │   └── groups/              # Group/container nodes
+│   │       ├── BaseGroupNode.ts     # Abstract group base
+│   │       ├── SequenceGroupNode.ts # Play inputs in sequence
+│   │       ├── StackGroupNode.ts    # Stack/composite with wipes
+│   │       ├── SwitchGroupNode.ts   # A/B switching
+│   │       ├── LayoutGroupNode.ts   # Tile/grid layout
+│   │       ├── FolderGroupNode.ts   # Organizational container
+│   │       ├── RetimeGroupNode.ts   # Speed/time remapping
+│   │       └── index.ts             # Registration + exports
 │   │
 │   ├── paint/                   # Annotation system
-│   │   ├── PaintEngine.ts      # Paint operations
-│   │   ├── Brush.ts            # Brush types
-│   │   ├── Stroke.ts           # Stroke data
-│   │   └── PaintRenderer.ts    # Paint rendering
+│   │   ├── PaintEngine.ts       # Paint operations + stroke management
+│   │   ├── PaintRenderer.ts     # Paint rendering to canvas
+│   │   └── types.ts             # Paint type definitions
+│   │
+│   ├── render/                  # WebGL/WebGPU rendering
+│   │   ├── Renderer.ts          # Main WebGL2 renderer (shader pipeline)
+│   │   ├── RendererBackend.ts   # Renderer backend abstraction
+│   │   ├── ShaderProgram.ts     # WebGL shader compilation
+│   │   ├── TextureCacheManager.ts # Texture cache management
+│   │   ├── WebGPUBackend.ts     # WebGPU rendering backend
+│   │   └── createRenderer.ts    # Renderer factory
+│   │
+│   ├── scopes/                  # Video scopes (GPU-accelerated)
+│   │   └── WebGLScopes.ts       # WebGL histogram/waveform/vectorscope
 │   │
 │   ├── stereo/                  # Stereoscopic 3D viewing
-│   │   ├── StereoRenderer.ts   # Stereo mode rendering (8 modes)
-│   │   └── StereoRenderer.test.ts # Unit tests
+│   │   ├── StereoRenderer.ts    # Stereo mode rendering (8 modes)
+│   │   ├── StereoAlignOverlay.ts # Stereo alignment overlay
+│   │   └── StereoEyeTransform.ts # Per-eye transform controls
 │   │
-│   ├── audio/                   # Audio handling
-│   │   ├── AudioEngine.ts      # Web Audio API
-│   │   ├── AudioTrack.ts       # Track management
-│   │   └── Waveform.ts         # Waveform display
+│   ├── transform/               # Geometric transforms
+│   │   └── LensDistortion.ts    # Lens distortion correction
 │   │
-│   ├── formats/                 # File format support
-│   │   ├── ImageLoader.ts      # Generic loader
-│   │   ├── loaders/
-│   │   │   ├── PNGLoader.ts
-│   │   │   ├── JPEGLoader.ts
-│   │   │   ├── EXRLoader.ts    # Via exr.js
-│   │   │   └── WebPLoader.ts
-│   │   └── SequenceLoader.ts   # Sequence handling
+│   ├── ui/                      # User interface
+│   │   └── components/          # UI components
+│   │       ├── Viewer.ts            # Main WebGL canvas viewer
+│   │       ├── ViewerEffects.ts     # Viewer effects pipeline
+│   │       ├── ViewerExport.ts      # Viewer frame export
+│   │       ├── ViewerInteraction.ts # Viewer input handling (pan/zoom/mouse)
+│   │       ├── ViewerPrerender.ts   # Viewer frame pre-rendering
+│   │       ├── ViewerRenderingUtils.ts # Viewer rendering helpers
+│   │       ├── ViewerSplitScreen.ts # Split screen A/B comparison
+│   │       ├── ViewerWipe.ts        # Wipe comparison overlay
+│   │       ├── Timeline.ts          # Timeline UI with scrubbing
+│   │       ├── TimelineEditor.ts    # Timeline editing controls
+│   │       ├── ThumbnailManager.ts  # Timeline thumbnail generation
+│   │       ├── TimecodeDisplay.ts   # Timecode readout
+│   │       ├── TimecodeOverlay.ts   # Timecode burn-in overlay
+│   │       ├── Histogram.ts         # Histogram display
+│   │       ├── Waveform.ts          # Waveform monitor
+│   │       ├── Vectorscope.ts       # Color vectorscope
+│   │       ├── ScopesControl.ts     # Scopes panel control
+│   │       ├── ChannelSelect.ts     # Channel isolation (R/G/B/A/Luma)
+│   │       ├── ColorControls.ts     # Color adjustment panel
+│   │       ├── ColorInversionToggle.ts # Color inversion toggle
+│   │       ├── ColorWheels.ts       # Lift/gamma/gain color wheels
+│   │       ├── CurvesControl.ts     # Color curves editor
+│   │       ├── CurveEditor.ts       # Bezier curve editor widget
+│   │       ├── CDLControl.ts        # ASC CDL controls
+│   │       ├── CompareControl.ts    # A/B source comparison
+│   │       ├── WipeControl.ts       # Wipe mode controls
+│   │       ├── CropControl.ts       # Crop tool controls
+│   │       ├── TransformControl.ts  # Transform controls
+│   │       ├── FilterControl.ts     # Filter effects panel
+│   │       ├── NoiseReductionControl.ts # Noise reduction UI
+│   │       ├── LensControl.ts       # Lens distortion controls
+│   │       ├── ExportControl.ts     # Export settings panel
+│   │       ├── StereoControl.ts     # Stereo 3D mode controls
+│   │       ├── StereoAlignControl.ts # Stereo alignment controls
+│   │       ├── StereoEyeTransformControl.ts # Per-eye transform UI
+│   │       ├── StackControl.ts      # Stack/composite controls
+│   │       ├── VolumeControl.ts     # Audio volume control
+│   │       ├── ZoomControl.ts       # Zoom level control
+│   │       ├── PaintToolbar.ts      # Paint annotation toolbar
+│   │       ├── TextFormattingToolbar.ts # Text annotation formatting
+│   │       ├── GhostFrameControl.ts # Ghost frames / onion skin
+│   │       ├── SnapshotPanel.ts     # Session snapshot management
+│   │       ├── PlaylistPanel.ts     # Multi-clip playlist UI
+│   │       ├── HistoryPanel.ts      # Undo/redo history panel
+│   │       ├── InfoPanel.ts         # Image info panel
+│   │       ├── MarkerListPanel.ts   # Timeline marker list
+│   │       ├── NetworkControl.ts    # Network sync controls
+│   │       ├── OCIOControl.ts       # OCIO config controls
+│   │       ├── DisplayProfileControl.ts # Display profile selection
+│   │       ├── ToneMappingControl.ts # Tone mapping controls
+│   │       ├── LUTPipelinePanel.ts  # LUT pipeline panel
+│   │       ├── LUTStageControl.ts   # LUT stage controls
+│   │       ├── PARControl.ts        # Pixel aspect ratio control
+│   │       ├── ThemeControl.ts      # UI theme controls
+│   │       ├── BackgroundPatternControl.ts # Background pattern control
+│   │       ├── AutoSaveIndicator.ts # Auto-save status indicator
+│   │       ├── CacheIndicator.ts    # Cache status indicator
+│   │       ├── FalseColor.ts        # False color visualization
+│   │       ├── FalseColorControl.ts # False color controls
+│   │       ├── HSLQualifier.ts      # HSL qualifier keying
+│   │       ├── HSLQualifierControl.ts # HSL qualifier controls
+│   │       ├── LuminanceVisualization.ts # Luminance visualization
+│   │       ├── LuminanceVisualizationControl.ts # Luminance viz controls
+│   │       ├── ClippingOverlay.ts   # Highlight/shadow clipping overlay
+│   │       ├── SafeAreasOverlay.ts  # Safe area guides overlay
+│   │       ├── SafeAreasControl.ts  # Safe area controls
+│   │       ├── SpotlightOverlay.ts  # Spotlight/focus overlay
+│   │       ├── MatteOverlay.ts      # Matte overlay
+│   │       ├── DifferenceMatteControl.ts # Difference matte controls
+│   │       ├── MissingFrameOverlay.ts # Missing frame indicator
+│   │       ├── WatermarkOverlay.ts  # Watermark overlay
+│   │       ├── WatermarkControl.ts  # Watermark controls
+│   │       ├── ZebraStripes.ts      # Zebra stripe exposure overlay
+│   │       ├── ZebraControl.ts      # Zebra stripe controls
+│   │       ├── layout/              # Layout components
+│   │       │   ├── ContextToolbar.ts # Context-sensitive toolbar
+│   │       │   ├── HeaderBar.ts     # Application header bar
+│   │       │   └── TabBar.ts        # Tab bar navigation
+│   │       └── shared/              # Shared UI primitives
+│   │           ├── Button.ts        # Button component
+│   │           ├── DraggableContainer.ts # Draggable container
+│   │           ├── DropdownMenu.ts  # Dropdown menu
+│   │           ├── Icons.ts         # Icon definitions
+│   │           ├── Modal.ts         # Modal dialog
+│   │           ├── Panel.ts         # Collapsible panel
+│   │           └── theme.ts         # Theme constants
 │   │
 │   ├── utils/                   # Utilities
-│   │   ├── math/               # Math utilities
-│   │   │   ├── Matrix.ts
-│   │   │   ├── Vector.ts
-│   │   │   └── Color.ts
-│   │   ├── EventEmitter.ts     # Event system
-│   │   └── Cache.ts            # LRU cache
+│   │   ├── AnnotationJSONExporter.ts # Annotation JSON export
+│   │   ├── AnnotationPDFExporter.ts # Annotation PDF export
+│   │   ├── CodecUtils.ts        # Codec utility functions
+│   │   ├── CustomKeyBindingsManager.ts # Custom key binding management
+│   │   ├── EffectProcessor.ts   # CPU effect processing
+│   │   ├── effectProcessing.shared.ts # Shared effect processing logic
+│   │   ├── EventEmitter.ts      # Event emitter system
+│   │   ├── FrameExporter.ts     # Frame export utilities
+│   │   ├── FrameInterpolator.ts # Frame interpolation
+│   │   ├── FramePreloadManager.ts # Frame preload/cache management
+│   │   ├── FullscreenManager.ts # Fullscreen API manager
+│   │   ├── getCSSColor.ts       # CSS color utility
+│   │   ├── HiDPICanvas.ts       # HiDPI canvas scaling
+│   │   ├── HistoryManager.ts    # Undo/redo history manager
+│   │   ├── KeyBindings.ts       # Default key binding definitions
+│   │   ├── KeyboardManager.ts   # Keyboard input manager
+│   │   ├── MediabunnyFrameExtractor.ts # WebCodecs frame extraction (HDR)
+│   │   ├── PixelAspectRatio.ts  # Pixel aspect ratio utilities
+│   │   ├── PrerenderBufferManager.ts # Pre-render buffer management
+│   │   ├── PresentationMode.ts  # Presentation mode manager
+│   │   ├── SequenceExporter.ts  # Image sequence export
+│   │   ├── SequenceLoader.ts    # Image sequence loading
+│   │   ├── ThemeManager.ts      # UI theme manager
+│   │   ├── Timecode.ts          # Timecode conversion utilities
+│   │   └── WorkerPool.ts        # Web Worker pool manager
+│   │
+│   ├── workers/                 # Web Workers
+│   │   └── effectProcessor.worker.ts # Effect processing worker
 │   │
 │   ├── App.ts                   # Main application
-│   └── main.ts                  # Entry point
+│   ├── main.ts                  # Entry point
+│   ├── test-helper.ts           # Test utilities
+│   └── vite-env.d.ts            # Vite type declarations
 │
-├── public/
-│   └── index.html
 ├── package.json
 ├── tsconfig.json
-├── vite.config.ts
-└── PLAN.md
+└── vite.config.ts
 ```
 
 ### Component Mapping Table
@@ -306,18 +444,58 @@ openrv-web/
 |-----------------|-------------------|-------|
 | `IPNode` | `src/nodes/base/IPNode.ts` | Abstract base with inputs/outputs/properties |
 | `IPGraph` | `src/core/graph/Graph.ts` | DAG management, evaluation |
-| `IPImage` | `src/core/image/Image.ts` | Image data + metadata |
-| `ImageRenderer` | `src/render/Renderer.ts` | WebGL-based rendering |
+| `IPImage` | `src/core/image/Image.ts` | Image data + metadata, HDR VideoFrame support |
+| `ImageRenderer` | `src/render/Renderer.ts` | WebGL2 renderer with fragment shader pipeline |
+| `RendererBackend` | `src/render/RendererBackend.ts` | Renderer backend abstraction |
+| `WebGPURenderer` | `src/render/WebGPUBackend.ts` | WebGPU rendering backend |
 | `ShaderProgram` | `src/render/ShaderProgram.ts` | WebGL shader compilation |
+| `TextureCache` | `src/render/TextureCacheManager.ts` | Texture cache management |
 | `Session` | `src/core/session/Session.ts` | Session state management |
 | GTO I/O | `gto-js` library | Already implemented |
-| `FileSourceIPNode` | `src/nodes/source/FileSourceNode.ts` | Web image loading |
-| `ColorIPNode` | `src/nodes/color/ColorNode.ts` | Color operations |
-| `Transform2DIPNode` | `src/nodes/transform/Transform2DNode.ts` | 2D transforms |
+| `GTOGraphLoader` | `src/core/session/GTOGraphLoader.ts` | Node graph from GTO files |
+| `SessionGTOStore` | `src/core/session/SessionGTOStore.ts` | GTO property storage/retrieval |
+| `SessionGTOExporter` | `src/core/session/SessionGTOExporter.ts` | Export session to GTO format |
+| `SessionSerializer` | `src/core/session/SessionSerializer.ts` | .orvproject save/load |
+| `AutoSaveManager` | `src/core/session/AutoSaveManager.ts` | Auto-save to IndexedDB |
+| `FileSourceIPNode` | `src/nodes/sources/FileSourceNode.ts` | Web image loading (format detection) |
+| `VideoSourceIPNode` | `src/nodes/sources/VideoSourceNode.ts` | Video file source |
+| `SequenceSourceIPNode` | `src/nodes/sources/SequenceSourceNode.ts` | Image sequence source |
+| `SequenceGroupIPNode` | `src/nodes/groups/SequenceGroupNode.ts` | Play inputs in sequence |
+| `StackGroupIPNode` | `src/nodes/groups/StackGroupNode.ts` | Stack/composite with wipes |
+| `SwitchGroupIPNode` | `src/nodes/groups/SwitchGroupNode.ts` | A/B switching |
+| `LayoutGroupIPNode` | `src/nodes/groups/LayoutGroupNode.ts` | Tile/grid layout |
+| `RetimeGroupIPNode` | `src/nodes/groups/RetimeGroupNode.ts` | Speed/time remapping |
+| `ColorCDLIPNode` | `src/color/CDL.ts` | ASC CDL color correction |
+| `ColorCurveIPNode` | `src/color/ColorCurves.ts` | Curve-based adjustments |
+| `ColorLinearToSRGBIPNode` | `src/color/TransferFunctions.ts` | EOTF/OETF transfer functions |
+| `OCIONodes` | `src/color/OCIOProcessor.ts` + `OCIOConfig.ts` | OCIO color processing |
+| `LUT3D` | `src/color/WebGLLUT.ts` + `LUTLoader.ts` | GPU LUT processing |
+| `LUT Pipeline` | `src/color/pipeline/LUTPipeline.ts` | Multi-stage LUT pipeline |
+| `Transform2DIPNode` | `src/transform/LensDistortion.ts` | Lens distortion correction |
+| `FilterGaussianIPNode` | `src/filters/WebGLSharpen.ts` | GPU sharpening filter |
+| `NoiseReductionIPNode` | `src/filters/NoiseReduction.ts` | Noise reduction filter |
+| `OverlayIPNode` | `src/composite/BlendModes.ts` | Blend mode implementations |
 | `PaintIPNode` | `src/paint/PaintEngine.ts` | Canvas-based annotations |
+| `PaintRenderer` | `src/paint/PaintRenderer.ts` | Paint rendering to canvas |
 | `StereoIPNode` | `src/stereo/StereoRenderer.ts` | 8 stereo viewing modes |
+| `StereoAlign` | `src/stereo/StereoAlignOverlay.ts` | Stereo alignment overlay |
+| `StereoEyeTransform` | `src/stereo/StereoEyeTransform.ts` | Per-eye transform controls |
+| `WebGLScopes` | `src/scopes/WebGLScopes.ts` | GPU-accelerated video scopes |
+| Audio Playback | `src/audio/AudioPlaybackManager.ts` | Web Audio API playback |
+| Audio Waveform | `src/audio/WaveformRenderer.ts` | Audio waveform rendering |
+| IOexr | `src/formats/EXRDecoder.ts` | OpenEXR decoder |
+| IOdpx | `src/formats/DPXDecoder.ts` | DPX format decoder |
+| IOcineon | `src/formats/CineonDecoder.ts` | Cineon format decoder |
+| IOtiff | `src/formats/TIFFFloatDecoder.ts` | Float TIFF decoder |
+| JPEG Gainmap | `src/formats/JPEGGainmapDecoder.ts` | JPEG gainmap HDR decoder |
+| `DecoderRegistry` | `src/formats/DecoderRegistry.ts` | Format decoder registry |
 | Timeline UI | `src/ui/components/Timeline.ts` | Custom canvas timeline |
+| Timeline Editor | `src/ui/components/TimelineEditor.ts` | Timeline editing controls |
 | Viewer | `src/ui/components/Viewer.ts` | WebGL canvas viewer |
+| Viewer Interaction | `src/ui/components/ViewerInteraction.ts` | Pan/zoom/mouse handling |
+| Viewer Effects | `src/ui/components/ViewerEffects.ts` | Viewer effects pipeline |
+| Viewer Export | `src/ui/components/ViewerExport.ts` | Frame export from viewer |
+| Viewer Pre-render | `src/ui/components/ViewerPrerender.ts` | Frame pre-rendering |
 | Histogram | `src/ui/components/Histogram.ts` | Real-time histogram |
 | Waveform | `src/ui/components/Waveform.ts` | Waveform monitor |
 | Vectorscope | `src/ui/components/Vectorscope.ts` | Color vectorscope |
@@ -326,6 +504,13 @@ openrv-web/
 | Ghost Frames | `src/ui/components/GhostFrameControl.ts` | Onion skin overlay |
 | Snapshots | `src/core/session/SnapshotManager.ts` | Session version history |
 | Playlist | `src/core/session/PlaylistManager.ts` | Multi-clip sequencing |
+| Network Sync | `src/network/NetworkSyncManager.ts` | Multi-client sync |
+| WebSocket | `src/network/WebSocketClient.ts` | WebSocket connection |
+| API Facade | `src/api/OpenRVAPI.ts` | Public API entry point |
+| Keyboard Shortcuts | `src/utils/KeyboardManager.ts` + `KeyBindings.ts` | Keyboard input handling |
+| Frame Extraction | `src/utils/MediabunnyFrameExtractor.ts` | WebCodecs HDR frame extraction |
+| Worker Pool | `src/utils/WorkerPool.ts` | Web Worker parallelism |
+| Effect Worker | `src/workers/effectProcessor.worker.ts` | Off-thread effect processing |
 
 ### Shader Mapping
 

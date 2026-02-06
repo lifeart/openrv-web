@@ -36,9 +36,7 @@ OpenRV implements a chat-like network protocol over TCP/IP for remote collaborat
 - Generally unencrypted traffic (use SSH/VPN for security)
 
 ## Status
-- [x] Not implemented
-- [ ] Partially implemented
-- [ ] Fully implemented
+Status: Implemented (Infrastructure)
 
 ## Implementation Analysis
 

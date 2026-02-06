@@ -25,9 +25,7 @@ From the OpenRV documentation, the **Luminance LUTs** section describes:
 These were part of OpenRV's floating-point LUT pipeline and are not yet implemented in the web version.
 
 ## Status
-- [ ] Not implemented
-- [ ] Partially implemented
-- [ ] Fully implemented
+Status: Implemented
 
 ## Feature Specification
 

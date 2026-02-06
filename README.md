@@ -583,7 +583,7 @@ const rootNode = session.graphParseResult?.rootNode;
 # Type check
 pnpm typecheck
 
-# Run unit tests (5500+ tests)
+# Run unit tests (7600+ tests)
 pnpm test
 
 # Run e2e tests (requires dev server running)
@@ -599,7 +599,7 @@ pnpm preview
 
 ### Test Coverage
 
-The codebase includes comprehensive test coverage with **5500+ unit tests** across 140+ test files and **70+ e2e test suites**:
+The codebase includes comprehensive test coverage with **7600+ unit tests** across 184+ test files and **97 e2e test suites**:
 
 - **Color Tools**: ColorWheels (46 tests), FalseColor (30 tests), HSLQualifier (57 tests), Curves, CDL, LogCurves (27 tests)
 - **OCIO**: OCIOConfig, OCIOTransform, OCIOProcessor (color space transforms, config parsing)
@@ -617,7 +617,7 @@ The codebase includes comprehensive test coverage with **5500+ unit tests** acro
 - **Utilities**: HiDPICanvas (32 tests), EffectProcessor (51 tests), WorkerPool (28 tests), PrerenderBufferManager (36 tests), PixelAspectRatio (28 tests), FullscreenManager (13 tests), PresentationMode (20 tests), FrameInterpolator, CodecUtils, ViewerInteraction
 - **API**: OpenRVAPI (80+ tests covering all sub-modules: Playback, Media, Audio, Loop, View, Color, Markers, Events)
 
-**E2E Tests** (70+ test suites):
+**E2E Tests** (97 test suites):
 - **Core**: App initialization, tab navigation, media loading, playback controls, session recovery, page visibility handling
 - **Audio**: Volume control, mute/unmute, audio sync, error recovery, keyboard shortcuts (21 tests)
 - **View**: Grayscale toggle (Shift+L/Y), channel isolation, EXR layers, background patterns (14 tests), fullscreen/presentation

@@ -32,9 +32,7 @@ When OpenColorIO is active, the Pre-Cache and File LUT stages can be auto-popula
 **LUT File Formats Supported**: .cube (Adobe/Resolve), .csp (Rising Sun), .3dl (Lustre/Flame), RV 3D, RV Channel, IRIDAS, Shake formats.
 
 ## Status
-- [x] Not implemented
-- [ ] Partially implemented
-- [ ] Fully implemented
+Status: Partially Implemented
 
 ## Current Implementation Gap
 

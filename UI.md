@@ -1,27 +1,6 @@
-# OpenRV Web - UI Redesign Plan
+# OpenRV Web - UI Architecture & Style Guide
 
-## Current State Analysis
-
-### Problems Identified
-
-1. **Toolbar Overflow**: 12+ control groups in a single horizontal row
-2. **No Logical Grouping**: Related tools scattered across toolbar
-3. **Inconsistent Panel Behavior**: Each control opens its own dropdown panel
-4. **Visual Clutter**: Too many buttons competing for attention
-5. **Poor Discoverability**: Advanced features hidden behind individual buttons
-6. **Inefficient Workflow**: Frequent panel opening/closing disrupts work
-
-### Current Toolbar Order (Left to Right)
-```
-[Toolbar] [PaintToolbar] [ColorControls] [CDLControl] [FilterControl]
-[CropControl] [LensControl] [StackControl] [CompareControl] [TransformControl]
-[VolumeControl] [ExportControl]
-```
-*Note: WipeControl has been merged into CompareControl along with A/B comparison.*
-
----
-
-## Proposed UI Architecture
+## UI Architecture
 
 ### Design Principles
 - **Industry Standard**: Match DaVinci Resolve, Nuke, RV style
@@ -30,7 +9,7 @@
 - **Keyboard-First**: Power users rely on shortcuts
 - **Minimal Clicks**: Common actions always visible
 
-### New Layout Structure
+### Layout Structure
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -110,59 +89,6 @@
 - Ghost mode toggle
 
 ---
-
-## Implementation Plan
-
-### Phase 1: Header Bar Consolidation ✅
-- [x] Create `HeaderBar.ts` component
-- [x] Move file operations (Open, Export dropdown)
-- [x] Move playback controls
-- [x] Move volume control
-- [x] Move help button
-- [x] Style: 40px height, clean separation
-
-### Phase 2: Tab System ✅
-- [x] Create `TabBar.ts` component
-- [x] Create `ContextToolbar.ts` component
-- [x] Implement tab switching logic
-- [x] Store active tab in App state
-- [x] Style: 36px tabs, active indicator
-
-### Phase 3: View Tab ✅
-- [x] Move zoom controls to context toolbar
-- [x] Move wipe control
-- [x] Add stack button (opens side panel)
-- [x] Add resolution/fps display
-
-### Phase 4: Color Tab ✅
-- [x] Create inline exposure/contrast/saturation sliders
-- [x] Consolidate CDL and LUT as panel toggles
-- [x] Create "Advanced" panel for secondary adjustments
-- [x] Add reset and before/after buttons
-
-### Phase 5: Effects Tab ✅
-- [x] Move blur/sharpen to inline sliders
-- [x] Keep lens distortion as panel button
-- [x] Add global reset
-
-### Phase 6: Transform Tab ✅
-- [x] Redesign rotation buttons with degrees
-- [x] Improve flip button states
-- [x] Integrate crop control inline
-- [x] Add reset button
-
-### Phase 7: Annotate Tab ✅
-- [x] Reorganize paint toolbar layout
-- [x] Move ghost mode to context toolbar
-- [x] Improve color picker UX
-- [x] Add brush preview
-
-### Phase 8: Polish & Consistency ✅
-- [x] Unify all button styles
-- [x] Consistent panel shadows and borders
-- [x] Smooth tab transitions
-- [x] Keyboard navigation for tabs (1-5)
-- [x] Update all keyboard shortcuts help
 
 ---
 
@@ -449,80 +375,9 @@ this.keyboardManager.register(DEFAULT_KEY_BINDINGS['playback.toggle'], () => {
 
 ---
 
-## Progress Tracking
-
-### Phase 1: Header Bar ✅
-- [x] HeaderBar.ts component
-- [x] File operations group
-- [x] Playback controls group
-- [x] Utility controls group
-- [x] Integration with App.ts
-
-### Phase 2: Tab System ✅
-- [x] TabBar.ts component
-- [x] ContextToolbar.ts component
-- [x] Tab state management
-- [x] Tab switching animations
-
-### Phase 3: View Tab ✅
-- [x] ViewContextToolbar.ts
-- [x] Zoom controls
-- [x] Wipe controls
-- [x] Stack side panel trigger
-
-### Phase 4: Color Tab ✅
-- [x] ColorContextToolbar.ts
-- [x] Inline sliders
-- [x] Panel consolidation
-- [x] Before/After toggle
-
-### Phase 5: Effects Tab ✅
-- [x] EffectsContextToolbar.ts
-- [x] Inline filter sliders
-- [x] Lens panel button
-
-### Phase 6: Transform Tab ✅
-- [x] TransformContextToolbar.ts
-- [x] Rotation controls
-- [x] Flip controls
-- [x] Crop integration
-
-### Phase 7: Annotate Tab ✅
-- [x] AnnotateContextToolbar.ts
-- [x] Tool buttons
-- [x] Brush controls
-- [x] Action buttons
-
-### Phase 8: Polish ✅
-- [x] Keyboard nav (1-5 for tabs)
-- [x] Help updates
-- [x] Style unification (consistent button styles, dividers)
-- [x] Smooth tab transitions (CSS transitions)
-
-### Phase 9: Design Consistency Pass ✅
-- [x] SVG icon system replacing all emojis
-- [x] Flat design pattern for all buttons
-- [x] Container styling unification (no boxed appearances)
-- [x] Divider standardization (1-2 per section)
-
-### Phase 10: View Tab Space Optimization ✅
-- [x] Reduce dividers from 13 → 4 (logical group separators only)
-- [x] Reduce gaps from 8px → 6px across all toolbars
-- [x] Convert overlay toggles to icon-only buttons (Probe, Spotlight, Info)
-- [x] Add `createIconButton()` helper to ContextToolbar
-- [x] Update e2e tests for new dropdown patterns
-
----
-
 ## View Tab Space Optimization
 
-### Problem Statement
-
-The View tab had **26 elements** (13 controls + 13 dividers) requiring ~1,400px horizontal space, causing scroll on most laptop displays.
-
-### Solution: Logical Grouping with Minimal Dividers
-
-Reorganized controls into 5 logical groups with only 4 dividers between them:
+Controls organized into 5 logical groups with only 4 dividers between them:
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
@@ -638,7 +493,7 @@ effectsContent.style.cssText = 'display: flex; align-items: center; gap: 6px;';
 
 ---
 
-## File Structure (New)
+## File Structure
 
 ```
 src/ui/
@@ -648,23 +503,27 @@ src/ui/
 │   │   ├── TabBar.ts           # Tab navigation
 │   │   ├── ContextToolbar.ts   # Base context toolbar
 │   │   └── SidePanel.ts        # Slide-out panel container
+│   ├── shared/
+│   │   ├── Button.ts           # Unified button utilities
+│   │   ├── Modal.ts            # Native modal dialogs
+│   │   ├── Panel.ts            # Reusable dropdown panel
+│   │   ├── DropdownMenu.ts     # Dropdown menu with a11y
+│   │   ├── DraggableContainer.ts # Draggable scope/panel container
+│   │   └── Icons.ts            # SVG icon system
 │   ├── ZoomControl.ts          # Zoom level dropdown (View tab)
 │   ├── ChannelSelect.ts        # Channel isolation dropdown (View tab)
 │   ├── CompareControl.ts       # Wipe + A/B comparison dropdown (View tab)
 │   ├── ScopesControl.ts        # Histogram/Waveform/Vectorscope dropdown (View tab)
 │   ├── StereoControl.ts        # Stereo viewing mode dropdown (View tab)
 │   ├── StackControl.ts         # Layer stack panel button (View tab)
-│   ├── panels/
-│   │   ├── CDLPanel.ts         # CDL controls (refactored)
-│   │   ├── LUTPanel.ts         # LUT controls (extracted)
-│   │   ├── LensPanel.ts        # Lens controls (refactored)
-│   │   └── StackPanel.ts       # Stack/layers (refactored)
-│   ├── controls/
-│   │   ├── InlineSlider.ts     # Reusable inline slider
-│   │   ├── IconButton.ts       # Reusable icon button
-│   │   ├── DropdownMenu.ts     # Reusable dropdown
-│   │   └── ToggleGroup.ts      # Reusable toggle group
-│   └── ... (existing)
+│   ├── ColorControls.ts        # Exposure/contrast/saturation (Color tab)
+│   ├── CDLControl.ts           # ASC CDL panel (Color tab)
+│   ├── FilterControl.ts        # Blur/sharpen sliders (Effects tab)
+│   ├── LensControl.ts          # Lens distortion panel (Effects tab)
+│   ├── TransformControl.ts     # Rotation/flip (Transform tab)
+│   ├── CropControl.ts          # Crop tool (Transform tab)
+│   ├── PaintToolbar.ts         # Paint tools (Annotate tab)
+│   └── ... (70+ component files total)
 ```
 
 ---
@@ -1223,11 +1082,9 @@ The View tab uses a grouped layout pattern to reduce visual clutter and horizont
 
 ## Notes
 
-- Maintain backward compatibility during transition
-- Add migration path for keyboard shortcuts
-- Consider saving tab preference in localStorage
-- Performance: Only render active tab's context toolbar
-- Accessibility: Ensure all controls are keyboard navigable
+- Performance: Only the active tab's context toolbar is rendered
+- Accessibility: All controls are keyboard navigable
+- Tab preference is stored in app state
 
 ---
 

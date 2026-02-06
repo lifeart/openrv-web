@@ -159,175 +159,128 @@ Support for stereoscopic 3D content viewing with multiple display modes.
 
 ## Medium Priority - Professional Features
 
-### 8. Highlight / Shadow Adjustment
+### 8. Highlight / Shadow Adjustment ✅
 
-**OpenRV Reference:** `src/lib/ip/IPBaseNodes/ColorHighlightIPNode.cpp`, `ColorShadowIPNode.cpp`
+**Status:** COMPLETED
 
-**Description:**
-Separate controls for adjusting highlight and shadow regions independently.
+**Implementation:**
+- Highlight/shadow recovery sliders in Color tab
+- Whites/blacks clipping controls
+- Soft knee rolloff for smooth transitions
+- GPU-accelerated via EffectProcessor
 
-**Requirements:**
-- [ ] Highlight lift/gain controls
-- [ ] Shadow lift/gain controls
-- [ ] Adjustable threshold between shadows/midtones/highlights
-- [ ] Soft rolloff between regions
-
-**Files to modify:**
-- `src/ui/components/ColorControls.ts` - Add highlight/shadow sliders
-- `src/ui/components/Viewer.ts` - Implement in shader/canvas
+**Files:**
+- `src/utils/EffectProcessor.ts` - Highlight/shadow algorithms
+- `src/ui/components/ColorControls.ts` - Sliders
 
 ---
 
-### 9. Vibrance Control
+### 9. Vibrance Control ✅
 
-**OpenRV Reference:** `src/lib/ip/IPBaseNodes/ColorVibranceIPNode.cpp`
+**Status:** COMPLETED
 
-**Description:**
-Intelligent saturation that protects skin tones and already-saturated colors.
+**Implementation:**
+- Vibrance slider (-100 to +100)
+- Skin tone protection (hue 20-50° range)
+- Inversely proportional saturation boost
 
-**Requirements:**
-- [ ] Vibrance slider (-100 to +100)
-- [ ] Protect skin tones option
-- [ ] Different algorithm than basic saturation
-
-**Files to modify:**
-- `src/ui/components/ColorControls.ts` - Add vibrance slider
-- `src/ui/components/Viewer.ts` - Implement vibrance algorithm
+**Files:**
+- `src/utils/EffectProcessor.ts` - Vibrance algorithm
 
 ---
 
-### 10. Clarity / Local Contrast
+### 10. Clarity / Local Contrast ✅
 
-**OpenRV Reference:** `src/lib/ip/IPBaseNodes/ClarityIPNode.cpp`
+**Status:** COMPLETED
 
-**Description:**
-Midtone contrast enhancement that adds punch without affecting highlights/shadows.
+**Implementation:**
+- Clarity slider (-100 to +100)
+- High-pass filter blended with midtone mask
+- Adjustable effect scale
 
-**Requirements:**
-- [ ] Clarity slider (-100 to +100)
-- [ ] Implement as unsharp mask on midtones only
-- [ ] Adjustable radius
-
-**Files to modify:**
-- `src/ui/components/FilterControl.ts` - Add clarity slider
-- `src/ui/components/Viewer.ts` - Implement clarity filter
+**Files:**
+- `src/utils/EffectProcessor.ts` - Clarity filter
 
 ---
 
-### 11. Custom Mattes / Safe Areas
+### 11. Custom Mattes / Safe Areas ✅
 
-**OpenRV Reference:** `src/plugins/rv-packages/custom_mattes`
+**Status:** COMPLETED
 
-**Description:**
-Overlay guides showing safe areas, aspect ratio masks, and custom frame guides.
+**Implementation:**
+- Title safe (80%) and action safe (90%) overlays
+- Aspect ratio overlays (16:9, 2.39:1, 4:3, 1:1)
+- Center crosshair and rule of thirds grid
+- Keyboard shortcut: `;` to toggle
+- 46 unit tests in SafeAreasOverlay.test.ts
 
-**Requirements:**
-- [ ] Title safe (90%) and action safe (93%) overlays
-- [ ] Aspect ratio mattes: 16:9, 2.39:1, 1.85:1, 4:3, 1:1
-- [ ] Custom aspect ratio input
-- [ ] Adjustable matte opacity and color
-- [ ] Center crosshair option
-- [ ] Grid overlay option (rule of thirds, etc.)
-
-**Files to create:**
-- `src/ui/components/MatteOverlay.ts`
-- `src/ui/components/MatteControl.ts`
-
-**Files to modify:**
-- `src/ui/components/Viewer.ts` - Render matte overlays
+**Files:**
+- `src/ui/components/SafeAreasOverlay.ts`
+- `src/ui/components/SafeAreasControl.ts`
 
 ---
 
-### 12. Missing Frame Indicator
+### 12. Missing Frame Indicator ✅
 
-**OpenRV Reference:** `src/plugins/rv-packages/missing_frame_bling`, `collapse_missing_frames`
+**Status:** COMPLETED
 
-**Description:**
-Visual indication when frames are missing from a sequence, with options to skip or hold on missing frames.
+**Implementation:**
+- Gap detection in frame sequences
+- Visual overlay showing "MISSING FRAME" warning
+- Timeline indicators for missing frames
+- 16 unit tests in MissingFrameOverlay.test.ts
 
-**Requirements:**
-- [ ] Detect gaps in frame sequences
-- [ ] Visual indicator on timeline for missing frames
-- [ ] Viewer overlay showing "MISSING FRAME" warning
-- [ ] Option: hold previous frame vs show placeholder
-- [ ] Option: skip missing frames during playback
-- [ ] List missing frames in info panel
-
-**Files to modify:**
-- `src/ui/components/Timeline.ts` - Show missing frame markers
-- `src/ui/components/Viewer.ts` - Show missing frame overlay
-- `src/core/session/Session.ts` - Track missing frames
+**Files:**
+- `src/ui/components/MissingFrameOverlay.ts`
 - `src/utils/SequenceLoader.ts` - Detect missing frames
 
 ---
 
-### 13. Timeline Markers with Notes
+### 13. Timeline Markers with Notes ✅
 
-**OpenRV Reference:** Session marker system in `src/lib/app/RvSession/`
+**Status:** COMPLETED
 
-**Description:**
-Enhanced markers that support text notes, colors, and categories for review workflows.
+**Implementation:**
+- Markers with text notes and color coding
+- Duration markers spanning frame ranges
+- Marker management via API (add, remove, getAll, clear)
+- GTO round-trip preserves marker data
+- Markers panel with keyboard shortcut Shift+Alt+M
 
-**Requirements:**
-- [ ] Add note text to markers
-- [ ] Color-coded marker categories (note, issue, approved, etc.)
-- [ ] Marker list panel showing all markers
-- [ ] Jump to marker by clicking in list
-- [ ] Export markers to CSV/JSON
-- [ ] Import markers from CSV/JSON
-
-**Files to create:**
-- `src/ui/components/MarkerPanel.ts`
-
-**Files to modify:**
-- `src/core/session/Session.ts` - Extend marker data structure
-- `src/ui/components/Timeline.ts` - Render colored markers with tooltips
+**Files:**
+- `src/core/session/Session.ts` - Marker data structure
+- `src/ui/components/Timeline.ts` - Render colored markers
+- `src/api/MarkersAPI.ts` - Public API
 
 ---
 
-### 14. Frame Info Overlay (Data Display)
+### 14. Frame Info Overlay (Data Display) ✅
 
-**OpenRV Reference:** `src/plugins/rv-packages/data_display_indicators`
+**Status:** COMPLETED
 
-**Description:**
-On-screen display of frame metadata: frame number, timecode, filename, color space, etc.
+**Implementation:**
+- Floating info panel with filename, resolution, frame, FPS
+- Cursor color readout (RGB values under mouse)
+- Keyboard shortcut: Shift+Alt+I
 
-**Requirements:**
-- [ ] Toggleable info overlay on viewer
-- [ ] Show: frame number, timecode, filename, resolution, fps
-- [ ] Show: color space, bit depth (when available)
-- [ ] Customizable position (corners)
-- [ ] Customizable fields to display
-- [ ] Burn-in option for export
-
-**Files to create:**
-- `src/ui/components/InfoOverlay.ts`
-
-**Files to modify:**
-- `src/ui/components/Viewer.ts` - Render info overlay
+**Files:**
+- `src/ui/components/InfoPanel.ts`
 
 ---
 
-### 15. Pixel Probe / Color Picker
+### 15. Pixel Probe / Color Picker ✅
 
-**OpenRV Reference:** Color inspection tools in RV UI
+**Status:** COMPLETED
 
-**Description:**
-Click on image to see exact pixel values at that location.
+**Implementation:**
+- Click to sample pixel color (RGB, HSL, IRE)
+- Area averaging (1x1, 3x3, 5x5, 9x9)
+- Source vs rendered toggle
+- Lock functionality for persistent samples
+- 45+ unit tests in PixelProbe.test.ts
 
-**Requirements:**
-- [ ] Click to sample pixel color
-- [ ] Show RGB values (0-255 and 0.0-1.0)
-- [ ] Show HSL/HSV values
-- [ ] Show hex color code
-- [ ] Continuous probe mode (show values under cursor)
-- [ ] Copy color value to clipboard
-
-**Files to create:**
+**Files:**
 - `src/ui/components/PixelProbe.ts`
-
-**Files to modify:**
-- `src/ui/components/Viewer.ts` - Add probe mode and cursor tracking
 
 ---
 
@@ -355,168 +308,134 @@ Import OpenTimelineIO files for timeline interchange with editorial systems.
 
 ---
 
-### 17. EXR Support via WebAssembly
+### 17. EXR Support via WebAssembly ✅
 
-**OpenRV Reference:** Native OpenEXR support throughout
+**Status:** COMPLETED
 
-**Description:**
-Load OpenEXR files using WebAssembly-compiled OpenEXR library.
+**Implementation:**
+- WebAssembly EXR decoder with multi-layer support
+- Half-float and full-float data
+- HDR tone mapping (Reinhard, Filmic, ACES)
+- Layer/channel selection UI (ChannelSelect with AOV selection)
+- Channel remapping (custom channel-to-RGBA mapping)
 
-**Requirements:**
-- [ ] Compile OpenEXR to WASM or find existing port
-- [ ] Support multi-layer EXR
-- [ ] Support half-float and float data
-- [ ] HDR tone mapping for display
-- [ ] Layer/channel selection
-
-**Dependencies:**
-- [openexr-wasm](https://github.com/nicholasbishop/openexr-wasm) or similar
-
-**Files to create:**
-- `src/formats/EXRLoader.ts`
+**Files:**
+- `src/formats/EXRDecoder.ts`
+- `src/ui/components/ChannelSelect.ts`
 
 ---
 
-### 18. Grayscale Mode
+### 18. Grayscale Mode ✅
 
-**OpenRV Reference:** `src/lib/ip/IPBaseNodes/ColorGrayScaleIPNode.cpp`
+**Status:** COMPLETED
 
-**Description:**
-Quick toggle to view image in grayscale for luminance evaluation.
+**Implementation:**
+- Luminance channel in ChannelSelect (Shift+L / Shift+Y)
+- Rec.709 luminance weights
 
-**Requirements:**
-- [ ] Toggle button in View tab
-- [ ] Keyboard shortcut: `Shift+G`
-- [ ] Use Rec.709 luminance weights
-
-**Files to modify:**
-- `src/ui/components/Viewer.ts` - Add grayscale filter
-- `src/ui/components/layout/ContextToolbar.ts` - Add toggle button
+**Files:**
+- `src/ui/components/ChannelSelect.ts`
 
 ---
 
-### 19. Linear/Log Conversion
+### 19. Linear/Log Conversion ✅
 
-**OpenRV Reference:** `src/lib/ip/IPBaseNodes/LinearizeIPNode.cpp`, `LogLinIPNode.cpp`
+**Status:** COMPLETED
 
-**Description:**
-Convert between linear and logarithmic color spaces for proper viewing of log-encoded footage.
+**Implementation:**
+- Camera-specific log curve presets
+- Cineon Film Log (10-bit), ARRI LogC3/LogC4, Sony S-Log3, RED Log3G10
+- GLSL shader generation for GPU processing
+- 27 unit tests in LogCurves.test.ts
 
-**Requirements:**
-- [ ] Cineon/DPX log to linear
-- [ ] ARRI LogC to linear
-- [ ] Sony S-Log to linear
-- [ ] RED Log3G10 to linear
-- [ ] Custom log parameters
-
-**Files to create:**
-- `src/color/LogLinear.ts`
-- `src/ui/components/LogLinControl.ts`
+**Files:**
+- `src/color/LogCurves.ts`
 
 ---
 
-### 20. Primary Color Correction (Lift/Gamma/Gain)
+### 20. Primary Color Correction (Lift/Gamma/Gain) ✅
 
-**OpenRV Reference:** `src/lib/ip/IPBaseNodes/PrimaryConvertIPNode.cpp`
+**Status:** COMPLETED
 
-**Description:**
-Professional 3-way color correction with lift (shadows), gamma (midtones), and gain (highlights) for each RGB channel.
+**Implementation:**
+- Three circular wheel controls (120px) for Lift, Gamma, Gain
+- Master wheel for overall adjustments
+- Numeric input fields, reset buttons
+- Link/unlink for gang adjustments
+- Color preview ring, undo/redo support
+- 46 unit tests in ColorWheels.test.ts
 
-**Requirements:**
-- [ ] Color wheels UI for Lift, Gamma, Gain
-- [ ] Per-channel RGB controls
-- [ ] Master controls
-- [ ] Reset buttons per wheel
-- [ ] Link/unlink RGB channels
-
-**Files to create:**
-- `src/color/LiftGammaGain.ts`
+**Files:**
 - `src/ui/components/ColorWheels.ts`
 
 ---
 
-### 21. Noise Reduction
+### 21. Noise Reduction ✅
 
-**OpenRV Reference:** `src/lib/ip/IPBaseNodes/NoiseReductionIPNode.cpp`
+**Status:** COMPLETED
 
-**Description:**
-Basic noise reduction filter for cleaning up noisy footage.
+**Implementation:**
+- Edge-preserving bilateral filter
+- GPU-accelerated with WebGL2 (WebGLNoiseReduction)
+- CPU fallback (NoiseReduction)
+- Adjustable strength and radius (1-5)
+- 18 unit tests
 
-**Requirements:**
-- [ ] Spatial noise reduction (blur-based)
-- [ ] Luminance vs Chroma noise reduction
-- [ ] Strength control
-- [ ] Preserve detail option
-
-**Files to create:**
+**Files:**
 - `src/filters/NoiseReduction.ts`
-
-**Files to modify:**
-- `src/ui/components/FilterControl.ts` - Add noise reduction controls
+- `src/filters/WebGLNoiseReduction.ts`
 
 ---
 
-### 22. Overlay/Watermark
+### 22. Overlay/Watermark ✅
 
-**OpenRV Reference:** `src/lib/ip/IPBaseNodes/OverlayIPNode.cpp`
+**Status:** COMPLETED
 
-**Description:**
-Add image overlays like logos or watermarks to the viewer.
+**Implementation:**
+- Watermark overlay with 9 preset positions (3x3 grid)
+- Adjustable scale (10-200%), opacity, and margin
+- Supports PNG, JPEG, WebP, and SVG
+- Custom positioning
 
-**Requirements:**
-- [ ] Load PNG/SVG overlay
-- [ ] Position: corners, center, custom
-- [ ] Opacity control
-- [ ] Scale control
-- [ ] Burn-in option for export
-
-**Files to create:**
-- `src/ui/components/OverlayControl.ts`
-
-**Files to modify:**
-- `src/ui/components/Viewer.ts` - Render overlays
+**Files:**
+- `src/ui/components/WatermarkOverlay.ts`
+- `src/ui/components/WatermarkControl.ts`
 
 ---
 
-### 23. Compare Mode (Difference/Blend)
+### 23. Compare Mode (Difference/Blend) ✅
 
-**OpenRV Reference:** Stack composite modes
+**Status:** COMPLETED
 
-**Description:**
-Advanced comparison modes beyond wipe: difference, blend, overlay.
+**Implementation:**
+- Difference matte with gain and heatmap modes
+- Onion skin mode with adjustable opacity
+- Flicker mode (1-30 Hz configurable rate)
+- Blend mode with adjustable ratio
+- Split screen A/B comparison
+- CompareControl dropdown with 53 tests
 
-**Requirements:**
-- [ ] Difference mode (shows pixel differences)
-- [ ] Blend mode (50/50 mix)
-- [ ] Onion skin mode (semi-transparent overlay)
-- [ ] Flicker mode (alternate frames rapidly)
-
-**Files to modify:**
-- `src/ui/components/WipeControl.ts` - Extend to compare control
-- `src/composite/BlendModes.ts` - Add difference mode
+**Files:**
+- `src/ui/components/CompareControl.ts`
+- `src/ui/components/ViewerSplitScreen.ts`
 
 ---
 
-### 24. Flipbook Cache
+### 24. Flipbook Cache ✅
 
-**OpenRV Reference:** Frame caching system in `src/lib/ip/IPCore/`
+**Status:** COMPLETED
 
-**Description:**
-Pre-cache frames to RAM for smooth real-time playback.
+**Implementation:**
+- Frame cache with visual indicator on timeline
+- Cache ahead of playhead
+- Clear cache button
+- Memory usage display
+- Smart cache management with LRU eviction
+- PrerenderBufferManager for smooth playback
 
-**Requirements:**
-- [ ] Cache frames to memory (limited by available RAM)
-- [ ] Visual indicator of cached frames on timeline
-- [ ] Cache ahead of playhead
-- [ ] Clear cache button
-- [ ] Memory usage display
-
-**Files to create:**
-- `src/cache/FrameCache.ts`
-
-**Files to modify:**
-- `src/core/session/Session.ts` - Integrate cache
-- `src/ui/components/Timeline.ts` - Show cache status
+**Files:**
+- `src/utils/PrerenderBufferManager.ts`
+- `src/ui/components/Timeline.ts` - Cache status display
 
 ---
 
@@ -527,13 +446,13 @@ These features require native system access and cannot be implemented in a web b
 | Feature | OpenRV Reference | Reason |
 |---------|------------------|--------|
 | Hardware SDI Output | Blackmagic/AJA integration | Requires native drivers |
-| GPU LUT acceleration | CUDA/Metal compute | Limited WebGL compute |
-| DPX/Cineon native decode | Native codec | No browser support |
+| ~~GPU LUT acceleration~~ | ~~CUDA/Metal compute~~ | ✅ Done via WebGL2 3D textures |
+| ~~DPX/Cineon native decode~~ | ~~Native codec~~ | ✅ Done via JS decoder |
 | RAW camera formats | LibRaw, etc. | No browser decoder |
 | Maya/Nuke plugin | Application plugins | Desktop integration |
 | Multi-GPU rendering | Native GPU access | Browser sandbox |
-| System color management | OS color profiles | Limited browser access |
-| Network sync playback | Low-latency networking | WebSocket latency |
+| ~~System color management~~ | ~~OS color profiles~~ | ✅ Partial via OCIO integration |
+| ~~Network sync playback~~ | ~~Low-latency networking~~ | ✅ Done via WebSocket infrastructure |
 
 ---
 
@@ -551,26 +470,30 @@ These features require native system access and cannot be implemented in a web b
 
 ```
 src/
-├── ui/components/      # Scopes and controls implemented here
-│   ├── Histogram.ts    # ✅ Implemented
-│   ├── Waveform.ts     # ✅ Implemented
-│   ├── Vectorscope.ts  # ✅ Implemented
-│   ├── ChannelSelect.ts # ✅ Implemented
-│   ├── CurveEditor.ts  # ✅ Implemented - Interactive curve UI
-│   ├── CurvesControl.ts # ✅ Implemented - Curves panel wrapper
-│   └── StereoControl.ts # ✅ Implemented - Stereo mode UI
+├── ui/components/      # 146 component files - scopes, controls, overlays
+│   ├── Histogram.ts, Waveform.ts, Vectorscope.ts  # ✅ Scopes
+│   ├── ChannelSelect.ts, CurveEditor.ts           # ✅ Color tools
+│   ├── CompareControl.ts, ViewerSplitScreen.ts     # ✅ Comparison
+│   ├── SafeAreasOverlay.ts, PixelProbe.ts          # ✅ Analysis
+│   ├── ColorWheels.ts, HSLQualifierControl.ts      # ✅ Color grading
+│   ├── SnapshotPanel.ts, PlaylistPanel.ts          # ✅ Session management
+│   └── shared/         # Reusable: Button, Modal, Panel, DropdownMenu, Icons
 ├── color/              # Color processing
-│   └── ColorCurves.ts  # ✅ Implemented - Curve evaluation & LUT
-├── stereo/             # ✅ Stereo viewing modes
-│   ├── StereoRenderer.ts    # ✅ Implemented - All stereo modes
-│   └── StereoRenderer.test.ts # ✅ Implemented - Unit tests
-├── formats/            # NEW: Additional format loaders
-│   ├── OTIOLoader.ts
-│   └── EXRLoader.ts
-├── cache/              # NEW: Frame caching
-│   └── FrameCache.ts
-└── filters/            # NEW: Additional filters
-    └── NoiseReduction.ts
+│   ├── ColorCurves.ts, CDL.ts, LogCurves.ts        # ✅ Color tools
+│   ├── LUTLoader.ts, WebGLLUT.ts                   # ✅ LUT pipeline
+│   └── ocio/           # ✅ OCIO color management
+├── stereo/StereoRenderer.ts    # ✅ 8 stereo modes
+├── formats/            # Format decoders
+│   ├── EXRDecoder.ts   # ✅ WebAssembly EXR
+│   ├── DPXDecoder.ts   # ✅ DPX support
+│   └── index.ts        # Decoder registry
+├── filters/            # Image filters
+│   ├── NoiseReduction.ts       # ✅ CPU bilateral filter
+│   └── WebGLNoiseReduction.ts  # ✅ GPU bilateral filter
+├── api/                # ✅ Public scripting API (window.openrv)
+├── network/            # ✅ WebSocket sync infrastructure
+├── audio/              # ✅ Audio playback and waveform
+└── workers/            # ✅ Web Workers for background processing
 ```
 
 ### Testing Checklist
