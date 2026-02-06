@@ -61,17 +61,26 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
   - GLSL shader generation for GPU processing
 - **OCIO Color Management** - OpenColorIO-style color pipeline
   - Built-in config presets (ACES 1.2, sRGB)
+  - **Custom .ocio config file loading** - upload studio configs with drag-and-drop and validation feedback
   - Input color space selection with auto-detection from metadata
   - Working color space (ACEScg, Rec.709, Linear sRGB)
   - Display and view transforms (sRGB, Rec.709, DCI-P3)
   - Look transforms with forward/inverse direction
+  - **Reverse transforms** - bidirectional camera space conversions (sRGB ↔ ARRI LogC3/LogC4, Sony S-Log3, RED Log3G10, ACEScg)
   - Integration with existing LUT and log curve infrastructure
   - Toggle via Shift+O keyboard shortcut
 - **Tone Mapping for HDR** - operators for mapping HDR content to SDR displays
-  - Reinhard operator (preserves highlight detail)
-  - Filmic operator (S-curve with shoulder and toe)
+  - Reinhard operator with adjustable white point (0.5–10.0)
+  - Filmic operator with configurable exposure bias (0.5–8.0) and white point (2.0–20.0)
   - ACES filmic tone mapping
+  - Per-operator parameter sliders with real-time preview
   - Toggle via Shift+Alt+J keyboard shortcut
+- **Display Color Management** - monitor-accurate output transforms
+  - Transfer functions: Linear, sRGB, Rec.709, Gamma 2.2, Gamma 2.4, Custom Gamma
+  - Display gamma and brightness adjustments
+  - GPU-accelerated via fragment shader (no CPU round-trip)
+  - LocalStorage persistence for display profile settings
+  - Cycle profiles via Shift+D keyboard shortcut
 - **HDR & Wide Color Gamut Output** - progressive enhancement for HDR-capable displays
   - **Display P3 gamut** - automatic Wide Color Gamut output on supported displays (Chrome 104+, Safari 15.1+)
   - **HDR extended range** - HLG and PQ output modes for HDR displays (experimental, Chrome)
@@ -136,6 +145,10 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
   - **Area averaging** - configurable sample size (1x1, 3x3, 5x5, 9x9)
   - **Source vs Rendered toggle** - view pre- or post-color-pipeline values
   - **Alpha channel display** - shows alpha in both 0-255 and 0.0-1.0 formats
+  - **HDR out-of-range indicators** - color-coded values for >1.0 (red) and <0.0 (blue)
+  - **Nits readout** - HDR luminance in cd/m² (luminance × 203)
+  - **Color space info** - displays active color space from image metadata
+  - **Float precision toggle** - switch between 3 and 6 decimal places
 - **False Color Display** - exposure visualization with ARRI, RED, and custom presets
 - **Zebra Stripes** - animated diagonal stripes for exposure warnings
   - High zebras (>95% IRE) - right-leaning red stripes
@@ -182,6 +195,7 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
   - Drag-and-drop reordering
   - Loop modes: none, single clip, or all clips
   - EDL (Edit Decision List) export
+  - **OTIO (OpenTimelineIO) import** - parse editorial timelines with clips, gaps, and transitions
   - Total duration display
   - Web Worker-based parallel effect processing
   - Smart cache management with LRU eviction
@@ -244,10 +258,13 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 - Sequence export with progress
 - Copy to clipboard
 - Session save/load (.orvproject format)
-- **Annotation JSON Export** - standalone annotation metadata export
-  - Frame range filtering
-  - Statistics (pen strokes, text, shapes)
-  - Import/validation for round-trip
+- **Annotation JSON Export/Import** - standalone annotation metadata exchange
+  - Frame range filtering and statistics (pen strokes, text, shapes)
+  - Full round-trip: export → parse → import with validation
+  - Import modes: replace (clear existing) or merge (add to existing)
+  - Frame offset support for timeline alignment
+  - Automatic ID collision avoidance in merge mode
+  - Paint effects preservation (hold, ghost settings)
 - **Annotation PDF Export** - printable annotation reports
   - Frame thumbnails with timecodes
   - Annotation summary tables
@@ -387,6 +404,7 @@ pnpm dev
 | `U` | Toggle curves panel |
 | `Shift+O` | Toggle OCIO color management panel |
 | `Shift+Alt+J` | Toggle tone mapping |
+| `Shift+D` | Cycle display color profile |
 | `Shift+Alt+E` | Toggle effects/filter panel |
 | `Shift+K` | Toggle crop mode |
 | `Shift+H` | Toggle HSL Qualifier |
@@ -463,9 +481,10 @@ src/
 │   ├── image/          # IPImage data structure (with PAR metadata)
 │   └── session/        # Session management, GTO loading, serialization, auto-save
 │       ├── SnapshotManager.ts  # IndexedDB-based session snapshots
-│       └── PlaylistManager.ts  # Multi-clip playlist with EDL export
+│       └── PlaylistManager.ts  # Multi-clip playlist with EDL export & OTIO import
 ├── formats/
-│   └── EXRDecoder.ts   # WebAssembly EXR decoder with multi-layer support
+│   ├── EXRDecoder.ts   # WebAssembly EXR decoder with multi-layer support
+│   └── EXRPIZCodec.ts  # PIZ wavelet compression codec (Huffman + Haar + LUT)
 ├── nodes/
 │   ├── base/           # IPNode, NodeFactory with @RegisterNode decorator
 │   ├── sources/        # FileSourceNode, VideoSourceNode, SequenceSourceNode
@@ -483,9 +502,10 @@ src/
 │   │   ├── PlaylistPanel.ts            # Multi-clip playlist UI
 │   │   ├── ChannelSelect.ts            # Channel isolation with EXR layer selection
 │   │   ├── BackgroundPatternControl.ts # Viewer background patterns (checker, grey, etc.)
+│   │   ├── DisplayProfileControl.ts   # Display color management profile selector
 │   │   ├── PARControl.ts              # Pixel aspect ratio controls
 │   │   ├── CropControl.ts             # Crop and uncrop/canvas extension
-│   │   └── OCIOControl.ts             # OCIO color management UI
+│   │   └── OCIOControl.ts             # OCIO color management UI (incl. custom config upload)
 │   └── shared/         # Button, Modal, Panel utilities
 ├── paint/              # Annotation engine
 ├── audio/              # Audio playback and waveform rendering
@@ -494,7 +514,9 @@ src/
 ├── color/              # CDL, LUT loader (1D & 3D), WebGL LUT processor
 │   ├── LogCurves.ts    # Camera log curve presets (Cineon, LogC, S-Log3, etc.)
 │   ├── DisplayCapabilities.ts # HDR/P3/WebGPU display capability detection
+│   ├── DisplayTransfer.ts     # Display transfer functions (sRGB, Rec.709, gamma)
 │   ├── HDRPixelData.ts        # HDR-aware pixel value access wrapper
+│   ├── LUTPresets.ts          # Film emulation preset library (10 built-in looks)
 │   ├── SafeCanvasContext.ts   # Safe canvas context creation with P3/HDR fallback
 │   └── ocio/           # OCIO color management (config, transforms, processor)
 ├── filters/            # Image processing filters
@@ -514,8 +536,9 @@ src/
 │   ├── EffectProcessor.ts        # CPU effect processing (highlights, vibrance, clarity, etc.)
 │   ├── PrerenderBufferManager.ts # Prerender cache for smooth playback with effects
 │   ├── WorkerPool.ts             # Generic worker pool for parallel processing
-│   ├── AnnotationJSONExporter.ts # Export annotations as JSON
-│   └── AnnotationPDFExporter.ts  # Export annotations as PDF via browser print
+│   ├── AnnotationJSONExporter.ts # Export/import annotations as JSON (round-trip)
+│   ├── AnnotationPDFExporter.ts  # Export annotations as PDF via browser print
+│   └── OTIOParser.ts             # OpenTimelineIO import parser
 └── workers/            # Web Workers for background processing
     └── effectProcessor.worker.ts # Background effect processing
 ```
@@ -586,7 +609,7 @@ const rootNode = session.graphParseResult?.rootNode;
 # Type check
 pnpm typecheck
 
-# Run unit tests (7600+ tests)
+# Run unit tests (7700+ tests)
 pnpm test
 
 # Run e2e tests (requires dev server running)
@@ -602,42 +625,49 @@ pnpm preview
 
 ### Test Coverage
 
-The codebase includes comprehensive test coverage with **7600+ unit tests** across 184+ test files and **97 e2e test suites**:
+The codebase includes comprehensive test coverage with **7700+ unit tests** across 187 test files and **103 e2e test suites**:
 
-- **Color Tools**: ColorWheels (46 tests), FalseColor (30 tests), HSLQualifier (57 tests), Curves, CDL, LogCurves (27 tests)
-- **OCIO**: OCIOConfig, OCIOTransform, OCIOProcessor (color space transforms, config parsing)
-- **Tone Mapping**: Reinhard, Filmic, ACES operator tests
+- **Color Tools**: ColorWheels (46 tests), FalseColor (30 tests), HSLQualifier (57 tests), Curves, CDL, LogCurves (27 tests), DisplayTransfer, DisplayProfileControl
+- **OCIO**: OCIOConfig, OCIOTransform, OCIOProcessor (color space transforms, config parsing, reverse transforms)
+- **Tone Mapping**: Reinhard (white point), Filmic (exposure bias, white point), ACES operator tests
+- **LUT Presets**: Preset generation, identity verification, value ranges, category grouping (16 tests)
+- **EXR PIZ Codec**: Huffman decode, wavelet reconstruction, LUT inverse (39 tests)
 - **Analysis**: ZebraStripes (49 tests), PixelProbe (45+ tests), ClippingOverlay (48 tests), Waveform (50 tests), Histogram (45 tests), Vectorscope (49 tests)
 - **Overlays**: TimecodeOverlay (50 tests), SafeAreasOverlay (46 tests), SpotlightOverlay (62 tests)
 - **UI Components**: ThemeControl, HistoryPanel, InfoPanel, Modal, Button, CurveEditor (33 tests), AutoSaveIndicator (35 tests), TimelineEditor (25 tests), ThumbnailManager (12 tests), BackgroundPatternControl (32 tests), PARControl (13 tests)
 - **Core**: Session, Graph, GTO loading/export, SequenceLoader (88 tests), AutoSaveManager (28 tests), SessionSerializer (35 tests), SnapshotManager (16 tests), PlaylistManager (34 tests)
 - **Formats**: EXRDecoder (multi-layer, channel remapping), ChannelSelect (EXR layer UI)
 - **Render**: TextureCacheManager (22 tests)
-- **Export**: AnnotationJSONExporter (19 tests), AnnotationPDFExporter (21 tests)
+- **Export/Import**: AnnotationJSONExporter (33 tests incl. import), AnnotationPDFExporter (21 tests), OTIOParser (42 tests)
 - **Audio**: AudioPlaybackManager (36 tests), WaveformRenderer (35 tests)
 - **Filters**: NoiseReduction (18 tests), WebGLNoiseReduction
 - **Overlays**: MissingFrameOverlay (16 tests), WatermarkOverlay, WatermarkControl
 - **Utilities**: HiDPICanvas (32 tests), EffectProcessor (51 tests), WorkerPool (28 tests), PrerenderBufferManager (36 tests), PixelAspectRatio (28 tests), FullscreenManager (13 tests), PresentationMode (20 tests), FrameInterpolator, CodecUtils, ViewerInteraction
 - **API**: OpenRVAPI (80+ tests covering all sub-modules: Playback, Media, Audio, Loop, View, Color, Markers, Events)
 
-**E2E Tests** (97 test suites):
+**E2E Tests** (103 test suites):
 - **Core**: App initialization, tab navigation, media loading, playback controls, session recovery, page visibility handling
 - **Audio**: Volume control, mute/unmute, audio sync, error recovery, keyboard shortcuts (21 tests)
 - **View**: Grayscale toggle (Shift+L/Y), channel isolation, EXR layers, background patterns (14 tests), fullscreen/presentation
 - **GTO**: Round-trip verification (markers, frame ranges, matte, paint effects, metadata, custom nodes)
 - **Scopes**: Histogram, Waveform, Vectorscope, Parade scope
 - **Color**: Color controls, Curves, Vibrance, Highlight/Shadow recovery, Log curves, OCIO
-- **View**: Pixel probe, False color, Zebra stripes, Safe areas, Spotlight, Info panel, Pixel aspect ratio (11 tests)
+- **View**: Pixel probe (incl. HDR nits/precision), False color, Zebra stripes, Safe areas, Spotlight, Info panel, Pixel aspect ratio (11 tests)
 - **Comparison**: A/B compare, Wipe modes, Difference matte
 - **Compositing**: Stack Control - layer management, blend modes, opacity, visibility, reordering (44 tests)
 - **Transform**: Rotation, Flip, Crop, Uncrop (9 tests)
-- **Annotations**: Paint tools, Paint coordinates, Text formatting, JSON/PDF export
+- **Annotations**: Paint tools, Paint coordinates, Text formatting, JSON/PDF export, annotation import (18 tests)
 - **Export**: Frame export, Sequence export, Annotation export
 - **Timeline**: EDL editing, cut manipulation
 - **Auto-Save**: Indicator display, status changes, styling, animations (14 tests)
 - **Sequences**: Image sequence loading, pattern detection (11 tests)
 - **Codecs**: Unsupported codec detection and transcoding guidance
 - **Scripting API**: window.openrv API testing
+- **Tone Mapping**: Per-operator parameter controls, persistence, visual impact (30 tests)
+- **OTIO Import**: Parser validation, playlist integration, UI workflow (20 tests)
+- **LUT Presets & OCIO Config**: Preset browser, custom config loading (12 tests)
+- **HDR Pixel Probe**: Float precision, nits display, out-of-range detection (24 tests)
+- **Display & Float LUT**: GPU display profiles, float LUT shader, compound effects (21 tests)
 
 ### Hi-DPI Canvas Support
 
