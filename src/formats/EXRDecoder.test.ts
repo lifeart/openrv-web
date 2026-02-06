@@ -596,9 +596,18 @@ describe('EXRDecoder', () => {
   });
 
   describe('corner cases - unsupported compression', () => {
-    it('EXR-U090: should reject PIZ compression', async () => {
+    it('EXR-U090: should accept PIZ compression', async () => {
+      // PIZ compression is now supported. The test EXR has uncompressed data layout
+      // but PIZ header, so decompression may fail on the data content rather than
+      // rejecting the compression type. The key is it does NOT throw "Unsupported EXR compression".
       const buffer = createTestEXR({ compression: EXRCompression.PIZ });
-      await expect(decodeEXR(buffer)).rejects.toThrow(/Unsupported EXR compression.*PIZ/);
+      try {
+        await decodeEXR(buffer);
+      } catch (e: unknown) {
+        const msg = (e as Error).message;
+        // It should NOT reject PIZ as unsupported compression
+        expect(msg).not.toMatch(/Unsupported EXR compression.*PIZ/);
+      }
     });
 
     it('EXR-U091: should reject PXR24 compression', async () => {

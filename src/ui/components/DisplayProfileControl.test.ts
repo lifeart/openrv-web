@@ -1,16 +1,25 @@
 /**
  * DisplayProfileControl Unit Tests
+ *
+ * Tests for the display color management transfer function selector.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DisplayProfileControl } from './DisplayProfileControl';
-import { DEFAULT_DISPLAY_COLOR_STATE, DisplayColorState } from '../../color/DisplayTransfer';
+import {
+  DEFAULT_DISPLAY_COLOR_STATE,
+  PROFILE_CYCLE_ORDER,
+  isDisplayStateActive,
+} from '../../color/DisplayTransfer';
+import type { DisplayColorState } from '../../color/DisplayTransfer';
 
+// ---------------------------------------------------------------------------
 // Mock localStorage
+// ---------------------------------------------------------------------------
 const localStorageMock = (() => {
   let store: Record<string, string> = {};
   return {
-    getItem: vi.fn((key: string) => store[key] || null),
+    getItem: vi.fn((key: string) => store[key] ?? null),
     setItem: vi.fn((key: string, value: string) => {
       store[key] = value;
     }),
@@ -25,17 +34,11 @@ const localStorageMock = (() => {
 
 Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock });
 
-// Mock matchMedia for BrowserColorSpace detection
-Object.defineProperty(globalThis, 'matchMedia', {
-  value: vi.fn().mockImplementation(() => ({
-    matches: false,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-  })),
-});
-
+// ---------------------------------------------------------------------------
+// Test suite
+// ---------------------------------------------------------------------------
 describe('DisplayProfileControl', () => {
-  let component: DisplayProfileControl;
+  let control: DisplayProfileControl;
 
   beforeEach(() => {
     localStorageMock.clear();
@@ -43,309 +46,606 @@ describe('DisplayProfileControl', () => {
   });
 
   afterEach(() => {
-    if (component) {
-      component.dispose();
+    if (control) {
+      control.dispose();
     }
   });
 
-  // ==================================================================
-  // Initialization
-  // ==================================================================
-  describe('initialization', () => {
-    it('DPS-001: starts with default display state (sRGB, gamma 1.0, brightness 1.0)', () => {
-      component = new DisplayProfileControl();
-      const state = component.getState();
-      expect(state.transferFunction).toBe('srgb');
-      expect(state.displayGamma).toBe(1.0);
-      expect(state.displayBrightness).toBe(1.0);
+  // ========================================================================
+  // 1. Default state is sRGB
+  // ========================================================================
+  describe('default state', () => {
+    it('DPC-001: default transfer function is sRGB', () => {
+      control = new DisplayProfileControl();
+      expect(control.getState().transferFunction).toBe('srgb');
     });
 
-    it('DPS-002: render returns HTMLElement', () => {
-      component = new DisplayProfileControl();
-      const el = component.render();
-      expect(el).toBeInstanceOf(HTMLElement);
+    it('DPC-002: default display gamma is 1.0', () => {
+      control = new DisplayProfileControl();
+      expect(control.getState().displayGamma).toBe(1.0);
     });
 
-    it('DPS-003: render contains display profile button', () => {
-      component = new DisplayProfileControl();
-      const el = component.render();
-      const button = el.querySelector('[data-testid="display-profile-button"]');
-      expect(button).not.toBeNull();
+    it('DPC-003: default display brightness is 1.0', () => {
+      control = new DisplayProfileControl();
+      expect(control.getState().displayBrightness).toBe(1.0);
     });
 
-    it('DPS-004: button shows sRGB label by default', () => {
-      component = new DisplayProfileControl();
-      const el = component.render();
-      const button = el.querySelector('[data-testid="display-profile-button"]') as HTMLElement;
-      expect(button.textContent).toContain('sRGB');
+    it('DPC-004: default custom gamma is 2.2', () => {
+      control = new DisplayProfileControl();
+      expect(control.getState().customGamma).toBe(2.2);
+    });
+
+    it('DPC-005: default state matches DEFAULT_DISPLAY_COLOR_STATE', () => {
+      control = new DisplayProfileControl();
+      const state = control.getState();
+      expect(state.transferFunction).toBe(DEFAULT_DISPLAY_COLOR_STATE.transferFunction);
+      expect(state.displayGamma).toBe(DEFAULT_DISPLAY_COLOR_STATE.displayGamma);
+      expect(state.displayBrightness).toBe(DEFAULT_DISPLAY_COLOR_STATE.displayBrightness);
+      expect(state.customGamma).toBe(DEFAULT_DISPLAY_COLOR_STATE.customGamma);
+    });
+
+    it('DPC-006: render returns an HTMLElement', () => {
+      control = new DisplayProfileControl();
+      expect(control.render()).toBeInstanceOf(HTMLElement);
+    });
+
+    it('DPC-007: container has display-profile-control class', () => {
+      control = new DisplayProfileControl();
+      expect(control.render().className).toBe('display-profile-control');
+    });
+
+    it('DPC-008: toggle button exists in rendered element', () => {
+      control = new DisplayProfileControl();
+      const el = control.render();
+      const btn = el.querySelector('[data-testid="display-profile-button"]');
+      expect(btn).not.toBeNull();
+    });
+
+    it('DPC-009: dropdown is hidden by default', () => {
+      control = new DisplayProfileControl();
+      const el = control.render();
+      const dropdown = el.querySelector('[data-testid="display-profile-dropdown"]') as HTMLElement;
+      expect(dropdown.style.display).toBe('none');
     });
   });
 
-  // ==================================================================
-  // State Management
-  // ==================================================================
-  describe('state management', () => {
-    it('DPS-010: getState returns copy of display state', () => {
-      component = new DisplayProfileControl();
-      const a = component.getState();
-      const b = component.getState();
+  // ========================================================================
+  // 2. Transfer function selection updates state
+  // ========================================================================
+  describe('transfer function selection', () => {
+    it('DPC-010: setTransferFunction changes transfer function', () => {
+      control = new DisplayProfileControl();
+      control.setTransferFunction('rec709');
+      expect(control.getState().transferFunction).toBe('rec709');
+    });
+
+    it('DPC-011: setTransferFunction emits stateChanged', () => {
+      control = new DisplayProfileControl();
+      const handler = vi.fn();
+      control.on('stateChanged', handler);
+      control.setTransferFunction('linear');
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler.mock.calls[0][0].transferFunction).toBe('linear');
+    });
+
+    it('DPC-012: setTransferFunction with same value does not emit', () => {
+      control = new DisplayProfileControl();
+      const handler = vi.fn();
+      control.on('stateChanged', handler);
+      control.setTransferFunction('srgb'); // already sRGB
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('DPC-013: clicking profile button in dropdown updates state', () => {
+      control = new DisplayProfileControl();
+      const el = control.render();
+      const rec709Btn = el.querySelector('[data-testid="display-profile-rec709"]') as HTMLButtonElement;
+      rec709Btn.click();
+      expect(control.getState().transferFunction).toBe('rec709');
+    });
+
+    it('DPC-014: selected profile button has aria-checked true', () => {
+      control = new DisplayProfileControl();
+      const el = control.render();
+      const srgbBtn = el.querySelector('[data-testid="display-profile-srgb"]') as HTMLElement;
+      expect(srgbBtn.getAttribute('aria-checked')).toBe('true');
+    });
+
+    it('DPC-015: non-selected profile button has aria-checked false', () => {
+      control = new DisplayProfileControl();
+      const el = control.render();
+      const linearBtn = el.querySelector('[data-testid="display-profile-linear"]') as HTMLElement;
+      expect(linearBtn.getAttribute('aria-checked')).toBe('false');
+    });
+
+    it('DPC-016: aria-checked updates after changing transfer function', () => {
+      control = new DisplayProfileControl();
+      const el = control.render();
+      control.setTransferFunction('gamma2.2');
+      const gammaBtn = el.querySelector('[data-testid="display-profile-gamma2.2"]') as HTMLElement;
+      const srgbBtn = el.querySelector('[data-testid="display-profile-srgb"]') as HTMLElement;
+      expect(gammaBtn.getAttribute('aria-checked')).toBe('true');
+      expect(srgbBtn.getAttribute('aria-checked')).toBe('false');
+    });
+
+    it('DPC-017: setState updates transfer function', () => {
+      control = new DisplayProfileControl();
+      control.setState({ transferFunction: 'gamma2.4' });
+      expect(control.getState().transferFunction).toBe('gamma2.4');
+    });
+
+    it('DPC-018: setState updates display gamma', () => {
+      control = new DisplayProfileControl();
+      control.setState({ displayGamma: 2.0 });
+      expect(control.getState().displayGamma).toBe(2.0);
+    });
+
+    it('DPC-019: setState updates display brightness', () => {
+      control = new DisplayProfileControl();
+      control.setState({ displayBrightness: 0.5 });
+      expect(control.getState().displayBrightness).toBe(0.5);
+    });
+
+    it('DPC-020: setState with no changes does not emit', () => {
+      control = new DisplayProfileControl();
+      const handler = vi.fn();
+      control.on('stateChanged', handler);
+      control.setState({
+        transferFunction: 'srgb',
+        displayGamma: 1.0,
+        displayBrightness: 1.0,
+        customGamma: 2.2,
+      });
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('DPC-021: getState returns a copy, not the internal object', () => {
+      control = new DisplayProfileControl();
+      const a = control.getState();
+      const b = control.getState();
       expect(a).not.toBe(b);
       expect(a).toEqual(b);
     });
 
-    it('DPS-011: setState updates transfer function', () => {
-      component = new DisplayProfileControl();
-      component.setState({ transferFunction: 'rec709' });
-      expect(component.getState().transferFunction).toBe('rec709');
+    it('DPC-022: all six profile buttons are present', () => {
+      control = new DisplayProfileControl();
+      const el = control.render();
+      const buttons = el.querySelectorAll('button[data-profile]');
+      expect(buttons.length).toBe(6);
+    });
+  });
+
+  // ========================================================================
+  // 3. Keyboard cycling (Shift+D)
+  // ========================================================================
+  describe('keyboard cycling (Shift+D)', () => {
+    it('DPC-030: handleKeyboard with Shift+D returns true', () => {
+      control = new DisplayProfileControl();
+      const handled = control.handleKeyboard('D', true);
+      expect(handled).toBe(true);
     });
 
-    it('DPS-012: setState updates display gamma', () => {
-      component = new DisplayProfileControl();
-      component.setState({ displayGamma: 2.0 });
-      expect(component.getState().displayGamma).toBe(2.0);
+    it('DPC-031: handleKeyboard with Shift+d (lowercase) returns true', () => {
+      control = new DisplayProfileControl();
+      const handled = control.handleKeyboard('d', true);
+      expect(handled).toBe(true);
     });
 
-    it('DPS-013: setState updates display brightness', () => {
-      component = new DisplayProfileControl();
-      component.setState({ displayBrightness: 0.5 });
-      expect(component.getState().displayBrightness).toBe(0.5);
+    it('DPC-032: handleKeyboard without shift returns false', () => {
+      control = new DisplayProfileControl();
+      const handled = control.handleKeyboard('D', false);
+      expect(handled).toBe(false);
     });
 
-    it('DPS-014: setState emits displayStateChanged event', () => {
-      component = new DisplayProfileControl();
+    it('DPC-033: handleKeyboard with wrong key returns false', () => {
+      control = new DisplayProfileControl();
+      const handled = control.handleKeyboard('x', true);
+      expect(handled).toBe(false);
+    });
+
+    it('DPC-034: Shift+D cycles from sRGB to next profile', () => {
+      control = new DisplayProfileControl();
+      // sRGB is at index 1 in PROFILE_CYCLE_ORDER, next is rec709
+      control.handleKeyboard('D', true);
+      expect(control.getState().transferFunction).toBe('rec709');
+    });
+
+    it('DPC-035: Shift+D cycles through two profiles', () => {
+      control = new DisplayProfileControl();
+      control.handleKeyboard('D', true); // srgb -> rec709
+      control.handleKeyboard('D', true); // rec709 -> gamma2.2
+      expect(control.getState().transferFunction).toBe('gamma2.2');
+    });
+  });
+
+  // ========================================================================
+  // 4. Profile cycle order
+  // ========================================================================
+  describe('profile cycle order', () => {
+    it('DPC-040: cycleProfile advances through PROFILE_CYCLE_ORDER', () => {
+      control = new DisplayProfileControl();
+      const startIdx = PROFILE_CYCLE_ORDER.indexOf('srgb');
+      const expectedNext = PROFILE_CYCLE_ORDER[(startIdx + 1) % PROFILE_CYCLE_ORDER.length];
+      control.cycleProfile();
+      expect(control.getState().transferFunction).toBe(expectedNext);
+    });
+
+    it('DPC-041: cycling wraps from last to first', () => {
+      control = new DisplayProfileControl();
+      const lastProfile = PROFILE_CYCLE_ORDER[PROFILE_CYCLE_ORDER.length - 1]!;
+      control.setTransferFunction(lastProfile);
+      control.cycleProfile();
+      expect(control.getState().transferFunction).toBe(PROFILE_CYCLE_ORDER[0]);
+    });
+
+    it('DPC-042: full cycle returns all profiles in order', () => {
+      control = new DisplayProfileControl();
+      control.setTransferFunction(PROFILE_CYCLE_ORDER[0]!);
+      const visited: string[] = [control.getState().transferFunction];
+      for (let i = 0; i < PROFILE_CYCLE_ORDER.length; i++) {
+        control.cycleProfile();
+        visited.push(control.getState().transferFunction);
+      }
+      // After a full cycle, should be back to the start
+      expect(visited[0]).toBe(visited[visited.length - 1]);
+      // Intermediate values should match PROFILE_CYCLE_ORDER
+      for (let i = 0; i < PROFILE_CYCLE_ORDER.length; i++) {
+        expect(visited[i]).toBe(PROFILE_CYCLE_ORDER[i]);
+      }
+    });
+
+    it('DPC-043: custom is not in PROFILE_CYCLE_ORDER', () => {
+      expect(PROFILE_CYCLE_ORDER.includes('custom')).toBe(false);
+    });
+
+    it('DPC-044: cycleProfile from custom goes to linear (index 0 fallback)', () => {
+      control = new DisplayProfileControl();
+      control.setTransferFunction('custom');
+      // 'custom' is not in PROFILE_CYCLE_ORDER, indexOf returns -1
+      // (-1 + 1) % length = 0, so next is PROFILE_CYCLE_ORDER[0] = 'linear'
+      control.cycleProfile();
+      expect(control.getState().transferFunction).toBe(PROFILE_CYCLE_ORDER[0]);
+    });
+  });
+
+  // ========================================================================
+  // 5. Reset to defaults
+  // ========================================================================
+  describe('reset to defaults', () => {
+    it('DPC-050: resetToDefaults restores transfer function', () => {
+      control = new DisplayProfileControl();
+      control.setTransferFunction('rec709');
+      control.resetToDefaults();
+      expect(control.getState().transferFunction).toBe('srgb');
+    });
+
+    it('DPC-051: resetToDefaults restores display gamma', () => {
+      control = new DisplayProfileControl();
+      control.setState({ displayGamma: 2.5 });
+      control.resetToDefaults();
+      expect(control.getState().displayGamma).toBe(1.0);
+    });
+
+    it('DPC-052: resetToDefaults restores display brightness', () => {
+      control = new DisplayProfileControl();
+      control.setState({ displayBrightness: 0.3 });
+      control.resetToDefaults();
+      expect(control.getState().displayBrightness).toBe(1.0);
+    });
+
+    it('DPC-053: resetToDefaults restores custom gamma', () => {
+      control = new DisplayProfileControl();
+      control.setState({ customGamma: 5.0 });
+      control.resetToDefaults();
+      expect(control.getState().customGamma).toBe(2.2);
+    });
+
+    it('DPC-054: resetToDefaults emits stateChanged', () => {
+      control = new DisplayProfileControl();
+      control.setState({ transferFunction: 'linear' });
       const handler = vi.fn();
-      component.on('displayStateChanged', handler);
-      component.setState({ transferFunction: 'rec709' });
+      control.on('stateChanged', handler);
+      control.resetToDefaults();
       expect(handler).toHaveBeenCalledTimes(1);
-      expect(handler.mock.calls[0][0].transferFunction).toBe('rec709');
     });
 
-    it('DPS-015: setState emits copy of state', () => {
-      component = new DisplayProfileControl();
-      let emitted: DisplayColorState | null = null;
-      component.on('displayStateChanged', (s) => {
-        emitted = s;
-      });
-      component.setState({ transferFunction: 'rec709' });
-      expect(emitted).not.toBe(component.getState());
+    it('DPC-055: resetToDefaults emits default state values', () => {
+      control = new DisplayProfileControl();
+      control.setState({ transferFunction: 'rec709', displayGamma: 3.0 });
+      const handler = vi.fn();
+      control.on('stateChanged', handler);
+      control.resetToDefaults();
+      const emitted = handler.mock.calls[0][0] as DisplayColorState;
+      expect(emitted.transferFunction).toBe(DEFAULT_DISPLAY_COLOR_STATE.transferFunction);
+      expect(emitted.displayGamma).toBe(DEFAULT_DISPLAY_COLOR_STATE.displayGamma);
+      expect(emitted.displayBrightness).toBe(DEFAULT_DISPLAY_COLOR_STATE.displayBrightness);
+      expect(emitted.customGamma).toBe(DEFAULT_DISPLAY_COLOR_STATE.customGamma);
+    });
+
+    it('DPC-056: clicking Reset to Defaults button triggers reset', () => {
+      control = new DisplayProfileControl();
+      control.setTransferFunction('gamma2.4');
+      const el = control.render();
+      const resetBtn = el.querySelector('[data-testid="display-profile-reset"]') as HTMLButtonElement;
+      resetBtn.click();
+      expect(control.getState().transferFunction).toBe('srgb');
     });
   });
 
-  // ==================================================================
-  // Transfer Function / Gamma / Brightness
-  // ==================================================================
-  describe('setters', () => {
-    it('DPS-020: setTransferFunction changes only transfer function', () => {
-      component = new DisplayProfileControl();
-      component.setState({ displayGamma: 1.5, displayBrightness: 0.8 });
-      component.setTransferFunction('rec709');
-      const state = component.getState();
-      expect(state.transferFunction).toBe('rec709');
-      expect(state.displayGamma).toBe(1.5);
-      expect(state.displayBrightness).toBe(0.8);
-    });
-
-    it('DPS-021: setDisplayGamma clamps to [0.1, 4.0]', () => {
-      component = new DisplayProfileControl();
-      component.setDisplayGamma(0.01);
-      expect(component.getState().displayGamma).toBe(0.1);
-      component.setDisplayGamma(10);
-      expect(component.getState().displayGamma).toBe(4.0);
-    });
-
-    it('DPS-022: setDisplayBrightness clamps to [0.0, 2.0]', () => {
-      component = new DisplayProfileControl();
-      component.setDisplayBrightness(-1);
-      expect(component.getState().displayBrightness).toBe(0.0);
-      component.setDisplayBrightness(5);
-      expect(component.getState().displayBrightness).toBe(2.0);
-    });
-  });
-
-  // ==================================================================
-  // Reset
-  // ==================================================================
-  describe('reset', () => {
-    it('DPS-030: reset restores all values to defaults', () => {
-      component = new DisplayProfileControl();
-      component.setState({ transferFunction: 'rec709', displayGamma: 2.0, displayBrightness: 0.5 });
-      component.reset();
-      expect(component.getState()).toEqual(DEFAULT_DISPLAY_COLOR_STATE);
-    });
-
-    it('DPS-031: reset emits displayStateChanged with defaults', () => {
-      component = new DisplayProfileControl();
-      component.setState({ transferFunction: 'rec709' });
-      const handler = vi.fn();
-      component.on('displayStateChanged', handler);
-      component.reset();
-      expect(handler).toHaveBeenCalledTimes(1);
-      expect(handler.mock.calls[0][0]).toEqual(DEFAULT_DISPLAY_COLOR_STATE);
-    });
-  });
-
-  // ==================================================================
-  // Toggle / Show / Hide
-  // ==================================================================
-  describe('visibility', () => {
-    it('DPS-040: toggle shows panel when hidden', () => {
-      component = new DisplayProfileControl();
-      const handler = vi.fn();
-      component.on('visibilityChanged', handler);
-      component.toggle();
-      expect(handler).toHaveBeenCalledWith(true);
-    });
-
-    it('DPS-041: toggle hides panel when visible', () => {
-      component = new DisplayProfileControl();
-      component.show();
-      const handler = vi.fn();
-      component.on('visibilityChanged', handler);
-      component.toggle();
-      expect(handler).toHaveBeenCalledWith(false);
-    });
-
-    it('DPS-042: show emits visibilityChanged true', () => {
-      component = new DisplayProfileControl();
-      const handler = vi.fn();
-      component.on('visibilityChanged', handler);
-      component.show();
-      expect(handler).toHaveBeenCalledWith(true);
-    });
-
-    it('DPS-043: hide emits visibilityChanged false', () => {
-      component = new DisplayProfileControl();
-      component.show();
-      const handler = vi.fn();
-      component.on('visibilityChanged', handler);
-      component.hide();
-      expect(handler).toHaveBeenCalledWith(false);
-    });
-
-    it('DPS-044: show is idempotent', () => {
-      component = new DisplayProfileControl();
-      const handler = vi.fn();
-      component.on('visibilityChanged', handler);
-      component.show();
-      component.show(); // second call should not re-emit
-      expect(handler).toHaveBeenCalledTimes(1);
-    });
-
-    it('DPS-045: hide is idempotent', () => {
-      component = new DisplayProfileControl();
-      const handler = vi.fn();
-      component.on('visibilityChanged', handler);
-      component.hide(); // should not emit when already hidden
-      expect(handler).not.toHaveBeenCalled();
-    });
-  });
-
-  // ==================================================================
-  // Keyboard Shortcuts
-  // ==================================================================
-  describe('keyboard shortcuts', () => {
-    it('DPS-050: Shift+D cycles through profiles in order', () => {
-      component = new DisplayProfileControl();
-      // Default is sRGB (index 1 in cycle order)
-      const event1 = new KeyboardEvent('keydown', { key: 'D', shiftKey: true });
-      component.handleKeyDown(event1);
-      expect(component.getState().transferFunction).toBe('rec709');
-
-      const event2 = new KeyboardEvent('keydown', { key: 'D', shiftKey: true });
-      component.handleKeyDown(event2);
-      expect(component.getState().transferFunction).toBe('gamma2.2');
-    });
-
-    it('DPS-051: Shift+D wraps from last profile to first', () => {
-      component = new DisplayProfileControl();
-      component.setState({ transferFunction: 'gamma2.4' });
-      const event = new KeyboardEvent('keydown', { key: 'D', shiftKey: true });
-      component.handleKeyDown(event);
-      expect(component.getState().transferFunction).toBe('linear');
-    });
-
-    it('DPS-052: Shift+D does not fire when input is focused', () => {
-      component = new DisplayProfileControl();
-      const input = document.createElement('input');
-      document.body.appendChild(input);
-      input.focus();
-      const event = new KeyboardEvent('keydown', { key: 'D', shiftKey: true });
-      Object.defineProperty(event, 'target', { value: input });
-      component.handleKeyDown(event);
-      expect(component.getState().transferFunction).toBe('srgb'); // unchanged
-      document.body.removeChild(input);
-    });
-  });
-
-  // ==================================================================
-  // Persistence
-  // ==================================================================
-  describe('persistence', () => {
-    it('DPS-060: persists state to localStorage on change', () => {
-      component = new DisplayProfileControl();
-      component.setState({ transferFunction: 'rec709' });
+  // ========================================================================
+  // 6. State persistence (mock localStorage)
+  // ========================================================================
+  describe('state persistence', () => {
+    it('DPC-060: setState persists to localStorage', () => {
+      control = new DisplayProfileControl();
+      control.setState({ transferFunction: 'rec709' });
       expect(localStorageMock.setItem).toHaveBeenCalled();
-      const savedCall = localStorageMock.setItem.mock.calls.find(
+      const calls = localStorageMock.setItem.mock.calls;
+      const profileCall = calls.find(
         (call: [string, string]) => call[0] === 'openrv-display-profile',
       );
-      expect(savedCall).toBeDefined();
+      expect(profileCall).toBeDefined();
+      const stored = JSON.parse(profileCall![1]);
+      expect(stored.transferFunction).toBe('rec709');
     });
 
-    it('DPS-061: restores state from localStorage on init', () => {
-      const state = { ...DEFAULT_DISPLAY_COLOR_STATE, transferFunction: 'rec709' as const };
+    it('DPC-061: setTransferFunction persists to localStorage', () => {
+      control = new DisplayProfileControl();
+      control.setTransferFunction('linear');
+      const calls = localStorageMock.setItem.mock.calls;
+      const profileCall = calls.find(
+        (call: [string, string]) => call[0] === 'openrv-display-profile',
+      );
+      expect(profileCall).toBeDefined();
+      const stored = JSON.parse(profileCall![1]);
+      expect(stored.transferFunction).toBe('linear');
+    });
+
+    it('DPC-062: constructor loads persisted state from localStorage', () => {
+      const state: DisplayColorState = {
+        transferFunction: 'gamma2.2',
+        displayGamma: 1.5,
+        displayBrightness: 0.8,
+        customGamma: 3.0,
+      };
       localStorageMock.setItem('openrv-display-profile', JSON.stringify(state));
-      component = new DisplayProfileControl();
-      expect(component.getState().transferFunction).toBe('rec709');
+      // Clear mock call tracking so we only see new calls
+      vi.clearAllMocks();
+
+      control = new DisplayProfileControl();
+      expect(control.getState().transferFunction).toBe('gamma2.2');
+      expect(control.getState().displayGamma).toBe(1.5);
+      expect(control.getState().displayBrightness).toBe(0.8);
+      expect(control.getState().customGamma).toBe(3.0);
     });
 
-    it('DPS-062: handles missing localStorage gracefully', () => {
-      // No stored value - should default to sRGB
-      component = new DisplayProfileControl();
-      expect(component.getState().transferFunction).toBe('srgb');
+    it('DPC-063: missing localStorage defaults to sRGB', () => {
+      // Store is already cleared in beforeEach
+      control = new DisplayProfileControl();
+      expect(control.getState().transferFunction).toBe('srgb');
+    });
+
+    it('DPC-064: invalid localStorage data defaults to sRGB', () => {
+      localStorageMock.setItem('openrv-display-profile', 'not valid json!!!');
+      control = new DisplayProfileControl();
+      expect(control.getState().transferFunction).toBe('srgb');
+    });
+
+    it('DPC-065: resetToDefaults persists defaults to localStorage', () => {
+      control = new DisplayProfileControl();
+      control.setState({ transferFunction: 'linear' });
+      vi.clearAllMocks();
+      control.resetToDefaults();
+      expect(localStorageMock.setItem).toHaveBeenCalled();
+      const calls = localStorageMock.setItem.mock.calls;
+      const profileCall = calls.find(
+        (call: [string, string]) => call[0] === 'openrv-display-profile',
+      );
+      expect(profileCall).toBeDefined();
+      const stored = JSON.parse(profileCall![1]);
+      expect(stored.transferFunction).toBe('srgb');
     });
   });
 
-  // ==================================================================
-  // Button Highlighting
-  // ==================================================================
-  describe('button style', () => {
-    it('DPS-073: button uses default style when all values are default', () => {
-      component = new DisplayProfileControl();
-      const el = component.render();
+  // ========================================================================
+  // 7. isDisplayStateActive detection
+  // ========================================================================
+  describe('isDisplayStateActive detection', () => {
+    it('DPC-070: default sRGB state is not active', () => {
+      expect(isDisplayStateActive(DEFAULT_DISPLAY_COLOR_STATE)).toBe(false);
+    });
+
+    it('DPC-071: non-sRGB transfer function is active', () => {
+      expect(isDisplayStateActive({
+        ...DEFAULT_DISPLAY_COLOR_STATE,
+        transferFunction: 'linear',
+      })).toBe(true);
+    });
+
+    it('DPC-072: non-default gamma is active', () => {
+      expect(isDisplayStateActive({
+        ...DEFAULT_DISPLAY_COLOR_STATE,
+        displayGamma: 2.0,
+      })).toBe(true);
+    });
+
+    it('DPC-073: non-default brightness is active', () => {
+      expect(isDisplayStateActive({
+        ...DEFAULT_DISPLAY_COLOR_STATE,
+        displayBrightness: 0.5,
+      })).toBe(true);
+    });
+
+    it('DPC-074: button has transparent background when state is default', () => {
+      control = new DisplayProfileControl();
+      const el = control.render();
       const button = el.querySelector('[data-testid="display-profile-button"]') as HTMLElement;
-      // Default sRGB state = not active, should have transparent background
       expect(button.style.background).toBe('transparent');
     });
 
-    it('DPS-070: button highlights when non-default profile active', () => {
-      component = new DisplayProfileControl();
-      component.setState({ transferFunction: 'linear' });
-      const el = component.render();
+    it('DPC-075: button has accent styling when state is active (non-sRGB)', () => {
+      control = new DisplayProfileControl();
+      control.setTransferFunction('linear');
+      const el = control.render();
       const button = el.querySelector('[data-testid="display-profile-button"]') as HTMLElement;
-      expect(button.style.background).toContain('rgba');
+      expect(button.style.cssText).toContain('var(--accent-primary)');
+    });
+
+    it('DPC-076: button has accent styling when gamma is non-default', () => {
+      control = new DisplayProfileControl();
+      control.setState({ displayGamma: 2.0 });
+      const el = control.render();
+      const button = el.querySelector('[data-testid="display-profile-button"]') as HTMLElement;
+      expect(button.style.cssText).toContain('var(--accent-primary)');
+    });
+
+    it('DPC-077: button reverts to transparent after reset', () => {
+      control = new DisplayProfileControl();
+      control.setTransferFunction('rec709');
+      control.resetToDefaults();
+      const el = control.render();
+      const button = el.querySelector('[data-testid="display-profile-button"]') as HTMLElement;
+      expect(button.style.background).toBe('transparent');
     });
   });
 
-  // ==================================================================
-  // Dispose
-  // ==================================================================
-  describe('dispose', () => {
-    it('DPS-080: dispose removes event listeners', () => {
-      component = new DisplayProfileControl();
-      component.dispose();
-      // Should not throw when trying to emit after dispose
-      expect(() => {
-        component.on('displayStateChanged', () => {});
-      }).not.toThrow();
+  // ========================================================================
+  // 8. Custom gamma section visibility toggle
+  // ========================================================================
+  describe('custom gamma section visibility', () => {
+    it('DPC-080: custom gamma section is hidden by default (sRGB)', () => {
+      control = new DisplayProfileControl();
+      const el = control.render();
+      const section = el.querySelector('[data-testid="display-custom-gamma-section"]') as HTMLElement;
+      expect(section.style.display).toBe('none');
     });
 
-    it('DPS-081: dispose removes DOM panel from body', () => {
-      component = new DisplayProfileControl();
-      component.show(); // This appends panel to body
-      component.dispose();
-      // Panel should be removed
-      const panels = document.querySelectorAll('.display-profile-panel');
-      expect(panels.length).toBe(0);
+    it('DPC-081: custom gamma section is visible when custom is selected', () => {
+      control = new DisplayProfileControl();
+      control.setTransferFunction('custom');
+      const el = control.render();
+      const section = el.querySelector('[data-testid="display-custom-gamma-section"]') as HTMLElement;
+      expect(section.style.display).toBe('block');
+    });
+
+    it('DPC-082: custom gamma section hides when switching from custom to sRGB', () => {
+      control = new DisplayProfileControl();
+      control.setTransferFunction('custom');
+      control.setTransferFunction('srgb');
+      const el = control.render();
+      const section = el.querySelector('[data-testid="display-custom-gamma-section"]') as HTMLElement;
+      expect(section.style.display).toBe('none');
+    });
+
+    it('DPC-083: custom gamma section hides when switching to linear', () => {
+      control = new DisplayProfileControl();
+      control.setTransferFunction('custom');
+      control.setTransferFunction('linear');
+      const el = control.render();
+      const section = el.querySelector('[data-testid="display-custom-gamma-section"]') as HTMLElement;
+      expect(section.style.display).toBe('none');
+    });
+
+    it('DPC-084: custom gamma section hides after resetToDefaults', () => {
+      control = new DisplayProfileControl();
+      control.setTransferFunction('custom');
+      control.resetToDefaults();
+      const el = control.render();
+      const section = el.querySelector('[data-testid="display-custom-gamma-section"]') as HTMLElement;
+      expect(section.style.display).toBe('none');
+    });
+
+    it('DPC-085: setState with transferFunction custom shows custom gamma section', () => {
+      control = new DisplayProfileControl();
+      control.setState({ transferFunction: 'custom' });
+      const el = control.render();
+      const section = el.querySelector('[data-testid="display-custom-gamma-section"]') as HTMLElement;
+      expect(section.style.display).toBe('block');
+    });
+
+    it('DPC-086: custom gamma section hidden for gamma2.2', () => {
+      control = new DisplayProfileControl();
+      control.setTransferFunction('gamma2.2');
+      const el = control.render();
+      const section = el.querySelector('[data-testid="display-custom-gamma-section"]') as HTMLElement;
+      expect(section.style.display).toBe('none');
+    });
+
+    it('DPC-087: custom gamma section hidden for rec709', () => {
+      control = new DisplayProfileControl();
+      control.setTransferFunction('rec709');
+      const el = control.render();
+      const section = el.querySelector('[data-testid="display-custom-gamma-section"]') as HTMLElement;
+      expect(section.style.display).toBe('none');
+    });
+  });
+
+  // ========================================================================
+  // Additional: Dropdown behavior
+  // ========================================================================
+  describe('dropdown behavior', () => {
+    it('DPC-090: clicking toggle button opens dropdown', () => {
+      control = new DisplayProfileControl();
+      const el = control.render();
+      const button = el.querySelector('[data-testid="display-profile-button"]') as HTMLButtonElement;
+      const dropdown = el.querySelector('[data-testid="display-profile-dropdown"]') as HTMLElement;
+      button.click();
+      expect(dropdown.style.display).toBe('block');
+    });
+
+    it('DPC-091: clicking toggle button twice closes dropdown', () => {
+      control = new DisplayProfileControl();
+      const el = control.render();
+      const button = el.querySelector('[data-testid="display-profile-button"]') as HTMLButtonElement;
+      const dropdown = el.querySelector('[data-testid="display-profile-dropdown"]') as HTMLElement;
+      button.click();
+      button.click();
+      expect(dropdown.style.display).toBe('none');
+    });
+
+    it('DPC-092: aria-expanded updates when dropdown opens', () => {
+      control = new DisplayProfileControl();
+      const el = control.render();
+      const button = el.querySelector('[data-testid="display-profile-button"]') as HTMLButtonElement;
+      expect(button.getAttribute('aria-expanded')).toBe('false');
+      button.click();
+      expect(button.getAttribute('aria-expanded')).toBe('true');
+      button.click();
+      expect(button.getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('DPC-093: dropdown has role menu', () => {
+      control = new DisplayProfileControl();
+      const el = control.render();
+      const dropdown = el.querySelector('[data-testid="display-profile-dropdown"]') as HTMLElement;
+      expect(dropdown.getAttribute('role')).toBe('menu');
+    });
+
+    it('DPC-094: profile buttons have role menuitemradio', () => {
+      control = new DisplayProfileControl();
+      const el = control.render();
+      const profileBtns = el.querySelectorAll('button[data-profile]');
+      profileBtns.forEach((btn) => {
+        expect(btn.getAttribute('role')).toBe('menuitemradio');
+      });
+    });
+  });
+
+  // ========================================================================
+  // Additional: Dispose
+  // ========================================================================
+  describe('dispose', () => {
+    it('DPC-100: dispose can be called without error', () => {
+      control = new DisplayProfileControl();
+      expect(() => control.dispose()).not.toThrow();
+    });
+
+    it('DPC-101: dispose can be called multiple times', () => {
+      control = new DisplayProfileControl();
+      expect(() => {
+        control.dispose();
+        control.dispose();
+      }).not.toThrow();
     });
   });
 });

@@ -296,4 +296,10 @@ export class WebGPUBackend implements RendererBackend {
   setFalseColor(_enabled: boolean, _lut: Uint8Array | null): void { /* STUB */ }
   setZebraStripes(_state: ZebraState): void { /* STUB */ }
   setChannelMode(_mode: ChannelMode): void { /* STUB */ }
+
+  // --- 3D LUT (single-pass float precision pipeline) ---
+  setLUT(_lutData: Float32Array | null, _lutSize: number, _intensity: number): void { /* STUB */ }
+
+  // --- Display color management ---
+  setDisplayColorState(_state: { transferFunction: number; displayGamma: number; displayBrightness: number; customGamma: number }): void { /* STUB */ }
 }

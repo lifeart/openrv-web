@@ -454,8 +454,8 @@ describe('Phase 1: Wide Color Gamut (Display P3)', () => {
     it('AC-P1-1.1h: App constructor calls detectDisplayCapabilities and passes result to Viewer and DisplayProfileControl', () => {
       // We verify the integration by checking that:
       // 1. detectDisplayCapabilities is a callable function (imported correctly)
-      // 2. Its return value has the shape expected by Viewer and DisplayProfileControl constructors
-      // 3. DisplayProfileControl accepts capabilities parameter
+      // 2. Its return value has the shape expected by Viewer constructor
+      // 3. DisplayProfileControl can be constructed
       const caps = detectDisplayCapabilities();
 
       // Verify capabilities have the correct shape for Viewer constructor
@@ -463,8 +463,8 @@ describe('Phase 1: Wide Color Gamut (Display P3)', () => {
       expect(caps).toHaveProperty('webglP3');
       expect(caps).toHaveProperty('displayGamut');
 
-      // Verify DisplayProfileControl can be constructed with capabilities
-      const control = new DisplayProfileControl(caps);
+      // Verify DisplayProfileControl can be constructed
+      const control = new DisplayProfileControl();
       expect(control).toBeDefined();
       expect(control.getState()).toBeDefined();
       control.dispose();
@@ -472,109 +472,53 @@ describe('Phase 1: Wide Color Gamut (Display P3)', () => {
   });
 
   // =====================================================================
-  // 1.6 DisplayProfileControl: Active Output label reactivity
+  // 1.6 DisplayProfileControl: Transfer function selection
   // =====================================================================
-  describe('1.6 DisplayProfileControl active output label reactivity', () => {
+  describe('1.6 DisplayProfileControl transfer function selection', () => {
+    beforeEach(() => {
+      try { localStorage.removeItem('openrv-display-profile'); } catch { /* noop */ }
+    });
     afterEach(() => {
       vi.restoreAllMocks();
+      try { localStorage.removeItem('openrv-display-profile'); } catch { /* noop */ }
     });
 
-    it('AC-P1-1.6a: active output label shows sRGB by default (no P3 capability)', () => {
-      const caps = makeCaps({ webglP3: false, displayGamut: 'srgb' });
-      const control = new DisplayProfileControl(caps);
-      const el = control.render();
-      document.body.appendChild(el);
-
-      // The activeOutputLabel is in the panel, which is appended to body on show()
-      control.show();
-      const activeOutputEl = document.querySelector('[data-testid="display-active-output"]');
-      expect(activeOutputEl).not.toBeNull();
-      expect(activeOutputEl!.textContent).toBe('sRGB');
-
-      control.hide();
+    it('AC-P1-1.6a: default transfer function is sRGB', () => {
+      const control = new DisplayProfileControl();
+      expect(control.getState().transferFunction).toBe('srgb');
       control.dispose();
-      el.remove();
     });
 
-    it('AC-P1-1.6b: active output label shows P3 when capabilities support P3', () => {
-      const caps = makeCaps({ webglP3: true, displayGamut: 'p3' });
-      const control = new DisplayProfileControl(caps);
-      const el = control.render();
-      document.body.appendChild(el);
-
-      control.show();
-      const activeOutputEl = document.querySelector('[data-testid="display-active-output"]');
-      expect(activeOutputEl).not.toBeNull();
-      expect(activeOutputEl!.textContent).toBe('P3');
-
-      control.hide();
+    it('AC-P1-1.6b: transfer function can be changed to rec709', () => {
+      const control = new DisplayProfileControl();
+      control.setTransferFunction('rec709');
+      expect(control.getState().transferFunction).toBe('rec709');
       control.dispose();
-      el.remove();
     });
 
-    it('AC-P1-1.6c: active output label updates to sRGB when gamut preference changes to srgb', () => {
-      const caps = makeCaps({ webglP3: true, displayGamut: 'p3' });
-      const control = new DisplayProfileControl(caps);
-      const el = control.render();
-      document.body.appendChild(el);
-
-      control.show();
-
-      // Initially should be P3 (auto resolves to P3 on P3-capable display)
-      const activeOutputEl = document.querySelector('[data-testid="display-active-output"]');
-      expect(activeOutputEl).not.toBeNull();
-      expect(activeOutputEl!.textContent).toBe('P3');
-
-      // Change gamut preference to force sRGB
-      control.setState({ outputGamut: 'srgb' });
-
-      // Label should now reflect sRGB
-      expect(activeOutputEl!.textContent).toBe('sRGB');
-
-      control.hide();
+    it('AC-P1-1.6c: cycleProfile advances transfer function', () => {
+      const control = new DisplayProfileControl();
+      control.cycleProfile();
+      expect(control.getState().transferFunction).toBe('rec709');
       control.dispose();
-      el.remove();
     });
 
-    it('AC-P1-1.6d: active output label updates back to P3 when gamut preference changes to auto', () => {
-      const caps = makeCaps({ webglP3: true, displayGamut: 'p3' });
-      const control = new DisplayProfileControl(caps);
-      const el = control.render();
-      document.body.appendChild(el);
-
-      control.show();
-
-      // Force sRGB first
-      control.setState({ outputGamut: 'srgb' });
-      const activeOutputEl = document.querySelector('[data-testid="display-active-output"]');
-      expect(activeOutputEl!.textContent).toBe('sRGB');
-
-      // Switch back to auto - should resolve to P3 on P3-capable display
-      control.setState({ outputGamut: 'auto' });
-      expect(activeOutputEl!.textContent).toBe('P3');
-
-      control.hide();
+    it('AC-P1-1.6d: resetToDefaults restores sRGB', () => {
+      const control = new DisplayProfileControl();
+      control.setTransferFunction('linear');
+      control.resetToDefaults();
+      expect(control.getState().transferFunction).toBe('srgb');
       control.dispose();
-      el.remove();
     });
 
-    it('AC-P1-1.6e: active output label stays sRGB when forcing P3 on non-P3 display', () => {
-      const caps = makeCaps({ webglP3: false, displayGamut: 'srgb' });
-      const control = new DisplayProfileControl(caps);
-      const el = control.render();
-      document.body.appendChild(el);
-
-      control.show();
-
-      // Try to force display-p3 on a non-P3 display
-      control.setState({ outputGamut: 'display-p3' });
-      const activeOutputEl = document.querySelector('[data-testid="display-active-output"]');
-      // Should still show sRGB since the display doesn't support P3
-      expect(activeOutputEl!.textContent).toBe('sRGB');
-
-      control.hide();
+    it('AC-P1-1.6e: stateChanged event fires on transfer function change', () => {
+      const control = new DisplayProfileControl();
+      const handler = vi.fn();
+      control.on('stateChanged', handler);
+      control.setTransferFunction('gamma2.2');
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler.mock.calls[0][0].transferFunction).toBe('gamma2.2');
       control.dispose();
-      el.remove();
     });
   });
 

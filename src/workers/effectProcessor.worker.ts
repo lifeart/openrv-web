@@ -760,7 +760,11 @@ function processEffects(
   if (hasCDL) applyCDL(data, state.cdlValues);
   if (hasCurves) applyCurves(data, state.curvesData);
   if (hasHSLQualifier) applyHSLQualifier(data, state.hslQualifierState);
-  if (hasToneMapping) applyToneMappingToData(data, state.toneMappingState.operator);
+  if (hasToneMapping) applyToneMappingToData(data, state.toneMappingState.operator, {
+    reinhardWhitePoint: state.toneMappingState.reinhardWhitePoint,
+    filmicExposureBias: state.toneMappingState.filmicExposureBias,
+    filmicWhitePoint: state.toneMappingState.filmicWhitePoint,
+  });
   if (state.colorInversionEnabled) applyWorkerColorInversion(data);
   if (hasSharpen)
     applySharpen(data, width, height, state.filterSettings.sharpen / 100);

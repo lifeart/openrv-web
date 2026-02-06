@@ -16,6 +16,7 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
   - Multi-layer EXR with AOV (Arbitrary Output Variable) selection
   - Channel remapping (custom channel-to-RGBA mapping)
   - Layer selection UI for multi-layer files (diffuse, specular, normals, depth, etc.)
+  - **PIZ wavelet compression** support (most common VFX compression)
 - Video files (MP4, WebM)
   - **ProRes/DNxHD Codec Detection** - identifies unsupported professional codecs and provides FFmpeg transcoding guidance
 - Image sequences (numbered files like `frame_001.png`, `file.0001.exr`)
@@ -49,6 +50,8 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 - **LUT support** (.cube files) with GPU-accelerated processing
   - 3D LUTs for complex color transforms
   - 1D LUTs for simple curve-based corrections
+  - **Single-pass float LUT pipeline** - 3D LUT sampling in main fragment shader (no 8-bit bottleneck)
+  - **Film emulation presets** - 10 built-in looks (Warm Film, Cool Chrome, Bleach Bypass, Cross Process, Monochrome, Cinematic Teal & Orange, Vintage Fade, High/Low Contrast)
 - Color curves (Master/R/G/B channels) with presets and import/export
 - **Log Curve Presets** - camera-specific log-to-linear conversion
   - Cineon Film Log (10-bit)

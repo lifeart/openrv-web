@@ -359,8 +359,8 @@ export class App {
     });
 
     // Display profile control (display color management - final pipeline stage)
-    this.displayProfileControl = new DisplayProfileControl(this.displayCapabilities);
-    this.displayProfileControl.on('displayStateChanged', (state) => {
+    this.displayProfileControl = new DisplayProfileControl();
+    this.displayProfileControl.on('stateChanged', (state) => {
       this.viewer.setDisplayColorState(state);
       this.scheduleUpdateScopes();
     });

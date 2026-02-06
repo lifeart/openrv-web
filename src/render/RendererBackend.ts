@@ -144,4 +144,14 @@ export interface RendererBackend {
 
   /** Set channel isolation mode. */
   setChannelMode(mode: ChannelMode): void;
+
+  // --- 3D LUT (single-pass float precision pipeline) ---
+
+  /** Set 3D LUT for single-pass application in the main shader. Pass null to disable. */
+  setLUT(lutData: Float32Array | null, lutSize: number, intensity: number): void;
+
+  // --- Display color management ---
+
+  /** Set the display color management state (transfer function, gamma, brightness). */
+  setDisplayColorState(state: { transferFunction: number; displayGamma: number; displayBrightness: number; customGamma: number }): void;
 }

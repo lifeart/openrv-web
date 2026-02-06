@@ -22,6 +22,10 @@ export type ToneMappingOperator = 'off' | 'reinhard' | 'filmic' | 'aces';
 export interface ToneMappingState {
   enabled: boolean;
   operator: ToneMappingOperator;
+  // Per-operator parameters
+  reinhardWhitePoint?: number;    // 0.5 - 10.0, default 4.0
+  filmicExposureBias?: number;    // 0.5 - 8.0, default 2.0
+  filmicWhitePoint?: number;      // 2.0 - 20.0, default 11.2
 }
 
 /**
@@ -30,6 +34,9 @@ export interface ToneMappingState {
 export const DEFAULT_TONE_MAPPING_STATE: ToneMappingState = {
   enabled: false,
   operator: 'off',
+  reinhardWhitePoint: 4.0,
+  filmicExposureBias: 2.0,
+  filmicWhitePoint: 11.2,
 };
 
 /**
@@ -75,6 +82,9 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
   private operatorButtons: Map<ToneMappingOperator, HTMLButtonElement> = new Map();
   private boundHandleReposition: () => void;
   private state: ToneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
+
+  // Per-operator parameter section
+  private parameterSection: HTMLElement | null = null;
 
   // HDR output mode
   private capabilities: DisplayCapabilities | undefined;
@@ -276,6 +286,11 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
     operatorSection.appendChild(operatorList);
     this.dropdown.appendChild(operatorSection);
 
+    // Per-operator parameter sliders
+    this.parameterSection = this.createParameterSection();
+    this.dropdown.appendChild(this.parameterSection);
+    this.updateParameterVisibility();
+
     // HDR Output section (only shown when HDR is available)
     this.createHDRSection();
 
@@ -378,6 +393,149 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
     this.hdrSection.appendChild(hdrList);
     this.dropdown.appendChild(this.hdrSection);
     this.updateHDRModeButtons();
+  }
+
+  private createParameterSection(): HTMLElement {
+    const container = document.createElement('div');
+    container.dataset.testid = 'tone-mapping-params';
+    container.style.cssText = `
+      margin-bottom: 10px;
+      border-top: 1px solid var(--border-secondary);
+      padding-top: 8px;
+    `;
+
+    return container;
+  }
+
+  private createSlider(
+    label: string,
+    min: number,
+    max: number,
+    step: number,
+    value: number,
+    onChange: (value: number) => void
+  ): HTMLElement {
+    const row = document.createElement('div');
+    row.style.cssText = `
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      margin-bottom: 6px;
+    `;
+
+    const labelRow = document.createElement('div');
+    labelRow.style.cssText = `
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    `;
+
+    const labelSpan = document.createElement('span');
+    labelSpan.textContent = label;
+    labelSpan.style.cssText = 'color: var(--text-primary); font-size: 10px;';
+
+    const valueSpan = document.createElement('span');
+    valueSpan.textContent = value.toFixed(1);
+    valueSpan.style.cssText = 'color: var(--text-secondary); font-size: 10px;';
+
+    labelRow.appendChild(labelSpan);
+    labelRow.appendChild(valueSpan);
+
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = String(min);
+    slider.max = String(max);
+    slider.step = String(step);
+    slider.value = String(value);
+    slider.style.cssText = `
+      width: 100%;
+      cursor: pointer;
+      height: 4px;
+    `;
+
+    slider.addEventListener('input', () => {
+      const newValue = parseFloat(slider.value);
+      valueSpan.textContent = newValue.toFixed(1);
+      onChange(newValue);
+    });
+
+    row.appendChild(labelRow);
+    row.appendChild(slider);
+
+    return row;
+  }
+
+  private updateParameterVisibility(): void {
+    if (!this.parameterSection) return;
+
+    // Clear existing content
+    this.parameterSection.innerHTML = '';
+
+    const op = this.state.operator;
+
+    if (op === 'reinhard') {
+      this.parameterSection.style.display = 'block';
+
+      const paramLabel = document.createElement('div');
+      paramLabel.textContent = 'Reinhard Parameters';
+      paramLabel.style.cssText = `
+        color: var(--text-secondary);
+        font-size: 10px;
+        text-transform: uppercase;
+        margin-bottom: 6px;
+      `;
+      this.parameterSection.appendChild(paramLabel);
+
+      const whitePointSlider = this.createSlider(
+        'White Point',
+        0.5, 10.0, 0.1,
+        this.state.reinhardWhitePoint ?? 4.0,
+        (value) => {
+          this.state.reinhardWhitePoint = value;
+          this.emit('stateChanged', { ...this.state });
+        }
+      );
+      this.parameterSection.appendChild(whitePointSlider);
+
+    } else if (op === 'filmic') {
+      this.parameterSection.style.display = 'block';
+
+      const paramLabel = document.createElement('div');
+      paramLabel.textContent = 'Filmic Parameters';
+      paramLabel.style.cssText = `
+        color: var(--text-secondary);
+        font-size: 10px;
+        text-transform: uppercase;
+        margin-bottom: 6px;
+      `;
+      this.parameterSection.appendChild(paramLabel);
+
+      const exposureBiasSlider = this.createSlider(
+        'Exposure Bias',
+        0.5, 8.0, 0.1,
+        this.state.filmicExposureBias ?? 2.0,
+        (value) => {
+          this.state.filmicExposureBias = value;
+          this.emit('stateChanged', { ...this.state });
+        }
+      );
+      this.parameterSection.appendChild(exposureBiasSlider);
+
+      const whitePointSlider = this.createSlider(
+        'White Point',
+        2.0, 20.0, 0.1,
+        this.state.filmicWhitePoint ?? 11.2,
+        (value) => {
+          this.state.filmicWhitePoint = value;
+          this.emit('stateChanged', { ...this.state });
+        }
+      );
+      this.parameterSection.appendChild(whitePointSlider);
+
+    } else {
+      // 'aces' or 'off': hide the section
+      this.parameterSection.style.display = 'none';
+    }
   }
 
   private updateHDRModeButtons(): void {
@@ -525,6 +683,7 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
     }
     this.updateOperatorButtons();
     this.updateButtonState();
+    this.updateParameterVisibility();
     this.emit('stateChanged', { ...this.state });
   }
 
@@ -555,10 +714,23 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
       this.state.operator = state.operator;
       changed = true;
     }
+    if (state.reinhardWhitePoint !== undefined && state.reinhardWhitePoint !== this.state.reinhardWhitePoint) {
+      this.state.reinhardWhitePoint = state.reinhardWhitePoint;
+      changed = true;
+    }
+    if (state.filmicExposureBias !== undefined && state.filmicExposureBias !== this.state.filmicExposureBias) {
+      this.state.filmicExposureBias = state.filmicExposureBias;
+      changed = true;
+    }
+    if (state.filmicWhitePoint !== undefined && state.filmicWhitePoint !== this.state.filmicWhitePoint) {
+      this.state.filmicWhitePoint = state.filmicWhitePoint;
+      changed = true;
+    }
     if (changed) {
       this.updateButtonState();
       this.updateOperatorButtons();
       this.updateEnableCheckbox();
+      this.updateParameterVisibility();
       this.emit('stateChanged', { ...this.state });
     }
   }

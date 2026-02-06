@@ -101,6 +101,7 @@ describe('PixelProbe', () => {
         format: 'rgb',
         sampleSize: 1,
         sourceMode: 'rendered',
+        floatPrecision: 3,
       });
     });
 

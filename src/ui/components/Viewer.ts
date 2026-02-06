@@ -40,7 +40,7 @@ import { PrerenderBufferManager } from '../../utils/PrerenderBufferManager';
 import { getThemeManager } from '../../utils/ThemeManager';
 import { setupHiDPICanvas, resetCanvasFromHiDPI } from '../../utils/HiDPICanvas';
 import { getSharedOCIOProcessor } from '../../color/OCIOProcessor';
-import { DisplayColorState, DEFAULT_DISPLAY_COLOR_STATE, applyDisplayColorManagementToImageData, isDisplayStateActive } from '../../color/DisplayTransfer';
+import { DisplayColorState, DEFAULT_DISPLAY_COLOR_STATE, DISPLAY_TRANSFER_CODES, applyDisplayColorManagementToImageData, isDisplayStateActive } from '../../color/DisplayTransfer';
 import type { DisplayCapabilities } from '../../color/DisplayCapabilities';
 import { safeCanvasContext2D } from '../../color/SafeCanvasContext';
 import { Renderer } from '../../render/Renderer';
@@ -1662,6 +1662,19 @@ export class Viewer {
     renderer.setFalseColor(this.falseColor.isEnabled(), this.falseColor.getColorLUT());
     renderer.setZebraStripes(this.zebraStripes.getState());
     renderer.setChannelMode(this.channelMode);
+    renderer.setDisplayColorState({
+      transferFunction: DISPLAY_TRANSFER_CODES[this.displayColorState.transferFunction],
+      displayGamma: this.displayColorState.displayGamma,
+      displayBrightness: this.displayColorState.displayBrightness,
+      customGamma: this.displayColorState.customGamma,
+    });
+
+    // Sync single-pass 3D LUT into GPU shader
+    if (this.currentLUT && this.lutIntensity > 0) {
+      renderer.setLUT(this.currentLUT.data, this.currentLUT.size, this.lutIntensity);
+    } else {
+      renderer.setLUT(null, 0, 0);
+    }
 
     // Render
     renderer.clear(0, 0, 0, 1);
