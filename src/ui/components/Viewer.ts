@@ -2308,13 +2308,48 @@ export class Viewer {
       // so we don't duplicate it here. Only queuePriorityFrame() is called on cache miss.
       const cached = this.prerenderBuffer.getFrame(currentFrame);
       if (cached) {
+        // Clear canvas before drawing cached frame (prevents stale pixels at edges)
+        this.imageCtx.clearRect(0, 0, displayWidth, displayHeight);
+
+        // Draw background pattern (shows through transparent/alpha areas)
+        if (this.backgroundPatternState.pattern !== 'black') {
+          drawBackgroundPattern(this.imageCtx, displayWidth, displayHeight, this.backgroundPatternState);
+        }
+
+        // When uncrop is active, fill the padding area with a subtle pattern
+        if (uncropActive) {
+          this.drawUncropBackground(displayWidth, displayHeight, uncropOffsetX, uncropOffsetY, imageDisplayW, imageDisplayH);
+        }
+
         // Draw cached pre-rendered frame scaled to display size
         if (uncropActive) {
           this.imageCtx.drawImage(cached.canvas, uncropOffsetX, uncropOffsetY, imageDisplayW, imageDisplayH);
         } else {
           this.imageCtx.drawImage(cached.canvas, 0, 0, displayWidth, displayHeight);
         }
-        // After drawing cached frame, apply GPU-accelerated effects not handled by worker
+
+        // After drawing cached frame, apply effects not handled by worker
+        // Render ghost frames (onion skin) on top of the main frame
+        if (this.ghostFrameState.enabled) {
+          this.renderGhostFrames(displayWidth, displayHeight);
+        }
+
+        // Apply stereo viewing mode (transforms layout for 3D viewing)
+        if (!isDefaultStereoState(this.stereoState)) {
+          const hasEyeTransforms = !isDefaultStereoEyeTransformState(this.stereoEyeTransformState);
+          const hasAlignOverlay = this.stereoAlignMode !== 'off';
+          if (hasEyeTransforms || hasAlignOverlay) {
+            this.applyStereoModeWithEyeTransforms(this.imageCtx, displayWidth, displayHeight);
+          } else {
+            this.applyStereoMode(this.imageCtx, displayWidth, displayHeight);
+          }
+        }
+
+        // Apply lens distortion correction (geometric transform, applied before color effects)
+        if (!isDefaultLensParams(this.lensParams)) {
+          this.applyLensDistortionToCtx(this.imageCtx, displayWidth, displayHeight);
+        }
+        // Apply GPU-accelerated color effects
         if (this.currentLUT && this.lutIntensity > 0) {
           this.applyLUTToCanvas(this.imageCtx, displayWidth, displayHeight);
         }
@@ -3541,6 +3576,14 @@ export class Viewer {
   // Display color management methods
   setDisplayColorState(state: DisplayColorState): void {
     this.displayColorState = { ...state };
+    if (this.glRenderer) {
+      this.glRenderer.setDisplayColorState({
+        transferFunction: DISPLAY_TRANSFER_CODES[state.transferFunction],
+        displayGamma: state.displayGamma,
+        displayBrightness: state.displayBrightness,
+        customGamma: state.customGamma,
+      });
+    }
     this.notifyEffectsChanged();
     this.scheduleRender();
   }
@@ -3551,6 +3594,14 @@ export class Viewer {
 
   resetDisplayColorState(): void {
     this.displayColorState = { ...DEFAULT_DISPLAY_COLOR_STATE };
+    if (this.glRenderer) {
+      this.glRenderer.setDisplayColorState({
+        transferFunction: DISPLAY_TRANSFER_CODES[DEFAULT_DISPLAY_COLOR_STATE.transferFunction],
+        displayGamma: DEFAULT_DISPLAY_COLOR_STATE.displayGamma,
+        displayBrightness: DEFAULT_DISPLAY_COLOR_STATE.displayBrightness,
+        customGamma: DEFAULT_DISPLAY_COLOR_STATE.customGamma,
+      });
+    }
     this.notifyEffectsChanged();
     this.scheduleRender();
   }

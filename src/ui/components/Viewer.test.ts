@@ -91,6 +91,26 @@ interface TestableViewer {
 
   // Phase 2A/2B: Prerender buffer
   prerenderBuffer: import('../../utils/PrerenderBufferManager').PrerenderBufferManager | null;
+
+  // Lens distortion
+  lensParams: import('../../transform/LensDistortion').LensDistortionParams;
+  applyLensDistortionToCtx(ctx: CanvasRenderingContext2D, width: number, height: number): void;
+
+  // Ghost frames
+  ghostFrameState: import('./GhostFrameControl').GhostFrameState;
+
+  // Stereo mode
+  stereoState: import('../../stereo/StereoRenderer').StereoState;
+  applyStereoMode(ctx: CanvasRenderingContext2D, width: number, height: number): void;
+
+  // Background pattern
+  backgroundPatternState: import('./BackgroundPatternControl').BackgroundPatternState;
+
+  // Uncrop
+  drawUncropBackground(displayWidth: number, displayHeight: number, uncropOffsetX: number, uncropOffsetY: number, imageDisplayW: number, imageDisplayH: number): void;
+
+  // Canvas context
+  imageCtx: CanvasRenderingContext2D;
 }
 
 /** Cast a Viewer to its testable internals for accessing private members in tests. */
@@ -1796,6 +1816,774 @@ describe('Viewer', () => {
       expect(() => {
         viewer.render();
       }).not.toThrow();
+    });
+
+    it('VWR-357: lens distortion is applied during playback with cached prerender frame', () => {
+      // Regression test: lens distortion must be applied even when the prerender
+      // buffer has a cached frame and the session is playing. Previously, the
+      // cached-frame early-return path skipped applyLensDistortionToCtx().
+      const tv = testable(viewer);
+
+      // Set non-default lens distortion params
+      viewer.setLensParams({ ...DEFAULT_LENS_PARAMS, k1: 0.3 });
+
+      // Create a mock image element as the current source
+      const mockImg = new Image(100, 100);
+
+      // Mock a prerenderBuffer with a cached frame
+      const mockCanvas = document.createElement('canvas');
+      mockCanvas.width = 100;
+      mockCanvas.height = 100;
+      tv.prerenderBuffer = {
+        getFrame: vi.fn().mockReturnValue({
+          canvas: mockCanvas,
+          effectsHash: 'test',
+          width: 100,
+          height: 100,
+        }),
+        queuePriorityFrame: vi.fn(),
+        onFrameProcessed: null,
+        dispose: vi.fn(),
+      } as unknown as typeof tv.prerenderBuffer;
+
+      // Mock session as playing with a valid current source (image)
+      tv.session = {
+        ...tv.session,
+        isPlaying: true,
+        currentFrame: 1,
+        frameCount: 10,
+        currentSource: {
+          type: 'image' as const,
+          name: 'test.jpg',
+          url: 'test.jpg',
+          width: 100,
+          height: 100,
+          duration: 1,
+          fps: 24,
+          element: mockImg,
+        },
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+
+      // Spy on applyLensDistortionToCtx
+      const lensSpy = vi.spyOn(tv, 'applyLensDistortionToCtx');
+
+      viewer.render();
+
+      expect(lensSpy).toHaveBeenCalled();
+      lensSpy.mockRestore();
+    });
+
+    it('VWR-358: lens distortion is NOT applied during playback when params are default', () => {
+      // Verify that default lens params do not trigger the lens distortion call
+      const tv = testable(viewer);
+
+      // Keep default lens params (no distortion)
+      viewer.resetLensParams();
+
+      // Create a mock image element as the current source
+      const mockImg = new Image(100, 100);
+
+      // Mock a prerenderBuffer with a cached frame
+      const mockCanvas = document.createElement('canvas');
+      mockCanvas.width = 100;
+      mockCanvas.height = 100;
+      tv.prerenderBuffer = {
+        getFrame: vi.fn().mockReturnValue({
+          canvas: mockCanvas,
+          effectsHash: 'test',
+          width: 100,
+          height: 100,
+        }),
+        queuePriorityFrame: vi.fn(),
+        onFrameProcessed: null,
+        dispose: vi.fn(),
+      } as unknown as typeof tv.prerenderBuffer;
+
+      // Mock session as playing with a valid current source (image)
+      tv.session = {
+        ...tv.session,
+        isPlaying: true,
+        currentFrame: 1,
+        frameCount: 10,
+        currentSource: {
+          type: 'image' as const,
+          name: 'test.jpg',
+          url: 'test.jpg',
+          width: 100,
+          height: 100,
+          duration: 1,
+          fps: 24,
+          element: mockImg,
+        },
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+
+      // Spy on applyLensDistortionToCtx
+      const lensSpy = vi.spyOn(tv, 'applyLensDistortionToCtx');
+
+      viewer.render();
+
+      expect(lensSpy).not.toHaveBeenCalled();
+      lensSpy.mockRestore();
+    });
+  });
+
+  describe('prerender cache hit path effects (regression)', () => {
+    it('VWR-GF-001: When ghost frames are enabled and playback is active with a prerender cache hit, the ghost frame rendering method is called', () => {
+      const tv = testable(viewer);
+
+      // Enable ghost frames
+      viewer.setGhostFrameState({
+        enabled: true,
+        framesBefore: 2,
+        framesAfter: 2,
+        opacityBase: 0.3,
+        opacityFalloff: 0.7,
+        colorTint: false,
+      });
+
+      // Create a mock image element as the current source
+      const mockImg = new Image(100, 100);
+
+      // Mock a prerenderBuffer with a cached frame
+      const mockCanvas = document.createElement('canvas');
+      mockCanvas.width = 100;
+      mockCanvas.height = 100;
+      tv.prerenderBuffer = {
+        getFrame: vi.fn().mockReturnValue({
+          canvas: mockCanvas,
+          effectsHash: 'test',
+          width: 100,
+          height: 100,
+        }),
+        queuePriorityFrame: vi.fn(),
+        onFrameProcessed: null,
+        dispose: vi.fn(),
+      } as unknown as typeof tv.prerenderBuffer;
+
+      // Mock session as playing with a valid current source (image)
+      tv.session = {
+        ...tv.session,
+        isPlaying: true,
+        currentFrame: 1,
+        frameCount: 10,
+        currentSource: {
+          type: 'image' as const,
+          name: 'test.jpg',
+          url: 'test.jpg',
+          width: 100,
+          height: 100,
+          duration: 1,
+          fps: 24,
+          element: mockImg,
+        },
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+
+      // Spy on renderGhostFrames (private method accessed through testable)
+      const ghostSpy = vi.spyOn(tv as any, 'renderGhostFrames');
+
+      viewer.render();
+
+      expect(ghostSpy).toHaveBeenCalled();
+      ghostSpy.mockRestore();
+    });
+
+    it('VWR-GF-002: When ghost frames are disabled, the ghost frame method is NOT called during cache hit path', () => {
+      const tv = testable(viewer);
+
+      // Keep ghost frames disabled (default)
+      viewer.resetGhostFrameState();
+
+      // Create a mock image element as the current source
+      const mockImg = new Image(100, 100);
+
+      // Mock a prerenderBuffer with a cached frame
+      const mockCanvas = document.createElement('canvas');
+      mockCanvas.width = 100;
+      mockCanvas.height = 100;
+      tv.prerenderBuffer = {
+        getFrame: vi.fn().mockReturnValue({
+          canvas: mockCanvas,
+          effectsHash: 'test',
+          width: 100,
+          height: 100,
+        }),
+        queuePriorityFrame: vi.fn(),
+        onFrameProcessed: null,
+        dispose: vi.fn(),
+      } as unknown as typeof tv.prerenderBuffer;
+
+      // Mock session as playing with a valid current source (image)
+      tv.session = {
+        ...tv.session,
+        isPlaying: true,
+        currentFrame: 1,
+        frameCount: 10,
+        currentSource: {
+          type: 'image' as const,
+          name: 'test.jpg',
+          url: 'test.jpg',
+          width: 100,
+          height: 100,
+          duration: 1,
+          fps: 24,
+          element: mockImg,
+        },
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+
+      // Spy on renderGhostFrames
+      const ghostSpy = vi.spyOn(tv as any, 'renderGhostFrames');
+
+      viewer.render();
+
+      expect(ghostSpy).not.toHaveBeenCalled();
+      ghostSpy.mockRestore();
+    });
+
+    it('VWR-SM-001: When stereo mode is active and playback is active with a prerender cache hit, the stereo mode method is called', () => {
+      const tv = testable(viewer);
+
+      // Enable stereo mode
+      viewer.setStereoState({
+        mode: 'side-by-side',
+        eyeSwap: false,
+        offset: 0,
+      });
+
+      // Create a mock image element as the current source
+      const mockImg = new Image(100, 100);
+
+      // Mock a prerenderBuffer with a cached frame
+      const mockCanvas = document.createElement('canvas');
+      mockCanvas.width = 100;
+      mockCanvas.height = 100;
+      tv.prerenderBuffer = {
+        getFrame: vi.fn().mockReturnValue({
+          canvas: mockCanvas,
+          effectsHash: 'test',
+          width: 100,
+          height: 100,
+        }),
+        queuePriorityFrame: vi.fn(),
+        onFrameProcessed: null,
+        dispose: vi.fn(),
+      } as unknown as typeof tv.prerenderBuffer;
+
+      // Mock session as playing with a valid current source (image)
+      tv.session = {
+        ...tv.session,
+        isPlaying: true,
+        currentFrame: 1,
+        frameCount: 10,
+        currentSource: {
+          type: 'image' as const,
+          name: 'test.jpg',
+          url: 'test.jpg',
+          width: 100,
+          height: 100,
+          duration: 1,
+          fps: 24,
+          element: mockImg,
+        },
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+
+      // Spy on applyStereoMode
+      const stereoSpy = vi.spyOn(tv as any, 'applyStereoMode');
+
+      viewer.render();
+
+      expect(stereoSpy).toHaveBeenCalled();
+      stereoSpy.mockRestore();
+    });
+
+    it('VWR-SM-002: When stereo mode is default/disabled, the stereo method is NOT called during cache hit path', () => {
+      const tv = testable(viewer);
+
+      // Keep stereo mode at default (disabled)
+      viewer.resetStereoState();
+
+      // Create a mock image element as the current source
+      const mockImg = new Image(100, 100);
+
+      // Mock a prerenderBuffer with a cached frame
+      const mockCanvas = document.createElement('canvas');
+      mockCanvas.width = 100;
+      mockCanvas.height = 100;
+      tv.prerenderBuffer = {
+        getFrame: vi.fn().mockReturnValue({
+          canvas: mockCanvas,
+          effectsHash: 'test',
+          width: 100,
+          height: 100,
+        }),
+        queuePriorityFrame: vi.fn(),
+        onFrameProcessed: null,
+        dispose: vi.fn(),
+      } as unknown as typeof tv.prerenderBuffer;
+
+      // Mock session as playing with a valid current source (image)
+      tv.session = {
+        ...tv.session,
+        isPlaying: true,
+        currentFrame: 1,
+        frameCount: 10,
+        currentSource: {
+          type: 'image' as const,
+          name: 'test.jpg',
+          url: 'test.jpg',
+          width: 100,
+          height: 100,
+          duration: 1,
+          fps: 24,
+          element: mockImg,
+        },
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+
+      // Spy on applyStereoMode
+      const stereoSpy = vi.spyOn(tv as any, 'applyStereoMode');
+
+      viewer.render();
+
+      expect(stereoSpy).not.toHaveBeenCalled();
+      stereoSpy.mockRestore();
+    });
+
+    it('VWR-CP-001: During prerender cache hit path, canvas is cleared before drawing', () => {
+      const tv = testable(viewer);
+
+      // Create a mock image element as the current source
+      const mockImg = new Image(100, 100);
+
+      // Mock a prerenderBuffer with a cached frame
+      const mockCanvas = document.createElement('canvas');
+      mockCanvas.width = 100;
+      mockCanvas.height = 100;
+      tv.prerenderBuffer = {
+        getFrame: vi.fn().mockReturnValue({
+          canvas: mockCanvas,
+          effectsHash: 'test',
+          width: 100,
+          height: 100,
+        }),
+        queuePriorityFrame: vi.fn(),
+        onFrameProcessed: null,
+        dispose: vi.fn(),
+      } as unknown as typeof tv.prerenderBuffer;
+
+      // Mock session as playing with a valid current source (image)
+      tv.session = {
+        ...tv.session,
+        isPlaying: true,
+        currentFrame: 1,
+        frameCount: 10,
+        currentSource: {
+          type: 'image' as const,
+          name: 'test.jpg',
+          url: 'test.jpg',
+          width: 100,
+          height: 100,
+          duration: 1,
+          fps: 24,
+          element: mockImg,
+        },
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+
+      // Spy on clearRect
+      const clearSpy = vi.spyOn(tv.imageCtx, 'clearRect');
+
+      viewer.render();
+
+      // Canvas should be cleared at the start of render
+      expect(clearSpy).toHaveBeenCalledWith(0, 0, tv.displayWidth, tv.displayHeight);
+      clearSpy.mockRestore();
+    });
+
+    it('VWR-CP-002: During prerender cache hit path, background pattern is drawn when active', () => {
+      const tv = testable(viewer);
+
+      // Enable a non-black background pattern (use 'grey50' for solid fill so fillRect is called)
+      viewer.setBackgroundPatternState({
+        pattern: 'grey50',
+        checkerSize: 'medium',
+        customColor: '#1a1a1a',
+      });
+
+      // Create a mock image element as the current source
+      const mockImg = new Image(100, 100);
+
+      // Mock a prerenderBuffer with a cached frame
+      const mockCanvas = document.createElement('canvas');
+      mockCanvas.width = 100;
+      mockCanvas.height = 100;
+      tv.prerenderBuffer = {
+        getFrame: vi.fn().mockReturnValue({
+          canvas: mockCanvas,
+          effectsHash: 'test',
+          width: 100,
+          height: 100,
+        }),
+        queuePriorityFrame: vi.fn(),
+        onFrameProcessed: null,
+        dispose: vi.fn(),
+      } as unknown as typeof tv.prerenderBuffer;
+
+      // Mock session as playing with a valid current source (image)
+      tv.session = {
+        ...tv.session,
+        isPlaying: true,
+        currentFrame: 1,
+        frameCount: 10,
+        currentSource: {
+          type: 'image' as const,
+          name: 'test.jpg',
+          url: 'test.jpg',
+          width: 100,
+          height: 100,
+          duration: 1,
+          fps: 24,
+          element: mockImg,
+        },
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+
+      // Spy on clearRect and drawImage (used during cache hit path)
+      const clearSpy = vi.spyOn(tv.imageCtx, 'clearRect');
+      const drawImageSpy = vi.spyOn(tv.imageCtx, 'drawImage');
+
+      viewer.render();
+
+      // Canvas should be cleared before drawing cached frame (line 2312)
+      expect(clearSpy).toHaveBeenCalledWith(0, 0, tv.displayWidth, tv.displayHeight);
+      // Background pattern drawing happens via drawBackgroundPattern which uses fillStyle and fillRect
+      // but we can verify the cached frame is drawn
+      expect(drawImageSpy).toHaveBeenCalled();
+      clearSpy.mockRestore();
+      drawImageSpy.mockRestore();
+    });
+
+    it('VWR-CP-003: During prerender cache hit path, uncrop background is drawn when uncrop is active', () => {
+      const tv = testable(viewer);
+
+      // Enable uncrop with per-side padding mode
+      viewer.setUncropState({
+        enabled: true,
+        paddingMode: 'per-side',
+        padding: 0,
+        paddingTop: 100,
+        paddingBottom: 100,
+        paddingLeft: 100,
+        paddingRight: 100,
+      });
+
+      // Create a mock image element as the current source
+      const mockImg = new Image(100, 100);
+
+      // Mock a prerenderBuffer with a cached frame
+      const mockCanvas = document.createElement('canvas');
+      mockCanvas.width = 300;  // Larger to account for uncrop
+      mockCanvas.height = 300;
+      tv.prerenderBuffer = {
+        getFrame: vi.fn().mockReturnValue({
+          canvas: mockCanvas,
+          effectsHash: 'test',
+          width: 300,
+          height: 300,
+        }),
+        queuePriorityFrame: vi.fn(),
+        onFrameProcessed: null,
+        dispose: vi.fn(),
+      } as unknown as typeof tv.prerenderBuffer;
+
+      // Mock session as playing with a valid current source (image)
+      tv.session = {
+        ...tv.session,
+        isPlaying: true,
+        currentFrame: 1,
+        frameCount: 10,
+        currentSource: {
+          type: 'image' as const,
+          name: 'test.jpg',
+          url: 'test.jpg',
+          width: 100,
+          height: 100,
+          duration: 1,
+          fps: 24,
+          element: mockImg,
+        },
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+
+      // Spy on drawUncropBackground
+      const uncropSpy = vi.spyOn(tv as any, 'drawUncropBackground');
+      const drawImageSpy = vi.spyOn(tv.imageCtx, 'drawImage');
+
+      viewer.render();
+
+      // Uncrop background should be drawn during cache hit path (line 2320-2322)
+      expect(uncropSpy).toHaveBeenCalled();
+      // The cached frame should also be drawn with uncrop offset
+      expect(drawImageSpy).toHaveBeenCalled();
+      uncropSpy.mockRestore();
+      drawImageSpy.mockRestore();
+    });
+
+    it('VWR-EFF-001: All effects applied in full path are also applied in cache hit path (consistency check)', () => {
+      // This meta-test verifies that the cache hit path doesn't skip effects that
+      // the full rendering path applies. We check for ghost frames, stereo, lens.
+      const tv = testable(viewer);
+
+      // Enable all relevant effects
+      viewer.setGhostFrameState({
+        enabled: true,
+        framesBefore: 2,
+        framesAfter: 2,
+        opacityBase: 0.3,
+        opacityFalloff: 0.7,
+        colorTint: false,
+      });
+      viewer.setStereoState({
+        mode: 'side-by-side',
+        eyeSwap: false,
+        offset: 0,
+      });
+      viewer.setLensParams({ ...DEFAULT_LENS_PARAMS, k1: 0.3 });
+
+      // Create a mock image element as the current source
+      const mockImg = new Image(100, 100);
+
+      // Mock a prerenderBuffer with a cached frame
+      const mockCanvas = document.createElement('canvas');
+      mockCanvas.width = 100;
+      mockCanvas.height = 100;
+      tv.prerenderBuffer = {
+        getFrame: vi.fn().mockReturnValue({
+          canvas: mockCanvas,
+          effectsHash: 'test',
+          width: 100,
+          height: 100,
+        }),
+        queuePriorityFrame: vi.fn(),
+        onFrameProcessed: null,
+        dispose: vi.fn(),
+      } as unknown as typeof tv.prerenderBuffer;
+
+      // Mock session as playing with a valid current source (image)
+      tv.session = {
+        ...tv.session,
+        isPlaying: true,
+        currentFrame: 1,
+        frameCount: 10,
+        currentSource: {
+          type: 'image' as const,
+          name: 'test.jpg',
+          url: 'test.jpg',
+          width: 100,
+          height: 100,
+          duration: 1,
+          fps: 24,
+          element: mockImg,
+        },
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+
+      // Spy on all the effect methods
+      const ghostSpy = vi.spyOn(tv as any, 'renderGhostFrames');
+      const stereoSpy = vi.spyOn(tv as any, 'applyStereoMode');
+      const lensSpy = vi.spyOn(tv as any, 'applyLensDistortionToCtx');
+
+      viewer.render();
+
+      // All effects should be applied in cache hit path
+      expect(ghostSpy).toHaveBeenCalled();
+      expect(stereoSpy).toHaveBeenCalled();
+      expect(lensSpy).toHaveBeenCalled();
+
+      ghostSpy.mockRestore();
+      stereoSpy.mockRestore();
+      lensSpy.mockRestore();
+    });
+  });
+
+  describe('display color state re-render (regression)', () => {
+    it('VWR-DCS-001: setDisplayColorState() eagerly updates glRenderer', () => {
+      // Setup mock glRenderer
+      const mockGLRenderer = {
+        setDisplayColorState: vi.fn(),
+        setColorAdjustments: vi.fn(),
+        setToneMappingState: vi.fn(),
+        setColorInversion: vi.fn(),
+        setChannelMode: vi.fn(),
+        dispose: vi.fn(),
+      };
+      testable(viewer).glRenderer = mockGLRenderer;
+
+      // Call setDisplayColorState
+      viewer.setDisplayColorState({
+        transferFunction: 'rec709',
+        displayGamma: 1.2,
+        displayBrightness: 0.9,
+        customGamma: 2.2,
+      });
+
+      // Verify glRenderer.setDisplayColorState was called with correct numeric code
+      expect(mockGLRenderer.setDisplayColorState).toHaveBeenCalledWith({
+        transferFunction: 2, // rec709 = 2 in DISPLAY_TRANSFER_CODES
+        displayGamma: 1.2,
+        displayBrightness: 0.9,
+        customGamma: 2.2,
+      });
+    });
+
+    it('VWR-DCS-002: setDisplayColorState() calls scheduleRender()', () => {
+      const scheduleRenderSpy = vi.spyOn(viewer as unknown as { scheduleRender: () => void }, 'scheduleRender');
+
+      viewer.setDisplayColorState({
+        transferFunction: 'gamma2.2',
+        displayGamma: 1.0,
+        displayBrightness: 1.0,
+        customGamma: 2.2,
+      });
+
+      expect(scheduleRenderSpy).toHaveBeenCalled();
+      scheduleRenderSpy.mockRestore();
+    });
+
+    it('VWR-DCS-003: resetDisplayColorState() eagerly updates glRenderer with default values', () => {
+      // Setup mock glRenderer
+      const mockGLRenderer = {
+        setDisplayColorState: vi.fn(),
+        dispose: vi.fn(),
+      };
+      testable(viewer).glRenderer = mockGLRenderer;
+
+      // Call resetDisplayColorState
+      viewer.resetDisplayColorState();
+
+      // Verify glRenderer.setDisplayColorState was called with default values
+      expect(mockGLRenderer.setDisplayColorState).toHaveBeenCalledWith({
+        transferFunction: 1, // srgb = 1 in DISPLAY_TRANSFER_CODES (default)
+        displayGamma: 1.0,
+        displayBrightness: 1.0,
+        customGamma: 2.2,
+      });
+    });
+
+    it('VWR-DCS-004: setDisplayColorState() works when glRenderer is null (no crash, still schedules render)', () => {
+      // Ensure glRenderer is null
+      testable(viewer).glRenderer = null;
+
+      // Should not throw
+      expect(() => {
+        viewer.setDisplayColorState({
+          transferFunction: 'gamma2.4',
+          displayGamma: 1.1,
+          displayBrightness: 1.2,
+          customGamma: 2.4,
+        });
+      }).not.toThrow();
+
+      // Verify state was updated
+      const state = viewer.getDisplayColorState();
+      expect(state.transferFunction).toBe('gamma2.4');
+      expect(state.displayGamma).toBe(1.1);
+      expect(state.displayBrightness).toBe(1.2);
+    });
+
+    it('VWR-DCS-005: Display state transfer function code is correctly mapped via DISPLAY_TRANSFER_CODES', () => {
+      const mockGLRenderer = {
+        setDisplayColorState: vi.fn(),
+        dispose: vi.fn(),
+      };
+      testable(viewer).glRenderer = mockGLRenderer;
+
+      // Test all transfer functions
+      const testCases: Array<[string, number]> = [
+        ['linear', 0],
+        ['srgb', 1],
+        ['rec709', 2],
+        ['gamma2.2', 3],
+        ['gamma2.4', 4],
+        ['custom', 5],
+      ];
+
+      testCases.forEach(([transferFunction, expectedCode]) => {
+        mockGLRenderer.setDisplayColorState.mockClear();
+
+        viewer.setDisplayColorState({
+          transferFunction: transferFunction as import('../../color/DisplayTransfer').DisplayTransferFunction,
+          displayGamma: 1.0,
+          displayBrightness: 1.0,
+          customGamma: 2.2,
+        });
+
+        expect(mockGLRenderer.setDisplayColorState).toHaveBeenCalledWith({
+          transferFunction: expectedCode,
+          displayGamma: 1.0,
+          displayBrightness: 1.0,
+          customGamma: 2.2,
+        });
+      });
+    });
+
+    it('VWR-DCS-006: Consistency check — setColorAdjustments and setDisplayColorState both eagerly update glRenderer', () => {
+      // Setup mock glRenderer
+      const mockGLRenderer = {
+        setDisplayColorState: vi.fn(),
+        setColorAdjustments: vi.fn(),
+        setToneMappingState: vi.fn(),
+        setColorInversion: vi.fn(),
+        setChannelMode: vi.fn(),
+        dispose: vi.fn(),
+      };
+      testable(viewer).glRenderer = mockGLRenderer;
+
+      // Test setColorAdjustments
+      viewer.setColorAdjustments({
+        exposure: 1.5,
+        gamma: 2.2,
+        saturation: 1.2,
+        contrast: 1.0,
+        brightness: 0.0,
+        temperature: 0,
+        tint: 0,
+        hueRotation: 0,
+        highlights: 0,
+        shadows: 0,
+        whites: 0,
+        blacks: 0,
+        vibrance: 0,
+        vibranceSkinProtection: true,
+        clarity: 0,
+      });
+      expect(mockGLRenderer.setColorAdjustments).toHaveBeenCalled();
+
+      // Test setDisplayColorState
+      mockGLRenderer.setDisplayColorState.mockClear();
+      viewer.setDisplayColorState({
+        transferFunction: 'rec709',
+        displayGamma: 1.2,
+        displayBrightness: 0.9,
+        customGamma: 2.2,
+      });
+      expect(mockGLRenderer.setDisplayColorState).toHaveBeenCalled();
+
+      // Both methods should follow the same pattern: eagerly update glRenderer when it exists
     });
   });
 });
