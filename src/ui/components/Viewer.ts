@@ -49,24 +49,7 @@ import type { IPImage } from '../../core/image/Image';
 import { applyHighlightsShadows, applyVibrance, applyClarity, applySharpenCPU, applyToneMapping } from './ViewerEffects';
 import { yieldToMain } from '../../utils/EffectProcessor';
 import { applyHueRotation as applyHueRotationPixel, isIdentityHueRotation } from '../../color/HueRotation';
-import {
-  createWipeUIElements,
-  updateWipeLinePosition,
-  isPointerOnWipeLine,
-  calculateWipePosition,
-  setWipeLabels as setWipeLabelsUtil,
-  getWipeLabels as getWipeLabelsUtil,
-  WipeUIElements,
-} from './ViewerWipe';
-import {
-  SplitScreenState,
-  SplitScreenUIElements,
-  createSplitScreenUIElements,
-  updateSplitScreenPosition,
-  isPointerOnSplitLine,
-  calculateSplitPosition,
-  isSplitScreenMode,
-} from './ViewerSplitScreen';
+import { WipeManager } from './WipeManager';
 import type { GhostFrameState } from './GhostFrameControl';
 import { ColorPipelineManager } from './ColorPipelineManager';
 import { TransformManager } from './TransformManager';
@@ -110,10 +93,6 @@ import {
   PrerenderStats,
   EFFECTS_DEBOUNCE_MS,
 } from './ViewerPrerender';
-
-// Wipe label constants (kept for wipe UI initialization)
-const DEFAULT_WIPE_LABEL_A = 'Original';
-const DEFAULT_WIPE_LABEL_B = 'Graded';
 
 export class Viewer {
   private container: HTMLElement;
@@ -188,15 +167,8 @@ export class Viewer {
   // Color pipeline manager (owns all color correction state)
   private colorPipeline = new ColorPipelineManager();
 
-  // Wipe comparison
-  private wipeState: WipeState = { mode: 'off', position: 0.5, showOriginal: 'left' };
-  private wipeElements: WipeUIElements | null = null;
-  private isDraggingWipe = false;
-
-  // Split screen comparison (shows A/B sources side-by-side)
-  // Note: Split screen state is managed via wipeState.mode for unified handling
-  private splitScreenElements: SplitScreenUIElements | null = null;
-  private isDraggingSplit = false;
+  // Wipe + split-screen comparison manager
+  private wipeManager = new WipeManager();
 
   // LUT indicator badge (UI element, remains in Viewer)
   private lutIndicator: HTMLElement | null = null;
@@ -473,11 +445,8 @@ export class Viewer {
     const paintCtx = safeCanvasContext2D(this.paintCanvas, {}, this.canvasColorSpace);
     this.paintCtx = paintCtx;
 
-    // Create wipe UI elements (line and labels)
-    this.wipeElements = createWipeUIElements(this.container);
-
-    // Create split screen UI elements (divider line and A/B labels)
-    this.splitScreenElements = createSplitScreenUIElements(this.container);
+    // Create wipe + split screen UI elements
+    this.wipeManager.initUI(this.container);
 
     // Create LUT indicator badge
     this.lutIndicator = document.createElement('div');
@@ -970,8 +939,8 @@ export class Viewer {
       this.imageCanvas,
       this.paintCanvas,
       this.cropOverlay,
-      this.wipeElements?.wipeLine ?? null,
-      this.splitScreenElements?.splitLine ?? null
+      this.wipeManager.wipeLine,
+      this.wipeManager.splitLine
     );
   }
 
@@ -992,7 +961,7 @@ export class Viewer {
     this.container.setPointerCapture(e.pointerId);
 
     // Check for wipe line dragging first
-    if (this.handleWipePointerDown(e)) {
+    if (this.wipeManager.handlePointerDown(e)) {
       return;
     }
 
@@ -1054,8 +1023,12 @@ export class Viewer {
 
   private onPointerMove = (e: PointerEvent): void => {
     // Handle wipe/split dragging
-    if (this.isDraggingWipe || this.isDraggingSplit) {
-      this.handleWipePointerMove(e);
+    if (this.wipeManager.isDragging) {
+      const canvasRect = this.getCanvasContainerRect();
+      const containerRect = this.getContainerRect();
+      if (this.wipeManager.handlePointerMove(e, canvasRect, containerRect, this.displayWidth, this.displayHeight)) {
+        this.scheduleRender();
+      }
       return;
     }
 
@@ -1115,8 +1088,8 @@ export class Viewer {
     this.container.releasePointerCapture(e.pointerId);
 
     // Handle wipe/split dragging end
-    if (this.isDraggingWipe || this.isDraggingSplit) {
-      this.handleWipePointerUp();
+    if (this.wipeManager.isDragging) {
+      this.wipeManager.handlePointerUp();
       return;
     }
 
@@ -2112,7 +2085,7 @@ export class Viewer {
       this.hasGPUShaderEffectsActive() &&
       !this.hasCPUOnlyEffectsActive() &&
       !uncropActive &&
-      this.wipeState.mode === 'off' &&
+      this.wipeManager.isOff &&
       !this.isStackEnabled() &&
       !this.differenceMatteState.enabled &&
       !this.ghostFrameManager.enabled &&
@@ -2241,7 +2214,7 @@ export class Viewer {
       }
     }
 
-    if (!rendered && isSplitScreenMode(this.wipeState.mode) && this.session.abCompareAvailable) {
+    if (!rendered && this.wipeManager.isSplitScreen && this.session.abCompareAvailable) {
       // Split screen A/B comparison - show source A on one side, source B on other
       this.renderSplitScreen(displayWidth, displayHeight);
       rendered = true;
@@ -2264,7 +2237,7 @@ export class Viewer {
     )) {
       // Single source rendering (supports images, videos, and canvas elements from mediabunny)
       // Handle wipe rendering (but not split screen modes which are handled above)
-      if (this.wipeState.mode !== 'off' && !isSplitScreenMode(this.wipeState.mode) && !(element instanceof HTMLCanvasElement) && !(typeof OffscreenCanvas !== 'undefined' && element instanceof OffscreenCanvas)) {
+      if (!this.wipeManager.isOff && !this.wipeManager.isSplitScreen && !(element instanceof HTMLCanvasElement) && !(typeof OffscreenCanvas !== 'undefined' && element instanceof OffscreenCanvas)) {
         // Wipe only works with HTMLImageElement/HTMLVideoElement
         this.renderWithWipe(element as HTMLImageElement | HTMLVideoElement, displayWidth, displayHeight);
       } else if (uncropActive) {
@@ -2380,7 +2353,7 @@ export class Viewer {
     displayHeight: number
   ): void {
     const ctx = this.imageCtx;
-    const pos = this.wipeState.position;
+    const pos = this.wipeManager.position;
 
     // Enable high-quality image smoothing for best picture quality
     ctx.imageSmoothingEnabled = true;
@@ -2391,7 +2364,7 @@ export class Viewer {
 
     ctx.save();
 
-    if (this.wipeState.mode === 'horizontal') {
+    if (this.wipeManager.mode === 'horizontal') {
       // Left side: original (no filter)
       // Right side: with color adjustments
       const splitX = Math.floor(displayWidth * pos);
@@ -2414,7 +2387,7 @@ export class Viewer {
       ctx.drawImage(element, 0, 0, displayWidth, displayHeight);
       ctx.restore();
 
-    } else if (this.wipeState.mode === 'vertical') {
+    } else if (this.wipeManager.mode === 'vertical') {
       // Top side: original (no filter)
       // Bottom side: with color adjustments
       const splitY = Math.floor(displayHeight * pos);
@@ -2459,7 +2432,7 @@ export class Viewer {
     }
 
     const ctx = this.imageCtx;
-    const pos = this.wipeState.position;
+    const pos = this.wipeManager.position;
     const currentFrame = this.session.currentFrame;
 
     // Determine the element to use for source A
@@ -2523,12 +2496,12 @@ export class Viewer {
 
     ctx.save();
 
-    if (this.wipeState.mode === 'splitscreen-h') {
+    if (this.wipeManager.mode === 'splitscreen-h') {
       // Horizontal split: A on left, B on right
       const splitX = Math.floor(displayWidth * pos);
       this.drawClippedSource(ctx, elementA, 0, 0, splitX, displayHeight, displayWidth, displayHeight);
       this.drawClippedSource(ctx, elementB, splitX, 0, displayWidth - splitX, displayHeight, displayWidth, displayHeight);
-    } else if (this.wipeState.mode === 'splitscreen-v') {
+    } else if (this.wipeManager.mode === 'splitscreen-v') {
       // Vertical split: A on top, B on bottom
       const splitY = Math.floor(displayHeight * pos);
       this.drawClippedSource(ctx, elementA, 0, 0, displayWidth, splitY, displayWidth, displayHeight);
@@ -2703,7 +2676,7 @@ export class Viewer {
 
     // Hide the A/B indicator in split screen mode since both sources are visible
     // with their own labels (A and B) on each side of the split
-    if (isSplitScreenMode(this.wipeState.mode)) {
+    if (this.wipeManager.isSplitScreen) {
       this.abIndicator.style.display = 'none';
       return;
     }
@@ -2768,7 +2741,7 @@ export class Viewer {
 
   // Wipe comparison methods
   setWipeState(state: WipeState): void {
-    this.wipeState = { ...state };
+    this.wipeManager.setState(state);
     this.updateWipeLine();
     this.updateSplitScreenLine();
     this.updateABIndicator(); // Hide/show A/B indicator based on mode
@@ -2776,11 +2749,11 @@ export class Viewer {
   }
 
   getWipeState(): WipeState {
-    return { ...this.wipeState };
+    return this.wipeManager.getState();
   }
 
   setWipeMode(mode: WipeMode): void {
-    this.wipeState.mode = mode;
+    this.wipeManager.setMode(mode);
     this.updateWipeLine();
     this.updateSplitScreenLine();
     this.updateABIndicator(); // Hide/show A/B indicator based on mode
@@ -2788,28 +2761,17 @@ export class Viewer {
   }
 
   setWipePosition(position: number): void {
-    this.wipeState.position = Math.max(0, Math.min(1, position));
+    this.wipeManager.setPosition(position);
     this.updateWipeLine();
     this.scheduleRender();
   }
 
-  /**
-   * Set the text labels shown on each side of the wipe split
-   */
   setWipeLabels(labelA: string, labelB: string): void {
-    if (this.wipeElements) {
-      setWipeLabelsUtil(this.wipeElements, labelA, labelB);
-    }
+    this.wipeManager.setLabels(labelA, labelB);
   }
 
-  /**
-   * Get wipe labels
-   */
   getWipeLabels(): { labelA: string; labelB: string } {
-    if (this.wipeElements) {
-      return getWipeLabelsUtil(this.wipeElements);
-    }
-    return { labelA: DEFAULT_WIPE_LABEL_A, labelB: DEFAULT_WIPE_LABEL_B };
+    return this.wipeManager.getLabels();
   }
 
   // Transform methods
@@ -3946,128 +3908,15 @@ export class Viewer {
   }
 
   private updateWipeLine(): void {
-    if (!this.wipeElements) return;
-
     const containerRect = this.getContainerRect();
     const canvasRect = this.getCanvasContainerRect();
-
-    // If split screen mode is active, hide the wipe line (split screen has its own UI)
-    if (isSplitScreenMode(this.wipeState.mode)) {
-      this.wipeElements.wipeLine.style.display = 'none';
-      this.wipeElements.wipeLabelA.style.display = 'none';
-      this.wipeElements.wipeLabelB.style.display = 'none';
-      return;
-    }
-
-    updateWipeLinePosition(
-      this.wipeState,
-      this.wipeElements,
-      containerRect,
-      canvasRect,
-      this.displayWidth,
-      this.displayHeight
-    );
+    this.wipeManager.updateWipeLine(containerRect, canvasRect, this.displayWidth, this.displayHeight);
   }
 
   private updateSplitScreenLine(): void {
-    if (!this.splitScreenElements) return;
-
-    // Only update if actually in split screen mode
-    if (!isSplitScreenMode(this.wipeState.mode)) {
-      // Hide split screen UI when not in split screen mode
-      this.splitScreenElements.splitLine.style.display = 'none';
-      this.splitScreenElements.labelA.style.display = 'none';
-      this.splitScreenElements.labelB.style.display = 'none';
-      return;
-    }
-
     const containerRect = this.getContainerRect();
     const canvasRect = this.getCanvasContainerRect();
-
-    // Safe to cast since we validated with isSplitScreenMode
-    const splitState: SplitScreenState = {
-      mode: this.wipeState.mode as 'splitscreen-h' | 'splitscreen-v',
-      position: this.wipeState.position,
-    };
-
-    updateSplitScreenPosition(
-      splitState,
-      this.splitScreenElements,
-      containerRect,
-      canvasRect,
-      this.displayWidth,
-      this.displayHeight
-    );
-  }
-
-  private handleWipePointerDown(e: PointerEvent): boolean {
-    if (this.wipeState.mode === 'off') return false;
-
-    // Handle split screen mode
-    if (isSplitScreenMode(this.wipeState.mode) && this.splitScreenElements) {
-      const splitRect = this.splitScreenElements.splitLine.getBoundingClientRect();
-      const splitState: SplitScreenState = {
-        mode: this.wipeState.mode as 'splitscreen-h' | 'splitscreen-v',
-        position: this.wipeState.position,
-      };
-      if (isPointerOnSplitLine(e, splitState, splitRect)) {
-        this.isDraggingSplit = true;
-        return true;
-      }
-      return false;
-    }
-
-    // Handle regular wipe mode
-    if (!this.wipeElements) return false;
-
-    const wipeRect = this.wipeElements.wipeLine.getBoundingClientRect();
-    if (isPointerOnWipeLine(e, this.wipeState, wipeRect)) {
-      this.isDraggingWipe = true;
-      return true;
-    }
-
-    return false;
-  }
-
-  private handleWipePointerMove(e: PointerEvent): void {
-    // Handle split screen dragging
-    if (this.isDraggingSplit) {
-      const canvasRect = this.getCanvasContainerRect();
-      const splitState: SplitScreenState = {
-        mode: this.wipeState.mode as 'splitscreen-h' | 'splitscreen-v',
-        position: this.wipeState.position,
-      };
-      this.wipeState.position = calculateSplitPosition(
-        e,
-        splitState,
-        canvasRect,
-        this.displayWidth,
-        this.displayHeight
-      );
-      this.updateSplitScreenLine();
-      this.scheduleRender();
-      return;
-    }
-
-    // Handle regular wipe dragging
-    if (!this.isDraggingWipe) return;
-
-    const canvasRect = this.getCanvasContainerRect();
-    this.wipeState.position = calculateWipePosition(
-      e,
-      this.wipeState,
-      canvasRect,
-      this.displayWidth,
-      this.displayHeight
-    );
-
-    this.updateWipeLine();
-    this.scheduleRender();
-  }
-
-  private handleWipePointerUp(): void {
-    this.isDraggingWipe = false;
-    this.isDraggingSplit = false;
+    this.wipeManager.updateSplitScreenLine(containerRect, canvasRect, this.displayWidth, this.displayHeight);
   }
 
   // Crop dragging methods
@@ -4607,8 +4456,8 @@ export class Viewer {
     }
     this.glCanvas = null;
 
-    // Cleanup wipe elements
-    this.wipeElements = null;
+    // Cleanup wipe manager
+    this.wipeManager.dispose();
 
     // Cleanup cached source image canvas
     this.sourceImageCanvas = null;
