@@ -516,3 +516,334 @@ export function applyToneMappingToData(data: Uint8ClampedArray, operator: string
     // Alpha unchanged
   }
 }
+
+// ============================================================================
+// Half-Resolution Processing Helpers
+// ============================================================================
+
+/** Minimum dimension to apply half-resolution optimization */
+export const HALF_RES_MIN_DIMENSION = 256;
+
+/**
+ * Downsample ImageData to half resolution using box filter (2x2 average).
+ * Each 2x2 block of source pixels is averaged into a single destination pixel.
+ * Handles odd dimensions by clamping to image bounds.
+ *
+ * @param data - Source pixel data (RGBA Uint8ClampedArray)
+ * @param width - Source width
+ * @param height - Source height
+ * @returns Object with half-res data, halfW, and halfH
+ */
+export function downsample2x(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number
+): { data: Uint8ClampedArray; width: number; height: number } {
+  const halfW = Math.ceil(width / 2);
+  const halfH = Math.ceil(height / 2);
+  const result = new Uint8ClampedArray(halfW * halfH * 4);
+
+  for (let y = 0; y < halfH; y++) {
+    const sy = y * 2;
+    // Clamp the second row for odd heights
+    const sy1 = Math.min(sy + 1, height - 1);
+
+    for (let x = 0; x < halfW; x++) {
+      const sx = x * 2;
+      // Clamp the second column for odd widths
+      const sx1 = Math.min(sx + 1, width - 1);
+
+      const dstIdx = (y * halfW + x) * 4;
+
+      // Indices for the 2x2 block
+      const i00 = (sy * width + sx) * 4;
+      const i10 = (sy * width + sx1) * 4;
+      const i01 = (sy1 * width + sx) * 4;
+      const i11 = (sy1 * width + sx1) * 4;
+
+      // Average each channel
+      for (let c = 0; c < 4; c++) {
+        result[dstIdx + c] = (
+          data[i00 + c]! + data[i10 + c]! +
+          data[i01 + c]! + data[i11 + c]!
+        ) >> 2; // Integer divide by 4
+      }
+    }
+  }
+
+  return { data: result, width: halfW, height: halfH };
+}
+
+/**
+ * Upsample half-resolution data to target resolution using bilinear interpolation.
+ *
+ * @param halfData - Half-resolution pixel data (RGBA Uint8ClampedArray)
+ * @param halfW - Half-resolution width
+ * @param halfH - Half-resolution height
+ * @param targetW - Target (full) width
+ * @param targetH - Target (full) height
+ * @returns Full-resolution pixel data
+ */
+export function upsample2x(
+  halfData: Uint8ClampedArray,
+  halfW: number,
+  halfH: number,
+  targetW: number,
+  targetH: number
+): Uint8ClampedArray {
+  const result = new Uint8ClampedArray(targetW * targetH * 4);
+
+  // Scale factors: map target pixel center to half-res coordinates
+  const scaleX = halfW / targetW;
+  const scaleY = halfH / targetH;
+
+  for (let y = 0; y < targetH; y++) {
+    // Map target y to half-res coordinates (center of target pixel)
+    const srcY = y * scaleY;
+    const y0 = Math.floor(srcY);
+    const y1 = Math.min(y0 + 1, halfH - 1);
+    const fy = srcY - y0;
+
+    for (let x = 0; x < targetW; x++) {
+      const srcX = x * scaleX;
+      const x0 = Math.floor(srcX);
+      const x1 = Math.min(x0 + 1, halfW - 1);
+      const fx = srcX - x0;
+
+      const dstIdx = (y * targetW + x) * 4;
+
+      // Indices for 4 corners in half-res
+      const i00 = (y0 * halfW + x0) * 4;
+      const i10 = (y0 * halfW + x1) * 4;
+      const i01 = (y1 * halfW + x0) * 4;
+      const i11 = (y1 * halfW + x1) * 4;
+
+      // Bilinear weights
+      const w00 = (1 - fx) * (1 - fy);
+      const w10 = fx * (1 - fy);
+      const w01 = (1 - fx) * fy;
+      const w11 = fx * fy;
+
+      for (let c = 0; c < 4; c++) {
+        result[dstIdx + c] = Math.round(
+          halfData[i00 + c]! * w00 +
+          halfData[i10 + c]! * w10 +
+          halfData[i01 + c]! * w01 +
+          halfData[i11 + c]! * w11
+        );
+      }
+    }
+  }
+
+  return result;
+}
+
+// ============================================================================
+// SIMD-like Optimizations using TypedArray Views
+// ============================================================================
+
+/**
+ * Detect system endianness at module load time.
+ * All modern browsers run on little-endian CPUs, but we detect to be safe.
+ *
+ * On little-endian systems, a Uint32Array view of RGBA pixel data
+ * stores bytes as [R, G, B, A] at byte offsets 0,1,2,3 which reads
+ * as 0xAABBGGRR in the 32-bit integer.
+ */
+export const IS_LITTLE_ENDIAN: boolean =
+  new Uint8Array(new Uint32Array([0x12345678]).buffer)[0] === 0x78;
+
+/**
+ * XOR mask for color inversion (inverts R, G, B but preserves Alpha).
+ *
+ * Little-endian layout in Uint32: 0xAABBGGRR
+ * To invert RGB but keep A: XOR with 0x00FFFFFF
+ *   - Byte 0 (R): 0xFF XOR inverts
+ *   - Byte 1 (G): 0xFF XOR inverts
+ *   - Byte 2 (B): 0xFF XOR inverts
+ *   - Byte 3 (A): 0x00 XOR preserves
+ *
+ * Big-endian layout in Uint32: 0xRRGGBBAA
+ * To invert RGB but keep A: XOR with 0xFFFFFF00
+ */
+export const COLOR_INVERSION_XOR_MASK: number = IS_LITTLE_ENDIAN
+  ? 0x00FFFFFF
+  : 0xFFFFFF00;
+
+/**
+ * Channel isolation bitmasks for Uint32Array operations.
+ * These masks zero out unwanted channels while preserving the target channel and alpha.
+ *
+ * Little-endian Uint32 layout: 0xAABBGGRR
+ * Big-endian Uint32 layout: 0xRRGGBBAA
+ */
+export const CHANNEL_MASKS = IS_LITTLE_ENDIAN
+  ? {
+      // Little-endian: 0xAABBGGRR
+      red:   0xFF0000FF,  // Keep R (byte 0) and A (byte 3)
+      green: 0xFF00FF00,  // Keep G (byte 1) and A (byte 3)
+      blue:  0xFFFF0000,  // Keep B (byte 2) and A (byte 3)
+    }
+  : {
+      // Big-endian: 0xRRGGBBAA
+      red:   0xFF0000FF,  // Keep R (byte 0) and A (byte 3)
+      green: 0x00FF00FF,  // Keep G (byte 1) and A (byte 3)
+      blue:  0x0000FFFF,  // Keep B (byte 2) and A (byte 3)
+    };
+
+/**
+ * Apply color inversion using Uint32Array XOR trick.
+ * Inverts R, G, B channels while preserving Alpha.
+ * This is significantly faster than per-channel iteration for large images.
+ *
+ * @param data - The pixel data buffer (must be from ImageData.data or Uint8ClampedArray with aligned buffer)
+ */
+export function applyColorInversionSIMD(data: Uint8ClampedArray): void {
+  const u32 = new Uint32Array(data.buffer, data.byteOffset, data.byteLength >> 2);
+  const mask = COLOR_INVERSION_XOR_MASK;
+  const len = u32.length;
+  for (let i = 0; i < len; i++) {
+    u32[i] = u32[i]! ^ mask;
+  }
+}
+
+/**
+ * Scalar (reference) implementation of color inversion.
+ * Kept for testing comparison and as a fallback.
+ */
+export function applyColorInversionScalar(data: Uint8ClampedArray): void {
+  const len = data.length;
+  for (let i = 0; i < len; i += 4) {
+    data[i]     = 255 - data[i]!;
+    data[i + 1] = 255 - data[i + 1]!;
+    data[i + 2] = 255 - data[i + 2]!;
+    // Alpha unchanged
+  }
+}
+
+/**
+ * Apply channel isolation using Uint32Array bitmask.
+ * Zeros out unwanted color channels while preserving the target channel and alpha.
+ *
+ * Note: This produces "true" channel isolation (non-target channels become 0),
+ * which differs from the grayscale-style channel isolation used in the main
+ * effect pipeline (where the target channel value is copied to all three channels).
+ * Use applyChannelIsolationGrayscale() for the grayscale behavior.
+ *
+ * @param data - The pixel data buffer
+ * @param channel - Which channel to isolate: 'red', 'green', or 'blue'
+ */
+export function applyChannelIsolationSIMD(
+  data: Uint8ClampedArray,
+  channel: 'red' | 'green' | 'blue'
+): void {
+  const u32 = new Uint32Array(data.buffer, data.byteOffset, data.byteLength >> 2);
+  const mask = CHANNEL_MASKS[channel];
+  const len = u32.length;
+  for (let i = 0; i < len; i++) {
+    u32[i] = u32[i]! & mask;
+  }
+}
+
+/**
+ * Apply channel isolation as grayscale: copy the selected channel's value to R, G, B.
+ * This matches the behavior of the main effect pipeline's channel isolation
+ * (where selecting "red" shows the red value as a grayscale image).
+ *
+ * Uses a Uint32Array view for efficient whole-pixel writes on little-endian systems.
+ *
+ * @param data - The pixel data buffer
+ * @param channel - Which channel to show as grayscale: 'red', 'green', or 'blue'
+ */
+export function applyChannelIsolationGrayscale(
+  data: Uint8ClampedArray,
+  channel: 'red' | 'green' | 'blue'
+): void {
+  const len = data.length;
+
+  // Channel byte offset within each RGBA quad
+  const channelOffset = channel === 'red' ? 0 : channel === 'green' ? 1 : 2;
+
+  if (IS_LITTLE_ENDIAN) {
+    const u32 = new Uint32Array(data.buffer, data.byteOffset, data.byteLength >> 2);
+    const pixelCount = u32.length;
+    for (let i = 0; i < pixelCount; i++) {
+      const byteIdx = i * 4 + channelOffset;
+      const val = data[byteIdx]!;
+      // Build 0xAA_val_val_val in little-endian: bytes are [val, val, val, alpha]
+      u32[i] = val | (val << 8) | (val << 16) | (data[i * 4 + 3]! << 24);
+    }
+  } else {
+    // Big-endian fallback: scalar approach
+    for (let i = 0; i < len; i += 4) {
+      const val = data[i + channelOffset]!;
+      data[i] = val;
+      data[i + 1] = val;
+      data[i + 2] = val;
+      // Alpha unchanged
+    }
+  }
+}
+
+/**
+ * Apply luminance channel isolation: compute Rec.709 luminance and set R=G=B=luma.
+ * Uses a Uint32Array view for efficient whole-pixel writes on little-endian systems.
+ *
+ * @param data - The pixel data buffer
+ */
+export function applyLuminanceIsolation(data: Uint8ClampedArray): void {
+  if (IS_LITTLE_ENDIAN) {
+    const u32 = new Uint32Array(data.buffer, data.byteOffset, data.byteLength >> 2);
+    const pixelCount = u32.length;
+    for (let i = 0; i < pixelCount; i++) {
+      const byteIdx = i * 4;
+      const luma = Math.round(
+        LUMA_R * data[byteIdx]! + LUMA_G * data[byteIdx + 1]! + LUMA_B * data[byteIdx + 2]!
+      );
+      const val = Math.max(0, Math.min(255, luma));
+      u32[i] = val | (val << 8) | (val << 16) | (data[byteIdx + 3]! << 24);
+    }
+  } else {
+    const len = data.length;
+    for (let i = 0; i < len; i += 4) {
+      const luma = Math.round(
+        LUMA_R * data[i]! + LUMA_G * data[i + 1]! + LUMA_B * data[i + 2]!
+      );
+      const val = Math.max(0, Math.min(255, luma));
+      data[i] = val;
+      data[i + 1] = val;
+      data[i + 2] = val;
+    }
+  }
+}
+
+/**
+ * Build a 256-entry brightness lookup table.
+ * Each entry maps an input byte value (0-255) to the brightness-adjusted output.
+ *
+ * @param multiplier - Brightness multiplier (1.0 = no change, >1 = brighter, <1 = darker)
+ * @returns A 256-entry Uint8Array lookup table
+ */
+export function buildBrightnessLUT(multiplier: number): Uint8Array {
+  const lut = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) {
+    lut[i] = Math.max(0, Math.min(255, Math.round(i * multiplier)));
+  }
+  return lut;
+}
+
+/**
+ * Apply a pre-computed LUT to all R, G, B channels (alpha preserved).
+ *
+ * @param data - The pixel data buffer
+ * @param lut - A 256-entry lookup table
+ */
+export function applyLUTToRGB(data: Uint8ClampedArray, lut: Uint8Array): void {
+  const len = data.length;
+  for (let i = 0; i < len; i += 4) {
+    data[i]     = lut[data[i]!]!;
+    data[i + 1] = lut[data[i + 1]!]!;
+    data[i + 2] = lut[data[i + 2]!]!;
+    // Alpha unchanged
+  }
+}

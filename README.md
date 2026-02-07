@@ -190,6 +190,10 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 - **Smooth Zoom Animation** - requestAnimationFrame-based zoom with ease-out cubic easing
 - **Cache indicator** showing cached frames and memory usage
 - **Prerender Buffer** - background processing of effects for smooth playback
+  - Double-buffered cache for glitch-free effects parameter changes
+  - SIMD-like TypedArray optimizations for color inversion and channel isolation
+  - Half-resolution convolution for clarity and sharpen (4x fewer pixels)
+  - Async chunked processing with main-thread yielding (<16ms blocking)
 - **Multi-Clip Playlist** - manage and play multiple clips in sequence
   - Add clips from any loaded source with in/out points
   - Drag-and-drop reordering

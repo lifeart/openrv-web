@@ -49,6 +49,7 @@ import type { IPImage } from '../../core/image/Image';
 
 // Extracted effect processing utilities
 import { applyHighlightsShadows, applyVibrance, applyClarity, applySharpenCPU, applyToneMapping } from './ViewerEffects';
+import { yieldToMain } from '../../utils/EffectProcessor';
 import { applyHueRotation as applyHueRotationPixel, isIdentityHueRotation } from '../../color/HueRotation';
 import {
   createWipeUIElements,
@@ -179,6 +180,10 @@ export class Viewer {
 
   // Animation frame for smooth rendering
   private pendingRender = false;
+
+  // Generation counter for async effects — incremented on each render() call
+  // so that stale async operations can detect they've been superseded and bail out.
+  private _asyncEffectsGeneration = 0;
 
   // Pending video frame fetch tracking
   private pendingVideoFrameFetch: Promise<void> | null = null;
@@ -1672,6 +1677,8 @@ export class Viewer {
   }
 
   render(): void {
+    // Bump generation so any in-flight async effects from a previous render() are cancelled.
+    this._asyncEffectsGeneration++;
     // Invalidate layout cache once per frame - measurements are cached within the frame
     this.invalidateLayoutCache();
     this.renderImage();
@@ -2313,7 +2320,7 @@ export class Viewer {
 
     // Check if crop clipping should be applied (will be done AFTER all rendering)
     // Note: We can't use ctx.clip() because putImageData() ignores clip regions
-    const cropClipActive = this.cropState.enabled && !isFullCropRegion(this.cropState.region);
+    let cropClipActive = this.cropState.enabled && !isFullCropRegion(this.cropState.region);
 
     // Try prerendered cache first during playback for smooth performance with effects
     if (this.session.isPlaying && this.prerenderBuffer) {
@@ -2495,8 +2502,26 @@ export class Viewer {
     if (this.session.isPlaying && this.prerenderBuffer) {
       this.applyLightweightEffects(this.imageCtx, displayWidth, displayHeight);
     } else {
-      // When paused/scrubbing, apply all effects synchronously for instant feedback
-      this.applyBatchedPixelEffects(this.imageCtx, displayWidth, displayHeight);
+      // When paused/scrubbing, apply all effects.
+      // Phase 4A: Use async version when heavy inter-pixel effects (clarity/sharpen)
+      // are active, to yield between passes and keep each blocking period <16ms.
+      // For lightweight per-pixel-only effects, use the sync version for simplicity.
+      const hasClarity = this.colorAdjustments.clarity !== 0;
+      const hasSharpen = this.filterSettings.sharpen > 0;
+      if (hasClarity || hasSharpen) {
+        // Fire-and-forget: the async method checks _asyncEffectsGeneration at each
+        // yield point and bails out if a newer render() has started, preventing
+        // stale pixel data from overwriting a newer frame. Crop clipping is handled
+        // inside the async method (after putImageData) for the same reason.
+        void this.applyBatchedPixelEffectsAsync(
+          this.imageCtx, displayWidth, displayHeight,
+          this._asyncEffectsGeneration, cropClipActive
+        );
+        // Skip the crop clipping below — it's handled inside the async method.
+        cropClipActive = false;
+      } else {
+        this.applyBatchedPixelEffects(this.imageCtx, displayWidth, displayHeight);
+      }
     }
 
     // Apply crop clipping by clearing areas outside the crop region
@@ -3279,6 +3304,168 @@ export class Viewer {
 
     // Single putImageData call
     ctx.putImageData(imageData, 0, 0);
+  }
+
+  /**
+   * Async version of applyBatchedPixelEffects that yields to the event loop
+   * between major effect passes. This keeps each blocking period under ~16ms,
+   * preventing janky UI during paused frame updates, export rendering, or
+   * interactive slider dragging on CPU fallback.
+   *
+   * Produces identical pixel output to the sync applyBatchedPixelEffects().
+   * During playback, the sync version is used instead (workers handle CPU effects).
+   */
+  private async applyBatchedPixelEffectsAsync(
+    ctx: CanvasRenderingContext2D, width: number, height: number,
+    generation: number, cropClipActive: boolean
+  ): Promise<void> {
+    const hasCDL = !isDefaultCDL(this.cdlValues);
+    const hasCurves = !isDefaultCurves(this.curvesData);
+    const hasSharpen = this.filterSettings.sharpen > 0;
+    const hasChannel = this.channelMode !== 'rgb';
+    const hasHighlightsShadows = this.colorAdjustments.highlights !== 0 || this.colorAdjustments.shadows !== 0 ||
+                                 this.colorAdjustments.whites !== 0 || this.colorAdjustments.blacks !== 0;
+    const hasVibrance = this.colorAdjustments.vibrance !== 0;
+    const hasClarity = this.colorAdjustments.clarity !== 0;
+    const hasHueRotation = !isIdentityHueRotation(this.colorAdjustments.hueRotation);
+    const hasColorWheels = this.colorWheels.hasAdjustments();
+    const hasHSLQualifier = this.hslQualifier.isEnabled();
+    const hasFalseColor = this.falseColor.isEnabled();
+    const hasLuminanceVis = this.luminanceVisualization.getMode() !== 'off' && this.luminanceVisualization.getMode() !== 'false-color';
+    const hasZebras = this.zebraStripes.isEnabled();
+    const hasClippingOverlay = this.clippingOverlay.isEnabled();
+    const hasToneMapping = this.isToneMappingEnabled();
+    const hasInversion = this.colorInversionEnabled;
+    const hasDisplayColorMgmt = isDisplayStateActive(this.displayColorState);
+
+    // Early return if no pixel effects are active
+    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasHueRotation && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasLuminanceVis && !hasZebras && !hasClippingOverlay && !hasToneMapping && !hasInversion && !hasDisplayColorMgmt) {
+      return;
+    }
+
+    // Single getImageData call
+    const imageData = ctx.getImageData(0, 0, width, height);
+
+    // --- Pass 1: Clarity (most expensive - 5x5 Gaussian blur, inter-pixel dependency) ---
+    if (hasClarity) {
+      applyClarity(imageData, this.colorAdjustments.clarity);
+      await yieldToMain();
+      if (this._asyncEffectsGeneration !== generation) return; // superseded by newer render
+    }
+
+    // --- Pass 2: Per-pixel color effects (merged where possible) ---
+    const hasPerPixelEffects = hasHighlightsShadows || hasVibrance || hasHueRotation ||
+      hasColorWheels || hasCDL || hasCurves || hasHSLQualifier || hasToneMapping || hasInversion;
+
+    if (hasPerPixelEffects) {
+      // Apply highlight/shadow recovery
+      if (hasHighlightsShadows) {
+        applyHighlightsShadows(imageData, {
+          highlights: this.colorAdjustments.highlights,
+          shadows: this.colorAdjustments.shadows,
+          whites: this.colorAdjustments.whites,
+          blacks: this.colorAdjustments.blacks,
+        });
+      }
+
+      // Apply vibrance
+      if (hasVibrance) {
+        applyVibrance(imageData, {
+          vibrance: this.colorAdjustments.vibrance,
+          skinProtection: this.colorAdjustments.vibranceSkinProtection,
+        });
+      }
+
+      // Apply hue rotation
+      if (hasHueRotation) {
+        const data = imageData.data;
+        const len = data.length;
+        for (let i = 0; i < len; i += 4) {
+          const r = data[i]! / 255;
+          const g = data[i + 1]! / 255;
+          const b = data[i + 2]! / 255;
+          const [nr, ng, nb] = applyHueRotationPixel(r, g, b, this.colorAdjustments.hueRotation);
+          data[i] = Math.round(nr * 255);
+          data[i + 1] = Math.round(ng * 255);
+          data[i + 2] = Math.round(nb * 255);
+        }
+      }
+
+      // Apply color wheels
+      if (hasColorWheels) {
+        this.colorWheels.apply(imageData);
+      }
+
+      // Apply CDL color correction
+      if (hasCDL) {
+        applyCDLToImageData(imageData, this.cdlValues);
+      }
+
+      // Apply color curves
+      if (hasCurves) {
+        this.curveLUTCache.apply(imageData, this.curvesData);
+      }
+
+      // Apply HSL Qualifier
+      if (hasHSLQualifier) {
+        this.hslQualifier.apply(imageData);
+      }
+
+      // Apply tone mapping
+      if (hasToneMapping) {
+        applyToneMapping(imageData, this.toneMappingState.operator);
+      }
+
+      // Apply color inversion
+      if (hasInversion) {
+        applyColorInversion(imageData);
+      }
+
+      await yieldToMain();
+      if (this._asyncEffectsGeneration !== generation) return; // superseded by newer render
+    }
+
+    // --- Pass 3: Sharpen (inter-pixel dependency - 3x3 kernel) ---
+    if (hasSharpen) {
+      this.applySharpenToImageData(imageData);
+      await yieldToMain();
+      if (this._asyncEffectsGeneration !== generation) return; // superseded by newer render
+    }
+
+    // --- Pass 4: Channel isolation + display color management ---
+    if (hasChannel) {
+      applyChannelIsolation(imageData, this.channelMode);
+    }
+
+    if (hasDisplayColorMgmt) {
+      applyDisplayColorManagementToImageData(imageData, this.displayColorState);
+    }
+
+    // --- Pass 5: Diagnostic overlays ---
+    if (hasLuminanceVis) {
+      this.luminanceVisualization.apply(imageData);
+    } else if (hasFalseColor) {
+      this.falseColor.apply(imageData);
+    }
+
+    if (hasZebras && !hasFalseColor && !hasLuminanceVis) {
+      this.zebraStripes.apply(imageData);
+    }
+
+    if (hasClippingOverlay && !hasFalseColor && !hasLuminanceVis && !hasZebras) {
+      this.clippingOverlay.apply(imageData);
+    }
+
+    // Final generation check before writing pixels — avoid overwriting a newer frame.
+    if (this._asyncEffectsGeneration !== generation) return;
+
+    // Single putImageData call
+    ctx.putImageData(imageData, 0, 0);
+
+    // Apply crop clipping after putImageData (putImageData ignores clip regions)
+    if (cropClipActive) {
+      this.clearOutsideCropRegion(width, height);
+    }
   }
 
   /**

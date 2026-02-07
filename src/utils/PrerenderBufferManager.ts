@@ -122,6 +122,10 @@ export class PrerenderBufferManager {
   private workersInitialized: boolean = false;
   private workersAvailable: boolean = false;
 
+  // Phase 2C: Double-buffering - previous generation cache for fallback during effects changes
+  private previousCache: Map<number, CachedFrame> = new Map();
+  private previousEffectsHash: string | null = null;
+
   // Statistics
   private cacheHits: number = 0;
   private cacheMisses: number = 0;
@@ -186,32 +190,29 @@ export class PrerenderBufferManager {
   /**
    * Get a pre-rendered frame from cache (synchronous)
    * Returns null if frame is not in cache.
-   * During playback, returns stale cached frames as fallback to avoid
-   * dropping to expensive live rendering while effects are being updated.
+   * Uses double-buffering: checks current cache first, then falls back to
+   * previousCache (from the last effects hash) to avoid flashing unprocessed
+   * frames while new effects are being re-rendered.
    */
   getFrame(frameNumber: number): CachedFrame | null {
     if (frameNumber < 1 || frameNumber > this.totalFrames) {
       return null;
     }
 
+    // First: check current cache (current effects hash)
     const cached = this.cache.get(frameNumber);
-    if (!cached) {
-      this.cacheMisses++;
-      return null;
-    }
-
-    if (cached.effectsHash === this.currentEffectsHash) {
+    if (cached && cached.effectsHash === this.currentEffectsHash) {
       this.cacheHits++;
       this.updateAccessOrder(frameNumber);
       return cached;
     }
 
-    // During playback, allow stale frames as fallback
-    // (better than dropping to live render which causes stuttering)
-    if (this.isPlaying) {
+    // Second: check previousCache (previous effects hash) as fallback
+    // This avoids the "flash" of unprocessed frames when effects change
+    const previousCached = this.previousCache.get(frameNumber);
+    if (previousCached) {
       this.staleCacheHits++;
-      this.updateAccessOrder(frameNumber);
-      return cached;
+      return previousCached;
     }
 
     this.cacheMisses++;
@@ -228,8 +229,8 @@ export class PrerenderBufferManager {
 
   /**
    * Update the effects state and invalidate cache if changed.
-   * During playback, performs a soft invalidation that keeps stale frames
-   * as fallback while new frames are pre-rendered in the background.
+   * Uses double-buffering: rotates current cache into previousCache so old
+   * frames remain available as fallback while new effects are being rendered.
    */
   updateEffects(state: AllEffectsState): void {
     const newHash = computeEffectsHash(state);
@@ -251,13 +252,18 @@ export class PrerenderBufferManager {
         this.idleCallbackId = null;
       }
 
-      if (!this.isPlaying) {
-        // When paused, do a hard invalidation (accuracy matters more)
-        this.cache.clear();
-        this.accessOrder.clear();
+      // Phase 2C: Double-buffer rotation
+      // Move current cache → previousCache (only keep ONE generation back)
+      // Clear old previousCache first to avoid unbounded memory growth
+      this.previousCache.clear();
+      if (this.cache.size > 0) {
+        this.previousCache = this.cache;
+        this.previousEffectsHash = this.currentEffectsHash;
       }
-      // During playback, keep stale cached frames as fallback
-      // (getFrame will return them with stale effectsHash)
+
+      // Start fresh cache for new effects hash
+      this.cache = new Map();
+      this.accessOrder.clear();
 
       this.currentEffectsHash = newHash;
     }
@@ -266,7 +272,7 @@ export class PrerenderBufferManager {
   }
 
   /**
-   * Invalidate all cached frames
+   * Invalidate all cached frames (both current and previous generation)
    */
   invalidateAll(): void {
     for (const request of this.pendingRequests.values()) {
@@ -277,6 +283,9 @@ export class PrerenderBufferManager {
 
     this.cache.clear();
     this.accessOrder.clear();
+    // Phase 2C: Also clear previousCache on full invalidation
+    this.previousCache.clear();
+    this.previousEffectsHash = null;
 
     if (this.idleCallbackId !== null) {
       if (this.usingIdleCallback && typeof cancelIdleCallback !== 'undefined') {
@@ -733,6 +742,17 @@ export class PrerenderBufferManager {
     this.cache.set(frame, cached);
     this.updateAccessOrder(frame);
     this.enforceMaxCacheSize();
+    // Phase 2C: Clear previousCache once new cache has enough frames
+    // to avoid holding two full generations in memory indefinitely.
+    // Threshold: when new cache has >= half the previous cache size (or >= 10 frames),
+    // the previous generation is no longer needed as fallback.
+    if (this.previousCache.size > 0) {
+      const threshold = Math.max(10, Math.floor(this.previousCache.size / 2));
+      if (this.cache.size >= threshold) {
+        this.previousCache.clear();
+        this.previousEffectsHash = null;
+      }
+    }
     // Notify UI of cache update
     this.onCacheUpdateCallback?.();
     // Phase 2A: Notify that a specific frame completed processing
@@ -803,6 +823,8 @@ export class PrerenderBufferManager {
 
   getStats(): {
     cacheSize: number;
+    previousCacheSize: number;
+    hasPreviousCache: boolean;
     pendingRequests: number;
     activeRequests: number;
     cacheHits: number;
@@ -816,6 +838,8 @@ export class PrerenderBufferManager {
     const totalRequests = this.cacheHits + this.staleCacheHits + this.cacheMisses;
     return {
       cacheSize: this.cache.size,
+      previousCacheSize: this.previousCache.size,
+      hasPreviousCache: this.previousEffectsHash !== null,
       pendingRequests: this.pendingRequests.size,
       activeRequests: this.activeCount,
       cacheHits: this.cacheHits,
