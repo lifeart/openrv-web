@@ -17,6 +17,7 @@ import type { BackgroundPatternState } from '../ui/components/BackgroundPatternC
 import type { CurveLUTs } from '../color/ColorCurves';
 import type { ChannelMode } from '../ui/components/ChannelSelect';
 import type { HSLQualifierState } from '../ui/components/HSLQualifier';
+import type { RenderState } from './RenderState';
 
 /**
  * Opaque texture handle.
@@ -172,6 +173,11 @@ export interface RendererBackend {
 
   /** Set HSL qualifier (secondary color correction) state. */
   setHSLQualifier(state: HSLQualifierState): void;
+
+  // --- Batch state application ---
+
+  /** Apply all render state in a single call, replacing individual setter calls. */
+  applyRenderState(state: RenderState): void;
 
   // --- SDR frame rendering (Phase 1A) ---
 

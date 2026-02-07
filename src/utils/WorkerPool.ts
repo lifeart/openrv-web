@@ -8,6 +8,10 @@
  * - Graceful shutdown and cleanup
  */
 
+import { Logger } from './Logger';
+
+const log = new Logger('WorkerPool');
+
 /**
  * Task data must be a plain object (not null, array, or primitive)
  */
@@ -103,7 +107,7 @@ export class WorkerPool<TResult = unknown> {
         setTimeout(() => {
           if (!resolved) {
             resolved = true;
-            console.warn('Worker did not send ready signal within timeout, assuming ready');
+            log.warn('Worker did not send ready signal within timeout, assuming ready');
             workerState.ready = true;
             worker.removeEventListener('message', onMessage); // Fix memory leak
             resolve();
@@ -231,7 +235,7 @@ export class WorkerPool<TResult = unknown> {
       return; // Task already completed
     }
 
-    console.warn(`Task ${taskId} timed out after ${this.config.taskTimeout}ms`);
+    log.warn(`Task ${taskId} timed out after ${this.config.taskTimeout}ms`);
 
     this.pendingTasks.delete(taskId);
     workerState.busy = false;
@@ -290,7 +294,7 @@ export class WorkerPool<TResult = unknown> {
    */
   private handleWorkerError(workerState: WorkerState, event: ErrorEvent): void {
     // Log detailed error information for debugging
-    console.error('Worker error:', {
+    log.error('Worker error:', {
       message: event.message,
       filename: event.filename,
       lineno: event.lineno,
@@ -386,9 +390,9 @@ export class WorkerPool<TResult = unknown> {
         }
       }, 1000);
 
-      console.log('Worker restarted successfully');
+      log.info('Worker restarted successfully');
     } catch (error) {
-      console.error('Failed to restart worker:', error);
+      log.error('Failed to restart worker:', error);
       // Remove the failed worker from the pool
       const index = this.workers.indexOf(workerState);
       if (index !== -1) {

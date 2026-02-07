@@ -13,6 +13,10 @@ import { PATTERN_COLORS } from '../ui/components/BackgroundPatternControl';
 import type { CurveLUTs } from '../color/ColorCurves';
 import type { ChannelMode } from '../ui/components/ChannelSelect';
 import type { HSLQualifierState } from '../ui/components/HSLQualifier';
+import type { RenderState } from './RenderState';
+import { Logger } from '../utils/Logger';
+
+const log = new Logger('Renderer');
 
 // Re-export the interface and types so existing consumers can import from here
 export type { RendererBackend, TextureHandle } from './RendererBackend';
@@ -204,35 +208,37 @@ export class Renderer implements RendererBackend {
         glExt.drawingBufferColorSpace = 'rec2100-hlg';
         if (glExt.drawingBufferColorSpace === 'rec2100-hlg') {
           this.hdrOutputMode = 'hlg';
-          console.log('[Renderer] HDR output: rec2100-hlg');
+          log.info('HDR output: rec2100-hlg');
         } else {
           glExt.drawingBufferColorSpace = 'rec2100-pq';
           if (glExt.drawingBufferColorSpace === 'rec2100-pq') {
             this.hdrOutputMode = 'pq';
-            console.log('[Renderer] HDR output: rec2100-pq');
+            log.info('HDR output: rec2100-pq');
           } else {
             // Fall back to P3
             if (capabilities?.webglP3) {
               glExt.drawingBufferColorSpace = 'display-p3';
             }
-            console.log(`[Renderer] HDR color spaces not accepted, drawingBufferColorSpace='${glExt.drawingBufferColorSpace}'`);
+            log.info(`HDR color spaces not accepted, drawingBufferColorSpace='${glExt.drawingBufferColorSpace}'`);
           }
         }
-      } catch {
+      } catch (e) {
         // rec2100-hlg/pq not in PredefinedColorSpace enum — expected on most browsers.
         // Fall back to P3 if possible.
         try {
           if (capabilities?.webglP3) {
             (gl as unknown as { drawingBufferColorSpace: string }).drawingBufferColorSpace = 'display-p3';
           }
-        } catch { /* ignore */ }
-        console.log(`[Renderer] HDR color spaces not available, using ${capabilities?.webglP3 ? 'display-p3' : 'srgb'}`);
+        } catch (p3Err) {
+          log.warn('Failed to set display-p3 drawingBufferColorSpace:', p3Err);
+        }
+        log.info(`HDR color spaces not available, using ${capabilities?.webglP3 ? 'display-p3' : 'srgb'}`);
       }
     } else if (capabilities?.webglP3) {
       try {
         (gl as WebGL2RenderingContext & { drawingBufferColorSpace: string }).drawingBufferColorSpace = 'display-p3';
-      } catch {
-        // Browser doesn't support setting drawingBufferColorSpace
+      } catch (e) {
+        log.warn('Browser does not support setting drawingBufferColorSpace:', e);
       }
     }
 
@@ -240,7 +246,7 @@ export class Renderer implements RendererBackend {
     const requiredExtensions = ['EXT_color_buffer_float', 'OES_texture_float_linear'];
     for (const ext of requiredExtensions) {
       if (!gl.getExtension(ext)) {
-        console.warn(`Extension ${ext} not available`);
+        log.warn(`Extension ${ext} not available`);
       }
     }
 
@@ -1299,8 +1305,8 @@ export class Renderer implements RendererBackend {
         // Set unpackColorSpace for best color fidelity
         try {
           (gl as unknown as Record<string, string>).unpackColorSpace = 'display-p3';
-        } catch {
-          // Browser doesn't support unpackColorSpace
+        } catch (e) {
+          log.warn('Browser does not support unpackColorSpace:', e);
         }
 
         gl.texImage2D(
@@ -1318,19 +1324,23 @@ export class Renderer implements RendererBackend {
         // Reset unpackColorSpace back to sRGB
         try {
           (gl as unknown as Record<string, string>).unpackColorSpace = 'srgb';
-        } catch { /* ignore */ }
+        } catch (e) {
+          log.warn('Failed to reset unpackColorSpace to srgb:', e);
+        }
 
         image.textureNeedsUpdate = false;
         return;
-      } catch {
+      } catch (e) {
         // VideoFrame texImage2D not supported - fall through to SDR path
-        console.warn('VideoFrame texImage2D failed, falling back to typed array upload');
+        log.warn('VideoFrame texImage2D failed, falling back to typed array upload:', e);
         image.close();
 
         // Reset unpackColorSpace back to sRGB
         try {
           (gl as unknown as Record<string, string>).unpackColorSpace = 'srgb';
-        } catch { /* ignore */ }
+        } catch (resetErr) {
+          log.warn('Failed to reset unpackColorSpace to srgb:', resetErr);
+        }
       }
     }
 
@@ -1498,7 +1508,7 @@ export class Renderer implements RendererBackend {
 
       // Verify the assignment stuck (browser silently ignores unsupported values)
       if (mode !== 'sdr' && glExt.drawingBufferColorSpace !== targetColorSpace) {
-        console.warn(`[Renderer] drawingBufferColorSpace='${targetColorSpace}' not supported (got '${glExt.drawingBufferColorSpace}')`);
+        log.warn(`drawingBufferColorSpace='${targetColorSpace}' not supported (got '${glExt.drawingBufferColorSpace}')`);
         this.hdrOutputMode = previousMode;
         return false;
       }
@@ -1511,8 +1521,9 @@ export class Renderer implements RendererBackend {
       }
 
       return true;
-    } catch {
+    } catch (e) {
       // Ensure hdrOutputMode is rolled back to its previous value
+      log.warn('Failed to set HDR output mode:', e);
       this.hdrOutputMode = previousMode;
       return false;
     }
@@ -1763,13 +1774,38 @@ export class Renderer implements RendererBackend {
     this.hslMattePreview = state.mattePreview;
   }
 
+  applyRenderState(state: RenderState): void {
+    this.setColorAdjustments(state.colorAdjustments);
+    this.setColorInversion(state.colorInversion);
+    this.setToneMappingState(state.toneMappingState);
+    this.setBackgroundPattern(state.backgroundPattern);
+    this.setCDL(state.cdl);
+    this.setCurvesLUT(state.curvesLUT);
+    this.setColorWheels(state.colorWheels);
+    this.setFalseColor(state.falseColor.enabled, state.falseColor.lut);
+    this.setZebraStripes(state.zebraStripes);
+    this.setChannelMode(state.channelMode);
+    this.setLUT(state.lut.data, state.lut.size, state.lut.intensity);
+    this.setDisplayColorState(state.displayColor);
+    this.setHighlightsShadows(
+      state.highlightsShadows.highlights,
+      state.highlightsShadows.shadows,
+      state.highlightsShadows.whites,
+      state.highlightsShadows.blacks,
+    );
+    this.setVibrance(state.vibrance.amount, state.vibrance.skinProtection);
+    this.setClarity(state.clarity);
+    this.setSharpen(state.sharpen);
+    this.setHSLQualifier(state.hslQualifier);
+  }
+
   private tryConfigureHDRMetadata(): void {
     if (!this.canvas) return;
     if ('configureHighDynamicRange' in this.canvas) {
       try {
         (this.canvas as HTMLCanvasElement & { configureHighDynamicRange: (opts: { mode: string }) => void }).configureHighDynamicRange({ mode: 'default' });
-      } catch {
-        // Not supported — continue without metadata
+      } catch (e) {
+        log.warn('configureHighDynamicRange not supported:', e);
       }
     }
   }
@@ -1819,8 +1855,9 @@ export class Renderer implements RendererBackend {
         gl.UNSIGNED_BYTE,
         source as TexImageSource,
       );
-    } catch {
+    } catch (e) {
       // texImage2D can throw for tainted or invalid sources
+      log.warn('texImage2D failed for SDR frame (tainted or invalid source):', e);
       return null;
     }
 

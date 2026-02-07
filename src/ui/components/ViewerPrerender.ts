@@ -134,7 +134,5 @@ export function getPrerenderStats(
   };
 }
 
-/**
- * Effects debounce management constants.
- */
-export const EFFECTS_DEBOUNCE_MS = 50;
+// Re-export for backward compatibility
+export { EFFECTS_DEBOUNCE_MS } from '../../config/TimingConfig';

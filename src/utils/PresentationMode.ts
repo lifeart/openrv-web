@@ -6,6 +6,9 @@
  */
 
 import { EventEmitter, EventMap } from './EventEmitter';
+import { Logger } from './Logger';
+
+const log = new Logger('PresentationMode');
 
 export interface PresentationState {
   enabled: boolean;
@@ -219,8 +222,8 @@ export class PresentationMode extends EventEmitter<PresentationEvents> {
       if (saved !== null) {
         this.state.cursorAutoHide = saved === 'true';
       }
-    } catch {
-      // localStorage not available
+    } catch (e) {
+      log.warn('Failed to load preference from localStorage:', e);
     }
   }
 
@@ -230,8 +233,8 @@ export class PresentationMode extends EventEmitter<PresentationEvents> {
   savePreference(): void {
     try {
       localStorage.setItem('openrv-cursor-autohide', String(this.state.cursorAutoHide));
-    } catch {
-      // localStorage not available
+    } catch (e) {
+      log.warn('Failed to save preference to localStorage:', e);
     }
   }
 
@@ -254,6 +257,13 @@ export class PresentationMode extends EventEmitter<PresentationEvents> {
     }
     this.showCursor();
     document.removeEventListener('mousemove', this.boundHandleMouseMove);
+
+    // Remove screen reader announcer element to prevent DOM pollution
+    const announcer = document.getElementById('openrv-sr-announcer');
+    if (announcer) {
+      announcer.remove();
+    }
+
     this.removeAllListeners();
   }
 }

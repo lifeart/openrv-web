@@ -13,6 +13,7 @@
 
 import { cineonLogToLinear as _cineonLogToLinear, type LogLinearOptions } from './LogLinear';
 import { unpackDPX10bit } from './DPXDecoder';
+import { validateImageDimensions, toRGBA as sharedToRGBA, applyLogToLinearRGBA as sharedApplyLogToLinearRGBA } from './shared';
 
 // Re-export for backwards compatibility
 export { cineonLogToLinear } from './LogLinear';
@@ -87,27 +88,16 @@ export function getCineonInfo(buffer: ArrayBuffer): CineonInfo | null {
 }
 
 /**
- * Convert component data to RGBA Float32Array
- * Cineon is always RGB, so alpha is set to 1.0
+ * Convert component data to RGBA Float32Array.
+ * Cineon is always 3-channel RGB; delegates to shared utility.
  */
 function toRGBA(data: Float32Array, width: number, height: number): Float32Array {
-  const totalPixels = width * height;
-  const result = new Float32Array(totalPixels * 4);
-
-  for (let i = 0; i < totalPixels; i++) {
-    const srcIdx = i * 3;
-    const dstIdx = i * 4;
-    result[dstIdx] = data[srcIdx] ?? 0;
-    result[dstIdx + 1] = data[srcIdx + 1] ?? 0;
-    result[dstIdx + 2] = data[srcIdx + 2] ?? 0;
-    result[dstIdx + 3] = 1.0;
-  }
-
-  return result;
+  return sharedToRGBA(data, width, height, 3);
 }
 
 /**
- * Apply log-to-linear conversion on RGBA data (only on RGB, leave alpha)
+ * Apply log-to-linear conversion on RGBA data (only on RGB, leave alpha).
+ * Wraps shared utility with Cineon-specific log-to-linear function.
  */
 function applyLogToLinearRGBA(
   data: Float32Array,
@@ -116,18 +106,7 @@ function applyLogToLinearRGBA(
   bitDepth: number,
   options?: LogLinearOptions
 ): void {
-  const totalPixels = width * height;
-  const maxCodeValue = (1 << bitDepth) - 1;
-
-  for (let i = 0; i < totalPixels; i++) {
-    const idx = i * 4;
-    for (let c = 0; c < 3; c++) {
-      const normalized = data[idx + c]!;
-      const codeValue = normalized * maxCodeValue;
-      data[idx + c] = _cineonLogToLinear(codeValue, options);
-    }
-    // Alpha stays as-is
-  }
+  sharedApplyLogToLinearRGBA(data, width, height, bitDepth, (codeValue) => _cineonLogToLinear(codeValue, options));
 }
 
 /**
@@ -149,9 +128,7 @@ export async function decodeCineon(
   const { width, height, bitDepth, channels, dataOffset } = info;
 
   // Validate dimensions
-  if (width <= 0 || height <= 0 || width > 65536 || height > 65536) {
-    throw new Error(`Invalid Cineon dimensions: ${width}x${height}`);
-  }
+  validateImageDimensions(width, height, 'Cineon');
 
   // Cineon is always 10-bit packed
   if (bitDepth !== 10) {

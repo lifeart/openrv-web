@@ -18,6 +18,7 @@
 
 import { IPImage, ImageMetadata } from '../core/image/Image';
 import { decompressPIZ } from './EXRPIZCodec';
+import { validateImageDimensions } from './shared';
 
 // EXR magic number
 const EXR_MAGIC = 0x01312f76;
@@ -137,10 +138,6 @@ export interface EXRDecodeOptions {
   /** Custom channel remapping configuration */
   channelRemapping?: EXRChannelRemapping;
 }
-
-// Maximum supported image dimensions (prevent memory exhaustion)
-const MAX_IMAGE_DIMENSION = 65536;
-const MAX_IMAGE_PIXELS = 268435456; // 256 megapixels
 
 // Maximum string length in EXR header (prevent denial of service)
 const MAX_STRING_LENGTH = 256;
@@ -439,18 +436,7 @@ function parseHeader(reader: EXRDataReader): EXRHeader {
     throw new Error(`Invalid EXR dimensions: ${width}x${height} (dataWindow: ${dw.xMin},${dw.yMin} to ${dw.xMax},${dw.yMax})`);
   }
 
-  if (width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION) {
-    throw new Error(
-      `EXR dimensions ${width}x${height} exceed maximum of ${MAX_IMAGE_DIMENSION}x${MAX_IMAGE_DIMENSION}`
-    );
-  }
-
-  const totalPixels = width * height;
-  if (totalPixels > MAX_IMAGE_PIXELS) {
-    throw new Error(
-      `EXR image has ${totalPixels} pixels, exceeding maximum of ${MAX_IMAGE_PIXELS}`
-    );
-  }
+  validateImageDimensions(width, height, 'EXR');
 
   // Validate channels
   if (header.channels.length === 0) {

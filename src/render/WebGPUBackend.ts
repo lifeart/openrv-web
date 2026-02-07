@@ -28,6 +28,7 @@ import type { BackgroundPatternState } from '../ui/components/BackgroundPatternC
 import type { CurveLUTs } from '../color/ColorCurves';
 import type { ChannelMode } from '../ui/components/ChannelSelect';
 import type { HSLQualifierState } from '../ui/components/HSLQualifier';
+import type { RenderState } from './RenderState';
 
 // ---------------------------------------------------------------------------
 // WebGPU type shims (experimental API, not in TS DOM lib)
@@ -311,6 +312,31 @@ export class WebGPUBackend implements RendererBackend {
   setClarity(_clarity: number): void { /* STUB */ }
   setSharpen(_amount: number): void { /* STUB */ }
   setHSLQualifier(_state: HSLQualifierState): void { /* STUB */ }
+
+  applyRenderState(state: RenderState): void {
+    this.setColorAdjustments(state.colorAdjustments);
+    this.setColorInversion(state.colorInversion);
+    this.setToneMappingState(state.toneMappingState);
+    this.setBackgroundPattern(state.backgroundPattern);
+    this.setCDL(state.cdl);
+    this.setCurvesLUT(state.curvesLUT);
+    this.setColorWheels(state.colorWheels);
+    this.setFalseColor(state.falseColor.enabled, state.falseColor.lut);
+    this.setZebraStripes(state.zebraStripes);
+    this.setChannelMode(state.channelMode);
+    this.setLUT(state.lut.data, state.lut.size, state.lut.intensity);
+    this.setDisplayColorState(state.displayColor);
+    this.setHighlightsShadows(
+      state.highlightsShadows.highlights,
+      state.highlightsShadows.shadows,
+      state.highlightsShadows.whites,
+      state.highlightsShadows.blacks,
+    );
+    this.setVibrance(state.vibrance.amount, state.vibrance.skinProtection);
+    this.setClarity(state.clarity);
+    this.setSharpen(state.sharpen);
+    this.setHSLQualifier(state.hslQualifier);
+  }
 
   // --- SDR frame rendering (Phase 1A) ---
   renderSDRFrame(

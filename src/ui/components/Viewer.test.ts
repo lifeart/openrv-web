@@ -71,10 +71,6 @@ interface TestableViewer {
   lastCursorColorUpdate?: undefined;
 
   // Ghost frame canvas pool
-  ghostFrameCanvasPool: { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D }[];
-  ghostFramePoolWidth: number;
-  ghostFramePoolHeight: number;
-  getGhostFrameCanvas(index: number, width: number, height: number): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } | null;
 
   // SDR WebGL rendering (Phase 1A + 1B)
   sdrWebGLRenderActive: boolean;
@@ -92,16 +88,14 @@ interface TestableViewer {
   // Phase 2A/2B: Prerender buffer
   prerenderBuffer: import('../../utils/PrerenderBufferManager').PrerenderBufferManager | null;
 
-  // Lens distortion
-  lensParams: import('../../transform/LensDistortion').LensDistortionParams;
-  applyLensDistortionToCtx(ctx: CanvasRenderingContext2D, width: number, height: number): void;
+  // Lens distortion manager
+  lensDistortionManager: import('./LensDistortionManager').LensDistortionManager;
 
-  // Ghost frames
-  ghostFrameState: import('./GhostFrameControl').GhostFrameState;
+  // Ghost frame manager
+  ghostFrameManager: import('./GhostFrameManager').GhostFrameManager;
 
-  // Stereo mode
-  stereoState: import('../../stereo/StereoRenderer').StereoState;
-  applyStereoMode(ctx: CanvasRenderingContext2D, width: number, height: number): void;
+  // Stereo manager
+  stereoManager: import('./StereoManager').StereoManager;
 
   // Background pattern
   backgroundPatternState: import('./BackgroundPatternControl').BackgroundPatternState;
@@ -109,7 +103,10 @@ interface TestableViewer {
   // Uncrop
   drawUncropBackground(displayWidth: number, displayHeight: number, uncropOffsetX: number, uncropOffsetY: number, imageDisplayW: number, imageDisplayH: number): void;
 
-  // OCIO color management
+  // Color pipeline manager
+  colorPipeline: import('./ColorPipelineManager').ColorPipelineManager;
+
+  // OCIO color management (legacy - now on colorPipeline)
   ocioEnabled: boolean;
   ocioBakedLUT: import('../../color/LUTLoader').LUT3D | null;
   applyOCIOToCanvas(ctx: CanvasRenderingContext2D, width: number, height: number): void;
@@ -121,6 +118,9 @@ interface TestableViewer {
 
   // Lightweight effects
   applyLightweightEffects(ctx: CanvasRenderingContext2D, width: number, height: number): void;
+
+  // Full batched pixel effects
+  applyBatchedPixelEffects(ctx: CanvasRenderingContext2D, width: number, height: number): void;
 
   // Crop clipping
   clearOutsideCropRegion(displayWidth: number, displayHeight: number): void;
@@ -1383,74 +1383,69 @@ describe('Viewer', () => {
 
   describe('ghost frame canvas pool (performance/03)', () => {
     it('VWR-300: pool is lazily initialized (empty at startup)', () => {
-      const pool = testable(viewer).ghostFrameCanvasPool;
+      const pool = testable(viewer).ghostFrameManager.canvasPool;
       expect(pool).toEqual([]);
-      expect(testable(viewer).ghostFramePoolWidth).toBe(0);
-      expect(testable(viewer).ghostFramePoolHeight).toBe(0);
+      expect(testable(viewer).ghostFrameManager.poolWidth).toBe(0);
+      expect(testable(viewer).ghostFrameManager.poolHeight).toBe(0);
     });
 
     it('VWR-301: getGhostFrameCanvas creates canvas on first call', () => {
-      const result = testable(viewer).getGhostFrameCanvas(0, 800, 600);
+      const result = testable(viewer).ghostFrameManager.getPoolCanvas(0, 800, 600);
       expect(result).not.toBeNull();
       expect(result!.canvas).toBeInstanceOf(HTMLCanvasElement);
       expect(result!.canvas.width).toBe(800);
       expect(result!.canvas.height).toBe(600);
       expect(result!.ctx).toBeDefined();
-      expect(testable(viewer).ghostFrameCanvasPool.length).toBe(1);
+      expect(testable(viewer).ghostFrameManager.canvasPool.length).toBe(1);
     });
 
     it('VWR-302: getGhostFrameCanvas reuses existing canvas (no new creation)', () => {
-      const first = testable(viewer).getGhostFrameCanvas(0, 800, 600);
-      const second = testable(viewer).getGhostFrameCanvas(0, 800, 600);
+      const first = testable(viewer).ghostFrameManager.getPoolCanvas(0, 800, 600);
+      const second = testable(viewer).ghostFrameManager.getPoolCanvas(0, 800, 600);
       expect(second!.canvas).toBe(first!.canvas);
       expect(second!.ctx).toBe(first!.ctx);
-      expect(testable(viewer).ghostFrameCanvasPool.length).toBe(1);
+      expect(testable(viewer).ghostFrameManager.canvasPool.length).toBe(1);
     });
 
     it('VWR-303: getGhostFrameCanvas grows pool for new indices', () => {
-      testable(viewer).getGhostFrameCanvas(0, 800, 600);
-      testable(viewer).getGhostFrameCanvas(1, 800, 600);
-      testable(viewer).getGhostFrameCanvas(2, 800, 600);
-      expect(testable(viewer).ghostFrameCanvasPool.length).toBe(3);
-      const pool = testable(viewer).ghostFrameCanvasPool;
+      testable(viewer).ghostFrameManager.getPoolCanvas(0, 800, 600);
+      testable(viewer).ghostFrameManager.getPoolCanvas(1, 800, 600);
+      testable(viewer).ghostFrameManager.getPoolCanvas(2, 800, 600);
+      expect(testable(viewer).ghostFrameManager.canvasPool.length).toBe(3);
+      const pool = testable(viewer).ghostFrameManager.canvasPool;
       expect(pool[0]!.canvas).not.toBe(pool[1]!.canvas);
       expect(pool[1]!.canvas).not.toBe(pool[2]!.canvas);
     });
 
     it('VWR-304: pool resizes all canvases when display dimensions change', () => {
-      testable(viewer).getGhostFrameCanvas(0, 800, 600);
-      testable(viewer).getGhostFrameCanvas(1, 800, 600);
+      testable(viewer).ghostFrameManager.getPoolCanvas(0, 800, 600);
+      testable(viewer).ghostFrameManager.getPoolCanvas(1, 800, 600);
       // Request with new dimensions
-      testable(viewer).getGhostFrameCanvas(0, 1920, 1080);
-      const pool = testable(viewer).ghostFrameCanvasPool;
+      testable(viewer).ghostFrameManager.getPoolCanvas(0, 1920, 1080);
+      const pool = testable(viewer).ghostFrameManager.canvasPool;
       expect(pool[0]!.canvas.width).toBe(1920);
       expect(pool[0]!.canvas.height).toBe(1080);
       expect(pool[1]!.canvas.width).toBe(1920);
       expect(pool[1]!.canvas.height).toBe(1080);
-      expect(testable(viewer).ghostFramePoolWidth).toBe(1920);
-      expect(testable(viewer).ghostFramePoolHeight).toBe(1080);
+      expect(testable(viewer).ghostFrameManager.poolWidth).toBe(1920);
+      expect(testable(viewer).ghostFrameManager.poolHeight).toBe(1080);
     });
 
     it('VWR-305: pool is trimmed when frame count decreases', () => {
       for (let i = 0; i < 5; i++) {
-        testable(viewer).getGhostFrameCanvas(i, 100, 100);
+        testable(viewer).ghostFrameManager.getPoolCanvas(i, 100, 100);
       }
-      expect(testable(viewer).ghostFrameCanvasPool.length).toBe(5);
+      expect(testable(viewer).ghostFrameManager.canvasPool.length).toBe(5);
 
-      // Simulate the trim logic from renderGhostFrames (line 3112-3113):
-      // if (poolIndex < this.ghostFrameCanvasPool.length) pool.length = poolIndex
-      const pool = testable(viewer).ghostFrameCanvasPool;
-      const poolIndex = 2;
-      if (poolIndex < pool.length) {
-        pool.length = poolIndex;
-      }
-      expect(testable(viewer).ghostFrameCanvasPool.length).toBe(2);
+      // Trim pool using the manager's trimPool method
+      testable(viewer).ghostFrameManager.trimPool(2);
+      expect(testable(viewer).ghostFrameManager.canvasPool.length).toBe(2);
     });
 
     it('VWR-306: pool is cleared when ghost frames disabled via setGhostFrameState', () => {
-      testable(viewer).getGhostFrameCanvas(0, 800, 600);
-      testable(viewer).getGhostFrameCanvas(1, 800, 600);
-      expect(testable(viewer).ghostFrameCanvasPool.length).toBe(2);
+      testable(viewer).ghostFrameManager.getPoolCanvas(0, 800, 600);
+      testable(viewer).ghostFrameManager.getPoolCanvas(1, 800, 600);
+      expect(testable(viewer).ghostFrameManager.canvasPool.length).toBe(2);
 
       viewer.setGhostFrameState({
         enabled: false,
@@ -1460,34 +1455,34 @@ describe('Viewer', () => {
         opacityFalloff: 0.7,
         colorTint: false,
       });
-      expect(testable(viewer).ghostFrameCanvasPool).toEqual([]);
-      expect(testable(viewer).ghostFramePoolWidth).toBe(0);
-      expect(testable(viewer).ghostFramePoolHeight).toBe(0);
+      expect(testable(viewer).ghostFrameManager.canvasPool).toEqual([]);
+      expect(testable(viewer).ghostFrameManager.poolWidth).toBe(0);
+      expect(testable(viewer).ghostFrameManager.poolHeight).toBe(0);
     });
 
     it('VWR-307: pool is cleared on resetGhostFrameState', () => {
-      testable(viewer).getGhostFrameCanvas(0, 800, 600);
-      expect(testable(viewer).ghostFrameCanvasPool.length).toBe(1);
+      testable(viewer).ghostFrameManager.getPoolCanvas(0, 800, 600);
+      expect(testable(viewer).ghostFrameManager.canvasPool.length).toBe(1);
 
       viewer.resetGhostFrameState();
-      expect(testable(viewer).ghostFrameCanvasPool).toEqual([]);
-      expect(testable(viewer).ghostFramePoolWidth).toBe(0);
-      expect(testable(viewer).ghostFramePoolHeight).toBe(0);
+      expect(testable(viewer).ghostFrameManager.canvasPool).toEqual([]);
+      expect(testable(viewer).ghostFrameManager.poolWidth).toBe(0);
+      expect(testable(viewer).ghostFrameManager.poolHeight).toBe(0);
     });
 
     it('VWR-308: pool is cleaned up in dispose()', () => {
-      testable(viewer).getGhostFrameCanvas(0, 800, 600);
-      testable(viewer).getGhostFrameCanvas(1, 800, 600);
-      expect(testable(viewer).ghostFrameCanvasPool.length).toBe(2);
+      testable(viewer).ghostFrameManager.getPoolCanvas(0, 800, 600);
+      testable(viewer).ghostFrameManager.getPoolCanvas(1, 800, 600);
+      expect(testable(viewer).ghostFrameManager.canvasPool.length).toBe(2);
 
       viewer.dispose();
-      expect(testable(viewer).ghostFrameCanvasPool).toEqual([]);
-      expect(testable(viewer).ghostFramePoolWidth).toBe(0);
-      expect(testable(viewer).ghostFramePoolHeight).toBe(0);
+      expect(testable(viewer).ghostFrameManager.canvasPool).toEqual([]);
+      expect(testable(viewer).ghostFrameManager.poolWidth).toBe(0);
+      expect(testable(viewer).ghostFrameManager.poolHeight).toBe(0);
     });
 
     it('VWR-309: clearRect is called before canvas reuse in renderGhostFrames', () => {
-      const entry = testable(viewer).getGhostFrameCanvas(0, 200, 200);
+      const entry = testable(viewer).ghostFrameManager.getPoolCanvas(0, 200, 200);
       expect(entry).not.toBeNull();
       const spy = vi.spyOn(entry!.ctx, 'clearRect');
 
@@ -1501,14 +1496,14 @@ describe('Viewer', () => {
       const createSpy = vi.spyOn(document, 'createElement');
 
       // First call creates a canvas
-      testable(viewer).getGhostFrameCanvas(0, 800, 600);
+      testable(viewer).ghostFrameManager.getPoolCanvas(0, 800, 600);
       const createCount1 = createSpy.mock.calls.filter(
         (c) => c[0] === 'canvas'
       ).length;
       expect(createCount1).toBe(1);
 
       // Second call with same index reuses -- no new createElement('canvas')
-      testable(viewer).getGhostFrameCanvas(0, 800, 600);
+      testable(viewer).ghostFrameManager.getPoolCanvas(0, 800, 600);
       const createCount2 = createSpy.mock.calls.filter(
         (c) => c[0] === 'canvas'
       ).length;
@@ -1542,7 +1537,7 @@ describe('Viewer', () => {
         mockCanvas as unknown as HTMLElement
       );
 
-      const result = testable(viewer).getGhostFrameCanvas(0, 800, 600);
+      const result = testable(viewer).ghostFrameManager.getPoolCanvas(0, 800, 600);
       expect(result).toBeNull();
 
       createSpy.mockRestore();
@@ -1551,7 +1546,7 @@ describe('Viewer', () => {
     it('VWR-313: pool not populated for video source path', () => {
       // The video path in renderGhostFrames uses getVideoFrameCanvas directly,
       // never calls getGhostFrameCanvas, so pool stays empty for video sources.
-      expect(testable(viewer).ghostFrameCanvasPool.length).toBe(0);
+      expect(testable(viewer).ghostFrameManager.canvasPool.length).toBe(0);
       viewer.setGhostFrameState({
         enabled: true,
         framesBefore: 2,
@@ -1561,29 +1556,29 @@ describe('Viewer', () => {
         colorTint: false,
       });
       // Pool should still be empty since no actual rendering occurred
-      expect(testable(viewer).ghostFrameCanvasPool.length).toBe(0);
+      expect(testable(viewer).ghostFrameManager.canvasPool.length).toBe(0);
     });
 
     it('VWR-314: pool dimensions are updated when size changes', () => {
-      testable(viewer).getGhostFrameCanvas(0, 640, 480);
-      expect(testable(viewer).ghostFramePoolWidth).toBe(640);
-      expect(testable(viewer).ghostFramePoolHeight).toBe(480);
+      testable(viewer).ghostFrameManager.getPoolCanvas(0, 640, 480);
+      expect(testable(viewer).ghostFrameManager.poolWidth).toBe(640);
+      expect(testable(viewer).ghostFrameManager.poolHeight).toBe(480);
 
-      testable(viewer).getGhostFrameCanvas(0, 1280, 720);
-      expect(testable(viewer).ghostFramePoolWidth).toBe(1280);
-      expect(testable(viewer).ghostFramePoolHeight).toBe(720);
+      testable(viewer).ghostFrameManager.getPoolCanvas(0, 1280, 720);
+      expect(testable(viewer).ghostFrameManager.poolWidth).toBe(1280);
+      expect(testable(viewer).ghostFrameManager.poolHeight).toBe(720);
     });
 
     it('VWR-315: no getContext call during steady-state reuse', () => {
       // First call creates canvas and calls getContext
-      testable(viewer).getGhostFrameCanvas(0, 800, 600);
+      testable(viewer).ghostFrameManager.getPoolCanvas(0, 800, 600);
 
       // Spy on getContext of the pooled canvas
-      const poolEntry = testable(viewer).ghostFrameCanvasPool[0];
+      const poolEntry = testable(viewer).ghostFrameManager.canvasPool[0];
       const ctxSpy = vi.spyOn(poolEntry!.canvas, 'getContext');
 
       // Re-request same index - should reuse without calling getContext
-      testable(viewer).getGhostFrameCanvas(0, 800, 600);
+      testable(viewer).ghostFrameManager.getPoolCanvas(0, 800, 600);
       expect(ctxSpy).not.toHaveBeenCalled();
 
       ctxSpy.mockRestore();
@@ -1886,7 +1881,7 @@ describe('Viewer', () => {
       } as TestableViewer['session'];
 
       // Spy on applyLensDistortionToCtx
-      const lensSpy = vi.spyOn(tv, 'applyLensDistortionToCtx');
+      const lensSpy = vi.spyOn(tv.lensDistortionManager, 'applyToCtx');
 
       viewer.render();
 
@@ -1941,7 +1936,7 @@ describe('Viewer', () => {
       } as TestableViewer['session'];
 
       // Spy on applyLensDistortionToCtx
-      const lensSpy = vi.spyOn(tv, 'applyLensDistortionToCtx');
+      const lensSpy = vi.spyOn(tv.lensDistortionManager, 'applyToCtx');
 
       viewer.render();
 
@@ -2116,7 +2111,7 @@ describe('Viewer', () => {
       } as TestableViewer['session'];
 
       // Spy on applyStereoMode
-      const stereoSpy = vi.spyOn(tv as any, 'applyStereoMode');
+      const stereoSpy = vi.spyOn(tv.stereoManager, 'applyStereoMode');
 
       viewer.render();
 
@@ -2170,7 +2165,7 @@ describe('Viewer', () => {
       } as TestableViewer['session'];
 
       // Spy on applyStereoMode
-      const stereoSpy = vi.spyOn(tv as any, 'applyStereoMode');
+      const stereoSpy = vi.spyOn(tv.stereoManager, 'applyStereoMode');
 
       viewer.render();
 
@@ -2423,8 +2418,8 @@ describe('Viewer', () => {
 
       // Spy on all the effect methods
       const ghostSpy = vi.spyOn(tv as any, 'renderGhostFrames');
-      const stereoSpy = vi.spyOn(tv as any, 'applyStereoMode');
-      const lensSpy = vi.spyOn(tv as any, 'applyLensDistortionToCtx');
+      const stereoSpy = vi.spyOn(tv.stereoManager, 'applyStereoMode');
+      const lensSpy = vi.spyOn(tv.lensDistortionManager, 'applyToCtx');
 
       viewer.render();
 
@@ -2648,8 +2643,8 @@ describe('Viewer', () => {
       // Even with GPU shader effects active, OCIO should prevent SDR WebGL
       viewer.setColorAdjustments({ ...DEFAULT_COLOR_ADJUSTMENTS, exposure: 1 });
       expect(tv.hasGPUShaderEffectsActive()).toBe(true);
-      expect(tv.ocioEnabled).toBe(true);
-      expect(tv.ocioBakedLUT).not.toBeNull();
+      expect(tv.colorPipeline.ocioEnabled).toBe(true);
+      expect(tv.colorPipeline.ocioBakedLUT).not.toBeNull();
     });
 
     it('VWR-404: OCIO is applied on playback cache hit path (before lightweight effects)', () => {
@@ -2815,8 +2810,8 @@ describe('Viewer', () => {
       // The check in renderImage() is:
       //   if (hdrFileSource && !(this.ocioEnabled && this.ocioBakedLUT))
       // When OCIO is active, this condition is false, so the HDR WebGL path is skipped.
-      expect(tv.ocioEnabled).toBe(true);
-      expect(tv.ocioBakedLUT).not.toBeNull();
+      expect(tv.colorPipeline.ocioEnabled).toBe(true);
+      expect(tv.colorPipeline.ocioBakedLUT).not.toBeNull();
 
       // Render should not throw (no HDR source available in test env, so it
       // just confirms the guard logic doesn't cause errors)
@@ -3392,8 +3387,8 @@ describe('Viewer', () => {
       const uncropSpy = vi.spyOn(tv, 'drawUncropBackground');
       const drawImageSpy = vi.spyOn(tv.imageCtx, 'drawImage');
       const ghostSpy = vi.spyOn(tv as any, 'renderGhostFrames');
-      const stereoSpy = vi.spyOn(tv as any, 'applyStereoMode');
-      const lensSpy = vi.spyOn(tv, 'applyLensDistortionToCtx');
+      const stereoSpy = vi.spyOn(tv.stereoManager, 'applyStereoMode');
+      const lensSpy = vi.spyOn(tv.lensDistortionManager, 'applyToCtx');
       const lutSpy = vi.spyOn(tv, 'applyLUTToCanvas');
       const ocioSpy = vi.spyOn(tv, 'applyOCIOToCanvas');
       const lightweightSpy = vi.spyOn(tv, 'applyLightweightEffects');
@@ -3419,8 +3414,8 @@ describe('Viewer', () => {
       const uncropOrder = vi.mocked(tv.drawUncropBackground).mock.invocationCallOrder[0]!;
       const drawOrder = vi.mocked(tv.imageCtx.drawImage).mock.invocationCallOrder[0]!;
       const ghostOrder = vi.mocked((tv as any).renderGhostFrames).mock.invocationCallOrder[0]!;
-      const stereoOrder = vi.mocked((tv as any).applyStereoMode).mock.invocationCallOrder[0]!;
-      const lensOrder = vi.mocked(tv.applyLensDistortionToCtx).mock.invocationCallOrder[0]!;
+      const stereoOrder = vi.mocked(tv.stereoManager.applyStereoMode).mock.invocationCallOrder[0]!;
+      const lensOrder = vi.mocked(tv.lensDistortionManager.applyToCtx).mock.invocationCallOrder[0]!;
       const lutOrder = vi.mocked(tv.applyLUTToCanvas).mock.invocationCallOrder[0]!;
       const ocioOrder = vi.mocked(tv.applyOCIOToCanvas).mock.invocationCallOrder[0]!;
       const lightweightOrder = vi.mocked(tv.applyLightweightEffects).mock.invocationCallOrder[0]!;
@@ -3448,6 +3443,137 @@ describe('Viewer', () => {
       ocioSpy.mockRestore();
       lightweightSpy.mockRestore();
       cropSpy.mockRestore();
+    });
+  });
+
+  describe('Effects applied on playback cache miss (regression)', () => {
+    // Regression tests: previously, during playback with a prerender buffer but
+    // a cache miss, only lightweight diagnostic overlays were applied. Heavy CPU
+    // effects (highlights/shadows, vibrance, CDL, curves, etc.) were skipped,
+    // making them visible only when paused.
+
+    /** Set up a playing session with a mock prerenderBuffer (cache miss or hit). */
+    function setupPlaybackSession(
+      tv: TestableViewer,
+      cachedFrame: { canvas: HTMLCanvasElement; effectsHash: string; width: number; height: number } | null
+    ): void {
+      tv.prerenderBuffer = {
+        getFrame: vi.fn().mockReturnValue(cachedFrame),
+        queuePriorityFrame: vi.fn(),
+        onFrameProcessed: null,
+        dispose: vi.fn(),
+      } as unknown as typeof tv.prerenderBuffer;
+
+      const mockImg = new Image(100, 100);
+      tv.session = {
+        ...tv.session,
+        isPlaying: true,
+        currentFrame: 1,
+        frameCount: 10,
+        currentSource: {
+          type: 'image' as const,
+          name: 'test.jpg',
+          url: 'test.jpg',
+          width: 100,
+          height: 100,
+          duration: 1,
+          fps: 24,
+          element: mockImg,
+        },
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+    }
+
+    it('VWR-CMISS-001: applyBatchedPixelEffects is called on playback cache miss', () => {
+      const tv = testable(viewer);
+      viewer.setColorAdjustments({ ...DEFAULT_COLOR_ADJUSTMENTS, highlights: 50 });
+      setupPlaybackSession(tv, null);
+
+      const batchedSpy = vi.spyOn(tv, 'applyBatchedPixelEffects');
+      viewer.render();
+
+      expect(batchedSpy).toHaveBeenCalled();
+      batchedSpy.mockRestore();
+    });
+
+    it('VWR-CMISS-002: full effects on cache miss match effects when paused', () => {
+      // The same effect method must be called whether playing (cache miss) or paused.
+      const tv = testable(viewer);
+      viewer.setColorAdjustments({ ...DEFAULT_COLOR_ADJUSTMENTS, vibrance: 30 });
+
+      // Render while paused
+      const mockImg = new Image(100, 100);
+      tv.session = {
+        ...tv.session,
+        isPlaying: false,
+        currentFrame: 1,
+        frameCount: 10,
+        currentSource: {
+          type: 'image' as const,
+          name: 'test.jpg',
+          url: 'test.jpg',
+          width: 100,
+          height: 100,
+          duration: 1,
+          fps: 24,
+          element: mockImg,
+        },
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+      tv.prerenderBuffer = null;
+
+      const batchedSpy = vi.spyOn(tv, 'applyBatchedPixelEffects');
+      viewer.render();
+      expect(batchedSpy).toHaveBeenCalledTimes(1);
+
+      batchedSpy.mockClear();
+
+      // Render while playing with cache miss — same method must be called
+      setupPlaybackSession(tv, null);
+      viewer.render();
+      expect(batchedSpy).toHaveBeenCalledTimes(1);
+
+      batchedSpy.mockRestore();
+    });
+
+    it('VWR-CMISS-003: full batched effects (not lightweight) are used on cache miss', () => {
+      // On cache miss, the full effect pipeline must run. This is the core
+      // regression guard: a future "optimization" that replaces batched effects
+      // with lightweight-only on cache miss would re-introduce the bug.
+      const tv = testable(viewer);
+      viewer.setColorAdjustments({ ...DEFAULT_COLOR_ADJUSTMENTS, shadows: -20 });
+      setupPlaybackSession(tv, null);
+
+      const batchedSpy = vi.spyOn(tv, 'applyBatchedPixelEffects');
+      viewer.render();
+
+      expect(batchedSpy).toHaveBeenCalled();
+      batchedSpy.mockRestore();
+    });
+
+    it('VWR-CMISS-004: cache hit uses lightweight effects and skips batched', () => {
+      // Cache hits take the fast path: effects are baked in by the worker,
+      // so only lightweight diagnostic overlays are applied on the main thread.
+      const tv = testable(viewer);
+      viewer.setColorAdjustments({ ...DEFAULT_COLOR_ADJUSTMENTS, highlights: 50 });
+
+      const mockCanvas = document.createElement('canvas');
+      mockCanvas.width = 100;
+      mockCanvas.height = 100;
+      setupPlaybackSession(tv, { canvas: mockCanvas, effectsHash: 'test', width: 100, height: 100 });
+
+      const lightweightSpy = vi.spyOn(tv, 'applyLightweightEffects');
+      const batchedSpy = vi.spyOn(tv, 'applyBatchedPixelEffects');
+
+      viewer.render();
+
+      expect(lightweightSpy).toHaveBeenCalled();
+      expect(batchedSpy).not.toHaveBeenCalled();
+
+      lightweightSpy.mockRestore();
+      batchedSpy.mockRestore();
     });
   });
 
