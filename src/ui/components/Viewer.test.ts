@@ -122,6 +122,9 @@ interface TestableViewer {
   // Lightweight effects
   applyLightweightEffects(ctx: CanvasRenderingContext2D, width: number, height: number): void;
 
+  // Full batched pixel effects
+  applyBatchedPixelEffects(ctx: CanvasRenderingContext2D, width: number, height: number): void;
+
   // Crop clipping
   clearOutsideCropRegion(displayWidth: number, displayHeight: number): void;
 
@@ -3448,6 +3451,137 @@ describe('Viewer', () => {
       ocioSpy.mockRestore();
       lightweightSpy.mockRestore();
       cropSpy.mockRestore();
+    });
+  });
+
+  describe('Effects applied on playback cache miss (regression)', () => {
+    // Regression tests: previously, during playback with a prerender buffer but
+    // a cache miss, only lightweight diagnostic overlays were applied. Heavy CPU
+    // effects (highlights/shadows, vibrance, CDL, curves, etc.) were skipped,
+    // making them visible only when paused.
+
+    /** Set up a playing session with a mock prerenderBuffer (cache miss or hit). */
+    function setupPlaybackSession(
+      tv: TestableViewer,
+      cachedFrame: { canvas: HTMLCanvasElement; effectsHash: string; width: number; height: number } | null
+    ): void {
+      tv.prerenderBuffer = {
+        getFrame: vi.fn().mockReturnValue(cachedFrame),
+        queuePriorityFrame: vi.fn(),
+        onFrameProcessed: null,
+        dispose: vi.fn(),
+      } as unknown as typeof tv.prerenderBuffer;
+
+      const mockImg = new Image(100, 100);
+      tv.session = {
+        ...tv.session,
+        isPlaying: true,
+        currentFrame: 1,
+        frameCount: 10,
+        currentSource: {
+          type: 'image' as const,
+          name: 'test.jpg',
+          url: 'test.jpg',
+          width: 100,
+          height: 100,
+          duration: 1,
+          fps: 24,
+          element: mockImg,
+        },
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+    }
+
+    it('VWR-CMISS-001: applyBatchedPixelEffects is called on playback cache miss', () => {
+      const tv = testable(viewer);
+      viewer.setColorAdjustments({ ...DEFAULT_COLOR_ADJUSTMENTS, highlights: 50 });
+      setupPlaybackSession(tv, null);
+
+      const batchedSpy = vi.spyOn(tv, 'applyBatchedPixelEffects');
+      viewer.render();
+
+      expect(batchedSpy).toHaveBeenCalled();
+      batchedSpy.mockRestore();
+    });
+
+    it('VWR-CMISS-002: full effects on cache miss match effects when paused', () => {
+      // The same effect method must be called whether playing (cache miss) or paused.
+      const tv = testable(viewer);
+      viewer.setColorAdjustments({ ...DEFAULT_COLOR_ADJUSTMENTS, vibrance: 30 });
+
+      // Render while paused
+      const mockImg = new Image(100, 100);
+      tv.session = {
+        ...tv.session,
+        isPlaying: false,
+        currentFrame: 1,
+        frameCount: 10,
+        currentSource: {
+          type: 'image' as const,
+          name: 'test.jpg',
+          url: 'test.jpg',
+          width: 100,
+          height: 100,
+          duration: 1,
+          fps: 24,
+          element: mockImg,
+        },
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+      tv.prerenderBuffer = null;
+
+      const batchedSpy = vi.spyOn(tv, 'applyBatchedPixelEffects');
+      viewer.render();
+      expect(batchedSpy).toHaveBeenCalledTimes(1);
+
+      batchedSpy.mockClear();
+
+      // Render while playing with cache miss — same method must be called
+      setupPlaybackSession(tv, null);
+      viewer.render();
+      expect(batchedSpy).toHaveBeenCalledTimes(1);
+
+      batchedSpy.mockRestore();
+    });
+
+    it('VWR-CMISS-003: full batched effects (not lightweight) are used on cache miss', () => {
+      // On cache miss, the full effect pipeline must run. This is the core
+      // regression guard: a future "optimization" that replaces batched effects
+      // with lightweight-only on cache miss would re-introduce the bug.
+      const tv = testable(viewer);
+      viewer.setColorAdjustments({ ...DEFAULT_COLOR_ADJUSTMENTS, shadows: -20 });
+      setupPlaybackSession(tv, null);
+
+      const batchedSpy = vi.spyOn(tv, 'applyBatchedPixelEffects');
+      viewer.render();
+
+      expect(batchedSpy).toHaveBeenCalled();
+      batchedSpy.mockRestore();
+    });
+
+    it('VWR-CMISS-004: cache hit uses lightweight effects and skips batched', () => {
+      // Cache hits take the fast path: effects are baked in by the worker,
+      // so only lightweight diagnostic overlays are applied on the main thread.
+      const tv = testable(viewer);
+      viewer.setColorAdjustments({ ...DEFAULT_COLOR_ADJUSTMENTS, highlights: 50 });
+
+      const mockCanvas = document.createElement('canvas');
+      mockCanvas.width = 100;
+      mockCanvas.height = 100;
+      setupPlaybackSession(tv, { canvas: mockCanvas, effectsHash: 'test', width: 100, height: 100 });
+
+      const lightweightSpy = vi.spyOn(tv, 'applyLightweightEffects');
+      const batchedSpy = vi.spyOn(tv, 'applyBatchedPixelEffects');
+
+      viewer.render();
+
+      expect(lightweightSpy).toHaveBeenCalled();
+      expect(batchedSpy).not.toHaveBeenCalled();
+
+      lightweightSpy.mockRestore();
+      batchedSpy.mockRestore();
     });
   });
 

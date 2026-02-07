@@ -2387,10 +2387,9 @@ export class Viewer {
         this.updateWipeLine();
         return; // Skip live effect processing
       }
-      // Phase 2A: On cache miss during playback, show raw frame without effects.
-      // Queue the frame for async processing in the background so it will be
-      // available on the next render pass. This avoids blocking the main thread
-      // with synchronous applyBatchedPixelEffects() during playback.
+      // Cache miss during playback: queue for background prerender so the
+      // frame is cached for future hits. The current render still falls through
+      // to the full effect pipeline below for correct visuals.
       this.prerenderBuffer.queuePriorityFrame(currentFrame);
     }
 
@@ -2496,32 +2495,26 @@ export class Viewer {
     // Apply batched pixel-level effects (highlights/shadows, vibrance, clarity,
     // CDL, curves, HSL qualifier, sharpen, channel isolation, etc.)
     // This uses a single getImageData/putImageData pair for better performance.
-    // Phase 2A: During playback with prerender buffer active, skip expensive CPU
-    // effects on cache miss (workers handle those). Still apply cheap diagnostic
-    // overlays and display color management for accurate monitoring.
-    if (this.session.isPlaying && this.prerenderBuffer) {
-      this.applyLightweightEffects(this.imageCtx, displayWidth, displayHeight);
+    // Note: Cache hits already returned early above (line 2388), so this code
+    // only runs on cache misses or when paused/scrubbing. Always apply full
+    // effects for correct visuals — do NOT skip effects during playback cache
+    // misses, as that causes effects to disappear until paused.
+    // Phase 4A: Use async version when heavy inter-pixel effects (clarity/sharpen)
+    // are active, to yield between passes and keep each blocking period <16ms.
+    // For lightweight per-pixel-only effects, use the sync version for simplicity.
+    if (this.colorAdjustments.clarity !== 0 || this.filterSettings.sharpen > 0) {
+      // Fire-and-forget: the async method checks _asyncEffectsGeneration at each
+      // yield point and bails out if a newer render() has started, preventing
+      // stale pixel data from overwriting a newer frame. Crop clipping is handled
+      // inside the async method (after putImageData) for the same reason.
+      void this.applyBatchedPixelEffectsAsync(
+        this.imageCtx, displayWidth, displayHeight,
+        this._asyncEffectsGeneration, cropClipActive
+      );
+      // Skip the crop clipping below — it's handled inside the async method.
+      cropClipActive = false;
     } else {
-      // When paused/scrubbing, apply all effects.
-      // Phase 4A: Use async version when heavy inter-pixel effects (clarity/sharpen)
-      // are active, to yield between passes and keep each blocking period <16ms.
-      // For lightweight per-pixel-only effects, use the sync version for simplicity.
-      const hasClarity = this.colorAdjustments.clarity !== 0;
-      const hasSharpen = this.filterSettings.sharpen > 0;
-      if (hasClarity || hasSharpen) {
-        // Fire-and-forget: the async method checks _asyncEffectsGeneration at each
-        // yield point and bails out if a newer render() has started, preventing
-        // stale pixel data from overwriting a newer frame. Crop clipping is handled
-        // inside the async method (after putImageData) for the same reason.
-        void this.applyBatchedPixelEffectsAsync(
-          this.imageCtx, displayWidth, displayHeight,
-          this._asyncEffectsGeneration, cropClipActive
-        );
-        // Skip the crop clipping below — it's handled inside the async method.
-        cropClipActive = false;
-      } else {
-        this.applyBatchedPixelEffects(this.imageCtx, displayWidth, displayHeight);
-      }
+      this.applyBatchedPixelEffects(this.imageCtx, displayWidth, displayHeight);
     }
 
     // Apply crop clipping by clearing areas outside the crop region
