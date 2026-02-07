@@ -69,11 +69,11 @@ export const ASPECT_RATIOS: { label: string; value: string | null; ratio: number
   { label: '2.35:1', value: '2.35:1', ratio: 2.35 },
 ];
 
-/** Minimum crop region fraction (5% of image dimension) */
-export const MIN_CROP_FRACTION = 0.05;
+// Re-export for backward compatibility
+export { MIN_CROP_FRACTION, MAX_UNCROP_PADDING } from '../../config/UIConfig';
 
-/** Maximum allowed uncrop padding in pixels per side */
-export const MAX_UNCROP_PADDING = 2000;
+// Local import so the class implementation can use them
+import { MIN_CROP_FRACTION, MAX_UNCROP_PADDING } from '../../config/UIConfig';
 
 /** Clamp a padding value to the valid range [0, MAX_UNCROP_PADDING] */
 function clampPadding(value: number): number {

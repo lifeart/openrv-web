@@ -5,42 +5,31 @@
  * - src/utils/EffectProcessor.ts (main thread)
  * - src/workers/effectProcessor.worker.ts (worker thread)
  *
- * IMPORTANT: Keep this file self-contained with no external dependencies
- * to ensure it can be imported by the Web Worker.
+ * IMPORTANT: The only allowed dependency is `../../config/RenderConfig`
+ * (a pure-constant module with zero external dependencies) so that
+ * this file remains safe for Web Worker import.
  */
 
-// ============================================================================
-// Effect Processing Constants
-// ============================================================================
+// Re-export rendering constants from the centralized config.
+// Kept here for backward compatibility so existing imports are unaffected.
+export {
+  HIGHLIGHT_SHADOW_RANGE,
+  WHITES_BLACKS_RANGE,
+  CLARITY_EFFECT_SCALE,
+  SKIN_TONE_HUE_CENTER,
+  SKIN_TONE_HUE_RANGE,
+  SKIN_PROTECTION_MIN,
+  COLOR_WHEEL_MASTER_FACTOR,
+  COLOR_WHEEL_LIFT_FACTOR,
+  COLOR_WHEEL_GAMMA_FACTOR,
+  COLOR_WHEEL_GAIN_FACTOR,
+  LUMA_R,
+  LUMA_G,
+  LUMA_B,
+} from '../config/RenderConfig';
 
-/** Maximum adjustment range for highlights/shadows (in pixel values 0-255) */
-export const HIGHLIGHT_SHADOW_RANGE = 128;
-
-/** Maximum adjustment range for whites/blacks clipping (in pixel values 0-255) */
-export const WHITES_BLACKS_RANGE = 55;
-
-/** Clarity effect intensity scale factor */
-export const CLARITY_EFFECT_SCALE = 0.7;
-
-/** Skin tone hue center (degrees) for vibrance protection */
-export const SKIN_TONE_HUE_CENTER = 35;
-
-/** Skin tone hue range (degrees from center) for vibrance protection */
-export const SKIN_TONE_HUE_RANGE = 15;
-
-/** Minimum skin protection factor (0-1) */
-export const SKIN_PROTECTION_MIN = 0.3;
-
-/** Color wheel adjustment factors */
-export const COLOR_WHEEL_MASTER_FACTOR = 0.5;
-export const COLOR_WHEEL_LIFT_FACTOR = 0.3;
-export const COLOR_WHEEL_GAMMA_FACTOR = 0.5;
-export const COLOR_WHEEL_GAIN_FACTOR = 0.5;
-
-/** Luminance coefficients (Rec. 709) */
-export const LUMA_R = 0.2126;
-export const LUMA_G = 0.7152;
-export const LUMA_B = 0.0722;
+// Local imports for constants used within this file
+import { LUMA_R, LUMA_G, LUMA_B } from '../config/RenderConfig';
 
 // ============================================================================
 // Shared Types for Effect Processing
@@ -521,8 +510,7 @@ export function applyToneMappingToData(data: Uint8ClampedArray, operator: string
 // Half-Resolution Processing Helpers
 // ============================================================================
 
-/** Minimum dimension to apply half-resolution optimization */
-export const HALF_RES_MIN_DIMENSION = 256;
+export { HALF_RES_MIN_DIMENSION } from '../config/RenderConfig';
 
 /**
  * Downsample ImageData to half resolution using box filter (2x2 average).

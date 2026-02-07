@@ -41,8 +41,16 @@ import { loadGTOGraph } from './GTOGraphLoader';
 import type { GTOParseResult } from './GTOGraphLoader';
 import type { SubFramePosition } from '../../utils/FrameInterpolator';
 import { PlaybackTimingController, MAX_CONSECUTIVE_STARVATION_SKIPS } from './PlaybackTimingController';
+import { MarkerManager, MARKER_COLORS, type Marker, type MarkerColor } from './MarkerManager';
+import { VolumeManager } from './VolumeManager';
+import { ABCompareManager } from './ABCompareManager';
+import { Logger } from '../../utils/Logger';
+
+const log = new Logger('Session');
 
 export type { SubFramePosition };
+export { MARKER_COLORS };
+export type { Marker, MarkerColor };
 
 export interface GTOComponentDTO {
   property(name: string): {
@@ -80,16 +88,6 @@ export interface GTOViewSettings {
 }
 
 /**
- * Marker data structure with optional note and color
- */
-export interface Marker {
-  frame: number;
-  note: string;
-  color: string; // Hex color like '#ff0000'
-  endFrame?: number; // Optional end frame for duration/range markers
-}
-
-/**
  * Matte overlay settings for letterbox/pillarbox display
  */
 export interface MatteSettings {
@@ -112,22 +110,6 @@ export interface SessionMetadata {
   clipboard: number;
   membershipContains: string[];
 }
-
-/**
- * Default marker colors palette
- */
-export const MARKER_COLORS = [
-  '#ff4444', // Red
-  '#44ff44', // Green
-  '#4444ff', // Blue
-  '#ffff44', // Yellow
-  '#ff44ff', // Magenta
-  '#44ffff', // Cyan
-  '#ff8844', // Orange
-  '#8844ff', // Purple
-] as const;
-
-export type MarkerColor = typeof MARKER_COLORS[number];
 
 /**
  * Audio playback error types
@@ -192,11 +174,12 @@ export interface MediaSource {
   fileSourceNode?: FileSourceNode;
 }
 
-// Common playback speed presets
-export const PLAYBACK_SPEED_PRESETS = [0.1, 0.25, 0.5, 1, 2, 4, 8] as const;
-export type PlaybackSpeedPreset = typeof PLAYBACK_SPEED_PRESETS[number];
+// Re-export for backward compatibility
+export { PLAYBACK_SPEED_PRESETS } from '../../config/PlaybackConfig';
+export type { PlaybackSpeedPreset } from '../../config/PlaybackConfig';
 
-// Note: MAX_REVERSE_SPEED has been moved to PlaybackTimingController
+// Local import so the class implementation can use them
+import { PLAYBACK_SPEED_PRESETS, type PlaybackSpeedPreset } from '../../config/PlaybackConfig';
 
 export class Session extends EventEmitter<SessionEvents> {
   private _currentFrame = 1;
@@ -207,16 +190,15 @@ export class Session extends EventEmitter<SessionEvents> {
   private _playDirection = 1;
   private _playbackSpeed = 1;
   private _loopMode: LoopMode = 'loop';
-  private _marks = new Map<number, Marker>();
-  private _volume = 0.7;
-  private _muted = false;
-  private _previousVolume = 0.7; // For unmute restore
-  private _preservesPitch = true; // Pitch correction at non-1x speeds (default: on)
   private _interpolationEnabled = false; // Sub-frame interpolation for slow-motion (default: off)
 
   // Playback guard to prevent concurrent play() calls
   private _pendingPlayPromise: Promise<void> | null = null;
-  private _audioSyncEnabled = true; // Controls whether to sync video element for audio
+
+  // Extracted managers
+  private _markerManager = new MarkerManager();
+  private _volumeManager = new VolumeManager();
+  private _abCompareManager = new ABCompareManager();
 
   // Session integration properties
   private _frameIncrement = 1;
@@ -296,12 +278,6 @@ export class Session extends EventEmitter<SessionEvents> {
   protected sources: MediaSource[] = [];
   private _currentSourceIndex = 0;
 
-  // A/B source comparison
-  private _sourceAIndex = 0;
-  private _sourceBIndex = -1; // -1 means no B source assigned
-  private _currentAB: 'A' | 'B' = 'A';
-  private _syncPlayhead = true;
-
   // Node graph from GTO file
   protected _graph: Graph | null = null;
   private _graphParseResult: GTOParseResult | null = null;
@@ -310,6 +286,28 @@ export class Session extends EventEmitter<SessionEvents> {
 
   constructor() {
     super();
+
+    // Wire manager callbacks
+    this._markerManager.setCallbacks({
+      onMarksChanged: (marks) => this.emit('marksChanged', marks),
+    });
+    this._volumeManager.setCallbacks({
+      onVolumeChanged: (v) => {
+        this.applyVolumeToVideo();
+        this.emit('volumeChanged', v);
+      },
+      onMutedChanged: (m) => {
+        this.applyVolumeToVideo();
+        this.emit('mutedChanged', m);
+      },
+      onPreservesPitchChanged: (p) => {
+        this.applyPreservesPitchToVideo();
+        this.emit('preservesPitchChanged', p);
+      },
+    });
+    this._abCompareManager.setCallbacks({
+      onABSourceChanged: (info) => this.emit('abSourceChanged', info),
+    });
   }
 
   /**
@@ -332,21 +330,11 @@ export class Session extends EventEmitter<SessionEvents> {
     this.sources.push(source);
     this._currentSourceIndex = this.sources.length - 1;
 
-    // Auto-assign source B when second source is loaded
-    if (this.sources.length === 2 && this._sourceBIndex === -1) {
-      this._sourceBIndex = 1; // Second source becomes B
-      this._sourceAIndex = 0; // First source is A
-
-      // Keep showing source A (stay on first source) for consistent A/B compare UX
-      // Note: The newly loaded source's sourceLoaded event will still fire,
-      // but we set the index to A so toggling to B shows the new source
-      this._currentSourceIndex = this._sourceAIndex;
-
-      // Emit event so UI updates
-      this.emit('abSourceChanged', {
-        current: this._currentAB,
-        sourceIndex: this._sourceAIndex,
-      });
+    // Delegate auto-assignment of A/B to ABCompareManager
+    const abResult = this._abCompareManager.onSourceAdded(this.sources.length);
+    if (abResult.emitEvent) {
+      this._currentSourceIndex = abResult.currentSourceIndex;
+      this._abCompareManager.emitChanged(this._currentSourceIndex);
     }
   }
 
@@ -524,81 +512,48 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   get marks(): ReadonlyMap<number, Marker> {
-    return this._marks;
+    return this._markerManager.marks;
   }
 
   /**
    * Get all marked frame numbers (for backward compatibility)
    */
   get markedFrames(): number[] {
-    return Array.from(this._marks.keys());
+    return this._markerManager.markedFrames;
   }
 
   /**
    * Get marker at a specific frame
    */
   getMarker(frame: number): Marker | undefined {
-    return this._marks.get(frame);
+    return this._markerManager.getMarker(frame);
   }
 
   /**
    * Check if a frame has a marker
    */
   hasMarker(frame: number): boolean {
-    return this._marks.has(frame);
+    return this._markerManager.hasMarker(frame);
   }
 
   get volume(): number {
-    return this._volume;
+    return this._volumeManager.volume;
   }
 
   set volume(value: number) {
-    const clamped = Math.max(0, Math.min(1, value));
-    if (clamped !== this._volume) {
-      // Store previous volume for unmute restore (only if setting a non-zero value)
-      if (clamped > 0) {
-        this._previousVolume = clamped;
-      }
-      this._volume = clamped;
-      // Auto-unmute when volume is set to non-zero
-      if (clamped > 0 && this._muted) {
-        this._muted = false;
-        this.emit('mutedChanged', this._muted);
-      }
-      this.applyVolumeToVideo();
-      this.emit('volumeChanged', this._volume);
-    }
+    this._volumeManager.volume = value;
   }
 
   get muted(): boolean {
-    return this._muted;
+    return this._volumeManager.muted;
   }
 
   set muted(value: boolean) {
-    if (value !== this._muted) {
-      this._muted = value;
-      this.applyVolumeToVideo();
-      this.emit('mutedChanged', this._muted);
-    }
+    this._volumeManager.muted = value;
   }
 
   toggleMute(): void {
-    if (this._muted) {
-      // Unmuting - restore previous volume
-      this._muted = false;
-      if (this._volume === 0) {
-        this._volume = this._previousVolume || 0.7;
-        this.emit('volumeChanged', this._volume);
-      }
-    } else {
-      // Muting - save current volume for later restore
-      if (this._volume > 0) {
-        this._previousVolume = this._volume;
-      }
-      this._muted = true;
-    }
-    this.applyVolumeToVideo();
-    this.emit('mutedChanged', this._muted);
+    this._volumeManager.toggleMute();
   }
 
   /**
@@ -608,15 +563,11 @@ export class Session extends EventEmitter<SessionEvents> {
    * Default: true (most users expect pitch-corrected audio).
    */
   get preservesPitch(): boolean {
-    return this._preservesPitch;
+    return this._volumeManager.preservesPitch;
   }
 
   set preservesPitch(value: boolean) {
-    if (value !== this._preservesPitch) {
-      this._preservesPitch = value;
-      this.applyPreservesPitchToVideo();
-      this.emit('preservesPitchChanged', this._preservesPitch);
-    }
+    this._volumeManager.preservesPitch = value;
   }
 
   /**
@@ -656,49 +607,22 @@ export class Session extends EventEmitter<SessionEvents> {
   private applyPreservesPitchToVideo(): void {
     const source = this.currentSource;
     if (source?.type === 'video' && source.element instanceof HTMLVideoElement) {
-      const video = source.element as HTMLVideoElement;
-      video.preservesPitch = this._preservesPitch;
-      // Vendor-prefixed fallbacks for older browsers
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const videoAny = video as any;
-      if ('mozPreservesPitch' in video) {
-        videoAny.mozPreservesPitch = this._preservesPitch;
-      }
-      if ('webkitPreservesPitch' in video) {
-        videoAny.webkitPreservesPitch = this._preservesPitch;
-      }
+      this._volumeManager.applyPreservesPitchToVideo(source.element);
     }
   }
 
   /**
    * Apply preservesPitch to a newly created video element.
+   * Delegates to VolumeManager.
    */
   private initVideoPreservesPitch(video: HTMLVideoElement): void {
-    video.preservesPitch = this._preservesPitch;
-    // Vendor-prefixed fallbacks for older browsers
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const videoAny = video as any;
-    if ('mozPreservesPitch' in video) {
-      videoAny.mozPreservesPitch = this._preservesPitch;
-    }
-    if ('webkitPreservesPitch' in video) {
-      videoAny.webkitPreservesPitch = this._preservesPitch;
-    }
+    this._volumeManager.initVideoPreservesPitch(video);
   }
 
   private applyVolumeToVideo(): void {
     const source = this.currentSource;
     if (source?.type === 'video' && source.element instanceof HTMLVideoElement) {
-      const video = source.element;
-      // Apply effective volume (0 if muted, otherwise the actual volume)
-      const effectiveVolume = this._muted ? 0 : this._volume;
-      video.volume = effectiveVolume;
-      video.muted = this._muted;
-
-      // Also mute during reverse playback (sounds bad)
-      if (this._playDirection < 0) {
-        video.muted = true;
-      }
+      this._volumeManager.applyVolumeToVideo(source.element, this._playDirection);
     }
   }
 
@@ -778,7 +702,7 @@ export class Session extends EventEmitter<SessionEvents> {
     }
 
     // Enable audio sync for playback
-    this._audioSyncEnabled = this._playDirection === 1;
+    this._volumeManager.audioSyncEnabled = this._playDirection === 1;
 
     this.emit('playbackChanged', true);
   }
@@ -821,7 +745,7 @@ export class Session extends EventEmitter<SessionEvents> {
     ).then(results => {
       for (const result of results) {
         if (result.status === 'rejected' && result.reason?.name !== 'AbortError') {
-          console.debug('Initial buffer preload error:', result.reason);
+          log.debug('Initial buffer preload error:', result.reason);
         }
       }
     });
@@ -859,7 +783,7 @@ export class Session extends EventEmitter<SessionEvents> {
     ).then(results => {
       for (const result of results) {
         if (result.status === 'rejected' && result.reason?.name !== 'AbortError') {
-          console.debug('Starvation recovery preload error:', result.reason);
+          log.debug('Starvation recovery preload error:', result.reason);
         }
       }
     });
@@ -889,12 +813,12 @@ export class Session extends EventEmitter<SessionEvents> {
           });
           // Continue playing muted - update internal state to match
           video.muted = true;
-          this._muted = true;
-          this.emit('mutedChanged', this._muted);
+          this._volumeManager.muted = true;
           try {
             await video.play();
-          } catch {
+          } catch (retryErr) {
             // If still failing, pause playback
+            log.warn('Muted playback retry also failed, pausing:', retryErr);
             this.pause();
           }
         } else if (err.name === 'NotSupportedError') {
@@ -906,7 +830,7 @@ export class Session extends EventEmitter<SessionEvents> {
           this.pause();
         } else if (err.name === 'AbortError') {
           // Playback was interrupted (e.g., by seeking) - this is normal, don't emit error
-          console.debug('Video play() was aborted');
+          log.debug('Video play() was aborted');
         } else {
           this.emit('audioError', {
             type: 'unknown',
@@ -993,7 +917,7 @@ export class Session extends EventEmitter<SessionEvents> {
     const source = this.currentSource;
 
     // Update audio mute state based on direction (reverse should be muted)
-    this._audioSyncEnabled = this._playDirection === 1;
+    this._volumeManager.audioSyncEnabled = this._playDirection === 1;
 
     // Handle video playback mode switching while playing
     if (this._isPlaying && source?.type === 'video') {
@@ -1101,154 +1025,53 @@ export class Session extends EventEmitter<SessionEvents> {
     this.currentFrame = 1;
   }
 
-  // Marks
-  /**
-   * Toggle a mark at the specified frame
-   * If the frame has a marker, it removes it; otherwise, it creates a new marker with default color
-   */
+  // Marks — delegated to MarkerManager
   toggleMark(frame?: number): void {
-    const f = frame ?? this._currentFrame;
-    if (this._marks.has(f)) {
-      this._marks.delete(f);
-    } else {
-      // Create a new marker with default values
-      this._marks.set(f, {
-        frame: f,
-        note: '',
-        color: MARKER_COLORS[0], // Default red
-      });
-    }
-    this.emit('marksChanged', this._marks);
+    this._markerManager.toggleMark(frame ?? this._currentFrame);
   }
 
-  /**
-   * Add or update a marker at the specified frame
-   * If endFrame is provided, the marker spans a range from frame to endFrame
-   */
   setMarker(frame: number, note: string = '', color: string = MARKER_COLORS[0], endFrame?: number): void {
-    const marker: Marker = {
-      frame,
-      note,
-      color,
-    };
-    if (endFrame !== undefined && endFrame > frame) {
-      marker.endFrame = endFrame;
-    }
-    this._marks.set(frame, marker);
-    this.emit('marksChanged', this._marks);
+    this._markerManager.setMarker(frame, note, color, endFrame);
   }
 
-  /**
-   * Update the end frame for an existing marker (to convert to/from duration marker)
-   * Pass undefined to remove the end frame (convert back to point marker)
-   */
   setMarkerEndFrame(frame: number, endFrame: number | undefined): void {
-    const marker = this._marks.get(frame);
-    if (marker) {
-      if (endFrame !== undefined && endFrame > frame) {
-        marker.endFrame = endFrame;
-      } else {
-        delete marker.endFrame;
-      }
-      this.emit('marksChanged', this._marks);
-    }
+    this._markerManager.setMarkerEndFrame(frame, endFrame);
   }
 
-  /**
-   * Check if a given frame falls within any duration marker's range
-   * Returns the marker if found, undefined otherwise
-   */
   getMarkerAtFrame(frame: number): Marker | undefined {
-    // First check for exact match (point marker or start of range)
-    const exact = this._marks.get(frame);
-    if (exact) return exact;
-
-    // Then check if frame falls within any duration marker range
-    for (const marker of this._marks.values()) {
-      if (marker.endFrame !== undefined && frame >= marker.frame && frame <= marker.endFrame) {
-        return marker;
-      }
-    }
-    return undefined;
+    return this._markerManager.getMarkerAtFrame(frame);
   }
 
-  /**
-   * Update the note for an existing marker
-   */
   setMarkerNote(frame: number, note: string): void {
-    const marker = this._marks.get(frame);
-    if (marker) {
-      marker.note = note;
-      this.emit('marksChanged', this._marks);
-    }
+    this._markerManager.setMarkerNote(frame, note);
   }
 
-  /**
-   * Update the color for an existing marker
-   */
   setMarkerColor(frame: number, color: string): void {
-    const marker = this._marks.get(frame);
-    if (marker) {
-      marker.color = color;
-      this.emit('marksChanged', this._marks);
-    }
+    this._markerManager.setMarkerColor(frame, color);
   }
 
-  /**
-   * Remove a marker at the specified frame
-   */
   removeMark(frame: number): void {
-    if (this._marks.delete(frame)) {
-      this.emit('marksChanged', this._marks);
-    }
+    this._markerManager.removeMark(frame);
   }
 
-  /**
-   * Clear all markers
-   */
   clearMarks(): void {
-    this._marks.clear();
-    this.emit('marksChanged', this._marks);
+    this._markerManager.clearMarks();
   }
 
-  /**
-   * Navigate to the next marker from current frame
-   * Returns the frame number of the next marker, or null if none
-   */
   goToNextMarker(): number | null {
-    const frames = this.markedFrames.sort((a, b) => a - b);
-    for (const frame of frames) {
-      if (frame > this._currentFrame) {
-        this.currentFrame = frame;
-        return frame;
-      }
-    }
-    // Wrap around to first marker if none found after current frame
-    const firstFrame = frames[0];
-    if (firstFrame !== undefined && firstFrame !== this._currentFrame) {
-      this.currentFrame = firstFrame;
-      return firstFrame;
+    const frame = this._markerManager.findNextMarkerFrame(this._currentFrame);
+    if (frame !== null) {
+      this.currentFrame = frame;
+      return frame;
     }
     return null;
   }
 
-  /**
-   * Navigate to the previous marker from current frame
-   * Returns the frame number of the previous marker, or null if none
-   */
   goToPreviousMarker(): number | null {
-    const frames = this.markedFrames.sort((a, b) => b - a); // Descending
-    for (const frame of frames) {
-      if (frame < this._currentFrame) {
-        this.currentFrame = frame;
-        return frame;
-      }
-    }
-    // Wrap around to last marker if none found before current frame
-    const lastFrame = frames[0];
-    if (lastFrame !== undefined && lastFrame !== this._currentFrame) {
-      this.currentFrame = lastFrame;
-      return lastFrame;
+    const frame = this._markerManager.findPreviousMarkerFrame(this._currentFrame);
+    if (frame !== null) {
+      this.currentFrame = frame;
+      return frame;
     }
     return null;
   }
@@ -1300,7 +1123,7 @@ export class Session extends EventEmitter<SessionEvents> {
           if (starvation.timedOut) {
             // If consecutive skips exceed threshold, pause to prevent cascade freeze
             if (starvation.shouldPause) {
-              console.warn(
+              log.warn(
                 `Playback paused: frame buffer underrun (frame ${nextFrame}, ` +
                 `${this._ts.consecutiveStarvationSkips} consecutive starvation timeouts)`
               );
@@ -1340,7 +1163,7 @@ export class Session extends EventEmitter<SessionEvents> {
             }
 
             // Under the threshold: skip the frame and try the next one
-            console.warn(`Frame ${nextFrame} starvation timeout (${Math.round(starvation.starvationDurationMs)}ms) - skipping frame`);
+            log.warn(`Frame ${nextFrame} starvation timeout (${Math.round(starvation.starvationDurationMs)}ms) - skipping frame`);
             tc.resetStarvation(this._ts);
             tc.consumeFrame(this._ts, frameDuration);
             this.advanceFrame(this._playDirection);
@@ -1368,7 +1191,7 @@ export class Session extends EventEmitter<SessionEvents> {
           }).catch(err => {
             // Don't log abort errors
             if (err?.name !== 'AbortError') {
-              console.warn('Frame fetch error:', err);
+              log.warn('Frame fetch error:', err);
             }
             this.decrementBufferingCount();
           });
@@ -1381,7 +1204,7 @@ export class Session extends EventEmitter<SessionEvents> {
 
       // Sync HTMLVideoElement for audio (but not for frame display)
       // Only sync during forward playback with audio enabled
-      if (this._audioSyncEnabled && source.element instanceof HTMLVideoElement) {
+      if (this._volumeManager.audioSyncEnabled && source.element instanceof HTMLVideoElement) {
         const video = source.element;
         const targetTime = (this._currentFrame - 1) / this._fps;
 
@@ -1508,7 +1331,7 @@ export class Session extends EventEmitter<SessionEvents> {
       if (source.videoSourceNode?.isUsingMediabunny()) {
         // preloadFrames fetches current frame and surrounding frames
         source.videoSourceNode.preloadFrames(this._currentFrame).catch(err => {
-          console.warn('Frame preload error:', err);
+          log.warn('Frame preload error:', err);
         });
       }
 
@@ -1551,7 +1374,7 @@ export class Session extends EventEmitter<SessionEvents> {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      console.error('GTO parsing error:', message);
+      log.error('GTO parsing error:', message);
       throw new Error(`Failed to parse GTO file: ${message}`);
     }
 
@@ -1578,15 +1401,7 @@ export class Session extends EventEmitter<SessionEvents> {
         this.emit('inOutChanged', { inPoint: this._inPoint, outPoint: this._outPoint });
       }
       if (result.sessionInfo.marks && result.sessionInfo.marks.length > 0) {
-        this._marks = new Map();
-        for (const frame of result.sessionInfo.marks) {
-          this._marks.set(frame, {
-            frame,
-            note: '',
-            color: MARKER_COLORS[0],
-          });
-        }
-        this.emit('marksChanged', this._marks);
+        this._markerManager.setFromFrameNumbers(result.sessionInfo.marks);
       }
 
       // Apply frame increment
@@ -1633,7 +1448,7 @@ export class Session extends EventEmitter<SessionEvents> {
       }
 
       if (result.nodes.size > 0) {
-        console.debug('GTO Graph loaded:', {
+        log.debug('GTO Graph loaded:', {
           nodeCount: result.nodes.size,
           rootNode: result.rootNode?.name,
           sessionInfo: result.sessionInfo,
@@ -1646,7 +1461,7 @@ export class Session extends EventEmitter<SessionEvents> {
       await this.loadVideoSourcesFromGraph(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      console.warn('Failed to load node graph from GTO:', message);
+      log.warn('Failed to load node graph from GTO:', message);
       // Non-fatal - continue with session
     }
 
@@ -1665,7 +1480,7 @@ export class Session extends EventEmitter<SessionEvents> {
         const url = node.properties.getValue('url') as string | undefined;
 
         if (file) {
-          console.log(`Loading video source "${node.name}" from file: ${file.name}`);
+          log.debug(`Loading video source "${node.name}" from file: ${file.name}`);
 
           // Load the video using the file - this initializes mediabunny
           await node.loadFile(file, this._fps);
@@ -1678,8 +1493,8 @@ export class Session extends EventEmitter<SessionEvents> {
           const video = document.createElement('video');
           video.crossOrigin = 'anonymous';
           video.preload = 'auto';
-          video.muted = this._muted;
-          video.volume = this._muted ? 0 : this._volume;
+          video.muted = this._volumeManager.muted;
+          video.volume = this._volumeManager.getEffectiveVolume();
           video.loop = false;
           video.playsInline = true;
           this.initVideoPreservesPitch(video);
@@ -1709,7 +1524,7 @@ export class Session extends EventEmitter<SessionEvents> {
           // Pre-fetch initial frames for immediate display
           if (node.isUsingMediabunny()) {
             node.preloadFrames(1).catch(err => {
-              console.warn('Initial frame preload error:', err);
+              log.warn('Initial frame preload error:', err);
             });
           }
 
@@ -1730,7 +1545,7 @@ export class Session extends EventEmitter<SessionEvents> {
           this.emit('durationChanged', duration);
         } else if (url) {
           // Fallback: load from URL only (no mediabunny - File object not available)
-          console.log(`Loading video source "${node.name}" from URL (no mediabunny): ${url}`);
+          log.debug(`Loading video source "${node.name}" from URL (no mediabunny): ${url}`);
 
           await node.load(url, node.name, this._fps);
 
@@ -1741,8 +1556,8 @@ export class Session extends EventEmitter<SessionEvents> {
           const video = document.createElement('video');
           video.crossOrigin = 'anonymous';
           video.preload = 'auto';
-          video.muted = this._muted;
-          video.volume = this._muted ? 0 : this._volume;
+          video.muted = this._volumeManager.muted;
+          video.volume = this._volumeManager.getEffectiveVolume();
           video.loop = false;
           video.playsInline = true;
           this.initVideoPreservesPitch(video);
@@ -1786,12 +1601,12 @@ export class Session extends EventEmitter<SessionEvents> {
 
   private parseSession(dto: GTODTO): void {
     // Debug: Log all available protocols
-    console.log('GTO Result:', dto);
+    log.debug('GTO Result:', dto);
 
     const sessions = dto.byProtocol('RVSession');
-    console.log('RVSession objects:', sessions.length);
+    log.debug('RVSession objects:', sessions.length);
     if (sessions.length === 0) {
-      console.warn('No RVSession found in file');
+      log.warn('No RVSession found in file');
     } else {
       const session = sessions.first();
       const sessionComp = session.component('session');
@@ -1852,15 +1667,7 @@ export class Session extends EventEmitter<SessionEvents> {
         if (Array.isArray(marksValue)) {
           const marks = marksValue.filter((value): value is number => typeof value === 'number');
           if (marks.length > 0) {
-            this._marks = new Map();
-            for (const frame of marks) {
-              this._marks.set(frame, {
-                frame,
-                note: '',
-                color: MARKER_COLORS[0],
-              });
-            }
-            this.emit('marksChanged', this._marks);
+            this._markerManager.setFromFrameNumbers(marks);
           }
         }
       }
@@ -1871,7 +1678,7 @@ export class Session extends EventEmitter<SessionEvents> {
     let sourceWidth = 0;
     let sourceHeight = 0;
     const sources = dto.byProtocol('RVFileSource');
-    console.log('RVFileSource objects:', sources.length);
+    log.debug('RVFileSource objects:', sources.length);
     for (const source of sources) {
       // Get size from proxy component
       const proxyComp = source.component('proxy');
@@ -1887,7 +1694,7 @@ export class Session extends EventEmitter<SessionEvents> {
               sourceHeight = height;
             }
             aspectRatio = width / height;
-            console.log('Source size:', width, 'x', height, 'aspect:', aspectRatio);
+            log.debug('Source size:', width, 'x', height, 'aspect:', aspectRatio);
           }
         }
       }
@@ -1896,7 +1703,7 @@ export class Session extends EventEmitter<SessionEvents> {
       if (mediaObj) {
         const movieProp = mediaObj.property('movie').value();
         if (movieProp) {
-          console.log('Found source:', movieProp);
+          log.debug('Found source:', movieProp);
         }
       }
     }
@@ -2367,7 +2174,7 @@ export class Session extends EventEmitter<SessionEvents> {
 
   private parsePaintAnnotations(dto: GTODTO, aspectRatio: number): void {
     const paintObjects = dto.byProtocol('RVPaint');
-    console.log('RVPaint objects:', paintObjects.length);
+    log.debug('RVPaint objects:', paintObjects.length);
 
     if (paintObjects.length === 0) {
       return;
@@ -2377,7 +2184,7 @@ export class Session extends EventEmitter<SessionEvents> {
     let effects: Partial<PaintEffects> | undefined;
 
     for (const paintObj of paintObjects) {
-      console.log('Paint object:', paintObj.name);
+      log.debug('Paint object:', paintObj.name);
 
       // Get all components from this paint object using the components() method
       const allComponents = paintObj.components();
@@ -2406,8 +2213,8 @@ export class Session extends EventEmitter<SessionEvents> {
         }
       }
 
-      console.log('Frame orders:', Object.fromEntries(frameOrders));
-      console.log('Stroke data keys:', Array.from(strokeData.keys()));
+      log.debug('Frame orders:', Object.fromEntries(frameOrders));
+      log.debug('Stroke data keys:', Array.from(strokeData.keys()));
 
       // Parse strokes and text for each frame
       for (const [frame, order] of frameOrders) {
@@ -2481,7 +2288,7 @@ export class Session extends EventEmitter<SessionEvents> {
 
     }
 
-    console.log('Total annotations parsed:', annotations.length);
+    log.debug('Total annotations parsed:', annotations.length);
     if (annotations.length > 0 || effects) {
       this.emit('annotationsLoaded', { annotations, effects });
     }
@@ -2537,8 +2344,9 @@ export class Session extends EventEmitter<SessionEvents> {
             applyValue(normalized, value);
           });
         }
-      } catch {
+      } catch (e) {
         // fall through to string parsing
+        log.debug('JSON parse of paint tag failed, trying string parsing:', e);
       }
     }
 
@@ -2637,7 +2445,7 @@ export class Session extends EventEmitter<SessionEvents> {
     }
 
     if (points.length === 0) {
-      console.warn('Stroke has no points:', strokeId);
+      log.warn('Stroke has no points:', strokeId);
       return null;
     }
 
@@ -2818,7 +2626,7 @@ export class Session extends EventEmitter<SessionEvents> {
       const fileSourceNode = new FileSourceNode(file.name);
       await fileSourceNode.loadFile(file);
 
-      console.log(`[Session] Image loaded via FileSourceNode: ${file.name}, isHDR=${fileSourceNode.isHDR()}, format=${fileSourceNode.formatName ?? 'standard'}`);
+      log.info(`Image loaded via FileSourceNode: ${file.name}, isHDR=${fileSourceNode.isHDR()}, format=${fileSourceNode.formatName ?? 'standard'}`);
 
       const source: MediaSource = {
         type: 'image',
@@ -2840,7 +2648,7 @@ export class Session extends EventEmitter<SessionEvents> {
       this.emit('durationChanged', 1);
     } catch (err) {
       // Fallback to simple HTMLImageElement loading
-      console.warn(`[Session] FileSourceNode loading failed for ${file.name}, falling back to HTMLImageElement:`, err);
+      log.warn(`FileSourceNode loading failed for ${file.name}, falling back to HTMLImageElement:`, err);
       const url = URL.createObjectURL(file);
       try {
         await this.loadImage(file.name, url);
@@ -2896,8 +2704,8 @@ export class Session extends EventEmitter<SessionEvents> {
       const video = document.createElement('video');
       video.crossOrigin = 'anonymous';
       video.preload = 'auto';
-      video.muted = this._muted;
-      video.volume = this._muted ? 0 : this._volume;
+      video.muted = this._volumeManager.muted;
+      video.volume = this._volumeManager.getEffectiveVolume();
       video.loop = false;
       video.playsInline = true; // Required for iOS and some browsers
       this.initVideoPreservesPitch(video);
@@ -2931,7 +2739,7 @@ export class Session extends EventEmitter<SessionEvents> {
       };
 
       video.onerror = (e) => {
-        console.error('Video load error:', e);
+        log.error('Video load error:', e);
         reject(new Error(`Failed to load video: ${url}`));
       };
 
@@ -2970,8 +2778,8 @@ export class Session extends EventEmitter<SessionEvents> {
     const video = document.createElement('video');
     video.crossOrigin = 'anonymous';
     video.preload = 'auto';
-    video.muted = this._muted;
-    video.volume = this._muted ? 0 : this._volume;
+    video.muted = this._volumeManager.muted;
+    video.volume = this._volumeManager.getEffectiveVolume();
     video.loop = false;
     video.playsInline = true;
     this.initVideoPreservesPitch(video);
@@ -3001,7 +2809,7 @@ export class Session extends EventEmitter<SessionEvents> {
     // Pre-fetch initial frames for immediate display
     if (videoSourceNode.isUsingMediabunny()) {
       videoSourceNode.preloadFrames(1).catch(err => {
-        console.warn('Initial frame preload error:', err);
+        log.warn('Initial frame preload error:', err);
       });
     }
 
@@ -3013,7 +2821,7 @@ export class Session extends EventEmitter<SessionEvents> {
     // Pre-load initial frames for immediate playback
     if (videoSourceNode.isUsingMediabunny()) {
       videoSourceNode.preloadFrames(1).catch(err => {
-        console.warn('Initial frame preload error:', err);
+        log.warn('Initial frame preload error:', err);
       });
 
       // Detect actual FPS and frame count from video (async, updates when ready)
@@ -3040,12 +2848,12 @@ export class Session extends EventEmitter<SessionEvents> {
       // Update source metadata with actual values
       if (detectedFps !== null) {
         source.fps = detectedFps;
-        console.log(`Video FPS detected: ${detectedFps}`);
+        log.debug(`Video FPS detected: ${detectedFps}`);
       }
 
       if (actualFrameCount > 0) {
         source.duration = actualFrameCount;
-        console.log(`Video frame count: ${actualFrameCount}`);
+        log.debug(`Video frame count: ${actualFrameCount}`);
       }
 
       // Only update session if this source is still the current one
@@ -3066,7 +2874,7 @@ export class Session extends EventEmitter<SessionEvents> {
         }
       }
     } catch (err) {
-      console.warn('Failed to detect video FPS/duration:', err);
+      log.warn('Failed to detect video FPS/duration:', err);
     }
   }
 
@@ -3249,7 +3057,7 @@ export class Session extends EventEmitter<SessionEvents> {
 
     const frame = centerFrame ?? this._currentFrame;
     source.videoSourceNode.preloadFrames(frame).catch(err => {
-      console.warn('Video frame preload error:', err);
+      log.warn('Video frame preload error:', err);
     });
   }
 
@@ -3364,94 +3172,60 @@ export class Session extends EventEmitter<SessionEvents> {
     }
   }
 
-  // A/B Source Compare methods
+  // A/B Source Compare methods — delegated to ABCompareManager
 
-  /**
-   * Get the current A/B state
-   */
   get currentAB(): 'A' | 'B' {
-    return this._currentAB;
+    return this._abCompareManager.currentAB;
   }
 
-  /**
-   * Get source A index
-   */
   get sourceAIndex(): number {
-    return this._sourceAIndex;
+    return this._abCompareManager.sourceAIndex;
   }
 
-  /**
-   * Get source B index (-1 if not assigned)
-   */
   get sourceBIndex(): number {
-    return this._sourceBIndex;
+    return this._abCompareManager.sourceBIndex;
   }
 
-  /**
-   * Get source A
-   */
   get sourceA(): MediaSource | null {
-    return this.sources[this._sourceAIndex] ?? null;
+    return this.sources[this._abCompareManager.sourceAIndex] ?? null;
   }
 
-  /**
-   * Get source B
-   */
   get sourceB(): MediaSource | null {
-    if (this._sourceBIndex < 0) return null;
-    return this.sources[this._sourceBIndex] ?? null;
+    const idx = this._abCompareManager.sourceBIndex;
+    if (idx < 0) return null;
+    return this.sources[idx] ?? null;
   }
 
-  /**
-   * Check if A/B compare is available (both sources assigned)
-   */
   get abCompareAvailable(): boolean {
-    return this._sourceBIndex >= 0 && this._sourceBIndex < this.sources.length;
+    return this._abCompareManager.isAvailable(this.sources.length);
   }
 
-  /**
-   * Get or set sync playhead mode
-   */
   get syncPlayhead(): boolean {
-    return this._syncPlayhead;
+    return this._abCompareManager.syncPlayhead;
   }
 
   set syncPlayhead(value: boolean) {
-    this._syncPlayhead = value;
+    this._abCompareManager.syncPlayhead = value;
   }
 
-  /**
-   * Set source A by index
-   */
   setSourceA(index: number): void {
-    if (index >= 0 && index < this.sources.length && index !== this._sourceAIndex) {
-      this._sourceAIndex = index;
-      if (this._currentAB === 'A') {
-        this.switchToSource(index);
-      }
+    this._abCompareManager.setSourceA(index, this.sources.length);
+    if (this._abCompareManager.currentAB === 'A') {
+      this.switchToSource(index);
     }
   }
 
-  /**
-   * Set source B by index
-   */
   setSourceB(index: number): void {
-    if (index >= 0 && index < this.sources.length && index !== this._sourceBIndex) {
-      this._sourceBIndex = index;
-      if (this._currentAB === 'B') {
-        this.switchToSource(index);
-      }
+    this._abCompareManager.setSourceB(index, this.sources.length);
+    if (this._abCompareManager.currentAB === 'B') {
+      this.switchToSource(index);
     }
   }
 
-  /**
-   * Clear source B assignment
-   */
   clearSourceB(): void {
-    this._sourceBIndex = -1;
-    if (this._currentAB === 'B') {
-      this._currentAB = 'A';
-      this.switchToSource(this._sourceAIndex);
+    const needsSwitch = this._abCompareManager.clearSourceB();
+    if (needsSwitch) {
+      this.switchToSource(this._abCompareManager.sourceAIndex);
     }
   }
 
@@ -3502,17 +3276,12 @@ export class Session extends EventEmitter<SessionEvents> {
    * Toggle between A and B sources
    */
   toggleAB(): void {
-    if (!this.abCompareAvailable) return;
+    const result = this._abCompareManager.toggle(this.sources.length);
+    if (!result) return;
 
-    const savedFrame = this._syncPlayhead ? this._currentFrame : null;
+    const savedFrame = result.shouldRestoreFrame ? this._currentFrame : null;
 
-    if (this._currentAB === 'A') {
-      this._currentAB = 'B';
-      this.switchToSource(this._sourceBIndex);
-    } else {
-      this._currentAB = 'A';
-      this.switchToSource(this._sourceAIndex);
-    }
+    this.switchToSource(result.newSourceIndex);
 
     // Restore frame position if sync is enabled
     if (savedFrame !== null) {
@@ -3522,19 +3291,11 @@ export class Session extends EventEmitter<SessionEvents> {
       this.emit('frameChanged', this._currentFrame);
     }
 
-    this.emit('abSourceChanged', {
-      current: this._currentAB,
-      sourceIndex: this._currentSourceIndex,
-    });
+    this._abCompareManager.emitChanged(this._currentSourceIndex);
   }
 
-  /**
-   * Set current A/B state directly
-   */
   setCurrentAB(ab: 'A' | 'B'): void {
-    if (ab === this._currentAB) return;
-    if (ab === 'B' && !this.abCompareAvailable) return;
-
+    if (!this._abCompareManager.shouldToggle(ab, this.sources.length)) return;
     this.toggleAB();
   }
 
@@ -3582,10 +3343,10 @@ export class Session extends EventEmitter<SessionEvents> {
       outPoint: this._outPoint,
       fps: this._fps,
       loopMode: this._loopMode,
-      volume: this._volume,
-      muted: this._muted,
-      preservesPitch: this._preservesPitch,
-      marks: Array.from(this._marks.values()),
+      volume: this._volumeManager.volume,
+      muted: this._volumeManager.muted,
+      preservesPitch: this._volumeManager.preservesPitch,
+      marks: this._markerManager.toArray(),
       currentSourceIndex: this._currentSourceIndex,
     };
   }
@@ -3617,16 +3378,7 @@ export class Session extends EventEmitter<SessionEvents> {
     if (state.outPoint !== undefined) this.setOutPoint(state.outPoint);
     if (state.currentFrame !== undefined) this.currentFrame = state.currentFrame;
     if (state.marks) {
-      this._marks.clear();
-      for (const m of state.marks) {
-        // Support both old format (number[]) and new format (Marker[])
-        if (typeof m === 'number') {
-          this._marks.set(m, { frame: m, note: '', color: MARKER_COLORS[0] });
-        } else {
-          this._marks.set(m.frame, m);
-        }
-      }
-      this.emit('marksChanged', this._marks);
+      this._markerManager.setFromArray(state.marks);
     }
   }
 

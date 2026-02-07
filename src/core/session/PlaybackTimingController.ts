@@ -1,20 +1,13 @@
 import type { SubFramePosition } from '../../utils/FrameInterpolator';
 import type { LoopMode } from './Session';
 
-/**
- * Maximum consecutive starvation skips before forcing a pause
- */
-export const MAX_CONSECUTIVE_STARVATION_SKIPS = 2;
+// Re-export for backward compatibility
+export { MAX_CONSECUTIVE_STARVATION_SKIPS, MAX_REVERSE_SPEED } from '../../config/PlaybackConfig';
+export { STARVATION_TIMEOUT_MS } from '../../config/TimingConfig';
 
-/**
- * Starvation timeout - if frame extraction hangs for this long, skip the frame
- */
-export const STARVATION_TIMEOUT_MS = 5000;
-
-/**
- * Maximum reverse playback speed - higher speeds may outpace frame extraction
- */
-export const MAX_REVERSE_SPEED = 4;
+// Local imports so the class implementation can use them
+import { MAX_CONSECUTIVE_STARVATION_SKIPS, MAX_REVERSE_SPEED } from '../../config/PlaybackConfig';
+import { STARVATION_TIMEOUT_MS } from '../../config/TimingConfig';
 
 /**
  * Mutable timing state owned by Session and passed into PlaybackTimingController methods.

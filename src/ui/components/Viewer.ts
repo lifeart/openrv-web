@@ -43,6 +43,7 @@ import type { DisplayCapabilities } from '../../color/DisplayCapabilities';
 import { safeCanvasContext2D } from '../../color/SafeCanvasContext';
 import { Renderer } from '../../render/Renderer';
 import { RenderWorkerProxy } from '../../render/RenderWorkerProxy';
+import type { RenderState } from '../../render/RenderState';
 import type { IPImage } from '../../core/image/Image';
 
 // Extracted effect processing utilities
@@ -1612,50 +1613,39 @@ export class Viewer {
   }
 
   /**
-   * Sync shared Viewer state (effects, LUT, background pattern, etc.) to the GL
-   * renderer. Called by both renderHDRWithWebGL() and renderSDRWithWebGL() to
-   * avoid duplicating the state transfer code.
-   *
-   * Basic color adjustments (exposure, gamma, saturation, contrast, brightness,
-   * temperature, tint) and tone mapping are NOT synced here because HDR and SDR
-   * paths override them differently. Extended adjustments (highlights/shadows,
-   * vibrance, clarity, sharpen, HSL qualifier) ARE synced here since they use
-   * the same values regardless of HDR/SDR mode.
+   * Build a RenderState object aggregating all current Viewer state for the
+   * Renderer. The returned object can be modified (e.g. HDR overrides) before
+   * being passed to renderer.applyRenderState().
    */
-  private syncRendererState(renderer: Renderer): void {
-    renderer.setColorInversion(this.colorPipeline.colorInversionEnabled);
-
-    // Background pattern
-    renderer.setBackgroundPattern(this.backgroundPatternState);
-
-    // 2D effects
-    renderer.setCDL(this.colorPipeline.cdlValues);
-    renderer.setCurvesLUT(isDefaultCurves(this.colorPipeline.curvesData) ? null : buildAllCurveLUTs(this.colorPipeline.curvesData));
-    renderer.setColorWheels(this.colorWheels.getState());
-    renderer.setFalseColor(this.falseColor.isEnabled(), this.falseColor.getColorLUT());
-    renderer.setZebraStripes(this.zebraStripes.getState());
-    renderer.setChannelMode(this.channelMode);
-    renderer.setDisplayColorState({
-      transferFunction: DISPLAY_TRANSFER_CODES[this.colorPipeline.displayColorState.transferFunction],
-      displayGamma: this.colorPipeline.displayColorState.displayGamma,
-      displayBrightness: this.colorPipeline.displayColorState.displayBrightness,
-      customGamma: this.colorPipeline.displayColorState.customGamma,
-    });
-
-    // 3D LUT
-    if (this.colorPipeline.currentLUT && this.colorPipeline.lutIntensity > 0) {
-      renderer.setLUT(this.colorPipeline.currentLUT.data, this.colorPipeline.currentLUT.size, this.colorPipeline.lutIntensity);
-    } else {
-      renderer.setLUT(null, 0, 0);
-    }
-
-    // Phase 1B: New GPU shader effects
+  private buildRenderState(): RenderState {
     const adj = this.colorPipeline.colorAdjustments;
-    renderer.setHighlightsShadows(adj.highlights, adj.shadows, adj.whites, adj.blacks);
-    renderer.setVibrance(adj.vibrance, adj.vibranceSkinProtection);
-    renderer.setClarity(adj.clarity);
-    renderer.setSharpen(this.filterSettings.sharpen);
-    renderer.setHSLQualifier(this.hslQualifier.getState());
+    const lut = this.colorPipeline.currentLUT;
+    return {
+      colorAdjustments: adj,
+      colorInversion: this.colorPipeline.colorInversionEnabled,
+      toneMappingState: this.colorPipeline.toneMappingState,
+      backgroundPattern: this.backgroundPatternState,
+      cdl: this.colorPipeline.cdlValues,
+      curvesLUT: isDefaultCurves(this.colorPipeline.curvesData) ? null : buildAllCurveLUTs(this.colorPipeline.curvesData),
+      colorWheels: this.colorWheels.getState(),
+      falseColor: { enabled: this.falseColor.isEnabled(), lut: this.falseColor.getColorLUT() },
+      zebraStripes: this.zebraStripes.getState(),
+      channelMode: this.channelMode,
+      lut: lut && this.colorPipeline.lutIntensity > 0
+        ? { data: lut.data, size: lut.size, intensity: this.colorPipeline.lutIntensity }
+        : { data: null, size: 0, intensity: 0 },
+      displayColor: {
+        transferFunction: DISPLAY_TRANSFER_CODES[this.colorPipeline.displayColorState.transferFunction],
+        displayGamma: this.colorPipeline.displayColorState.displayGamma,
+        displayBrightness: this.colorPipeline.displayColorState.displayBrightness,
+        customGamma: this.colorPipeline.displayColorState.customGamma,
+      },
+      highlightsShadows: { highlights: adj.highlights, shadows: adj.shadows, whites: adj.whites, blacks: adj.blacks },
+      vibrance: { amount: adj.vibrance, skinProtection: adj.vibranceSkinProtection },
+      clarity: adj.clarity,
+      sharpen: this.filterSettings.sharpen,
+      hslQualifier: this.hslQualifier.getState(),
+    };
   }
 
   private renderHDRWithWebGL(
@@ -1678,23 +1668,18 @@ export class Viewer {
       renderer.resize(displayWidth, displayHeight);
     }
 
-    // Sync color adjustments and tone mapping (HDR-specific overrides)
+    // Build render state and apply HDR-specific overrides
+    const state = this.buildRenderState();
     const isHDROutput = renderer.getHDROutputMode() !== 'sdr';
     if (isHDROutput) {
       // HDR output: values > 1.0 pass through to the rec2100-hlg/pq drawing buffer.
       // - No tone mapping: the HDR display handles the extended luminance range
       // - Gamma = 1 (linear): the browser applies the HLG/PQ OETF automatically
       // Other adjustments (exposure, temperature, saturation, etc.) still apply.
-      renderer.setColorAdjustments({ ...this.colorPipeline.colorAdjustments, gamma: 1 });
-      renderer.setToneMappingState({ enabled: false, operator: 'off' });
-    } else {
-      // SDR output: tone mapping compresses HDR→SDR, gamma encodes linear→sRGB
-      renderer.setColorAdjustments(this.colorPipeline.colorAdjustments);
-      renderer.setToneMappingState(this.colorPipeline.toneMappingState);
+      state.colorAdjustments = { ...state.colorAdjustments, gamma: 1 };
+      state.toneMappingState = { enabled: false, operator: 'off' };
     }
-
-    // Sync shared state (effects, LUT, background pattern, etc.)
-    this.syncRendererState(renderer);
+    renderer.applyRenderState(state);
 
     // Render
     renderer.clear(0, 0, 0, 1);
@@ -1839,12 +1824,8 @@ export class Viewer {
       renderer.resize(displayWidth, displayHeight);
     }
 
-    // Sync color adjustments and tone mapping (SDR: use as configured)
-    renderer.setColorAdjustments(this.colorPipeline.colorAdjustments);
-    renderer.setToneMappingState(this.colorPipeline.toneMappingState);
-
-    // Sync shared state (effects, LUT, background pattern, etc.)
-    this.syncRendererState(renderer);
+    // Sync all render state (SDR: use as configured, no overrides)
+    renderer.applyRenderState(this.buildRenderState());
 
     // Render
     renderer.clear(0, 0, 0, 1);

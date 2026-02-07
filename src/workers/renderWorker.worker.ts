@@ -24,6 +24,9 @@ import {
   TRANSFER_FUNCTION_FROM_CODE,
   COLOR_PRIMARIES_FROM_CODE,
 } from '../render/renderWorker.messages';
+import { Logger } from '../utils/Logger';
+
+const log = new Logger('RenderWorker');
 
 // Type assertion for Worker context
 const workerSelf = self as unknown as {
@@ -132,6 +135,7 @@ workerSelf.onmessage = function (event: MessageEvent<RenderWorkerMessage>) {
         const hdrMode = renderer.getHDROutputMode();
         post({ type: 'initResult', success: true, hdrMode });
       } catch (error) {
+        log.error('Initialization failed:', error);
         post({
           type: 'initResult',
           success: false,
@@ -168,7 +172,7 @@ workerSelf.onmessage = function (event: MessageEvent<RenderWorkerMessage>) {
         post({ type: 'renderDone', id: msg.id });
       } catch (error) {
         // Attempt to close bitmap even on error
-        try { msg.bitmap.close(); } catch (e) { console.warn('Failed to close bitmap after render error:', e); }
+        try { msg.bitmap.close(); } catch (e) { log.warn('Failed to close bitmap after render error:', e); }
         post({
           type: 'renderError',
           id: msg.id,
@@ -188,6 +192,7 @@ workerSelf.onmessage = function (event: MessageEvent<RenderWorkerMessage>) {
         renderer.renderImage(image, 0, 0, 1, 1);
         post({ type: 'renderDone', id: msg.id });
       } catch (error) {
+        log.error('HDR render failed:', error);
         post({
           type: 'renderError',
           id: msg.id,
