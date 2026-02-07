@@ -378,6 +378,26 @@ export interface OCIOState {
   panelVisible: boolean;
 }
 
+/**
+ * Creates a state getter that retrieves a component, calls getState() on it,
+ * and merges the result with defaults using nullish coalescing (??) semantics.
+ * This preserves the behavior where state values of `null` or `undefined`
+ * are replaced by the corresponding default value.
+ */
+function createStateGetter<T extends object>(
+  getComponent: () => any,
+  defaults: T,
+): () => T {
+  return () => {
+    const state = getComponent()?.getState?.() ?? {};
+    const result = {} as Record<string, unknown>;
+    for (const key of Object.keys(defaults)) {
+      result[key] = state[key] ?? (defaults as Record<string, unknown>)[key];
+    }
+    return result as T;
+  };
+}
+
 export function exposeForTesting(app: App): void {
   // Access private properties through any cast (for testing only)
   const appAny = app as any;
@@ -539,82 +559,71 @@ export function exposeForTesting(app: App): void {
       };
     },
 
-    getPixelProbeState: (): PixelProbeState => {
-      const viewer = appAny.viewer;
-      const pixelProbe = viewer?.getPixelProbe?.();
-      const state = pixelProbe?.getState?.() ?? {};
-      return {
-        enabled: state.enabled ?? false,
-        locked: state.locked ?? false,
-        x: state.x ?? 0,
-        y: state.y ?? 0,
-        rgb: state.rgb ?? { r: 0, g: 0, b: 0 },
-        alpha: state.alpha ?? 255,
-        hsl: state.hsl ?? { h: 0, s: 0, l: 0 },
-        ire: state.ire ?? 0,
-        format: state.format ?? 'rgb',
-        sampleSize: state.sampleSize ?? 1,
-        sourceMode: state.sourceMode ?? 'rendered',
-      };
-    },
+    getPixelProbeState: createStateGetter<PixelProbeState>(
+      () => appAny.viewer?.getPixelProbe?.(),
+      {
+        enabled: false,
+        locked: false,
+        x: 0,
+        y: 0,
+        rgb: { r: 0, g: 0, b: 0 },
+        alpha: 255,
+        hsl: { h: 0, s: 0, l: 0 },
+        ire: 0,
+        format: 'rgb',
+        sampleSize: 1,
+        sourceMode: 'rendered',
+      },
+    ),
 
-    getFalseColorState: (): FalseColorState => {
-      const viewer = appAny.viewer;
-      const falseColor = viewer?.getFalseColor?.();
-      const state = falseColor?.getState?.() ?? {};
-      return {
-        enabled: state.enabled ?? false,
-        preset: state.preset ?? 'standard',
-      };
-    },
+    getFalseColorState: createStateGetter<FalseColorState>(
+      () => appAny.viewer?.getFalseColor?.(),
+      {
+        enabled: false,
+        preset: 'standard',
+      },
+    ),
 
-    getToneMappingState: (): ToneMappingTestState => {
-      const toneMappingControl = appAny.toneMappingControl;
-      const state = toneMappingControl?.getState?.() ?? {};
-      return {
-        enabled: state.enabled ?? false,
-        operator: state.operator ?? 'off',
-      };
-    },
+    getToneMappingState: createStateGetter<ToneMappingTestState>(
+      () => appAny.toneMappingControl,
+      {
+        enabled: false,
+        operator: 'off',
+      },
+    ),
 
-    getSafeAreasState: (): SafeAreasState => {
-      const viewer = appAny.viewer;
-      const safeAreas = viewer?.getSafeAreasOverlay?.();
-      const state = safeAreas?.getState?.() ?? {};
-      return {
-        enabled: state.enabled ?? false,
-        titleSafe: state.titleSafe ?? true,
-        actionSafe: state.actionSafe ?? true,
-        centerCrosshair: state.centerCrosshair ?? false,
-        ruleOfThirds: state.ruleOfThirds ?? false,
-        aspectRatio: state.aspectRatio ?? null,
-      };
-    },
+    getSafeAreasState: createStateGetter<SafeAreasState>(
+      () => appAny.viewer?.getSafeAreasOverlay?.(),
+      {
+        enabled: false,
+        titleSafe: true,
+        actionSafe: true,
+        centerCrosshair: false,
+        ruleOfThirds: false,
+        aspectRatio: null,
+      },
+    ),
 
-    getTimecodeOverlayState: (): TimecodeOverlayState => {
-      const viewer = appAny.viewer;
-      const timecodeOverlay = viewer?.getTimecodeOverlay?.();
-      const state = timecodeOverlay?.getState?.() ?? {};
-      return {
-        enabled: state.enabled ?? false,
-        position: state.position ?? 'top-left',
-        fontSize: state.fontSize ?? 'medium',
-        showFrameCounter: state.showFrameCounter ?? true,
-      };
-    },
+    getTimecodeOverlayState: createStateGetter<TimecodeOverlayState>(
+      () => appAny.viewer?.getTimecodeOverlay?.(),
+      {
+        enabled: false,
+        position: 'top-left',
+        fontSize: 'medium',
+        showFrameCounter: true,
+      },
+    ),
 
-    getZebraStripesState: (): ZebraStripesState => {
-      const viewer = appAny.viewer;
-      const zebraStripes = viewer?.getZebraStripes?.();
-      const state = zebraStripes?.getState?.() ?? {};
-      return {
-        enabled: state.enabled ?? false,
-        highEnabled: state.highEnabled ?? true,
-        lowEnabled: state.lowEnabled ?? false,
-        highThreshold: state.highThreshold ?? 95,
-        lowThreshold: state.lowThreshold ?? 5,
-      };
-    },
+    getZebraStripesState: createStateGetter<ZebraStripesState>(
+      () => appAny.viewer?.getZebraStripes?.(),
+      {
+        enabled: false,
+        highEnabled: true,
+        lowEnabled: false,
+        highThreshold: 95,
+        lowThreshold: 5,
+      },
+    ),
 
     getColorWheelsState: (): ColorWheelsState => {
       const viewer = appAny.viewer;
@@ -632,36 +641,32 @@ export function exposeForTesting(app: App): void {
       };
     },
 
-    getSpotlightState: (): SpotlightState => {
-      const viewer = appAny.viewer;
-      const spotlight = viewer?.getSpotlightOverlay?.();
-      const state = spotlight?.getState?.() ?? {};
-      return {
-        enabled: state.enabled ?? false,
-        shape: state.shape ?? 'circle',
-        x: state.x ?? 0.5,
-        y: state.y ?? 0.5,
-        width: state.width ?? 0.2,
-        height: state.height ?? 0.2,
-        dimAmount: state.dimAmount ?? 0.7,
-        feather: state.feather ?? 0.05,
-      };
-    },
+    getSpotlightState: createStateGetter<SpotlightState>(
+      () => appAny.viewer?.getSpotlightOverlay?.(),
+      {
+        enabled: false,
+        shape: 'circle',
+        x: 0.5,
+        y: 0.5,
+        width: 0.2,
+        height: 0.2,
+        dimAmount: 0.7,
+        feather: 0.05,
+      },
+    ),
 
-    getHSLQualifierState: (): HSLQualifierState => {
-      const viewer = appAny.viewer;
-      const hslQualifier = viewer?.getHSLQualifier?.();
-      const state = hslQualifier?.getState?.() ?? {};
-      return {
-        enabled: state.enabled ?? false,
-        hue: state.hue ?? { center: 0, width: 30, softness: 20 },
-        saturation: state.saturation ?? { center: 50, width: 100, softness: 10 },
-        luminance: state.luminance ?? { center: 50, width: 100, softness: 10 },
-        correction: state.correction ?? { hueShift: 0, saturationScale: 1, luminanceScale: 1 },
-        invert: state.invert ?? false,
-        mattePreview: state.mattePreview ?? false,
-      };
-    },
+    getHSLQualifierState: createStateGetter<HSLQualifierState>(
+      () => appAny.viewer?.getHSLQualifier?.(),
+      {
+        enabled: false,
+        hue: { center: 0, width: 30, softness: 20 },
+        saturation: { center: 50, width: 100, softness: 10 },
+        luminance: { center: 50, width: 100, softness: 10 },
+        correction: { hueShift: 0, saturationScale: 1, luminanceScale: 1 },
+        invert: false,
+        mattePreview: false,
+      },
+    ),
 
     getHistoryPanelState: (): HistoryPanelState => {
       const historyPanel = appAny.historyPanel;
@@ -848,30 +853,27 @@ export function exposeForTesting(app: App): void {
       };
     },
 
-    getPresentationState: (): PresentationTestState => {
-      const presentationMode = appAny.presentationMode;
-      const state = presentationMode?.getState?.() ?? {};
-      return {
-        enabled: state.enabled ?? false,
-        cursorAutoHide: state.cursorAutoHide ?? true,
-        cursorHideDelay: state.cursorHideDelay ?? 3000,
-      };
-    },
+    getPresentationState: createStateGetter<PresentationTestState>(
+      () => appAny.presentationMode,
+      {
+        enabled: false,
+        cursorAutoHide: true,
+        cursorHideDelay: 3000,
+      },
+    ),
 
-    getLuminanceVisState: (): LuminanceVisTestState => {
-      const viewer = appAny.viewer;
-      const lumVis = viewer?.getLuminanceVisualization?.();
-      const state = lumVis?.getState?.() ?? {};
-      return {
-        mode: state.mode ?? 'off',
-        falseColorPreset: state.falseColorPreset ?? 'standard',
-        randomBandCount: state.randomBandCount ?? 16,
-        randomSeed: state.randomSeed ?? 42,
-        contourLevels: state.contourLevels ?? 10,
-        contourDesaturate: state.contourDesaturate ?? true,
-        contourLineColor: state.contourLineColor ?? [255, 255, 255],
-      };
-    },
+    getLuminanceVisState: createStateGetter<LuminanceVisTestState>(
+      () => appAny.viewer?.getLuminanceVisualization?.(),
+      {
+        mode: 'off',
+        falseColorPreset: 'standard',
+        randomBandCount: 16,
+        randomSeed: 42,
+        contourLevels: 10,
+        contourDesaturate: true,
+        contourLineColor: [255, 255, 255],
+      },
+    ),
 
     getNetworkSyncState: (): NetworkSyncState => {
       const networkControl = appAny.networkControl;

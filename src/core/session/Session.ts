@@ -40,6 +40,7 @@ import { Graph } from '../graph/Graph';
 import { loadGTOGraph } from './GTOGraphLoader';
 import type { GTOParseResult } from './GTOGraphLoader';
 import type { SubFramePosition } from '../../utils/FrameInterpolator';
+import { PlaybackTimingController, MAX_CONSECUTIVE_STARVATION_SKIPS } from './PlaybackTimingController';
 
 export type { SubFramePosition };
 
@@ -195,11 +196,7 @@ export interface MediaSource {
 export const PLAYBACK_SPEED_PRESETS = [0.1, 0.25, 0.5, 1, 2, 4, 8] as const;
 export type PlaybackSpeedPreset = typeof PLAYBACK_SPEED_PRESETS[number];
 
-// Maximum reverse playback speed - higher speeds may outpace frame extraction
-const MAX_REVERSE_SPEED = 4;
-
-// Starvation timeout - if frame extraction hangs for this long, skip the frame
-const STARVATION_TIMEOUT_MS = 5000;
+// Note: MAX_REVERSE_SPEED has been moved to PlaybackTimingController
 
 export class Session extends EventEmitter<SessionEvents> {
   private _currentFrame = 1;
@@ -216,7 +213,6 @@ export class Session extends EventEmitter<SessionEvents> {
   private _previousVolume = 0.7; // For unmute restore
   private _preservesPitch = true; // Pitch correction at non-1x speeds (default: on)
   private _interpolationEnabled = false; // Sub-frame interpolation for slow-motion (default: off)
-  private _subFramePosition: SubFramePosition | null = null; // Current sub-frame position (non-null during slow-mo with interpolation)
 
   // Playback guard to prevent concurrent play() calls
   private _pendingPlayPromise: Promise<void> | null = null;
@@ -236,25 +232,65 @@ export class Session extends EventEmitter<SessionEvents> {
     membershipContains: [],
   };
 
-  private lastFrameTime = 0;
-  private frameAccumulator = 0;
+  // Playback timing controller - holds pure logic for frame accumulator,
+  // starvation detection, buffering, effective FPS, and sub-frame interpolation.
+  // State is kept in _ts (TimingState) for the controller to operate on.
+  private _timingController = new PlaybackTimingController();
 
-  // Buffering state - counter to handle multiple concurrent frame requests
-  // Only emit 'buffering: false' when counter reaches 0
-  private _bufferingCount = 0;
-  private _isBuffering = false;
+  // Static constant for starvation threshold - kept for backward compatibility
+  static readonly MAX_CONSECUTIVE_STARVATION_SKIPS = MAX_CONSECUTIVE_STARVATION_SKIPS;
 
-  // Starvation tracking - timestamp when starvation started
-  private _starvationStartTime = 0;
-  // Consecutive starvation skip counter - pauses playback if too many skips cascade
-  private _consecutiveStarvationSkips = 0;
-  // Maximum consecutive starvation skips before forcing a pause
-  private static readonly MAX_CONSECUTIVE_STARVATION_SKIPS = 2;
+  // Timing state object - all mutable fields for playback timing.
+  // The PlaybackTimingController methods operate on this by reference.
+  //
+  // Individual fields are also exposed as direct properties on Session
+  // (via getters/setters below) so that existing tests which access
+  // `(session as any).lastFrameTime` etc. continue to work.
+  private _ts: import('./PlaybackTimingController').TimingState = {
+    lastFrameTime: 0,
+    frameAccumulator: 0,
+    bufferingCount: 0,
+    isBuffering: false,
+    starvationStartTime: 0,
+    consecutiveStarvationSkips: 0,
+    fpsFrameCount: 0,
+    fpsLastTime: 0,
+    effectiveFps: 0,
+    subFramePosition: null,
+  };
 
-  // Effective FPS tracking
-  private fpsFrameCount = 0;
-  private fpsLastTime = 0;
-  private _effectiveFps = 0;
+  // --- Backward-compatible accessors for timing state fields ---
+  // Tests access these via `(session as any).lastFrameTime` etc.
+
+  get lastFrameTime(): number { return this._ts.lastFrameTime; }
+  set lastFrameTime(v: number) { this._ts.lastFrameTime = v; }
+
+  get frameAccumulator(): number { return this._ts.frameAccumulator; }
+  set frameAccumulator(v: number) { this._ts.frameAccumulator = v; }
+
+  get _bufferingCount(): number { return this._ts.bufferingCount; }
+  set _bufferingCount(v: number) { this._ts.bufferingCount = v; }
+
+  get _isBuffering(): boolean { return this._ts.isBuffering; }
+  set _isBuffering(v: boolean) { this._ts.isBuffering = v; }
+
+  get _starvationStartTime(): number { return this._ts.starvationStartTime; }
+  set _starvationStartTime(v: number) { this._ts.starvationStartTime = v; }
+
+  get _consecutiveStarvationSkips(): number { return this._ts.consecutiveStarvationSkips; }
+  set _consecutiveStarvationSkips(v: number) { this._ts.consecutiveStarvationSkips = v; }
+
+  get fpsFrameCount(): number { return this._ts.fpsFrameCount; }
+  set fpsFrameCount(v: number) { this._ts.fpsFrameCount = v; }
+
+  get fpsLastTime(): number { return this._ts.fpsLastTime; }
+  set fpsLastTime(v: number) { this._ts.fpsLastTime = v; }
+
+  get _effectiveFps(): number { return this._ts.effectiveFps; }
+  set _effectiveFps(v: number) { this._ts.effectiveFps = v; }
+
+  get _subFramePosition(): SubFramePosition | null { return this._ts.subFramePosition; }
+  set _subFramePosition(v: SubFramePosition | null) { this._ts.subFramePosition = v; }
 
   // Media sources
   protected sources: MediaSource[] = [];
@@ -407,8 +443,7 @@ export class Session extends EventEmitter<SessionEvents> {
       // Reset frame accumulator on speed change to prevent timing discontinuity
       // This avoids frame skips when changing speed during playback
       if (this._isPlaying) {
-        this.frameAccumulator = 0;
-        this.lastFrameTime = performance.now();
+        this._timingController.resetTiming(this._ts);
       }
 
       this.emit('playbackSpeedChanged', this._playbackSpeed);
@@ -470,7 +505,7 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   get isBuffering(): boolean {
-    return this._isBuffering;
+    return this._ts.isBuffering;
   }
 
   get loopMode(): LoopMode {
@@ -598,7 +633,7 @@ export class Session extends EventEmitter<SessionEvents> {
     if (value !== this._interpolationEnabled) {
       this._interpolationEnabled = value;
       if (!value) {
-        this._subFramePosition = null;
+        this._timingController.clearSubFramePosition(this._ts);
         this.emit('subFramePositionChanged', null);
       }
       this.emit('interpolationEnabledChanged', this._interpolationEnabled);
@@ -611,7 +646,7 @@ export class Session extends EventEmitter<SessionEvents> {
    * Used by the Viewer to blend adjacent frames for smooth slow-motion.
    */
   get subFramePosition(): SubFramePosition | null {
-    return this._subFramePosition;
+    return this._ts.subFramePosition;
   }
 
   /**
@@ -700,13 +735,8 @@ export class Session extends EventEmitter<SessionEvents> {
     }
 
     this._isPlaying = true;
-    this.lastFrameTime = performance.now();
-    this.frameAccumulator = 0;
-
-    // Reset FPS tracking
-    this.fpsFrameCount = 0;
-    this.fpsLastTime = performance.now();
-    this._effectiveFps = 0;
+    this._timingController.resetTiming(this._ts);
+    this._timingController.resetFpsTracking(this._ts);
 
     const source = this.currentSource;
 
@@ -909,7 +939,9 @@ export class Session extends EventEmitter<SessionEvents> {
       this._pendingPlayPromise = null;
 
       // Reset buffering state
-      this.resetBufferingState();
+      if (this._timingController.resetBuffering(this._ts)) {
+        this.emit('buffering', false);
+      }
 
       // Pause video if current source is video
       const source = this.currentSource;
@@ -927,8 +959,7 @@ export class Session extends EventEmitter<SessionEvents> {
       this.stopSourceBPlaybackPreload();
 
       // Clear sub-frame position when paused
-      if (this._subFramePosition !== null) {
-        this._subFramePosition = null;
+      if (this._timingController.clearSubFramePosition(this._ts)) {
         this.emit('subFramePositionChanged', null);
       }
 
@@ -940,26 +971,11 @@ export class Session extends EventEmitter<SessionEvents> {
    * Decrement buffering counter and emit 'buffering: false' when all pending loads complete
    */
   private decrementBufferingCount(): void {
-    this._bufferingCount = Math.max(0, this._bufferingCount - 1);
-    if (this._bufferingCount === 0 && this._isBuffering) {
-      this._isBuffering = false;
+    if (this._timingController.decrementBuffering(this._ts)) {
       // Only emit if still playing - no need to signal buffering end if paused
       if (this._isPlaying) {
         this.emit('buffering', false);
       }
-    }
-  }
-
-  /**
-   * Reset buffering state (called on pause or stop)
-   */
-  private resetBufferingState(): void {
-    this._bufferingCount = 0;
-    this._starvationStartTime = 0;
-    this._consecutiveStarvationSkips = 0;
-    if (this._isBuffering) {
-      this._isBuffering = false;
-      this.emit('buffering', false);
     }
   }
 
@@ -985,8 +1001,7 @@ export class Session extends EventEmitter<SessionEvents> {
       if (source.videoSourceNode?.isUsingMediabunny()) {
         source.videoSourceNode.setPlaybackDirection(this._playDirection);
         source.videoSourceNode.startPlaybackPreload(this._currentFrame, this._playDirection);
-        this.lastFrameTime = performance.now();
-        this.frameAccumulator = 0;
+        this._timingController.resetTiming(this._ts);
 
         // Handle audio for direction change
         if (source.element instanceof HTMLVideoElement) {
@@ -1009,8 +1024,7 @@ export class Session extends EventEmitter<SessionEvents> {
         } else {
           // Switching to reverse: pause video, will use frame-based seeking
           source.element.pause();
-          this.lastFrameTime = performance.now();
-          this.frameAccumulator = 0;
+          this._timingController.resetTiming(this._ts);
         }
       }
     }
@@ -1027,7 +1041,7 @@ export class Session extends EventEmitter<SessionEvents> {
    * Returns 0 when not playing
    */
   get effectiveFps(): number {
-    return this._isPlaying ? this._effectiveFps : 0;
+    return this._isPlaying ? this._ts.effectiveFps : 0;
   }
 
   stepForward(): void {
@@ -1244,56 +1258,51 @@ export class Session extends EventEmitter<SessionEvents> {
     if (!this._isPlaying) return;
 
     const source = this.currentSource;
+    const tc = this._timingController;
 
     // Check if using mediabunny for smooth frame-accurate playback
     if (source?.type === 'video' && source.videoSourceNode?.isUsingMediabunny()) {
       // Use frame-based timing for both forward and reverse
-      const now = performance.now();
-      const delta = now - this.lastFrameTime;
-      this.lastFrameTime = now;
-
-      // Limit speed for reverse playback to prevent frame extraction from being outpaced
-      const effectiveSpeed = this._playDirection < 0
-        ? Math.min(this._playbackSpeed, MAX_REVERSE_SPEED)
-        : this._playbackSpeed;
-      const frameDuration = (1000 / this._fps) / effectiveSpeed;
-      this.frameAccumulator += delta;
+      const { frameDuration } = tc.accumulateDelta(
+        this._ts, this._fps, this._playbackSpeed, this._playDirection,
+      );
 
       // Only advance if next frame is cached (frame-gated playback)
       // This ensures we always display the correct frame from mediabunny
-      while (this.frameAccumulator >= frameDuration) {
+      while (tc.hasAccumulatedFrame(this._ts, frameDuration)) {
         // Compute actual next frame accounting for loop boundaries
-        const nextFrame = this.computeNextFrame(this._playDirection);
+        const nextFrame = tc.computeNextFrame(
+          this._currentFrame, this._playDirection,
+          this._inPoint, this._outPoint, this._loopMode,
+        );
 
         // Check if next frame is cached and ready
         if (source.videoSourceNode.hasFrameCached(nextFrame)) {
           // Reset starvation tracking on successful frame
-          this._starvationStartTime = 0;
-          this._consecutiveStarvationSkips = 0;
-          this.frameAccumulator -= frameDuration;
+          tc.onFrameDisplayed(this._ts);
+          tc.consumeFrame(this._ts, frameDuration);
           this.advanceFrame(this._playDirection);
           // Update source B's playback buffer for split screen support
           this.updateSourceBPlaybackBuffer(nextFrame);
         } else {
           // Frame not ready - trigger fetch and wait
           // Cap accumulator to prevent huge jumps when frame becomes available
-          this.frameAccumulator = Math.min(this.frameAccumulator, frameDuration * 2);
+          tc.capAccumulator(this._ts, frameDuration);
 
           // Track starvation start time
-          if (this._starvationStartTime === 0) {
-            this._starvationStartTime = performance.now();
-          }
+          tc.beginStarvation(this._ts);
 
           // Check for starvation timeout
-          const starvationDuration = performance.now() - this._starvationStartTime;
-          if (starvationDuration > STARVATION_TIMEOUT_MS) {
-            this._consecutiveStarvationSkips++;
+          const starvation = tc.checkStarvation(
+            this._ts, nextFrame, this._inPoint, this._outPoint, this._playDirection,
+          );
 
+          if (starvation.timedOut) {
             // If consecutive skips exceed threshold, pause to prevent cascade freeze
-            if (this._consecutiveStarvationSkips >= Session.MAX_CONSECUTIVE_STARVATION_SKIPS) {
+            if (starvation.shouldPause) {
               console.warn(
                 `Playback paused: frame buffer underrun (frame ${nextFrame}, ` +
-                `${this._consecutiveStarvationSkips} consecutive starvation timeouts)`
+                `${this._ts.consecutiveStarvationSkips} consecutive starvation timeouts)`
               );
               // IMMEDIATELY pause audio to prevent loop/restart during the pause transition
               if (source.element instanceof HTMLVideoElement) {
@@ -1302,8 +1311,7 @@ export class Session extends EventEmitter<SessionEvents> {
               // Trigger prebuffering of upcoming frames before pausing
               // so the system can recover faster when the user presses play again
               this.triggerStarvationRecoveryPreload(source.videoSourceNode, nextFrame, this._playDirection);
-              this._starvationStartTime = 0;
-              this._consecutiveStarvationSkips = 0;
+              tc.resetStarvation(this._ts);
               this.pause();
               return; // Exit update loop entirely - we've paused
             }
@@ -1311,22 +1319,18 @@ export class Session extends EventEmitter<SessionEvents> {
             // Check if starvation is at end-of-video (within 2 frames of out point)
             // This prevents blind advanceFrame which would wrap to beginning
             // and cause audio to restart from the start
-            const isNearEnd = this._playDirection > 0
-              ? nextFrame >= this._outPoint - 2
-              : nextFrame <= this._inPoint + 2;
-            if (isNearEnd) {
+            if (starvation.nearEnd) {
               if (this._loopMode === 'loop') {
                 // Properly loop: reset both frame AND audio to beginning
                 this._currentFrame = this._playDirection > 0 ? this._inPoint : this._outPoint;
-                this._consecutiveStarvationSkips = 0;
-                this._starvationStartTime = 0;
+                tc.resetStarvation(this._ts);
                 // Sync audio to the loop point
                 if (source.element instanceof HTMLVideoElement) {
                   const video = source.element;
                   video.currentTime = (this._currentFrame - 1) / this._fps;
                 }
                 this.emit('frameChanged', this._currentFrame);
-                this.frameAccumulator -= frameDuration;
+                tc.consumeFrame(this._ts, frameDuration);
                 continue;
               } else {
                 // 'once' or 'pingpong' at end: just stop playback
@@ -1336,17 +1340,15 @@ export class Session extends EventEmitter<SessionEvents> {
             }
 
             // Under the threshold: skip the frame and try the next one
-            console.warn(`Frame ${nextFrame} starvation timeout (${Math.round(starvationDuration)}ms) - skipping frame`);
-            this._starvationStartTime = 0;
-            this.frameAccumulator -= frameDuration;
+            console.warn(`Frame ${nextFrame} starvation timeout (${Math.round(starvation.starvationDurationMs)}ms) - skipping frame`);
+            tc.resetStarvation(this._ts);
+            tc.consumeFrame(this._ts, frameDuration);
             this.advanceFrame(this._playDirection);
             continue; // Try the next frame
           }
 
           // Track buffering state with counter to prevent event flickering
-          this._bufferingCount++;
-          if (!this._isBuffering) {
-            this._isBuffering = true;
+          if (tc.incrementBuffering(this._ts)) {
             this.emit('buffering', true);
           }
 
@@ -1375,7 +1377,7 @@ export class Session extends EventEmitter<SessionEvents> {
       }
 
       // Compute sub-frame position for interpolation during slow-motion
-      this.updateSubFramePosition(frameDuration);
+      this.emitSubFrameUpdate(frameDuration);
 
       // Sync HTMLVideoElement for audio (but not for frame display)
       // Only sync during forward playback with audio enabled
@@ -1413,24 +1415,16 @@ export class Session extends EventEmitter<SessionEvents> {
       }
     } else {
       // For images or video with reverse playback (no mediabunny), use frame-based timing
-      const now = performance.now();
-      const delta = now - this.lastFrameTime;
-      this.lastFrameTime = now;
+      const { framesToAdvance, frameDuration } = tc.accumulateFrames(
+        this._ts, this._fps, this._playbackSpeed, this._playDirection,
+      );
 
-      // Limit speed for reverse playback
-      const effectiveSpeed = this._playDirection < 0
-        ? Math.min(this._playbackSpeed, MAX_REVERSE_SPEED)
-        : this._playbackSpeed;
-      const frameDuration = (1000 / this._fps) / effectiveSpeed;
-      this.frameAccumulator += delta;
-
-      while (this.frameAccumulator >= frameDuration) {
-        this.frameAccumulator -= frameDuration;
+      for (let i = 0; i < framesToAdvance; i++) {
         this.advanceFrame(this._playDirection);
       }
 
       // Compute sub-frame position for interpolation during slow-motion
-      this.updateSubFramePosition(frameDuration);
+      this.emitSubFrameUpdate(frameDuration);
 
       // For video reverse playback without mediabunny, seek to the current frame
       if (source?.type === 'video' && source.element instanceof HTMLVideoElement) {
@@ -1441,89 +1435,34 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   /**
-   * Compute the next frame without side effects (for cache checking)
-   * Returns the frame number that would be displayed after advancing
+   * Delegate sub-frame position update to the timing controller and emit events as needed.
    */
-  private computeNextFrame(direction: number): number {
-    let nextFrame = this._currentFrame + direction;
+  private emitSubFrameUpdate(frameDuration: number): void {
+    const result = this._timingController.updateSubFramePosition(
+      this._ts,
+      this._interpolationEnabled,
+      this._playbackSpeed,
+      this._currentFrame,
+      this._playDirection,
+      this._inPoint,
+      this._outPoint,
+      this._loopMode,
+      frameDuration,
+    );
 
-    if (nextFrame > this._outPoint) {
-      switch (this._loopMode) {
-        case 'once':
-          return this._outPoint;
-        case 'loop':
-          return this._inPoint;
-        case 'pingpong':
-          return this._outPoint - 1;
-      }
-    } else if (nextFrame < this._inPoint) {
-      switch (this._loopMode) {
-        case 'once':
-          return this._inPoint;
-        case 'loop':
-          return this._outPoint;
-        case 'pingpong':
-          return this._inPoint + 1;
-      }
+    if (result === null) {
+      // Sub-frame position was cleared
+      this.emit('subFramePositionChanged', null);
+    } else if (result !== undefined) {
+      // Sub-frame position changed meaningfully
+      this.emit('subFramePositionChanged', result);
     }
-
-    return nextFrame;
-  }
-
-  /**
-   * Update the sub-frame position for interpolation during slow-motion playback.
-   *
-   * When interpolation is enabled and playing at speeds < 1x, this computes
-   * the fractional position between the current frame and the next frame
-   * from the frame accumulator. The Viewer uses this to blend adjacent frames.
-   *
-   * At normal or fast speeds (>= 1x), sub-frame position is cleared since
-   * frames change fast enough that blending provides no visual benefit.
-   */
-  private updateSubFramePosition(frameDuration: number): void {
-    if (!this._interpolationEnabled || this._playbackSpeed >= 1) {
-      // Clear sub-frame position when not in slow-motion or disabled
-      if (this._subFramePosition !== null) {
-        this._subFramePosition = null;
-        this.emit('subFramePositionChanged', null);
-      }
-      return;
-    }
-
-    // Compute the fractional position between current frame and next
-    const ratio = Math.max(0, Math.min(1, this.frameAccumulator / frameDuration));
-    const nextFrame = this.computeNextFrame(this._playDirection);
-
-    const newPosition: SubFramePosition = {
-      baseFrame: this._currentFrame,
-      nextFrame,
-      ratio,
-    };
-
-    // Only emit if position changed meaningfully (avoid excessive events)
-    if (
-      !this._subFramePosition ||
-      this._subFramePosition.baseFrame !== newPosition.baseFrame ||
-      this._subFramePosition.nextFrame !== newPosition.nextFrame ||
-      Math.abs(this._subFramePosition.ratio - newPosition.ratio) > 0.005
-    ) {
-      this._subFramePosition = newPosition;
-      this.emit('subFramePositionChanged', this._subFramePosition);
-    }
+    // undefined means no change needed
   }
 
   private advanceFrame(direction: number): void {
-    // Track effective FPS
-    this.fpsFrameCount++;
-    const now = performance.now();
-    const elapsed = now - this.fpsLastTime;
-
-    // Update FPS calculation every 500ms for smooth display
-    if (elapsed >= 500) {
-      this._effectiveFps = Math.round((this.fpsFrameCount / elapsed) * 1000 * 10) / 10;
-      this.fpsFrameCount = 0;
-      this.fpsLastTime = now;
-    }
+    // Track effective FPS via timing controller
+    this._timingController.trackFrameAdvance(this._ts);
 
     let nextFrame = this._currentFrame + direction;
 

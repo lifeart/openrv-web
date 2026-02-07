@@ -12,6 +12,7 @@
  */
 
 import { dpxLogToLinear as _dpxLogToLinear, type LogLinearOptions } from './LogLinear';
+import { validateImageDimensions, toRGBA, applyLogToLinearRGBA as sharedApplyLogToLinearRGBA } from './shared';
 
 // Re-export for backwards compatibility
 export { dpxLogToLinear } from './LogLinear';
@@ -254,31 +255,8 @@ function unpack12bit(
 }
 
 /**
- * Convert component data to RGBA Float32Array
- * If input has 3 channels, alpha is set to 1.0
- */
-function toRGBA(data: Float32Array, width: number, height: number, inputChannels: number): Float32Array {
-  if (inputChannels === 4) {
-    return data;
-  }
-
-  const totalPixels = width * height;
-  const result = new Float32Array(totalPixels * 4);
-
-  for (let i = 0; i < totalPixels; i++) {
-    const srcIdx = i * inputChannels;
-    const dstIdx = i * 4;
-    result[dstIdx] = data[srcIdx] ?? 0;
-    result[dstIdx + 1] = data[srcIdx + 1] ?? 0;
-    result[dstIdx + 2] = data[srcIdx + 2] ?? 0;
-    result[dstIdx + 3] = inputChannels >= 4 ? (data[srcIdx + 3] ?? 1.0) : 1.0;
-  }
-
-  return result;
-}
-
-/**
- * Apply log-to-linear conversion on RGBA data (only on RGB, leave alpha)
+ * Apply log-to-linear conversion on RGBA data (only on RGB, leave alpha).
+ * Wraps shared utility with DPX-specific log-to-linear function.
  */
 function applyLogToLinearRGBA(
   data: Float32Array,
@@ -287,19 +265,7 @@ function applyLogToLinearRGBA(
   bitDepth: number,
   options?: LogLinearOptions
 ): void {
-  const totalPixels = width * height;
-  const maxCodeValue = (1 << bitDepth) - 1;
-
-  for (let i = 0; i < totalPixels; i++) {
-    const idx = i * 4;
-    // Convert normalized [0,1] back to code value for log-to-linear
-    for (let c = 0; c < 3; c++) {
-      const normalized = data[idx + c]!;
-      const codeValue = normalized * maxCodeValue;
-      data[idx + c] = _dpxLogToLinear(codeValue, options);
-    }
-    // Alpha stays as-is
-  }
+  sharedApplyLogToLinearRGBA(data, width, height, bitDepth, (codeValue) => _dpxLogToLinear(codeValue, options));
 }
 
 /**
@@ -321,9 +287,7 @@ export async function decodeDPX(
   const { width, height, bitDepth, bigEndian, transfer, channels: inputChannels, dataOffset } = info;
 
   // Validate dimensions
-  if (width <= 0 || height <= 0 || width > 65536 || height > 65536) {
-    throw new Error(`Invalid DPX dimensions: ${width}x${height}`);
-  }
+  validateImageDimensions(width, height, 'DPX');
 
   // Validate data offset
   if (dataOffset >= buffer.byteLength) {

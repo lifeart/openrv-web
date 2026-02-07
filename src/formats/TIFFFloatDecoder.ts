@@ -17,6 +17,8 @@
  * Based on TIFF 6.0 specification.
  */
 
+import { validateImageDimensions } from './shared';
+
 // TIFF byte order marks
 const TIFF_LE = 0x4949; // "II" - Intel byte order (little-endian)
 const TIFF_BE = 0x4d4d; // "MM" - Motorola byte order (big-endian)
@@ -347,10 +349,8 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
   const rowsPerStrip = getTagSingleValue(view, tags, TAG_ROWS_PER_STRIP, le, height);
   const sampleFormatValue = getTagSingleValue(view, tags, TAG_SAMPLE_FORMAT, le, SAMPLE_FORMAT_UINT);
 
-  // Validate
-  if (width <= 0 || height <= 0 || width > 65536 || height > 65536) {
-    throw new Error(`Invalid TIFF dimensions: ${width}x${height}`);
-  }
+  // Validate dimensions
+  validateImageDimensions(width, height, 'TIFF');
 
   if (sampleFormatValue !== SAMPLE_FORMAT_FLOAT) {
     throw new Error(`Not a float TIFF: sample format is ${sampleFormatValue}, expected ${SAMPLE_FORMAT_FLOAT} (IEEE float)`);

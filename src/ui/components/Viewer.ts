@@ -2,18 +2,17 @@ import { Session } from '../../core/session/Session';
 import { PaintEngine, PaintTool } from '../../paint/PaintEngine';
 import { PaintRenderer } from '../../paint/PaintRenderer';
 import { StrokePoint, ShapeType, Point } from '../../paint/types';
-import { ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from './ColorControls';
+import { ColorAdjustments } from './ColorControls';
 import { WipeState, WipeMode } from './WipeControl';
-import { Transform2D, DEFAULT_TRANSFORM } from './TransformControl';
+import { Transform2D } from './TransformControl';
 import { FilterSettings, DEFAULT_FILTER_SETTINGS } from './FilterControl';
 import { CropState, CropRegion, DEFAULT_CROP_STATE, DEFAULT_CROP_REGION, ASPECT_RATIOS, MIN_CROP_FRACTION, UncropState, DEFAULT_UNCROP_STATE } from './CropControl';
 import { LUT3D } from '../../color/LUTLoader';
-import { WebGLLUTProcessor } from '../../color/WebGLLUT';
 import { LUTPipeline } from '../../color/pipeline/LUTPipeline';
 import { GPULUTChain } from '../../color/pipeline/GPULUTChain';
-import { CDLValues, DEFAULT_CDL, isDefaultCDL, applyCDLToImageData } from '../../color/CDL';
-import { ColorCurvesData, createDefaultCurvesData, isDefaultCurves, CurveLUTCache, buildAllCurveLUTs } from '../../color/ColorCurves';
-import { LensDistortionParams, DEFAULT_LENS_PARAMS, isDefaultLensParams, applyLensDistortion } from '../../transform/LensDistortion';
+import { CDLValues, isDefaultCDL, applyCDLToImageData } from '../../color/CDL';
+import { ColorCurvesData, isDefaultCurves, buildAllCurveLUTs } from '../../color/ColorCurves';
+import type { LensDistortionParams } from '../../transform/LensDistortion';
 import { ExportFormat, exportCanvas as doExportCanvas, copyCanvasToClipboard } from '../../utils/FrameExporter';
 import { filterImageFiles, getBestSequence } from '../../utils/SequenceLoader';
 import { StackLayer } from './StackControl';
@@ -22,7 +21,7 @@ import { showAlert } from './shared/Modal';
 import { getIconSvg } from './shared/Icons';
 import { ChannelMode, applyChannelIsolation } from './ChannelSelect';
 import { applyColorInversion } from '../../color/Inversion';
-import { StereoState, DEFAULT_STEREO_STATE, isDefaultStereoState, applyStereoMode, applyStereoModeWithEyeTransforms, StereoEyeTransformState, StereoAlignMode, DEFAULT_STEREO_EYE_TRANSFORM_STATE, DEFAULT_STEREO_ALIGN_MODE, isDefaultStereoEyeTransformState } from '../../stereo/StereoRenderer';
+import type { StereoState, StereoEyeTransformState, StereoAlignMode } from '../../stereo/StereoRenderer';
 import { DifferenceMatteState, DEFAULT_DIFFERENCE_MATTE_STATE, applyDifferenceMatte } from './DifferenceMatteControl';
 import { WebGLSharpenProcessor } from '../../filters/WebGLSharpen';
 import { SafeAreasOverlay } from './SafeAreasOverlay';
@@ -39,7 +38,6 @@ import { HSLQualifier } from './HSLQualifier';
 import { PrerenderBufferManager } from '../../utils/PrerenderBufferManager';
 import { getThemeManager } from '../../utils/ThemeManager';
 import { setupHiDPICanvas, resetCanvasFromHiDPI } from '../../utils/HiDPICanvas';
-import { getSharedOCIOProcessor } from '../../color/OCIOProcessor';
 import { DisplayColorState, DEFAULT_DISPLAY_COLOR_STATE, DISPLAY_TRANSFER_CODES, applyDisplayColorManagementToImageData, isDisplayStateActive } from '../../color/DisplayTransfer';
 import type { DisplayCapabilities } from '../../color/DisplayCapabilities';
 import { safeCanvasContext2D } from '../../color/SafeCanvasContext';
@@ -69,8 +67,13 @@ import {
   calculateSplitPosition,
   isSplitScreenMode,
 } from './ViewerSplitScreen';
-import { GhostFrameState, DEFAULT_GHOST_FRAME_STATE } from './GhostFrameControl';
-import { ToneMappingState, DEFAULT_TONE_MAPPING_STATE } from './ToneMappingControl';
+import type { GhostFrameState } from './GhostFrameControl';
+import { ColorPipelineManager } from './ColorPipelineManager';
+import { TransformManager } from './TransformManager';
+import { StereoManager } from './StereoManager';
+import { LensDistortionManager } from './LensDistortionManager';
+import { GhostFrameManager } from './GhostFrameManager';
+import { ToneMappingState } from './ToneMappingControl';
 import { PARState, DEFAULT_PAR_STATE, isPARActive, calculatePARCorrectedWidth } from '../../utils/PixelAspectRatio';
 import { BackgroundPatternState, DEFAULT_BACKGROUND_PATTERN_STATE, drawBackgroundPattern, PATTERN_COLORS } from './BackgroundPatternControl';
 import { FrameInterpolator } from '../../utils/FrameInterpolator';
@@ -84,7 +87,6 @@ import {
   isViewerContentElement as isViewerContentElementUtil,
   getPixelCoordinates,
   getPixelColor,
-  interpolateZoom,
 } from './ViewerInteraction';
 import {
   drawWithTransform as drawWithTransformUtil,
@@ -133,31 +135,14 @@ export class Viewer {
   private shapeStartPoint: Point | null = null;
   private shapeCurrentPoint: Point | null = null;
 
-  // View state
-  private panX = 0;
-  private panY = 0;
-  private zoom = 1;
-
-  // Smooth zoom animation state
-  private zoomAnimationId: number | null = null;
-  private zoomAnimationStartTime = 0;
-  private zoomAnimationStartZoom = 1;
-  private zoomAnimationTargetZoom = 1;
-  private zoomAnimationDuration = 0;
-  private zoomAnimationStartPanX = 0;
-  private zoomAnimationStartPanY = 0;
-  private zoomAnimationTargetPanX = 0;
-  private zoomAnimationTargetPanY = 0;
+  // Transform manager (owns pan/zoom/rotation/flip/animation state)
+  private transformManager = new TransformManager();
 
   // Interaction state
   private isPanning = false;
   private lastPointerX = 0;
   private lastPointerY = 0;
   private activePointers: Map<number, PointerState> = new Map();
-
-  // Pinch zoom state
-  private initialPinchDistance = 0;
-  private initialZoom = 1;
 
   // Source dimensions for coordinate conversion
   private sourceWidth = 0;
@@ -200,11 +185,8 @@ export class Viewer {
   // Track if we've ever displayed a mediabunny frame (for fallback logic)
   private hasDisplayedMediabunnyFrame = false;
 
-  // Color adjustments
-  private colorAdjustments: ColorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
-
-  // Color inversion state
-  private colorInversionEnabled = false;
+  // Color pipeline manager (owns all color correction state)
+  private colorPipeline = new ColorPipelineManager();
 
   // Wipe comparison
   private wipeState: WipeState = { mode: 'off', position: 0.5, showOriginal: 'left' };
@@ -216,30 +198,13 @@ export class Viewer {
   private splitScreenElements: SplitScreenUIElements | null = null;
   private isDraggingSplit = false;
 
-  // LUT
-  private currentLUT: LUT3D | null = null;
-  private lutIntensity = 1.0;
+  // LUT indicator badge (UI element, remains in Viewer)
   private lutIndicator: HTMLElement | null = null;
-  private lutProcessor: WebGLLUTProcessor | null = null;
-
-  // Multi-point LUT pipeline
-  private lutPipeline: LUTPipeline = new LUTPipeline();
-  private gpuLUTChain: GPULUTChain | null = null;
-
-  // OCIO GPU-accelerated color management
-  private ocioLUTProcessor: WebGLLUTProcessor | null = null;
-  private ocioEnabled = false;
-  private ocioBakedLUT: LUT3D | null = null;
 
   // A/B Compare indicator
   private abIndicator: HTMLElement | null = null;
 
-  // 2D Transform
-  private transform: Transform2D = {
-    ...DEFAULT_TRANSFORM,
-    scale: { ...DEFAULT_TRANSFORM.scale },
-    translate: { ...DEFAULT_TRANSFORM.translate },
-  };
+  // 2D Transform -> moved to transformManager
 
   // Filter effects
   private filterSettings: FilterSettings = { ...DEFAULT_FILTER_SETTINGS };
@@ -288,15 +253,11 @@ export class Viewer {
   // HSL Qualifier (secondary color correction)
   private hslQualifier: HSLQualifier;
 
-  // CDL state
-  private cdlValues: CDLValues = JSON.parse(JSON.stringify(DEFAULT_CDL));
+  // CDL state -> moved to colorPipeline
+  // Color curves state -> moved to colorPipeline
 
-  // Color curves state
-  private curvesData: ColorCurvesData = createDefaultCurvesData();
-  private curveLUTCache = new CurveLUTCache();
-
-  // Lens distortion state
-  private lensParams: LensDistortionParams = { ...DEFAULT_LENS_PARAMS };
+  // Lens distortion manager (owns lens correction state)
+  private lensDistortionManager = new LensDistortionManager();
 
   // Stack/composite state
   private stackLayers: StackLayer[] = [];
@@ -305,28 +266,16 @@ export class Viewer {
   // Channel isolation state
   private channelMode: ChannelMode = 'rgb';
 
-  // Stereo viewing state
-  private stereoState: StereoState = { ...DEFAULT_STEREO_STATE };
-
-  // Per-eye transform state
-  private stereoEyeTransformState: StereoEyeTransformState = { ...DEFAULT_STEREO_EYE_TRANSFORM_STATE, left: { ...DEFAULT_STEREO_EYE_TRANSFORM_STATE.left }, right: { ...DEFAULT_STEREO_EYE_TRANSFORM_STATE.right } };
-
-  // Stereo alignment overlay mode
-  private stereoAlignMode: StereoAlignMode = DEFAULT_STEREO_ALIGN_MODE;
+  // Stereo manager (owns stereo/3D viewing state)
+  private stereoManager = new StereoManager();
 
   // Difference matte state
   private differenceMatteState: DifferenceMatteState = { ...DEFAULT_DIFFERENCE_MATTE_STATE };
 
-  // Ghost frame (onion skin) state
-  private ghostFrameState: GhostFrameState = { ...DEFAULT_GHOST_FRAME_STATE };
+  // Ghost frame manager (owns onion skin state + canvas pool)
+  private ghostFrameManager = new GhostFrameManager();
 
-  // Ghost frame canvas pool - reuse canvases instead of creating new ones each frame
-  private ghostFrameCanvasPool: { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D }[] = [];
-  private ghostFramePoolWidth = 0;
-  private ghostFramePoolHeight = 0;
-
-  // Tone mapping state
-  private toneMappingState: ToneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
+  // Tone mapping state -> moved to colorPipeline
 
   // Pixel Aspect Ratio state
   private parState: PARState = { ...DEFAULT_PAR_STATE };
@@ -334,8 +283,7 @@ export class Viewer {
   // Background pattern state (for alpha visualization)
   private backgroundPatternState: BackgroundPatternState = { ...DEFAULT_BACKGROUND_PATTERN_STATE };
 
-  // Display color management state (final pipeline stage)
-  private displayColorState: DisplayColorState = { ...DEFAULT_DISPLAY_COLOR_STATE };
+  // Display color management state -> moved to colorPipeline
 
   // Sub-frame interpolator for slow-motion blending
   private frameInterpolator = new FrameInterpolator();
@@ -389,6 +337,9 @@ export class Viewer {
     this.session = session;
     this.paintEngine = paintEngine;
     this.paintRenderer = new PaintRenderer(this.canvasColorSpace);
+
+    // Wire up transform manager's render callback
+    this.transformManager.setScheduleRender(() => this.scheduleRender());
 
     // Create container
     this.container = document.createElement('div');
@@ -606,40 +557,11 @@ export class Viewer {
     this.initializeCanvas();
     this.updateCursor(this.paintEngine.tool);
 
-    // Initialize WebGL LUT processor
-    try {
-      this.lutProcessor = new WebGLLUTProcessor();
-    } catch (e) {
-      console.warn('WebGL LUT processor not available, falling back to CPU:', e);
-      this.lutProcessor = null;
-    }
-
-    // Initialize multi-point LUT pipeline GPU chain
-    try {
-      const chainCanvas = document.createElement('canvas');
-      const chainGl = chainCanvas.getContext('webgl2', {
-        premultipliedAlpha: false,
-        preserveDrawingBuffer: false,
-      });
-      if (chainGl) {
-        this.gpuLUTChain = new GPULUTChain(chainGl);
-      }
-    } catch (e) {
-      console.warn('GPU LUT chain not available:', e);
-      this.gpuLUTChain = null;
-    }
-
-    // Register default source for LUT pipeline
-    this.lutPipeline.registerSource('default');
-    this.lutPipeline.setActiveSource('default');
-
-    // Initialize dedicated OCIO WebGL LUT processor for GPU-accelerated color management
-    try {
-      this.ocioLUTProcessor = new WebGLLUTProcessor();
-    } catch (e) {
-      console.warn('WebGL OCIO LUT processor not available, OCIO will use CPU fallback:', e);
-      this.ocioLUTProcessor = null;
-    }
+    // Initialize color pipeline GPU resources
+    this.colorPipeline.initLUTProcessor();
+    this.colorPipeline.initGPULUTChain();
+    this.colorPipeline.initLUTPipelineDefaults();
+    this.colorPipeline.initOCIOProcessor();
 
     // Initialize WebGL sharpen processor
     try {
@@ -724,7 +646,7 @@ export class Viewer {
     });
 
     // Draw the placeholder content using logical coordinates
-    drawPlaceholderUtil(this.imageCtx, this.displayWidth, this.displayHeight, this.zoom);
+    drawPlaceholderUtil(this.imageCtx, this.displayWidth, this.displayHeight, this.transformManager.zoom);
   }
 
   private bindEvents(): void {
@@ -1157,7 +1079,7 @@ export class Viewer {
     pointer.y = e.clientY;
 
     // Handle pinch zoom
-    if (this.activePointers.size === 2 && this.initialPinchDistance > 0) {
+    if (this.activePointers.size === 2 && this.transformManager.initialPinchDistance > 0) {
       this.handlePinchZoom();
       return;
     }
@@ -1179,8 +1101,8 @@ export class Viewer {
       const dx = e.clientX - this.lastPointerX;
       const dy = e.clientY - this.lastPointerY;
 
-      this.panX += dx;
-      this.panY += dy;
+      this.transformManager.panX += dx;
+      this.transformManager.panY += dy;
 
       this.lastPointerX = e.clientX;
       this.lastPointerY = e.clientY;
@@ -1208,7 +1130,7 @@ export class Viewer {
 
     // Reset pinch zoom state
     if (this.activePointers.size < 2) {
-      this.initialPinchDistance = 0;
+      this.transformManager.initialPinchDistance = 0;
     }
 
     if (this.isDrawing) {
@@ -1245,10 +1167,10 @@ export class Viewer {
     if (pointers.length !== 2) return;
 
     // Cancel any smooth zoom animation - pinch zoom should be instant
-    this.cancelZoomAnimation();
+    this.transformManager.cancelZoomAnimation();
 
-    this.initialPinchDistance = calculatePinchDistance(pointers);
-    this.initialZoom = this.zoom;
+    this.transformManager.initialPinchDistance = calculatePinchDistance(pointers);
+    this.transformManager.initialZoom = this.transformManager.zoom;
 
     // Cancel any drawing in progress
     if (this.isDrawing) {
@@ -1268,10 +1190,10 @@ export class Viewer {
   private handlePinchZoom(): void {
     const pointers = Array.from(this.activePointers.values());
     const currentDistance = calculatePinchDistance(pointers);
-    const newZoom = calculatePinchZoom(this.initialPinchDistance, currentDistance, this.initialZoom);
+    const newZoom = calculatePinchZoom(this.transformManager.initialPinchDistance, currentDistance, this.transformManager.initialZoom);
 
-    if (newZoom !== null && Math.abs(newZoom - this.zoom) > 0.01) {
-      this.zoom = newZoom;
+    if (newZoom !== null && Math.abs(newZoom - this.transformManager.zoom) > 0.01) {
+      this.transformManager.zoom = newZoom;
       this.scheduleRender();
     }
   }
@@ -1280,13 +1202,13 @@ export class Viewer {
     e.preventDefault();
 
     // Cancel any smooth zoom animation - wheel zoom should be instant for responsiveness
-    this.cancelZoomAnimation();
+    this.transformManager.cancelZoomAnimation();
 
     const rect = this.getContainerRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    const newZoom = calculateWheelZoom(e.deltaY, this.zoom);
+    const newZoom = calculateWheelZoom(e.deltaY, this.transformManager.zoom);
     if (newZoom === null) return;
 
     const containerWidth = rect.width || 640;
@@ -1299,15 +1221,15 @@ export class Viewer {
       containerHeight,
       this.sourceWidth,
       this.sourceHeight,
-      this.panX,
-      this.panY,
-      this.zoom,
+      this.transformManager.panX,
+      this.transformManager.panY,
+      this.transformManager.zoom,
       newZoom
     );
 
-    this.panX = panX;
-    this.panY = panY;
-    this.zoom = newZoom;
+    this.transformManager.panX = panX;
+    this.transformManager.panY = panY;
+    this.transformManager.zoom = newZoom;
     this.scheduleRender();
   };
 
@@ -1498,10 +1420,7 @@ export class Viewer {
   }
 
   fitToWindow(): void {
-    this.cancelZoomAnimation();
-    this.panX = 0;
-    this.panY = 0;
-    this.zoom = 1;
+    this.transformManager.fitToWindow();
     this.scheduleRender();
   }
 
@@ -1509,14 +1428,11 @@ export class Viewer {
    * Fit to window with a smooth animated transition.
    */
   smoothFitToWindow(): void {
-    this.smoothZoomTo(1, 200, 0, 0);
+    this.transformManager.smoothFitToWindow();
   }
 
   setZoom(level: number): void {
-    this.cancelZoomAnimation();
-    this.zoom = level;
-    this.panX = 0;
-    this.panY = 0;
+    this.transformManager.setZoom(level);
     this.scheduleRender();
   }
 
@@ -1524,17 +1440,13 @@ export class Viewer {
    * Set zoom with a smooth animated transition.
    */
   smoothSetZoom(level: number): void {
-    this.smoothZoomTo(level, 200, 0, 0);
+    this.transformManager.smoothSetZoom(level);
   }
 
   /**
    * Animate zoom smoothly to a target level over a given duration.
    * Uses requestAnimationFrame with ease-out cubic interpolation.
    * Also animates pan position to the target values.
-   * @param targetZoom - The target zoom level
-   * @param duration - Animation duration in milliseconds (default 200)
-   * @param targetPanX - Target pan X position (default: current panX)
-   * @param targetPanY - Target pan Y position (default: current panY)
    */
   smoothZoomTo(
     targetZoom: number,
@@ -1542,77 +1454,7 @@ export class Viewer {
     targetPanX?: number,
     targetPanY?: number
   ): void {
-    // Cancel any in-progress zoom animation
-    this.cancelZoomAnimation();
-
-    // If duration is 0 or negligible, apply instantly
-    if (duration <= 0) {
-      this.zoom = targetZoom;
-      if (targetPanX !== undefined) this.panX = targetPanX;
-      if (targetPanY !== undefined) this.panY = targetPanY;
-      this.scheduleRender();
-      return;
-    }
-
-    // If already at target, no animation needed
-    const panXTarget = targetPanX !== undefined ? targetPanX : this.panX;
-    const panYTarget = targetPanY !== undefined ? targetPanY : this.panY;
-    if (
-      Math.abs(this.zoom - targetZoom) < 0.001 &&
-      Math.abs(this.panX - panXTarget) < 0.5 &&
-      Math.abs(this.panY - panYTarget) < 0.5
-    ) {
-      this.zoom = targetZoom;
-      this.panX = panXTarget;
-      this.panY = panYTarget;
-      this.scheduleRender();
-      return;
-    }
-
-    this.zoomAnimationStartTime = performance.now();
-    this.zoomAnimationStartZoom = this.zoom;
-    this.zoomAnimationTargetZoom = targetZoom;
-    this.zoomAnimationDuration = duration;
-    this.zoomAnimationStartPanX = this.panX;
-    this.zoomAnimationStartPanY = this.panY;
-    this.zoomAnimationTargetPanX = panXTarget;
-    this.zoomAnimationTargetPanY = panYTarget;
-
-    const animate = (now: number): void => {
-      const elapsed = now - this.zoomAnimationStartTime;
-      const progress = Math.min(1, elapsed / this.zoomAnimationDuration);
-
-      this.zoom = interpolateZoom(
-        this.zoomAnimationStartZoom,
-        this.zoomAnimationTargetZoom,
-        progress
-      );
-      this.panX = interpolateZoom(
-        this.zoomAnimationStartPanX,
-        this.zoomAnimationTargetPanX,
-        progress
-      );
-      this.panY = interpolateZoom(
-        this.zoomAnimationStartPanY,
-        this.zoomAnimationTargetPanY,
-        progress
-      );
-
-      this.scheduleRender();
-
-      if (progress < 1) {
-        this.zoomAnimationId = requestAnimationFrame(animate);
-      } else {
-        // Ensure exact final values
-        this.zoom = this.zoomAnimationTargetZoom;
-        this.panX = this.zoomAnimationTargetPanX;
-        this.panY = this.zoomAnimationTargetPanY;
-        this.zoomAnimationId = null;
-        this.scheduleRender();
-      }
-    };
-
-    this.zoomAnimationId = requestAnimationFrame(animate);
+    this.transformManager.smoothZoomTo(targetZoom, duration, targetPanX, targetPanY);
   }
 
   /**
@@ -1620,17 +1462,14 @@ export class Viewer {
    * The zoom remains at whatever intermediate value it reached.
    */
   cancelZoomAnimation(): void {
-    if (this.zoomAnimationId !== null) {
-      cancelAnimationFrame(this.zoomAnimationId);
-      this.zoomAnimationId = null;
-    }
+    this.transformManager.cancelZoomAnimation();
   }
 
   /**
    * Check if a smooth zoom animation is currently in progress.
    */
   isZoomAnimating(): boolean {
-    return this.zoomAnimationId !== null;
+    return this.transformManager.isZoomAnimating();
   }
 
   private updateCanvasPosition(): void {
@@ -1643,8 +1482,8 @@ export class Viewer {
     const baseY = (containerHeight - this.displayHeight) / 2;
 
     // Apply pan offset
-    const centerX = baseX + this.panX;
-    const centerY = baseY + this.panY;
+    const centerX = baseX + this.transformManager.panX;
+    const centerY = baseY + this.transformManager.panY;
 
     this.canvasContainer.style.transform = `translate(${centerX}px, ${centerY}px)`;
   }
@@ -1811,34 +1650,34 @@ export class Viewer {
    * the same values regardless of HDR/SDR mode.
    */
   private syncRendererState(renderer: Renderer): void {
-    renderer.setColorInversion(this.colorInversionEnabled);
+    renderer.setColorInversion(this.colorPipeline.colorInversionEnabled);
 
     // Background pattern
     renderer.setBackgroundPattern(this.backgroundPatternState);
 
     // 2D effects
-    renderer.setCDL(this.cdlValues);
-    renderer.setCurvesLUT(isDefaultCurves(this.curvesData) ? null : buildAllCurveLUTs(this.curvesData));
+    renderer.setCDL(this.colorPipeline.cdlValues);
+    renderer.setCurvesLUT(isDefaultCurves(this.colorPipeline.curvesData) ? null : buildAllCurveLUTs(this.colorPipeline.curvesData));
     renderer.setColorWheels(this.colorWheels.getState());
     renderer.setFalseColor(this.falseColor.isEnabled(), this.falseColor.getColorLUT());
     renderer.setZebraStripes(this.zebraStripes.getState());
     renderer.setChannelMode(this.channelMode);
     renderer.setDisplayColorState({
-      transferFunction: DISPLAY_TRANSFER_CODES[this.displayColorState.transferFunction],
-      displayGamma: this.displayColorState.displayGamma,
-      displayBrightness: this.displayColorState.displayBrightness,
-      customGamma: this.displayColorState.customGamma,
+      transferFunction: DISPLAY_TRANSFER_CODES[this.colorPipeline.displayColorState.transferFunction],
+      displayGamma: this.colorPipeline.displayColorState.displayGamma,
+      displayBrightness: this.colorPipeline.displayColorState.displayBrightness,
+      customGamma: this.colorPipeline.displayColorState.customGamma,
     });
 
     // 3D LUT
-    if (this.currentLUT && this.lutIntensity > 0) {
-      renderer.setLUT(this.currentLUT.data, this.currentLUT.size, this.lutIntensity);
+    if (this.colorPipeline.currentLUT && this.colorPipeline.lutIntensity > 0) {
+      renderer.setLUT(this.colorPipeline.currentLUT.data, this.colorPipeline.currentLUT.size, this.colorPipeline.lutIntensity);
     } else {
       renderer.setLUT(null, 0, 0);
     }
 
     // Phase 1B: New GPU shader effects
-    const adj = this.colorAdjustments;
+    const adj = this.colorPipeline.colorAdjustments;
     renderer.setHighlightsShadows(adj.highlights, adj.shadows, adj.whites, adj.blacks);
     renderer.setVibrance(adj.vibrance, adj.vibranceSkinProtection);
     renderer.setClarity(adj.clarity);
@@ -1873,12 +1712,12 @@ export class Viewer {
       // - No tone mapping: the HDR display handles the extended luminance range
       // - Gamma = 1 (linear): the browser applies the HLG/PQ OETF automatically
       // Other adjustments (exposure, temperature, saturation, etc.) still apply.
-      renderer.setColorAdjustments({ ...this.colorAdjustments, gamma: 1 });
+      renderer.setColorAdjustments({ ...this.colorPipeline.colorAdjustments, gamma: 1 });
       renderer.setToneMappingState({ enabled: false, operator: 'off' });
     } else {
       // SDR output: tone mapping compresses HDR→SDR, gamma encodes linear→sRGB
-      renderer.setColorAdjustments(this.colorAdjustments);
-      renderer.setToneMappingState(this.toneMappingState);
+      renderer.setColorAdjustments(this.colorPipeline.colorAdjustments);
+      renderer.setToneMappingState(this.colorPipeline.toneMappingState);
     }
 
     // Sync shared state (effects, LUT, background pattern, etc.)
@@ -1889,7 +1728,7 @@ export class Viewer {
     renderer.renderImage(image, 0, 0, 1, 1);
 
     // CSS transform for rotation/flip
-    const { rotation, flipH, flipV } = this.transform;
+    const { rotation, flipH, flipV } = this.transformManager.transform;
     const transforms: string[] = [];
     if (rotation) transforms.push(`rotate(${rotation}deg)`);
     if (flipH) transforms.push('scaleX(-1)');
@@ -1928,7 +1767,7 @@ export class Viewer {
    * - HSL qualifier (secondary color correction)
    */
   private hasGPUShaderEffectsActive(): boolean {
-    const adj = this.colorAdjustments;
+    const adj = this.colorPipeline.colorAdjustments;
     // Basic color adjustments
     if (adj.exposure !== 0) return true;
     if (adj.gamma !== 1) return true;
@@ -1943,16 +1782,16 @@ export class Viewer {
     if (this.isToneMappingEnabled()) return true;
 
     // Color inversion
-    if (this.colorInversionEnabled) return true;
+    if (this.colorPipeline.colorInversionEnabled) return true;
 
     // Channel isolation
     if (this.channelMode !== 'rgb') return true;
 
     // CDL
-    if (!isDefaultCDL(this.cdlValues)) return true;
+    if (!isDefaultCDL(this.colorPipeline.cdlValues)) return true;
 
     // Curves
-    if (!isDefaultCurves(this.curvesData)) return true;
+    if (!isDefaultCurves(this.colorPipeline.curvesData)) return true;
 
     // Color wheels
     if (this.colorWheels.hasAdjustments()) return true;
@@ -1964,10 +1803,10 @@ export class Viewer {
     if (this.zebraStripes.isEnabled()) return true;
 
     // 3D LUT
-    if (this.currentLUT && this.lutIntensity > 0) return true;
+    if (this.colorPipeline.currentLUT && this.colorPipeline.lutIntensity > 0) return true;
 
     // Display color management
-    if (isDisplayStateActive(this.displayColorState)) return true;
+    if (isDisplayStateActive(this.colorPipeline.displayColorState)) return true;
 
     // Phase 1B: New GPU shader effects
     // Highlights/shadows/whites/blacks
@@ -2028,8 +1867,8 @@ export class Viewer {
     }
 
     // Sync color adjustments and tone mapping (SDR: use as configured)
-    renderer.setColorAdjustments(this.colorAdjustments);
-    renderer.setToneMappingState(this.toneMappingState);
+    renderer.setColorAdjustments(this.colorPipeline.colorAdjustments);
+    renderer.setToneMappingState(this.colorPipeline.toneMappingState);
 
     // Sync shared state (effects, LUT, background pattern, etc.)
     this.syncRendererState(renderer);
@@ -2045,7 +1884,7 @@ export class Viewer {
     }
 
     // CSS transform for rotation/flip
-    const { rotation, flipH, flipV } = this.transform;
+    const { rotation, flipH, flipV } = this.transformManager.transform;
     const transforms: string[] = [];
     if (rotation) transforms.push(`rotate(${rotation}deg)`);
     if (flipH) transforms.push('scaleX(-1)');
@@ -2061,7 +1900,7 @@ export class Viewer {
     // Deactivate HDR mode if current source isn't HDR, or if OCIO is active
     // (OCIO requires the 2D canvas path since the GL shader has no OCIO support)
     const isCurrentHDR = source?.fileSourceNode?.isHDR() === true;
-    const ocioActive = this.ocioEnabled && this.ocioBakedLUT !== null;
+    const ocioActive = this.colorPipeline.ocioEnabled && this.colorPipeline.ocioBakedLUT !== null;
     if (this.hdrRenderActive && (!isCurrentHDR || ocioActive)) {
       this.deactivateHDRMode();
     }
@@ -2177,7 +2016,7 @@ export class Viewer {
         this.sourceHeight,
         containerWidth,
         containerHeight,
-        this.zoom
+        this.transformManager.zoom
       );
 
       if (this.displayWidth !== displayWidth || this.displayHeight !== displayHeight) {
@@ -2208,7 +2047,7 @@ export class Viewer {
       virtualHeight,
       containerWidth,
       containerHeight,
-      this.zoom
+      this.transformManager.zoom
     );
 
     // Scale factor from virtual source to display pixels
@@ -2233,7 +2072,7 @@ export class Viewer {
     // When OCIO is active, skip the WebGL path and fall through to the 2D canvas
     // where applyOCIOToCanvas() can apply the baked LUT as a post-process (the GL
     // shader does not support OCIO transforms, mirroring the SDR WebGL guard).
-    if (hdrFileSource && !(this.ocioEnabled && this.ocioBakedLUT)) {
+    if (hdrFileSource && !(this.colorPipeline.ocioEnabled && this.colorPipeline.ocioBakedLUT)) {
       const ipImage = hdrFileSource.getIPImage();
       if (ipImage && this.renderHDRWithWebGL(ipImage, displayWidth, displayHeight)) {
         this.updateCanvasPosition();
@@ -2276,10 +2115,10 @@ export class Viewer {
       this.wipeState.mode === 'off' &&
       !this.isStackEnabled() &&
       !this.differenceMatteState.enabled &&
-      !this.ghostFrameState.enabled &&
-      isDefaultStereoState(this.stereoState) &&
-      isDefaultLensParams(this.lensParams) &&
-      !(this.ocioEnabled && this.ocioBakedLUT) &&
+      !this.ghostFrameManager.enabled &&
+      this.stereoManager.isDefaultStereo() &&
+      this.lensDistortionManager.isDefault() &&
+      !(this.colorPipeline.ocioEnabled && this.colorPipeline.ocioBakedLUT) &&
       (element instanceof HTMLImageElement ||
        element instanceof HTMLVideoElement ||
        element instanceof HTMLCanvasElement ||
@@ -2351,30 +2190,28 @@ export class Viewer {
 
         // After drawing cached frame, apply effects not handled by worker
         // Render ghost frames (onion skin) on top of the main frame
-        if (this.ghostFrameState.enabled) {
+        if (this.ghostFrameManager.enabled) {
           this.renderGhostFrames(displayWidth, displayHeight);
         }
 
         // Apply stereo viewing mode (transforms layout for 3D viewing)
-        if (!isDefaultStereoState(this.stereoState)) {
-          const hasEyeTransforms = !isDefaultStereoEyeTransformState(this.stereoEyeTransformState);
-          const hasAlignOverlay = this.stereoAlignMode !== 'off';
-          if (hasEyeTransforms || hasAlignOverlay) {
-            this.applyStereoModeWithEyeTransforms(this.imageCtx, displayWidth, displayHeight);
+        if (!this.stereoManager.isDefaultStereo()) {
+          if (this.stereoManager.needsEyeTransformApply()) {
+            this.stereoManager.applyStereoModeWithEyeTransforms(this.imageCtx, displayWidth, displayHeight);
           } else {
-            this.applyStereoMode(this.imageCtx, displayWidth, displayHeight);
+            this.stereoManager.applyStereoMode(this.imageCtx, displayWidth, displayHeight);
           }
         }
 
         // Apply lens distortion correction (geometric transform, applied before color effects)
-        if (!isDefaultLensParams(this.lensParams)) {
-          this.applyLensDistortionToCtx(this.imageCtx, displayWidth, displayHeight);
+        if (!this.lensDistortionManager.isDefault()) {
+          this.lensDistortionManager.applyToCtx(this.imageCtx, displayWidth, displayHeight);
         }
         // Apply GPU-accelerated color effects
-        if (this.currentLUT && this.lutIntensity > 0) {
+        if (this.colorPipeline.currentLUT && this.colorPipeline.lutIntensity > 0) {
           this.applyLUTToCanvas(this.imageCtx, displayWidth, displayHeight);
         }
-        if (this.ocioEnabled && this.ocioBakedLUT) {
+        if (this.colorPipeline.ocioEnabled && this.colorPipeline.ocioBakedLUT) {
           this.applyOCIOToCanvas(this.imageCtx, displayWidth, displayHeight);
         }
         // Apply lightweight diagnostic overlays and display management
@@ -2459,36 +2296,34 @@ export class Viewer {
     }
 
     // Render ghost frames (onion skin) on top of the main frame
-    if (this.ghostFrameState.enabled) {
+    if (this.ghostFrameManager.enabled) {
       this.renderGhostFrames(displayWidth, displayHeight);
     }
 
     // Apply post-processing effects (stereo, lens, LUT, color, sharpen) regardless of stack mode
     // Apply stereo viewing mode (transforms layout for 3D viewing)
     // Uses extended function when per-eye transforms or alignment overlays are active
-    if (!isDefaultStereoState(this.stereoState)) {
-      const hasEyeTransforms = !isDefaultStereoEyeTransformState(this.stereoEyeTransformState);
-      const hasAlignOverlay = this.stereoAlignMode !== 'off';
-      if (hasEyeTransforms || hasAlignOverlay) {
-        this.applyStereoModeWithEyeTransforms(this.imageCtx, displayWidth, displayHeight);
+    if (!this.stereoManager.isDefaultStereo()) {
+      if (this.stereoManager.needsEyeTransformApply()) {
+        this.stereoManager.applyStereoModeWithEyeTransforms(this.imageCtx, displayWidth, displayHeight);
       } else {
-        this.applyStereoMode(this.imageCtx, displayWidth, displayHeight);
+        this.stereoManager.applyStereoMode(this.imageCtx, displayWidth, displayHeight);
       }
     }
 
     // Apply lens distortion correction (geometric transform, applied first)
-    if (!isDefaultLensParams(this.lensParams)) {
-      this.applyLensDistortionToCtx(this.imageCtx, displayWidth, displayHeight);
+    if (!this.lensDistortionManager.isDefault()) {
+      this.lensDistortionManager.applyToCtx(this.imageCtx, displayWidth, displayHeight);
     }
 
     // Apply 3D LUT (GPU-accelerated color grading)
-    if (this.currentLUT && this.lutIntensity > 0) {
+    if (this.colorPipeline.currentLUT && this.colorPipeline.lutIntensity > 0) {
       this.applyLUTToCanvas(this.imageCtx, displayWidth, displayHeight);
     }
 
     // Apply OCIO display transform (GPU-accelerated via baked 3D LUT)
     // This runs after user-loaded LUTs but before color adjustments/CDL/curves
-    if (this.ocioEnabled && this.ocioBakedLUT) {
+    if (this.colorPipeline.ocioEnabled && this.colorPipeline.ocioBakedLUT) {
       this.applyOCIOToCanvas(this.imageCtx, displayWidth, displayHeight);
     }
 
@@ -2502,7 +2337,7 @@ export class Viewer {
     // Phase 4A: Use async version when heavy inter-pixel effects (clarity/sharpen)
     // are active, to yield between passes and keep each blocking period <16ms.
     // For lightweight per-pixel-only effects, use the sync version for simplicity.
-    if (this.colorAdjustments.clarity !== 0 || this.filterSettings.sharpen > 0) {
+    if (this.colorPipeline.colorAdjustments.clarity !== 0 || this.filterSettings.sharpen > 0) {
       // Fire-and-forget: the async method checks _asyncEffectsGeneration at each
       // yield point and bails out if a newer render() has started, preventing
       // stale pixel data from overwriting a newer frame. Crop clipping is handled
@@ -2536,7 +2371,7 @@ export class Viewer {
     displayWidth: number,
     displayHeight: number
   ): void {
-    drawWithTransformUtil(ctx, element, displayWidth, displayHeight, this.transform);
+    drawWithTransformUtil(ctx, element, displayWidth, displayHeight, this.transformManager.transform);
   }
 
   private renderWithWipe(
@@ -2739,11 +2574,11 @@ export class Viewer {
     height: number
   ): void {
     // Apply transform and draw
-    drawWithTransformUtil(ctx, element, width, height, this.transform);
+    drawWithTransformUtil(ctx, element, width, height, this.transformManager.transform);
   }
 
   private getCanvasFilterString(): string {
-    return getCanvasFilterStringUtil(this.colorAdjustments, this.filterStringCache);
+    return getCanvasFilterStringUtil(this.colorPipeline.colorAdjustments, this.filterStringCache);
   }
 
   private renderPaint(): void {
@@ -2772,21 +2607,20 @@ export class Viewer {
   }
 
   getZoom(): number {
-    return this.zoom;
+    return this.transformManager.getZoom();
   }
 
   getPan(): { x: number; y: number } {
-    return { x: this.panX, y: this.panY };
+    return this.transformManager.getPan();
   }
 
   setPan(x: number, y: number): void {
-    this.panX = x;
-    this.panY = y;
+    this.transformManager.setPan(x, y);
     this.scheduleRender();
   }
 
   setColorAdjustments(adjustments: ColorAdjustments): void {
-    this.colorAdjustments = { ...adjustments };
+    this.colorPipeline.setColorAdjustments(adjustments);
     if (this.glRenderer) {
       this.glRenderer.setColorAdjustments(adjustments);
     }
@@ -2796,11 +2630,11 @@ export class Viewer {
   }
 
   getColorAdjustments(): ColorAdjustments {
-    return { ...this.colorAdjustments };
+    return this.colorPipeline.getColorAdjustments();
   }
 
   resetColorAdjustments(): void {
-    this.colorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
+    this.colorPipeline.resetColorAdjustments();
     this.applyColorFilters();
     this.notifyEffectsChanged();
     this.scheduleRender();
@@ -2808,8 +2642,7 @@ export class Viewer {
 
   // Color inversion methods
   setColorInversion(enabled: boolean): void {
-    if (this.colorInversionEnabled === enabled) return;
-    this.colorInversionEnabled = enabled;
+    if (!this.colorPipeline.setColorInversion(enabled)) return;
     if (this.glRenderer) {
       this.glRenderer.setColorInversion(enabled);
     }
@@ -2818,21 +2651,16 @@ export class Viewer {
   }
 
   getColorInversion(): boolean {
-    return this.colorInversionEnabled;
+    return this.colorPipeline.getColorInversion();
   }
 
   toggleColorInversion(): void {
-    this.setColorInversion(!this.colorInversionEnabled);
+    this.setColorInversion(!this.colorPipeline.colorInversionEnabled);
   }
 
   // LUT methods
   setLUT(lut: LUT3D | null): void {
-    this.currentLUT = lut;
-
-    // Update WebGL LUT processor
-    if (this.lutProcessor) {
-      this.lutProcessor.setLUT(lut);
-    }
+    this.colorPipeline.setLUT(lut);
 
     if (this.lutIndicator) {
       this.lutIndicator.style.display = lut ? 'block' : 'none';
@@ -2842,26 +2670,26 @@ export class Viewer {
   }
 
   getLUT(): LUT3D | null {
-    return this.currentLUT;
+    return this.colorPipeline.getLUT();
   }
 
   setLUTIntensity(intensity: number): void {
-    this.lutIntensity = Math.max(0, Math.min(1, intensity));
+    this.colorPipeline.setLUTIntensity(intensity);
     this.scheduleRender();
   }
 
   getLUTIntensity(): number {
-    return this.lutIntensity;
+    return this.colorPipeline.getLUTIntensity();
   }
 
   /** Get the multi-point LUT pipeline instance */
   getLUTPipeline(): LUTPipeline {
-    return this.lutPipeline;
+    return this.colorPipeline.lutPipeline;
   }
 
   /** Get the GPU LUT chain (for multi-point rendering) */
   getGPULUTChain(): GPULUTChain | null {
-    return this.gpuLUTChain;
+    return this.colorPipeline.gpuLUTChain;
   }
 
   /**
@@ -2900,14 +2728,7 @@ export class Viewer {
    * Apply LUT using WebGL for GPU acceleration
    */
   private applyLUTToCanvas(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-    if (!this.currentLUT || this.lutIntensity === 0) return;
-
-    // Use WebGL processor if available for GPU acceleration
-    if (this.lutProcessor && this.lutProcessor.hasLUT()) {
-      this.lutProcessor.applyToCanvas(ctx, width, height, this.lutIntensity);
-    }
-    // Fallback: No CPU fallback implemented for performance reasons
-    // The WebGL path handles all LUT processing
+    this.colorPipeline.applyLUTToCanvas(ctx, width, height);
   }
 
   /**
@@ -2918,22 +2739,7 @@ export class Viewer {
    * for real-time performance.
    */
   private applyOCIOToCanvas(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-    if (!this.ocioBakedLUT) return;
-
-    // Use dedicated GPU LUT processor for OCIO
-    if (this.ocioLUTProcessor && this.ocioLUTProcessor.hasLUT()) {
-      this.ocioLUTProcessor.applyToCanvas(ctx, width, height, 1.0);
-      return;
-    }
-
-    // CPU fallback: apply OCIO transform via the shared processor
-    // This is slower but ensures OCIO always works even without GPU support
-    const ocioProcessor = getSharedOCIOProcessor();
-    if (ocioProcessor.isEnabled()) {
-      const imageData = ctx.getImageData(0, 0, width, height);
-      ocioProcessor.apply(imageData);
-      ctx.putImageData(imageData, 0, 0);
-    }
+    this.colorPipeline.applyOCIOToCanvas(ctx, width, height);
   }
 
   // ==========================================================================
@@ -2948,14 +2754,7 @@ export class Viewer {
    * @param enabled Whether OCIO processing is enabled
    */
   setOCIOBakedLUT(lut: LUT3D | null, enabled: boolean): void {
-    this.ocioBakedLUT = lut;
-    this.ocioEnabled = enabled;
-
-    // Update the dedicated OCIO GPU LUT processor
-    if (this.ocioLUTProcessor) {
-      this.ocioLUTProcessor.setLUT(lut);
-    }
-
+    this.colorPipeline.setOCIOBakedLUT(lut, enabled);
     this.notifyEffectsChanged();
     this.scheduleRender();
   }
@@ -2964,7 +2763,7 @@ export class Viewer {
    * Get whether OCIO is currently enabled and active
    */
   isOCIOEnabled(): boolean {
-    return this.ocioEnabled && this.ocioBakedLUT !== null;
+    return this.colorPipeline.isOCIOEnabled();
   }
 
   // Wipe comparison methods
@@ -3015,20 +2814,12 @@ export class Viewer {
 
   // Transform methods
   setTransform(transform: Transform2D): void {
-    this.transform = {
-      ...transform,
-      scale: { ...DEFAULT_TRANSFORM.scale, ...transform.scale },
-      translate: { ...DEFAULT_TRANSFORM.translate, ...transform.translate },
-    };
+    this.transformManager.setTransform(transform);
     this.scheduleRender();
   }
 
   getTransform(): Transform2D {
-    return {
-      ...this.transform,
-      scale: { ...this.transform.scale },
-      translate: { ...this.transform.translate },
-    };
+    return this.transformManager.getTransform();
   }
 
   // Filter methods
@@ -3111,44 +2902,34 @@ export class Viewer {
 
   // CDL methods
   setCDL(cdl: CDLValues): void {
-    this.cdlValues = JSON.parse(JSON.stringify(cdl));
+    this.colorPipeline.setCDL(cdl);
     this.notifyEffectsChanged();
     this.scheduleRender();
   }
 
   getCDL(): CDLValues {
-    return JSON.parse(JSON.stringify(this.cdlValues));
+    return this.colorPipeline.getCDL();
   }
 
   resetCDL(): void {
-    this.cdlValues = JSON.parse(JSON.stringify(DEFAULT_CDL));
+    this.colorPipeline.resetCDL();
     this.notifyEffectsChanged();
     this.scheduleRender();
   }
 
   // Color curves methods
   setCurves(curves: ColorCurvesData): void {
-    this.curvesData = {
-      master: { ...curves.master, points: [...curves.master.points] },
-      red: { ...curves.red, points: [...curves.red.points] },
-      green: { ...curves.green, points: [...curves.green.points] },
-      blue: { ...curves.blue, points: [...curves.blue.points] },
-    };
+    this.colorPipeline.setCurves(curves);
     this.notifyEffectsChanged();
     this.scheduleRender();
   }
 
   getCurves(): ColorCurvesData {
-    return {
-      master: { ...this.curvesData.master, points: [...this.curvesData.master.points] },
-      red: { ...this.curvesData.red, points: [...this.curvesData.red.points] },
-      green: { ...this.curvesData.green, points: [...this.curvesData.green.points] },
-      blue: { ...this.curvesData.blue, points: [...this.curvesData.blue.points] },
-    };
+    return this.colorPipeline.getCurves();
   }
 
   resetCurves(): void {
-    this.curvesData = createDefaultCurvesData();
+    this.colorPipeline.resetCurves();
     this.notifyEffectsChanged();
     this.scheduleRender();
   }
@@ -3163,15 +2944,15 @@ export class Viewer {
    * This reduces GPU-to-CPU transfers from N to 1.
    */
   private applyBatchedPixelEffects(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-    const hasCDL = !isDefaultCDL(this.cdlValues);
-    const hasCurves = !isDefaultCurves(this.curvesData);
+    const hasCDL = !isDefaultCDL(this.colorPipeline.cdlValues);
+    const hasCurves = !isDefaultCurves(this.colorPipeline.curvesData);
     const hasSharpen = this.filterSettings.sharpen > 0;
     const hasChannel = this.channelMode !== 'rgb';
-    const hasHighlightsShadows = this.colorAdjustments.highlights !== 0 || this.colorAdjustments.shadows !== 0 ||
-                                 this.colorAdjustments.whites !== 0 || this.colorAdjustments.blacks !== 0;
-    const hasVibrance = this.colorAdjustments.vibrance !== 0;
-    const hasClarity = this.colorAdjustments.clarity !== 0;
-    const hasHueRotation = !isIdentityHueRotation(this.colorAdjustments.hueRotation);
+    const hasHighlightsShadows = this.colorPipeline.colorAdjustments.highlights !== 0 || this.colorPipeline.colorAdjustments.shadows !== 0 ||
+                                 this.colorPipeline.colorAdjustments.whites !== 0 || this.colorPipeline.colorAdjustments.blacks !== 0;
+    const hasVibrance = this.colorPipeline.colorAdjustments.vibrance !== 0;
+    const hasClarity = this.colorPipeline.colorAdjustments.clarity !== 0;
+    const hasHueRotation = !isIdentityHueRotation(this.colorPipeline.colorAdjustments.hueRotation);
     const hasColorWheels = this.colorWheels.hasAdjustments();
     const hasHSLQualifier = this.hslQualifier.isEnabled();
     const hasFalseColor = this.falseColor.isEnabled();
@@ -3179,8 +2960,8 @@ export class Viewer {
     const hasZebras = this.zebraStripes.isEnabled();
     const hasClippingOverlay = this.clippingOverlay.isEnabled();
     const hasToneMapping = this.isToneMappingEnabled();
-    const hasInversion = this.colorInversionEnabled;
-    const hasDisplayColorMgmt = isDisplayStateActive(this.displayColorState);
+    const hasInversion = this.colorPipeline.colorInversionEnabled;
+    const hasDisplayColorMgmt = isDisplayStateActive(this.colorPipeline.displayColorState);
 
     // Early return if no pixel effects are active
     // Note: OCIO is handled via GPU-accelerated 3D LUT in the main render pipeline (applyOCIOToCanvas)
@@ -3194,24 +2975,24 @@ export class Viewer {
     // Apply highlight/shadow recovery (before other adjustments for best results)
     if (hasHighlightsShadows) {
       applyHighlightsShadows(imageData, {
-        highlights: this.colorAdjustments.highlights,
-        shadows: this.colorAdjustments.shadows,
-        whites: this.colorAdjustments.whites,
-        blacks: this.colorAdjustments.blacks,
+        highlights: this.colorPipeline.colorAdjustments.highlights,
+        shadows: this.colorPipeline.colorAdjustments.shadows,
+        whites: this.colorPipeline.colorAdjustments.whites,
+        blacks: this.colorPipeline.colorAdjustments.blacks,
       });
     }
 
     // Apply vibrance (intelligent saturation - before CDL/curves for natural results)
     if (hasVibrance) {
       applyVibrance(imageData, {
-        vibrance: this.colorAdjustments.vibrance,
-        skinProtection: this.colorAdjustments.vibranceSkinProtection,
+        vibrance: this.colorPipeline.colorAdjustments.vibrance,
+        skinProtection: this.colorPipeline.colorAdjustments.vibranceSkinProtection,
       });
     }
 
     // Apply clarity (local contrast enhancement in midtones)
     if (hasClarity) {
-      applyClarity(imageData, this.colorAdjustments.clarity);
+      applyClarity(imageData, this.colorPipeline.colorAdjustments.clarity);
     }
 
     // Apply hue rotation (luminance-preserving, after basic adjustments, before CDL)
@@ -3222,7 +3003,7 @@ export class Viewer {
         const r = data[i]! / 255;
         const g = data[i + 1]! / 255;
         const b = data[i + 2]! / 255;
-        const [nr, ng, nb] = applyHueRotationPixel(r, g, b, this.colorAdjustments.hueRotation);
+        const [nr, ng, nb] = applyHueRotationPixel(r, g, b, this.colorPipeline.colorAdjustments.hueRotation);
         data[i] = Math.round(nr * 255);
         data[i + 1] = Math.round(ng * 255);
         data[i + 2] = Math.round(nb * 255);
@@ -3236,12 +3017,12 @@ export class Viewer {
 
     // Apply CDL color correction
     if (hasCDL) {
-      applyCDLToImageData(imageData, this.cdlValues);
+      applyCDLToImageData(imageData, this.colorPipeline.cdlValues);
     }
 
     // Apply color curves
     if (hasCurves) {
-      this.curveLUTCache.apply(imageData, this.curvesData);
+      this.colorPipeline.curveLUTCache.apply(imageData, this.colorPipeline.curvesData);
     }
 
     // Apply HSL Qualifier (secondary color correction - after primary corrections)
@@ -3251,7 +3032,7 @@ export class Viewer {
 
     // Apply tone mapping (after color adjustments, before channel isolation)
     if (hasToneMapping) {
-      applyToneMapping(imageData, this.toneMappingState.operator);
+      applyToneMapping(imageData, this.colorPipeline.toneMappingState.operator);
     }
 
     // Apply color inversion (after all color corrections, before sharpen/channel isolation)
@@ -3271,7 +3052,7 @@ export class Viewer {
 
     // Apply display color management (final pipeline stage before diagnostic overlays)
     if (hasDisplayColorMgmt) {
-      applyDisplayColorManagementToImageData(imageData, this.displayColorState);
+      applyDisplayColorManagementToImageData(imageData, this.colorPipeline.displayColorState);
     }
 
     // Apply luminance visualization modes (HSV, random color, contour) or false color
@@ -3312,15 +3093,15 @@ export class Viewer {
     ctx: CanvasRenderingContext2D, width: number, height: number,
     generation: number, cropClipActive: boolean
   ): Promise<void> {
-    const hasCDL = !isDefaultCDL(this.cdlValues);
-    const hasCurves = !isDefaultCurves(this.curvesData);
+    const hasCDL = !isDefaultCDL(this.colorPipeline.cdlValues);
+    const hasCurves = !isDefaultCurves(this.colorPipeline.curvesData);
     const hasSharpen = this.filterSettings.sharpen > 0;
     const hasChannel = this.channelMode !== 'rgb';
-    const hasHighlightsShadows = this.colorAdjustments.highlights !== 0 || this.colorAdjustments.shadows !== 0 ||
-                                 this.colorAdjustments.whites !== 0 || this.colorAdjustments.blacks !== 0;
-    const hasVibrance = this.colorAdjustments.vibrance !== 0;
-    const hasClarity = this.colorAdjustments.clarity !== 0;
-    const hasHueRotation = !isIdentityHueRotation(this.colorAdjustments.hueRotation);
+    const hasHighlightsShadows = this.colorPipeline.colorAdjustments.highlights !== 0 || this.colorPipeline.colorAdjustments.shadows !== 0 ||
+                                 this.colorPipeline.colorAdjustments.whites !== 0 || this.colorPipeline.colorAdjustments.blacks !== 0;
+    const hasVibrance = this.colorPipeline.colorAdjustments.vibrance !== 0;
+    const hasClarity = this.colorPipeline.colorAdjustments.clarity !== 0;
+    const hasHueRotation = !isIdentityHueRotation(this.colorPipeline.colorAdjustments.hueRotation);
     const hasColorWheels = this.colorWheels.hasAdjustments();
     const hasHSLQualifier = this.hslQualifier.isEnabled();
     const hasFalseColor = this.falseColor.isEnabled();
@@ -3328,8 +3109,8 @@ export class Viewer {
     const hasZebras = this.zebraStripes.isEnabled();
     const hasClippingOverlay = this.clippingOverlay.isEnabled();
     const hasToneMapping = this.isToneMappingEnabled();
-    const hasInversion = this.colorInversionEnabled;
-    const hasDisplayColorMgmt = isDisplayStateActive(this.displayColorState);
+    const hasInversion = this.colorPipeline.colorInversionEnabled;
+    const hasDisplayColorMgmt = isDisplayStateActive(this.colorPipeline.displayColorState);
 
     // Early return if no pixel effects are active
     if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasHueRotation && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasLuminanceVis && !hasZebras && !hasClippingOverlay && !hasToneMapping && !hasInversion && !hasDisplayColorMgmt) {
@@ -3341,7 +3122,7 @@ export class Viewer {
 
     // --- Pass 1: Clarity (most expensive - 5x5 Gaussian blur, inter-pixel dependency) ---
     if (hasClarity) {
-      applyClarity(imageData, this.colorAdjustments.clarity);
+      applyClarity(imageData, this.colorPipeline.colorAdjustments.clarity);
       await yieldToMain();
       if (this._asyncEffectsGeneration !== generation) return; // superseded by newer render
     }
@@ -3354,18 +3135,18 @@ export class Viewer {
       // Apply highlight/shadow recovery
       if (hasHighlightsShadows) {
         applyHighlightsShadows(imageData, {
-          highlights: this.colorAdjustments.highlights,
-          shadows: this.colorAdjustments.shadows,
-          whites: this.colorAdjustments.whites,
-          blacks: this.colorAdjustments.blacks,
+          highlights: this.colorPipeline.colorAdjustments.highlights,
+          shadows: this.colorPipeline.colorAdjustments.shadows,
+          whites: this.colorPipeline.colorAdjustments.whites,
+          blacks: this.colorPipeline.colorAdjustments.blacks,
         });
       }
 
       // Apply vibrance
       if (hasVibrance) {
         applyVibrance(imageData, {
-          vibrance: this.colorAdjustments.vibrance,
-          skinProtection: this.colorAdjustments.vibranceSkinProtection,
+          vibrance: this.colorPipeline.colorAdjustments.vibrance,
+          skinProtection: this.colorPipeline.colorAdjustments.vibranceSkinProtection,
         });
       }
 
@@ -3377,7 +3158,7 @@ export class Viewer {
           const r = data[i]! / 255;
           const g = data[i + 1]! / 255;
           const b = data[i + 2]! / 255;
-          const [nr, ng, nb] = applyHueRotationPixel(r, g, b, this.colorAdjustments.hueRotation);
+          const [nr, ng, nb] = applyHueRotationPixel(r, g, b, this.colorPipeline.colorAdjustments.hueRotation);
           data[i] = Math.round(nr * 255);
           data[i + 1] = Math.round(ng * 255);
           data[i + 2] = Math.round(nb * 255);
@@ -3391,12 +3172,12 @@ export class Viewer {
 
       // Apply CDL color correction
       if (hasCDL) {
-        applyCDLToImageData(imageData, this.cdlValues);
+        applyCDLToImageData(imageData, this.colorPipeline.cdlValues);
       }
 
       // Apply color curves
       if (hasCurves) {
-        this.curveLUTCache.apply(imageData, this.curvesData);
+        this.colorPipeline.curveLUTCache.apply(imageData, this.colorPipeline.curvesData);
       }
 
       // Apply HSL Qualifier
@@ -3406,7 +3187,7 @@ export class Viewer {
 
       // Apply tone mapping
       if (hasToneMapping) {
-        applyToneMapping(imageData, this.toneMappingState.operator);
+        applyToneMapping(imageData, this.colorPipeline.toneMappingState.operator);
       }
 
       // Apply color inversion
@@ -3431,7 +3212,7 @@ export class Viewer {
     }
 
     if (hasDisplayColorMgmt) {
-      applyDisplayColorManagementToImageData(imageData, this.displayColorState);
+      applyDisplayColorManagementToImageData(imageData, this.colorPipeline.displayColorState);
     }
 
     // --- Pass 5: Diagnostic overlays ---
@@ -3473,7 +3254,7 @@ export class Viewer {
     const hasLuminanceVis = this.luminanceVisualization.getMode() !== 'off' && this.luminanceVisualization.getMode() !== 'false-color';
     const hasZebras = this.zebraStripes.isEnabled();
     const hasClippingOverlay = this.clippingOverlay.isEnabled();
-    const hasDisplayColorMgmt = isDisplayStateActive(this.displayColorState);
+    const hasDisplayColorMgmt = isDisplayStateActive(this.colorPipeline.displayColorState);
 
     // Early return if no lightweight effects are active
     if (!hasChannel && !hasFalseColor && !hasLuminanceVis && !hasZebras && !hasClippingOverlay && !hasDisplayColorMgmt) {
@@ -3490,7 +3271,7 @@ export class Viewer {
 
     // Display color management (final pipeline stage before diagnostic overlays)
     if (hasDisplayColorMgmt) {
-      applyDisplayColorManagementToImageData(imageData, this.displayColorState);
+      applyDisplayColorManagementToImageData(imageData, this.colorPipeline.displayColorState);
     }
 
     // Luminance visualization or false color (mutually exclusive)
@@ -3531,30 +3312,19 @@ export class Viewer {
     applySharpenCPU(imageData, amount / 100);
   }
 
-  // Lens distortion methods
+  // Lens distortion methods (delegated to LensDistortionManager)
   setLensParams(params: LensDistortionParams): void {
-    this.lensParams = { ...params };
+    this.lensDistortionManager.setLensParams(params);
     this.scheduleRender();
   }
 
   getLensParams(): LensDistortionParams {
-    return { ...this.lensParams };
+    return this.lensDistortionManager.getLensParams();
   }
 
   resetLensParams(): void {
-    this.lensParams = { ...DEFAULT_LENS_PARAMS };
+    this.lensDistortionManager.resetLensParams();
     this.scheduleRender();
-  }
-
-  /**
-   * Apply lens distortion correction to the canvas
-   */
-  private applyLensDistortionToCtx(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-    if (isDefaultLensParams(this.lensParams)) return;
-
-    const imageData = ctx.getImageData(0, 0, width, height);
-    const correctedData = applyLensDistortion(imageData, this.lensParams);
-    ctx.putImageData(correctedData, 0, 0);
   }
 
   // Channel isolation methods
@@ -3575,87 +3345,48 @@ export class Viewer {
     this.scheduleRender();
   }
 
-  // Stereo viewing methods
+  // Stereo viewing methods (delegated to StereoManager)
   setStereoState(state: StereoState): void {
-    this.stereoState = { ...state };
+    this.stereoManager.setStereoState(state);
     this.scheduleRender();
   }
 
   getStereoState(): StereoState {
-    return { ...this.stereoState };
+    return this.stereoManager.getStereoState();
   }
 
   resetStereoState(): void {
-    this.stereoState = { ...DEFAULT_STEREO_STATE };
+    this.stereoManager.resetStereoState();
     this.scheduleRender();
   }
 
-  /**
-   * Apply stereo viewing mode to the canvas
-   */
-  private applyStereoMode(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-    if (isDefaultStereoState(this.stereoState)) return;
-
-    const imageData = ctx.getImageData(0, 0, width, height);
-    const processedData = applyStereoMode(imageData, this.stereoState);
-    ctx.putImageData(processedData, 0, 0);
-  }
-
-  /**
-   * Apply stereo viewing mode with per-eye transforms and alignment overlay
-   */
-  private applyStereoModeWithEyeTransforms(ctx: CanvasRenderingContext2D, width: number, height: number): void {
-    if (isDefaultStereoState(this.stereoState)) return;
-
-    const imageData = ctx.getImageData(0, 0, width, height);
-    const processedData = applyStereoModeWithEyeTransforms(
-      imageData,
-      this.stereoState,
-      this.stereoEyeTransformState,
-      this.stereoAlignMode
-    );
-    ctx.putImageData(processedData, 0, 0);
-  }
-
-  // Per-eye transform methods
+  // Per-eye transform methods (delegated to StereoManager)
   setStereoEyeTransforms(state: StereoEyeTransformState): void {
-    this.stereoEyeTransformState = {
-      left: { ...state.left },
-      right: { ...state.right },
-      linked: state.linked,
-    };
+    this.stereoManager.setStereoEyeTransforms(state);
     this.scheduleRender();
   }
 
   getStereoEyeTransforms(): StereoEyeTransformState {
-    return {
-      left: { ...this.stereoEyeTransformState.left },
-      right: { ...this.stereoEyeTransformState.right },
-      linked: this.stereoEyeTransformState.linked,
-    };
+    return this.stereoManager.getStereoEyeTransforms();
   }
 
   resetStereoEyeTransforms(): void {
-    this.stereoEyeTransformState = {
-      left: { ...DEFAULT_STEREO_EYE_TRANSFORM_STATE.left },
-      right: { ...DEFAULT_STEREO_EYE_TRANSFORM_STATE.right },
-      linked: false,
-    };
+    this.stereoManager.resetStereoEyeTransforms();
     this.scheduleRender();
   }
 
-  // Stereo alignment mode methods
+  // Stereo alignment mode methods (delegated to StereoManager)
   setStereoAlignMode(mode: StereoAlignMode): void {
-    this.stereoAlignMode = mode;
+    this.stereoManager.setStereoAlignMode(mode);
     this.scheduleRender();
   }
 
   getStereoAlignMode(): StereoAlignMode {
-    return this.stereoAlignMode;
+    return this.stereoManager.getStereoAlignMode();
   }
 
   resetStereoAlignMode(): void {
-    this.stereoAlignMode = DEFAULT_STEREO_ALIGN_MODE;
+    this.stereoManager.resetStereoAlignMode();
     this.scheduleRender();
   }
 
@@ -3681,36 +3412,28 @@ export class Viewer {
     return this.differenceMatteState.enabled;
   }
 
-  // Ghost frame (onion skin) methods
+  // Ghost frame (onion skin) methods (delegated to GhostFrameManager)
   setGhostFrameState(state: GhostFrameState): void {
-    this.ghostFrameState = { ...state };
-    if (!state.enabled) {
-      this.ghostFrameCanvasPool = [];
-      this.ghostFramePoolWidth = 0;
-      this.ghostFramePoolHeight = 0;
-    }
+    this.ghostFrameManager.setState(state);
     this.scheduleRender();
   }
 
   getGhostFrameState(): GhostFrameState {
-    return { ...this.ghostFrameState };
+    return this.ghostFrameManager.getState();
   }
 
   resetGhostFrameState(): void {
-    this.ghostFrameState = { ...DEFAULT_GHOST_FRAME_STATE };
-    this.ghostFrameCanvasPool = [];
-    this.ghostFramePoolWidth = 0;
-    this.ghostFramePoolHeight = 0;
+    this.ghostFrameManager.resetState();
     this.scheduleRender();
   }
 
   isGhostFrameEnabled(): boolean {
-    return this.ghostFrameState.enabled;
+    return this.ghostFrameManager.enabled;
   }
 
   // Tone mapping methods
   setToneMappingState(state: ToneMappingState): void {
-    this.toneMappingState = { ...state };
+    this.colorPipeline.setToneMappingState(state);
     if (this.glRenderer) {
       this.glRenderer.setToneMappingState(state);
     }
@@ -3719,11 +3442,11 @@ export class Viewer {
   }
 
   getToneMappingState(): ToneMappingState {
-    return { ...this.toneMappingState };
+    return this.colorPipeline.getToneMappingState();
   }
 
   resetToneMappingState(): void {
-    this.toneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
+    this.colorPipeline.resetToneMappingState();
     this.notifyEffectsChanged();
     this.scheduleRender();
   }
@@ -3769,7 +3492,7 @@ export class Viewer {
 
   // Display color management methods
   setDisplayColorState(state: DisplayColorState): void {
-    this.displayColorState = { ...state };
+    this.colorPipeline.setDisplayColorState(state);
     if (this.glRenderer) {
       this.glRenderer.setDisplayColorState({
         transferFunction: DISPLAY_TRANSFER_CODES[state.transferFunction],
@@ -3783,11 +3506,11 @@ export class Viewer {
   }
 
   getDisplayColorState(): DisplayColorState {
-    return { ...this.displayColorState };
+    return this.colorPipeline.getDisplayColorState();
   }
 
   resetDisplayColorState(): void {
-    this.displayColorState = { ...DEFAULT_DISPLAY_COLOR_STATE };
+    this.colorPipeline.resetDisplayColorState();
     if (this.glRenderer) {
       this.glRenderer.setDisplayColorState({
         transferFunction: DISPLAY_TRANSFER_CODES[DEFAULT_DISPLAY_COLOR_STATE.transferFunction],
@@ -3908,7 +3631,7 @@ export class Viewer {
   }
 
   isToneMappingEnabled(): boolean {
-    return this.toneMappingState.enabled && this.toneMappingState.operator !== 'off';
+    return this.colorPipeline.toneMappingState.enabled && this.colorPipeline.toneMappingState.operator !== 'off';
   }
 
   /**
@@ -3916,43 +3639,14 @@ export class Viewer {
    * All pooled canvases share the same dimensions; if the display size changes,
    * the pool is re-sized.
    */
-  private getGhostFrameCanvas(
-    index: number,
-    width: number,
-    height: number
-  ): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } | null {
-    // If display size changed, resize all existing pool entries
-    if (this.ghostFramePoolWidth !== width || this.ghostFramePoolHeight !== height) {
-      this.ghostFramePoolWidth = width;
-      this.ghostFramePoolHeight = height;
-      for (const entry of this.ghostFrameCanvasPool) {
-        entry.canvas.width = width;
-        entry.canvas.height = height;
-      }
-    }
-
-    // Create new entry if pool is not big enough
-    if (index >= this.ghostFrameCanvasPool.length) {
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      try {
-        const ctx = safeCanvasContext2D(canvas, {}, this.canvasColorSpace);
-        this.ghostFrameCanvasPool.push({ canvas, ctx });
-      } catch {
-        return null;
-      }
-    }
-
-    return this.ghostFrameCanvasPool[index]!;
-  }
-
   /**
    * Render ghost frames (onion skin overlay) behind the main frame.
    * Shows semi-transparent previous/next frames for animation review.
    */
   private renderGhostFrames(displayWidth: number, displayHeight: number): void {
-    if (!this.ghostFrameState.enabled) return;
+    const gfm = this.ghostFrameManager;
+    const gfs = gfm.state;
+    if (!gfs.enabled) return;
 
     const currentFrame = this.session.currentFrame;
     const source = this.session.currentSource;
@@ -3969,7 +3663,7 @@ export class Viewer {
     const framesToRender: { frame: number; distance: number; isBefore: boolean }[] = [];
 
     // Frames before current (rendered first, farthest first)
-    for (let i = this.ghostFrameState.framesBefore; i >= 1; i--) {
+    for (let i = gfs.framesBefore; i >= 1; i--) {
       const frame = currentFrame - i;
       if (frame >= 1) {
         framesToRender.push({ frame, distance: i, isBefore: true });
@@ -3977,7 +3671,7 @@ export class Viewer {
     }
 
     // Frames after current (rendered second, farthest first)
-    for (let i = this.ghostFrameState.framesAfter; i >= 1; i--) {
+    for (let i = gfs.framesAfter; i >= 1; i--) {
       const frame = currentFrame + i;
       if (frame <= duration) {
         framesToRender.push({ frame, distance: i, isBefore: false });
@@ -3988,8 +3682,8 @@ export class Viewer {
     let poolIndex = 0;
     for (const { frame, distance, isBefore } of framesToRender) {
       // Calculate opacity with falloff
-      const opacity = this.ghostFrameState.opacityBase *
-        Math.pow(this.ghostFrameState.opacityFalloff, distance - 1);
+      const opacity = gfs.opacityBase *
+        Math.pow(gfs.opacityFalloff, distance - 1);
 
       // Try to get the frame from prerender cache
       let frameCanvas: HTMLCanvasElement | OffscreenCanvas | null = null;
@@ -4007,8 +3701,8 @@ export class Viewer {
           // Synchronous check for cached sequence frame
           const seqFrame = this.session.getSequenceFrameSync(frame);
           if (seqFrame) {
-            // Use pooled canvas instead of creating a new one
-            const poolEntry = this.getGhostFrameCanvas(poolIndex, displayWidth, displayHeight);
+            // Use pooled canvas from ghost frame manager
+            const poolEntry = gfm.getPoolCanvas(poolIndex, displayWidth, displayHeight, this.canvasColorSpace);
             if (poolEntry) {
               poolEntry.ctx.clearRect(0, 0, displayWidth, displayHeight);
               poolEntry.ctx.drawImage(seqFrame, 0, 0, displayWidth, displayHeight);
@@ -4031,7 +3725,7 @@ export class Viewer {
       ctx.save();
       ctx.globalAlpha = opacity;
 
-      if (this.ghostFrameState.colorTint) {
+      if (gfs.colorTint) {
         // Apply color tint using composite operations
         // First draw the frame
         ctx.drawImage(frameCanvas, 0, 0, displayWidth, displayHeight);
@@ -4050,9 +3744,7 @@ export class Viewer {
     }
 
     // Trim pool to actual number of canvases used
-    if (poolIndex < this.ghostFrameCanvasPool.length) {
-      this.ghostFrameCanvasPool.length = poolIndex;
-    }
+    gfm.trimPool(poolIndex);
   }
 
   // Stack/composite methods
@@ -4652,7 +4344,7 @@ export class Viewer {
       this.canvasContainer.style.filter = 'none';
       return;
     }
-    const filterString = buildContainerFilterString(this.colorAdjustments, this.filterSettings.blur);
+    const filterString = buildContainerFilterString(this.colorPipeline.colorAdjustments, this.filterSettings.blur);
     this.canvasContainer.style.filter = filterString;
   }
 
@@ -4688,7 +4380,7 @@ export class Viewer {
       this.paintRenderer,
       this.getCanvasFilterString(),
       includeAnnotations,
-      this.transform,
+      this.transformManager.transform,
       cropRegion,
       colorSpace
     );
@@ -4705,7 +4397,7 @@ export class Viewer {
       this.paintEngine,
       this.paintRenderer,
       frame,
-      this.transform,
+      this.transformManager.transform,
       this.getCanvasFilterString(),
       includeAnnotations,
       cropRegion
@@ -4780,15 +4472,15 @@ export class Viewer {
     if (!this.prerenderBuffer) return;
 
     const effectsState = buildEffectsState(
-      this.colorAdjustments,
-      this.cdlValues,
-      this.curvesData,
+      this.colorPipeline.colorAdjustments,
+      this.colorPipeline.cdlValues,
+      this.colorPipeline.curvesData,
       this.filterSettings,
       this.channelMode,
       this.colorWheels,
       this.hslQualifier,
-      this.toneMappingState,
-      this.colorInversionEnabled
+      this.colorPipeline.toneMappingState,
+      this.colorPipeline.colorInversionEnabled
     );
 
     this.prerenderBuffer.updateEffects(effectsState);
@@ -4830,8 +4522,8 @@ export class Viewer {
   }
 
   dispose(): void {
-    // Cancel any in-progress zoom animation
-    this.cancelZoomAnimation();
+    // Dispose transform manager (cancels zoom animation, clears callback)
+    this.transformManager.dispose();
 
     this.resizeObserver.disconnect();
     this.container.removeEventListener('pointerdown', this.onPointerDown);
@@ -4856,23 +4548,8 @@ export class Viewer {
     // Cleanup frame interpolator
     this.frameInterpolator.dispose();
 
-    // Cleanup WebGL LUT processor
-    if (this.lutProcessor) {
-      this.lutProcessor.dispose();
-      this.lutProcessor = null;
-    }
-
-    // Cleanup multi-point GPU LUT chain
-    if (this.gpuLUTChain) {
-      this.gpuLUTChain.dispose();
-      this.gpuLUTChain = null;
-    }
-
-    // Cleanup OCIO WebGL LUT processor
-    if (this.ocioLUTProcessor) {
-      this.ocioLUTProcessor.dispose();
-      this.ocioLUTProcessor = null;
-    }
+    // Cleanup color pipeline GPU resources (LUT processor, GPU LUT chain, OCIO processor)
+    this.colorPipeline.dispose();
 
     // Cleanup WebGL sharpen processor
     if (this.sharpenProcessor) {
@@ -4893,9 +4570,7 @@ export class Viewer {
     }
 
     // Cleanup ghost frame canvas pool
-    this.ghostFrameCanvasPool = [];
-    this.ghostFramePoolWidth = 0;
-    this.ghostFramePoolHeight = 0;
+    this.ghostFrameManager.dispose();
 
     // Cleanup overlays
     this.clippingOverlay.dispose();

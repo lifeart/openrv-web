@@ -168,7 +168,7 @@ workerSelf.onmessage = function (event: MessageEvent<RenderWorkerMessage>) {
         post({ type: 'renderDone', id: msg.id });
       } catch (error) {
         // Attempt to close bitmap even on error
-        try { msg.bitmap.close(); } catch { /* ignore */ }
+        try { msg.bitmap.close(); } catch (e) { console.warn('Failed to close bitmap after render error:', e); }
         post({
           type: 'renderError',
           id: msg.id,

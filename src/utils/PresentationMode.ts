@@ -254,6 +254,13 @@ export class PresentationMode extends EventEmitter<PresentationEvents> {
     }
     this.showCursor();
     document.removeEventListener('mousemove', this.boundHandleMouseMove);
+
+    // Remove screen reader announcer element to prevent DOM pollution
+    const announcer = document.getElementById('openrv-sr-announcer');
+    if (announcer) {
+      announcer.remove();
+    }
+
     this.removeAllListeners();
   }
 }
