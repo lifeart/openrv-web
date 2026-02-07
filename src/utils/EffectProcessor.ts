@@ -45,7 +45,31 @@ import {
   hslToRgb as sharedHslToRgb,
   applyToneMappingToChannel,
   getHueRotationMatrix,
+  HALF_RES_MIN_DIMENSION,
+  downsample2x,
+  upsample2x,
+  // SIMD-like optimizations
+  applyColorInversionSIMD,
+  applyChannelIsolationGrayscale,
+  applyLuminanceIsolation,
 } from './effectProcessing.shared';
+
+/**
+ * Yield to the main event loop to avoid blocking for too long.
+ * Uses the modern scheduler.yield() API when available, falling back
+ * to setTimeout(0) for broader compatibility.
+ */
+export function yieldToMain(): Promise<void> {
+  if (
+    'scheduler' in globalThis &&
+    typeof (globalThis as Record<string, unknown>).scheduler === 'object' &&
+    (globalThis as Record<string, unknown>).scheduler !== null &&
+    'yield' in ((globalThis as Record<string, unknown>).scheduler as Record<string, unknown>)
+  ) {
+    return ((globalThis as Record<string, unknown>).scheduler as { yield: () => Promise<void> }).yield();
+  }
+  return new Promise(resolve => setTimeout(resolve, 0));
+}
 
 /**
  * All effect state bundled together for fingerprinting and processing
@@ -365,7 +389,8 @@ export class EffectProcessor {
     imageData: ImageData,
     width: number,
     height: number,
-    state: AllEffectsState
+    state: AllEffectsState,
+    halfRes = false
   ): void {
     const hasCDL = !isDefaultCDL(state.cdlValues);
     const hasCurves = !isDefaultCurves(state.curvesData);
@@ -393,9 +418,44 @@ export class EffectProcessor {
       return;
     }
 
+    // ---- SIMD fast-path: when only simple bitwise operations are needed ----
+    // When the only active per-pixel effects are color inversion and/or channel
+    // isolation (without clarity or sharpen), we can use optimized Uint32Array
+    // operations that avoid the expensive per-pixel float conversion loop.
+    const hasComplexEffects = hasHighlightsShadows || hasVibrance || hasHueRotation ||
+      hasColorWheels || hasCDL || hasCurves || hasHSLQualifier || hasToneMapping;
+
+    if (!hasComplexEffects && !hasClarity && !hasSharpen && (hasInversion || hasChannel)) {
+      // Apply inversion first (step 9 in pipeline order)
+      if (hasInversion) {
+        applyColorInversionSIMD(imageData.data);
+      }
+      // Apply channel isolation (step 10 in pipeline order)
+      if (hasChannel) {
+        const channelMode = state.channelMode;
+        if (channelMode === 'red' || channelMode === 'green' || channelMode === 'blue') {
+          applyChannelIsolationGrayscale(imageData.data, channelMode);
+        } else if (channelMode === 'luminance') {
+          applyLuminanceIsolation(imageData.data);
+        } else if (channelMode === 'alpha') {
+          // Alpha isolation: show alpha as grayscale, set alpha to 255
+          const data = imageData.data;
+          const len = data.length;
+          for (let i = 0; i < len; i += 4) {
+            const a = data[i + 3]!;
+            data[i] = a;
+            data[i + 1] = a;
+            data[i + 2] = a;
+            data[i + 3] = 255;
+          }
+        }
+      }
+      return;
+    }
+
     // Pass 1: Clarity (inter-pixel dependency - must be separate, applied first)
     if (hasClarity) {
-      this.applyClarity(imageData, width, height, state.colorAdjustments);
+      this.applyClarity(imageData, width, height, state.colorAdjustments, halfRes);
     }
 
     // Pass 2: All per-pixel effects merged into a single loop
@@ -405,7 +465,99 @@ export class EffectProcessor {
 
     // Pass 3: Sharpen (inter-pixel dependency - must be separate, applied last)
     if (hasSharpen) {
-      this.applySharpenCPU(imageData, width, height, state.filterSettings.sharpen / 100);
+      this.applySharpenCPU(imageData, width, height, state.filterSettings.sharpen / 100, halfRes);
+    }
+  }
+
+  /**
+   * Async version of applyEffects that yields to the event loop between
+   * effect passes. This keeps each blocking period under ~16ms, preventing
+   * janky UI during paused frame updates, export rendering, or interactive
+   * slider dragging on CPU fallback.
+   *
+   * Produces identical pixel output to the sync applyEffects().
+   * Workers should continue using the sync version (no event loop to yield to).
+   */
+  async applyEffectsAsync(
+    imageData: ImageData,
+    width: number,
+    height: number,
+    state: AllEffectsState,
+    halfRes = false
+  ): Promise<void> {
+    const hasCDL = !isDefaultCDL(state.cdlValues);
+    const hasCurves = !isDefaultCurves(state.curvesData);
+    const hasSharpen = state.filterSettings.sharpen > 0;
+    const hasChannel = state.channelMode !== 'rgb';
+    const hasHighlightsShadows = state.colorAdjustments.highlights !== 0 ||
+                                 state.colorAdjustments.shadows !== 0 ||
+                                 state.colorAdjustments.whites !== 0 ||
+                                 state.colorAdjustments.blacks !== 0;
+    const hasVibrance = state.colorAdjustments.vibrance !== 0;
+    const hasClarity = state.colorAdjustments.clarity !== 0;
+    const hasHueRotation = !isIdentityHueRotation(state.colorAdjustments.hueRotation);
+    const hasColorWheels = hasColorWheelAdjustments(state.colorWheelsState);
+    const hasHSLQualifier = state.hslQualifierState.enabled;
+    const hasToneMapping = state.toneMappingState.enabled && state.toneMappingState.operator !== 'off';
+    const hasInversion = state.colorInversionEnabled;
+
+    // Check if any per-pixel effects are active
+    const hasPerPixelEffects = hasHighlightsShadows || hasVibrance || hasHueRotation ||
+      hasColorWheels || hasCDL || hasCurves || hasHSLQualifier || hasToneMapping ||
+      hasInversion || hasChannel;
+
+    // Early return if no pixel effects are active
+    if (!hasPerPixelEffects && !hasSharpen && !hasClarity) {
+      return;
+    }
+
+    // ---- SIMD fast-path (same as sync version) ----
+    const hasComplexEffects = hasHighlightsShadows || hasVibrance || hasHueRotation ||
+      hasColorWheels || hasCDL || hasCurves || hasHSLQualifier || hasToneMapping;
+
+    if (!hasComplexEffects && !hasClarity && !hasSharpen && (hasInversion || hasChannel)) {
+      if (hasInversion) {
+        applyColorInversionSIMD(imageData.data);
+      }
+      if (hasChannel) {
+        const channelMode = state.channelMode;
+        if (channelMode === 'red' || channelMode === 'green' || channelMode === 'blue') {
+          applyChannelIsolationGrayscale(imageData.data, channelMode);
+        } else if (channelMode === 'luminance') {
+          applyLuminanceIsolation(imageData.data);
+        } else if (channelMode === 'alpha') {
+          const data = imageData.data;
+          const len = data.length;
+          for (let i = 0; i < len; i += 4) {
+            const a = data[i + 3]!;
+            data[i] = a;
+            data[i + 1] = a;
+            data[i + 2] = a;
+            data[i + 3] = 255;
+          }
+        }
+      }
+      return;
+    }
+
+    // Pass 1: Clarity (inter-pixel dependency - most expensive, 5x5 blur)
+    // Uses row-based chunking to keep individual blocking periods under ~16ms.
+    if (hasClarity) {
+      await this.applyClarityChunked(imageData, width, height, state.colorAdjustments, halfRes);
+      await yieldToMain();
+    }
+
+    // Pass 2: All per-pixel effects merged into a single loop
+    if (hasPerPixelEffects) {
+      this.applyMergedPerPixelEffects(imageData, width, height, state);
+      await yieldToMain();
+    }
+
+    // Pass 3: Sharpen (inter-pixel dependency - 3x3 kernel)
+    // Uses row-based chunking to keep individual blocking periods under ~16ms.
+    if (hasSharpen) {
+      await this.applySharpenCPUChunked(imageData, width, height, state.filterSettings.sharpen / 100, halfRes);
+      // No yield needed after last pass
     }
   }
 
@@ -800,8 +952,17 @@ export class EffectProcessor {
   /**
    * Apply clarity (local contrast) effect to ImageData.
    * Uses reusable buffers to minimize memory allocations.
+   *
+   * When halfRes is true and the image is large enough (> HALF_RES_MIN_DIMENSION),
+   * processes at half resolution for ~4x speedup with minimal quality loss.
    */
-  private applyClarity(imageData: ImageData, width: number, height: number, colorAdjustments: ColorAdjustments): void {
+  private applyClarity(imageData: ImageData, width: number, height: number, colorAdjustments: ColorAdjustments, halfRes = false): void {
+    // Half-resolution path: downsample, apply clarity at half-res, blend result
+    if (halfRes && width > HALF_RES_MIN_DIMENSION && height > HALF_RES_MIN_DIMENSION) {
+      this.applyClarityHalfRes(imageData, width, height, colorAdjustments);
+      return;
+    }
+
     const data = imageData.data;
     const clarity = colorAdjustments.clarity / 100;
     const len = data.length;
@@ -827,6 +988,63 @@ export class EffectProcessor {
       const blurredR = blurred[i]!;
       const blurredG = blurred[i + 1]!;
       const blurredB = blurred[i + 2]!;
+
+      const lum = LUMA_R * r + LUMA_G * g + LUMA_B * b;
+      const lumIndex = Math.min(255, Math.max(0, Math.round(lum)));
+      const mask = midtoneMask[lumIndex]!;
+
+      const highR = r - blurredR;
+      const highG = g - blurredG;
+      const highB = b - blurredB;
+
+      const adjustedMask = mask * effectScale;
+      data[i] = Math.max(0, Math.min(255, r + highR * adjustedMask));
+      data[i + 1] = Math.max(0, Math.min(255, g + highG * adjustedMask));
+      data[i + 2] = Math.max(0, Math.min(255, b + highB * adjustedMask));
+    }
+  }
+
+  /**
+   * Half-resolution clarity: downsample, compute blur at half-res,
+   * upsample the blurred result, then apply high-pass blend at full-res.
+   * This gives ~4x speedup for the expensive Gaussian blur pass.
+   */
+  private applyClarityHalfRes(imageData: ImageData, width: number, height: number, colorAdjustments: ColorAdjustments): void {
+    const data = imageData.data;
+    const clarity = colorAdjustments.clarity / 100;
+    const len = data.length;
+
+    // Downsample to half resolution
+    const half = downsample2x(data, width, height);
+    const halfW = half.width;
+    const halfH = half.height;
+    const halfLen = half.data.length;
+
+    // Ensure clarity buffers are sized for half-res
+    this.ensureClarityBuffers(halfLen);
+    const halfOriginal = this.clarityOriginalBuffer!;
+    halfOriginal.set(half.data);
+
+    // Apply Gaussian blur at half resolution (much faster, ~4x fewer pixels)
+    this.applyGaussianBlur5x5InPlace(halfOriginal, halfW, halfH);
+    const halfBlurred = this.clarityBlurResultBuffer!;
+
+    // Upsample the blurred result back to full resolution
+    const upsampled = upsample2x(halfBlurred, halfW, halfH, width, height);
+
+    // Use cached midtone mask
+    const midtoneMask = this.getMidtoneMask();
+    const effectScale = clarity * CLARITY_EFFECT_SCALE;
+
+    // Apply high-pass blend at full resolution: original + (original - upsampled_blur) * mask
+    for (let i = 0; i < len; i += 4) {
+      const r = data[i]!;
+      const g = data[i + 1]!;
+      const b = data[i + 2]!;
+
+      const blurredR = upsampled[i]!;
+      const blurredG = upsampled[i + 1]!;
+      const blurredB = upsampled[i + 2]!;
 
       const lum = LUMA_R * r + LUMA_G * g + LUMA_B * b;
       const lumIndex = Math.min(255, Math.max(0, Math.round(lum)));
@@ -901,9 +1119,19 @@ export class EffectProcessor {
   }
 
   /**
-   * CPU-based sharpen filter
+   * CPU-based sharpen filter.
+   *
+   * When halfRes is true and the image is large enough (> HALF_RES_MIN_DIMENSION),
+   * processes at half resolution for ~4x speedup. The sharpened detail is upsampled
+   * and blended with the original at full resolution.
    */
-  private applySharpenCPU(imageData: ImageData, width: number, height: number, amount: number): void {
+  private applySharpenCPU(imageData: ImageData, width: number, height: number, amount: number, halfRes = false): void {
+    // Half-resolution path
+    if (halfRes && width > HALF_RES_MIN_DIMENSION && height > HALF_RES_MIN_DIMENSION) {
+      this.applySharpenHalfRes(imageData, width, height, amount);
+      return;
+    }
+
     const data = imageData.data;
     const original = new Uint8ClampedArray(data);
 
@@ -933,6 +1161,210 @@ export class EffectProcessor {
           const sharpenedValue = Math.max(0, Math.min(255, sum));
           data[idx + c] = Math.round(originalValue + (sharpenedValue - originalValue) * amount);
         }
+      }
+    }
+  }
+
+  /**
+   * Half-resolution sharpen: downsample, apply sharpen at half-res,
+   * upsample the result, then blend with original at full-res.
+   * This gives ~4x speedup for the expensive convolution pass.
+   */
+  private applySharpenHalfRes(imageData: ImageData, width: number, height: number, amount: number): void {
+    const data = imageData.data;
+    const len = data.length;
+
+    // Downsample to half resolution
+    const half = downsample2x(data, width, height);
+    const halfW = half.width;
+    const halfH = half.height;
+
+    // Apply sharpen kernel at half-res
+    const halfOriginal = new Uint8ClampedArray(half.data);
+    const halfData = half.data;
+
+    const kernel = [
+      0, -1, 0,
+      -1, 5, -1,
+      0, -1, 0
+    ];
+
+    for (let y = 1; y < halfH - 1; y++) {
+      for (let x = 1; x < halfW - 1; x++) {
+        const idx = (y * halfW + x) * 4;
+
+        for (let c = 0; c < 3; c++) {
+          let sum = 0;
+          let ki = 0;
+
+          for (let ky = -1; ky <= 1; ky++) {
+            for (let kx = -1; kx <= 1; kx++) {
+              const pidx = ((y + ky) * halfW + (x + kx)) * 4 + c;
+              sum += halfOriginal[pidx]! * kernel[ki]!;
+              ki++;
+            }
+          }
+
+          const originalValue = halfOriginal[idx + c]!;
+          const sharpenedValue = Math.max(0, Math.min(255, sum));
+          halfData[idx + c] = Math.round(originalValue + (sharpenedValue - originalValue) * amount);
+        }
+      }
+    }
+
+    // Upsample the sharpened half-res back to full resolution
+    const upsampled = upsample2x(halfData, halfW, halfH, width, height);
+
+    // Copy upsampled result to output, preserving alpha
+    for (let i = 0; i < len; i += 4) {
+      data[i] = upsampled[i]!;
+      data[i + 1] = upsampled[i + 1]!;
+      data[i + 2] = upsampled[i + 2]!;
+      // Alpha unchanged
+    }
+  }
+
+  /**
+   * Number of rows to process per chunk in the async (chunked) clarity/sharpen path.
+   * Chosen to keep each chunk under ~16ms for 1080p images (~128 rows at 1920px wide).
+   */
+  static readonly CHUNK_ROWS = 128;
+
+  /**
+   * Async chunked version of applyClarity.
+   * Runs the Gaussian blur synchronously (it uses pre-allocated buffers and is a
+   * separable two-pass filter that needs the full image), then processes the
+   * high-pass blend step in row-based chunks, yielding between chunks.
+   *
+   * Produces identical pixel output to the sync applyClarity().
+   */
+  private async applyClarityChunked(
+    imageData: ImageData,
+    width: number,
+    height: number,
+    colorAdjustments: ColorAdjustments,
+    halfRes = false
+  ): Promise<void> {
+    // For half-res or small images, fall back to the sync version (fast enough)
+    if (halfRes && width > HALF_RES_MIN_DIMENSION && height > HALF_RES_MIN_DIMENSION) {
+      this.applyClarityHalfRes(imageData, width, height, colorAdjustments);
+      return;
+    }
+
+    const data = imageData.data;
+    const clarity = colorAdjustments.clarity / 100;
+    const len = data.length;
+
+    // Ensure buffers are the right size (reuses if already correct)
+    this.ensureClarityBuffers(len);
+    const original = this.clarityOriginalBuffer!;
+    original.set(data);
+
+    // Apply blur using reusable buffers (synchronous - needs full image)
+    this.applyGaussianBlur5x5InPlace(original, width, height);
+    const blurred = this.clarityBlurResultBuffer!;
+
+    // Use cached midtone mask
+    const midtoneMask = this.getMidtoneMask();
+    const effectScale = clarity * CLARITY_EFFECT_SCALE;
+
+    // Process the high-pass blend in row-based chunks
+    const chunkRows = EffectProcessor.CHUNK_ROWS;
+    for (let startRow = 0; startRow < height; startRow += chunkRows) {
+      const endRow = Math.min(startRow + chunkRows, height);
+      const startIdx = startRow * width * 4;
+      const endIdx = endRow * width * 4;
+
+      for (let i = startIdx; i < endIdx; i += 4) {
+        const r = original[i]!;
+        const g = original[i + 1]!;
+        const b = original[i + 2]!;
+
+        const blurredR = blurred[i]!;
+        const blurredG = blurred[i + 1]!;
+        const blurredB = blurred[i + 2]!;
+
+        const lum = LUMA_R * r + LUMA_G * g + LUMA_B * b;
+        const lumIndex = Math.min(255, Math.max(0, Math.round(lum)));
+        const mask = midtoneMask[lumIndex]!;
+
+        const highR = r - blurredR;
+        const highG = g - blurredG;
+        const highB = b - blurredB;
+
+        const adjustedMask = mask * effectScale;
+        data[i] = Math.max(0, Math.min(255, r + highR * adjustedMask));
+        data[i + 1] = Math.max(0, Math.min(255, g + highG * adjustedMask));
+        data[i + 2] = Math.max(0, Math.min(255, b + highB * adjustedMask));
+      }
+
+      // Yield between chunks (but not after the last chunk)
+      if (endRow < height) {
+        await yieldToMain();
+      }
+    }
+  }
+
+  /**
+   * Async chunked version of applySharpenCPU.
+   * Copies the original image data, then processes the 3x3 sharpen convolution
+   * in row-based chunks, yielding between chunks.
+   *
+   * Produces identical pixel output to the sync applySharpenCPU().
+   */
+  private async applySharpenCPUChunked(
+    imageData: ImageData,
+    width: number,
+    height: number,
+    amount: number,
+    halfRes = false
+  ): Promise<void> {
+    // For half-res, fall back to the sync version (already fast enough)
+    if (halfRes && width > HALF_RES_MIN_DIMENSION && height > HALF_RES_MIN_DIMENSION) {
+      this.applySharpenHalfRes(imageData, width, height, amount);
+      return;
+    }
+
+    const data = imageData.data;
+    const original = new Uint8ClampedArray(data);
+
+    const kernel = [
+      0, -1, 0,
+      -1, 5, -1,
+      0, -1, 0
+    ];
+
+    // Process in row-based chunks (skip first and last rows as they have no neighbors)
+    const chunkRows = EffectProcessor.CHUNK_ROWS;
+    for (let startRow = 1; startRow < height - 1; startRow += chunkRows) {
+      const endRow = Math.min(startRow + chunkRows, height - 1);
+
+      for (let y = startRow; y < endRow; y++) {
+        for (let x = 1; x < width - 1; x++) {
+          const idx = (y * width + x) * 4;
+
+          for (let c = 0; c < 3; c++) {
+            let sum = 0;
+            let ki = 0;
+
+            for (let ky = -1; ky <= 1; ky++) {
+              for (let kx = -1; kx <= 1; kx++) {
+                const pidx = ((y + ky) * width + (x + kx)) * 4 + c;
+                sum += original[pidx]! * kernel[ki]!;
+                ki++;
+              }
+            }
+
+            const originalValue = original[idx + c]!;
+            const sharpenedValue = Math.max(0, Math.min(255, sum));
+            data[idx + c] = Math.round(originalValue + (sharpenedValue - originalValue) * amount);
+          }
+        }
+      }
+
+      // Yield between chunks (but not after the last chunk)
+      if (endRow < height - 1) {
+        await yieldToMain();
       }
     }
   }

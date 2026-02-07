@@ -9,10 +9,23 @@ import {
   createDefaultEffectsState,
   computeEffectsHash,
   hasActiveEffects,
+  yieldToMain,
 } from './EffectProcessor';
 import { createTestImageData, createGradientImageData, isGrayscale } from '../../test/utils';
 import { ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from '../ui/components/ColorControls';
 import { DEFAULT_FILTER_SETTINGS } from '../ui/components/FilterControl';
+import {
+  IS_LITTLE_ENDIAN,
+  applyColorInversionSIMD,
+  applyColorInversionScalar,
+  applyChannelIsolationSIMD,
+  applyChannelIsolationGrayscale,
+  applyLuminanceIsolation,
+  buildBrightnessLUT,
+  applyLUTToRGB,
+  CHANNEL_MASKS,
+  COLOR_INVERSION_XOR_MASK,
+} from './effectProcessing.shared';
 
 describe('EffectProcessor', () => {
   let processor: EffectProcessor;
@@ -1182,6 +1195,638 @@ describe('EffectProcessor', () => {
 
         // Pixel data should be completely unchanged
         expect(imageData.data).toEqual(originalData);
+      });
+    });
+
+    describe('applyEffectsAsync (Phase 4A)', () => {
+      it('VE-ASYNC-001: applyEffectsAsync exists and returns a Promise', () => {
+        const imageData = createTestImageData(4, 4, { r: 128, g: 128, b: 128 });
+        const result = processor.applyEffectsAsync(imageData, 4, 4, defaultState);
+
+        expect(result).toBeInstanceOf(Promise);
+      });
+
+      it('VE-ASYNC-002: async version produces the same pixel output as the sync version', async () => {
+        // Create two identical images
+        const imageDataSync = createGradientImageData(16, 16);
+        const imageDataAsync = createGradientImageData(16, 16);
+
+        // Set up effects state with clarity, per-pixel effects, and sharpen active
+        const state = createDefaultEffectsState();
+        state.colorAdjustments.clarity = 50;
+        state.colorAdjustments.highlights = 30;
+        state.colorAdjustments.shadows = -20;
+        state.colorAdjustments.vibrance = 40;
+        state.filterSettings.sharpen = 50;
+        state.cdlValues.slope.r = 1.1;
+        state.cdlValues.offset.g = 0.02;
+
+        // Apply sync version
+        processor.applyEffects(imageDataSync, 16, 16, state);
+
+        // Apply async version
+        const processor2 = new EffectProcessor();
+        await processor2.applyEffectsAsync(imageDataAsync, 16, 16, state);
+
+        // Pixel output must be identical
+        expect(imageDataAsync.data).toEqual(imageDataSync.data);
+      });
+
+      it('VE-ASYNC-003: async version yields between passes (verify via microtask timing)', async () => {
+        const imageData = createGradientImageData(8, 8);
+
+        // State with clarity + per-pixel + sharpen to trigger all 3 passes
+        const state = createDefaultEffectsState();
+        state.colorAdjustments.clarity = 30;
+        state.colorAdjustments.highlights = 20;
+        state.filterSettings.sharpen = 40;
+
+        // Track yields by counting how many times the event loop is yielded to.
+        // We do this by scheduling microtasks that increment a counter.
+        let yieldCount = 0;
+        const originalSetTimeout = globalThis.setTimeout;
+
+        // Monkey-patch setTimeout to count yield calls
+        const mockSetTimeout = (fn: () => void, ms?: number) => {
+          if (ms === 0) {
+            yieldCount++;
+          }
+          return originalSetTimeout(fn, ms);
+        };
+        globalThis.setTimeout = mockSetTimeout as typeof globalThis.setTimeout;
+
+        try {
+          await processor.applyEffectsAsync(imageData, 8, 8, state);
+
+          // With all 3 passes active (clarity, per-pixel, sharpen),
+          // we expect yields after clarity and after per-pixel passes (2 yields).
+          // The last pass (sharpen) does not yield after.
+          expect(yieldCount).toBeGreaterThanOrEqual(2);
+        } finally {
+          globalThis.setTimeout = originalSetTimeout;
+        }
+      });
+
+      it('VE-ASYNC-004: yieldToMain resolves promptly', async () => {
+        const start = performance.now();
+        await yieldToMain();
+        const elapsed = performance.now() - start;
+
+        // yieldToMain should resolve within a reasonable time (well under 100ms)
+        expect(elapsed).toBeLessThan(100);
+      });
+
+      it('VE-ASYNC-005: async version with no effects returns immediately without yielding', async () => {
+        const imageData = createTestImageData(4, 4, { r: 100, g: 150, b: 200 });
+        const originalData = new Uint8ClampedArray(imageData.data);
+
+        await processor.applyEffectsAsync(imageData, 4, 4, defaultState);
+
+        // No effects active: data should be unchanged
+        expect(imageData.data).toEqual(originalData);
+      });
+
+      it('VE-ASYNC-006: async version with only clarity yields once', async () => {
+        const imageData = createGradientImageData(8, 8);
+        const state = createDefaultEffectsState();
+        state.colorAdjustments.clarity = 50;
+
+        let yieldCount = 0;
+        const originalSetTimeout = globalThis.setTimeout;
+        globalThis.setTimeout = ((fn: () => void, ms?: number) => {
+          if (ms === 0) yieldCount++;
+          return originalSetTimeout(fn, ms);
+        }) as typeof globalThis.setTimeout;
+
+        try {
+          await processor.applyEffectsAsync(imageData, 8, 8, state);
+          // Only clarity pass is active, so one yield after it
+          expect(yieldCount).toBe(1);
+        } finally {
+          globalThis.setTimeout = originalSetTimeout;
+        }
+      });
+
+      it('VE-ASYNC-007: async version with only sharpen does not yield', async () => {
+        const imageData = createGradientImageData(8, 8);
+        const state = createDefaultEffectsState();
+        state.filterSettings.sharpen = 50;
+
+        let yieldCount = 0;
+        const originalSetTimeout = globalThis.setTimeout;
+        globalThis.setTimeout = ((fn: () => void, ms?: number) => {
+          if (ms === 0) yieldCount++;
+          return originalSetTimeout(fn, ms);
+        }) as typeof globalThis.setTimeout;
+
+        try {
+          await processor.applyEffectsAsync(imageData, 8, 8, state);
+          // Only sharpen pass is active, no yield after the last pass
+          expect(yieldCount).toBe(0);
+        } finally {
+          globalThis.setTimeout = originalSetTimeout;
+        }
+      });
+    });
+
+    describe('SIMD-like Optimizations (Phase 5B)', () => {
+      describe('EP-SIMD-001: SIMD color inversion produces same output as scalar version', () => {
+        it('inverts RGB and preserves alpha identically to scalar', () => {
+          const imgSIMD = createTestImageData(10, 10, { r: 100, g: 150, b: 200, a: 180 });
+          const imgScalar = createTestImageData(10, 10, { r: 100, g: 150, b: 200, a: 180 });
+
+          applyColorInversionSIMD(imgSIMD.data);
+          applyColorInversionScalar(imgScalar.data);
+
+          expect(imgSIMD.data).toEqual(imgScalar.data);
+        });
+
+        it('inverts pure black to white', () => {
+          const img = createTestImageData(2, 2, { r: 0, g: 0, b: 0, a: 255 });
+          applyColorInversionSIMD(img.data);
+
+          expect(img.data[0]).toBe(255);
+          expect(img.data[1]).toBe(255);
+          expect(img.data[2]).toBe(255);
+          expect(img.data[3]).toBe(255); // Alpha preserved
+        });
+
+        it('inverts pure white to black', () => {
+          const img = createTestImageData(2, 2, { r: 255, g: 255, b: 255, a: 128 });
+          applyColorInversionSIMD(img.data);
+
+          expect(img.data[0]).toBe(0);
+          expect(img.data[1]).toBe(0);
+          expect(img.data[2]).toBe(0);
+          expect(img.data[3]).toBe(128); // Alpha preserved
+        });
+
+        it('double inversion returns to original', () => {
+          const img = createTestImageData(5, 5, { r: 42, g: 137, b: 233, a: 99 });
+          const original = new Uint8ClampedArray(img.data);
+
+          applyColorInversionSIMD(img.data);
+          applyColorInversionSIMD(img.data);
+
+          expect(img.data).toEqual(original);
+        });
+
+        it('matches output of EffectProcessor inversion-only path', () => {
+          const imgDirect = createTestImageData(8, 8, { r: 80, g: 160, b: 240, a: 200 });
+          const imgProcessor = createTestImageData(8, 8, { r: 80, g: 160, b: 240, a: 200 });
+
+          // Direct SIMD function
+          applyColorInversionSIMD(imgDirect.data);
+
+          // Through EffectProcessor (should use SIMD fast-path)
+          const state = createDefaultEffectsState();
+          state.colorInversionEnabled = true;
+          processor.applyEffects(imgProcessor, 8, 8, state);
+
+          expect(imgProcessor.data).toEqual(imgDirect.data);
+        });
+
+        it('handles varied pixel values across the image', () => {
+          const img = createGradientImageData(16, 16);
+          const imgCopy = new ImageData(new Uint8ClampedArray(img.data), 16, 16);
+
+          applyColorInversionSIMD(img.data);
+          applyColorInversionScalar(imgCopy.data);
+
+          expect(img.data).toEqual(imgCopy.data);
+        });
+      });
+
+      describe('EP-SIMD-002: SIMD channel isolation produces correct output', () => {
+        it('red channel isolation via bitmask zeros G and B', () => {
+          const img = createTestImageData(2, 2, { r: 100, g: 150, b: 200, a: 255 });
+          applyChannelIsolationSIMD(img.data, 'red');
+
+          expect(img.data[0]).toBe(100); // R preserved
+          expect(img.data[1]).toBe(0);   // G zeroed
+          expect(img.data[2]).toBe(0);   // B zeroed
+          expect(img.data[3]).toBe(255); // A preserved
+        });
+
+        it('green channel isolation via bitmask zeros R and B', () => {
+          const img = createTestImageData(2, 2, { r: 100, g: 150, b: 200, a: 255 });
+          applyChannelIsolationSIMD(img.data, 'green');
+
+          expect(img.data[0]).toBe(0);   // R zeroed
+          expect(img.data[1]).toBe(150); // G preserved
+          expect(img.data[2]).toBe(0);   // B zeroed
+          expect(img.data[3]).toBe(255); // A preserved
+        });
+
+        it('blue channel isolation via bitmask zeros R and G', () => {
+          const img = createTestImageData(2, 2, { r: 100, g: 150, b: 200, a: 255 });
+          applyChannelIsolationSIMD(img.data, 'blue');
+
+          expect(img.data[0]).toBe(0);   // R zeroed
+          expect(img.data[1]).toBe(0);   // G zeroed
+          expect(img.data[2]).toBe(200); // B preserved
+          expect(img.data[3]).toBe(255); // A preserved
+        });
+
+        it('grayscale channel isolation copies selected channel to all RGB', () => {
+          const img = createTestImageData(2, 2, { r: 100, g: 150, b: 200, a: 128 });
+          applyChannelIsolationGrayscale(img.data, 'red');
+
+          expect(img.data[0]).toBe(100); // R value
+          expect(img.data[1]).toBe(100); // R value copied to G
+          expect(img.data[2]).toBe(100); // R value copied to B
+          expect(img.data[3]).toBe(128); // A preserved
+        });
+
+        it('grayscale green isolation matches processor channel mode', () => {
+          const imgDirect = createTestImageData(4, 4, { r: 80, g: 160, b: 240, a: 255 });
+          const imgProcessor = createTestImageData(4, 4, { r: 80, g: 160, b: 240, a: 255 });
+
+          applyChannelIsolationGrayscale(imgDirect.data, 'green');
+
+          const state = createDefaultEffectsState();
+          state.channelMode = 'green';
+          processor.applyEffects(imgProcessor, 4, 4, state);
+
+          expect(imgProcessor.data).toEqual(imgDirect.data);
+        });
+
+        it('luminance isolation matches processor luminance mode', () => {
+          const imgDirect = createTestImageData(4, 4, { r: 255, g: 0, b: 0, a: 255 });
+          const imgProcessor = createTestImageData(4, 4, { r: 255, g: 0, b: 0, a: 255 });
+
+          applyLuminanceIsolation(imgDirect.data);
+
+          const state = createDefaultEffectsState();
+          state.channelMode = 'luminance';
+          processor.applyEffects(imgProcessor, 4, 4, state);
+
+          expect(imgProcessor.data).toEqual(imgDirect.data);
+        });
+
+        it('channel isolation preserves alpha for all channels', () => {
+          for (const channel of ['red', 'green', 'blue'] as const) {
+            const img = createTestImageData(3, 3, { r: 100, g: 150, b: 200, a: 77 });
+            applyChannelIsolationGrayscale(img.data, channel);
+
+            // Check all alpha values preserved
+            for (let i = 3; i < img.data.length; i += 4) {
+              expect(img.data[i]).toBe(77);
+            }
+          }
+        });
+      });
+
+      describe('EP-SIMD-003: Endianness detection works correctly', () => {
+        it('IS_LITTLE_ENDIAN is a boolean', () => {
+          expect(typeof IS_LITTLE_ENDIAN).toBe('boolean');
+        });
+
+        it('endianness detection is consistent with manual check', () => {
+          const buf = new ArrayBuffer(4);
+          const u32 = new Uint32Array(buf);
+          const u8 = new Uint8Array(buf);
+          u32[0] = 0x12345678;
+          const manualIsLE = u8[0] === 0x78;
+
+          expect(IS_LITTLE_ENDIAN).toBe(manualIsLE);
+        });
+
+        it('COLOR_INVERSION_XOR_MASK is correct for detected endianness', () => {
+          if (IS_LITTLE_ENDIAN) {
+            expect(COLOR_INVERSION_XOR_MASK).toBe(0x00FFFFFF);
+          } else {
+            expect(COLOR_INVERSION_XOR_MASK).toBe(0xFFFFFF00);
+          }
+        });
+
+        it('CHANNEL_MASKS are correct for detected endianness', () => {
+          if (IS_LITTLE_ENDIAN) {
+            expect(CHANNEL_MASKS.red).toBe(0xFF0000FF);
+            expect(CHANNEL_MASKS.green).toBe(0xFF00FF00);
+            expect(CHANNEL_MASKS.blue).toBe(0xFFFF0000);
+          }
+          // Verify masks isolate correct channel by applying to a known pixel
+          const img = createTestImageData(1, 1, { r: 100, g: 150, b: 200, a: 255 });
+          const u32 = new Uint32Array(img.data.buffer);
+          const originalPixel = u32[0]!;
+
+          // Red mask should preserve R and A
+          const redResult = originalPixel & CHANNEL_MASKS.red;
+          const redBytes = new Uint8Array(new Uint32Array([redResult]).buffer);
+          if (IS_LITTLE_ENDIAN) {
+            expect(redBytes[0]).toBe(100); // R
+            expect(redBytes[1]).toBe(0);   // G zeroed
+            expect(redBytes[2]).toBe(0);   // B zeroed
+            expect(redBytes[3]).toBe(255); // A
+          }
+        });
+      });
+
+      describe('EP-SIMD-004: Performance comparison', () => {
+        it('SIMD inversion is not slower than scalar for large images', () => {
+          const size = 512;
+          const imgSIMD = createTestImageData(size, size, { r: 100, g: 150, b: 200 });
+          const imgScalar = createTestImageData(size, size, { r: 100, g: 150, b: 200 });
+
+          // Warm up
+          applyColorInversionSIMD(imgSIMD.data);
+          applyColorInversionScalar(imgScalar.data);
+
+          // Reset
+          const img1 = createTestImageData(size, size, { r: 100, g: 150, b: 200 });
+          const img2 = createTestImageData(size, size, { r: 100, g: 150, b: 200 });
+
+          const iterations = 10;
+
+          const startSIMD = performance.now();
+          for (let i = 0; i < iterations; i++) {
+            applyColorInversionSIMD(img1.data);
+          }
+          const timeSIMD = performance.now() - startSIMD;
+
+          const startScalar = performance.now();
+          for (let i = 0; i < iterations; i++) {
+            applyColorInversionScalar(img2.data);
+          }
+          const timeScalar = performance.now() - startScalar;
+
+          // SIMD should not be significantly slower (allow 3x margin for JIT variance)
+          expect(timeSIMD).toBeLessThan(timeScalar * 3);
+
+          // Both should produce same result (after even number of inversions)
+          expect(img1.data).toEqual(img2.data);
+        });
+      });
+
+      describe('EP-SIMD-005: Edge cases', () => {
+        it('handles single pixel image', () => {
+          const img = createTestImageData(1, 1, { r: 42, g: 137, b: 233, a: 99 });
+
+          applyColorInversionSIMD(img.data);
+          expect(img.data[0]).toBe(213);  // 255 - 42
+          expect(img.data[1]).toBe(118);  // 255 - 137
+          expect(img.data[2]).toBe(22);   // 255 - 233
+          expect(img.data[3]).toBe(99);   // Alpha preserved
+        });
+
+        it('handles single pixel channel isolation', () => {
+          const img = createTestImageData(1, 1, { r: 42, g: 137, b: 233, a: 99 });
+
+          applyChannelIsolationGrayscale(img.data, 'blue');
+          expect(img.data[0]).toBe(233);
+          expect(img.data[1]).toBe(233);
+          expect(img.data[2]).toBe(233);
+          expect(img.data[3]).toBe(99);
+        });
+
+        it('handles odd-dimension images', () => {
+          const img = createTestImageData(3, 7, { r: 100, g: 150, b: 200, a: 255 });
+          applyColorInversionSIMD(img.data);
+
+          for (let i = 0; i < img.data.length; i += 4) {
+            expect(img.data[i]).toBe(155);
+            expect(img.data[i + 1]).toBe(105);
+            expect(img.data[i + 2]).toBe(55);
+            expect(img.data[i + 3]).toBe(255);
+          }
+        });
+
+        it('handles all-zero image (transparent black)', () => {
+          const img = createTestImageData(4, 4, { r: 0, g: 0, b: 0, a: 0 });
+          applyColorInversionSIMD(img.data);
+
+          for (let i = 0; i < img.data.length; i += 4) {
+            expect(img.data[i]).toBe(255);
+            expect(img.data[i + 1]).toBe(255);
+            expect(img.data[i + 2]).toBe(255);
+            expect(img.data[i + 3]).toBe(0); // Alpha preserved
+          }
+        });
+
+        it('handles maximum values image', () => {
+          const img = createTestImageData(2, 2, { r: 255, g: 255, b: 255, a: 255 });
+          applyColorInversionSIMD(img.data);
+
+          for (let i = 0; i < img.data.length; i += 4) {
+            expect(img.data[i]).toBe(0);
+            expect(img.data[i + 1]).toBe(0);
+            expect(img.data[i + 2]).toBe(0);
+            expect(img.data[i + 3]).toBe(255);
+          }
+        });
+
+        it('SIMD fast-path handles inversion + channel isolation combined', () => {
+          const imgFastPath = createTestImageData(4, 4, { r: 100, g: 150, b: 200, a: 255 });
+          const imgManual = createTestImageData(4, 4, { r: 100, g: 150, b: 200, a: 255 });
+
+          // Fast path through EffectProcessor
+          const state = createDefaultEffectsState();
+          state.colorInversionEnabled = true;
+          state.channelMode = 'red';
+          processor.applyEffects(imgFastPath, 4, 4, state);
+
+          // Manual: invert then show red as grayscale
+          applyColorInversionSIMD(imgManual.data);
+          applyChannelIsolationGrayscale(imgManual.data, 'red');
+
+          expect(imgFastPath.data).toEqual(imgManual.data);
+        });
+
+        it('brightness LUT produces correct values', () => {
+          const lut = buildBrightnessLUT(2.0);
+          expect(lut[0]).toBe(0);      // 0 * 2 = 0
+          expect(lut[64]).toBe(128);   // 64 * 2 = 128
+          expect(lut[128]).toBe(255);  // 128 * 2 = 256 -> clamped to 255
+          expect(lut[255]).toBe(255);  // 255 * 2 = 510 -> clamped to 255
+
+          const lutDim = buildBrightnessLUT(0.5);
+          expect(lutDim[0]).toBe(0);
+          expect(lutDim[100]).toBe(50);
+          expect(lutDim[200]).toBe(100);
+          expect(lutDim[255]).toBe(128); // 255 * 0.5 = 127.5 -> 128
+        });
+
+        it('applyLUTToRGB applies lookup correctly', () => {
+          const img = createTestImageData(2, 2, { r: 100, g: 150, b: 200, a: 128 });
+          const lut = buildBrightnessLUT(0.5);
+
+          applyLUTToRGB(img.data, lut);
+
+          expect(img.data[0]).toBe(50);   // 100 * 0.5
+          expect(img.data[1]).toBe(75);   // 150 * 0.5
+          expect(img.data[2]).toBe(100);  // 200 * 0.5
+          expect(img.data[3]).toBe(128);  // Alpha preserved
+        });
+      });
+    });
+
+    describe('Row-Based Chunking (Phase 4B)', () => {
+      it('EP-CHUNK-001: chunked clarity produces same output as non-chunked', async () => {
+        // Create two identical gradient images (gradient has spatial variation for clarity effect)
+        const imageDataSync = createGradientImageData(64, 64);
+        const imageDataAsync = createGradientImageData(64, 64);
+
+        const state = createDefaultEffectsState();
+        state.colorAdjustments.clarity = 60;
+
+        // Apply sync version (uses non-chunked applyClarity)
+        processor.applyEffects(imageDataSync, 64, 64, state);
+
+        // Apply async version (uses chunked applyClarityChunked)
+        const processor2 = new EffectProcessor();
+        await processor2.applyEffectsAsync(imageDataAsync, 64, 64, state);
+
+        // Pixel output must be identical
+        expect(imageDataAsync.data).toEqual(imageDataSync.data);
+      });
+
+      it('EP-CHUNK-002: chunked sharpen produces same output as non-chunked', async () => {
+        // Create two identical gradient images
+        const imageDataSync = createGradientImageData(64, 64);
+        const imageDataAsync = createGradientImageData(64, 64);
+
+        const state = createDefaultEffectsState();
+        state.filterSettings.sharpen = 75;
+
+        // Apply sync version (uses non-chunked applySharpenCPU)
+        processor.applyEffects(imageDataSync, 64, 64, state);
+
+        // Apply async version (uses chunked applySharpenCPUChunked)
+        const processor2 = new EffectProcessor();
+        await processor2.applyEffectsAsync(imageDataAsync, 64, 64, state);
+
+        // Pixel output must be identical
+        expect(imageDataAsync.data).toEqual(imageDataSync.data);
+      });
+
+      it('EP-CHUNK-003: multiple yields occur during chunked clarity processing on large images', async () => {
+        // Create an image taller than CHUNK_ROWS (128) so it requires multiple chunks
+        const tallHeight = 300; // 300 rows > 128 chunk size => ceil(300/128) = 3 chunks => 2 yields within clarity
+        const imageData = createGradientImageData(32, tallHeight);
+        const state = createDefaultEffectsState();
+        state.colorAdjustments.clarity = 50;
+
+        let yieldCount = 0;
+        const originalSetTimeout = globalThis.setTimeout;
+        globalThis.setTimeout = ((fn: () => void, ms?: number) => {
+          if (ms === 0) yieldCount++;
+          return originalSetTimeout(fn, ms);
+        }) as typeof globalThis.setTimeout;
+
+        try {
+          await processor.applyEffectsAsync(imageData, 32, tallHeight, state);
+
+          // Clarity with 300 rows / 128 chunk = 3 chunks => 2 yields within clarity blend
+          // Plus 1 yield after the clarity pass itself (from applyEffectsAsync)
+          // Total: at least 3 yields
+          expect(yieldCount).toBeGreaterThanOrEqual(3);
+        } finally {
+          globalThis.setTimeout = originalSetTimeout;
+        }
+      });
+
+      it('EP-CHUNK-004: multiple yields occur during chunked sharpen processing on large images', async () => {
+        // Create an image taller than CHUNK_ROWS so sharpen requires multiple chunks
+        const tallHeight = 300;
+        const imageData = createGradientImageData(32, tallHeight);
+        const state = createDefaultEffectsState();
+        state.filterSettings.sharpen = 50;
+
+        let yieldCount = 0;
+        const originalSetTimeout = globalThis.setTimeout;
+        globalThis.setTimeout = ((fn: () => void, ms?: number) => {
+          if (ms === 0) yieldCount++;
+          return originalSetTimeout(fn, ms);
+        }) as typeof globalThis.setTimeout;
+
+        try {
+          await processor.applyEffectsAsync(imageData, 32, tallHeight, state);
+
+          // Sharpen with 298 processable rows (1..298) / 128 chunk = 3 chunks => 2 yields
+          // No yield after sharpen (last pass), so total: at least 2 yields
+          expect(yieldCount).toBeGreaterThanOrEqual(2);
+        } finally {
+          globalThis.setTimeout = originalSetTimeout;
+        }
+      });
+
+      it('EP-CHUNK-005: small images (fewer rows than chunk size) work correctly for clarity', async () => {
+        // Image smaller than CHUNK_ROWS (128 rows)
+        const imageDataSync = createGradientImageData(16, 16);
+        const imageDataAsync = createGradientImageData(16, 16);
+
+        const state = createDefaultEffectsState();
+        state.colorAdjustments.clarity = 40;
+
+        processor.applyEffects(imageDataSync, 16, 16, state);
+        const processor2 = new EffectProcessor();
+        await processor2.applyEffectsAsync(imageDataAsync, 16, 16, state);
+
+        // Should produce identical output even with a single chunk
+        expect(imageDataAsync.data).toEqual(imageDataSync.data);
+      });
+
+      it('EP-CHUNK-006: small images (fewer rows than chunk size) work correctly for sharpen', async () => {
+        // Image smaller than CHUNK_ROWS (128 rows)
+        const imageDataSync = createGradientImageData(16, 16);
+        const imageDataAsync = createGradientImageData(16, 16);
+
+        const state = createDefaultEffectsState();
+        state.filterSettings.sharpen = 60;
+
+        processor.applyEffects(imageDataSync, 16, 16, state);
+        const processor2 = new EffectProcessor();
+        await processor2.applyEffectsAsync(imageDataAsync, 16, 16, state);
+
+        expect(imageDataAsync.data).toEqual(imageDataSync.data);
+      });
+
+      it('EP-CHUNK-007: chunked clarity + sharpen combined produces same output as sync', async () => {
+        // Test both chunked effects together
+        const imageDataSync = createGradientImageData(64, 64);
+        const imageDataAsync = createGradientImageData(64, 64);
+
+        const state = createDefaultEffectsState();
+        state.colorAdjustments.clarity = 50;
+        state.colorAdjustments.highlights = 20;
+        state.filterSettings.sharpen = 40;
+
+        processor.applyEffects(imageDataSync, 64, 64, state);
+        const processor2 = new EffectProcessor();
+        await processor2.applyEffectsAsync(imageDataAsync, 64, 64, state);
+
+        expect(imageDataAsync.data).toEqual(imageDataSync.data);
+      });
+
+      it('EP-CHUNK-008: no intra-chunk yields for small images with clarity', async () => {
+        // Small image (8 rows < 128 chunk size) should not yield within the clarity blend
+        const imageData = createGradientImageData(8, 8);
+        const state = createDefaultEffectsState();
+        state.colorAdjustments.clarity = 50;
+
+        let yieldCount = 0;
+        const originalSetTimeout = globalThis.setTimeout;
+        globalThis.setTimeout = ((fn: () => void, ms?: number) => {
+          if (ms === 0) yieldCount++;
+          return originalSetTimeout(fn, ms);
+        }) as typeof globalThis.setTimeout;
+
+        try {
+          await processor.applyEffectsAsync(imageData, 8, 8, state);
+
+          // Only 1 yield: after the clarity pass itself (from applyEffectsAsync)
+          // No intra-chunk yields because 8 rows < 128 chunk rows (single chunk, no mid-yield)
+          expect(yieldCount).toBe(1);
+        } finally {
+          globalThis.setTimeout = originalSetTimeout;
+        }
+      });
+
+      it('EP-CHUNK-009: CHUNK_ROWS constant is accessible and reasonable', () => {
+        expect(EffectProcessor.CHUNK_ROWS).toBe(128);
+        expect(EffectProcessor.CHUNK_ROWS).toBeGreaterThanOrEqual(32);
+        expect(EffectProcessor.CHUNK_ROWS).toBeLessThanOrEqual(256);
       });
     });
   });

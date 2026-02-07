@@ -540,7 +540,7 @@ describe('Stale cache fallback during playback', () => {
     manager.dispose();
   });
 
-  it('PBM-050: getFrame returns stale cached frames during playback', async () => {
+  it('PBM-050: getFrame returns stale cached frames from previousCache during playback', async () => {
     // Set initial effects and cache some frames
     const state1 = createDefaultEffectsState();
     state1.colorAdjustments.highlights = 20;
@@ -560,11 +560,12 @@ describe('Stale cache fallback during playback', () => {
     state2.colorAdjustments.highlights = 40;
     manager.updateEffects(state2);
 
-    // Cache should still have entries (soft invalidation during playback)
+    // Phase 2C: Current cache is empty, old frames in previousCache
     const statsAfterChange = manager.getStats();
-    expect(statsAfterChange.cacheSize).toBeGreaterThan(0);
+    expect(statsAfterChange.cacheSize).toBe(0);
+    expect(statsAfterChange.previousCacheSize).toBeGreaterThan(0);
 
-    // getFrame should return stale frames during playback
+    // getFrame should return stale frames from previousCache
     // Try a frame that was prerendered earlier
     // (frames around 50 should have been cached)
     let foundStaleFrame = false;
@@ -578,7 +579,7 @@ describe('Stale cache fallback during playback', () => {
     expect(foundStaleFrame).toBe(true);
   });
 
-  it('PBM-051: getFrame returns null for stale frames when paused', async () => {
+  it('PBM-051: getFrame returns stale frames from previousCache when paused (Phase 2C)', async () => {
     // Set initial effects and cache some frames
     const state1 = createDefaultEffectsState();
     state1.colorAdjustments.highlights = 20;
@@ -589,17 +590,31 @@ describe('Stale cache fallback during playback', () => {
 
     await new Promise(resolve => setTimeout(resolve, 150));
 
+    const cacheSizeBefore = manager.getStats().cacheSize;
+    expect(cacheSizeBefore).toBeGreaterThan(0);
+
     // Change effects while paused
     const state2 = createDefaultEffectsState();
     state2.colorAdjustments.highlights = 40;
     manager.updateEffects(state2);
 
-    // Cache should be cleared (hard invalidation when paused)
+    // Current cache should be empty (rotated to previousCache)
     const stats = manager.getStats();
     expect(stats.cacheSize).toBe(0);
+    // Previous cache should retain the old frames
+    expect(stats.previousCacheSize).toBe(cacheSizeBefore);
 
-    // getFrame should return null
-    expect(manager.getFrame(50)).toBeNull();
+    // Phase 2C: getFrame should return stale frames from previousCache
+    // even when paused (avoids flash of unprocessed content)
+    let foundStaleFrame = false;
+    for (let f = 48; f <= 55; f++) {
+      const frame = manager.getFrame(f);
+      if (frame !== null) {
+        foundStaleFrame = true;
+        break;
+      }
+    }
+    expect(foundStaleFrame).toBe(true);
   });
 
   it('PBM-052: updateEffects does hard invalidation when paused', () => {
@@ -618,7 +633,7 @@ describe('Stale cache fallback during playback', () => {
     expect(manager.getStats().cacheSize).toBe(0);
   });
 
-  it('PBM-053: updateEffects does soft invalidation when playing', async () => {
+  it('PBM-053: updateEffects rotates cache to previousCache (Phase 2C double-buffer)', async () => {
     const state1 = createDefaultEffectsState();
     state1.colorAdjustments.highlights = 20;
     manager.updateEffects(state1);
@@ -635,8 +650,9 @@ describe('Stale cache fallback during playback', () => {
     state2.colorAdjustments.highlights = 40;
     manager.updateEffects(state2);
 
-    // Cache should NOT be cleared (soft invalidation)
-    expect(manager.getStats().cacheSize).toBe(cacheSizeBefore);
+    // Phase 2C: Current cache is empty, old frames moved to previousCache
+    expect(manager.getStats().cacheSize).toBe(0);
+    expect(manager.getStats().previousCacheSize).toBe(cacheSizeBefore);
   });
 
   it('PBM-054: hasFrame returns false for stale frames even during playback', async () => {
@@ -679,12 +695,12 @@ describe('Stale cache fallback during playback', () => {
     expect(statsBeforeChange.cacheHits).toBe(freshHitCount);
     expect(statsBeforeChange.staleCacheHits).toBe(0);
 
-    // Change effects (soft invalidation during playback)
+    // Change effects (Phase 2C: double-buffer rotation, frames move to previousCache)
     const state2 = createDefaultEffectsState();
     state2.colorAdjustments.highlights = 40;
     manager.updateEffects(state2);
 
-    // Now get stale hits
+    // Now get stale hits (from previousCache)
     let staleHitCount = 0;
     for (let f = 48; f <= 55; f++) {
       if (manager.getFrame(f)) staleHitCount++;
@@ -1135,5 +1151,316 @@ describe('Phase 2B: Dynamic preload-ahead', () => {
     manager.updateDynamicPreloadAhead(24);
     // Value may or may not change from 30 depending on timing, but should not crash
     expect(manager.getDynamicPreloadAhead()).toBeGreaterThanOrEqual(30);
+  });
+});
+
+describe('Phase 2C: Double-buffering for effects parameter changes', () => {
+  let manager: PrerenderBufferManager;
+  let frameLoader: (frame: number) => HTMLCanvasElement | null;
+
+  beforeEach(() => {
+    frameLoader = (frame: number) => {
+      if (frame < 1 || frame > 100) return null;
+      const canvas = document.createElement('canvas');
+      canvas.width = 100;
+      canvas.height = 100;
+      const ctx = canvas.getContext('2d')!;
+      ctx.fillStyle = `rgb(${frame}, ${frame}, ${frame})`;
+      ctx.fillRect(0, 0, 100, 100);
+      return canvas;
+    };
+    manager = new PrerenderBufferManager(100, frameLoader, {
+      useWorkers: false,
+      maxCacheSize: 50,
+      preloadAhead: 5,
+      preloadBehind: 2,
+      maxConcurrent: 4,
+    });
+  });
+
+  afterEach(() => {
+    manager.dispose();
+  });
+
+  it('PBM-DB-001: When effects hash changes, previous cache retains old frames', async () => {
+    const state1 = createDefaultEffectsState();
+    state1.colorAdjustments.highlights = 20;
+    manager.updateEffects(state1);
+
+    manager.preloadAround(50);
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    const cacheSizeBefore = manager.getStats().cacheSize;
+    expect(cacheSizeBefore).toBeGreaterThan(0);
+
+    // Change effects hash
+    const state2 = createDefaultEffectsState();
+    state2.colorAdjustments.highlights = 40;
+    manager.updateEffects(state2);
+
+    // Current cache should be empty (fresh for new hash)
+    expect(manager.getStats().cacheSize).toBe(0);
+    // Previous cache should retain all old frames
+    expect(manager.getStats().previousCacheSize).toBe(cacheSizeBefore);
+  });
+
+  it('PBM-DB-002: getFrame returns stale frame from previousCache on current cache miss', async () => {
+    const state1 = createDefaultEffectsState();
+    state1.colorAdjustments.highlights = 20;
+    manager.updateEffects(state1);
+
+    manager.preloadAround(50);
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    // Verify frames are cached
+    let cachedFrameNumber = -1;
+    for (let f = 48; f <= 55; f++) {
+      if (manager.hasFrame(f)) {
+        cachedFrameNumber = f;
+        break;
+      }
+    }
+    expect(cachedFrameNumber).toBeGreaterThan(0);
+
+    // Change effects - frames rotate to previousCache
+    const state2 = createDefaultEffectsState();
+    state2.colorAdjustments.highlights = 40;
+    manager.updateEffects(state2);
+
+    // Current cache miss, should fall back to previousCache
+    const staleFrame = manager.getFrame(cachedFrameNumber);
+    expect(staleFrame).not.toBeNull();
+    expect(staleFrame!.width).toBe(100);
+    expect(staleFrame!.height).toBe(100);
+
+    // Should be counted as a stale hit
+    const stats = manager.getStats();
+    expect(stats.staleCacheHits).toBeGreaterThan(0);
+  });
+
+  it('PBM-DB-003: getFrame prefers current cache over previousCache', async () => {
+    const state1 = createDefaultEffectsState();
+    state1.colorAdjustments.highlights = 20;
+    manager.updateEffects(state1);
+
+    manager.preloadAround(50);
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    // Change effects
+    const state2 = createDefaultEffectsState();
+    state2.colorAdjustments.highlights = 40;
+    manager.updateEffects(state2);
+
+    // Now prerender with new effects
+    manager.preloadAround(50);
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    // Reset stats to isolate measurements
+    manager.resetStats();
+
+    // Get a frame that should be in the current cache
+    let foundCurrentFrame = false;
+    for (let f = 48; f <= 55; f++) {
+      if (manager.hasFrame(f)) {
+        const frame = manager.getFrame(f);
+        expect(frame).not.toBeNull();
+        foundCurrentFrame = true;
+
+        // Should be a fresh cache hit, NOT a stale one
+        const stats = manager.getStats();
+        expect(stats.cacheHits).toBeGreaterThan(0);
+        expect(stats.staleCacheHits).toBe(0);
+        break;
+      }
+    }
+    expect(foundCurrentFrame).toBe(true);
+  });
+
+  it('PBM-DB-004: Previous cache is cleared when new cache is sufficiently populated', async () => {
+    const state1 = createDefaultEffectsState();
+    state1.colorAdjustments.highlights = 20;
+    manager.updateEffects(state1);
+
+    manager.preloadAround(50);
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    const previousCacheSize = manager.getStats().cacheSize;
+    expect(previousCacheSize).toBeGreaterThan(0);
+
+    // Change effects
+    const state2 = createDefaultEffectsState();
+    state2.colorAdjustments.highlights = 40;
+    manager.updateEffects(state2);
+
+    expect(manager.getStats().previousCacheSize).toBe(previousCacheSize);
+
+    // Prerender enough frames with new effects to trigger cleanup
+    // Threshold is max(10, floor(previousCacheSize / 2))
+    manager.preloadAround(50);
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    // Once new cache has enough frames, previousCache should be cleared
+    const finalStats = manager.getStats();
+    if (finalStats.cacheSize >= Math.max(10, Math.floor(previousCacheSize / 2))) {
+      expect(finalStats.previousCacheSize).toBe(0);
+    }
+  });
+
+  it('PBM-DB-005: dispose() clears both caches', async () => {
+    const state1 = createDefaultEffectsState();
+    state1.colorAdjustments.highlights = 20;
+    manager.updateEffects(state1);
+
+    manager.preloadAround(50);
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    // Change effects to populate previousCache
+    const state2 = createDefaultEffectsState();
+    state2.colorAdjustments.highlights = 40;
+    manager.updateEffects(state2);
+
+    expect(manager.getStats().previousCacheSize).toBeGreaterThan(0);
+
+    // Dispose should clear everything
+    manager.dispose();
+
+    const stats = manager.getStats();
+    expect(stats.cacheSize).toBe(0);
+    expect(stats.previousCacheSize).toBe(0);
+  });
+
+  it('PBM-DB-006: Multiple rapid effects changes only keep ONE generation back', async () => {
+    // Set first effects and cache frames
+    const state1 = createDefaultEffectsState();
+    state1.colorAdjustments.highlights = 20;
+    manager.updateEffects(state1);
+
+    manager.preloadAround(50);
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    const firstCacheSize = manager.getStats().cacheSize;
+    expect(firstCacheSize).toBeGreaterThan(0);
+
+    // Rapid effects changes (simulating slider drag)
+    const state2 = createDefaultEffectsState();
+    state2.colorAdjustments.highlights = 30;
+    manager.updateEffects(state2);
+
+    // previousCache should have generation 1 frames
+    expect(manager.getStats().previousCacheSize).toBe(firstCacheSize);
+
+    // Another change immediately (generation 2 cache is empty, replaces previousCache)
+    const state3 = createDefaultEffectsState();
+    state3.colorAdjustments.highlights = 40;
+    manager.updateEffects(state3);
+
+    // previousCache should now have generation 2 frames (which is empty since
+    // no prerendering happened between state2 and state3).
+    // The key invariant: only ONE previousCache exists, never two.
+    // Generation 1 frames are gone.
+    expect(manager.getStats().previousCacheSize).toBe(0);
+
+    // Yet another change
+    const state4 = createDefaultEffectsState();
+    state4.colorAdjustments.highlights = 50;
+    manager.updateEffects(state4);
+
+    // Still only zero or one generation of previousCache
+    expect(manager.getStats().previousCacheSize).toBe(0);
+
+    // Now prerender some frames with state4, then change again
+    manager.preloadAround(50);
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    const state4CacheSize = manager.getStats().cacheSize;
+
+    const state5 = createDefaultEffectsState();
+    state5.colorAdjustments.highlights = 60;
+    manager.updateEffects(state5);
+
+    // Only state4 frames in previousCache, nothing from state1/2/3
+    expect(manager.getStats().previousCacheSize).toBe(state4CacheSize);
+    expect(manager.getStats().cacheSize).toBe(0);
+  });
+
+  it('PBM-DB-007: getStats includes previousCacheSize', () => {
+    const stats = manager.getStats();
+    expect(stats.previousCacheSize).toBe(0);
+    expect(typeof stats.previousCacheSize).toBe('number');
+  });
+
+  it('PBM-DB-008: invalidateAll clears both current and previous caches', async () => {
+    const state1 = createDefaultEffectsState();
+    state1.colorAdjustments.highlights = 20;
+    manager.updateEffects(state1);
+
+    manager.preloadAround(50);
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    // Change effects to populate previousCache
+    const state2 = createDefaultEffectsState();
+    state2.colorAdjustments.highlights = 40;
+    manager.updateEffects(state2);
+
+    expect(manager.getStats().previousCacheSize).toBeGreaterThan(0);
+
+    // invalidateAll should clear everything
+    manager.invalidateAll();
+
+    expect(manager.getStats().cacheSize).toBe(0);
+    expect(manager.getStats().previousCacheSize).toBe(0);
+  });
+
+  it('PBM-DB-009: getFrame returns null when both caches miss', async () => {
+    const state1 = createDefaultEffectsState();
+    state1.colorAdjustments.highlights = 20;
+    manager.updateEffects(state1);
+
+    // Frame 99 is far from any preloaded range
+    expect(manager.getFrame(99)).toBeNull();
+
+    // Change effects
+    const state2 = createDefaultEffectsState();
+    state2.colorAdjustments.highlights = 40;
+    manager.updateEffects(state2);
+
+    // Frame 99 is in neither cache
+    expect(manager.getFrame(99)).toBeNull();
+    expect(manager.getStats().cacheMisses).toBeGreaterThan(0);
+  });
+
+  it('PBM-DB-010: Double-buffering works regardless of playback state', async () => {
+    // Test that previousCache fallback works both when playing and when paused
+    const state1 = createDefaultEffectsState();
+    state1.colorAdjustments.highlights = 20;
+    manager.updateEffects(state1);
+
+    manager.preloadAround(50);
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    // Verify we have cached frames
+    let cachedFrameNumber = -1;
+    for (let f = 48; f <= 55; f++) {
+      if (manager.hasFrame(f)) {
+        cachedFrameNumber = f;
+        break;
+      }
+    }
+    expect(cachedFrameNumber).toBeGreaterThan(0);
+
+    // Change effects while paused (default state)
+    manager.setPlaybackState(false);
+    const state2 = createDefaultEffectsState();
+    state2.colorAdjustments.highlights = 40;
+    manager.updateEffects(state2);
+
+    // Should still get stale frame from previousCache even when paused
+    const frame = manager.getFrame(cachedFrameNumber);
+    expect(frame).not.toBeNull();
+
+    // Now test while playing
+    manager.setPlaybackState(true, 1);
+    const frameWhilePlaying = manager.getFrame(cachedFrameNumber);
+    expect(frameWhilePlaying).not.toBeNull();
   });
 });

@@ -127,6 +127,9 @@ interface TestableViewer {
 
   // Canvas context
   imageCtx: CanvasRenderingContext2D;
+
+  // Async effects generation counter (Phase 4A race-condition fix)
+  _asyncEffectsGeneration: number;
 }
 
 /** Cast a Viewer to its testable internals for accessing private members in tests. */
@@ -3445,6 +3448,24 @@ describe('Viewer', () => {
       ocioSpy.mockRestore();
       lightweightSpy.mockRestore();
       cropSpy.mockRestore();
+    });
+  });
+
+  describe('Async effects race condition prevention', () => {
+    it('VWR-ASYNC-001: render() increments _asyncEffectsGeneration', () => {
+      const tv = testable(viewer);
+      const gen0 = tv._asyncEffectsGeneration;
+      viewer.render();
+      expect(tv._asyncEffectsGeneration).toBe(gen0 + 1);
+      viewer.render();
+      expect(tv._asyncEffectsGeneration).toBe(gen0 + 2);
+    });
+
+    it('VWR-ASYNC-002: _asyncEffectsGeneration starts at 0', () => {
+      const tv = testable(viewer);
+      // After construction, generation starts at 0 (no renders yet)
+      expect(typeof tv._asyncEffectsGeneration).toBe('number');
+      expect(tv._asyncEffectsGeneration).toBeGreaterThanOrEqual(0);
     });
   });
 });

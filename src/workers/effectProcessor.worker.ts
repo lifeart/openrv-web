@@ -58,6 +58,10 @@ import {
   type CurveChannel,
   type HSLRange,
   type HSLCorrection,
+  // SIMD-like optimizations
+  applyColorInversionSIMD,
+  applyChannelIsolationGrayscale,
+  applyLuminanceIsolation,
 } from '../utils/effectProcessing.shared';
 
 // ============================================================================
@@ -834,6 +838,39 @@ function processEffects(
   const hasPerPixelEffects = hasHS || hasVibrance || hasHueRotation ||
     hasColorWheels || hasCDL || hasCurves || hasHSLQualifier || hasToneMapping ||
     hasInversion || hasChannel;
+
+  // Early return if no effects are active
+  if (!hasPerPixelEffects && !hasSharpen && !hasClarity) {
+    return;
+  }
+
+  // ---- SIMD fast-path: when only simple bitwise operations are needed ----
+  const hasComplexEffects = hasHS || hasVibrance || hasHueRotation ||
+    hasColorWheels || hasCDL || hasCurves || hasHSLQualifier || hasToneMapping;
+
+  if (!hasComplexEffects && !hasClarity && !hasSharpen && (hasInversion || hasChannel)) {
+    if (hasInversion) {
+      applyColorInversionSIMD(data);
+    }
+    if (hasChannel) {
+      const channelMode = state.channelMode;
+      if (channelMode === 'red' || channelMode === 'green' || channelMode === 'blue') {
+        applyChannelIsolationGrayscale(data, channelMode);
+      } else if (channelMode === 'luminance') {
+        applyLuminanceIsolation(data);
+      } else if (channelMode === 'alpha') {
+        const len = data.length;
+        for (let i = 0; i < len; i += 4) {
+          const a = data[i + 3]!;
+          data[i] = a;
+          data[i + 1] = a;
+          data[i + 2] = a;
+          data[i + 3] = 255;
+        }
+      }
+    }
+    return;
+  }
 
   // Pass 1: Clarity (inter-pixel dependency - must be separate, applied first)
   if (hasClarity) {
