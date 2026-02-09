@@ -1,21 +1,11 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg, type IconName } from './shared/Icons';
 
-export interface Transform2D {
-  rotation: 0 | 90 | 180 | 270;  // Degrees clockwise
-  flipH: boolean;                 // Horizontal flip
-  flipV: boolean;                 // Vertical flip
-  scale: { x: number; y: number }; // Scale factors (1.0 = no scale)
-  translate: { x: number; y: number }; // Translation in normalized coordinates
-}
+export type { Transform2D } from '../../core/types/transform';
+export { DEFAULT_TRANSFORM } from '../../core/types/transform';
 
-export const DEFAULT_TRANSFORM: Transform2D = {
-  rotation: 0,
-  flipH: false,
-  flipV: false,
-  scale: { x: 1, y: 1 },
-  translate: { x: 0, y: 0 },
-};
+import type { Transform2D } from '../../core/types/transform';
+import { DEFAULT_TRANSFORM } from '../../core/types/transform';
 
 export interface TransformControlEvents extends EventMap {
   transformChanged: Transform2D;

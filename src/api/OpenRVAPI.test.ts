@@ -396,6 +396,8 @@ describe('OpenRVAPI', () => {
 // PlaybackAPI Tests
 // ============================================================
 
+// Tests verify observable behavior (state changes, output values)
+// rather than internal method calls
 describe('PlaybackAPI', () => {
   let playback: PlaybackAPI;
   let session: any;
@@ -405,25 +407,30 @@ describe('PlaybackAPI', () => {
     playback = new PlaybackAPI(session);
   });
 
-  it('API-U010: play() calls session.play()', () => {
+  it('API-U010: play() starts playback', () => {
     playback.play();
-    expect(session.play).toHaveBeenCalled();
+    expect(playback.isPlaying()).toBe(true);
   });
 
-  it('API-U011: pause() calls session.pause()', () => {
+  it('API-U011: pause() stops playback', () => {
+    playback.play();
     playback.pause();
-    expect(session.pause).toHaveBeenCalled();
+    expect(playback.isPlaying()).toBe(false);
   });
 
   it('API-U012: toggle() toggles playback state', () => {
+    expect(playback.isPlaying()).toBe(false);
     playback.toggle();
-    expect(session.togglePlayback).toHaveBeenCalled();
+    expect(playback.isPlaying()).toBe(true);
+    playback.toggle();
+    expect(playback.isPlaying()).toBe(false);
   });
 
   it('API-U013: stop() pauses and seeks to start', () => {
+    session._currentFrame = 50;
     playback.stop();
-    expect(session.pause).toHaveBeenCalled();
-    expect(session.goToStart).toHaveBeenCalled();
+    expect(playback.isPlaying()).toBe(false);
+    expect(playback.getCurrentFrame()).toBe(session._inPoint);
   });
 
   it('API-U014: seek() validates frame number', () => {
@@ -431,19 +438,21 @@ describe('PlaybackAPI', () => {
     expect(() => playback.seek('abc' as any)).toThrow();
   });
 
-  it('API-U015: seek() calls goToFrame with valid frame', () => {
+  it('API-U015: seek() updates current frame', () => {
     playback.seek(50);
-    expect(session.goToFrame).toHaveBeenCalledWith(50);
+    expect(playback.getCurrentFrame()).toBe(50);
   });
 
   it('API-U016: step(1) increments frame', () => {
+    const before = playback.getCurrentFrame();
     playback.step(1);
-    expect(session.stepForward).toHaveBeenCalled();
+    expect(playback.getCurrentFrame()).toBe(before + 1);
   });
 
   it('API-U017: step(-1) decrements frame', () => {
+    session._currentFrame = 10;
     playback.step(-1);
-    expect(session.stepBackward).toHaveBeenCalled();
+    expect(playback.getCurrentFrame()).toBe(9);
   });
 
   it('API-U018: setSpeed() validates speed value', () => {
@@ -477,8 +486,9 @@ describe('PlaybackAPI', () => {
   });
 
   it('API-U024: step() defaults to forward', () => {
+    const before = playback.getCurrentFrame();
     playback.step();
-    expect(session.stepForward).toHaveBeenCalled();
+    expect(playback.getCurrentFrame()).toBe(before + 1);
   });
 
   it('API-U025: step(0) is a no-op', () => {
@@ -492,14 +502,16 @@ describe('PlaybackAPI', () => {
     expect(() => playback.step('abc' as any)).toThrow();
   });
 
-  it('API-U027: step(3) steps forward 3 times', () => {
+  it('API-U027: step(3) steps forward 3 frames', () => {
+    const before = playback.getCurrentFrame();
     playback.step(3);
-    expect(session.stepForward).toHaveBeenCalledTimes(3);
+    expect(playback.getCurrentFrame()).toBe(before + 3);
   });
 
-  it('API-U028: step(-2) steps backward 2 times', () => {
+  it('API-U028: step(-2) steps backward 2 frames', () => {
+    session._currentFrame = 10;
     playback.step(-2);
-    expect(session.stepBackward).toHaveBeenCalledTimes(2);
+    expect(playback.getCurrentFrame()).toBe(8);
   });
 
   it('API-U029: setSpeed() clamps to 0.1-8 range at API level', () => {
@@ -714,7 +726,7 @@ describe('LoopAPI', () => {
 
   it('API-U055: setInPoint() sets in point', () => {
     loop.setInPoint(10);
-    expect(session.setInPoint).toHaveBeenCalledWith(10);
+    expect(loop.getInPoint()).toBe(10);
   });
 
   it('API-U056: setInPoint() validates frame number', () => {
@@ -723,7 +735,7 @@ describe('LoopAPI', () => {
 
   it('API-U057: setOutPoint() sets out point', () => {
     loop.setOutPoint(50);
-    expect(session.setOutPoint).toHaveBeenCalledWith(50);
+    expect(loop.getOutPoint()).toBe(50);
   });
 
   it('API-U058: getInPoint() returns in point', () => {
@@ -737,8 +749,11 @@ describe('LoopAPI', () => {
   });
 
   it('API-U060: clearInOut() resets in/out points', () => {
+    loop.setInPoint(10);
+    loop.setOutPoint(50);
     loop.clearInOut();
-    expect(session.resetInOutPoints).toHaveBeenCalled();
+    expect(loop.getInPoint()).toBe(1);
+    expect(loop.getOutPoint()).toBe(100);
   });
 
   it('API-U061: setMode() rejects non-string values', () => {
@@ -777,29 +792,29 @@ describe('ViewAPI', () => {
     expect(() => view.setZoom(NaN)).toThrow();
   });
 
-  it('API-U031: setZoom() calls viewer method', () => {
+  it('API-U031: setZoom() updates zoom level', () => {
     view.setZoom(2);
-    expect(viewer.setZoom).toHaveBeenCalledWith(2);
+    expect(view.getZoom()).toBe(2);
   });
 
-  it('API-U032: getZoom() returns viewer zoom', () => {
-    viewer._zoom = 3;
+  it('API-U032: getZoom() returns current zoom', () => {
+    view.setZoom(3);
     expect(view.getZoom()).toBe(3);
   });
 
-  it('API-U033: fitToWindow() calls viewer fit', () => {
+  it('API-U033: fitToWindow() resets zoom to 1', () => {
+    view.setZoom(5);
     view.fitToWindow();
-    expect(viewer.fitToWindow).toHaveBeenCalled();
+    expect(view.getZoom()).toBe(1);
   });
 
-  it('API-U034: setPan() sets viewer pan', () => {
+  it('API-U034: setPan() updates pan position', () => {
     view.setPan(100, 50);
-    expect(viewer.setPan).toHaveBeenCalledWith(100, 50);
+    expect(view.getPan()).toEqual({ x: 100, y: 50 });
   });
 
-  it('API-U035: getPan() returns viewer pan', () => {
-    viewer._panX = 10;
-    viewer._panY = 20;
+  it('API-U035: getPan() returns current pan coordinates', () => {
+    view.setPan(10, 20);
     expect(view.getPan()).toEqual({ x: 10, y: 20 });
   });
 
@@ -808,27 +823,27 @@ describe('ViewAPI', () => {
     expect(() => view.setChannel('')).toThrow();
   });
 
-  it('API-U037: setChannel() calls viewer method', () => {
+  it('API-U037: setChannel() updates channel mode', () => {
     view.setChannel('red');
-    expect(viewer.setChannelMode).toHaveBeenCalledWith('red');
+    expect(view.getChannel()).toBe('red');
   });
 
   it('API-U038: getChannel() returns current channel', () => {
-    viewer._channelMode = 'blue';
+    view.setChannel('blue');
     expect(view.getChannel()).toBe('blue');
   });
 
-  it('API-U039: setChannel() accepts aliases', () => {
+  it('API-U039: setChannel() resolves aliases to canonical names', () => {
     view.setChannel('r');
-    expect(viewer.setChannelMode).toHaveBeenCalledWith('red');
+    expect(view.getChannel()).toBe('red');
     view.setChannel('g');
-    expect(viewer.setChannelMode).toHaveBeenCalledWith('green');
+    expect(view.getChannel()).toBe('green');
     view.setChannel('b');
-    expect(viewer.setChannelMode).toHaveBeenCalledWith('blue');
+    expect(view.getChannel()).toBe('blue');
     view.setChannel('a');
-    expect(viewer.setChannelMode).toHaveBeenCalledWith('alpha');
+    expect(view.getChannel()).toBe('alpha');
     view.setChannel('luma');
-    expect(viewer.setChannelMode).toHaveBeenCalledWith('luminance');
+    expect(view.getChannel()).toBe('luminance');
   });
 
   it('API-U040: setPan() validates coordinates', () => {
@@ -838,9 +853,9 @@ describe('ViewAPI', () => {
 
   it('API-U041: setChannel() is case-insensitive', () => {
     view.setChannel('RED');
-    expect(viewer.setChannelMode).toHaveBeenCalledWith('red');
+    expect(view.getChannel()).toBe('red');
     view.setChannel('Blue');
-    expect(viewer.setChannelMode).toHaveBeenCalledWith('blue');
+    expect(view.getChannel()).toBe('blue');
   });
 
   it('API-U042: setChannel() rejects non-string values', () => {
@@ -1014,17 +1029,26 @@ describe('MarkersAPI', () => {
 
   it('API-U071: add() creates marker with defaults', () => {
     markers.add(10);
-    expect(session.setMarker).toHaveBeenCalledWith(10, '', '#ff4444', undefined);
+    const marker = markers.get(10);
+    expect(marker).not.toBeNull();
+    expect(marker!.frame).toBe(10);
+    expect(marker!.note).toBe('');
+    expect(marker!.color).toBe('#ff4444');
   });
 
   it('API-U072: add() accepts note and color', () => {
     markers.add(10, 'my note', '#00ff00');
-    expect(session.setMarker).toHaveBeenCalledWith(10, 'my note', '#00ff00', undefined);
+    const marker = markers.get(10);
+    expect(marker).not.toBeNull();
+    expect(marker!.note).toBe('my note');
+    expect(marker!.color).toBe('#00ff00');
   });
 
   it('API-U073: remove() deletes marker', () => {
+    markers.add(10);
+    expect(markers.get(10)).not.toBeNull();
     markers.remove(10);
-    expect(session.removeMark).toHaveBeenCalledWith(10);
+    expect(markers.get(10)).toBeNull();
   });
 
   it('API-U074: remove() validates frame number', () => {
@@ -1044,8 +1068,12 @@ describe('MarkersAPI', () => {
   });
 
   it('API-U076: clear() removes all markers', () => {
+    markers.add(10);
+    markers.add(20);
+    expect(markers.count()).toBe(2);
     markers.clear();
-    expect(session.clearMarks).toHaveBeenCalled();
+    expect(markers.count()).toBe(0);
+    expect(markers.getAll()).toEqual([]);
   });
 
   it('API-U077: goToNext() seeks to next marker', () => {
@@ -1121,7 +1149,12 @@ describe('MarkersAPI', () => {
   // Duration marker tests
   it('API-U089: add() creates duration marker with endFrame', () => {
     markers.add(10, 'range note', '#ff0000', 25);
-    expect(session.setMarker).toHaveBeenCalledWith(10, 'range note', '#ff0000', 25);
+    const marker = markers.get(10);
+    expect(marker).not.toBeNull();
+    expect(marker!.frame).toBe(10);
+    expect(marker!.note).toBe('range note');
+    expect(marker!.color).toBe('#ff0000');
+    expect(marker!.endFrame).toBe(25);
   });
 
   it('API-U090: add() rejects endFrame <= frame', () => {

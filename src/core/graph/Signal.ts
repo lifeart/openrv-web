@@ -3,6 +3,29 @@ type SignalCallback<T> = (value: T, oldValue: T) => void;
 export class Signal<T> {
   private callbacks = new Set<SignalCallback<T>>();
 
+  /**
+   * Subscribe a callback to this signal. The callback is invoked whenever
+   * the signal is emitted, receiving both the new value and the previous value.
+   *
+   * Returns an unsubscribe function that **MUST** be called when the listener
+   * is no longer needed. Failing to call the returned function will prevent
+   * the callback (and anything it closes over) from being garbage-collected,
+   * leading to memory leaks.
+   *
+   * @param callback - Function invoked on each emission with `(value, oldValue)`.
+   * @returns A dispose function that removes the callback from this signal.
+   *
+   * @example
+   * ```ts
+   * const signal = new Signal<number>();
+   * const unsubscribe = signal.connect((value, oldValue) => {
+   *   console.log(`Changed from ${oldValue} to ${value}`);
+   * });
+   *
+   * // Later, when the listener is no longer needed:
+   * unsubscribe();
+   * ```
+   */
   connect(callback: SignalCallback<T>): () => void {
     this.callbacks.add(callback);
     return () => this.disconnect(callback);

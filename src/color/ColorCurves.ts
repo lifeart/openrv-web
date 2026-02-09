@@ -5,7 +5,8 @@
  * Uses monotonic cubic spline interpolation for smooth curves.
  */
 
-import { evaluateCurveAtPoint } from '../utils/effectProcessing.shared';
+import { evaluateCurveAtPoint } from '../utils/effects/effectProcessing.shared';
+import { clamp } from '../utils/math';
 
 // Re-export so existing consumers don't break
 export { evaluateCurveAtPoint };
@@ -476,16 +477,16 @@ export function updatePointInCurve(
 
   // First and last points can only move on Y axis
   if (index === 0) {
-    newPoints[0] = { x: 0, y: Math.max(0, Math.min(1, y)) };
+    newPoints[0] = { x: 0, y: clamp(y, 0, 1) };
   } else if (index === curve.points.length - 1) {
-    newPoints[index] = { x: 1, y: Math.max(0, Math.min(1, y)) };
+    newPoints[index] = { x: 1, y: clamp(y, 0, 1) };
   } else {
     // Middle points can move freely but stay within bounds
     const prevX = curve.points[index - 1]?.x ?? 0;
     const nextX = curve.points[index + 1]?.x ?? 1;
     newPoints[index] = {
-      x: Math.max(prevX + 0.01, Math.min(nextX - 0.01, x)),
-      y: Math.max(0, Math.min(1, y)),
+      x: clamp(x, prevX + 0.01, nextX - 0.01),
+      y: clamp(y, 0, 1),
     };
   }
 

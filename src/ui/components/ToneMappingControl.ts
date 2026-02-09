@@ -9,59 +9,13 @@
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
-import type { DisplayCapabilities } from '../../color/DisplayCapabilities';
+import type { DisplayCapabilities } from '../../color/ColorProcessingFacade';
 
-/**
- * Tone mapping operator types
- */
-export type ToneMappingOperator = 'off' | 'reinhard' | 'filmic' | 'aces';
+export type { ToneMappingOperator, ToneMappingState, ToneMappingOperatorInfo, HDROutputMode } from '../../core/types/effects';
+export { DEFAULT_TONE_MAPPING_STATE, TONE_MAPPING_OPERATORS } from '../../core/types/effects';
 
-/**
- * Tone mapping state
- */
-export interface ToneMappingState {
-  enabled: boolean;
-  operator: ToneMappingOperator;
-  // Per-operator parameters
-  reinhardWhitePoint?: number;    // 0.5 - 10.0, default 4.0
-  filmicExposureBias?: number;    // 0.5 - 8.0, default 2.0
-  filmicWhitePoint?: number;      // 2.0 - 20.0, default 11.2
-}
-
-/**
- * Default tone mapping state
- */
-export const DEFAULT_TONE_MAPPING_STATE: ToneMappingState = {
-  enabled: false,
-  operator: 'off',
-  reinhardWhitePoint: 4.0,
-  filmicExposureBias: 2.0,
-  filmicWhitePoint: 11.2,
-};
-
-/**
- * Tone mapping operator info
- */
-export interface ToneMappingOperatorInfo {
-  key: ToneMappingOperator;
-  label: string;
-  description: string;
-}
-
-/**
- * Available tone mapping operators
- */
-export const TONE_MAPPING_OPERATORS: ToneMappingOperatorInfo[] = [
-  { key: 'off', label: 'Off', description: 'No tone mapping (linear)' },
-  { key: 'reinhard', label: 'Reinhard', description: 'Simple global operator' },
-  { key: 'filmic', label: 'Filmic', description: 'Film-like S-curve response' },
-  { key: 'aces', label: 'ACES', description: 'Academy Color Encoding System' },
-];
-
-/**
- * HDR output mode type
- */
-export type HDROutputMode = 'sdr' | 'hlg' | 'pq';
+import type { ToneMappingOperator, ToneMappingState, ToneMappingOperatorInfo, HDROutputMode } from '../../core/types/effects';
+import { DEFAULT_TONE_MAPPING_STATE, TONE_MAPPING_OPERATORS } from '../../core/types/effects';
 
 /**
  * Events emitted by ToneMappingControl

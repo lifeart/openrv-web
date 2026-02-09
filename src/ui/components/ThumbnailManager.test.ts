@@ -199,6 +199,149 @@ describe('ThumbnailManager', () => {
     });
   });
 
+  describe('disposal/cleanup lifecycle', () => {
+    it('TM-D001: dispose clears the thumbnail cache', () => {
+      manager.calculateSlots(60, 35, 500, 24, 100, 1920, 1080);
+      // Even though we have slots, no thumbnails are loaded
+      // Verify dispose clears slots (proxy for cache clear)
+      manager.dispose();
+      expect(manager.getSlots()).toEqual([]);
+    });
+
+    it('TM-D002: double dispose does not throw', () => {
+      manager.dispose();
+      expect(() => manager.dispose()).not.toThrow();
+    });
+
+    it('TM-D003: dispose aborts pending loads via AbortController', async () => {
+      (mockSession as any).currentSource = {
+        name: 'test.mp4',
+        width: 1920,
+        height: 1080,
+        type: 'video',
+        duration: 100,
+      };
+
+      manager.calculateSlots(60, 35, 500, 24, 100, 1920, 1080);
+
+      // Start loading (non-awaited to simulate in-flight loads)
+      vi.mocked(mockSession.getVideoFrameCanvas).mockReturnValue(null);
+      const loadPromise = manager.loadThumbnails();
+
+      // Dispose while loading is in flight
+      manager.dispose();
+
+      // Wait for loadPromise to settle
+      await loadPromise;
+
+      // Verify state is cleaned up
+      expect(manager.getSlots()).toEqual([]);
+      expect(manager.isLoadingPaused).toBe(false);
+    });
+
+    it('TM-D004: dispose clears retry timer', () => {
+      vi.useFakeTimers();
+
+      (mockSession as any).currentSource = {
+        name: 'test.mp4',
+        width: 1920,
+        height: 1080,
+        type: 'video',
+        duration: 100,
+      };
+
+      manager.calculateSlots(60, 35, 500, 24, 100, 1920, 1080);
+
+      // Mock to return null to trigger retry queueing
+      vi.mocked(mockSession.getVideoFrameCanvas).mockReturnValue(null);
+      manager.loadThumbnails();
+
+      // Advance past initial load to let retry timer be scheduled
+      vi.advanceTimersByTime(100);
+
+      // Dispose should clear the retry timer
+      manager.dispose();
+
+      expect(vi.getTimerCount()).toBe(0);
+
+      vi.useRealTimers();
+    });
+
+    it('TM-D005: dispose clears pending retries queue', async () => {
+      (mockSession as any).currentSource = {
+        name: 'test.mp4',
+        width: 1920,
+        height: 1080,
+        type: 'video',
+        duration: 100,
+      };
+
+      manager.calculateSlots(60, 35, 500, 24, 100, 1920, 1080);
+
+      // Return null to trigger retry queueing
+      vi.mocked(mockSession.getVideoFrameCanvas).mockReturnValue(null);
+      await manager.loadThumbnails();
+
+      // Dispose should clear retries
+      manager.dispose();
+
+      // After dispose and re-setup, no stale retries should fire
+      // Verify slots and cache are empty
+      expect(manager.getSlots()).toEqual([]);
+    });
+
+    it('TM-D006: getThumbnail returns null after dispose', () => {
+      manager.calculateSlots(60, 35, 500, 24, 100, 1920, 1080);
+      manager.dispose();
+
+      // After dispose, cache is cleared so getThumbnail returns null
+      const result = manager.getThumbnail(1);
+      expect(result).toBeNull();
+    });
+
+    it('TM-D007: isFullyLoaded returns true after dispose (no slots)', () => {
+      manager.calculateSlots(60, 35, 500, 24, 100, 1920, 1080);
+      expect(manager.isFullyLoaded()).toBe(false); // slots exist but no thumbnails
+
+      manager.dispose();
+
+      // After dispose, slots are empty so isFullyLoaded is vacuously true
+      expect(manager.isFullyLoaded()).toBe(true);
+    });
+
+    it('TM-D008: loadThumbnails after dispose is effectively a no-op', async () => {
+      (mockSession as any).currentSource = {
+        name: 'test.mp4',
+        width: 1920,
+        height: 1080,
+        type: 'video',
+        duration: 100,
+      };
+
+      manager.dispose();
+
+      // loadThumbnails should not throw and should not load anything
+      // (slots are empty after dispose, so the loop does nothing)
+      await expect(manager.loadThumbnails()).resolves.toBeUndefined();
+    });
+
+    it('TM-D009: calculateSlots still works after dispose for reuse scenario', () => {
+      manager.dispose();
+
+      // After dispose, calculateSlots should still work (manager can be reused)
+      const slots = manager.calculateSlots(60, 35, 500, 24, 100, 1920, 1080);
+      expect(slots.length).toBeGreaterThan(0);
+    });
+
+    it('TM-D010: dispose resets loading paused flag', () => {
+      manager.pauseLoading();
+      expect(manager.isLoadingPaused).toBe(true);
+
+      manager.dispose();
+      expect(manager.isLoadingPaused).toBe(false);
+    });
+  });
+
   describe('regression tests for pause-during-playback fix', () => {
     let testSource: any;
 

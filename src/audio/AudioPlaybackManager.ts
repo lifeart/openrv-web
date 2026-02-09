@@ -8,6 +8,8 @@
  */
 
 import { EventEmitter, EventMap } from '../utils/EventEmitter';
+import { clamp } from '../utils/math';
+import type { ManagerBase } from '../core/ManagerBase';
 
 export interface AudioPlaybackEvents extends EventMap {
   error: AudioPlaybackError;
@@ -23,7 +25,7 @@ export interface AudioPlaybackError {
 
 export type AudioPlaybackState = 'idle' | 'loading' | 'ready' | 'playing' | 'paused' | 'error';
 
-export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> {
+export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> implements ManagerBase {
   private audioContext: AudioContext | null = null;
   private audioBuffer: AudioBuffer | null = null;
   private sourceNode: AudioBufferSourceNode | null = null;
@@ -56,7 +58,7 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> {
       const elapsed = (this.audioContext.currentTime - this._startTime) * this._playbackRate;
       const time = this._startOffset + elapsed;
       // Clamp to valid range to prevent negative values
-      return Math.max(0, Math.min(time, this._duration));
+      return clamp(time, 0, this._duration);
     }
     return this._currentTime;
   }
@@ -238,7 +240,7 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> {
       };
 
       // Start playback
-      this._startOffset = Math.max(0, Math.min(startTime, this._duration));
+      this._startOffset = clamp(startTime, 0, this._duration);
       this._startTime = this.audioContext.currentTime;
       this.sourceNode.start(0, this._startOffset);
 
@@ -316,7 +318,7 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> {
       this.pause();
     }
 
-    this._currentTime = Math.max(0, Math.min(time, this._duration));
+    this._currentTime = clamp(time, 0, this._duration);
 
     if (this.useVideoFallback && this.videoElement) {
       this.videoElement.currentTime = this._currentTime;
@@ -356,7 +358,7 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> {
    * Set volume (0-1)
    */
   setVolume(volume: number): void {
-    this._volume = Math.max(0, Math.min(1, volume));
+    this._volume = clamp(volume, 0, 1);
     this.updateGain();
   }
 
@@ -372,7 +374,7 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> {
    * Set playback rate (0.1-8)
    */
   setPlaybackRate(rate: number): void {
-    this._playbackRate = Math.max(0.1, Math.min(8, rate));
+    this._playbackRate = clamp(rate, 0.1, 8);
 
     if (this.useVideoFallback && this.videoElement) {
       this.videoElement.playbackRate = this._playbackRate;
@@ -446,7 +448,7 @@ export class AudioPlaybackManager extends EventEmitter<AudioPlaybackEvents> {
     }
 
     if (this.audioContext) {
-      this.audioContext.close().catch(() => {});
+      this.audioContext.close().catch((err) => { console.warn('AudioPlaybackManager: Audio context close failed:', err); });
       this.audioContext = null;
     }
 

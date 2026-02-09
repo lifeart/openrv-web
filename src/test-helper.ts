@@ -4,7 +4,7 @@
  */
 
 import type { App } from './App';
-import { getThemeManager } from './utils/ThemeManager';
+import { getThemeManager } from './utils/ui/ThemeManager';
 
 declare global {
   interface Window {

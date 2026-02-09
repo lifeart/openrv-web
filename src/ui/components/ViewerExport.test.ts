@@ -8,73 +8,14 @@ import { Session, MediaSource } from '../../core/session/Session';
 import { PaintEngine } from '../../paint/PaintEngine';
 import { PaintRenderer } from '../../paint/PaintRenderer';
 import { Transform2D } from './TransformControl';
+import {
+  createMockImage,
+  createMockMediaSource,
+} from '../../../test/mocks';
 
 // Mock dependencies
 vi.mock('../../paint/PaintEngine');
 vi.mock('../../paint/PaintRenderer');
-
-// Create mock image element using real DOM
-function createMockImage(width: number, height: number): HTMLImageElement {
-  const img = document.createElement('img');
-  Object.defineProperty(img, 'naturalWidth', { value: width, configurable: true });
-  Object.defineProperty(img, 'naturalHeight', { value: height, configurable: true });
-  Object.defineProperty(img, 'width', { value: width, configurable: true, writable: true });
-  Object.defineProperty(img, 'height', { value: height, configurable: true, writable: true });
-  return img;
-}
-
-// Create mock video element
-function createMockVideo(width: number, height: number): HTMLVideoElement {
-  const video = document.createElement('video');
-  Object.defineProperty(video, 'videoWidth', { value: width, writable: true });
-  Object.defineProperty(video, 'videoHeight', { value: height, writable: true });
-  (video as any)._currentTime = 0;
-  Object.defineProperty(video, 'currentTime', {
-    get: () => (video as any)._currentTime,
-    set: (v: number) => {
-      (video as any)._currentTime = v;
-      // Simulate seeked event
-      setTimeout(() => video.dispatchEvent(new Event('seeked')), 0);
-    },
-  });
-  return video;
-}
-
-// Create mock media source
-function createMockMediaSource(
-  type: 'image' | 'video' | 'sequence',
-  width: number,
-  height: number
-): MediaSource {
-  let element: HTMLImageElement | HTMLVideoElement;
-  if (type === 'video') {
-    element = createMockVideo(width, height);
-  } else {
-    element = createMockImage(width, height);
-  }
-
-  return {
-    name: 'test-source',
-    type,
-    url: 'test://test-source',
-    element,
-    width,
-    height,
-    duration: type === 'video' ? 100 : 1,
-    fps: 24,
-    sequenceInfo: type === 'sequence' ? {
-      name: 'test-sequence',
-      pattern: 'frame_####.png',
-      frames: [],
-      startFrame: 1,
-      endFrame: 100,
-      width,
-      height,
-      fps: 24,
-      missingFrames: [],
-    } : undefined,
-  };
-}
 
 // Create mock Session
 function createMockSession(source: MediaSource | null = null): Session {

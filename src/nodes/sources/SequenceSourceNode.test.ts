@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { SequenceSourceNode } from './SequenceSourceNode';
 
 // Mock the SequenceLoader module
-vi.mock('../../utils/SequenceLoader', () => ({
+vi.mock('../../utils/media/SequenceLoader', () => ({
   createSequenceInfo: vi.fn(),
   loadFrameImage: vi.fn(),
   preloadFrames: vi.fn(),
@@ -20,7 +20,7 @@ import {
   preloadFrames,
   releaseDistantFrames,
   disposeSequence,
-} from '../../utils/SequenceLoader';
+} from '../../utils/media/SequenceLoader';
 
 describe('SequenceSourceNode', () => {
   let node: SequenceSourceNode;

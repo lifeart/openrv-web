@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { OCIOControl } from './OCIOControl';
-import { OCIOProcessor } from '../../color/OCIOProcessor';
+import { OCIOProcessor } from '../../color/ColorProcessingFacade';
 
 // Mock localStorage
 const localStorageMock = (() => {
@@ -214,6 +214,34 @@ describe('OCIOControl', () => {
     it('OCIO-C016: disposes without error', () => {
       control = new OCIOControl();
       expect(() => control.dispose()).not.toThrow();
+    });
+
+    it('OCIO-C017: dispose clears pending feedback timer', () => {
+      control = new OCIOControl();
+      // Simulate a pending feedback timer by setting internal state
+      (control as any).feedbackTimer = setTimeout(() => {}, 5000);
+      const spy = vi.spyOn(globalThis, 'clearTimeout');
+      control.dispose();
+      expect(spy).toHaveBeenCalled();
+      spy.mockRestore();
+    });
+
+    it('OCIO-C018: dispose removes outsideClickHandler from document', () => {
+      control = new OCIOControl();
+      const removeSpy = vi.spyOn(document, 'removeEventListener');
+      // The constructor registers the outsideClickHandler on document
+      control.dispose();
+      expect(removeSpy).toHaveBeenCalledWith('click', expect.any(Function));
+      removeSpy.mockRestore();
+    });
+
+    it('OCIO-C019: dispose removes panel element from body', () => {
+      control = new OCIOControl();
+      control.show(); // this appends panel to document.body
+      control.dispose();
+      // Panel should no longer be in body
+      const panels = document.querySelectorAll('.ocio-panel');
+      expect(panels.length).toBe(0);
     });
   });
 });

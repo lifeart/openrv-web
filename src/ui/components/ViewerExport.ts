@@ -13,7 +13,7 @@ import {
   isFullCropRegion,
   getEffectiveDimensions,
 } from './ViewerRenderingUtils';
-import { safeCanvasContext2D } from '../../color/SafeCanvasContext';
+import { safeCanvasContext2D } from '../../color/ColorProcessingFacade';
 
 /**
  * Shared helper: draw an element onto a context with transform and/or crop applied.

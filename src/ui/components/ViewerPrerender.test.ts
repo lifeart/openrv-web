@@ -6,11 +6,10 @@ import {
   EFFECTS_DEBOUNCE_MS,
 } from './ViewerPrerender';
 import { Session, MediaSource } from '../../core/session/Session';
-import { PrerenderBufferManager } from '../../utils/PrerenderBufferManager';
+import { PrerenderBufferManager } from '../../utils/effects/PrerenderBufferManager';
 import { ColorAdjustments } from './ColorControls';
 import { FilterSettings } from './FilterControl';
-import { CDLValues } from '../../color/CDL';
-import { ColorCurvesData } from '../../color/ColorCurves';
+import { type CDLValues, type ColorCurvesData } from '../../color/ColorProcessingFacade';
 import { ChannelMode } from './ChannelSelect';
 import { ColorWheels } from './ColorWheels';
 import { HSLQualifier } from './HSLQualifier';

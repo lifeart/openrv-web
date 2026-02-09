@@ -80,3 +80,49 @@ export const COLOR_WHEEL_GAIN_FACTOR = 0.5;
 
 /** Minimum image dimension (px) required to apply half-resolution optimization */
 export const HALF_RES_MIN_DIMENSION = 256;
+
+// ---------------------------------------------------------------------------
+// Render Pipeline — LUT & Channel Sizes
+// ---------------------------------------------------------------------------
+
+/** LUT texture width (number of entries in 1D LUT) */
+export const LUT_1D_SIZE = 256;
+
+/** Number of RGBA channels */
+export const RGBA_CHANNELS = 4;
+
+/** Number of RGB channels */
+export const RGB_CHANNELS = 3;
+
+// ---------------------------------------------------------------------------
+// Render Pipeline — Input Transfer Function Shader Codes
+// ---------------------------------------------------------------------------
+
+/** sRGB / linear input (default) */
+export const INPUT_TRANSFER_SRGB = 0;
+
+/** HLG (Hybrid Log-Gamma) input */
+export const INPUT_TRANSFER_HLG = 1;
+
+/** PQ (Perceptual Quantizer) input */
+export const INPUT_TRANSFER_PQ = 2;
+
+// ---------------------------------------------------------------------------
+// Render Pipeline — Output Mode Shader Codes
+// ---------------------------------------------------------------------------
+
+/** SDR output: clamp to [0,1] */
+export const OUTPUT_MODE_SDR = 0;
+
+/** HDR output: allow values > 1.0 */
+export const OUTPUT_MODE_HDR = 1;
+
+// ---------------------------------------------------------------------------
+// Render Pipeline — Display Transfer Function Shader Codes
+// ---------------------------------------------------------------------------
+
+/** Linear (no transfer function) */
+export const DISPLAY_TRANSFER_LINEAR = 0;
+
+/** sRGB transfer function */
+export const DISPLAY_TRANSFER_SRGB = 1;

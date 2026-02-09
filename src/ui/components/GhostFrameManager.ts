@@ -9,7 +9,7 @@
  */
 
 import { GhostFrameState, DEFAULT_GHOST_FRAME_STATE } from './GhostFrameControl';
-import { safeCanvasContext2D } from '../../color/SafeCanvasContext';
+import { safeCanvasContext2D } from '../../color/ColorProcessingFacade';
 
 export class GhostFrameManager {
   private _state: GhostFrameState = { ...DEFAULT_GHOST_FRAME_STATE };

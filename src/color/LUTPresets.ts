@@ -5,6 +5,8 @@
  */
 
 import type { LUT3D } from './LUTLoader';
+import { clamp } from '../utils/math';
+import { luminanceRec709 } from './PixelMath';
 
 export interface LUTPreset {
   id: string;
@@ -83,7 +85,7 @@ function applyPresetTransform(presetId: string, r: number, g: number, b: number)
 
     case 'cool-chrome': {
       // Cool blue shift with desaturation in shadows
-      const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      const luma = luminanceRec709(r, g, b);
       const shadowBlend = 1.0 - smoothstep(0.0, 0.4, luma);
       const coolR = r * 0.92;
       const coolG = g * 0.98;
@@ -93,7 +95,7 @@ function applyPresetTransform(presetId: string, r: number, g: number, b: number)
 
     case 'bleach-bypass': {
       // Desaturate + increase contrast
-      const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      const luma = luminanceRec709(r, g, b);
       const desat = 0.5; // 50% desaturation
       const dR = r + (luma - r) * desat;
       const dG = g + (luma - g) * desat;
@@ -112,13 +114,13 @@ function applyPresetTransform(presetId: string, r: number, g: number, b: number)
 
     case 'monochrome': {
       // Rec.709 luminance
-      const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      const luma = luminanceRec709(r, g, b);
       const l = softSCurve(clamp01(luma));
       return [l, l, l];
     }
 
     case 'cinematic-teal-orange': {
-      const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      const luma = luminanceRec709(r, g, b);
       // Shadows -> teal (low R, high G/B)
       const shadowW = 1.0 - smoothstep(0.0, 0.5, luma);
       // Highlights -> orange (high R/G, low B)
@@ -158,7 +160,7 @@ function applyPresetTransform(presetId: string, r: number, g: number, b: number)
 // --- Utility functions ---
 
 function clamp01(v: number): number {
-  return Math.max(0, Math.min(1, v));
+  return clamp(v, 0, 1);
 }
 
 function smoothstep(edge0: number, edge1: number, x: number): number {

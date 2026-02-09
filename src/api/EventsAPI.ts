@@ -6,7 +6,8 @@
  */
 
 import type { Session } from '../core/session/Session';
-import type { Viewer } from '../ui/components/Viewer';
+import type { ViewerProvider } from './types';
+import { ValidationError } from '../core/errors';
 
 /**
  * Events that can be subscribed to via the public API
@@ -65,15 +66,25 @@ export class EventsAPI {
   private internalUnsubscribers: Array<() => void> = [];
   private session: Session;
 
-  constructor(session: Session, _viewer: Viewer) {
+  constructor(session: Session, _viewer: ViewerProvider) {
     this.session = session;
     // Viewer parameter accepted for future extension (e.g., zoom/pan change events)
     this.wireInternalEvents();
   }
 
   /**
-   * Subscribe to an event
-   * @returns Unsubscribe function
+   * Subscribe to an event. The callback is invoked each time the event fires.
+   *
+   * @param event - The event name to listen for (see {@link OpenRVEventName}).
+   * @param callback - Handler function receiving the event-specific data payload.
+   * @returns An idempotent unsubscribe function. Call it to stop listening.
+   * @throws {ValidationError} If `event` is not a valid event name or `callback` is not a function.
+   *
+   * @example
+   * ```ts
+   * const unsub = openrv.events.on('frameChange', (d) => console.log(d.frame));
+   * unsub(); // stop listening
+   * ```
    */
   on<K extends OpenRVEventName>(event: K, callback: EventCallback<OpenRVEventData[K]>): () => void {
     this.validateEventName(event);
@@ -95,15 +106,32 @@ export class EventsAPI {
   }
 
   /**
-   * Unsubscribe from an event
+   * Unsubscribe a specific callback from an event.
+   *
+   * @param event - The event name to unsubscribe from.
+   * @param callback - The exact callback reference that was passed to {@link on}.
+   *
+   * @example
+   * ```ts
+   * openrv.events.off('frameChange', myHandler);
+   * ```
    */
   off<K extends OpenRVEventName>(event: K, callback: EventCallback<OpenRVEventData[K]>): void {
     this.listeners.get(event)?.delete(callback as EventCallback);
   }
 
   /**
-   * Subscribe to an event, firing only once
-   * @returns Unsubscribe function
+   * Subscribe to an event, firing the callback only once then automatically unsubscribing.
+   *
+   * @param event - The event name to listen for.
+   * @param callback - Handler function invoked once with the event data.
+   * @returns An unsubscribe function (can be called early to cancel before it fires).
+   * @throws {ValidationError} If `event` is not a valid event name or `callback` is not a function.
+   *
+   * @example
+   * ```ts
+   * openrv.events.once('sourceLoaded', (d) => console.log(d.name));
+   * ```
    */
   once<K extends OpenRVEventName>(event: K, callback: EventCallback<OpenRVEventData[K]>): () => void {
     this.validateEventName(event);
@@ -117,7 +145,14 @@ export class EventsAPI {
   }
 
   /**
-   * Get list of valid event names
+   * Get the list of all valid event names that can be subscribed to.
+   *
+   * @returns An array of valid event name strings.
+   *
+   * @example
+   * ```ts
+   * const names = openrv.events.getEventNames();
+   * ```
    */
   getEventNames(): OpenRVEventName[] {
     return Array.from(VALID_EVENTS);
@@ -125,7 +160,7 @@ export class EventsAPI {
 
   private validateEventName(event: string): asserts event is OpenRVEventName {
     if (typeof event !== 'string' || !VALID_EVENTS.has(event as OpenRVEventName)) {
-      throw new Error(
+      throw new ValidationError(
         `Invalid event name: "${event}". Valid events: ${Array.from(VALID_EVENTS).join(', ')}`
       );
     }
@@ -136,7 +171,7 @@ export class EventsAPI {
    */
   private validateCallback(callback: unknown): asserts callback is EventCallback {
     if (typeof callback !== 'function') {
-      throw new Error('Event callback must be a function');
+      throw new ValidationError('Event callback must be a function');
     }
   }
 
@@ -226,14 +261,18 @@ export class EventsAPI {
   }
 
   /**
-   * Emit an error event (for internal use by other API modules)
+   * Emit an error event (for internal use by other API modules).
+   *
+   * @param message - Human-readable error description.
+   * @param code - Optional machine-readable error code.
    */
   emitError(message: string, code?: string): void {
     this.emit('error', { message, code });
   }
 
   /**
-   * Clean up all listeners and internal subscriptions
+   * Clean up all listeners and internal subscriptions.
+   * After calling this, the EventsAPI instance should not be used.
    */
   dispose(): void {
     // Remove all internal subscriptions

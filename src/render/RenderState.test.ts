@@ -76,6 +76,7 @@ function createMockRenderer(): RendererBackend {
     setSharpen: vi.fn(),
     setHSLQualifier: vi.fn(),
     applyRenderState: vi.fn(),
+    isShaderReady: vi.fn().mockReturnValue(true),
     renderSDRFrame: vi.fn().mockReturnValue(null),
     getCanvasElement: vi.fn().mockReturnValue(null),
   };
@@ -93,20 +94,15 @@ function applyRenderState(renderer: RendererBackend, state: RenderState): void {
   renderer.setCDL(state.cdl);
   renderer.setCurvesLUT(state.curvesLUT);
   renderer.setColorWheels(state.colorWheels);
-  renderer.setFalseColor(state.falseColor.enabled, state.falseColor.lut);
+  renderer.setFalseColor(state.falseColor);
   renderer.setZebraStripes(state.zebraStripes);
   renderer.setChannelMode(state.channelMode);
   renderer.setLUT(state.lut.data, state.lut.size, state.lut.intensity);
   renderer.setDisplayColorState(state.displayColor);
-  renderer.setHighlightsShadows(
-    state.highlightsShadows.highlights,
-    state.highlightsShadows.shadows,
-    state.highlightsShadows.whites,
-    state.highlightsShadows.blacks,
-  );
-  renderer.setVibrance(state.vibrance.amount, state.vibrance.skinProtection);
-  renderer.setClarity(state.clarity);
-  renderer.setSharpen(state.sharpen);
+  renderer.setHighlightsShadows(state.highlightsShadows);
+  renderer.setVibrance({ vibrance: state.vibrance.amount, skinProtection: state.vibrance.skinProtection });
+  renderer.setClarity({ clarity: state.clarity });
+  renderer.setSharpen({ amount: state.sharpen });
   renderer.setHSLQualifier(state.hslQualifier);
 }
 
@@ -220,14 +216,14 @@ describe('RenderState', () => {
       );
     });
 
-    it('passes false color as separate arguments', () => {
+    it('passes false color as state object', () => {
       const renderer = createMockRenderer();
       const state = createDefaultRenderState();
       const lut = new Uint8Array(256 * 3);
       state.falseColor = { enabled: true, lut };
       applyRenderState(renderer, state);
 
-      expect(renderer.setFalseColor).toHaveBeenCalledWith(true, lut);
+      expect(renderer.setFalseColor).toHaveBeenCalledWith({ enabled: true, lut });
     });
 
     it('passes LUT as separate arguments', () => {
@@ -240,22 +236,22 @@ describe('RenderState', () => {
       expect(renderer.setLUT).toHaveBeenCalledWith(lutData, 17, 0.8);
     });
 
-    it('passes highlights/shadows as separate arguments', () => {
+    it('passes highlights/shadows as state object', () => {
       const renderer = createMockRenderer();
       const state = createDefaultRenderState();
       state.highlightsShadows = { highlights: 25, shadows: -30, whites: 10, blacks: -5 };
       applyRenderState(renderer, state);
 
-      expect(renderer.setHighlightsShadows).toHaveBeenCalledWith(25, -30, 10, -5);
+      expect(renderer.setHighlightsShadows).toHaveBeenCalledWith({ highlights: 25, shadows: -30, whites: 10, blacks: -5 });
     });
 
-    it('passes vibrance as separate arguments', () => {
+    it('passes vibrance as state object', () => {
       const renderer = createMockRenderer();
       const state = createDefaultRenderState();
       state.vibrance = { amount: 50, skinProtection: false };
       applyRenderState(renderer, state);
 
-      expect(renderer.setVibrance).toHaveBeenCalledWith(50, false);
+      expect(renderer.setVibrance).toHaveBeenCalledWith({ vibrance: 50, skinProtection: false });
     });
 
     it('passes channel mode correctly', () => {
@@ -267,22 +263,22 @@ describe('RenderState', () => {
       expect(renderer.setChannelMode).toHaveBeenCalledWith('red');
     });
 
-    it('passes clarity correctly', () => {
+    it('passes clarity as state object', () => {
       const renderer = createMockRenderer();
       const state = createDefaultRenderState();
       state.clarity = 42;
       applyRenderState(renderer, state);
 
-      expect(renderer.setClarity).toHaveBeenCalledWith(42);
+      expect(renderer.setClarity).toHaveBeenCalledWith({ clarity: 42 });
     });
 
-    it('passes sharpen correctly', () => {
+    it('passes sharpen as state object', () => {
       const renderer = createMockRenderer();
       const state = createDefaultRenderState();
       state.sharpen = 75;
       applyRenderState(renderer, state);
 
-      expect(renderer.setSharpen).toHaveBeenCalledWith(75);
+      expect(renderer.setSharpen).toHaveBeenCalledWith({ amount: 75 });
     });
 
     it('passes display color config correctly', () => {

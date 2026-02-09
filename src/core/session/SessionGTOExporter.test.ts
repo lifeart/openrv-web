@@ -25,7 +25,7 @@ class TestSession extends Session {
         heightVisible: number;
         centerPoint: [number, number];
     }) {
-        (this as any)._matteSettings = matte;
+        (this.annotationStore as any)._matteSettings = matte;
     }
     public setSessionPaintEffectsForTest(effects: {
         hold?: boolean;
@@ -33,7 +33,7 @@ class TestSession extends Session {
         ghostBefore?: number;
         ghostAfter?: number;
     }) {
-        (this as any)._sessionPaintEffects = effects;
+        (this.annotationStore as any)._sessionPaintEffects = effects;
     }
     public setMetadataForTest(metadata: {
         displayName: string;

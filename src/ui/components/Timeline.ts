@@ -2,7 +2,7 @@ import { Session } from '../../core/session/Session';
 import { PaintEngine } from '../../paint/PaintEngine';
 import { WaveformRenderer } from '../../audio/WaveformRenderer';
 import { ThumbnailManager } from './ThumbnailManager';
-import { formatTimecode, formatFrameDisplay, TimecodeDisplayMode } from '../../utils/Timecode';
+import { formatTimecode, formatFrameDisplay, TimecodeDisplayMode } from '../../utils/media/Timecode';
 
 export class Timeline {
   private container: HTMLElement;

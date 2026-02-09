@@ -1,5 +1,5 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import { ExportFormat } from '../../utils/FrameExporter';
+import { ExportFormat } from '../../utils/export/FrameExporter';
 import { getIconSvg, IconName } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 

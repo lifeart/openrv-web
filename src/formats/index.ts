@@ -11,6 +11,7 @@ export {
   unpackDPX10bit,
   DPXTransferFunction,
   type DPXInfo,
+  type DPXDecodeOptions,
   type DPXDecodeResult,
 } from './DPXDecoder';
 export {
@@ -18,6 +19,7 @@ export {
   getCineonInfo,
   decodeCineon,
   type CineonInfo,
+  type CineonDecodeOptions,
   type CineonDecodeResult,
 } from './CineonDecoder';
 export {
@@ -30,8 +32,10 @@ export {
 } from './TIFFFloatDecoder';
 export {
   DecoderRegistry,
+  decoderRegistry,
   type FormatName,
   type FormatDecoder,
+  type DecodeResult,
 } from './DecoderRegistry';
 export {
   isGainmapJPEG,

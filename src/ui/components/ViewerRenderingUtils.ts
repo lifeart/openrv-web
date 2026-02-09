@@ -6,7 +6,7 @@
 import { ColorAdjustments } from './ColorControls';
 import { Transform2D } from './TransformControl';
 import { CropState, CropRegion } from './CropControl';
-import { getCSSColor } from '../../utils/getCSSColor';
+import { getCSSColor } from '../../utils/ui/getCSSColor';
 
 /**
  * Draw image/video with rotation and flip transforms applied.

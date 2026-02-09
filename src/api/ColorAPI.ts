@@ -4,9 +4,10 @@
  * Wraps ColorControls and CDLControl to expose color pipeline access.
  */
 
-import type { ColorControls, ColorAdjustments } from '../ui/components/ColorControls';
-import type { CDLControl } from '../ui/components/CDLControl';
+import type { ColorAdjustmentProvider, CDLProvider } from './types';
+import type { ColorAdjustments } from '../core/types/color';
 import type { CDLValues } from '../color/CDL';
+import { ValidationError } from '../core/errors';
 
 /**
  * Subset of ColorAdjustments exposed via the public API
@@ -28,20 +29,33 @@ export interface PublicColorAdjustments {
 }
 
 export class ColorAPI {
-  private colorControls: ColorControls;
-  private cdlControl: CDLControl;
+  private colorControls: ColorAdjustmentProvider;
+  private cdlControl: CDLProvider;
 
-  constructor(colorControls: ColorControls, cdlControl: CDLControl) {
+  constructor(colorControls: ColorAdjustmentProvider, cdlControl: CDLProvider) {
     this.colorControls = colorControls;
     this.cdlControl = cdlControl;
   }
 
   /**
-   * Set color adjustments (partial update - merges with current values)
+   * Set color adjustments (partial update - merges with current values).
+   *
+   * Only the provided keys are updated; the rest retain their current values.
+   * Non-numeric or NaN values for a key are silently ignored.
+   *
+   * @param adjustments - An object with one or more color adjustment fields to update.
+   *   Valid keys: exposure, gamma, saturation, contrast, hueRotation, temperature,
+   *   tint, brightness, highlights, shadows, whites, blacks.
+   * @throws {ValidationError} If `adjustments` is not a plain object.
+   *
+   * @example
+   * ```ts
+   * openrv.color.setAdjustments({ exposure: 1.5, saturation: 0.8 });
+   * ```
    */
   setAdjustments(adjustments: Partial<PublicColorAdjustments>): void {
     if (typeof adjustments !== 'object' || adjustments === null || Array.isArray(adjustments)) {
-      throw new Error('setAdjustments() requires an object');
+      throw new ValidationError('setAdjustments() requires an object');
     }
 
     const current = this.colorControls.getAdjustments();
@@ -67,7 +81,15 @@ export class ColorAPI {
   }
 
   /**
-   * Get current color adjustments
+   * Get current color adjustments.
+   *
+   * @returns A snapshot of all current color adjustment values.
+   *
+   * @example
+   * ```ts
+   * const adj = openrv.color.getAdjustments();
+   * console.log(adj.exposure, adj.gamma);
+   * ```
    */
   getAdjustments(): PublicColorAdjustments {
     const adj = this.colorControls.getAdjustments();
@@ -88,7 +110,12 @@ export class ColorAPI {
   }
 
   /**
-   * Reset all color adjustments to defaults
+   * Reset all color adjustments to their default values.
+   *
+   * @example
+   * ```ts
+   * openrv.color.reset();
+   * ```
    */
   reset(): void {
     this.colorControls.reset();
@@ -98,22 +125,37 @@ export class ColorAPI {
    * Validate that an RGB triplet has valid numeric r, g, b fields
    */
   private validateRGB(obj: unknown, name: string): asserts obj is { r: number; g: number; b: number } {
+    if (typeof obj !== 'object' || obj === null) {
+      throw new ValidationError(`setCDL() "${name}" must be an object with numeric r, g, b fields`);
+    }
+    const record = obj as Record<string, unknown>;
     if (
-      typeof obj !== 'object' || obj === null ||
-      typeof (obj as any).r !== 'number' || isNaN((obj as any).r) ||
-      typeof (obj as any).g !== 'number' || isNaN((obj as any).g) ||
-      typeof (obj as any).b !== 'number' || isNaN((obj as any).b)
+      typeof record.r !== 'number' || isNaN(record.r) ||
+      typeof record.g !== 'number' || isNaN(record.g) ||
+      typeof record.b !== 'number' || isNaN(record.b)
     ) {
-      throw new Error(`setCDL() "${name}" must be an object with numeric r, g, b fields`);
+      throw new ValidationError(`setCDL() "${name}" must be an object with numeric r, g, b fields`);
     }
   }
 
   /**
-   * Set CDL (Color Decision List) values
+   * Set CDL (Color Decision List) values (partial update - merges with current values).
+   *
+   * Each of `slope`, `offset`, and `power` must be an object with numeric `r`, `g`, `b` fields.
+   * `saturation` must be a number. Only provided keys are updated.
+   *
+   * @param cdl - An object with one or more CDL fields: slope, offset, power, saturation.
+   * @throws {ValidationError} If `cdl` is not a plain object, or if slope/offset/power
+   *   do not have numeric r, g, b fields, or if saturation is not a number.
+   *
+   * @example
+   * ```ts
+   * openrv.color.setCDL({ slope: { r: 1.1, g: 1.0, b: 0.9 }, saturation: 1.2 });
+   * ```
    */
   setCDL(cdl: Partial<CDLValues>): void {
     if (typeof cdl !== 'object' || cdl === null || Array.isArray(cdl)) {
-      throw new Error('setCDL() requires an object');
+      throw new ValidationError('setCDL() requires an object');
     }
 
     const current = this.cdlControl.getCDL();
@@ -128,7 +170,7 @@ export class ColorAPI {
       this.validateRGB(cdl.power, 'power');
     }
     if (cdl.saturation !== undefined && (typeof cdl.saturation !== 'number' || isNaN(cdl.saturation))) {
-      throw new Error('setCDL() "saturation" must be a number');
+      throw new ValidationError('setCDL() "saturation" must be a number');
     }
 
     const merged: CDLValues = {
@@ -142,7 +184,15 @@ export class ColorAPI {
   }
 
   /**
-   * Get current CDL values (returns a defensive copy)
+   * Get current CDL values (returns a defensive copy).
+   *
+   * @returns A deep copy of the current CDL slope, offset, power, and saturation values.
+   *
+   * @example
+   * ```ts
+   * const cdl = openrv.color.getCDL();
+   * console.log(cdl.slope.r, cdl.offset.g, cdl.saturation);
+   * ```
    */
   getCDL(): CDLValues {
     const cdl = this.cdlControl.getCDL();

@@ -3,39 +3,27 @@
  *
  * Combines Wipe mode controls, A/B source comparison, and difference matte into a single dropdown.
  * Shows active indicator when wipe is enabled, B source is selected, or difference matte is on.
+ *
+ * Delegates all comparison state and logic to ComparisonManager.
+ * This class is responsible only for DOM rendering and user interaction.
  */
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg, type IconName } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
-import { DifferenceMatteState, DEFAULT_DIFFERENCE_MATTE_STATE } from './DifferenceMatteControl';
+import { DifferenceMatteState } from './DifferenceMatteControl';
+import {
+  ComparisonManager,
+  type WipeMode,
+  type ABSource,
+  type BlendMode,
+  type BlendModeState,
+  type CompareState,
+} from './ComparisonManager';
 
-export type WipeMode = 'off' | 'horizontal' | 'vertical' | 'splitscreen-h' | 'splitscreen-v';
-export type ABSource = 'A' | 'B';
-export type BlendMode = 'off' | 'onionskin' | 'flicker' | 'blend';
-
-export interface BlendModeState {
-  mode: BlendMode;
-  onionOpacity: number;    // 0-1 for onion skin mode
-  flickerRate: number;     // Hz for flicker mode (1-30)
-  blendRatio: number;      // 0-1 for blend mode (0.5 = 50/50)
-}
-
-export const DEFAULT_BLEND_MODE_STATE: BlendModeState = {
-  mode: 'off',
-  onionOpacity: 0.5,
-  flickerRate: 4,
-  blendRatio: 0.5,
-};
-
-export interface CompareState {
-  wipeMode: WipeMode;
-  wipePosition: number;
-  currentAB: ABSource;
-  abAvailable: boolean;
-  differenceMatte: DifferenceMatteState;
-  blendMode: BlendModeState;
-}
+// Re-export types so external consumers don't need to change imports
+export type { WipeMode, ABSource, BlendMode, BlendModeState, CompareState };
+export { DEFAULT_BLEND_MODE_STATE } from './ComparisonManager';
 
 export interface CompareControlEvents extends EventMap {
   wipeModeChanged: WipeMode;
@@ -59,22 +47,16 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
   private container: HTMLElement;
   private button: HTMLButtonElement;
   private dropdown: HTMLElement;
-  private state: CompareState = {
-    wipeMode: 'off',
-    wipePosition: 0.5,
-    currentAB: 'A',
-    abAvailable: false,
-    differenceMatte: { ...DEFAULT_DIFFERENCE_MATTE_STATE },
-    blendMode: { ...DEFAULT_BLEND_MODE_STATE },
-  };
-  private flickerInterval: number | null = null;
-  private flickerFrame: 0 | 1 = 0;
+  private manager: ComparisonManager;
   private isOpen = false;
   private boundHandleOutsideClick: (e: MouseEvent) => void;
   private boundHandleReposition: () => void;
 
   constructor() {
     super();
+
+    this.manager = new ComparisonManager();
+    this.bindManagerEvents();
 
     this.boundHandleOutsideClick = (e: MouseEvent) => this.handleOutsideClick(e);
     this.boundHandleReposition = () => this.positionDropdown();
@@ -115,14 +97,14 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
       this.toggleDropdown();
     });
     this.button.addEventListener('mouseenter', () => {
-      if (!this.isOpen && !this.isActive()) {
+      if (!this.isOpen && !this.manager.isActive()) {
         this.button.style.background = 'var(--bg-hover)';
         this.button.style.borderColor = 'var(--border-primary)';
         this.button.style.color = 'var(--text-primary)';
       }
     });
     this.button.addEventListener('mouseleave', () => {
-      if (!this.isOpen && !this.isActive()) {
+      if (!this.isOpen && !this.manager.isActive()) {
         this.button.style.background = 'transparent';
         this.button.style.borderColor = 'transparent';
         this.button.style.color = 'var(--text-muted)';
@@ -152,6 +134,42 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
 
     this.populateDropdown();
     this.container.appendChild(this.button);
+  }
+
+  /**
+   * Forward all manager events to this control's EventEmitter,
+   * plus update UI when state changes.
+   */
+  private bindManagerEvents(): void {
+    this.manager.on('wipeModeChanged', (mode) => {
+      this.updateButtonLabel();
+      this.updateDropdownStates();
+      this.emit('wipeModeChanged', mode);
+    });
+    this.manager.on('wipePositionChanged', (pos) => {
+      this.emit('wipePositionChanged', pos);
+    });
+    this.manager.on('abSourceChanged', (source) => {
+      this.updateButtonLabel();
+      this.updateDropdownStates();
+      this.emit('abSourceChanged', source);
+    });
+    this.manager.on('abToggled', () => {
+      this.emit('abToggled', undefined);
+    });
+    this.manager.on('differenceMatteChanged', (state) => {
+      this.updateButtonLabel();
+      this.updateDropdownStates();
+      this.emit('differenceMatteChanged', state);
+    });
+    this.manager.on('blendModeChanged', (state) => {
+      this.updateButtonLabel();
+      this.updateDropdownStates();
+      this.emit('blendModeChanged', state);
+    });
+    this.manager.on('stateChanged', (state) => {
+      this.emit('stateChanged', state);
+    });
   }
 
   private populateDropdown(): void {
@@ -265,7 +283,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
 
     const toggleButton = document.createElement('button');
     toggleButton.dataset.testid = 'compare-ab-toggle';
-    toggleButton.textContent = '⇄';
+    toggleButton.textContent = '\u21C4';
     toggleButton.title = 'Toggle A/B (`)';
     toggleButton.style.cssText = `
       background: transparent;
@@ -343,12 +361,13 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     gainLabel.textContent = 'Gain:';
     gainLabel.style.cssText = 'font-size: 11px; color: var(--text-secondary); min-width: 35px;';
 
+    const managerState = this.manager.getState();
     const gainSlider = document.createElement('input');
     gainSlider.type = 'range';
     gainSlider.min = '1';
     gainSlider.max = '10';
     gainSlider.step = '0.5';
-    gainSlider.value = String(this.state.differenceMatte.gain);
+    gainSlider.value = String(managerState.differenceMatte.gain);
     gainSlider.dataset.testid = 'diff-matte-gain';
     gainSlider.style.cssText = 'flex: 1; height: 4px; cursor: pointer;';
     gainSlider.addEventListener('input', (e) => {
@@ -359,7 +378,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
 
     const gainValue = document.createElement('span');
     gainValue.className = 'diff-gain-value';
-    gainValue.textContent = `${this.state.differenceMatte.gain.toFixed(1)}x`;
+    gainValue.textContent = `${managerState.differenceMatte.gain.toFixed(1)}x`;
     gainValue.style.cssText = 'font-size: 11px; color: var(--text-secondary); min-width: 30px; text-align: right;';
 
     gainRow.appendChild(gainLabel);
@@ -431,7 +450,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     onionOpacitySlider.type = 'range';
     onionOpacitySlider.min = '0';
     onionOpacitySlider.max = '100';
-    onionOpacitySlider.value = String(this.state.blendMode.onionOpacity * 100);
+    onionOpacitySlider.value = String(managerState.blendMode.onionOpacity * 100);
     onionOpacitySlider.dataset.testid = 'onion-opacity-slider';
     onionOpacitySlider.style.cssText = 'flex: 1; height: 4px; cursor: pointer;';
     onionOpacitySlider.addEventListener('input', (e) => {
@@ -441,7 +460,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
 
     const onionOpacityValue = document.createElement('span');
     onionOpacityValue.className = 'onion-opacity-value';
-    onionOpacityValue.textContent = `${Math.round(this.state.blendMode.onionOpacity * 100)}%`;
+    onionOpacityValue.textContent = `${Math.round(managerState.blendMode.onionOpacity * 100)}%`;
     onionOpacityValue.style.cssText = 'font-size: 11px; color: var(--text-secondary); min-width: 35px; text-align: right;';
 
     onionOpacityRow.appendChild(onionOpacityLabel);
@@ -466,7 +485,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     flickerRateSlider.type = 'range';
     flickerRateSlider.min = '1';
     flickerRateSlider.max = '30';
-    flickerRateSlider.value = String(this.state.blendMode.flickerRate);
+    flickerRateSlider.value = String(managerState.blendMode.flickerRate);
     flickerRateSlider.dataset.testid = 'flicker-rate-slider';
     flickerRateSlider.style.cssText = 'flex: 1; height: 4px; cursor: pointer;';
     flickerRateSlider.addEventListener('input', (e) => {
@@ -476,7 +495,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
 
     const flickerRateValue = document.createElement('span');
     flickerRateValue.className = 'flicker-rate-value';
-    flickerRateValue.textContent = `${this.state.blendMode.flickerRate} Hz`;
+    flickerRateValue.textContent = `${managerState.blendMode.flickerRate} Hz`;
     flickerRateValue.style.cssText = 'font-size: 11px; color: var(--text-secondary); min-width: 40px; text-align: right;';
 
     flickerRateRow.appendChild(flickerRateLabel);
@@ -501,7 +520,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     blendRatioSlider.type = 'range';
     blendRatioSlider.min = '0';
     blendRatioSlider.max = '100';
-    blendRatioSlider.value = String(this.state.blendMode.blendRatio * 100);
+    blendRatioSlider.value = String(managerState.blendMode.blendRatio * 100);
     blendRatioSlider.dataset.testid = 'blend-ratio-slider';
     blendRatioSlider.style.cssText = 'flex: 1; height: 4px; cursor: pointer;';
     blendRatioSlider.addEventListener('input', (e) => {
@@ -511,7 +530,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
 
     const blendRatioValue = document.createElement('span');
     blendRatioValue.className = 'blend-ratio-value';
-    blendRatioValue.textContent = `${Math.round(this.state.blendMode.blendRatio * 100)}%`;
+    blendRatioValue.textContent = `${Math.round(managerState.blendMode.blendRatio * 100)}%`;
     blendRatioValue.style.cssText = 'font-size: 11px; color: var(--text-secondary); min-width: 35px; text-align: right;';
 
     blendRatioRow.appendChild(blendRatioLabel);
@@ -557,19 +576,20 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
   }
 
   private updateButtonLabel(): void {
+    const state = this.manager.getState();
     const parts: string[] = [];
 
-    if (this.state.differenceMatte.enabled) {
+    if (state.differenceMatte.enabled) {
       parts.push('Diff');
-    } else if (this.state.blendMode.mode !== 'off') {
+    } else if (state.blendMode.mode !== 'off') {
       const blendLabels: Record<BlendMode, string> = {
         off: '',
         onionskin: 'Onion',
         flicker: 'Flicker',
         blend: 'Blend',
       };
-      parts.push(blendLabels[this.state.blendMode.mode]);
-    } else if (this.state.wipeMode !== 'off') {
+      parts.push(blendLabels[state.blendMode.mode]);
+    } else if (state.wipeMode !== 'off') {
       const wipeLabels: Record<WipeMode, string> = {
         'off': '',
         'horizontal': 'H-Wipe',
@@ -577,9 +597,9 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
         'splitscreen-h': 'Split-H',
         'splitscreen-v': 'Split-V',
       };
-      parts.push(wipeLabels[this.state.wipeMode]);
+      parts.push(wipeLabels[state.wipeMode]);
     }
-    if (this.state.currentAB === 'B' && this.state.abAvailable) {
+    if (state.currentAB === 'B' && state.abAvailable) {
       parts.push('B');
     }
 
@@ -587,7 +607,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     this.button.innerHTML = `${getIconSvg('columns', 'sm')}<span>${label}</span><span style="font-size: 8px;">&#9660;</span>`;
 
     // Update button style based on active state
-    if (this.isActive()) {
+    if (this.manager.isActive()) {
       this.button.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
       this.button.style.borderColor = 'var(--accent-primary)';
       this.button.style.color = 'var(--accent-primary)';
@@ -599,12 +619,14 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
   }
 
   private updateWipeOptionStyle(option: HTMLButtonElement, mode: WipeMode): void {
-    const isActive = this.state.wipeMode === mode;
+    const isActive = this.manager.getWipeMode() === mode;
     option.style.background = isActive ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent';
     option.style.color = isActive ? 'var(--accent-primary)' : 'var(--text-primary)';
   }
 
   private updateDropdownStates(): void {
+    const state = this.manager.getState();
+
     // Update wipe options
     const wipeOptions = this.dropdown.querySelectorAll('[data-wipe-mode]');
     wipeOptions.forEach((option) => {
@@ -620,24 +642,24 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
       const toggleButton = abRow.querySelector('[data-testid="compare-ab-toggle"]') as HTMLButtonElement;
 
       if (aButton) {
-        const isActive = this.state.currentAB === 'A';
+        const isActive = state.currentAB === 'A';
         aButton.style.background = isActive ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent';
         aButton.style.borderColor = isActive ? 'var(--accent-primary)' : 'var(--border-secondary)';
         aButton.style.color = isActive ? 'var(--accent-primary)' : 'var(--text-primary)';
       }
 
       if (bButton) {
-        const isActive = this.state.currentAB === 'B';
+        const isActive = state.currentAB === 'B';
         bButton.style.background = isActive ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent';
         bButton.style.borderColor = isActive ? 'var(--accent-primary)' : 'var(--border-secondary)';
         bButton.style.color = isActive ? 'var(--accent-primary)' : 'var(--text-primary)';
-        bButton.disabled = !this.state.abAvailable;
-        bButton.style.opacity = this.state.abAvailable ? '1' : '0.5';
+        bButton.disabled = !state.abAvailable;
+        bButton.style.opacity = state.abAvailable ? '1' : '0.5';
       }
 
       if (toggleButton) {
-        toggleButton.disabled = !this.state.abAvailable;
-        toggleButton.style.opacity = this.state.abAvailable ? '1' : '0.5';
+        toggleButton.disabled = !state.abAvailable;
+        toggleButton.style.opacity = state.abAvailable ? '1' : '0.5';
       }
     }
 
@@ -652,26 +674,26 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
       if (diffToggle) {
         this.updateDiffToggleStyle(diffToggle);
         // Disable if A/B not available
-        diffToggle.disabled = !this.state.abAvailable;
-        diffToggle.style.opacity = this.state.abAvailable ? '1' : '0.5';
+        diffToggle.disabled = !state.abAvailable;
+        diffToggle.style.opacity = state.abAvailable ? '1' : '0.5';
       }
 
       if (heatmapToggle) {
         this.updateHeatmapToggleStyle(heatmapToggle);
         // Disable if difference matte not enabled
-        heatmapToggle.disabled = !this.state.differenceMatte.enabled;
-        heatmapToggle.style.opacity = this.state.differenceMatte.enabled ? '1' : '0.5';
+        heatmapToggle.disabled = !state.differenceMatte.enabled;
+        heatmapToggle.style.opacity = state.differenceMatte.enabled ? '1' : '0.5';
       }
 
       if (gainSlider) {
-        gainSlider.value = String(this.state.differenceMatte.gain);
-        gainSlider.disabled = !this.state.differenceMatte.enabled;
-        gainSlider.style.opacity = this.state.differenceMatte.enabled ? '1' : '0.5';
+        gainSlider.value = String(state.differenceMatte.gain);
+        gainSlider.disabled = !state.differenceMatte.enabled;
+        gainSlider.style.opacity = state.differenceMatte.enabled ? '1' : '0.5';
       }
 
       if (gainValue) {
-        gainValue.textContent = `${this.state.differenceMatte.gain.toFixed(1)}x`;
-        gainValue.style.opacity = this.state.differenceMatte.enabled ? '1' : '0.5';
+        gainValue.textContent = `${state.differenceMatte.gain.toFixed(1)}x`;
+        gainValue.style.opacity = state.differenceMatte.enabled ? '1' : '0.5';
       }
     }
 
@@ -683,64 +705,57 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
         const button = blendSection.querySelector(`[data-blend-mode="${mode}"]`) as HTMLButtonElement;
         if (button) {
           this.updateBlendModeButtonStyle(button, mode);
-          button.disabled = !this.state.abAvailable;
-          button.style.opacity = this.state.abAvailable ? '1' : '0.5';
+          button.disabled = !state.abAvailable;
+          button.style.opacity = state.abAvailable ? '1' : '0.5';
         }
       }
 
       // Onion skin slider
       const onionOpacityRow = blendSection.querySelector('.onion-opacity-row') as HTMLElement;
       if (onionOpacityRow) {
-        onionOpacityRow.style.display = this.state.blendMode.mode === 'onionskin' ? 'flex' : 'none';
+        onionOpacityRow.style.display = state.blendMode.mode === 'onionskin' ? 'flex' : 'none';
         const slider = onionOpacityRow.querySelector('[data-testid="onion-opacity-slider"]') as HTMLInputElement;
         const valueSpan = onionOpacityRow.querySelector('.onion-opacity-value') as HTMLSpanElement;
-        if (slider) slider.value = String(this.state.blendMode.onionOpacity * 100);
-        if (valueSpan) valueSpan.textContent = `${Math.round(this.state.blendMode.onionOpacity * 100)}%`;
+        if (slider) slider.value = String(state.blendMode.onionOpacity * 100);
+        if (valueSpan) valueSpan.textContent = `${Math.round(state.blendMode.onionOpacity * 100)}%`;
       }
 
       // Flicker rate slider
       const flickerRateRow = blendSection.querySelector('.flicker-rate-row') as HTMLElement;
       if (flickerRateRow) {
-        flickerRateRow.style.display = this.state.blendMode.mode === 'flicker' ? 'flex' : 'none';
+        flickerRateRow.style.display = state.blendMode.mode === 'flicker' ? 'flex' : 'none';
         const slider = flickerRateRow.querySelector('[data-testid="flicker-rate-slider"]') as HTMLInputElement;
         const valueSpan = flickerRateRow.querySelector('.flicker-rate-value') as HTMLSpanElement;
-        if (slider) slider.value = String(this.state.blendMode.flickerRate);
-        if (valueSpan) valueSpan.textContent = `${this.state.blendMode.flickerRate} Hz`;
+        if (slider) slider.value = String(state.blendMode.flickerRate);
+        if (valueSpan) valueSpan.textContent = `${state.blendMode.flickerRate} Hz`;
       }
 
       // Blend ratio slider
       const blendRatioRow = blendSection.querySelector('.blend-ratio-row') as HTMLElement;
       if (blendRatioRow) {
-        blendRatioRow.style.display = this.state.blendMode.mode === 'blend' ? 'flex' : 'none';
+        blendRatioRow.style.display = state.blendMode.mode === 'blend' ? 'flex' : 'none';
         const slider = blendRatioRow.querySelector('[data-testid="blend-ratio-slider"]') as HTMLInputElement;
         const valueSpan = blendRatioRow.querySelector('.blend-ratio-value') as HTMLSpanElement;
-        if (slider) slider.value = String(this.state.blendMode.blendRatio * 100);
-        if (valueSpan) valueSpan.textContent = `${Math.round(this.state.blendMode.blendRatio * 100)}%`;
+        if (slider) slider.value = String(state.blendMode.blendRatio * 100);
+        if (valueSpan) valueSpan.textContent = `${Math.round(state.blendMode.blendRatio * 100)}%`;
       }
     }
   }
 
-  private isActive(): boolean {
-    return this.state.wipeMode !== 'off' ||
-           (this.state.currentAB === 'B' && this.state.abAvailable) ||
-           this.state.differenceMatte.enabled ||
-           this.state.blendMode.mode !== 'off';
-  }
-
   private updateBlendModeButtonStyle(button: HTMLButtonElement, mode: BlendMode): void {
-    const isActive = this.state.blendMode.mode === mode;
+    const isActive = this.manager.getBlendMode() === mode;
     button.style.background = isActive ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent';
     button.style.color = isActive ? 'var(--accent-primary)' : 'var(--text-primary)';
   }
 
   private updateDiffToggleStyle(toggle: HTMLButtonElement): void {
-    const isActive = this.state.differenceMatte.enabled;
+    const isActive = this.manager.isDifferenceMatteEnabled();
     toggle.style.background = isActive ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent';
     toggle.style.color = isActive ? 'var(--accent-primary)' : 'var(--text-primary)';
   }
 
   private updateHeatmapToggleStyle(toggle: HTMLButtonElement): void {
-    const isActive = this.state.differenceMatte.heatmap;
+    const isActive = this.manager.getDifferenceMatteState().heatmap;
     toggle.style.background = isActive ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent';
     toggle.style.color = isActive ? 'var(--accent-primary)' : 'var(--text-primary)';
   }
@@ -796,137 +811,79 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     window.removeEventListener('resize', this.boundHandleReposition);
   }
 
+  // === Public API: delegates to ComparisonManager ===
+
   // Wipe methods
   setWipeMode(mode: WipeMode): void {
-    if (this.state.wipeMode !== mode) {
-      this.state.wipeMode = mode;
-      this.updateButtonLabel();
-      this.updateDropdownStates();
-      this.emit('wipeModeChanged', mode);
-      this.emit('stateChanged', { ...this.state });
-    }
+    this.manager.setWipeMode(mode);
   }
 
   cycleWipeMode(): void {
-    const modes: WipeMode[] = ['off', 'horizontal', 'vertical', 'splitscreen-h', 'splitscreen-v'];
-    const currentIndex = modes.indexOf(this.state.wipeMode);
-    const nextMode = modes[(currentIndex + 1) % modes.length]!;
-    this.setWipeMode(nextMode);
+    this.manager.cycleWipeMode();
   }
 
   getWipeMode(): WipeMode {
-    return this.state.wipeMode;
+    return this.manager.getWipeMode();
   }
 
   setWipePosition(position: number): void {
-    const clamped = Math.max(0, Math.min(1, position));
-    if (clamped !== this.state.wipePosition) {
-      this.state.wipePosition = clamped;
-      this.emit('wipePositionChanged', clamped);
-      this.emit('stateChanged', { ...this.state });
-    }
+    this.manager.setWipePosition(position);
   }
 
   getWipePosition(): number {
-    return this.state.wipePosition;
+    return this.manager.getWipePosition();
   }
 
   // A/B methods
   setABSource(source: ABSource): void {
-    if (this.state.currentAB !== source) {
-      this.state.currentAB = source;
-      this.updateButtonLabel();
-      this.updateDropdownStates();
-      this.emit('abSourceChanged', source);
-      this.emit('stateChanged', { ...this.state });
-    }
+    this.manager.setABSource(source);
   }
 
   toggleAB(): void {
-    if (this.state.abAvailable) {
-      const newSource = this.state.currentAB === 'A' ? 'B' : 'A';
-      this.setABSource(newSource);
-      this.emit('abToggled', undefined);
-    }
+    this.manager.toggleAB();
   }
 
   getABSource(): ABSource {
-    return this.state.currentAB;
+    return this.manager.getABSource();
   }
 
   setABAvailable(available: boolean): void {
-    if (this.state.abAvailable !== available) {
-      this.state.abAvailable = available;
-      this.updateDropdownStates();
-      this.updateButtonLabel();
-    }
+    this.manager.setABAvailable(available);
+    this.updateDropdownStates();
+    this.updateButtonLabel();
   }
 
   isABAvailable(): boolean {
-    return this.state.abAvailable;
+    return this.manager.isABAvailable();
   }
 
   // Difference Matte methods
   toggleDifferenceMatte(): void {
-    this.state.differenceMatte.enabled = !this.state.differenceMatte.enabled;
-    // When enabling difference matte, disable wipe mode to avoid conflicts
-    if (this.state.differenceMatte.enabled && this.state.wipeMode !== 'off') {
-      this.state.wipeMode = 'off';
-      this.emit('wipeModeChanged', 'off');
-    }
-    this.updateButtonLabel();
-    this.updateDropdownStates();
-    this.emit('differenceMatteChanged', { ...this.state.differenceMatte });
-    this.emit('stateChanged', { ...this.state });
+    this.manager.toggleDifferenceMatte();
   }
 
   setDifferenceMatteEnabled(enabled: boolean): void {
-    if (this.state.differenceMatte.enabled !== enabled) {
-      this.state.differenceMatte.enabled = enabled;
-      // When enabling difference matte, disable wipe mode to avoid conflicts
-      if (enabled && this.state.wipeMode !== 'off') {
-        this.state.wipeMode = 'off';
-        this.emit('wipeModeChanged', 'off');
-      }
-      this.updateButtonLabel();
-      this.updateDropdownStates();
-      this.emit('differenceMatteChanged', { ...this.state.differenceMatte });
-      this.emit('stateChanged', { ...this.state });
-    }
+    this.manager.setDifferenceMatteEnabled(enabled);
   }
 
   setDifferenceMatteGain(gain: number): void {
-    const clamped = Math.max(1.0, Math.min(10.0, gain));
-    if (clamped !== this.state.differenceMatte.gain) {
-      this.state.differenceMatte.gain = clamped;
-      this.updateDropdownStates();
-      this.emit('differenceMatteChanged', { ...this.state.differenceMatte });
-      this.emit('stateChanged', { ...this.state });
-    }
+    this.manager.setDifferenceMatteGain(gain);
   }
 
   toggleDifferenceMatteHeatmap(): void {
-    this.state.differenceMatte.heatmap = !this.state.differenceMatte.heatmap;
-    this.updateDropdownStates();
-    this.emit('differenceMatteChanged', { ...this.state.differenceMatte });
-    this.emit('stateChanged', { ...this.state });
+    this.manager.toggleDifferenceMatteHeatmap();
   }
 
   setDifferenceMatteHeatmap(enabled: boolean): void {
-    if (this.state.differenceMatte.heatmap !== enabled) {
-      this.state.differenceMatte.heatmap = enabled;
-      this.updateDropdownStates();
-      this.emit('differenceMatteChanged', { ...this.state.differenceMatte });
-      this.emit('stateChanged', { ...this.state });
-    }
+    this.manager.setDifferenceMatteHeatmap(enabled);
   }
 
   getDifferenceMatteState(): DifferenceMatteState {
-    return { ...this.state.differenceMatte };
+    return this.manager.getDifferenceMatteState();
   }
 
   isDifferenceMatteEnabled(): boolean {
-    return this.state.differenceMatte.enabled;
+    return this.manager.isDifferenceMatteEnabled();
   }
 
   // Blend Mode methods
@@ -938,12 +895,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
    * @param mode - The blend mode to toggle ('onionskin' | 'flicker' | 'blend')
    */
   toggleBlendMode(mode: BlendMode): void {
-    if (this.state.blendMode.mode === mode) {
-      // Toggle off
-      this.setBlendMode('off');
-    } else {
-      this.setBlendMode(mode);
-    }
+    this.manager.toggleBlendMode(mode);
   }
 
   /**
@@ -952,37 +904,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
    * @param mode - The blend mode to set ('off' | 'onionskin' | 'flicker' | 'blend')
    */
   setBlendMode(mode: BlendMode): void {
-    if (this.state.blendMode.mode !== mode) {
-      const previousMode = this.state.blendMode.mode;
-      this.state.blendMode.mode = mode;
-
-      // Stop flicker if switching away from it
-      if (previousMode === 'flicker') {
-        this.stopFlicker();
-      }
-
-      // Start flicker if switching to it
-      if (mode === 'flicker') {
-        this.startFlicker();
-      }
-
-      // When enabling a blend mode, disable wipe and difference matte to avoid conflicts
-      if (mode !== 'off') {
-        if (this.state.wipeMode !== 'off') {
-          this.state.wipeMode = 'off';
-          this.emit('wipeModeChanged', 'off');
-        }
-        if (this.state.differenceMatte.enabled) {
-          this.state.differenceMatte.enabled = false;
-          this.emit('differenceMatteChanged', { ...this.state.differenceMatte });
-        }
-      }
-
-      this.updateButtonLabel();
-      this.updateDropdownStates();
-      this.emit('blendModeChanged', { ...this.state.blendMode });
-      this.emit('stateChanged', { ...this.state });
-    }
+    this.manager.setBlendMode(mode);
   }
 
   /**
@@ -990,7 +912,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
    * @returns The active blend mode ('off' | 'onionskin' | 'flicker' | 'blend')
    */
   getBlendMode(): BlendMode {
-    return this.state.blendMode.mode;
+    return this.manager.getBlendMode();
   }
 
   /**
@@ -998,7 +920,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
    * @returns A copy of the blend mode state object
    */
   getBlendModeState(): BlendModeState {
-    return { ...this.state.blendMode };
+    return this.manager.getBlendModeState();
   }
 
   /**
@@ -1006,13 +928,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
    * @param opacity - Opacity value between 0 (transparent) and 1 (opaque)
    */
   setOnionOpacity(opacity: number): void {
-    const clamped = Math.max(0, Math.min(1, opacity));
-    if (clamped !== this.state.blendMode.onionOpacity) {
-      this.state.blendMode.onionOpacity = clamped;
-      this.updateDropdownStates();
-      this.emit('blendModeChanged', { ...this.state.blendMode });
-      this.emit('stateChanged', { ...this.state });
-    }
+    this.manager.setOnionOpacity(opacity);
   }
 
   /**
@@ -1020,7 +936,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
    * @returns Opacity value between 0 and 1
    */
   getOnionOpacity(): number {
-    return this.state.blendMode.onionOpacity;
+    return this.manager.getOnionOpacity();
   }
 
   /**
@@ -1028,18 +944,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
    * @param rate - Flicker frequency in Hz (1-30)
    */
   setFlickerRate(rate: number): void {
-    const clamped = Math.max(1, Math.min(30, Math.round(rate)));
-    if (clamped !== this.state.blendMode.flickerRate) {
-      this.state.blendMode.flickerRate = clamped;
-      // Restart flicker with new rate if active
-      if (this.state.blendMode.mode === 'flicker') {
-        this.stopFlicker();
-        this.startFlicker();
-      }
-      this.updateDropdownStates();
-      this.emit('blendModeChanged', { ...this.state.blendMode });
-      this.emit('stateChanged', { ...this.state });
-    }
+    this.manager.setFlickerRate(rate);
   }
 
   /**
@@ -1047,25 +952,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
    * @returns Flicker frequency in Hz (1-30)
    */
   getFlickerRate(): number {
-    return this.state.blendMode.flickerRate;
-  }
-
-  private startFlicker(): void {
-    if (this.flickerInterval !== null) return;
-    const intervalMs = 1000 / this.state.blendMode.flickerRate;
-    this.flickerInterval = window.setInterval(() => {
-      this.flickerFrame = this.flickerFrame === 0 ? 1 : 0;
-      // Emit state change to trigger re-render
-      this.emit('blendModeChanged', { ...this.state.blendMode });
-    }, intervalMs);
-  }
-
-  private stopFlicker(): void {
-    if (this.flickerInterval !== null) {
-      window.clearInterval(this.flickerInterval);
-      this.flickerInterval = null;
-      this.flickerFrame = 0;
-    }
+    return this.manager.getFlickerRate();
   }
 
   /**
@@ -1074,7 +961,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
    * @returns Current frame index (0 or 1)
    */
   getFlickerFrame(): 0 | 1 {
-    return this.flickerFrame;
+    return this.manager.getFlickerFrame();
   }
 
   /**
@@ -1082,13 +969,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
    * @param ratio - Blend ratio between 0 (100% A) and 1 (100% B), 0.5 = 50/50
    */
   setBlendRatio(ratio: number): void {
-    const clamped = Math.max(0, Math.min(1, ratio));
-    if (clamped !== this.state.blendMode.blendRatio) {
-      this.state.blendMode.blendRatio = clamped;
-      this.updateDropdownStates();
-      this.emit('blendModeChanged', { ...this.state.blendMode });
-      this.emit('stateChanged', { ...this.state });
-    }
+    this.manager.setBlendRatio(ratio);
   }
 
   /**
@@ -1096,49 +977,32 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
    * @returns Blend ratio between 0 and 1
    */
   getBlendRatio(): number {
-    return this.state.blendMode.blendRatio;
+    return this.manager.getBlendRatio();
   }
 
   getState(): CompareState {
-    return { ...this.state };
+    return this.manager.getState();
   }
 
   /**
    * Get wipe state for WipeControl compatibility
    */
   getWipeState(): { mode: WipeMode; position: number; showOriginal: 'left' | 'right' | 'top' | 'bottom' } {
-    // For split screen modes, use 'left' or 'top' as placeholders (not actually used for split screen)
-    let showOriginal: 'left' | 'right' | 'top' | 'bottom' = 'left';
-    if (this.state.wipeMode === 'horizontal' || this.state.wipeMode === 'splitscreen-h') {
-      showOriginal = 'left';
-    } else {
-      showOriginal = 'top';
-    }
-    return {
-      mode: this.state.wipeMode,
-      position: this.state.wipePosition,
-      showOriginal,
-    };
+    return this.manager.getWipeState();
   }
 
   /**
    * Check if split screen mode is active
    */
   isSplitScreenMode(): boolean {
-    return this.state.wipeMode === 'splitscreen-h' || this.state.wipeMode === 'splitscreen-v';
+    return this.manager.isSplitScreenMode();
   }
 
   /**
    * Toggle split screen mode (cycles between off, horizontal split, vertical split)
    */
   toggleSplitScreen(): void {
-    if (this.state.wipeMode === 'off' || this.state.wipeMode === 'horizontal' || this.state.wipeMode === 'vertical') {
-      this.setWipeMode('splitscreen-h');
-    } else if (this.state.wipeMode === 'splitscreen-h') {
-      this.setWipeMode('splitscreen-v');
-    } else {
-      this.setWipeMode('off');
-    }
+    this.manager.toggleSplitScreen();
   }
 
   render(): HTMLElement {
@@ -1146,7 +1010,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
   }
 
   dispose(): void {
-    this.stopFlicker();
+    this.manager.dispose();
     this.closeDropdown();
     if (document.body.contains(this.dropdown)) {
       document.body.removeChild(this.dropdown);

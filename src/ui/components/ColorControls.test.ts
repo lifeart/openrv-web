@@ -7,7 +7,7 @@ import {
   ColorControls,
   DEFAULT_COLOR_ADJUSTMENTS,
 } from './ColorControls';
-import type { LUT3D } from '../../color/LUTLoader';
+import type { LUT3D } from '../../color/ColorProcessingFacade';
 
 describe('ColorControls', () => {
   let controls: ColorControls;

@@ -5,6 +5,15 @@
 export { Session } from './Session';
 export type { SessionEvents, LoopMode, MediaType, MediaSource, ParsedAnnotations } from './Session';
 
+export { AnnotationStore } from './AnnotationStore';
+export type { AnnotationStoreCallbacks } from './AnnotationStore';
+export {
+  getNumberValue,
+  getBooleanValue,
+  getNumberArray,
+  getStringValue,
+} from './AnnotationStore';
+
 export { SessionSerializer } from './SessionSerializer';
 
 export type {

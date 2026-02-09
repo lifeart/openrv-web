@@ -1,5 +1,5 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import { CDLValues, DEFAULT_CDL, isDefaultCDL, parseCDLXML, exportCDLXML } from '../../color/CDL';
+import { type CDLValues, DEFAULT_CDL, isDefaultCDL, parseCDLXML, exportCDLXML } from '../../color/ColorProcessingFacade';
 import { showAlert } from './shared/Modal';
 import { getIconSvg } from './shared/Icons';
 

@@ -4,20 +4,25 @@
  * Phase 4: Extracted from the Renderer class to allow multiple backend
  * implementations (WebGL2, WebGPU). All public rendering methods are
  * defined here so that consumers can work with any backend transparently.
+ *
+ * The interface is organized into logical sub-interfaces:
+ * - RendererLifecycle: initialization, disposal, resize, clear
+ * - RendererColorPipeline: color adjustments, CDL, curves, wheels, channels, HSL
+ * - RendererEffects: tone mapping, zebra, false color, highlights/shadows, vibrance, clarity, sharpen
+ * - RendererHDR: HDR output, display color management, background pattern, 3D LUT
+ *
+ * RendererBackend extends all four sub-interfaces and adds core rendering,
+ * texture management, batch state, and async/offscreen methods.
  */
 
 import type { IPImage } from '../core/image/Image';
-import type { ColorAdjustments } from '../ui/components/ColorControls';
-import type { ToneMappingState } from '../ui/components/ToneMappingControl';
+import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState } from '../core/types/color';
+import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState } from '../core/types/effects';
+import type { BackgroundPatternState } from '../core/types/background';
 import type { DisplayCapabilities } from '../color/DisplayCapabilities';
 import type { CDLValues } from '../color/CDL';
-import type { ColorWheelsState } from '../ui/components/ColorWheels';
-import type { ZebraState } from '../ui/components/ZebraStripes';
-import type { BackgroundPatternState } from '../ui/components/BackgroundPatternControl';
 import type { CurveLUTs } from '../color/ColorCurves';
-import type { ChannelMode } from '../ui/components/ChannelSelect';
-import type { HSLQualifierState } from '../ui/components/HSLQualifier';
-import type { RenderState } from './RenderState';
+import type { RenderState, DisplayColorConfig } from './RenderState';
 
 /**
  * Opaque texture handle.
@@ -28,15 +33,14 @@ import type { RenderState } from './RenderState';
  */
 export type TextureHandle = WebGLTexture | null;
 
-/**
- * Complete rendering backend interface.
- *
- * Implementations must support initialization, image rendering,
- * color adjustments, tone mapping, HDR output, and resource cleanup.
- */
-export interface RendererBackend {
-  // --- Lifecycle ---
+// ---------------------------------------------------------------------------
+// Sub-interfaces
+// ---------------------------------------------------------------------------
 
+/**
+ * Lifecycle methods: initialization, disposal, viewport management.
+ */
+export interface RendererLifecycle {
   /** Initialize the backend with a canvas element and optional capabilities. */
   initialize(canvas: HTMLCanvasElement | OffscreenCanvas, capabilities?: DisplayCapabilities): void;
 
@@ -53,25 +57,18 @@ export interface RendererBackend {
   /** Release all GPU resources. After dispose(), no other methods should be called. */
   dispose(): void;
 
-  // --- Rendering ---
-
   /** Resize the rendering viewport. */
   resize(width: number, height: number): void;
 
   /** Clear the canvas to the given color. */
   clear(r?: number, g?: number, b?: number, a?: number): void;
+}
 
-  /** Render an image with the given transform. */
-  renderImage(
-    image: IPImage,
-    offsetX?: number,
-    offsetY?: number,
-    scaleX?: number,
-    scaleY?: number,
-  ): void;
-
-  // --- Color adjustments ---
-
+/**
+ * Color pipeline methods: adjustments, CDL, curves, color wheels, channel
+ * isolation, color inversion, and HSL qualifier.
+ */
+export interface RendererColorPipeline {
   /** Set the current color adjustments (exposure, gamma, saturation, etc.). */
   setColorAdjustments(adjustments: ColorAdjustments): void;
 
@@ -81,16 +78,33 @@ export interface RendererBackend {
   /** Reset color adjustments to defaults. */
   resetColorAdjustments(): void;
 
-  // --- Color inversion ---
-
   /** Enable or disable color inversion. */
   setColorInversion(enabled: boolean): void;
 
   /** Get the current color inversion state. */
   getColorInversion(): boolean;
 
-  // --- Tone mapping ---
+  /** Set CDL (Color Decision List) values. */
+  setCDL(cdl: CDLValues): void;
 
+  /** Set curves LUT data (256-entry per channel). Null disables curves. */
+  setCurvesLUT(luts: CurveLUTs | null): void;
+
+  /** Set color wheels (Lift/Gamma/Gain) state. */
+  setColorWheels(state: ColorWheelsState): void;
+
+  /** Set channel isolation mode. */
+  setChannelMode(mode: ChannelMode): void;
+
+  /** Set HSL qualifier (secondary color correction) state. */
+  setHSLQualifier(state: HSLQualifierState): void;
+}
+
+/**
+ * Visual effects methods: tone mapping, zebra stripes, false color,
+ * highlights/shadows, vibrance, clarity, and sharpen.
+ */
+export interface RendererEffects {
   /** Set the tone mapping state. */
   setToneMappingState(state: ToneMappingState): void;
 
@@ -100,13 +114,67 @@ export interface RendererBackend {
   /** Reset tone mapping to defaults. */
   resetToneMappingState(): void;
 
-  // --- HDR output ---
+  /** Set false color enabled state and LUT data (256*3 RGB Uint8Array). */
+  setFalseColor(state: FalseColorState): void;
 
+  /** Set zebra stripes state. */
+  setZebraStripes(state: ZebraState): void;
+
+  /** Set highlights/shadows/whites/blacks adjustment values (range: -100 to +100 each). */
+  setHighlightsShadows(state: HighlightsShadowsState): void;
+
+  /** Set vibrance amount (-100 to +100) and skin protection toggle. */
+  setVibrance(state: VibranceState): void;
+
+  /** Set clarity (local contrast) amount (-100 to +100). */
+  setClarity(state: ClarityState): void;
+
+  /** Set sharpen (unsharp mask) amount (0 to 100). */
+  setSharpen(state: SharpenState): void;
+}
+
+/**
+ * HDR and display color management methods: HDR output mode, display color
+ * configuration, background pattern, and 3D LUT.
+ */
+export interface RendererHDR {
   /** Set the HDR output mode. Returns true if mode was applied successfully. */
   setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq', capabilities: DisplayCapabilities): boolean;
 
   /** Get the current HDR output mode. */
   getHDROutputMode(): 'sdr' | 'hlg' | 'pq';
+
+  /** Set the display color management state (transfer function, gamma, brightness). */
+  setDisplayColorState(state: DisplayColorConfig): void;
+
+  /** Set background pattern for alpha compositing in HDR mode. */
+  setBackgroundPattern(state: BackgroundPatternState): void;
+
+  /** Set 3D LUT for single-pass application in the main shader. Pass null to disable. */
+  setLUT(lutData: Float32Array | null, lutSize: number, intensity: number): void;
+}
+
+// ---------------------------------------------------------------------------
+// Composite interface
+// ---------------------------------------------------------------------------
+
+/**
+ * Complete rendering backend interface.
+ *
+ * Implementations must support initialization, image rendering,
+ * color adjustments, tone mapping, HDR output, and resource cleanup.
+ */
+export interface RendererBackend extends RendererLifecycle, RendererColorPipeline, RendererEffects, RendererHDR {
+  // --- Rendering ---
+
+  /** Render an image with the given transform. */
+  renderImage(
+    image: IPImage,
+    offsetX?: number,
+    offsetY?: number,
+    scaleX?: number,
+    scaleY?: number,
+  ): void;
 
   // --- Texture management ---
 
@@ -121,58 +189,23 @@ export interface RendererBackend {
   /** Get the underlying WebGL2 context, or null for non-WebGL backends. */
   getContext(): WebGL2RenderingContext | null;
 
-  // --- HDR effects (Phase 1-3) ---
-
-  /** Set background pattern for alpha compositing in HDR mode. */
-  setBackgroundPattern(state: BackgroundPatternState): void;
-
   /** Read float pixel values from the WebGL framebuffer. Returns null if not supported. */
   readPixelFloat(x: number, y: number, width: number, height: number): Float32Array | null;
 
-  /** Set CDL (Color Decision List) values. */
-  setCDL(cdl: CDLValues): void;
+  // --- Shader compilation status ---
 
-  /** Set curves LUT data (256-entry per channel). Null disables curves. */
-  setCurvesLUT(luts: CurveLUTs | null): void;
-
-  /** Set color wheels (Lift/Gamma/Gain) state. */
-  setColorWheels(state: ColorWheelsState): void;
-
-  /** Set false color enabled state and LUT data (256*3 RGB Uint8Array). */
-  setFalseColor(enabled: boolean, lut: Uint8Array | null): void;
-
-  /** Set zebra stripes state. */
-  setZebraStripes(state: ZebraState): void;
-
-  /** Set channel isolation mode. */
-  setChannelMode(mode: ChannelMode): void;
-
-  // --- 3D LUT (single-pass float precision pipeline) ---
-
-  /** Set 3D LUT for single-pass application in the main shader. Pass null to disable. */
-  setLUT(lutData: Float32Array | null, lutSize: number, intensity: number): void;
-
-  // --- Display color management ---
-
-  /** Set the display color management state (transfer function, gamma, brightness). */
-  setDisplayColorState(state: { transferFunction: number; displayGamma: number; displayBrightness: number; customGamma: number }): void;
-
-  // --- Phase 1B: New GPU shader effects ---
-
-  /** Set highlights/shadows/whites/blacks adjustment values (range: -100 to +100 each). */
-  setHighlightsShadows(highlights: number, shadows: number, whites: number, blacks: number): void;
-
-  /** Set vibrance amount (-100 to +100) and skin protection toggle. */
-  setVibrance(vibrance: number, skinProtection: boolean): void;
-
-  /** Set clarity (local contrast) amount (-100 to +100). */
-  setClarity(clarity: number): void;
-
-  /** Set sharpen (unsharp mask) amount (0 to 100). */
-  setSharpen(amount: number): void;
-
-  /** Set HSL qualifier (secondary color correction) state. */
-  setHSLQualifier(state: HSLQualifierState): void;
+  /**
+   * Whether the shader program is fully compiled and ready for rendering.
+   *
+   * When KHR_parallel_shader_compile is used, this returns false while the
+   * GPU driver is still compiling shaders asynchronously. Callers can use
+   * this to show a loading indicator or skip rendering until the shader is
+   * ready.
+   *
+   * Backends that compile synchronously (or have no shader compilation step)
+   * should always return true after initialization.
+   */
+  isShaderReady(): boolean;
 
   // --- Batch state application ---
 

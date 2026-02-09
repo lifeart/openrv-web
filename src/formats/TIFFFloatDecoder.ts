@@ -18,6 +18,7 @@
  */
 
 import { validateImageDimensions } from './shared';
+import { DecoderError } from '../core/errors';
 
 // TIFF byte order marks
 const TIFF_LE = 0x4949; // "II" - Intel byte order (little-endian)
@@ -323,19 +324,19 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
   } else if (byteOrder === TIFF_BE) {
     bigEndian = true;
   } else {
-    throw new Error('Invalid TIFF file: unrecognized byte order');
+    throw new DecoderError('TIFF', 'Invalid TIFF file: unrecognized byte order');
   }
 
   const le = !bigEndian;
   const magic = view.getUint16(2, le);
   if (magic !== TIFF_MAGIC) {
-    throw new Error('Invalid TIFF file: wrong magic number');
+    throw new DecoderError('TIFF', 'Invalid TIFF file: wrong magic number');
   }
 
   // Read IFD offset
   const ifdOffset = view.getUint32(4, le);
   if (ifdOffset >= buffer.byteLength) {
-    throw new Error('Invalid TIFF file: IFD offset out of range');
+    throw new DecoderError('TIFF', 'Invalid TIFF file: IFD offset out of range');
   }
 
   // Parse IFD
@@ -353,19 +354,19 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
   validateImageDimensions(width, height, 'TIFF');
 
   if (sampleFormatValue !== SAMPLE_FORMAT_FLOAT) {
-    throw new Error(`Not a float TIFF: sample format is ${sampleFormatValue}, expected ${SAMPLE_FORMAT_FLOAT} (IEEE float)`);
+    throw new DecoderError('TIFF', `Not a float TIFF: sample format is ${sampleFormatValue}, expected ${SAMPLE_FORMAT_FLOAT} (IEEE float)`);
   }
 
   if (bitsPerSample !== 32) {
-    throw new Error(`Unsupported bits per sample: ${bitsPerSample}. Only 32-bit float is supported.`);
+    throw new DecoderError('TIFF', `Unsupported bits per sample: ${bitsPerSample}. Only 32-bit float is supported.`);
   }
 
   if (compression !== COMPRESSION_NONE) {
-    throw new Error(`Unsupported TIFF compression: ${compression}. Only uncompressed (1) is supported.`);
+    throw new DecoderError('TIFF', `Unsupported TIFF compression: ${compression}. Only uncompressed (1) is supported.`);
   }
 
   if (samplesPerPixel < 3 || samplesPerPixel > 4) {
-    throw new Error(`Unsupported samples per pixel: ${samplesPerPixel}. Only 3 (RGB) or 4 (RGBA) are supported.`);
+    throw new DecoderError('TIFF', `Unsupported samples per pixel: ${samplesPerPixel}. Only 3 (RGB) or 4 (RGBA) are supported.`);
   }
 
   // Read strip offsets and byte counts
@@ -373,7 +374,7 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
   const stripByteCounts = getTagMultipleValues(view, tags, TAG_STRIP_BYTE_COUNTS, le);
 
   if (stripOffsets.length === 0) {
-    throw new Error('Invalid TIFF: no strip offsets found');
+    throw new DecoderError('TIFF', 'Invalid TIFF: no strip offsets found');
   }
 
   // Read float data from strips

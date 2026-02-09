@@ -10,8 +10,8 @@ import {
   DEFAULT_DISPLAY_COLOR_STATE,
   PROFILE_CYCLE_ORDER,
   isDisplayStateActive,
-} from '../../color/DisplayTransfer';
-import type { DisplayColorState } from '../../color/DisplayTransfer';
+  type DisplayColorState,
+} from '../../color/ColorProcessingFacade';
 
 // ---------------------------------------------------------------------------
 // Mock localStorage

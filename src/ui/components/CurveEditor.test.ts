@@ -7,7 +7,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { CurveEditor, CurveChannelType } from './CurveEditor';
-import { ColorCurvesData, createDefaultCurve } from '../../color/ColorCurves';
+import { type ColorCurvesData, createDefaultCurve } from '../../color/ColorProcessingFacade';
 
 describe('CurveEditor', () => {
   let editor: CurveEditor;

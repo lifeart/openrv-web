@@ -271,4 +271,127 @@ describe('SnapshotManager', () => {
       // We can't directly access private fields, but the dispose should work
     });
   });
+
+  describe('disposal/cleanup lifecycle', () => {
+    it('SNAP-D001: dispose resets initialized state', () => {
+      // Without proper initialization, db is null
+      // After dispose, operations that require initialization should fail/return empty
+      manager.dispose();
+
+      // createSnapshot should throw because isInitialized is false
+      const mockState = { version: SESSION_STATE_VERSION, name: 'Test' } as any;
+      expect(
+        manager.createSnapshot('Test', mockState)
+      ).rejects.toThrow('SnapshotManager not initialized');
+    });
+
+    it('SNAP-D002: double dispose does not throw', () => {
+      const openRequest = (indexedDB as any).open();
+      openRequest.onsuccess?.();
+
+      manager.dispose();
+      // Second dispose should not throw (db is already null)
+      expect(() => manager.dispose()).not.toThrow();
+    });
+
+    it('SNAP-D003: listSnapshots returns empty array after dispose', async () => {
+      const openRequest = (indexedDB as any).open();
+      openRequest.onsuccess?.();
+
+      manager.dispose();
+
+      const snapshots = await manager.listSnapshots();
+      expect(snapshots).toEqual([]);
+    });
+
+    it('SNAP-D004: getSnapshot returns null after dispose', async () => {
+      const openRequest = (indexedDB as any).open();
+      openRequest.onsuccess?.();
+
+      manager.dispose();
+
+      const result = await manager.getSnapshot('snapshot-123');
+      expect(result).toBeNull();
+    });
+
+    it('SNAP-D005: getSnapshotMetadata returns null after dispose', async () => {
+      const openRequest = (indexedDB as any).open();
+      openRequest.onsuccess?.();
+
+      manager.dispose();
+
+      const result = await manager.getSnapshotMetadata('snapshot-123');
+      expect(result).toBeNull();
+    });
+
+    it('SNAP-D006: deleteSnapshot is a no-op after dispose (db is null)', async () => {
+      const openRequest = (indexedDB as any).open();
+      openRequest.onsuccess?.();
+
+      manager.dispose();
+
+      // Should not throw, just return early
+      await expect(manager.deleteSnapshot('snapshot-123')).resolves.toBeUndefined();
+    });
+
+    it('SNAP-D007: clearAll is a no-op after dispose (db is null)', async () => {
+      const openRequest = (indexedDB as any).open();
+      openRequest.onsuccess?.();
+
+      manager.dispose();
+
+      await expect(manager.clearAll()).resolves.toBeUndefined();
+    });
+
+    it('SNAP-D008: createSnapshot throws after dispose (not initialized)', async () => {
+      const openRequest = (indexedDB as any).open();
+      openRequest.onsuccess?.();
+
+      manager.dispose();
+
+      const mockState = {
+        version: SESSION_STATE_VERSION,
+        name: 'Test',
+      } as any;
+
+      await expect(
+        manager.createSnapshot('Test', mockState)
+      ).rejects.toThrow('SnapshotManager not initialized');
+    });
+
+    it('SNAP-D009: createAutoCheckpoint throws after dispose (not initialized)', async () => {
+      const openRequest = (indexedDB as any).open();
+      openRequest.onsuccess?.();
+
+      manager.dispose();
+
+      const mockState = {
+        version: SESSION_STATE_VERSION,
+        name: 'Test',
+      } as any;
+
+      await expect(
+        manager.createAutoCheckpoint('source-change', mockState)
+      ).rejects.toThrow('SnapshotManager not initialized');
+    });
+
+    it('SNAP-D010: exportSnapshot returns null after dispose (db is null)', async () => {
+      const openRequest = (indexedDB as any).open();
+      openRequest.onsuccess?.();
+
+      manager.dispose();
+
+      const result = await manager.exportSnapshot('snapshot-123');
+      expect(result).toBeNull();
+    });
+
+    it('SNAP-D011: renameSnapshot is a no-op after dispose (db is null)', async () => {
+      manager.dispose();
+
+      // renameSnapshot early-returns when db is null (first line: if (!this.db) return)
+      await expect(
+        manager.renameSnapshot('snapshot-123', 'New Name')
+      ).resolves.toBeUndefined();
+    });
+  });
 });

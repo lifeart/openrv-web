@@ -103,68 +103,111 @@ export function detectDisplayCapabilities(): DisplayCapabilities {
     }
   } catch { /* stays false */ }
 
+  // --- Reuse a single probe canvas for all 2D context tests ---
+  // Each getContext('2d', ...) with different options requires a fresh canvas
+  // because a canvas can only have one context type. However, we reuse the
+  // same DOM element by resetting it between probes (setting width triggers
+  // a canvas clear and context invalidation in the spec).
+  let probeCanvas: HTMLCanvasElement | null = null;
+  try {
+    probeCanvas = document.createElement('canvas');
+    probeCanvas.width = probeCanvas.height = 1;
+  } catch { /* probeCanvas stays null, all canvas tests will be skipped */ }
+
   // --- 2D canvas P3 support ---
-  try {
-    const c = document.createElement('canvas');
-    c.width = c.height = 1;
-    const ctx = c.getContext('2d', { colorSpace: 'display-p3' } as CanvasRenderingContext2DSettings);
-    caps.canvasP3 = ctx !== null;
-  } catch { /* stays false */ }
+  if (probeCanvas) {
+    try {
+      const ctx = probeCanvas.getContext('2d', { colorSpace: 'display-p3' } as CanvasRenderingContext2DSettings);
+      caps.canvasP3 = ctx !== null;
+    } catch { /* stays false */ }
+  }
 
-  // --- 2D canvas HLG support ---
+  // --- 2D canvas HLG support (needs fresh canvas - context params locked on first getContext) ---
+  let probeCanvas2d2: HTMLCanvasElement | null = null;
   try {
-    const c = document.createElement('canvas');
-    c.width = c.height = 1;
-    // rec2100-hlg is experimental and not in TS typings yet
-    const ctx = c.getContext('2d', { colorSpace: 'rec2100-hlg' } as unknown as CanvasRenderingContext2DSettings);
-    caps.canvasHLG = ctx !== null;
-  } catch { /* stays false */ }
+    probeCanvas2d2 = document.createElement('canvas');
+    probeCanvas2d2.width = probeCanvas2d2.height = 1;
+  } catch { /* stays null */ }
 
-  // --- 2D canvas float16 support ---
+  if (probeCanvas2d2) {
+    try {
+      // rec2100-hlg is not in PredefinedColorSpace (see src/types/webgl-hdr.d.ts)
+      const ctx = probeCanvas2d2.getContext('2d', { colorSpace: 'rec2100-hlg' } as unknown as CanvasRenderingContext2DSettings);
+      caps.canvasHLG = ctx !== null;
+    } catch { /* stays false */ }
+  }
+
+  // --- 2D canvas float16 support (needs fresh canvas) ---
+  let probeCanvas2d3: HTMLCanvasElement | null = null;
   try {
-    const c = document.createElement('canvas');
-    c.width = c.height = 1;
-    // pixelFormat and rec2100-hlg are experimental and not in TS typings yet
-    const ctx = c.getContext('2d', {
-      colorSpace: 'rec2100-hlg',
-      pixelFormat: 'float16',
-    } as unknown as CanvasRenderingContext2DSettings);
-    caps.canvasFloat16 = ctx !== null;
-  } catch { /* stays false */ }
+    probeCanvas2d3 = document.createElement('canvas');
+    probeCanvas2d3.width = probeCanvas2d3.height = 1;
+  } catch { /* stays null */ }
 
-  // --- WebGL2 P3, HLG, and PQ support (single context) ---
+  if (probeCanvas2d3) {
+    try {
+      // rec2100-hlg is not in PredefinedColorSpace; pixelFormat is typed via webgl-hdr.d.ts
+      const ctx = probeCanvas2d3.getContext('2d', {
+        colorSpace: 'rec2100-hlg',
+        pixelFormat: 'float16',
+      } as unknown as CanvasRenderingContext2DSettings);
+      caps.canvasFloat16 = ctx !== null;
+    } catch { /* stays false */ }
+  }
+
+  // --- WebGL2 P3, HLG, and PQ support (single context, reuses probeCanvas if no 2D ctx) ---
   // Note: HLG/PQ detection on detached canvases may report false even
   // when the live DOM canvas supports them. The Viewer tries again on
   // the real canvas at render time. displayHDR (matchMedia) is reliable.
+  let glProbeCanvas: HTMLCanvasElement | null = null;
   try {
-    const c = document.createElement('canvas');
-    c.width = c.height = 1;
-    const gl = c.getContext('webgl2');
+    glProbeCanvas = document.createElement('canvas');
+    glProbeCanvas.width = glProbeCanvas.height = 1;
+  } catch { /* stays null */ }
+
+  if (glProbeCanvas) {
     try {
-      if (gl && 'drawingBufferColorSpace' in gl) {
-        // Widen drawingBufferColorSpace to string for experimental color space values
-        // (rec2100-hlg, rec2100-pq) not yet in TypeScript's PredefinedColorSpace type
-        type WebGL2WithExtendedColorSpace = Omit<WebGL2RenderingContext, 'drawingBufferColorSpace'> & { drawingBufferColorSpace: string };
-        const glExt = gl as unknown as WebGL2WithExtendedColorSpace;
-        // Test P3
-        glExt.drawingBufferColorSpace = 'display-p3';
-        caps.webglP3 = glExt.drawingBufferColorSpace === 'display-p3';
-        // Reset
-        glExt.drawingBufferColorSpace = 'srgb';
-        // Test HLG
-        glExt.drawingBufferColorSpace = 'rec2100-hlg';
-        caps.webglHLG = glExt.drawingBufferColorSpace === 'rec2100-hlg';
-        // Reset
-        glExt.drawingBufferColorSpace = 'srgb';
-        // Test PQ
-        glExt.drawingBufferColorSpace = 'rec2100-pq';
-        caps.webglPQ = glExt.drawingBufferColorSpace === 'rec2100-pq';
+      const gl = glProbeCanvas.getContext('webgl2');
+      try {
+        if (gl && 'drawingBufferColorSpace' in gl) {
+          // Test P3
+          gl.drawingBufferColorSpace = 'display-p3';
+          caps.webglP3 = gl.drawingBufferColorSpace === 'display-p3';
+          // Reset
+          gl.drawingBufferColorSpace = 'srgb';
+          // Test HLG
+          gl.drawingBufferColorSpace = 'rec2100-hlg';
+          caps.webglHLG = gl.drawingBufferColorSpace === 'rec2100-hlg';
+          // Reset
+          gl.drawingBufferColorSpace = 'srgb';
+          // Test PQ
+          gl.drawingBufferColorSpace = 'rec2100-pq';
+          caps.webglPQ = gl.drawingBufferColorSpace === 'rec2100-pq';
+        }
+      } finally {
+        const loseCtx = gl?.getExtension('WEBGL_lose_context');
+        loseCtx?.loseContext();
       }
-    } finally {
-      const loseCtx = gl?.getExtension('WEBGL_lose_context');
-      loseCtx?.loseContext();
-    }
-  } catch { /* stays false */ }
+    } catch { /* stays false */ }
+  }
+
+  // --- Cleanup all probe canvases: set dimensions to 0 and nullify references to help GC ---
+  if (probeCanvas) {
+    probeCanvas.width = probeCanvas.height = 0;
+    probeCanvas = null;
+  }
+  if (probeCanvas2d2) {
+    probeCanvas2d2.width = probeCanvas2d2.height = 0;
+    probeCanvas2d2 = null;
+  }
+  if (probeCanvas2d3) {
+    probeCanvas2d3.width = probeCanvas2d3.height = 0;
+    probeCanvas2d3 = null;
+  }
+  if (glProbeCanvas) {
+    glProbeCanvas.width = glProbeCanvas.height = 0;
+    glProbeCanvas = null;
+  }
 
   // --- WebGPU availability ---
   try {
@@ -241,9 +284,8 @@ export function resolveActiveColorSpace(
  */
 export async function queryHDRHeadroom(): Promise<number | null> {
   try {
-    // The Screen Details API is experimental; type assertions needed
-    if (typeof window !== 'undefined' && 'getScreenDetails' in window) {
-      const screenDetails = await (window as unknown as { getScreenDetails: () => Promise<{ currentScreen: { highDynamicRangeHeadroom?: number } }> }).getScreenDetails();
+    if (typeof window !== 'undefined' && window.getScreenDetails) {
+      const screenDetails = await window.getScreenDetails();
       const headroom = screenDetails?.currentScreen?.highDynamicRangeHeadroom;
       if (typeof headroom === 'number' && Number.isFinite(headroom) && headroom > 0) {
         return headroom;

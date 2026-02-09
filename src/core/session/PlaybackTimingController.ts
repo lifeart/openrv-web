@@ -1,5 +1,5 @@
-import type { SubFramePosition } from '../../utils/FrameInterpolator';
-import type { LoopMode } from './Session';
+import type { SubFramePosition } from '../../utils/media/FrameInterpolator';
+import type { LoopMode } from '../types/session';
 
 // Re-export for backward compatibility
 export { MAX_CONSECUTIVE_STARVATION_SKIPS, MAX_REVERSE_SPEED } from '../../config/PlaybackConfig';

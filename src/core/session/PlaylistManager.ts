@@ -9,7 +9,8 @@
  */
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import { parseOTIO } from '../../utils/OTIOParser';
+import { parseOTIO } from '../../utils/media/OTIOParser';
+import type { ManagerBase } from '../ManagerBase';
 
 /** Represents a single clip in the playlist */
 export interface PlaylistClip {
@@ -74,7 +75,7 @@ export interface FrameMapping {
 /**
  * PlaylistManager handles multi-clip playlist functionality
  */
-export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> {
+export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> implements ManagerBase {
   private clips: PlaylistClip[] = [];
   private enabled = false;
   private currentFrame = 1;

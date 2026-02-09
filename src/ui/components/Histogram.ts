@@ -17,9 +17,9 @@ import {
   createControlButton,
   DraggableContainer,
 } from './shared/DraggableContainer';
-import { setupHiDPICanvas } from '../../utils/HiDPICanvas';
-import { getThemeManager } from '../../utils/ThemeManager';
-import { getCSSColor } from '../../utils/getCSSColor';
+import { setupHiDPICanvas } from '../../utils/ui/HiDPICanvas';
+import { getThemeManager } from '../../utils/ui/ThemeManager';
+import { getCSSColor } from '../../utils/ui/getCSSColor';
 
 export type HistogramMode = 'rgb' | 'luminance' | 'separate';
 

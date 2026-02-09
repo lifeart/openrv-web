@@ -143,7 +143,7 @@ export async function decodeGainmapToFloat32(
 
   // Draw to canvases and get pixel data
   const baseCanvas = createCanvas(width, height);
-  const baseCtx = baseCanvas.getContext('2d')!;
+  const baseCtx = baseCanvas.getContext('2d')! as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
   baseCtx.drawImage(baseBitmap, 0, 0);
   const baseData = baseCtx.getImageData(0, 0, width, height).data;
   baseBitmap.close();
@@ -152,7 +152,7 @@ export async function decodeGainmapToFloat32(
   const gainmapOrigWidth = gainmapBitmap.width;
   const gainmapOrigHeight = gainmapBitmap.height;
   const gainCanvas = createCanvas(width, height);
-  const gainCtx = gainCanvas.getContext('2d')!;
+  const gainCtx = gainCanvas.getContext('2d')! as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
   gainCtx.drawImage(gainmapBitmap, 0, 0, width, height);
   const gainData = gainCtx.getImageData(0, 0, width, height).data;
   gainmapBitmap.close();
@@ -166,20 +166,32 @@ export async function decodeGainmapToFloat32(
   const headroom = info.headroom;
   let maxValue = 0;
 
+  // Pre-compute sRGB-to-linear LUT for uint8 values (0-255)
+  const srgbLUT = new Float32Array(256);
+  for (let i = 0; i < 256; i++) {
+    srgbLUT[i] = srgbToLinear(i / 255.0);
+  }
+
+  // Pre-compute gain LUT: gainmap values come from uint8 source (0-255),
+  // so there are only 256 possible gain multipliers.
+  // gain = 2^(v/255 * headroom) = exp(v/255 * headroom * LN2)
+  const gainLUT = new Float32Array(256);
+  const headroomLN2 = headroom * Math.LN2;
+  for (let i = 0; i < 256; i++) {
+    gainLUT[i] = Math.exp((i / 255.0) * headroomLN2);
+  }
+
   for (let i = 0; i < pixelCount; i++) {
     const srcIdx = i * 4;
     const dstIdx = i * 4;
 
-    // sRGB to linear conversion for base image
-    const r = srgbToLinear(baseData[srcIdx]! / 255.0);
-    const g = srgbToLinear(baseData[srcIdx + 1]! / 255.0);
-    const b = srgbToLinear(baseData[srcIdx + 2]! / 255.0);
+    // sRGB to linear via pre-computed LUT
+    const r = srgbLUT[baseData[srcIdx]!]!;
+    const g = srgbLUT[baseData[srcIdx + 1]!]!;
+    const b = srgbLUT[baseData[srcIdx + 2]!]!;
 
-    // Gainmap is grayscale - use red channel (0-1 range)
-    const gainValue = gainData[srcIdx]! / 255.0;
-
-    // Apply gain: HDR = base_linear * 2^(gainmap * headroom)
-    const gain = Math.pow(2, gainValue * headroom);
+    // Gainmap is grayscale - use red channel; gain via pre-computed LUT
+    const gain = gainLUT[gainData[srcIdx]!]!;
 
     result[dstIdx] = r * gain;
     result[dstIdx + 1] = g * gain;

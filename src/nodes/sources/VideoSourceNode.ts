@@ -14,10 +14,10 @@ import {
   MediabunnyFrameExtractor,
   UnsupportedCodecException,
   type FrameResult,
-} from '../../utils/MediabunnyFrameExtractor';
+} from '../../utils/media/MediabunnyFrameExtractor';
 import type { VideoSample } from 'mediabunny';
-import { FramePreloadManager, type PreloadConfig } from '../../utils/FramePreloadManager';
-import type { CodecFamily, UnsupportedCodecError } from '../../utils/CodecUtils';
+import { FramePreloadManager, type PreloadConfig } from '../../utils/media/FramePreloadManager';
+import type { CodecFamily, UnsupportedCodecError } from '../../utils/media/CodecUtils';
 
 /** Frame extraction mode */
 export type FrameExtractionMode = 'mediabunny' | 'html-video' | 'auto';
@@ -468,7 +468,7 @@ export class VideoSourceNode extends BaseSourceNode {
    * Get cached frame canvas directly for rendering (no IPImage conversion)
    * Returns null if frame is not cached
    */
-  getCachedFrameCanvas(frame: number): HTMLCanvasElement | OffscreenCanvas | null {
+  getCachedFrameCanvas(frame: number): HTMLCanvasElement | OffscreenCanvas | ImageBitmap | null {
     const cached = this.preloadManager?.getCachedFrame(frame);
     return cached?.canvas ?? null;
   }
@@ -746,18 +746,27 @@ export class VideoSourceNode extends BaseSourceNode {
   private frameResultToIPImage(result: FrameResult, frame: number): IPImage {
     const canvas = result.canvas;
     let ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
+    let imageData: ImageData;
 
-    if (canvas instanceof HTMLCanvasElement) {
-      ctx = canvas.getContext('2d');
+    if (canvas instanceof ImageBitmap) {
+      // ImageBitmap from createImageBitmap - draw to temp canvas to extract pixels
+      const tempCanvas = new OffscreenCanvas(canvas.width, canvas.height);
+      const tempCtx = tempCanvas.getContext('2d')!;
+      tempCtx.drawImage(canvas, 0, 0);
+      imageData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
     } else {
-      ctx = canvas.getContext('2d');
-    }
+      if (canvas instanceof HTMLCanvasElement) {
+        ctx = canvas.getContext('2d');
+      } else {
+        ctx = canvas.getContext('2d');
+      }
 
-    if (!ctx) {
-      throw new Error('Failed to get 2D context from frame canvas');
-    }
+      if (!ctx) {
+        throw new Error('Failed to get 2D context from frame canvas');
+      }
 
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    }
 
     return new IPImage({
       width: imageData.width,

@@ -16,7 +16,7 @@ import {
   preloadFrames,
   releaseDistantFrames,
   disposeSequence,
-} from '../../utils/SequenceLoader';
+} from '../../utils/media/SequenceLoader';
 
 @RegisterNode('RVSequenceSource')
 export class SequenceSourceNode extends BaseSourceNode {

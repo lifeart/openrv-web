@@ -17,9 +17,7 @@ import {
   EXRDecodeOptions,
   EXRChannelRemapping,
 } from '../../formats/EXRDecoder';
-import { isDPXFile, decodeDPX } from '../../formats/DPXDecoder';
-import { isCineonFile, decodeCineon } from '../../formats/CineonDecoder';
-import { isTIFFFile, isFloatTIFF, decodeTIFFFloat } from '../../formats/TIFFFloatDecoder';
+import { decoderRegistry } from '../../formats/DecoderRegistry';
 import { isGainmapJPEG, parseGainmapJPEG, decodeGainmapToFloat32 } from '../../formats/JPEGGainmapDecoder';
 
 /**
@@ -124,7 +122,7 @@ export class FileSourceNode extends BaseSourceNode {
         const response = await fetch(url);
         if (response.ok) {
           const buffer = await response.arrayBuffer();
-          if (isTIFFFile(buffer) && isFloatTIFF(buffer)) {
+          if (decoderRegistry.detectFormat(buffer) === 'tiff') {
             await this.loadHDRFromBuffer(buffer, filename, url, originalUrl);
             return;
           }
@@ -351,32 +349,12 @@ export class FileSourceNode extends BaseSourceNode {
     url: string,
     originalUrl?: string
   ): Promise<void> {
-    let decodeResult: {
-      width: number;
-      height: number;
-      data: Float32Array;
-      channels: number;
-      colorSpace: string;
-      metadata: Record<string, unknown>;
-    };
-    let formatName: string;
-
-    // Detect format by magic number
-    if (isDPXFile(buffer)) {
-      const result = await decodeDPX(buffer, { applyLogToLinear: true });
-      decodeResult = result;
-      formatName = 'dpx';
-    } else if (isCineonFile(buffer)) {
-      const result = await decodeCineon(buffer, { applyLogToLinear: true });
-      decodeResult = result;
-      formatName = 'cineon';
-    } else if (isTIFFFile(buffer) && isFloatTIFF(buffer)) {
-      const result = await decodeTIFFFloat(buffer);
-      decodeResult = result;
-      formatName = 'tiff';
-    } else {
+    // Detect format and decode via registry
+    const result = await decoderRegistry.detectAndDecode(buffer, { applyLogToLinear: true });
+    if (!result) {
       throw new Error('Unsupported HDR format or invalid file');
     }
+    const { formatName, ...decodeResult } = result;
 
     // Convert decode result to IPImage
     const metadata: ImageMetadata = {
@@ -557,7 +535,7 @@ export class FileSourceNode extends BaseSourceNode {
     // Check if this is a TIFF file - only use HDR path for float TIFFs
     if (isTIFFExtension(file.name)) {
       const buffer = await file.arrayBuffer();
-      if (isTIFFFile(buffer) && isFloatTIFF(buffer)) {
+      if (decoderRegistry.detectFormat(buffer) === 'tiff') {
         const url = URL.createObjectURL(file);
         await this.loadHDRFromBuffer(buffer, file.name, url);
         return;

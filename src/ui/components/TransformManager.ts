@@ -11,6 +11,7 @@
 
 import { Transform2D, DEFAULT_TRANSFORM } from './TransformControl';
 import { interpolateZoom } from './ViewerInteraction';
+import type { ManagerBase } from '../../core/ManagerBase';
 
 /**
  * Snapshot of all spatial transform state.
@@ -22,7 +23,7 @@ export interface TransformSnapshot {
   transform: Transform2D;
 }
 
-export class TransformManager {
+export class TransformManager implements ManagerBase {
   // --- Pan / Zoom ---
   private _panX = 0;
   private _panY = 0;

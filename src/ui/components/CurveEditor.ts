@@ -6,17 +6,17 @@
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import {
-  CurveChannel,
-  ColorCurvesData,
+  type CurveChannel,
+  type ColorCurvesData,
   createDefaultCurve,
   evaluateCurveAtPoint,
   addPointToCurve,
   removePointFromCurve,
   updatePointInCurve,
-} from '../../color/ColorCurves';
-import { setupHiDPICanvas, clientToCanvasCoordinates } from '../../utils/HiDPICanvas';
-import { getThemeManager } from '../../utils/ThemeManager';
-import { getCSSColor } from '../../utils/getCSSColor';
+} from '../../color/ColorProcessingFacade';
+import { setupHiDPICanvas, clientToCanvasCoordinates } from '../../utils/ui/HiDPICanvas';
+import { getThemeManager } from '../../utils/ui/ThemeManager';
+import { getCSSColor } from '../../utils/ui/getCSSColor';
 
 export type CurveChannelType = 'master' | 'red' | 'green' | 'blue';
 

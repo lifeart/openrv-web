@@ -62,7 +62,7 @@ import {
   applyColorInversionSIMD,
   applyChannelIsolationGrayscale,
   applyLuminanceIsolation,
-} from '../utils/effectProcessing.shared';
+} from '../utils/effects/effectProcessing.shared';
 
 // ============================================================================
 // Reusable clarity buffers - allocated once and reused across frames

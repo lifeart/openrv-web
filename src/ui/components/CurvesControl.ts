@@ -9,12 +9,12 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { CurveEditor, CurveChannelType } from './CurveEditor';
 import {
-  ColorCurvesData,
+  type ColorCurvesData,
   CURVE_PRESETS,
   exportCurvesJSON,
   importCurvesJSON,
   isDefaultCurves,
-} from '../../color/ColorCurves';
+} from '../../color/ColorProcessingFacade';
 import { getIconSvg } from './shared/Icons';
 import { createButton } from './shared/Button';
 import {

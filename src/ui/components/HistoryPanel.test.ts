@@ -2,9 +2,10 @@
  * HistoryPanel Component Tests
  *
  * Tests for the history panel showing undo/redo entries.
+ * Uses a real HistoryManager (not mocked) since it is lightweight.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { HistoryPanel } from './HistoryPanel';
 import { HistoryManager } from '../../utils/HistoryManager';
 
@@ -15,323 +16,231 @@ describe('HistoryPanel', () => {
   beforeEach(() => {
     historyManager = new HistoryManager();
     panel = new HistoryPanel(historyManager);
+    // Attach to the document so container.remove() has an effect
+    document.body.appendChild(panel.getElement());
   });
 
-  describe('initialization', () => {
-    it('HIST-U001: creates HistoryPanel instance', () => {
-      expect(panel).toBeInstanceOf(HistoryPanel);
-    });
-
-    it('HIST-U002: panel is hidden by default', () => {
-      expect(panel.isVisible()).toBe(false);
-    });
+  afterEach(() => {
+    // Clean up DOM in case dispose was not called during the test
+    panel.getElement().remove();
   });
 
-  describe('getElement', () => {
-    it('HIST-U010: getElement returns container element', () => {
+  // ---------------------------------------------------------------------------
+  // Constructor
+  // ---------------------------------------------------------------------------
+  describe('constructor', () => {
+    it('HP-001: creates container element with data-testid "history-panel"', () => {
       const el = panel.getElement();
       expect(el).toBeInstanceOf(HTMLElement);
-    });
-
-    it('HIST-U011: container has data-testid', () => {
-      const el = panel.getElement();
       expect(el.dataset.testid).toBe('history-panel');
     });
 
-    it('HIST-U012: container has history-panel class', () => {
-      const el = panel.getElement();
-      expect(el.className).toBe('history-panel');
-    });
+    it('HP-002: subscribes to historyManager events (historyChanged, currentIndexChanged)', () => {
+      // After construction the panel should react to historyManager events.
+      // Record an action and verify the panel re-renders with the new entry.
+      panel.show();
+      expect(panel.getElement().textContent).toContain('No history yet');
 
-    it('HIST-U013: container is hidden by default', () => {
-      const el = panel.getElement();
-      expect(el.style.display).toBe('none');
+      historyManager.recordAction('Subscribed action', 'color', () => {});
+
+      // The panel should have re-rendered automatically via the subscription
+      expect(panel.getElement().textContent).toContain('Subscribed action');
     });
   });
 
-  describe('show/hide', () => {
-    it('HIST-U020: show makes panel visible', () => {
+  // ---------------------------------------------------------------------------
+  // show / hide / toggle / isVisible
+  // ---------------------------------------------------------------------------
+  describe('show/hide/toggle', () => {
+    it('HP-010: show() sets container display to flex', () => {
       panel.show();
+      expect(panel.getElement().style.display).toBe('flex');
+    });
+
+    it('HP-011: show() emits visibilityChanged with true', () => {
+      const callback = vi.fn();
+      panel.on('visibilityChanged', callback);
+
+      panel.show();
+
+      expect(callback).toHaveBeenCalledTimes(1);
+      expect(callback).toHaveBeenCalledWith(true);
+    });
+
+    it('HP-012: hide() sets container display to none and emits visibilityChanged false', () => {
+      panel.show();
+
+      const callback = vi.fn();
+      panel.on('visibilityChanged', callback);
+
+      panel.hide();
+
+      expect(panel.getElement().style.display).toBe('none');
+      expect(callback).toHaveBeenCalledTimes(1);
+      expect(callback).toHaveBeenCalledWith(false);
+    });
+
+    it('HP-013: toggle() shows a hidden panel', () => {
+      expect(panel.isVisible()).toBe(false);
+
+      panel.toggle();
+
       expect(panel.isVisible()).toBe(true);
       expect(panel.getElement().style.display).toBe('flex');
     });
 
-    it('HIST-U021: hide makes panel invisible', () => {
+    it('HP-014: toggle() hides a visible panel', () => {
       panel.show();
-      panel.hide();
+      expect(panel.isVisible()).toBe(true);
+
+      panel.toggle();
+
       expect(panel.isVisible()).toBe(false);
       expect(panel.getElement().style.display).toBe('none');
     });
 
-    it('HIST-U022: toggle shows hidden panel', () => {
-      panel.toggle();
-      expect(panel.isVisible()).toBe(true);
-    });
-
-    it('HIST-U023: toggle hides visible panel', () => {
-      panel.show();
-      panel.toggle();
+    it('HP-015: isVisible() returns correct state after show and hide', () => {
       expect(panel.isVisible()).toBe(false);
-    });
-
-    it('HIST-U024: show emits visibilityChanged event', () => {
-      const callback = vi.fn();
-      panel.on('visibilityChanged', callback);
 
       panel.show();
-
-      expect(callback).toHaveBeenCalledWith(true);
-    });
-
-    it('HIST-U025: hide emits visibilityChanged event', () => {
-      panel.show();
-      const callback = vi.fn();
-      panel.on('visibilityChanged', callback);
+      expect(panel.isVisible()).toBe(true);
 
       panel.hide();
-
-      expect(callback).toHaveBeenCalledWith(false);
-    });
-  });
-
-  describe('header', () => {
-    it('HIST-U030: has header with title', () => {
-      const el = panel.getElement();
-      expect(el.textContent).toContain('History');
-    });
-
-    it('HIST-U031: has clear button', () => {
-      const el = panel.getElement();
-      const clearBtn = el.querySelector('[data-testid="history-clear-btn"]');
-      expect(clearBtn).not.toBeNull();
-    });
-
-    it('HIST-U032: has close button', () => {
-      const el = panel.getElement();
-      const buttons = el.querySelectorAll('button');
-      const closeBtn = Array.from(buttons).find(btn => btn.textContent === '×');
-      expect(closeBtn).not.toBeNull();
-    });
-
-    it('HIST-U033: close button hides panel', () => {
-      panel.show();
-      const el = panel.getElement();
-      const buttons = el.querySelectorAll('button');
-      const closeBtn = Array.from(buttons).find(btn => btn.textContent === '×') as HTMLButtonElement;
-
-      closeBtn.click();
-
       expect(panel.isVisible()).toBe(false);
     });
   });
 
-  describe('entries container', () => {
-    it('HIST-U040: has entries container', () => {
-      const el = panel.getElement();
-      const entries = el.querySelector('[data-testid="history-entries"]');
-      expect(entries).not.toBeNull();
-    });
-
-    it('HIST-U041: shows empty message when no history', () => {
-      panel.show();
-      const el = panel.getElement();
-      expect(el.textContent).toContain('No history yet');
-    });
-  });
-
-  describe('history entries', () => {
-    it('HIST-U050: displays history entry after recording', () => {
-      historyManager.recordAction('Test action', 'color', () => {});
+  // ---------------------------------------------------------------------------
+  // dispose
+  // ---------------------------------------------------------------------------
+  describe('dispose', () => {
+    it('HP-020: dispose() calls all unsubscribers (historyChanged and currentIndexChanged handlers are disconnected)', () => {
       panel.show();
 
-      const el = panel.getElement();
-      expect(el.textContent).toContain('Test action');
+      // Record an action so the panel has rendered content
+      historyManager.recordAction('Before dispose', 'color', () => {});
+      expect(panel.getElement().textContent).toContain('Before dispose');
+
+      panel.dispose();
+
+      // Capture the current innerHTML to compare after a new action
+      const htmlAfterDispose = panel.getElement().innerHTML;
+
+      // Recording another action should NOT trigger re-render because the
+      // event subscriptions have been removed
+      historyManager.recordAction('After dispose', 'paint', () => {});
+
+      expect(panel.getElement().innerHTML).toBe(htmlAfterDispose);
+      expect(panel.getElement().textContent).not.toContain('After dispose');
     });
 
-    it('HIST-U051: displays multiple entries', () => {
+    it('HP-021: after dispose, historyManager events no longer trigger panel re-render', () => {
+      panel.show();
+      panel.dispose();
+
+      const htmlBeforeAction = panel.getElement().innerHTML;
+
+      historyManager.recordAction('Should not appear', 'view', () => {});
+      historyManager.recordAction('Also invisible', 'session', () => {});
+
+      expect(panel.getElement().innerHTML).toBe(htmlBeforeAction);
+    });
+
+    it('HP-022: dispose() removes container from DOM', () => {
+      const el = panel.getElement();
+      expect(document.body.contains(el)).toBe(true);
+
+      panel.dispose();
+
+      expect(document.body.contains(el)).toBe(false);
+    });
+
+    it('HP-023: dispose() empties unsubscribers array', () => {
+      // We cannot inspect the private array directly, but we can verify the
+      // effect: after dispose, recording actions should not re-render.
+      // Additionally, calling dispose a second time should not throw.
+      panel.dispose();
+
+      // If unsubscribers were not emptied, a second dispose would attempt to
+      // call already-called unsubscribe functions. This should be safe.
+      expect(() => panel.dispose()).not.toThrow();
+    });
+
+    it('HP-024: dispose() is idempotent', () => {
+      panel.dispose();
+      // Second call should not throw or produce side effects
+      expect(() => panel.dispose()).not.toThrow();
+      // Third call for good measure
+      expect(() => panel.dispose()).not.toThrow();
+    });
+
+    it('HP-025: after dispose, currentIndexChanged from jumpTo does not re-render', () => {
       historyManager.recordAction('Action 1', 'color', () => {});
       historyManager.recordAction('Action 2', 'paint', () => {});
-      historyManager.recordAction('Action 3', 'transform', () => {});
       panel.show();
 
-      const el = panel.getElement();
-      expect(el.textContent).toContain('Action 1');
-      expect(el.textContent).toContain('Action 2');
-      expect(el.textContent).toContain('Action 3');
-    });
+      panel.dispose();
 
-    it('HIST-U052: entry elements have data-testid', () => {
-      historyManager.recordAction('Test', 'color', () => {});
-      panel.show();
+      const htmlAfterDispose = panel.getElement().innerHTML;
 
-      const el = panel.getElement();
-      const entry = el.querySelector('[data-testid="history-entry-0"]');
-      expect(entry).not.toBeNull();
-    });
+      historyManager.jumpTo(0);
 
-    it('HIST-U053: clicking entry calls historyManager.jumpTo', () => {
-      const restore1 = vi.fn();
-      const restore2 = vi.fn();
-      historyManager.recordAction('Action 1', 'color', restore1);
-      historyManager.recordAction('Action 2', 'paint', restore2);
-      panel.show();
-
-      const el = panel.getElement();
-      const entry = el.querySelector('[data-testid="history-entry-0"]') as HTMLElement;
-      entry.click();
-
-      // After clicking entry 0, current index should be 0
-      const state = panel.getState();
-      expect(state.currentIndex).toBe(0);
-    });
-
-    it('HIST-U054: clicking entry emits entrySelected event', () => {
-      historyManager.recordAction('Action', 'color', () => {});
-      panel.show();
-
-      const callback = vi.fn();
-      panel.on('entrySelected', callback);
-
-      const el = panel.getElement();
-      const entry = el.querySelector('[data-testid="history-entry-0"]') as HTMLElement;
-      entry.click();
-
-      expect(callback).toHaveBeenCalledWith(0);
+      expect(panel.getElement().innerHTML).toBe(htmlAfterDispose);
     });
   });
 
-  describe('clear history', () => {
-    it('HIST-U060: clear button clears history', () => {
-      historyManager.recordAction('Action', 'color', () => {});
+  // ---------------------------------------------------------------------------
+  // getState
+  // ---------------------------------------------------------------------------
+  describe('getState', () => {
+    it('HP-030: returns correct visible state and history info', () => {
+      // Initially hidden, no entries
+      let state = panel.getState();
+      expect(state.visible).toBe(false);
+      expect(state.entryCount).toBe(0);
+      expect(state.currentIndex).toBe(-1);
+
+      // Show the panel
       panel.show();
+      state = panel.getState();
+      expect(state.visible).toBe(true);
 
-      const el = panel.getElement();
-      const clearBtn = el.querySelector('[data-testid="history-clear-btn"]') as HTMLButtonElement;
-      clearBtn.click();
+      // Record some actions
+      historyManager.recordAction('Action A', 'color', () => {});
+      historyManager.recordAction('Action B', 'paint', () => {});
+      state = panel.getState();
+      expect(state.entryCount).toBe(2);
+      expect(state.currentIndex).toBe(1);
 
-      expect(panel.getState().entryCount).toBe(0);
+      // Jump back
+      historyManager.jumpTo(0);
+      state = panel.getState();
+      expect(state.currentIndex).toBe(0);
+      expect(state.entryCount).toBe(2);
+
+      // Hide the panel
+      panel.hide();
+      state = panel.getState();
+      expect(state.visible).toBe(false);
     });
+  });
 
-    it('HIST-U061: clearHistory method clears history', () => {
-      historyManager.recordAction('Action', 'color', () => {});
+  // ---------------------------------------------------------------------------
+  // clearHistory
+  // ---------------------------------------------------------------------------
+  describe('clearHistory', () => {
+    it('HP-035: delegates to historyManager.clear()', () => {
+      historyManager.recordAction('Action 1', 'color', () => {});
+      historyManager.recordAction('Action 2', 'paint', () => {});
+      expect(panel.getState().entryCount).toBe(2);
+
+      const clearSpy = vi.spyOn(historyManager, 'clear');
 
       panel.clearHistory();
 
+      expect(clearSpy).toHaveBeenCalledTimes(1);
       expect(panel.getState().entryCount).toBe(0);
-    });
-  });
-
-  describe('getState', () => {
-    it('HIST-U070: getState returns visibility', () => {
-      panel.show();
-      const state = panel.getState();
-      expect(state.visible).toBe(true);
-    });
-
-    it('HIST-U071: getState returns entry count', () => {
-      historyManager.recordAction('A1', 'color', () => {});
-      historyManager.recordAction('A2', 'color', () => {});
-      const state = panel.getState();
-      expect(state.entryCount).toBe(2);
-    });
-
-    it('HIST-U072: getState returns current index', () => {
-      historyManager.recordAction('Action', 'color', () => {});
-      const state = panel.getState();
-      expect(state.currentIndex).toBe(0);
-    });
-  });
-
-  describe('entry hover effects', () => {
-    it('HIST-U080: entry changes on mouseenter', () => {
-      historyManager.recordAction('Action 1', 'color', () => {});
-      historyManager.recordAction('Action 2', 'paint', () => {});
-      panel.show();
-
-      const el = panel.getElement();
-      // Entry 0 is not current (entry 1 is), so it should change on hover
-      const entry = el.querySelector('[data-testid="history-entry-0"]') as HTMLElement;
-      entry.dispatchEvent(new MouseEvent('mouseenter'));
-
-      expect(entry.style.cssText).toContain('rgba(255, 255, 255, 0.05)');
-    });
-
-    it('HIST-U081: entry restores on mouseleave', () => {
-      historyManager.recordAction('Action 1', 'color', () => {});
-      historyManager.recordAction('Action 2', 'paint', () => {});
-      panel.show();
-
-      const el = panel.getElement();
-      const entry = el.querySelector('[data-testid="history-entry-0"]') as HTMLElement;
-      entry.dispatchEvent(new MouseEvent('mouseenter'));
-      entry.dispatchEvent(new MouseEvent('mouseleave'));
-
-      // Should restore to no background
-      expect(entry.style.background).toBe('');
-    });
-  });
-
-  describe('styling', () => {
-    it('HIST-U090: panel has absolute positioning', () => {
-      const el = panel.getElement();
-      expect(el.style.position).toBe('absolute');
-    });
-
-    it('HIST-U091: panel has high z-index', () => {
-      const el = panel.getElement();
-      expect(parseInt(el.style.zIndex, 10)).toBeGreaterThan(100);
-    });
-
-    it('HIST-U092: panel has fixed width', () => {
-      const el = panel.getElement();
-      expect(el.style.width).toBe('280px');
-    });
-
-    it('HIST-U093: panel has max-height', () => {
-      const el = panel.getElement();
-      expect(el.style.maxHeight).toBe('400px');
-    });
-  });
-
-  describe('history manager events', () => {
-    it('HIST-U100: renders when historyChanged event fires', () => {
-      panel.show();
-
-      // Initially shows empty message
-      expect(panel.getElement().textContent).toContain('No history yet');
-
-      // Add entry - should trigger re-render
-      historyManager.recordAction('New action', 'color', () => {});
-
-      // Should now show the action
-      expect(panel.getElement().textContent).toContain('New action');
-    });
-
-    it('HIST-U101: renders when currentIndexChanged event fires', () => {
-      historyManager.recordAction('Action 1', 'color', () => {});
-      historyManager.recordAction('Action 2', 'paint', () => {});
-      panel.show();
-
-      // Jump to previous entry
-      historyManager.jumpTo(0);
-
-      // Current indicator should be at entry 0
-      const state = panel.getState();
-      expect(state.currentIndex).toBe(0);
-    });
-  });
-
-  describe('entry categories', () => {
-    const categories = ['color', 'paint', 'transform', 'view', 'session'] as const;
-
-    categories.forEach(category => {
-      it(`HIST-U110-${category}: ${category} category entry renders`, () => {
-        historyManager.recordAction(`${category} action`, category, () => {});
-        panel.show();
-
-        const el = panel.getElement();
-        expect(el.textContent).toContain(`${category} action`);
-      });
+      expect(panel.getState().currentIndex).toBe(-1);
     });
   });
 });

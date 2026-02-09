@@ -14,6 +14,7 @@
 import { cineonLogToLinear as _cineonLogToLinear, type LogLinearOptions } from './LogLinear';
 import { unpackDPX10bit } from './DPXDecoder';
 import { validateImageDimensions, toRGBA as sharedToRGBA, applyLogToLinearRGBA as sharedApplyLogToLinearRGBA } from './shared';
+import { DecoderError } from '../core/errors';
 
 // Re-export for backwards compatibility
 export { cineonLogToLinear } from './LogLinear';
@@ -27,6 +28,13 @@ export interface CineonInfo {
   bitDepth: number;
   channels: number;
   dataOffset: number;
+}
+
+export interface CineonDecodeOptions {
+  /** Whether to convert log data to linear (default: true for Cineon) */
+  applyLogToLinear?: boolean;
+  /** Custom log-to-linear conversion parameters */
+  logLinearOptions?: LogLinearOptions;
 }
 
 export interface CineonDecodeResult {
@@ -118,11 +126,11 @@ function applyLogToLinearRGBA(
  */
 export async function decodeCineon(
   buffer: ArrayBuffer,
-  options?: { applyLogToLinear?: boolean; logLinearOptions?: LogLinearOptions }
+  options?: CineonDecodeOptions
 ): Promise<CineonDecodeResult> {
   const info = getCineonInfo(buffer);
   if (!info) {
-    throw new Error('Invalid Cineon file');
+    throw new DecoderError('Cineon', 'Invalid Cineon file');
   }
 
   const { width, height, bitDepth, channels, dataOffset } = info;
@@ -132,12 +140,12 @@ export async function decodeCineon(
 
   // Cineon is always 10-bit packed
   if (bitDepth !== 10) {
-    throw new Error(`Unsupported Cineon bit depth: ${bitDepth}. Only 10-bit is supported.`);
+    throw new DecoderError('Cineon', `Unsupported Cineon bit depth: ${bitDepth}. Only 10-bit is supported.`);
   }
 
   // Validate data offset
   if (dataOffset >= buffer.byteLength) {
-    throw new Error(`Invalid Cineon file: data offset ${dataOffset} exceeds file size ${buffer.byteLength}`);
+    throw new DecoderError('Cineon', `Invalid Cineon file: data offset ${dataOffset} exceeds file size ${buffer.byteLength}`);
   }
 
   // Create DataView for pixel data

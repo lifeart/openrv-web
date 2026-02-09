@@ -12,39 +12,55 @@
  * - ImageBitmap transferred as transferable (zero-copy)
  * - HDR image data transferred as ArrayBuffer (zero-copy)
  * - Pixel probe returns Float32Array via message
+ * - All messages carry a protocolVersion for forward/backward compatibility
  */
 
-import type { ColorAdjustments } from '../ui/components/ColorControls';
-import type { ToneMappingState } from '../ui/components/ToneMappingControl';
+import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState } from '../core/types/color';
+import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState } from '../core/types/effects';
+import type { BackgroundPatternState } from '../core/types/background';
 import type { CDLValues } from '../color/CDL';
-import type { ColorWheelsState } from '../ui/components/ColorWheels';
-import type { ZebraState } from '../ui/components/ZebraStripes';
-import type { BackgroundPatternState } from '../ui/components/BackgroundPatternControl';
 import type { CurveLUTs } from '../color/ColorCurves';
-import type { ChannelMode } from '../ui/components/ChannelSelect';
-import type { HSLQualifierState } from '../ui/components/HSLQualifier';
 import type { DisplayCapabilities } from '../color/DisplayCapabilities';
+
+// =============================================================================
+// Protocol Version
+// =============================================================================
+
+/**
+ * Current protocol version for render worker messages.
+ * Increment this when making breaking changes to the message format.
+ */
+export const RENDER_WORKER_PROTOCOL_VERSION = 1;
+
+/**
+ * Base interface for all render worker messages.
+ * The protocolVersion field is optional for backward compatibility with
+ * messages that were created before versioning was introduced.
+ */
+export interface BaseWorkerMessage {
+  protocolVersion?: number;
+}
 
 // =============================================================================
 // Main Thread → Worker Messages
 // =============================================================================
 
 /** Initialize the worker with a transferred OffscreenCanvas. */
-export interface InitMessage {
+export interface InitMessage extends BaseWorkerMessage {
   type: 'init';
   canvas: OffscreenCanvas;
   capabilities?: DisplayCapabilities;
 }
 
 /** Resize the rendering viewport. */
-export interface ResizeMessage {
+export interface ResizeMessage extends BaseWorkerMessage {
   type: 'resize';
   width: number;
   height: number;
 }
 
 /** Clear the canvas to the given color. */
-export interface ClearMessage {
+export interface ClearMessage extends BaseWorkerMessage {
   type: 'clear';
   r: number;
   g: number;
@@ -56,7 +72,7 @@ export interface ClearMessage {
  * Render an SDR frame. The ImageBitmap is transferred separately as a
  * transferable object for zero-copy.
  */
-export interface RenderSDRMessage {
+export interface RenderSDRMessage extends BaseWorkerMessage {
   type: 'renderSDR';
   id: number;
   bitmap: ImageBitmap;
@@ -68,7 +84,7 @@ export interface RenderSDRMessage {
  * Render an HDR frame. The image data ArrayBuffer is transferred as a
  * transferable for zero-copy.
  */
-export interface RenderHDRMessage {
+export interface RenderHDRMessage extends BaseWorkerMessage {
   type: 'renderHDR';
   id: number;
   imageData: ArrayBuffer;
@@ -81,96 +97,91 @@ export interface RenderHDRMessage {
 }
 
 /** Set color adjustments (fire-and-forget). */
-export interface SetColorAdjustmentsMessage {
+export interface SetColorAdjustmentsMessage extends BaseWorkerMessage {
   type: 'setColorAdjustments';
   adjustments: ColorAdjustments;
 }
 
 /** Set tone mapping state (fire-and-forget). */
-export interface SetToneMappingStateMessage {
+export interface SetToneMappingStateMessage extends BaseWorkerMessage {
   type: 'setToneMappingState';
   state: ToneMappingState;
 }
 
 /** Set CDL values (fire-and-forget). */
-export interface SetCDLMessage {
+export interface SetCDLMessage extends BaseWorkerMessage {
   type: 'setCDL';
   cdl: CDLValues;
 }
 
 /** Set curves LUT data (fire-and-forget). */
-export interface SetCurvesLUTMessage {
+export interface SetCurvesLUTMessage extends BaseWorkerMessage {
   type: 'setCurvesLUT';
   luts: CurveLUTs | null;
 }
 
 /** Set color wheels state (fire-and-forget). */
-export interface SetColorWheelsMessage {
+export interface SetColorWheelsMessage extends BaseWorkerMessage {
   type: 'setColorWheels';
   state: ColorWheelsState;
 }
 
 /** Set highlights/shadows/whites/blacks (fire-and-forget). */
-export interface SetHighlightsShadowsMessage {
+export interface SetHighlightsShadowsMessage extends BaseWorkerMessage {
   type: 'setHighlightsShadows';
-  highlights: number;
-  shadows: number;
-  whites: number;
-  blacks: number;
+  state: HighlightsShadowsState;
 }
 
 /** Set vibrance (fire-and-forget). */
-export interface SetVibranceMessage {
+export interface SetVibranceMessage extends BaseWorkerMessage {
   type: 'setVibrance';
-  vibrance: number;
-  skinProtection: boolean;
+  state: VibranceState;
 }
 
 /** Set clarity (fire-and-forget). */
-export interface SetClarityMessage {
+export interface SetClarityMessage extends BaseWorkerMessage {
   type: 'setClarity';
-  clarity: number;
+  state: ClarityState;
 }
 
 /** Set sharpen amount (fire-and-forget). */
-export interface SetSharpenMessage {
+export interface SetSharpenMessage extends BaseWorkerMessage {
   type: 'setSharpen';
-  amount: number;
+  state: SharpenState;
 }
 
 /** Set HSL qualifier state (fire-and-forget). */
-export interface SetHSLQualifierMessage {
+export interface SetHSLQualifierMessage extends BaseWorkerMessage {
   type: 'setHSLQualifier';
   state: HSLQualifierState;
 }
 
 /** Set color inversion (fire-and-forget). */
-export interface SetColorInversionMessage {
+export interface SetColorInversionMessage extends BaseWorkerMessage {
   type: 'setColorInversion';
   enabled: boolean;
 }
 
 /** Set channel mode (fire-and-forget). */
-export interface SetChannelModeMessage {
+export interface SetChannelModeMessage extends BaseWorkerMessage {
   type: 'setChannelMode';
   mode: ChannelMode;
 }
 
 /** Set false color state (fire-and-forget). */
-export interface SetFalseColorMessage {
+export interface SetFalseColorMessage extends BaseWorkerMessage {
   type: 'setFalseColor';
-  enabled: boolean;
-  lut: Uint8Array | null;
+  state: FalseColorState;
 }
 
 /** Set zebra stripes state (fire-and-forget). */
-export interface SetZebraStripesMessage {
+export interface SetZebraStripesMessage extends BaseWorkerMessage {
   type: 'setZebraStripes';
   state: ZebraState;
 }
 
 /** Set 3D LUT data (fire-and-forget). LUT data transferred as transferable. */
-export interface SetLUTMessage {
+export interface SetLUTMessage extends BaseWorkerMessage {
   type: 'setLUT';
   lutData: Float32Array | null;
   lutSize: number;
@@ -178,7 +189,7 @@ export interface SetLUTMessage {
 }
 
 /** Set display color management state (fire-and-forget). */
-export interface SetDisplayColorStateMessage {
+export interface SetDisplayColorStateMessage extends BaseWorkerMessage {
   type: 'setDisplayColorState';
   state: {
     transferFunction: number;
@@ -189,20 +200,20 @@ export interface SetDisplayColorStateMessage {
 }
 
 /** Set background pattern state (fire-and-forget). */
-export interface SetBackgroundPatternMessage {
+export interface SetBackgroundPatternMessage extends BaseWorkerMessage {
   type: 'setBackgroundPattern';
   state: BackgroundPatternState;
 }
 
 /** Set HDR output mode (fire-and-forget). */
-export interface SetHDROutputModeMessage {
+export interface SetHDROutputModeMessage extends BaseWorkerMessage {
   type: 'setHDROutputMode';
   mode: 'sdr' | 'hlg' | 'pq';
   capabilities: DisplayCapabilities;
 }
 
 /** Read pixel data at a specific location. Requires response. */
-export interface ReadPixelMessage {
+export interface ReadPixelMessage extends BaseWorkerMessage {
   type: 'readPixel';
   id: number;
   x: number;
@@ -212,13 +223,13 @@ export interface ReadPixelMessage {
 }
 
 /** Batch state sync: all dirty state in a single message. */
-export interface SyncStateMessage {
+export interface SyncStateMessage extends BaseWorkerMessage {
   type: 'syncState';
   state: Partial<RendererSyncState>;
 }
 
 /** Dispose the worker and release all resources. */
-export interface DisposeMessage {
+export interface DisposeMessage extends BaseWorkerMessage {
   type: 'dispose';
 }
 
@@ -233,13 +244,13 @@ export interface RendererSyncState {
   cdl: CDLValues;
   curvesLUT: CurveLUTs | null;
   colorWheels: ColorWheelsState;
-  highlightsShadows: { highlights: number; shadows: number; whites: number; blacks: number };
-  vibrance: { vibrance: number; skinProtection: boolean };
+  highlightsShadows: HighlightsShadowsState;
+  vibrance: VibranceState;
   clarity: number;
   sharpen: number;
   hslQualifier: HSLQualifierState;
   channelMode: ChannelMode;
-  falseColor: { enabled: boolean; lut: Uint8Array | null };
+  falseColor: FalseColorState;
   zebraStripes: ZebraState;
   lut: { lutData: Float32Array | null; lutSize: number; intensity: number };
   displayColorState: { transferFunction: number; displayGamma: number; displayBrightness: number; customGamma: number };
@@ -281,12 +292,12 @@ export type RenderWorkerMessage =
 // =============================================================================
 
 /** Worker is ready to receive messages. */
-export interface ReadyResult {
+export interface ReadyResult extends BaseWorkerMessage {
   type: 'ready';
 }
 
 /** Initialization result. */
-export interface InitResult {
+export interface InitResult extends BaseWorkerMessage {
   type: 'initResult';
   success: boolean;
   error?: string;
@@ -294,32 +305,32 @@ export interface InitResult {
 }
 
 /** Render completed successfully. */
-export interface RenderDoneResult {
+export interface RenderDoneResult extends BaseWorkerMessage {
   type: 'renderDone';
   id: number;
 }
 
 /** Render failed with an error. */
-export interface RenderErrorResult {
+export interface RenderErrorResult extends BaseWorkerMessage {
   type: 'renderError';
   id: number;
   error: string;
 }
 
 /** Pixel data response. */
-export interface PixelDataResult {
+export interface PixelDataResult extends BaseWorkerMessage {
   type: 'pixelData';
   id: number;
   data: Float32Array | null;
 }
 
 /** WebGL context was lost. */
-export interface ContextLostResult {
+export interface ContextLostResult extends BaseWorkerMessage {
   type: 'contextLost';
 }
 
 /** WebGL context was restored. */
-export interface ContextRestoredResult {
+export interface ContextRestoredResult extends BaseWorkerMessage {
   type: 'contextRestored';
 }
 

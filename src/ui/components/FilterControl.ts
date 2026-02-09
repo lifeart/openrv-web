@@ -1,15 +1,11 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 
-export interface FilterSettings {
-  blur: number;      // 0-20 pixels
-  sharpen: number;   // 0-100 amount
-}
+export type { FilterSettings } from '../../core/types/filter';
+export { DEFAULT_FILTER_SETTINGS } from '../../core/types/filter';
 
-export const DEFAULT_FILTER_SETTINGS: FilterSettings = {
-  blur: 0,
-  sharpen: 0,
-};
+import type { FilterSettings } from '../../core/types/filter';
+import { DEFAULT_FILTER_SETTINGS } from '../../core/types/filter';
 
 export interface FilterControlEvents extends EventMap {
   filtersChanged: FilterSettings;

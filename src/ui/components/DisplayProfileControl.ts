@@ -4,15 +4,15 @@
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import {
-  DisplayTransferFunction,
-  DisplayColorState,
+  type DisplayTransferFunction,
+  type DisplayColorState,
   DEFAULT_DISPLAY_COLOR_STATE,
   PROFILE_FULL_LABELS,
   PROFILE_CYCLE_ORDER,
   saveDisplayProfile,
   loadDisplayProfile,
   isDisplayStateActive,
-} from '../../color/DisplayTransfer';
+} from '../../color/ColorProcessingFacade';
 import { getIconSvg } from './shared/Icons';
 
 export interface DisplayProfileControlEvents extends EventMap {

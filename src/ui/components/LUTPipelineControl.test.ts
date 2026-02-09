@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { LUTPipeline } from '../../color/pipeline/LUTPipeline';
+import { LUTPipeline, type LUT3D } from '../../color/ColorProcessingFacade';
 import { LUTPipelinePanel } from './LUTPipelinePanel';
 import { LUTStageControl } from './LUTStageControl';
-import type { LUT3D } from '../../color/LUTLoader';
 
 function createTestLUT3D(title: string = 'Test'): LUT3D {
   const size = 2;

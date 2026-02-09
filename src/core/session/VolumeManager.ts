@@ -140,13 +140,12 @@ export class VolumeManager {
   applyPreservesPitchToVideo(video: HTMLVideoElement): void {
     video.preservesPitch = this._preservesPitch;
     // Vendor-prefixed fallbacks for older browsers
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const videoAny = video as any;
+    const videoRecord = video as unknown as Record<string, unknown>;
     if ('mozPreservesPitch' in video) {
-      videoAny.mozPreservesPitch = this._preservesPitch;
+      videoRecord.mozPreservesPitch = this._preservesPitch;
     }
     if ('webkitPreservesPitch' in video) {
-      videoAny.webkitPreservesPitch = this._preservesPitch;
+      videoRecord.webkitPreservesPitch = this._preservesPitch;
     }
   }
 

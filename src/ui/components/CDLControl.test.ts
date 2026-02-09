@@ -7,7 +7,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { CDLControl } from './CDLControl';
-import { DEFAULT_CDL, CDLValues } from '../../color/CDL';
+import { DEFAULT_CDL, type CDLValues } from '../../color/ColorProcessingFacade';
 
 // Mock showAlert
 vi.mock('./shared/Modal', () => ({

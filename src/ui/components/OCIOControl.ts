@@ -7,23 +7,24 @@
  * - Working color space
  * - Display and view transforms
  * - Look transforms
+ *
+ * State management is delegated to OCIOStateManager.
  */
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import {
-  OCIOState,
+  type OCIOState,
   getAvailableConfigs,
   getInputColorSpaces,
   getWorkingColorSpaces,
   getDisplays,
   getViewsForDisplay,
   getLooks,
-  registerCustomConfig,
-} from '../../color/OCIOConfig';
-import { OCIOProcessor } from '../../color/OCIOProcessor';
-import { parseOCIOConfig, validateOCIOConfig } from '../../color/OCIOConfigParser';
+  OCIOProcessor,
+} from '../../color/ColorProcessingFacade';
 import { getIconSvg } from './shared/Icons';
 import { DropdownMenu } from './shared/DropdownMenu';
+import { OCIOStateManager } from './OCIOStateManager';
 
 /**
  * OCIO Control events
@@ -34,11 +35,6 @@ export interface OCIOControlEvents extends EventMap {
 }
 
 /**
- * localStorage key for OCIO state persistence
- */
-const STORAGE_KEY = 'openrv-ocio-state';
-
-/**
  * OCIO Control UI Component
  */
 export class OCIOControl extends EventEmitter<OCIOControlEvents> {
@@ -47,7 +43,7 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
   private toggleButton: HTMLButtonElement;
   private isExpanded = false;
 
-  private processor: OCIOProcessor;
+  private manager: OCIOStateManager;
 
   // Dropdowns
   private configDropdown: DropdownMenu;
@@ -83,7 +79,7 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
   constructor(processor?: OCIOProcessor) {
     super();
 
-    this.processor = processor ?? new OCIOProcessor();
+    this.manager = new OCIOStateManager(processor);
 
     // Create main container
     this.container = document.createElement('div');
@@ -171,18 +167,23 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
 
     this.buildPanel();
     this.setupDropdownHandlers();
-
-    // Load persisted state before updating UI
-    this.loadState();
-
     this.updateUIFromState();
 
-    // Listen to processor state changes
-    this.processor.on('stateChanged', (state) => {
+    // Listen to manager state changes
+    this.manager.on('stateChanged', (state) => {
       this.updateUIFromState();
       this.updateButtonStyle();
-      this.saveState();
       this.emit('stateChanged', state);
+    });
+
+    // Listen to manager validation feedback
+    this.manager.on('validationFeedback', (feedback) => {
+      this.showValidationFeedback(feedback.message, feedback.type);
+    });
+
+    // Listen to config list changes (refresh dropdown)
+    this.manager.on('configListChanged', () => {
+      this.refreshConfigDropdown();
     });
 
     // Close panel on outside click
@@ -283,7 +284,7 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       dropZone.style.background = 'transparent';
       const file = e.dataTransfer?.files[0];
       if (file && /\.ocio$/i.test(file.name)) {
-        this.loadConfigFromFile(file);
+        this.manager.loadConfigFromFile(file);
       } else {
         this.showValidationFeedback('Please drop a .ocio file', 'error');
       }
@@ -554,7 +555,7 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
     `;
 
     this.enableToggle.type = 'checkbox';
-    this.enableToggle.checked = this.processor.isEnabled();
+    this.enableToggle.checked = this.manager.isEnabled();
     this.enableToggle.dataset.testid = 'ocio-enable-toggle';
     this.enableToggle.style.cssText = `
       width: 16px;
@@ -563,7 +564,7 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       cursor: pointer;
     `;
     this.enableToggle.addEventListener('change', () => {
-      this.processor.setEnabled(this.enableToggle.checked);
+      this.manager.setEnabled(this.enableToggle.checked);
     });
 
     const toggleLabel = document.createElement('span');
@@ -595,43 +596,43 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
     this.configDropdown = new DropdownMenu({
       minWidth: '200px',
       onSelect: (value) => {
-        this.processor.loadConfig(value);
+        this.manager.loadConfig(value);
       },
     });
     this.inputColorSpaceDropdown = new DropdownMenu({
       minWidth: '200px',
       onSelect: (value) => {
-        this.processor.setInputColorSpace(value);
+        this.manager.setInputColorSpace(value);
       },
     });
     this.workingColorSpaceDropdown = new DropdownMenu({
       minWidth: '200px',
       onSelect: (value) => {
-        this.processor.setWorkingColorSpace(value);
+        this.manager.setWorkingColorSpace(value);
       },
     });
     this.displayDropdown = new DropdownMenu({
       minWidth: '150px',
       onSelect: (value) => {
-        this.processor.setDisplay(value);
+        this.manager.setDisplay(value);
       },
     });
     this.viewDropdown = new DropdownMenu({
       minWidth: '180px',
       onSelect: (value) => {
-        this.processor.setView(value);
+        this.manager.setView(value);
       },
     });
     this.lookDropdown = new DropdownMenu({
       minWidth: '150px',
       onSelect: (value) => {
-        this.processor.setLook(value);
+        this.manager.setLook(value);
       },
     });
     this.lookDirectionDropdown = new DropdownMenu({
       minWidth: '120px',
       onSelect: (value) => {
-        this.processor.setLookDirection(value as 'forward' | 'inverse');
+        this.manager.setLookDirection(value as 'forward' | 'inverse');
       },
     });
 
@@ -642,7 +643,7 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
         label: c.description,
       }))
     );
-    this.configDropdown.setSelectedValue(this.processor.getState().configName);
+    this.configDropdown.setSelectedValue(this.manager.getState().configName);
 
     // Look direction items
     this.lookDirectionDropdown.setItems([
@@ -710,7 +711,7 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
    * Update input color space dropdown items
    */
   private updateInputColorSpaceItems(): void {
-    const state = this.processor.getState();
+    const state = this.manager.getState();
     this.inputColorSpaceDropdown.setItems(
       getInputColorSpaces(state.configName).map((cs) => ({
         value: cs,
@@ -724,7 +725,7 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
    * Update working color space dropdown items
    */
   private updateWorkingColorSpaceItems(): void {
-    const state = this.processor.getState();
+    const state = this.manager.getState();
     this.workingColorSpaceDropdown.setItems(
       getWorkingColorSpaces(state.configName).map((cs) => ({
         value: cs,
@@ -738,7 +739,7 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
    * Update display dropdown items
    */
   private updateDisplayItems(): void {
-    const state = this.processor.getState();
+    const state = this.manager.getState();
     this.displayDropdown.setItems(
       getDisplays(state.configName).map((d) => ({
         value: d,
@@ -752,7 +753,7 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
    * Update view dropdown items
    */
   private updateViewItems(): void {
-    const state = this.processor.getState();
+    const state = this.manager.getState();
     this.viewDropdown.setItems(
       getViewsForDisplay(state.configName, state.display).map((v) => ({
         value: v,
@@ -766,7 +767,7 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
    * Update look dropdown items
    */
   private updateLookItems(): void {
-    const state = this.processor.getState();
+    const state = this.manager.getState();
     this.lookDropdown.setItems(
       getLooks(state.configName).map((l) => ({
         value: l,
@@ -777,10 +778,10 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
   }
 
   /**
-   * Update UI from processor state
+   * Update UI from manager state
    */
   private updateUIFromState(): void {
-    const state = this.processor.getState();
+    const state = this.manager.getState();
 
     // Update labels
     const configDef = getAvailableConfigs().find((c) => c.name === state.configName);
@@ -801,7 +802,7 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
    * Update button style based on enabled state
    */
   private updateButtonStyle(): void {
-    const isEnabled = this.processor.isEnabled();
+    const isEnabled = this.manager.isEnabled();
     if (isEnabled) {
       this.toggleButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
       this.toggleButton.style.borderColor = 'var(--accent-primary)';
@@ -814,7 +815,7 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
   }
 
   // ==========================================================================
-  // Custom Config Loading
+  // Custom Config Loading (UI)
   // ==========================================================================
 
   /**
@@ -834,7 +835,7 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
       const file = input.files?.[0];
       cleanup();
       if (!file) return;
-      this.loadConfigFromFile(file);
+      this.manager.loadConfigFromFile(file);
     });
 
     // Remove the input from DOM if the user cancels the file dialog.
@@ -843,55 +844,6 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
 
     document.body.appendChild(input);
     input.click();
-  }
-
-  /**
-   * Load and validate an OCIO config from a File object (used by both file picker and drag-drop).
-   */
-  private loadConfigFromFile(file: File): void {
-    const reader = new FileReader();
-    reader.onerror = () => {
-      this.showValidationFeedback('Failed to read file', 'error');
-    };
-    reader.onload = () => {
-      try {
-        const configText = reader.result as string;
-
-        // Validate before parsing
-        const validation = validateOCIOConfig(configText);
-        if (!validation.valid) {
-          const errors = validation.errors.slice(0, 3).join('; ');
-          this.showValidationFeedback(`Invalid config: ${errors}`, 'error');
-          return;
-        }
-
-        // Show warnings if any
-        if (validation.warnings.length > 0) {
-          const warnings = validation.warnings.slice(0, 3).join('; ');
-          this.showValidationFeedback(`Loaded with warnings: ${warnings}`, 'warning');
-        }
-
-        const configName = file.name.replace(/\.ocio$/i, '').replace(/[^a-zA-Z0-9_.-]/g, '_');
-        const config = parseOCIOConfig(configText, configName);
-
-        // Register the custom config
-        registerCustomConfig(config);
-
-        // Update the config dropdown with new items
-        this.refreshConfigDropdown();
-
-        // Load the new config in the processor
-        this.processor.loadConfig(config.name);
-
-        if (validation.warnings.length === 0) {
-          this.showValidationFeedback(`Loaded "${file.name}" successfully`, 'success');
-        }
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : 'Unknown error';
-        this.showValidationFeedback(`Load failed: ${msg}`, 'error');
-      }
-    };
-    reader.readAsText(file);
   }
 
   /**
@@ -993,35 +945,35 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
    * Reset OCIO to defaults
    */
   reset(): void {
-    this.processor.reset();
+    this.manager.reset();
   }
 
   /**
    * Get current OCIO state
    */
   getState(): OCIOState {
-    return this.processor.getState();
+    return this.manager.getState();
   }
 
   /**
    * Set OCIO state
    */
   setState(state: Partial<OCIOState>): void {
-    this.processor.setState(state);
+    this.manager.setState(state);
   }
 
   /**
    * Get the OCIO processor
    */
   getProcessor(): OCIOProcessor {
-    return this.processor;
+    return this.manager.getProcessor();
   }
 
   /**
    * Check if OCIO is enabled
    */
   isEnabled(): boolean {
-    return this.processor.isEnabled();
+    return this.manager.isEnabled();
   }
 
   /**
@@ -1031,56 +983,15 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
     return this.container;
   }
 
-  // ==========================================================================
-  // State Persistence
-  // ==========================================================================
-
-  /**
-   * Load OCIO state from localStorage
-   */
-  private loadState(): void {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const raw = JSON.parse(stored);
-        if (typeof raw !== 'object' || raw === null) return;
-
-        // Only apply known, correctly-typed properties
-        const safe: Partial<OCIOState> = {};
-        if (typeof raw.enabled === 'boolean') safe.enabled = raw.enabled;
-        if (typeof raw.configName === 'string') safe.configName = raw.configName;
-        if (typeof raw.inputColorSpace === 'string') safe.inputColorSpace = raw.inputColorSpace;
-        if (typeof raw.workingColorSpace === 'string') safe.workingColorSpace = raw.workingColorSpace;
-        if (typeof raw.display === 'string') safe.display = raw.display;
-        if (typeof raw.view === 'string') safe.view = raw.view;
-        if (typeof raw.look === 'string') safe.look = raw.look;
-        if (raw.lookDirection === 'forward' || raw.lookDirection === 'inverse') safe.lookDirection = raw.lookDirection;
-
-        if (Object.keys(safe).length > 0) {
-          this.processor.setState(safe);
-        }
-      }
-    } catch {
-      // localStorage not available or invalid JSON, use defaults
-    }
-  }
-
-  /**
-   * Save OCIO state to localStorage
-   */
-  private saveState(): void {
-    try {
-      const state = this.processor.getState();
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {
-      // localStorage not available
-    }
-  }
-
   /**
    * Dispose of resources
    */
   dispose(): void {
+    if (this.feedbackTimer) {
+      clearTimeout(this.feedbackTimer);
+      this.feedbackTimer = null;
+    }
+
     // Remove global document click listener
     if (this.outsideClickHandler) {
       document.removeEventListener('click', this.outsideClickHandler);

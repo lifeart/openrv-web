@@ -7,9 +7,8 @@
  * Integrates with the LUTPipeline orchestrator for state management.
  */
 
-import { LUTPipeline } from '../../color/pipeline/LUTPipeline';
+import { LUTPipeline, type LUT } from '../../color/ColorProcessingFacade';
 import { LUTStageControl } from './LUTStageControl';
-import type { LUT } from '../../color/LUTLoader';
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 
 export interface LUTPipelinePanelEvents extends EventMap {

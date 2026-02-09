@@ -9,7 +9,7 @@
 
 import { getIconSvg } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
-import { getThemeManager, ThemeMode } from '../../utils/ThemeManager';
+import { getThemeManager, ThemeMode } from '../../utils/ui/ThemeManager';
 
 export class ThemeControl {
   private container: HTMLElement;

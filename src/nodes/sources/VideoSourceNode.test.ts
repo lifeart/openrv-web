@@ -4,7 +4,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { VideoSourceNode } from './VideoSourceNode';
-import { DEFAULT_PRELOAD_CONFIG } from '../../utils/FramePreloadManager';
+import { DEFAULT_PRELOAD_CONFIG } from '../../utils/media/FramePreloadManager';
 
 describe('VideoSourceNode', () => {
   let node: VideoSourceNode;
@@ -160,6 +160,149 @@ describe('VideoSourceNode', () => {
     it('VSN-010: has codec property', () => {
       expect(node.properties.has('codec')).toBe(true);
       expect(node.properties.getValue('codec')).toBe('');
+    });
+  });
+
+  // =============================================================================
+  // Edge case tests for VideoSourceNode (IMP-039)
+  // =============================================================================
+
+  describe('edge cases (IMP-039)', () => {
+    it('IMP-039-VSN-001: getFrameAsync returns null when not using mediabunny', async () => {
+      // When mediabunny is not initialized, getFrameAsync should return null
+      const result = await node.getFrameAsync(1);
+      expect(result).toBeNull();
+    });
+
+    it('IMP-039-VSN-002: getFrameAsync returns null for invalid frame number 0', async () => {
+      // Even without mediabunny, should handle gracefully
+      const result = await node.getFrameAsync(0);
+      expect(result).toBeNull();
+    });
+
+    it('IMP-039-VSN-003: getFrameAsync returns null for negative frame number', async () => {
+      const result = await node.getFrameAsync(-1);
+      expect(result).toBeNull();
+    });
+
+    it('IMP-039-VSN-004: concurrent getFrameAsync calls return null without mediabunny', async () => {
+      // Concurrent calls should all return null gracefully
+      const results = await Promise.all([
+        node.getFrameAsync(1),
+        node.getFrameAsync(2),
+        node.getFrameAsync(3),
+      ]);
+      expect(results).toEqual([null, null, null]);
+    });
+
+    it('IMP-039-VSN-005: dispose during no pending operations does not throw', () => {
+      // Should be safe to dispose even when there are no pending operations
+      expect(() => node.dispose()).not.toThrow();
+      expect(node.isReady()).toBe(false);
+    });
+
+    it('IMP-039-VSN-006: hasFrameCached returns false when no preload manager', () => {
+      // Without mediabunny, no preload manager exists
+      expect(node.hasFrameCached(1)).toBe(false);
+      expect(node.hasFrameCached(0)).toBe(false);
+      expect(node.hasFrameCached(-1)).toBe(false);
+    });
+
+    it('IMP-039-VSN-007: getCachedFrameCanvas returns null when no preload manager', () => {
+      expect(node.getCachedFrameCanvas(1)).toBeNull();
+    });
+
+    it('IMP-039-VSN-008: getCachedFrames returns empty set when no preload manager', () => {
+      const frames = node.getCachedFrames();
+      expect(frames.size).toBe(0);
+    });
+
+    it('IMP-039-VSN-009: getPendingFrames returns empty set when no preload manager', () => {
+      const frames = node.getPendingFrames();
+      expect(frames.size).toBe(0);
+    });
+
+    it('IMP-039-VSN-010: getCacheStats returns null when no preload manager', () => {
+      expect(node.getCacheStats()).toBeNull();
+    });
+
+    it('IMP-039-VSN-011: clearCache does not throw when no preload manager', () => {
+      expect(() => node.clearCache()).not.toThrow();
+    });
+
+    it('IMP-039-VSN-012: preloadFrames does not throw when no mediabunny', async () => {
+      await expect(node.preloadFrames(1)).resolves.toBeUndefined();
+    });
+
+    it('IMP-039-VSN-013: startPlaybackPreload does not throw when no mediabunny', () => {
+      expect(() => node.startPlaybackPreload(1, 1)).not.toThrow();
+    });
+
+    it('IMP-039-VSN-014: stopPlaybackPreload does not throw when no mediabunny', () => {
+      expect(() => node.stopPlaybackPreload()).not.toThrow();
+    });
+
+    it('IMP-039-VSN-015: updatePlaybackBuffer does not throw when no mediabunny', () => {
+      expect(() => node.updatePlaybackBuffer(1)).not.toThrow();
+    });
+
+    it('IMP-039-VSN-016: setPlaybackDirection normalizes direction values', () => {
+      node.setPlaybackDirection(1);
+      expect(node.getPlaybackDirection()).toBe(1);
+
+      node.setPlaybackDirection(-1);
+      expect(node.getPlaybackDirection()).toBe(-1);
+
+      // Zero and positive should map to 1
+      node.setPlaybackDirection(0);
+      expect(node.getPlaybackDirection()).toBe(1);
+
+      // Large negative should map to -1
+      node.setPlaybackDirection(-100);
+      expect(node.getPlaybackDirection()).toBe(-1);
+    });
+
+    it('IMP-039-VSN-017: isPlaybackModeActive returns false initially', () => {
+      expect(node.isPlaybackModeActive()).toBe(false);
+    });
+
+    it('IMP-039-VSN-018: setPlaybackActive toggles playback mode', () => {
+      node.setPlaybackActive(true);
+      expect(node.isPlaybackModeActive()).toBe(true);
+
+      node.setPlaybackActive(false);
+      expect(node.isPlaybackModeActive()).toBe(false);
+    });
+
+    it('IMP-039-VSN-019: isHDR returns false when no video loaded', () => {
+      expect(node.isHDR()).toBe(false);
+    });
+
+    it('IMP-039-VSN-020: getVideoColorSpace returns null when no video loaded', () => {
+      expect(node.getVideoColorSpace()).toBeNull();
+    });
+
+    it('IMP-039-VSN-021: dispose cleans up HDR state', () => {
+      node.dispose();
+      expect(node.isHDR()).toBe(false);
+      expect(node.getVideoColorSpace()).toBeNull();
+    });
+
+    it('IMP-039-VSN-022: extraction mode can be changed', () => {
+      expect(node.getExtractionMode()).toBe('auto');
+
+      node.setExtractionMode('html-video');
+      expect(node.getExtractionMode()).toBe('html-video');
+
+      node.setExtractionMode('mediabunny');
+      expect(node.getExtractionMode()).toBe('mediabunny');
+
+      node.setExtractionMode('auto');
+      expect(node.getExtractionMode()).toBe('auto');
+    });
+
+    it('IMP-039-VSN-023: clearFrameCache does not throw when no preload manager', () => {
+      expect(() => node.clearFrameCache()).not.toThrow();
     });
   });
 

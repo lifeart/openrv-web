@@ -22,6 +22,7 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
   private visible = false;
   private entriesContainer: HTMLElement;
   private headerElement: HTMLElement;
+  private unsubscribers: (() => void)[] = [];
 
   constructor(historyManager: HistoryManager) {
     super();
@@ -116,8 +117,8 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
     this.container.appendChild(this.entriesContainer);
 
     // Listen to history changes
-    this.historyManager.on('historyChanged', () => this.render());
-    this.historyManager.on('currentIndexChanged', () => this.render());
+    this.unsubscribers.push(this.historyManager.on('historyChanged', () => this.render()));
+    this.unsubscribers.push(this.historyManager.on('currentIndexChanged', () => this.render()));
 
     // Initial render
     this.render();
@@ -274,6 +275,17 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
     el.appendChild(time);
 
     return el;
+  }
+
+  /**
+   * Dispose of resources
+   */
+  dispose(): void {
+    for (const unsubscribe of this.unsubscribers) {
+      unsubscribe();
+    }
+    this.unsubscribers = [];
+    this.container.remove();
   }
 
   /**

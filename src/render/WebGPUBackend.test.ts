@@ -453,7 +453,7 @@ describe('WebGPUBackend', () => {
     });
 
     it('setFalseColor', () => {
-      expect(() => backend.setFalseColor(false, null)).not.toThrow();
+      expect(() => backend.setFalseColor({ enabled: false, lut: null })).not.toThrow();
     });
 
     it('setZebraStripes', () => {
@@ -473,19 +473,19 @@ describe('WebGPUBackend', () => {
     });
 
     it('setHighlightsShadows', () => {
-      expect(() => backend.setHighlightsShadows(0, 0, 0, 0)).not.toThrow();
+      expect(() => backend.setHighlightsShadows({ highlights: 0, shadows: 0, whites: 0, blacks: 0 })).not.toThrow();
     });
 
     it('setVibrance', () => {
-      expect(() => backend.setVibrance(0, true)).not.toThrow();
+      expect(() => backend.setVibrance({ vibrance: 0, skinProtection: true })).not.toThrow();
     });
 
     it('setClarity', () => {
-      expect(() => backend.setClarity(0)).not.toThrow();
+      expect(() => backend.setClarity({ clarity: 0 })).not.toThrow();
     });
 
     it('setSharpen', () => {
-      expect(() => backend.setSharpen(0)).not.toThrow();
+      expect(() => backend.setSharpen({ amount: 0 })).not.toThrow();
     });
 
     it('setHSLQualifier', () => {

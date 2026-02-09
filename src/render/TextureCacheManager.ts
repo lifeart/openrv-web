@@ -5,6 +5,8 @@
  * during playback and rendering. Uses an LRU eviction policy.
  */
 
+import type { ManagerBase } from '../core/ManagerBase';
+
 /**
  * Configuration for the texture cache
  */
@@ -107,7 +109,7 @@ function calculateTextureSize(
 /**
  * TextureCacheManager manages a pool of reusable WebGL textures
  */
-export class TextureCacheManager {
+export class TextureCacheManager implements ManagerBase {
   private gl: WebGL2RenderingContext;
   private config: CacheConfig;
   private cache: Map<string, CacheEntry> = new Map();

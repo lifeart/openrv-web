@@ -5,6 +5,7 @@
  * standard XYZ-based transformations with chromatic adaptation.
  */
 
+import { clamp } from '../utils/math';
 import {
   pqEncode, pqDecode,
   hlgEncode, hlgDecode,
@@ -682,7 +683,7 @@ export function acesToneMap(x: number): number {
   const c = 2.43;
   const d = 0.59;
   const e = 0.14;
-  return Math.max(0, Math.min(1, (x * (a * x + b)) / (x * (c * x + d) + e)));
+  return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0, 1);
 }
 
 /**
@@ -709,7 +710,7 @@ function filmicLookChannel(x: number): number {
   // Using a cubic Bezier-like S-curve approximation
   const t = x;
   const result = t * t * (3.0 - 2.0 * t) * 1.05 - 0.025;
-  return Math.max(0, Math.min(1, result));
+  return clamp(result, 0, 1);
 }
 
 /**
@@ -756,7 +757,7 @@ function applyLookTransform(rgb: RGB, lookName: string, direction: 'forward' | '
             const df = (6.0 * t - 6.0 * t * t) * 1.05;
             if (Math.abs(df) < 1e-10) break;
             t -= f / df;
-            t = Math.max(0, Math.min(1, t));
+            t = clamp(t, 0, 1);
           }
           return t;
         };
@@ -1262,9 +1263,9 @@ export class OCIOTransform {
       const [outR, outG, outB] = this.apply(r, g, b);
 
       // Clamp and convert back to 8-bit
-      data[i] = Math.round(Math.max(0, Math.min(1, outR)) * 255);
-      data[i + 1] = Math.round(Math.max(0, Math.min(1, outG)) * 255);
-      data[i + 2] = Math.round(Math.max(0, Math.min(1, outB)) * 255);
+      data[i] = Math.round(clamp(outR, 0, 1) * 255);
+      data[i + 1] = Math.round(clamp(outG, 0, 1) * 255);
+      data[i + 2] = Math.round(clamp(outB, 0, 1) * 255);
       // Alpha unchanged
     }
 

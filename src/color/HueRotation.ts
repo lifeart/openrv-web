@@ -20,19 +20,20 @@ export {
   getHueRotationMatrix,
   clearHueRotationCache,
   isIdentityHueRotation,
-} from '../utils/effectProcessing.shared';
+} from '../utils/effects/effectProcessing.shared';
 
-import { getHueRotationMatrix } from '../utils/effectProcessing.shared';
+import { getHueRotationMatrix } from '../utils/effects/effectProcessing.shared';
+import { LUMA_R, LUMA_G, LUMA_B } from '../config/RenderConfig';
 
 // ============================================================================
 // Alternative matrix builder (matrix-multiplication approach)
 // Kept for cross-validation in tests; not used at runtime.
 // ============================================================================
 
-/** Rec. 709 luminance weights */
-const Wr = 0.2126;
-const Wg = 0.7152;
-const Wb = 0.0722;
+/** Rec. 709 luminance weights (from centralized config) */
+const Wr = LUMA_R;
+const Wg = LUMA_G;
+const Wb = LUMA_B;
 
 type Mat3 = [number, number, number, number, number, number, number, number, number];
 

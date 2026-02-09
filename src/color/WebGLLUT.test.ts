@@ -5,133 +5,7 @@ import {
   disposeSharedLUTProcessor,
 } from './WebGLLUT';
 import type { LUT3D } from './LUTLoader';
-
-// Mock WebGL2 context
-function createMockWebGL2Context() {
-  const textures: object[] = [];
-  const buffers: object[] = [];
-  const programs: object[] = [];
-  const shaders: object[] = [];
-
-  return {
-    VERTEX_SHADER: 35633,
-    FRAGMENT_SHADER: 35632,
-    ARRAY_BUFFER: 34962,
-    STATIC_DRAW: 35044,
-    FLOAT: 5126,
-    LINK_STATUS: 35714,
-    COMPILE_STATUS: 35713,
-    TEXTURE_2D: 3553,
-    TEXTURE_3D: 32879,
-    TEXTURE0: 33984,
-    TEXTURE1: 33985,
-    RGBA: 6408,
-    RGB: 6407,
-    UNSIGNED_BYTE: 5121,
-    LINEAR: 9729,
-    NEAREST: 9728,
-    CLAMP_TO_EDGE: 33071,
-    TEXTURE_MIN_FILTER: 10241,
-    TEXTURE_MAG_FILTER: 10240,
-    TEXTURE_WRAP_S: 10242,
-    TEXTURE_WRAP_T: 10243,
-    TEXTURE_WRAP_R: 32882,
-    FRAMEBUFFER: 36160,
-    TRIANGLE_STRIP: 5,
-    COLOR_ATTACHMENT0: 36064,
-    FRAMEBUFFER_COMPLETE: 36053,
-    NO_ERROR: 0,
-    HALF_FLOAT: 0x140B,
-    RGBA32F: 0x8814,
-    RGBA16F: 0x881A,
-    RGBA8: 0x8058,
-    RGB32F: 0x8815,
-
-    getExtension: vi.fn((name: string) => {
-      if (name === 'EXT_color_buffer_float') return {};
-      if (name === 'OES_texture_float_linear') return {};
-      return null;
-    }),
-    getError: vi.fn(() => 0),
-
-    createShader: vi.fn(() => {
-      const shader = {};
-      shaders.push(shader);
-      return shader;
-    }),
-    shaderSource: vi.fn(),
-    compileShader: vi.fn(),
-    getShaderParameter: vi.fn(() => true),
-    getShaderInfoLog: vi.fn(() => ''),
-    deleteShader: vi.fn(),
-
-    createProgram: vi.fn(() => {
-      const program = {};
-      programs.push(program);
-      return program;
-    }),
-    attachShader: vi.fn(),
-    linkProgram: vi.fn(),
-    getProgramParameter: vi.fn(() => true),
-    getProgramInfoLog: vi.fn(() => ''),
-    useProgram: vi.fn(),
-    deleteProgram: vi.fn(),
-
-    getAttribLocation: vi.fn((_, name) => {
-      if (name === 'a_position') return 0;
-      if (name === 'a_texCoord') return 1;
-      return -1;
-    }),
-    getUniformLocation: vi.fn((_, name) => ({ name })),
-
-    createBuffer: vi.fn(() => {
-      const buffer = {};
-      buffers.push(buffer);
-      return buffer;
-    }),
-    bindBuffer: vi.fn(),
-    bufferData: vi.fn(),
-    deleteBuffer: vi.fn(),
-
-    enableVertexAttribArray: vi.fn(),
-    vertexAttribPointer: vi.fn(),
-
-    createTexture: vi.fn(() => {
-      const texture = {};
-      textures.push(texture);
-      return texture;
-    }),
-    bindTexture: vi.fn(),
-    texImage2D: vi.fn(),
-    texImage3D: vi.fn(),
-    texParameteri: vi.fn(),
-    deleteTexture: vi.fn(),
-    activeTexture: vi.fn(),
-
-    createFramebuffer: vi.fn(() => ({})),
-    bindFramebuffer: vi.fn(),
-    framebufferTexture2D: vi.fn(),
-    checkFramebufferStatus: vi.fn(() => 36053), // FRAMEBUFFER_COMPLETE
-    deleteFramebuffer: vi.fn(),
-
-    uniform1i: vi.fn(),
-    uniform1f: vi.fn(),
-    uniform2f: vi.fn(),
-    uniform3fv: vi.fn(),
-
-    viewport: vi.fn(),
-    drawArrays: vi.fn(),
-    readPixels: vi.fn((_x, _y, _width, _height, _format, _type, pixels) => {
-      // Fill with a pattern to verify processing happened
-      for (let i = 0; i < pixels.length; i += 4) {
-        pixels[i] = 128;     // R
-        pixels[i + 1] = 128; // G
-        pixels[i + 2] = 128; // B
-        pixels[i + 3] = 255; // A
-      }
-    }),
-  };
-}
+import { createMockWebGL2Context } from '../../test/mocks';
 
 // Create a mock LUT3D
 function createMockLUT(): LUT3D {
@@ -386,7 +260,7 @@ describe('WebGLLUTProcessor', () => {
         // Simulate WebGL: copy the input data to output
         if (capturedImageData) {
           for (let i = 0; i < pixels.length && i < capturedImageData.data.length; i++) {
-            pixels[i] = capturedImageData.data[i];
+            pixels[i] = capturedImageData.data[i]!;
           }
         }
       });

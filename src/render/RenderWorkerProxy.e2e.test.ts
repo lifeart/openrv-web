@@ -838,9 +838,9 @@ describe('RenderWorkerProxy E2E', () => {
     });
 
     it('RWP-E2E-045: setter calls accumulate dirty state without sending syncState', () => {
-      proxy.setClarity(50);
-      proxy.setSharpen(25);
-      proxy.setVibrance(75, true);
+      proxy.setClarity({ clarity: 50 });
+      proxy.setSharpen({ amount: 25 });
+      proxy.setVibrance({ vibrance: 75, skinProtection: true });
       proxy.setColorInversion(true);
 
       // No syncState message should have been sent yet
@@ -849,8 +849,8 @@ describe('RenderWorkerProxy E2E', () => {
     });
 
     it('RWP-E2E-046: dirty state is flushed on renderSDRFrameAsync', async () => {
-      proxy.setClarity(50);
-      proxy.setSharpen(25);
+      proxy.setClarity({ clarity: 50 });
+      proxy.setSharpen({ amount: 25 });
 
       const bitmap = createMockBitmap();
       const promise = proxy.renderSDRFrameAsync(bitmap);
@@ -875,7 +875,7 @@ describe('RenderWorkerProxy E2E', () => {
     });
 
     it('RWP-E2E-047: dirty state is cleared after flush', async () => {
-      proxy.setClarity(50);
+      proxy.setClarity({ clarity: 50 });
 
       const bitmap = createMockBitmap();
       const promise1 = proxy.renderSDRFrameAsync(bitmap);
@@ -903,8 +903,8 @@ describe('RenderWorkerProxy E2E', () => {
     });
 
     it('RWP-E2E-048: multiple setters batch into one syncState with all dirty fields', async () => {
-      proxy.setClarity(50);
-      proxy.setSharpen(30);
+      proxy.setClarity({ clarity: 50 });
+      proxy.setSharpen({ amount: 30 });
       proxy.setChannelMode('red');
       proxy.setColorAdjustments({ ...DEFAULT_COLOR_ADJUSTMENTS, exposure: 1.5 });
       proxy.setToneMappingState({ ...DEFAULT_TONE_MAPPING_STATE, enabled: true });
@@ -933,9 +933,9 @@ describe('RenderWorkerProxy E2E', () => {
     });
 
     it('RWP-E2E-049: overwriting same dirty field keeps the latest value', async () => {
-      proxy.setClarity(10);
-      proxy.setClarity(20);
-      proxy.setClarity(50);
+      proxy.setClarity({ clarity: 10 });
+      proxy.setClarity({ clarity: 20 });
+      proxy.setClarity({ clarity: 50 });
 
       const bitmap = createMockBitmap();
       const promise = proxy.renderSDRFrameAsync(bitmap);
@@ -951,7 +951,7 @@ describe('RenderWorkerProxy E2E', () => {
     });
 
     it('RWP-E2E-050: dirty state is flushed on renderHDRAsync', async () => {
-      proxy.setClarity(75);
+      proxy.setClarity({ clarity: 75 });
 
       const mockImage = {
         width: 1,
@@ -1043,7 +1043,7 @@ describe('RenderWorkerProxy E2E', () => {
 
     it('RWP-E2E-054: false color setter marks dirty state', async () => {
       const lut = new Uint8Array(256 * 3);
-      proxy.setFalseColor(true, lut);
+      proxy.setFalseColor({ enabled: true, lut });
 
       const bitmap = createMockBitmap();
       const promise = proxy.renderSDRFrameAsync(bitmap);
@@ -1097,7 +1097,7 @@ describe('RenderWorkerProxy E2E', () => {
     });
 
     it('RWP-E2E-057: highlights/shadows setter marks dirty state', async () => {
-      proxy.setHighlightsShadows(50, -30, 20, -10);
+      proxy.setHighlightsShadows({ highlights: 50, shadows: -30, whites: 20, blacks: -10 });
 
       const bitmap = createMockBitmap();
       const promise = proxy.renderSDRFrameAsync(bitmap);
@@ -1118,7 +1118,7 @@ describe('RenderWorkerProxy E2E', () => {
     });
 
     it('RWP-E2E-058: vibrance setter marks dirty state', async () => {
-      proxy.setVibrance(80, true);
+      proxy.setVibrance({ vibrance: 80, skinProtection: true });
 
       const bitmap = createMockBitmap();
       const promise = proxy.renderSDRFrameAsync(bitmap);

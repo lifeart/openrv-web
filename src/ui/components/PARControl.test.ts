@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { PARControl } from './PARControl';
-import { PARState } from '../../utils/PixelAspectRatio';
+import { PARState } from '../../utils/media/PixelAspectRatio';
 
 describe('PARControl', () => {
   let control: PARControl;

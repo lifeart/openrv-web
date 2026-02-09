@@ -11,50 +11,13 @@
  */
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { clamp } from '../../utils/math';
 
-export interface HSLRange {
-  center: number;     // Center value
-  width: number;      // Width of selection range
-  softness: number;   // Falloff amount (0-100)
-}
+export type { HSLRange, HSLCorrection, HSLQualifierState } from '../../core/types/color';
+export { DEFAULT_HSL_RANGE, DEFAULT_HSL_CORRECTION, DEFAULT_HSL_QUALIFIER_STATE } from '../../core/types/color';
 
-export interface HSLCorrection {
-  hueShift: number;       // -180 to +180 degrees
-  saturationScale: number; // 0 to 2 (1 = no change)
-  luminanceScale: number;  // 0 to 2 (1 = no change)
-}
-
-export interface HSLQualifierState {
-  enabled: boolean;
-  hue: HSLRange;         // 0-360 degrees
-  saturation: HSLRange;  // 0-100%
-  luminance: HSLRange;   // 0-100%
-  correction: HSLCorrection;
-  invert: boolean;       // Invert the selection
-  mattePreview: boolean; // Show selection as grayscale mask
-}
-
-export const DEFAULT_HSL_RANGE: HSLRange = {
-  center: 0,
-  width: 30,
-  softness: 20,
-};
-
-export const DEFAULT_HSL_CORRECTION: HSLCorrection = {
-  hueShift: 0,
-  saturationScale: 1,
-  luminanceScale: 1,
-};
-
-export const DEFAULT_HSL_QUALIFIER_STATE: HSLQualifierState = {
-  enabled: false,
-  hue: { center: 0, width: 30, softness: 20 },
-  saturation: { center: 50, width: 100, softness: 10 },
-  luminance: { center: 50, width: 100, softness: 10 },
-  correction: { ...DEFAULT_HSL_CORRECTION },
-  invert: false,
-  mattePreview: false,
-};
+import type { HSLRange, HSLCorrection, HSLQualifierState } from '../../core/types/color';
+import { DEFAULT_HSL_QUALIFIER_STATE } from '../../core/types/color';
 
 export interface HSLQualifierEvents extends EventMap {
   stateChanged: HSLQualifierState;
@@ -207,8 +170,8 @@ export class HSLQualifier extends EventEmitter<HSLQualifierEvents> {
 
     return {
       h: newH,
-      s: Math.max(0, Math.min(1, newS)),
-      l: Math.max(0, Math.min(1, newL)),
+      s: clamp(newS, 0, 1),
+      l: clamp(newL, 0, 1),
     };
   }
 
@@ -216,7 +179,7 @@ export class HSLQualifier extends EventEmitter<HSLQualifierEvents> {
    * Smoothstep function for soft transitions
    */
   private smoothstep(edge0: number, edge1: number, x: number): number {
-    const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+    const t = clamp((x - edge0) / (edge1 - edge0), 0, 1);
     return t * t * (3 - 2 * t);
   }
 
@@ -357,7 +320,7 @@ export class HSLQualifier extends EventEmitter<HSLQualifierEvents> {
   setSaturationRange(range: Partial<HSLRange>): void {
     this.state.saturation = { ...this.state.saturation, ...range };
     // Clamp center to 0-100
-    this.state.saturation.center = Math.max(0, Math.min(100, this.state.saturation.center));
+    this.state.saturation.center = clamp(this.state.saturation.center, 0, 100);
     this.emit('stateChanged', this.getState());
   }
 
@@ -367,7 +330,7 @@ export class HSLQualifier extends EventEmitter<HSLQualifierEvents> {
   setLuminanceRange(range: Partial<HSLRange>): void {
     this.state.luminance = { ...this.state.luminance, ...range };
     // Clamp center to 0-100
-    this.state.luminance.center = Math.max(0, Math.min(100, this.state.luminance.center));
+    this.state.luminance.center = clamp(this.state.luminance.center, 0, 100);
     this.emit('stateChanged', this.getState());
   }
 
@@ -377,9 +340,9 @@ export class HSLQualifier extends EventEmitter<HSLQualifierEvents> {
   setCorrection(correction: Partial<HSLCorrection>): void {
     this.state.correction = { ...this.state.correction, ...correction };
     // Clamp values
-    this.state.correction.hueShift = Math.max(-180, Math.min(180, this.state.correction.hueShift));
-    this.state.correction.saturationScale = Math.max(0, Math.min(2, this.state.correction.saturationScale));
-    this.state.correction.luminanceScale = Math.max(0, Math.min(2, this.state.correction.luminanceScale));
+    this.state.correction.hueShift = clamp(this.state.correction.hueShift, -180, 180);
+    this.state.correction.saturationScale = clamp(this.state.correction.saturationScale, 0, 2);
+    this.state.correction.luminanceScale = clamp(this.state.correction.luminanceScale, 0, 2);
     this.emit('stateChanged', this.getState());
   }
 

@@ -9,38 +9,49 @@ import {
   preloadFrames,
   releaseDistantFrames,
   disposeSequence,
-} from '../../utils/SequenceLoader';
+} from '../../utils/media/SequenceLoader';
 import { VideoSourceNode } from '../../nodes/sources/VideoSourceNode';
 import { FileSourceNode } from '../../nodes/sources/FileSourceNode';
-import type { UnsupportedCodecError, CodecFamily } from '../../utils/CodecUtils';
-import {
+import type { UnsupportedCodecError, CodecFamily } from '../../utils/media/CodecUtils';
+import type {
   Annotation,
   PenStroke,
   TextAnnotation,
-  BrushType,
-  LineJoin,
-  LineCap,
-  StrokeMode,
-  TextOrigin,
   PaintEffects,
-  RV_PEN_WIDTH_SCALE,
-  RV_TEXT_SIZE_SCALE,
 } from '../../paint/types';
-import type { ColorAdjustments } from '../../ui/components/ColorControls';
-import type { FilterSettings } from '../../ui/components/FilterControl';
-import type { Transform2D } from '../../ui/components/TransformControl';
-import type { CropState } from '../../ui/components/CropControl';
-import type { ChannelMode } from '../../ui/components/ChannelSelect';
-import type { ScopesState } from '../../ui/components/ScopesControl';
+import {
+  AnnotationStore,
+  getNumberValue as _getNumberValue,
+  getBooleanValue as _getBooleanValue,
+  getNumberArray as _getNumberArray,
+  getStringValue as _getStringValue,
+} from './AnnotationStore';
+import type { ColorAdjustments, ChannelMode } from '../../core/types/color';
+import type { FilterSettings } from '../../core/types/filter';
+import type { Transform2D, CropState } from '../../core/types/transform';
+import type { ScopesState } from '../../core/types/scopes';
 import type { CDLValues } from '../../color/CDL';
 import type { LensDistortionParams } from '../../transform/LensDistortion';
-import type { StereoState } from '../../stereo/StereoRenderer';
+import type { StereoState } from '../types/stereo';
 import type { StereoEyeTransformState, StereoAlignMode } from '../../stereo/StereoEyeTransform';
+import type { LoopMode, MediaType } from '../types/session';
 import { Graph } from '../graph/Graph';
 import { loadGTOGraph } from './GTOGraphLoader';
+import {
+  parseInitialSettings as _parseInitialSettings,
+  parseColorAdjustments as _parseColorAdjustments,
+  parseCDL as _parseCDL,
+  parseTransform as _parseTransform,
+  parseLens as _parseLens,
+  parseCrop as _parseCrop,
+  parseChannelMode as _parseChannelMode,
+  parseStereo as _parseStereo,
+  parseScopes as _parseScopes,
+} from './GTOSettingsParser';
 import type { GTOParseResult } from './GTOGraphLoader';
-import type { SubFramePosition } from '../../utils/FrameInterpolator';
-import { PlaybackTimingController, MAX_CONSECUTIVE_STARVATION_SKIPS } from './PlaybackTimingController';
+import type { SubFramePosition } from '../../utils/media/FrameInterpolator';
+import { MAX_CONSECUTIVE_STARVATION_SKIPS } from './PlaybackTimingController';
+import { PlaybackEngine } from './PlaybackEngine';
 import { MarkerManager, MARKER_COLORS, type Marker, type MarkerColor } from './MarkerManager';
 import { VolumeManager } from './VolumeManager';
 import { ABCompareManager } from './ABCompareManager';
@@ -153,8 +164,8 @@ export interface SessionEvents extends EventMap {
   subFramePositionChanged: SubFramePosition | null;
 }
 
-export type LoopMode = 'once' | 'loop' | 'pingpong';
-export type MediaType = 'image' | 'video' | 'sequence';
+// Re-export from centralized types for backward compatibility
+export type { LoopMode, MediaType } from '../types/session';
 
 export interface MediaSource {
   type: MediaType;
@@ -178,32 +189,18 @@ export interface MediaSource {
 export { PLAYBACK_SPEED_PRESETS } from '../../config/PlaybackConfig';
 export type { PlaybackSpeedPreset } from '../../config/PlaybackConfig';
 
-// Local import so the class implementation can use them
-import { PLAYBACK_SPEED_PRESETS, type PlaybackSpeedPreset } from '../../config/PlaybackConfig';
 
 export class Session extends EventEmitter<SessionEvents> {
-  private _currentFrame = 1;
-  private _inPoint = 1;
-  private _outPoint = 1;
-  private _fps = 24;
-  private _isPlaying = false;
-  private _playDirection = 1;
-  private _playbackSpeed = 1;
-  private _loopMode: LoopMode = 'loop';
-  private _interpolationEnabled = false; // Sub-frame interpolation for slow-motion (default: off)
-
-  // Playback guard to prevent concurrent play() calls
-  private _pendingPlayPromise: Promise<void> | null = null;
+  // Playback engine - owns all playback state (frame, in/out points, fps, timing, etc.)
+  protected _playbackEngine = new PlaybackEngine();
 
   // Extracted managers
   private _markerManager = new MarkerManager();
   private _volumeManager = new VolumeManager();
   private _abCompareManager = new ABCompareManager();
+  private _annotationStore = new AnnotationStore();
 
   // Session integration properties
-  private _frameIncrement = 1;
-  private _matteSettings: MatteSettings | null = null;
-  private _sessionPaintEffects: Partial<PaintEffects> | null = null;
   private _metadata: SessionMetadata = {
     displayName: '',
     comment: '',
@@ -214,65 +211,79 @@ export class Session extends EventEmitter<SessionEvents> {
     membershipContains: [],
   };
 
-  // Playback timing controller - holds pure logic for frame accumulator,
-  // starvation detection, buffering, effective FPS, and sub-frame interpolation.
-  // State is kept in _ts (TimingState) for the controller to operate on.
-  private _timingController = new PlaybackTimingController();
-
   // Static constant for starvation threshold - kept for backward compatibility
   static readonly MAX_CONSECUTIVE_STARVATION_SKIPS = MAX_CONSECUTIVE_STARVATION_SKIPS;
 
-  // Timing state object - all mutable fields for playback timing.
-  // The PlaybackTimingController methods operate on this by reference.
-  //
-  // Individual fields are also exposed as direct properties on Session
-  // (via getters/setters below) so that existing tests which access
-  // `(session as any).lastFrameTime` etc. continue to work.
-  private _ts: import('./PlaybackTimingController').TimingState = {
-    lastFrameTime: 0,
-    frameAccumulator: 0,
-    bufferingCount: 0,
-    isBuffering: false,
-    starvationStartTime: 0,
-    consecutiveStarvationSkips: 0,
-    fpsFrameCount: 0,
-    fpsLastTime: 0,
-    effectiveFps: 0,
-    subFramePosition: null,
-  };
+  // --- Backward-compatible accessors for playback state ---
+  // Tests access these via (session as any)._currentFrame etc.
 
-  // --- Backward-compatible accessors for timing state fields ---
-  // Tests access these via `(session as any).lastFrameTime` etc.
+  protected get _currentFrame(): number { return this._playbackEngine.currentFrame; }
+  protected set _currentFrame(v: number) { this._playbackEngine.setCurrentFrameInternal(v); }
 
-  get lastFrameTime(): number { return this._ts.lastFrameTime; }
-  set lastFrameTime(v: number) { this._ts.lastFrameTime = v; }
+  protected get _inPoint(): number { return this._playbackEngine.inPoint; }
+  protected set _inPoint(v: number) { this._playbackEngine.setInPointInternal(v); }
 
-  get frameAccumulator(): number { return this._ts.frameAccumulator; }
-  set frameAccumulator(v: number) { this._ts.frameAccumulator = v; }
+  protected get _outPoint(): number { return this._playbackEngine.outPoint; }
+  protected set _outPoint(v: number) { this._playbackEngine.setOutPointInternal(v); }
 
-  get _bufferingCount(): number { return this._ts.bufferingCount; }
-  set _bufferingCount(v: number) { this._ts.bufferingCount = v; }
+  protected get _fps(): number { return this._playbackEngine.fps; }
+  protected set _fps(v: number) { this._playbackEngine.setFpsInternal(v); }
 
-  get _isBuffering(): boolean { return this._ts.isBuffering; }
-  set _isBuffering(v: boolean) { this._ts.isBuffering = v; }
+  protected get _isPlaying(): boolean { return this._playbackEngine.isPlaying; }
+  protected set _isPlaying(v: boolean) { (this._playbackEngine as any)._isPlaying = v; }
 
-  get _starvationStartTime(): number { return this._ts.starvationStartTime; }
-  set _starvationStartTime(v: number) { this._ts.starvationStartTime = v; }
+  protected get _playDirection(): number { return this._playbackEngine.playDirection; }
+  protected set _playDirection(v: number) {
+    (this._playbackEngine as any)._playDirection = v;
+  }
 
-  get _consecutiveStarvationSkips(): number { return this._ts.consecutiveStarvationSkips; }
-  set _consecutiveStarvationSkips(v: number) { this._ts.consecutiveStarvationSkips = v; }
+  protected get _playbackSpeed(): number { return this._playbackEngine.playbackSpeed; }
 
-  get fpsFrameCount(): number { return this._ts.fpsFrameCount; }
-  set fpsFrameCount(v: number) { this._ts.fpsFrameCount = v; }
+  protected get _loopMode(): LoopMode { return this._playbackEngine.loopMode; }
+  protected set _loopMode(v: LoopMode) { this._playbackEngine.loopMode = v; }
 
-  get fpsLastTime(): number { return this._ts.fpsLastTime; }
-  set fpsLastTime(v: number) { this._ts.fpsLastTime = v; }
+  protected get _interpolationEnabled(): boolean { return this._playbackEngine.interpolationEnabled; }
 
-  get _effectiveFps(): number { return this._ts.effectiveFps; }
-  set _effectiveFps(v: number) { this._ts.effectiveFps = v; }
+  protected get _pendingPlayPromise(): Promise<void> | null { return this._playbackEngine.pendingPlayPromise; }
+  protected set _pendingPlayPromise(v: Promise<void> | null) { this._playbackEngine.setPendingPlayPromise(v); }
 
-  get _subFramePosition(): SubFramePosition | null { return this._ts.subFramePosition; }
-  set _subFramePosition(v: SubFramePosition | null) { this._ts.subFramePosition = v; }
+  protected get _pendingFetchFrame(): number | null { return (this._playbackEngine as any)._pendingFetchFrame; }
+
+  protected get _frameIncrement(): number { return this._playbackEngine.frameIncrement; }
+  protected set _frameIncrement(v: number) { this._playbackEngine.setFrameIncrementInternal(v); }
+
+  // --- Backward-compatible accessors for timing state ---
+  // Tests access these via (session as any).lastFrameTime etc.
+
+  get lastFrameTime(): number { return this._playbackEngine.lastFrameTime; }
+  set lastFrameTime(v: number) { this._playbackEngine.lastFrameTime = v; }
+
+  get frameAccumulator(): number { return this._playbackEngine.frameAccumulator; }
+  set frameAccumulator(v: number) { this._playbackEngine.frameAccumulator = v; }
+
+  get _bufferingCount(): number { return this._playbackEngine._bufferingCount; }
+  set _bufferingCount(v: number) { this._playbackEngine._bufferingCount = v; }
+
+  get _isBuffering(): boolean { return this._playbackEngine._isBuffering; }
+  set _isBuffering(v: boolean) { this._playbackEngine._isBuffering = v; }
+
+  get _starvationStartTime(): number { return this._playbackEngine._starvationStartTime; }
+  set _starvationStartTime(v: number) { this._playbackEngine._starvationStartTime = v; }
+
+  get _consecutiveStarvationSkips(): number { return this._playbackEngine._consecutiveStarvationSkips; }
+  set _consecutiveStarvationSkips(v: number) { this._playbackEngine._consecutiveStarvationSkips = v; }
+
+  get fpsFrameCount(): number { return this._playbackEngine.fpsFrameCount; }
+  set fpsFrameCount(v: number) { this._playbackEngine.fpsFrameCount = v; }
+
+  get fpsLastTime(): number { return this._playbackEngine.fpsLastTime; }
+  set fpsLastTime(v: number) { this._playbackEngine.fpsLastTime = v; }
+
+  get _effectiveFps(): number { return this._playbackEngine._effectiveFps; }
+  set _effectiveFps(v: number) { this._playbackEngine._effectiveFps = v; }
+
+  get _subFramePosition(): SubFramePosition | null { return this._playbackEngine._subFramePosition; }
+  set _subFramePosition(v: SubFramePosition | null) { this._playbackEngine._subFramePosition = v; }
 
   // Media sources
   protected sources: MediaSource[] = [];
@@ -286,6 +297,30 @@ export class Session extends EventEmitter<SessionEvents> {
 
   constructor() {
     super();
+
+    // Wire PlaybackEngine host
+    this._playbackEngine.setHost({
+      getCurrentSource: () => this.currentSource,
+      getSourceB: () => this.sourceB,
+      applyVolumeToVideo: () => this.applyVolumeToVideo(),
+      safeVideoPlay: (video) => this.safeVideoPlay(video),
+      initVideoPreservesPitch: (video) => this.initVideoPreservesPitch(video),
+      getAudioSyncEnabled: () => this._volumeManager.audioSyncEnabled,
+      setAudioSyncEnabled: (enabled) => { this._volumeManager.audioSyncEnabled = enabled; },
+    });
+
+    // Forward PlaybackEngine events to Session events
+    this._playbackEngine.on('frameChanged', (frame) => this.emit('frameChanged', frame));
+    this._playbackEngine.on('playbackChanged', (playing) => this.emit('playbackChanged', playing));
+    this._playbackEngine.on('playDirectionChanged', (dir) => this.emit('playDirectionChanged', dir));
+    this._playbackEngine.on('playbackSpeedChanged', (speed) => this.emit('playbackSpeedChanged', speed));
+    this._playbackEngine.on('loopModeChanged', (mode) => this.emit('loopModeChanged', mode));
+    this._playbackEngine.on('fpsChanged', (fps) => this.emit('fpsChanged', fps));
+    this._playbackEngine.on('frameIncrementChanged', (inc) => this.emit('frameIncrementChanged', inc));
+    this._playbackEngine.on('inOutChanged', (range) => this.emit('inOutChanged', range));
+    this._playbackEngine.on('interpolationEnabledChanged', (enabled) => this.emit('interpolationEnabledChanged', enabled));
+    this._playbackEngine.on('subFramePositionChanged', (pos) => this.emit('subFramePositionChanged', pos));
+    this._playbackEngine.on('buffering', (buffering) => this.emit('buffering', buffering));
 
     // Wire manager callbacks
     this._markerManager.setCallbacks({
@@ -307,6 +342,11 @@ export class Session extends EventEmitter<SessionEvents> {
     });
     this._abCompareManager.setCallbacks({
       onABSourceChanged: (info) => this.emit('abSourceChanged', info),
+    });
+    this._annotationStore.setCallbacks({
+      onAnnotationsLoaded: (data) => this.emit('annotationsLoaded', data),
+      onPaintEffectsLoaded: (effects) => this.emit('paintEffectsLoaded', effects),
+      onMatteChanged: (settings) => this.emit('matteChanged', settings),
     });
   }
 
@@ -357,38 +397,27 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   get currentFrame(): number {
-    return this._currentFrame;
+    return this._playbackEngine.currentFrame;
   }
 
   set currentFrame(frame: number) {
-    // Allow seeking within full source duration, not just in/out range
-    const duration = this.currentSource?.duration ?? 1;
-    const clamped = Math.max(1, Math.min(duration, Math.round(frame)));
-    if (clamped !== this._currentFrame) {
-      this._currentFrame = clamped;
-      this.syncVideoToFrame();
-      this.emit('frameChanged', this._currentFrame);
-    }
+    this._playbackEngine.currentFrame = frame;
   }
 
   get inPoint(): number {
-    return this._inPoint;
+    return this._playbackEngine.inPoint;
   }
 
   get outPoint(): number {
-    return this._outPoint;
+    return this._playbackEngine.outPoint;
   }
 
   get fps(): number {
-    return this._fps;
+    return this._playbackEngine.fps;
   }
 
   set fps(value: number) {
-    const clamped = Math.max(1, Math.min(120, value));
-    if (clamped !== this._fps) {
-      this._fps = clamped;
-      this.emit('fpsChanged', this._fps);
-    }
+    this._playbackEngine.fps = value;
   }
 
   /** Frame increment for step forward/backward */
@@ -397,21 +426,22 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   set frameIncrement(value: number) {
-    const clamped = Math.max(1, Math.min(100, value));
-    if (clamped !== this._frameIncrement) {
-      this._frameIncrement = clamped;
-      this.emit('frameIncrementChanged', this._frameIncrement);
-    }
+    this._playbackEngine.frameIncrement = value;
   }
 
   /** Matte overlay settings */
   get matteSettings(): MatteSettings | null {
-    return this._matteSettings;
+    return this._annotationStore.matteSettings;
   }
 
   /** Paint effects from session (ghost, hold, etc.) */
   get sessionPaintEffects(): Partial<PaintEffects> | null {
-    return this._sessionPaintEffects;
+    return this._annotationStore.sessionPaintEffects;
+  }
+
+  /** Annotation store (owns paint/annotation/matte state and parsing) */
+  get annotationStore(): AnnotationStore {
+    return this._annotationStore;
   }
 
   /** Session metadata (name, comment, version, origin) */
@@ -420,80 +450,34 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   get playbackSpeed(): number {
-    return this._playbackSpeed;
+    return this._playbackEngine.playbackSpeed;
   }
 
   set playbackSpeed(value: number) {
-    const clamped = Math.max(0.1, Math.min(8, value));
-    if (clamped !== this._playbackSpeed) {
-      this._playbackSpeed = clamped;
-
-      // Reset frame accumulator on speed change to prevent timing discontinuity
-      // This avoids frame skips when changing speed during playback
-      if (this._isPlaying) {
-        this._timingController.resetTiming(this._ts);
-      }
-
-      this.emit('playbackSpeedChanged', this._playbackSpeed);
-      // Update video playback rate if playing a video natively
-      const source = this.currentSource;
-      if (source?.element && source.type === 'video') {
-        (source.element as HTMLVideoElement).playbackRate = this._playbackSpeed;
-      }
-    }
+    this._playbackEngine.playbackSpeed = value;
   }
 
-  /**
-   * Increase playback speed to the next preset level
-   */
-  increaseSpeed(): void {
-    const currentIndex = PLAYBACK_SPEED_PRESETS.indexOf(this._playbackSpeed as PlaybackSpeedPreset);
-    if (currentIndex >= 0 && currentIndex < PLAYBACK_SPEED_PRESETS.length - 1) {
-      const nextSpeed = PLAYBACK_SPEED_PRESETS[currentIndex + 1];
-      if (nextSpeed !== undefined) {
-        this.playbackSpeed = nextSpeed;
-      }
-    } else if (currentIndex === -1) {
-      // Find next higher preset
-      const nextPreset = PLAYBACK_SPEED_PRESETS.find(p => p > this._playbackSpeed);
-      if (nextPreset !== undefined) {
-        this.playbackSpeed = nextPreset;
-      }
-    }
+    increaseSpeed(): void {
+    this._playbackEngine.increaseSpeed();
   }
 
-  /**
-   * Decrease playback speed to the previous preset level
-   */
-  decreaseSpeed(): void {
-    const currentIndex = PLAYBACK_SPEED_PRESETS.indexOf(this._playbackSpeed as PlaybackSpeedPreset);
-    if (currentIndex > 0) {
-      const prevSpeed = PLAYBACK_SPEED_PRESETS[currentIndex - 1];
-      if (prevSpeed !== undefined) {
-        this.playbackSpeed = prevSpeed;
-      }
-    } else if (currentIndex === -1) {
-      // Find previous lower preset
-      const prevPreset = [...PLAYBACK_SPEED_PRESETS].reverse().find(p => p < this._playbackSpeed);
-      if (prevPreset !== undefined) {
-        this.playbackSpeed = prevPreset;
-      }
-    }
+    decreaseSpeed(): void {
+    this._playbackEngine.decreaseSpeed();
   }
 
   /**
    * Reset playback speed to 1x
    */
   resetSpeed(): void {
-    this.playbackSpeed = 1;
+    this._playbackEngine.resetSpeed();
   }
 
   get isPlaying(): boolean {
-    return this._isPlaying;
+    return this._playbackEngine.isPlaying;
   }
 
   get isBuffering(): boolean {
-    return this._ts.isBuffering;
+    return this._playbackEngine.isBuffering;
   }
 
   get loopMode(): LoopMode {
@@ -501,14 +485,11 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   set loopMode(mode: LoopMode) {
-    if (mode !== this._loopMode) {
-      this._loopMode = mode;
-      this.emit('loopModeChanged', mode);
-    }
+    this._playbackEngine.loopMode = mode;
   }
 
   get frameCount(): number {
-    return this._outPoint - this._inPoint + 1;
+    return this._playbackEngine.frameCount;
   }
 
   get marks(): ReadonlyMap<number, Marker> {
@@ -581,14 +562,7 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   set interpolationEnabled(value: boolean) {
-    if (value !== this._interpolationEnabled) {
-      this._interpolationEnabled = value;
-      if (!value) {
-        this._timingController.clearSubFramePosition(this._ts);
-        this.emit('subFramePositionChanged', null);
-      }
-      this.emit('interpolationEnabledChanged', this._interpolationEnabled);
-    }
+    this._playbackEngine.interpolationEnabled = value;
   }
 
   /**
@@ -597,7 +571,7 @@ export class Session extends EventEmitter<SessionEvents> {
    * Used by the Viewer to blend adjacent frames for smooth slow-motion.
    */
   get subFramePosition(): SubFramePosition | null {
-    return this._ts.subFramePosition;
+    return this._playbackEngine.subFramePosition;
   }
 
   /**
@@ -646,147 +620,18 @@ export class Session extends EventEmitter<SessionEvents> {
     return this._currentSourceIndex;
   }
 
-  // Minimum number of frames to buffer before starting playback
-  private readonly MIN_PLAYBACK_BUFFER = 3;
-
-  // Playback control
   play(): void {
-    if (this._isPlaying) return;
-
-    // Guard against concurrent play() calls
-    if (this._pendingPlayPromise) {
-      return;
-    }
-
-    this._isPlaying = true;
-    this._timingController.resetTiming(this._ts);
-    this._timingController.resetFpsTracking(this._ts);
-
-    const source = this.currentSource;
-
-    // Check if we should use mediabunny for smooth playback
-    if (source?.type === 'video' && source.videoSourceNode?.isUsingMediabunny()) {
-      // Use frame-based playback with mediabunny for both forward and reverse
-      source.videoSourceNode.setPlaybackDirection(this._playDirection);
-      source.videoSourceNode.startPlaybackPreload(this._currentFrame, this._playDirection);
-
-      // Trigger initial buffer loading to avoid starvation at playback start
-      this.triggerInitialBufferLoad(source.videoSourceNode, this._currentFrame, this._playDirection);
-
-      // Also start preloading for source B (for split screen support)
-      this.startSourceBPlaybackPreload();
-
-      // For mediabunny mode, start audio sync at current position
-      if (source.element instanceof HTMLVideoElement) {
-        const video = source.element;
-        const targetTime = (this._currentFrame - 1) / this._fps;
-        video.currentTime = targetTime;
-
-        // Only play audio for forward playback
-        if (this._playDirection === 1) {
-          this.safeVideoPlay(video);
-        } else {
-          // Mute during reverse
-          video.muted = true;
-          video.pause();
-        }
-      }
-    } else if (source?.type === 'video' && source.element instanceof HTMLVideoElement) {
-      // Fallback to native video playback (only for forward)
-      if (this._playDirection === 1) {
-        this.safeVideoPlay(source.element);
-      } else {
-        // For reverse playback, keep video paused - we'll seek frame by frame
-        source.element.pause();
-      }
-    }
-
-    // Enable audio sync for playback
-    this._volumeManager.audioSyncEnabled = this._playDirection === 1;
-
-    this.emit('playbackChanged', true);
+    this._playbackEngine.play();
   }
 
-  /**
-   * Trigger initial playback buffer loading (fire-and-forget)
-   *
-   * This kicks off parallel frame loading to prime the cache before
-   * the update() loop needs them. The requests go through preloadManager
-   * which handles:
-   * - Request coalescing (no duplicates with startPlaybackPreload)
-   * - Cancellation via abort signal when pause() is called
-   *
-   * We don't await this because:
-   * - Blocking play() would cause UI lag
-   * - The frame-gated logic in update() handles waiting for frames
-   */
-  private triggerInitialBufferLoad(
-    videoSourceNode: import('../../nodes/sources/VideoSourceNode').VideoSourceNode,
-    startFrame: number,
-    direction: number
+
+
+  protected triggerStarvationRecoveryPreload(
+    _videoSourceNode: import('../../nodes/sources/VideoSourceNode').VideoSourceNode,
+    _fromFrame: number,
+    _direction: number
   ): void {
-    const duration = this._outPoint - this._inPoint + 1;
-    const bufferSize = Math.min(this.MIN_PLAYBACK_BUFFER, duration);
-
-    // Calculate frames to pre-buffer based on playback direction
-    const framesToBuffer: number[] = [];
-    for (let i = 0; i < bufferSize; i++) {
-      const frame = startFrame + (i * direction);
-      if (frame >= this._inPoint && frame <= this._outPoint) {
-        framesToBuffer.push(frame);
-      }
-    }
-
-    // Request frames in parallel - preloadManager coalesces with startPlaybackPreload
-    // These requests will be cancelled if pause() is called (via abort signal)
-    // Use Promise.allSettled to handle individual failures without losing other results
-    Promise.allSettled(
-      framesToBuffer.map(frame => videoSourceNode.getFrameAsync(frame))
-    ).then(results => {
-      for (const result of results) {
-        if (result.status === 'rejected' && result.reason?.name !== 'AbortError') {
-          log.debug('Initial buffer preload error:', result.reason);
-        }
-      }
-    });
-  }
-
-  /**
-   * Trigger preloading of upcoming frames after a starvation-induced pause.
-   *
-   * This requests the next ~10 frames so the cache is primed when the user
-   * presses play again, reducing the chance of another immediate starvation.
-   * Requests go through preloadManager which handles coalescing and cancellation.
-   * Fire-and-forget: errors are logged at debug level and otherwise ignored.
-   */
-  private triggerStarvationRecoveryPreload(
-    videoSourceNode: import('../../nodes/sources/VideoSourceNode').VideoSourceNode,
-    fromFrame: number,
-    direction: number
-  ): void {
-    const RECOVERY_BUFFER_SIZE = 10;
-    const duration = this._outPoint - this._inPoint + 1;
-    const bufferSize = Math.min(RECOVERY_BUFFER_SIZE, duration);
-
-    const framesToBuffer: number[] = [];
-    for (let i = 0; i < bufferSize; i++) {
-      const frame = fromFrame + (i * direction);
-      if (frame >= this._inPoint && frame <= this._outPoint) {
-        framesToBuffer.push(frame);
-      }
-    }
-
-    if (framesToBuffer.length === 0) return;
-
-    Promise.allSettled(
-      framesToBuffer.map(frame => videoSourceNode.getFrameAsync(frame))
-    ).then(results => {
-      for (const result of results) {
-        if (result.status === 'rejected' && result.reason?.name !== 'AbortError') {
-          log.debug('Starvation recovery preload error:', result.reason);
-        }
-      }
-    });
+    // Handled by PlaybackEngine internally
   }
 
   /**
@@ -855,109 +700,21 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   pause(): void {
-    if (this._isPlaying) {
-      this._pendingPlayPromise = null;
-      this._isPlaying = false;
-
-      // Clear pending play promise so play() can be called again
-      this._pendingPlayPromise = null;
-
-      // Reset buffering state
-      if (this._timingController.resetBuffering(this._ts)) {
-        this.emit('buffering', false);
-      }
-
-      // Pause video if current source is video
-      const source = this.currentSource;
-      if (source?.type === 'video') {
-        // Stop playback preloading to reset preload state and cancel pending requests
-        if (source.videoSourceNode?.isUsingMediabunny()) {
-          source.videoSourceNode.stopPlaybackPreload();
-        }
-        if (source.element instanceof HTMLVideoElement) {
-          source.element.pause();
-        }
-      }
-
-      // Also stop source B's playback preload (for split screen support)
-      this.stopSourceBPlaybackPreload();
-
-      // Clear sub-frame position when paused
-      if (this._timingController.clearSubFramePosition(this._ts)) {
-        this.emit('subFramePositionChanged', null);
-      }
-
-      this.emit('playbackChanged', false);
-    }
+    this._playbackEngine.pause();
   }
 
-  /**
-   * Decrement buffering counter and emit 'buffering: false' when all pending loads complete
-   */
-  private decrementBufferingCount(): void {
-    if (this._timingController.decrementBuffering(this._ts)) {
-      // Only emit if still playing - no need to signal buffering end if paused
-      if (this._isPlaying) {
-        this.emit('buffering', false);
-      }
-    }
-  }
+  
 
   togglePlayback(): void {
-    if (this._isPlaying) {
-      this.pause();
-    } else {
-      this.play();
-    }
+    this._playbackEngine.togglePlayback();
   }
 
   togglePlayDirection(): void {
-    this._playDirection *= -1;
-
-    const source = this.currentSource;
-
-    // Update audio mute state based on direction (reverse should be muted)
-    this._volumeManager.audioSyncEnabled = this._playDirection === 1;
-
-    // Handle video playback mode switching while playing
-    if (this._isPlaying && source?.type === 'video') {
-      // If using mediabunny, update direction and restart preloading
-      if (source.videoSourceNode?.isUsingMediabunny()) {
-        source.videoSourceNode.setPlaybackDirection(this._playDirection);
-        source.videoSourceNode.startPlaybackPreload(this._currentFrame, this._playDirection);
-        this._timingController.resetTiming(this._ts);
-
-        // Handle audio for direction change
-        if (source.element instanceof HTMLVideoElement) {
-          if (this._playDirection === 1) {
-            // Switching to forward: resume audio
-            this.applyVolumeToVideo();
-            this.safeVideoPlay(source.element);
-          } else {
-            // Switching to reverse: mute and pause audio
-            source.element.muted = true;
-            source.element.pause();
-          }
-        }
-      } else if (source.element instanceof HTMLVideoElement) {
-        // Fallback behavior
-        if (this._playDirection === 1) {
-          // Switching to forward: start native video playback
-          this.applyVolumeToVideo();
-          this.safeVideoPlay(source.element);
-        } else {
-          // Switching to reverse: pause video, will use frame-based seeking
-          source.element.pause();
-          this._timingController.resetTiming(this._ts);
-        }
-      }
-    }
-
-    this.emit('playDirectionChanged', this._playDirection);
+    this._playbackEngine.togglePlayDirection();
   }
 
   get playDirection(): number {
-    return this._playDirection;
+    return this._playbackEngine.playDirection;
   }
 
   /**
@@ -965,64 +722,39 @@ export class Session extends EventEmitter<SessionEvents> {
    * Returns 0 when not playing
    */
   get effectiveFps(): number {
-    return this._isPlaying ? this._ts.effectiveFps : 0;
+    return this._playbackEngine.effectiveFps;
   }
 
   stepForward(): void {
-    this.pause();
-    this.advanceFrame(this._frameIncrement);
+    this._playbackEngine.stepForward();
   }
 
   stepBackward(): void {
-    this.pause();
-    this.advanceFrame(-this._frameIncrement);
+    this._playbackEngine.stepBackward();
   }
 
   goToFrame(frame: number): void {
-    this.currentFrame = frame;
+    this._playbackEngine.goToFrame(frame);
   }
 
   goToStart(): void {
-    this.currentFrame = this._inPoint;
+    this._playbackEngine.goToStart();
   }
 
   goToEnd(): void {
-    this.currentFrame = this._outPoint;
+    this._playbackEngine.goToEnd();
   }
 
-  // In/out points
   setInPoint(frame?: number): void {
-    // Clamp to valid range: 1 to outPoint
-    const newInPoint = Math.max(1, Math.min(this._outPoint, frame ?? this._currentFrame));
-    if (newInPoint !== this._inPoint) {
-      this._inPoint = newInPoint;
-      this.emit('inOutChanged', { inPoint: this._inPoint, outPoint: this._outPoint });
-    }
-    if (this._currentFrame < this._inPoint) {
-      this.currentFrame = this._inPoint;
-    }
+    this._playbackEngine.setInPoint(frame);
   }
 
   setOutPoint(frame?: number): void {
-    const duration = this.currentSource?.duration ?? 1;
-    // Clamp to valid range: inPoint to duration
-    const newOutPoint = Math.max(this._inPoint, Math.min(duration, frame ?? this._currentFrame));
-    if (newOutPoint !== this._outPoint) {
-      this._outPoint = newOutPoint;
-      this.emit('inOutChanged', { inPoint: this._inPoint, outPoint: this._outPoint });
-    }
-    if (this._currentFrame > this._outPoint) {
-      this.currentFrame = this._outPoint;
-    }
+    this._playbackEngine.setOutPoint(frame);
   }
 
   resetInOutPoints(): void {
-    const duration = this.currentSource?.duration ?? 1;
-    this._inPoint = 1;
-    this._outPoint = duration;
-    this.emit('inOutChanged', { inPoint: this._inPoint, outPoint: this._outPoint });
-    // Also reset playhead to start
-    this.currentFrame = 1;
+    this._playbackEngine.resetInOutPoints();
   }
 
   // Marks — delegated to MarkerManager
@@ -1076,268 +808,30 @@ export class Session extends EventEmitter<SessionEvents> {
     return null;
   }
 
-  // Update called each frame
   update(): void {
-    if (!this._isPlaying) return;
+    this._playbackEngine.update();
+  }
 
-    const source = this.currentSource;
-    const tc = this._timingController;
+  
 
-    // Check if using mediabunny for smooth frame-accurate playback
-    if (source?.type === 'video' && source.videoSourceNode?.isUsingMediabunny()) {
-      // Use frame-based timing for both forward and reverse
-      const { frameDuration } = tc.accumulateDelta(
-        this._ts, this._fps, this._playbackSpeed, this._playDirection,
-      );
-
-      // Only advance if next frame is cached (frame-gated playback)
-      // This ensures we always display the correct frame from mediabunny
-      while (tc.hasAccumulatedFrame(this._ts, frameDuration)) {
-        // Compute actual next frame accounting for loop boundaries
-        const nextFrame = tc.computeNextFrame(
-          this._currentFrame, this._playDirection,
-          this._inPoint, this._outPoint, this._loopMode,
-        );
-
-        // Check if next frame is cached and ready
-        if (source.videoSourceNode.hasFrameCached(nextFrame)) {
-          // Reset starvation tracking on successful frame
-          tc.onFrameDisplayed(this._ts);
-          tc.consumeFrame(this._ts, frameDuration);
-          this.advanceFrame(this._playDirection);
-          // Update source B's playback buffer for split screen support
-          this.updateSourceBPlaybackBuffer(nextFrame);
-        } else {
-          // Frame not ready - trigger fetch and wait
-          // Cap accumulator to prevent huge jumps when frame becomes available
-          tc.capAccumulator(this._ts, frameDuration);
-
-          // Track starvation start time
-          tc.beginStarvation(this._ts);
-
-          // Check for starvation timeout
-          const starvation = tc.checkStarvation(
-            this._ts, nextFrame, this._inPoint, this._outPoint, this._playDirection,
-          );
-
-          if (starvation.timedOut) {
-            // If consecutive skips exceed threshold, pause to prevent cascade freeze
-            if (starvation.shouldPause) {
-              log.warn(
-                `Playback paused: frame buffer underrun (frame ${nextFrame}, ` +
-                `${this._ts.consecutiveStarvationSkips} consecutive starvation timeouts)`
-              );
-              // IMMEDIATELY pause audio to prevent loop/restart during the pause transition
-              if (source.element instanceof HTMLVideoElement) {
-                source.element.pause();
-              }
-              // Trigger prebuffering of upcoming frames before pausing
-              // so the system can recover faster when the user presses play again
-              this.triggerStarvationRecoveryPreload(source.videoSourceNode, nextFrame, this._playDirection);
-              tc.resetStarvation(this._ts);
-              this.pause();
-              return; // Exit update loop entirely - we've paused
-            }
-
-            // Check if starvation is at end-of-video (within 2 frames of out point)
-            // This prevents blind advanceFrame which would wrap to beginning
-            // and cause audio to restart from the start
-            if (starvation.nearEnd) {
-              if (this._loopMode === 'loop') {
-                // Properly loop: reset both frame AND audio to beginning
-                this._currentFrame = this._playDirection > 0 ? this._inPoint : this._outPoint;
-                tc.resetStarvation(this._ts);
-                // Sync audio to the loop point
-                if (source.element instanceof HTMLVideoElement) {
-                  const video = source.element;
-                  video.currentTime = (this._currentFrame - 1) / this._fps;
-                }
-                this.emit('frameChanged', this._currentFrame);
-                tc.consumeFrame(this._ts, frameDuration);
-                continue;
-              } else {
-                // 'once' or 'pingpong' at end: just stop playback
-                this.pause();
-                return;
-              }
-            }
-
-            // Under the threshold: skip the frame and try the next one
-            log.warn(`Frame ${nextFrame} starvation timeout (${Math.round(starvation.starvationDurationMs)}ms) - skipping frame`);
-            tc.resetStarvation(this._ts);
-            tc.consumeFrame(this._ts, frameDuration);
-            this.advanceFrame(this._playDirection);
-            continue; // Try the next frame
-          }
-
-          // Track buffering state with counter to prevent event flickering
-          if (tc.incrementBuffering(this._ts)) {
-            this.emit('buffering', true);
-          }
-
-          // Request the frame and trigger surrounding preload via preloadManager
-          // getFrameAsync internally uses preloadManager which handles:
-          // - Request coalescing (no duplicate requests)
-          // - Priority-based loading (requested frame gets priority 0)
-          // - Surrounding frame preloading via preloadAround
-          source.videoSourceNode.getFrameAsync(nextFrame).then(() => {
-            // After frame loads, trigger preloading around it for smooth playback
-            // Use optional chaining because source may be disposed/changed during async load
-            // (this is intentional - if disposed, we simply skip the buffer update)
-            source.videoSourceNode?.updatePlaybackBuffer(nextFrame);
-            // Also update source B for split screen mode support
-            this.updateSourceBPlaybackBuffer(nextFrame);
-            this.decrementBufferingCount();
-          }).catch(err => {
-            // Don't log abort errors
-            if (err?.name !== 'AbortError') {
-              log.warn('Frame fetch error:', err);
-            }
-            this.decrementBufferingCount();
-          });
-          break;
-        }
-      }
-
-      // Compute sub-frame position for interpolation during slow-motion
-      this.emitSubFrameUpdate(frameDuration);
-
-      // Sync HTMLVideoElement for audio (but not for frame display)
-      // Only sync during forward playback with audio enabled
-      if (this._volumeManager.audioSyncEnabled && source.element instanceof HTMLVideoElement) {
-        const video = source.element;
-        const targetTime = (this._currentFrame - 1) / this._fps;
-
-        // Only sync if significantly out of sync (for audio purposes)
-        // Use a larger threshold (1.0s) to reduce frequency of seeks
-        const drift = Math.abs(video.currentTime - targetTime);
-        if (drift > 1.0) {
-          // Just seek without pause/play to minimize audio disruption
-          video.currentTime = targetTime;
-        }
-      }
-    } else if (source?.type === 'video' && source.element instanceof HTMLVideoElement && this._playDirection === 1) {
-      // Fallback: For video with forward playback, sync frame from video time
-      const video = source.element;
-      const currentTime = video.currentTime;
-      const frame = Math.floor(currentTime * this._fps) + 1;
-
-      if (frame !== this._currentFrame) {
-        this._currentFrame = Math.max(this._inPoint, Math.min(this._outPoint, frame));
-        this.emit('frameChanged', this._currentFrame);
-      }
-
-      // Handle loop
-      if (video.ended || frame >= this._outPoint) {
-        if (this._loopMode === 'loop') {
-          video.currentTime = (this._inPoint - 1) / this._fps;
-          this.safeVideoPlay(video);
-        } else if (this._loopMode === 'once') {
-          this.pause();
-        }
-      }
-    } else {
-      // For images or video with reverse playback (no mediabunny), use frame-based timing
-      const { framesToAdvance, frameDuration } = tc.accumulateFrames(
-        this._ts, this._fps, this._playbackSpeed, this._playDirection,
-      );
-
-      for (let i = 0; i < framesToAdvance; i++) {
-        this.advanceFrame(this._playDirection);
-      }
-
-      // Compute sub-frame position for interpolation during slow-motion
-      this.emitSubFrameUpdate(frameDuration);
-
-      // For video reverse playback without mediabunny, seek to the current frame
-      if (source?.type === 'video' && source.element instanceof HTMLVideoElement) {
-        const targetTime = (this._currentFrame - 1) / this._fps;
-        source.element.currentTime = targetTime;
-      }
-    }
+  protected advanceFrame(direction: number): void {
+    this._playbackEngine.advanceFrame(direction);
   }
 
   /**
-   * Delegate sub-frame position update to the timing controller and emit events as needed.
+   * Sync video element to the current frame position.
+   * Used after seeking or when frames change.
    */
-  private emitSubFrameUpdate(frameDuration: number): void {
-    const result = this._timingController.updateSubFramePosition(
-      this._ts,
-      this._interpolationEnabled,
-      this._playbackSpeed,
-      this._currentFrame,
-      this._playDirection,
-      this._inPoint,
-      this._outPoint,
-      this._loopMode,
-      frameDuration,
-    );
-
-    if (result === null) {
-      // Sub-frame position was cleared
-      this.emit('subFramePositionChanged', null);
-    } else if (result !== undefined) {
-      // Sub-frame position changed meaningfully
-      this.emit('subFramePositionChanged', result);
-    }
-    // undefined means no change needed
-  }
-
-  private advanceFrame(direction: number): void {
-    // Track effective FPS via timing controller
-    this._timingController.trackFrameAdvance(this._ts);
-
-    let nextFrame = this._currentFrame + direction;
-
-    if (nextFrame > this._outPoint) {
-      switch (this._loopMode) {
-        case 'once':
-          this.pause();
-          nextFrame = this._outPoint;
-          break;
-        case 'loop':
-          nextFrame = this._inPoint;
-          break;
-        case 'pingpong':
-          this._playDirection = -1;
-          this.emit('playDirectionChanged', this._playDirection);
-          nextFrame = this._outPoint - 1;
-          break;
-      }
-    } else if (nextFrame < this._inPoint) {
-      switch (this._loopMode) {
-        case 'once':
-          this.pause();
-          nextFrame = this._inPoint;
-          break;
-        case 'loop':
-          nextFrame = this._outPoint;
-          break;
-        case 'pingpong':
-          this._playDirection = 1;
-          this.emit('playDirectionChanged', this._playDirection);
-          nextFrame = this._inPoint + 1;
-          break;
-      }
-    }
-
-    this.currentFrame = nextFrame;
-  }
-
   private syncVideoToFrame(): void {
+    // Setting currentFrame through the engine triggers its internal syncVideoToFrame
+    // For direct sync without frame change, trigger preload on the current frame
     const source = this.currentSource;
     if (source?.type === 'video') {
-      // If using mediabunny, preload frames around current position for scrubbing
       if (source.videoSourceNode?.isUsingMediabunny()) {
-        // preloadFrames fetches current frame and surrounding frames
         source.videoSourceNode.preloadFrames(this._currentFrame).catch(err => {
           log.warn('Frame preload error:', err);
         });
       }
-
-      // Sync HTMLVideoElement for audio purposes
-      // During mediabunny playback, let the video element play freely for audio.
-      // Only seek when not playing (scrubbing) to avoid audio disruption.
       if (source.element instanceof HTMLVideoElement && !this._isPlaying) {
         const targetTime = (this._currentFrame - 1) / this._fps;
         if (Math.abs(source.element.currentTime - targetTime) > 0.1) {
@@ -1346,6 +840,8 @@ export class Session extends EventEmitter<SessionEvents> {
       }
     }
   }
+
+
 
   // Session loading
   async loadFromGTO(data: ArrayBuffer | string, availableFiles?: Map<string, File>): Promise<void> {
@@ -1412,21 +908,12 @@ export class Session extends EventEmitter<SessionEvents> {
 
       // Apply paint effects from session
       if (result.sessionInfo.paintEffects) {
-        this._sessionPaintEffects = result.sessionInfo.paintEffects;
-        this.emit('paintEffectsLoaded', this._sessionPaintEffects);
+        this._annotationStore.setPaintEffects(result.sessionInfo.paintEffects);
       }
 
       // Apply matte settings
       if (result.sessionInfo.matte) {
-        const m = result.sessionInfo.matte;
-        this._matteSettings = {
-          show: m.show ?? false,
-          aspect: m.aspect ?? 1.78,
-          opacity: m.opacity ?? 0.66,
-          heightVisible: m.heightVisible ?? -1,
-          centerPoint: m.centerPoint ?? [0, 0],
-        };
-        this.emit('matteChanged', this._matteSettings);
+        this._annotationStore.setMatteSettings(result.sessionInfo.matte);
       }
 
       // Apply session metadata
@@ -1709,7 +1196,7 @@ export class Session extends EventEmitter<SessionEvents> {
     }
 
     // Parse paint annotations with aspect ratio
-    this.parsePaintAnnotations(dto, aspectRatio);
+    this._annotationStore.parsePaintAnnotations(dto, aspectRatio);
 
     const settings = this.parseInitialSettings(dto, { width: sourceWidth, height: sourceHeight });
     if (settings) {
@@ -1717,838 +1204,85 @@ export class Session extends EventEmitter<SessionEvents> {
     }
   }
 
-  private getNumberValue(value: unknown): number | undefined {
-    if (typeof value === 'number') {
-      return value;
-    }
-    if (Array.isArray(value) && value.length > 0) {
-      const first = value[0];
-      if (typeof first === 'number') {
-        return first;
-      }
-      if (Array.isArray(first) && first.length > 0 && typeof first[0] === 'number') {
-        return first[0];
-      }
-    }
-    return undefined;
-  }
+  // GTO value extraction helpers - delegate to standalone functions from AnnotationStore.
+  // Kept as private methods for backward compatibility (tests access via `(session as any)`).
+  private getNumberValue(value: unknown): number | undefined { return _getNumberValue(value); }
 
-  private getBooleanValue(value: unknown): boolean | undefined {
-    if (typeof value === 'boolean') {
-      return value;
-    }
-    if (typeof value === 'number') {
-      return value !== 0;
-    }
-    if (typeof value === 'string') {
-      const normalized = value.trim().toLowerCase();
-      if (normalized === 'true' || normalized === '1') {
-        return true;
-      }
-      if (normalized === 'false' || normalized === '0') {
-        return false;
-      }
-    }
-    if (Array.isArray(value) && value.length > 0) {
-      const first = value[0];
-      if (typeof first === 'boolean') {
-        return first;
-      }
-      if (typeof first === 'number') {
-        return first !== 0;
-      }
-      if (typeof first === 'string') {
-        const normalized = first.trim().toLowerCase();
-        if (normalized === 'true' || normalized === '1') {
-          return true;
-        }
-        if (normalized === 'false' || normalized === '0') {
-          return false;
-        }
-      }
-    }
-    return undefined;
-  }
+  // @ts-ignore TS6133 - accessed by tests via (session as any).getBooleanValue()
+  private getBooleanValue(value: unknown): boolean | undefined { return _getBooleanValue(value); }
 
-  private getNumberArray(value: unknown): number[] | undefined {
-    if (!Array.isArray(value) || value.length === 0) {
-      return undefined;
-    }
-    const first = value[0];
-    if (typeof first === 'number') {
-      return value.filter((entry): entry is number => typeof entry === 'number');
-    }
-    if (Array.isArray(first)) {
-      const numbers = first.filter((entry): entry is number => typeof entry === 'number');
-      return numbers.length > 0 ? numbers : undefined;
-    }
-    return undefined;
-  }
+  private getNumberArray(value: unknown): number[] | undefined { return _getNumberArray(value); }
 
-  private getStringValue(value: unknown): string | undefined {
-    if (typeof value === 'string') {
-      return value;
-    }
-    if (Array.isArray(value) && value.length > 0 && typeof value[0] === 'string') {
-      return value[0];
-    }
-    return undefined;
-  }
+  // @ts-ignore TS6133 - accessed by tests via (session as any).getStringValue()
+  private getStringValue(value: unknown): string | undefined { return _getStringValue(value); }
+
+  // GTO settings parsing - delegates to pure functions in GTOSettingsParser.ts.
+  // Kept as private methods for backward compatibility (tests access via `(session as any)`).
 
   private parseInitialSettings(dto: GTODTO, sourceInfo: { width: number; height: number }): GTOViewSettings | null {
-    const settings: GTOViewSettings = {};
-
-    const colorAdjustments = this.parseColorAdjustments(dto);
-    if (colorAdjustments && Object.keys(colorAdjustments).length > 0) {
-      settings.colorAdjustments = colorAdjustments;
-    }
-
-    const cdl = this.parseCDL(dto);
-    if (cdl) {
-      settings.cdl = cdl;
-    }
-
-    const transform = this.parseTransform(dto);
-    if (transform) {
-      settings.transform = transform;
-    }
-
-    const lens = this.parseLens(dto);
-    if (lens) {
-      settings.lens = lens;
-    }
-
-    const crop = this.parseCrop(dto, sourceInfo);
-    if (crop) {
-      settings.crop = crop;
-    }
-
-    const channelMode = this.parseChannelMode(dto);
-    if (channelMode) {
-      settings.channelMode = channelMode;
-    }
-
-    const stereo = this.parseStereo(dto);
-    if (stereo) {
-      settings.stereo = stereo;
-    }
-
-    const scopes = this.parseScopes(dto);
-    if (scopes) {
-      settings.scopes = scopes;
-    }
-
-    return Object.keys(settings).length > 0 ? settings : null;
+    return _parseInitialSettings(dto, sourceInfo);
   }
 
+  // @ts-ignore TS6133 - accessed by tests via (session as any).parseColorAdjustments()
   private parseColorAdjustments(dto: GTODTO): Partial<ColorAdjustments> | null {
-    const adjustments: Partial<ColorAdjustments> = {};
-    const colorNodes = dto.byProtocol('RVColor');
-
-    if (colorNodes.length > 0) {
-      const colorComp = colorNodes.first().component('color');
-      if (colorComp?.exists()) {
-        const exposure = this.getNumberValue(colorComp.property('exposure').value());
-        const gamma = this.getNumberValue(colorComp.property('gamma').value());
-        const contrast = this.getNumberValue(colorComp.property('contrast').value());
-        const saturation = this.getNumberValue(colorComp.property('saturation').value());
-        const offset = this.getNumberValue(colorComp.property('offset').value());
-
-        if (typeof exposure === 'number') adjustments.exposure = exposure;
-        if (typeof gamma === 'number') adjustments.gamma = gamma;
-        if (typeof contrast === 'number') adjustments.contrast = contrast === 0 ? 1 : contrast;
-        if (typeof saturation === 'number') adjustments.saturation = saturation;
-        if (typeof offset === 'number' && adjustments.brightness === undefined) {
-          adjustments.brightness = offset;
-        }
-      }
-    }
-
-    const displayColorNodes = dto.byProtocol('RVDisplayColor');
-    if (displayColorNodes.length > 0) {
-      const displayComp = displayColorNodes.first().component('color');
-      if (displayComp?.exists()) {
-        const brightness = this.getNumberValue(displayComp.property('brightness').value());
-        const gamma = this.getNumberValue(displayComp.property('gamma').value());
-        if (typeof brightness === 'number') adjustments.brightness = brightness;
-        if (typeof gamma === 'number' && adjustments.gamma === undefined) adjustments.gamma = gamma;
-      }
-    }
-
-    return Object.keys(adjustments).length > 0 ? adjustments : null;
+    return _parseColorAdjustments(dto);
   }
 
+  // @ts-ignore TS6133 - accessed by tests via (session as any).parseCDL()
   private parseCDL(dto: GTODTO): CDLValues | null {
-    const buildCDL = (values: { slope?: number[]; offset?: number[]; power?: number[]; saturation?: number }): CDLValues | null => {
-      const slope = values.slope ?? [];
-      const offset = values.offset ?? [];
-      const power = values.power ?? [];
-      const saturation = values.saturation;
-
-      if (slope.length < 3 || offset.length < 3 || power.length < 3 || typeof saturation !== 'number') {
-        return null;
-      }
-
-      return {
-        slope: { r: slope[0]!, g: slope[1]!, b: slope[2]! },
-        offset: { r: offset[0]!, g: offset[1]!, b: offset[2]! },
-        power: { r: power[0]!, g: power[1]!, b: power[2]! },
-        saturation,
-      };
-    };
-
-    const readCDLFromNodes = (nodes: ReturnType<GTODTO['byProtocol']>): CDLValues | null => {
-      for (const node of nodes) {
-        const cdlComp = node.component('CDL');
-        if (!cdlComp?.exists()) continue;
-
-        const active = this.getNumberValue(cdlComp.property('active').value());
-        if (active !== undefined && active === 0) {
-          continue;
-        }
-
-        const slope = this.getNumberArray(cdlComp.property('slope').value());
-        const offset = this.getNumberArray(cdlComp.property('offset').value());
-        const power = this.getNumberArray(cdlComp.property('power').value());
-        const saturation = this.getNumberValue(cdlComp.property('saturation').value());
-        const cdl = buildCDL({ slope, offset, power, saturation });
-        if (cdl) return cdl;
-      }
-      return null;
-    };
-
-    return readCDLFromNodes(dto.byProtocol('RVColor')) ?? readCDLFromNodes(dto.byProtocol('RVLinearize'));
+    return _parseCDL(dto);
   }
 
+  // @ts-ignore TS6133 - accessed by tests via (session as any).parseTransform()
   private parseTransform(dto: GTODTO): Transform2D | null {
-    const nodes = dto.byProtocol('RVTransform2D');
-    if (nodes.length === 0) return null;
-
-    const transformComp = nodes.first().component('transform');
-    if (!transformComp?.exists()) return null;
-
-    const active = this.getNumberValue(transformComp.property('active').value());
-    if (active !== undefined && active === 0) return null;
-
-    const rotationValue = this.getNumberValue(transformComp.property('rotate').value());
-    const flipValue = this.getNumberValue(transformComp.property('flip').value());
-    const flopValue = this.getNumberValue(transformComp.property('flop').value());
-
-    const rotationOptions: Array<0 | 90 | 180 | 270> = [0, 90, 180, 270];
-    let rotation: 0 | 90 | 180 | 270 = 0;
-
-    if (typeof rotationValue === 'number') {
-      const snapped = Math.round(rotationValue / 90) * 90;
-      if (rotationOptions.includes(snapped as 0 | 90 | 180 | 270)) {
-        rotation = snapped as 0 | 90 | 180 | 270;
-      }
-    }
-
-    // Parse scale and translate if available
-    const scaleValue = transformComp.property('scale').value();
-    const translateValue = transformComp.property('translate').value();
-
-    let scale = { x: 1, y: 1 };
-    let translate = { x: 0, y: 0 };
-
-    if (Array.isArray(scaleValue) && scaleValue.length >= 2) {
-      const sx = typeof scaleValue[0] === 'number' ? scaleValue[0] : 1;
-      const sy = typeof scaleValue[1] === 'number' ? scaleValue[1] : 1;
-      scale = { x: sx, y: sy };
-    }
-
-    if (Array.isArray(translateValue) && translateValue.length >= 2) {
-      const tx = typeof translateValue[0] === 'number' ? translateValue[0] : 0;
-      const ty = typeof translateValue[1] === 'number' ? translateValue[1] : 0;
-      translate = { x: tx, y: ty };
-    }
-
-    return {
-      rotation,
-      flipH: flopValue === 1,
-      flipV: flipValue === 1,
-      scale,
-      translate,
-    };
+    return _parseTransform(dto);
   }
 
+  // @ts-ignore TS6133 - accessed by tests via (session as any).parseLens()
   private parseLens(dto: GTODTO): LensDistortionParams | null {
-    const nodes = dto.byProtocol('RVLensWarp');
-    if (nodes.length === 0) return null;
-
-    const node = nodes.first();
-    const nodeComp = node.component('node');
-    if (nodeComp?.exists()) {
-      const active = this.getNumberValue(nodeComp.property('active').value());
-      if (active !== undefined && active === 0) return null;
-    }
-
-    const warpComp = node.component('warp');
-    if (!warpComp?.exists()) return null;
-
-    const k1 = this.getNumberValue(warpComp.property('k1').value());
-    const k2 = this.getNumberValue(warpComp.property('k2').value());
-    const center = this.getNumberArray(warpComp.property('center').value());
-
-    if (k1 === undefined && k2 === undefined && !center) return null;
-
-    // Read additional properties if available
-    const k3 = this.getNumberValue(warpComp.property('k3').value());
-    const p1 = this.getNumberValue(warpComp.property('p1').value());
-    const p2 = this.getNumberValue(warpComp.property('p2').value());
-    const scaleValue = this.getNumberValue(warpComp.property('scale').value());
-    const model = warpComp.property('model').value() as string | undefined;
-    const pixelAspectRatio = this.getNumberValue(warpComp.property('pixelAspectRatio').value());
-    const fx = this.getNumberValue(warpComp.property('fx').value());
-    const fy = this.getNumberValue(warpComp.property('fy').value());
-    const cropRatioX = this.getNumberValue(warpComp.property('cropRatioX').value());
-    const cropRatioY = this.getNumberValue(warpComp.property('cropRatioY').value());
-
-    const validModels = ['brown', 'opencv', 'pfbarrel', '3de4_radial_standard', '3de4_anamorphic'] as const;
-    const parsedModel = validModels.includes(model as typeof validModels[number])
-      ? (model as typeof validModels[number])
-      : 'brown';
-
-    const params: LensDistortionParams = {
-      k1: k1 ?? 0,
-      k2: k2 ?? 0,
-      k3: k3 ?? 0,
-      p1: p1 ?? 0,
-      p2: p2 ?? 0,
-      centerX: 0,
-      centerY: 0,
-      scale: scaleValue ?? 1,
-      model: parsedModel,
-      pixelAspectRatio: pixelAspectRatio ?? 1,
-      fx: fx ?? 1,
-      fy: fy ?? 1,
-      cropRatioX: cropRatioX ?? 1,
-      cropRatioY: cropRatioY ?? 1,
-    };
-
-    if (center && center.length >= 2) {
-      params.centerX = center[0]! - 0.5;
-      params.centerY = center[1]! - 0.5;
-    }
-
-    return params;
+    return _parseLens(dto);
   }
 
+  // @ts-ignore TS6133 - accessed by tests via (session as any).parseCrop()
   private parseCrop(dto: GTODTO, sourceInfo: { width: number; height: number }): CropState | null {
-    const nodes = dto.byProtocol('RVFormat');
-    if (nodes.length === 0) return null;
-
-    const cropComp = nodes.first().component('crop');
-    if (!cropComp?.exists()) return null;
-
-    const active = this.getNumberValue(cropComp.property('active').value());
-    const xmin = this.getNumberValue(cropComp.property('xmin').value());
-    const ymin = this.getNumberValue(cropComp.property('ymin').value());
-    const xmax = this.getNumberValue(cropComp.property('xmax').value());
-    const ymax = this.getNumberValue(cropComp.property('ymax').value());
-
-    const enabled = active === 1;
-    if (!enabled && xmin === undefined && ymin === undefined && xmax === undefined && ymax === undefined) {
-      return null;
-    }
-
-    const { width, height } = sourceInfo;
-    let region = { x: 0, y: 0, width: 1, height: 1 };
-
-    if (width > 0 && height > 0 && xmin !== undefined && ymin !== undefined && xmax !== undefined && ymax !== undefined) {
-      const cropWidth = Math.max(0, xmax - xmin);
-      const cropHeight = Math.max(0, ymax - ymin);
-      region = {
-        x: Math.max(0, Math.min(1, xmin / width)),
-        y: Math.max(0, Math.min(1, ymin / height)),
-        width: Math.max(0, Math.min(1, cropWidth / width)),
-        height: Math.max(0, Math.min(1, cropHeight / height)),
-      };
-    }
-
-    return {
-      enabled,
-      region,
-      aspectRatio: null,
-    };
+    return _parseCrop(dto, sourceInfo);
   }
 
+  // @ts-ignore TS6133 - accessed by tests via (session as any).parseChannelMode()
   private parseChannelMode(dto: GTODTO): ChannelMode | null {
-    const nodes = dto.byProtocol('ChannelSelect');
-    if (nodes.length === 0) return null;
-
-    const channelMap: Record<number, ChannelMode> = {
-      0: 'red',
-      1: 'green',
-      2: 'blue',
-      3: 'alpha',
-      4: 'rgb',
-      5: 'luminance',
-    };
-
-    for (const node of nodes) {
-      const nodeComp = node.component('node');
-      const active = nodeComp?.exists() ? this.getNumberValue(nodeComp.property('active').value()) : undefined;
-      if (active !== undefined && active === 0) {
-        continue;
-      }
-
-      const parametersComp = node.component('parameters');
-      const channelValue = parametersComp?.exists()
-        ? this.getNumberValue(parametersComp.property('channel').value())
-        : undefined;
-      if (channelValue !== undefined) {
-        return channelMap[channelValue] ?? 'rgb';
-      }
-    }
-
-    return null;
+    return _parseChannelMode(dto);
   }
 
+  // @ts-ignore TS6133 - accessed by tests via (session as any).parseStereo()
   private parseStereo(dto: GTODTO): StereoState | null {
-    const nodes = dto.byProtocol('RVDisplayStereo');
-    if (nodes.length === 0) return null;
-
-    const stereoComp = nodes.first().component('stereo');
-    if (!stereoComp?.exists()) return null;
-
-    const typeValue = this.getStringValue(stereoComp.property('type').value()) ?? 'off';
-    const swapValue = this.getNumberValue(stereoComp.property('swap').value());
-    const offsetValue = this.getNumberValue(stereoComp.property('relativeOffset').value());
-
-    const typeMap: Record<string, StereoState['mode']> = {
-      off: 'off',
-      mono: 'off',
-      pair: 'side-by-side',
-      mirror: 'mirror',
-      hsqueezed: 'side-by-side',
-      vsqueezed: 'over-under',
-      anaglyph: 'anaglyph',
-      lumanaglyph: 'anaglyph-luminance',
-      checker: 'checkerboard',
-      scanline: 'scanline',
-    };
-
-    const mode = typeMap[typeValue] ?? 'off';
-    const offset = typeof offsetValue === 'number' ? offsetValue * 100 : 0;
-    const clampedOffset = Math.max(-20, Math.min(20, offset));
-
-    return {
-      mode,
-      eyeSwap: swapValue === 1,
-      offset: clampedOffset,
-    };
+    return _parseStereo(dto);
   }
 
+  // @ts-ignore TS6133 - accessed by tests via (session as any).parseScopes()
   private parseScopes(dto: GTODTO): ScopesState | null {
-    const scopes: ScopesState = {
-      histogram: false,
-      waveform: false,
-      vectorscope: false,
-    };
-
-    const applyScope = (protocol: string, key: keyof ScopesState): void => {
-      const nodes = dto.byProtocol(protocol);
-      if (nodes.length === 0) return;
-      const node = nodes.first();
-      const nodeComp = node.component('node');
-      const active = nodeComp?.exists() ? this.getNumberValue(nodeComp.property('active').value()) : undefined;
-      if (active !== undefined) {
-        scopes[key] = active !== 0;
-      }
-    };
-
-    applyScope('Histogram', 'histogram');
-    applyScope('RVHistogram', 'histogram');
-    applyScope('Waveform', 'waveform');
-    applyScope('RVWaveform', 'waveform');
-    applyScope('Vectorscope', 'vectorscope');
-    applyScope('RVVectorscope', 'vectorscope');
-
-    if (scopes.histogram || scopes.waveform || scopes.vectorscope) {
-      return scopes;
-    }
-
-    return null;
+    return _parseScopes(dto);
   }
 
+  // Annotation parsing methods - delegate to AnnotationStore.
+  // Kept as methods on Session for backward compatibility (tests access via `(session as any)`).
+
+  // @ts-ignore TS6133 - accessed by tests via (session as any).parsePaintAnnotations()
   private parsePaintAnnotations(dto: GTODTO, aspectRatio: number): void {
-    const paintObjects = dto.byProtocol('RVPaint');
-    log.debug('RVPaint objects:', paintObjects.length);
-
-    if (paintObjects.length === 0) {
-      return;
-    }
-
-    const annotations: Annotation[] = [];
-    let effects: Partial<PaintEffects> | undefined;
-
-    for (const paintObj of paintObjects) {
-      log.debug('Paint object:', paintObj.name);
-
-      // Get all components from this paint object using the components() method
-      const allComponents = paintObj.components();
-      if (!allComponents || allComponents.length === 0) continue;
-
-      // Find frame components and stroke/text components
-      const frameOrders = new Map<number, string[]>();
-      const strokeData = new Map<string, GTOComponentDTO>();
-
-      for (const comp of allComponents) {
-        const compName = comp.name;
-
-        if (compName.startsWith('frame:')) {
-          // Parse frame order component like "frame:15"
-          const frameNum = parseInt(compName.split(':')[1] ?? '1', 10);
-          const orderProp = comp.property('order');
-          if (orderProp?.exists()) {
-            // Order can be a string or string array
-            const orderValue = orderProp.value();
-            const order = Array.isArray(orderValue) ? orderValue : [orderValue];
-            frameOrders.set(frameNum, order as string[]);
-          }
-        } else if (compName.startsWith('pen:') || compName.startsWith('text:')) {
-          // Store stroke/text data for later lookup
-          strokeData.set(compName, comp);
-        }
-      }
-
-      log.debug('Frame orders:', Object.fromEntries(frameOrders));
-      log.debug('Stroke data keys:', Array.from(strokeData.keys()));
-
-      // Parse strokes and text for each frame
-      for (const [frame, order] of frameOrders) {
-        for (const strokeId of order) {
-          const comp = strokeData.get(strokeId);
-          if (!comp) continue;
-
-          if (strokeId.startsWith('pen:')) {
-            const stroke = this.parsePenStroke(strokeId, frame, comp, aspectRatio);
-            if (stroke) {
-              annotations.push(stroke);
-            }
-          } else if (strokeId.startsWith('text:')) {
-            const text = this.parseTextAnnotation(strokeId, frame, comp, aspectRatio);
-            if (text) {
-              annotations.push(text);
-            }
-          }
-        }
-      }
-
-      // Parse effects/settings from paint component
-      const paintComp = paintObj.component('paint');
-      if (paintComp?.exists()) {
-        const ghost = this.getBooleanValue(paintComp.property('ghost').value());
-        const hold = this.getBooleanValue(paintComp.property('hold').value());
-        const ghostBefore = this.getNumberValue(paintComp.property('ghostBefore').value());
-        const ghostAfter = this.getNumberValue(paintComp.property('ghostAfter').value());
-
-        const nextEffects: Partial<PaintEffects> = {
-          ...(ghost !== undefined ? { ghost } : {}),
-          ...(hold !== undefined ? { hold } : {}),
-          ...(ghostBefore !== undefined ? { ghostBefore: Math.round(ghostBefore) } : {}),
-          ...(ghostAfter !== undefined ? { ghostAfter: Math.round(ghostAfter) } : {}),
-        };
-
-        if (Object.keys(nextEffects).length > 0) {
-          effects = { ...effects, ...nextEffects };
-        }
-      }
-
-      const tagComp = paintObj.component('tag');
-      if (tagComp?.exists()) {
-        const annotateValue = this.getStringValue(tagComp.property('annotate').value());
-        if (annotateValue) {
-          const tagEffects = this.parsePaintTagEffects(annotateValue);
-          if (tagEffects) {
-            effects = { ...effects, ...tagEffects };
-          }
-        }
-      }
-
-      const annotationComp = paintObj.component('annotation');
-      if (annotationComp?.exists()) {
-        const ghost = this.getBooleanValue(annotationComp.property('ghost').value());
-        const hold = this.getBooleanValue(annotationComp.property('hold').value());
-        const ghostBefore = this.getNumberValue(annotationComp.property('ghostBefore').value());
-        const ghostAfter = this.getNumberValue(annotationComp.property('ghostAfter').value());
-
-        const nextEffects: Partial<PaintEffects> = {
-          ...(ghost !== undefined ? { ghost } : {}),
-          ...(hold !== undefined ? { hold } : {}),
-          ...(ghostBefore !== undefined ? { ghostBefore: Math.round(ghostBefore) } : {}),
-          ...(ghostAfter !== undefined ? { ghostAfter: Math.round(ghostAfter) } : {}),
-        };
-
-        if (Object.keys(nextEffects).length > 0) {
-          effects = { ...effects, ...nextEffects };
-        }
-      }
-
-    }
-
-    log.debug('Total annotations parsed:', annotations.length);
-    if (annotations.length > 0 || effects) {
-      this.emit('annotationsLoaded', { annotations, effects });
-    }
+    this._annotationStore.parsePaintAnnotations(dto, aspectRatio);
   }
 
+  // @ts-ignore TS6133 - accessed by tests via (session as any).parsePaintTagEffects()
   private parsePaintTagEffects(tagValue: string): Partial<PaintEffects> | null {
-    const trimmed = tagValue.trim();
-    if (!trimmed) return null;
-
-    const result: Partial<PaintEffects> = {};
-    const applyValue = (key: string, rawValue: unknown): void => {
-      if (rawValue === undefined || rawValue === null) return;
-      const value = typeof rawValue === 'string' ? rawValue.trim() : rawValue;
-      const booleanValue = this.getBooleanValue(value);
-      const numberValue = this.getNumberValue(value) ??
-        (typeof value === 'string' && value.length > 0 && !isNaN(Number(value))
-          ? Number(value)
-          : undefined);
-
-      switch (key) {
-        case 'ghost':
-          if (booleanValue !== undefined) {
-            result.ghost = booleanValue;
-          }
-          break;
-        case 'hold':
-          if (booleanValue !== undefined) {
-            result.hold = booleanValue;
-          }
-          break;
-        case 'ghostbefore':
-          if (numberValue !== undefined) {
-            result.ghostBefore = Math.round(numberValue);
-          }
-          break;
-        case 'ghostafter':
-          if (numberValue !== undefined) {
-            result.ghostAfter = Math.round(numberValue);
-          }
-          break;
-        default:
-          break;
-      }
-    };
-
-    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-      try {
-        const parsed = JSON.parse(trimmed) as Record<string, unknown> | Array<Record<string, unknown>>;
-        const target = Array.isArray(parsed) ? parsed[0] : parsed;
-        if (target && typeof target === 'object') {
-          Object.entries(target).forEach(([key, value]) => {
-            const normalized = key.replace(/[^a-z]/gi, '').toLowerCase();
-            applyValue(normalized, value);
-          });
-        }
-      } catch (e) {
-        // fall through to string parsing
-        log.debug('JSON parse of paint tag failed, trying string parsing:', e);
-      }
-    }
-
-    if (Object.keys(result).length === 0) {
-      const normalizedText = trimmed.replace(/;/g, ' ').replace(/,/g, ' ');
-      const pairRegex = /([a-zA-Z][a-zA-Z0-9_-]*)\s*[:=]\s*([^\s]+)/g;
-      let match: RegExpExecArray | null = null;
-      while ((match = pairRegex.exec(normalizedText)) !== null) {
-        const key = match[1] ?? '';
-        const value = match[2] ?? '';
-        const normalized = key.replace(/[^a-z]/gi, '').toLowerCase();
-        applyValue(normalized, value);
-      }
-
-      if (/\bghost\b/i.test(normalizedText) && result.ghost === undefined) {
-        result.ghost = true;
-      }
-      if (/\bhold\b/i.test(normalizedText) && result.hold === undefined) {
-        result.hold = true;
-      }
-    }
-
-    return Object.keys(result).length > 0 ? result : null;
+    return this._annotationStore.parsePaintTagEffects(tagValue);
   }
 
-  // Parse a single pen stroke from RV GTO format
-  // strokeId format: "pen:ID:FRAME:USER" e.g., "pen:1:15:User"
+  // Protected so that subclasses (e.g., CoordinateParsing.test.ts TestSession) can access them.
   protected parsePenStroke(strokeId: string, frame: number, comp: GTOComponentDTO, aspectRatio: number): PenStroke | null {
-    // Parse user from strokeId (e.g., "pen:1:15:User" -> "User")
-    const parts = strokeId.split(':');
-    const user = parts[3] ?? 'unknown';
-    const id = parts[1] ?? '0';
-
-    // Get properties from component using the ComponentDTO API
-    const colorValue = comp.property('color').value();
-    const widthValue = comp.property('width').value();
-    const brushValue = comp.property('brush').value();
-    const pointsValue = comp.property('points').value();
-    const joinValue = comp.property('join').value();
-    const capValue = comp.property('cap').value();
-    const splatValue = comp.property('splat').value();
-
-    // Parse color - stored as float[4] in GTO
-    let color: [number, number, number, number] = [1, 0, 0, 1];
-    if (colorValue && Array.isArray(colorValue) && colorValue.length >= 4) {
-      color = [colorValue[0], colorValue[1], colorValue[2], colorValue[3]];
-    }
-
-    // Parse width - can be a single value or array (per-point width)
-    let width = 3;
-      if (widthValue) {
-      if (Array.isArray(widthValue) && widthValue.length > 0) {
-        // Use the first width value, convert from normalized to pixel
-        width = (widthValue[0] as number) * RV_PEN_WIDTH_SCALE;
-      } else if (typeof widthValue === 'number') {
-        width = widthValue * RV_PEN_WIDTH_SCALE;
-      }
-    }
-
-
-    // Parse brush type
-    const brushType = brushValue === 'gaussian' ? BrushType.Gaussian : BrushType.Circle;
-
-    // Parse points - stored as float[2] array (flat: [x1, y1, x2, y2, ...])
-    // OpenRV coordinate system: X from -aspectRatio to +aspectRatio, Y from -0.5 to +0.5
-    const points: Array<{ x: number; y: number; pressure?: number }> = [];
-    if (pointsValue && Array.isArray(pointsValue)) {
-      // Check if it's a nested array [[x,y], [x,y]] or flat [x, y, x, y]
-      const isNested = pointsValue.length > 0 && Array.isArray(pointsValue[0]);
-      
-      if (isNested) {
-        // Nested format: [[x,y], [x,y]]
-        for (const point of pointsValue) {
-          if (Array.isArray(point) && point.length >= 2) {
-            const rawX = point[0] as number;
-            const rawY = point[1] as number;
-            points.push({
-              x: rawX / aspectRatio + 0.5,
-              y: rawY + 0.5,
-            });
-          }
-        }
-      } else {
-        // Flat format: [x, y, x, y] - chunk into pairs
-        for (let i = 0; i < pointsValue.length; i += 2) {
-          if (i + 1 < pointsValue.length) {
-            const rawX = pointsValue[i] as number;
-            const rawY = pointsValue[i + 1] as number;
-            points.push({
-              x: rawX / aspectRatio + 0.5,
-              y: rawY + 0.5,
-            });
-          }
-        }
-      }
-    }
-
-    if (points.length === 0) {
-      log.warn('Stroke has no points:', strokeId);
-      return null;
-    }
-
-    // Parse line join (0=miter, 1=round, 2=bevel - GTO uses different values)
-    let join = LineJoin.Round;
-    if (joinValue !== null && joinValue !== undefined) {
-      const joinVal = joinValue as number;
-      if (joinVal === 0) join = LineJoin.Miter;
-      else if (joinVal === 2) join = LineJoin.Bevel;
-      // 1 and 3 are round variants
-    }
-
-    // Parse line cap
-    let cap = LineCap.Round;
-    if (capValue !== null && capValue !== undefined) {
-      const capVal = capValue as number;
-      if (capVal === 0) cap = LineCap.NoCap;
-      else if (capVal === 2) cap = LineCap.Square;
-    }
-
-    const stroke: PenStroke = {
-      type: 'pen',
-      id,
-      frame,
-      user,
-      color,
-      width,
-      brush: brushType,
-      points,
-      join,
-      cap,
-      splat: splatValue === 1,
-      mode: StrokeMode.Draw,
-      startFrame: frame,
-      duration: 0, // Only visible on this specific frame
-    };
-
-    return stroke;
+    return this._annotationStore.parsePenStroke(strokeId, frame, comp, aspectRatio);
   }
 
-  // Parse a single text annotation from RV GTO format
-  // textId format: "text:ID:FRAME:USER" e.g., "text:6:1:User"
   protected parseTextAnnotation(textId: string, frame: number, comp: GTOComponentDTO, aspectRatio: number): TextAnnotation | null {
-    const parts = textId.split(':');
-    const user = parts[3] ?? 'unknown';
-    const id = parts[1] ?? '0';
-
-    const positionValue = comp.property('position').value();
-    const colorValue = comp.property('color').value();
-    const textValue = comp.property('text').value();
-    const sizeValue = comp.property('size').value();
-    const scaleValue = comp.property('scale').value();
-    const rotationValue = comp.property('rotation').value();
-    const spacingValue = comp.property('spacing').value();
-    const fontValue = comp.property('font').value();
-
-    // Parse position
-    // OpenRV coordinate system: X from -aspectRatio to +aspectRatio, Y from -0.5 to +0.5
-    let x = 0.5, y = 0.5;
-    if (positionValue && Array.isArray(positionValue)) {
-      // Check if it's a double-wrapped array [[[x,y]]] or [[x,y]] or flat [x,y]
-      let posData = positionValue;
-      
-      // Unwrap if nested
-      while (posData.length > 0 && Array.isArray(posData[0]) && posData[0].length === 2) {
-        posData = posData[0];
-      }
-      
-      // Now posData should be [x, y]
-      if (posData.length >= 2 && typeof posData[0] === 'number') {
-        const rawX = posData[0] as number;
-        const rawY = posData[1] as number;
-        // OpenRV Coords are height-normalized (Y: -0.5 to 0.5)
-        x = rawX / aspectRatio + 0.5;
-        y = rawY + 0.5;
-      }
-    }
-
-    // Parse color
-    let color: [number, number, number, number] = [1, 1, 1, 1];
-    if (colorValue && Array.isArray(colorValue) && colorValue.length >= 4) {
-      color = [colorValue[0], colorValue[1], colorValue[2], colorValue[3]];
-    }
-
-    const text: TextAnnotation = {
-      type: 'text',
-      id,
-      frame,
-      user,
-      position: { x, y },
-      color,
-      text: (textValue as string) ?? '',
-      size: ((sizeValue as number) ?? 0.01) * RV_TEXT_SIZE_SCALE, // Scale up from normalized
-      scale: (scaleValue as number) ?? 1,
-      rotation: (rotationValue as number) ?? 0,
-      spacing: (spacingValue as number) ?? 1,
-      font: (fontValue as string) || 'sans-serif',
-      origin: TextOrigin.BottomLeft,
-      startFrame: frame,
-      duration: 0, // Only visible on this specific frame
-    };
-
-    return text;
+    return this._annotationStore.parseTextAnnotation(textId, frame, comp, aspectRatio);
   }
 
   // File loading
@@ -2959,7 +1693,7 @@ export class Session extends EventEmitter<SessionEvents> {
    * Get video frame canvas from mediabunny (for direct rendering)
    * Returns null if mediabunny is not available or frame is not cached
    */
-  getVideoFrameCanvas(frameIndex?: number): HTMLCanvasElement | OffscreenCanvas | null {
+  getVideoFrameCanvas(frameIndex?: number): HTMLCanvasElement | OffscreenCanvas | ImageBitmap | null {
     const source = this.currentSource;
     if (source?.type !== 'video' || !source.videoSourceNode?.isUsingMediabunny()) {
       return null;
@@ -3007,7 +1741,7 @@ export class Session extends EventEmitter<SessionEvents> {
    * Get video frame canvas for source B from mediabunny (for split screen rendering)
    * Returns null if mediabunny is not available or frame is not cached
    */
-  getSourceBFrameCanvas(frameIndex?: number): HTMLCanvasElement | OffscreenCanvas | null {
+  getSourceBFrameCanvas(frameIndex?: number): HTMLCanvasElement | OffscreenCanvas | ImageBitmap | null {
     return this.getFrameCanvasForSource(this.sourceB, frameIndex);
   }
 
@@ -3017,7 +1751,7 @@ export class Session extends EventEmitter<SessionEvents> {
   private getFrameCanvasForSource(
     source: MediaSource | null,
     frameIndex?: number
-  ): HTMLCanvasElement | OffscreenCanvas | null {
+  ): HTMLCanvasElement | OffscreenCanvas | ImageBitmap | null {
     if (source?.type !== 'video' || !source.videoSourceNode?.isUsingMediabunny()) {
       return null;
     }
@@ -3229,48 +1963,11 @@ export class Session extends EventEmitter<SessionEvents> {
     }
   }
 
-  /**
-   * Update source B's playback buffer for split screen support.
-   * Called during playback to keep source B's frames in sync with current playback position.
-   */
-  private updateSourceBPlaybackBuffer(frame: number): void {
-    const sourceB = this.sourceB;
-    if (!sourceB || sourceB.type !== 'video') return;
+  
 
-    // Update source B's playback buffer if it uses mediabunny
-    if (sourceB.videoSourceNode?.isUsingMediabunny()) {
-      sourceB.videoSourceNode.updatePlaybackBuffer(frame);
-    }
-  }
+  
 
-  /**
-   * Start playback preloading for source B (for split screen support).
-   * Called when playback starts to ensure source B's frames are preloaded.
-   */
-  private startSourceBPlaybackPreload(): void {
-    const sourceB = this.sourceB;
-    if (!sourceB || sourceB.type !== 'video') return;
-
-    // Start source B's playback preload if it uses mediabunny
-    if (sourceB.videoSourceNode?.isUsingMediabunny()) {
-      sourceB.videoSourceNode.setPlaybackDirection(this._playDirection);
-      sourceB.videoSourceNode.startPlaybackPreload(this._currentFrame, this._playDirection);
-    }
-  }
-
-  /**
-   * Stop playback preloading for source B.
-   * Called when playback stops.
-   */
-  private stopSourceBPlaybackPreload(): void {
-    const sourceB = this.sourceB;
-    if (!sourceB || sourceB.type !== 'video') return;
-
-    // Stop source B's playback preload if it uses mediabunny
-    if (sourceB.videoSourceNode?.isUsingMediabunny()) {
-      sourceB.videoSourceNode.stopPlaybackPreload();
-    }
-  }
+  
 
   /**
    * Toggle between A and B sources

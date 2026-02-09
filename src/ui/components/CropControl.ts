@@ -1,18 +1,11 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 
-export interface CropRegion {
-  x: number;      // 0-1 normalized left position
-  y: number;      // 0-1 normalized top position
-  width: number;  // 0-1 normalized width
-  height: number; // 0-1 normalized height
-}
+export type { CropRegion, CropState } from '../../core/types/transform';
+export { DEFAULT_CROP_REGION, DEFAULT_CROP_STATE } from '../../core/types/transform';
 
-export interface CropState {
-  enabled: boolean;
-  region: CropRegion;
-  aspectRatio: string | null;  // null = free, "16:9", "4:3", "1:1", etc.
-}
+import type { CropRegion, CropState } from '../../core/types/transform';
+import { DEFAULT_CROP_REGION, DEFAULT_CROP_STATE } from '../../core/types/transform';
 
 /** Padding mode for uncrop: uniform applies same padding on all sides, per-side allows individual control */
 export type UncropPaddingMode = 'uniform' | 'per-side';
@@ -38,19 +31,6 @@ export const DEFAULT_UNCROP_STATE: UncropState = {
   paddingRight: 0,
   paddingBottom: 0,
   paddingLeft: 0,
-};
-
-export const DEFAULT_CROP_REGION: CropRegion = {
-  x: 0,
-  y: 0,
-  width: 1,
-  height: 1,
-};
-
-export const DEFAULT_CROP_STATE: CropState = {
-  enabled: false,
-  region: { ...DEFAULT_CROP_REGION },
-  aspectRatio: null,
 };
 
 export interface CropControlEvents extends EventMap {

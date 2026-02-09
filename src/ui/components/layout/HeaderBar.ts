@@ -6,8 +6,9 @@
  */
 
 import { EventEmitter, EventMap } from '../../../utils/EventEmitter';
-import { Session, LoopMode, PLAYBACK_SPEED_PRESETS } from '../../../core/session/Session';
-import { filterImageFiles, inferSequenceFromSingleFile, getBestSequence } from '../../../utils/SequenceLoader';
+import { Session, PLAYBACK_SPEED_PRESETS } from '../../../core/session/Session';
+import type { LoopMode } from '../../../core/types/session';
+import { filterImageFiles, inferSequenceFromSingleFile, getBestSequence } from '../../../utils/media/SequenceLoader';
 import { VolumeControl } from '../VolumeControl';
 import { ExportControl } from '../ExportControl';
 import { TimecodeDisplay } from '../TimecodeDisplay';
