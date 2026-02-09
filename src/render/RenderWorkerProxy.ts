@@ -29,6 +29,7 @@ import type { BackgroundPatternState } from '../ui/components/BackgroundPatternC
 import type { CurveLUTs } from '../color/ColorCurves';
 import type { ChannelMode } from '../ui/components/ChannelSelect';
 import type { HSLQualifierState } from '../ui/components/HSLQualifier';
+import type { RenderState } from './RenderState';
 import type {
   RenderWorkerMessage,
   RenderWorkerResult,
@@ -40,6 +41,9 @@ import {
   COLOR_PRIMARIES_CODES,
 } from './renderWorker.messages';
 import RenderWorkerConstructor from '../workers/renderWorker.worker?worker';
+import { Logger } from '../utils/Logger';
+
+const log = new Logger('RenderWorkerProxy');
 
 /** Pending render request tracker. */
 interface PendingRequest<T = void> {
@@ -208,7 +212,9 @@ export class RenderWorkerProxy implements RendererBackend {
     if (this.worker && this.workerReady) {
       try {
         this.postMessage({ type: 'dispose' });
-      } catch { /* ignore */ }
+      } catch (e) {
+        log.warn('Failed to send dispose message to worker:', e);
+      }
     }
 
     this.disposed = true;
@@ -415,7 +421,8 @@ export class RenderWorkerProxy implements RendererBackend {
       this.pendingBitmap = null;
       this.pendingBitmapSource = null;
       return bitmap;
-    } catch {
+    } catch (e) {
+      log.warn('Failed to get prepared bitmap:', e);
       this.pendingBitmap = null;
       this.pendingBitmapSource = null;
       return null;
@@ -625,6 +632,31 @@ export class RenderWorkerProxy implements RendererBackend {
     this.hasDirtyState = true;
   }
 
+  applyRenderState(state: RenderState): void {
+    this.setColorAdjustments(state.colorAdjustments);
+    this.setColorInversion(state.colorInversion);
+    this.setToneMappingState(state.toneMappingState);
+    this.setBackgroundPattern(state.backgroundPattern);
+    this.setCDL(state.cdl);
+    this.setCurvesLUT(state.curvesLUT);
+    this.setColorWheels(state.colorWheels);
+    this.setFalseColor(state.falseColor.enabled, state.falseColor.lut);
+    this.setZebraStripes(state.zebraStripes);
+    this.setChannelMode(state.channelMode);
+    this.setLUT(state.lut.data, state.lut.size, state.lut.intensity);
+    this.setDisplayColorState(state.displayColor);
+    this.setHighlightsShadows(
+      state.highlightsShadows.highlights,
+      state.highlightsShadows.shadows,
+      state.highlightsShadows.whites,
+      state.highlightsShadows.blacks,
+    );
+    this.setVibrance(state.vibrance.amount, state.vibrance.skinProtection);
+    this.setClarity(state.clarity);
+    this.setSharpen(state.sharpen);
+    this.setHSLQualifier(state.hslQualifier);
+  }
+
   // ==========================================================================
   // Status queries
   // ==========================================================================
@@ -679,7 +711,7 @@ export class RenderWorkerProxy implements RendererBackend {
         this.worker.postMessage(msg);
       }
     } catch (error) {
-      console.warn('[RenderWorkerProxy] postMessage failed:', error);
+      log.warn('postMessage failed:', error);
     }
   }
 
@@ -752,7 +784,7 @@ export class RenderWorkerProxy implements RendererBackend {
    * Handle worker errors (unrecoverable).
    */
   private handleWorkerError = (event: ErrorEvent): void => {
-    console.error('[RenderWorkerProxy] Worker error:', event.message);
+    log.error('Worker error:', event.message);
 
     // Reject all pending requests
     const error = new Error(`Worker error: ${event.message}`);

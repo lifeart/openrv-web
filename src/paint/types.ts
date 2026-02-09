@@ -43,8 +43,8 @@ export enum ShapeType {
   Polygon = 'polygon',
 }
 
-export const RV_PEN_WIDTH_SCALE = 500;
-export const RV_TEXT_SIZE_SCALE = 2000;
+// Re-export for backward compatibility
+export { RV_PEN_WIDTH_SCALE, RV_TEXT_SIZE_SCALE } from '../config/UIConfig';
 
 export interface Point {
   x: number; // Normalized 0-1 (0 = left)

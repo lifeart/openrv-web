@@ -332,4 +332,44 @@ describe('PresentationMode', () => {
       expect(state2.enabled).toBe(false);
     });
   });
+
+  describe('DOM cleanup', () => {
+    it('PM-U029: dispose should remove the screen reader announcer element', () => {
+      vi.useFakeTimers();
+      // Enter presentation mode to trigger announcer creation
+      mode.setElementsToHide([]);
+      mode.setState({ enabled: true });
+
+      // Verify announcer was created
+      const announcer = document.getElementById('openrv-sr-announcer');
+      expect(announcer).not.toBeNull();
+
+      mode.dispose();
+
+      // Announcer should be removed from DOM
+      expect(document.getElementById('openrv-sr-announcer')).toBeNull();
+      vi.useRealTimers();
+    });
+
+    it('PM-U030: dispose should handle missing announcer element gracefully', () => {
+      // Dispose without ever entering presentation mode (no announcer created)
+      expect(() => mode.dispose()).not.toThrow();
+      expect(document.getElementById('openrv-sr-announcer')).toBeNull();
+    });
+
+    it('PM-U031: dispose should remove announcer even if created by earlier enter/exit cycle', () => {
+      vi.useFakeTimers();
+      mode.setElementsToHide([]);
+      // Enter and exit to create announcer
+      mode.setState({ enabled: true });
+      mode.setState({ enabled: false });
+
+      // Announcer should still exist after exiting (it was created but not cleaned up until dispose)
+      expect(document.getElementById('openrv-sr-announcer')).not.toBeNull();
+
+      mode.dispose();
+      expect(document.getElementById('openrv-sr-announcer')).toBeNull();
+      vi.useRealTimers();
+    });
+  });
 });

@@ -22,6 +22,9 @@ import {
   type CodecFamily,
   type UnsupportedCodecError,
 } from './CodecUtils';
+import { Logger } from './Logger';
+
+const log = new Logger('MediabunnyFrameExtractor');
 
 export interface VideoMetadata {
   width: number;
@@ -197,8 +200,8 @@ export class MediabunnyFrameExtractor {
           const csResult = this.videoTrack.getColorSpace();
           videoColorSpace = csResult instanceof Promise ? await csResult : csResult;
         }
-      } catch {
-        // HDR detection not available in this version of mediabunny
+      } catch (e) {
+        log.warn('HDR detection not available in this version of mediabunny:', e);
       }
 
       // Create canvas sink for frame extraction (always needed for SDR fallback & thumbnails)
@@ -212,8 +215,8 @@ export class MediabunnyFrameExtractor {
       if (isHDR) {
         try {
           this.videoSampleSink = new VideoSampleSink(this.videoTrack);
-        } catch {
-          console.warn('VideoSampleSink creation failed, HDR frames will use SDR fallback');
+        } catch (e) {
+          log.warn('VideoSampleSink creation failed, HDR frames will use SDR fallback:', e);
           isHDR = false;
         }
       }
@@ -298,11 +301,11 @@ export class MediabunnyFrameExtractor {
       frameTimestamps.sort((a, b) => a - b);
 
       // Log raw vs sorted timestamps for debugging
-      console.log(`Frame index: collected ${frameTimestamps.length} frames`);
+      log.debug(`Frame index: collected ${frameTimestamps.length} frames`);
       if (frameTimestamps.length <= 10) {
-        console.log('Sorted timestamps:', frameTimestamps.map(t => t.toFixed(4)));
+        log.debug('Sorted timestamps:', frameTimestamps.map(t => t.toFixed(4)));
       } else {
-        console.log('First 10 sorted timestamps:', frameTimestamps.slice(0, 10).map(t => t.toFixed(4)));
+        log.debug('First 10 sorted timestamps:', frameTimestamps.slice(0, 10).map(t => t.toFixed(4)));
       }
 
       // Build frame index from sorted timestamps
@@ -354,8 +357,8 @@ export class MediabunnyFrameExtractor {
         if (this.metadata?.isHDR) {
           try {
             this.videoSampleSink = new VideoSampleSink(this.videoTrack);
-          } catch {
-            console.warn('VideoSampleSink recreation failed after frame index build, falling back to SDR');
+          } catch (e) {
+            log.warn('VideoSampleSink recreation failed after frame index build, falling back to SDR:', e);
             this.videoSampleSink = null;
             this.metadata.isHDR = false;
           }
@@ -489,7 +492,7 @@ export class MediabunnyFrameExtractor {
         // Warn if the timestamp is significantly different from expected
         // This helps debug seeking issues
         if (bestTimestampDiff > 0.01) {
-          console.warn(
+          log.warn(
             `Frame ${clampedFrame}: expected timestamp ${expectedTimestamp.toFixed(4)}, ` +
             `got ${bestMatch.timestamp.toFixed(4)} (diff: ${bestTimestampDiff.toFixed(4)})`
           );
@@ -502,7 +505,7 @@ export class MediabunnyFrameExtractor {
           frameNumber: clampedFrame,
         };
       } else {
-        console.warn(
+        log.warn(
           `Frame ${clampedFrame}: no frame found in range ` +
           `[${startTimestamp.toFixed(4)}, ${endTimestamp.toFixed(4)}]`
         );
@@ -565,7 +568,7 @@ export class MediabunnyFrameExtractor {
       const sample = await this.videoSampleSink.getSample(expectedTimestamp);
       return sample ?? null;
     } catch (error) {
-      console.warn(`HDR frame ${clampedFrame} extraction failed:`, error);
+      log.warn(`HDR frame ${clampedFrame} extraction failed:`, error);
       return null;
     } finally {
       resolveOurs!();

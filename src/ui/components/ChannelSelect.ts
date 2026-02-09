@@ -75,14 +75,11 @@ const CHANNEL_COLORS: Record<ChannelMode, string> = {
   luminance: 'var(--text-primary)',
 };
 
-/**
- * Rec.709 luminance coefficients
- */
-export const LUMINANCE_COEFFICIENTS = {
-  r: 0.2126,
-  g: 0.7152,
-  b: 0.0722,
-};
+// Re-export for backward compatibility
+export { LUMINANCE_COEFFICIENTS } from '../../config/RenderConfig';
+
+// Local import so the class implementation can use it
+import { LUMINANCE_COEFFICIENTS } from '../../config/RenderConfig';
 
 export class ChannelSelect extends EventEmitter<ChannelSelectEvents> {
   private container: HTMLElement;
