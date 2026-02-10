@@ -97,6 +97,196 @@ describe('VideoSourceNode', () => {
     });
   });
 
+  // =============================================================================
+  // HDR VideoSample lifecycle tests
+  // =============================================================================
+
+  describe('HDR VideoSample lifecycle', () => {
+    /**
+     * Set up a VideoSourceNode with mocked HDR internals.
+     * Returns the node and mock objects for assertions.
+     */
+    function setupHDRNode() {
+      const testNode = new VideoSourceNode('HDR Test');
+      const internal = testNode as any;
+
+      // Simulate mediabunny HDR state
+      internal.useMediabunny = true;
+      internal.isHDRVideo = true;
+      internal.videoColorSpace = { transfer: 'hlg', primaries: 'bt2020' };
+      internal.url = 'test://hdr-video.mp4';
+      internal.metadata = { name: 'hdr', width: 1920, height: 1080, duration: 100, fps: 24 };
+
+      // Mock frameExtractor
+      const mockFrameExtractor = {
+        getMetadata: vi.fn().mockReturnValue({ rotation: 0 }),
+        getFrameHDR: vi.fn(),
+        getFrame: vi.fn(),
+        dispose: vi.fn(),
+        isReady: vi.fn().mockReturnValue(true),
+        abortPendingOperations: vi.fn(),
+      };
+      internal.frameExtractor = mockFrameExtractor;
+
+      // Mock preloadManager
+      const mockPreloadManager = {
+        getCachedFrame: vi.fn().mockReturnValue(null),
+        getFrame: vi.fn(),
+        dispose: vi.fn(),
+        setPlaybackState: vi.fn(),
+        clear: vi.fn(),
+      };
+      internal.preloadManager = mockPreloadManager;
+
+      return { testNode, internal, mockFrameExtractor };
+    }
+
+    /**
+     * Create a mock VideoSample with a close() spy.
+     */
+    function createMockSample(width = 1920, height = 1080) {
+      const mockVideoFrame = {
+        displayWidth: width,
+        displayHeight: height,
+        codedWidth: width,
+        codedHeight: height,
+        colorSpace: { transfer: 'hlg', primaries: 'bt2020' },
+        close: vi.fn(),
+      };
+      const mockSample = {
+        toVideoFrame: vi.fn().mockReturnValue(mockVideoFrame),
+        close: vi.fn(),
+      };
+      return { mockSample, mockVideoFrame };
+    }
+
+    it('VSN-HDR-001: fetchHDRFrame closes the VideoSample after extracting VideoFrame', async () => {
+      const { testNode, mockFrameExtractor } = setupHDRNode();
+      const { mockSample } = createMockSample();
+      mockFrameExtractor.getFrameHDR.mockResolvedValue(mockSample);
+
+      const result = await testNode.fetchHDRFrame(1);
+
+      expect(result).not.toBeNull();
+      expect(mockSample.toVideoFrame).toHaveBeenCalledOnce();
+      expect(mockSample.close).toHaveBeenCalledOnce();
+
+      testNode.dispose();
+    });
+
+    it('VSN-HDR-002: fetchHDRFrame closes previous cached IPImage VideoFrame', async () => {
+      const { testNode, mockFrameExtractor } = setupHDRNode();
+
+      // First fetch
+      const { mockSample: sample1, mockVideoFrame: frame1 } = createMockSample();
+      mockFrameExtractor.getFrameHDR.mockResolvedValue(sample1);
+      await testNode.fetchHDRFrame(1);
+
+      // Second fetch for different frame
+      const { mockSample: sample2 } = createMockSample();
+      mockFrameExtractor.getFrameHDR.mockResolvedValue(sample2);
+      await testNode.fetchHDRFrame(2);
+
+      // First VideoFrame should have been closed (via IPImage.close())
+      expect(frame1.close).toHaveBeenCalled();
+      expect(sample1.close).toHaveBeenCalledOnce();
+      expect(sample2.close).toHaveBeenCalledOnce();
+
+      testNode.dispose();
+    });
+
+    it('VSN-HDR-003: dispose closes pending HDR sample', () => {
+      const { testNode, internal } = setupHDRNode();
+
+      const { mockSample } = createMockSample();
+      internal.pendingHDRSample = mockSample;
+      internal.pendingHDRFrame = 5;
+
+      testNode.dispose();
+
+      expect(mockSample.close).toHaveBeenCalledOnce();
+    });
+
+    it('VSN-HDR-004: dispose does not throw when pendingHDRSample is null', () => {
+      const { testNode, internal } = setupHDRNode();
+      internal.pendingHDRSample = null;
+
+      expect(() => testNode.dispose()).not.toThrow();
+    });
+
+    it('VSN-HDR-005: process() closes pendingHDRSample after consuming it', () => {
+      const { testNode, internal, mockFrameExtractor } = setupHDRNode();
+      const { mockSample } = createMockSample();
+
+      // Set up pending sample as if the async callback already fired
+      internal.pendingHDRSample = mockSample;
+      internal.pendingHDRFrame = 1;
+
+      // Block the async path by setting a pending request
+      internal.pendingHDRRequest = Promise.resolve(null);
+
+      const context = { frame: 1, width: 1920, height: 1080, quality: 'full' as const };
+      const result = (internal as any).process(context, []);
+
+      expect(result).not.toBeNull();
+      expect(mockSample.close).toHaveBeenCalledOnce();
+      expect(internal.pendingHDRSample).toBeNull();
+
+      testNode.dispose();
+    });
+
+    it('VSN-HDR-006: async callback closes stale sample before replacing', async () => {
+      const { testNode, internal, mockFrameExtractor } = setupHDRNode();
+      const { mockSample: oldSample } = createMockSample();
+      const { mockSample: newSample } = createMockSample();
+
+      // Simulate stale sample from a prior frame
+      internal.pendingHDRSample = oldSample;
+      internal.pendingHDRFrame = 1;
+
+      // Set up getFrameHDR to return new sample
+      mockFrameExtractor.getFrameHDR.mockResolvedValue(newSample);
+
+      // Trigger process for frame 2 — async callback will fire
+      internal.pendingHDRRequest = null; // allow new request
+      const context = { frame: 2, width: 1920, height: 1080, quality: 'full' as const };
+      (internal as any).process(context, []);
+
+      // Wait for the async callback
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      expect(oldSample.close).toHaveBeenCalledOnce();
+      expect(internal.pendingHDRSample).toBe(newSample);
+      expect(internal.pendingHDRFrame).toBe(2);
+
+      testNode.dispose();
+    });
+
+    it('VSN-HDR-007: getFrameIPImage closes sample after HDR conversion', async () => {
+      const { testNode, mockFrameExtractor } = setupHDRNode();
+      const { mockSample } = createMockSample();
+      mockFrameExtractor.getFrameHDR.mockResolvedValue(mockSample);
+
+      const result = await testNode.getFrameIPImage(1);
+
+      expect(result).not.toBeNull();
+      expect(mockSample.close).toHaveBeenCalledOnce();
+
+      testNode.dispose();
+    });
+
+    it('VSN-HDR-008: fetchHDRFrame returns null when getFrameHDR returns null', async () => {
+      const { testNode, mockFrameExtractor } = setupHDRNode();
+      mockFrameExtractor.getFrameHDR.mockResolvedValue(null);
+
+      const result = await testNode.fetchHDRFrame(1);
+
+      expect(result).toBeNull();
+
+      testNode.dispose();
+    });
+  });
+
   // REGRESSION TEST: VideoSourceNode must use DEFAULT_PRELOAD_CONFIG
   // Previously, VideoSourceNode hardcoded maxCacheSize: 60 and preloadAhead: 15,
   // which caused 70-frame videos to only cache 60 frames instead of all frames.
@@ -286,6 +476,20 @@ describe('VideoSourceNode', () => {
       node.dispose();
       expect(node.isHDR()).toBe(false);
       expect(node.getVideoColorSpace()).toBeNull();
+    });
+
+    it('IMP-039-VSN-024: getCachedHDRIPImage returns null when no video loaded', () => {
+      expect(node.getCachedHDRIPImage(1)).toBeNull();
+    });
+
+    it('IMP-039-VSN-025: fetchHDRFrame returns null when not HDR', async () => {
+      const result = await node.fetchHDRFrame(1);
+      expect(result).toBeNull();
+    });
+
+    it('IMP-039-VSN-026: getFrameIPImage returns null when not using mediabunny', async () => {
+      const result = await node.getFrameIPImage(1);
+      expect(result).toBeNull();
     });
 
     it('IMP-039-VSN-022: extraction mode can be changed', () => {

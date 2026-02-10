@@ -391,6 +391,143 @@ describe('Session', () => {
     });
   });
 
+  describe('video HDR methods', () => {
+    it('SES-HDR-001: isVideoHDR returns false when no source', () => {
+      expect(session.isVideoHDR()).toBe(false);
+    });
+
+    it('SES-HDR-002: isVideoHDR returns false for image source', () => {
+      const source: MediaSource = {
+        name: 'test.png', type: 'image', url: 'test.png',
+        width: 100, height: 100, duration: 1, fps: 24,
+      };
+      session.setSources([source]);
+      expect(session.isVideoHDR()).toBe(false);
+    });
+
+    it('SES-HDR-003: isVideoHDR returns false for video without videoSourceNode', () => {
+      const source: MediaSource = {
+        name: 'test.mp4', type: 'video', url: 'test.mp4',
+        width: 100, height: 100, duration: 100, fps: 24,
+      };
+      session.setSources([source]);
+      expect(session.isVideoHDR()).toBe(false);
+    });
+
+    it('SES-HDR-004: isVideoHDR returns false for non-HDR video', () => {
+      const mockVideoNode = { isHDR: vi.fn().mockReturnValue(false) };
+      const source: MediaSource = {
+        name: 'test.mp4', type: 'video', url: 'test.mp4',
+        width: 100, height: 100, duration: 100, fps: 24,
+        videoSourceNode: mockVideoNode as any,
+      };
+      session.setSources([source]);
+      expect(session.isVideoHDR()).toBe(false);
+      expect(mockVideoNode.isHDR).toHaveBeenCalled();
+    });
+
+    it('SES-HDR-005: isVideoHDR returns true for HDR video', () => {
+      const mockVideoNode = { isHDR: vi.fn().mockReturnValue(true) };
+      const source: MediaSource = {
+        name: 'test.mp4', type: 'video', url: 'test.mp4',
+        width: 100, height: 100, duration: 100, fps: 24,
+        videoSourceNode: mockVideoNode as any,
+      };
+      session.setSources([source]);
+      expect(session.isVideoHDR()).toBe(true);
+    });
+
+    it('SES-HDR-006: getVideoHDRIPImage returns null when no source', () => {
+      expect(session.getVideoHDRIPImage()).toBeNull();
+    });
+
+    it('SES-HDR-007: getVideoHDRIPImage returns null for non-HDR video', () => {
+      const mockVideoNode = {
+        isHDR: vi.fn().mockReturnValue(false),
+        getCachedHDRIPImage: vi.fn(),
+      };
+      const source: MediaSource = {
+        name: 'test.mp4', type: 'video', url: 'test.mp4',
+        width: 100, height: 100, duration: 100, fps: 24,
+        videoSourceNode: mockVideoNode as any,
+      };
+      session.setSources([source]);
+      expect(session.getVideoHDRIPImage()).toBeNull();
+      expect(mockVideoNode.getCachedHDRIPImage).not.toHaveBeenCalled();
+    });
+
+    it('SES-HDR-008: getVideoHDRIPImage delegates to videoSourceNode', () => {
+      const mockIPImage = { width: 1920, height: 1080 };
+      const mockVideoNode = {
+        isHDR: vi.fn().mockReturnValue(true),
+        getCachedHDRIPImage: vi.fn().mockReturnValue(mockIPImage),
+      };
+      const source: MediaSource = {
+        name: 'test.mp4', type: 'video', url: 'test.mp4',
+        width: 100, height: 100, duration: 100, fps: 24,
+        videoSourceNode: mockVideoNode as any,
+      };
+      session.setSources([source]);
+
+      const result = session.getVideoHDRIPImage(5);
+      expect(result).toBe(mockIPImage);
+      expect(mockVideoNode.getCachedHDRIPImage).toHaveBeenCalledWith(5);
+    });
+
+    it('SES-HDR-009: getVideoHDRIPImage uses currentFrame when no frameIndex', () => {
+      const mockVideoNode = {
+        isHDR: vi.fn().mockReturnValue(true),
+        getCachedHDRIPImage: vi.fn().mockReturnValue(null),
+      };
+      const source: MediaSource = {
+        name: 'test.mp4', type: 'video', url: 'test.mp4',
+        width: 100, height: 100, duration: 100, fps: 24,
+        videoSourceNode: mockVideoNode as any,
+      };
+      session.setSources([source]);
+
+      session.getVideoHDRIPImage();
+      expect(mockVideoNode.getCachedHDRIPImage).toHaveBeenCalledWith(session.currentFrame);
+    });
+
+    it('SES-HDR-010: fetchVideoHDRFrame does nothing for non-HDR video', async () => {
+      const mockVideoNode = {
+        isHDR: vi.fn().mockReturnValue(false),
+        fetchHDRFrame: vi.fn(),
+      };
+      const source: MediaSource = {
+        name: 'test.mp4', type: 'video', url: 'test.mp4',
+        width: 100, height: 100, duration: 100, fps: 24,
+        videoSourceNode: mockVideoNode as any,
+      };
+      session.setSources([source]);
+
+      await session.fetchVideoHDRFrame(1);
+      expect(mockVideoNode.fetchHDRFrame).not.toHaveBeenCalled();
+    });
+
+    it('SES-HDR-011: fetchVideoHDRFrame delegates to videoSourceNode', async () => {
+      const mockVideoNode = {
+        isHDR: vi.fn().mockReturnValue(true),
+        fetchHDRFrame: vi.fn().mockResolvedValue(null),
+      };
+      const source: MediaSource = {
+        name: 'test.mp4', type: 'video', url: 'test.mp4',
+        width: 100, height: 100, duration: 100, fps: 24,
+        videoSourceNode: mockVideoNode as any,
+      };
+      session.setSources([source]);
+
+      await session.fetchVideoHDRFrame(10);
+      expect(mockVideoNode.fetchHDRFrame).toHaveBeenCalledWith(10);
+    });
+
+    it('SES-HDR-012: fetchVideoHDRFrame does nothing when no source', async () => {
+      // Should not throw
+      await expect(session.fetchVideoHDRFrame()).resolves.toBeUndefined();
+    });
+  });
+
   describe('cleanup and switching', () => {
     it('SES-036: switchToSource pauses current video if playing', () => {
       const video = document.createElement('video');

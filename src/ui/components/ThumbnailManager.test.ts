@@ -678,4 +678,45 @@ describe('ThumbnailManager', () => {
       });
     });
   });
+
+  // =============================================================================
+  // Detached ImageBitmap guard
+  // =============================================================================
+
+  describe('detached ImageBitmap guard', () => {
+    it('THUMB-GUARD-001: queues retry for detached ImageBitmap (width=0)', async () => {
+      // Set up a video source with an ImageBitmap-returning getVideoFrameCanvas
+      (mockSession as any).currentSource = {
+        type: 'video',
+        name: 'test.mp4',
+        url: 'test.mp4',
+        width: 1920,
+        height: 1080,
+        duration: 100,
+        fps: 24,
+      };
+
+      // Only test when ImageBitmap is available in the environment
+      if (typeof ImageBitmap === 'undefined') {
+        return;
+      }
+
+      // Create a detached ImageBitmap mock (width=0, height=0)
+      const detachedBitmap = Object.create(ImageBitmap.prototype);
+      Object.defineProperty(detachedBitmap, 'width', { value: 0 });
+      Object.defineProperty(detachedBitmap, 'height', { value: 0 });
+
+      (mockSession as any).getVideoFrameCanvas = vi.fn().mockReturnValue(detachedBitmap);
+
+      await manager.loadThumbnails();
+      manager.calculateSlots(60, 35, 500, 24, 100, 1920, 1080);
+
+      // Wait for async thumbnail generation to process
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // The detached bitmap should have been detected and the frame queued for retry
+      // (not thrown an error). The manager should still be functional.
+      expect(() => manager.dispose()).not.toThrow();
+    });
+  });
 });

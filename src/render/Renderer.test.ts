@@ -1876,3 +1876,216 @@ describe('Renderer renderImageToFloat', () => {
     expect(drawArrays).toHaveBeenCalled();
   });
 });
+
+// =============================================================================
+// Detached ImageBitmap guard in renderSDRFrame
+// =============================================================================
+
+describe('Renderer detached ImageBitmap guard', () => {
+  let renderer: Renderer;
+
+  beforeEach(() => {
+    renderer = new Renderer();
+  });
+
+  it('REN-GUARD-001: renderSDRFrame returns null for detached ImageBitmap (width=0)', () => {
+    initRendererWithMockGL(renderer);
+    renderer.resize(100, 100);
+
+    // Simulate a detached ImageBitmap (closed bitmap has width/height = 0)
+    const detachedBitmap = {
+      width: 0,
+      height: 100,
+      close: vi.fn(),
+    };
+
+    // Make it pass the instanceof check
+    if (typeof ImageBitmap !== 'undefined') {
+      Object.setPrototypeOf(detachedBitmap, ImageBitmap.prototype);
+      const result = renderer.renderSDRFrame(detachedBitmap as unknown as ImageBitmap);
+      expect(result).toBeNull();
+    }
+  });
+
+  it('REN-GUARD-002: renderSDRFrame returns null for detached ImageBitmap (height=0)', () => {
+    initRendererWithMockGL(renderer);
+    renderer.resize(100, 100);
+
+    const detachedBitmap = {
+      width: 100,
+      height: 0,
+      close: vi.fn(),
+    };
+
+    if (typeof ImageBitmap !== 'undefined') {
+      Object.setPrototypeOf(detachedBitmap, ImageBitmap.prototype);
+      const result = renderer.renderSDRFrame(detachedBitmap as unknown as ImageBitmap);
+      expect(result).toBeNull();
+    }
+  });
+
+  it('REN-GUARD-003: renderSDRFrame returns null for detached ImageBitmap (both 0)', () => {
+    initRendererWithMockGL(renderer);
+    renderer.resize(100, 100);
+
+    const detachedBitmap = {
+      width: 0,
+      height: 0,
+      close: vi.fn(),
+    };
+
+    if (typeof ImageBitmap !== 'undefined') {
+      Object.setPrototypeOf(detachedBitmap, ImageBitmap.prototype);
+      const result = renderer.renderSDRFrame(detachedBitmap as unknown as ImageBitmap);
+      expect(result).toBeNull();
+    }
+  });
+
+  it('REN-GUARD-004: renderSDRFrame succeeds for non-ImageBitmap with zero dimensions', () => {
+    initRendererWithMockGL(renderer);
+    renderer.resize(100, 100);
+
+    // A regular canvas with zero dimensions should still attempt rendering (not guarded)
+    const canvas = document.createElement('canvas');
+    canvas.width = 0;
+    canvas.height = 0;
+
+    const result = renderer.renderSDRFrame(canvas);
+    // Should not be null — the guard only applies to ImageBitmap
+    expect(result).toBeInstanceOf(HTMLCanvasElement);
+  });
+});
+
+// =============================================================================
+// Texture rotation uniform (u_texRotation) in renderImage
+// =============================================================================
+
+describe('Renderer texture rotation (u_texRotation)', () => {
+  /**
+   * Create a mock GL that tracks uniform1i calls by name.
+   * getUniformLocation returns the uniform name for easy tracking.
+   */
+  function createRotationTrackingGL() {
+    const uniformCalls: Array<{ name: string; value: number }> = [];
+    const gl = createMockGL();
+
+    // Override getUniformLocation to return name-tagged objects
+    (gl.getUniformLocation as ReturnType<typeof vi.fn>).mockImplementation(
+      (_program: unknown, name: string) => ({ __name: name })
+    );
+
+    // Track uniform1i calls with their location name
+    (gl.uniform1i as ReturnType<typeof vi.fn>).mockImplementation(
+      (location: { __name: string } | null, value: number) => {
+        if (location && '__name' in location) {
+          uniformCalls.push({ name: location.__name, value });
+        }
+      }
+    );
+
+    return { gl, uniformCalls };
+  }
+
+  function initWithTrackingGL(renderer: Renderer): ReturnType<typeof createRotationTrackingGL> {
+    const tracking = createRotationTrackingGL();
+    const canvas = document.createElement('canvas');
+    const originalGetContext = canvas.getContext.bind(canvas);
+    canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+      if (contextId === 'webgl2') return tracking.gl;
+      return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
+    }) as typeof canvas.getContext;
+    renderer.initialize(canvas);
+    return tracking;
+  }
+
+  it('REN-ROT-001: renderImage sets u_texRotation=0 when no videoRotation', () => {
+    const renderer = new Renderer();
+    const { uniformCalls } = initWithTrackingGL(renderer);
+    renderer.resize(100, 100);
+
+    const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+    renderer.renderImage(image);
+
+    const rotationCalls = uniformCalls.filter(c => c.name === 'u_texRotation');
+    expect(rotationCalls.length).toBeGreaterThanOrEqual(1);
+    expect(rotationCalls[rotationCalls.length - 1]!.value).toBe(0);
+  });
+
+  it('REN-ROT-002: renderImage sets u_texRotation=1 for 90° rotation', () => {
+    const renderer = new Renderer();
+    const { uniformCalls } = initWithTrackingGL(renderer);
+    renderer.resize(100, 100);
+
+    const image = new IPImage({
+      width: 10, height: 10, channels: 4, dataType: 'uint8',
+      metadata: { attributes: { videoRotation: 90 } },
+    });
+    renderer.renderImage(image);
+
+    const rotationCalls = uniformCalls.filter(c => c.name === 'u_texRotation');
+    expect(rotationCalls.length).toBeGreaterThanOrEqual(1);
+    expect(rotationCalls[rotationCalls.length - 1]!.value).toBe(1);
+  });
+
+  it('REN-ROT-003: renderImage sets u_texRotation=2 for 180° rotation', () => {
+    const renderer = new Renderer();
+    const { uniformCalls } = initWithTrackingGL(renderer);
+    renderer.resize(100, 100);
+
+    const image = new IPImage({
+      width: 10, height: 10, channels: 4, dataType: 'uint8',
+      metadata: { attributes: { videoRotation: 180 } },
+    });
+    renderer.renderImage(image);
+
+    const rotationCalls = uniformCalls.filter(c => c.name === 'u_texRotation');
+    expect(rotationCalls.length).toBeGreaterThanOrEqual(1);
+    expect(rotationCalls[rotationCalls.length - 1]!.value).toBe(2);
+  });
+
+  it('REN-ROT-004: renderImage sets u_texRotation=3 for 270° rotation', () => {
+    const renderer = new Renderer();
+    const { uniformCalls } = initWithTrackingGL(renderer);
+    renderer.resize(100, 100);
+
+    const image = new IPImage({
+      width: 10, height: 10, channels: 4, dataType: 'uint8',
+      metadata: { attributes: { videoRotation: 270 } },
+    });
+    renderer.renderImage(image);
+
+    const rotationCalls = uniformCalls.filter(c => c.name === 'u_texRotation');
+    expect(rotationCalls.length).toBeGreaterThanOrEqual(1);
+    expect(rotationCalls[rotationCalls.length - 1]!.value).toBe(3);
+  });
+
+  it('REN-ROT-005: renderSDRFrame sets u_texRotation=0 (no rotation for SDR)', () => {
+    const renderer = new Renderer();
+    const { uniformCalls } = initWithTrackingGL(renderer);
+    renderer.resize(100, 100);
+
+    const sourceCanvas = document.createElement('canvas');
+    renderer.renderSDRFrame(sourceCanvas);
+
+    const rotationCalls = uniformCalls.filter(c => c.name === 'u_texRotation');
+    expect(rotationCalls.length).toBeGreaterThanOrEqual(1);
+    expect(rotationCalls[rotationCalls.length - 1]!.value).toBe(0);
+  });
+
+  it('REN-ROT-006: renderImage wraps rotation at 360°', () => {
+    const renderer = new Renderer();
+    const { uniformCalls } = initWithTrackingGL(renderer);
+    renderer.resize(100, 100);
+
+    const image = new IPImage({
+      width: 10, height: 10, channels: 4, dataType: 'uint8',
+      metadata: { attributes: { videoRotation: 360 } },
+    });
+    renderer.renderImage(image);
+
+    const rotationCalls = uniformCalls.filter(c => c.name === 'u_texRotation');
+    expect(rotationCalls.length).toBeGreaterThanOrEqual(1);
+    // 360 / 90 = 4, 4 % 4 = 0
+    expect(rotationCalls[rotationCalls.length - 1]!.value).toBe(0);
+  });
+});
