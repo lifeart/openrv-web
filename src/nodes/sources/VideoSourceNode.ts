@@ -192,8 +192,6 @@ export class VideoSourceNode extends BaseSourceNode {
       // Propagate HDR metadata
       this.isHDRVideo = metadata.isHDR;
       this.videoColorSpace = metadata.colorSpace;
-      console.log(`[VideoSourceNode] HDR: isHDR=${metadata.isHDR}, colorSpace=${JSON.stringify(metadata.colorSpace)}`);
-
       // Update duration from mediabunny (more accurate)
       this.metadata.duration = metadata.frameCount;
       this.properties.setValue('duration', metadata.frameCount);
@@ -619,6 +617,8 @@ export class VideoSourceNode extends BaseSourceNode {
         // Return cached HDR sample if we already have one for this frame
         if (this.pendingHDRSample && this.pendingHDRFrame === context.frame) {
           const image = this.hdrSampleToIPImage(this.pendingHDRSample, context.frame);
+          this.pendingHDRSample.close();
+          this.pendingHDRSample = null;
           return image;
         }
 
@@ -627,6 +627,10 @@ export class VideoSourceNode extends BaseSourceNode {
           this.pendingHDRRequest = this.frameExtractor.getFrameHDR(context.frame).then((sample) => {
             this.pendingHDRRequest = null;
             if (sample) {
+              // Close stale sample from a previous frame if it was never consumed
+              if (this.pendingHDRSample) {
+                this.pendingHDRSample.close();
+              }
               this.pendingHDRSample = sample;
               this.pendingHDRFrame = context.frame;
               this.markDirty();
@@ -736,8 +740,6 @@ export class VideoSourceNode extends BaseSourceNode {
     const trackHeight = this.metadata.height;
     const rotation = this.frameExtractor?.getMetadata()?.rotation ?? 0;
 
-    console.log(`[HDR] VideoFrame: ${videoFrame.displayWidth}x${videoFrame.displayHeight}, coded: ${videoFrame.codedWidth}x${videoFrame.codedHeight}, track: ${trackWidth}x${trackHeight}, rotation: ${rotation}`);
-
     // Create IPImage with VideoFrame attached (minimal data buffer)
     // The VideoFrame is the actual pixel source; data is a placeholder
     return new IPImage({
@@ -846,6 +848,7 @@ export class VideoSourceNode extends BaseSourceNode {
       if (!sample) return null;
 
       const ipImage = this.hdrSampleToIPImage(sample, frame);
+      sample.close();
 
       // Close previous cached VideoFrame to prevent GPU memory leaks
       if (this.cachedHDRIPImage && this.cachedHDRIPImage !== ipImage) {
@@ -871,7 +874,9 @@ export class VideoSourceNode extends BaseSourceNode {
         try {
           const sample = await this.frameExtractor.getFrameHDR(frame);
           if (sample) {
-            return this.hdrSampleToIPImage(sample, frame);
+            const result = this.hdrSampleToIPImage(sample, frame);
+            sample.close();
+            return result;
           }
         } catch {
           // Fall through to SDR path
@@ -959,7 +964,10 @@ export class VideoSourceNode extends BaseSourceNode {
     this.isHDRVideo = false;
     this.videoColorSpace = null;
     this.pendingHDRRequest = null;
-    this.pendingHDRSample = null;
+    if (this.pendingHDRSample) {
+      this.pendingHDRSample.close();
+      this.pendingHDRSample = null;
+    }
     this.pendingHDRFrame = -1;
     if (this.cachedHDRIPImage) {
       this.cachedHDRIPImage.close();
