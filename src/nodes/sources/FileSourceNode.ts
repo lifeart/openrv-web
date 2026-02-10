@@ -6,7 +6,7 @@
  */
 
 import { BaseSourceNode } from './BaseSourceNode';
-import { IPImage, ImageMetadata } from '../../core/image/Image';
+import { IPImage, ImageMetadata, TransferFunction, ColorPrimaries } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
 import { RegisterNode } from '../base/NodeFactory';
 import {
@@ -58,6 +58,138 @@ function isTIFFExtension(filename: string): boolean {
 function isJPEGExtension(filename: string): boolean {
   const ext = filename.split('.').pop()?.toLowerCase();
   return ext === 'jpg' || ext === 'jpeg' || ext === 'jpe';
+}
+
+/**
+ * Check if a filename has an AVIF extension
+ */
+function isAVIFExtension(filename: string): boolean {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  return ext === 'avif';
+}
+
+/**
+ * Check if an ArrayBuffer contains an AVIF file (ISOBMFF ftyp box with AVIF brand)
+ */
+function isAVIFFile(buffer: ArrayBuffer): boolean {
+  if (buffer.byteLength < 12) return false;
+  const view = new DataView(buffer);
+  // Box type at offset 4..7 must be 'ftyp'
+  const type = String.fromCharCode(view.getUint8(4), view.getUint8(5), view.getUint8(6), view.getUint8(7));
+  if (type !== 'ftyp') return false;
+  // Major brand at offset 8..11
+  const brand = String.fromCharCode(view.getUint8(8), view.getUint8(9), view.getUint8(10), view.getUint8(11));
+  return brand === 'avif' || brand === 'avis' || brand === 'mif1';
+}
+
+interface AVIFColorInfo {
+  transferFunction: TransferFunction;
+  colorPrimaries: ColorPrimaries;
+  isHDR: boolean;
+}
+
+/**
+ * Parse AVIF ISOBMFF box hierarchy to extract color info from colr(nclx) box.
+ * Path: ftyp → meta → iprp → ipco → colr(nclx)
+ *
+ * Returns null if no nclx colour info found (treat as SDR).
+ */
+function parseAVIFColorInfo(buffer: ArrayBuffer): AVIFColorInfo | null {
+  const view = new DataView(buffer);
+  const length = buffer.byteLength;
+
+  /**
+   * Find a box by type within a range, returning its content offset and size.
+   * For FullBox types (like 'meta'), set isFullBox=true to skip 4 extra bytes.
+   */
+  function findBox(
+    type: string,
+    start: number,
+    end: number,
+    isFullBox = false
+  ): { contentStart: number; contentEnd: number } | null {
+    let offset = start;
+    while (offset + 8 <= end) {
+      const boxSize = view.getUint32(offset);
+      const boxType = String.fromCharCode(
+        view.getUint8(offset + 4),
+        view.getUint8(offset + 5),
+        view.getUint8(offset + 6),
+        view.getUint8(offset + 7)
+      );
+
+      if (boxSize < 8 || offset + boxSize > end) break;
+
+      if (boxType === type) {
+        const headerSize = isFullBox ? 12 : 8; // FullBox has 4 extra bytes (version + flags)
+        return {
+          contentStart: offset + headerSize,
+          contentEnd: offset + boxSize,
+        };
+      }
+
+      offset += boxSize;
+    }
+    return null;
+  }
+
+  // Skip past ftyp box to find top-level meta box
+  if (length < 12) return null;
+  const ftypSize = view.getUint32(0);
+  if (ftypSize < 8 || ftypSize > length) return null;
+
+  // Find 'meta' box (FullBox - has version+flags)
+  const meta = findBox('meta', ftypSize, length, true);
+  if (!meta) return null;
+
+  // Find 'iprp' box inside meta (plain container)
+  const iprp = findBox('iprp', meta.contentStart, meta.contentEnd);
+  if (!iprp) return null;
+
+  // Find 'ipco' box inside iprp (plain container)
+  const ipco = findBox('ipco', iprp.contentStart, iprp.contentEnd);
+  if (!ipco) return null;
+
+  // Find 'colr' box inside ipco
+  const colr = findBox('colr', ipco.contentStart, ipco.contentEnd);
+  if (!colr) return null;
+
+  // Check colour_type is 'nclx' (4 bytes at content start)
+  if (colr.contentStart + 4 > colr.contentEnd) return null;
+  const colourType = String.fromCharCode(
+    view.getUint8(colr.contentStart),
+    view.getUint8(colr.contentStart + 1),
+    view.getUint8(colr.contentStart + 2),
+    view.getUint8(colr.contentStart + 3)
+  );
+  if (colourType !== 'nclx') return null;
+
+  // nclx layout after colour_type:
+  //   colour_primaries (uint16)
+  //   transfer_characteristics (uint16)
+  //   matrix_coefficients (uint16)
+  //   full_range_flag (uint8)
+  if (colr.contentStart + 4 + 4 > colr.contentEnd) return null;
+
+  const primariesCode = view.getUint16(colr.contentStart + 4);
+  const transferCode = view.getUint16(colr.contentStart + 6);
+
+  // Map transfer characteristics
+  let transferFunction: TransferFunction;
+  if (transferCode === 16) {
+    transferFunction = 'pq'; // SMPTE ST 2084
+  } else if (transferCode === 18) {
+    transferFunction = 'hlg'; // ARIB STD-B67
+  } else {
+    transferFunction = 'srgb';
+  }
+
+  // Map colour primaries
+  const colorPrimaries: ColorPrimaries = primariesCode === 9 ? 'bt2020' : 'bt709';
+
+  const isHDR = transferFunction === 'pq' || transferFunction === 'hlg';
+
+  return { transferFunction, colorPrimaries, isHDR };
 }
 
 @RegisterNode('RVFileSource')
@@ -187,6 +319,63 @@ export class FileSourceNode extends BaseSourceNode {
         // Fetch failed - fall through to standard image loading
       } catch (err) {
         console.warn('[FileSource] JPEG gainmap loading failed, falling back to standard loading:', err);
+        // Fall through to standard image loading
+      }
+    }
+
+    // Check if this is an AVIF file - detect HDR via ISOBMFF colr box
+    if (isAVIFExtension(filename)) {
+      try {
+        const response = await fetch(url);
+        if (response.ok) {
+          const buffer = await response.arrayBuffer();
+          if (isAVIFFile(buffer)) {
+            const colorInfo = parseAVIFColorInfo(buffer);
+            if (colorInfo?.isHDR) {
+              await this.loadAVIFHDR(buffer, colorInfo, filename, url, originalUrl);
+              return;
+            }
+          }
+          // Not HDR AVIF - use blob URL from already-fetched data to avoid re-fetch
+          const blob = new Blob([buffer], { type: 'image/avif' });
+          const blobUrl = URL.createObjectURL(blob);
+          return new Promise<void>((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+              URL.revokeObjectURL(blobUrl);
+              this.image = img;
+              this.url = url;
+              this.isEXR = false;
+              this._isHDRFormat = false;
+              this._formatName = null;
+              this.metadata = {
+                name: filename,
+                width: img.naturalWidth,
+                height: img.naturalHeight,
+                duration: 1,
+                fps: 24,
+              };
+              this.properties.setValue('url', url);
+              if (originalUrl) {
+                this.properties.setValue('originalUrl', originalUrl);
+              }
+              this.properties.setValue('width', img.naturalWidth);
+              this.properties.setValue('height', img.naturalHeight);
+              this.properties.setValue('isHDR', false);
+              this.markDirty();
+              this.cachedIPImage = null;
+              resolve();
+            };
+            img.onerror = () => {
+              URL.revokeObjectURL(blobUrl);
+              reject(new Error(`Failed to load image: ${url}`));
+            };
+            img.src = blobUrl;
+          });
+        }
+      } catch (err) {
+        console.warn('[FileSource] AVIF loading failed, falling back to standard loading:', err);
         // Fall through to standard image loading
       }
     }
@@ -463,6 +652,69 @@ export class FileSourceNode extends BaseSourceNode {
   }
 
   /**
+   * Load HDR AVIF file using VideoFrame for GPU upload (preserves HDR values)
+   */
+  private async loadAVIFHDR(
+    buffer: ArrayBuffer,
+    colorInfo: AVIFColorInfo,
+    name: string,
+    url: string,
+    originalUrl?: string
+  ): Promise<void> {
+    const blob = new Blob([buffer], { type: 'image/avif' });
+    const bitmap = await createImageBitmap(blob, { colorSpaceConversion: 'none' });
+    const videoFrame = new VideoFrame(bitmap, { timestamp: 0 });
+    bitmap.close();
+
+    const metadata: ImageMetadata = {
+      sourcePath: originalUrl ?? url,
+      frameNumber: 1,
+      transferFunction: colorInfo.transferFunction,
+      colorPrimaries: colorInfo.colorPrimaries,
+      colorSpace: colorInfo.colorPrimaries === 'bt2020' ? 'rec2020' : 'rec709',
+      attributes: {
+        hdr: true,
+        formatName: 'avif-hdr',
+      },
+    };
+
+    this.cachedIPImage = new IPImage({
+      width: videoFrame.displayWidth,
+      height: videoFrame.displayHeight,
+      channels: 4,
+      dataType: 'float32',
+      data: new ArrayBuffer(4), // minimal placeholder; VideoFrame is the pixel source
+      videoFrame,
+      metadata,
+    });
+
+    this.url = url;
+    this.isEXR = false;
+    this._isHDRFormat = true;
+    this._formatName = 'avif-hdr';
+    this.image = null;
+
+    this.metadata = {
+      name,
+      width: videoFrame.displayWidth,
+      height: videoFrame.displayHeight,
+      duration: 1,
+      fps: 24,
+    };
+
+    this.properties.setValue('url', url);
+    if (originalUrl) {
+      this.properties.setValue('originalUrl', originalUrl);
+    }
+    this.properties.setValue('width', videoFrame.displayWidth);
+    this.properties.setValue('height', videoFrame.displayHeight);
+    this.properties.setValue('isHDR', true);
+
+    this.canvasDirty = true;
+    this.markDirty();
+  }
+
+  /**
    * Get available EXR layers (only valid for EXR files)
    */
   getEXRLayers(): EXRLayerInfo[] {
@@ -561,6 +813,24 @@ export class FileSourceNode extends BaseSourceNode {
       }
     }
 
+    // Check if this is an AVIF file - detect HDR via ISOBMFF colr box
+    if (isAVIFExtension(file.name)) {
+      try {
+        const buffer = await file.arrayBuffer();
+        if (isAVIFFile(buffer)) {
+          const colorInfo = parseAVIFColorInfo(buffer);
+          if (colorInfo?.isHDR) {
+            const url = URL.createObjectURL(file);
+            await this.loadAVIFHDR(buffer, colorInfo, file.name, url);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('[FileSource] AVIF HDR loading failed, falling back to standard loading:', err);
+        // Fall through to standard image loading
+      }
+    }
+
     // Standard image loading
     const url = URL.createObjectURL(file);
     await this.load(url, file.name);
@@ -592,6 +862,11 @@ export class FileSourceNode extends BaseSourceNode {
    */
   getCanvas(): HTMLCanvasElement | null {
     if (!this.cachedIPImage) {
+      return null;
+    }
+
+    // VideoFrame-backed images (HDR AVIF) render via WebGL path only
+    if (this.cachedIPImage.videoFrame) {
       return null;
     }
 
@@ -711,6 +986,9 @@ export class FileSourceNode extends BaseSourceNode {
       URL.revokeObjectURL(this.url);
     }
     this.image = null;
+    if (this.cachedIPImage) {
+      this.cachedIPImage.close();
+    }
     this.cachedIPImage = null;
     this.exrBuffer = null;
     this.exrLayers = [];

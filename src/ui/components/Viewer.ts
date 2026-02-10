@@ -954,7 +954,9 @@ export class Viewer {
       // HDR files: prefer WebGL rendering path (handled below after display dimensions are computed)
       // Set canvas fallback in case WebGL path fails or source isn't HDR
       if (!source.fileSourceNode.isHDR()) {
-        element = source.fileSourceNode.getCanvas() ?? undefined;
+        element = source.fileSourceNode.getCanvas()
+          ?? source.fileSourceNode.getElement(0)
+          ?? undefined;
       }
       // For HDR: element stays undefined here; we intercept after displayWidth/Height are calculated
     } else {

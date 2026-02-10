@@ -653,4 +653,298 @@ describe('FileSourceNode', () => {
       expect(node.getCurrentEXRLayer()).toBeNull();
     });
   });
+
+  describe('AVIF support', () => {
+    /**
+     * Create a minimal AVIF ISOBMFF buffer for testing.
+     * Builds: ftyp + meta(iprp(ipco(colr(nclx)))) with configurable color params.
+     */
+    function createTestAVIFBuffer(options: {
+      brand?: string;
+      transferCharacteristics?: number;
+      colourPrimaries?: number;
+      includeColrBox?: boolean;
+    } = {}): ArrayBuffer {
+      const {
+        brand = 'avif',
+        transferCharacteristics = 16, // PQ by default
+        colourPrimaries = 9, // BT.2020 by default
+        includeColrBox = true,
+      } = options;
+
+      const parts: Uint8Array[] = [];
+
+      function writeUint32BE(value: number): void {
+        const buf = new Uint8Array(4);
+        const view = new DataView(buf.buffer);
+        view.setUint32(0, value, false); // big-endian
+        parts.push(buf);
+      }
+
+      function writeString(str: string): void {
+        const bytes = new Uint8Array(str.length);
+        for (let i = 0; i < str.length; i++) {
+          bytes[i] = str.charCodeAt(i);
+        }
+        parts.push(bytes);
+      }
+
+      // Build colr(nclx) box: 4(size) + 4(type) + 4(colour_type) + 2+2+2+1 = 19 bytes
+      let colrBox: Uint8Array | null = null;
+      if (includeColrBox) {
+        const colrParts: Uint8Array[] = [];
+        // size placeholder
+        const colrSizeBuf = new Uint8Array(4);
+        colrParts.push(colrSizeBuf);
+        // type
+        colrParts.push(new TextEncoder().encode('colr'));
+        // colour_type = 'nclx'
+        colrParts.push(new TextEncoder().encode('nclx'));
+        // colour_primaries (uint16)
+        const cpBuf = new Uint8Array(2);
+        new DataView(cpBuf.buffer).setUint16(0, colourPrimaries, false);
+        colrParts.push(cpBuf);
+        // transfer_characteristics (uint16)
+        const tcBuf = new Uint8Array(2);
+        new DataView(tcBuf.buffer).setUint16(0, transferCharacteristics, false);
+        colrParts.push(tcBuf);
+        // matrix_coefficients (uint16)
+        const mcBuf = new Uint8Array(2);
+        new DataView(mcBuf.buffer).setUint16(0, 0, false);
+        colrParts.push(mcBuf);
+        // full_range_flag (uint8)
+        colrParts.push(new Uint8Array([1]));
+
+        const colrSize = colrParts.reduce((s, p) => s + p.length, 0);
+        new DataView(colrSizeBuf.buffer).setUint32(0, colrSize, false);
+
+        colrBox = new Uint8Array(colrSize);
+        let pos = 0;
+        for (const p of colrParts) {
+          colrBox.set(p, pos);
+          pos += p.length;
+        }
+      }
+
+      // Build ipco box: 8(header) + colrBox
+      const ipcoContentSize = colrBox ? colrBox.length : 0;
+      const ipcoSize = 8 + ipcoContentSize;
+
+      // Build iprp box: 8(header) + ipco
+      const iprpSize = 8 + ipcoSize;
+
+      // Build meta box (FullBox): 8(header) + 4(version+flags) + iprp
+      const metaSize = 12 + iprpSize;
+
+      // Build ftyp box: 8(header) + 4(brand) + 4(version)
+      const ftypSize = 16;
+
+      // ftyp
+      writeUint32BE(ftypSize);
+      writeString('ftyp');
+      writeString(brand.padEnd(4, ' ').slice(0, 4));
+      writeUint32BE(0); // minor_version
+
+      // meta (FullBox)
+      writeUint32BE(metaSize);
+      writeString('meta');
+      writeUint32BE(0); // version + flags
+
+      // iprp
+      writeUint32BE(iprpSize);
+      writeString('iprp');
+
+      // ipco
+      writeUint32BE(ipcoSize);
+      writeString('ipco');
+
+      // colr
+      if (colrBox) {
+        parts.push(colrBox);
+      }
+
+      const totalLength = parts.reduce((sum, p) => sum + p.length, 0);
+      const result = new Uint8Array(totalLength);
+      let pos = 0;
+      for (const part of parts) {
+        result.set(part, pos);
+        pos += part.length;
+      }
+      return result.buffer;
+    }
+
+    // Mock createImageBitmap and VideoFrame for HDR AVIF tests
+    let origCreateImageBitmap: typeof globalThis.createImageBitmap;
+    let origVideoFrame: typeof globalThis.VideoFrame;
+
+    beforeEach(() => {
+      origCreateImageBitmap = globalThis.createImageBitmap;
+      origVideoFrame = globalThis.VideoFrame;
+
+      (globalThis as any).createImageBitmap = vi.fn(async () => ({
+        width: 64,
+        height: 64,
+        close: vi.fn(),
+      }));
+
+      (globalThis as any).VideoFrame = vi.fn((bitmap: any) => ({
+        displayWidth: bitmap.width ?? 64,
+        displayHeight: bitmap.height ?? 64,
+        close: vi.fn(),
+      }));
+    });
+
+    afterEach(() => {
+      globalThis.createImageBitmap = origCreateImageBitmap;
+      globalThis.VideoFrame = origVideoFrame;
+    });
+
+    it('FSN-060: AVIF with PQ (TC=16) detected as HDR', async () => {
+      const buffer = createTestAVIFBuffer({ transferCharacteristics: 16, colourPrimaries: 9 });
+      const file = new File([buffer], 'cosmos-pq.avif', { type: 'image/avif' });
+
+      await node.loadFile(file);
+
+      expect(node.isHDR()).toBe(true);
+      expect(node.formatName).toBe('avif-hdr');
+    });
+
+    it('FSN-061: AVIF with HLG (TC=18) detected as HDR', async () => {
+      const buffer = createTestAVIFBuffer({ transferCharacteristics: 18, colourPrimaries: 9 });
+      const file = new File([buffer], 'cosmos-hlg.avif', { type: 'image/avif' });
+
+      await node.loadFile(file);
+
+      expect(node.isHDR()).toBe(true);
+      expect(node.formatName).toBe('avif-hdr');
+    });
+
+    it('FSN-062: AVIF with BT.709 (TC=1) treated as SDR', async () => {
+      const buffer = createTestAVIFBuffer({ transferCharacteristics: 1, colourPrimaries: 1 });
+      const file = new File([buffer], 'photo.avif', { type: 'image/avif' });
+
+      await node.loadFile(file);
+
+      // Should fall through to standard loading (SDR)
+      expect(node.isHDR()).toBe(false);
+    });
+
+    it('FSN-063: AVIF without colr box treated as SDR', async () => {
+      const buffer = createTestAVIFBuffer({ includeColrBox: false });
+      const file = new File([buffer], 'simple.avif', { type: 'image/avif' });
+
+      await node.loadFile(file);
+
+      // No colr box → parseAVIFColorInfo returns null → falls through to SDR
+      expect(node.isHDR()).toBe(false);
+    });
+
+    it('FSN-064: non-AVIF file with .avif extension handled gracefully', async () => {
+      // Create a non-ISOBMFF buffer (no ftyp box)
+      const fakeBuffer = new ArrayBuffer(100);
+      const view = new DataView(fakeBuffer);
+      view.setUint32(0, 0x89504e47, false); // PNG magic instead
+      const file = new File([fakeBuffer], 'fake.avif', { type: 'image/avif' });
+
+      await node.loadFile(file);
+
+      // Should fall through to standard loading
+      expect(node.isHDR()).toBe(false);
+    });
+
+    it('FSN-065: HDR AVIF produces IPImage with videoFrame', async () => {
+      const buffer = createTestAVIFBuffer({ transferCharacteristics: 16, colourPrimaries: 9 });
+      const file = new File([buffer], 'hdr.avif', { type: 'image/avif' });
+
+      await node.loadFile(file);
+
+      const ipImage = node.getIPImage();
+      expect(ipImage).not.toBeNull();
+      expect(ipImage!.videoFrame).not.toBeNull();
+      expect(ipImage!.dataType).toBe('float32');
+    });
+
+    it('FSN-066: HDR AVIF metadata has correct transferFunction and colorPrimaries', async () => {
+      const buffer = createTestAVIFBuffer({ transferCharacteristics: 18, colourPrimaries: 9 });
+      const file = new File([buffer], 'hlg.avif', { type: 'image/avif' });
+
+      await node.loadFile(file);
+
+      const ipImage = node.getIPImage();
+      expect(ipImage).not.toBeNull();
+      expect(ipImage!.metadata.transferFunction).toBe('hlg');
+      expect(ipImage!.metadata.colorPrimaries).toBe('bt2020');
+      expect(ipImage!.metadata.colorSpace).toBe('rec2020');
+    });
+
+    it('FSN-067: HDR AVIF with BT.709 primaries sets correct colorSpace', async () => {
+      const buffer = createTestAVIFBuffer({ transferCharacteristics: 16, colourPrimaries: 1 });
+      const file = new File([buffer], 'pq-709.avif', { type: 'image/avif' });
+
+      await node.loadFile(file);
+
+      const ipImage = node.getIPImage();
+      expect(ipImage).not.toBeNull();
+      expect(ipImage!.metadata.transferFunction).toBe('pq');
+      expect(ipImage!.metadata.colorPrimaries).toBe('bt709');
+      expect(ipImage!.metadata.colorSpace).toBe('rec709');
+    });
+
+    it('FSN-068: dispose() calls close() on VideoFrame', async () => {
+      const buffer = createTestAVIFBuffer({ transferCharacteristics: 16, colourPrimaries: 9 });
+      const file = new File([buffer], 'hdr.avif', { type: 'image/avif' });
+
+      await node.loadFile(file);
+
+      const ipImage = node.getIPImage();
+      expect(ipImage).not.toBeNull();
+      const closeSpy = vi.spyOn(ipImage!, 'close');
+
+      node.dispose();
+
+      expect(closeSpy).toHaveBeenCalled();
+    });
+
+    it('FSN-069: getCanvas() returns null for VideoFrame-backed AVIF', async () => {
+      const buffer = createTestAVIFBuffer({ transferCharacteristics: 16, colourPrimaries: 9 });
+      const file = new File([buffer], 'hdr.avif', { type: 'image/avif' });
+
+      await node.loadFile(file);
+
+      // VideoFrame-backed images should not produce a canvas
+      expect(node.getCanvas()).toBeNull();
+    });
+
+    it('FSN-070: AVIF with avis brand is recognized', async () => {
+      const buffer = createTestAVIFBuffer({ brand: 'avis', transferCharacteristics: 16, colourPrimaries: 9 });
+      const file = new File([buffer], 'sequence.avif', { type: 'image/avif' });
+
+      await node.loadFile(file);
+
+      expect(node.isHDR()).toBe(true);
+      expect(node.formatName).toBe('avif-hdr');
+    });
+
+    it('FSN-071: AVIF with mif1 brand is recognized', async () => {
+      const buffer = createTestAVIFBuffer({ brand: 'mif1', transferCharacteristics: 18, colourPrimaries: 9 });
+      const file = new File([buffer], 'generic.avif', { type: 'image/avif' });
+
+      await node.loadFile(file);
+
+      expect(node.isHDR()).toBe(true);
+      expect(node.formatName).toBe('avif-hdr');
+    });
+
+    it('FSN-072: HDR AVIF populates correct dimensions', async () => {
+      const buffer = createTestAVIFBuffer({ transferCharacteristics: 16 });
+      const file = new File([buffer], 'hdr.avif', { type: 'image/avif' });
+
+      await node.loadFile(file);
+
+      // Mock returns 64x64
+      expect(node.properties.getValue('width')).toBe(64);
+      expect(node.properties.getValue('height')).toBe(64);
+      expect(node.properties.getValue('isHDR')).toBe(true);
+    });
+  });
 });
