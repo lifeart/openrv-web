@@ -14,8 +14,9 @@ import { isDPXFile } from './DPXDecoder';
 import { isCineonFile } from './CineonDecoder';
 import { isTIFFFile, isFloatTIFF } from './TIFFFloatDecoder';
 import { isGainmapJPEG } from './JPEGGainmapDecoder';
+import { isHDRFile } from './HDRDecoder';
 
-export type FormatName = 'exr' | 'dpx' | 'cineon' | 'tiff' | 'jpeg-gainmap' | null;
+export type FormatName = 'exr' | 'dpx' | 'cineon' | 'tiff' | 'jpeg-gainmap' | 'hdr' | null;
 
 /** Result returned by FormatDecoder.decode() and detectAndDecode() */
 export interface DecodeResult {
@@ -158,6 +159,27 @@ const jpegGainmapDecoder: FormatDecoder = {
 };
 
 /**
+ * Radiance HDR format decoder adapter
+ * Detection is sync (magic byte check); decoding lazy-loads the full module.
+ */
+const hdrDecoder: FormatDecoder = {
+  formatName: 'hdr',
+  canDecode: isHDRFile,
+  async decode(buffer: ArrayBuffer) {
+    const { decodeHDR } = await import('./HDRDecoder');
+    const result = await decodeHDR(buffer);
+    return {
+      width: result.width,
+      height: result.height,
+      data: result.data,
+      channels: result.channels,
+      colorSpace: result.colorSpace,
+      metadata: result.metadata,
+    };
+  },
+};
+
+/**
  * Registry for image format decoders.
  * Detects format by magic number and dispatches to the appropriate decoder.
  */
@@ -166,12 +188,13 @@ export class DecoderRegistry {
 
   constructor() {
     // Register built-in decoders in detection order
-    // EXR first (most common in VFX), then DPX, Cineon, TIFF, JPEG Gainmap
+    // EXR first (most common in VFX), then DPX, Cineon, TIFF, JPEG Gainmap, HDR
     this.decoders.push(exrDecoder);
     this.decoders.push(dpxDecoder);
     this.decoders.push(cineonDecoder);
     this.decoders.push(tiffDecoder);
     this.decoders.push(jpegGainmapDecoder);
+    this.decoders.push(hdrDecoder);
   }
 
   /**

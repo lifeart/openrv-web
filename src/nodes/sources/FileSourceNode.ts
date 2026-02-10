@@ -2,7 +2,7 @@
  * FileSourceNode - Source node for single image files
  *
  * Loads and provides a single image as source data.
- * Supports standard web formats (PNG, JPEG, WebP) and HDR formats (EXR, DPX, Cineon, Float TIFF).
+ * Supports standard web formats (PNG, JPEG, WebP) and HDR formats (EXR, DPX, Cineon, Float TIFF, Radiance HDR).
  */
 
 import { BaseSourceNode } from './BaseSourceNode';
@@ -50,6 +50,16 @@ function isCineonExtension(filename: string): boolean {
 function isTIFFExtension(filename: string): boolean {
   const ext = filename.split('.').pop()?.toLowerCase();
   return ext === 'tiff' || ext === 'tif';
+}
+
+/**
+ * Check if a filename has a Radiance HDR extension.
+ * Note: .pic is ambiguous (also used by Softimage PIC, Apple PICT, etc.)
+ * but magic-byte validation in the decoder prevents silent mis-decode.
+ */
+function isHDRExtension(filename: string): boolean {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  return ext === 'hdr' || ext === 'pic';
 }
 
 /**
@@ -242,8 +252,8 @@ export class FileSourceNode extends BaseSourceNode {
       return;
     }
 
-    // Check if this is a DPX or Cineon file (always HDR)
-    if (isDPXExtension(filename) || isCineonExtension(filename)) {
+    // Check if this is a DPX, Cineon, or Radiance HDR file (always HDR)
+    if (isDPXExtension(filename) || isCineonExtension(filename) || isHDRExtension(filename)) {
       await this.loadHDRFromUrl(url, filename, originalUrl);
       return;
     }
@@ -432,7 +442,7 @@ export class FileSourceNode extends BaseSourceNode {
   }
 
   /**
-   * Load HDR format file (DPX, Cineon, Float TIFF) from URL
+   * Load HDR format file (DPX, Cineon, Float TIFF, Radiance HDR) from URL
    */
   private async loadHDRFromUrl(url: string, name: string, originalUrl?: string): Promise<void> {
     const response = await fetch(url);
@@ -530,7 +540,7 @@ export class FileSourceNode extends BaseSourceNode {
   }
 
   /**
-   * Load HDR format file (DPX, Cineon, Float TIFF) from ArrayBuffer
+   * Load HDR format file (DPX, Cineon, Float TIFF, Radiance HDR) from ArrayBuffer
    */
   private async loadHDRFromBuffer(
     buffer: ArrayBuffer,
@@ -776,8 +786,8 @@ export class FileSourceNode extends BaseSourceNode {
       return;
     }
 
-    // Check if this is a DPX or Cineon file (always HDR)
-    if (isDPXExtension(file.name) || isCineonExtension(file.name)) {
+    // Check if this is a DPX, Cineon, or Radiance HDR file (always HDR)
+    if (isDPXExtension(file.name) || isCineonExtension(file.name) || isHDRExtension(file.name)) {
       const buffer = await file.arrayBuffer();
       const url = URL.createObjectURL(file);
       await this.loadHDRFromBuffer(buffer, file.name, url);
@@ -837,7 +847,7 @@ export class FileSourceNode extends BaseSourceNode {
   }
 
   isReady(): boolean {
-    // For HDR files (EXR, DPX, Cineon, Float TIFF), check if we have cached IPImage
+    // For HDR files (EXR, DPX, Cineon, Float TIFF, Radiance HDR), check if we have cached IPImage
     if (this._isHDRFormat || this.isEXR) {
       return this.cachedIPImage !== null;
     }

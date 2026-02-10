@@ -43,3 +43,10 @@ export {
   decodeGainmapToFloat32,
   type GainmapInfo,
 } from './JPEGGainmapDecoder';
+export {
+  isHDRFile,
+  getHDRInfo,
+  decodeHDR,
+  type HDRInfo,
+  type HDRDecodeResult,
+} from './HDRDecoder';

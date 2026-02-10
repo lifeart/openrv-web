@@ -88,6 +88,18 @@ function createFloatTIFFMagic(): ArrayBuffer {
   return buffer;
 }
 
+function createHDRMagic(): ArrayBuffer {
+  const header = '#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 2 +X 2\n';
+  const headerBytes = Array.from(header).map(c => c.charCodeAt(0));
+  // Add 4 pixels of uncompressed RGBE data (2x2 image)
+  const pixelBytes = [128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128];
+  const buffer = new ArrayBuffer(headerBytes.length + pixelBytes.length);
+  const view = new Uint8Array(buffer);
+  view.set(headerBytes, 0);
+  view.set(pixelBytes, headerBytes.length);
+  return buffer;
+}
+
 function createNonFloatTIFFMagic(): ArrayBuffer {
   // Same as float TIFF but with SampleFormat=1 (uint)
   const buffer = new ArrayBuffer(512);
@@ -169,6 +181,11 @@ describe('DecoderRegistry', () => {
       expect(registry.detectFormat(createNonFloatTIFFMagic())).toBeNull();
     });
 
+    it('should detect HDR format', () => {
+      const registry = new DecoderRegistry();
+      expect(registry.detectFormat(createHDRMagic())).toBe('hdr');
+    });
+
     it('should return null for unknown format', () => {
       const registry = new DecoderRegistry();
       const buffer = new ArrayBuffer(16);
@@ -209,6 +226,13 @@ describe('DecoderRegistry', () => {
       const decoder = registry.getDecoder(createFloatTIFFMagic());
       expect(decoder).not.toBeNull();
       expect(decoder!.formatName).toBe('tiff');
+    });
+
+    it('should return HDR decoder for HDR data', () => {
+      const registry = new DecoderRegistry();
+      const decoder = registry.getDecoder(createHDRMagic());
+      expect(decoder).not.toBeNull();
+      expect(decoder!.formatName).toBe('hdr');
     });
 
     it('should return null for unknown data', () => {
@@ -274,13 +298,14 @@ describe('DecoderRegistry', () => {
       expect(decoder!.formatName).toBe('exr');
     });
 
-    it('should have all five built-in decoders', () => {
+    it('should have all six built-in decoders', () => {
       const registry = new DecoderRegistry();
       // Test each format is detectable
       expect(registry.getDecoder(createEXRMagic())?.formatName).toBe('exr');
       expect(registry.getDecoder(createDPXMagic())?.formatName).toBe('dpx');
       expect(registry.getDecoder(createCineonMagic())?.formatName).toBe('cineon');
       expect(registry.getDecoder(createFloatTIFFMagic())?.formatName).toBe('tiff');
+      expect(registry.getDecoder(createHDRMagic())?.formatName).toBe('hdr');
       // JPEG Gainmap requires a valid JPEG+MPF buffer which is complex to create,
       // but the decoder is registered and tested via isGainmapJPEG in its own test suite
     });
@@ -292,6 +317,19 @@ describe('DecoderRegistry', () => {
       const buffer = new ArrayBuffer(16);
       const result = await registry.detectAndDecode(buffer);
       expect(result).toBeNull();
+    });
+
+    it('should detect and decode HDR format end-to-end', async () => {
+      const registry = new DecoderRegistry();
+      const buffer = createHDRMagic();
+      const result = await registry.detectAndDecode(buffer);
+      expect(result).not.toBeNull();
+      expect(result!.formatName).toBe('hdr');
+      expect(result!.width).toBe(2);
+      expect(result!.height).toBe(2);
+      expect(result!.channels).toBe(4);
+      expect(result!.colorSpace).toBe('linear');
+      expect(result!.data).toBeInstanceOf(Float32Array);
     });
 
     it('should detect, decode, and include formatName in result', async () => {
@@ -368,6 +406,7 @@ describe('DecoderRegistry', () => {
       expect(decoderRegistry.detectFormat(createDPXMagic())).toBe('dpx');
       expect(decoderRegistry.detectFormat(createCineonMagic())).toBe('cineon');
       expect(decoderRegistry.detectFormat(createFloatTIFFMagic())).toBe('tiff');
+      expect(decoderRegistry.detectFormat(createHDRMagic())).toBe('hdr');
     });
 
     it('should allow registering custom decoders on the singleton', () => {
