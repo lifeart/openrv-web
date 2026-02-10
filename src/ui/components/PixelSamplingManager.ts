@@ -109,12 +109,19 @@ export class PixelSamplingManager {
     // HDR/SDR WebGL path: use WebGL readPixelFloat for accurate values
     const glRenderer = this.context.getGLRenderer();
     if ((this.context.isHDRRenderActive() || this.context.isSDRWebGLRenderActive()) && glRenderer) {
+      // Scale coordinates by DPR since the GL canvas is at physical resolution
+      const dpr = window.devicePixelRatio || 1;
+      const physicalX = Math.round(position.x * dpr);
+      const physicalY = Math.round(position.y * dpr);
+      const physicalDisplayW = Math.round(displayWidth * dpr);
+      const physicalDisplayH = Math.round(displayHeight * dpr);
+
       const sampleSize = this.context.pixelProbe.getSampleSize();
       const halfSize = Math.floor(sampleSize / 2);
-      const rx = Math.max(0, Math.floor(position.x) - halfSize);
-      const ry = Math.max(0, Math.floor(position.y) - halfSize);
-      const rw = Math.min(sampleSize, displayWidth - rx);
-      const rh = Math.min(sampleSize, displayHeight - ry);
+      const rx = Math.max(0, physicalX - halfSize);
+      const ry = Math.max(0, physicalY - halfSize);
+      const rw = Math.min(sampleSize, physicalDisplayW - rx);
+      const rh = Math.min(sampleSize, physicalDisplayH - ry);
 
       // Phase 4: Use async readback when worker renderer is active
       const renderWorkerProxy = this.context.getRenderWorkerProxy();

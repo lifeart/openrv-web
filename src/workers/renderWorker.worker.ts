@@ -166,6 +166,13 @@ workerSelf.onmessage = function (event: MessageEvent<RenderWorkerMessage>) {
       break;
     }
 
+    case 'setViewport': {
+      if (renderer) {
+        renderer.setViewport(msg.width, msg.height);
+      }
+      break;
+    }
+
     case 'clear': {
       if (renderer) {
         renderer.clear(msg.r, msg.g, msg.b, msg.a);

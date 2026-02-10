@@ -22,6 +22,9 @@ interface TestableViewerGLRenderer {
   _isAsyncRenderer: boolean;
   _hdrRenderActive: boolean;
   _sdrWebGLRenderActive: boolean;
+  _webgpuBlit: { initialized: boolean; getCanvas: () => HTMLCanvasElement } | null;
+  _logicalWidth: number;
+  _logicalHeight: number;
 }
 
 function createMockContext(): GLRendererContext {
@@ -255,6 +258,94 @@ describe('ViewerGLRenderer', () => {
       expect(() => renderer.dispose()).not.toThrow();
       expect(renderer.glCanvas).toBeNull();
       expect(renderer.glRenderer).toBeNull();
+    });
+  });
+
+  // =========================================================================
+  // resizeIfActive — WebGPU blit canvas CSS sizing
+  // =========================================================================
+  describe('resizeIfActive — WebGPU blit canvas sizing', () => {
+    it('VGLR-050: resizeIfActive stores logical dimensions', () => {
+      const internal = renderer as unknown as TestableViewerGLRenderer;
+      renderer.resizeIfActive(1920, 1080, 960, 540);
+      expect(internal._logicalWidth).toBe(960);
+      expect(internal._logicalHeight).toBe(540);
+    });
+
+    it('VGLR-051: resizeIfActive applies CSS sizing to WebGPU blit canvas when HDR active', () => {
+      const internal = renderer as unknown as TestableViewerGLRenderer;
+      const mockGL = createMockRenderer();
+      const blitCanvas = document.createElement('canvas');
+      internal._glCanvas = document.createElement('canvas');
+      internal._glRenderer = { ...mockGL, resize: vi.fn() } as unknown as Renderer;
+      internal._hdrRenderActive = true;
+      internal._webgpuBlit = { initialized: true, getCanvas: () => blitCanvas };
+
+      // Simulate DPR=2 retina display
+      Object.defineProperty(window, 'devicePixelRatio', { value: 2, configurable: true });
+
+      renderer.resizeIfActive(1920, 1080, 960, 540);
+
+      // WebGPU blit canvas should get logical CSS dimensions
+      expect(blitCanvas.style.width).toBe('960px');
+      expect(blitCanvas.style.height).toBe('540px');
+
+      Object.defineProperty(window, 'devicePixelRatio', { value: 1, configurable: true });
+    });
+
+    it('VGLR-052: resizeIfActive does NOT resize WebGPU blit canvas when SDR-only (no HDR active)', () => {
+      const internal = renderer as unknown as TestableViewerGLRenderer;
+      const mockGL = createMockRenderer();
+      const blitCanvas = document.createElement('canvas');
+      internal._glCanvas = document.createElement('canvas');
+      internal._glRenderer = { ...mockGL, resize: vi.fn() } as unknown as Renderer;
+      internal._sdrWebGLRenderActive = true;
+      internal._hdrRenderActive = false;
+      internal._webgpuBlit = { initialized: true, getCanvas: () => blitCanvas };
+
+      renderer.resizeIfActive(1920, 1080, 960, 540);
+
+      // WebGPU blit canvas should NOT get CSS sizing (not in HDR mode)
+      expect(blitCanvas.style.width).toBe('');
+      expect(blitCanvas.style.height).toBe('');
+    });
+
+    it('VGLR-053: resizeIfActive falls back to physical/DPR when no logical dims provided', () => {
+      const internal = renderer as unknown as TestableViewerGLRenderer;
+      const mockGL = createMockRenderer();
+      const blitCanvas = document.createElement('canvas');
+      internal._glCanvas = document.createElement('canvas');
+      internal._glRenderer = { ...mockGL, resize: vi.fn() } as unknown as Renderer;
+      internal._hdrRenderActive = true;
+      internal._webgpuBlit = { initialized: true, getCanvas: () => blitCanvas };
+
+      // DPR=2, no logical dims passed
+      Object.defineProperty(window, 'devicePixelRatio', { value: 2, configurable: true });
+
+      renderer.resizeIfActive(1920, 1080);
+
+      // Should compute CSS size from physical / DPR
+      expect(blitCanvas.style.width).toBe('960px');
+      expect(blitCanvas.style.height).toBe('540px');
+
+      Object.defineProperty(window, 'devicePixelRatio', { value: 1, configurable: true });
+    });
+
+    it('VGLR-054: resizeIfActive applies CSS sizing to GL canvas on retina', () => {
+      const internal = renderer as unknown as TestableViewerGLRenderer;
+      const mockGL = createMockRenderer();
+      internal._glCanvas = document.createElement('canvas');
+      internal._glRenderer = { ...mockGL, resize: vi.fn() } as unknown as Renderer;
+      internal._hdrRenderActive = true;
+
+      Object.defineProperty(window, 'devicePixelRatio', { value: 2, configurable: true });
+
+      renderer.resizeIfActive(1920, 1080, 960, 540);
+
+      expect(internal._glCanvas!.style.width).toBe('960px');
+      expect(internal._glCanvas!.style.height).toBe('540px');
+
+      Object.defineProperty(window, 'devicePixelRatio', { value: 1, configurable: true });
     });
   });
 });

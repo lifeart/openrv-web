@@ -726,6 +726,20 @@ const physicalHeight = canvas.height;
 const imageData = ctx.getImageData(0, 0, physicalWidth, physicalHeight);
 ```
 
+### Adaptive Proxy Rendering
+
+The rendering pipeline adapts resolution across four layers to balance quality and performance:
+
+**Phase 1 — DPI-Aware Canvas**: The WebGL canvas renders at physical resolution (`logical × devicePixelRatio`) while the 2D canvas stays at logical resolution to avoid CPU effect regressions. CSS `width`/`height` on the GL canvas maps physical pixels back to logical layout. A `matchMedia('(resolution:…)')` listener detects DPR changes when windows move between displays. Physical dimensions are capped at `MAX_TEXTURE_SIZE` proportionally to prevent GL failures.
+
+**Phase 2 — Interaction Quality Tiering**: During zoom/scrub, `InteractionQualityManager` drops the GL viewport to 50% of physical resolution via `gl.viewport()` subrect, restoring full quality 200ms after the last interaction ends. Reference-counted `beginInteraction()`/`endInteraction()` handles overlapping interactions (e.g. simultaneous wheel zoom + timeline scrub).
+
+**Phase 3 — GL Mipmaps**: `generateMipmap()` is called for RGBA float textures (including 3-channel EXR padded to RGBA) and static SDR images. Guards skip mipmaps for `RGB32F` (not color-renderable), VideoFrame sources (too expensive per frame), and when `OES_texture_float_linear`/`EXT_color_buffer_float` are unavailable.
+
+**Phase 4 — Cache-Level Resize**: `createImageBitmap()` resize options downscale frames at extraction time to match display resolution. The frame cache stores a single entry per frame with lazy upgrade: proxy-resolution frames display immediately, then re-extract at full resolution in the background when interaction ends.
+
+Key files: `Viewer.ts` (dimension state), `ViewerGLRenderer.ts` (GL canvas sizing), `Renderer.ts` (mipmaps, viewport), `InteractionQualityManager.ts` (quality tiering), `MediabunnyFrameExtractor.ts` (cache-level resize).
+
 ### Adding a New Node Type
 
 1. Create node class extending `IPNode` or `BaseGroupNode`

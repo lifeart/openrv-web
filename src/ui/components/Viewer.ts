@@ -96,6 +96,7 @@ import {
   EFFECTS_DEBOUNCE_MS,
 } from './ViewerPrerender';
 import { ViewerInputHandler } from './ViewerInputHandler';
+import { InteractionQualityManager } from './InteractionQualityManager';
 
 export interface ViewerConfig {
   session: Session;
@@ -131,6 +132,9 @@ export class Viewer {
   // Input handler (owns pointer/wheel/drag-drop events, pan/zoom interaction, live paint state)
   private inputHandler!: ViewerInputHandler;
 
+  // Interaction quality tiering (reduces GL viewport during zoom/scrub)
+  private interactionQuality: InteractionQualityManager;
+
   // Source dimensions for coordinate conversion
   private sourceWidth = 0;
   private sourceHeight = 0;
@@ -138,6 +142,10 @@ export class Viewer {
   // Display dimensions
   private displayWidth = 0;
   private displayHeight = 0;
+
+  // Physical (DPR-scaled) dimensions for the GL canvas
+  private physicalWidth = 0;
+  private physicalHeight = 0;
 
   // Drop zone
   private dropOverlay: HTMLElement;
@@ -301,6 +309,7 @@ export class Viewer {
       getPaintRenderer: () => this.paintRenderer,
       getSession: () => this.session,
       getPixelProbe: () => this.overlayManager.getPixelProbe(),
+      getInteractionQuality: () => this.interactionQuality,
       isViewerContentElement: (el: HTMLElement) => this.isViewerContentElement(el),
       scheduleRender: () => this.scheduleRender(),
       updateCanvasPosition: () => this.updateCanvasPosition(),
@@ -325,6 +334,16 @@ export class Viewer {
 
     // Wire up transform manager's render callback
     this.transformManager.setScheduleRender(() => this.scheduleRender());
+
+    // Initialize interaction quality tiering
+    this.interactionQuality = new InteractionQualityManager();
+    this.interactionQuality.setOnQualityChange(() => this.scheduleRender());
+
+    // Wire up transform manager interaction callbacks for smooth zoom animations
+    this.transformManager.setInteractionCallbacks(
+      () => this.interactionQuality.beginInteraction(),
+      () => this.interactionQuality.endInteraction(),
+    );
 
     // Create container
     this.container = document.createElement('div');
@@ -568,19 +587,35 @@ export class Viewer {
   /**
    * Set canvas size for media rendering (standard mode, no hi-DPI scaling).
    * This resets any hi-DPI configuration from placeholder mode.
+   * The 2D canvases stay at logical resolution; the GL canvas is sized at
+   * physical (DPR-scaled) resolution for retina sharpness.
    */
   private setCanvasSize(width: number, height: number): void {
     this.displayWidth = width;
     this.displayHeight = height;
 
-    // Reset all canvases from hi-DPI mode using the utility
+    // Compute physical dimensions for GL path (DPR-aware)
+    const dpr = window.devicePixelRatio || 1;
+    this.physicalWidth = Math.max(1, Math.round(width * dpr));
+    this.physicalHeight = Math.max(1, Math.round(height * dpr));
+
+    // Cap physical dimensions at GPU MAX_TEXTURE_SIZE (proportional to preserve aspect ratio)
+    const maxSize = this.glRendererManager.getMaxTextureSize();
+    if (this.physicalWidth > maxSize || this.physicalHeight > maxSize) {
+      const capScale = maxSize / Math.max(this.physicalWidth, this.physicalHeight);
+      this.physicalWidth = Math.max(1, Math.round(this.physicalWidth * capScale));
+      this.physicalHeight = Math.max(1, Math.round(this.physicalHeight * capScale));
+    }
+
+    // Reset 2D canvases at LOGICAL resolution (no DPR scaling for CPU effects)
     resetCanvasFromHiDPI(this.imageCanvas, this.imageCtx, width, height);
     resetCanvasFromHiDPI(this.paintCanvas, this.paintCtx, width, height);
 
     this.cropManager.resetOverlayCanvas(width, height);
 
-    // Resize WebGL canvas if HDR or SDR WebGL mode is active
-    this.glRendererManager.resizeIfActive(width, height);
+    // Resize WebGL canvas at PHYSICAL resolution for retina sharpness.
+    // Pass logical (display) dims for exact CSS sizing (avoids rounding drift).
+    this.glRendererManager.resizeIfActive(this.physicalWidth, this.physicalHeight, width, height);
 
     this.updateOverlayDimensions();
     this.updateCanvasPosition();
@@ -651,6 +686,41 @@ export class Viewer {
     this.container.addEventListener('mousemove', this.pixelSamplingManager.onMouseMoveForPixelSampling);
     this.container.addEventListener('mouseleave', this.pixelSamplingManager.onMouseLeaveForCursorColor);
     this.container.addEventListener('click', this.pixelSamplingManager.onClickForProbe);
+
+    // Listen for DPR changes (window moved between displays).
+    // matchMedia fires only when the query transitions from match→no-match,
+    // so we must re-register with the new DPR value after each change.
+    this.listenForDPRChange();
+  }
+
+  /**
+   * Listen for DPR changes (user moves window between displays).
+   * Re-registers the listener after each change since the media query
+   * is tied to a specific DPR value.
+   */
+  private _dprCleanup: (() => void) | null = null;
+  private listenForDPRChange(): void {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+
+    const onDPRChange = () => {
+      // Recompute physical dims and re-render
+      if (this.displayWidth > 0 && this.displayHeight > 0) {
+        const dpr = window.devicePixelRatio || 1;
+        this.physicalWidth = Math.max(1, Math.round(this.displayWidth * dpr));
+        this.physicalHeight = Math.max(1, Math.round(this.displayHeight * dpr));
+        this.glRendererManager.resizeIfActive(this.physicalWidth, this.physicalHeight);
+        this.scheduleRender();
+      }
+      // Re-register for the new DPR value
+      this.listenForDPRChange();
+    };
+
+    // Clean up previous listener
+    this._dprCleanup?.();
+
+    const mql = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+    mql.addEventListener('change', onDPRChange, { once: true });
+    this._dprCleanup = () => mql.removeEventListener('change', onDPRChange);
   }
 
   /**
@@ -834,9 +904,15 @@ export class Viewer {
     }
   }
 
-  // GL rendering methods delegated to ViewerGLRenderer
-  private renderHDRWithWebGL(image: import('../../core/image/Image').IPImage, displayWidth: number, displayHeight: number) {
-    return this.glRendererManager.renderHDRWithWebGL(image, displayWidth, displayHeight);
+  // GL rendering methods delegated to ViewerGLRenderer.
+  // These wrappers forward physical (DPR-scaled) dimensions to the GL renderer
+  // so the WebGL canvas renders at retina resolution.
+  // NOTE: Viewport sub-rect reduction (Phase 2 interaction quality) is disabled because
+  // gl.viewport() renders to a canvas sub-region without upscaling, producing
+  // incorrect visual output. The InteractionQualityManager infrastructure is retained
+  // for future use with a proper FBO-based downscale approach.
+  private renderHDRWithWebGL(image: import('../../core/image/Image').IPImage, _displayWidth: number, _displayHeight: number) {
+    return this.glRendererManager.renderHDRWithWebGL(image, this.physicalWidth, this.physicalHeight);
   }
   private deactivateHDRMode() { this.glRendererManager.deactivateHDRMode(); }
   private deactivateSDRWebGLMode() { this.glRendererManager.deactivateSDRWebGLMode(); }
@@ -844,10 +920,10 @@ export class Viewer {
   private hasCPUOnlyEffectsActive() { return this.glRendererManager.hasCPUOnlyEffectsActive(); }
   private renderSDRWithWebGL(
     source: HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | HTMLImageElement | ImageBitmap,
-    displayWidth: number,
-    displayHeight: number,
+    _displayWidth: number,
+    _displayHeight: number,
   ) {
-    return this.glRendererManager.renderSDRWithWebGL(source, displayWidth, displayHeight);
+    return this.glRendererManager.renderSDRWithWebGL(source, this.physicalWidth, this.physicalHeight);
   }
 
   private renderImage(): void {
@@ -3021,6 +3097,13 @@ export class Viewer {
   }
 
   dispose(): void {
+    // Clean up DPR change listener
+    this._dprCleanup?.();
+    this._dprCleanup = null;
+
+    // Dispose interaction quality manager (clears debounce timer)
+    this.interactionQuality.dispose();
+
     // Dispose transform manager (cancels zoom animation, clears callback)
     this.transformManager.dispose();
 

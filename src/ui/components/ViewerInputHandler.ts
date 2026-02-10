@@ -27,6 +27,7 @@ import type { TransformManager } from './TransformManager';
 import type { WipeManager } from './WipeManager';
 import type { CropManager } from './CropManager';
 import type { PixelProbe } from './PixelProbe';
+import type { InteractionQualityManager } from './InteractionQualityManager';
 
 // ---------------------------------------------------------------------------
 // Context interface – the "thin adapter" that the Viewer supplies so that
@@ -62,6 +63,9 @@ export interface ViewerInputContext {
   getPaintRenderer(): PaintRenderer;
   getSession(): Session;
   getPixelProbe(): PixelProbe;
+
+  // Interaction quality tiering
+  getInteractionQuality(): InteractionQualityManager;
 
   // Viewer helpers that the handler needs to invoke
   isViewerContentElement(element: HTMLElement): boolean;
@@ -369,6 +373,9 @@ export class ViewerInputHandler {
 
     // Reset pinch zoom state
     if (this.activePointers.size < 2) {
+      if (this.ctx.getTransformManager().initialPinchDistance > 0) {
+        this.ctx.getInteractionQuality().endInteraction();
+      }
       this.ctx.getTransformManager().initialPinchDistance = 0;
     }
 
@@ -406,6 +413,8 @@ export class ViewerInputHandler {
   private startPinchZoom(): void {
     const pointers = Array.from(this.activePointers.values());
     if (pointers.length !== 2) return;
+
+    this.ctx.getInteractionQuality().beginInteraction();
 
     const tm = this.ctx.getTransformManager();
     tm.cancelZoomAnimation();
@@ -446,6 +455,8 @@ export class ViewerInputHandler {
   private onWheel = (e: WheelEvent): void => {
     e.preventDefault();
 
+    this.ctx.getInteractionQuality().beginInteraction();
+
     const tm = this.ctx.getTransformManager();
     tm.cancelZoomAnimation();
 
@@ -454,7 +465,10 @@ export class ViewerInputHandler {
     const mouseY = e.clientY - rect.top;
 
     const newZoom = calculateWheelZoom(e.deltaY, tm.zoom);
-    if (newZoom === null) return;
+    if (newZoom === null) {
+      this.ctx.getInteractionQuality().endInteraction();
+      return;
+    }
 
     const containerWidth = rect.width || 640;
     const containerHeight = rect.height || 360;
@@ -476,6 +490,8 @@ export class ViewerInputHandler {
     tm.panY = panY;
     tm.zoom = newZoom;
     this.ctx.scheduleRender();
+
+    this.ctx.getInteractionQuality().endInteraction();
   };
 
   // ======================================================================

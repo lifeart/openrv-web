@@ -352,7 +352,8 @@ export function calculateDisplayDimensions(
     return { width: 1, height: 1 };
   }
 
-  // Calculate fit scale (never exceed 1x to avoid upscaling beyond source)
+  // Calculate fit scale: scale down to fit the container while preserving aspect ratio.
+  // Only scale down images larger than the viewport; smaller images stay at native size.
   const fitScale = Math.min(
     containerWidth / sourceWidth,
     containerHeight / sourceHeight,

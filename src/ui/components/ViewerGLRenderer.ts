@@ -78,6 +78,11 @@ export class ViewerGLRenderer {
   private _webgpuBlitInitializing = false;
   private _webgpuBlitFailed = false;
 
+  // Last known logical (CSS) dimensions — set by resizeIfActive() to avoid
+  // rounding drift when computing CSS size from physical / DPR.
+  private _logicalWidth = 0;
+  private _logicalHeight = 0;
+
   private ctx: GLRendererContext;
 
   get glCanvas(): HTMLCanvasElement | null { return this._glCanvas; }
@@ -297,9 +302,17 @@ export class ViewerGLRenderer {
       this._hdrRenderActive = true;
     }
 
-    // Resize if needed
+    // Resize if needed (canvas buffer always at full physical resolution)
     if (this._glCanvas.width !== displayWidth || this._glCanvas.height !== displayHeight) {
       renderer.resize(displayWidth, displayHeight);
+      // Use stored logical dims for exact CSS sizing (avoids rounding drift)
+      if (this._glCanvas instanceof HTMLCanvasElement) {
+        const dpr = window.devicePixelRatio || 1;
+        const cssW = this._logicalWidth || Math.round(displayWidth / dpr);
+        const cssH = this._logicalHeight || Math.round(displayHeight / dpr);
+        this._glCanvas.style.width = `${cssW}px`;
+        this._glCanvas.style.height = `${cssH}px`;
+      }
     }
 
     // Build render state and apply HDR-specific overrides
@@ -356,15 +369,24 @@ export class ViewerGLRenderer {
     this._webgpuBlit!.uploadAndDisplay(pixels, displayWidth, displayHeight);
 
     // Show WebGPU canvas, hide GL canvas
+    const blitCanvas = this._webgpuBlit!.getCanvas();
     if (!this._hdrRenderActive) {
       this._glCanvas!.style.display = 'none';
-      this._webgpuBlit!.getCanvas().style.display = 'block';
+      blitCanvas.style.display = 'block';
       this.ctx.getImageCanvas().style.visibility = 'hidden';
       this._hdrRenderActive = true;
     }
 
+    // Apply CSS sizing to match logical (CSS) dimensions — without this,
+    // the canvas at physical pixel size appears too large on retina displays.
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = this._logicalWidth || Math.round(displayWidth / dpr);
+    const cssH = this._logicalHeight || Math.round(displayHeight / dpr);
+    blitCanvas.style.width = `${cssW}px`;
+    blitCanvas.style.height = `${cssH}px`;
+
     // CSS transform for rotation/flip
-    this.applyTransformToCanvas(this._webgpuBlit!.getCanvas());
+    this.applyTransformToCanvas(blitCanvas);
 
     return true;
   }
@@ -557,9 +579,17 @@ export class ViewerGLRenderer {
       this.ctx.applyColorFilters();
     }
 
-    // Resize if needed
+    // Resize if needed (canvas buffer always at full physical resolution)
     if (this._glCanvas.width !== displayWidth || this._glCanvas.height !== displayHeight) {
       renderer.resize(displayWidth, displayHeight);
+      // Use stored logical dims for exact CSS sizing (avoids rounding drift)
+      if (this._glCanvas instanceof HTMLCanvasElement) {
+        const dpr = window.devicePixelRatio || 1;
+        const cssW = this._logicalWidth || Math.round(displayWidth / dpr);
+        const cssH = this._logicalHeight || Math.round(displayHeight / dpr);
+        this._glCanvas.style.width = `${cssW}px`;
+        this._glCanvas.style.height = `${cssH}px`;
+      }
     }
 
     // Sync all render state (SDR: use as configured, no overrides)
@@ -588,14 +618,46 @@ export class ViewerGLRenderer {
 
   /**
    * Resize the GL canvas/renderer if HDR or SDR WebGL mode is active.
-   * Called from Viewer.setCanvasSize().
+   * Called from Viewer.setCanvasSize() with physical (DPR-scaled) dimensions.
+   * logicalWidth/logicalHeight are the exact CSS display dimensions (avoids
+   * rounding drift from physical / DPR back-computation).
    */
-  resizeIfActive(width: number, height: number): void {
+  resizeIfActive(width: number, height: number, logicalWidth?: number, logicalHeight?: number): void {
+    // Store logical dims for use in render methods
+    if (logicalWidth !== undefined && logicalHeight !== undefined) {
+      this._logicalWidth = logicalWidth;
+      this._logicalHeight = logicalHeight;
+    }
     if (this._glCanvas && (this._hdrRenderActive || this._sdrWebGLRenderActive) && this._glRenderer) {
       this._glRenderer.resize(width, height);
+      // Use exact logical dims when provided, fall back to physical / DPR
+      const dpr = window.devicePixelRatio || 1;
+      const cssW = logicalWidth ?? Math.round(width / dpr);
+      const cssH = logicalHeight ?? Math.round(height / dpr);
+      if (this._glCanvas instanceof HTMLCanvasElement) {
+        this._glCanvas.style.width = `${cssW}px`;
+        this._glCanvas.style.height = `${cssH}px`;
+      }
+      // Also resize WebGPU blit canvas if active (HDR blit path)
+      if (this._webgpuBlit?.initialized && this._hdrRenderActive) {
+        const blitCanvas = this._webgpuBlit.getCanvas();
+        blitCanvas.style.width = `${cssW}px`;
+        blitCanvas.style.height = `${cssH}px`;
+      }
     }
   }
 
+
+  /**
+   * Return the GPU's MAX_TEXTURE_SIZE, or a safe default if no GL context exists.
+   */
+  getMaxTextureSize(): number {
+    if (this._glRenderer) {
+      const gl = (this._glRenderer as any).gl;
+      if (gl) return gl.getParameter(gl.MAX_TEXTURE_SIZE) || 16384;
+    }
+    return 16384;
+  }
 
   // =========================================================================
   // Delegation methods — forward to the underlying Renderer when available.

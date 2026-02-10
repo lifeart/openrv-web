@@ -26,7 +26,8 @@ const log = new Logger('WebGPUHDRBlit');
 
 interface WGPUAdapter {
   features?: Set<string>;
-  requestDevice(desc?: { requiredFeatures?: string[] }): Promise<WGPUDevice>;
+  limits?: { maxBufferSize?: number };
+  requestDevice(desc?: { requiredFeatures?: string[]; requiredLimits?: Record<string, number> }): Promise<WGPUDevice>;
 }
 
 interface WGPUDevice {
@@ -215,10 +216,17 @@ export class WebGPUHDRBlit {
 
     // Request float32-filterable so rgba32float textures can use linear sampling.
     // Fall back to nearest filter if the feature is unavailable.
+    // Request higher maxBufferSize for large HDR images (default 256MB is too small for 4K+ RGBA32Float).
     const hasFloat32Filterable = adapter.features?.has('float32-filterable') === true;
-    const device = await adapter.requestDevice(
-      hasFloat32Filterable ? { requiredFeatures: ['float32-filterable'] } : undefined,
-    );
+    const adapterMaxBuffer = adapter.limits?.maxBufferSize ?? 268435456;
+    const desiredMaxBuffer = Math.min(adapterMaxBuffer, 1024 * 1024 * 1024); // up to 1GB
+    const deviceDesc: { requiredFeatures?: string[]; requiredLimits?: Record<string, number> } = {
+      requiredLimits: { maxBufferSize: desiredMaxBuffer },
+    };
+    if (hasFloat32Filterable) {
+      deviceDesc.requiredFeatures = ['float32-filterable'];
+    }
+    const device = await adapter.requestDevice(deviceDesc);
     this.device = device;
 
     // Get WebGPU canvas context

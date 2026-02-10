@@ -43,11 +43,20 @@ const MAX_CACHE_SIZE = 500;
 type FrameLoader<T> = (frame: number, signal?: AbortSignal) => Promise<T | null>;
 type FrameDisposer<T> = (frame: number, data: T) => void;
 
+/** Resolution metadata stored alongside each cached frame */
+interface CachedEntry<T> {
+  data: T;
+  resolution?: { w: number; h: number };
+}
+
 export class FramePreloadManager<T> {
   private config: PreloadConfig;
-  private cache: Map<number, T> = new Map();
+  private cache: Map<number, CachedEntry<T>> = new Map();
   // LRU tracking using Map which maintains insertion order (O(1) operations)
   private accessOrder: Map<number, true> = new Map();
+
+  // Current target resolution for frame extraction (undefined = full resolution)
+  private currentTargetSize?: { w: number; h: number };
   private pendingRequests: Map<number, PreloadRequest<T>> = new Map();
   // Sorted array of pending requests by priority (lower = higher priority).
   // Kept in sync with pendingRequests Map to avoid O(n log n) re-sorting in processQueue().
@@ -97,18 +106,80 @@ export class FramePreloadManager<T> {
   }
 
   /**
-   * Get a frame from cache, triggering preload if needed
+   * Set the target resolution for future frame extractions.
+   * Cached frames at a different resolution are still returned (stale-while-revalidate)
+   * but new extractions will use the updated size.
    */
-  async getFrame(frame: number): Promise<T | null> {
+  setTargetSize(targetSize?: { w: number; h: number }): void {
+    this.currentTargetSize = targetSize;
+  }
+
+  /**
+   * Get the current target resolution.
+   */
+  getTargetSize(): { w: number; h: number } | undefined {
+    return this.currentTargetSize;
+  }
+
+  /**
+   * Check if a cached entry's resolution matches the current target size.
+   * Returns true if the cached resolution is at least as large as the target.
+   */
+  private isResolutionSufficient(entry: CachedEntry<T>): boolean {
+    // No target size means full resolution is desired
+    if (!this.currentTargetSize) {
+      // Entry without resolution was extracted at full res
+      return !entry.resolution;
+    }
+    // Entry at full resolution is always sufficient
+    if (!entry.resolution) {
+      return true;
+    }
+    return entry.resolution.w >= this.currentTargetSize.w &&
+           entry.resolution.h >= this.currentTargetSize.h;
+  }
+
+  /**
+   * Get a frame from cache, triggering preload if needed.
+   * @param frame - Frame number (1-based)
+   * @param targetSize - Optional target resolution. If not provided, uses the
+   *   current targetSize set via setTargetSize().
+   */
+  async getFrame(frame: number, targetSize?: { w: number; h: number }): Promise<T | null> {
     if (frame < 1 || frame > this.totalFrames) {
       return null;
     }
 
+    // Update current target size if explicitly provided
+    if (targetSize !== undefined) {
+      this.currentTargetSize = targetSize;
+    }
+
     // Check cache first
     if (this.cache.has(frame)) {
+      const entry = this.cache.get(frame)!;
       this.cacheHits++;
       this.updateAccessOrder(frame);
-      return this.cache.get(frame)!;
+
+      // If cached at sufficient resolution, return immediately
+      if (this.isResolutionSufficient(entry)) {
+        return entry.data;
+      }
+
+      // Stale entry: return it for immediate use but also trigger re-extraction below
+      // (The caller gets the low-res frame now; next getFrame() call will get the upgraded one)
+      const staleData = entry.data;
+
+      // Fall through to trigger a new extraction at the desired resolution
+      // but first check if one is already pending
+      const pending = this.pendingRequests.get(frame);
+      if (pending && pending.promise && !pending.cancelled) {
+        return staleData;
+      }
+
+      // Trigger upgrade extraction (don't await, return stale data immediately)
+      this.queueUpgradeExtraction(frame);
+      return staleData;
     }
 
     this.cacheMisses++;
@@ -177,7 +248,7 @@ export class FramePreloadManager<T> {
     if (this.cache.has(frame)) {
       this.cacheHits++;
       this.updateAccessOrder(frame);
-      return this.cache.get(frame)!;
+      return this.cache.get(frame)!.data;
     }
     return null;
   }
@@ -497,9 +568,47 @@ export class FramePreloadManager<T> {
    * Add frame to cache with LRU tracking
    */
   private addToCache(frame: number, data: T): void {
-    this.cache.set(frame, data);
+    this.cache.set(frame, { data, resolution: this.currentTargetSize ? { ...this.currentTargetSize } : undefined });
     this.updateAccessOrder(frame);
     this.enforceMaxCacheSize();
+  }
+
+  /**
+   * Queue an upgrade extraction for a frame that is cached at insufficient resolution.
+   * The extraction runs asynchronously; on success the cache entry is replaced.
+   */
+  private queueUpgradeExtraction(frame: number): void {
+    const requestSignal = this.abortController.signal;
+
+    const promise = this.loader(frame, requestSignal)
+      .then(data => {
+        if (data !== null && !requestSignal.aborted) {
+          // Dispose old entry before replacing
+          const oldEntry = this.cache.get(frame);
+          if (oldEntry && this.disposer) {
+            this.disposer(frame, oldEntry.data);
+          }
+          this.addToCache(frame, data);
+        }
+        return data;
+      })
+      .catch(e => {
+        if (e?.name !== 'AbortError' && !requestSignal.aborted) {
+          console.warn(`Upgrade extraction failed for frame ${frame}:`, e);
+        }
+        return null;
+      })
+      .finally(() => {
+        this.pendingRequests.delete(frame);
+      });
+
+    const request: PreloadRequest<T> = {
+      frame,
+      priority: 0,
+      promise: promise as Promise<T>,
+      cancelled: false,
+    };
+    this.pendingRequests.set(frame, request);
   }
 
   /**
@@ -561,10 +670,10 @@ export class FramePreloadManager<T> {
    * Evict a single frame from cache
    */
   private evictFrame(frame: number): void {
-    const data = this.cache.get(frame);
-    if (data !== undefined) {
+    const entry = this.cache.get(frame);
+    if (entry !== undefined) {
       if (this.disposer) {
-        this.disposer(frame, data);
+        this.disposer(frame, entry.data);
       }
       this.cache.delete(frame);
       this.accessOrder.delete(frame);
@@ -671,9 +780,9 @@ export class FramePreloadManager<T> {
     this.abortPendingOperations();
 
     // Dispose all cached
-    for (const [frame, data] of this.cache) {
+    for (const [frame, entry] of this.cache) {
       if (this.disposer) {
-        this.disposer(frame, data);
+        this.disposer(frame, entry.data);
       }
     }
     this.cache.clear();

@@ -101,6 +101,11 @@ export function blendFrames(
  * and blends them. Useful when working directly with cached frame canvases
  * from the mediabunny frame extractor.
  *
+ * Both canvases must have the same dimensions. When using adaptive proxy
+ * rendering (targetSize), both frames in a blend pair must be extracted at
+ * the same resolution. This is guaranteed by FramePreloadManager which uses
+ * a single currentTargetSize for all extractions.
+ *
  * @param canvasA - First frame canvas (shown when ratio = 0)
  * @param canvasB - Second frame canvas (shown when ratio = 1)
  * @param ratio - Blend ratio [0, 1]

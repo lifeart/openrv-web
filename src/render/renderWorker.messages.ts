@@ -59,6 +59,13 @@ export interface ResizeMessage extends BaseWorkerMessage {
   height: number;
 }
 
+/** Set GL viewport subrect without resizing the canvas buffer. */
+export interface SetViewportMessage extends BaseWorkerMessage {
+  type: 'setViewport';
+  width: number;
+  height: number;
+}
+
 /** Clear the canvas to the given color. */
 export interface ClearMessage extends BaseWorkerMessage {
   type: 'clear';
@@ -262,6 +269,7 @@ export interface RendererSyncState {
 export type RenderWorkerMessage =
   | InitMessage
   | ResizeMessage
+  | SetViewportMessage
   | ClearMessage
   | RenderSDRMessage
   | RenderHDRMessage

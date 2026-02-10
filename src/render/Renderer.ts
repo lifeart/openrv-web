@@ -91,6 +91,12 @@ export class Renderer implements RendererBackend {
   private hasColorBufferFloat: boolean | null = null; // cached extension check
   private hdrReadbackBuffer: Float32Array | null = null; // reused across frames
 
+  // Mipmap support for float textures (requires OES_texture_float_linear + EXT_color_buffer_float)
+  private _mipmapSupported = false;
+
+  // Whether the current SDR texture has mipmaps generated (only for HTMLImageElement sources)
+  private _sdrTextureMipmapped = false;
+
   initialize(canvas: HTMLCanvasElement | OffscreenCanvas, capabilities?: DisplayCapabilities): void {
     this.canvas = canvas;
 
@@ -195,6 +201,12 @@ export class Renderer implements RendererBackend {
       }
     }
 
+    // Cache mipmap support for float textures: both extensions must be present
+    // and generateMipmap must be available on the context
+    const floatLinear = (gl as WebGL2RenderingContext).getExtension('OES_texture_float_linear');
+    const colorBufferFloat = (gl as WebGL2RenderingContext).getExtension('EXT_color_buffer_float');
+    this._mipmapSupported = !!(floatLinear && colorBufferFloat && typeof (gl as WebGL2RenderingContext).generateMipmap === 'function');
+
     // Probe for KHR_parallel_shader_compile before shader init.
     // When available, shader compilation will be non-blocking.
     this.parallelCompileExt = (gl as WebGL2RenderingContext).getExtension('KHR_parallel_shader_compile');
@@ -290,6 +302,17 @@ export class Renderer implements RendererBackend {
       } catch (e) {
         log.warn('drawingBufferStorage resize failed:', e);
       }
+    }
+  }
+
+  /**
+   * Set the GL viewport subrect without resizing the canvas buffer.
+   * Used for interaction quality tiering: the canvas stays at full physical
+   * resolution while the viewport is reduced during active interactions.
+   */
+  setViewport(width: number, height: number): void {
+    if (this.gl) {
+      this.gl.viewport(0, 0, width, height);
     }
   }
 
@@ -524,7 +547,27 @@ export class Renderer implements RendererBackend {
     }
 
     // Standard TypedArray upload path
-    const { internalFormat, format, type } = this.getTextureFormat(image.dataType, image.channels);
+    // For 3-channel float images (e.g. RGB EXR), pad to RGBA so mipmaps can be generated.
+    // RGB32F is not color-renderable in WebGL2, so generateMipmap would fail on it.
+    const canPadToRGBA = image.channels === 3 && image.dataType === 'float32' && this._mipmapSupported;
+    const uploadChannels = canPadToRGBA ? 4 : image.channels;
+    const { internalFormat, format, type } = this.getTextureFormat(image.dataType, uploadChannels);
+
+    let uploadData: Uint8Array | Uint16Array | Float32Array = image.getTypedArray();
+    if (canPadToRGBA) {
+      const src = image.getTypedArray() as Float32Array;
+      const pixelCount = image.width * image.height;
+      const rgba = new Float32Array(pixelCount * 4);
+      for (let i = 0; i < pixelCount; i++) {
+        const si = i * 3;
+        const di = i * 4;
+        rgba[di] = src[si]!;
+        rgba[di + 1] = src[si + 1]!;
+        rgba[di + 2] = src[si + 2]!;
+        rgba[di + 3] = 1.0;
+      }
+      uploadData = rgba;
+    }
 
     gl.texImage2D(
       gl.TEXTURE_2D,
@@ -535,8 +578,17 @@ export class Renderer implements RendererBackend {
       0,
       format,
       type,
-      image.getTypedArray()
+      uploadData
     );
+
+    // Generate mipmaps for RGBA float textures (including padded 3-channel HDR).
+    // Skip for VideoFrame sources (cost blows 16ms frame budget on mobile).
+    if (uploadChannels === 4 && !image.videoFrame && this._mipmapSupported) {
+      gl.generateMipmap(gl.TEXTURE_2D);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    } else {
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    }
 
     image.textureNeedsUpdate = false;
   }
@@ -1081,6 +1133,7 @@ export class Renderer implements RendererBackend {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      this._sdrTextureMipmapped = false;
     }
 
     // Upload the SDR source to the texture
@@ -1099,6 +1152,19 @@ export class Renderer implements RendererBackend {
       // texImage2D can throw for tainted or invalid sources
       log.warn('texImage2D failed for SDR frame (tainted or invalid source):', e);
       return null;
+    }
+
+    // Generate mipmaps for HTMLImageElement sources only (static, uploaded once).
+    // Skip for HTMLVideoElement (texture changes every frame), HTMLCanvasElement
+    // (from frame cache), and ImageBitmap.
+    const isStaticImage = typeof HTMLImageElement !== 'undefined' && source instanceof HTMLImageElement;
+    if (isStaticImage && !this._sdrTextureMipmapped && typeof gl.generateMipmap === 'function') {
+      gl.generateMipmap(gl.TEXTURE_2D);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+      this._sdrTextureMipmapped = true;
+    } else if (!isStaticImage) {
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      this._sdrTextureMipmapped = false;
     }
 
     // Use display shader
@@ -1169,6 +1235,7 @@ export class Renderer implements RendererBackend {
     if (this.sdrTexture) {
       gl.deleteTexture(this.sdrTexture);
       this.sdrTexture = null;
+      this._sdrTextureMipmapped = false;
     }
     if (this.curvesLUTTexture) gl.deleteTexture(this.curvesLUTTexture);
     if (this.falseColorLUTTexture) gl.deleteTexture(this.falseColorLUTTexture);

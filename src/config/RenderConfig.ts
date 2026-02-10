@@ -126,3 +126,13 @@ export const DISPLAY_TRANSFER_LINEAR = 0;
 
 /** sRGB transfer function */
 export const DISPLAY_TRANSFER_SRGB = 1;
+
+// ---------------------------------------------------------------------------
+// Interaction Quality Tiering
+// ---------------------------------------------------------------------------
+
+/** Quality factor during active interactions (zoom, scrub). 1.0 = full, 0.5 = half resolution. */
+export const INTERACTION_QUALITY_FACTOR = 0.5;
+
+/** Debounce delay (ms) before restoring full quality after interaction ends. */
+export const INTERACTION_DEBOUNCE_MS = 200;

@@ -27,6 +27,31 @@ import { LRUCache } from '../LRUCache';
 
 const log = new Logger('MediabunnyFrameExtractor');
 
+/**
+ * Whether createImageBitmap() supports resize options (resizeWidth, resizeHeight).
+ * Detected once and cached. null = not yet checked.
+ */
+let createImageBitmapResizeSupported: boolean | null = null;
+
+/**
+ * Detect whether createImageBitmap supports resize options.
+ * Uses a 1x1 OffscreenCanvas as test source.
+ */
+async function detectCreateImageBitmapResize(): Promise<boolean> {
+  if (createImageBitmapResizeSupported !== null) {
+    return createImageBitmapResizeSupported;
+  }
+  try {
+    const testCanvas = new OffscreenCanvas(1, 1);
+    const testBitmap = await createImageBitmap(testCanvas, { resizeWidth: 1, resizeHeight: 1 });
+    testBitmap.close();
+    createImageBitmapResizeSupported = true;
+  } catch {
+    createImageBitmapResizeSupported = false;
+  }
+  return createImageBitmapResizeSupported;
+}
+
 export interface VideoMetadata {
   width: number;
   height: number;
@@ -80,8 +105,22 @@ export interface FrameResult {
  * This is necessary because mediabunny reuses the same canvas for subsequent frames.
  * Using createImageBitmap instead of synchronous canvas copy avoids blocking the
  * main thread with pixel copies (~8MB per 1080p frame).
+ *
+ * When targetSize is provided and createImageBitmap resize is supported,
+ * the snapshot is resized during the GPU copy (no extra pass needed).
+ * targetSize must already be capped at source resolution (never upscale).
  */
-async function snapshotCanvas(source: HTMLCanvasElement | OffscreenCanvas): Promise<ImageBitmap> {
+async function snapshotCanvas(
+  source: HTMLCanvasElement | OffscreenCanvas,
+  targetSize?: { w: number; h: number },
+): Promise<ImageBitmap> {
+  if (targetSize && createImageBitmapResizeSupported) {
+    return createImageBitmap(source, {
+      resizeWidth: targetSize.w,
+      resizeHeight: targetSize.h,
+      resizeQuality: 'high',
+    });
+  }
   return createImageBitmap(source);
 }
 
@@ -112,10 +151,15 @@ export class MediabunnyFrameExtractor {
   // AbortController for cancelling pending frame extraction operations
   private abortController: AbortController = new AbortController();
 
-  // Snapshot cache: caches last N ImageBitmaps by timestamp to avoid redundant GPU round-trips.
+  // Snapshot cache: caches last N ImageBitmaps by a composite key (timestamp + resolution)
+  // to avoid redundant GPU round-trips.
   // Does NOT close() evicted bitmaps — FramePreloadManager owns the ImageBitmap lifecycle
   // and will close them via its disposer when evicting from its own cache.
-  private snapshotCache = new LRUCache<number, ImageBitmap>(3);
+  private snapshotCache = new LRUCache<string, ImageBitmap>(3);
+
+  // Whether createImageBitmap resize is supported (detected lazily)
+  private resizeSupported: boolean = false;
+  private resizeDetected: boolean = false;
 
   /**
    * Check if WebCodecs API is available
@@ -464,8 +508,11 @@ export class MediabunnyFrameExtractor {
    * Serialized via queue to prevent concurrent decoder state corruption
    * @param frame - The frame number to extract (1-based)
    * @param signal - Optional AbortSignal to cancel the operation
+   * @param targetSize - Optional target resolution for resized extraction.
+   *   Capped at source resolution (never upscales). Requires browser support
+   *   for createImageBitmap resize options; falls back to full resolution if unsupported.
    */
-  async getFrame(frame: number, signal?: AbortSignal): Promise<FrameResult | null> {
+  async getFrame(frame: number, signal?: AbortSignal, targetSize?: { w: number; h: number }): Promise<FrameResult | null> {
     // Use provided signal or the internal one
     const abortSignal = signal ?? this.abortController.signal;
 
@@ -476,6 +523,31 @@ export class MediabunnyFrameExtractor {
 
     if (!this.canvasSink || !this.metadata) {
       throw new Error('Extractor not initialized. Call load() first.');
+    }
+
+    // Lazily detect createImageBitmap resize support once
+    if (!this.resizeDetected) {
+      this.resizeSupported = await detectCreateImageBitmapResize();
+      this.resizeDetected = true;
+    }
+
+    // Cap targetSize at source resolution — never upscale
+    let effectiveTargetSize = targetSize;
+    if (effectiveTargetSize) {
+      const sourceW = this.metadata.width;
+      const sourceH = this.metadata.height;
+      effectiveTargetSize = {
+        w: Math.min(effectiveTargetSize.w, sourceW),
+        h: Math.min(effectiveTargetSize.h, sourceH),
+      };
+      // If capped size equals source, no need for resize
+      if (effectiveTargetSize.w >= sourceW && effectiveTargetSize.h >= sourceH) {
+        effectiveTargetSize = undefined;
+      }
+      // If resize is not supported by the browser, skip it
+      if (!this.resizeSupported) {
+        effectiveTargetSize = undefined;
+      }
     }
 
     // Clamp frame to valid range
@@ -491,8 +563,9 @@ export class MediabunnyFrameExtractor {
     }
 
     // Check snapshot cache - return cached bitmap if available (avoids GPU round-trip)
-    // LRUCache.get() automatically refreshes access order
-    const cachedBitmap = this.snapshotCache.get(expectedTimestamp);
+    // Cache key includes resolution so different sizes don't collide
+    const cacheKey = this.snapshotCacheKey(expectedTimestamp, effectiveTargetSize);
+    const cachedBitmap = this.snapshotCache.get(cacheKey);
     if (cachedBitmap) {
       return {
         canvas: cachedBitmap,
@@ -549,8 +622,9 @@ export class MediabunnyFrameExtractor {
           bestTimestampDiff = timestampDiff;
           // IMPORTANT: Snapshot the canvas because mediabunny reuses the same canvas object
           // Uses async createImageBitmap for GPU-accelerated, non-blocking copy
+          // When effectiveTargetSize is set, resize happens during the GPU copy
           bestMatch = {
-            canvas: await snapshotCanvas(wrapped.canvas),
+            canvas: await snapshotCanvas(wrapped.canvas, effectiveTargetSize),
             timestamp: wrapped.timestamp,
             duration: wrapped.duration,
           };
@@ -577,8 +651,8 @@ export class MediabunnyFrameExtractor {
           );
         }
 
-        // Store in snapshot cache for future reuse
-        this.cacheSnapshot(expectedTimestamp, bestMatch.canvas);
+        // Store in snapshot cache for future reuse (keyed by timestamp + resolution)
+        this.cacheSnapshot(expectedTimestamp, bestMatch.canvas, effectiveTargetSize);
 
         result = {
           canvas: bestMatch.canvas,
@@ -601,11 +675,23 @@ export class MediabunnyFrameExtractor {
   }
 
   /**
+   * Build a composite cache key from timestamp and target resolution.
+   * Encodes resolution so that the same timestamp at different sizes
+   * does not produce a false cache hit.
+   */
+  private snapshotCacheKey(timestamp: number, targetSize?: { w: number; h: number }): string {
+    if (targetSize) {
+      return `${timestamp}:${targetSize.w}x${targetSize.h}`;
+    }
+    return `${timestamp}:full`;
+  }
+
+  /**
    * Store an ImageBitmap in the snapshot cache.
    * LRUCache handles eviction and calls bitmap.close() via onEvict.
    */
-  private cacheSnapshot(timestamp: number, bitmap: ImageBitmap): void {
-    this.snapshotCache.set(timestamp, bitmap);
+  private cacheSnapshot(timestamp: number, bitmap: ImageBitmap, targetSize?: { w: number; h: number }): void {
+    this.snapshotCache.set(this.snapshotCacheKey(timestamp, targetSize), bitmap);
   }
 
   /**

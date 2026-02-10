@@ -55,6 +55,7 @@ function createMockGPUDevice(opts: { float32Filterable?: boolean } = {}) {
 
   const adapter = {
     features: new Set<string>(opts.float32Filterable ? ['float32-filterable'] : []),
+    limits: { maxBufferSize: 268435456 },
     requestDevice: vi.fn().mockResolvedValue(device),
   };
 
@@ -186,9 +187,10 @@ describe('WebGPUHDRBlit', () => {
 
       await blit.initialize();
 
-      expect(adapter.requestDevice).toHaveBeenCalledWith({
+      expect(adapter.requestDevice).toHaveBeenCalledWith(expect.objectContaining({
         requiredFeatures: ['float32-filterable'],
-      });
+        requiredLimits: expect.objectContaining({ maxBufferSize: expect.any(Number) }),
+      }));
     });
 
     it('WGPU-BLIT-008: requests device without features when float32-filterable unavailable', async () => {
@@ -208,7 +210,12 @@ describe('WebGPUHDRBlit', () => {
 
       await blit.initialize();
 
-      expect(adapter.requestDevice).toHaveBeenCalledWith(undefined);
+      // Should have requiredLimits but NOT requiredFeatures
+      expect(adapter.requestDevice).toHaveBeenCalledWith(expect.objectContaining({
+        requiredLimits: expect.objectContaining({ maxBufferSize: expect.any(Number) }),
+      }));
+      const callArg = adapter.requestDevice.mock.calls[0]![0];
+      expect(callArg).not.toHaveProperty('requiredFeatures');
     });
 
     it('WGPU-BLIT-009: uses linear sampler when float32-filterable available', async () => {

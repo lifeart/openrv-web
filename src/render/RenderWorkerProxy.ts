@@ -277,6 +277,10 @@ export class RenderWorkerProxy implements RendererBackend {
     this.postMessage({ type: 'resize', width, height });
   }
 
+  setViewport(width: number, height: number): void {
+    this.postMessage({ type: 'setViewport', width, height });
+  }
+
   clear(r = 0, g = 0, b = 0, a = 1): void {
     this.postMessage({ type: 'clear', r, g, b, a });
   }

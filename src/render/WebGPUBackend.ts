@@ -36,7 +36,8 @@ import type { RenderState } from './RenderState';
 
 /** Minimal GPUAdapter shape. */
 interface WGPUAdapter {
-  requestDevice(): Promise<WGPUDevice>;
+  limits?: { maxBufferSize?: number };
+  requestDevice(desc?: { requiredLimits?: Record<string, number> }): Promise<WGPUDevice>;
 }
 
 /** Minimal GPUDevice shape. */
@@ -125,7 +126,12 @@ export class WebGPUBackend implements RendererBackend {
     if (!adapter) {
       throw new Error('WebGPU adapter not available');
     }
-    const device = await adapter.requestDevice();
+    // Request higher maxBufferSize for large HDR images (default 256MB is too small for 4K+ RGBA32Float)
+    const adapterMaxBuffer = adapter.limits?.maxBufferSize ?? 268435456;
+    const desiredMaxBuffer = Math.min(adapterMaxBuffer, 1024 * 1024 * 1024); // up to 1GB
+    const device = await adapter.requestDevice({
+      requiredLimits: { maxBufferSize: desiredMaxBuffer },
+    });
     this.device = device;
 
     // Configure canvas context with HDR settings

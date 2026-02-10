@@ -258,6 +258,7 @@ export class VideoSourceNode extends BaseSourceNode {
     // Create loader function that uses frameExtractor
     // Accepts optional AbortSignal for cancellation support
     // Returns null on failure instead of throwing to avoid breaking the app
+    // Reads currentTargetSize from preloadManager at call time for resolution-aware extraction
     const loader = async (frame: number, signal?: AbortSignal): Promise<FrameResult | null> => {
       if (!this.frameExtractor) {
         return null;
@@ -269,7 +270,8 @@ export class VideoSourceNode extends BaseSourceNode {
       }
 
       try {
-        const result = await this.frameExtractor.getFrame(frame, signal);
+        const targetSize = this.preloadManager?.getTargetSize();
+        const result = await this.frameExtractor.getFrame(frame, signal, targetSize);
         return result;
       } catch (error) {
         // Log error for debugging but don't break the app
@@ -423,13 +425,15 @@ export class VideoSourceNode extends BaseSourceNode {
   /**
    * Get frame using mediabunny (async, accurate)
    * Uses FramePreloadManager for intelligent caching and request coalescing
+   * @param frame - Frame number (1-based)
+   * @param targetSize - Optional target resolution for resized extraction
    */
-  async getFrameAsync(frame: number): Promise<FrameResult | null> {
+  async getFrameAsync(frame: number, targetSize?: { w: number; h: number }): Promise<FrameResult | null> {
     if (!this.frameExtractor || !this.useMediabunny || !this.preloadManager) {
       return null;
     }
 
-    return this.preloadManager.getFrame(frame);
+    return this.preloadManager.getFrame(frame, targetSize);
   }
 
   /**
@@ -515,6 +519,23 @@ export class VideoSourceNode extends BaseSourceNode {
       totalFrames: this.preloadManager.getTotalFrames(),
       maxCacheSize: this.preloadManager.getMaxCacheSize(),
     };
+  }
+
+  /**
+   * Set the target resolution for frame extraction.
+   * Frames already cached at a lower resolution will be returned immediately
+   * (stale) but upgraded asynchronously on next access.
+   * Pass undefined to extract at full source resolution.
+   */
+  setTargetSize(targetSize?: { w: number; h: number }): void {
+    this.preloadManager?.setTargetSize(targetSize);
+  }
+
+  /**
+   * Get the current target resolution for frame extraction.
+   */
+  getTargetSize(): { w: number; h: number } | undefined {
+    return this.preloadManager?.getTargetSize();
   }
 
   /**
