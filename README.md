@@ -10,13 +10,17 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 ## Features
 
 ### Media Support
-- Single images (PNG, JPEG, WebP, EXR)
+- Single images (PNG, JPEG, WebP, EXR, Radiance HDR)
 - **EXR Format Support** - full HDR image loading via WebAssembly decoder
   - Float32 texture support for HDR precision
   - Multi-layer EXR with AOV (Arbitrary Output Variable) selection
   - Channel remapping (custom channel-to-RGBA mapping)
   - Layer selection UI for multi-layer files (diffuse, specular, normals, depth, etc.)
   - **PIZ wavelet compression** support (most common VFX compression)
+- **Radiance HDR (.hdr/.pic)** - environment maps and light probes
+  - RGBE shared-exponent encoding with adaptive RLE decompression
+  - Header metadata (exposure, gamma, primaries)
+  - Automatic format detection via `#?RADIANCE` / `#?RGBE` magic bytes
 - Video files (MP4, WebM)
   - **ProRes/DNxHD Codec Detection** - identifies unsupported professional codecs and provides FFmpeg transcoding guidance
 - Image sequences (numbered files like `frame_001.png`, `file.0001.exr`)
@@ -488,7 +492,8 @@ src/
 │       └── PlaylistManager.ts  # Multi-clip playlist with EDL export & OTIO import
 ├── formats/
 │   ├── EXRDecoder.ts   # WebAssembly EXR decoder with multi-layer support
-│   └── EXRPIZCodec.ts  # PIZ wavelet compression codec (Huffman + Haar + LUT)
+│   ├── EXRPIZCodec.ts  # PIZ wavelet compression codec (Huffman + Haar + LUT)
+│   └── HDRDecoder.ts   # Radiance HDR (.hdr/.pic) decoder with RLE support
 ├── nodes/
 │   ├── base/           # IPNode, NodeFactory with @RegisterNode decorator
 │   ├── sources/        # FileSourceNode, VideoSourceNode, SequenceSourceNode
@@ -613,7 +618,7 @@ const rootNode = session.graphParseResult?.rootNode;
 # Type check
 pnpm typecheck
 
-# Run unit tests (7700+ tests)
+# Run unit tests (9700+ tests)
 pnpm test
 
 # Run e2e tests (requires dev server running)
@@ -629,7 +634,7 @@ pnpm preview
 
 ### Test Coverage
 
-The codebase includes comprehensive test coverage with **7700+ unit tests** across 187 test files and **103 e2e test suites**:
+The codebase includes comprehensive test coverage with **9700+ unit tests** across 239 test files and **103 e2e test suites**:
 
 - **Color Tools**: ColorWheels (46 tests), FalseColor (30 tests), HSLQualifier (57 tests), Curves, CDL, LogCurves (27 tests), DisplayTransfer, DisplayProfileControl
 - **OCIO**: OCIOConfig, OCIOTransform, OCIOProcessor (color space transforms, config parsing, reverse transforms)
@@ -640,7 +645,7 @@ The codebase includes comprehensive test coverage with **7700+ unit tests** acro
 - **Overlays**: TimecodeOverlay (50 tests), SafeAreasOverlay (46 tests), SpotlightOverlay (62 tests)
 - **UI Components**: ThemeControl, HistoryPanel, InfoPanel, Modal, Button, CurveEditor (33 tests), AutoSaveIndicator (35 tests), TimelineEditor (25 tests), ThumbnailManager (12 tests), BackgroundPatternControl (32 tests), PARControl (13 tests)
 - **Core**: Session, Graph, GTO loading/export, SequenceLoader (88 tests), AutoSaveManager (28 tests), SessionSerializer (35 tests), SnapshotManager (16 tests), PlaylistManager (34 tests)
-- **Formats**: EXRDecoder (multi-layer, channel remapping), ChannelSelect (EXR layer UI)
+- **Formats**: EXRDecoder (multi-layer, channel remapping), HDRDecoder (34 tests), DecoderRegistry, ChannelSelect (EXR layer UI)
 - **Render**: TextureCacheManager (22 tests)
 - **Export/Import**: AnnotationJSONExporter (33 tests incl. import), AnnotationPDFExporter (21 tests), OTIOParser (42 tests)
 - **Audio**: AudioPlaybackManager (36 tests), WaveformRenderer (35 tests)

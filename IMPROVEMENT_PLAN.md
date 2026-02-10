@@ -56,6 +56,7 @@ Five independent expert analyses converged on several recurring themes. These re
 - **Architecture expert**: DecoderRegistry exists but FileSourceNode bypasses it with hardcoded if/else chains. No lazy loading, no plugin registration.
 - **DX expert**: DecoderRegistry not exported. External developers cannot register custom decoders. Options/metadata use generic Record types.
 - **Testing expert**: 3 of 5 format decoders (DPX, Cineon, TIFFFloat) have no test coverage. No malformed file handling tests.
+- **Update**: Registry now has 6 built-in decoders (EXR, DPX, Cineon, Float TIFF, JPEG Gainmap, Radiance HDR) with lazy-loaded decode modules, exported singleton, and `registerDecoder()` for external plugins.
 
 ---
 
@@ -90,7 +91,7 @@ Five independent expert analyses converged on several recurring themes. These re
 | IMP-013 | Extract clamp() utility function | CQ | Code Quality | Medium | S | Low | **DONE** — `clamp()` in `utils/math.ts`, `luminanceRec709()` + luma constants in `color/PixelMath.ts`. Replaced ~200+ inline patterns across 25 files. |
 | IMP-014 | Create WebGL HDR type definitions | Arch, CQ | Code Quality | Medium | S | Low | **DONE** — `types/webgl-hdr.d.ts` with global augmentations for ExtendedColorSpace, drawingBufferColorSpace, configureHighDynamicRange, getScreenDetails. Eliminates 8 unsafe casts. |
 | IMP-015 | Create ManagerBase interface and registry | Arch, CQ | Architecture | Medium | M | Low | **DONE** — `Disposable` and `ManagerBase` interfaces in `core/ManagerBase.ts`. 8 managers implement it (TextureCache, Playlist, AudioPlayback, Media, Transform, NetworkSync, ShaderState, History). |
-| IMP-016 | Complete DecoderRegistry with plugin support | Arch, DX, Testing | Architecture | Medium | M | Low | **DONE** — JPEG Gainmap added as 5th decoder, `detectAndDecode()` method, `decoderRegistry` singleton. FileSourceNode uses registry. Typed `DPXDecodeOptions`/`CineonDecodeOptions`. |
+| IMP-016 | Complete DecoderRegistry with plugin support | Arch, DX, Testing | Architecture | Medium | M | Low | **DONE** — JPEG Gainmap added as 5th decoder, Radiance HDR as 6th decoder, `detectAndDecode()` method, `decoderRegistry` singleton. FileSourceNode uses registry. Typed `DPXDecodeOptions`/`CineonDecodeOptions`. HDR decoder supports RGBE encoding, adaptive RLE, and header metadata. |
 | IMP-017 | Pre-allocate LUT conversion buffers | Perf | Performance | Medium | S | Low | **DONE** — Alpha channels pre-filled once at init; subsequent updates only copy RGB. Saves ~25% writes per LUT update. |
 | IMP-018 | Optimize getPixel/setPixel hot loop allocations | Perf | Performance | Medium | S | Low | **DONE** — `getPixel(x, y, out?)` optional output buffer parameter eliminates array allocation per pixel sample. |
 | IMP-019 | Optimize Gainmap decoder Math.pow loop | Perf | Performance | Medium | S | Low | **DONE** — Pre-computed `srgbLUT` (256 entries) and `gainLUT` (256 entries) replace per-pixel `Math.pow` calls. 2-5x faster for HDR gainmap decoding. |
