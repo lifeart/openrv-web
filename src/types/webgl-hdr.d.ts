@@ -62,6 +62,15 @@ interface WebGL2RenderingContext {
    * Supports the same extended color space values as drawingBufferColorSpace.
    */
   unpackColorSpace: ExtendedColorSpace;
+
+  /**
+   * Configure the drawing buffer's internal storage format and dimensions.
+   * When called with RGBA16F, enables a half-float backbuffer that can
+   * represent values > 1.0 — essential for HDR extended range output.
+   *
+   * @see https://www.w3.org/TR/webgl-drawingbuffer-storage/
+   */
+  drawingBufferStorage?(internalformat: GLenum, width: GLsizei, height: GLsizei): void;
 }
 
 // =============================================================================

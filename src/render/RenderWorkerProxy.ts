@@ -91,7 +91,7 @@ export class RenderWorkerProxy implements RendererBackend {
   private colorAdjustments: ColorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
   private colorInversionEnabled = false;
   private toneMappingState: ToneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
-  private hdrOutputMode: 'sdr' | 'hlg' | 'pq' = 'sdr';
+  private hdrOutputMode: 'sdr' | 'hlg' | 'pq' | 'extended' = 'sdr';
 
   // --- Batch state optimization ---
   private dirtyState: Partial<RendererSyncState> = {};
@@ -161,7 +161,7 @@ export class RenderWorkerProxy implements RendererBackend {
     }
     const hdrMode = await this.initPromise;
     if (hdrMode) {
-      this.hdrOutputMode = hdrMode as 'sdr' | 'hlg' | 'pq';
+      this.hdrOutputMode = hdrMode as 'sdr' | 'hlg' | 'pq' | 'extended';
     }
   }
 
@@ -198,7 +198,7 @@ export class RenderWorkerProxy implements RendererBackend {
 
     const hdrMode = await this.initPromise;
     if (hdrMode) {
-      this.hdrOutputMode = hdrMode as 'sdr' | 'hlg' | 'pq';
+      this.hdrOutputMode = hdrMode as 'sdr' | 'hlg' | 'pq' | 'extended';
     }
   }
 
@@ -522,15 +522,19 @@ export class RenderWorkerProxy implements RendererBackend {
   // HDR output
   // ==========================================================================
 
-  setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq', capabilities: DisplayCapabilities): boolean {
+  setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq' | 'extended', capabilities: DisplayCapabilities): boolean {
     this.hdrOutputMode = mode;
     this.dirtyState.hdrOutputMode = { mode, capabilities };
     this.hasDirtyState = true;
     return true;
   }
 
-  getHDROutputMode(): 'sdr' | 'hlg' | 'pq' {
+  getHDROutputMode(): 'sdr' | 'hlg' | 'pq' | 'extended' {
     return this.hdrOutputMode;
+  }
+
+  setHDRHeadroom(_headroom: number): void {
+    // TODO: forward to worker when HDR headroom is supported in worker pipeline
   }
 
   // ==========================================================================
@@ -736,7 +740,7 @@ export class RenderWorkerProxy implements RendererBackend {
       case 'initResult':
         if (msg.success) {
           if (msg.hdrMode) {
-            this.hdrOutputMode = msg.hdrMode as 'sdr' | 'hlg' | 'pq';
+            this.hdrOutputMode = msg.hdrMode as 'sdr' | 'hlg' | 'pq' | 'extended';
           }
           this.initResolve?.(msg.hdrMode);
         } else {

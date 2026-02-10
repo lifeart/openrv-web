@@ -34,13 +34,19 @@ export interface DisplayCapabilities {
   webgpuAvailable: boolean;
   webgpuHDR: boolean;         // webgpuHDR requires async adapter request, deferred to Phase 4
 
+  // Extended HDR capabilities
+  /** True if WebGL2 supports drawingBufferStorage() for half-float backbuffer */
+  webglDrawingBufferStorage: boolean;
+  /** True if canvas.configureHighDynamicRange() API is available */
+  canvasExtendedHDR: boolean;
+
   // VideoFrame
   /** True if VideoFrame API is available (for HDR video texImage2D upload) */
   videoFrameTexImage: boolean;
 
   // Derived
   activeColorSpace: 'srgb' | 'display-p3';
-  activeHDRMode: 'sdr' | 'hlg' | 'pq' | 'none';
+  activeHDRMode: 'sdr' | 'hlg' | 'pq' | 'extended' | 'none';
 }
 
 // =============================================================================
@@ -64,6 +70,9 @@ export const DEFAULT_CAPABILITIES: DisplayCapabilities = {
 
   webgpuAvailable: false,
   webgpuHDR: false,
+
+  webglDrawingBufferStorage: false,
+  canvasExtendedHDR: false,
 
   videoFrameTexImage: false,
 
@@ -183,11 +192,21 @@ export function detectDisplayCapabilities(): DisplayCapabilities {
           // Test PQ
           gl.drawingBufferColorSpace = 'rec2100-pq';
           caps.webglPQ = gl.drawingBufferColorSpace === 'rec2100-pq';
+
+          // Test drawingBufferStorage availability
+          caps.webglDrawingBufferStorage = typeof gl.drawingBufferStorage === 'function';
         }
       } finally {
         const loseCtx = gl?.getExtension('WEBGL_lose_context');
         loseCtx?.loseContext();
       }
+    } catch { /* stays false */ }
+  }
+
+  // --- canvasExtendedHDR: check if configureHighDynamicRange is available ---
+  if (glProbeCanvas) {
+    try {
+      caps.canvasExtendedHDR = typeof glProbeCanvas.configureHighDynamicRange === 'function';
     } catch { /* stays false */ }
   }
 
@@ -230,6 +249,8 @@ export function detectDisplayCapabilities(): DisplayCapabilities {
     caps.activeHDRMode = 'hlg';
   } else if (caps.webglPQ) {
     caps.activeHDRMode = 'pq';
+  } else if (caps.displayHDR && caps.webglDrawingBufferStorage && caps.canvasExtendedHDR) {
+    caps.activeHDRMode = 'extended';
   }
 
   console.log('[DisplayCapabilities]', {
@@ -240,6 +261,8 @@ export function detectDisplayCapabilities(): DisplayCapabilities {
     webglPQ: caps.webglPQ,
     canvasHLG: caps.canvasHLG,
     canvasFloat16: caps.canvasFloat16,
+    webglDrawingBufferStorage: caps.webglDrawingBufferStorage,
+    canvasExtendedHDR: caps.canvasExtendedHDR,
     activeHDRMode: caps.activeHDRMode,
   });
 
@@ -269,6 +292,32 @@ export function resolveActiveColorSpace(
   if (preference === 'display-p3') return caps.webglP3 ? 'display-p3' : 'srgb';
   // auto: use P3 if available
   return caps.webglP3 && (caps.displayGamut === 'p3' || caps.displayGamut === 'rec2020') ? 'display-p3' : 'srgb';
+}
+
+// =============================================================================
+// WebGPU HDR Detection (async)
+// =============================================================================
+
+/**
+ * Detect whether WebGPU HDR output is likely available.
+ *
+ * Requests a GPU adapter to verify WebGPU works. The adapter is a
+ * lightweight object that does not allocate a device. The actual device
+ * creation happens in WebGPUHDRBlit.initialize() — no need to create
+ * and immediately destroy a device here just for probing.
+ *
+ * This is intentionally separate from detectDisplayCapabilities()
+ * because it requires async operations.
+ */
+export async function detectWebGPUHDR(): Promise<boolean> {
+  if (typeof navigator === 'undefined' || !('gpu' in navigator)) return false;
+  try {
+    const gpu = (navigator as unknown as { gpu: { requestAdapter(opts?: { powerPreference?: string }): Promise<object | null> } }).gpu;
+    const adapter = await gpu.requestAdapter();
+    return adapter !== null;
+  } catch {
+    return false;
+  }
 }
 
 // =============================================================================

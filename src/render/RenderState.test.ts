@@ -57,6 +57,7 @@ function createMockRenderer(): RendererBackend {
     resetToneMappingState: vi.fn(),
     setHDROutputMode: vi.fn().mockReturnValue(true),
     getHDROutputMode: vi.fn().mockReturnValue('sdr'),
+    setHDRHeadroom: vi.fn(),
     createTexture: vi.fn().mockReturnValue(null),
     deleteTexture: vi.fn(),
     getContext: vi.fn().mockReturnValue(null),

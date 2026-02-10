@@ -12,6 +12,7 @@
 
 import { Renderer } from '../../render/Renderer';
 import { RenderWorkerProxy } from '../../render/RenderWorkerProxy';
+import { WebGPUHDRBlit } from '../../render/WebGPUHDRBlit';
 import type { RenderState } from '../../render/RenderState';
 import type { IPImage } from '../../core/image/Image';
 import {
@@ -72,6 +73,11 @@ export class ViewerGLRenderer {
   // Display capabilities for wide color gamut / HDR support
   private _capabilities: DisplayCapabilities | undefined;
 
+  // WebGPU HDR blit (hybrid path: WebGL2 FBO → readPixels → WebGPU HDR canvas)
+  private _webgpuBlit: WebGPUHDRBlit | null = null;
+  private _webgpuBlitInitializing = false;
+  private _webgpuBlitFailed = false;
+
   private ctx: GLRendererContext;
 
   get glCanvas(): HTMLCanvasElement | null { return this._glCanvas; }
@@ -81,6 +87,8 @@ export class ViewerGLRenderer {
   get renderWorkerProxy(): RenderWorkerProxy | null { return this._renderWorkerProxy; }
   get isAsyncRenderer(): boolean { return this._isAsyncRenderer; }
   get capabilities(): DisplayCapabilities | undefined { return this._capabilities; }
+  /** True when the WebGPU HDR blit module is initialized and ready to display. */
+  get isWebGPUBlitReady(): boolean { return this._webgpuBlit?.initialized === true; }
 
   constructor(ctx: GLRendererContext, capabilities?: DisplayCapabilities) {
     this._capabilities = capabilities;
@@ -100,6 +108,10 @@ export class ViewerGLRenderer {
   /**
    * Ensure a GL renderer exists (sync or async worker).
    * Returns the renderer or null if creation fails.
+   *
+   * When WebGPU HDR blit is ready, skips the worker proxy path and creates a
+   * sync main-thread renderer directly. This is needed because
+   * renderImageToFloat() (FBO readback) only works on the sync Renderer.
    */
   ensureGLRenderer(): Renderer | null {
     if (this._glRenderer) return this._glRenderer;
@@ -107,7 +119,9 @@ export class ViewerGLRenderer {
 
     // Phase 4: Try OffscreenCanvas worker first for main-thread isolation.
     // Only attempt once — if worker proxy already failed, skip directly to sync renderer.
-    if (!this._renderWorkerProxy && !this._isAsyncRenderer) {
+    // Skip worker path when WebGPU HDR blit is ready (blit needs FBO readback via sync Renderer).
+    const skipWorker = this._webgpuBlit?.initialized === true;
+    if (!skipWorker && !this._renderWorkerProxy && !this._isAsyncRenderer) {
       try {
         if (typeof OffscreenCanvas !== 'undefined' &&
             'transferControlToOffscreen' in this._glCanvas &&
@@ -174,6 +188,7 @@ export class ViewerGLRenderer {
    * Used when the worker fails to initialize or crashes.
    */
   fallbackToSyncRenderer(): void {
+    console.log('[Viewer] fallbackToSyncRenderer called');
     if (this._renderWorkerProxy) {
       this._renderWorkerProxy.dispose();
       this._renderWorkerProxy = null;
@@ -244,18 +259,40 @@ export class ViewerGLRenderer {
   /**
    * Render an HDR IPImage through the WebGL shader pipeline.
    * Returns true if rendering succeeded, false if fallback is needed.
+   *
+   * When the WebGL2 backend has no native HDR output (no HLG/PQ/extended) but
+   * WebGPU HDR is available, uses the hybrid blit path:
+   *   WebGL2 FBO (RGBA16F) → readPixels(FLOAT) → WebGPU HDR canvas
    */
   renderHDRWithWebGL(
     image: IPImage,
     displayWidth: number,
     displayHeight: number,
   ): boolean {
+    const blitReady = this._webgpuBlit?.initialized === true;
+
+    // If the blit is ready but the current renderer is a worker proxy,
+    // we must switch to sync. Do this BEFORE ensureGLRenderer().
+    if (blitReady && this._isAsyncRenderer && this._glRenderer) {
+      this.fallbackToSyncRenderer();
+    }
+
     const renderer = this.ensureGLRenderer();
     if (!renderer || !this._glCanvas) return false;
 
+    const isHDROutput = renderer.getHDROutputMode() !== 'sdr';
+    const hasFloatReadback = typeof renderer.renderImageToFloat === 'function';
+
+    // Try WebGPU HDR blit path when WebGL2 has no native HDR output
+    if (!isHDROutput && this._webgpuBlit?.initialized && hasFloatReadback) {
+      return this.renderHDRWithWebGPUBlit(renderer, image, displayWidth, displayHeight);
+    }
+
+    // Standard WebGL2 HDR path (HLG/PQ/extended) or SDR fallback
     // Activate WebGL canvas
     if (!this._hdrRenderActive) {
       this._glCanvas.style.display = 'block';
+      this.hideWebGPUBlitCanvas();
       this.ctx.getImageCanvas().style.visibility = 'hidden';
       this._hdrRenderActive = true;
     }
@@ -267,12 +304,7 @@ export class ViewerGLRenderer {
 
     // Build render state and apply HDR-specific overrides
     const state = this.buildRenderState();
-    const isHDROutput = renderer.getHDROutputMode() !== 'sdr';
     if (isHDROutput) {
-      // HDR output: values > 1.0 pass through to the rec2100-hlg/pq drawing buffer.
-      // - No tone mapping: the HDR display handles the extended luminance range
-      // - Gamma = 1 (linear): the browser applies the HLG/PQ OETF automatically
-      // Other adjustments (exposure, temperature, saturation, etc.) still apply.
       state.colorAdjustments = { ...state.colorAdjustments, gamma: 1 };
       state.toneMappingState = { enabled: false, operator: 'off' };
     }
@@ -283,14 +315,115 @@ export class ViewerGLRenderer {
     renderer.renderImage(image, 0, 0, 1, 1);
 
     // CSS transform for rotation/flip
+    this.applyTransformToCanvas(this._glCanvas);
+
+    return true;
+  }
+
+  /**
+   * Hybrid WebGL2 → WebGPU HDR blit render path.
+   * Renders via WebGL2 FBO, reads float pixels, uploads to WebGPU HDR canvas.
+   */
+  private renderHDRWithWebGPUBlit(
+    renderer: Renderer,
+    image: IPImage,
+    displayWidth: number,
+    displayHeight: number,
+  ): boolean {
+    // Ensure GL canvas is sized for FBO rendering (it stays hidden)
+    if (this._glCanvas!.width !== displayWidth || this._glCanvas!.height !== displayHeight) {
+      renderer.resize(displayWidth, displayHeight);
+    }
+
+    // Build render state with minimal HDR overrides for linear-light output.
+    // The WebGPU HDR canvas expects linear values where >1.0 = brighter than SDR white.
+    // - Gamma = 1: no gamma compression (the HDR canvas expects linear light)
+    // - Display transfer = 0 (linear): CRITICAL — without this, the shader applies
+    //   sRGB OETF (pow(c, 1/2.4)) which compresses HDR values and ignores u_gamma
+    // - Display gamma = 1: no additional gamma encoding on top of transfer function
+    // - Tone mapping: NOT overridden — user controls whether ACES/Reinhard/etc. is applied.
+    // - Display brightness: NOT overridden — user can adjust display brightness freely.
+    const state = this.buildRenderState();
+    state.colorAdjustments = { ...state.colorAdjustments, gamma: 1 };
+    state.displayColor = { ...state.displayColor, transferFunction: 0, displayGamma: 1 };
+    renderer.applyRenderState(state);
+
+    // Render to RGBA16F FBO and read float pixels
+    const pixels = renderer.renderImageToFloat!(image, displayWidth, displayHeight);
+    if (!pixels) return false;
+
+    // Upload to WebGPU HDR canvas
+    this._webgpuBlit!.uploadAndDisplay(pixels, displayWidth, displayHeight);
+
+    // Show WebGPU canvas, hide GL canvas
+    if (!this._hdrRenderActive) {
+      this._glCanvas!.style.display = 'none';
+      this._webgpuBlit!.getCanvas().style.display = 'block';
+      this.ctx.getImageCanvas().style.visibility = 'hidden';
+      this._hdrRenderActive = true;
+    }
+
+    // CSS transform for rotation/flip
+    this.applyTransformToCanvas(this._webgpuBlit!.getCanvas());
+
+    return true;
+  }
+
+  /**
+   * Apply CSS rotation/flip transform to a canvas element.
+   */
+  private applyTransformToCanvas(canvas: HTMLCanvasElement): void {
     const { rotation, flipH, flipV } = this.ctx.getTransformManager().transform;
     const transforms: string[] = [];
     if (rotation) transforms.push(`rotate(${rotation}deg)`);
     if (flipH) transforms.push('scaleX(-1)');
     if (flipV) transforms.push('scaleY(-1)');
-    this._glCanvas.style.transform = transforms.length ? transforms.join(' ') : '';
+    canvas.style.transform = transforms.length ? transforms.join(' ') : '';
+  }
 
-    return true;
+  /**
+   * Initialize the WebGPU HDR blit module lazily.
+   * Called when HDR content is detected and WebGPU HDR is available but WebGL2
+   * has no native HDR output.
+   */
+  async initWebGPUHDRBlit(): Promise<void> {
+    if (this._webgpuBlit || this._webgpuBlitInitializing || this._webgpuBlitFailed) return;
+    this._webgpuBlitInitializing = true;
+
+    try {
+      const blit = new WebGPUHDRBlit();
+      await blit.initialize();
+      this._webgpuBlit = blit;
+
+      // Append WebGPU canvas to the container (after GL canvas)
+      const container = this.ctx.getCanvasContainer();
+      container.appendChild(blit.getCanvas());
+
+      console.log('[Viewer] WebGPU HDR blit initialized');
+
+      // If there's already a worker proxy renderer, switch to sync now
+      // so the next render uses the blit path with renderImageToFloat.
+      if (this._isAsyncRenderer) {
+        console.log('[Viewer] Blit ready, switching from worker to sync renderer');
+        this.fallbackToSyncRenderer();
+      }
+
+      // Trigger a re-render so the current HDR content (if any) is re-rendered
+      // through the blit path.
+      this.ctx.scheduleRender();
+    } catch (e) {
+      console.warn('[Viewer] WebGPU HDR blit init failed:', e);
+      this._webgpuBlitFailed = true;
+    } finally {
+      this._webgpuBlitInitializing = false;
+    }
+  }
+
+  /** Hide the WebGPU blit canvas if it exists. */
+  private hideWebGPUBlitCanvas(): void {
+    if (this._webgpuBlit) {
+      this._webgpuBlit.getCanvas().style.display = 'none';
+    }
   }
 
   /**
@@ -299,6 +432,7 @@ export class ViewerGLRenderer {
   deactivateHDRMode(): void {
     if (!this._glCanvas) return;
     this._glCanvas.style.display = 'none';
+    this.hideWebGPUBlitCanvas();
     this.ctx.getImageCanvas().style.visibility = 'visible';
     this._hdrRenderActive = false;
   }
@@ -485,7 +619,7 @@ export class ViewerGLRenderer {
   }
 
   /**
-   * Dispose all GL resources (renderer, worker proxy, canvas reference).
+   * Dispose all GL resources (renderer, worker proxy, WebGPU blit, canvas reference).
    */
   dispose(): void {
     // Cleanup render worker proxy (Phase 4)
@@ -501,6 +635,13 @@ export class ViewerGLRenderer {
       this._glRenderer.dispose();
       this._glRenderer = null;
     }
+
+    // Cleanup WebGPU HDR blit
+    if (this._webgpuBlit) {
+      this._webgpuBlit.dispose();
+      this._webgpuBlit = null;
+    }
+
     this._glCanvas = null;
   }
 }

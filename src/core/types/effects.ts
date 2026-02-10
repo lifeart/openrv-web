@@ -29,7 +29,7 @@ export const TONE_MAPPING_OPERATORS: ToneMappingOperatorInfo[] = [
   { key: 'aces', label: 'ACES', description: 'Academy Color Encoding System' },
 ];
 
-export type HDROutputMode = 'sdr' | 'hlg' | 'pq';
+export type HDROutputMode = 'sdr' | 'hlg' | 'pq' | 'extended';
 
 export interface ZebraState {
   enabled: boolean;

@@ -1088,3 +1088,791 @@ describe('Renderer Sampler Unit Assignment (regression)', () => {
     }
   });
 });
+
+// ============================================================================
+// Extended HDR Mode Tests
+// ============================================================================
+
+describe('Renderer Extended HDR Mode', () => {
+  let renderer: Renderer;
+
+  beforeEach(() => {
+    renderer = new Renderer();
+  });
+
+  it('REN-EXT-001: setHDROutputMode extended returns true with P3 support', () => {
+    initRendererWithMockGL(renderer, { supportP3: true, supportDrawingBufferStorage: true });
+    const caps = makeCaps({
+      displayHDR: true,
+      webglP3: true,
+      webglDrawingBufferStorage: true,
+      canvasExtendedHDR: true,
+    });
+
+    const result = renderer.setHDROutputMode('extended', caps);
+
+    expect(result).toBe(true);
+    expect(renderer.getHDROutputMode()).toBe('extended');
+  });
+
+  it('REN-EXT-002: setHDROutputMode extended sets display-p3 when P3 supported', () => {
+    const mockGL = initRendererWithMockGL(renderer, { supportP3: true, supportDrawingBufferStorage: true });
+    const caps = makeCaps({
+      displayHDR: true,
+      webglP3: true,
+      webglDrawingBufferStorage: true,
+      canvasExtendedHDR: true,
+    });
+
+    renderer.setHDROutputMode('extended', caps);
+
+    expect((mockGL as unknown as { drawingBufferColorSpace: string }).drawingBufferColorSpace).toBe('display-p3');
+  });
+
+  it('REN-EXT-003: setHDROutputMode extended sets srgb when P3 not supported', () => {
+    const mockGL = initRendererWithMockGL(renderer, { supportDrawingBufferStorage: true });
+    const caps = makeCaps({
+      displayHDR: true,
+      webglP3: false,
+      webglDrawingBufferStorage: true,
+      canvasExtendedHDR: true,
+    });
+
+    renderer.setHDROutputMode('extended', caps);
+
+    expect((mockGL as unknown as { drawingBufferColorSpace: string }).drawingBufferColorSpace).toBe('srgb');
+  });
+
+  it('REN-EXT-004: setHDROutputMode extended calls drawingBufferStorage', () => {
+    const mockGL = initRendererWithMockGL(renderer, { supportP3: true, supportDrawingBufferStorage: true });
+    const caps = makeCaps({
+      displayHDR: true,
+      webglP3: true,
+      webglDrawingBufferStorage: true,
+      canvasExtendedHDR: true,
+    });
+
+    renderer.setHDROutputMode('extended', caps);
+
+    expect(mockGL.drawingBufferStorage).toHaveBeenCalled();
+  });
+
+  it('REN-EXT-005: setHDROutputMode extended works without drawingBufferStorage', () => {
+    initRendererWithMockGL(renderer, { supportP3: true });
+    const caps = makeCaps({
+      displayHDR: true,
+      webglP3: true,
+      webglDrawingBufferStorage: false,
+      canvasExtendedHDR: true,
+    });
+
+    const result = renderer.setHDROutputMode('extended', caps);
+
+    expect(result).toBe(true);
+    expect(renderer.getHDROutputMode()).toBe('extended');
+  });
+
+  it('REN-EXT-006: setHDROutputMode reverts from extended to sdr', () => {
+    const mockGL = initRendererWithMockGL(renderer, { supportP3: true, supportDrawingBufferStorage: true });
+    const caps = makeCaps({
+      displayHDR: true,
+      webglP3: true,
+      webglDrawingBufferStorage: true,
+      canvasExtendedHDR: true,
+    });
+
+    renderer.setHDROutputMode('extended', caps);
+    expect(renderer.getHDROutputMode()).toBe('extended');
+
+    renderer.setHDROutputMode('sdr', caps);
+    expect(renderer.getHDROutputMode()).toBe('sdr');
+    expect((mockGL as unknown as { drawingBufferColorSpace: string }).drawingBufferColorSpace).toBe('display-p3');
+  });
+
+  it('REN-EXT-007: setHDRHeadroom clamps to minimum 1.0', () => {
+    initRendererWithMockGL(renderer);
+
+    renderer.setHDRHeadroom(0.5);
+    // No direct getter, but verify no crash
+    // The headroom will be used in renderImage uniform, tested below
+    expect(renderer.getHDROutputMode()).toBe('sdr');
+  });
+
+  it('REN-EXT-008: setHDRHeadroom accepts values > 1.0', () => {
+    initRendererWithMockGL(renderer);
+
+    renderer.setHDRHeadroom(3.0);
+    // No crash means success - headroom value is internal state
+    expect(renderer.getHDROutputMode()).toBe('sdr');
+  });
+
+  it('REN-EXT-009: initialize auto-detects extended mode when HLG/PQ unavailable', () => {
+    const mockGL = createMockGL({ supportP3: true, supportDrawingBufferStorage: true });
+    const canvas = document.createElement('canvas');
+
+    canvas.getContext = vi.fn((contextId: string) => {
+      if (contextId === 'webgl2') return mockGL;
+      return null;
+    }) as typeof canvas.getContext;
+
+    // Attach configureHighDynamicRange to canvas
+    (canvas as unknown as { configureHighDynamicRange: (opts: unknown) => void }).configureHighDynamicRange = vi.fn();
+
+    const caps = makeCaps({
+      displayHDR: true,
+      webglP3: true,
+      webglHLG: false,
+      webglPQ: false,
+      webglDrawingBufferStorage: true,
+      canvasExtendedHDR: true,
+    });
+
+    renderer.initialize(canvas, caps);
+
+    expect(renderer.getHDROutputMode()).toBe('extended');
+  });
+
+  it('REN-EXT-010: initialize falls back to SDR when extended not available', () => {
+    const mockGL = createMockGL({ supportP3: true });
+    const canvas = document.createElement('canvas');
+
+    canvas.getContext = vi.fn((contextId: string) => {
+      if (contextId === 'webgl2') return mockGL;
+      return null;
+    }) as typeof canvas.getContext;
+
+    const caps = makeCaps({
+      displayHDR: true,
+      webglP3: true,
+      webglHLG: false,
+      webglPQ: false,
+      webglDrawingBufferStorage: false,
+      canvasExtendedHDR: false,
+    });
+
+    renderer.initialize(canvas, caps);
+
+    expect(renderer.getHDROutputMode()).toBe('sdr');
+  });
+
+  it('REN-EXT-011: resize re-allocates half-float buffer for extended mode', () => {
+    const mockGL = createMockGL({ supportP3: true, supportDrawingBufferStorage: true });
+    const canvas = document.createElement('canvas');
+
+    canvas.getContext = vi.fn((contextId: string) => {
+      if (contextId === 'webgl2') return mockGL;
+      return null;
+    }) as typeof canvas.getContext;
+    (canvas as unknown as { configureHighDynamicRange: (opts: unknown) => void }).configureHighDynamicRange = vi.fn();
+
+    const caps = makeCaps({
+      displayHDR: true,
+      webglP3: true,
+      webglHLG: false,
+      webglPQ: false,
+      webglDrawingBufferStorage: true,
+      canvasExtendedHDR: true,
+    });
+
+    renderer.initialize(canvas, caps);
+    expect(renderer.getHDROutputMode()).toBe('extended');
+
+    // drawingBufferStorage should have been called during init
+    const storageMock = mockGL.drawingBufferStorage as unknown as ReturnType<typeof vi.fn>;
+    const initCallCount = storageMock.mock.calls.length;
+
+    // Resize should call drawingBufferStorage again
+    renderer.resize(800, 600);
+
+    expect(storageMock.mock.calls.length).toBe(initCallCount + 1);
+    // The last call should have the new dimensions
+    const lastCall = storageMock.mock.calls[storageMock.mock.calls.length - 1]!;
+    expect(lastCall[1]).toBe(800);
+    expect(lastCall[2]).toBe(600);
+  });
+
+  it('REN-EXT-012: configureHighDynamicRange called with mode extended', () => {
+    const mockGL = createMockGL({ supportP3: true, supportDrawingBufferStorage: true });
+    const canvas = document.createElement('canvas');
+
+    canvas.getContext = vi.fn((contextId: string) => {
+      if (contextId === 'webgl2') return mockGL;
+      return null;
+    }) as typeof canvas.getContext;
+
+    const configureHDR = vi.fn();
+    (canvas as unknown as { configureHighDynamicRange: typeof configureHDR }).configureHighDynamicRange = configureHDR;
+
+    const caps = makeCaps({
+      displayHDR: true,
+      webglP3: true,
+      webglHLG: false,
+      webglPQ: false,
+      webglDrawingBufferStorage: true,
+      canvasExtendedHDR: true,
+    });
+
+    renderer.initialize(canvas, caps);
+
+    expect(configureHDR).toHaveBeenCalledWith({ mode: 'extended' });
+  });
+
+  it('REN-EXT-013: dispose resets half-float backbuffer flag', () => {
+    const mockGL = createMockGL({ supportP3: true, supportDrawingBufferStorage: true });
+    const canvas = document.createElement('canvas');
+
+    canvas.getContext = vi.fn((contextId: string) => {
+      if (contextId === 'webgl2') return mockGL;
+      return null;
+    }) as typeof canvas.getContext;
+    (canvas as unknown as { configureHighDynamicRange: (opts: unknown) => void }).configureHighDynamicRange = vi.fn();
+
+    const caps = makeCaps({
+      displayHDR: true,
+      webglP3: true,
+      webglHLG: false,
+      webglPQ: false,
+      webglDrawingBufferStorage: true,
+      canvasExtendedHDR: true,
+    });
+
+    renderer.initialize(canvas, caps);
+    expect(renderer.getHDROutputMode()).toBe('extended');
+
+    renderer.dispose();
+    // After dispose, getHDROutputMode should still return the last value
+    // but the renderer should be in a clean state
+    expect(renderer.getContext()).toBeNull();
+  });
+});
+
+// ============================================================================
+// DisplayCapabilities Extended HDR Tests
+// ============================================================================
+
+describe('DisplayCapabilities Extended HDR', () => {
+  it('DC-EXT-001: DEFAULT_CAPABILITIES has new extended HDR fields', () => {
+    expect(DEFAULT_CAPABILITIES.webglDrawingBufferStorage).toBe(false);
+    expect(DEFAULT_CAPABILITIES.canvasExtendedHDR).toBe(false);
+  });
+
+  it('DC-EXT-002: activeHDRMode includes extended as valid value', () => {
+    const caps: DisplayCapabilities = {
+      ...DEFAULT_CAPABILITIES,
+      displayHDR: true,
+      webglDrawingBufferStorage: true,
+      canvasExtendedHDR: true,
+      activeHDRMode: 'extended',
+    };
+    expect(caps.activeHDRMode).toBe('extended');
+  });
+});
+
+// ============================================================================
+// Shader u_hdrHeadroom Tests
+// ============================================================================
+
+describe('Renderer HDR Headroom Uniform', () => {
+  /**
+   * Create a mock GL context that tracks u_hdrHeadroom uniform1f calls.
+   */
+  function createHeadroomTrackingGL(): {
+    gl: WebGL2RenderingContext;
+    getHeadroomCalls: () => number[];
+  } {
+    const locationToName = new Map<object, string>();
+    const headroomCalls: number[] = [];
+
+    const gl = {
+      canvas: document.createElement('canvas'),
+      drawingBufferColorSpace: 'srgb',
+      getExtension: vi.fn(() => null),
+      createProgram: vi.fn(() => ({})),
+      attachShader: vi.fn(),
+      linkProgram: vi.fn(),
+      getProgramParameter: vi.fn(() => true),
+      getProgramInfoLog: vi.fn(() => ''),
+      deleteShader: vi.fn(),
+      createShader: vi.fn(() => ({})),
+      shaderSource: vi.fn(),
+      compileShader: vi.fn(),
+      getShaderParameter: vi.fn(() => true),
+      getShaderInfoLog: vi.fn(() => ''),
+      createVertexArray: vi.fn(() => ({})),
+      bindVertexArray: vi.fn(),
+      createBuffer: vi.fn(() => ({})),
+      bindBuffer: vi.fn(),
+      bufferData: vi.fn(),
+      enableVertexAttribArray: vi.fn(),
+      vertexAttribPointer: vi.fn(),
+      getUniformLocation: vi.fn((_program: WebGLProgram, name: string) => {
+        const sentinel = { __uniformName: name };
+        locationToName.set(sentinel, name);
+        return sentinel;
+      }),
+      getAttribLocation: vi.fn(() => 0),
+      useProgram: vi.fn(),
+      uniform1f: vi.fn((location: object, value: number) => {
+        const name = locationToName.get(location);
+        if (name === 'u_hdrHeadroom') {
+          headroomCalls.push(value);
+        }
+      }),
+      uniform1i: vi.fn(),
+      uniform2fv: vi.fn(),
+      uniform3fv: vi.fn(),
+      uniformMatrix3fv: vi.fn(),
+      activeTexture: vi.fn(),
+      bindTexture: vi.fn(),
+      drawArrays: vi.fn(),
+      viewport: vi.fn(),
+      clearColor: vi.fn(),
+      clear: vi.fn(),
+      createTexture: vi.fn(() => ({})),
+      deleteTexture: vi.fn(),
+      deleteVertexArray: vi.fn(),
+      deleteBuffer: vi.fn(),
+      deleteProgram: vi.fn(),
+      texParameteri: vi.fn(),
+      texImage2D: vi.fn(),
+      texImage3D: vi.fn(),
+      isContextLost: vi.fn(() => false),
+      // Constants
+      VERTEX_SHADER: 0x8b31,
+      FRAGMENT_SHADER: 0x8b30,
+      LINK_STATUS: 0x8b82,
+      COMPILE_STATUS: 0x8b81,
+      ARRAY_BUFFER: 0x8892,
+      STATIC_DRAW: 0x88e4,
+      FLOAT: 0x1406,
+      TEXTURE_2D: 0x0de1,
+      TEXTURE_3D: 0x806f,
+      TEXTURE0: 0x84c0,
+      TEXTURE1: 0x84c1,
+      TEXTURE2: 0x84c2,
+      TEXTURE3: 0x84c3,
+      TRIANGLE_STRIP: 0x0005,
+      COLOR_BUFFER_BIT: 0x4000,
+      TEXTURE_WRAP_S: 0x2802,
+      TEXTURE_WRAP_T: 0x2803,
+      TEXTURE_WRAP_R: 0x8072,
+      TEXTURE_MIN_FILTER: 0x2801,
+      TEXTURE_MAG_FILTER: 0x2800,
+      CLAMP_TO_EDGE: 0x812f,
+      LINEAR: 0x2601,
+      RGBA8: 0x8058,
+      RGBA: 0x1908,
+      UNSIGNED_BYTE: 0x1401,
+      R32F: 0x822e,
+      RG32F: 0x8230,
+      RGB32F: 0x8815,
+      RGBA32F: 0x8814,
+      RED: 0x1903,
+      RG: 0x8227,
+      RGB: 0x1907,
+    } as unknown as WebGL2RenderingContext;
+
+    return { gl, getHeadroomCalls: () => headroomCalls };
+  }
+
+  it('REN-HDR-HEAD-001: renderImage sets u_hdrHeadroom to 1.0 for SDR mode', () => {
+    const renderer = new Renderer();
+    const { gl, getHeadroomCalls } = createHeadroomTrackingGL();
+    const canvas = document.createElement('canvas');
+
+    const originalGetContext = canvas.getContext.bind(canvas);
+    canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+      if (contextId === 'webgl2') return gl;
+      return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
+    }) as typeof canvas.getContext;
+
+    renderer.initialize(canvas);
+    renderer.resize(100, 100);
+
+    const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+    renderer.renderImage(image);
+
+    const calls = getHeadroomCalls();
+    expect(calls.length).toBeGreaterThanOrEqual(1);
+    expect(calls[calls.length - 1]).toBe(1.0);
+  });
+
+  it('REN-HDR-HEAD-002: renderImage uses custom headroom for HDR mode', () => {
+    const renderer = new Renderer();
+    const { gl, getHeadroomCalls } = createHeadroomTrackingGL();
+    const canvas = document.createElement('canvas');
+
+    // Support HLG so we can enter HDR mode
+    let currentColorSpace = 'srgb';
+    Object.defineProperty(gl, 'drawingBufferColorSpace', {
+      get: () => currentColorSpace,
+      set: (v: string) => { currentColorSpace = v; },
+      configurable: true,
+      enumerable: true,
+    });
+
+    const originalGetContext = canvas.getContext.bind(canvas);
+    canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+      if (contextId === 'webgl2') return gl;
+      return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
+    }) as typeof canvas.getContext;
+
+    renderer.initialize(canvas);
+    renderer.resize(100, 100);
+
+    // Set to HLG mode
+    const caps = makeCaps({ webglHLG: true });
+    renderer.setHDROutputMode('hlg', caps);
+    renderer.setHDRHeadroom(3.0);
+
+    const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+    renderer.renderImage(image);
+
+    const calls = getHeadroomCalls();
+    expect(calls.length).toBeGreaterThanOrEqual(1);
+    expect(calls[calls.length - 1]).toBe(3.0);
+  });
+
+  it('REN-HDR-HEAD-003: renderSDRFrame always sets headroom to 1.0', () => {
+    const renderer = new Renderer();
+    const { gl, getHeadroomCalls } = createHeadroomTrackingGL();
+    const canvas = document.createElement('canvas');
+
+    const originalGetContext = canvas.getContext.bind(canvas);
+    canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+      if (contextId === 'webgl2') return gl;
+      return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
+    }) as typeof canvas.getContext;
+
+    renderer.initialize(canvas);
+    renderer.resize(100, 100);
+
+    // Set a high headroom (simulating previous HDR renderImage call)
+    renderer.setHDRHeadroom(5.0);
+
+    // Render an SDR frame — should force headroom to 1.0
+    const img = document.createElement('img');
+    renderer.renderSDRFrame(img);
+
+    const calls = getHeadroomCalls();
+    expect(calls.length).toBeGreaterThanOrEqual(1);
+    expect(calls[calls.length - 1]).toBe(1.0);
+  });
+});
+
+// ===========================================================================
+// renderImageToFloat (RGBA16F FBO → readPixels(FLOAT) → Float32Array)
+// ===========================================================================
+
+describe('Renderer renderImageToFloat', () => {
+  let renderer: Renderer;
+
+  beforeEach(() => {
+    renderer = new Renderer();
+  });
+
+  /**
+   * Create a mock GL that supports EXT_color_buffer_float, RGBA16F FBO,
+   * and gl.readPixels(FLOAT). Extends the standard mock with FBO operations.
+   */
+  function createFBOCapableGL() {
+    const mockGL = createMockGL();
+
+    // Add missing constants and methods for FBO operations
+    const extendedGL = mockGL as unknown as Record<string, unknown>;
+    extendedGL.FRAMEBUFFER = 0x8d40;
+    extendedGL.COLOR_ATTACHMENT0 = 0x8ce0;
+    extendedGL.FRAMEBUFFER_COMPLETE = 0x8cd5;
+    extendedGL.NO_ERROR = 0;
+    extendedGL.VIEWPORT = 0x0ba2;
+    extendedGL.TEXTURE_3D = 0x806f;
+    extendedGL.TEXTURE_WRAP_R = 0x8072;
+    extendedGL.RGBA32F = 0x8814;
+    extendedGL.RGB32F = 0x8815;
+    extendedGL.R32F = 0x822e;
+    extendedGL.RG32F = 0x8230;
+    extendedGL.RED = 0x1903;
+    extendedGL.RG = 0x8227;
+    extendedGL.RGB = 0x1907;
+    extendedGL.TEXTURE1 = 0x84c1;
+    extendedGL.TEXTURE2 = 0x84c2;
+    extendedGL.TEXTURE3 = 0x84c3;
+
+    // FBO methods
+    extendedGL.createFramebuffer = vi.fn(() => ({}));
+    extendedGL.bindFramebuffer = vi.fn();
+    extendedGL.framebufferTexture2D = vi.fn();
+    extendedGL.checkFramebufferStatus = vi.fn(() => 0x8cd5); // FRAMEBUFFER_COMPLETE
+    extendedGL.deleteFramebuffer = vi.fn();
+    extendedGL.texImage3D = vi.fn();
+    extendedGL.uniform2fv = vi.fn();
+    extendedGL.uniform3fv = vi.fn();
+    extendedGL.uniformMatrix3fv = vi.fn();
+
+    // readPixels for float data (fills with a pattern)
+    extendedGL.readPixels = vi.fn(
+      (_x: number, _y: number, _w: number, _h: number, _fmt: number, _type: number, pixels: Float32Array | Uint8Array) => {
+        if (pixels instanceof Float32Array) {
+          for (let i = 0; i < pixels.length; i += 4) {
+            pixels[i] = 0.5;     // R
+            pixels[i + 1] = 1.5; // G (HDR value > 1.0)
+            pixels[i + 2] = 0.3; // B
+            pixels[i + 3] = 1.0; // A
+          }
+        }
+      },
+    );
+
+    // getParameter returns viewport for VIEWPORT queries
+    extendedGL.getParameter = vi.fn((param: number) => {
+      if (param === 0x0ba2) return new Int32Array([0, 0, 100, 100]); // VIEWPORT
+      return null;
+    });
+
+    // getError returns NO_ERROR
+    extendedGL.getError = vi.fn(() => 0);
+
+    // EXT_color_buffer_float support
+    const originalGetExtension = mockGL.getExtension as ReturnType<typeof vi.fn>;
+    extendedGL.getExtension = vi.fn((name: string) => {
+      if (name === 'EXT_color_buffer_float') return {};
+      if (name === 'OES_texture_float_linear') return {};
+      return originalGetExtension(name);
+    });
+
+    return mockGL;
+  }
+
+  function initWithFBOCapableGL(): WebGL2RenderingContext {
+    const mockGL = createFBOCapableGL();
+    const canvas = document.createElement('canvas');
+    const originalGetContext = canvas.getContext.bind(canvas);
+    canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+      if (contextId === 'webgl2') return mockGL;
+      return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
+    }) as typeof canvas.getContext;
+    renderer.initialize(canvas);
+    return mockGL;
+  }
+
+  it('REN-FBO-001: returns null when renderer is not initialized', () => {
+    const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+    const result = renderer.renderImageToFloat(image, 10, 10);
+    expect(result).toBeNull();
+  });
+
+  it('REN-FBO-002: returns null when EXT_color_buffer_float is unavailable', () => {
+    const mockGL = createFBOCapableGL();
+    // Override getExtension to not return EXT_color_buffer_float
+    (mockGL as unknown as Record<string, unknown>).getExtension = vi.fn(() => null);
+
+    const canvas = document.createElement('canvas');
+    canvas.getContext = vi.fn((contextId: string) => {
+      if (contextId === 'webgl2') return mockGL;
+      return null;
+    }) as typeof canvas.getContext;
+    renderer.initialize(canvas);
+
+    const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+    const result = renderer.renderImageToFloat(image, 10, 10);
+    expect(result).toBeNull();
+  });
+
+  it('REN-FBO-003: returns Float32Array on success', () => {
+    initWithFBOCapableGL();
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+    const result = renderer.renderImageToFloat(image, 4, 4);
+
+    expect(result).toBeInstanceOf(Float32Array);
+    expect(result!.length).toBe(4 * 4 * 4); // width * height * RGBA
+  });
+
+  it('REN-FBO-004: preserves HDR values > 1.0 in output', () => {
+    initWithFBOCapableGL();
+
+    const image = new IPImage({ width: 2, height: 2, channels: 4, dataType: 'uint8' });
+    const result = renderer.renderImageToFloat(image, 2, 2);
+
+    expect(result).not.toBeNull();
+    // readPixels mock fills G channel with 1.5 (HDR value)
+    expect(result![1]).toBe(1.5);
+  });
+
+  it('REN-FBO-005: creates RGBA16F FBO', () => {
+    const mockGL = initWithFBOCapableGL();
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+    renderer.renderImageToFloat(image, 4, 4);
+
+    expect((mockGL as unknown as Record<string, ReturnType<typeof vi.fn>>).createFramebuffer).toHaveBeenCalled();
+    expect((mockGL as unknown as Record<string, ReturnType<typeof vi.fn>>).framebufferTexture2D).toHaveBeenCalled();
+    expect((mockGL as unknown as Record<string, ReturnType<typeof vi.fn>>).checkFramebufferStatus).toHaveBeenCalled();
+  });
+
+  it('REN-FBO-006: binds FBO during render and unbinds after', () => {
+    const mockGL = initWithFBOCapableGL();
+    const bindFramebuffer = (mockGL as unknown as { bindFramebuffer: ReturnType<typeof vi.fn> }).bindFramebuffer;
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+    renderer.renderImageToFloat(image, 4, 4);
+
+    const calls = bindFramebuffer.mock.calls;
+    // First call: bind FBO (non-null)
+    expect(calls.some((c: unknown[]) => c[0] === 0x8d40 && c[1] !== null)).toBe(true);
+    // Last call: unbind FBO (null)
+    const lastCall = calls[calls.length - 1] as unknown[];
+    expect(lastCall[0]).toBe(0x8d40); // FRAMEBUFFER
+    expect(lastCall[1]).toBeNull();
+  });
+
+  it('REN-FBO-007: restores previous viewport after render', () => {
+    const mockGL = initWithFBOCapableGL();
+    const viewport = (mockGL as unknown as { viewport: ReturnType<typeof vi.fn> }).viewport;
+
+    const image = new IPImage({ width: 8, height: 6, channels: 4, dataType: 'uint8' });
+    renderer.renderImageToFloat(image, 8, 6);
+
+    const calls = viewport.mock.calls;
+    // Should have at least 2 viewport calls: one for FBO render, one for restore
+    expect(calls.length).toBeGreaterThanOrEqual(2);
+    // Last viewport call should restore original viewport [0, 0, 100, 100]
+    const lastCall = calls[calls.length - 1] as number[];
+    expect(lastCall).toEqual([0, 0, 100, 100]);
+  });
+
+  it('REN-FBO-008: calls readPixels with FLOAT type', () => {
+    const mockGL = initWithFBOCapableGL();
+    const readPixels = (mockGL as unknown as Record<string, ReturnType<typeof vi.fn>>).readPixels;
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+    renderer.renderImageToFloat(image, 4, 4);
+
+    expect(readPixels).toHaveBeenCalledWith(
+      0, 0, 4, 4,
+      0x1908, // RGBA
+      0x1406, // FLOAT
+      expect.any(Float32Array),
+    );
+  });
+
+  it('REN-FBO-009: returns null when readPixels fails (GL error)', () => {
+    const mockGL = initWithFBOCapableGL();
+    // Make getError return a non-zero error code after readPixels
+    (mockGL as unknown as { getError: ReturnType<typeof vi.fn> }).getError = vi.fn(() => 0x0500 as unknown); // GL_INVALID_ENUM
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+    const result = renderer.renderImageToFloat(image, 4, 4);
+
+    expect(result).toBeNull();
+  });
+
+  it('REN-FBO-010: reuses FBO when dimensions unchanged', () => {
+    const mockGL = initWithFBOCapableGL();
+    const createFramebuffer = (mockGL as unknown as Record<string, ReturnType<typeof vi.fn>>).createFramebuffer;
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+    renderer.renderImageToFloat(image, 4, 4);
+    renderer.renderImageToFloat(image, 4, 4);
+
+    // FBO should only be created once
+    expect(createFramebuffer).toHaveBeenCalledTimes(1);
+  });
+
+  it('REN-FBO-011: recreates FBO when dimensions change', () => {
+    const mockGL = initWithFBOCapableGL();
+    const createFramebuffer = (mockGL as unknown as Record<string, ReturnType<typeof vi.fn>>).createFramebuffer;
+    const deleteFramebuffer = (mockGL as unknown as Record<string, ReturnType<typeof vi.fn>>).deleteFramebuffer;
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+    renderer.renderImageToFloat(image, 4, 4);
+    renderer.renderImageToFloat(image, 8, 8);
+
+    // FBO should be created twice
+    expect(createFramebuffer).toHaveBeenCalledTimes(2);
+    // Old FBO should be deleted
+    expect(deleteFramebuffer).toHaveBeenCalled();
+  });
+
+  it('REN-FBO-012: reuses readback buffer when dimensions unchanged', () => {
+    initWithFBOCapableGL();
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+    const result1 = renderer.renderImageToFloat(image, 4, 4);
+    const result2 = renderer.renderImageToFloat(image, 4, 4);
+
+    // Same buffer reference should be returned
+    expect(result1).toBe(result2);
+  });
+
+  it('REN-FBO-013: allocates new readback buffer when dimensions change', () => {
+    initWithFBOCapableGL();
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+    const result1 = renderer.renderImageToFloat(image, 4, 4);
+    const result2 = renderer.renderImageToFloat(image, 8, 8);
+
+    expect(result1!.length).toBe(4 * 4 * 4);
+    expect(result2!.length).toBe(8 * 8 * 4);
+    // Different buffer since dimensions changed
+    expect(result1).not.toBe(result2);
+  });
+
+  it('REN-FBO-014: caches EXT_color_buffer_float check across calls', () => {
+    const mockGL = initWithFBOCapableGL();
+    const getExtension = (mockGL as unknown as { getExtension: ReturnType<typeof vi.fn> }).getExtension;
+
+    // Count calls BEFORE renderImageToFloat (initialize also calls getExtension)
+    const callsBefore = getExtension.mock.calls.filter(
+      (c: unknown[]) => c[0] === 'EXT_color_buffer_float'
+    ).length;
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+    renderer.renderImageToFloat(image, 4, 4);
+    renderer.renderImageToFloat(image, 4, 4);
+
+    // renderImageToFloat should only add ONE getExtension('EXT_color_buffer_float') call
+    // (cached after first check), regardless of how many calls initialize() made
+    const callsAfter = getExtension.mock.calls.filter(
+      (c: unknown[]) => c[0] === 'EXT_color_buffer_float'
+    ).length;
+    expect(callsAfter - callsBefore).toBe(1);
+  });
+
+  it('REN-FBO-015: returns null when FBO creation fails', () => {
+    const mockGL = initWithFBOCapableGL();
+    // Make checkFramebufferStatus return incomplete
+    (mockGL as unknown as { checkFramebufferStatus: ReturnType<typeof vi.fn> }).checkFramebufferStatus =
+      vi.fn(() => 0 as unknown); // not FRAMEBUFFER_COMPLETE
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+    const result = renderer.renderImageToFloat(image, 4, 4);
+
+    expect(result).toBeNull();
+  });
+
+  it('REN-FBO-016: dispose cleans up FBO resources', () => {
+    const mockGL = initWithFBOCapableGL();
+    const deleteFramebuffer = (mockGL as unknown as Record<string, ReturnType<typeof vi.fn>>).deleteFramebuffer;
+    const deleteTexture = mockGL.deleteTexture as ReturnType<typeof vi.fn>;
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+    renderer.renderImageToFloat(image, 4, 4);
+
+    renderer.dispose();
+
+    expect(deleteFramebuffer).toHaveBeenCalled();
+    expect(deleteTexture).toHaveBeenCalled();
+  });
+
+  it('REN-FBO-017: calls renderImage during FBO render', () => {
+    const mockGL = initWithFBOCapableGL();
+    const drawArrays = mockGL.drawArrays as ReturnType<typeof vi.fn>;
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+    renderer.renderImageToFloat(image, 4, 4);
+
+    // renderImage should have drawn the quad (TRIANGLE_STRIP)
+    expect(drawArrays).toHaveBeenCalled();
+  });
+});

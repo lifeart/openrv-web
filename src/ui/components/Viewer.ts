@@ -65,6 +65,7 @@ import { GhostFrameManager } from './GhostFrameManager';
 import { PixelSamplingManager } from './PixelSamplingManager';
 import { ViewerGLRenderer } from './ViewerGLRenderer';
 import type { GLRendererContext } from './ViewerGLRenderer';
+import { detectWebGPUHDR } from '../../color/DisplayCapabilities';
 import { VideoFrameFetchTracker } from './VideoFrameFetchTracker';
 import { ToneMappingState } from './ToneMappingControl';
 import { PARState, DEFAULT_PAR_STATE, isPARActive, calculatePARCorrectedWidth } from '../../utils/media/PixelAspectRatio';
@@ -362,6 +363,20 @@ export class Viewer {
     // Create WebGL/HDR rendering manager and its GL canvas (between image canvas and paint canvas)
     this.glRendererManager = new ViewerGLRenderer(this.asGLRendererContext(), this.capabilities);
     this.canvasContainer.appendChild(this.glRendererManager.createGLCanvas());
+
+    // Async WebGPU HDR detection: when the display supports HDR but WebGL2 has no
+    // native HDR output (no HLG/PQ/extended), probe WebGPU for HDR blit fallback.
+    if (this.capabilities?.webgpuAvailable && this.capabilities?.displayHDR &&
+        !this.capabilities?.webglHLG && !this.capabilities?.webglPQ &&
+        !(this.capabilities?.webglDrawingBufferStorage && this.capabilities?.canvasExtendedHDR)) {
+      detectWebGPUHDR().then(available => {
+        if (available && this.capabilities) {
+          this.capabilities.webgpuHDR = available;
+          console.log('[Viewer] WebGPU HDR available, initializing blit');
+          this.glRendererManager.initWebGPUHDRBlit();
+        }
+      }).catch(() => { /* WebGPU detection failed, stay on SDR path */ });
+    }
 
     // Create paint canvas (top layer, overlaid)
     this.paintCanvas = document.createElement('canvas');
@@ -839,10 +854,11 @@ export class Viewer {
     const source = this.session.currentSource;
 
     // Deactivate HDR mode if current source isn't HDR, or if OCIO is active
-    // (OCIO requires the 2D canvas path since the GL shader has no OCIO support)
+    // (unless WebGPU blit bypasses OCIO for HDR output)
     const isCurrentHDR = source?.fileSourceNode?.isHDR() === true;
     const ocioActive = this.colorPipeline.ocioEnabled && this.colorPipeline.ocioBakedLUT !== null;
-    if (this.glRendererManager.hdrRenderActive && (!isCurrentHDR || ocioActive)) {
+    const blitBypassesOCIO = this.glRendererManager.isWebGPUBlitReady;
+    if (this.glRendererManager.hdrRenderActive && (!isCurrentHDR || (ocioActive && !blitBypassesOCIO))) {
       this.deactivateHDRMode();
     }
 
@@ -1011,10 +1027,11 @@ export class Viewer {
     }
 
     // HDR WebGL rendering path: render via GPU shader pipeline and skip 2D canvas.
-    // When OCIO is active, skip the WebGL path and fall through to the 2D canvas
-    // where applyOCIOToCanvas() can apply the baked LUT as a post-process (the GL
-    // shader does not support OCIO transforms, mirroring the SDR WebGL guard).
-    if (hdrFileSource && !(this.colorPipeline.ocioEnabled && this.colorPipeline.ocioBakedLUT)) {
+    // When OCIO is active, normally skip the WebGL path and fall through to the
+    // 2D canvas where applyOCIOToCanvas() can apply the baked LUT as a post-process.
+    // Exception: when the WebGPU HDR blit is ready, bypass the OCIO guard so that
+    // HDR content can be displayed via the float FBO → WebGPU extended-range path.
+    if (hdrFileSource && (!ocioActive || blitBypassesOCIO)) {
       const ipImage = hdrFileSource.getIPImage();
       if (ipImage && this.renderHDRWithWebGL(ipImage, displayWidth, displayHeight)) {
         this.updateCanvasPosition();
@@ -2405,7 +2422,7 @@ export class Viewer {
   }
 
   // HDR output mode (delegates to renderer when available)
-  setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq'): void {
+  setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq' | 'extended'): void {
     if (this.glRendererManager.glRenderer && this.glRendererManager.capabilities) {
       this.glRendererManager.glRenderer.setHDROutputMode(mode, this.glRendererManager.capabilities);
     }

@@ -11,6 +11,7 @@ import {
   DisplayCapabilities,
   DEFAULT_CAPABILITIES,
   detectDisplayCapabilities,
+  detectWebGPUHDR,
   queryHDRHeadroom,
   resolveActiveColorSpace,
 } from './DisplayCapabilities';
@@ -44,11 +45,20 @@ describe('DisplayCapabilities', () => {
       expect(DEFAULT_CAPABILITIES.activeHDRMode).toBe('sdr');
     });
 
+    it('DC-004b: webglDrawingBufferStorage defaults to false', () => {
+      expect(DEFAULT_CAPABILITIES.webglDrawingBufferStorage).toBe(false);
+    });
+
+    it('DC-004c: canvasExtendedHDR defaults to false', () => {
+      expect(DEFAULT_CAPABILITIES.canvasExtendedHDR).toBe(false);
+    });
+
     it('DC-005: is a complete DisplayCapabilities object', () => {
       const requiredKeys: Array<keyof DisplayCapabilities> = [
         'canvasP3', 'webglP3', 'displayGamut',
         'displayHDR', 'webglHLG', 'webglPQ', 'canvasHLG', 'canvasFloat16',
         'webgpuAvailable', 'webgpuHDR',
+        'webglDrawingBufferStorage', 'canvasExtendedHDR',
         'activeColorSpace', 'activeHDRMode',
       ];
       for (const key of requiredKeys) {
@@ -149,7 +159,17 @@ describe('DisplayCapabilities', () => {
 
     it('DC-019: activeHDRMode is a valid mode string', () => {
       const caps = detectDisplayCapabilities();
-      expect(['sdr', 'hlg', 'pq', 'none']).toContain(caps.activeHDRMode);
+      expect(['sdr', 'hlg', 'pq', 'extended', 'none']).toContain(caps.activeHDRMode);
+    });
+
+    it('DC-019b: webglDrawingBufferStorage is boolean', () => {
+      const caps = detectDisplayCapabilities();
+      expect(typeof caps.webglDrawingBufferStorage).toBe('boolean');
+    });
+
+    it('DC-019c: canvasExtendedHDR is boolean', () => {
+      const caps = detectDisplayCapabilities();
+      expect(typeof caps.canvasExtendedHDR).toBe('boolean');
     });
 
     it('DC-020: detects p3 display gamut when matchMedia matches', () => {
@@ -376,6 +396,98 @@ describe('DisplayCapabilities', () => {
       expect(result).toBeNull();
 
       delete (window as unknown as { getScreenDetails?: unknown }).getScreenDetails;
+    });
+  });
+
+  // ====================================================================
+  // detectWebGPUHDR
+  // ====================================================================
+  describe('detectWebGPUHDR', () => {
+    let originalGpu: PropertyDescriptor | undefined;
+
+    beforeEach(() => {
+      originalGpu = Object.getOwnPropertyDescriptor(navigator, 'gpu');
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      if (originalGpu) {
+        Object.defineProperty(navigator, 'gpu', originalGpu);
+      } else {
+        try {
+          delete (navigator as unknown as Record<string, unknown>)['gpu'];
+        } catch {
+          // Cannot delete non-configurable property
+        }
+      }
+    });
+
+    it('DC-WGPU-001: returns false when navigator.gpu is undefined', async () => {
+      // In jsdom, navigator.gpu is not defined by default
+      const result = await detectWebGPUHDR();
+      expect(result).toBe(false);
+    });
+
+    it('DC-WGPU-002: returns false when requestAdapter returns null', async () => {
+      Object.defineProperty(navigator, 'gpu', {
+        value: { requestAdapter: vi.fn().mockResolvedValue(null) },
+        configurable: true,
+        writable: true,
+      });
+
+      const result = await detectWebGPUHDR();
+      expect(result).toBe(false);
+    });
+
+    it('DC-WGPU-003: returns true when adapter is obtained', async () => {
+      const mockAdapter = { features: new Set<string>() };
+      Object.defineProperty(navigator, 'gpu', {
+        value: { requestAdapter: vi.fn().mockResolvedValue(mockAdapter) },
+        configurable: true,
+        writable: true,
+      });
+
+      const result = await detectWebGPUHDR();
+      expect(result).toBe(true);
+    });
+
+    it('DC-WGPU-004: returns false when requestAdapter throws', async () => {
+      Object.defineProperty(navigator, 'gpu', {
+        value: { requestAdapter: vi.fn().mockRejectedValue(new Error('GPU error')) },
+        configurable: true,
+        writable: true,
+      });
+
+      const result = await detectWebGPUHDR();
+      expect(result).toBe(false);
+    });
+
+    it('DC-WGPU-005: never throws (safe to call without try/catch)', async () => {
+      Object.defineProperty(navigator, 'gpu', {
+        value: { requestAdapter: vi.fn().mockRejectedValue(new Error('crash')) },
+        configurable: true,
+        writable: true,
+      });
+
+      await expect(detectWebGPUHDR()).resolves.not.toThrow();
+    });
+
+    it('DC-WGPU-006: does not create a device (lightweight probe)', async () => {
+      const mockRequestDevice = vi.fn();
+      const mockAdapter = {
+        features: new Set<string>(),
+        requestDevice: mockRequestDevice,
+      };
+      Object.defineProperty(navigator, 'gpu', {
+        value: { requestAdapter: vi.fn().mockResolvedValue(mockAdapter) },
+        configurable: true,
+        writable: true,
+      });
+
+      await detectWebGPUHDR();
+
+      // detectWebGPUHDR should NOT call requestDevice (lightweight adapter-only check)
+      expect(mockRequestDevice).not.toHaveBeenCalled();
     });
   });
 });

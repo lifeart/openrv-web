@@ -77,7 +77,7 @@ export class WebGPUBackend implements RendererBackend {
   private colorAdjustments: ColorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
   private colorInversionEnabled = false;
   private toneMappingState: ToneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
-  private hdrOutputMode: 'sdr' | 'hlg' | 'pq' = 'sdr';
+  private hdrOutputMode: 'sdr' | 'hlg' | 'pq' | 'extended' = 'sdr';
 
   // Whether extended tone mapping is active (vs. standard fallback)
   private extendedToneMapping = false;
@@ -245,15 +245,19 @@ export class WebGPUBackend implements RendererBackend {
 
   // --- HDR output (IMPLEMENTED) ---
 
-  setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq', _capabilities: DisplayCapabilities): boolean {
+  setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq' | 'extended', _capabilities: DisplayCapabilities): boolean {
     // WebGPU handles HDR through canvas configuration rather than
     // drawingBufferColorSpace. For now, store the mode.
     this.hdrOutputMode = mode;
     return true;
   }
 
-  getHDROutputMode(): 'sdr' | 'hlg' | 'pq' {
+  getHDROutputMode(): 'sdr' | 'hlg' | 'pq' | 'extended' {
     return this.hdrOutputMode;
+  }
+
+  setHDRHeadroom(_headroom: number): void {
+    // TODO: implement for WebGPU pipeline when HDR rendering is added
   }
 
   // --- Texture management (STUBS - WebGPU uses GPUTexture, not WebGLTexture) ---

@@ -33,6 +33,9 @@
       // Input transfer function: 0=sRGB/linear, 1=HLG, 2=PQ
       uniform int u_inputTransfer;
 
+      // HDR headroom: 1.0 for SDR, >1.0 for HDR (e.g. 3.0 = display peak is 3x SDR white)
+      uniform float u_hdrHeadroom;
+
       // --- Phase 3: Effect uniforms ---
 
       // CDL (Color Decision List)
@@ -149,7 +152,8 @@
       // Simple global operator that preserves detail in highlights
       // Reference: Reinhard et al., "Photographic Tone Reproduction for Digital Images"
       vec3 tonemapReinhard(vec3 color) {
-        float wp2 = u_tmReinhardWhitePoint * u_tmReinhardWhitePoint;
+        float wp = u_tmReinhardWhitePoint * u_hdrHeadroom;
+        float wp2 = wp * wp;
         return color * (1.0 + color / wp2) / (1.0 + color);
       }
 
@@ -168,7 +172,7 @@
 
       vec3 tonemapFilmic(vec3 color) {
         vec3 curr = filmic(u_tmFilmicExposureBias * color);
-        vec3 whiteScale = vec3(1.0) / filmic(vec3(u_tmFilmicWhitePoint));
+        vec3 whiteScale = vec3(1.0) / filmic(vec3(u_tmFilmicWhitePoint * u_hdrHeadroom));
         // Clamp to non-negative to match CPU implementation (filmic curve can produce slightly negative values)
         return max(curr * whiteScale, vec3(0.0));
       }
@@ -183,7 +187,10 @@
         float c = 2.43;
         float d = 0.59;
         float e = 0.14;
-        return clamp((color * (a * color + b)) / (color * (c * color + d) + e), 0.0, 1.0);
+        // Scale input to map headroom range to [0,1], apply curve, then scale back
+        vec3 scaled = color / u_hdrHeadroom;
+        vec3 mapped = clamp((scaled * (a * scaled + b)) / (scaled * (c * scaled + d) + e), 0.0, 1.0);
+        return mapped * u_hdrHeadroom;
       }
 
       // Apply selected tone mapping operator

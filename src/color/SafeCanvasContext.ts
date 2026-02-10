@@ -49,7 +49,7 @@ export function safeCanvasContext2D(
  */
 export function createViewerCanvas(
   caps: DisplayCapabilities,
-  hdrMode: 'sdr' | 'hlg' | 'pq',
+  hdrMode: 'sdr' | 'hlg' | 'pq' | 'extended',
 ): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
   const canvas = document.createElement('canvas');
   const baseOpts: CanvasRenderingContext2DSettings = { alpha: false, willReadFrequently: true };

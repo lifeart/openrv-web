@@ -139,10 +139,13 @@ export interface RendererEffects {
  */
 export interface RendererHDR {
   /** Set the HDR output mode. Returns true if mode was applied successfully. */
-  setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq', capabilities: DisplayCapabilities): boolean;
+  setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq' | 'extended', capabilities: DisplayCapabilities): boolean;
 
   /** Get the current HDR output mode. */
-  getHDROutputMode(): 'sdr' | 'hlg' | 'pq';
+  getHDROutputMode(): 'sdr' | 'hlg' | 'pq' | 'extended';
+
+  /** Set the HDR headroom (peak luminance / SDR white). Values > 1.0 indicate HDR capable display. */
+  setHDRHeadroom(headroom: number): void;
 
   /** Set the display color management state (transfer function, gamma, brightness). */
   setDisplayColorState(state: DisplayColorConfig): void;
@@ -191,6 +194,13 @@ export interface RendererBackend extends RendererLifecycle, RendererColorPipelin
 
   /** Read float pixel values from the WebGL framebuffer. Returns null if not supported. */
   readPixelFloat(x: number, y: number, width: number, height: number): Float32Array | null;
+
+  /**
+   * Render to an offscreen RGBA16F FBO and return float pixel data.
+   * Optional — only WebGL2 backend implements this (used for WebGPU HDR blit path).
+   * Returns null if the FBO cannot be created or rendering fails.
+   */
+  renderImageToFloat?(image: IPImage, width: number, height: number): Float32Array | null;
 
   // --- Shader compilation status ---
 

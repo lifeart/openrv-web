@@ -101,7 +101,7 @@ describe('Phase 1: Wide Color Gamut (Display P3)', () => {
       // String defaults
       expect(['srgb', 'p3', 'rec2020']).toContain(caps.displayGamut);
       expect(['srgb', 'display-p3']).toContain(caps.activeColorSpace);
-      expect(['sdr', 'hlg', 'pq', 'none']).toContain(caps.activeHDRMode);
+      expect(['sdr', 'hlg', 'pq', 'extended', 'none']).toContain(caps.activeHDRMode);
     });
 
     it('AC-P1-1.1c: detection uses throwaway canvases - no leaked DOM nodes', () => {

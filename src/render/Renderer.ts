@@ -52,7 +52,13 @@ export class Renderer implements RendererBackend {
   private canvas: HTMLCanvasElement | OffscreenCanvas | null = null;
 
   // HDR output mode (not part of shader state — controls drawingBufferColorSpace)
-  private hdrOutputMode: 'sdr' | 'hlg' | 'pq' = 'sdr';
+  private hdrOutputMode: 'sdr' | 'hlg' | 'pq' | 'extended' = 'sdr';
+
+  // Whether a half-float (RGBA16F) drawing buffer is active via drawingBufferStorage
+  private usingHalfFloatBackbuffer = false;
+
+  // HDR headroom: ratio of display peak luminance to SDR white (1.0 = SDR)
+  private hdrHeadroom = 1.0;
 
   // Shaders
   private displayShader: ShaderProgram | null = null;
@@ -77,21 +83,27 @@ export class Renderer implements RendererBackend {
   private lut3DRGBABuffer: Float32Array | null = null;
   private lut3DRGBABufferSize = 0; // tracks the LUT size the buffer was allocated for
 
+  // --- RGBA16F FBO for renderImageToFloat (WebGPU HDR blit path) ---
+  private hdrFBO: WebGLFramebuffer | null = null;
+  private hdrFBOTexture: WebGLTexture | null = null;
+  private hdrFBOWidth = 0;
+  private hdrFBOHeight = 0;
+  private hasColorBufferFloat: boolean | null = null; // cached extension check
+  private hdrReadbackBuffer: Float32Array | null = null; // reused across frames
+
   initialize(canvas: HTMLCanvasElement | OffscreenCanvas, capabilities?: DisplayCapabilities): void {
     this.canvas = canvas;
 
     // For HDR displays, request preserveDrawingBuffer so readPixels works after compositing.
     const wantHDR = capabilities?.displayHDR === true;
-    const gl = wantHDR
-      ? canvas.getContext('webgl2', { preserveDrawingBuffer: true })
-      : canvas.getContext('webgl2', {
-          alpha: false,
-          antialias: false,
-          depth: false,
-          stencil: false,
-          powerPreference: 'high-performance',
-          preserveDrawingBuffer: false,
-        });
+    const gl = canvas.getContext('webgl2', {
+      alpha: false,
+      antialias: false,
+      depth: false,
+      stencil: false,
+      powerPreference: 'high-performance',
+      preserveDrawingBuffer: wantHDR,
+    });
 
     if (!gl) {
       throw new RenderError('WebGL2 not supported');
@@ -115,6 +127,11 @@ export class Renderer implements RendererBackend {
           if (gl2.drawingBufferColorSpace === 'rec2100-pq') {
             this.hdrOutputMode = 'pq';
             log.info('HDR output: rec2100-pq');
+          } else if (capabilities?.displayHDR && capabilities?.webglDrawingBufferStorage && capabilities?.canvasExtendedHDR) {
+            // Extended HDR: use display-p3 (or srgb) + half-float backbuffer + extended mode
+            gl2.drawingBufferColorSpace = capabilities?.webglP3 ? 'display-p3' : 'srgb';
+            this.hdrOutputMode = 'extended';
+            log.info(`HDR output: extended (drawingBufferColorSpace='${gl2.drawingBufferColorSpace}')`);
           } else {
             // Fall back to P3
             if (capabilities?.webglP3) {
@@ -125,15 +142,27 @@ export class Renderer implements RendererBackend {
         }
       } catch (e) {
         // rec2100-hlg/pq not in PredefinedColorSpace enum — expected on most browsers.
-        // Fall back to P3 if possible.
-        try {
-          if (capabilities?.webglP3) {
-            (gl as WebGL2RenderingContext).drawingBufferColorSpace = 'display-p3';
+        // Try extended HDR mode, then fall back to P3.
+        if (capabilities?.displayHDR && capabilities?.webglDrawingBufferStorage && capabilities?.canvasExtendedHDR) {
+          try {
+            const gl2 = gl as WebGL2RenderingContext;
+            gl2.drawingBufferColorSpace = capabilities?.webglP3 ? 'display-p3' : 'srgb';
+            this.hdrOutputMode = 'extended';
+            log.info(`HDR output: extended (drawingBufferColorSpace='${gl2.drawingBufferColorSpace}')`);
+          } catch (extErr) {
+            log.warn('Failed to configure extended HDR mode:', extErr);
           }
-        } catch (p3Err) {
-          log.warn('Failed to set display-p3 drawingBufferColorSpace:', p3Err);
         }
-        log.info(`HDR color spaces not available, using ${capabilities?.webglP3 ? 'display-p3' : 'srgb'}`);
+        if (this.hdrOutputMode === 'sdr') {
+          try {
+            if (capabilities?.webglP3) {
+              (gl as WebGL2RenderingContext).drawingBufferColorSpace = 'display-p3';
+            }
+          } catch (p3Err) {
+            log.warn('Failed to set display-p3 drawingBufferColorSpace:', p3Err);
+          }
+          log.info(`HDR color spaces not available, using ${capabilities?.webglP3 ? 'display-p3' : 'srgb'}`);
+        }
       }
     } else if (capabilities?.webglP3) {
       try {
@@ -141,6 +170,21 @@ export class Renderer implements RendererBackend {
       } catch (e) {
         log.warn('Browser does not support setting drawingBufferColorSpace:', e);
       }
+    }
+
+    // Request half-float drawing buffer for HDR modes (essential for extended range)
+    if (this.hdrOutputMode !== 'sdr') {
+      const gl2 = gl as WebGL2RenderingContext;
+      if (typeof gl2.drawingBufferStorage === 'function') {
+        try {
+          gl2.drawingBufferStorage(gl2.RGBA16F, canvas.width, canvas.height);
+          this.usingHalfFloatBackbuffer = true;
+          log.info('HDR: half-float drawing buffer enabled (RGBA16F)');
+        } catch (e) {
+          log.warn('drawingBufferStorage(RGBA16F) not supported:', e);
+        }
+      }
+      this.tryConfigureHDRMetadata();
     }
 
     // Check for required extensions
@@ -238,6 +282,15 @@ export class Renderer implements RendererBackend {
     this.canvas.width = width;
     this.canvas.height = height;
     this.gl.viewport(0, 0, width, height);
+
+    // Re-allocate half-float drawing buffer at new dimensions
+    if (this.usingHalfFloatBackbuffer && typeof this.gl.drawingBufferStorage === 'function') {
+      try {
+        this.gl.drawingBufferStorage(this.gl.RGBA16F, width, height);
+      } catch (e) {
+        log.warn('drawingBufferStorage resize failed:', e);
+      }
+    }
   }
 
   clear(r = 0.1, g = 0.1, b = 0.1, a = 1): void {
@@ -274,6 +327,9 @@ export class Renderer implements RendererBackend {
 
     // Set HDR output mode uniform
     this.displayShader.setUniformInt('u_outputMode', this.hdrOutputMode === 'sdr' ? OUTPUT_MODE_SDR : OUTPUT_MODE_HDR);
+
+    // Set HDR headroom for tone mapping (1.0 for SDR, >1.0 for HDR displays)
+    this.displayShader.setUniform('u_hdrHeadroom', this.hdrOutputMode === 'sdr' ? 1.0 : this.hdrHeadroom);
 
     // Set input transfer function uniform based on image metadata
     let inputTransferCode = INPUT_TRANSFER_SRGB;
@@ -606,10 +662,12 @@ export class Renderer implements RendererBackend {
     this.stateManager.resetToneMappingState();
   }
 
-  setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq', capabilities: DisplayCapabilities): boolean {
+  setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq' | 'extended', capabilities: DisplayCapabilities): boolean {
     if (!this.gl) return false;
 
     const previousMode = this.hdrOutputMode;
+    const previousHalfFloat = this.usingHalfFloatBackbuffer;
+    const previousColorSpace = this.gl.drawingBufferColorSpace;
     try {
       let targetColorSpace: ExtendedColorSpace;
       switch (mode) {
@@ -619,6 +677,9 @@ export class Renderer implements RendererBackend {
         case 'pq':
           targetColorSpace = 'rec2100-pq';
           break;
+        case 'extended':
+          targetColorSpace = capabilities.webglP3 ? 'display-p3' : 'srgb';
+          break;
         default:
           targetColorSpace = capabilities.webglP3 ? 'display-p3' : 'srgb';
       }
@@ -626,13 +687,41 @@ export class Renderer implements RendererBackend {
       this.gl.drawingBufferColorSpace = targetColorSpace;
 
       // Verify the assignment stuck (browser silently ignores unsupported values)
-      if (mode !== 'sdr' && this.gl.drawingBufferColorSpace !== targetColorSpace) {
+      if ((mode === 'hlg' || mode === 'pq') && this.gl.drawingBufferColorSpace !== targetColorSpace) {
         log.warn(`drawingBufferColorSpace='${targetColorSpace}' not supported (got '${this.gl.drawingBufferColorSpace}')`);
         this.hdrOutputMode = previousMode;
         return false;
       }
 
       this.hdrOutputMode = mode;
+
+      // Request half-float drawing buffer for HDR modes
+      if (mode !== 'sdr' && typeof this.gl.drawingBufferStorage === 'function' && this.canvas) {
+        try {
+          this.gl.drawingBufferStorage(this.gl.RGBA16F, this.canvas.width, this.canvas.height);
+          this.usingHalfFloatBackbuffer = true;
+        } catch (e) {
+          log.warn('drawingBufferStorage(RGBA16F) failed:', e);
+          this.usingHalfFloatBackbuffer = false;
+          // Extended mode requires half-float backbuffer — fall back
+          if (mode === 'extended') {
+            log.warn('Extended HDR mode requires half-float backbuffer; falling back');
+            this.hdrOutputMode = previousMode;
+            this.gl.drawingBufferColorSpace = previousColorSpace;
+            return false;
+          }
+        }
+      } else if (mode === 'sdr') {
+        // Revert to RGBA8 backbuffer when switching back to SDR
+        if (this.usingHalfFloatBackbuffer && typeof this.gl.drawingBufferStorage === 'function' && this.canvas) {
+          try {
+            this.gl.drawingBufferStorage(this.gl.RGBA8, this.canvas.width, this.canvas.height);
+          } catch (e) {
+            log.warn('drawingBufferStorage(RGBA8) revert failed:', e);
+          }
+        }
+        this.usingHalfFloatBackbuffer = false;
+      }
 
       // Attempt to configure HDR metadata when entering HDR mode
       if (mode !== 'sdr') {
@@ -641,15 +730,28 @@ export class Renderer implements RendererBackend {
 
       return true;
     } catch (e) {
-      // Ensure hdrOutputMode is rolled back to its previous value
+      // Ensure all state is rolled back to its previous value
       log.warn('Failed to set HDR output mode:', e);
       this.hdrOutputMode = previousMode;
+      this.usingHalfFloatBackbuffer = previousHalfFloat;
+      try { this.gl.drawingBufferColorSpace = previousColorSpace; } catch { /* best effort */ }
       return false;
     }
   }
 
-  getHDROutputMode(): 'sdr' | 'hlg' | 'pq' {
+  getHDROutputMode(): 'sdr' | 'hlg' | 'pq' | 'extended' {
     return this.hdrOutputMode;
+  }
+
+  /**
+   * Set the HDR headroom (peak luminance / SDR white luminance).
+   * Values > 1.0 indicate the display can show brighter-than-SDR-white.
+   * Used by tone mapping to preserve highlights up to display peak brightness.
+   */
+  setHDRHeadroom(headroom: number): void {
+    // Clamp to [1.0, 100.0] — values beyond 100x SDR white are unreasonable
+    // and could cause NaN/Inf in shader tone mapping math.
+    this.hdrHeadroom = Math.min(100.0, Math.max(1.0, headroom));
   }
 
   setBackgroundPattern(state: BackgroundPatternState): void {
@@ -683,6 +785,140 @@ export class Renderer implements RendererBackend {
       pixels[i] = bytes[i]! / 255;
     }
     return pixels;
+  }
+
+  // --- Offscreen RGBA16F FBO rendering (WebGPU HDR blit path) ---
+
+  /**
+   * Render an image through the full shader pipeline into an offscreen RGBA16F
+   * FBO, then read back the float pixel data via readPixels(FLOAT).
+   *
+   * This preserves HDR values > 1.0 that would be clamped by the default RGBA8
+   * backbuffer. The returned Float32Array can be uploaded to a WebGPU HDR canvas.
+   *
+   * Row order: bottom-to-top (WebGL convention). The caller (WGSL shader) flips
+   * via UV coordinates, so no CPU row-flip is performed here.
+   *
+   * Returns null if EXT_color_buffer_float is unavailable or rendering fails.
+   */
+  renderImageToFloat(image: IPImage, width: number, height: number): Float32Array | null {
+    const gl = this.gl;
+    if (!gl || !this.displayShader) return null;
+
+    // Check EXT_color_buffer_float once (required for RGBA16F render target)
+    if (this.hasColorBufferFloat === null) {
+      this.hasColorBufferFloat = gl.getExtension('EXT_color_buffer_float') !== null;
+    }
+    if (!this.hasColorBufferFloat) {
+      log.warn('EXT_color_buffer_float not available; renderImageToFloat disabled');
+      return null;
+    }
+
+    // Ensure FBO exists and matches dimensions
+    this.ensureHDRFBO(width, height);
+    if (!this.hdrFBO) return null;
+
+    // Save current viewport and HDR output state
+    const prevViewport = gl.getParameter(gl.VIEWPORT) as Int32Array;
+    const prevHdrMode = this.hdrOutputMode;
+
+    // IMPORTANT: Temporarily set any non-SDR mode so renderImage() emits
+    // u_outputMode=HDR (which skips [0,1] clamping in the shader). The
+    // specific mode ('hlg') is irrelevant — only the SDR vs non-SDR
+    // distinction matters. Without this, values > 1.0 are clamped,
+    // defeating the purpose of the RGBA16F FBO.
+    this.hdrOutputMode = 'hlg';
+
+    // Bind FBO and render
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.hdrFBO);
+    gl.viewport(0, 0, width, height);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+
+    // Render image using the existing pipeline (renderImage draws to the currently bound FBO)
+    this.renderImage(image, 0, 0, 1, 1);
+
+    // Restore HDR output mode immediately after rendering
+    this.hdrOutputMode = prevHdrMode;
+
+    // Read float pixels (reuse buffer across frames when dimensions match)
+    const pixelCount = width * height * RGBA_CHANNELS;
+    if (!this.hdrReadbackBuffer || this.hdrReadbackBuffer.length !== pixelCount) {
+      this.hdrReadbackBuffer = new Float32Array(pixelCount);
+    }
+    const pixels = this.hdrReadbackBuffer;
+    gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, pixels);
+
+    const err = gl.getError();
+
+    // Unbind FBO and restore viewport
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(prevViewport[0]!, prevViewport[1]!, prevViewport[2]!, prevViewport[3]!);
+
+    if (err !== gl.NO_ERROR) {
+      log.warn('readPixels(FLOAT) failed with GL error:', err);
+      return null;
+    }
+
+    return pixels;
+  }
+
+  /**
+   * Ensure the offscreen RGBA16F FBO exists and matches the requested dimensions.
+   */
+  private ensureHDRFBO(width: number, height: number): void {
+    const gl = this.gl;
+    if (!gl) return;
+
+    if (this.hdrFBO && this.hdrFBOWidth === width && this.hdrFBOHeight === height) {
+      return; // Already correct size
+    }
+
+    // Delete old resources
+    if (this.hdrFBOTexture) {
+      gl.deleteTexture(this.hdrFBOTexture);
+      this.hdrFBOTexture = null;
+    }
+    if (this.hdrFBO) {
+      gl.deleteFramebuffer(this.hdrFBO);
+      this.hdrFBO = null;
+    }
+
+    // Create texture
+    const texture = gl.createTexture();
+    if (!texture) return;
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, width, height, 0, gl.RGBA, gl.FLOAT, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+    // Create FBO and attach texture
+    const fbo = gl.createFramebuffer();
+    if (!fbo) {
+      gl.deleteTexture(texture);
+      return;
+    }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+
+    // Verify completeness
+    const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+
+    if (status !== gl.FRAMEBUFFER_COMPLETE) {
+      log.warn('RGBA16F FBO not complete, status:', status);
+      gl.deleteFramebuffer(fbo);
+      gl.deleteTexture(texture);
+      return;
+    }
+
+    this.hdrFBO = fbo;
+    this.hdrFBOTexture = texture;
+    this.hdrFBOWidth = width;
+    this.hdrFBOHeight = height;
   }
 
   // --- Effect setters (delegating to ShaderStateManager) ---
@@ -794,7 +1030,7 @@ export class Renderer implements RendererBackend {
     if (!this.canvas) return;
     if (this.canvas.configureHighDynamicRange) {
       try {
-        this.canvas.configureHighDynamicRange({ mode: 'default' });
+        this.canvas.configureHighDynamicRange({ mode: 'extended' });
       } catch (e) {
         log.warn('configureHighDynamicRange not supported:', e);
       }
@@ -864,6 +1100,9 @@ export class Renderer implements RendererBackend {
     this.displayShader.setUniformInt('u_outputMode', OUTPUT_MODE_SDR);
     this.displayShader.setUniformInt('u_inputTransfer', INPUT_TRANSFER_SRGB);
 
+    // SDR frames always use headroom=1.0 (no HDR expansion)
+    this.displayShader.setUniform('u_hdrHeadroom', 1.0);
+
     // Set texel size for clarity/sharpen (based on source dimensions)
     const srcWidth = ('videoWidth' in source ? (source as HTMLVideoElement).videoWidth : (source as HTMLCanvasElement | HTMLImageElement).width) || this.canvas.width;
     const srcHeight = ('videoHeight' in source ? (source as HTMLVideoElement).videoHeight : (source as HTMLCanvasElement | HTMLImageElement).height) || this.canvas.height;
@@ -929,7 +1168,18 @@ export class Renderer implements RendererBackend {
     this.lut3DRGBABuffer = null;
     this.lut3DRGBABufferSize = 0;
 
+    // Release HDR FBO resources
+    if (this.hdrFBOTexture) gl.deleteTexture(this.hdrFBOTexture);
+    if (this.hdrFBO) gl.deleteFramebuffer(this.hdrFBO);
+    this.hdrFBOTexture = null;
+    this.hdrFBO = null;
+    this.hdrFBOWidth = 0;
+    this.hdrFBOHeight = 0;
+    this.hasColorBufferFloat = null;
+    this.hdrReadbackBuffer = null;
+
     this.parallelCompileExt = null;
+    this.usingHalfFloatBackbuffer = false;
     this.gl = null;
     this.canvas = null;
   }

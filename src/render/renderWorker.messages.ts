@@ -208,7 +208,7 @@ export interface SetBackgroundPatternMessage extends BaseWorkerMessage {
 /** Set HDR output mode (fire-and-forget). */
 export interface SetHDROutputModeMessage extends BaseWorkerMessage {
   type: 'setHDROutputMode';
-  mode: 'sdr' | 'hlg' | 'pq';
+  mode: 'sdr' | 'hlg' | 'pq' | 'extended';
   capabilities: DisplayCapabilities;
 }
 
@@ -255,7 +255,7 @@ export interface RendererSyncState {
   lut: { lutData: Float32Array | null; lutSize: number; intensity: number };
   displayColorState: { transferFunction: number; displayGamma: number; displayBrightness: number; customGamma: number };
   backgroundPattern: BackgroundPatternState;
-  hdrOutputMode: { mode: 'sdr' | 'hlg' | 'pq'; capabilities: DisplayCapabilities };
+  hdrOutputMode: { mode: 'sdr' | 'hlg' | 'pq' | 'extended'; capabilities: DisplayCapabilities };
 }
 
 /** Union of all main thread → worker messages. */

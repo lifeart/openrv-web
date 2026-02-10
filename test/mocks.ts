@@ -20,6 +20,8 @@ export interface MockRendererGLOptions {
   supportHLG?: boolean;
   /** When true the mock accepts 'rec2100-pq' for drawingBufferColorSpace. */
   supportPQ?: boolean;
+  /** When true the mock provides drawingBufferStorage() method. */
+  supportDrawingBufferStorage?: boolean;
 }
 
 /**
@@ -50,6 +52,7 @@ export function createMockRendererGL(
       }
       // If unsupported, silently ignore (like real browsers)
     },
+    drawingBufferStorage: opts.supportDrawingBufferStorage ? vi.fn() : undefined,
     getExtension: vi.fn(() => null),
     createProgram: vi.fn(() => ({})),
     attachShader: vi.fn(),
@@ -112,6 +115,7 @@ export function createMockRendererGL(
     RGBA8: 0x8058,
     RGBA: 0x1908,
     UNSIGNED_BYTE: 0x1401,
+    RGBA16F: 0x881a,
   } as unknown as WebGL2RenderingContext;
 
   return gl;
@@ -125,9 +129,19 @@ export function createMockRendererGL(
  *
  * Used by: RendererBackend.test.ts, hdr-acceptance-criteria.test.ts
  */
+export interface InitRendererWithMockGLOptions {
+  /** Options for the mock GL context */
+  gl?: MockRendererGLOptions;
+  /** When true, attaches configureHighDynamicRange() to the canvas */
+  canvasExtendedHDR?: boolean;
+  /** DisplayCapabilities to pass to initialize() */
+  capabilities?: import('../src/color/DisplayCapabilities').DisplayCapabilities;
+}
+
 export function initRendererWithMockGL(
   renderer: Renderer,
   glOpts: MockRendererGLOptions = {},
+  extraOpts?: Omit<InitRendererWithMockGLOptions, 'gl'>,
 ): WebGL2RenderingContext {
   const mockGL = createMockRendererGL(glOpts);
   const canvas = document.createElement('canvas');
@@ -138,7 +152,11 @@ export function initRendererWithMockGL(
     return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
   }) as typeof canvas.getContext;
 
-  renderer.initialize(canvas);
+  if (extraOpts?.canvasExtendedHDR) {
+    (canvas as unknown as { configureHighDynamicRange: (opts: unknown) => void }).configureHighDynamicRange = vi.fn();
+  }
+
+  renderer.initialize(canvas, extraOpts?.capabilities);
   return mockGL;
 }
 
