@@ -340,6 +340,11 @@ export class Renderer implements RendererBackend {
     }
     this.displayShader.setUniformInt('u_inputTransfer', inputTransferCode);
 
+    // Set texture rotation for VideoFrame sources that don't have container rotation applied.
+    // 0=0°, 1=90°CW, 2=180°, 3=270°CW
+    const rotation = (image.metadata.attributes?.videoRotation as number) ?? 0;
+    this.displayShader.setUniformInt('u_texRotation', Math.round(rotation / 90) % 4);
+
     // Set texel size for clarity/sharpen (based on source image dimensions)
     if (image.width > 0 && image.height > 0) {
       this.stateManager.setTexelSize(1.0 / image.width, 1.0 / image.height);
@@ -1061,6 +1066,11 @@ export class Renderer implements RendererBackend {
     // Skip rendering if the shader is still compiling (parallel compile path).
     if (!this.displayShader.isReady()) return null;
 
+    // Guard against detached ImageBitmaps (closed before render)
+    if (typeof ImageBitmap !== 'undefined' && source instanceof ImageBitmap && (source.width === 0 || source.height === 0)) {
+      return null;
+    }
+
     const gl = this.gl;
 
     // Ensure the SDR texture exists and set texture params once at creation
@@ -1099,6 +1109,7 @@ export class Renderer implements RendererBackend {
     // SDR output: always clamp to [0,1], sRGB input (no special EOTF)
     this.displayShader.setUniformInt('u_outputMode', OUTPUT_MODE_SDR);
     this.displayShader.setUniformInt('u_inputTransfer', INPUT_TRANSFER_SRGB);
+    this.displayShader.setUniformInt('u_texRotation', 0); // SDR: no texture rotation
 
     // SDR frames always use headroom=1.0 (no HDR expansion)
     this.displayShader.setUniform('u_hdrHeadroom', 1.0);

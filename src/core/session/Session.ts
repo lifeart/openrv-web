@@ -1704,6 +1704,39 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   /**
+   * Check if current video source is HDR
+   */
+  isVideoHDR(): boolean {
+    const source = this.currentSource;
+    return source?.type === 'video' && source.videoSourceNode?.isHDR() === true;
+  }
+
+  /**
+   * Get cached HDR IPImage for video (synchronous, for render loop).
+   * Returns null if the frame hasn't been fetched yet or source isn't HDR video.
+   */
+  getVideoHDRIPImage(frameIndex?: number): import('../../core/image/Image').IPImage | null {
+    const source = this.currentSource;
+    if (source?.type !== 'video' || !source.videoSourceNode?.isHDR()) {
+      return null;
+    }
+    const frame = frameIndex ?? this._currentFrame;
+    return source.videoSourceNode.getCachedHDRIPImage(frame);
+  }
+
+  /**
+   * Fetch an HDR video frame and cache it for synchronous access.
+   */
+  async fetchVideoHDRFrame(frameIndex?: number): Promise<void> {
+    const source = this.currentSource;
+    if (source?.type !== 'video' || !source.videoSourceNode?.isHDR()) {
+      return;
+    }
+    const frame = frameIndex ?? this._currentFrame;
+    await source.videoSourceNode.fetchHDRFrame(frame);
+  }
+
+  /**
    * Check if video frame is cached and ready for immediate display
    */
   hasVideoFrameCached(frameIndex?: number): boolean {

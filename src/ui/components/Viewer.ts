@@ -635,7 +635,7 @@ export class Viewer {
       // This starts bitmap creation before the next RAF, avoiding blocking.
       if (this.glRendererManager.isAsyncRenderer && this.glRendererManager.renderWorkerProxy) {
         const source = this.session.currentSource;
-        if (source?.element && !(source.fileSourceNode?.isHDR())) {
+        if (source?.element && !(source.fileSourceNode?.isHDR()) && !(source.videoSourceNode?.isHDR())) {
           this.glRendererManager.renderWorkerProxy.prepareFrame(source.element as unknown as HTMLImageElement);
         }
       }
@@ -855,7 +855,7 @@ export class Viewer {
 
     // Deactivate HDR mode if current source isn't HDR, or if OCIO is active
     // (unless WebGPU blit bypasses OCIO for HDR output)
-    const isCurrentHDR = source?.fileSourceNode?.isHDR() === true;
+    const isCurrentHDR = source?.fileSourceNode?.isHDR() === true || source?.videoSourceNode?.isHDR() === true;
     const ocioActive = this.colorPipeline.ocioEnabled && this.colorPipeline.ocioBakedLUT !== null;
     const blitBypassesOCIO = this.glRendererManager.isWebGPUBlitReady;
     if (this.glRendererManager.hdrRenderActive && (!isCurrentHDR || (ocioActive && !blitBypassesOCIO))) {
@@ -966,7 +966,8 @@ export class Viewer {
 
     // HDR sources may have no element (they render via WebGL); treat them as valid
     const hdrFileSource = source?.fileSourceNode?.isHDR() ? source.fileSourceNode : null;
-    if (!source || (!element && !hdrFileSource)) {
+    const isHDRVideo = source?.videoSourceNode?.isHDR() === true;
+    if (!source || (!element && !hdrFileSource && !isHDRVideo)) {
       // Placeholder mode
       this.sourceWidth = 640;
       this.sourceHeight = 360;
@@ -1033,7 +1034,23 @@ export class Viewer {
     // 2D canvas where applyOCIOToCanvas() can apply the baked LUT as a post-process.
     // Exception: when the WebGPU HDR blit is ready, bypass the OCIO guard so that
     // HDR content can be displayed via the float FBO → WebGPU extended-range path.
-    if (hdrFileSource && (!ocioActive || blitBypassesOCIO)) {
+    if (isHDRVideo && (!ocioActive || blitBypassesOCIO)) {
+      // HDR video: get cached HDR IPImage with VideoFrame for GPU upload
+      const currentFrame = this.session.currentFrame;
+      const hdrIPImage = this.session.getVideoHDRIPImage(currentFrame);
+      if (hdrIPImage && this.renderHDRWithWebGL(hdrIPImage, displayWidth, displayHeight)) {
+        this.updateCanvasPosition();
+        this.updateWipeLine();
+        return; // HDR video path complete
+      }
+      // Start async HDR frame fetch if not cached
+      if (!hdrIPImage) {
+        this.session.fetchVideoHDRFrame(currentFrame)
+          .then(() => this.refresh())
+          .catch((err) => console.warn('Failed to fetch HDR video frame:', err));
+      }
+      // Fall through to SDR while waiting (element was set by the video path above)
+    } else if (hdrFileSource && (!ocioActive || blitBypassesOCIO)) {
       const ipImage = hdrFileSource.getIPImage();
       if (ipImage && this.renderHDRWithWebGL(ipImage, displayWidth, displayHeight)) {
         this.updateCanvasPosition();

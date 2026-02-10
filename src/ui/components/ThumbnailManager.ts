@@ -274,6 +274,12 @@ export class ThumbnailManager {
 
       if (!sourceElement || signal.aborted) return;
 
+      // Guard against detached ImageBitmaps (closed before thumbnail generation)
+      if (sourceElement instanceof ImageBitmap && (sourceElement.width === 0 || sourceElement.height === 0)) {
+        this.queueRetry(frame);
+        return;
+      }
+
       // Use OffscreenCanvas if available for better performance
       let targetCanvas: HTMLCanvasElement | OffscreenCanvas;
       let targetCtx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;

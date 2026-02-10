@@ -55,6 +55,10 @@ export class VideoSourceNode extends BaseSourceNode {
   private pendingHDRSample: VideoSample | null = null;
   private pendingHDRFrame: number = -1;
 
+  // Cached HDR IPImage for synchronous access by Viewer's render loop
+  private cachedHDRIPImage: IPImage | null = null;
+  private cachedHDRIPImageFrame: number = -1;
+
   // HDR state
   private isHDRVideo: boolean = false;
   private videoColorSpace: VideoColorSpaceInit | null = null;
@@ -188,6 +192,7 @@ export class VideoSourceNode extends BaseSourceNode {
       // Propagate HDR metadata
       this.isHDRVideo = metadata.isHDR;
       this.videoColorSpace = metadata.colorSpace;
+      console.log(`[VideoSourceNode] HDR: isHDR=${metadata.isHDR}, colorSpace=${JSON.stringify(metadata.colorSpace)}`);
 
       // Update duration from mediabunny (more accurate)
       this.metadata.duration = metadata.frameCount;
@@ -277,10 +282,18 @@ export class VideoSourceNode extends BaseSourceNode {
       }
     };
 
+    // Disposer: close ImageBitmap when evicted from cache to release GPU memory.
+    // The ImageBitmap is the primary pixel data container returned by snapshotCanvas().
+    const disposer = (_frame: number, result: FrameResult): void => {
+      if (result.canvas && 'close' in result.canvas && typeof result.canvas.close === 'function') {
+        result.canvas.close();
+      }
+    };
+
     this.preloadManager = new FramePreloadManager<FrameResult>(
       totalFrames,
       loader,
-      undefined, // No special disposer needed for FrameResult
+      disposer,
       config // FramePreloadManager applies DEFAULT_PRELOAD_CONFIG internally
     );
   }
@@ -717,11 +730,19 @@ export class VideoSourceNode extends BaseSourceNode {
     const transferFunction = this.mapTransferFunction(this.videoColorSpace?.transfer ?? undefined);
     const colorPrimaries = this.mapColorPrimaries(this.videoColorSpace?.primaries ?? undefined);
 
+    // Use the track's display dimensions (which account for rotation) instead of
+    // the VideoFrame's raw dimensions (which are pre-rotation coded dimensions).
+    const trackWidth = this.metadata.width;
+    const trackHeight = this.metadata.height;
+    const rotation = this.frameExtractor?.getMetadata()?.rotation ?? 0;
+
+    console.log(`[HDR] VideoFrame: ${videoFrame.displayWidth}x${videoFrame.displayHeight}, coded: ${videoFrame.codedWidth}x${videoFrame.codedHeight}, track: ${trackWidth}x${trackHeight}, rotation: ${rotation}`);
+
     // Create IPImage with VideoFrame attached (minimal data buffer)
     // The VideoFrame is the actual pixel source; data is a placeholder
     return new IPImage({
-      width: videoFrame.displayWidth,
-      height: videoFrame.displayHeight,
+      width: trackWidth,
+      height: trackHeight,
       channels: 4,
       dataType: 'float32',
       data: new ArrayBuffer(4), // minimal placeholder; VideoFrame is the pixel source
@@ -735,6 +756,8 @@ export class VideoSourceNode extends BaseSourceNode {
         attributes: {
           hdr: true,
           videoColorSpace: this.videoColorSpace,
+          // VideoFrame pixels are unrotated; store rotation so Renderer can apply it via shader
+          videoRotation: rotation,
         },
       },
     });
@@ -796,6 +819,45 @@ export class VideoSourceNode extends BaseSourceNode {
    */
   getVideoColorSpace(): VideoColorSpaceInit | null {
     return this.videoColorSpace;
+  }
+
+  /**
+   * Get cached HDR IPImage for a frame (synchronous, for Viewer render loop).
+   * Returns null if the frame hasn't been fetched yet.
+   */
+  getCachedHDRIPImage(frame: number): IPImage | null {
+    if (this.cachedHDRIPImageFrame === frame && this.cachedHDRIPImage) {
+      return this.cachedHDRIPImage;
+    }
+    return null;
+  }
+
+  /**
+   * Fetch an HDR frame and cache the resulting IPImage for synchronous access.
+   * Closes the previous cached VideoFrame to prevent leaks.
+   */
+  async fetchHDRFrame(frame: number): Promise<IPImage | null> {
+    if (!this.isHDRVideo || !this.useMediabunny || !this.frameExtractor) {
+      return null;
+    }
+
+    try {
+      const sample = await this.frameExtractor.getFrameHDR(frame);
+      if (!sample) return null;
+
+      const ipImage = this.hdrSampleToIPImage(sample, frame);
+
+      // Close previous cached VideoFrame to prevent GPU memory leaks
+      if (this.cachedHDRIPImage && this.cachedHDRIPImage !== ipImage) {
+        this.cachedHDRIPImage.close();
+      }
+
+      this.cachedHDRIPImage = ipImage;
+      this.cachedHDRIPImageFrame = frame;
+      return ipImage;
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -899,6 +961,11 @@ export class VideoSourceNode extends BaseSourceNode {
     this.pendingHDRRequest = null;
     this.pendingHDRSample = null;
     this.pendingHDRFrame = -1;
+    if (this.cachedHDRIPImage) {
+      this.cachedHDRIPImage.close();
+      this.cachedHDRIPImage = null;
+    }
+    this.cachedHDRIPImageFrame = -1;
     super.dispose();
   }
 

@@ -30,6 +30,12 @@ const log = new Logger('MediabunnyFrameExtractor');
 export interface VideoMetadata {
   width: number;
   height: number;
+  /** Coded (pre-rotation) width */
+  codedWidth: number;
+  /** Coded (pre-rotation) height */
+  codedHeight: number;
+  /** Rotation in degrees (0, 90, 180, 270) from container metadata */
+  rotation: number;
   duration: number; // in seconds
   frameCount: number;
   fps: number;
@@ -107,10 +113,9 @@ export class MediabunnyFrameExtractor {
   private abortController: AbortController = new AbortController();
 
   // Snapshot cache: caches last N ImageBitmaps by timestamp to avoid redundant GPU round-trips.
-  // Uses LRUCache with onEvict to close() evicted bitmaps.
-  private snapshotCache = new LRUCache<number, ImageBitmap>(3, (_key, bitmap) => {
-    bitmap.close();
-  });
+  // Does NOT close() evicted bitmaps — FramePreloadManager owns the ImageBitmap lifecycle
+  // and will close them via its disposer when evicting from its own cache.
+  private snapshotCache = new LRUCache<number, ImageBitmap>(3);
 
   /**
    * Check if WebCodecs API is available
@@ -190,7 +195,7 @@ export class MediabunnyFrameExtractor {
       // Calculate frame count based on duration and fps
       const frameCount = Math.round(duration * fps);
 
-      // Detect HDR capabilities
+      // Detect HDR capabilities from container-level metadata
       let isHDR = false;
       let videoColorSpace: VideoColorSpaceInit | null = null;
       try {
@@ -213,6 +218,40 @@ export class MediabunnyFrameExtractor {
         fit: 'contain', // Required when both width and height are provided
       });
 
+      // If container-level detection found no color info, probe the first decoded
+      // VideoFrame.  Many HDR videos (especially HEVC/AV1) store color metadata only
+      // in the codec bitstream, which becomes available after decoding.
+      const hasContainerColorInfo = videoColorSpace && (videoColorSpace.transfer || videoColorSpace.primaries);
+      if (!isHDR && !hasContainerColorInfo) {
+        try {
+          const probeSink = new VideoSampleSink(this.videoTrack);
+          const probeSample = await probeSink.getSample(0);
+          if (probeSample) {
+            const probeFrame = probeSample.toVideoFrame();
+            const cs = probeFrame.colorSpace;
+            if (cs) {
+              const transfer = cs.transfer as string | undefined;
+              const primaries = cs.primaries as string | undefined;
+              if (transfer === 'pq' || transfer === 'hlg' || transfer === 'smpte2084' || transfer === 'arib-std-b67' ||
+                  primaries === 'bt2020' || primaries === 'smpte432') {
+                isHDR = true;
+                videoColorSpace = {
+                  transfer: cs.transfer ?? undefined,
+                  primaries: cs.primaries ?? undefined,
+                  matrix: cs.matrix ?? undefined,
+                  fullRange: cs.fullRange ?? undefined,
+                };
+                log.info(`HDR detected from decoded VideoFrame: transfer=${cs.transfer}, primaries=${cs.primaries}`);
+              }
+            }
+            probeFrame.close();
+            probeSample.close();
+          }
+        } catch (e) {
+          log.warn('VideoFrame HDR probe failed:', e);
+        }
+      }
+
       // Create VideoSampleSink for HDR frame extraction when HDR is detected
       if (isHDR) {
         try {
@@ -223,9 +262,16 @@ export class MediabunnyFrameExtractor {
         }
       }
 
+      log.info(`HDR detection result: isHDR=${isHDR}, colorSpace=${JSON.stringify(videoColorSpace)}`);
+
+      const trackRotation = this.videoTrack.rotation ?? 0;
+
       this.metadata = {
         width: this.videoTrack.displayWidth,
         height: this.videoTrack.displayHeight,
+        codedWidth: this.videoTrack.codedWidth,
+        codedHeight: this.videoTrack.codedHeight,
+        rotation: trackRotation,
         duration,
         frameCount,
         fps,
@@ -563,7 +609,7 @@ export class MediabunnyFrameExtractor {
   }
 
   /**
-   * Clear the snapshot cache, closing all cached ImageBitmaps via onEvict.
+   * Clear the snapshot cache references.
    */
   private clearSnapshotCache(): void {
     this.snapshotCache.clear();
@@ -871,7 +917,7 @@ export class MediabunnyFrameExtractor {
     this.buildingFrameIndex = null;
     this.detectedFps = null;
 
-    // Clear snapshot cache, closing all cached bitmaps
+    // Clear snapshot cache references (bitmaps are owned by FramePreloadManager)
     this.clearSnapshotCache();
 
     // Reset extraction queue
