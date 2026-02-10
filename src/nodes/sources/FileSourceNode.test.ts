@@ -946,5 +946,80 @@ describe('FileSourceNode', () => {
       expect(node.properties.getValue('height')).toBe(64);
       expect(node.properties.getValue('isHDR')).toBe(true);
     });
+
+    it('FSN-073: isReady returns true after HDR AVIF load', async () => {
+      const buffer = createTestAVIFBuffer({ transferCharacteristics: 16 });
+      const file = new File([buffer], 'hdr.avif', { type: 'image/avif' });
+
+      expect(node.isReady()).toBe(false);
+      await node.loadFile(file);
+      expect(node.isReady()).toBe(true);
+    });
+
+    it('FSN-074: case-insensitive AVIF extension detection', async () => {
+      const buffer = createTestAVIFBuffer({ transferCharacteristics: 16 });
+
+      // Test uppercase
+      const fileUpper = new File([buffer], 'test.AVIF', { type: 'image/avif' });
+      await node.loadFile(fileUpper);
+      expect(node.isHDR()).toBe(true);
+      expect(node.formatName).toBe('avif-hdr');
+
+      // Reset
+      node.dispose();
+      node = new FileSourceNode('TestFileSource');
+
+      // Re-create mocks after dispose/recreate
+      (globalThis as any).createImageBitmap = vi.fn(async () => ({
+        width: 64,
+        height: 64,
+        close: vi.fn(),
+      }));
+      (globalThis as any).VideoFrame = vi.fn((bitmap: any) => ({
+        displayWidth: bitmap.width ?? 64,
+        displayHeight: bitmap.height ?? 64,
+        close: vi.fn(),
+      }));
+
+      // Test mixed case
+      const fileMixed = new File([buffer], 'test.AviF', { type: 'image/avif' });
+      await node.loadFile(fileMixed);
+      expect(node.isHDR()).toBe(true);
+    });
+
+    it('FSN-075: toJSON includes isHDR for HDR AVIF files', async () => {
+      const buffer = createTestAVIFBuffer({ transferCharacteristics: 16 });
+      const file = new File([buffer], 'hdr.avif', { type: 'image/avif' });
+
+      await node.loadFile(file);
+
+      const json = node.toJSON() as { isHDR: boolean };
+      expect(json.isHDR).toBe(true);
+    });
+
+    it('FSN-076: getElement returns null for HDR AVIF (no HTMLImageElement)', async () => {
+      const buffer = createTestAVIFBuffer({ transferCharacteristics: 16 });
+      const file = new File([buffer], 'hdr.avif', { type: 'image/avif' });
+
+      await node.loadFile(file);
+
+      expect(node.getElement(1)).toBeNull();
+    });
+
+    it('FSN-077: node remains usable after AVIF HDR load failure', async () => {
+      // Mock createImageBitmap to throw
+      (globalThis as any).createImageBitmap = vi.fn(async () => {
+        throw new Error('createImageBitmap failed');
+      });
+
+      const buffer = createTestAVIFBuffer({ transferCharacteristics: 16 });
+      const file = new File([buffer], 'broken.avif', { type: 'image/avif' });
+
+      // Should not throw — falls through to standard loading
+      await node.loadFile(file);
+
+      // Node should still be in a valid state (loaded as SDR fallback)
+      expect(node.isHDR()).toBe(false);
+    });
   });
 });
