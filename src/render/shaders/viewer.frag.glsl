@@ -19,7 +19,7 @@
       uniform bool u_hueRotationEnabled;
 
       // Tone mapping
-      uniform int u_toneMappingOperator;  // 0=off, 1=reinhard, 2=filmic, 3=aces
+      uniform int u_toneMappingOperator;  // 0=off, 1=reinhard, 2=filmic, 3=aces, 4=agx, 5=pbrNeutral, 6=gt, 7=acesHill
       uniform float u_tmReinhardWhitePoint;  // Reinhard white point (default 4.0)
       uniform float u_tmFilmicExposureBias;  // Filmic exposure bias (default 2.0)
       uniform float u_tmFilmicWhitePoint;    // Filmic white point (default 11.2)
@@ -193,6 +193,134 @@
         return mapped * u_hdrHeadroom;
       }
 
+      // AgX tone mapping (Troy Sobotka / Blender 4.x)
+      // Best hue preservation in saturated highlights
+      vec3 agxDefaultContrastApprox(vec3 x) {
+        vec3 x2 = x * x;
+        vec3 x4 = x2 * x2;
+        return + 15.5     * x4 * x2
+               - 40.14    * x4 * x
+               + 31.96    * x4
+               - 6.868    * x2 * x
+               + 0.4298   * x2
+               + 0.1191   * x
+               - 0.00232;
+      }
+
+      vec3 tonemapAgX(vec3 color) {
+        const mat3 AgXInsetMatrix = mat3(
+          vec3(0.842479062253094, 0.0423282422610123, 0.0423756549057051),
+          vec3(0.0784335999999992, 0.878468636469772, 0.0784336),
+          vec3(0.0792237451477643, 0.0791661274605434, 0.879142973793104)
+        );
+        const mat3 AgXOutsetMatrix = mat3(
+          vec3(1.19687900512017, -0.0528968517574562, -0.0529716355144438),
+          vec3(-0.0980208811401368, 1.15190312990417, -0.0980434501171241),
+          vec3(-0.0990297440797205, -0.0989611768448433, 1.15107367264116)
+        );
+        const float AgxMinEv = -12.47393;
+        const float AgxMaxEv = 4.026069;
+
+        vec3 scaled = color / u_hdrHeadroom;
+        scaled = AgXInsetMatrix * scaled;
+        scaled = max(scaled, vec3(1e-10));
+        scaled = log2(scaled);
+        scaled = (scaled - AgxMinEv) / (AgxMaxEv - AgxMinEv);
+        scaled = clamp(scaled, 0.0, 1.0);
+        scaled = agxDefaultContrastApprox(scaled);
+        scaled = AgXOutsetMatrix * scaled;
+        scaled = clamp(scaled, 0.0, 1.0);
+        return scaled * u_hdrHeadroom;
+      }
+
+      // PBR Neutral tone mapping (Khronos)
+      // Minimal hue/saturation shift, ideal for color-critical work
+      vec3 tonemapPBRNeutral(vec3 color) {
+        const float startCompression = 0.8 - 0.04;
+        const float desaturation = 0.15;
+
+        vec3 scaled = color / u_hdrHeadroom;
+
+        float x = min(scaled.r, min(scaled.g, scaled.b));
+        float offset = x < 0.08 ? x - 6.25 * x * x : 0.04;
+        scaled -= offset;
+
+        float peak = max(scaled.r, max(scaled.g, scaled.b));
+        if (peak < startCompression) return scaled * u_hdrHeadroom;
+
+        float d = 1.0 - startCompression;
+        float newPeak = 1.0 - d * d / (peak + d - startCompression);
+        scaled *= newPeak / peak;
+
+        float g = 1.0 - 1.0 / (desaturation * (peak - newPeak) + 1.0);
+        return mix(scaled, vec3(newPeak), g) * u_hdrHeadroom;
+      }
+
+      // GT tone mapping per-channel (Hajime Uchimura / Gran Turismo Sport)
+      // Smooth highlight rolloff with toe and shoulder regions
+      float gt_tonemap_channel(float x) {
+        const float P = 1.0;
+        const float a = 1.0;
+        const float m = 0.22;
+        const float l = 0.4;
+        const float c = 1.33;
+        const float b = 0.0;
+
+        float l0 = ((P - m) * l) / a;
+        float S0 = m + l0;
+        float S1 = m + a * l0;
+        float C2 = (a * P) / (P - S1);
+        float CP = -C2 / P;
+
+        float w0 = 1.0 - smoothstep(0.0, m, x);
+        float w2 = step(m + l0, x);
+        float w1 = 1.0 - w0 - w2;
+
+        float T = m * pow(x / m, c) + b;
+        float L = m + a * (x - m);
+        float S = P - (P - S1) * exp(CP * (x - S0));
+
+        return T * w0 + L * w1 + S * w2;
+      }
+
+      vec3 tonemapGT(vec3 color) {
+        vec3 scaled = color / u_hdrHeadroom;
+        vec3 mapped = vec3(
+          gt_tonemap_channel(scaled.r),
+          gt_tonemap_channel(scaled.g),
+          gt_tonemap_channel(scaled.b)
+        );
+        return mapped * u_hdrHeadroom;
+      }
+
+      // ACES Hill tone mapping (Stephen Hill)
+      // More accurate RRT+ODT fit than Narkowicz
+      vec3 RRTAndODTFit(vec3 v) {
+        vec3 a = v * (v + 0.0245786) - 0.000090537;
+        vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081;
+        return a / b;
+      }
+
+      vec3 tonemapACESHill(vec3 color) {
+        const mat3 ACESInputMat = mat3(
+          vec3(0.59719, 0.07600, 0.02840),
+          vec3(0.35458, 0.90834, 0.13383),
+          vec3(0.04823, 0.01566, 0.83777)
+        );
+        const mat3 ACESOutputMat = mat3(
+          vec3( 1.60475, -0.10208, -0.00327),
+          vec3(-0.53108,  1.10813, -0.07276),
+          vec3(-0.07367, -0.00605,  1.07602)
+        );
+
+        vec3 scaled = color / u_hdrHeadroom;
+        scaled = ACESInputMat * scaled;
+        scaled = RRTAndODTFit(scaled);
+        scaled = ACESOutputMat * scaled;
+        scaled = clamp(scaled, 0.0, 1.0);
+        return scaled * u_hdrHeadroom;
+      }
+
       // Apply selected tone mapping operator
       vec3 applyToneMapping(vec3 color, int op) {
         if (op == 1) {
@@ -201,6 +329,14 @@
           return tonemapFilmic(color);
         } else if (op == 3) {
           return tonemapACES(color);
+        } else if (op == 4) {
+          return tonemapAgX(color);
+        } else if (op == 5) {
+          return tonemapPBRNeutral(color);
+        } else if (op == 6) {
+          return tonemapGT(color);
+        } else if (op == 7) {
+          return tonemapACESHill(color);
         }
         return color;  // op == 0 (off)
       }

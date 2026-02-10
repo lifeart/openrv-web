@@ -367,81 +367,7 @@ export function applyClarity(imageData: ImageData, clarity: number): void {
  */
 
 import { ToneMappingOperator } from './ToneMappingControl';
-
-/**
- * Reinhard tone mapping operator
- * Simple global operator that preserves detail in highlights.
- * Formula: output = input / (1 + input)
- * Reference: Reinhard et al., "Photographic Tone Reproduction for Digital Images"
- */
-function tonemapReinhard(value: number): number {
-  // Handle edge cases: NaN, Infinity, negative values
-  if (!Number.isFinite(value) || value < 0) {
-    return 0;
-  }
-  return value / (1.0 + value);
-}
-
-/**
- * Filmic tone mapping operator (Uncharted 2 style)
- * Provides an S-curve response similar to film stock.
- * Reference: John Hable, "Uncharted 2: HDR Lighting"
- */
-function filmicCurve(x: number): number {
-  const A = 0.15; // Shoulder strength
-  const B = 0.50; // Linear strength
-  const C = 0.10; // Linear angle
-  const D = 0.20; // Toe strength
-  const E = 0.02; // Toe numerator
-  const F = 0.30; // Toe denominator
-  return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
-}
-
-function tonemapFilmic(value: number): number {
-  // Handle edge cases: NaN, Infinity, negative values
-  if (!Number.isFinite(value) || value < 0) {
-    return 0;
-  }
-  const exposureBias = 2.0;
-  const curr = filmicCurve(exposureBias * value);
-  const whiteScale = 1.0 / filmicCurve(11.2); // Linear white point
-  // Clamp to ensure non-negative output (filmicCurve can return slightly negative for very small inputs)
-  return Math.max(0, curr * whiteScale);
-}
-
-/**
- * ACES (Academy Color Encoding System) tone mapping
- * Industry standard for cinema color management.
- * Reference: Academy ACES Output Transform, fitted curve by Krzysztof Narkowicz
- */
-function tonemapACES(value: number): number {
-  // Handle edge cases: NaN, Infinity, negative values
-  if (!Number.isFinite(value) || value < 0) {
-    return 0;
-  }
-  const a = 2.51;
-  const b = 0.03;
-  const c = 2.43;
-  const d = 0.59;
-  const e = 0.14;
-  return clamp((value * (a * value + b)) / (value * (c * value + d) + e), 0, 1);
-}
-
-/**
- * Apply the selected tone mapping operator to a single value
- */
-function applyToneMappingToValue(value: number, operator: ToneMappingOperator): number {
-  switch (operator) {
-    case 'reinhard':
-      return tonemapReinhard(value);
-    case 'filmic':
-      return tonemapFilmic(value);
-    case 'aces':
-      return tonemapACES(value);
-    default:
-      return value;
-  }
-}
+import { applyToneMappingToRGB } from '../../utils/effects/effectProcessing.shared';
 
 /**
  * Apply tone mapping to ImageData in-place.
@@ -468,11 +394,9 @@ export function applyToneMapping(imageData: ImageData, operator: ToneMappingOper
     let g = data[i + 1]! / 255;
     let b = data[i + 2]! / 255;
 
-    // Apply tone mapping to each channel
-    // The individual tone mapping functions handle edge cases (NaN, Infinity, negative)
-    r = applyToneMappingToValue(r, operator);
-    g = applyToneMappingToValue(g, operator);
-    b = applyToneMappingToValue(b, operator);
+    // Apply tone mapping (cross-channel for agx, pbrNeutral, acesHill)
+    const tm = applyToneMappingToRGB(r, g, b, operator);
+    r = tm.r; g = tm.g; b = tm.b;
 
     // Convert back to 8-bit with safe clamping
     // Handle NaN that could have slipped through by treating it as 0
@@ -507,10 +431,9 @@ export function applyToneMappingHDR(
     let g = channels >= 2 ? hdrData[hdrIndex + 1]! : r;
     let b = channels >= 3 ? hdrData[hdrIndex + 2]! : r;
 
-    // Apply tone mapping to compress HDR to SDR range
-    r = applyToneMappingToValue(r, operator);
-    g = applyToneMappingToValue(g, operator);
-    b = applyToneMappingToValue(b, operator);
+    // Apply tone mapping to compress HDR to SDR range (cross-channel for agx, pbrNeutral, acesHill)
+    const tm = applyToneMappingToRGB(r, g, b, operator);
+    r = tm.r; g = tm.g; b = tm.b;
 
     // Convert to 8-bit
     data[dataIndex] = clamp(Math.round(Number.isFinite(r) ? r * 255 : 0), 0, 255);

@@ -142,7 +142,7 @@ export interface WorkerHSLQualifierState {
  */
 export interface WorkerToneMappingState {
   enabled: boolean;
-  operator: string; // 'off' | 'reinhard' | 'filmic' | 'aces'
+  operator: string; // 'off' | 'reinhard' | 'filmic' | 'aces' | 'agx' | 'pbrNeutral' | 'gt' | 'acesHill'
   reinhardWhitePoint?: number;    // Extended Reinhard white point (default 4.0)
   filmicExposureBias?: number;    // Filmic exposure bias (default 2.0)
   filmicWhitePoint?: number;      // Filmic white point (default 11.2)
@@ -457,6 +457,149 @@ export function tonemapACESChannel(value: number): number {
 }
 
 /**
+ * AgX tone mapping (Troy Sobotka / Blender 4.x).
+ * Cross-channel operation: matrix transform → log2 → polynomial sigmoid → inverse matrix.
+ * Best hue preservation in saturated highlights.
+ */
+export function tonemapAgX(r: number, g: number, b: number): { r: number; g: number; b: number } {
+  if (!Number.isFinite(r) || r < 0) r = 0;
+  if (!Number.isFinite(g) || g < 0) g = 0;
+  if (!Number.isFinite(b) || b < 0) b = 0;
+
+  // AgX inset matrix (row-major interpretation of GLSL column-major mat3)
+  let ir = 0.842479062253094 * r + 0.0784335999999992 * g + 0.0792237451477643 * b;
+  let ig = 0.0423282422610123 * r + 0.878468636469772 * g + 0.0791661274605434 * b;
+  let ib = 0.0423756549057051 * r + 0.0784336 * g + 0.879142973793104 * b;
+
+  // Log2 encoding
+  const AgxMinEv = -12.47393;
+  const AgxMaxEv = 4.026069;
+  const range = AgxMaxEv - AgxMinEv;
+
+  ir = (Math.log2(Math.max(ir, 1e-10)) - AgxMinEv) / range;
+  ig = (Math.log2(Math.max(ig, 1e-10)) - AgxMinEv) / range;
+  ib = (Math.log2(Math.max(ib, 1e-10)) - AgxMinEv) / range;
+
+  ir = clamp(ir, 0, 1);
+  ig = clamp(ig, 0, 1);
+  ib = clamp(ib, 0, 1);
+
+  // Polynomial sigmoid approximation (6th order)
+  const sigmoid = (x: number): number => {
+    const x2 = x * x;
+    const x4 = x2 * x2;
+    return 15.5 * x4 * x2 - 40.14 * x4 * x + 31.96 * x4
+           - 6.868 * x2 * x + 0.4298 * x2 + 0.1191 * x - 0.00232;
+  };
+  ir = sigmoid(ir);
+  ig = sigmoid(ig);
+  ib = sigmoid(ib);
+
+  // AgX outset matrix (row-major interpretation)
+  const or = 1.19687900512017 * ir + (-0.0980208811401368) * ig + (-0.0990297440797205) * ib;
+  const og = (-0.0528968517574562) * ir + 1.15190312990417 * ig + (-0.0989611768448433) * ib;
+  const ob = (-0.0529716355144438) * ir + (-0.0980434501171241) * ig + 1.15107367264116 * ib;
+
+  return { r: clamp(or, 0, 1), g: clamp(og, 0, 1), b: clamp(ob, 0, 1) };
+}
+
+/**
+ * PBR Neutral tone mapping (Khronos).
+ * Cross-channel operation: offset → peak compress → desaturate.
+ * Minimal hue/saturation shift, ideal for color-critical work.
+ */
+export function tonemapPBRNeutral(r: number, g: number, b: number): { r: number; g: number; b: number } {
+  if (!Number.isFinite(r) || r < 0) r = 0;
+  if (!Number.isFinite(g) || g < 0) g = 0;
+  if (!Number.isFinite(b) || b < 0) b = 0;
+
+  const startCompression = 0.8 - 0.04;
+  const desaturation = 0.15;
+
+  const x = Math.min(r, g, b);
+  const offset = x < 0.08 ? x - 6.25 * x * x : 0.04;
+  r -= offset;
+  g -= offset;
+  b -= offset;
+
+  const peak = Math.max(r, g, b);
+  if (peak < startCompression) return { r, g, b };
+
+  const d = 1.0 - startCompression;
+  const newPeak = 1.0 - d * d / (peak + d - startCompression);
+  const scale = newPeak / peak;
+  r *= scale;
+  g *= scale;
+  b *= scale;
+
+  const gFactor = 1.0 - 1.0 / (desaturation * (peak - newPeak) + 1.0);
+  r = r * (1.0 - gFactor) + newPeak * gFactor;
+  g = g * (1.0 - gFactor) + newPeak * gFactor;
+  b = b * (1.0 - gFactor) + newPeak * gFactor;
+
+  return { r, g, b };
+}
+
+/**
+ * GT (Gran Turismo / Uchimura) tone mapping per-channel.
+ * Smooth highlight rolloff with toe, linear, and shoulder regions.
+ */
+export function tonemapGTChannel(value: number): number {
+  if (!Number.isFinite(value) || value < 0) return 0;
+
+  const P = 1.0;     // max display brightness
+  const a = 1.0;     // contrast
+  const m = 0.22;    // linear section start
+  const l = 0.4;     // linear section length
+  const c = 1.33;    // black tightness
+  const b = 0.0;     // pedestal
+
+  const l0 = ((P - m) * l) / a;
+  const S0 = m + l0;
+  const S1 = m + a * l0;
+  const C2 = (a * P) / (P - S1);
+  const CP = -C2 / P;
+
+  const w0 = 1.0 - smoothstep(0.0, m, value);
+  const w2 = value >= m + l0 ? 1.0 : 0.0;
+  const w1 = 1.0 - w0 - w2;
+
+  const T = m * Math.pow(value / m, c) + b;
+  const L = m + a * (value - m);
+  const S = P - (P - S1) * Math.exp(CP * (value - S0));
+
+  return T * w0 + L * w1 + S * w2;
+}
+
+/**
+ * ACES Hill tone mapping (Stephen Hill).
+ * Cross-channel operation: sRGB→AP1 → RRT+ODT rational fit → AP1→sRGB.
+ * More accurate RRT+ODT fit than Narkowicz.
+ */
+export function tonemapACESHill(r: number, g: number, b: number): { r: number; g: number; b: number } {
+  if (!Number.isFinite(r) || r < 0) r = 0;
+  if (!Number.isFinite(g) || g < 0) g = 0;
+  if (!Number.isFinite(b) || b < 0) b = 0;
+
+  // ACES input matrix (sRGB → AP1, row-major interpretation)
+  const ir = 0.59719 * r + 0.35458 * g + 0.04823 * b;
+  const ig = 0.07600 * r + 0.90834 * g + 0.01566 * b;
+  const ib = 0.02840 * r + 0.13383 * g + 0.83777 * b;
+
+  // RRT+ODT fit
+  const fitR = (ir * (ir + 0.0245786) - 0.000090537) / (ir * (0.983729 * ir + 0.4329510) + 0.238081);
+  const fitG = (ig * (ig + 0.0245786) - 0.000090537) / (ig * (0.983729 * ig + 0.4329510) + 0.238081);
+  const fitB = (ib * (ib + 0.0245786) - 0.000090537) / (ib * (0.983729 * ib + 0.4329510) + 0.238081);
+
+  // ACES output matrix (AP1 → sRGB, row-major interpretation)
+  const or = 1.60475 * fitR + (-0.53108) * fitG + (-0.07367) * fitB;
+  const og = (-0.10208) * fitR + 1.10813 * fitG + (-0.00605) * fitB;
+  const ob = (-0.00327) * fitR + (-0.07276) * fitG + 1.07602 * fitB;
+
+  return { r: clamp(or, 0, 1), g: clamp(og, 0, 1), b: clamp(ob, 0, 1) };
+}
+
+/**
  * Tone mapping parameters for CPU processing.
  * Matches the GPU uniforms: u_tmReinhardWhitePoint, u_tmFilmicExposureBias, u_tmFilmicWhitePoint.
  */
@@ -477,8 +620,55 @@ export function applyToneMappingToChannel(value: number, operator: string, param
       return tonemapFilmicChannel(value, params?.filmicExposureBias, params?.filmicWhitePoint);
     case 'aces':
       return tonemapACESChannel(value);
+    case 'gt':
+      return tonemapGTChannel(value);
     default:
       return value;
+  }
+}
+
+/**
+ * Apply tone mapping to an RGB triplet using the specified operator.
+ * Handles both per-channel operators (reinhard, filmic, aces, gt) and
+ * cross-channel operators (agx, pbrNeutral, acesHill) that require all three channels.
+ */
+export function applyToneMappingToRGB(
+  r: number, g: number, b: number,
+  operator: string, params?: ToneMappingParams
+): { r: number; g: number; b: number } {
+  switch (operator) {
+    case 'reinhard':
+      return {
+        r: tonemapReinhardChannel(r, params?.reinhardWhitePoint),
+        g: tonemapReinhardChannel(g, params?.reinhardWhitePoint),
+        b: tonemapReinhardChannel(b, params?.reinhardWhitePoint),
+      };
+    case 'filmic':
+      return {
+        r: tonemapFilmicChannel(r, params?.filmicExposureBias, params?.filmicWhitePoint),
+        g: tonemapFilmicChannel(g, params?.filmicExposureBias, params?.filmicWhitePoint),
+        b: tonemapFilmicChannel(b, params?.filmicExposureBias, params?.filmicWhitePoint),
+      };
+    case 'aces':
+      return {
+        r: tonemapACESChannel(r),
+        g: tonemapACESChannel(g),
+        b: tonemapACESChannel(b),
+      };
+    case 'agx':
+      return tonemapAgX(r, g, b);
+    case 'pbrNeutral':
+      return tonemapPBRNeutral(r, g, b);
+    case 'gt':
+      return {
+        r: tonemapGTChannel(r),
+        g: tonemapGTChannel(g),
+        b: tonemapGTChannel(b),
+      };
+    case 'acesHill':
+      return tonemapACESHill(r, g, b);
+    default:
+      return { r, g, b };
   }
 }
 
@@ -492,17 +682,15 @@ export function applyToneMappingToData(data: Uint8ClampedArray, operator: string
 
   const len = data.length;
   for (let i = 0; i < len; i += 4) {
-    let r = data[i]! / 255;
-    let g = data[i + 1]! / 255;
-    let b = data[i + 2]! / 255;
+    const r = data[i]! / 255;
+    const g = data[i + 1]! / 255;
+    const b = data[i + 2]! / 255;
 
-    r = applyToneMappingToChannel(r, operator, params);
-    g = applyToneMappingToChannel(g, operator, params);
-    b = applyToneMappingToChannel(b, operator, params);
+    const tm = applyToneMappingToRGB(r, g, b, operator, params);
 
-    data[i] = clamp(Math.round(Number.isFinite(r) ? r * 255 : 0), 0, 255);
-    data[i + 1] = clamp(Math.round(Number.isFinite(g) ? g * 255 : 0), 0, 255);
-    data[i + 2] = clamp(Math.round(Number.isFinite(b) ? b * 255 : 0), 0, 255);
+    data[i] = clamp(Math.round(Number.isFinite(tm.r) ? tm.r * 255 : 0), 0, 255);
+    data[i + 1] = clamp(Math.round(Number.isFinite(tm.g) ? tm.g * 255 : 0), 0, 255);
+    data[i + 2] = clamp(Math.round(Number.isFinite(tm.b) ? tm.b * 255 : 0), 0, 255);
     // Alpha unchanged
   }
 }

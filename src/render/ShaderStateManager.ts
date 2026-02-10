@@ -68,6 +68,10 @@ export const TONE_MAPPING_OPERATOR_CODES: Record<ToneMappingOperator, number> = 
   'reinhard': 1,
   'filmic': 2,
   'aces': 3,
+  'agx': 4,
+  'pbrNeutral': 5,
+  'gt': 6,
+  'acesHill': 7,
 };
 
 /** Map ChannelMode string to shader integer */

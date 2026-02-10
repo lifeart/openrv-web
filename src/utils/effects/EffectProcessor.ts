@@ -43,7 +43,7 @@ import {
   hueToRgb as sharedHueToRgb,
   rgbToHsl as sharedRgbToHsl,
   hslToRgb as sharedHslToRgb,
-  applyToneMappingToChannel,
+  applyToneMappingToRGB,
   getHueRotationMatrix,
   HALF_RES_MIN_DIMENSION,
   downsample2x,
@@ -869,9 +869,8 @@ export class EffectProcessor {
 
       // ---- 8. Tone Mapping ----
       if (hasToneMapping) {
-        r = applyToneMappingToChannel(r, tmOperator, tmParams);
-        g = applyToneMappingToChannel(g, tmOperator, tmParams);
-        b = applyToneMappingToChannel(b, tmOperator, tmParams);
+        const tm = applyToneMappingToRGB(r, g, b, tmOperator, tmParams);
+        r = tm.r; g = tm.g; b = tm.b;
       }
 
       // ---- 9. Color Inversion ----

@@ -1,4 +1,4 @@
-export type ToneMappingOperator = 'off' | 'reinhard' | 'filmic' | 'aces';
+export type ToneMappingOperator = 'off' | 'reinhard' | 'filmic' | 'aces' | 'agx' | 'pbrNeutral' | 'gt' | 'acesHill';
 
 export interface ToneMappingState {
   enabled: boolean;
@@ -27,6 +27,10 @@ export const TONE_MAPPING_OPERATORS: ToneMappingOperatorInfo[] = [
   { key: 'reinhard', label: 'Reinhard', description: 'Simple global operator' },
   { key: 'filmic', label: 'Filmic', description: 'Film-like S-curve response' },
   { key: 'aces', label: 'ACES', description: 'Academy Color Encoding System' },
+  { key: 'agx', label: 'AgX', description: 'Best hue preservation in saturated highlights' },
+  { key: 'pbrNeutral', label: 'PBR Neutral', description: 'Minimal hue/saturation shift' },
+  { key: 'gt', label: 'GT', description: 'Gran Turismo smooth highlight rolloff' },
+  { key: 'acesHill', label: 'ACES Hill', description: 'Accurate RRT+ODT fit by Stephen Hill' },
 ];
 
 export type HDROutputMode = 'sdr' | 'hlg' | 'pq' | 'extended';

@@ -174,7 +174,7 @@ describe('ToneMappingControl', () => {
       const el = control.render();
       const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
       const operatorButtons = dropdown.querySelectorAll('button[data-operator]');
-      expect(operatorButtons.length).toBe(4); // off, reinhard, filmic, aces
+      expect(operatorButtons.length).toBe(8); // off, reinhard, filmic, aces, agx, pbrNeutral, gt, acesHill
     });
 
     it('TONE-U041: off operator button exists', () => {
@@ -383,7 +383,7 @@ describe('ToneMappingControl', () => {
   describe('getOperators', () => {
     it('TONE-U100: getOperators returns all operators', () => {
       const operators = control.getOperators();
-      expect(operators.length).toBe(4);
+      expect(operators.length).toBe(8);
     });
 
     it('TONE-U101: getOperators returns copies', () => {
@@ -569,8 +569,8 @@ describe('ToneMappingControl', () => {
 });
 
 describe('TONE_MAPPING_OPERATORS', () => {
-  it('TONE-U200: has 4 operators', () => {
-    expect(TONE_MAPPING_OPERATORS.length).toBe(4);
+  it('TONE-U200: has 8 operators', () => {
+    expect(TONE_MAPPING_OPERATORS.length).toBe(8);
   });
 
   it('TONE-U201: each operator has key, label, and description', () => {
