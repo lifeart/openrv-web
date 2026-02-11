@@ -142,10 +142,14 @@ export interface WorkerHSLQualifierState {
  */
 export interface WorkerToneMappingState {
   enabled: boolean;
-  operator: string; // 'off' | 'reinhard' | 'filmic' | 'aces' | 'agx' | 'pbrNeutral' | 'gt' | 'acesHill'
+  operator: string; // 'off' | 'reinhard' | 'filmic' | 'aces' | 'agx' | 'pbrNeutral' | 'gt' | 'acesHill' | 'drago'
   reinhardWhitePoint?: number;    // Extended Reinhard white point (default 4.0)
   filmicExposureBias?: number;    // Filmic exposure bias (default 2.0)
   filmicWhitePoint?: number;      // Filmic white point (default 11.2)
+  dragoBias?: number;             // Drago bias (default 0.85)
+  dragoLwa?: number;              // Scene average luminance (from LuminanceAnalyzer)
+  dragoLmax?: number;             // Scene max luminance (from LuminanceAnalyzer)
+  dragoBrightness?: number;       // Post-Drago brightness multiplier (default 2.0)
 }
 
 /**
@@ -600,6 +604,97 @@ export function tonemapACESHill(r: number, g: number, b: number): { r: number; g
 }
 
 /**
+ * Drago adaptive logarithmic tone mapping (per-channel).
+ * Reference: Drago et al., "Adaptive Logarithmic Mapping For Displaying High Contrast Scenes"
+ * Matches GPU shader: tonemapDragoChannel()
+ */
+export function tonemapDragoChannel(value: number, bias = 0.85, Lwa = 0.2, Lmax = 1.5): number {
+  if (!Number.isFinite(value) || value < 0) return 0;
+  const safeWa = Math.max(Lwa, 1e-6);
+  const safeMax = Math.max(Lmax, 1e-6);
+  const Ln = value / safeWa;
+  const biasP = Math.log(bias) / Math.log(0.5);
+  const denom = Math.log2(1.0 + safeMax / safeWa);
+  const num = Math.log(1.0 + Ln) / Math.log(2.0 + 8.0 * Math.pow(Ln / (safeMax / safeWa), biasP));
+  const result = num / Math.max(denom, 1e-6);
+  return Number.isFinite(result) ? Math.max(result, 0) : 0;
+}
+
+// ============================================================================
+// Gamut Mapping (CPU path)
+// ============================================================================
+
+// Gamut conversion matrices (row-major for CPU matMul3: each group of 3 is one row)
+
+/** Rec.2020 → sRGB */
+const REC2020_TO_SRGB = [
+   1.6605, -0.5876, -0.0728,
+  -0.1246,  1.1329, -0.0083,
+  -0.0182, -0.1006,  1.1187,
+];
+
+/** Rec.2020 → Display-P3 (derived from ITU-R BT.2020 and DCI-P3 D65 chromaticity coordinates) */
+const REC2020_TO_P3 = [
+   1.3436, -0.2822, -0.0614,
+  -0.0653,  1.0758, -0.0105,
+   0.0028, -0.0196,  1.0168,
+];
+
+/** Display-P3 → sRGB */
+const P3_TO_SRGB = [
+   1.2249, -0.2247, -0.0002,
+  -0.0420,  1.0419,  0.0001,
+  -0.0197, -0.0786,  1.0983,
+];
+
+function matMul3(m: number[], r: number, g: number, b: number): [number, number, number] {
+  return [
+    m[0]! * r + m[1]! * g + m[2]! * b,
+    m[3]! * r + m[4]! * g + m[5]! * b,
+    m[6]! * r + m[7]! * g + m[8]! * b,
+  ];
+}
+
+function softClipChannel(x: number): number {
+  if (x <= 0.0) return 0.0;
+  if (x <= 0.8) return x;
+  return 0.8 + 0.2 * Math.tanh((x - 0.8) / 0.2);
+}
+
+/**
+ * Gamut map an RGB triplet from source to target gamut.
+ *
+ * @param r - Red channel (linear)
+ * @param g - Green channel (linear)
+ * @param b - Blue channel (linear)
+ * @param sourceGamut - Source gamut identifier
+ * @param targetGamut - Target gamut identifier
+ * @param mode - 'clip' for hard clamp, 'compress' for soft clip
+ * @returns Mapped [r, g, b] tuple
+ */
+export function gamutMapRGB(
+  r: number, g: number, b: number,
+  sourceGamut: string, targetGamut: string,
+  mode: 'clip' | 'compress',
+): [number, number, number] {
+  // Convert from source to target gamut
+  let mapped: [number, number, number] = [r, g, b];
+  if (sourceGamut === 'rec2020') {
+    mapped = targetGamut === 'display-p3'
+      ? matMul3(REC2020_TO_P3, r, g, b)
+      : matMul3(REC2020_TO_SRGB, r, g, b);
+  } else if (sourceGamut === 'display-p3' && targetGamut === 'srgb') {
+    mapped = matMul3(P3_TO_SRGB, r, g, b);
+  }
+
+  // Apply clip or compress
+  if (mode === 'compress') {
+    return [softClipChannel(mapped[0]), softClipChannel(mapped[1]), softClipChannel(mapped[2])];
+  }
+  return [clamp(mapped[0], 0, 1), clamp(mapped[1], 0, 1), clamp(mapped[2], 0, 1)];
+}
+
+/**
  * Tone mapping parameters for CPU processing.
  * Matches the GPU uniforms: u_tmReinhardWhitePoint, u_tmFilmicExposureBias, u_tmFilmicWhitePoint.
  */
@@ -607,6 +702,10 @@ export interface ToneMappingParams {
   reinhardWhitePoint?: number;
   filmicExposureBias?: number;
   filmicWhitePoint?: number;
+  dragoBias?: number;
+  dragoLwa?: number;
+  dragoLmax?: number;
+  dragoBrightness?: number;
 }
 
 /**
@@ -622,6 +721,10 @@ export function applyToneMappingToChannel(value: number, operator: string, param
       return tonemapACESChannel(value);
     case 'gt':
       return tonemapGTChannel(value);
+    case 'drago': {
+      const brightness = params?.dragoBrightness ?? 2.0;
+      return tonemapDragoChannel(value, params?.dragoBias, params?.dragoLwa, params?.dragoLmax) * brightness;
+    }
     default:
       return value;
   }
@@ -667,6 +770,14 @@ export function applyToneMappingToRGB(
       };
     case 'acesHill':
       return tonemapACESHill(r, g, b);
+    case 'drago': {
+      const brightness = params?.dragoBrightness ?? 2.0;
+      return {
+        r: tonemapDragoChannel(r, params?.dragoBias, params?.dragoLwa, params?.dragoLmax) * brightness,
+        g: tonemapDragoChannel(g, params?.dragoBias, params?.dragoLwa, params?.dragoLmax) * brightness,
+        b: tonemapDragoChannel(b, params?.dragoBias, params?.dragoLwa, params?.dragoLmax) * brightness,
+      };
+    }
     default:
       return { r, g, b };
   }

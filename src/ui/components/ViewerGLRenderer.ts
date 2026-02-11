@@ -36,6 +36,10 @@ import type { ZebraStripes } from './ZebraStripes';
 import type { HSLQualifier } from './HSLQualifier';
 import type { ColorAdjustments } from './ColorControls';
 import type { ToneMappingState } from './ToneMappingControl';
+import type { AutoExposureState, GamutMappingState, GamutIdentifier } from '../../core/types/effects';
+import { DEFAULT_AUTO_EXPOSURE_STATE, DEFAULT_GAMUT_MAPPING_STATE } from '../../core/types/effects';
+import { AutoExposureController } from '../../color/AutoExposureController';
+import { LuminanceAnalyzer } from '../../render/LuminanceAnalyzer';
 import { PerfTrace } from '../../utils/PerfTrace';
 
 /**
@@ -92,6 +96,12 @@ export class ViewerGLRenderer {
 
   private ctx: GLRendererContext;
 
+  // Auto-exposure and scene analysis
+  private _autoExposureController = new AutoExposureController();
+  private _autoExposureState: AutoExposureState = { ...DEFAULT_AUTO_EXPOSURE_STATE };
+  private _luminanceAnalyzer: LuminanceAnalyzer | null = null;
+  private _gamutMappingState: GamutMappingState = { ...DEFAULT_GAMUT_MAPPING_STATE };
+
   get glCanvas(): HTMLCanvasElement | null { return this._glCanvas; }
   get glRenderer(): Renderer | null { return this._glRenderer; }
   get hdrRenderActive(): boolean { return this._hdrRenderActive; }
@@ -105,6 +115,56 @@ export class ViewerGLRenderer {
   constructor(ctx: GLRendererContext, capabilities?: DisplayCapabilities) {
     this._capabilities = capabilities;
     this.ctx = ctx;
+  }
+
+  /** Set auto-exposure configuration. */
+  setAutoExposure(state: AutoExposureState): void {
+    this._autoExposureState = { ...state };
+    if (!state.enabled) {
+      this._autoExposureController.reset();
+    }
+  }
+
+  /** Get current auto-exposure configuration. */
+  getAutoExposure(): AutoExposureState {
+    return { ...this._autoExposureState };
+  }
+
+  /** Set gamut mapping configuration. */
+  setGamutMapping(state: GamutMappingState): void {
+    this._gamutMappingState = { ...state };
+  }
+
+  /** Get current gamut mapping configuration. */
+  getGamutMapping(): GamutMappingState {
+    return { ...this._gamutMappingState };
+  }
+
+  /**
+   * Auto-detect source gamut from image metadata and determine
+   * target gamut from display capabilities.
+   */
+  private detectGamutMapping(image: IPImage): GamutMappingState {
+    if (this._gamutMappingState.mode === 'off') {
+      return this._gamutMappingState;
+    }
+
+    const sourceGamut: GamutIdentifier =
+      image.metadata?.colorPrimaries === 'bt2020' ? 'rec2020' : 'srgb';
+    const targetGamut: GamutIdentifier =
+      this._capabilities?.displayGamut === 'p3' || this._capabilities?.displayGamut === 'rec2020'
+        ? 'display-p3' : 'srgb';
+
+    // No mapping needed if source matches target or source is sRGB
+    if (sourceGamut === 'srgb' || (sourceGamut as string) === (targetGamut as string)) {
+      return { ...this._gamutMappingState, mode: 'off' };
+    }
+
+    return {
+      mode: this._gamutMappingState.mode,
+      sourceGamut,
+      targetGamut,
+    };
   }
 
   /**
@@ -333,6 +393,50 @@ export class ViewerGLRenderer {
       state.colorAdjustments = { ...state.colorAdjustments, gamma: 1 };
       state.toneMappingState = { enabled: false, operator: 'off' };
     }
+
+    // Scene luminance analysis: needed for Drago (always) and auto-exposure (when enabled)
+    const needsLuminance = !isHDROutput && (
+      this._autoExposureState.enabled ||
+      state.toneMappingState.operator === 'drago'
+    );
+    if (needsLuminance) {
+      const gl = renderer.getContext();
+      if (gl) {
+        if (!this._luminanceAnalyzer) {
+          this._luminanceAnalyzer = new LuminanceAnalyzer(gl);
+        }
+        const currentTexture = gl.getParameter(gl.TEXTURE_BINDING_2D) as WebGLTexture | null;
+        if (currentTexture) {
+          const inputTransfer = image.metadata?.transferFunction === 'hlg' ? 1
+            : image.metadata?.transferFunction === 'pq' ? 2 : 0;
+          const stats = this._luminanceAnalyzer.computeLuminanceStats(currentTexture, inputTransfer);
+
+          // Auto-exposure: smooth and apply
+          if (this._autoExposureState.enabled) {
+            this._autoExposureController.update(stats.avg, this._autoExposureState);
+            const finalExposure = this._autoExposureController.currentExposure + state.colorAdjustments.exposure;
+            state.colorAdjustments = { ...state.colorAdjustments, exposure: finalExposure };
+          }
+
+          // Drago: feed scene luminance stats.
+          // Note: linearAvg is the mipmap-averaged luminance (arithmetic mean),
+          // NOT the scene maximum. Estimate Lmax using a content-aware multiplier
+          // since WebGL2 mipmaps can only average, not compute max.
+          if (state.toneMappingState.operator === 'drago') {
+            const drMultiplier = inputTransfer === 2 ? 10 : inputTransfer === 1 ? 6 : 4;
+            state.toneMappingState = {
+              ...state.toneMappingState,
+              dragoLwa: stats.avg,
+              dragoLmax: stats.linearAvg * drMultiplier,
+            };
+          }
+        }
+      }
+    }
+
+    // Gamut mapping: auto-detect based on image metadata and display capabilities
+    state.gamutMapping = this.detectGamutMapping(image);
+
     PerfTrace.end('buildRenderState');
 
     PerfTrace.begin('applyRenderState');
@@ -751,6 +855,13 @@ export class ViewerGLRenderer {
       this._webgpuBlit = null;
     }
 
+    // Cleanup luminance analyzer
+    if (this._luminanceAnalyzer) {
+      this._luminanceAnalyzer.dispose();
+      this._luminanceAnalyzer = null;
+    }
+
+    this._autoExposureController.reset();
     this._glCanvas = null;
     this._lastRenderedImage = null;
   }

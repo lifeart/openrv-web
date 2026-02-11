@@ -17,7 +17,7 @@
 
 import type { IPImage } from '../core/image/Image';
 import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState } from '../core/types/color';
-import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState } from '../core/types/effects';
+import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState, GamutMappingState } from '../core/types/effects';
 import type { BackgroundPatternState } from '../core/types/background';
 import type { DisplayCapabilities } from '../color/DisplayCapabilities';
 import type { CDLValues } from '../color/CDL';
@@ -131,6 +131,9 @@ export interface RendererEffects {
 
   /** Set sharpen (unsharp mask) amount (0 to 100). */
   setSharpen(state: SharpenState): void;
+
+  /** Set gamut mapping state (source gamut, target gamut, mode). */
+  setGamutMapping(state: GamutMappingState): void;
 }
 
 /**

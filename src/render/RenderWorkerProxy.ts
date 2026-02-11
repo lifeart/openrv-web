@@ -18,7 +18,7 @@
 import type { IPImage } from '../core/image/Image';
 import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState } from '../core/types/color';
 import { DEFAULT_COLOR_ADJUSTMENTS } from '../core/types/color';
-import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState } from '../core/types/effects';
+import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState, GamutMappingState } from '../core/types/effects';
 import { DEFAULT_TONE_MAPPING_STATE } from '../core/types/effects';
 import type { BackgroundPatternState } from '../core/types/background';
 import type { DisplayCapabilities } from '../color/DisplayCapabilities';
@@ -649,6 +649,10 @@ export class RenderWorkerProxy implements RendererBackend {
     this.hasDirtyState = true;
   }
 
+  setGamutMapping(_state: GamutMappingState): void {
+    // TODO: forward gamut mapping state to worker when supported
+  }
+
   applyRenderState(state: RenderState): void {
     this.setColorAdjustments(state.colorAdjustments);
     this.setColorInversion(state.colorInversion);
@@ -667,6 +671,9 @@ export class RenderWorkerProxy implements RendererBackend {
     this.setClarity({ clarity: state.clarity });
     this.setSharpen({ amount: state.sharpen });
     this.setHSLQualifier(state.hslQualifier);
+    if (state.gamutMapping) {
+      this.setGamutMapping(state.gamutMapping);
+    }
   }
 
   // ==========================================================================

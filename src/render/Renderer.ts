@@ -1,7 +1,7 @@
 import { IPImage, DataType } from '../core/image/Image';
 import { ShaderProgram } from './ShaderProgram';
 import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState } from '../core/types/color';
-import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState } from '../core/types/effects';
+import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState, GamutMappingState } from '../core/types/effects';
 import type { BackgroundPatternState } from '../core/types/background';
 import type { DisplayCapabilities } from '../color/DisplayCapabilities';
 import type { RendererBackend, TextureHandle } from './RendererBackend';
@@ -1283,6 +1283,10 @@ export class Renderer implements RendererBackend {
 
   setHSLQualifier(state: HSLQualifierState): void {
     this.stateManager.setHSLQualifier(state);
+  }
+
+  setGamutMapping(state: GamutMappingState): void {
+    this.stateManager.setGamutMapping(state);
   }
 
   applyRenderState(state: RenderState): void {

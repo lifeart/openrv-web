@@ -207,6 +207,10 @@ export function computeEffectsHash(state: AllEffectsState): string {
   hashNum(tm.reinhardWhitePoint ?? 4.0);
   hashNum(tm.filmicExposureBias ?? 2.0);
   hashNum(tm.filmicWhitePoint ?? 11.2);
+  hashNum(tm.dragoBias ?? 0.85);
+  hashNum(tm.dragoLwa ?? 0.2);
+  hashNum(tm.dragoLmax ?? 1.5);
+  hashNum(tm.dragoBrightness ?? 2.0);
 
   // Color inversion
   hashBool(state.colorInversionEnabled);

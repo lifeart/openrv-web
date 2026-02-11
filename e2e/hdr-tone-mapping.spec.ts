@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import {
   loadVideoFile,
+  loadExrFile,
   getToneMappingState,
   waitForTestHelper,
   captureCanvasState,
@@ -98,9 +99,13 @@ test.describe('HDR Tone Mapping Integration', () => {
   });
 
   test('HDRTM-E002: enabling reinhard tone mapping changes canvas', async ({ page }) => {
+    // Use HDR content to ensure tone mapping has a visible effect.
+    await loadExrFile(page);
+
     const original = await captureCanvasState(page);
 
     await selectOperatorViaUI(page, 'reinhard');
+    await page.waitForTimeout(150);
 
     const withToneMapping = await captureCanvasState(page);
 

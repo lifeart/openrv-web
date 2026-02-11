@@ -539,46 +539,46 @@ test.describe('Playback State Fixes', () => {
     test('PLAY-STATE-060: speed change updates playback rate', async ({ page }) => {
       // Get initial speed
       let state = await getSessionState(page);
-      const initialSpeed = state.speed;
+      const initialSpeed = state.playbackSpeed;
       expect(initialSpeed).toBe(1);
 
-      // Increase speed with > key
-      await page.keyboard.press('>');
+      // Increase speed with L key
+      await page.keyboard.press('l');
       await page.waitForFunction(
         () => {
           const state = (window as any).__OPENRV_TEST__?.getSessionState();
-          return state?.speed > 1;
+          return state?.playbackSpeed > 1;
         },
         undefined,
         { timeout: 2000 }
       );
 
       state = await getSessionState(page);
-      expect(state.speed).toBeGreaterThan(1);
+      expect(state.playbackSpeed).toBeGreaterThan(1);
 
-      // Decrease speed with < key
-      await page.keyboard.press('<');
-      await page.keyboard.press('<');
+      // Decrease speed with J key
+      await page.keyboard.press('j');
+      await page.keyboard.press('j');
       await page.waitForFunction(
         () => {
           const state = (window as any).__OPENRV_TEST__?.getSessionState();
-          return state?.speed < 1;
+          return state?.playbackSpeed < 1;
         },
         undefined,
         { timeout: 2000 }
       );
 
       state = await getSessionState(page);
-      expect(state.speed).toBeLessThan(1);
+      expect(state.playbackSpeed).toBeLessThan(1);
     });
 
     test('PLAY-STATE-061: playback respects speed setting', async ({ page }) => {
       // Set speed to 2x
-      await page.keyboard.press('>');
+      await page.keyboard.press('l');
       await page.waitForFunction(
         () => {
           const state = (window as any).__OPENRV_TEST__?.getSessionState();
-          return state?.speed > 1;
+          return state?.playbackSpeed > 1;
         },
         undefined,
         { timeout: 2000 }

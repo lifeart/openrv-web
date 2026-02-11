@@ -129,6 +129,18 @@
       uniform bool u_hslInvert;
       uniform bool u_hslMattePreview;
 
+      // Drago tone mapping parameters
+      uniform float u_tmDragoBias;       // default 0.85
+      uniform float u_tmDragoLmax;       // scene max luminance
+      uniform float u_tmDragoLwa;        // scene average luminance
+      uniform float u_tmDragoBrightness; // post-Drago brightness multiplier (default 2.0)
+
+      // Gamut mapping
+      uniform bool u_gamutMappingEnabled;
+      uniform int u_gamutMappingMode;  // 0=clip, 1=compress
+      uniform int u_sourceGamut;       // 0=sRGB, 1=Rec.2020, 2=Display-P3
+      uniform int u_targetGamut;       // 0=sRGB, 1=Rec.2020, 2=Display-P3
+
       // Luminance coefficients (Rec. 709)
       const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 
@@ -321,6 +333,81 @@
         return scaled * u_hdrHeadroom;
       }
 
+      // Drago adaptive logarithmic tone mapping (per-channel)
+      // Reference: Drago et al., "Adaptive Logarithmic Mapping For Displaying High Contrast Scenes"
+      float tonemapDragoChannel(float L) {
+        float Lwa = max(u_tmDragoLwa, 1e-6);
+        float Lmax = max(u_tmDragoLmax, 1e-6) * u_hdrHeadroom;
+        float Ln = L / Lwa;
+        float biasP = log(u_tmDragoBias) / log(0.5);
+        float denom = log2(1.0 + Lmax / Lwa);
+        float num = log(1.0 + Ln) / log(2.0 + 8.0 * pow(Ln / (Lmax / Lwa), biasP));
+        return num / max(denom, 1e-6);
+      }
+
+      vec3 tonemapDrago(vec3 color) {
+        vec3 mapped = vec3(
+          tonemapDragoChannel(color.r),
+          tonemapDragoChannel(color.g),
+          tonemapDragoChannel(color.b)
+        );
+        return mapped * max(u_tmDragoBrightness, 0.0);
+      }
+
+      // --- Gamut mapping matrices and functions ---
+
+      // Rec.2020 to sRGB (derived from ITU-R BT.2020 and sRGB chromaticity coordinates)
+      // Column-major for GLSL: each group of 3 is one column
+      const mat3 REC2020_TO_SRGB = mat3(
+         1.6605, -0.1246, -0.0182,
+        -0.5876,  1.1329, -0.1006,
+        -0.0728, -0.0083,  1.1187
+      );
+      // Rec.2020 to Display-P3 (derived from ITU-R BT.2020 and DCI-P3 D65 chromaticity coordinates)
+      // Column-major for GLSL: each group of 3 is one column
+      const mat3 REC2020_TO_P3 = mat3(
+         1.3436, -0.0653,  0.0028,
+        -0.2822,  1.0758, -0.0196,
+        -0.0614, -0.0105,  1.0168
+      );
+      // Display-P3 to sRGB
+      const mat3 P3_TO_SRGB = mat3(
+         1.2249, -0.0420, -0.0197,
+        -0.2247,  1.0419, -0.0786,
+        -0.0002,  0.0001,  1.0983
+      );
+
+      vec3 gamutSoftClip(vec3 color) {
+        vec3 result;
+        for (int i = 0; i < 3; i++) {
+          float x = color[i];
+          if (x <= 0.0) {
+            result[i] = 0.0;
+          } else if (x <= 0.8) {
+            result[i] = x;
+          } else {
+            result[i] = 0.8 + 0.2 * tanh((x - 0.8) / 0.2);
+          }
+        }
+        return result;
+      }
+
+      vec3 applyGamutMapping(vec3 color) {
+        // Matrix conversion based on source/target gamut
+        if (u_sourceGamut == 1) { // Rec.2020
+          color = (u_targetGamut == 2) ? REC2020_TO_P3 * color : REC2020_TO_SRGB * color;
+        } else if (u_sourceGamut == 2 && u_targetGamut == 0) { // P3 -> sRGB
+          color = P3_TO_SRGB * color;
+        }
+        // Apply clipping or soft compression
+        if (u_gamutMappingMode == 1) {
+          color = gamutSoftClip(color);
+        } else {
+          color = clamp(color, 0.0, 1.0);
+        }
+        return color;
+      }
+
       // Apply selected tone mapping operator
       vec3 applyToneMapping(vec3 color, int op) {
         if (op == 1) {
@@ -337,6 +424,8 @@
           return tonemapGT(color);
         } else if (op == 7) {
           return tonemapACESHill(color);
+        } else if (op == 8) {
+          return tonemapDrago(color);
         }
         return color;  // op == 0 (off)
       }
@@ -691,6 +780,11 @@
 
         // 7. Tone mapping (applied before display transfer for proper HDR handling)
         color.rgb = applyToneMapping(max(color.rgb, 0.0), u_toneMappingOperator);
+
+        // 7a. Gamut mapping (after tone mapping, before display transfer)
+        if (u_gamutMappingEnabled) {
+          color.rgb = applyGamutMapping(color.rgb);
+        }
 
         // 7b. Sharpen (unsharp mask, after tone mapping but before display transfer)
         // NOTE: Sharpen samples neighboring pixels from u_texture (the original source image).

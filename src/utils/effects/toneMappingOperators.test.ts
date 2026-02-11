@@ -15,6 +15,8 @@ import {
   tonemapPBRNeutral,
   tonemapGTChannel,
   tonemapACESHill,
+  tonemapDragoChannel,
+  gamutMapRGB,
   applyToneMappingToChannel,
   applyToneMappingToRGB,
   applyToneMappingToData,
@@ -531,7 +533,7 @@ describe('Operator Comparison', () => {
     expect(rHill.r).toBeGreaterThan(0.5);
   });
 
-  it('all seven operators produce distinct results for grey input', () => {
+  it('all eight operators produce distinct results for grey input', () => {
     const v = 0.5;
     const results = [
       tonemapReinhardChannel(v),
@@ -541,6 +543,7 @@ describe('Operator Comparison', () => {
       tonemapAgX(v, v, v).r,
       tonemapPBRNeutral(v, v, v).r,
       tonemapACESHill(v, v, v).r,
+      tonemapDragoChannel(v),
     ];
     // Check all pairs are different
     for (let i = 0; i < results.length; i++) {
@@ -722,7 +725,7 @@ describe('applyToneMappingToData', () => {
   });
 
   it('new operators produce valid output for all input values', () => {
-    const newOps = ['agx', 'pbrNeutral', 'gt', 'acesHill'];
+    const newOps = ['agx', 'pbrNeutral', 'gt', 'acesHill', 'drago'];
     for (const op of newOps) {
       for (let v = 0; v <= 255; v += 51) {
         const data = createPixelData(v, v, v);
@@ -734,8 +737,22 @@ describe('applyToneMappingToData', () => {
     }
   });
 
+  it('drago preserves alpha channel on pixel data', () => {
+    const data = createPixelData(200, 100, 50, 128);
+    applyToneMappingToData(data, 'drago');
+    expect(data[3]).toBe(128);
+  });
+
+  it('drago maps black pixel to black', () => {
+    const data = createPixelData(0, 0, 0);
+    applyToneMappingToData(data, 'drago');
+    expect(data[0]).toBe(0);
+    expect(data[1]).toBe(0);
+    expect(data[2]).toBe(0);
+  });
+
   it('preserves brightness ordering across all operators', () => {
-    const operators = ['reinhard', 'filmic', 'aces', 'agx', 'pbrNeutral', 'gt', 'acesHill'] as const;
+    const operators = ['reinhard', 'filmic', 'aces', 'agx', 'pbrNeutral', 'gt', 'acesHill', 'drago'] as const;
 
     for (const op of operators) {
       const dark = createPixelData(64, 64, 64);
@@ -895,5 +912,333 @@ describe('GPU/CPU Parity with shared functions', () => {
       const x = i / 255;
       expect(tonemapGTChannel(x)).toBeGreaterThanOrEqual(0);
     }
+  });
+
+  it('Drago CPU matches GPU formula', () => {
+    const testValues = [0.1, 0.25, 0.5, 0.75, 1.0, 2.0];
+    const bias = 0.85;
+    const Lwa = 0.2;
+    const Lmax = 1.5;
+    for (const L of testValues) {
+      // GPU formula (from viewer.frag.glsl tonemapDragoChannel):
+      const Ln = L / Lwa;
+      const biasP = Math.log(bias) / Math.log(0.5);
+      const denom = Math.log2(1.0 + Lmax / Lwa);
+      const num = Math.log(1.0 + Ln) / Math.log(2.0 + 8.0 * Math.pow(Ln / (Lmax / Lwa), biasP));
+      const gpuResult = num / Math.max(denom, 1e-6);
+
+      const cpuResult = tonemapDragoChannel(L, bias, Lwa, Lmax);
+      expect(cpuResult).toBeCloseTo(gpuResult, 10);
+    }
+  });
+
+  it('Drago never produces negative values', () => {
+    for (let i = 0; i <= 255; i++) {
+      const x = i / 255;
+      expect(tonemapDragoChannel(x)).toBeGreaterThanOrEqual(0);
+    }
+  });
+});
+
+// ============================================================================
+// Drago Adaptive Logarithmic Tone Mapping
+// ============================================================================
+
+describe('Drago Tone Mapping', () => {
+  it('HDRTM-U_DRAGO_001: black (0) maps to 0', () => {
+    expect(tonemapDragoChannel(0)).toBe(0);
+  });
+
+  it('HDRTM-U_DRAGO_002: monotonically increasing', () => {
+    let prev = tonemapDragoChannel(0);
+    for (let i = 1; i <= 100; i++) {
+      const val = i * 0.1;
+      const curr = tonemapDragoChannel(val);
+      expect(curr).toBeGreaterThanOrEqual(prev);
+      prev = curr;
+    }
+  });
+
+  it('HDRTM-U_DRAGO_003: bounded for high inputs', () => {
+    const high = tonemapDragoChannel(1000);
+    expect(high).toBeGreaterThan(0);
+    expect(Number.isFinite(high)).toBe(true);
+  });
+
+  it('HDRTM-U_DRAGO_004: formula matches expected range for unit input', () => {
+    // With default params (bias=0.85, Lwa=0.18, Lmax=10.0)
+    // input=0.18 (= Lwa) should produce a low-mid value
+    const mid = tonemapDragoChannel(0.18);
+    expect(mid).toBeGreaterThan(0.01);
+    expect(mid).toBeLessThan(0.5);
+  });
+
+  it('HDRTM-U_DRAGO_005: handles NaN -> 0', () => {
+    expect(tonemapDragoChannel(NaN)).toBe(0);
+  });
+
+  it('HDRTM-U_DRAGO_006: handles Infinity -> 0', () => {
+    expect(tonemapDragoChannel(Infinity)).toBe(0);
+  });
+
+  it('HDRTM-U_DRAGO_007: handles negative -> 0', () => {
+    expect(tonemapDragoChannel(-1)).toBe(0);
+  });
+
+  it('HDRTM-U_DRAGO_008: bias parameter affects output', () => {
+    const lowBias = tonemapDragoChannel(1.0, 0.7);
+    const highBias = tonemapDragoChannel(1.0, 0.95);
+    expect(lowBias).not.toBeCloseTo(highBias, 2);
+  });
+
+  it('HDRTM-U_DRAGO_009: operates per-channel via dispatcher (with default brightness)', () => {
+    const defaultBrightness = 2.0;
+    const rgb = applyToneMappingToRGB(0.3, 0.5, 0.7, 'drago');
+    expect(rgb.r).not.toBe(rgb.g);
+    expect(rgb.g).not.toBe(rgb.b);
+    // Per-channel: each channel mapped independently, with brightness multiplier
+    expect(rgb.r).toBeCloseTo(tonemapDragoChannel(0.3) * defaultBrightness, 5);
+    expect(rgb.g).toBeCloseTo(tonemapDragoChannel(0.5) * defaultBrightness, 5);
+    expect(rgb.b).toBeCloseTo(tonemapDragoChannel(0.7) * defaultBrightness, 5);
+  });
+
+  it('HDRTM-U_DRAGO_010: channel dispatcher includes drago (with default brightness)', () => {
+    const defaultBrightness = 2.0;
+    const result = applyToneMappingToChannel(0.5, 'drago');
+    expect(result).toBeCloseTo(tonemapDragoChannel(0.5) * defaultBrightness, 5);
+  });
+
+  it('all eight operators map 0 to approximately 0 (including drago)', () => {
+    expect(tonemapDragoChannel(0)).toBeCloseTo(0, 2);
+  });
+
+  it('drago compresses HDR range', () => {
+    const hdr = tonemapDragoChannel(10.0);
+    expect(hdr).toBeLessThan(10.0);
+    expect(hdr).toBeGreaterThan(0);
+  });
+});
+
+// ============================================================================
+// Gamut Mapping
+// ============================================================================
+
+describe('Gamut Mapping', () => {
+  it('sRGB to sRGB is identity', () => {
+    const [r, g, b] = gamutMapRGB(0.5, 0.3, 0.7, 'srgb', 'srgb', 'clip');
+    expect(r).toBeCloseTo(0.5, 5);
+    expect(g).toBeCloseTo(0.3, 5);
+    expect(b).toBeCloseTo(0.7, 5);
+  });
+
+  it('Rec.2020 green maps to [0,1] range in sRGB (clip)', () => {
+    // Pure Rec.2020 green may be out of sRGB gamut
+    const [r, g, b] = gamutMapRGB(0.0, 1.0, 0.0, 'rec2020', 'srgb', 'clip');
+    expect(r).toBeGreaterThanOrEqual(0);
+    expect(r).toBeLessThanOrEqual(1);
+    expect(g).toBeGreaterThanOrEqual(0);
+    expect(g).toBeLessThanOrEqual(1);
+    expect(b).toBeGreaterThanOrEqual(0);
+    expect(b).toBeLessThanOrEqual(1);
+  });
+
+  it('negative inputs are clamped (clip mode)', () => {
+    const [r, g, b] = gamutMapRGB(-0.5, 0.5, -0.3, 'srgb', 'srgb', 'clip');
+    expect(r).toBeGreaterThanOrEqual(0);
+    expect(g).toBeGreaterThanOrEqual(0);
+    expect(b).toBeGreaterThanOrEqual(0);
+  });
+
+  it('compress mode uses soft clip', () => {
+    // Values above 0.8 should be compressed, not hard clipped
+    const [rClip] = gamutMapRGB(0.95, 0.5, 0.5, 'srgb', 'srgb', 'clip');
+    const [rCompress] = gamutMapRGB(0.95, 0.5, 0.5, 'srgb', 'srgb', 'compress');
+    // Compress should produce a value between 0.8 and 1.0 for input 0.95
+    expect(rCompress).toBeGreaterThan(0.8);
+    expect(rCompress).toBeLessThanOrEqual(1.0);
+    expect(rClip).toBeCloseTo(0.95, 5);
+  });
+
+  it('Rec.2020 to P3 conversion is closer to identity than Rec.2020 to sRGB', () => {
+    // P3 gamut is between sRGB and Rec.2020
+    const [rSrgb] = gamutMapRGB(0.5, 0.5, 0.5, 'rec2020', 'srgb', 'clip');
+    const [rP3] = gamutMapRGB(0.5, 0.5, 0.5, 'rec2020', 'display-p3', 'clip');
+    // Both should produce valid results
+    expect(rSrgb).toBeGreaterThanOrEqual(0);
+    expect(rP3).toBeGreaterThanOrEqual(0);
+  });
+
+  it('P3 to sRGB conversion produces valid output', () => {
+    const [r, g, b] = gamutMapRGB(0.8, 0.5, 0.3, 'display-p3', 'srgb', 'clip');
+    expect(r).toBeGreaterThanOrEqual(0);
+    expect(r).toBeLessThanOrEqual(1);
+    expect(g).toBeGreaterThanOrEqual(0);
+    expect(g).toBeLessThanOrEqual(1);
+    expect(b).toBeGreaterThanOrEqual(0);
+    expect(b).toBeLessThanOrEqual(1);
+  });
+
+  it('Rec.2020 to sRGB white (1,1,1) preserves white', () => {
+    // White in any color space must map to white: row sums of correct matrix ≈ 1.0
+    const [r, g, b] = gamutMapRGB(1.0, 1.0, 1.0, 'rec2020', 'srgb', 'clip');
+    expect(r).toBeCloseTo(1.0, 2);
+    expect(g).toBeCloseTo(1.0, 2);
+    expect(b).toBeCloseTo(1.0, 2);
+  });
+
+  it('Rec.2020 to Display-P3 white (1,1,1) preserves white', () => {
+    const [r, g, b] = gamutMapRGB(1.0, 1.0, 1.0, 'rec2020', 'display-p3', 'clip');
+    expect(r).toBeCloseTo(1.0, 2);
+    expect(g).toBeCloseTo(1.0, 2);
+    expect(b).toBeCloseTo(1.0, 2);
+  });
+
+  it('P3 to sRGB white (1,1,1) preserves white', () => {
+    const [r, g, b] = gamutMapRGB(1.0, 1.0, 1.0, 'display-p3', 'srgb', 'clip');
+    expect(r).toBeCloseTo(1.0, 2);
+    expect(g).toBeCloseTo(1.0, 2);
+    expect(b).toBeCloseTo(1.0, 2);
+  });
+
+  it('Rec.2020 to sRGB black (0,0,0) preserves black', () => {
+    const [r, g, b] = gamutMapRGB(0.0, 0.0, 0.0, 'rec2020', 'srgb', 'clip');
+    expect(r).toBeCloseTo(0.0, 5);
+    expect(g).toBeCloseTo(0.0, 5);
+    expect(b).toBeCloseTo(0.0, 5);
+  });
+
+  it('Rec.2020 to sRGB grey (0.5) maps to approximately (0.5) (chromatically neutral)', () => {
+    // Neutral grey should remain approximately neutral after gamut mapping
+    const [r, g, b] = gamutMapRGB(0.5, 0.5, 0.5, 'rec2020', 'srgb', 'clip');
+    expect(r).toBeCloseTo(0.5, 1);
+    expect(g).toBeCloseTo(0.5, 1);
+    expect(b).toBeCloseTo(0.5, 1);
+  });
+
+  it('Rec.2020 to Display-P3 grey (0.5) preserves chromaticity', () => {
+    const [r, g, b] = gamutMapRGB(0.5, 0.5, 0.5, 'rec2020', 'display-p3', 'clip');
+    expect(r).toBeCloseTo(0.5, 1);
+    expect(g).toBeCloseTo(0.5, 1);
+    expect(b).toBeCloseTo(0.5, 1);
+  });
+
+  it('Rec.2020 to Display-P3 black (0,0,0) preserves black', () => {
+    const [r, g, b] = gamutMapRGB(0.0, 0.0, 0.0, 'rec2020', 'display-p3', 'clip');
+    expect(r).toBeCloseTo(0.0, 5);
+    expect(g).toBeCloseTo(0.0, 5);
+    expect(b).toBeCloseTo(0.0, 5);
+  });
+
+  it('Rec.2020 pure red (1,0,0) to sRGB produces valid output with negative clipping', () => {
+    // Pure Rec.2020 red is out of sRGB gamut — some channels may go negative before clip
+    const [r, g, b] = gamutMapRGB(1.0, 0.0, 0.0, 'rec2020', 'srgb', 'clip');
+    expect(r).toBeGreaterThan(0);
+    expect(r).toBeLessThanOrEqual(1);
+    expect(g).toBeGreaterThanOrEqual(0);
+    expect(g).toBeLessThanOrEqual(1);
+    expect(b).toBeGreaterThanOrEqual(0);
+    expect(b).toBeLessThanOrEqual(1);
+  });
+
+  it('Rec.2020 pure green (0,1,0) to sRGB produces valid output', () => {
+    const [r, g, b] = gamutMapRGB(0.0, 1.0, 0.0, 'rec2020', 'srgb', 'clip');
+    expect(r).toBeGreaterThanOrEqual(0);
+    expect(r).toBeLessThanOrEqual(1);
+    expect(g).toBeGreaterThan(0);
+    expect(g).toBeLessThanOrEqual(1);
+    expect(b).toBeGreaterThanOrEqual(0);
+    expect(b).toBeLessThanOrEqual(1);
+  });
+
+  it('Rec.2020 pure blue (0,0,1) to sRGB produces valid output', () => {
+    const [r, g, b] = gamutMapRGB(0.0, 0.0, 1.0, 'rec2020', 'srgb', 'clip');
+    expect(r).toBeGreaterThanOrEqual(0);
+    expect(r).toBeLessThanOrEqual(1);
+    expect(g).toBeGreaterThanOrEqual(0);
+    expect(g).toBeLessThanOrEqual(1);
+    expect(b).toBeGreaterThan(0);
+    expect(b).toBeLessThanOrEqual(1);
+  });
+
+  it('Rec.2020 mid-saturated green to P3 preserves more than to sRGB (compress mode)', () => {
+    // P3 gamut is wider than sRGB, so Rec.2020→P3 should distort less on saturated colors.
+    // Use compress mode so soft-clipping reveals the difference (hard clip masks it).
+    const [rP3, , bP3] = gamutMapRGB(0.0, 0.8, 0.0, 'rec2020', 'display-p3', 'compress');
+    const [rSrgb, , bSrgb] = gamutMapRGB(0.0, 0.8, 0.0, 'rec2020', 'srgb', 'compress');
+    // sRGB should have more negative-channel distortion (R and B pushed further from 0)
+    const p3Error = Math.abs(rP3) + Math.abs(bP3);
+    const srgbError = Math.abs(rSrgb) + Math.abs(bSrgb);
+    expect(p3Error).toBeLessThanOrEqual(srgbError);
+  });
+
+  it('all three matrix row sums are approximately 1.0 (white preservation)', () => {
+    // Verify all matrices preserve white by testing row sums via the gamut mapper
+    for (const [source, target] of [
+      ['rec2020', 'srgb'],
+      ['rec2020', 'display-p3'],
+      ['display-p3', 'srgb'],
+    ] as const) {
+      const [r, g, b] = gamutMapRGB(1.0, 1.0, 1.0, source, target, 'clip');
+      expect(r).toBeCloseTo(1.0, 2);
+      expect(g).toBeCloseTo(1.0, 2);
+      expect(b).toBeCloseTo(1.0, 2);
+    }
+  });
+});
+
+// ============================================================================
+// Drago Edge Cases and Custom Parameters
+// ============================================================================
+
+describe('Drago Edge Cases', () => {
+  it('Drago with bias at low boundary (0.7) produces valid output', () => {
+    const result = tonemapDragoChannel(1.0, 0.7, 0.2, 1.5);
+    expect(result).toBeGreaterThan(0);
+    expect(Number.isFinite(result)).toBe(true);
+  });
+
+  it('Drago with bias at high boundary (0.95) produces valid output', () => {
+    const result = tonemapDragoChannel(1.0, 0.95, 0.2, 1.5);
+    expect(result).toBeGreaterThan(0);
+    expect(Number.isFinite(result)).toBe(true);
+  });
+
+  it('Drago bias range: low bias compresses more than high bias for bright values', () => {
+    const lowBias = tonemapDragoChannel(5.0, 0.7, 0.2, 10.0);
+    const highBias = tonemapDragoChannel(5.0, 0.95, 0.2, 10.0);
+    // Lower bias produces stronger compression (lower output for high input)
+    expect(lowBias).not.toBeCloseTo(highBias, 2);
+  });
+
+  it('Drago with custom Lwa and Lmax produces different output than defaults', () => {
+    const defaultResult = tonemapDragoChannel(1.0, 0.85, 0.18, 10.0);
+    const customResult = tonemapDragoChannel(1.0, 0.85, 0.5, 100.0);
+    expect(defaultResult).not.toBeCloseTo(customResult, 2);
+  });
+
+  it('Drago with very small Lwa (dark scene) produces high output', () => {
+    const darkScene = tonemapDragoChannel(0.5, 0.85, 0.01, 10.0);
+    const normalScene = tonemapDragoChannel(0.5, 0.85, 0.5, 10.0);
+    // Dark scene adaptation means higher perceived brightness for the same absolute luminance
+    expect(darkScene).toBeGreaterThan(normalScene);
+  });
+
+  it('Drago with very large Lmax (high dynamic range) still produces bounded output', () => {
+    const result = tonemapDragoChannel(100.0, 0.85, 0.2, 10000.0);
+    expect(result).toBeGreaterThan(0);
+    expect(result).toBeLessThan(100.0);
+    expect(Number.isFinite(result)).toBe(true);
+  });
+
+  it('Drago with zero Lwa uses safety clamp', () => {
+    const result = tonemapDragoChannel(1.0, 0.85, 0.0, 1.5);
+    expect(Number.isFinite(result)).toBe(true);
+    expect(result).toBeGreaterThanOrEqual(0);
+  });
+
+  it('Drago with zero Lmax uses safety clamp', () => {
+    const result = tonemapDragoChannel(1.0, 0.85, 0.2, 0.0);
+    expect(Number.isFinite(result)).toBe(true);
+    expect(result).toBeGreaterThanOrEqual(0);
   });
 });

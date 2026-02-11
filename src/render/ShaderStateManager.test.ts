@@ -11,6 +11,7 @@ import {
   ShaderStateManager,
   DIRTY_LUT3D,
   DIRTY_BACKGROUND,
+  DIRTY_GAMUT_MAPPING,
   ALL_DIRTY_FLAGS,
 } from './ShaderStateManager';
 import type { RenderState } from './RenderState';
@@ -264,6 +265,59 @@ describe('ShaderStateManager', () => {
       mgr.setColorInversion(true);
       expect(flags.has('inversion')).toBe(true);
       expect(flags.size).toBe(1);
+    });
+  });
+
+  describe('setGamutMapping', () => {
+    it('SSM-060: marks gamut mapping dirty flag', () => {
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      mgr.setGamutMapping({ mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb' });
+      expect(flags.has(DIRTY_GAMUT_MAPPING)).toBe(true);
+    });
+
+    it('SSM-061: disables gamut mapping when mode is off', () => {
+      mgr.setGamutMapping({ mode: 'off', sourceGamut: 'rec2020', targetGamut: 'srgb' });
+      const state = mgr.getGamutMapping();
+      expect(state.mode).toBe('off');
+    });
+
+    it('SSM-062: disables gamut mapping when source equals target', () => {
+      mgr.setGamutMapping({ mode: 'clip', sourceGamut: 'srgb', targetGamut: 'srgb' });
+      const state = mgr.getGamutMapping();
+      expect(state.mode).toBe('off');
+    });
+
+    it('SSM-063: enables gamut mapping for rec2020 to srgb clip', () => {
+      mgr.setGamutMapping({ mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb' });
+      const state = mgr.getGamutMapping();
+      expect(state.mode).toBe('clip');
+      expect(state.sourceGamut).toBe('rec2020');
+      expect(state.targetGamut).toBe('srgb');
+    });
+
+    it('SSM-064: enables gamut mapping for rec2020 to display-p3 compress', () => {
+      mgr.setGamutMapping({ mode: 'compress', sourceGamut: 'rec2020', targetGamut: 'display-p3' });
+      const state = mgr.getGamutMapping();
+      expect(state.mode).toBe('compress');
+      expect(state.sourceGamut).toBe('rec2020');
+      expect(state.targetGamut).toBe('display-p3');
+    });
+
+    it('SSM-065: DIRTY_GAMUT_MAPPING is included in ALL_DIRTY_FLAGS', () => {
+      expect(ALL_DIRTY_FLAGS).toContain(DIRTY_GAMUT_MAPPING);
+    });
+
+    it('SSM-066: applyRenderState with gamutMapping marks gamut dirty', () => {
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      const state = createDefaultRenderState();
+      state.gamutMapping = { mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb' };
+      mgr.applyRenderState(state);
+
+      expect(flags.has(DIRTY_GAMUT_MAPPING)).toBe(true);
     });
   });
 });

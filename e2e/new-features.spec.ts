@@ -36,6 +36,26 @@ async function getSliderByLabel(page: import('@playwright/test').Page, label: st
   return page.locator('.color-controls-panel label').filter({ hasText: label }).locator('..').locator('input[type="range"]');
 }
 
+async function enablePixelProbeAndHover(page: import('@playwright/test').Page) {
+  const state = await getPixelProbeState(page);
+  if (!state.enabled) {
+    await page.locator('[data-testid="pixel-probe-toggle"]').click();
+  }
+
+  await page.waitForFunction(
+    () => window.__OPENRV_TEST__?.getPixelProbeState?.()?.enabled === true,
+    undefined,
+    { timeout: 5000 },
+  );
+
+  const canvas = page.locator('canvas').first();
+  const box = await canvas.boundingBox();
+  if (box) {
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.waitForTimeout(100);
+  }
+}
+
 test.describe('Highlight/Shadow Recovery Controls', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
@@ -325,9 +345,7 @@ test.describe('Pixel Probe / Color Sampler', () => {
   });
 
   test('PROBE-009: pixel probe should display IRE value', async ({ page }) => {
-    // Enable probe
-    await page.keyboard.press('Shift+i');
-    await page.waitForTimeout(200);
+    await enablePixelProbeAndHover(page);
 
     const overlay = page.locator('[data-testid="pixel-probe-overlay"]');
     await expect(overlay).toBeVisible();
@@ -354,9 +372,7 @@ test.describe('Pixel Probe / Color Sampler', () => {
   });
 
   test('PROBE-011: IRE format button should be available', async ({ page }) => {
-    // Enable probe
-    await page.keyboard.press('Shift+i');
-    await page.waitForTimeout(200);
+    await enablePixelProbeAndHover(page);
 
     const overlay = page.locator('[data-testid="pixel-probe-overlay"]');
     const ireButton = overlay.locator('button:has-text("IRE")');
@@ -3692,4 +3708,3 @@ test.describe('Theme Control', () => {
     expect(state.mode).toBe('auto');
   });
 });
-

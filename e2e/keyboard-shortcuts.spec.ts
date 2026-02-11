@@ -3,6 +3,7 @@ import {
   loadVideoFile,
   waitForTestHelper,
   getSessionState,
+  waitForLoopMode,
   getViewerState,
   getPaintState,
   getTransformState,
@@ -26,6 +27,21 @@ async function selectZoomPreset(page: import('@playwright/test').Page, value: 'f
   const dropdown = page.locator('[data-testid="zoom-dropdown"]');
   await expect(dropdown).toBeVisible();
   await dropdown.locator(`button[data-value="${value}"]`).click();
+}
+
+async function cycleLoopModeWithShortcut(page: import('@playwright/test').Page): Promise<void> {
+  // Dispatch Ctrl+L on <body> to avoid browser-level shortcut interception while
+  // keeping an HTMLElement event target for KeyboardManager filtering logic.
+  await page.evaluate(() => {
+    const event = new KeyboardEvent('keydown', {
+      key: 'l',
+      code: 'KeyL',
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    document.body.dispatchEvent(event);
+  });
 }
 
 test.describe('Keyboard Shortcuts', () => {
@@ -348,20 +364,20 @@ test.describe('Keyboard Shortcuts', () => {
       let state = await getSessionState(page);
       expect(state.loopMode).toBe('loop');
 
-      await page.keyboard.press('Control+l');
-      await page.waitForTimeout(100);
+      await cycleLoopModeWithShortcut(page);
+      await waitForLoopMode(page, 'pingpong');
 
       state = await getSessionState(page);
       expect(state.loopMode).toBe('pingpong');
 
-      await page.keyboard.press('Control+l');
-      await page.waitForTimeout(100);
+      await cycleLoopModeWithShortcut(page);
+      await waitForLoopMode(page, 'once');
 
       state = await getSessionState(page);
       expect(state.loopMode).toBe('once');
 
-      await page.keyboard.press('Control+l');
-      await page.waitForTimeout(100);
+      await cycleLoopModeWithShortcut(page);
+      await waitForLoopMode(page, 'loop');
 
       state = await getSessionState(page);
       expect(state.loopMode).toBe('loop');

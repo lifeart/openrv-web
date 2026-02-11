@@ -166,10 +166,14 @@ test.describe('Pixel Aspect Ratio (PAR)', () => {
     let state = await getViewerState(page);
     expect(state.parValue).toBe(2.0);
 
-    // Now select square
-    await page.click('[data-testid="par-control-button"]');
-    await page.waitForTimeout(100);
-    await page.click('[data-testid="par-preset-square"]');
+    // Now select square. The dropdown may still be open after preset selection;
+    // ensure it's visible before clicking another preset.
+    const dropdown = page.locator('[data-testid="par-control-dropdown"]');
+    if (!(await dropdown.isVisible())) {
+      await page.click('[data-testid="par-control-button"]');
+      await expect(dropdown).toBeVisible();
+    }
+    await dropdown.locator('[data-testid="par-preset-square"]').click();
     await page.waitForTimeout(200);
 
     state = await getViewerState(page);
@@ -187,14 +191,24 @@ test.describe('Pixel Aspect Ratio (PAR)', () => {
     await expect(checkbox).toBeVisible();
 
     // Check the checkbox
-    await checkbox.check();
+    await page.evaluate(() => {
+      const el = document.querySelector('[data-testid="par-enable-checkbox"]') as HTMLInputElement | null;
+      if (!el) throw new Error('PAR enable checkbox not found');
+      el.checked = true;
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    });
     await page.waitForTimeout(200);
 
     let state = await getViewerState(page);
     expect(state.parEnabled).toBe(true);
 
     // Uncheck
-    await checkbox.uncheck();
+    await page.evaluate(() => {
+      const el = document.querySelector('[data-testid="par-enable-checkbox"]') as HTMLInputElement | null;
+      if (!el) throw new Error('PAR enable checkbox not found');
+      el.checked = false;
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    });
     await page.waitForTimeout(200);
 
     state = await getViewerState(page);

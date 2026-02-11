@@ -307,13 +307,28 @@ test.describe('Highlight/Shadow Recovery', () => {
 
       // Set highlights and shadows
       const highlightsSlider = await getSliderByLabel(page, 'Highlights');
-      await highlightsSlider.fill('-40');
-      await highlightsSlider.dispatchEvent('input');
+      await highlightsSlider.evaluate((el, val) => {
+        const input = el as HTMLInputElement;
+        input.value = String(val);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }, -40);
 
       const shadowsSlider = await getSliderByLabel(page, 'Shadows');
-      await shadowsSlider.fill('40');
-      await shadowsSlider.dispatchEvent('input');
-      await page.waitForTimeout(100);
+      await shadowsSlider.evaluate((el, val) => {
+        const input = el as HTMLInputElement;
+        input.value = String(val);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }, 40);
+      await page.waitForFunction(
+        () => {
+          const state = window.__OPENRV_TEST__?.getColorState?.();
+          return !!state && state.highlights === -40 && state.shadows === 40;
+        },
+        undefined,
+        { timeout: 5000 },
+      );
 
       let state = await getColorState(page);
       expect(state.highlights).toBe(-40);

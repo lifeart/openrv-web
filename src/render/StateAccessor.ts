@@ -13,7 +13,7 @@
 
 import type { ShaderProgram } from './ShaderProgram';
 import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState } from '../core/types/color';
-import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState } from '../core/types/effects';
+import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState, GamutMappingState } from '../core/types/effects';
 import type { BackgroundPatternState } from '../core/types/background';
 import type { CDLValues } from '../color/CDL';
 import type { CurveLUTs } from '../color/ColorCurves';
@@ -117,6 +117,12 @@ export interface StateAccessor {
 
   /** Set HSL qualifier (secondary color correction). */
   setHSLQualifier(state: HSLQualifierState): void;
+
+  /** Set gamut mapping state. */
+  setGamutMapping(state: GamutMappingState): void;
+
+  /** Get the current gamut mapping state. */
+  getGamutMapping(): GamutMappingState;
 
   /** Set texel size (called before applyUniforms based on image dimensions). */
   setTexelSize(w: number, h: number): void;

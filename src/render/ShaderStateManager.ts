@@ -16,8 +16,8 @@ import type { ManagerBase } from '../core/ManagerBase';
 import type { ShaderProgram } from './ShaderProgram';
 import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState } from '../core/types/color';
 import { DEFAULT_COLOR_ADJUSTMENTS } from '../core/types/color';
-import type { ToneMappingState, ToneMappingOperator, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState } from '../core/types/effects';
-import { DEFAULT_TONE_MAPPING_STATE } from '../core/types/effects';
+import type { ToneMappingState, ToneMappingOperator, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState, GamutMappingState, GamutIdentifier } from '../core/types/effects';
+import { DEFAULT_TONE_MAPPING_STATE, DEFAULT_GAMUT_MAPPING_STATE } from '../core/types/effects';
 import type { BackgroundPatternState } from '../core/types/background';
 import { PATTERN_COLORS } from '../core/types/background';
 import { getHueRotationMatrix, isIdentityHueRotation } from '../color/HueRotation';
@@ -48,6 +48,7 @@ export const DIRTY_VIBRANCE = 'vibrance';
 export const DIRTY_HIGHLIGHTS_SHADOWS = 'highlightsShadows';
 export const DIRTY_INVERSION = 'inversion';
 export const DIRTY_LUT3D = 'lut3d';
+export const DIRTY_GAMUT_MAPPING = 'gamutMapping';
 
 /** All dirty flag names -- used to initialize on first render so all uniforms are set. */
 export const ALL_DIRTY_FLAGS = [
@@ -55,7 +56,7 @@ export const ALL_DIRTY_FLAGS = [
   DIRTY_HSL, DIRTY_ZEBRA, DIRTY_CHANNELS, DIRTY_BACKGROUND,
   DIRTY_DISPLAY, DIRTY_CLARITY, DIRTY_SHARPEN, DIRTY_FALSE_COLOR,
   DIRTY_CURVES, DIRTY_VIBRANCE, DIRTY_HIGHLIGHTS_SHADOWS, DIRTY_INVERSION,
-  DIRTY_LUT3D,
+  DIRTY_LUT3D, DIRTY_GAMUT_MAPPING,
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -72,6 +73,20 @@ export const TONE_MAPPING_OPERATOR_CODES: Record<ToneMappingOperator, number> = 
   'pbrNeutral': 5,
   'gt': 6,
   'acesHill': 7,
+  'drago': 8,
+};
+
+/** Gamut identifier integer codes for shader uniform */
+const GAMUT_CODES: Record<GamutIdentifier, number> = {
+  'srgb': 0,
+  'rec2020': 1,
+  'display-p3': 2,
+};
+
+/** Gamut mapping mode codes for shader uniform */
+const GAMUT_MODE_CODES: Record<string, number> = {
+  'clip': 0,
+  'compress': 1,
 };
 
 /** Map ChannelMode string to shader integer */
@@ -133,6 +148,10 @@ function assignToneMappingState(dst: ToneMappingState, src: Readonly<ToneMapping
   dst.reinhardWhitePoint = src.reinhardWhitePoint;
   dst.filmicExposureBias = src.filmicExposureBias;
   dst.filmicWhitePoint = src.filmicWhitePoint;
+  dst.dragoBias = src.dragoBias;
+  dst.dragoLwa = src.dragoLwa;
+  dst.dragoLmax = src.dragoLmax;
+  dst.dragoBrightness = src.dragoBrightness;
 }
 
 // ---------------------------------------------------------------------------
@@ -242,6 +261,12 @@ export interface InternalShaderState {
   hslCorrLumScale: number;
   hslInvert: boolean;
   hslMattePreview: boolean;
+
+  // Gamut Mapping
+  gamutMappingEnabled: boolean;
+  gamutMappingModeCode: number;
+  gamutSourceCode: number;
+  gamutTargetCode: number;
 }
 
 function createDefaultInternalState(): InternalShaderState {
@@ -312,6 +337,10 @@ function createDefaultInternalState(): InternalShaderState {
     hslCorrLumScale: 1,
     hslInvert: false,
     hslMattePreview: false,
+    gamutMappingEnabled: false,
+    gamutMappingModeCode: 0,
+    gamutSourceCode: 0,
+    gamutTargetCode: 0,
   };
 }
 
@@ -699,6 +728,26 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     this.dirtyFlags.add(DIRTY_HSL);
   }
 
+  setGamutMapping(gmState: GamutMappingState): void {
+    const enabled = gmState.mode !== 'off' && gmState.sourceGamut !== gmState.targetGamut;
+    this.state.gamutMappingEnabled = enabled;
+    this.state.gamutMappingModeCode = enabled ? (GAMUT_MODE_CODES[gmState.mode] ?? 0) : 0;
+    this.state.gamutSourceCode = GAMUT_CODES[gmState.sourceGamut] ?? 0;
+    this.state.gamutTargetCode = GAMUT_CODES[gmState.targetGamut] ?? 0;
+    this.dirtyFlags.add(DIRTY_GAMUT_MAPPING);
+  }
+
+  getGamutMapping(): GamutMappingState {
+    const s = this.state;
+    if (!s.gamutMappingEnabled) return { ...DEFAULT_GAMUT_MAPPING_STATE };
+    const sourceEntries = Object.entries(GAMUT_CODES);
+    const targetEntries = Object.entries(GAMUT_CODES);
+    const source = (sourceEntries.find(([, v]) => v === s.gamutSourceCode)?.[0] ?? 'srgb') as GamutIdentifier;
+    const target = (targetEntries.find(([, v]) => v === s.gamutTargetCode)?.[0] ?? 'srgb') as GamutIdentifier;
+    const mode = s.gamutMappingModeCode === 1 ? 'compress' : 'clip';
+    return { mode, sourceGamut: source, targetGamut: target };
+  }
+
   /** Set texel size (called by Renderer before applyUniforms, based on image dimensions). */
   setTexelSize(w: number, h: number): void {
     this.state.texelSize[0] = w;
@@ -736,14 +785,18 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
       this.setColorInversion(renderState.colorInversion);
     }
 
-    // --- Tone mapping (3 uniforms) ---
+    // --- Tone mapping (3+ uniforms) ---
     {
       const t = renderState.toneMappingState;
       const c = s.toneMappingState;
       if (t.enabled !== c.enabled || t.operator !== c.operator ||
           (t.reinhardWhitePoint ?? 4.0) !== (c.reinhardWhitePoint ?? 4.0) ||
           (t.filmicExposureBias ?? 2.0) !== (c.filmicExposureBias ?? 2.0) ||
-          (t.filmicWhitePoint ?? 11.2) !== (c.filmicWhitePoint ?? 11.2)) {
+          (t.filmicWhitePoint ?? 11.2) !== (c.filmicWhitePoint ?? 11.2) ||
+          (t.dragoBias ?? 0.85) !== (c.dragoBias ?? 0.85) ||
+          (t.dragoLwa ?? 0.2) !== (c.dragoLwa ?? 0.2) ||
+          (t.dragoLmax ?? 1.5) !== (c.dragoLmax ?? 1.5) ||
+          (t.dragoBrightness ?? 2.0) !== (c.dragoBrightness ?? 2.0)) {
         this.setToneMappingState(t);
       }
     }
@@ -872,6 +925,21 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
         this.setHSLQualifier(h);
       }
     }
+
+    // --- Gamut mapping (4 uniforms) ---
+    if (renderState.gamutMapping) {
+      const gm = renderState.gamutMapping;
+      const newEnabled = gm.mode !== 'off' && gm.sourceGamut !== gm.targetGamut;
+      const newModeCode = newEnabled ? (GAMUT_MODE_CODES[gm.mode] ?? 0) : 0;
+      const newSourceCode = GAMUT_CODES[gm.sourceGamut] ?? 0;
+      const newTargetCode = GAMUT_CODES[gm.targetGamut] ?? 0;
+      if (newEnabled !== s.gamutMappingEnabled ||
+          newModeCode !== s.gamutMappingModeCode ||
+          newSourceCode !== s.gamutSourceCode ||
+          newTargetCode !== s.gamutTargetCode) {
+        this.setGamutMapping(gm);
+      }
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -923,6 +991,10 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
       shader.setUniformInt('u_toneMappingOperator', toneMappingCode);
       shader.setUniform('u_tmReinhardWhitePoint', s.toneMappingState.reinhardWhitePoint ?? 4.0);
       shader.setUniform('u_tmFilmicExposureBias', s.toneMappingState.filmicExposureBias ?? 2.0);
+      shader.setUniform('u_tmDragoBias', s.toneMappingState.dragoBias ?? 0.85);
+      shader.setUniform('u_tmDragoLwa', s.toneMappingState.dragoLwa ?? 0.2);
+      shader.setUniform('u_tmDragoLmax', s.toneMappingState.dragoLmax ?? 1.5);
+      shader.setUniform('u_tmDragoBrightness', s.toneMappingState.dragoBrightness ?? 2.0);
       shader.setUniform('u_tmFilmicWhitePoint', s.toneMappingState.filmicWhitePoint ?? 11.2);
     }
 
@@ -1074,6 +1146,16 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
         shader.setUniform('u_hslCorrLumScale', s.hslCorrLumScale);
         shader.setUniformInt('u_hslInvert', s.hslInvert ? 1 : 0);
         shader.setUniformInt('u_hslMattePreview', s.hslMattePreview ? 1 : 0);
+      }
+    }
+
+    // Gamut Mapping
+    if (dirty.has(DIRTY_GAMUT_MAPPING)) {
+      shader.setUniformInt('u_gamutMappingEnabled', s.gamutMappingEnabled ? 1 : 0);
+      if (s.gamutMappingEnabled) {
+        shader.setUniformInt('u_gamutMappingMode', s.gamutMappingModeCode);
+        shader.setUniformInt('u_sourceGamut', s.gamutSourceCode);
+        shader.setUniformInt('u_targetGamut', s.gamutTargetCode);
       }
     }
 

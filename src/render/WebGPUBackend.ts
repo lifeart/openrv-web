@@ -19,7 +19,7 @@
 import type { IPImage } from '../core/image/Image';
 import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState } from '../core/types/color';
 import { DEFAULT_COLOR_ADJUSTMENTS } from '../core/types/color';
-import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState } from '../core/types/effects';
+import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState, GamutMappingState } from '../core/types/effects';
 import { DEFAULT_TONE_MAPPING_STATE } from '../core/types/effects';
 import type { BackgroundPatternState } from '../core/types/background';
 import type { DisplayCapabilities } from '../color/DisplayCapabilities';
@@ -328,6 +328,7 @@ export class WebGPUBackend implements RendererBackend {
   setClarity(_state: ClarityState): void { /* STUB */ }
   setSharpen(_state: SharpenState): void { /* STUB */ }
   setHSLQualifier(_state: HSLQualifierState): void { /* STUB */ }
+  setGamutMapping(_state: GamutMappingState): void { /* STUB */ }
 
   applyRenderState(state: RenderState): void {
     this.setColorAdjustments(state.colorAdjustments);
@@ -347,6 +348,9 @@ export class WebGPUBackend implements RendererBackend {
     this.setClarity({ clarity: state.clarity });
     this.setSharpen({ amount: state.sharpen });
     this.setHSLQualifier(state.hslQualifier);
+    if (state.gamutMapping) {
+      this.setGamutMapping(state.gamutMapping);
+    }
   }
 
   hasPendingStateChanges(): boolean {

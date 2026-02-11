@@ -369,6 +369,10 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
     value: number,
     onChange: (value: number) => void
   ): HTMLElement {
+    // Derive display precision from step value (e.g. step=0.1 → 1 decimal, step=0.01 → 2 decimals)
+    const stepStr = String(step);
+    const decimals = stepStr.includes('.') ? stepStr.split('.')[1]!.length : 0;
+
     const row = document.createElement('div');
     row.style.cssText = `
       display: flex;
@@ -389,7 +393,7 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
     labelSpan.style.cssText = 'color: var(--text-primary); font-size: 10px;';
 
     const valueSpan = document.createElement('span');
-    valueSpan.textContent = value.toFixed(1);
+    valueSpan.textContent = value.toFixed(decimals);
     valueSpan.style.cssText = 'color: var(--text-secondary); font-size: 10px;';
 
     labelRow.appendChild(labelSpan);
@@ -409,7 +413,7 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
 
     slider.addEventListener('input', () => {
       const newValue = parseFloat(slider.value);
-      valueSpan.textContent = newValue.toFixed(1);
+      valueSpan.textContent = newValue.toFixed(decimals);
       onChange(newValue);
     });
 
@@ -486,8 +490,43 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
       );
       this.parameterSection.appendChild(whitePointSlider);
 
+    } else if (op === 'drago') {
+      this.parameterSection.style.display = 'block';
+
+      const paramLabel = document.createElement('div');
+      paramLabel.textContent = 'Drago Parameters';
+      paramLabel.style.cssText = `
+        color: var(--text-secondary);
+        font-size: 10px;
+        text-transform: uppercase;
+        margin-bottom: 6px;
+      `;
+      this.parameterSection.appendChild(paramLabel);
+
+      const biasSlider = this.createSlider(
+        'Bias',
+        0.5, 1.0, 0.01,
+        this.state.dragoBias ?? 0.85,
+        (value) => {
+          this.state.dragoBias = value;
+          this.emit('stateChanged', { ...this.state });
+        }
+      );
+      this.parameterSection.appendChild(biasSlider);
+
+      const brightnessSlider = this.createSlider(
+        'Brightness',
+        0.5, 5.0, 0.1,
+        this.state.dragoBrightness ?? 2.0,
+        (value) => {
+          this.state.dragoBrightness = value;
+          this.emit('stateChanged', { ...this.state });
+        }
+      );
+      this.parameterSection.appendChild(brightnessSlider);
+
     } else {
-      // 'aces' or 'off': hide the section
+      // Other operators (aces, agx, pbrNeutral, gt, acesHill, off): hide the section
       this.parameterSection.style.display = 'none';
     }
   }
@@ -678,6 +717,22 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
     }
     if (state.filmicWhitePoint !== undefined && state.filmicWhitePoint !== this.state.filmicWhitePoint) {
       this.state.filmicWhitePoint = state.filmicWhitePoint;
+      changed = true;
+    }
+    if (state.dragoBias !== undefined && state.dragoBias !== this.state.dragoBias) {
+      this.state.dragoBias = state.dragoBias;
+      changed = true;
+    }
+    if (state.dragoLwa !== undefined && state.dragoLwa !== this.state.dragoLwa) {
+      this.state.dragoLwa = state.dragoLwa;
+      changed = true;
+    }
+    if (state.dragoLmax !== undefined && state.dragoLmax !== this.state.dragoLmax) {
+      this.state.dragoLmax = state.dragoLmax;
+      changed = true;
+    }
+    if (state.dragoBrightness !== undefined && state.dragoBrightness !== this.state.dragoBrightness) {
+      this.state.dragoBrightness = state.dragoBrightness;
       changed = true;
     }
     if (changed) {

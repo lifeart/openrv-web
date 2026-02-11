@@ -76,6 +76,7 @@ function createMockRenderer(): RendererBackend {
     setClarity: vi.fn(),
     setSharpen: vi.fn(),
     setHSLQualifier: vi.fn(),
+    setGamutMapping: vi.fn(),
     applyRenderState: vi.fn(),
     hasPendingStateChanges: vi.fn().mockReturnValue(false),
     isShaderReady: vi.fn().mockReturnValue(true),
@@ -106,6 +107,9 @@ function applyRenderState(renderer: RendererBackend, state: RenderState): void {
   renderer.setClarity({ clarity: state.clarity });
   renderer.setSharpen({ amount: state.sharpen });
   renderer.setHSLQualifier(state.hslQualifier);
+  if (state.gamutMapping) {
+    renderer.setGamutMapping(state.gamutMapping);
+  }
 }
 
 describe('RenderState', () => {
@@ -319,6 +323,40 @@ describe('RenderState', () => {
       expect(renderer.setToneMappingState).toHaveBeenCalledWith(
         expect.objectContaining({ enabled: false, operator: 'off' }),
       );
+    });
+  });
+
+  describe('gamutMapping forwarding', () => {
+    it('calls setGamutMapping when gamutMapping is present in state', () => {
+      const renderer = createMockRenderer();
+      const state = createDefaultRenderState();
+      state.gamutMapping = { mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb' };
+      applyRenderState(renderer, state);
+
+      expect(renderer.setGamutMapping).toHaveBeenCalledOnce();
+      expect(renderer.setGamutMapping).toHaveBeenCalledWith({
+        mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb',
+      });
+    });
+
+    it('does not call setGamutMapping when gamutMapping is undefined', () => {
+      const renderer = createMockRenderer();
+      const state = createDefaultRenderState();
+      // gamutMapping is optional and not set in default
+      applyRenderState(renderer, state);
+
+      expect(renderer.setGamutMapping).not.toHaveBeenCalled();
+    });
+
+    it('passes compress mode gamut mapping correctly', () => {
+      const renderer = createMockRenderer();
+      const state = createDefaultRenderState();
+      state.gamutMapping = { mode: 'compress', sourceGamut: 'rec2020', targetGamut: 'display-p3' };
+      applyRenderState(renderer, state);
+
+      expect(renderer.setGamutMapping).toHaveBeenCalledWith({
+        mode: 'compress', sourceGamut: 'rec2020', targetGamut: 'display-p3',
+      });
     });
   });
 

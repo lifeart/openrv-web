@@ -6,7 +6,7 @@
  */
 
 import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState } from '../core/types/color';
-import type { ToneMappingState, ZebraState, HighlightsShadowsState, FalseColorState } from '../core/types/effects';
+import type { ToneMappingState, ZebraState, HighlightsShadowsState, FalseColorState, GamutMappingState } from '../core/types/effects';
 import type { BackgroundPatternState } from '../core/types/background';
 import type { CDLValues } from '../color/CDL';
 import type { CurveLUTs } from '../color/ColorCurves';
@@ -36,4 +36,5 @@ export interface RenderState {
   clarity: number;
   sharpen: number;
   hslQualifier: HSLQualifierState;
+  gamutMapping?: GamutMappingState;
 }
