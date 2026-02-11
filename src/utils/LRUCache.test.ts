@@ -162,6 +162,28 @@ describe('LRUCache', () => {
     });
   });
 
+  describe('peek', () => {
+    it('LRU-U019: peek returns value without refreshing LRU order', () => {
+      const cache = new LRUCache<string, number>(3);
+      cache.set('a', 1);
+      cache.set('b', 2);
+      cache.set('c', 3);
+
+      // peek 'a' — should return the value but NOT refresh its position
+      expect(cache.peek('a')).toBe(1);
+
+      // 'a' should still be oldest → evicted when a new key is added
+      cache.set('d', 4);
+      expect(cache.has('a')).toBe(false);
+      expect(cache.has('b')).toBe(true);
+    });
+
+    it('LRU-U020: peek returns undefined for missing key', () => {
+      const cache = new LRUCache<string, number>(3);
+      expect(cache.peek('missing')).toBeUndefined();
+    });
+  });
+
   describe('edge cases', () => {
     it('LRU-U015: constructor clamps maxSize to at least 1', () => {
       const cache = new LRUCache<string, number>(0);

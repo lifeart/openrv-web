@@ -108,6 +108,11 @@ export class Renderer implements RendererBackend {
   // Whether the current SDR texture has mipmaps generated (only for HTMLImageElement sources)
   private _sdrTextureMipmapped = false;
 
+  // Shared texture for VideoFrame uploads (HDR video path).
+  // Reused across frames to avoid allocating one GPU texture per cached IPImage
+  // (which would consume width×height×8 bytes × cacheSize, often exceeding VRAM).
+  private _videoFrameTexture: WebGLTexture | null = null;
+
   initialize(canvas: HTMLCanvasElement | OffscreenCanvas, capabilities?: DisplayCapabilities): void {
     this.canvas = canvas;
 
@@ -499,21 +504,27 @@ export class Renderer implements RendererBackend {
 
     const gl = this.gl;
 
-    // Create texture if needed
-    if (!image.texture) {
-      image.texture = gl.createTexture();
-    }
-
-    gl.bindTexture(gl.TEXTURE_2D, image.texture);
-
-    // Set texture parameters
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-
-    // VideoFrame direct GPU upload path (HDR video)
+    // VideoFrame direct GPU upload path (HDR video).
+    // Uses a single shared texture (_videoFrameTexture) instead of creating
+    // one GL texture per cached IPImage. Without this, a 300-frame cache at
+    // 1920×1080 RGBA16F would allocate ~4.8 GB of GPU textures, exceeding
+    // VRAM and causing driver-level frame drops / texture swapping.
     if (image.videoFrame) {
+      if (!this._videoFrameTexture) {
+        this._videoFrameTexture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, this._videoFrameTexture);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      }
+
+      // Point the IPImage at the shared texture so renderImage() binds the
+      // correct object. The data is re-uploaded every frame (cheap: VideoFrame
+      // is already a GPU resource, so texImage2D is a GPU-to-GPU copy).
+      image.texture = this._videoFrameTexture;
+      gl.bindTexture(gl.TEXTURE_2D, this._videoFrameTexture);
+
       try {
         // Set unpackColorSpace for best color fidelity
         try {
@@ -543,7 +554,8 @@ export class Renderer implements RendererBackend {
           log.warn('Failed to reset unpackColorSpace to srgb:', e);
         }
 
-        image.textureNeedsUpdate = false;
+        // Do NOT set textureNeedsUpdate = false — since the texture is shared,
+        // the next frame's IPImage must re-upload its own VideoFrame data.
         return;
       } catch (e) {
         // VideoFrame texImage2D not supported - fall through to SDR path
@@ -558,6 +570,21 @@ export class Renderer implements RendererBackend {
         }
       }
     }
+
+    // --- Non-VideoFrame path (typed array / HDR files) ---
+
+    // Create texture if needed
+    if (!image.texture) {
+      image.texture = gl.createTexture();
+    }
+
+    gl.bindTexture(gl.TEXTURE_2D, image.texture);
+
+    // Set texture parameters
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
     // Standard TypedArray upload path
     // For 3-channel float images (e.g. RGB EXR), pad to RGBA so mipmaps can be generated.
@@ -1407,6 +1434,10 @@ export class Renderer implements RendererBackend {
       gl.deleteTexture(this.sdrTexture);
       this.sdrTexture = null;
       this._sdrTextureMipmapped = false;
+    }
+    if (this._videoFrameTexture) {
+      gl.deleteTexture(this._videoFrameTexture);
+      this._videoFrameTexture = null;
     }
     if (this.curvesLUTTexture) gl.deleteTexture(this.curvesLUTTexture);
     if (this.falseColorLUTTexture) gl.deleteTexture(this.falseColorLUTTexture);

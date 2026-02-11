@@ -1141,8 +1141,12 @@ export class Viewer {
       if (hdrIPImage && this.renderHDRWithWebGL(hdrIPImage, displayWidth, displayHeight)) {
         this.updateCanvasPosition();
         this.updateWipeLine();
-        // Preload nearby HDR frames in background for smoother scrubbing
-        this.session.preloadVideoHDRFrames(currentFrame).catch(() => {});
+        // Preload nearby HDR frames in background for smoother scrubbing.
+        // Skip during playback — PlaybackEngine.update() already calls
+        // updatePlaybackBuffer() which triggers preloadHDRFrames().
+        if (!this.session.isPlaying) {
+          this.session.preloadVideoHDRFrames(currentFrame).catch(() => {});
+        }
         return; // HDR video path complete
       }
       // Start async HDR frame fetch if not cached

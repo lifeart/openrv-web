@@ -54,6 +54,10 @@ export class VideoSourceNode extends BaseSourceNode {
   // 500 MB memory budget for HDR frame cache (RGBA16F = 8 bytes/pixel)
   private static readonly HDR_MEMORY_BUDGET_BYTES = 500 * 1024 * 1024;
 
+  // Minimum HDR cache capacity: must hold the full preload window (ahead + behind + current frame).
+  // updatePlaybackBuffer() uses ahead=8, behind=2, so minimum = 8 + 2 + 1 = 11.
+  private static readonly HDR_MIN_CACHE_FRAMES = 11;
+
   // LRU cache of resized HDR IPImages for synchronous access by Viewer's render loop.
   // Size is updated dynamically via updateHDRCacheSize() based on frame dimensions.
   private hdrFrameCache = new LRUCache<number, IPImage>(
@@ -299,7 +303,7 @@ export class VideoSourceNode extends BaseSourceNode {
     const h = this.hdrTargetSize?.h ?? this.metadata.height;
     const bytesPerFrame = w * h * 8; // RGBA16F = 8 bytes/pixel
     if (bytesPerFrame <= 0) return;
-    const maxFrames = Math.max(4, Math.min(
+    const maxFrames = Math.max(VideoSourceNode.HDR_MIN_CACHE_FRAMES, Math.min(
       this.metadata.duration, // never more than total frames
       Math.floor(VideoSourceNode.HDR_MEMORY_BUDGET_BYTES / bytesPerFrame)
     ));
@@ -628,6 +632,8 @@ export class VideoSourceNode extends BaseSourceNode {
    * are always at full display quality.
    */
   setHDRTargetSize(targetSize?: { w: number; h: number }): void {
+    // Skip recalculation when dimensions haven't changed (called every render frame)
+    if (this.hdrTargetSize?.w === targetSize?.w && this.hdrTargetSize?.h === targetSize?.h) return;
     this.hdrTargetSize = targetSize;
     if (this.isHDRVideo) {
       this.updateHDRCacheSize();
@@ -720,9 +726,13 @@ export class VideoSourceNode extends BaseSourceNode {
     if (!this.useMediabunny) return;
 
     if (this.isHDRVideo) {
-      // HDR: preload via HDR LRU cache with direction-aware window
-      const ahead = this.playbackDirection >= 0 ? 8 : 2;
-      const behind = this.playbackDirection >= 0 ? 2 : 8;
+      // HDR: preload via HDR LRU cache with direction-aware window.
+      // Clamp to cache capacity so preloading never evicts the current frame.
+      const maxWindow = Math.max(0, this.hdrFrameCache.capacity - 1);
+      const rawAhead = this.playbackDirection >= 0 ? 8 : 2;
+      const rawBehind = this.playbackDirection >= 0 ? 2 : 8;
+      const ahead = Math.min(rawAhead, maxWindow);
+      const behind = Math.min(rawBehind, maxWindow - ahead);
       this.preloadHDRFrames(currentFrame, ahead, behind).catch(() => {});
       return;
     }
@@ -973,7 +983,10 @@ export class VideoSourceNode extends BaseSourceNode {
    * Returns null if the frame hasn't been fetched yet.
    */
   getCachedHDRIPImage(frame: number): IPImage | null {
-    return this.hdrFrameCache.get(frame) ?? null;
+    // Use peek() (no LRU refresh) to avoid Map delete+re-insert on every
+    // render frame. The render loop reads every frame sequentially; the
+    // preload window already keeps nearby frames alive.
+    return this.hdrFrameCache.peek(frame) ?? null;
   }
 
   /**
@@ -1043,6 +1056,11 @@ export class VideoSourceNode extends BaseSourceNode {
     behind: number = 2,
   ): Promise<void> {
     if (!this.isHDRVideo || !this.useMediabunny || !this.frameExtractor) return;
+
+    // Clamp preload window to cache capacity to prevent evicting the current frame
+    const maxWindow = Math.max(0, this.hdrFrameCache.capacity - 1);
+    ahead = Math.min(ahead, maxWindow);
+    behind = Math.min(behind, maxWindow - ahead);
 
     const maxFrame = this.metadata.duration;
     const frames: number[] = [];

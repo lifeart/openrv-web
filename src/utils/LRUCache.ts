@@ -22,6 +22,15 @@ export class LRUCache<K, V> {
     return value;
   }
 
+  /**
+   * Return the cached value WITHOUT refreshing its LRU position.
+   * Use this on hot paths (e.g. the render loop) where the value is read
+   * every frame and the Map delete+re-insert would cause unnecessary GC pressure.
+   */
+  peek(key: K): V | undefined {
+    return this.map.get(key);
+  }
+
   set(key: K, value: V): void {
     if (this.map.has(key)) {
       const oldValue = this.map.get(key)!;
