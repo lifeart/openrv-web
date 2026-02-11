@@ -10,8 +10,9 @@
  * - Extended color space type for WebGL2 (rec2100-hlg, rec2100-pq)
  * - WebGL2RenderingContext.drawingBufferColorSpace / unpackColorSpace widened
  * - HTMLCanvasElement.configureHighDynamicRange()
- * - CanvasRenderingContext2DSettings.pixelFormat (for HDR float16 canvas)
+ * - CanvasRenderingContext2DSettings.pixelFormat / colorType (for HDR float16 canvas)
  * - Window.getScreenDetails() (Screen Details API)
+ * - OffscreenCanvasRenderingContext2D extended for HDR canvas drawImage
  *
  * Note: PredefinedColorSpace is a type alias and cannot be augmented via
  * declaration merging. For canvas 2D context settings that need HDR color
@@ -116,12 +117,36 @@ interface OffscreenCanvas {
  */
 interface CanvasRenderingContext2DSettings {
   /**
-   * The pixel storage format. When set to 'float16' with an HDR colorSpace
-   * (e.g. rec2100-hlg), the canvas uses 16-bit float pixel storage.
+   * The pixel storage format (legacy name, pre-Chrome 133).
+   * Superseded by colorType in Chrome 133+.
    *
    * Experimental: Only available in Chromium-based browsers.
    */
   pixelFormat?: 'uint8' | 'float16';
+
+  /**
+   * The color type / pixel storage format (Chrome 137+ stable).
+   * When set to 'float16', the canvas uses 16-bit float pixel storage
+   * capable of representing values > 1.0 (extended range / HDR).
+   *
+   * @see https://chromestatus.com/feature/5086141338877952
+   */
+  colorType?: 'unorm8' | 'float16';
+}
+
+// =============================================================================
+// HDR Canvas context settings for OffscreenCanvas
+// =============================================================================
+
+/**
+ * Extended context settings for OffscreenCanvas 2D context.
+ * Used when creating HDR float16 canvases for VideoFrame resize.
+ */
+interface HDRCanvasContextSettings {
+  colorSpace?: string;  // 'srgb' | 'display-p3' | 'rec2100-hlg' | 'rec2100-pq'
+  colorType?: 'unorm8' | 'float16';
+  pixelFormat?: 'uint8' | 'float16';
+  willReadFrequently?: boolean;
 }
 
 // =============================================================================

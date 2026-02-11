@@ -132,6 +132,7 @@ describe('VideoSourceNode', () => {
       const mockPreloadManager = {
         getCachedFrame: vi.fn().mockReturnValue(null),
         getFrame: vi.fn(),
+        getTargetSize: vi.fn().mockReturnValue(undefined),
         dispose: vi.fn(),
         setPlaybackState: vi.fn(),
         clear: vi.fn(),
@@ -174,7 +175,7 @@ describe('VideoSourceNode', () => {
       testNode.dispose();
     });
 
-    it('VSN-HDR-002: fetchHDRFrame closes previous cached IPImage VideoFrame', async () => {
+    it('VSN-HDR-002: fetchHDRFrame caches multiple frames, dispose closes all VideoFrames', async () => {
       const { testNode, mockFrameExtractor } = setupHDRNode();
 
       // First fetch
@@ -183,81 +184,86 @@ describe('VideoSourceNode', () => {
       await testNode.fetchHDRFrame(1);
 
       // Second fetch for different frame
-      const { mockSample: sample2 } = createMockSample();
+      const { mockSample: sample2, mockVideoFrame: frame2 } = createMockSample();
       mockFrameExtractor.getFrameHDR.mockResolvedValue(sample2);
       await testNode.fetchHDRFrame(2);
 
-      // First VideoFrame should have been closed (via IPImage.close())
-      expect(frame1.close).toHaveBeenCalled();
+      // Both samples should have been closed after extraction
       expect(sample1.close).toHaveBeenCalledOnce();
       expect(sample2.close).toHaveBeenCalledOnce();
 
+      // Both frames should still be alive in the LRU cache (not evicted yet)
+      expect(frame1.close).not.toHaveBeenCalled();
+      expect(frame2.close).not.toHaveBeenCalled();
+
+      // Dispose closes all cached VideoFrames via LRU cache clear
       testNode.dispose();
+      expect(frame1.close).toHaveBeenCalled();
+      expect(frame2.close).toHaveBeenCalled();
     });
 
-    it('VSN-HDR-003: dispose closes pending HDR sample', () => {
-      const { testNode, internal } = setupHDRNode();
-
-      const { mockSample } = createMockSample();
-      internal.pendingHDRSample = mockSample;
-      internal.pendingHDRFrame = 5;
-
-      testNode.dispose();
-
-      expect(mockSample.close).toHaveBeenCalledOnce();
-    });
-
-    it('VSN-HDR-004: dispose does not throw when pendingHDRSample is null', () => {
-      const { testNode, internal } = setupHDRNode();
-      internal.pendingHDRSample = null;
-
-      expect(() => testNode.dispose()).not.toThrow();
-    });
-
-    it('VSN-HDR-005: process() closes pendingHDRSample after consuming it', () => {
+    it('VSN-HDR-003: process() returns cached HDR frame from LRU cache', async () => {
       const { testNode, internal, mockFrameExtractor } = setupHDRNode();
       const { mockSample } = createMockSample();
+      mockFrameExtractor.getFrameHDR.mockResolvedValue(mockSample);
 
-      // Set up pending sample as if the async callback already fired
-      internal.pendingHDRSample = mockSample;
-      internal.pendingHDRFrame = 1;
-
-      // Block the async path by setting a pending request
-      internal.pendingHDRRequest = Promise.resolve(null);
+      // Populate cache via fetchHDRFrame (decode → resize → cache)
+      await testNode.fetchHDRFrame(1);
 
       const context = { frame: 1, width: 1920, height: 1080, quality: 'full' as const };
       const result = (internal as any).process(context, []);
 
+      // Should return the cached frame
       expect(result).not.toBeNull();
-      expect(mockSample.close).toHaveBeenCalledOnce();
-      expect(internal.pendingHDRSample).toBeNull();
+      expect(result.videoFrame).toBeDefined();
 
       testNode.dispose();
     });
 
-    it('VSN-HDR-006: async callback closes stale sample before replacing', async () => {
+    it('VSN-HDR-004: process() returns null and kicks off fetch for uncached HDR frame', () => {
       const { testNode, internal, mockFrameExtractor } = setupHDRNode();
-      const { mockSample: oldSample } = createMockSample();
-      const { mockSample: newSample } = createMockSample();
+      mockFrameExtractor.getFrameHDR.mockResolvedValue(null);
 
-      // Simulate stale sample from a prior frame
-      internal.pendingHDRSample = oldSample;
-      internal.pendingHDRFrame = 1;
+      const context = { frame: 1, width: 1920, height: 1080, quality: 'full' as const };
+      const result = (internal as any).process(context, []);
 
-      // Set up getFrameHDR to return new sample
-      mockFrameExtractor.getFrameHDR.mockResolvedValue(newSample);
+      // Returns null while waiting for async fetch
+      expect(result).toBeNull();
+      // getFrameHDR should have been called (via fetchHDRFrame)
+      expect(mockFrameExtractor.getFrameHDR).toHaveBeenCalledWith(1);
 
-      // Trigger process for frame 2 — async callback will fire
-      internal.pendingHDRRequest = null; // allow new request
-      const context = { frame: 2, width: 1920, height: 1080, quality: 'full' as const };
-      (internal as any).process(context, []);
+      testNode.dispose();
+    });
 
-      // Wait for the async callback
-      await new Promise(resolve => setTimeout(resolve, 10));
+    it('VSN-HDR-005: fetchHDRFrame deduplicates concurrent requests for same frame', async () => {
+      const { testNode, mockFrameExtractor } = setupHDRNode();
+      const { mockSample } = createMockSample();
+      mockFrameExtractor.getFrameHDR.mockResolvedValue(mockSample);
 
-      expect(oldSample.close).toHaveBeenCalledOnce();
-      expect(internal.pendingHDRSample).toBe(newSample);
-      expect(internal.pendingHDRFrame).toBe(2);
+      // Fire two concurrent fetches for the same frame
+      const [result1, result2] = await Promise.all([
+        testNode.fetchHDRFrame(1),
+        testNode.fetchHDRFrame(1),
+      ]);
+
+      // Both should return the same IPImage, but only one extraction
+      expect(result1).toBe(result2);
+      expect(mockFrameExtractor.getFrameHDR).toHaveBeenCalledTimes(1);
+
+      testNode.dispose();
+    });
+
+    it('VSN-HDR-006: getFrameIPImage delegates to fetchHDRFrame for HDR video', async () => {
+      const { testNode, mockFrameExtractor } = setupHDRNode();
+      const { mockSample } = createMockSample();
+      mockFrameExtractor.getFrameHDR.mockResolvedValue(mockSample);
+
+      const result = await testNode.getFrameIPImage(1);
+
+      expect(result).not.toBeNull();
+      // Should be cached after getFrameIPImage
+      expect(testNode.hasFrameCached(1)).toBe(true);
+      expect(mockSample.close).toHaveBeenCalledOnce();
 
       testNode.dispose();
     });
@@ -282,6 +288,64 @@ describe('VideoSourceNode', () => {
       const result = await testNode.fetchHDRFrame(1);
 
       expect(result).toBeNull();
+
+      testNode.dispose();
+    });
+
+    it('VSN-HDR-009: hasFrameCached checks HDR cache for HDR video', async () => {
+      const { testNode, mockFrameExtractor } = setupHDRNode();
+      const { mockSample } = createMockSample();
+      mockFrameExtractor.getFrameHDR.mockResolvedValue(mockSample);
+
+      // Before fetching, frame should not be cached
+      expect(testNode.hasFrameCached(1)).toBe(false);
+
+      // Fetch frame 1 into HDR cache
+      await testNode.fetchHDRFrame(1);
+
+      // Now frame 1 should be cached (via hdrFrameCache, not preloadManager)
+      expect(testNode.hasFrameCached(1)).toBe(true);
+      // Frame 2 was never fetched
+      expect(testNode.hasFrameCached(2)).toBe(false);
+
+      testNode.dispose();
+    });
+
+    it('VSN-HDR-010: getCachedFrames returns HDR cache keys for HDR video', async () => {
+      const { testNode, mockFrameExtractor } = setupHDRNode();
+
+      // Fetch frame 1
+      const { mockSample: sample1 } = createMockSample();
+      mockFrameExtractor.getFrameHDR.mockResolvedValue(sample1);
+      await testNode.fetchHDRFrame(1);
+
+      // Fetch frame 2
+      const { mockSample: sample2 } = createMockSample();
+      mockFrameExtractor.getFrameHDR.mockResolvedValue(sample2);
+      await testNode.fetchHDRFrame(2);
+
+      const cachedFrames = testNode.getCachedFrames();
+      expect(cachedFrames.has(1)).toBe(true);
+      expect(cachedFrames.has(2)).toBe(true);
+      expect(cachedFrames.size).toBe(2);
+
+      testNode.dispose();
+    });
+
+    it('VSN-HDR-011: getFrameAsync delegates to fetchHDRFrame for HDR video', async () => {
+      const { testNode, mockFrameExtractor } = setupHDRNode();
+      const { mockSample } = createMockSample();
+      mockFrameExtractor.getFrameHDR.mockResolvedValue(mockSample);
+
+      // getFrameAsync should delegate to fetchHDRFrame for HDR video
+      const result = await testNode.getFrameAsync(1);
+
+      // HDR path returns null (frame is cached internally, not returned as FrameResult)
+      expect(result).toBeNull();
+      // Verify getFrameHDR was called (via fetchHDRFrame)
+      expect(mockFrameExtractor.getFrameHDR).toHaveBeenCalledWith(1);
+      // Frame should now be in the HDR cache
+      expect(testNode.hasFrameCached(1)).toBe(true);
 
       testNode.dispose();
     });

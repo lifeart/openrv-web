@@ -44,6 +44,17 @@ export interface DisplayCapabilities {
   /** True if VideoFrame API is available (for HDR video texImage2D upload) */
   videoFrameTexImage: boolean;
 
+  // HDR VideoFrame resize via OffscreenCanvas
+  /** True if OffscreenCanvas supports HDR-preserving float16 canvas for VideoFrame resize */
+  canvasHDRResize: boolean;
+  /**
+   * Which HDR canvas resize tier is available:
+   * - 'rec2100': rec2100-hlg/pq + float16 (experimental, preserves exact HDR signal)
+   * - 'display-p3-float16': display-p3 + float16 (stable Chrome 137+, extended-range)
+   * - 'none': no HDR-preserving resize available
+   */
+  canvasHDRResizeTier: 'rec2100' | 'display-p3-float16' | 'none';
+
   // Derived
   activeColorSpace: 'srgb' | 'display-p3';
   activeHDRMode: 'sdr' | 'hlg' | 'pq' | 'extended' | 'none';
@@ -75,6 +86,9 @@ export const DEFAULT_CAPABILITIES: DisplayCapabilities = {
   canvasExtendedHDR: false,
 
   videoFrameTexImage: false,
+
+  canvasHDRResize: false,
+  canvasHDRResizeTier: 'none',
 
   activeColorSpace: 'srgb',
   activeHDRMode: 'sdr',
@@ -162,6 +176,54 @@ export function detectDisplayCapabilities(): DisplayCapabilities {
       } as unknown as CanvasRenderingContext2DSettings);
       caps.canvasFloat16 = ctx !== null;
     } catch { /* stays false */ }
+  }
+
+  // --- HDR canvas resize tier detection (OffscreenCanvas with float16) ---
+  // Tier 1: rec2100-hlg + float16 (experimental, preserves exact HDR signal space)
+  // Tier 2: display-p3 + float16 (stable Chrome 137+, extended-range values >1.0)
+  //
+  // The float16 property name varies by Chrome version:
+  //   - Chrome <133: pixelFormat: 'float16'
+  //   - Chrome 133-136: colorType: 'float16' (behind flag)
+  //   - Chrome 137+: colorType: 'float16' (stable)
+  // We try colorType first (newer), then pixelFormat (older).
+  if (typeof OffscreenCanvas !== 'undefined') {
+    const float16Options = [
+      { colorType: 'float16' },
+      { pixelFormat: 'float16' },
+    ] as const;
+
+    // Tier 1: try rec2100-hlg + float16
+    for (const opt of float16Options) {
+      if (caps.canvasHDRResize) break;
+      try {
+        const probe = new OffscreenCanvas(1, 1);
+        const ctx = probe.getContext('2d', {
+          colorSpace: 'rec2100-hlg',
+          ...opt,
+        } as unknown as CanvasRenderingContext2DSettings);
+        if (ctx) {
+          caps.canvasHDRResizeTier = 'rec2100';
+          caps.canvasHDRResize = true;
+        }
+      } catch { /* not available with this option */ }
+    }
+
+    // Tier 2: try display-p3 + float16 (only if tier 1 failed)
+    for (const opt of float16Options) {
+      if (caps.canvasHDRResize) break;
+      try {
+        const probe = new OffscreenCanvas(1, 1);
+        const ctx = probe.getContext('2d', {
+          colorSpace: 'display-p3',
+          ...opt,
+        } as unknown as CanvasRenderingContext2DSettings);
+        if (ctx) {
+          caps.canvasHDRResizeTier = 'display-p3-float16';
+          caps.canvasHDRResize = true;
+        }
+      } catch { /* not available with this option */ }
+    }
   }
 
   // --- WebGL2 P3, HLG, and PQ support (single context, reuses probeCanvas if no 2D ctx) ---
@@ -263,6 +325,8 @@ export function detectDisplayCapabilities(): DisplayCapabilities {
     canvasFloat16: caps.canvasFloat16,
     webglDrawingBufferStorage: caps.webglDrawingBufferStorage,
     canvasExtendedHDR: caps.canvasExtendedHDR,
+    canvasHDRResize: caps.canvasHDRResize,
+    canvasHDRResizeTier: caps.canvasHDRResizeTier,
     activeHDRMode: caps.activeHDRMode,
   });
 

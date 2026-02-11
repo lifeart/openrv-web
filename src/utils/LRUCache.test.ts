@@ -184,11 +184,21 @@ describe('LRUCache', () => {
       expect(cache.get(4)).toBe('four');
     });
 
-    it('LRU-U017: onEvict is not called on overwrite', () => {
+    it('LRU-U017: onEvict is called on overwrite with different value', () => {
       const onEvict = vi.fn();
       const cache = new LRUCache<string, number>(10, onEvict);
       cache.set('a', 1);
       cache.set('a', 2);
+
+      expect(onEvict).toHaveBeenCalledWith('a', 1);
+      expect(onEvict).toHaveBeenCalledTimes(1);
+    });
+
+    it('LRU-U017b: onEvict is not called on overwrite with same value', () => {
+      const onEvict = vi.fn();
+      const cache = new LRUCache<string, number>(10, onEvict);
+      cache.set('a', 1);
+      cache.set('a', 1);
 
       expect(onEvict).not.toHaveBeenCalled();
     });

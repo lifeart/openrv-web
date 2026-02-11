@@ -104,6 +104,7 @@ function createMockHost(overrides: Partial<MediaManagerHost> = {}): MediaManager
     emitDurationChanged: vi.fn(),
     emitInOutChanged: vi.fn(),
     emitUnsupportedCodec: vi.fn(),
+    getHDRResizeTier: vi.fn().mockReturnValue('none'),
     ...overrides,
   };
 }

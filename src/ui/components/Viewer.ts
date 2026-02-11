@@ -1117,6 +1117,16 @@ export class Viewer {
           ? { w: cappedW, h: cappedH }
           : undefined // full resolution
       );
+
+      // Set stable HDR target size using actual display dimensions (not interaction-reduced).
+      // HDR frames are cached in an LRU and should always be at full display quality.
+      const hdrW = Math.min(this.physicalWidth, source.width);
+      const hdrH = Math.min(this.physicalHeight, source.height);
+      source.videoSourceNode.setHDRTargetSize(
+        hdrW < source.width || hdrH < source.height
+          ? { w: hdrW, h: hdrH }
+          : undefined
+      );
     }
 
     // HDR WebGL rendering path: render via GPU shader pipeline and skip 2D canvas.
@@ -1131,6 +1141,8 @@ export class Viewer {
       if (hdrIPImage && this.renderHDRWithWebGL(hdrIPImage, displayWidth, displayHeight)) {
         this.updateCanvasPosition();
         this.updateWipeLine();
+        // Preload nearby HDR frames in background for smoother scrubbing
+        this.session.preloadVideoHDRFrames(currentFrame).catch(() => {});
         return; // HDR video path complete
       }
       // Start async HDR frame fetch if not cached
@@ -3016,6 +3028,15 @@ export class Viewer {
 
     const totalFrames = this.session.frameCount;
     if (totalFrames <= 0) {
+      this.prerenderBuffer = null;
+      return;
+    }
+
+    // Skip CPU effects prerender for HDR video — effects are handled by the
+    // WebGL shader pipeline, so the PrerenderBufferManager would only waste
+    // memory caching unused SDR frames at full source resolution.
+    const source = this.session.currentSource;
+    if (source?.videoSourceNode?.isHDR()) {
       this.prerenderBuffer = null;
       return;
     }

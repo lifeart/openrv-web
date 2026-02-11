@@ -11,6 +11,7 @@ import {
 import { VideoSourceNode } from '../../nodes/sources/VideoSourceNode';
 import { FileSourceNode } from '../../nodes/sources/FileSourceNode';
 import type { GTOParseResult } from './GTOGraphLoader';
+import type { HDRResizeTier } from '../../utils/media/HDRFrameResizer';
 import { Logger } from '../../utils/Logger';
 
 const log = new Logger('MediaManager');
@@ -60,6 +61,8 @@ export interface MediaManagerHost {
   emitInOutChanged(inPoint: number, outPoint: number): void;
   /** Emit unsupportedCodec event */
   emitUnsupportedCodec(info: UnsupportedCodecInfo): void;
+  /** Get the pre-detected HDR canvas resize tier */
+  getHDRResizeTier(): HDRResizeTier;
 }
 
 /**
@@ -402,10 +405,11 @@ export class MediaManager implements ManagerBase {
    */
   async loadVideoFile(file: File): Promise<void> {
     const fps = this._host?.getFps() ?? 24;
+    const hdrResizeTier = this._host?.getHDRResizeTier() ?? 'none';
 
     // Create VideoSourceNode for frame-accurate extraction
     const videoSourceNode = new VideoSourceNode(file.name);
-    const loadResult = await videoSourceNode.loadFile(file, fps);
+    const loadResult = await videoSourceNode.loadFile(file, fps, hdrResizeTier);
 
     // Check for unsupported codec and emit event if detected
     if (loadResult.unsupportedCodecError) {

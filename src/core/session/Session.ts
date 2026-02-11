@@ -13,6 +13,7 @@ import {
 import { VideoSourceNode } from '../../nodes/sources/VideoSourceNode';
 import { FileSourceNode } from '../../nodes/sources/FileSourceNode';
 import type { UnsupportedCodecError, CodecFamily } from '../../utils/media/CodecUtils';
+import type { HDRResizeTier } from '../../utils/media/HDRFrameResizer';
 import type {
   Annotation,
   PenStroke,
@@ -199,6 +200,10 @@ export class Session extends EventEmitter<SessionEvents> {
   private _volumeManager = new VolumeManager();
   private _abCompareManager = new ABCompareManager();
   private _annotationStore = new AnnotationStore();
+
+  // Pre-detected HDR canvas resize tier from DisplayCapabilities.
+  // Set via setHDRResizeTier() so VideoSourceNode can use it instead of re-probing.
+  private _hdrResizeTier: HDRResizeTier = 'none';
 
   // Session integration properties
   private _metadata: SessionMetadata = {
@@ -427,6 +432,14 @@ export class Session extends EventEmitter<SessionEvents> {
 
   set frameIncrement(value: number) {
     this._playbackEngine.frameIncrement = value;
+  }
+
+  /**
+   * Set the HDR canvas resize tier detected at startup by DisplayCapabilities.
+   * VideoSourceNode uses this instead of re-probing OffscreenCanvas capabilities.
+   */
+  setHDRResizeTier(tier: HDRResizeTier): void {
+    this._hdrResizeTier = tier;
   }
 
   /** Matte overlay settings */
@@ -1491,7 +1504,7 @@ export class Session extends EventEmitter<SessionEvents> {
 
     // Create VideoSourceNode for frame-accurate extraction
     const videoSourceNode = new VideoSourceNode(file.name);
-    const loadResult = await videoSourceNode.loadFile(file, this._fps);
+    const loadResult = await videoSourceNode.loadFile(file, this._fps, this._hdrResizeTier);
 
     // Check for unsupported codec and emit event if detected
     if (loadResult.unsupportedCodecError) {
@@ -1737,6 +1750,18 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   /**
+   * Preload HDR frames around the current frame for smoother scrubbing/playback.
+   */
+  async preloadVideoHDRFrames(centerFrame?: number, ahead?: number, behind?: number): Promise<void> {
+    const source = this.currentSource;
+    if (source?.type !== 'video' || !source.videoSourceNode?.isHDR()) {
+      return;
+    }
+    const frame = centerFrame ?? this._currentFrame;
+    await source.videoSourceNode.preloadHDRFrames(frame, ahead, behind);
+  }
+
+  /**
    * Check if video frame is cached and ready for immediate display
    */
   hasVideoFrameCached(frameIndex?: number): boolean {
@@ -1882,6 +1907,7 @@ export class Session extends EventEmitter<SessionEvents> {
     pendingCount: number;
     totalFrames: number;
     maxCacheSize: number;
+    memorySizeMB?: number;
   } | null {
     const source = this.currentSource;
     if (source?.type !== 'video' || !source.videoSourceNode?.isUsingMediabunny()) {

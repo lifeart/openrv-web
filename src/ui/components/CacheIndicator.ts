@@ -208,7 +208,8 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
     const pendingFrames = this.session.getPendingFrames();
     const source = this.session.currentSource;
     const totalFrames = source?.duration ?? 0;
-    const memorySizeMB = this.calculateMemorySizeMB(cachedFrames.size);
+    const stats = this.session.getCacheStats();
+    const memorySizeMB = stats?.memorySizeMB ?? this.calculateMemorySizeMB(cachedFrames.size);
 
     return {
       visible: this.visible,
@@ -296,7 +297,9 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
     // Update stats display
     const statsSpan = this.infoContainer.querySelector('.cache-stats') as HTMLSpanElement;
     if (statsSpan) {
-      const memorySizeMB = this.calculateMemorySizeMB(cachedFrames.size);
+      // Use accurate memory from stats when available (e.g. HDR resized frames),
+      // otherwise estimate from source dimensions
+      const memorySizeMB = stats?.memorySizeMB ?? this.calculateMemorySizeMB(cachedFrames.size);
       const memoryStr = this.formatMemorySize(memorySizeMB);
       statsSpan.textContent = `Cache: ${cachedFrames.size} / ${this.totalFrames} frames (${memoryStr})`;
       if (stats && pendingFrames.size > 0) {

@@ -531,8 +531,10 @@ export class Renderer implements RendererBackend {
           image.videoFrame // VideoFrame is a valid TexImageSource
         );
 
-        // Release VRAM - VideoFrame is consumed
-        image.close();
+        // Do NOT close the VideoFrame here — the IPImage may be held in an
+        // LRU cache (e.g. VideoSourceNode.hdrFrameCache) and could be re-uploaded
+        // after a WebGL context loss.  The cache's eviction callback owns the
+        // VideoFrame lifecycle.
 
         // Reset unpackColorSpace back to sRGB
         try {

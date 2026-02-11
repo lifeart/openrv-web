@@ -80,6 +80,7 @@ export class App {
 
     // Create core components
     this.session = new Session();
+    this.session.setHDRResizeTier(this.displayCapabilities.canvasHDRResizeTier);
     this.paintEngine = new PaintEngine();
     this.viewer = new Viewer({ session: this.session, paintEngine: this.paintEngine, capabilities: this.displayCapabilities });
     this.timeline = new Timeline(this.session, this.paintEngine);
