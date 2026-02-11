@@ -1004,14 +1004,89 @@ async function getViewerImageCanvas(page: Page): Promise<ReturnType<Page['locato
 }
 
 /**
+ * Best-effort canvas data URL capture that tolerates transient visibility swaps.
+ * Falls back through visible and non-visible viewer canvases.
+ */
+async function captureViewerCanvasDataUrl(page: Page): Promise<string | null> {
+  return page.evaluate(() => {
+    const seen = new Set<HTMLCanvasElement>();
+    const candidates: HTMLCanvasElement[] = [];
+
+    const isVisible = (el: HTMLCanvasElement): boolean => {
+      const style = window.getComputedStyle(el);
+      if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+        return false;
+      }
+      const rect = el.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    };
+
+    const pushCanvases = (selector: string, requireVisible: boolean) => {
+      const nodes = Array.from(document.querySelectorAll(selector));
+      for (const node of nodes) {
+        if (!(node instanceof HTMLCanvasElement)) continue;
+        if (seen.has(node)) continue;
+        if (requireVisible && !isVisible(node)) continue;
+        seen.add(node);
+        candidates.push(node);
+      }
+    };
+
+    // Prefer visible canvases in order of render significance.
+    pushCanvases('canvas[data-testid="viewer-gl-canvas"]', true);
+    pushCanvases('canvas[data-testid="viewer-image-canvas"]', true);
+    pushCanvases('.viewer-container canvas', true);
+    // Fallback to attached canvases even if currently hidden.
+    pushCanvases('canvas[data-testid="viewer-gl-canvas"]', false);
+    pushCanvases('canvas[data-testid="viewer-image-canvas"]', false);
+    pushCanvases('.viewer-container canvas', false);
+
+    for (const canvas of candidates) {
+      if (canvas.width < 1 || canvas.height < 1) {
+        continue;
+      }
+      try {
+        const dataUrl = canvas.toDataURL('image/png');
+        if (dataUrl.startsWith('data:image/png')) {
+          return dataUrl;
+        }
+      } catch {
+        // Ignore tainted/detached canvas and try next one.
+      }
+    }
+
+    return null;
+  });
+}
+
+/**
  * Capture canvas pixel data as a base64 string for comparison
  */
 export async function captureCanvasState(page: Page): Promise<string> {
-  const canvas = await getViewerRenderCanvas(page);
-  const dataUrl = await canvas.evaluate((el: HTMLCanvasElement) => {
-    return el.toDataURL('image/png');
-  });
-  return dataUrl;
+  const maxAttempts = 16;
+  let lastError: unknown = new Error('Viewer canvas data URL not available');
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (page.isClosed()) {
+      throw new Error('Page was closed while capturing canvas state');
+    }
+
+    try {
+      const dataUrl = await captureViewerCanvasDataUrl(page);
+      if (dataUrl) {
+        return dataUrl;
+      }
+      lastError = new Error('Viewer canvas data URL not available');
+    } catch (error) {
+      lastError = error;
+    }
+
+    if (attempt < maxAttempts) {
+      await page.waitForTimeout(50);
+    }
+  }
+
+  throw lastError ?? new Error('Failed to capture canvas state');
 }
 
 /**
@@ -1257,25 +1332,93 @@ export async function getAppState(page: Page): Promise<{
   return state;
 }
 
+interface ClipRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Resolve a stable screenshot clip around the currently active render canvas.
+ * Uses page-level clipping to avoid element screenshot visibility races.
+ */
+async function getViewerClipRect(page: Page, timeout = 5000): Promise<ClipRect> {
+  const deadline = Date.now() + timeout;
+  let lastError: unknown = new Error('Viewer clip not available');
+
+  while (Date.now() < deadline) {
+    if (page.isClosed()) {
+      throw new Error('Page was closed while resolving viewer clip rectangle');
+    }
+
+    try {
+      // Prefer visible viewer container bounds (stable under canvas swaps).
+      const viewer = page.locator('.viewer-container:visible').first();
+      let box = await viewer.boundingBox();
+
+      // Fallback to any visible viewer canvas if container bounds are unavailable.
+      if (!box) {
+        const canvas = page.locator('.viewer-container canvas:visible').first();
+        box = await canvas.boundingBox();
+      }
+
+      if (box && box.width > 1 && box.height > 1) {
+        const x = Math.max(0, Math.floor(box.x));
+        const y = Math.max(0, Math.floor(box.y));
+        const width = Math.max(1, Math.floor(box.width));
+        const height = Math.max(1, Math.floor(box.height));
+        return { x, y, width, height };
+      }
+    } catch (error) {
+      lastError = error;
+    }
+
+    if (page.isClosed()) {
+      throw new Error('Page was closed while waiting for viewer clip rectangle');
+    }
+    await page.waitForTimeout(40);
+  }
+
+  throw lastError ?? new Error('Could not resolve visible viewer clip rectangle');
+}
+
 /**
  * Verify video frame changed by checking visual difference
  * Uses screenshot comparison instead of canvas pixel access
  */
 export async function captureViewerScreenshot(page: Page): Promise<Buffer> {
   const maxAttempts = 3;
+  let lastError: unknown;
+  const viewer = page.locator('.viewer-container').first();
+
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const canvas = await getViewerRenderCanvas(page);
+    if (page.isClosed()) {
+      throw new Error('Page was closed while capturing viewer screenshot');
+    }
+
     try {
-      return await canvas.screenshot();
+      // Fast path: element screenshot avoids long clip polling loops.
+      if (await viewer.isVisible().catch(() => false)) {
+        return await viewer.screenshot();
+      }
+
+      // Fallback for transient visibility races.
+      const clip = await getViewerClipRect(page, 1200);
+      return await page.screenshot({ clip });
     } catch (error) {
+      lastError = error;
       if (attempt === maxAttempts) {
         throw error;
       }
-      await page.waitForTimeout(50 * attempt);
+      if (page.isClosed()) {
+        throw error;
+      }
+      await page.waitForTimeout(40 * attempt);
     }
   }
 
-  throw new Error('Failed to capture viewer screenshot');
+  throw lastError ?? new Error('Failed to capture viewer screenshot');
 }
 
 /**
@@ -1283,16 +1426,12 @@ export async function captureViewerScreenshot(page: Page): Promise<Buffer> {
  * Used to verify that the B source is actually updating during playback
  */
 export async function captureBSideScreenshot(page: Page): Promise<Buffer> {
-  const canvas = await getViewerRenderCanvas(page);
-  const box = await canvas.boundingBox();
-  if (!box) {
-    throw new Error('Canvas not found');
-  }
+  const box = await getViewerClipRect(page);
   // Capture right half (B side in horizontal split)
-  const screenshot = await canvas.screenshot({
+  const screenshot = await page.screenshot({
     clip: {
-      x: Math.floor(box.width / 2),
-      y: 0,
+      x: box.x + Math.floor(box.width / 2),
+      y: box.y,
       width: Math.ceil(box.width / 2),
       height: box.height,
     },
@@ -1305,16 +1444,12 @@ export async function captureBSideScreenshot(page: Page): Promise<Buffer> {
  * Used to verify that the A source is actually updating during playback
  */
 export async function captureASideScreenshot(page: Page): Promise<Buffer> {
-  const canvas = await getViewerRenderCanvas(page);
-  const box = await canvas.boundingBox();
-  if (!box) {
-    throw new Error('Canvas not found');
-  }
+  const box = await getViewerClipRect(page);
   // Capture left half (A side in horizontal split)
-  const screenshot = await canvas.screenshot({
+  const screenshot = await page.screenshot({
     clip: {
-      x: 0,
-      y: 0,
+      x: box.x,
+      y: box.y,
       width: Math.floor(box.width / 2),
       height: box.height,
     },
@@ -1328,21 +1463,20 @@ export async function captureASideScreenshot(page: Page): Promise<Buffer> {
  * Returns { aSide, bSide } screenshots
  */
 export async function captureBothSidesScreenshot(page: Page): Promise<{ aSide: Buffer; bSide: Buffer }> {
-  const canvas = await getViewerRenderCanvas(page);
-  const box = await canvas.boundingBox();
-  if (!box) {
-    throw new Error('Canvas not found');
-  }
+  const box = await getViewerClipRect(page);
 
   const halfWidth = Math.floor(box.width / 2);
+  const x = box.x;
+  const y = box.y;
+  const height = box.height;
 
   // Capture both sides in parallel using the same bounding box
   const [aSide, bSide] = await Promise.all([
-    canvas.screenshot({
-      clip: { x: 0, y: 0, width: halfWidth, height: box.height },
+    page.screenshot({
+      clip: { x, y, width: halfWidth, height },
     }),
-    canvas.screenshot({
-      clip: { x: halfWidth, y: 0, width: Math.ceil(box.width / 2), height: box.height },
+    page.screenshot({
+      clip: { x: x + halfWidth, y, width: Math.ceil(box.width / 2), height },
     }),
   ]);
 

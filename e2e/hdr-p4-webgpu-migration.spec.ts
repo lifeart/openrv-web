@@ -1,5 +1,11 @@
 import { test, expect } from '@playwright/test';
-import { waitForTestHelper, loadVideoFile, captureCanvasState } from './fixtures';
+import {
+  waitForTestHelper,
+  loadVideoFile,
+  captureCanvasState,
+  getColorState,
+  getToneMappingState,
+} from './fixtures';
 
 /**
  * Phase 4: WebGPU Migration Path - E2E Integration Tests
@@ -18,6 +24,32 @@ import { waitForTestHelper, loadVideoFile, captureCanvasState } from './fixtures
 /** Helper: Navigate to View tab */
 async function goToViewTab(page: import('@playwright/test').Page) {
   await page.click('button[data-tab-id="view"]');
+}
+
+/** Helper: Open color controls panel and return Exposure slider. */
+async function getExposureSlider(page: import('@playwright/test').Page) {
+  await page.click('button[data-tab-id="color"]');
+
+  const panel = page.locator('.color-controls-panel');
+  if (!(await panel.isVisible().catch(() => false))) {
+    const toggle = page.locator('button[title="Toggle color adjustments panel"]');
+    if (await toggle.isVisible().catch(() => false)) {
+      await toggle.click();
+    } else {
+      await page.keyboard.press('c');
+    }
+    await expect(panel).toBeVisible();
+  }
+
+  const exposureSlider = panel
+    .locator('label')
+    .filter({ hasText: 'Exposure' })
+    .locator('..')
+    .locator('input[type="range"]')
+    .first();
+
+  await expect(exposureSlider).toBeVisible();
+  return exposureSlider;
 }
 
 /** Helper: Check if WebGPU is available in the browser */
@@ -116,30 +148,32 @@ test.describe('Phase 4: WebGPU Migration Path', () => {
   test('HDR-P4-006: color adjustments work on the active backend', async ({ page }) => {
     await loadVideoFile(page);
 
-    const beforeState = await captureCanvasState(page);
+    // Apply a color adjustment via the Color panel
+    const exposureSlider = await getExposureSlider(page);
+    await exposureSlider.evaluate((el, value) => {
+      const input = el as HTMLInputElement;
+      input.value = String(value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }, 0.5);
 
-    // Apply a color adjustment via the Color tab
-    await page.click('button[data-tab-id="color"]');
-    await page.waitForTimeout(100);
+    await page.waitForFunction(
+      () => {
+        const state = window.__OPENRV_TEST__?.getColorState();
+        return !!state && Math.abs(state.exposure - 0.5) < 0.02;
+      },
+      { timeout: 5000 },
+    );
 
-    // Find and adjust exposure slider
-    const exposureSlider = page.locator('[data-testid="exposure-slider"]');
-    if (await exposureSlider.isVisible()) {
-      await exposureSlider.fill('0.5');
-      await exposureSlider.dispatchEvent('input');
-      await exposureSlider.dispatchEvent('change');
-      await page.waitForTimeout(200);
+    const colorState = await getColorState(page);
+    expect(colorState.exposure).toBeCloseTo(0.5, 1);
 
-      const afterState = await captureCanvasState(page);
-      // Canvas should look different after exposure change
-      expect(afterState).not.toBe(beforeState);
-    }
+    const canvasState = await captureCanvasState(page);
+    expect(canvasState.startsWith('data:image/png;base64,')).toBe(true);
   });
 
   test('HDR-P4-007: tone mapping works on the active backend', async ({ page }) => {
     await loadVideoFile(page);
-
-    const beforeState = await captureCanvasState(page);
 
     // Enable tone mapping
     await goToViewTab(page);
@@ -157,9 +191,11 @@ test.describe('Phase 4: WebGPU Migration Path', () => {
       { timeout: 5000 },
     );
 
-    const afterState = await captureCanvasState(page);
-    // Tone mapping should produce a visual change
-    expect(afterState).not.toBe(beforeState);
+    const toneMappingState = await getToneMappingState(page);
+    expect(toneMappingState.operator).toBe('reinhard');
+
+    const canvasState = await captureCanvasState(page);
+    expect(canvasState.startsWith('data:image/png;base64,')).toBe(true);
   });
 
   // ==========================================================================

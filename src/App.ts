@@ -503,6 +503,7 @@ export class App {
       'channel.blue': () => this.controls.channelSelect.handleKeyboard('B', true),
       'channel.alpha': () => this.controls.channelSelect.handleKeyboard('A', true),
       'channel.luminance': () => this.controls.channelSelect.handleKeyboard('L', true),
+      'channel.grayscale': () => this.controls.channelSelect.handleKeyboard('Y', true),
       'channel.none': () => this.controls.channelSelect.handleKeyboard('N', true),
       'stereo.toggle': () => this.controls.stereoControl.handleKeyboard('3', true),
       'stereo.eyeTransform': () => this.controls.stereoEyeTransformControl.handleKeyboard('E', true),

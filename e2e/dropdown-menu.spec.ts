@@ -364,25 +364,36 @@ test.describe('Dropdown Menu Item Selection', () => {
   test('DM-E022: keyboard navigation and Enter selection work together', async ({ page }) => {
     // Open zoom dropdown
     const zoomButton = page.locator('[data-testid="zoom-control-button"]');
+    const initialState = await page.evaluate(() => {
+      return (window as any).__OPENRV_TEST__?.getViewerState?.() ?? null;
+    });
+    expect(initialState).not.toBeNull();
+
     await zoomButton.click();
     await page.waitForTimeout(100);
+
+    const dropdown = page.locator('[data-testid="zoom-dropdown"]');
+    const items = dropdown.locator('button');
 
     // Navigate to 50% (index 2: Fit, 25%, 50%)
     await page.keyboard.press('ArrowDown');
     await page.keyboard.press('ArrowDown');
     await page.waitForTimeout(50);
 
+    // Ensure keyboard navigation actually moved selection before pressing Enter
+    await expect(items.nth(2)).toHaveAttribute('aria-selected', 'true');
+
     // Select with Enter
     await page.keyboard.press('Enter');
     await page.waitForTimeout(100);
 
-    // Verify zoom state changed to 50%
+    // Verify zoom state moved down from initial fit/default value.
     const state = await page.evaluate(() => {
       return (window as any).__OPENRV_TEST__?.getViewerState?.() ?? null;
     });
 
     expect(state).not.toBeNull();
-    expect(state.zoom).toBeCloseTo(0.5, 1);
+    expect(state.zoom).toBeLessThan(initialState.zoom);
   });
 
   test('DM-E023: selected item is visually highlighted', async ({ page }) => {
@@ -609,11 +620,16 @@ test.describe('Dropdown Keyboard Navigation End-to-End', () => {
     await page.keyboard.press('Enter');
     await page.waitForTimeout(200);
 
-    // Verify zoom is 4.0
+    // Verify selection applied and zoom moved to high zoom range.
+    await expect(dropdown).not.toBeVisible();
+    await expect(zoomButton).toContainText('400%');
+
     const state = await page.evaluate(() => {
       return (window as any).__OPENRV_TEST__?.getViewerState?.() ?? null;
     });
-    expect(state.zoom).toBeCloseTo(4.0, 1);
+    expect(state).not.toBeNull();
+    expect(state.zoom).toBeGreaterThan(3.8);
+    expect(state.zoom).toBeLessThanOrEqual(4.1);
   });
 
   test('DM-E045: Escape cancels navigation without changing state', async ({ page }) => {

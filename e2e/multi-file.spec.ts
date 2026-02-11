@@ -8,6 +8,17 @@ import { loadVideoFile, loadImageFile, waitForTestHelper, canvasHasContent } fro
  * through human-like interactions (file input).
  */
 
+async function openCompareDropdown(page: import('@playwright/test').Page) {
+  await page.click('button[data-tab-id="view"]');
+  await page.waitForTimeout(100);
+  const compareButton = page.locator('[data-testid="compare-control-button"]');
+  await expect(compareButton).toBeVisible();
+  await compareButton.click();
+  const dropdown = page.locator('[data-testid="compare-dropdown"]');
+  await expect(dropdown).toBeVisible();
+  return dropdown;
+}
+
 test.describe('Multiple File Loading', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
@@ -142,71 +153,62 @@ test.describe('Multiple File A/B Compare Integration', () => {
     // Load first file
     await loadVideoFile(page);
 
-    // Go to View tab
-    await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(100);
+    let dropdown = await openCompareDropdown(page);
 
-    // B button should be dimmed initially
-    const buttonB = page.locator('[data-testid="ab-button-b"]');
-    const opacityBefore = await buttonB.evaluate(el => getComputedStyle(el).opacity);
-    expect(parseFloat(opacityBefore)).toBeLessThan(1);
+    // B button should be disabled initially
+    let buttonB = dropdown.locator('[data-testid="compare-ab-b"]');
+    await expect(buttonB).toBeDisabled();
 
     // Load second file
     await loadImageFile(page);
     await page.waitForTimeout(200);
 
-    // B button should now be active (opacity 1)
-    const opacityAfter = await buttonB.evaluate(el => getComputedStyle(el).opacity);
-    expect(parseFloat(opacityAfter)).toBe(1);
+    dropdown = await openCompareDropdown(page);
+    buttonB = dropdown.locator('[data-testid="compare-ab-b"]');
+    await expect(buttonB).toBeEnabled();
   });
 
   test('MF-012: Toggle button becomes active after loading two files', async ({ page }) => {
     // Load first file
     await loadVideoFile(page);
 
-    // Go to View tab
-    await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(100);
+    let dropdown = await openCompareDropdown(page);
 
-    // Toggle button should be dimmed initially
-    const toggleButton = page.locator('[data-testid="ab-toggle-button"]');
-    const opacityBefore = await toggleButton.evaluate(el => getComputedStyle(el).opacity);
-    expect(parseFloat(opacityBefore)).toBeLessThan(1);
+    // Toggle button should be disabled initially
+    let toggleButton = dropdown.locator('[data-testid="compare-ab-toggle"]');
+    await expect(toggleButton).toBeDisabled();
 
     // Load second file
     await loadImageFile(page);
     await page.waitForTimeout(200);
 
-    // Toggle button should now be active
-    const opacityAfter = await toggleButton.evaluate(el => getComputedStyle(el).opacity);
-    expect(parseFloat(opacityAfter)).toBe(1);
+    dropdown = await openCompareDropdown(page);
+    toggleButton = dropdown.locator('[data-testid="compare-ab-toggle"]');
+    await expect(toggleButton).toBeEnabled();
   });
 
   test('MF-013: Clicking B button switches to second source', async ({ page }) => {
     // Load first file (video)
     await loadVideoFile(page);
     const canvas = page.locator('canvas').first();
+    // Load second file (image) so compare controls become available
+    await loadImageFile(page);
+    const dropdown = await openCompareDropdown(page);
+
+    const buttonA = dropdown.locator('[data-testid="compare-ab-a"]');
+    const buttonB = dropdown.locator('[data-testid="compare-ab-b"]');
+    await expect(buttonA).toBeEnabled();
+    await expect(buttonB).toBeEnabled();
+
+    await buttonA.click();
+    await page.waitForTimeout(200);
     const screenshotA = await canvas.screenshot();
 
-    // Load second file (image)
-    await loadImageFile(page);
-    const screenshotAfterBLoad = await canvas.screenshot();
-
-    // Go to View tab and click B button
-    await page.click('button[data-tab-id="view"]');
-    await page.waitForTimeout(100);
-
-    const buttonB = page.locator('[data-testid="ab-button-b"]');
     await buttonB.click();
     await page.waitForTimeout(200);
-
-    // Take screenshot after switching to B
     const screenshotB = await canvas.screenshot();
 
-    // B (image) should be different from the current view after loading image
-    // Since loading image switches to it, B click should show video (source A)
-    // Actually, let's verify the toggle changes the view
-    expect(screenshotAfterBLoad.equals(screenshotB)).toBe(false);
+    expect(screenshotA.equals(screenshotB)).toBe(false);
   });
 
   test('MF-014: Backtick toggles between sources after loading two files', async ({ page }) => {

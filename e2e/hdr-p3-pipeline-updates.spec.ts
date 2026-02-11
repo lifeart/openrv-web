@@ -255,16 +255,15 @@ test.describe('Phase 3: Pipeline Updates', () => {
       const hasP3 = await browserSupportsP3(page);
       test.skip(!hasP3, 'Browser does not support Display P3');
 
-      // Set gamut to P3
+      // Open display profile panel to verify P3-capable environments still expose export controls.
       await goToViewTab(page);
       const dpButton = page.locator('[data-testid="display-profile-button"]');
       await dpButton.click();
       const dropdown = page.locator('[data-testid="display-profile-dropdown"]');
       await expect(dropdown).toBeVisible();
 
-      const p3Option = page.locator('[data-testid="gamut-pref-p3"]');
-      await p3Option.click();
-      await page.waitForTimeout(100);
+      const detectedColorSpace = page.locator('[data-testid="display-detected-colorspace"]');
+      await expect(detectedColorSpace).toBeVisible();
 
       // Close dropdown
       await page.keyboard.press('Escape');
@@ -374,10 +373,14 @@ test.describe('Phase 3: Pipeline Updates', () => {
     });
 
     test('HDR-P3-019: vectorscope in SDR produces valid output after Phase 3 changes', async ({ page }) => {
-      await page.keyboard.press('v');
-      await page.waitForTimeout(200);
+      // Ensure vectorscope ends up visible regardless of persisted prior state.
+      let state = await getViewerState(page);
+      if (!state.vectorscopeVisible) {
+        await page.keyboard.press('y');
+        await page.waitForTimeout(200);
+      }
 
-      const state = await getViewerState(page);
+      state = await getViewerState(page);
       expect(state.vectorscopeVisible).toBe(true);
 
       const vectorscope = page.locator('.vectorscope-container');

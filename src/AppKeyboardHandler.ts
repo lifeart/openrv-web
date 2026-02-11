@@ -115,7 +115,7 @@ export class AppKeyboardHandler {
       'PLAYBACK': ['playback.toggle', 'playback.stepBackward', 'playback.stepForward', 'playback.goToStart', 'playback.goToEnd', 'playback.toggleDirection', 'playback.slower', 'playback.stop', 'playback.faster'],
       'VIEW': ['view.fitToWindow', 'view.fitToWindowAlt', 'view.zoom50', 'view.toggleAB', 'view.toggleABAlt', 'view.toggleSpotlight', 'color.toggleHSLQualifier'],
       'MOUSE CONTROLS': [], // Special case - not in DEFAULT_KEY_BINDINGS
-      'CHANNEL ISOLATION': ['channel.red', 'channel.green', 'channel.blue', 'channel.alpha', 'channel.luminance', 'channel.none'],
+      'CHANNEL ISOLATION': ['channel.red', 'channel.green', 'channel.blue', 'channel.alpha', 'channel.luminance', 'channel.grayscale', 'channel.none'],
       'SCOPES': ['panel.histogram', 'panel.waveform', 'panel.vectorscope'],
       'TIMELINE': ['timeline.setInPoint', 'timeline.setInPointAlt', 'timeline.setOutPoint', 'timeline.setOutPointAlt', 'timeline.resetInOut', 'timeline.toggleMark', 'timeline.cycleLoopMode'],
       'PAINT (Annotate tab)': ['paint.pan', 'paint.pen', 'paint.eraser', 'paint.text', 'paint.rectangle', 'paint.ellipse', 'paint.line', 'paint.arrow', 'paint.toggleBrush', 'paint.toggleGhost', 'paint.toggleHold', 'edit.undo', 'edit.redo'],

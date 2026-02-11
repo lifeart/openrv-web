@@ -6,6 +6,27 @@ import {
   waitForTestHelper,
 } from './fixtures';
 
+type InfoPanelPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+
+async function setInfoPanelPosition(
+  page: import('@playwright/test').Page,
+  position: InfoPanelPosition,
+): Promise<void> {
+  await page.evaluate((nextPosition) => {
+    const testApi = (window as unknown as { __OPENRV_TEST__?: { app?: { controls?: { infoPanel?: { setPosition?: (p: string) => void } } } } }).__OPENRV_TEST__;
+    const infoPanel = testApi?.app?.controls?.infoPanel;
+    infoPanel?.setPosition?.(nextPosition);
+  }, position);
+
+  await page.waitForFunction(
+    (expected) =>
+      ((window as unknown as { __OPENRV_TEST__?: { getInfoPanelState?: () => { position?: string } } })
+        .__OPENRV_TEST__?.getInfoPanelState?.()?.position) === expected,
+    position,
+    { timeout: 5000 },
+  );
+}
+
 /**
  * Info Panel Feature Tests
  *
@@ -123,30 +144,21 @@ test.describe('Info Panel Position', () => {
   });
 
   test('IP-E021: changing position to top-right updates state', async ({ page }) => {
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.infoPanel?.setPosition('top-right');
-    });
-    await page.waitForTimeout(100);
+    await setInfoPanelPosition(page, 'top-right');
 
     const state = await getInfoPanelState(page);
     expect(state.position).toBe('top-right');
   });
 
   test('IP-E022: changing position to bottom-left updates state', async ({ page }) => {
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.infoPanel?.setPosition('bottom-left');
-    });
-    await page.waitForTimeout(100);
+    await setInfoPanelPosition(page, 'bottom-left');
 
     const state = await getInfoPanelState(page);
     expect(state.position).toBe('bottom-left');
   });
 
   test('IP-E023: changing position to bottom-right updates state', async ({ page }) => {
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.infoPanel?.setPosition('bottom-right');
-    });
-    await page.waitForTimeout(100);
+    await setInfoPanelPosition(page, 'bottom-right');
 
     const state = await getInfoPanelState(page);
     expect(state.position).toBe('bottom-right');
@@ -200,10 +212,7 @@ test.describe('Info Panel State Persistence', () => {
     await page.waitForTimeout(100);
 
     // Change position
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.infoPanel?.setPosition('bottom-right');
-    });
-    await page.waitForTimeout(100);
+    await setInfoPanelPosition(page, 'bottom-right');
 
     let state = await getInfoPanelState(page);
     expect(state.position).toBe('bottom-right');

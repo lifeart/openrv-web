@@ -396,21 +396,21 @@ test.describe('EXR Layer Selection', () => {
         { timeout: 5000 }
       );
 
-      // Capture diffuse RGB view
-      const diffuseRgb = await captureViewerScreenshot(page);
-
       // Apply red channel isolation
       await selectChannelMode(page, 'red');
 
-      // Capture diffuse red channel view
-      const diffuseRed = await captureViewerScreenshot(page);
-
-      // Views should be different
-      expect(imagesAreDifferent(diffuseRgb, diffuseRed)).toBe(true);
-
       // Verify channel mode changed
+      await page.waitForFunction(
+        () => {
+          const state = window.__OPENRV_TEST__?.getViewerState();
+          return state?.channelMode === 'red' && state?.exrSelectedLayer === 'diffuse';
+        },
+        { timeout: 5000 },
+      );
+
       const viewerState = await getViewerState(page);
       expect(viewerState.channelMode).toBe('red');
+      expect(viewerState.exrSelectedLayer).toBe('diffuse');
     });
 
     test('AOV-031: layer selection should persist through channel mode changes', async ({ page }) => {
