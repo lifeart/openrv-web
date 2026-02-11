@@ -683,6 +683,10 @@ export class RenderWorkerProxy implements RendererBackend {
     return this.contextLost;
   }
 
+  hasPendingStateChanges(): boolean {
+    return this.hasDirtyState;
+  }
+
   // ==========================================================================
   // Private helpers
   // ==========================================================================

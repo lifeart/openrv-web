@@ -32,6 +32,7 @@ import { AppNetworkBridge } from './AppNetworkBridge';
 import { AppPersistenceManager } from './AppPersistenceManager';
 import { AppSessionBridge } from './AppSessionBridge';
 import { AppControlRegistry } from './AppControlRegistry';
+import { PerfTrace } from './utils/PerfTrace';
 import type { AppWiringContext } from './AppWiringContext';
 
 // Wiring modules
@@ -639,8 +640,19 @@ export class App {
   }
 
   private tick = (): void => {
+    // Auto-enable perf tracing during playback for fps diagnosis
+    if (this.session.isPlaying && !PerfTrace.enabled) {
+      PerfTrace.enabled = true;
+    } else if (!this.session.isPlaying && PerfTrace.enabled) {
+      PerfTrace.enabled = false;
+    }
+
+    PerfTrace.begin('tick');
+
     const frameBefore = this.session.currentFrame;
+    PerfTrace.begin('session.update');
     this.session.update();
+    PerfTrace.end('session.update');
 
     // Only render on frame changes during video playback.
     // Static images and drawing are handled by event-driven updates.
@@ -652,10 +664,16 @@ export class App {
         // would delay rendering by one frame (~16.7ms), halving effective throughput.
         // Only render when the frame actually advanced to avoid wasting GPU work
         // on ticks where the accumulator hasn't crossed the frame boundary yet.
+        PerfTrace.begin('viewer.renderDirect');
         this.viewer.renderDirect();
+        PerfTrace.end('viewer.renderDirect');
+        PerfTrace.frame();
+      } else {
+        PerfTrace.count('tick.noFrameAdvance');
       }
     }
 
+    PerfTrace.end('tick');
     this.animationId = requestAnimationFrame(this.tick);
   };
 

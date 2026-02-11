@@ -1,6 +1,7 @@
 import { Session } from '../../core/session/Session';
 import { PaintEngine } from '../../paint/PaintEngine';
 import { PaintRenderer } from '../../paint/PaintRenderer';
+import { PerfTrace } from '../../utils/PerfTrace';
 import { ColorAdjustments } from './ColorControls';
 import { WipeState, WipeMode } from './WipeControl';
 import { Transform2D } from './TransformControl';
@@ -755,6 +756,10 @@ export class Viewer {
   }
 
   private scheduleRender(): void {
+    // During video playback, the tick loop handles all rendering via renderDirect().
+    // Skip scheduling to prevent render storm that starves the video decoder.
+    if (this.session.isPlaying) return;
+
     if (this.pendingRender) return;
     this.pendingRender = true;
 
@@ -885,9 +890,12 @@ export class Viewer {
     this._asyncEffectsGeneration++;
     // Invalidate layout cache once per frame - measurements are cached within the frame
     this.invalidateLayoutCache();
+
+    PerfTrace.count('render.calls');
     this.renderImage();
 
     // If actively drawing, render with live stroke/shape; otherwise just paint
+    PerfTrace.begin('paint+crop');
     if (this.inputHandler.drawing && this.inputHandler.currentLivePoints.length > 0) {
       this.inputHandler.renderLiveStroke();
     } else if (this.inputHandler.drawingShape && this.inputHandler.currentShapeStart && this.inputHandler.currentShapeCurrent) {
@@ -902,6 +910,7 @@ export class Viewer {
     } catch (err) {
       console.error('Crop overlay render failed:', err);
     }
+    PerfTrace.end('paint+crop');
   }
 
   // GL rendering methods delegated to ViewerGLRenderer.
@@ -1137,7 +1146,10 @@ export class Viewer {
     if (isHDRVideo && (!ocioActive || blitBypassesOCIO)) {
       // HDR video: get cached HDR IPImage with VideoFrame for GPU upload
       const currentFrame = this.session.currentFrame;
+      PerfTrace.begin('getVideoHDRIPImage');
       const hdrIPImage = this.session.getVideoHDRIPImage(currentFrame);
+      PerfTrace.end('getVideoHDRIPImage');
+      if (!hdrIPImage) PerfTrace.count('hdrIPImage.miss');
       if (hdrIPImage && this.renderHDRWithWebGL(hdrIPImage, displayWidth, displayHeight)) {
         this.updateCanvasPosition();
         this.updateWipeLine();

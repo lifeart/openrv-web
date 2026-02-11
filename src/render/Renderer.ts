@@ -11,6 +11,7 @@ import type { RenderState, DisplayColorConfig } from './RenderState';
 import { Logger } from '../utils/Logger';
 import { RenderError } from '../core/errors';
 import { ShaderStateManager } from './ShaderStateManager';
+import { PerfTrace } from '../utils/PerfTrace';
 import vertexShaderSource from './shaders/viewer.vert.glsl?raw';
 import fragmentShaderSource from './shaders/viewer.frag.glsl?raw';
 import type { TextureCallbacks } from './ShaderStateManager';
@@ -112,6 +113,12 @@ export class Renderer implements RendererBackend {
   // Reused across frames to avoid allocating one GPU texture per cached IPImage
   // (which would consume width×height×8 bytes × cacheSize, often exceeding VRAM).
   private _videoFrameTexture: WebGLTexture | null = null;
+
+  // Track gl.unpackColorSpace to avoid toggling it every frame.
+  // During HDR playback, every frame is a VideoFrame needing 'display-p3',
+  // so resetting to 'srgb' after each upload just to set it back next frame
+  // wastes ~0.5ms per frame in try/catch overhead.
+  private _currentUnpackColorSpace: string = 'srgb';
 
   initialize(canvas: HTMLCanvasElement | OffscreenCanvas, capabilities?: DisplayCapabilities): void {
     this.canvas = canvas;
@@ -356,7 +363,9 @@ export class Renderer implements RendererBackend {
 
     // Update texture if needed
     if (image.textureNeedsUpdate || !image.texture) {
+      PerfTrace.begin('updateTexture');
       this.updateTexture(image);
+      PerfTrace.end('updateTexture');
     }
 
     // Use display shader
@@ -390,7 +399,9 @@ export class Renderer implements RendererBackend {
     }
 
     // Apply all shared effect uniforms and bind textures via state manager
+    PerfTrace.begin('applyUniforms');
     this.stateManager.applyUniforms(this.displayShader, this.createTextureCallbacks());
+    PerfTrace.end('applyUniforms');
 
     // Bind image texture to unit 0
     this.displayShader.setUniformInt('u_texture', 0);
@@ -526,13 +537,19 @@ export class Renderer implements RendererBackend {
       gl.bindTexture(gl.TEXTURE_2D, this._videoFrameTexture);
 
       try {
-        // Set unpackColorSpace for best color fidelity
-        try {
-          gl.unpackColorSpace = 'display-p3';
-        } catch (e) {
-          log.warn('Browser does not support unpackColorSpace:', e);
+        // Set unpackColorSpace for best color fidelity — only when not already set.
+        // During HDR playback every frame is a VideoFrame, so this avoids
+        // redundant try/catch toggles (~0.5ms saved per frame).
+        if (this._currentUnpackColorSpace !== 'display-p3') {
+          try {
+            gl.unpackColorSpace = 'display-p3';
+            this._currentUnpackColorSpace = 'display-p3';
+          } catch (e) {
+            log.warn('Browser does not support unpackColorSpace:', e);
+          }
         }
 
+        PerfTrace.begin('texImage2D(VideoFrame)');
         gl.texImage2D(
           gl.TEXTURE_2D,
           0,
@@ -541,18 +558,16 @@ export class Renderer implements RendererBackend {
           gl.HALF_FLOAT,
           image.videoFrame // VideoFrame is a valid TexImageSource
         );
+        PerfTrace.end('texImage2D(VideoFrame)');
 
         // Do NOT close the VideoFrame here — the IPImage may be held in an
         // LRU cache (e.g. VideoSourceNode.hdrFrameCache) and could be re-uploaded
         // after a WebGL context loss.  The cache's eviction callback owns the
         // VideoFrame lifecycle.
 
-        // Reset unpackColorSpace back to sRGB
-        try {
-          gl.unpackColorSpace = 'srgb';
-        } catch (e) {
-          log.warn('Failed to reset unpackColorSpace to srgb:', e);
-        }
+        // Do NOT reset unpackColorSpace here — during HDR playback the next
+        // frame will also be a VideoFrame needing 'display-p3'. The SDR path
+        // (renderSDRFrame) resets to 'srgb' when needed.
 
         // Do NOT set textureNeedsUpdate = false — since the texture is shared,
         // the next frame's IPImage must re-upload its own VideoFrame data.
@@ -561,13 +576,6 @@ export class Renderer implements RendererBackend {
         // VideoFrame texImage2D not supported - fall through to SDR path
         log.warn('VideoFrame texImage2D failed, falling back to typed array upload:', e);
         image.close();
-
-        // Reset unpackColorSpace back to sRGB
-        try {
-          gl.unpackColorSpace = 'srgb';
-        } catch (resetErr) {
-          log.warn('Failed to reset unpackColorSpace to srgb:', resetErr);
-        }
       }
     }
 
@@ -1281,6 +1289,10 @@ export class Renderer implements RendererBackend {
     this.stateManager.applyRenderState(state);
   }
 
+  hasPendingStateChanges(): boolean {
+    return this.stateManager.hasPendingStateChanges();
+  }
+
   private tryConfigureHDRMetadata(): void {
     if (!this.canvas) return;
     if (this.canvas.configureHighDynamicRange) {
@@ -1336,6 +1348,18 @@ export class Renderer implements RendererBackend {
 
     // Upload the SDR source to the texture
     gl.bindTexture(gl.TEXTURE_2D, this.sdrTexture);
+
+    // Ensure unpackColorSpace is 'srgb' for SDR sources.
+    // The HDR VideoFrame path sets it to 'display-p3' and leaves it there
+    // for performance; reset here when switching back to SDR.
+    if (this._currentUnpackColorSpace !== 'srgb') {
+      try {
+        gl.unpackColorSpace = 'srgb';
+        this._currentUnpackColorSpace = 'srgb';
+      } catch (e) {
+        // Shouldn't fail for 'srgb', but guard defensively
+      }
+    }
 
     try {
       gl.texImage2D(
@@ -1439,6 +1463,7 @@ export class Renderer implements RendererBackend {
       gl.deleteTexture(this._videoFrameTexture);
       this._videoFrameTexture = null;
     }
+    this._currentUnpackColorSpace = 'srgb';
     if (this.curvesLUTTexture) gl.deleteTexture(this.curvesLUTTexture);
     if (this.falseColorLUTTexture) gl.deleteTexture(this.falseColorLUTTexture);
     if (this.lut3DTexture) gl.deleteTexture(this.lut3DTexture);

@@ -231,6 +231,9 @@ export interface RendererBackend extends RendererLifecycle, RendererColorPipelin
   /** Apply all render state in a single call, replacing individual setter calls. */
   applyRenderState(state: RenderState): void;
 
+  /** True if applyRenderState() has marked dirty flags not yet consumed by rendering. */
+  hasPendingStateChanges(): boolean;
+
   // --- SDR frame rendering (Phase 1A) ---
 
   /**

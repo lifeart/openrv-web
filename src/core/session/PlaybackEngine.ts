@@ -7,6 +7,7 @@ import { PlaybackTimingController, MAX_CONSECUTIVE_STARVATION_SKIPS } from './Pl
 import type { TimingState } from './PlaybackTimingController';
 import { PLAYBACK_SPEED_PRESETS, type PlaybackSpeedPreset } from '../../config/PlaybackConfig';
 import { Logger } from '../../utils/Logger';
+import { PerfTrace } from '../../utils/PerfTrace';
 
 const log = new Logger('PlaybackEngine');
 
@@ -77,6 +78,9 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
 
   // Track which frame is currently being fetched to avoid redundant getFrameAsync calls
   private _pendingFetchFrame: number | null = null;
+
+  // HDR initial buffering: delay frame advancement until enough frames are pre-decoded
+  private _hdrBuffering = false;
 
   // Timing controller (pure logic)
   private _timingController = new PlaybackTimingController();
@@ -362,6 +366,15 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
       source.videoSourceNode.setPlaybackDirection(this._playDirection);
       source.videoSourceNode.startPlaybackPreload(this._currentFrame, this._playDirection);
 
+      // For HDR video, buffer frames before allowing frame advancement.
+      // The serial decoder needs time to fill the cache ahead of playback.
+      if (source.videoSourceNode.isHDR?.()) {
+        this._hdrBuffering = true;
+        if (this._timingController.incrementBuffering(this._ts)) {
+          this.emit('buffering', true);
+        }
+      }
+
       // Trigger initial buffer loading
       this.triggerInitialBufferLoad(source.videoSourceNode, this._currentFrame, this._playDirection);
 
@@ -400,6 +413,7 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
     if (this._isPlaying) {
       this._pendingPlayPromise = null;
       this._isPlaying = false;
+      this._hdrBuffering = false;
 
       // Clear pending play promise so play() can be called again
       this._pendingPlayPromise = null;
@@ -547,6 +561,11 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
   update(): void {
     if (!this._isPlaying) return;
 
+    // During HDR initial buffering, skip frame advancement.
+    // The decoder is filling the cache; once ready, _hdrBuffering is cleared
+    // and timing is reset so playback starts cleanly from the buffered position.
+    if (this._hdrBuffering) return;
+
     const source = this._host?.getCurrentSource();
     const tc = this._timingController;
 
@@ -563,6 +582,7 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
         );
 
         if (source.videoSourceNode.hasFrameCached(nextFrame)) {
+          PerfTrace.count('frame.cacheHit');
           tc.onFrameDisplayed(this._ts);
           this._pendingFetchFrame = null;
           tc.consumeFrame(this._ts, frameDuration);
@@ -571,6 +591,7 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
           this.updateSourceBPlaybackBuffer(nextFrame);
           source.videoSourceNode.updatePlaybackBuffer(nextFrame);
         } else {
+          PerfTrace.count('frame.cacheMiss');
           tc.capAccumulator(this._ts, frameDuration);
           tc.beginStarvation(this._ts);
 
@@ -806,6 +827,24 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
       if (frame >= this._inPoint && frame <= this._outPoint) {
         framesToBuffer.push(frame);
       }
+    }
+
+    if (this._hdrBuffering) {
+      // HDR: decode sequentially (serial decoder) and release the buffering
+      // gate once all frames are pre-decoded. This gives playback a runway
+      // so it doesn't stall waiting for each frame individually.
+      (async () => {
+        for (const frame of framesToBuffer) {
+          if (!this._isPlaying) break; // bail if stopped during buffer
+          await videoSourceNode.getFrameAsync(frame);
+        }
+        if (this._isPlaying && this._hdrBuffering) {
+          this._hdrBuffering = false;
+          this._timingController.resetTiming(this._ts);
+          this.decrementBufferingCount();
+        }
+      })();
+      return;
     }
 
     Promise.allSettled(

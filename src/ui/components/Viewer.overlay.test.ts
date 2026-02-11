@@ -1289,6 +1289,56 @@ describe('Viewer', () => {
       // After construction, no render is pending
       expect(tv.pendingRender).toBe(false);
     });
+
+    it('VWR-FPS-009: scheduleRender is no-op during playback (render storm prevention)', () => {
+      const tv = testable(viewer);
+
+      // Simulate active playback
+      tv.session = { ...tv.session, isPlaying: true };
+
+      // refresh() calls scheduleRender internally
+      viewer.refresh();
+
+      // pendingRender should remain false — scheduleRender bails early
+      expect(tv.pendingRender).toBe(false);
+    });
+
+    it('VWR-FPS-010: renderDirect still works during playback', () => {
+      const tv = testable(viewer);
+      const renderSpy = vi.spyOn(viewer, 'render');
+
+      tv.session = { ...tv.session, isPlaying: true };
+
+      // renderDirect bypasses scheduleRender — works regardless of isPlaying
+      viewer.renderDirect();
+      expect(renderSpy).toHaveBeenCalledTimes(1);
+
+      renderSpy.mockRestore();
+    });
+
+    it('VWR-FPS-011: scheduleRender works normally when not playing', () => {
+      const tv = testable(viewer);
+
+      // Not playing (default)
+      expect(tv.session.isPlaying).toBeFalsy();
+
+      viewer.refresh();
+      expect(tv.pendingRender).toBe(true);
+    });
+
+    it('VWR-FPS-012: scheduleRender resumes after playback stops', () => {
+      const tv = testable(viewer);
+
+      // Start playback — scheduleRender should be no-op
+      tv.session = { ...tv.session, isPlaying: true };
+      viewer.refresh();
+      expect(tv.pendingRender).toBe(false);
+
+      // Stop playback — scheduleRender should work again
+      tv.session = { ...tv.session, isPlaying: false };
+      viewer.refresh();
+      expect(tv.pendingRender).toBe(true);
+    });
   });
 
 });

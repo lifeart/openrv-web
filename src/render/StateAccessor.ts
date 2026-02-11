@@ -126,6 +126,13 @@ export interface StateAccessor {
   /** Apply all render state from a RenderState object. */
   applyRenderState(renderState: RenderState): void;
 
+  /**
+   * Returns true if applyRenderState() (or any setter) has marked dirty flags
+   * that haven't been pushed to the GPU yet via applyUniforms().
+   * Used to detect whether a re-render is actually needed.
+   */
+  hasPendingStateChanges(): boolean;
+
   // --- Uniform upload ---
 
   /**

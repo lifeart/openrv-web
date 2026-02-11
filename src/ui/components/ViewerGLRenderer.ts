@@ -36,6 +36,7 @@ import type { ZebraStripes } from './ZebraStripes';
 import type { HSLQualifier } from './HSLQualifier';
 import type { ColorAdjustments } from './ColorControls';
 import type { ToneMappingState } from './ToneMappingControl';
+import { PerfTrace } from '../../utils/PerfTrace';
 
 /**
  * Context interface for the ViewerGLRenderer to access Viewer state
@@ -77,6 +78,12 @@ export class ViewerGLRenderer {
   private _webgpuBlit: WebGPUHDRBlit | null = null;
   private _webgpuBlitInitializing = false;
   private _webgpuBlitFailed = false;
+
+  // Render-skip cache: tracks last successfully rendered HDR frame so
+  // redundant renders of the same image can be skipped when nothing changed.
+  private _lastRenderedImage: WeakRef<IPImage> | null = null;
+  private _lastRenderedWidth = 0;
+  private _lastRenderedHeight = 0;
 
   // Last known logical (CSS) dimensions — set by resizeIfActive() to avoid
   // rounding drift when computing CSS size from physical / DPR.
@@ -318,20 +325,39 @@ export class ViewerGLRenderer {
     }
 
     // Build render state and apply HDR-specific overrides
+    PerfTrace.begin('buildRenderState');
     const state = this.buildRenderState();
     if (isHDROutput) {
       state.colorAdjustments = { ...state.colorAdjustments, gamma: 1 };
       state.toneMappingState = { enabled: false, operator: 'off' };
     }
+    PerfTrace.end('buildRenderState');
+
+    PerfTrace.begin('applyRenderState');
     renderer.applyRenderState(state);
+    PerfTrace.end('applyRenderState');
+
+    // Skip re-render if same image, same dimensions, and no state changes.
+    // The canvas already shows the correct content from the last render.
+    const sameImage = this._lastRenderedImage?.deref() === image;
+    const sameDims = displayWidth === this._lastRenderedWidth && displayHeight === this._lastRenderedHeight;
+    if (sameImage && sameDims && !renderer.hasPendingStateChanges()) {
+      PerfTrace.count('hdr.renderSkipped');
+      return true;
+    }
 
     // Render
+    PerfTrace.begin('renderer.clear+render');
     renderer.clear(0, 0, 0, 1);
     renderer.renderImage(image, 0, 0, 1, 1);
+    PerfTrace.end('renderer.clear+render');
 
     // CSS transform for rotation/flip
     this.applyTransformToCanvas(this._glCanvas);
 
+    this._lastRenderedImage = new WeakRef(image);
+    this._lastRenderedWidth = displayWidth;
+    this._lastRenderedHeight = displayHeight;
     return true;
   }
 
@@ -351,28 +377,39 @@ export class ViewerGLRenderer {
     }
 
     // Build render state with minimal HDR overrides for linear-light output.
-    // The WebGPU HDR canvas expects linear values where >1.0 = brighter than SDR white.
-    // - Gamma = 1: no gamma compression (the HDR canvas expects linear light)
-    // - Display transfer = 0 (linear): CRITICAL — without this, the shader applies
-    //   sRGB OETF (pow(c, 1/2.4)) which compresses HDR values and ignores u_gamma
-    // - Display gamma = 1: no additional gamma encoding on top of transfer function
-    // - Tone mapping: NOT overridden — user controls whether ACES/Reinhard/etc. is applied.
-    // - Display brightness: NOT overridden — user can adjust display brightness freely.
+    PerfTrace.begin('blit.buildRenderState');
     const state = this.buildRenderState();
     state.colorAdjustments = { ...state.colorAdjustments, gamma: 1 };
     state.displayColor = { ...state.displayColor, transferFunction: 0, displayGamma: 1 };
     renderer.applyRenderState(state);
+    PerfTrace.end('blit.buildRenderState');
 
+    // Skip re-render if same image, same dimensions, and no state changes.
+    const sameImage = this._lastRenderedImage?.deref() === image;
+    const sameDims = displayWidth === this._lastRenderedWidth && displayHeight === this._lastRenderedHeight;
+    const hasPending = renderer.hasPendingStateChanges();
+    if (sameImage && sameDims && !hasPending) {
+      PerfTrace.count('blit.renderSkipped');
+      return true;
+    }
     // Render to RGBA16F FBO and read float pixels.
     // Prefer async PBO readback which returns previous frame's data immediately,
     // eliminating the 8-25ms GPU sync stall. Falls back to sync if unavailable.
+    PerfTrace.begin('blit.FBO+readPixels');
     const pixels = renderer.renderImageToFloatAsync
       ? renderer.renderImageToFloatAsync(image, displayWidth, displayHeight)
       : renderer.renderImageToFloat!(image, displayWidth, displayHeight);
+    PerfTrace.end('blit.FBO+readPixels');
     if (!pixels) return false;
 
     // Upload to WebGPU HDR canvas
+    PerfTrace.begin('blit.webgpuUpload');
     this._webgpuBlit!.uploadAndDisplay(pixels, displayWidth, displayHeight);
+    PerfTrace.end('blit.webgpuUpload');
+
+    this._lastRenderedImage = new WeakRef(image);
+    this._lastRenderedWidth = displayWidth;
+    this._lastRenderedHeight = displayHeight;
 
     // Show WebGPU canvas, hide GL canvas
     const blitCanvas = this._webgpuBlit!.getCanvas();
@@ -463,6 +500,7 @@ export class ViewerGLRenderer {
     this.hideWebGPUBlitCanvas();
     this.ctx.getImageCanvas().style.visibility = 'visible';
     this._hdrRenderActive = false;
+    this._lastRenderedImage = null; // Invalidate render cache
   }
 
   /**

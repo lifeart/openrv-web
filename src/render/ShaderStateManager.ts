@@ -381,6 +381,11 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     }
   }
 
+  /** True if any setter has marked dirty flags not yet consumed by applyUniforms(). */
+  hasPendingStateChanges(): boolean {
+    return this.dirtyFlags.size > 0;
+  }
+
   // -----------------------------------------------------------------------
   // State getters (for Renderer's public getters)
   // -----------------------------------------------------------------------
@@ -624,6 +629,7 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
       this.state.lut3DEnabled = false;
       this.state.lut3DData = null;
       this.state.lut3DSize = 0;
+      this.state.lut3DIntensity = intensity;
       return;
     }
     this.state.lut3DEnabled = true;
@@ -703,24 +709,169 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
   // Batch state application (from RenderState)
   // -----------------------------------------------------------------------
 
+  /**
+   * Apply a full RenderState, marking only groups whose values actually changed.
+   *
+   * During steady-state playback (no user interaction), all comparisons
+   * short-circuit → no dirty flags → applyUniforms() skips all GL calls.
+   * This eliminates ~65 redundant uniform uploads per frame.
+   */
   applyRenderState(renderState: RenderState): void {
-    this.setColorAdjustments(renderState.colorAdjustments);
-    this.setColorInversion(renderState.colorInversion);
-    this.setToneMappingState(renderState.toneMappingState);
-    this.setBackgroundPattern(renderState.backgroundPattern);
-    this.setCDL(renderState.cdl);
-    this.setCurvesLUT(renderState.curvesLUT);
-    this.setColorWheels(renderState.colorWheels);
-    this.setFalseColor(renderState.falseColor);
-    this.setZebraStripes(renderState.zebraStripes);
-    this.setChannelMode(renderState.channelMode);
-    this.setLUT(renderState.lut.data, renderState.lut.size, renderState.lut.intensity);
-    this.setDisplayColorState(renderState.displayColor);
-    this.setHighlightsShadows(renderState.highlightsShadows);
-    this.setVibrance({ vibrance: renderState.vibrance.amount, skinProtection: renderState.vibrance.skinProtection });
-    this.setClarity({ clarity: renderState.clarity });
-    this.setSharpen({ amount: renderState.sharpen });
-    this.setHSLQualifier(renderState.hslQualifier);
+    const s = this.state;
+
+    // --- Color adjustments (8 uniforms) ---
+    {
+      const a = renderState.colorAdjustments;
+      const c = s.colorAdjustments;
+      if (a.exposure !== c.exposure || a.gamma !== c.gamma ||
+          a.saturation !== c.saturation || a.contrast !== c.contrast ||
+          a.brightness !== c.brightness || a.temperature !== c.temperature ||
+          a.tint !== c.tint || a.hueRotation !== c.hueRotation) {
+        this.setColorAdjustments(a);
+      }
+    }
+
+    // --- Color inversion (1 uniform) ---
+    if (renderState.colorInversion !== s.colorInversionEnabled) {
+      this.setColorInversion(renderState.colorInversion);
+    }
+
+    // --- Tone mapping (3 uniforms) ---
+    {
+      const t = renderState.toneMappingState;
+      const c = s.toneMappingState;
+      if (t.enabled !== c.enabled || t.operator !== c.operator ||
+          (t.reinhardWhitePoint ?? 4.0) !== (c.reinhardWhitePoint ?? 4.0) ||
+          (t.filmicExposureBias ?? 2.0) !== (c.filmicExposureBias ?? 2.0) ||
+          (t.filmicWhitePoint ?? 11.2) !== (c.filmicWhitePoint ?? 11.2)) {
+        this.setToneMappingState(t);
+      }
+    }
+
+    // --- Background pattern (4 uniforms) ---
+    // Compare computed values before/after to avoid unconditional dirty marking.
+    {
+      const oldCode = s.bgPatternCode;
+      const oldC1_0 = s.bgColor1[0], oldC1_1 = s.bgColor1[1], oldC1_2 = s.bgColor1[2];
+      const oldC2_0 = s.bgColor2[0], oldC2_1 = s.bgColor2[1], oldC2_2 = s.bgColor2[2];
+      const oldChecker = s.bgCheckerSize;
+      this.setBackgroundPattern(renderState.backgroundPattern);
+      if (s.bgPatternCode === oldCode &&
+          s.bgColor1[0] === oldC1_0 && s.bgColor1[1] === oldC1_1 && s.bgColor1[2] === oldC1_2 &&
+          s.bgColor2[0] === oldC2_0 && s.bgColor2[1] === oldC2_1 && s.bgColor2[2] === oldC2_2 &&
+          s.bgCheckerSize === oldChecker) {
+        this.dirtyFlags.delete(DIRTY_BACKGROUND);
+      }
+    }
+
+    // --- CDL (5 uniforms) ---
+    {
+      const c = renderState.cdl;
+      if (c.slope.r !== s.cdlSlope[0] || c.slope.g !== s.cdlSlope[1] || c.slope.b !== s.cdlSlope[2] ||
+          c.offset.r !== s.cdlOffset[0] || c.offset.g !== s.cdlOffset[1] || c.offset.b !== s.cdlOffset[2] ||
+          c.power.r !== s.cdlPower[0] || c.power.g !== s.cdlPower[1] || c.power.b !== s.cdlPower[2] ||
+          c.saturation !== s.cdlSaturation) {
+        this.setCDL(c);
+      }
+    }
+
+    // --- Curves LUT (1-2 uniforms) ---
+    // Skip when null and already disabled (common case: curves not in use)
+    if (renderState.curvesLUT !== null || s.curvesEnabled) {
+      this.setCurvesLUT(renderState.curvesLUT);
+    }
+
+    // --- Color wheels (4 uniforms) ---
+    {
+      const cw = renderState.colorWheels;
+      const wl = s.wheelLift; const wg = s.wheelGamma; const wn = s.wheelGain;
+      if (cw.lift.r !== wl[0] || cw.lift.g !== wl[1] || cw.lift.b !== wl[2] || cw.lift.y !== wl[3] ||
+          cw.gamma.r !== wg[0] || cw.gamma.g !== wg[1] || cw.gamma.b !== wg[2] || cw.gamma.y !== wg[3] ||
+          cw.gain.r !== wn[0] || cw.gain.g !== wn[1] || cw.gain.b !== wn[2] || cw.gain.y !== wn[3]) {
+        this.setColorWheels(cw);
+      }
+    }
+
+    // --- False color (2 uniforms) ---
+    if (renderState.falseColor.enabled !== s.falseColorEnabled) {
+      this.setFalseColor(renderState.falseColor);
+    }
+
+    // --- Zebra stripes (5 uniforms, time animates when enabled) ---
+    {
+      const z = renderState.zebraStripes;
+      const newEnabled = z.enabled && (z.highEnabled || z.lowEnabled);
+      // Always call when enabled (zebraTime animates), skip when staying disabled
+      if (newEnabled || newEnabled !== s.zebraEnabled) {
+        this.setZebraStripes(z);
+      }
+    }
+
+    // --- Channel mode (1 uniform) ---
+    {
+      const code = CHANNEL_MODE_CODES[renderState.channelMode] ?? 0;
+      if (code !== s.channelModeCode) {
+        this.setChannelMode(renderState.channelMode);
+      }
+    }
+
+    // --- LUT 3D (3 uniforms) ---
+    {
+      const l = renderState.lut;
+      if (l.data !== s.lut3DData || l.size !== s.lut3DSize || l.intensity !== s.lut3DIntensity) {
+        this.setLUT(l.data, l.size, l.intensity);
+      }
+    }
+
+    // --- Display color (4 uniforms) ---
+    {
+      const d = renderState.displayColor;
+      if (d.transferFunction !== s.displayTransferCode || d.displayGamma !== s.displayGammaOverride ||
+          d.displayBrightness !== s.displayBrightnessMultiplier || d.customGamma !== s.displayCustomGamma) {
+        this.setDisplayColorState(d);
+      }
+    }
+
+    // --- Highlights/shadows (5 uniforms) ---
+    {
+      const h = renderState.highlightsShadows;
+      if (h.highlights / 100 !== s.highlightsValue || h.shadows / 100 !== s.shadowsValue ||
+          h.whites / 100 !== s.whitesValue || h.blacks / 100 !== s.blacksValue) {
+        this.setHighlightsShadows(h);
+      }
+    }
+
+    // --- Vibrance (3 uniforms) ---
+    {
+      const v = renderState.vibrance;
+      if (v.amount / 100 !== s.vibranceValue || v.skinProtection !== s.vibranceSkinProtection) {
+        this.setVibrance({ vibrance: v.amount, skinProtection: v.skinProtection });
+      }
+    }
+
+    // --- Clarity (2 uniforms) ---
+    if (renderState.clarity / 100 !== s.clarityValue) {
+      this.setClarity({ clarity: renderState.clarity });
+    }
+
+    // --- Sharpen (2 uniforms) ---
+    if (renderState.sharpen / 100 !== s.sharpenAmount) {
+      this.setSharpen({ amount: renderState.sharpen });
+    }
+
+    // --- HSL qualifier (14 uniforms) ---
+    {
+      const h = renderState.hslQualifier;
+      if (h.enabled !== s.hslQualifierEnabled ||
+          h.hue.center !== s.hslHueCenter || h.hue.width !== s.hslHueWidth || h.hue.softness !== s.hslHueSoftness ||
+          h.saturation.center !== s.hslSatCenter || h.saturation.width !== s.hslSatWidth || h.saturation.softness !== s.hslSatSoftness ||
+          h.luminance.center !== s.hslLumCenter || h.luminance.width !== s.hslLumWidth || h.luminance.softness !== s.hslLumSoftness ||
+          h.correction.hueShift !== s.hslCorrHueShift || h.correction.saturationScale !== s.hslCorrSatScale ||
+          h.correction.luminanceScale !== s.hslCorrLumScale ||
+          h.invert !== s.hslInvert || h.mattePreview !== s.hslMattePreview) {
+        this.setHSLQualifier(h);
+      }
+    }
   }
 
   // -----------------------------------------------------------------------

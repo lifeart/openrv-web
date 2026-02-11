@@ -349,6 +349,10 @@ export class WebGPUBackend implements RendererBackend {
     this.setHSLQualifier(state.hslQualifier);
   }
 
+  hasPendingStateChanges(): boolean {
+    return false;
+  }
+
   // --- SDR frame rendering (Phase 1A) ---
   renderSDRFrame(
     _source: HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | HTMLImageElement,

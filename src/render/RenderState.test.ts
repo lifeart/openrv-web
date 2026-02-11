@@ -77,6 +77,7 @@ function createMockRenderer(): RendererBackend {
     setSharpen: vi.fn(),
     setHSLQualifier: vi.fn(),
     applyRenderState: vi.fn(),
+    hasPendingStateChanges: vi.fn().mockReturnValue(false),
     isShaderReady: vi.fn().mockReturnValue(true),
     renderSDRFrame: vi.fn().mockReturnValue(null),
     getCanvasElement: vi.fn().mockReturnValue(null),

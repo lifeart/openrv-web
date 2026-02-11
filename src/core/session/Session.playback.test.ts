@@ -1138,6 +1138,301 @@ describe('Session', () => {
     });
   });
 
+  describe('HDR initial buffering', () => {
+    // Helper to create mock VideoSourceNode with HDR support
+    const createHDRMockVideoSourceNode = (hasFrameCachedFn: (frame: number) => boolean = () => false) => ({
+      isUsingMediabunny: vi.fn(() => true),
+      isHDR: vi.fn(() => true),
+      hasFrameCached: vi.fn(hasFrameCachedFn),
+      getFrameAsync: vi.fn().mockResolvedValue(null),
+      preloadForPlayback: vi.fn().mockResolvedValue(undefined),
+      preloadFrames: vi.fn().mockResolvedValue(undefined),
+      setPlaybackDirection: vi.fn(),
+      startPlaybackPreload: vi.fn(),
+      stopPlaybackPreload: vi.fn(),
+      updatePlaybackBuffer: vi.fn(),
+    });
+
+    it('SES-HDR-001: HDR video play() enables buffering gate', () => {
+      const mockVideoNode = createHDRMockVideoSourceNode();
+      const mockVideo = createMockVideo(100, 0);
+      Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
+
+      session.setSources([{
+        type: 'video',
+        name: 'hdr.mp4',
+        url: 'hdr.mp4',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 30,
+        element: mockVideo,
+        videoSourceNode: mockVideoNode as any,
+      }]);
+      session.setOutPoint(100);
+
+      const internal = session as any;
+      session.play();
+
+      // _hdrBuffering should be set
+      expect(internal._playbackEngine._hdrBuffering).toBe(true);
+    });
+
+    it('SES-HDR-002: update() skips frame advancement during HDR buffering', () => {
+      const mockVideoNode = createHDRMockVideoSourceNode(() => true);
+      const mockVideo = createMockVideo(100, 0);
+      Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
+
+      session.setSources([{
+        type: 'video',
+        name: 'hdr.mp4',
+        url: 'hdr.mp4',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 30,
+        element: mockVideo,
+        videoSourceNode: mockVideoNode as any,
+      }]);
+      session.setOutPoint(100);
+
+      const internal = session as any;
+
+      let mockTime = 0;
+      vi.spyOn(performance, 'now').mockImplementation(() => mockTime);
+
+      session.play();
+      internal._currentFrame = 5;
+      const startFrame = session.currentFrame;
+
+      // Force _hdrBuffering to be true (simulating slow decoder)
+      internal._playbackEngine._hdrBuffering = true;
+
+      // Advance time
+      mockTime = 200;
+      internal.lastFrameTime = 0;
+      internal.frameAccumulator = 0;
+
+      session.update();
+
+      // Frame should NOT advance while buffering
+      expect(session.currentFrame).toBe(startFrame);
+
+      vi.restoreAllMocks();
+    });
+
+    it('SES-HDR-003: pause() clears HDR buffering gate', () => {
+      const mockVideoNode = createHDRMockVideoSourceNode();
+      const mockVideo = createMockVideo(100, 0);
+      Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
+
+      session.setSources([{
+        type: 'video',
+        name: 'hdr.mp4',
+        url: 'hdr.mp4',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 30,
+        element: mockVideo,
+        videoSourceNode: mockVideoNode as any,
+      }]);
+      session.setOutPoint(100);
+
+      const internal = session as any;
+      session.play();
+      expect(internal._playbackEngine._hdrBuffering).toBe(true);
+
+      session.pause();
+      expect(internal._playbackEngine._hdrBuffering).toBe(false);
+    });
+
+    it('SES-HDR-004: play/pause/play cycle re-enables buffering', () => {
+      const mockVideoNode = createHDRMockVideoSourceNode();
+      const mockVideo = createMockVideo(100, 0);
+      Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
+
+      session.setSources([{
+        type: 'video',
+        name: 'hdr.mp4',
+        url: 'hdr.mp4',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 30,
+        element: mockVideo,
+        videoSourceNode: mockVideoNode as any,
+      }]);
+      session.setOutPoint(100);
+
+      const internal = session as any;
+
+      // First play
+      session.play();
+      expect(internal._playbackEngine._hdrBuffering).toBe(true);
+
+      // Pause clears it
+      session.pause();
+      expect(internal._playbackEngine._hdrBuffering).toBe(false);
+
+      // Second play re-enables it
+      session.play();
+      expect(internal._playbackEngine._hdrBuffering).toBe(true);
+
+      session.pause();
+    });
+
+    it('SES-HDR-005: non-HDR video does not enable buffering gate', () => {
+      // Mock without isHDR (returns undefined via optional chaining)
+      const mockVideoNode = {
+        isUsingMediabunny: vi.fn(() => true),
+        hasFrameCached: vi.fn(() => true),
+        getFrameAsync: vi.fn().mockResolvedValue(null),
+        preloadForPlayback: vi.fn().mockResolvedValue(undefined),
+        preloadFrames: vi.fn().mockResolvedValue(undefined),
+        setPlaybackDirection: vi.fn(),
+        startPlaybackPreload: vi.fn(),
+        stopPlaybackPreload: vi.fn(),
+        updatePlaybackBuffer: vi.fn(),
+      };
+      const mockVideo = createMockVideo(100, 0);
+      Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
+
+      session.setSources([{
+        type: 'video',
+        name: 'sdr.mp4',
+        url: 'sdr.mp4',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 30,
+        element: mockVideo,
+        videoSourceNode: mockVideoNode as any,
+      }]);
+      session.setOutPoint(100);
+
+      const internal = session as any;
+      session.play();
+
+      // Without isHDR, _hdrBuffering should remain false
+      expect(internal._playbackEngine._hdrBuffering).toBe(false);
+
+      session.pause();
+    });
+
+    it('SES-HDR-006: HDR buffering triggers sequential getFrameAsync calls', async () => {
+      const mockVideoNode = createHDRMockVideoSourceNode();
+      const mockVideo = createMockVideo(100, 0);
+      Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
+
+      session.setSources([{
+        type: 'video',
+        name: 'hdr.mp4',
+        url: 'hdr.mp4',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 30,
+        element: mockVideo,
+        videoSourceNode: mockVideoNode as any,
+      }]);
+      session.setOutPoint(100);
+
+      session.play();
+
+      // Wait for the async buffer loop to run
+      await vi.waitFor(() => {
+        expect(mockVideoNode.getFrameAsync).toHaveBeenCalled();
+      });
+
+      // The buffer fills 10 frames sequentially (MIN_PLAYBACK_BUFFER = 10)
+      // starting from frame 1 with direction 1
+      const calls = mockVideoNode.getFrameAsync.mock.calls;
+      expect(calls.length).toBeGreaterThanOrEqual(1);
+      // Frames should be sequential
+      for (let i = 1; i < calls.length; i++) {
+        expect(calls[i]![0]).toBeGreaterThan(calls[i - 1]![0]);
+      }
+
+      session.pause();
+    });
+
+    it('SES-HDR-007: HDR buffering clears after initial buffer load completes', async () => {
+      const mockVideoNode = createHDRMockVideoSourceNode();
+      const mockVideo = createMockVideo(100, 0);
+      Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
+
+      session.setSources([{
+        type: 'video',
+        name: 'hdr.mp4',
+        url: 'hdr.mp4',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 30,
+        element: mockVideo,
+        videoSourceNode: mockVideoNode as any,
+      }]);
+      session.setOutPoint(100);
+
+      const internal = session as any;
+      session.play();
+      expect(internal._playbackEngine._hdrBuffering).toBe(true);
+
+      // Wait for async buffer loop to complete (all getFrameAsync resolve)
+      await vi.waitFor(() => {
+        expect(internal._playbackEngine._hdrBuffering).toBe(false);
+      });
+
+      session.pause();
+    });
+
+    it('SES-HDR-008: pause during HDR buffering stops the buffer loop', async () => {
+      let resolvers: Array<() => void> = [];
+      const mockVideoNode = createHDRMockVideoSourceNode();
+      // Make getFrameAsync block until manually resolved
+      mockVideoNode.getFrameAsync.mockImplementation(() =>
+        new Promise<null>(resolve => {
+          resolvers.push(() => resolve(null));
+        })
+      );
+
+      const mockVideo = createMockVideo(100, 0);
+      Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
+
+      session.setSources([{
+        type: 'video',
+        name: 'hdr.mp4',
+        url: 'hdr.mp4',
+        width: 100,
+        height: 100,
+        duration: 100,
+        fps: 30,
+        element: mockVideo,
+        videoSourceNode: mockVideoNode as any,
+      }]);
+      session.setOutPoint(100);
+
+      session.play();
+
+      // Wait for first getFrameAsync to be called
+      await vi.waitFor(() => {
+        expect(resolvers.length).toBeGreaterThanOrEqual(1);
+      });
+
+      // Pause while buffering is in progress
+      session.pause();
+
+      // Resolve all pending frames
+      resolvers.forEach(r => r());
+      await Promise.resolve();
+
+      // getFrameAsync should not have been called for all 10 frames
+      // because pause sets _isPlaying to false, which breaks the loop
+      expect(mockVideoNode.getFrameAsync.mock.calls.length).toBeLessThan(10);
+    });
+  });
+
   describe('preservesPitch', () => {
     it('SES-PITCH-001: defaults to true', () => {
       expect(session.preservesPitch).toBe(true);

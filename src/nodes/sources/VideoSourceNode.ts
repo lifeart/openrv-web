@@ -19,6 +19,7 @@ import { FramePreloadManager, type PreloadConfig } from '../../utils/media/Frame
 import type { CodecFamily, UnsupportedCodecError } from '../../utils/media/CodecUtils';
 import { HDRFrameResizer, type HDRResizeTier } from '../../utils/media/HDRFrameResizer';
 import { LRUCache } from '../../utils/LRUCache';
+import { PerfTrace } from '../../utils/PerfTrace';
 
 /** Frame extraction mode */
 export type FrameExtractionMode = 'mediabunny' | 'html-video' | 'auto';
@@ -1013,14 +1014,18 @@ export class VideoSourceNode extends BaseSourceNode {
         // Guard: if dispose() was called before the async IIFE runs, bail out
         if (!this.frameExtractor) return null;
 
+        PerfTrace.begin('getFrameHDR');
         const sample = await this.frameExtractor.getFrameHDR(frame);
+        PerfTrace.end('getFrameHDR');
 
         // Guard: dispose() may have been called while awaiting getFrameHDR
         if (!sample || !this.frameExtractor) return null;
 
         // Use stable HDR target size (actual display dims, not interaction-reduced)
         const targetSize = this.hdrTargetSize;
+        PerfTrace.begin('hdrSampleToIPImage');
         const ipImage = this.hdrSampleToIPImage(sample, frame, targetSize);
+        PerfTrace.end('hdrSampleToIPImage');
         sample.close();
 
         // Guard: dispose() may have been called during hdrSampleToIPImage/resize
