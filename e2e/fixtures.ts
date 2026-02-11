@@ -953,16 +953,36 @@ export async function loadSingleSequenceFrame(page: Page, frameNumber: number = 
 }
 
 /**
+ * Wait until there is at least one visible viewer canvas with a non-zero size.
+ * Some controls swap render canvases (GL/2D) and there can be a brief hidden gap.
+ */
+async function waitForRenderableViewerCanvas(page: Page, timeout = 5000): Promise<void> {
+  await page.waitForFunction(() => {
+    const canvases = Array.from(document.querySelectorAll('.viewer-container canvas'));
+    return canvases.some((canvas) => {
+      const style = window.getComputedStyle(canvas as HTMLElement);
+      if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+        return false;
+      }
+      const rect = (canvas as HTMLCanvasElement).getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    });
+  }, { timeout });
+}
+
+/**
  * Resolve the active viewer render canvas.
  * Prefer visible WebGL canvas when active; otherwise use visible image canvas.
  */
 async function getViewerRenderCanvas(page: Page): Promise<ReturnType<Page['locator']>> {
-  const glCanvas = page.locator('canvas[data-testid="viewer-gl-canvas"]');
+  await waitForRenderableViewerCanvas(page);
+
+  const glCanvas = page.locator('canvas[data-testid="viewer-gl-canvas"]:visible').first();
   if (await glCanvas.isVisible().catch(() => false)) {
     return glCanvas;
   }
 
-  const imageCanvas = page.locator('canvas[data-testid="viewer-image-canvas"]');
+  const imageCanvas = page.locator('canvas[data-testid="viewer-image-canvas"]:visible').first();
   if (await imageCanvas.isVisible().catch(() => false)) {
     return imageCanvas;
   }
@@ -1242,9 +1262,20 @@ export async function getAppState(page: Page): Promise<{
  * Uses screenshot comparison instead of canvas pixel access
  */
 export async function captureViewerScreenshot(page: Page): Promise<Buffer> {
-  const canvas = await getViewerRenderCanvas(page);
-  const screenshot = await canvas.screenshot();
-  return screenshot;
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const canvas = await getViewerRenderCanvas(page);
+    try {
+      return await canvas.screenshot();
+    } catch (error) {
+      if (attempt === maxAttempts) {
+        throw error;
+      }
+      await page.waitForTimeout(50 * attempt);
+    }
+  }
+
+  throw new Error('Failed to capture viewer screenshot');
 }
 
 /**
