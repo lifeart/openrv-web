@@ -411,7 +411,6 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
 
   pause(): void {
     if (this._isPlaying) {
-      this._pendingPlayPromise = null;
       this._isPlaying = false;
       this._hdrBuffering = false;
 
@@ -843,7 +842,15 @@ export class PlaybackEngine extends EventEmitter<PlaybackEngineEvents> {
           this._timingController.resetTiming(this._ts);
           this.decrementBufferingCount();
         }
-      })();
+      })().catch(err => {
+        if (err?.name !== 'AbortError') {
+          log.warn('HDR buffer preload failed:', err);
+        }
+        if (this._hdrBuffering) {
+          this._hdrBuffering = false;
+          this.decrementBufferingCount();
+        }
+      });
       return;
     }
 

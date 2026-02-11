@@ -11,7 +11,6 @@ import {
   ShaderStateManager,
   DIRTY_LUT3D,
   DIRTY_BACKGROUND,
-  DIRTY_COLOR,
   ALL_DIRTY_FLAGS,
 } from './ShaderStateManager';
 import type { RenderState } from './RenderState';

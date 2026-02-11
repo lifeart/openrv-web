@@ -750,5 +750,6 @@ export class ViewerGLRenderer {
     }
 
     this._glCanvas = null;
+    this._lastRenderedImage = null;
   }
 }
