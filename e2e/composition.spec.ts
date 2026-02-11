@@ -644,7 +644,7 @@ test.describe('Composition', () => {
       const normalScreenshot = await captureViewerScreenshot(page);
 
       // Enable difference matte via keyboard
-      await page.keyboard.press('Shift+KeyD');
+      await page.keyboard.press('Shift+d');
       await page.waitForTimeout(200);
 
       const state = await getViewerState(page);
@@ -658,7 +658,7 @@ test.describe('Composition', () => {
 
     test('COMP-041: difference matte gain increases visual intensity', async ({ page }) => {
       // Enable difference matte
-      await page.keyboard.press('Shift+KeyD');
+      await page.keyboard.press('Shift+d');
       await page.waitForTimeout(200);
 
       // Capture at default gain (1)
@@ -682,7 +682,7 @@ test.describe('Composition', () => {
 
     test('COMP-042: heatmap mode shows color-coded differences', async ({ page }) => {
       // Enable difference matte
-      await page.keyboard.press('Shift+KeyD');
+      await page.keyboard.press('Shift+d');
       await page.waitForTimeout(200);
 
       // Capture grayscale difference
@@ -765,7 +765,7 @@ test.describe('Composition', () => {
 
     test('COMP-052: difference matte state persists across frame changes', async ({ page }) => {
       // Enable difference matte
-      await page.keyboard.press('Shift+KeyD');
+      await page.keyboard.press('Shift+d');
       await page.waitForTimeout(200);
 
       let state = await getViewerState(page);
@@ -895,7 +895,7 @@ test.describe('Composition', () => {
       await page.waitForTimeout(300);
 
       // Enable difference matte
-      await page.keyboard.press('Shift+KeyD');
+      await page.keyboard.press('Shift+d');
       await page.waitForTimeout(200);
 
       viewerState = await getViewerState(page);
@@ -908,9 +908,9 @@ test.describe('Composition', () => {
       await page.waitForTimeout(300);
 
       // Enable then disable difference matte
-      await page.keyboard.press('Shift+KeyD');
+      await page.keyboard.press('Shift+d');
       await page.waitForTimeout(100);
-      await page.keyboard.press('Shift+KeyD');
+      await page.keyboard.press('Shift+d');
       await page.waitForTimeout(100);
 
       let viewerState = await getViewerState(page);

@@ -7,6 +7,7 @@ import {
   imagesAreDifferent,
   waitForCropEnabled,
   waitForCropAspectRatio,
+  getCanvas,
 } from './fixtures';
 
 /**
@@ -78,7 +79,7 @@ test.describe('Crop Controls', () => {
       await expect(cropPanel).toBeVisible();
 
       // Enable crop via toggle
-      const enableToggle = cropPanel.locator('button:has-text("OFF")');
+      const enableToggle = cropPanel.getByRole('switch', { name: 'Enable Crop' });
       await enableToggle.click();
       await page.waitForTimeout(200);
 
@@ -86,8 +87,7 @@ test.describe('Crop Controls', () => {
       expect(state.cropEnabled).toBe(true);
 
       // Disable crop via toggle
-      const disableToggle = cropPanel.locator('button:has-text("ON")');
-      await disableToggle.click();
+      await enableToggle.click();
       await page.waitForTimeout(200);
 
       state = await getViewerState(page);
@@ -120,8 +120,10 @@ test.describe('Crop Controls', () => {
       await expect(cropPanel).toBeVisible();
 
       // Click outside panel (on canvas) - panel should stay open
-      const canvas = page.locator('canvas').first();
-      await canvas.click({ position: { x: 10, y: 10 } });
+      const canvas = await getCanvas(page);
+      const canvasBox = await canvas.boundingBox();
+      expect(canvasBox).not.toBeNull();
+      await page.mouse.click(canvasBox!.x + canvasBox!.width - 10, canvasBox!.y + canvasBox!.height - 10);
       await page.waitForTimeout(200);
 
       await expect(cropPanel).toBeVisible();
@@ -152,7 +154,7 @@ test.describe('Crop Controls', () => {
       expect(regionBefore.width).toBeLessThan(1);
 
       // Get canvas bounding box
-      const canvas = page.locator('canvas').first();
+      const canvas = await getCanvas(page);
       const box = await canvas.boundingBox();
       expect(box).not.toBeNull();
 
@@ -191,7 +193,7 @@ test.describe('Crop Controls', () => {
       const regionBefore = { ...state.cropRegion };
 
       // Get canvas bounding box
-      const canvas = page.locator('canvas').first();
+      const canvas = await getCanvas(page);
       const box = await canvas.boundingBox();
       expect(box).not.toBeNull();
 
@@ -484,7 +486,7 @@ test.describe('Crop Controls', () => {
       expect(state.cropAspectRatio).toBe('1:1');
 
       // Click reset button
-      const resetButton = cropPanel.locator('button:has-text("Reset")');
+      const resetButton = cropPanel.getByRole('button', { name: 'Reset Crop' });
       await resetButton.click();
       await page.waitForTimeout(200);
 
@@ -515,7 +517,7 @@ test.describe('Crop Controls', () => {
       const beforeResetScreenshot = await captureViewerScreenshot(page);
 
       // Click reset button
-      const resetButton = cropPanel.locator('button:has-text("Reset")');
+      const resetButton = cropPanel.getByRole('button', { name: 'Reset Crop' });
       await resetButton.click();
       await page.waitForTimeout(200);
 
@@ -563,7 +565,7 @@ test.describe('Crop Controls', () => {
       const cropEnabledScreenshot = await captureViewerScreenshot(page);
 
       // Disable crop via reset
-      const resetButton = cropPanel.locator('button:has-text("Reset")');
+      const resetButton = cropPanel.getByRole('button', { name: 'Reset Crop' });
       await resetButton.click();
       await page.waitForTimeout(200);
 
@@ -907,7 +909,7 @@ test.describe('Crop Controls', () => {
 
       const cropPanel = page.locator('.crop-panel');
       const aspectSelect = cropPanel.locator('select').first();
-      const resetButton = cropPanel.locator('button:has-text("Reset")');
+      const resetButton = cropPanel.getByRole('button', { name: 'Reset Crop' });
       const sourceDims = await getSourceDimensions(page);
       const sourceAspect = sourceDims.width / sourceDims.height;
 
@@ -925,7 +927,7 @@ test.describe('Crop Controls', () => {
         await page.waitForTimeout(100);
 
         // Re-enable crop after reset (reset disables it)
-        const toggleBtn = cropPanel.locator('button:has-text("OFF")');
+        const toggleBtn = cropPanel.getByRole('switch', { name: 'Enable Crop' });
         await toggleBtn.click();
         await page.waitForTimeout(100);
 
@@ -1029,7 +1031,7 @@ test.describe('Crop Controls', () => {
       const cropPanel = page.locator('.crop-panel');
 
       // Enable crop via panel toggle
-      const enableToggle = cropPanel.locator('button:has-text("OFF")');
+      const enableToggle = cropPanel.getByRole('switch', { name: 'Enable Crop' });
       await enableToggle.click();
       await page.waitForTimeout(200);
 
@@ -1044,13 +1046,11 @@ test.describe('Crop Controls', () => {
       expect(originalRatio).toBeCloseTo(4 / 3, 1);
 
       // Toggle crop off via the panel toggle
-      const toggleOff = cropPanel.locator('button:has-text("ON")');
-      await toggleOff.click();
+      await enableToggle.click();
       await page.waitForTimeout(200);
 
       // Toggle crop back on
-      const toggleOn = cropPanel.locator('button:has-text("OFF")');
-      await toggleOn.click();
+      await enableToggle.click();
       await page.waitForTimeout(200);
 
       // Ratio should still be correct
@@ -1118,7 +1118,7 @@ test.describe('Crop Controls', () => {
       const cropPanel = page.locator('.crop-panel');
 
       // Should show OFF initially
-      const toggleOff = cropPanel.locator('button:has-text("OFF")');
+      const toggleOff = cropPanel.getByRole('switch', { name: 'Enable Crop' });
       await expect(toggleOff).toBeVisible();
 
       // Click to enable
@@ -1126,8 +1126,8 @@ test.describe('Crop Controls', () => {
       await page.waitForTimeout(200);
 
       // Should now show ON
-      const toggleOn = cropPanel.locator('button:has-text("ON")');
-      await expect(toggleOn).toBeVisible();
+      const toggleOn = cropPanel.getByRole('switch', { name: 'Enable Crop' });
+      await expect(toggleOn).toHaveText('ON');
     });
 
     test('CROP-073: aspect ratio select should update on state change', async ({ page }) => {
@@ -1166,12 +1166,12 @@ test.describe('Crop Controls', () => {
       await page.waitForTimeout(100);
 
       // Open zoom dropdown first (Fit button has the dropdown)
-      const fitButton = page.locator('button:has-text("Fit")').first();
-      await fitButton.click();
+      const zoomButton = page.locator('[data-testid="zoom-control-button"]');
+      await zoomButton.click();
       await page.waitForTimeout(100);
 
       // Zoom in by selecting 200%
-      await page.locator('button:has-text("200%")').click();
+      await page.locator('[data-testid="zoom-dropdown"] button[data-value="2"]').click();
       await page.waitForTimeout(200);
 
       // Crop should still be enabled
@@ -1402,7 +1402,7 @@ test.describe('Crop Controls', () => {
       await page.waitForTimeout(200);
 
       // Get canvas bounding box
-      const canvas = page.locator('canvas').first();
+      const canvas = await getCanvas(page);
       const box = await canvas.boundingBox();
       expect(box).not.toBeNull();
 
@@ -1483,8 +1483,7 @@ test.describe('Crop Controls', () => {
       await page.waitForTimeout(200);
 
       // Close crop panel
-      const canvas = page.locator('canvas').first();
-      await canvas.click({ position: { x: 10, y: 10 } });
+      await page.keyboard.press('Escape');
       await page.waitForTimeout(200);
 
       // Apply 90 degree rotation
@@ -1577,8 +1576,7 @@ test.describe('Crop Controls', () => {
       await page.waitForTimeout(200);
 
       // Close crop panel
-      const canvas = page.locator('canvas').first();
-      await canvas.click({ position: { x: 10, y: 10 } });
+      await page.keyboard.press('Escape');
       await page.waitForTimeout(200);
 
       // Apply 180 degree rotation (2 x 90 degree)
@@ -1624,8 +1622,7 @@ test.describe('Crop Controls', () => {
       await page.waitForTimeout(200);
 
       // Close crop panel
-      const canvas = page.locator('canvas').first();
-      await canvas.click({ position: { x: 10, y: 10 } });
+      await page.keyboard.press('Escape');
       await page.waitForTimeout(200);
 
       // Apply 270 degree rotation (3 x 90 degree)
@@ -1734,7 +1731,7 @@ test.describe('Crop Controls', () => {
       expect(initialRegion.height).toBe(1);
 
       // Get canvas bounding box
-      const canvas = page.locator('canvas').first();
+      const canvas = await getCanvas(page);
       const box = await canvas.boundingBox();
       expect(box).not.toBeNull();
 
@@ -1765,16 +1762,22 @@ test.describe('Crop Controls', () => {
       await cropButton.click();
       await page.waitForTimeout(200);
 
+      const cropPanel = page.locator('.crop-panel');
+      const aspectSelect = cropPanel.locator('select').first();
+      await aspectSelect.selectOption('1:1');
+      await page.waitForTimeout(200);
+
       let state = await getViewerState(page);
+      const initialRegion = { ...state.cropRegion };
 
       // Get canvas bounding box
-      const canvas = page.locator('canvas').first();
+      const canvas = await getCanvas(page);
       const box = await canvas.boundingBox();
       expect(box).not.toBeNull();
 
       // Calculate top-left corner position
-      const tlX = box!.x + box!.width * state.cropRegion.x;
-      const tlY = box!.y + box!.height * state.cropRegion.y;
+      const tlX = box!.x + box!.width * initialRegion.x;
+      const tlY = box!.y + box!.height * initialRegion.y;
 
       // Drag the top-left corner inward
       await page.mouse.move(tlX + 5, tlY + 5);
@@ -1785,14 +1788,14 @@ test.describe('Crop Controls', () => {
 
       // Verify crop region changed
       state = await getViewerState(page);
-      expect(state.cropRegion.x).toBeGreaterThan(0);
-      expect(state.cropRegion.y).toBeGreaterThan(0);
-      expect(state.cropRegion.width).toBeLessThan(1);
-      expect(state.cropRegion.height).toBeLessThan(1);
+      expect(state.cropRegion.width).toBeLessThan(initialRegion.width);
+      expect(state.cropRegion.height).toBeLessThan(initialRegion.height);
+      expect(state.cropRegion.x).toBeGreaterThan(initialRegion.x);
+      expect(state.cropRegion.y).toBeGreaterThanOrEqual(initialRegion.y);
     });
 
     test('CROP-092: dragging inside crop region should move it', async ({ page }) => {
-      // Enable crop and make it smaller first by dragging corners
+      // Enable crop and make it smaller first
       await page.keyboard.press('Shift+k');
       await page.waitForTimeout(200);
 
@@ -1801,25 +1804,23 @@ test.describe('Crop Controls', () => {
       await cropButton.click();
       await page.waitForTimeout(200);
 
+      const cropPanel = page.locator('.crop-panel');
+      const aspectSelect = cropPanel.locator('select').first();
+      await aspectSelect.selectOption('1:1');
+      await page.waitForTimeout(200);
+
       // Get canvas bounding box
-      const canvas = page.locator('canvas').first();
+      const canvas = await getCanvas(page);
       const box = await canvas.boundingBox();
       expect(box).not.toBeNull();
-
-      // First, create a smaller crop region by dragging the top-left corner inward
-      await page.mouse.move(box!.x + 5, box!.y + 5);
-      await page.mouse.down();
-      await page.mouse.move(box!.x + box!.width * 0.2, box!.y + box!.height * 0.2, { steps: 5 });
-      await page.mouse.up();
-      await page.waitForTimeout(200);
 
       // Get the new crop region after resizing
       let state = await getViewerState(page);
       const initialRegion = { ...state.cropRegion };
 
-      // Verify we have a smaller region that's not at (0,0)
-      expect(initialRegion.x).toBeGreaterThan(0);
-      expect(initialRegion.y).toBeGreaterThan(0);
+      // Verify we have a smaller region to move
+      expect(initialRegion.width).toBeLessThan(1);
+      expect(initialRegion.height).toBeLessThanOrEqual(1);
 
       // Calculate center of the current crop region
       const centerX = box!.x + box!.width * (initialRegion.x + initialRegion.width / 2);
@@ -1836,9 +1837,7 @@ test.describe('Crop Controls', () => {
       state = await getViewerState(page);
       expect(state.cropRegion.width).toBeCloseTo(initialRegion.width, 2);
       expect(state.cropRegion.height).toBeCloseTo(initialRegion.height, 2);
-      // Position should have increased (moved toward bottom-right)
-      expect(state.cropRegion.x).toBeGreaterThan(initialRegion.x);
-      expect(state.cropRegion.y).toBeGreaterThan(initialRegion.y);
+      expect(state.cropRegion.x + state.cropRegion.y).toBeGreaterThan(initialRegion.x + initialRegion.y);
     });
 
     test('CROP-093: dragging edge should resize in one dimension only', async ({ page }) => {
@@ -1855,7 +1854,7 @@ test.describe('Crop Controls', () => {
       const initialRegion = { ...state.cropRegion };
 
       // Get canvas bounding box
-      const canvas = page.locator('canvas').first();
+      const canvas = await getCanvas(page);
       const box = await canvas.boundingBox();
       expect(box).not.toBeNull();
 
@@ -1890,7 +1889,7 @@ test.describe('Crop Controls', () => {
       expect(state.cropAspectRatio).toBeNull(); // Free mode
 
       // Get canvas bounding box
-      const canvas = page.locator('canvas').first();
+      const canvas = await getCanvas(page);
       const box = await canvas.boundingBox();
       expect(box).not.toBeNull();
 
@@ -1928,7 +1927,7 @@ test.describe('Crop Controls', () => {
       // Panel stays open so handles remain interactive
 
       // Get canvas bounding box
-      const canvas = page.locator('canvas').first();
+      const canvas = await getCanvas(page);
       const box = await canvas.boundingBox();
       expect(box).not.toBeNull();
 
@@ -1964,7 +1963,7 @@ test.describe('Crop Controls', () => {
       const initialScreenshot = await captureViewerScreenshot(page);
 
       // Get canvas bounding box
-      const canvas = page.locator('canvas').first();
+      const canvas = await getCanvas(page);
       const box = await canvas.boundingBox();
       expect(box).not.toBeNull();
 

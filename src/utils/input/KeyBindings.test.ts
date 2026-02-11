@@ -126,6 +126,18 @@ describe('KeyBindings', () => {
     it('KB-U020: defines panel.close with Escape', () => {
       expect(DEFAULT_KEY_BINDINGS['panel.close']!.code).toBe('Escape');
     });
+
+    it('KB-U021: difference matte and display profile shortcuts do not conflict', () => {
+      const diff = DEFAULT_KEY_BINDINGS['view.toggleDifferenceMatte']!;
+      const display = DEFAULT_KEY_BINDINGS['display.cycleProfile']!;
+
+      expect(diff.code).toBe('KeyD');
+      expect(diff.shift).toBe(true);
+
+      expect(display.code).toBe('KeyD');
+      expect(display.shift).toBe(true);
+      expect(display.alt).toBe(true);
+    });
   });
 
   describe('describeKeyCombo', () => {

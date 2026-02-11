@@ -84,11 +84,12 @@ test.describe('Color Curves', () => {
       await curvesButton.click();
       await page.waitForTimeout(200);
 
-      // Button should have active styling (border color change)
+      // Button should have active styling (border color no longer transparent)
       const borderColor = await curvesButton.evaluate((el) =>
         getComputedStyle(el).borderColor
       );
-      expect(borderColor).toContain('74, 158, 255'); // #4a9eff in rgb
+      expect(borderColor).not.toBe('transparent');
+      expect(borderColor).not.toBe('rgba(0, 0, 0, 0)');
     });
   });
 

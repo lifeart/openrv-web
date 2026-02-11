@@ -24,6 +24,15 @@ import {
  * user journey rather than testing isolated functionality.
  */
 
+async function selectViewChannel(page: import('@playwright/test').Page, channel: 'rgb' | 'red' | 'green' | 'blue' | 'alpha' | 'luminance'): Promise<void> {
+  await clickTab(page, 'view');
+  await page.waitForTimeout(100);
+  await page.click('[data-testid="channel-select-button"]');
+  await page.waitForTimeout(100);
+  await page.click(`[data-testid="channel-dropdown"] button[data-value="${channel}"]`);
+  await page.waitForTimeout(100);
+}
+
 test.describe('Dailies Review Workflow', () => {
   /**
    * User Flow: A colorist receives dailies and needs to:
@@ -260,36 +269,18 @@ test.describe('VFX Review Workflow', () => {
     const rgbView = await captureViewerScreenshot(page);
 
     // Check red channel
-    await page.keyboard.press('Shift+r');
-    await page.waitForTimeout(100);
+    await selectViewChannel(page, 'red');
 
-    // Note: Shift+R is used for rotation in this app, so red channel might be different
-    // Let's use the correct shortcut - check via clicking
-    await clickTab(page, 'view');
-    await page.waitForTimeout(100);
+    let viewerState = await getViewerState(page);
+    expect(viewerState.channelMode).toBe('red');
 
-    // Find channel buttons
-    const redButton = page.locator('button:has-text("R")').first();
-    if (await redButton.isVisible()) {
-      await redButton.click();
-      await page.waitForTimeout(100);
-
-      const viewerState = await getViewerState(page);
-      expect(viewerState.channelMode).toBe('red');
-
-      const redView = await captureViewerScreenshot(page);
-      expect(imagesAreDifferent(rgbView, redView)).toBe(true);
-    }
+    const redView = await captureViewerScreenshot(page);
+    expect(imagesAreDifferent(rgbView, redView)).toBe(true);
 
     // Return to RGB
-    const rgbButton = page.locator('button:has-text("RGB")').first();
-    if (await rgbButton.isVisible()) {
-      await rgbButton.click();
-      await page.waitForTimeout(100);
-
-      const viewerState = await getViewerState(page);
-      expect(viewerState.channelMode).toBe('rgb');
-    }
+    await selectViewChannel(page, 'rgb');
+    viewerState = await getViewerState(page);
+    expect(viewerState.channelMode).toBe('rgb');
   });
 
   test('UF-021: Use spotlight to focus on specific area', async ({ page }) => {

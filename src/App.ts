@@ -558,13 +558,13 @@ export class App {
         }
         if (this.controls.cropControl) {
           this.controls.cropControl.hidePanel();
-          if (this.controls.cropControl.getCropState().enabled) {
-            this.controls.cropControl.toggle();
-          }
         }
         // Close stereo eye transform panel
         if (this.controls.stereoEyeTransformControl.isPanelVisible()) {
           this.controls.stereoEyeTransformControl.hidePanel();
+        }
+        if (this.controls.displayProfileControl.isDropdownVisible()) {
+          this.controls.displayProfileControl.closeDropdown();
         }
       },
       'snapshot.create': () => {

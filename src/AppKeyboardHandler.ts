@@ -63,19 +63,19 @@ export class AppKeyboardHandler {
   private registerKeyboardShortcuts(): void {
     const actionHandlers = this.context.getActionHandlers();
 
-    // Paint shortcuts that conflict with other shortcuts are handled by delegating handlers
-    // (e.g., playback.faster handles L key, but delegates to paint.line on Annotate tab)
-    // Skip registering these to avoid overwriting the delegating handlers
-    const conflictingPaintShortcuts = new Set([
+    // Some actions intentionally share keys with higher-priority global shortcuts.
+    // Skip registering these to avoid overriding the intended behavior.
+    const conflictingShortcuts = new Set([
       'paint.line',      // L key - handled by playback.faster
       'paint.rectangle', // R key - handled by timeline.resetInOut
       'paint.ellipse',   // O key - handled by timeline.setOutPoint
+      'channel.red',     // Shift+R is reserved for transform.rotateLeft
     ]);
 
     // Register all keyboard shortcuts using effective combos (custom or default)
     for (const [action, defaultBinding] of Object.entries(DEFAULT_KEY_BINDINGS)) {
-      // Skip conflicting paint shortcuts - they're handled by delegating handlers
-      if (conflictingPaintShortcuts.has(action)) {
+      // Skip known conflicts handled elsewhere or intentionally reserved
+      if (conflictingShortcuts.has(action)) {
         continue;
       }
 

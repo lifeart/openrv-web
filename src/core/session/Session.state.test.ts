@@ -174,6 +174,16 @@ describe('Session', () => {
       expect(session.volume).toBe(0.5);
     });
 
+    it('SES-008b: setting volume to 0 auto-mutes session', () => {
+      const mutedListener = vi.fn();
+      session.on('mutedChanged', mutedListener);
+
+      session.volume = 0;
+      expect(session.volume).toBe(0);
+      expect(session.muted).toBe(true);
+      expect(mutedListener).toHaveBeenCalledWith(true);
+    });
+
     it('emits volumeChanged event', () => {
       const listener = vi.fn();
       session.on('volumeChanged', listener);

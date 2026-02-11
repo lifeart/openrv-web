@@ -12,6 +12,18 @@ import path from 'path';
 const SAMPLE_EXR = 'sample/test_hdr.exr';
 const SAMPLE_EXR_SMALL = 'sample/test_small.exr';
 
+async function setRangeValue(
+  slider: import('@playwright/test').Locator,
+  value: number,
+) {
+  await slider.evaluate((el, val) => {
+    const input = el as HTMLInputElement;
+    input.value = String(val);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }, value);
+}
+
 /**
  * EXR Format Loading Tests
  *
@@ -110,21 +122,18 @@ test.describe('EXR Format Support', () => {
       const beforeScreenshot = await captureViewerScreenshot(page);
 
       // Switch to Color tab
-      await page.click('button:has-text("Color")');
-      await page.waitForFunction(
-        () => document.querySelector('button:has-text("Color")')?.classList?.contains('active') ||
-              document.querySelector('[data-tab-id="color"][aria-selected="true"]') !== null,
-        { timeout: 5000 }
-      );
+      await page.click('button[data-tab-id="color"]');
+      await page.waitForTimeout(150);
+      await page.keyboard.press('c');
+      await expect(page.locator('.color-controls-panel')).toBeVisible({ timeout: 5000 });
 
       // Find and adjust exposure slider
       // The exposure control should be visible in the Color tab
-      const exposureSlider = page.locator('input[type="range"]').first();
+      const exposureSlider = page.locator('.color-controls-panel [data-testid="slider-exposure"]');
 
       if (await exposureSlider.isVisible()) {
         // Increase exposure
-        await exposureSlider.fill('2');
-        await exposureSlider.dispatchEvent('input');
+        await setRangeValue(exposureSlider, 2);
         await page.waitForFunction(
           () => {
             const state = window.__OPENRV_TEST__?.getColorState();
@@ -159,18 +168,15 @@ test.describe('EXR Format Support', () => {
       const normalExposure = await captureViewerScreenshot(page);
 
       // Switch to Color tab and reduce exposure
-      await page.click('button:has-text("Color")');
-      await page.waitForFunction(
-        () => document.querySelector('button:has-text("Color")')?.classList?.contains('active') ||
-              document.querySelector('[data-tab-id="color"][aria-selected="true"]') !== null,
-        { timeout: 5000 }
-      );
+      await page.click('button[data-tab-id="color"]');
+      await page.waitForTimeout(150);
+      await page.keyboard.press('c');
+      await expect(page.locator('.color-controls-panel')).toBeVisible({ timeout: 5000 });
 
-      const exposureSlider = page.locator('input[type="range"]').first();
+      const exposureSlider = page.locator('.color-controls-panel [data-testid="slider-exposure"]');
       if (await exposureSlider.isVisible()) {
         // Reduce exposure to see HDR detail
-        await exposureSlider.fill('-1');
-        await exposureSlider.dispatchEvent('input');
+        await setRangeValue(exposureSlider, -1);
         await page.waitForFunction(
           () => {
             const state = window.__OPENRV_TEST__?.getColorState();

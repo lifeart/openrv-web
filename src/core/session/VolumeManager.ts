@@ -47,6 +47,11 @@ export class VolumeManager {
         this._previousVolume = clamped;
       }
       this._volume = clamped;
+      // Keep mute state consistent with audible volume.
+      if (clamped === 0 && !this._muted) {
+        this._muted = true;
+        this._callbacks?.onMutedChanged(this._muted);
+      }
       // Auto-unmute when volume is set to non-zero
       if (clamped > 0 && this._muted) {
         this._muted = false;

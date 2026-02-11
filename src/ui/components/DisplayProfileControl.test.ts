@@ -216,18 +216,18 @@ describe('DisplayProfileControl', () => {
   });
 
   // ========================================================================
-  // 3. Keyboard cycling (Shift+D)
+  // 3. Keyboard cycling (Shift+Alt+D)
   // ========================================================================
-  describe('keyboard cycling (Shift+D)', () => {
-    it('DPC-030: handleKeyboard with Shift+D returns true', () => {
+  describe('keyboard cycling (Shift+Alt+D)', () => {
+    it('DPC-030: handleKeyboard with Shift+Alt+D returns true', () => {
       control = new DisplayProfileControl();
-      const handled = control.handleKeyboard('D', true);
+      const handled = control.handleKeyboard('D', true, true);
       expect(handled).toBe(true);
     });
 
-    it('DPC-031: handleKeyboard with Shift+d (lowercase) returns true', () => {
+    it('DPC-031: handleKeyboard with Shift+Alt+d (lowercase) returns true', () => {
       control = new DisplayProfileControl();
-      const handled = control.handleKeyboard('d', true);
+      const handled = control.handleKeyboard('d', true, true);
       expect(handled).toBe(true);
     });
 
@@ -237,23 +237,29 @@ describe('DisplayProfileControl', () => {
       expect(handled).toBe(false);
     });
 
-    it('DPC-033: handleKeyboard with wrong key returns false', () => {
+    it('DPC-033: handleKeyboard without alt modifier returns false', () => {
       control = new DisplayProfileControl();
-      const handled = control.handleKeyboard('x', true);
+      const handled = control.handleKeyboard('D', true, false);
       expect(handled).toBe(false);
     });
 
-    it('DPC-034: Shift+D cycles from sRGB to next profile', () => {
+    it('DPC-033b: handleKeyboard with wrong key returns false', () => {
+      control = new DisplayProfileControl();
+      const handled = control.handleKeyboard('x', true, true);
+      expect(handled).toBe(false);
+    });
+
+    it('DPC-034: Shift+Alt+D cycles from sRGB to next profile', () => {
       control = new DisplayProfileControl();
       // sRGB is at index 1 in PROFILE_CYCLE_ORDER, next is rec709
-      control.handleKeyboard('D', true);
+      control.handleKeyboard('D', true, true);
       expect(control.getState().transferFunction).toBe('rec709');
     });
 
-    it('DPC-035: Shift+D cycles through two profiles', () => {
+    it('DPC-035: Shift+Alt+D cycles through two profiles', () => {
       control = new DisplayProfileControl();
-      control.handleKeyboard('D', true); // srgb -> rec709
-      control.handleKeyboard('D', true); // rec709 -> gamma2.2
+      control.handleKeyboard('D', true, true); // srgb -> rec709
+      control.handleKeyboard('D', true, true); // rec709 -> gamma2.2
       expect(control.getState().transferFunction).toBe('gamma2.2');
     });
   });

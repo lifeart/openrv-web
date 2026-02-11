@@ -364,6 +364,7 @@ export class Viewer {
 
     // Create canvas container for transforms
     this.canvasContainer = document.createElement('div');
+    this.canvasContainer.dataset.testid = 'viewer-canvas-container';
     this.canvasContainer.style.cssText = `
       position: absolute;
       top: 0;
@@ -374,6 +375,7 @@ export class Viewer {
 
     // Create image canvas (bottom layer)
     this.imageCanvas = document.createElement('canvas');
+    this.imageCanvas.dataset.testid = 'viewer-image-canvas';
     this.imageCanvas.style.cssText = `
       display: block;
       background: #000;
@@ -400,6 +402,7 @@ export class Viewer {
 
     // Create paint canvas (top layer, overlaid)
     this.paintCanvas = document.createElement('canvas');
+    this.paintCanvas.dataset.testid = 'viewer-paint-canvas';
     this.paintCanvas.style.cssText = `
       position: absolute;
       top: 0;

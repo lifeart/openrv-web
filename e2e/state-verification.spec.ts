@@ -385,7 +385,8 @@ test.describe('State Verification - Zoom', () => {
     // Zoom to 200%
     await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
-    await page.click('button:has-text("200%")');
+    await page.click('[data-testid="zoom-control-button"]');
+    await page.click('[data-testid="zoom-dropdown"] button[data-value="2"]');
     await page.waitForTimeout(300);
 
     const zoomedScreenshot = await captureViewerScreenshot(page);
@@ -397,7 +398,8 @@ test.describe('State Verification - Zoom', () => {
   test('STATE-051: fit to window should show full image', async ({ page }) => {
     // Zoom in first
     await page.click('button[data-tab-id="view"]');
-    await page.click('button:has-text("400%")');
+    await page.click('[data-testid="zoom-control-button"]');
+    await page.click('[data-testid="zoom-dropdown"] button[data-value="4"]');
     await page.waitForTimeout(300);
 
     const zoomedScreenshot = await captureViewerScreenshot(page);

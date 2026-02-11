@@ -32,6 +32,22 @@ async function waitForFalseColorPreset(page: import('@playwright/test').Page, pr
   );
 }
 
+async function setFalseColorPreset(page: import('@playwright/test').Page, preset: 'standard' | 'arri' | 'red' | 'custom') {
+  await page.evaluate((nextPreset) => {
+    const falseColor = (window as any).__OPENRV_TEST__?.app?.viewer?.getFalseColor?.();
+    falseColor?.setPreset?.(nextPreset);
+  }, preset);
+}
+
+async function getFalseColorLutSignature(page: import('@playwright/test').Page): Promise<number[]> {
+  return page.evaluate(() => {
+    const falseColor = (window as any).__OPENRV_TEST__?.app?.viewer?.getFalseColor?.();
+    const lut: Uint8Array | undefined = falseColor?.getColorLUT?.();
+    if (!lut) return [];
+    return Array.from(lut.slice(0, 64));
+  });
+}
+
 test.describe('False Color Display', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
@@ -110,17 +126,13 @@ test.describe('False Color Presets', () => {
 
   test('FC-E011: changing preset updates state', async ({ page }) => {
     // Change preset via API
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.falseColorControl?.setPreset('arri');
-    });
+    await setFalseColorPreset(page, 'arri');
     await waitForFalseColorPreset(page, 'arri');
 
     let state = await getFalseColorState(page);
     expect(state.preset).toBe('arri');
 
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.falseColorControl?.setPreset('red');
-    });
+    await setFalseColorPreset(page, 'red');
     await waitForFalseColorPreset(page, 'red');
 
     state = await getFalseColorState(page);
@@ -128,16 +140,14 @@ test.describe('False Color Presets', () => {
   });
 
   test('FC-E012: different presets produce different visuals', async ({ page }) => {
-    const standardState = await captureCanvasState(page);
+    const standardSignature = await getFalseColorLutSignature(page);
 
     // Change to ARRI preset
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.falseColorControl?.setPreset('arri');
-    });
+    await setFalseColorPreset(page, 'arri');
     await waitForFalseColorPreset(page, 'arri');
 
-    const arriState = await captureCanvasState(page);
-    expect(verifyCanvasChanged(standardState, arriState)).toBe(true);
+    const arriSignature = await getFalseColorLutSignature(page);
+    expect(arriSignature).not.toEqual(standardSignature);
   });
 });
 
@@ -153,9 +163,8 @@ test.describe('False Color UI Controls', () => {
     // Go to View tab
     await page.click('button[data-tab-id="view"]');
 
-    // Look for false color control or dropdown
-    const control = page.locator('[data-testid="false-color-control"], button:has-text("False Color")');
-    await expect(control.first()).toBeVisible();
+    const control = page.locator('[data-testid="false-color-control-button"]');
+    await expect(control).toBeVisible();
   });
 
   test('FC-E021: clicking false color control toggles feature', async ({ page }) => {
@@ -165,9 +174,13 @@ test.describe('False Color UI Controls', () => {
     let state = await getFalseColorState(page);
     expect(state.enabled).toBe(false);
 
-    // Click the false color control
-    const control = page.locator('[data-testid="false-color-control"], button:has-text("False Color")');
-    await control.first().click();
+    // Open false color dropdown, then enable it via checkbox
+    const control = page.locator('[data-testid="false-color-control-button"]');
+    await control.click();
+    const dropdown = page.locator('[data-testid="false-color-dropdown"]');
+    await expect(dropdown).toBeVisible();
+    const enabledCheckbox = dropdown.locator('input[type="checkbox"]').first();
+    await enabledCheckbox.check();
     await waitForFalseColorEnabled(page, true);
 
     state = await getFalseColorState(page);
@@ -210,9 +223,7 @@ test.describe('False Color State Persistence', () => {
     await waitForFalseColorEnabled(page, true);
 
     // Change preset
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.falseColorControl?.setPreset('arri');
-    });
+    await setFalseColorPreset(page, 'arri');
     await waitForFalseColorPreset(page, 'arri');
 
     let state = await getFalseColorState(page);

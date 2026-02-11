@@ -446,7 +446,7 @@ test.describe('Full Workflow Tests', () => {
     expect(afterRotate?.rotation).toBe(270);
 
     // Flip horizontal using keyboard shortcut
-    await page.keyboard.press('Shift+h');
+    await page.keyboard.press('Alt+h');
     await page.waitForTimeout(100);
 
     // Verify flip H changed
@@ -467,7 +467,7 @@ test.describe('Full Workflow Tests', () => {
     await expect(cropPanel).toBeVisible();
 
     // Enable crop using the toggle in the panel
-    const enableToggle = cropPanel.locator('button:has-text("OFF")');
+    const enableToggle = cropPanel.getByRole('switch', { name: 'Enable Crop' });
     await enableToggle.click();
     await page.waitForTimeout(200);
 

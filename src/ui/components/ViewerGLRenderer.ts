@@ -113,6 +113,7 @@ export class ViewerGLRenderer {
    */
   createGLCanvas(): HTMLCanvasElement {
     this._glCanvas = document.createElement('canvas');
+    this._glCanvas.dataset.testid = 'viewer-gl-canvas';
     this._glCanvas.style.cssText = 'position:absolute;top:0;left:0;display:none;';
     return this._glCanvas;
   }
@@ -222,6 +223,7 @@ export class ViewerGLRenderer {
       const nextSibling = this._glCanvas.nextSibling;
       parent.removeChild(this._glCanvas);
       this._glCanvas = document.createElement('canvas');
+      this._glCanvas.dataset.testid = 'viewer-gl-canvas';
       this._glCanvas.style.cssText = 'position:absolute;top:0;left:0;display:none;';
       if (nextSibling) {
         parent.insertBefore(this._glCanvas, nextSibling);

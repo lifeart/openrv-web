@@ -202,8 +202,8 @@ test.describe('Spotlight UI Controls', () => {
     await page.waitForTimeout(100);
 
     // Look for spotlight control
-    const control = page.locator('[data-testid="spotlight-control"], button:has-text("Spotlight"), button:has-text("Focus")');
-    await expect(control.first()).toBeVisible();
+    const control = page.locator('[data-testid="spotlight-toggle-btn"]');
+    await expect(control).toBeVisible();
   });
 });
 
@@ -717,7 +717,7 @@ test.describe('Spotlight UI Button Toggle', () => {
 
     // Check initial styling (should not have active color)
     let bgColor = await spotlightButton.evaluate(el => el.style.background);
-    expect(bgColor).not.toContain('74, 158, 255');
+    expect(bgColor).not.toContain('accent-primary-rgb');
 
     // Enable spotlight
     await spotlightButton.click();
@@ -725,7 +725,7 @@ test.describe('Spotlight UI Button Toggle', () => {
 
     // Check active styling
     bgColor = await spotlightButton.evaluate(el => el.style.background);
-    expect(bgColor).toContain('74, 158, 255');
+    expect(bgColor).toContain('accent-primary-rgb');
   });
 
   test('SL-E063: spotlight button syncs with keyboard toggle', async ({ page }) => {
@@ -740,7 +740,7 @@ test.describe('Spotlight UI Button Toggle', () => {
 
     // Button should show active styling
     const bgColor = await spotlightButton.evaluate(el => el.style.background);
-    expect(bgColor).toContain('74, 158, 255');
+    expect(bgColor).toContain('accent-primary-rgb');
   });
 });
 

@@ -953,10 +953,41 @@ export async function loadSingleSequenceFrame(page: Page, frameNumber: number = 
 }
 
 /**
+ * Resolve the active viewer render canvas.
+ * Prefer visible WebGL canvas when active; otherwise use visible image canvas.
+ */
+async function getViewerRenderCanvas(page: Page): Promise<ReturnType<Page['locator']>> {
+  const glCanvas = page.locator('canvas[data-testid="viewer-gl-canvas"]');
+  if (await glCanvas.isVisible().catch(() => false)) {
+    return glCanvas;
+  }
+
+  const imageCanvas = page.locator('canvas[data-testid="viewer-image-canvas"]');
+  if (await imageCanvas.isVisible().catch(() => false)) {
+    return imageCanvas;
+  }
+
+  const fallback = page.locator('.viewer-container canvas:visible').first();
+  await expect(fallback).toBeVisible({ timeout: 5000 });
+  return fallback;
+}
+
+/**
+ * Resolve the 2D image canvas used for pixel sampling/state probes.
+ */
+async function getViewerImageCanvas(page: Page): Promise<ReturnType<Page['locator']>> {
+  const imageCanvas = page.locator('canvas[data-testid="viewer-image-canvas"]');
+  if ((await imageCanvas.count()) > 0) {
+    return imageCanvas.first();
+  }
+  return page.locator('.viewer-container canvas').first();
+}
+
+/**
  * Capture canvas pixel data as a base64 string for comparison
  */
 export async function captureCanvasState(page: Page): Promise<string> {
-  const canvas = page.locator('canvas').first();
+  const canvas = await getViewerRenderCanvas(page);
   const dataUrl = await canvas.evaluate((el: HTMLCanvasElement) => {
     return el.toDataURL('image/png');
   });
@@ -974,7 +1005,7 @@ export function verifyCanvasChanged(before: string, after: string): boolean {
  * Get the computed transform style of the canvas or viewer element
  */
 export async function getCanvasTransform(page: Page): Promise<{ scale: number; translateX: number; translateY: number }> {
-  const canvas = page.locator('canvas').first();
+  const canvas = await getViewerRenderCanvas(page);
   const transform = await canvas.evaluate((el) => {
     const style = getComputedStyle(el);
     const matrix = style.transform;
@@ -1017,7 +1048,7 @@ export async function getCurrentFrame(page: Page): Promise<number> {
  * Sample canvas pixel colors at specific points
  */
 export async function sampleCanvasPixels(page: Page, points: Array<{ x: number; y: number }>): Promise<Array<{ r: number; g: number; b: number; a: number }>> {
-  const canvas = page.locator('canvas').first();
+  const canvas = await getViewerImageCanvas(page);
   const pixels = await canvas.evaluate((el: HTMLCanvasElement, pts: Array<{ x: number; y: number }>) => {
     const ctx = el.getContext('2d');
     if (!ctx) return pts.map(() => ({ r: 0, g: 0, b: 0, a: 0 }));
@@ -1034,7 +1065,7 @@ export async function sampleCanvasPixels(page: Page, points: Array<{ x: number; 
  * Check if canvas has non-black content (media loaded)
  */
 export async function canvasHasContent(page: Page): Promise<boolean> {
-  const canvas = page.locator('canvas').first();
+  const canvas = await getViewerImageCanvas(page);
   const hasContent = await canvas.evaluate((el: HTMLCanvasElement) => {
     const ctx = el.getContext('2d');
     if (!ctx) return false;
@@ -1064,7 +1095,7 @@ export async function canvasHasContent(page: Page): Promise<boolean> {
  * Calculate average brightness of canvas
  */
 export async function getCanvasBrightness(page: Page): Promise<number> {
-  const canvas = page.locator('canvas').first();
+  const canvas = await getViewerImageCanvas(page);
   const brightness = await canvas.evaluate((el: HTMLCanvasElement) => {
     const ctx = el.getContext('2d');
     if (!ctx) return 0;
@@ -1098,7 +1129,7 @@ export async function getCanvasBrightness(page: Page): Promise<number> {
  * Get canvas dimensions
  */
 export async function getCanvasDimensions(page: Page): Promise<{ width: number; height: number }> {
-  const canvas = page.locator('canvas').first();
+  const canvas = await getViewerImageCanvas(page);
   const dims = await canvas.evaluate((el: HTMLCanvasElement) => ({
     width: el.width,
     height: el.height,
@@ -1211,7 +1242,7 @@ export async function getAppState(page: Page): Promise<{
  * Uses screenshot comparison instead of canvas pixel access
  */
 export async function captureViewerScreenshot(page: Page): Promise<Buffer> {
-  const canvas = page.locator('canvas').first();
+  const canvas = await getViewerRenderCanvas(page);
   const screenshot = await canvas.screenshot();
   return screenshot;
 }
@@ -1221,7 +1252,7 @@ export async function captureViewerScreenshot(page: Page): Promise<Buffer> {
  * Used to verify that the B source is actually updating during playback
  */
 export async function captureBSideScreenshot(page: Page): Promise<Buffer> {
-  const canvas = page.locator('canvas').first();
+  const canvas = await getViewerRenderCanvas(page);
   const box = await canvas.boundingBox();
   if (!box) {
     throw new Error('Canvas not found');
@@ -1243,7 +1274,7 @@ export async function captureBSideScreenshot(page: Page): Promise<Buffer> {
  * Used to verify that the A source is actually updating during playback
  */
 export async function captureASideScreenshot(page: Page): Promise<Buffer> {
-  const canvas = page.locator('canvas').first();
+  const canvas = await getViewerRenderCanvas(page);
   const box = await canvas.boundingBox();
   if (!box) {
     throw new Error('Canvas not found');
@@ -1266,7 +1297,7 @@ export async function captureASideScreenshot(page: Page): Promise<Buffer> {
  * Returns { aSide, bSide } screenshots
  */
 export async function captureBothSidesScreenshot(page: Page): Promise<{ aSide: Buffer; bSide: Buffer }> {
-  const canvas = page.locator('canvas').first();
+  const canvas = await getViewerRenderCanvas(page);
   const box = await canvas.boundingBox();
   if (!box) {
     throw new Error('Canvas not found');
@@ -1339,7 +1370,7 @@ export async function clickTab(page: Page, tabName: 'view' | 'color' | 'effects'
 
 // Helper to get canvas element
 export async function getCanvas(page: Page): Promise<ReturnType<Page['locator']>> {
-  return page.locator('canvas').first();
+  return getViewerRenderCanvas(page);
 }
 
 // Helper to perform drag operation on canvas

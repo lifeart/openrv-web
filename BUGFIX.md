@@ -859,6 +859,441 @@ Suite rename/removal drifted from documentation and command recipes.
 
 ---
 
+## Task 27 (P0): Preserve crop mode when closing transient panels via `Esc`
+### Problem
+Pressing `Esc` while crop is enabled closes the crop panel and also disables crop mode, causing apparent no-op behavior in crop, export, and transform interaction flows.
+
+### Root cause
+`panel.close` handler in `src/App.ts` called:
+1. `cropControl.hidePanel()`
+2. `cropControl.toggle()` when crop was enabled
+
+This conflates panel dismissal with mode toggle.
+
+### Implementation scope
+- In `src/App.ts`, keep `Esc` behavior to close crop panel only.
+- Do not toggle crop enabled state as part of panel close.
+- Preserve existing presentation/fullscreen precedence behavior.
+
+### Unit tests to add/update
+- Add/extend App keyboard action tests (for example `src/AppKeyboardHandler.test.ts`):
+  1. `Esc` hides crop panel when open.
+  2. `Esc` does not change `cropEnabled` state.
+
+### E2E verification
+- Re-run `e2e/crop.spec.ts` scenarios that depend on closing panel without disabling crop:
+  - `CROP-009`, `CROP-100`, `CROP-102`, `CROP-103`, `CROP-111`..`CROP-115`.
+- Expected outcome: crop state persists after `Esc` panel close.
+
+---
+
+## Task 28 (P1): Stabilize crop interaction tests around explicit crop controls and safe outside-click targets
+### Problem
+Crop E2E previously failed from ambiguous panel selectors (`OFF`/`Reset`) after uncrop controls were added, plus outside-click actions that hit panel overlays instead of viewer canvas.
+
+### Root cause
+- `e2e/crop.spec.ts` used broad text selectors:
+  - `button:has-text("OFF")`
+  - `button:has-text("Reset")`
+- Tests clicked `canvas` at fixed top-left coordinates that can be overlapped by floating panels.
+
+### Implementation scope
+- Use role+name selectors scoped to crop controls:
+  - crop toggle: `getByRole('switch', { name: 'Enable Crop' })`
+  - crop reset: `getByRole('button', { name: 'Reset Crop' })`
+- Route canvas interactions through shared stable helper (`getCanvas`) instead of `canvas.first()`.
+- Use deterministic outside-click target selection (canvas bounds bottom-right) or `Esc` where panel-close behavior is under test.
+- Align zoom interaction in crop integration tests to current zoom dropdown test IDs.
+
+### Unit tests to add/update
+- Update `src/ui/components/CropControl.test.ts`:
+  1. crop toggle and reset controls retain unique accessible names with uncrop section present.
+  2. panel close/open flow does not depend on ambiguous control text.
+
+### E2E verification
+- Re-run full `e2e/crop.spec.ts`.
+- Expected outcome: selector strict-mode failures and panel-overlay click timeouts are eliminated.
+
+---
+
+## Task 29 (P1): Validate false-color preset changes with deterministic LUT signatures
+### Problem
+Visual diff assertion for false-color preset switching can fail on content-dependent frames even when preset state changed correctly.
+
+### Root cause
+`FC-E012` compared full-canvas screenshots for preset differences. Depending on source luminance distribution, two presets can produce near-identical rendered output for sampled frames.
+
+### Implementation scope
+- Add deterministic preset-verification helper in E2E:
+  - read false-color LUT signature from `viewer.getFalseColor().getColorLUT()`.
+- Assert LUT signature changes when preset changes (`standard` -> `arri`) in preset coverage.
+- Keep state assertions (`getFalseColorState().preset`) as primary behavior contract.
+
+### Unit tests to add/update
+- Add/update `src/ui/components/FalseColor.test.ts`:
+  1. `setPreset()` mutates LUT data for different presets.
+  2. `getState().preset` and LUT snapshot stay in sync.
+
+### E2E verification
+- Re-run `e2e/false-color.spec.ts` (`FC-E010`, `FC-E011`, `FC-E012`, `FC-E031`).
+- Expected outcome: preset tests are deterministic and no longer content-fragile.
+
+---
+
+## Task 30 (P0): Prevent shortcut override regressions from duplicate key combos
+### Problem
+`Shift+R` rotate-left was silently broken because later shortcut registration (`channel.red`) overwrote the same combo in the keyboard manager.
+
+### Root cause
+- `AppKeyboardHandler.registerKeyboardShortcuts()` iterates `DEFAULT_KEY_BINDINGS` and registers directly into a map keyed by combo.
+- Duplicate combo registrations overwrite previous handlers without visibility.
+- `transform.rotateLeft` and `channel.red` both use `Shift+R`.
+
+### Implementation scope
+- In `src/AppKeyboardHandler.ts`, extend conflict skip handling to exclude `channel.red` from default registration so `Shift+R` remains reserved for transform rotate-left.
+- Keep `channel.red` action available for custom remapping workflows while avoiding default collision.
+
+### Unit tests to add/update
+- Add/extend `src/AppKeyboardHandler.test.ts`:
+  1. `Shift+R` dispatches `transform.rotateLeft`.
+  2. `channel.red` default binding does not override rotate-left registration.
+  3. conflict skip list remains enforced after `refresh()`.
+
+### E2E verification
+- Re-run:
+  - `e2e/transform-controls.spec.ts` (`TRANSFORM-004`)
+  - `e2e/keyboard-shortcuts.spec.ts` (`KEYS-060`)
+  - `e2e/channel-select.spec.ts` (`CS-015`)
+- Expected outcome: rotate-left works; red-channel shortcut no longer steals `Shift+R`.
+
+---
+
+## Task 31 (P1): Make tab zoom control E2E assertions animation-aware and dropdown-native
+### Problem
+Tab navigation zoom tests were using legacy button selectors and hardcoded zoom values, causing strict-mode selector failures and false negatives on animated zoom transitions.
+
+### Root cause
+- Legacy selectors (`button:has-text("Fit")`, `button:has-text("200%")`) no longer match the `ZoomControl` dropdown architecture.
+- Zoom transitions are animated and media-dependent, so immediate equality assertions (`zoom === 2`) can fail.
+
+### Implementation scope
+- In `e2e/tab-navigation.spec.ts`:
+  - use `[data-testid="zoom-control-button"]` and `[data-testid="zoom-dropdown"] button[data-value=...]`.
+  - wait for zoom to settle with `expect.poll(...)` before persistence assertions.
+  - assert relative zoom behavior (zoomed-in value and fit decrease) where exact equality is not guaranteed.
+
+### Unit tests to add/update
+- Update `src/ui/components/ZoomControl.test.ts`:
+  1. dropdown options expose stable data values (`fit`, `0.25`, `0.5`, `1`, `2`, `4`),
+  2. selecting dropdown items updates emitted zoom value consistently.
+
+### E2E verification
+- Re-run:
+  - `e2e/tab-navigation.spec.ts`
+  - `e2e/view-controls.spec.ts`
+  - `e2e/dropdown-menu.spec.ts` (zoom menu interaction sanity)
+- Expected outcome: no strict-mode selector collisions and no timing-flaky zoom persistence failures.
+
+---
+
+## Task 32 (P1): Align transform shortcut expectations to active binding map (`Alt+H` for flip horizontal)
+### Problem
+Transform E2E scenarios assumed `Shift+H` toggles horizontal flip, but the active binding map reserves `Shift+H` for HSL qualifier and uses `Alt+H` for horizontal flip.
+
+### Root cause
+- Shortcut drift between transform specs and `DEFAULT_KEY_BINDINGS`.
+- `Shift+H` is already consumed by `color.toggleHSLQualifier`.
+
+### Implementation scope
+- Update transform keyboard interaction specs to use `Alt+H` for flip-horizontal paths:
+  - `TRANSFORM-013`, combination tests, reset tests, and persistence tests.
+- Keep `Shift+V` for vertical flip and `Shift+R`/`Alt+R` rotation coverage.
+
+### Unit tests to add/update
+- Update `src/utils/input/KeyBindings.test.ts`:
+  1. assert `transform.flipHorizontal` remains `Alt+H`.
+  2. retain explicit coverage that `color.toggleHSLQualifier` uses `Shift+H`.
+
+### E2E verification
+- Re-run:
+  - `e2e/transform-controls.spec.ts`
+  - `e2e/keyboard-shortcuts.spec.ts` (transform + HSL shortcut sections)
+  - `e2e/hsl-qualifier.spec.ts` (shortcut toggle coverage)
+- Expected outcome: transform keyboard tests match real bindings without regressing HSL shortcut behavior.
+
+---
+
+## Task 33 (P1): Formalize channel-shortcut conflict policy (`Shift+B`, `Shift+N`) and lock with tests
+### Problem
+Channel shortcut specs assumed `Shift+B` and `Shift+N` always control channel mode, but these combos are currently claimed by other global features:
+- `Shift+B`: background pattern cycle
+- `Shift+N`: network panel toggle
+
+This produced false channel and user-flow failures that looked like control no-ops.
+
+### Root cause
+- `DEFAULT_KEY_BINDINGS` contains duplicate combos for channel and non-channel actions.
+- registration order makes background/network actions win for these keys.
+- older E2E tests still treated these combos as channel shortcuts.
+
+### Implementation scope
+- Decide and document one explicit policy:
+  1. either reserve `Shift+B`/`Shift+N` for background/network and keep channel switching on dropdown-only for blue/RGB reset, or
+  2. remap conflicting actions to unique combos and preserve channel shortcuts.
+- Keep `channel-select` and `user-flows` tests aligned with that policy (no mixed assumptions).
+- Add comments near conflicting bindings in `src/utils/input/KeyBindings.ts`.
+
+### Unit tests to add/update
+- Update `src/utils/input/KeyBindings.test.ts`:
+  1. assert chosen combos for `channel.blue`, `channel.none`, `view.cycleBackgroundPattern`, `network.togglePanel` are conflict-free or intentionally reserved.
+  2. add explicit test documenting any intentional reservation behavior.
+
+### E2E verification
+- Re-run:
+  - `e2e/channel-select.spec.ts` (`CS-011`, `CS-014`, `CS-024`, `CS-025`)
+  - `e2e/user-flows.spec.ts` (`UF-020`)
+  - `e2e/exr-layers.spec.ts` (`AOV-030`, `AOV-031`)
+  - `e2e/background-pattern.spec.ts` (`BG-010`)
+  - network panel shortcut coverage suite (if present)
+- Expected outcome: no channel/background/network shortcut ambiguity in tests.
+
+---
+
+## Completed Fixes (Current Sweep)
+
+## Task 34 (P0, done): Repair Display Profile control contract drift (UI + E2E)
+### Problem
+Display profile controls appeared partially broken in tests:
+- dropdown did not close on `Esc`,
+- missing test hooks for gamma/brightness values and section containers,
+- missing accessibility hooks expected by tests (`radiogroup`, slider ARIA metadata),
+- missing browser color-space info nodes expected by E2E.
+
+### Root cause
+`src/ui/components/DisplayProfileControl.ts` lacked semantic/testability hooks after control refactors.
+
+### Implementation completed
+- Added explicit close API and state queries:
+  - `isDropdownVisible()`
+  - `closeDropdown()`
+- Added global `Escape` handling in control and wired App-level `panel.close` to close the display dropdown.
+- Added/standardized display-profile test hooks:
+  - `display-profile-section`
+  - `display-gamma-section`
+  - `display-brightness-section`
+  - `display-colorspace-info`
+  - `display-gamma-value`
+  - `display-brightness-value`
+  - `display-detected-colorspace`
+  - `display-detected-gamut`
+- Added profile list semantics: `role="radiogroup"`.
+- Added slider semantics:
+  - `role="slider"`
+  - `aria-valuemin`, `aria-valuemax`, `aria-valuenow` (kept synchronized on input and state updates).
+
+### Unit tests verified
+- `src/ui/components/DisplayProfileControl.test.ts`
+
+### E2E tests verified
+- `e2e/display-color-management.spec.ts`
+
+### Verification results
+- `npx vitest run src/ui/components/DisplayProfileControl.test.ts --reporter=dot`
+  - `70 passed`
+- `npx playwright test e2e/display-color-management.spec.ts --reporter=line`
+  - `18 passed`
+
+---
+
+## Task 35 (P1, done): Make Display Profile/LUT E2E range interactions reliable
+### Problem
+Range sliders in multiple E2E suites used `locator.fill()` on `<input type="range">`, causing `Malformed value` failures and false no-op reports.
+
+### Root cause
+Playwright `fill()` is not valid for native range controls in these paths.
+
+### Implementation completed
+- Added small helper-based range updates using DOM `input`/`change` dispatch in:
+  - `e2e/display-color-management.spec.ts`
+  - `e2e/display-float-lut-integration.spec.ts`
+  - `e2e/exr-loading.spec.ts`
+- Replaced all failing `fill()` paths in these suites with deterministic slider state updates.
+
+### Unit tests verified
+- Covered indirectly by component unit tests:
+  - `src/ui/components/DisplayProfileControl.test.ts`
+
+### E2E tests verified
+- `e2e/display-color-management.spec.ts`
+- `e2e/display-float-lut-integration.spec.ts`
+- `e2e/exr-loading.spec.ts` targeted HDR exposure tests
+
+### Verification results
+- `npx playwright test e2e/display-color-management.spec.ts --reporter=line`
+  - `18 passed`
+- `npx playwright test e2e/display-float-lut-integration.spec.ts e2e/curves.spec.ts --reporter=line`
+  - `30 passed`, `11 skipped`
+- `npx playwright test e2e/exr-loading.spec.ts -g "EXR-010|EXR-011" --reporter=line`
+  - `2 passed`
+
+---
+
+## Task 36 (P1, done): Remove stale "active tab class" assumptions in LUT/EXR E2E helpers
+### Problem
+Color-tab activation waits depended on nonexistent tab CSS/ARIA states (`.active`, `aria-selected`), causing beforeEach timeouts and cascade failures.
+
+### Root cause
+`TabBar` tracks active state via internal state and inline styles; it does not set those legacy class/ARIA markers.
+
+### Implementation completed
+- Replaced stale active checks with deterministic flow:
+  1. click `button[data-tab-id="color"]`,
+  2. short settle wait,
+  3. open color panel via `c`,
+  4. assert `.color-controls-panel` visibility.
+- Updated files:
+  - `e2e/display-float-lut-integration.spec.ts`
+  - `e2e/float-lut-precision.spec.ts`
+  - `e2e/lut-support.spec.ts`
+  - `e2e/exr-loading.spec.ts` (color-tab waits)
+
+### Unit tests verified
+- N/A (E2E helper contract change).
+
+### E2E tests verified
+- `e2e/display-float-lut-integration.spec.ts`
+- targeted sanity:
+  - `e2e/float-lut-precision.spec.ts` (`FLUT-E001`)
+  - `e2e/lut-support.spec.ts` (`LUT-E001`)
+
+### Verification results
+- `npx playwright test e2e/display-float-lut-integration.spec.ts --reporter=line`
+  - included in combined run: `30 passed`, `11 skipped`
+- `npx playwright test e2e/float-lut-precision.spec.ts e2e/lut-support.spec.ts -g "FLUT-E001|LUT-E001" --reporter=line`
+  - `2 passed`
+
+---
+
+## Task 37 (P2, done): Stabilize Curves active-state assertion against theme token changes
+### Problem
+`CURVES-004` asserted an exact RGB border value and failed when design tokens changed, even with correct behavior.
+
+### Root cause
+Theme-coupled style assertion in `e2e/curves.spec.ts`.
+
+### Implementation completed
+- Replaced exact RGB check with semantic visibility/style presence check:
+  - border is not transparent when panel is open.
+
+### Unit tests verified
+- N/A (E2E-only assertion hardening).
+
+### E2E tests verified
+- `e2e/curves.spec.ts`
+
+### Verification results
+- `npx playwright test e2e/curves.spec.ts --reporter=line`
+  - included in combined run with LUT integration: all curves tests passed.
+
+---
+
+## Task 38 (P0, done): Fix display-profile shortcut conflict with difference matte (`Shift+D`)
+### Problem
+`Shift+D` executed display profile cycling instead of difference matte toggle in some flows.
+
+### Root cause
+Duplicate shortcut assignment in `DEFAULT_KEY_BINDINGS` (`view.toggleDifferenceMatte` and `display.cycleProfile` both on `Shift+D`).
+
+### Implementation completed
+- Remapped `display.cycleProfile` to `Shift+Alt+D`.
+- Synced tooltip/UI keyboard handling and tests:
+  - `src/utils/input/KeyBindings.ts`
+  - `src/ui/components/DisplayProfileControl.ts`
+  - `src/ui/components/DisplayProfileControl.test.ts`
+  - `src/color/DisplayTransfer.ts` comment
+  - `src/utils/input/KeyBindings.test.ts` uniqueness guard
+- Updated affected E2E expectations:
+  - `e2e/composition.spec.ts` difference-matte key strings.
+
+### Unit tests verified
+- `src/utils/input/KeyBindings.test.ts`
+- `src/ui/components/DisplayProfileControl.test.ts`
+
+### E2E tests verified
+- `e2e/difference-matte.spec.ts`
+- targeted difference-matte paths in `e2e/composition.spec.ts`
+
+### Verification results
+- `npx vitest run src/utils/input/KeyBindings.test.ts src/ui/components/DisplayProfileControl.test.ts --reporter=dot`
+  - `126 passed`
+- `npx playwright test e2e/difference-matte.spec.ts e2e/composition.spec.ts -g "DIFF-E001|COMP-040|COMP-041|COMP-042|COMP-052|COMP-064|COMP-065" --reporter=line`
+  - `7 passed`
+
+---
+
+## Task 39 (P0, done): Fix mute-state desync when volume is set to zero
+### Problem
+Setting volume to `0` did not always force `muted=true`, causing UI/state mismatch and apparent mute no-op behavior.
+
+### Root cause
+`VolumeManager` auto-unmuted on non-zero but did not symmetrically auto-mute on zero.
+
+### Implementation completed
+- Updated `src/core/session/VolumeManager.ts`:
+  - `volume=0` now sets `muted=true` and emits state update.
+- Added regression coverage:
+  - `src/core/session/VolumeManager.test.ts` (`VOL-009b`)
+  - `src/core/session/Session.state.test.ts` (`SES-008b`)
+
+### Unit tests verified
+- `src/core/session/VolumeManager.test.ts`
+- `src/core/session/Session.state.test.ts`
+
+### E2E tests verified
+- `e2e/audio-playback.spec.ts`
+
+### Verification results
+- `npx vitest run src/core/session/VolumeManager.test.ts src/core/session/Session.state.test.ts --reporter=dot`
+  - `114 passed`
+- `npx playwright test e2e/audio-playback.spec.ts e2e/business-logic.spec.ts --reporter=line`
+  - `45 passed`
+
+---
+
+## Task 40 (P1, done): Fix stale/no-op E2E assumptions in app init, business logic, and color inversion
+### Problem
+Several control tests reported no-op behavior due to stale selectors and outdated keybinding assumptions.
+
+### Root cause
+- hardcoded color literals and ambiguous selectors,
+- outdated keyboard combos (`l`, `k`, wipe mode assumptions),
+- invalid DOM selectors in `waitForFunction` (`:has-text()` usage).
+
+### Implementation completed
+- Updated:
+  - `e2e/app-initialization.spec.ts` (semantic view-control checks)
+  - `e2e/business-logic.spec.ts` (`Ctrl+L`, `Shift+K`, updated wipe cycle expectations)
+  - `e2e/color-inversion.spec.ts` (stable tab selectors and deterministic state assertions)
+  - `src/test-helper.ts` viewer wipe typing includes `splitscreen-h`/`splitscreen-v`
+
+### Unit tests verified
+- `src/test-helper` typing compatibility validated by TS + related suites.
+
+### E2E tests verified
+- `e2e/app-initialization.spec.ts`
+- `e2e/business-logic.spec.ts`
+- `e2e/color-inversion.spec.ts`
+
+### Verification results
+- `npx playwright test e2e/app-initialization.spec.ts --reporter=line`
+  - `13 passed`
+- `npx playwright test e2e/audio-playback.spec.ts e2e/business-logic.spec.ts --reporter=line`
+  - `45 passed`
+- `npx playwright test e2e/color-inversion.spec.ts --reporter=line`
+  - `14 passed`
+
+---
+
 ## Execution Order
 1. Task 1
 2. Task 2
@@ -867,15 +1302,22 @@ Suite rename/removal drifted from documentation and command recipes.
 5. Task 23
 6. Task 25
 7. Task 26
-8. Task 24
-9. Task 3
-10. Task 4
-11. Re-run focused E2E suite and re-triage residual fails
-12. Task 10
-13. Task 11
-14. Tasks 12-14
-15. Tasks 15-20
-16. Tasks 5-9 (non-blocking improvements can continue in parallel where safe)
+8. Task 27
+9. Task 28
+10. Task 29
+11. Task 30
+12. Task 31
+13. Task 32
+14. Task 33
+15. Task 24
+16. Task 3
+17. Task 4
+18. Re-run focused E2E suite and re-triage residual fails
+19. Task 10
+20. Task 11
+21. Tasks 12-14
+22. Tasks 15-20
+23. Tasks 5-9 (non-blocking improvements can continue in parallel where safe)
 
 ## Verification Gate
 After each task:

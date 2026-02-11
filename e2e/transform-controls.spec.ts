@@ -185,18 +185,18 @@ test.describe('Transform Controls', () => {
       expect(state.flipV).toBe(false);
     });
 
-    test('TRANSFORM-013: Shift+H should toggle flip horizontal', async ({ page }) => {
+    test('TRANSFORM-013: Alt+H should toggle flip horizontal', async ({ page }) => {
       let state = await getTransformState(page);
       expect(state.flipH).toBe(false);
 
-      await page.keyboard.press('Shift+h');
+      await page.keyboard.press('Alt+h');
       await page.waitForTimeout(200);
 
       state = await getTransformState(page);
       expect(state.flipH).toBe(true);
 
       // Toggle back
-      await page.keyboard.press('Shift+h');
+      await page.keyboard.press('Alt+h');
       await page.waitForTimeout(200);
 
       state = await getTransformState(page);
@@ -260,8 +260,8 @@ test.describe('Transform Controls', () => {
       expect(panelBox!.x).toBeGreaterThanOrEqual(0);
       expect(panelBox!.y).toBeGreaterThanOrEqual(0);
 
-      // Find the Enable Crop toggle (shows "OFF" initially)
-      const enableToggle = page.locator('.crop-panel button:has-text("OFF")');
+      // Find the specific "Enable Crop" toggle (avoid matching uncrop toggle)
+      const enableToggle = cropPanel.getByRole('switch', { name: 'Enable Crop' });
       await expect(enableToggle).toBeVisible();
       await enableToggle.click();
       await page.waitForTimeout(200);
@@ -269,9 +269,8 @@ test.describe('Transform Controls', () => {
       viewState = await getViewerState(page);
       expect(viewState.cropEnabled).toBe(true);
 
-      // Toggle off (now shows "ON")
-      const disableToggle = page.locator('.crop-panel button:has-text("ON")');
-      await disableToggle.click();
+      // Toggle off
+      await enableToggle.click();
       await page.waitForTimeout(200);
 
       viewState = await getViewerState(page);
@@ -316,18 +315,32 @@ test.describe('Transform Controls', () => {
     });
 
     test('TRANSFORM-024: crop should show rule of thirds overlay', async ({ page }) => {
+      // Enable crop first
       await page.keyboard.press('Shift+k');
       await page.waitForTimeout(200);
 
-      // Canvas should display crop overlay (visual verification via screenshot)
-      const cropScreenshot = await captureViewerScreenshot(page);
+      // Full-frame crop has minimal overlay; capture baseline
+      const noOverlayScreenshot = await captureViewerScreenshot(page);
 
-      // Disable crop
-      await page.keyboard.press('Shift+k');
+      // Open crop panel and force non-full crop to make guides visible
+      const cropButton = page.locator('button[title*="Crop"]').first();
+      await cropButton.click();
       await page.waitForTimeout(200);
 
-      const normalScreenshot = await captureViewerScreenshot(page);
-      expect(imagesAreDifferent(cropScreenshot, normalScreenshot)).toBe(true);
+      const cropPanel = page.locator('.crop-panel');
+      await expect(cropPanel).toBeVisible();
+
+      const aspectSelect = cropPanel.locator('select').first();
+      await aspectSelect.selectOption('9:16');
+      await page.waitForTimeout(200);
+
+      // Overlay (darkened mattes, handles, guides) should now be visible
+      const overlayScreenshot = await captureViewerScreenshot(page);
+      expect(imagesAreDifferent(noOverlayScreenshot, overlayScreenshot)).toBe(true);
+
+      const state = await getViewerState(page);
+      expect(state.cropEnabled).toBe(true);
+      expect(state.cropRegion.width).toBeLessThan(1);
     });
   });
 
@@ -346,7 +359,7 @@ test.describe('Transform Controls', () => {
       expect(imagesAreDifferent(initialScreenshot, rotatedScreenshot)).toBe(true);
 
       // Flip horizontal
-      await page.keyboard.press('Shift+h');
+      await page.keyboard.press('Alt+h');
       await page.waitForTimeout(100);
 
       state = await getTransformState(page);
@@ -361,13 +374,13 @@ test.describe('Transform Controls', () => {
       const initialScreenshot = await captureViewerScreenshot(page);
 
       // Flip horizontal twice
-      await page.keyboard.press('Shift+h');
+      await page.keyboard.press('Alt+h');
       await page.waitForTimeout(100);
 
       let state = await getTransformState(page);
       expect(state.flipH).toBe(true);
 
-      await page.keyboard.press('Shift+h');
+      await page.keyboard.press('Alt+h');
       await page.waitForTimeout(100);
 
       state = await getTransformState(page);
@@ -383,7 +396,7 @@ test.describe('Transform Controls', () => {
     test('TRANSFORM-040: reset button should restore all transforms to default', async ({ page }) => {
       // Apply some transforms
       await page.keyboard.press('Alt+r');
-      await page.keyboard.press('Shift+h');
+      await page.keyboard.press('Alt+h');
       await page.waitForTimeout(200);
 
       let state = await getTransformState(page);
@@ -424,7 +437,7 @@ test.describe('Transform Controls', () => {
 
     test('TRANSFORM-051: flip state should persist across frame changes', async ({ page }) => {
       // Apply flip
-      await page.keyboard.press('Shift+h');
+      await page.keyboard.press('Alt+h');
       await page.waitForTimeout(100);
 
       let state = await getTransformState(page);

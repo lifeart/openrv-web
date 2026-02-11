@@ -64,6 +64,13 @@ describe('VolumeManager', () => {
       expect(manager.muted).toBe(false);
       expect(onMutedChanged).toHaveBeenCalledWith(false);
     });
+
+    it('VOL-009b: auto-mutes when setting volume to zero', () => {
+      manager.volume = 0;
+      expect(manager.volume).toBe(0);
+      expect(manager.muted).toBe(true);
+      expect(onMutedChanged).toHaveBeenCalledWith(true);
+    });
   });
 
   describe('muted', () => {

@@ -439,6 +439,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   'display.cycleProfile': {
     code: 'KeyD',
     shift: true,
+    alt: true,
     description: 'Cycle display profile (Linear/sRGB/Rec.709/Gamma 2.2/Gamma 2.4)',
   },
 
