@@ -1464,3 +1464,112 @@ describe('Phase 2C: Double-buffering for effects parameter changes', () => {
     expect(frameWhilePlaying).not.toBeNull();
   });
 });
+
+// =============================================================================
+// setTargetSize — proxy-aware effects processing
+// =============================================================================
+
+describe('PrerenderBufferManager setTargetSize', () => {
+  let manager: PrerenderBufferManager;
+  let frameLoader: (frame: number) => HTMLCanvasElement | null;
+
+  beforeEach(() => {
+    frameLoader = createMockFrameLoader(100);
+    manager = new PrerenderBufferManager(100, frameLoader, {
+      useWorkers: false,
+      maxCacheSize: 20,
+      preloadAhead: 5,
+      preloadBehind: 2,
+      maxConcurrent: 2,
+    });
+  });
+
+  afterEach(() => {
+    manager.dispose();
+  });
+
+  /** Helper: populate cache for frame via public API and wait for processing. */
+  async function cacheFrame(mgr: PrerenderBufferManager, frame: number): Promise<void> {
+    mgr.queuePriorityFrame(frame);
+    await new Promise(resolve => setTimeout(resolve, 150));
+  }
+
+  it('PBM-TS-001: setTargetSize accepts positive dimensions', () => {
+    // Should not throw
+    manager.setTargetSize(800, 600);
+  });
+
+  it('PBM-TS-002: setTargetSize ignores zero dimensions', async () => {
+    manager.setTargetSize(800, 600);
+
+    const state = createDefaultEffectsState();
+    state.colorAdjustments.highlights = 20;
+    manager.updateEffects(state);
+
+    await cacheFrame(manager, 5);
+    expect(manager.hasFrame(5)).toBe(true);
+
+    // setTargetSize with 0 should be ignored — cache should NOT be invalidated
+    manager.setTargetSize(0, 600);
+    expect(manager.hasFrame(5)).toBe(true);
+
+    manager.setTargetSize(800, 0);
+    expect(manager.hasFrame(5)).toBe(true);
+  });
+
+  it('PBM-TS-003: setTargetSize ignores negative dimensions', async () => {
+    manager.setTargetSize(800, 600);
+    const state = createDefaultEffectsState();
+    state.colorAdjustments.highlights = 20;
+    manager.updateEffects(state);
+
+    await cacheFrame(manager, 5);
+    expect(manager.hasFrame(5)).toBe(true);
+
+    manager.setTargetSize(-100, 600);
+    expect(manager.hasFrame(5)).toBe(true);
+  });
+
+  it('PBM-TS-004: small size changes within 20% do not invalidate cache', async () => {
+    manager.setTargetSize(1000, 800);
+
+    const state = createDefaultEffectsState();
+    state.colorAdjustments.highlights = 20;
+    manager.updateEffects(state);
+
+    await cacheFrame(manager, 5);
+    expect(manager.hasFrame(5)).toBe(true);
+
+    // 10% change — within 20% tolerance
+    manager.setTargetSize(1100, 880);
+    expect(manager.hasFrame(5)).toBe(true);
+  });
+
+  it('PBM-TS-005: large size changes beyond 20% invalidate cache', async () => {
+    manager.setTargetSize(1000, 800);
+
+    const state = createDefaultEffectsState();
+    state.colorAdjustments.highlights = 20;
+    manager.updateEffects(state);
+
+    await cacheFrame(manager, 5);
+    expect(manager.hasFrame(5)).toBe(true);
+
+    // 50% change — beyond 20% tolerance
+    manager.setTargetSize(500, 400);
+    expect(manager.hasFrame(5)).toBe(false);
+  });
+
+  it('PBM-TS-006: first setTargetSize call does not invalidate (no prior target)', async () => {
+    const state = createDefaultEffectsState();
+    state.colorAdjustments.highlights = 20;
+    manager.updateEffects(state);
+
+    await cacheFrame(manager, 5);
+    expect(manager.hasFrame(5)).toBe(true);
+
+    // First setTargetSize — no prior target, should NOT invalidate
+    manager.setTargetSize(800, 600);
+    expect(manager.hasFrame(5)).toBe(true);
+  });
+});

@@ -202,6 +202,15 @@ export interface RendererBackend extends RendererLifecycle, RendererColorPipelin
    */
   renderImageToFloat?(image: IPImage, width: number, height: number): Float32Array | null;
 
+  /**
+   * Async PBO readback variant of renderImageToFloat. Uses double-buffered
+   * PBOs to eliminate the synchronous GPU stall from readPixels.
+   * Returns null on the first call (no previous data yet) and on subsequent
+   * calls returns the PREVIOUS frame's float pixel data immediately.
+   * Falls back to synchronous renderImageToFloat if PBOs are unavailable.
+   */
+  renderImageToFloatAsync?(image: IPImage, width: number, height: number): Float32Array | null;
+
   // --- Shader compilation status ---
 
   /**

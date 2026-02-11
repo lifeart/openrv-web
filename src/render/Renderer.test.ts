@@ -1878,6 +1878,441 @@ describe('Renderer renderImageToFloat', () => {
 });
 
 // =============================================================================
+// renderImageToFloatAsync (PBO double-buffered async readback)
+// =============================================================================
+
+describe('Renderer renderImageToFloatAsync', () => {
+  let renderer: Renderer;
+
+  beforeEach(() => {
+    renderer = new Renderer();
+  });
+
+  /**
+   * Extend the FBO-capable GL mock with PBO and fence sync support.
+   */
+  function createPBOCapableGL() {
+    const mockGL = createMockGL();
+    const extendedGL = mockGL as unknown as Record<string, unknown>;
+
+    // FBO constants & methods
+    extendedGL.FRAMEBUFFER = 0x8d40;
+    extendedGL.COLOR_ATTACHMENT0 = 0x8ce0;
+    extendedGL.FRAMEBUFFER_COMPLETE = 0x8cd5;
+    extendedGL.NO_ERROR = 0;
+    extendedGL.VIEWPORT = 0x0ba2;
+    extendedGL.TEXTURE_3D = 0x806f;
+    extendedGL.TEXTURE_WRAP_R = 0x8072;
+    extendedGL.RGBA32F = 0x8814;
+    extendedGL.RGB32F = 0x8815;
+    extendedGL.R32F = 0x822e;
+    extendedGL.RG32F = 0x8230;
+    extendedGL.RED = 0x1903;
+    extendedGL.RG = 0x8227;
+    extendedGL.RGB = 0x1907;
+    extendedGL.TEXTURE1 = 0x84c1;
+    extendedGL.TEXTURE2 = 0x84c2;
+    extendedGL.TEXTURE3 = 0x84c3;
+
+    extendedGL.createFramebuffer = vi.fn(() => ({}));
+    extendedGL.bindFramebuffer = vi.fn();
+    extendedGL.framebufferTexture2D = vi.fn();
+    extendedGL.checkFramebufferStatus = vi.fn(() => 0x8cd5);
+    extendedGL.deleteFramebuffer = vi.fn();
+    extendedGL.texImage3D = vi.fn();
+    extendedGL.uniform2fv = vi.fn();
+    extendedGL.uniform3fv = vi.fn();
+    extendedGL.uniformMatrix3fv = vi.fn();
+    extendedGL.getError = vi.fn(() => 0);
+
+    // PBO constants
+    extendedGL.PIXEL_PACK_BUFFER = 0x88eb;
+    extendedGL.DYNAMIC_READ = 0x88e9;
+    extendedGL.SYNC_GPU_COMMANDS_COMPLETE = 0x9117;
+    extendedGL.SYNC_STATUS = 0x9114;
+    extendedGL.SIGNALED = 0x9119;
+    extendedGL.UNSIGNALED = 0x9118;
+    extendedGL.SYNC_FLUSH_COMMANDS_BIT = 0x00000001;
+    extendedGL.ALREADY_SIGNALED = 0x911a;
+    extendedGL.TIMEOUT_EXPIRED = 0x911b;
+
+    // PBO / fence methods
+    let fenceCounter = 0;
+    const fenceSignaled = new Map<number, boolean>();
+
+    extendedGL.fenceSync = vi.fn(() => {
+      const id = ++fenceCounter;
+      fenceSignaled.set(id, false);
+      return id;
+    });
+    extendedGL.deleteSync = vi.fn((sync: number) => {
+      fenceSignaled.delete(sync);
+    });
+    extendedGL.getSyncParameter = vi.fn((_sync: number, _pname: number) => {
+      return fenceSignaled.get(_sync) ? 0x9119 /* SIGNALED */ : 0x9118 /* UNSIGNALED */;
+    });
+    extendedGL.clientWaitSync = vi.fn();
+    extendedGL.flush = vi.fn();
+    extendedGL.getBufferSubData = vi.fn(
+      (_target: number, _srcOffset: number, dst: Float32Array) => {
+        // Fill with recognizable PBO pattern
+        for (let i = 0; i < dst.length; i += 4) {
+          dst[i] = 0.7;     // R
+          dst[i + 1] = 2.0; // G (HDR)
+          dst[i + 2] = 0.1; // B
+          dst[i + 3] = 1.0; // A
+        }
+      },
+    );
+
+    // readPixels fills Float32Array with FBO pattern (different from PBO pattern)
+    extendedGL.readPixels = vi.fn(
+      (_x: number, _y: number, _w: number, _h: number, _fmt: number, _type: number, pixels: Float32Array | number) => {
+        if (pixels instanceof Float32Array) {
+          for (let i = 0; i < pixels.length; i += 4) {
+            pixels[i] = 0.5;     // R
+            pixels[i + 1] = 1.5; // G (HDR)
+            pixels[i + 2] = 0.3; // B
+            pixels[i + 3] = 1.0; // A
+          }
+        }
+        // When pixels is 0 (PBO offset), it's an async PBO write — nothing to fill
+      },
+    );
+
+    extendedGL.getParameter = vi.fn((param: number) => {
+      if (param === 0x0ba2) return new Int32Array([0, 0, 100, 100]);
+      return null;
+    });
+
+    // EXT_color_buffer_float support
+    const originalGetExtension = mockGL.getExtension as ReturnType<typeof vi.fn>;
+    extendedGL.getExtension = vi.fn((name: string) => {
+      if (name === 'EXT_color_buffer_float') return {};
+      if (name === 'OES_texture_float_linear') return {};
+      return originalGetExtension(name);
+    });
+
+    // Helper to signal specific fences
+    (mockGL as unknown as { _signalFence: (id: number) => void })._signalFence = (id: number) => {
+      fenceSignaled.set(id, true);
+    };
+    (mockGL as unknown as { _signalAllFences: () => void })._signalAllFences = () => {
+      for (const [id] of fenceSignaled) {
+        fenceSignaled.set(id, true);
+      }
+    };
+    (mockGL as unknown as { _getFenceMap: () => Map<number, boolean> })._getFenceMap = () => fenceSignaled;
+
+    return mockGL;
+  }
+
+  function initWithPBOCapableGL() {
+    const mockGL = createPBOCapableGL();
+    const canvas = document.createElement('canvas');
+    const originalGetContext = canvas.getContext.bind(canvas);
+    canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+      if (contextId === 'webgl2') return mockGL;
+      return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
+    }) as typeof canvas.getContext;
+    renderer.initialize(canvas);
+    return mockGL;
+  }
+
+  it('REN-PBO-001: returns null when renderer is not initialized', () => {
+    const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+    const result = renderer.renderImageToFloatAsync(image, 10, 10);
+    expect(result).toBeNull();
+  });
+
+  it('REN-PBO-002: returns null when EXT_color_buffer_float is unavailable', () => {
+    const mockGL = createPBOCapableGL();
+    (mockGL as unknown as Record<string, unknown>).getExtension = vi.fn(() => null);
+
+    const canvas = document.createElement('canvas');
+    canvas.getContext = vi.fn((contextId: string) => {
+      if (contextId === 'webgl2') return mockGL;
+      return null;
+    }) as typeof canvas.getContext;
+    renderer.initialize(canvas);
+
+    const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+    const result = renderer.renderImageToFloatAsync(image, 10, 10);
+    expect(result).toBeNull();
+  });
+
+  it('REN-PBO-003: first frame returns Float32Array via sync readPixels from FBO', () => {
+    initWithPBOCapableGL();
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+    const result = renderer.renderImageToFloatAsync(image, 4, 4);
+
+    expect(result).toBeInstanceOf(Float32Array);
+    expect(result!.length).toBe(4 * 4 * 4);
+    // First frame uses sync readPixels → FBO pattern (R=0.5, G=1.5)
+    expect(result![0]).toBe(0.5);
+    expect(result![1]).toBe(1.5);
+  });
+
+  it('REN-PBO-004: first frame does NOT call getBufferSubData (no PBO read)', () => {
+    const mockGL = initWithPBOCapableGL();
+    const getBufferSubData = (mockGL as unknown as Record<string, ReturnType<typeof vi.fn>>).getBufferSubData;
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+    renderer.renderImageToFloatAsync(image, 4, 4);
+
+    expect(getBufferSubData).not.toHaveBeenCalled();
+  });
+
+  it('REN-PBO-005: first frame issues async readPixels into PBO + fenceSync + flush', () => {
+    const mockGL = initWithPBOCapableGL();
+    const bindBuffer = (mockGL as unknown as Record<string, ReturnType<typeof vi.fn>>).bindBuffer;
+    const readPixels = (mockGL as unknown as Record<string, ReturnType<typeof vi.fn>>).readPixels;
+    const fenceSync = (mockGL as unknown as Record<string, ReturnType<typeof vi.fn>>).fenceSync;
+    const flush = (mockGL as unknown as Record<string, ReturnType<typeof vi.fn>>).flush;
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+    renderer.renderImageToFloatAsync(image, 4, 4);
+
+    // Should have bound PIXEL_PACK_BUFFER for async readPixels
+    const pboBindCalls = bindBuffer!.mock.calls.filter((c: unknown[]) => c[0] === 0x88eb);
+    expect(pboBindCalls.length).toBeGreaterThanOrEqual(2); // bind + unbind
+
+    // readPixels called with offset 0 (PBO write) — the last arg is 0 not Float32Array
+    const pboReadCalls = readPixels!.mock.calls.filter((c: unknown[]) => c[6] === 0);
+    expect(pboReadCalls.length).toBe(1);
+
+    // fenceSync and flush called
+    expect(fenceSync).toHaveBeenCalled();
+    expect(flush).toHaveBeenCalled();
+  });
+
+  it('REN-PBO-006: second frame returns cached data when fence not signaled', () => {
+    initWithPBOCapableGL();
+    // Fences default to UNSIGNALED
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+    const result1 = renderer.renderImageToFloatAsync(image, 4, 4);
+    const result2 = renderer.renderImageToFloatAsync(image, 4, 4);
+
+    // Both return valid data (same buffer reference)
+    expect(result1).toBe(result2);
+    // Data is from first frame's sync readPixels (FBO pattern)
+    expect(result2![0]).toBe(0.5);
+    expect(result2![1]).toBe(1.5);
+  });
+
+  it('REN-PBO-007: reads PBO data when fence is signaled', () => {
+    const mockGL = initWithPBOCapableGL();
+    const helpers = mockGL as unknown as { _signalAllFences: () => void };
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+
+    // Frame 1: sync readPixels from FBO, PBO write started
+    renderer.renderImageToFloatAsync(image, 4, 4);
+
+    // Signal all fences (simulates GPU completing async readPixels)
+    helpers._signalAllFences();
+
+    // Frame 2: should read from PBO (signaled fence)
+    const result = renderer.renderImageToFloatAsync(image, 4, 4);
+
+    expect(result).not.toBeNull();
+    // PBO data pattern: R=0.7, G=2.0 (from getBufferSubData mock)
+    // Use toBeCloseTo for Float32 precision (0.7 → 0.699999988...)
+    expect(result![0]).toBeCloseTo(0.7, 5);
+    expect(result![1]).toBeCloseTo(2.0, 5);
+  });
+
+  it('REN-PBO-008: deletes fence after reading signaled PBO', () => {
+    const mockGL = initWithPBOCapableGL();
+    const deleteSync = (mockGL as unknown as Record<string, ReturnType<typeof vi.fn>>).deleteSync;
+    const helpers = mockGL as unknown as { _signalAllFences: () => void };
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+    renderer.renderImageToFloatAsync(image, 4, 4);
+
+    helpers._signalAllFences();
+    renderer.renderImageToFloatAsync(image, 4, 4);
+
+    // Fence from frame 1 should be deleted after being consumed
+    expect(deleteSync).toHaveBeenCalled();
+  });
+
+  it('REN-PBO-009: does NOT call clientWaitSync (uses getSyncParameter polling)', () => {
+    const mockGL = initWithPBOCapableGL();
+    const clientWaitSync = (mockGL as unknown as Record<string, ReturnType<typeof vi.fn>>).clientWaitSync;
+    const getSyncParameter = (mockGL as unknown as Record<string, ReturnType<typeof vi.fn>>).getSyncParameter;
+    const helpers = mockGL as unknown as { _signalAllFences: () => void };
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+    renderer.renderImageToFloatAsync(image, 4, 4);
+    helpers._signalAllFences();
+    renderer.renderImageToFloatAsync(image, 4, 4);
+
+    // getSyncParameter should be used for polling, not clientWaitSync
+    expect(getSyncParameter).toHaveBeenCalled();
+    expect(clientWaitSync).not.toHaveBeenCalled();
+  });
+
+  it('REN-PBO-010: creates two PBOs with DYNAMIC_READ usage', () => {
+    const mockGL = initWithPBOCapableGL();
+    const bufferData = (mockGL as unknown as Record<string, ReturnType<typeof vi.fn>>).bufferData;
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+    renderer.renderImageToFloatAsync(image, 4, 4);
+
+    // Two PBOs created with PIXEL_PACK_BUFFER + DYNAMIC_READ
+    const pboAllocCalls = bufferData!.mock.calls.filter(
+      (c: unknown[]) => c[0] === 0x88eb && c[2] === 0x88e9
+    );
+    expect(pboAllocCalls.length).toBe(2);
+  });
+
+  it('REN-PBO-011: only writes to idle PBO (no pending fence)', () => {
+    const mockGL = initWithPBOCapableGL();
+    const fenceSync = (mockGL as unknown as Record<string, ReturnType<typeof vi.fn>>).fenceSync;
+    // Fences stay UNSIGNALED — both PBOs become "pending"
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+
+    // Frame 1: writes PBO[0], fence created
+    renderer.renderImageToFloatAsync(image, 4, 4);
+    expect(fenceSync).toHaveBeenCalledTimes(1);
+
+    // Frame 2: PBO[0] has fence (unsignaled), writes PBO[1]
+    renderer.renderImageToFloatAsync(image, 4, 4);
+    expect(fenceSync).toHaveBeenCalledTimes(2);
+
+    // Frame 3: both PBOs have fences (unsignaled) — no PBO write
+    renderer.renderImageToFloatAsync(image, 4, 4);
+    expect(fenceSync).toHaveBeenCalledTimes(2); // no new fence
+  });
+
+  it('REN-PBO-012: unbinds FBO and restores viewport after render', () => {
+    const mockGL = initWithPBOCapableGL();
+    const bindFramebuffer = (mockGL as unknown as Record<string, ReturnType<typeof vi.fn>>).bindFramebuffer;
+    const viewport = (mockGL as unknown as Record<string, ReturnType<typeof vi.fn>>).viewport;
+
+    const image = new IPImage({ width: 8, height: 6, channels: 4, dataType: 'uint8' });
+    renderer.renderImageToFloatAsync(image, 8, 6);
+
+    // Last bindFramebuffer should unbind (null)
+    const lastBind = bindFramebuffer!.mock.calls[bindFramebuffer!.mock.calls.length - 1] as unknown[];
+    expect(lastBind[1]).toBeNull();
+
+    // Last viewport should restore original [0, 0, 100, 100]
+    const lastViewport = viewport!.mock.calls[viewport!.mock.calls.length - 1] as number[];
+    expect(lastViewport).toEqual([0, 0, 100, 100]);
+  });
+
+  it('REN-PBO-013: reuses cached pixel buffer when dimensions unchanged', () => {
+    initWithPBOCapableGL();
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+    const result1 = renderer.renderImageToFloatAsync(image, 4, 4);
+    const result2 = renderer.renderImageToFloatAsync(image, 4, 4);
+
+    expect(result1).toBe(result2); // Same Float32Array reference
+  });
+
+  it('REN-PBO-014: disposes PBOs when dimensions change', () => {
+    const mockGL = initWithPBOCapableGL();
+    const deleteBuffer = mockGL.deleteBuffer as ReturnType<typeof vi.fn>;
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+    renderer.renderImageToFloatAsync(image, 4, 4);
+
+    const deletesBefore = deleteBuffer.mock.calls.length;
+    renderer.renderImageToFloatAsync(image, 8, 8);
+
+    // Old PBOs should be deleted
+    expect(deleteBuffer.mock.calls.length).toBeGreaterThan(deletesBefore);
+  });
+
+  it('REN-PBO-015: dispose cleans up PBOs and fences', () => {
+    const mockGL = initWithPBOCapableGL();
+    const deleteBuffer = mockGL.deleteBuffer as ReturnType<typeof vi.fn>;
+    const deleteSync = (mockGL as unknown as Record<string, ReturnType<typeof vi.fn>>).deleteSync;
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+    renderer.renderImageToFloatAsync(image, 4, 4);
+
+    renderer.dispose();
+
+    expect(deleteBuffer).toHaveBeenCalled();
+    expect(deleteSync).toHaveBeenCalled();
+  });
+
+  it('REN-PBO-016: falls back to sync renderImageToFloat when PBO creation fails', () => {
+    const mockGL = initWithPBOCapableGL();
+    // Make createBuffer fail
+    (mockGL as unknown as Record<string, unknown>).createBuffer = vi.fn(() => null);
+
+    // Reset the renderer to force PBO re-creation
+    renderer.dispose();
+    renderer = new Renderer();
+    const canvas = document.createElement('canvas');
+    const originalGetContext = canvas.getContext.bind(canvas);
+    canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+      if (contextId === 'webgl2') return mockGL;
+      return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
+    }) as typeof canvas.getContext;
+    renderer.initialize(canvas);
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+    const result = renderer.renderImageToFloatAsync(image, 4, 4);
+
+    // Should still return data via sync fallback
+    expect(result).toBeInstanceOf(Float32Array);
+    expect(result![0]).toBe(0.5); // FBO pattern from sync readPixels
+  });
+
+  it('REN-PBO-017: steady-state reads PBO data every frame when fences signal', () => {
+    const mockGL = initWithPBOCapableGL();
+    const helpers = mockGL as unknown as { _signalAllFences: () => void };
+    const getBufferSubData = (mockGL as unknown as Record<string, ReturnType<typeof vi.fn>>).getBufferSubData;
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+
+    // Frame 1: sync readPixels (first frame)
+    renderer.renderImageToFloatAsync(image, 4, 4);
+    expect(getBufferSubData).not.toHaveBeenCalled();
+
+    // Signal fences, then frame 2
+    helpers._signalAllFences();
+    renderer.renderImageToFloatAsync(image, 4, 4);
+    expect(getBufferSubData).toHaveBeenCalledTimes(1);
+
+    // Signal fences, then frame 3
+    helpers._signalAllFences();
+    renderer.renderImageToFloatAsync(image, 4, 4);
+    expect(getBufferSubData).toHaveBeenCalledTimes(2);
+  });
+
+  it('REN-PBO-018: returns null when FBO creation fails', () => {
+    const mockGL = initWithPBOCapableGL();
+    (mockGL as unknown as Record<string, unknown>).checkFramebufferStatus =
+      vi.fn(() => 0); // not FRAMEBUFFER_COMPLETE
+
+    // Force FBO re-creation
+    renderer.dispose();
+    renderer = new Renderer();
+    const canvas = document.createElement('canvas');
+    canvas.getContext = vi.fn((contextId: string) => {
+      if (contextId === 'webgl2') return mockGL;
+      return null;
+    }) as typeof canvas.getContext;
+    renderer.initialize(canvas);
+
+    const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
+    const result = renderer.renderImageToFloatAsync(image, 4, 4);
+
+    expect(result).toBeNull();
+  });
+});
+
+// =============================================================================
 // Detached ImageBitmap guard in renderSDRFrame
 // =============================================================================
 

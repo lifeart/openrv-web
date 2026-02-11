@@ -457,6 +457,7 @@ describe('Viewer', () => {
           height: 100,
         }),
         queuePriorityFrame: vi.fn(),
+        setTargetSize: vi.fn(),
         onFrameProcessed: null,
         dispose: vi.fn(),
       } as unknown as typeof tv.prerenderBuffer;
@@ -512,6 +513,7 @@ describe('Viewer', () => {
           height: 100,
         }),
         queuePriorityFrame: vi.fn(),
+        setTargetSize: vi.fn(),
         onFrameProcessed: null,
         dispose: vi.fn(),
       } as unknown as typeof tv.prerenderBuffer;
@@ -575,6 +577,7 @@ describe('Viewer', () => {
           height: 100,
         }),
         queuePriorityFrame: vi.fn(),
+        setTargetSize: vi.fn(),
         onFrameProcessed: null,
         dispose: vi.fn(),
       } as unknown as typeof tv.prerenderBuffer;
@@ -629,6 +632,7 @@ describe('Viewer', () => {
           height: 100,
         }),
         queuePriorityFrame: vi.fn(),
+        setTargetSize: vi.fn(),
         onFrameProcessed: null,
         dispose: vi.fn(),
       } as unknown as typeof tv.prerenderBuffer;
@@ -687,6 +691,7 @@ describe('Viewer', () => {
           height: 100,
         }),
         queuePriorityFrame: vi.fn(),
+        setTargetSize: vi.fn(),
         onFrameProcessed: null,
         dispose: vi.fn(),
       } as unknown as typeof tv.prerenderBuffer;
@@ -741,6 +746,7 @@ describe('Viewer', () => {
           height: 100,
         }),
         queuePriorityFrame: vi.fn(),
+        setTargetSize: vi.fn(),
         onFrameProcessed: null,
         dispose: vi.fn(),
       } as unknown as typeof tv.prerenderBuffer;
@@ -792,6 +798,7 @@ describe('Viewer', () => {
           height: 100,
         }),
         queuePriorityFrame: vi.fn(),
+        setTargetSize: vi.fn(),
         onFrameProcessed: null,
         dispose: vi.fn(),
       } as unknown as typeof tv.prerenderBuffer;
@@ -851,6 +858,7 @@ describe('Viewer', () => {
           height: 100,
         }),
         queuePriorityFrame: vi.fn(),
+        setTargetSize: vi.fn(),
         onFrameProcessed: null,
         dispose: vi.fn(),
       } as unknown as typeof tv.prerenderBuffer;
@@ -919,6 +927,7 @@ describe('Viewer', () => {
           height: 300,
         }),
         queuePriorityFrame: vi.fn(),
+        setTargetSize: vi.fn(),
         onFrameProcessed: null,
         dispose: vi.fn(),
       } as unknown as typeof tv.prerenderBuffer;
@@ -993,6 +1002,7 @@ describe('Viewer', () => {
           height: 100,
         }),
         queuePriorityFrame: vi.fn(),
+        setTargetSize: vi.fn(),
         onFrameProcessed: null,
         dispose: vi.fn(),
       } as unknown as typeof tv.prerenderBuffer;

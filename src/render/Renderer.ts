@@ -91,6 +91,17 @@ export class Renderer implements RendererBackend {
   private hasColorBufferFloat: boolean | null = null; // cached extension check
   private hdrReadbackBuffer: Float32Array | null = null; // reused across frames
 
+  // --- PBO async readback (double-buffered) ---
+  // Two PBOs alternate each frame: one receives async readPixels while
+  // the other's data (from the previous frame) is returned immediately.
+  // This eliminates the synchronous GPU stall from readPixels.
+  private hdrPBOs: [WebGLBuffer | null, WebGLBuffer | null] = [null, null];
+  private hdrPBOFences: [WebGLSync | null, WebGLSync | null] = [null, null];
+  private hdrPBOWidth = 0;
+  private hdrPBOHeight = 0;
+  private hdrPBOCachedPixels: Float32Array | null = null;  // data from previous frame
+  private hdrPBOReady = false;       // true after first frame has been captured
+
   // Mipmap support for float textures (requires OES_texture_float_linear + EXT_color_buffer_float)
   private _mipmapSupported = false;
 
@@ -921,6 +932,164 @@ export class Renderer implements RendererBackend {
   }
 
   /**
+   * Async PBO readback: renders to RGBA16F FBO, starts a non-blocking
+   * readPixels into a PBO, and returns the PREVIOUS frame's data immediately.
+   *
+   * Double-buffered: two PBOs alternate each frame.
+   * - Frame N: render → async readPixels into idle PBO, poll other PBO's fence
+   * - If fence signaled: getBufferSubData (fast, ~0.6ms), cache result
+   * - If fence not signaled: return previously cached data (no stall)
+   *
+   * On the very first call, performs a synchronous readPixels directly from
+   * the FBO to provide immediate data (one-time GPU stall).
+   *
+   * Uses getSyncParameter to poll fences (non-blocking). Only reads a PBO
+   * when its fence is confirmed SIGNALED, avoiding ANGLE performance warnings.
+   * Only writes to PBOs with no pending fence, preventing "written again"
+   * warnings.
+   *
+   * Falls back to synchronous renderImageToFloat if PBO allocation fails.
+   *
+   * Trade-off: 1 frame of latency (imperceptible at 30-60fps) in exchange
+   * for eliminating the 8-25ms GPU sync stall per frame.
+   */
+  renderImageToFloatAsync(image: IPImage, width: number, height: number): Float32Array | null {
+    const gl = this.gl;
+    if (!gl || !this.displayShader) return null;
+
+    // Check EXT_color_buffer_float once
+    if (this.hasColorBufferFloat === null) {
+      this.hasColorBufferFloat = gl.getExtension('EXT_color_buffer_float') !== null;
+    }
+    if (!this.hasColorBufferFloat) return null;
+
+    // Ensure FBO exists and matches dimensions
+    this.ensureHDRFBO(width, height);
+    if (!this.hdrFBO) return null;
+
+    // If dimensions changed, invalidate PBO state
+    if (this.hdrPBOWidth !== width || this.hdrPBOHeight !== height) {
+      this.disposeHDRPBOs();
+    }
+
+    // Ensure PBOs exist
+    this.ensureHDRPBOs(width, height);
+
+    // If PBO allocation failed, fall back to sync path
+    if (!this.hdrPBOs[0] || !this.hdrPBOs[1]) {
+      return this.renderImageToFloat(image, width, height);
+    }
+
+    const pixelCount = width * height * RGBA_CHANNELS;
+    if (!this.hdrPBOCachedPixels || this.hdrPBOCachedPixels.length !== pixelCount) {
+      this.hdrPBOCachedPixels = new Float32Array(pixelCount);
+    }
+
+    // Step 1: Render current frame to FBO
+    const prevViewport = gl.getParameter(gl.VIEWPORT) as Int32Array;
+    const prevHdrMode = this.hdrOutputMode;
+    this.hdrOutputMode = 'hlg';
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.hdrFBO);
+    gl.viewport(0, 0, width, height);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    this.renderImage(image, 0, 0, 1, 1);
+    this.hdrOutputMode = prevHdrMode;
+
+    // Step 2: Consume any PBO whose GPU fence has signaled.
+    // Only reads when getSyncParameter confirms SIGNALED — avoids the
+    // "read without fence" ANGLE warning that clientWaitSync(timeout=0)
+    // would cause (WebGL2 MAX_CLIENT_WAIT_TIMEOUT_WEBGL is 0).
+    for (let i = 0; i < 2; i++) {
+      const fence = this.hdrPBOFences[i];
+      if (fence && gl.getSyncParameter(fence, gl.SYNC_STATUS) === gl.SIGNALED) {
+        gl.deleteSync(fence);
+        this.hdrPBOFences[i] = null;
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.hdrPBOs[i]!);
+        gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, this.hdrPBOCachedPixels!);
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+        this.hdrPBOReady = true;
+      }
+    }
+
+    // Step 3: Start async readPixels into an idle PBO (no pending fence).
+    // Only writes to PBOs whose data has been consumed (fence cleared),
+    // preventing the "written again before read" ANGLE warning.
+    for (let i = 0; i < 2; i++) {
+      if (!this.hdrPBOFences[i]) {
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.hdrPBOs[i]!);
+        gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, 0);
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+        this.hdrPBOFences[i] = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+        gl.flush();
+        break;
+      }
+    }
+
+    // Step 4: First-frame fallback — no PBO data yet, sync readPixels from
+    // the FBO (still bound). One-time stall (~8-25ms).
+    if (!this.hdrPBOReady) {
+      gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, this.hdrPBOCachedPixels!);
+      this.hdrPBOReady = true;
+    }
+
+    // Unbind FBO and restore viewport
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(prevViewport[0]!, prevViewport[1]!, prevViewport[2]!, prevViewport[3]!);
+
+    return this.hdrPBOCachedPixels;
+  }
+
+  /**
+   * Ensure double-buffered PBOs exist for async readback.
+   */
+  private ensureHDRPBOs(width: number, height: number): void {
+    const gl = this.gl;
+    if (!gl) return;
+    if (this.hdrPBOs[0] && this.hdrPBOs[1]) return; // already allocated
+
+    const byteSize = width * height * RGBA_CHANNELS * Float32Array.BYTES_PER_ELEMENT;
+
+    const pbo0 = gl.createBuffer();
+    const pbo1 = gl.createBuffer();
+    if (!pbo0 || !pbo1) {
+      if (pbo0) gl.deleteBuffer(pbo0);
+      if (pbo1) gl.deleteBuffer(pbo1);
+      return;
+    }
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo0);
+    gl.bufferData(gl.PIXEL_PACK_BUFFER, byteSize, gl.DYNAMIC_READ);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo1);
+    gl.bufferData(gl.PIXEL_PACK_BUFFER, byteSize, gl.DYNAMIC_READ);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    this.hdrPBOs[0] = pbo0;
+    this.hdrPBOs[1] = pbo1;
+
+    this.hdrPBOWidth = width;
+    this.hdrPBOHeight = height;
+    this.hdrPBOReady = false;
+    this.hdrPBOCachedPixels = null;
+  }
+
+  /**
+   * Clean up PBO resources.
+   */
+  private disposeHDRPBOs(): void {
+    const gl = this.gl;
+    if (gl) {
+      if (this.hdrPBOs[0]) { gl.deleteBuffer(this.hdrPBOs[0]); this.hdrPBOs[0] = null; }
+      if (this.hdrPBOs[1]) { gl.deleteBuffer(this.hdrPBOs[1]); this.hdrPBOs[1] = null; }
+      if (this.hdrPBOFences[0]) { gl.deleteSync(this.hdrPBOFences[0]); this.hdrPBOFences[0] = null; }
+      if (this.hdrPBOFences[1]) { gl.deleteSync(this.hdrPBOFences[1]); this.hdrPBOFences[1] = null; }
+    }
+    this.hdrPBOWidth = 0;
+    this.hdrPBOHeight = 0;
+    this.hdrPBOReady = false;
+    this.hdrPBOCachedPixels = null;
+  }
+
+  /**
    * Ensure the offscreen RGBA16F FBO exists and matches the requested dimensions.
    */
   private ensureHDRFBO(width: number, height: number): void {
@@ -1255,6 +1424,9 @@ export class Renderer implements RendererBackend {
     this.hdrFBOHeight = 0;
     this.hasColorBufferFloat = null;
     this.hdrReadbackBuffer = null;
+
+    // Release PBO resources
+    this.disposeHDRPBOs();
 
     this.parallelCompileExt = null;
     this.usingHalfFloatBackbuffer = false;

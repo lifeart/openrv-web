@@ -142,6 +142,12 @@ export class PrerenderBufferManager {
   private dynamicPreloadAhead: number = 30;
   private lastFps: number = 0;
 
+  // Target display size for proxy-aware effects processing.
+  // When set, raw frames are scaled to this size before effects, avoiding
+  // wasteful CPU processing at full source resolution (e.g., 4K → display size).
+  private _targetWidth: number = 0;
+  private _targetHeight: number = 0;
+
   constructor(
     totalFrames: number,
     frameLoader: FrameLoader,
@@ -295,6 +301,54 @@ export class PrerenderBufferManager {
       }
       this.idleCallbackId = null;
     }
+  }
+
+  /**
+   * Set target display size for proxy-aware effects processing.
+   * When set, raw frames are scaled to this size before effects processing,
+   * dramatically reducing CPU work for large sources displayed at smaller sizes.
+   * Invalidates cache when size changes significantly (>20%).
+   */
+  setTargetSize(width: number, height: number): void {
+    if (width <= 0 || height <= 0) return;
+    // Only invalidate if target size changed significantly (>20%)
+    if (this._targetWidth > 0 && this._targetHeight > 0) {
+      const wRatio = width / this._targetWidth;
+      const hRatio = height / this._targetHeight;
+      if (wRatio > 0.8 && wRatio < 1.2 && hRatio > 0.8 && hRatio < 1.2) {
+        return; // Size change is within tolerance, no invalidation needed
+      }
+      // Significant size change — invalidate cache
+      this.invalidateAll();
+    }
+    this._targetWidth = width;
+    this._targetHeight = height;
+  }
+
+  /**
+   * Compute the effective processing dimensions for a frame.
+   * Returns target size if set and smaller than source, otherwise source size.
+   */
+  private getProcessingSize(sourceW: number, sourceH: number): { w: number; h: number } {
+    if (this._targetWidth <= 0 || this._targetHeight <= 0) {
+      return { w: sourceW, h: sourceH };
+    }
+    // Only downscale, never upscale
+    if (this._targetWidth >= sourceW && this._targetHeight >= sourceH) {
+      return { w: sourceW, h: sourceH };
+    }
+    // Fit source aspect ratio into target box
+    const srcAspect = sourceW / sourceH;
+    const tgtAspect = this._targetWidth / this._targetHeight;
+    let w: number, h: number;
+    if (srcAspect > tgtAspect) {
+      w = this._targetWidth;
+      h = Math.round(this._targetWidth / srcAspect);
+    } else {
+      h = this._targetHeight;
+      w = Math.round(this._targetHeight * srcAspect);
+    }
+    return { w: Math.max(1, w), h: Math.max(1, h) };
   }
 
   /**
@@ -535,18 +589,21 @@ export class PrerenderBufferManager {
         return; // completeRequest called in finally
       }
 
-      let width: number, height: number;
+      let sourceW: number, sourceH: number;
       if (rawFrame instanceof HTMLImageElement) {
-        width = rawFrame.naturalWidth || rawFrame.width;
-        height = rawFrame.naturalHeight || rawFrame.height;
+        sourceW = rawFrame.naturalWidth || rawFrame.width;
+        sourceH = rawFrame.naturalHeight || rawFrame.height;
       } else {
-        width = rawFrame.width;
-        height = rawFrame.height;
+        sourceW = rawFrame.width;
+        sourceH = rawFrame.height;
       }
 
-      if (width === 0 || height === 0) {
+      if (sourceW === 0 || sourceH === 0) {
         return;
       }
+
+      // Scale to display resolution before effects processing
+      const { w: width, h: height } = this.getProcessingSize(sourceW, sourceH);
 
       // Create temporary canvas to get image data
       // Use willReadFrequently for better getImageData performance
@@ -567,6 +624,7 @@ export class PrerenderBufferManager {
         return;
       }
 
+      // drawImage scales raw frame from source to processing resolution
       tempCtx.drawImage(rawFrame, 0, 0, width, height);
       const imageData = tempCtx.getImageData(0, 0, width, height);
 
@@ -704,18 +762,22 @@ export class PrerenderBufferManager {
       return null;
     }
 
-    let width: number, height: number;
+    let sourceW: number, sourceH: number;
     if (rawFrame instanceof HTMLImageElement) {
-      width = rawFrame.naturalWidth || rawFrame.width;
-      height = rawFrame.naturalHeight || rawFrame.height;
+      sourceW = rawFrame.naturalWidth || rawFrame.width;
+      sourceH = rawFrame.naturalHeight || rawFrame.height;
     } else {
-      width = rawFrame.width;
-      height = rawFrame.height;
+      sourceW = rawFrame.width;
+      sourceH = rawFrame.height;
     }
 
-    if (width === 0 || height === 0) {
+    if (sourceW === 0 || sourceH === 0) {
       return null;
     }
+
+    // Scale to display resolution before effects processing to avoid
+    // wasteful CPU work at full source resolution (e.g., 4K → display size)
+    const { w: width, h: height } = this.getProcessingSize(sourceW, sourceH);
 
     // Use willReadFrequently for better getImageData performance
     let canvas: HTMLCanvasElement | OffscreenCanvas;
@@ -735,6 +797,7 @@ export class PrerenderBufferManager {
       return null;
     }
 
+    // drawImage scales raw frame from source to processing resolution
     ctx.drawImage(rawFrame, 0, 0, width, height);
     const imageData = ctx.getImageData(0, 0, width, height);
     this.effectProcessor.applyEffects(imageData, width, height, this.currentEffectsState);

@@ -905,14 +905,13 @@ export class Viewer {
   }
 
   // GL rendering methods delegated to ViewerGLRenderer.
-  // These wrappers forward physical (DPR-scaled) dimensions to the GL renderer
-  // so the WebGL canvas renders at retina resolution.
-  // NOTE: Viewport sub-rect reduction (Phase 2 interaction quality) is disabled because
-  // gl.viewport() renders to a canvas sub-region without upscaling, producing
-  // incorrect visual output. The InteractionQualityManager infrastructure is retained
-  // for future use with a proper FBO-based downscale approach.
+  // These wrappers forward physical (DPR-scaled) dimensions to the GL renderer,
+  // reduced by interaction quality factor during active zoom/scrub for responsiveness.
+  // The canvas buffer is resized to reduced dims while CSS stays at full logical
+  // size — the browser upscales the smaller buffer, providing fluid interaction.
   private renderHDRWithWebGL(image: import('../../core/image/Image').IPImage, _displayWidth: number, _displayHeight: number) {
-    return this.glRendererManager.renderHDRWithWebGL(image, this.physicalWidth, this.physicalHeight);
+    const { w, h } = this.interactionQuality.getEffectiveViewport(this.physicalWidth, this.physicalHeight);
+    return this.glRendererManager.renderHDRWithWebGL(image, w, h);
   }
   private deactivateHDRMode() { this.glRendererManager.deactivateHDRMode(); }
   private deactivateSDRWebGLMode() { this.glRendererManager.deactivateSDRWebGLMode(); }
@@ -923,7 +922,8 @@ export class Viewer {
     _displayWidth: number,
     _displayHeight: number,
   ) {
-    return this.glRendererManager.renderSDRWithWebGL(source, this.physicalWidth, this.physicalHeight);
+    const { w, h } = this.interactionQuality.getEffectiveViewport(this.physicalWidth, this.physicalHeight);
+    return this.glRendererManager.renderSDRWithWebGL(source, w, h);
   }
 
   private renderImage(): void {
@@ -1105,6 +1105,20 @@ export class Viewer {
       this.setCanvasSize(displayWidth, displayHeight);
     }
 
+    // Phase 4: Set target extraction size for SDR video frame cache.
+    // Uses quality-reduced physical dims so frames are extracted at display resolution,
+    // not full source resolution. Capped at source dims (never upscale during extraction).
+    if (source.videoSourceNode && this.physicalWidth > 0 && this.physicalHeight > 0) {
+      const { w, h } = this.interactionQuality.getEffectiveViewport(this.physicalWidth, this.physicalHeight);
+      const cappedW = Math.min(w, source.width);
+      const cappedH = Math.min(h, source.height);
+      source.videoSourceNode.setTargetSize(
+        cappedW < source.width || cappedH < source.height
+          ? { w: cappedW, h: cappedH }
+          : undefined // full resolution
+      );
+    }
+
     // HDR WebGL rendering path: render via GPU shader pipeline and skip 2D canvas.
     // When OCIO is active, normally skip the WebGL path and fall through to the
     // 2D canvas where applyOCIOToCanvas() can apply the baked LUT as a post-process.
@@ -1215,6 +1229,12 @@ export class Viewer {
     // Check if crop clipping should be applied (will be done AFTER all rendering)
     // Note: We can't use ctx.clip() because putImageData() ignores clip regions
     let cropClipActive = this.cropManager.isCropClipActive();
+
+    // Set target display size for prerender buffer so effects are processed at
+    // display resolution instead of full source resolution (e.g., 4K → display size)
+    if (this.prerenderBuffer && displayWidth > 0 && displayHeight > 0) {
+      this.prerenderBuffer.setTargetSize(displayWidth, displayHeight);
+    }
 
     // Try prerendered cache first during playback for smooth performance with effects
     if (this.session.isPlaying && this.prerenderBuffer) {

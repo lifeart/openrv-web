@@ -261,6 +261,7 @@ export class ViewerGLRenderer {
     };
   }
 
+
   /**
    * Render an HDR IPImage through the WebGL shader pipeline.
    * Returns true if rendering succeeded, false if fallback is needed.
@@ -302,10 +303,11 @@ export class ViewerGLRenderer {
       this._hdrRenderActive = true;
     }
 
-    // Resize if needed (canvas buffer always at full physical resolution)
+    // Resize canvas buffer if needed. displayWidth/Height may be quality-reduced
+    // during interaction (50% of physical) — the browser upscales via CSS sizing.
     if (this._glCanvas.width !== displayWidth || this._glCanvas.height !== displayHeight) {
       renderer.resize(displayWidth, displayHeight);
-      // Use stored logical dims for exact CSS sizing (avoids rounding drift)
+      // CSS always uses full logical dims (set by resizeIfActive), not reduced render dims
       if (this._glCanvas instanceof HTMLCanvasElement) {
         const dpr = window.devicePixelRatio || 1;
         const cssW = this._logicalWidth || Math.round(displayWidth / dpr);
@@ -361,8 +363,12 @@ export class ViewerGLRenderer {
     state.displayColor = { ...state.displayColor, transferFunction: 0, displayGamma: 1 };
     renderer.applyRenderState(state);
 
-    // Render to RGBA16F FBO and read float pixels
-    const pixels = renderer.renderImageToFloat!(image, displayWidth, displayHeight);
+    // Render to RGBA16F FBO and read float pixels.
+    // Prefer async PBO readback which returns previous frame's data immediately,
+    // eliminating the 8-25ms GPU sync stall. Falls back to sync if unavailable.
+    const pixels = renderer.renderImageToFloatAsync
+      ? renderer.renderImageToFloatAsync(image, displayWidth, displayHeight)
+      : renderer.renderImageToFloat!(image, displayWidth, displayHeight);
     if (!pixels) return false;
 
     // Upload to WebGPU HDR canvas
@@ -579,10 +585,11 @@ export class ViewerGLRenderer {
       this.ctx.applyColorFilters();
     }
 
-    // Resize if needed (canvas buffer always at full physical resolution)
+    // Resize canvas buffer if needed. displayWidth/Height may be quality-reduced
+    // during interaction (50% of physical) — the browser upscales via CSS sizing.
     if (this._glCanvas.width !== displayWidth || this._glCanvas.height !== displayHeight) {
       renderer.resize(displayWidth, displayHeight);
-      // Use stored logical dims for exact CSS sizing (avoids rounding drift)
+      // CSS always uses full logical dims (set by resizeIfActive), not reduced render dims
       if (this._glCanvas instanceof HTMLCanvasElement) {
         const dpr = window.devicePixelRatio || 1;
         const cssW = this._logicalWidth || Math.round(displayWidth / dpr);
