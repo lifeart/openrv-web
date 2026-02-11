@@ -15,6 +15,7 @@ import {
   type InputVideoTrack,
   type VideoSample,
 } from 'mediabunny';
+import { PerfTrace } from '../PerfTrace';
 import {
   detectCodecFamily,
   isProfessionalCodec,
@@ -737,13 +738,17 @@ export class MediabunnyFrameExtractor {
     this.extractionQueue = ourTurn;
 
     try {
+      PerfTrace.begin('hdr.queueWait');
       await previousQueue;
+      PerfTrace.end('hdr.queueWait');
 
       if (abortSignal.aborted) {
         return null;
       }
 
+      PerfTrace.begin('hdr.getSample');
       const sample = await this.videoSampleSink.getSample(expectedTimestamp);
+      PerfTrace.end('hdr.getSample');
       return sample ?? null;
     } catch (error) {
       log.warn(`HDR frame ${clampedFrame} extraction failed:`, error);

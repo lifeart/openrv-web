@@ -71,21 +71,30 @@ UI evolved to dropdown and compact controls (`ZoomControl`, updated labels), but
   - `e2e/view-controls.spec.ts` (zoom button assumptions -> zoom dropdown actions)
   - `e2e/tab-navigation.spec.ts` (avoid strict-mode text collisions like `button:has-text("Fit")`)
   - `e2e/color-controls.spec.ts` (`Load .cube` -> current LUT load button label)
-  - `e2e/transform-controls.spec.ts` (disambiguate crop toggles where multiple `OFF` buttons exist)
+  - `e2e/transform-controls.spec.ts` and `e2e/crop.spec.ts` (disambiguate crop vs uncrop controls where multiple `OFF`/`Reset` buttons exist)
   - `e2e/keyboard-shortcuts.spec.ts` (replace outdated hardcoded key assumptions with current bindings)
   - `e2e/user-flows.spec.ts` (align keyboard-driven steps with current shortcuts and control structure)
+  - `e2e/false-color.spec.ts` (replace stale control selector assumptions and avoid matching hidden luminance-visualization menu items)
+  - `e2e/spotlight.spec.ts` (replace stale text/data-testid assumptions with current icon-button selector contract)
 - Use stable selectors:
   - prefer `data-testid` and role-based selectors over text-only selectors.
+  - avoid bare `button:has-text(...)` selectors when duplicate controls are expected.
+  - when testing "outside click", compute a click target guaranteed outside floating panel bounds.
 
 ### Unit tests to add/update
 - Add coverage for test IDs used in E2E:
   - `src/ui/components/ZoomControl.test.ts`
   - `src/ui/components/ColorControls.test.ts`
   - `src/ui/components/CropControl.test.ts`
+  - `src/ui/components/FalseColorControl.test.ts`
+  - `src/AppControlRegistry.test.ts` (spotlight and other icon-button test-id contracts)
 - Ensure expected test IDs/labels are rendered and unique.
 
 ### E2E verification
-- Re-run targeted specs listed above.
+- Re-run targeted specs listed above plus:
+  - `e2e/crop.spec.ts`
+  - `e2e/false-color.spec.ts`
+  - `e2e/spotlight.spec.ts`
 - Expected outcome: selector/strict-mode failures removed.
 
 ---
@@ -96,14 +105,16 @@ Multiple E2E tests timeout while taking screenshots because helper code captures
 
 ### Root cause
 - `e2e/fixtures.ts` uses generic first-canvas selection in:
+  - `captureCanvasState`
   - `captureViewerScreenshot`
   - `captureASideScreenshot`
   - `captureBSideScreenshot`
+  - `sampleCanvasPixels` / `getCanvasTransform` paths that also call `canvas.first()`
 - The app renders multiple canvases (viewer layers, overlays, scopes), so first match is not stable.
 
 ### Implementation scope
 - Add a stable test target for the main viewer render surface (for example a dedicated `data-testid` on viewer canvas/container).
-- Update screenshot helpers in `e2e/fixtures.ts` to:
+- Update canvas/screenshot helpers in `e2e/fixtures.ts` to:
   1. target the explicit viewer canvas,
   2. assert attached + visible before capture,
   3. avoid detached-element races.
@@ -112,13 +123,16 @@ Multiple E2E tests timeout while taking screenshots because helper code captures
 ### Unit tests to add/update
 - Add helper-level tests (for example `e2e/fixtures.viewer-capture.test.ts`):
   1. resolves viewer canvas target over unrelated canvases,
-  2. handles temporary detachment/reattach safely.
+  2. handles temporary detachment/reattach safely,
+  3. verifies all canvas state/screenshot helper entry points use the same stable target resolver.
 
 ### E2E verification
 - Re-run screenshot-heavy specs:
   - `e2e/user-flows.spec.ts`
   - `e2e/difference-matte.spec.ts`
   - `e2e/color-controls.spec.ts`
+  - `e2e/crop.spec.ts`
+  - `e2e/false-color.spec.ts`
 - Expected outcome: detached/hidden canvas screenshot timeouts are eliminated.
 
 ---
@@ -176,12 +190,16 @@ Many E2E specs bypass helper getters and call private internals like `window.__O
 
 ### E2E verification
 - Re-run suites that currently use direct private access heavily:
+  - `e2e/new-features.spec.ts`
+  - `e2e/session-integration.spec.ts`
   - `e2e/histogram.spec.ts`
   - `e2e/waveform.spec.ts`
   - `e2e/vectorscope.spec.ts`
   - `e2e/false-color.spec.ts`
   - `e2e/zebra-stripes.spec.ts`
   - `e2e/spotlight.spec.ts`
+  - `e2e/safe-areas.spec.ts`
+  - `e2e/crop.spec.ts`
 - Expected outcome: direct-access no-op failures are removed and specs use stable helper contracts.
 
 ---
@@ -755,20 +773,109 @@ In `AppControlRegistry` eyedropper callback wiring:
 
 ---
 
+## Task 24 (P1): Replace theme-coupled E2E style assertions with semantic state assertions
+### Problem
+Some E2E tests fail when UI theme tokens change even though control behavior is correct.
+
+### Root cause
+Specs assert exact RGB channel values from computed styles (for example compare A/B active border/background), which is brittle to design-token updates.
+
+### Implementation scope
+- In control components (starting with `CompareControl`), expose semantic state attributes for automation:
+  - `aria-pressed` / `aria-disabled` where applicable,
+  - optional `data-state="active|inactive"` for non-native toggle rows.
+- Replace color-channel assertions in E2E with semantic state assertions.
+- Keep one visual regression check per control area (snapshot-based), but do not couple behavior assertions to exact color literals.
+
+### Unit tests to add/update
+- Update `src/ui/components/CompareControl.test.ts`:
+  1. A/B active state updates semantic attributes correctly.
+  2. Disabled B/toggle state updates semantic attributes correctly when A/B is unavailable.
+- Add a small contract test in `src/ui/components/layout/ContextToolbar.test.ts` for icon-toggle semantic attributes if needed by other controls.
+
+### E2E verification
+- Re-run:
+  - `e2e/ab-compare.spec.ts`
+  - `e2e/keyboard-shortcuts.spec.ts` (for compare shortcut effects)
+- Expected outcome: style-token-only regressions stop producing false behavioral failures.
+
+---
+
+## Task 25 (P0): Add fail-fast diagnostics to `test-helper` to prevent silent false negatives
+### Problem
+When `test-helper` paths drift, getters return default values (`false`, `null`, empty state) instead of surfacing a broken adapter, causing controls to look no-op in E2E.
+
+### Root cause
+`src/test-helper.ts` uses permissive fallback logic (`createStateGetter` and direct `??` defaults) that masks missing components and stale object paths.
+
+### Implementation scope
+- Add a strict diagnostics mode in `test-helper`:
+  - per-getter missing-path detection,
+  - structured diagnostics (`missingPaths`, `lastErrors`),
+  - optional throw-on-missing behavior for CI.
+- Default E2E CI runs to strict mode so stale adapters fail fast.
+- Keep a compatibility mode only for local debugging where explicit.
+
+### Unit tests to add/update
+- Expand `src/test-helper.test.ts`:
+  1. strict mode throws (or flags) when getter target path is missing,
+  2. compatibility mode returns defaults without throwing,
+  3. diagnostics API reports exact missing getter paths.
+
+### E2E verification
+- Add/update a smoke check (for example in `e2e/state-verification.spec.ts`):
+  1. enable strict helper mode,
+  2. assert no missing-path diagnostics after app init and media load.
+- Re-run core control specs relying on helper state reads (`view-controls`, `color-controls`, `transform-controls`, `crop`).
+
+---
+
+## Task 26 (P1): Repair E2E suite topology and verification references
+### Problem
+Backlog and verification commands reference suites that do not exist (`e2e/custom-keybindings.spec.ts`, `e2e/network-sync.spec.ts`), leaving critical control areas effectively unverified.
+
+### Root cause
+Suite rename/removal drifted from documentation and command recipes.
+
+### Implementation scope
+- Create missing suites or update verification references to the canonical suite files.
+- Add explicit coverage for:
+  - custom keybinding flows (save/rebind/execute),
+  - network sync room create/join/disconnect lifecycle.
+- Add a repo check that fails CI when referenced E2E spec paths do not exist.
+
+### Unit tests to add/update
+- Add a small verification-script test (for example `scripts/validate-e2e-targets.test.cjs`):
+  1. validates referenced spec paths in `BUGFIX.md` execution commands and CI scripts,
+  2. fails on missing files.
+
+### E2E verification
+- Run the actual suite set after alignment:
+  - custom keybinding suite (new or canonical path),
+  - network sync suite (new or canonical path),
+  - `e2e/keyboard-shortcuts.spec.ts`
+  - `e2e/fullscreen-presentation.spec.ts` (for shared shortcut/event infrastructure sanity).
+- Expected outcome: verification commands are executable and cover intended control domains.
+
+---
+
 ## Execution Order
 1. Task 1
 2. Task 2
 3. Task 21
 4. Task 22
 5. Task 23
-6. Task 3
-7. Task 4
-8. Re-run focused E2E suite and re-triage residual fails
-9. Task 10
-10. Task 11
-11. Tasks 12-14
-12. Tasks 15-20
-13. Tasks 5-9 (non-blocking improvements can continue in parallel where safe)
+6. Task 25
+7. Task 26
+8. Task 24
+9. Task 3
+10. Task 4
+11. Re-run focused E2E suite and re-triage residual fails
+12. Task 10
+13. Task 11
+14. Tasks 12-14
+15. Tasks 15-20
+16. Tasks 5-9 (non-blocking improvements can continue in parallel where safe)
 
 ## Verification Gate
 After each task:
