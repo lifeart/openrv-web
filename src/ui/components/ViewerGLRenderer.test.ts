@@ -6,9 +6,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ViewerGLRenderer, GLRendererContext } from './ViewerGLRenderer';
 import type { Renderer } from '../../render/Renderer';
 import type { RenderWorkerProxy } from '../../render/RenderWorkerProxy';
+import type { RenderState } from '../../render/RenderState';
 import type { ColorAdjustments } from '../../core/types/color';
 import type { ToneMappingState } from '../../core/types/effects';
 import { type DisplayCapabilities, DEFAULT_CAPABILITIES } from '../../color/ColorProcessingFacade';
+import { DEFAULT_COLOR_ADJUSTMENTS } from '../../core/types/color';
+import { DEFAULT_TONE_MAPPING_STATE } from '../../core/types/effects';
+import { DEFAULT_CDL } from '../../color/CDL';
+import { DEFAULT_COLOR_WHEELS_STATE } from './ColorWheels';
+import { DEFAULT_ZEBRA_STATE } from './ZebraStripes';
+import { DEFAULT_BACKGROUND_PATTERN_STATE } from './BackgroundPatternControl';
+import { DEFAULT_HSL_QUALIFIER_STATE } from './HSLQualifier';
+import { IPImage } from '../../core/image/Image';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -22,7 +31,7 @@ interface TestableViewerGLRenderer {
   _isAsyncRenderer: boolean;
   _hdrRenderActive: boolean;
   _sdrWebGLRenderActive: boolean;
-  _webgpuBlit: { initialized: boolean; getCanvas: () => HTMLCanvasElement } | null;
+  _webgpuBlit: { initialized: boolean; getCanvas: () => HTMLCanvasElement; uploadAndDisplay?: (pixels: Float32Array, w: number, h: number) => void } | null;
   _logicalWidth: number;
   _logicalHeight: number;
 }
@@ -347,6 +356,250 @@ describe('ViewerGLRenderer', () => {
       expect(internal._glCanvas!.style.height).toBe('540px');
 
       Object.defineProperty(window, 'devicePixelRatio', { value: 1, configurable: true });
+    });
+  });
+
+  // =========================================================================
+  // HDR path — displayColor overrides
+  // =========================================================================
+  function createDefaultRenderState(): RenderState {
+      return {
+        colorAdjustments: { ...DEFAULT_COLOR_ADJUSTMENTS },
+        colorInversion: false,
+        toneMappingState: { ...DEFAULT_TONE_MAPPING_STATE },
+        backgroundPattern: { ...DEFAULT_BACKGROUND_PATTERN_STATE },
+        cdl: JSON.parse(JSON.stringify(DEFAULT_CDL)),
+        curvesLUT: null,
+        colorWheels: JSON.parse(JSON.stringify(DEFAULT_COLOR_WHEELS_STATE)),
+        falseColor: { enabled: false, lut: null },
+        zebraStripes: { ...DEFAULT_ZEBRA_STATE },
+        channelMode: 'rgb',
+        lut: { data: null, size: 0, intensity: 0 },
+        displayColor: { transferFunction: 3, displayGamma: 2.4, displayBrightness: 1.5, customGamma: 2.2 },
+        highlightsShadows: { highlights: 0, shadows: 0, whites: 0, blacks: 0 },
+        vibrance: { amount: 0, skinProtection: true },
+        clarity: 0,
+        sharpen: 0,
+        hslQualifier: JSON.parse(JSON.stringify(DEFAULT_HSL_QUALIFIER_STATE)),
+      };
+    }
+
+  describe('HDR path displayColor overrides', () => {
+    function setupHDRRenderer(hdrOutputMode: string) {
+      const capturedStates: RenderState[] = [];
+      const mockRendererObj = {
+        getHDROutputMode: vi.fn(() => hdrOutputMode),
+        applyRenderState: vi.fn((state: RenderState) => {
+          capturedStates.push(JSON.parse(JSON.stringify(state)));
+        }),
+        resize: vi.fn(),
+        clear: vi.fn(),
+        renderImage: vi.fn(),
+        hasPendingStateChanges: vi.fn(() => true),
+        dispose: vi.fn(),
+      };
+
+      // Provide getTransformManager with a .transform property
+      const hdrCtx = createMockContext();
+      (hdrCtx.getTransformManager as ReturnType<typeof vi.fn>).mockReturnValue({
+        transform: { rotation: 0, flipH: false, flipV: false },
+      });
+
+      const glRenderer = new ViewerGLRenderer(hdrCtx);
+      const internal = glRenderer as unknown as TestableViewerGLRenderer;
+      internal._glCanvas = document.createElement('canvas');
+      internal._glRenderer = mockRendererObj as unknown as Renderer;
+
+      // Spy on buildRenderState to return our controlled state with non-default display settings
+      vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(createDefaultRenderState());
+
+      return { glRenderer, capturedStates, mockRendererObj };
+    }
+
+    it('VGLR-030: HDR native path sets displayColor.transferFunction to 0', () => {
+      const { glRenderer, capturedStates } = setupHDRRenderer('hlg');
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(capturedStates.length).toBe(1);
+      expect(capturedStates[0]!.displayColor.transferFunction).toBe(0);
+    });
+
+    it('VGLR-031: HDR native path sets displayColor.displayGamma to 1', () => {
+      const { glRenderer, capturedStates } = setupHDRRenderer('hlg');
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(capturedStates.length).toBe(1);
+      expect(capturedStates[0]!.displayColor.displayGamma).toBe(1);
+    });
+
+    it('VGLR-032: HDR native path sets displayColor.displayBrightness to 1', () => {
+      const { glRenderer, capturedStates } = setupHDRRenderer('hlg');
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(capturedStates.length).toBe(1);
+      expect(capturedStates[0]!.displayColor.displayBrightness).toBe(1);
+    });
+
+    it('VGLR-033: SDR output path does NOT override displayColor', () => {
+      const { glRenderer, capturedStates } = setupHDRRenderer('sdr');
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'uint8' });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(capturedStates.length).toBe(1);
+      // SDR path should NOT override display settings — they should remain as built
+      expect(capturedStates[0]!.displayColor.transferFunction).toBe(3);
+      expect(capturedStates[0]!.displayColor.displayGamma).toBe(2.4);
+      expect(capturedStates[0]!.displayColor.displayBrightness).toBe(1.5);
+    });
+
+    it('VGLR-034: HDR native path disables tone mapping for HLG content', () => {
+      const { glRenderer, capturedStates } = setupHDRRenderer('hlg');
+
+      // Spy buildRenderState to return state with tone mapping enabled
+      const stateWithTM = createDefaultRenderState();
+      stateWithTM.toneMappingState = { enabled: true, operator: 'aces' };
+      vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithTM);
+
+      const image = new IPImage({
+        width: 10, height: 10, channels: 4, dataType: 'uint8',
+        metadata: { transferFunction: 'hlg' },
+      });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(capturedStates.length).toBe(1);
+      // HLG content: tone mapping force-disabled (display handles HLG natively)
+      expect(capturedStates[0]!.toneMappingState.enabled).toBe(false);
+    });
+
+    it('VGLR-035: HDR native path disables tone mapping for PQ content', () => {
+      const { glRenderer, capturedStates } = setupHDRRenderer('hlg');
+
+      const stateWithTM = createDefaultRenderState();
+      stateWithTM.toneMappingState = { enabled: true, operator: 'aces' };
+      vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithTM);
+
+      const image = new IPImage({
+        width: 10, height: 10, channels: 4, dataType: 'uint8',
+        metadata: { transferFunction: 'pq' },
+      });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(capturedStates.length).toBe(1);
+      // PQ content: tone mapping force-disabled
+      expect(capturedStates[0]!.toneMappingState.enabled).toBe(false);
+    });
+
+    it('VGLR-036: HDR native path preserves tone mapping for linear/sRGB content (gainmap/EXR)', () => {
+      const { glRenderer, capturedStates } = setupHDRRenderer('hlg');
+
+      const stateWithTM = createDefaultRenderState();
+      stateWithTM.toneMappingState = { enabled: true, operator: 'aces' };
+      vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithTM);
+
+      // Gainmap content with 'srgb' transfer function (linear float data)
+      const image = new IPImage({
+        width: 10, height: 10, channels: 4, dataType: 'float32',
+        metadata: { transferFunction: 'srgb', colorPrimaries: 'bt709' },
+      });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(capturedStates.length).toBe(1);
+      // Linear content: tone mapping preserved to compress dynamic range
+      expect(capturedStates[0]!.toneMappingState.enabled).toBe(true);
+      expect(capturedStates[0]!.toneMappingState.operator).toBe('aces');
+    });
+
+    it('VGLR-037: HDR native path preserves tone mapping when no transferFunction metadata', () => {
+      const { glRenderer, capturedStates } = setupHDRRenderer('hlg');
+
+      const stateWithTM = createDefaultRenderState();
+      stateWithTM.toneMappingState = { enabled: true, operator: 'aces' };
+      vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithTM);
+
+      // EXR content with no explicit transferFunction
+      const image = new IPImage({
+        width: 10, height: 10, channels: 4, dataType: 'float32',
+      });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(capturedStates.length).toBe(1);
+      // No transferFunction → not HLG/PQ → tone mapping preserved
+      expect(capturedStates[0]!.toneMappingState.enabled).toBe(true);
+      expect(capturedStates[0]!.toneMappingState.operator).toBe('aces');
+    });
+  });
+
+  // =========================================================================
+  // WebGPU blit path — sync/async readback selection
+  // =========================================================================
+  describe('WebGPU blit path readback mode', () => {
+    function setupBlitRenderer() {
+      const syncReadback = vi.fn(() => new Float32Array(100 * 100 * 4));
+      const asyncReadback = vi.fn(() => new Float32Array(100 * 100 * 4));
+      let pendingChanges = true;
+
+      const mockRendererObj = {
+        getHDROutputMode: vi.fn(() => 'sdr'),
+        applyRenderState: vi.fn(),
+        resize: vi.fn(),
+        clear: vi.fn(),
+        renderImage: vi.fn(),
+        renderImageToFloat: syncReadback,
+        renderImageToFloatAsync: asyncReadback,
+        hasPendingStateChanges: vi.fn(() => pendingChanges),
+        dispose: vi.fn(),
+      };
+
+      const blitCtx = createMockContext();
+      (blitCtx.getTransformManager as ReturnType<typeof vi.fn>).mockReturnValue({
+        transform: { rotation: 0, flipH: false, flipV: false },
+      });
+
+      const glRenderer = new ViewerGLRenderer(blitCtx);
+      const internal = glRenderer as unknown as TestableViewerGLRenderer;
+      internal._glCanvas = document.createElement('canvas');
+      internal._glRenderer = mockRendererObj as unknown as Renderer;
+      internal._webgpuBlit = {
+        initialized: true,
+        getCanvas: () => document.createElement('canvas'),
+        uploadAndDisplay: vi.fn(),
+      };
+
+      vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(createDefaultRenderState());
+
+      return {
+        glRenderer, mockRendererObj, syncReadback, asyncReadback,
+        setPendingChanges: (v: boolean) => { pendingChanges = v; },
+      };
+    }
+
+    it('VGLR-040: blit path uses sync readback when state has pending changes', () => {
+      const { glRenderer, syncReadback, asyncReadback, setPendingChanges } = setupBlitRenderer();
+      setPendingChanges(true); // state changed (e.g., operator switch)
+
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'float32' });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      // Sync readback used for immediate visual feedback after state change
+      expect(syncReadback).toHaveBeenCalled();
+      expect(asyncReadback).not.toHaveBeenCalled();
+    });
+
+    it('VGLR-041: blit path uses async readback when no pending state changes', () => {
+      const { glRenderer, syncReadback, asyncReadback, setPendingChanges } = setupBlitRenderer();
+      setPendingChanges(false);
+
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'float32' });
+      // Need to bypass the render-skip check (sameImage && sameDims && !hasPending)
+      // by providing a new image each time
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      // Async readback used during continuous playback (no state changes)
+      expect(asyncReadback).toHaveBeenCalled();
+      expect(syncReadback).not.toHaveBeenCalled();
     });
   });
 });

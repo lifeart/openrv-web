@@ -668,6 +668,15 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     this.state.lut3DDirty = true;
   }
 
+  getDisplayColorState(): DisplayColorConfig {
+    return {
+      transferFunction: this.state.displayTransferCode,
+      displayGamma: this.state.displayGammaOverride,
+      displayBrightness: this.state.displayBrightnessMultiplier,
+      customGamma: this.state.displayCustomGamma,
+    };
+  }
+
   setDisplayColorState(dcState: DisplayColorConfig): void {
     this.state.displayTransferCode = dcState.transferFunction;
     this.state.displayGammaOverride = dcState.displayGamma;

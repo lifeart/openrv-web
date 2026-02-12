@@ -100,6 +100,9 @@ export interface StateAccessor {
   /** Set 3D LUT data, size, and intensity. Null data disables. */
   setLUT(lutData: Float32Array | null, lutSize: number, intensity: number): void;
 
+  /** Get the current display color management state. */
+  getDisplayColorState(): DisplayColorConfig;
+
   /** Set display color management state. */
   setDisplayColorState(state: DisplayColorConfig): void;
 

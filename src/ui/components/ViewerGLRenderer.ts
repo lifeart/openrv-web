@@ -361,6 +361,25 @@ export class ViewerGLRenderer {
     const isHDROutput = renderer.getHDROutputMode() !== 'sdr';
     const hasFloatReadback = typeof renderer.renderImageToFloat === 'function';
 
+    // Debug: log HDR rendering path decision (once per image change)
+    if (this._lastRenderedImage?.deref() !== image) {
+      const fmt = image.metadata?.attributes?.formatName ?? image.metadata?.transferFunction ?? 'unknown';
+      const cp = image.metadata?.colorPrimaries ?? 'unset';
+      const tf = image.metadata?.transferFunction ?? 'unset';
+      const cs = image.metadata?.colorSpace ?? 'unset';
+      const peak = image.dataType === 'float32' ? (() => {
+        const arr = image.getTypedArray() as Float32Array;
+        let max = 0;
+        for (let i = 0; i < Math.min(arr.length, 200000); i++) max = Math.max(max, arr[i]!);
+        return max.toFixed(3);
+      })() : 'N/A';
+      console.log(
+        `[HDR Render] format=${fmt} tf=${tf} cp=${cp} cs=${cs} peak=${peak} ` +
+        `hdrOutput=${renderer.getHDROutputMode()} blitReady=${this._webgpuBlit?.initialized === true} ` +
+        `hasFloatReadback=${hasFloatReadback} size=${image.width}x${image.height} dtype=${image.dataType}`
+      );
+    }
+
     // Try WebGPU HDR blit path when WebGL2 has no native HDR output
     if (!isHDROutput && this._webgpuBlit?.initialized && hasFloatReadback) {
       return this.renderHDRWithWebGPUBlit(renderer, image, displayWidth, displayHeight);
@@ -394,7 +413,14 @@ export class ViewerGLRenderer {
     const state = this.buildRenderState();
     if (isHDROutput) {
       state.colorAdjustments = { ...state.colorAdjustments, gamma: 1 };
-      state.toneMappingState = { enabled: false, operator: 'off' };
+      state.displayColor = { ...state.displayColor, transferFunction: 0, displayGamma: 1, displayBrightness: 1 };
+      // Only disable tone mapping for HLG/PQ content — the transfer function
+      // already encodes dynamic range for the display. For linear float content
+      // (gainmap, EXR), preserve user's tone mapping to compress the range.
+      const tf = image.metadata?.transferFunction;
+      if (tf === 'hlg' || tf === 'pq') {
+        state.toneMappingState = { enabled: false, operator: 'off' };
+      }
     }
 
     // Scene luminance analysis: needed for Drago (always) and auto-exposure (when enabled)
@@ -441,6 +467,20 @@ export class ViewerGLRenderer {
     state.gamutMapping = this.detectGamutMapping(image);
 
     PerfTrace.end('buildRenderState');
+
+    // Debug: log render state applied to HDR path (once per image change)
+    if (this._lastRenderedImage?.deref() !== image) {
+      console.log(
+        `[HDR Render] state: isHDROutput=${isHDROutput}` +
+        ` toneMapping=${state.toneMappingState.enabled ? state.toneMappingState.operator : 'OFF'}` +
+        ` displayTransfer=${state.displayColor.transferFunction}` +
+        ` displayGamma=${state.displayColor.displayGamma}` +
+        ` displayBrightness=${state.displayColor.displayBrightness}` +
+        ` exposure=${state.colorAdjustments.exposure}` +
+        ` gamma=${state.colorAdjustments.gamma}` +
+        ` gamutMapping=${state.gamutMapping?.mode ?? 'none'}`
+      );
+    }
 
     PerfTrace.begin('applyRenderState');
     renderer.applyRenderState(state);
@@ -489,7 +529,19 @@ export class ViewerGLRenderer {
     PerfTrace.begin('blit.buildRenderState');
     const state = this.buildRenderState();
     state.colorAdjustments = { ...state.colorAdjustments, gamma: 1 };
-    state.displayColor = { ...state.displayColor, transferFunction: 0, displayGamma: 1 };
+    state.displayColor = { ...state.displayColor, transferFunction: 0, displayGamma: 1, displayBrightness: 1 };
+
+    // Debug: log blit render state (once per image change)
+    if (this._lastRenderedImage?.deref() !== image) {
+      console.log(
+        `[HDR Blit] state:` +
+        ` toneMapping=${state.toneMappingState.enabled ? state.toneMappingState.operator : 'OFF'}` +
+        ` displayTransfer=${state.displayColor.transferFunction}` +
+        ` exposure=${state.colorAdjustments.exposure}` +
+        ` gamma=${state.colorAdjustments.gamma}`
+      );
+    }
+
     renderer.applyRenderState(state);
     PerfTrace.end('blit.buildRenderState');
 
@@ -502,11 +554,15 @@ export class ViewerGLRenderer {
       return true;
     }
     // Render to RGBA16F FBO and read float pixels.
-    // Prefer async PBO readback which returns previous frame's data immediately,
-    // eliminating the 8-25ms GPU sync stall. Falls back to sync if unavailable.
+    // Use sync readback when shader state changed (hasPending=true) so the user
+    // sees immediate visual feedback after operator/setting changes. Use async
+    // PBO readback (1-frame lag) only for continuous playback where the 16ms
+    // latency is imperceptible but avoiding the 8-25ms GPU sync stall matters.
     PerfTrace.begin('blit.FBO+readPixels');
-    const pixels = renderer.renderImageToFloatAsync
-      ? renderer.renderImageToFloatAsync(image, displayWidth, displayHeight)
+    const hasAsyncReadback = typeof renderer.renderImageToFloatAsync === 'function';
+    const useAsync = hasAsyncReadback && !hasPending;
+    const pixels = useAsync
+      ? renderer.renderImageToFloatAsync!(image, displayWidth, displayHeight)
       : renderer.renderImageToFloat!(image, displayWidth, displayHeight);
     PerfTrace.end('blit.FBO+readPixels');
     if (!pixels) return false;

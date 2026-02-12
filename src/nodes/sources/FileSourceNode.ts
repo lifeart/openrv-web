@@ -614,16 +614,32 @@ export class FileSourceNode extends BaseSourceNode {
   ): Promise<void> {
     console.log(`[FileSource] Loading JPEG gainmap: ${name}, headroom=${info.headroom}`);
     const result = await decodeGainmapToFloat32(buffer, info);
-    console.log(`[FileSource] Gainmap decoded: ${result.width}x${result.height}, float32, ${result.channels}ch`);
+    // Compute peak pixel value for diagnostics
+    let peakValue = 0;
+    for (let i = 0; i < Math.min(result.data.length, 500000); i++) {
+      if (result.data[i]! > peakValue) peakValue = result.data[i]!;
+    }
+    console.log(
+      `[FileSource] Gainmap decoded: ${result.width}x${result.height}, float32, ${result.channels}ch` +
+      `, peak=${peakValue.toFixed(3)}, headroom=${info.headroom}`
+    );
 
     const metadata: ImageMetadata = {
       colorSpace: 'linear',
       sourcePath: originalUrl ?? url,
+      transferFunction: 'srgb',
+      colorPrimaries: 'bt709',
       attributes: {
         formatName: 'jpeg-gainmap',
         headroom: info.headroom,
+        peakValue,
       },
     };
+
+    console.log(
+      `[FileSource] Gainmap IPImage metadata: tf=${metadata.transferFunction} cp=${metadata.colorPrimaries}` +
+      ` cs=${metadata.colorSpace} format=${metadata.attributes?.formatName}`
+    );
 
     this.cachedIPImage = new IPImage({
       width: result.width,

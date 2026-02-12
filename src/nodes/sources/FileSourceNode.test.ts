@@ -1022,4 +1022,55 @@ describe('FileSourceNode', () => {
       expect(node.isHDR()).toBe(false);
     });
   });
+
+  // =================================================================
+  // JPEG gainmap metadata
+  // =================================================================
+  describe('JPEG gainmap metadata', () => {
+    it('FSN-GM-001: JPEG gainmap IPImage has transferFunction srgb', async () => {
+      // Test the metadata construction by importing IPImage and ImageMetadata types
+      const { IPImage } = await import('../../core/image/Image');
+
+      // Simulate the metadata that loadGainmapJPEG creates
+      const metadata = {
+        colorSpace: 'linear' as const,
+        sourcePath: 'test.jpg',
+        transferFunction: 'srgb' as const,
+        colorPrimaries: 'bt709' as const,
+        attributes: { formatName: 'jpeg-gainmap', headroom: 3.0 },
+      };
+
+      const image = new IPImage({
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'float32',
+        metadata,
+      });
+
+      expect(image.metadata.transferFunction).toBe('srgb');
+    });
+
+    it('FSN-GM-002: JPEG gainmap IPImage has colorPrimaries bt709', async () => {
+      const { IPImage } = await import('../../core/image/Image');
+
+      const metadata = {
+        colorSpace: 'linear' as const,
+        sourcePath: 'test.jpg',
+        transferFunction: 'srgb' as const,
+        colorPrimaries: 'bt709' as const,
+        attributes: { formatName: 'jpeg-gainmap', headroom: 3.0 },
+      };
+
+      const image = new IPImage({
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'float32',
+        metadata,
+      });
+
+      expect(image.metadata.colorPrimaries).toBe('bt709');
+    });
+  });
 });

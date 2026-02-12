@@ -51,13 +51,24 @@ export function handleSourceLoaded(
   if (isHDR) {
     const formatName = source?.fileSourceNode?.formatName ?? 'unknown';
 
+    const isFileHDR = !!source?.fileSourceNode?.isHDR?.();
     if (isHDRDisplay) {
-      // HDR display: no tone mapping needed — the display can show the full range.
-      // renderHDRWithWebGL() will render with gamma=1 and tone mapping disabled.
-      // Scopes show the HDR output range.
-      console.log(`[HDR] Detected HDR content (format: ${formatName}), HDR display available — no tone mapping`);
       const glRenderer = viewer.getGLRenderer?.();
       const headroom = glRenderer?.getHDRHeadroom?.() ?? 4.0;
+
+      if (isFileHDR) {
+        // HDR file (gainmap, EXR) on HDR display: linear float data has no
+        // inherent dynamic-range compression. Content peaks (e.g. 20x SDR white)
+        // often far exceed display headroom (3-6x). Without tone mapping,
+        // mid-tones are crushed and highlights clip hard.
+        console.log(`[HDR] HDR file (${formatName}) on HDR display — enabling ACES tone mapping`);
+        context.getToneMappingControl().setState({ enabled: true, operator: 'aces' });
+      } else {
+        // HDR video (HLG/PQ) on HDR display: the transfer function already
+        // encodes the dynamic range for the display. No tone mapping needed.
+        console.log(`[HDR] HDR video on HDR display — no tone mapping`);
+      }
+
       histogram.setHDRMode(true, Math.max(headroom, 4.0));
       scopesProcessor?.setHDRMode(true, Math.max(headroom, 4.0));
     } else {

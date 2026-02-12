@@ -5,7 +5,9 @@
  * Since Renderer requires WebGL2, these tests mock the internal methods.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { ShaderStateManager, DIRTY_DISPLAY } from './ShaderStateManager';
+import type { DisplayColorConfig } from './RenderState';
 
 // We test the Y-flip logic independently since it's the most error-prone part.
 // The renderForScopes method is integration-tested via e2e.
@@ -126,5 +128,114 @@ describe('floatRGBAToImageData utility', () => {
     const floatData = new Float32Array([-0.5, 0.0, 0.0, 1.0]);
     const imageData = floatRGBAToImageData(floatData, 1, 1);
     expect(imageData.data[0]).toBe(0);
+  });
+});
+
+/**
+ * Scope rendering display state neutralization tests.
+ *
+ * The Renderer.renderForScopes path (renderImageToFloatAsyncForScopes /
+ * renderImageToFloatSync) neutralizes display settings via
+ * stateManager.setDisplayColorState(SCOPE_DISPLAY_CONFIG) before rendering
+ * and restores after. These tests verify the save/restore contract through
+ * the ShaderStateManager directly, since full Renderer instantiation requires
+ * WebGL2.
+ */
+describe('Scope rendering display state neutralization', () => {
+  const SCOPE_DISPLAY_CONFIG: DisplayColorConfig = {
+    transferFunction: 0, displayGamma: 1, displayBrightness: 1, customGamma: 2.2,
+  };
+
+  let mgr: ShaderStateManager;
+
+  beforeEach(() => {
+    mgr = new ShaderStateManager();
+  });
+
+  it('RFS-020: scope config is independent of display transfer setting', () => {
+    mgr.setDisplayColorState({
+      transferFunction: 3,
+      displayGamma: 1,
+      displayBrightness: 1,
+      customGamma: 2.2,
+    });
+
+    // Save, apply scope config, verify
+    const prev = mgr.getDisplayColorState();
+    mgr.setDisplayColorState(SCOPE_DISPLAY_CONFIG);
+    const active = mgr.getDisplayColorState();
+
+    expect(active.transferFunction).toBe(0);
+    expect(prev.transferFunction).toBe(3);
+
+    // Restore
+    mgr.setDisplayColorState(prev);
+    expect(mgr.getDisplayColorState().transferFunction).toBe(3);
+  });
+
+  it('RFS-021: scope config is independent of display gamma setting', () => {
+    mgr.setDisplayColorState({
+      transferFunction: 0,
+      displayGamma: 2.4,
+      displayBrightness: 1,
+      customGamma: 2.2,
+    });
+
+    const prev = mgr.getDisplayColorState();
+    mgr.setDisplayColorState(SCOPE_DISPLAY_CONFIG);
+    const active = mgr.getDisplayColorState();
+
+    expect(active.displayGamma).toBe(1);
+    expect(prev.displayGamma).toBe(2.4);
+
+    mgr.setDisplayColorState(prev);
+    expect(mgr.getDisplayColorState().displayGamma).toBe(2.4);
+  });
+
+  it('RFS-022: scope config is independent of display brightness setting', () => {
+    mgr.setDisplayColorState({
+      transferFunction: 0,
+      displayGamma: 1,
+      displayBrightness: 2.0,
+      customGamma: 2.2,
+    });
+
+    const prev = mgr.getDisplayColorState();
+    mgr.setDisplayColorState(SCOPE_DISPLAY_CONFIG);
+    const active = mgr.getDisplayColorState();
+
+    expect(active.displayBrightness).toBe(1);
+    expect(prev.displayBrightness).toBe(2.0);
+
+    mgr.setDisplayColorState(prev);
+    expect(mgr.getDisplayColorState().displayBrightness).toBe(2.0);
+  });
+
+  it('RFS-023: display state is fully restored after scope rendering pattern', () => {
+    const userConfig: DisplayColorConfig = {
+      transferFunction: 3,
+      displayGamma: 2.4,
+      displayBrightness: 1.5,
+      customGamma: 1.8,
+    };
+    mgr.setDisplayColorState(userConfig);
+
+    // Simulate scope render: save → set neutral → restore
+    const prev = mgr.getDisplayColorState();
+    mgr.setDisplayColorState(SCOPE_DISPLAY_CONFIG);
+
+    // During scope render, display state should be neutral
+    const duringScope = mgr.getDisplayColorState();
+    expect(duringScope).toEqual(SCOPE_DISPLAY_CONFIG);
+
+    // Restore
+    mgr.setDisplayColorState(prev);
+
+    // After restore, display state should match original user config
+    const restored = mgr.getDisplayColorState();
+    expect(restored).toEqual(userConfig);
+
+    // And DIRTY_DISPLAY should be set (so next main render pushes uniforms)
+    expect(mgr.getDirtyFlags().has(DIRTY_DISPLAY)).toBe(true);
   });
 });

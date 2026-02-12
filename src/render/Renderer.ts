@@ -30,6 +30,11 @@ import {
 
 const log = new Logger('Renderer');
 
+/** Neutral display color config for scope rendering — no display OETF, gamma, or brightness. */
+const SCOPE_DISPLAY_CONFIG: DisplayColorConfig = {
+  transferFunction: 0, displayGamma: 1, displayBrightness: 1, customGamma: 2.2,
+};
+
 // Re-export TONE_MAPPING_OPERATOR_CODES for backward compatibility
 export { TONE_MAPPING_OPERATOR_CODES } from './ShaderStateManager';
 
@@ -402,6 +407,19 @@ export class Renderer implements RendererBackend {
       inputTransferCode = INPUT_TRANSFER_PQ;
     }
     this.displayShader.setUniformInt('u_inputTransfer', inputTransferCode);
+
+    // Debug: log shader uniforms for HDR pipeline diagnosis (once per texture update)
+    if (image.textureNeedsUpdate === false) {
+      // Only log on first render after texture upload to avoid spam
+    } else {
+      const dc = this.stateManager.getDisplayColorState();
+      log.info(
+        `renderImage: outputMode=${this.hdrOutputMode}` +
+        ` inputTransfer=${inputTransferCode} (metadata.tf=${image.metadata.transferFunction ?? 'unset'})` +
+        ` displayTransfer=${dc.transferFunction} displayGamma=${dc.displayGamma} displayBrightness=${dc.displayBrightness}` +
+        ` size=${image.width}x${image.height} dtype=${image.dataType} channels=${image.channels}`
+      );
+    }
 
     // Set texture rotation for VideoFrame sources that don't have container rotation applied.
     // 0=0°, 1=90°CW, 2=180°, 3=270°CW
@@ -969,6 +987,10 @@ export class Renderer implements RendererBackend {
       this.scopePBOCachedPixels = new Float32Array(pixelCount);
     }
 
+    // Neutralize display settings so scopes show scene-referred data
+    const prevDisplayState = this.stateManager.getDisplayColorState();
+    this.stateManager.setDisplayColorState(SCOPE_DISPLAY_CONFIG);
+
     // Step 1: Render current frame to scope FBO
     const prevViewport = gl.getParameter(gl.VIEWPORT) as Int32Array;
     const prevHdrMode = this.hdrOutputMode;
@@ -1016,6 +1038,9 @@ export class Renderer implements RendererBackend {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(prevViewport[0]!, prevViewport[1]!, prevViewport[2]!, prevViewport[3]!);
 
+    // Restore display state
+    this.stateManager.setDisplayColorState(prevDisplayState);
+
     return this.scopePBOCachedPixels;
   }
 
@@ -1025,6 +1050,10 @@ export class Renderer implements RendererBackend {
   private renderImageToFloatSync(image: IPImage, width: number, height: number, fbo: WebGLFramebuffer): Float32Array | null {
     const gl = this.gl;
     if (!gl || !this.displayShader) return null;
+
+    // Neutralize display settings so scopes show scene-referred data
+    const prevDisplayState = this.stateManager.getDisplayColorState();
+    this.stateManager.setDisplayColorState(SCOPE_DISPLAY_CONFIG);
 
     const prevViewport = gl.getParameter(gl.VIEWPORT) as Int32Array;
     const prevHdrMode = this.hdrOutputMode;
@@ -1042,6 +1071,9 @@ export class Renderer implements RendererBackend {
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(prevViewport[0]!, prevViewport[1]!, prevViewport[2]!, prevViewport[3]!);
+
+    // Restore display state
+    this.stateManager.setDisplayColorState(prevDisplayState);
 
     return gl.getError() === gl.NO_ERROR ? pixels : null;
   }
@@ -1536,6 +1568,10 @@ export class Renderer implements RendererBackend {
       gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA32F, size, size, size, 0, gl.RGBA, gl.FLOAT, rgbaData);
       this.stateManager.clearTextureDirtyFlag('lut3DDirty');
     }
+  }
+
+  getDisplayColorState(): DisplayColorConfig {
+    return this.stateManager.getDisplayColorState();
   }
 
   setDisplayColorState(state: DisplayColorConfig): void {

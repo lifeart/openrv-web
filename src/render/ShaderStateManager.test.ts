@@ -11,6 +11,7 @@ import {
   ShaderStateManager,
   DIRTY_LUT3D,
   DIRTY_BACKGROUND,
+  DIRTY_DISPLAY,
   DIRTY_GAMUT_MAPPING,
   ALL_DIRTY_FLAGS,
 } from './ShaderStateManager';
@@ -318,6 +319,61 @@ describe('ShaderStateManager', () => {
       mgr.applyRenderState(state);
 
       expect(flags.has(DIRTY_GAMUT_MAPPING)).toBe(true);
+    });
+  });
+
+  // =================================================================
+  // getDisplayColorState
+  // =================================================================
+
+  describe('getDisplayColorState', () => {
+    it('SSM-070: getDisplayColorState returns initial defaults', () => {
+      const dc = mgr.getDisplayColorState();
+      // Default displayTransferCode is DISPLAY_TRANSFER_SRGB = 1
+      expect(dc.transferFunction).toBe(1);
+      expect(dc.displayGamma).toBe(1.0);
+      expect(dc.displayBrightness).toBe(1.0);
+      expect(dc.customGamma).toBe(2.2);
+    });
+
+    it('SSM-071: getDisplayColorState reflects values after setDisplayColorState', () => {
+      mgr.setDisplayColorState({
+        transferFunction: 3,
+        displayGamma: 2.4,
+        displayBrightness: 1.5,
+        customGamma: 1.8,
+      });
+      const dc = mgr.getDisplayColorState();
+      expect(dc.transferFunction).toBe(3);
+      expect(dc.displayGamma).toBe(2.4);
+      expect(dc.displayBrightness).toBe(1.5);
+      expect(dc.customGamma).toBe(1.8);
+    });
+
+    it('SSM-072: getDisplayColorState round-trips all four fields', () => {
+      const config = {
+        transferFunction: 2,
+        displayGamma: 0.5,
+        displayBrightness: 2.0,
+        customGamma: 3.0,
+      };
+      mgr.setDisplayColorState(config);
+      const result = mgr.getDisplayColorState();
+      expect(result).toEqual(config);
+    });
+
+    it('SSM-073: setDisplayColorState marks DIRTY_DISPLAY flag', () => {
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+      expect(flags.has(DIRTY_DISPLAY)).toBe(false);
+
+      mgr.setDisplayColorState({
+        transferFunction: 1,
+        displayGamma: 1.0,
+        displayBrightness: 1.0,
+        customGamma: 2.2,
+      });
+      expect(flags.has(DIRTY_DISPLAY)).toBe(true);
     });
   });
 });

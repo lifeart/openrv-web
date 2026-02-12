@@ -857,6 +857,37 @@ describe('Renderer SDR Display Transfer Override (regression)', () => {
     expect(brightnessVals!.length).toBeGreaterThanOrEqual(1);
     expect(brightnessVals![brightnessVals!.length - 1]).toBe(1.2);
   });
+
+  it('REN-SDR-DT-005: renderImage with HDR mode applies display transfer from state (unchanged)', () => {
+    const renderer = new Renderer();
+    const { getDisplayTransferCalls } = initWithDisplayTransferTracking(renderer);
+
+    // Set display color state with rec709 transfer (code 2)
+    renderer.setDisplayColorState({
+      transferFunction: 2,
+      displayGamma: 1.0,
+      displayBrightness: 1.0,
+      customGamma: 2.2,
+    });
+
+    renderer.resize(100, 100);
+
+    // Create a minimal IPImage for the HDR render path
+    const image = new IPImage({
+      width: 10,
+      height: 10,
+      channels: 4,
+      dataType: 'uint8',
+    });
+
+    renderer.renderImage(image);
+
+    const calls = getDisplayTransferCalls();
+    // renderImage should use the display transfer code from state (2), NOT override it.
+    // The override happens at the ViewerGLRenderer layer via RenderState, not in Renderer.
+    expect(calls.length).toBeGreaterThanOrEqual(1);
+    expect(calls[calls.length - 1]).toBe(2);
+  });
 });
 
 /**

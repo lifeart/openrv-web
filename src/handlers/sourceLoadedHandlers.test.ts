@@ -273,7 +273,7 @@ describe('handleSourceLoaded', () => {
     expect(context.getToneMappingControl().setState).not.toHaveBeenCalled();
   });
 
-  it('SLH-U018: HDR display + HDR content → no tone mapping, scopes HDR', () => {
+  it('SLH-U018: HDR display + HDR file content → ACES tone mapping, scopes HDR', () => {
     const context = createMockContext({
       currentSource: {
         name: 'test.exr',
@@ -287,8 +287,8 @@ describe('handleSourceLoaded', () => {
 
     handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
 
-    // HDR display: no tone mapping needed
-    expect(context.getToneMappingControl().setState).not.toHaveBeenCalled();
+    // HDR file on HDR display: tone mapping enabled to compress linear float range
+    expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: true, operator: 'aces' });
     // Scopes show HDR range
     expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(true, expect.any(Number));
     const headroom = (context.getHistogram().setHDRMode as ReturnType<typeof vi.fn>).mock.calls[0]![1];
@@ -329,6 +329,61 @@ describe('handleSourceLoaded', () => {
 
     const headroom = (context.getHistogram().setHDRMode as ReturnType<typeof vi.fn>).mock.calls[0]![1];
     expect(headroom).toBe(8.0);
+  });
+
+  it('SLH-U021a: HDR display + JPEG gainmap file → ACES tone mapping', () => {
+    const context = createMockContext({
+      currentSource: {
+        name: 'photo.jpg',
+        width: 4032,
+        height: 3024,
+        fileSourceNode: { isHDR: () => true, formatName: 'jpeg-gainmap' },
+      },
+    });
+    (context.getViewer() as any).isDisplayHDRCapable = vi.fn(() => true);
+
+    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+
+    // Gainmap is file HDR — tone mapping must compress linear float range
+    expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: true, operator: 'aces' });
+    expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(true, expect.any(Number));
+  });
+
+  it('SLH-U021b: HDR display + HDR video (no fileSourceNode) → no tone mapping', () => {
+    const context = createMockContext({
+      currentSource: {
+        name: 'clip.mov',
+        width: 3840,
+        height: 2160,
+        videoSourceNode: { isHDR: () => true },
+        // No fileSourceNode — video-only source
+      },
+    });
+    (context.getViewer() as any).isDisplayHDRCapable = vi.fn(() => true);
+
+    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+
+    // Video HDR: display handles HLG/PQ natively — no tone mapping
+    expect(context.getToneMappingControl().setState).not.toHaveBeenCalled();
+    expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(true, expect.any(Number));
+  });
+
+  it('SLH-U021c: SDR display + JPEG gainmap → ACES + gamma 2.2 (unchanged)', () => {
+    const context = createMockContext({
+      currentSource: {
+        name: 'photo.jpg',
+        width: 4032,
+        height: 3024,
+        fileSourceNode: { isHDR: () => true, formatName: 'jpeg-gainmap' },
+      },
+    });
+    // Default: SDR display (isDisplayHDRCapable returns false)
+
+    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+
+    expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: true, operator: 'aces' });
+    expect(context.getColorControls().setAdjustments).toHaveBeenCalledWith({ gamma: 2.2 });
+    expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(false);
   });
 });
 
