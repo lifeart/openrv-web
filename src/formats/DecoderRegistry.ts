@@ -16,8 +16,9 @@ import { isTIFFFile, isFloatTIFF } from './TIFFFloatDecoder';
 import { isGainmapJPEG } from './JPEGGainmapDecoder';
 import { isHDRFile } from './HDRDecoder';
 import { isJXLFile } from './JXLDecoder';
+import { isGainmapHEIC } from './HEICGainmapDecoder';
 
-export type FormatName = 'exr' | 'dpx' | 'cineon' | 'tiff' | 'jpeg-gainmap' | 'hdr' | 'jxl' | null;
+export type FormatName = 'exr' | 'dpx' | 'cineon' | 'tiff' | 'jpeg-gainmap' | 'heic-gainmap' | 'hdr' | 'jxl' | null;
 
 /** Result returned by FormatDecoder.decode() and detectAndDecode() */
 export interface DecodeResult {
@@ -160,6 +161,34 @@ const jpegGainmapDecoder: FormatDecoder = {
 };
 
 /**
+ * HEIC Gainmap format decoder adapter
+ * Detection is sync (ftyp brand + auxC check); decoding lazy-loads the full module.
+ */
+const heicGainmapDecoder: FormatDecoder = {
+  formatName: 'heic-gainmap',
+  canDecode: isGainmapHEIC,
+  async decode(buffer: ArrayBuffer) {
+    const { parseHEICGainmapInfo, decodeHEICGainmapToFloat32 } = await import('./HEICGainmapDecoder');
+    const info = parseHEICGainmapInfo(buffer);
+    if (!info) {
+      throw new Error('Failed to parse HEIC gainmap metadata');
+    }
+    const result = await decodeHEICGainmapToFloat32(buffer, info);
+    return {
+      width: result.width,
+      height: result.height,
+      data: result.data,
+      channels: result.channels,
+      colorSpace: 'linear',
+      metadata: {
+        formatName: 'heic-gainmap',
+        headroom: info.headroom,
+      },
+    };
+  },
+};
+
+/**
  * Radiance HDR format decoder adapter
  * Detection is sync (magic byte check); decoding lazy-loads the full module.
  */
@@ -216,6 +245,7 @@ export class DecoderRegistry {
     this.decoders.push(cineonDecoder);
     this.decoders.push(tiffDecoder);
     this.decoders.push(jpegGainmapDecoder);
+    this.decoders.push(heicGainmapDecoder);
     this.decoders.push(hdrDecoder);
     this.decoders.push(jxlDecoder);
   }

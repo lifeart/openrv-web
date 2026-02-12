@@ -28,7 +28,7 @@ export interface AVIFGainmapInfo {
 // ISOBMFF box traversal helpers
 // =============================================================================
 
-function readBoxType(view: DataView, offset: number): string {
+export function readBoxType(view: DataView, offset: number): string {
   return String.fromCharCode(
     view.getUint8(offset),
     view.getUint8(offset + 1),
@@ -37,7 +37,7 @@ function readBoxType(view: DataView, offset: number): string {
   );
 }
 
-interface BoxInfo {
+export interface BoxInfo {
   type: string;
   /** Byte offset where the box starts (box header) */
   boxStart: number;
@@ -51,7 +51,7 @@ interface BoxInfo {
  * Read box header at given offset. Returns null if not enough bytes.
  * For FullBox types, set isFullBox=true to skip version+flags (4 bytes).
  */
-function readBox(view: DataView, offset: number, end: number, isFullBox = false): BoxInfo | null {
+export function readBox(view: DataView, offset: number, end: number, isFullBox = false): BoxInfo | null {
   if (offset + 8 > end) return null;
   let boxSize = view.getUint32(offset);
   const type = readBoxType(view, offset + 4);
@@ -85,7 +85,7 @@ function readBox(view: DataView, offset: number, end: number, isFullBox = false)
 /**
  * Find a box by type within a range.
  */
-function findBox(view: DataView, type: string, start: number, end: number, isFullBox = false): BoxInfo | null {
+export function findBox(view: DataView, type: string, start: number, end: number, isFullBox = false): BoxInfo | null {
   let offset = start;
   while (offset + 8 <= end) {
     const box = readBox(view, offset, end, isFullBox);
@@ -159,7 +159,7 @@ function hasGainmapAuxC(view: DataView, start: number, end: number): boolean {
   return false;
 }
 
-function readNullTerminatedString(view: DataView, start: number, end: number): string {
+export function readNullTerminatedString(view: DataView, start: number, end: number): string {
   const chars: string[] = [];
   for (let i = start; i < end; i++) {
     const byte = view.getUint8(i);
@@ -173,12 +173,12 @@ function readNullTerminatedString(view: DataView, start: number, end: number): s
 // Parsing
 // =============================================================================
 
-interface ItemEntry {
+export interface ItemEntry {
   id: number;
   type: string;
 }
 
-interface ItemLocation {
+export interface ItemLocation {
   itemId: number;
   constructionMethod: number;
   baseOffset: number;
@@ -275,7 +275,7 @@ export function parseGainmapAVIF(buffer: ArrayBuffer): AVIFGainmapInfo | null {
 /**
  * Parse pitm (primary item ID) box.
  */
-function parsePitm(view: DataView, start: number, end: number): number | null {
+export function parsePitm(view: DataView, start: number, end: number): number | null {
   const pitm = findBox(view, 'pitm', start, end, true);
   if (!pitm) return null;
 
@@ -294,7 +294,7 @@ function parsePitm(view: DataView, start: number, end: number): number | null {
 /**
  * Parse iinf box → list of infe entries with item IDs and types.
  */
-function parseIinf(view: DataView, metaStart: number, metaEnd: number): ItemEntry[] {
+export function parseIinf(view: DataView, metaStart: number, metaEnd: number): ItemEntry[] {
   const iinf = findBox(view, 'iinf', metaStart, metaEnd, true);
   if (!iinf) return [];
 
@@ -384,7 +384,7 @@ function findGainmapPropertyIndex(view: DataView, ipcoStart: number, ipcoEnd: nu
  * Parse ipma box to find which item ID is associated with a given property index.
  * Takes the full BoxInfo so version can be read from the box header.
  */
-function findItemWithProperty(view: DataView, ipma: BoxInfo, propertyIndex: number): number {
+export function findItemWithProperty(view: DataView, ipma: BoxInfo, propertyIndex: number): number {
   let pos = ipma.dataStart;
 
   // Read version and flags from FullBox header
@@ -438,7 +438,7 @@ function findItemWithProperty(view: DataView, ipma: BoxInfo, propertyIndex: numb
  * Find auxiliary item ID from iref box (auxl reference type).
  * Takes the full BoxInfo so version can be read from the box header.
  */
-function findAuxlItem(view: DataView, iref: BoxInfo, primaryItemId: number): number {
+export function findAuxlItem(view: DataView, iref: BoxInfo, primaryItemId: number): number {
   let offset = iref.dataStart;
   // Read version from FullBox header
   const version = view.getUint8(iref.boxStart + 8);
@@ -484,7 +484,7 @@ function findAuxlItem(view: DataView, iref: BoxInfo, primaryItemId: number): num
 /**
  * Parse iloc box to get item locations.
  */
-function parseIloc(view: DataView, metaStart: number, metaEnd: number): ItemLocation[] {
+export function parseIloc(view: DataView, metaStart: number, metaEnd: number): ItemLocation[] {
   const iloc = findBox(view, 'iloc', metaStart, metaEnd, true);
   if (!iloc) return [];
 
@@ -592,7 +592,7 @@ function readSizedUint(view: DataView, offset: number, size: number): number {
 /**
  * Extract headroom from XMP metadata (mime items) or tmap box.
  */
-function extractHeadroom(
+export function extractHeadroom(
   view: DataView,
   buffer: ArrayBuffer,
   items: ItemEntry[],
@@ -690,7 +690,7 @@ function parseTmapHeadroom(view: DataView, start: number, end: number): number |
 /**
  * sRGB to linear conversion (gamma decode)
  */
-function srgbToLinear(s: number): number {
+export function srgbToLinear(s: number): number {
   if (s <= 0.04045) {
     return s / 12.92;
   }

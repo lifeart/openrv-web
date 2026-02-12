@@ -62,3 +62,13 @@ export {
   decodeJXL,
   type JXLDecodeResult,
 } from './JXLDecoder';
+export {
+  isHEICFile,
+  isGainmapHEIC,
+  parseHEICGainmapInfo,
+  parseHEICColorInfo,
+  decodeHEICGainmapToFloat32,
+  buildStandaloneHEIC,
+  type HEICGainmapInfo,
+  type HEICColorInfo,
+} from './HEICGainmapDecoder';

@@ -40,6 +40,10 @@ export interface DisplayCapabilities {
   /** True if canvas.configureHighDynamicRange() API is available */
   canvasExtendedHDR: boolean;
 
+  // HEIC
+  /** True if browser can natively decode image/heic (Safari 17+) */
+  heicDecode: boolean;
+
   // VideoFrame
   /** True if VideoFrame API is available (for HDR video texImage2D upload) */
   videoFrameTexImage: boolean;
@@ -84,6 +88,8 @@ export const DEFAULT_CAPABILITIES: DisplayCapabilities = {
 
   webglDrawingBufferStorage: false,
   canvasExtendedHDR: false,
+
+  heicDecode: false,
 
   videoFrameTexImage: false,
 
@@ -293,6 +299,14 @@ export function detectDisplayCapabilities(): DisplayCapabilities {
   // --- WebGPU availability ---
   try {
     caps.webgpuAvailable = typeof navigator !== 'undefined' && 'gpu' in navigator;
+  } catch { /* stays false */ }
+
+  // --- HEIC decode availability (HEVC image support, Safari 17+) ---
+  try {
+    if (typeof document !== 'undefined') {
+      const video = document.createElement('video');
+      caps.heicDecode = video.canPlayType('video/mp4; codecs="hvc1"') !== '';
+    }
   } catch { /* stays false */ }
 
   // --- VideoFrame availability ---

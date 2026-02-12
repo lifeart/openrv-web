@@ -21,6 +21,15 @@ import { decoderRegistry } from '../../formats/DecoderRegistry';
 import { isGainmapJPEG, parseGainmapJPEG, decodeGainmapToFloat32 } from '../../formats/JPEGGainmapDecoder';
 import { isGainmapAVIF, parseGainmapAVIF, decodeAVIFGainmapToFloat32 } from '../../formats/AVIFGainmapDecoder';
 import { isJXLFile, isJXLContainer } from '../../formats/JXLDecoder';
+import {
+  isHEICFile,
+  isGainmapHEIC,
+  parseHEICGainmapInfo,
+  parseHEICColorInfo,
+  decodeHEICGainmapToFloat32,
+  type HEICGainmapInfo,
+  type HEICColorInfo,
+} from '../../formats/HEICGainmapDecoder';
 
 /**
  * Check if a filename has an EXR extension
@@ -86,6 +95,14 @@ function isAVIFExtension(filename: string): boolean {
 function isJXLExtension(filename: string): boolean {
   const ext = filename.split('.').pop()?.toLowerCase();
   return ext === 'jxl';
+}
+
+/**
+ * Check if a filename has a HEIC/HEIF extension
+ */
+function isHEICExtension(filename: string): boolean {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  return ext === 'heic' || ext === 'heif';
 }
 
 /**
@@ -750,6 +767,72 @@ export class FileSourceNode extends BaseSourceNode {
       }
     }
 
+    // Check if this is a HEIC file - detect HDR via gainmap or colr(nclx)
+    if (isHEICExtension(filename)) {
+      try {
+        const response = await fetch(url);
+        if (response.ok) {
+          const buffer = await response.arrayBuffer();
+          if (isHEICFile(buffer)) {
+            // Check for gainmap FIRST (gainmap HEIC may also have nclx HDR markers)
+            if (isGainmapHEIC(buffer)) {
+              const gmInfo = parseHEICGainmapInfo(buffer);
+              if (gmInfo) {
+                await this.loadGainmapHEIC(buffer, gmInfo, filename, url, originalUrl);
+                return;
+              }
+            }
+            // Check nclx colr for HLG/PQ HDR (Safari only - VideoFrame path)
+            const colorInfo = parseHEICColorInfo(buffer);
+            if (colorInfo?.isHDR) {
+              await this.loadHEICHDR(buffer, colorInfo, filename, url, originalUrl);
+              return;
+            }
+            // SDR fallback: blob URL (Safari can decode HEIC natively)
+            const blob = new Blob([buffer], { type: 'image/heic' });
+            const blobUrl = URL.createObjectURL(blob);
+            return new Promise<void>((resolve, reject) => {
+              const img = new Image();
+              img.crossOrigin = 'anonymous';
+              img.onload = () => {
+                URL.revokeObjectURL(blobUrl);
+                this.image = img;
+                this.url = url;
+                this.isEXR = false;
+                this._isHDRFormat = false;
+                this._formatName = 'heic';
+                this.metadata = {
+                  name: filename,
+                  width: img.naturalWidth,
+                  height: img.naturalHeight,
+                  duration: 1,
+                  fps: 24,
+                };
+                this.properties.setValue('url', url);
+                if (originalUrl) {
+                  this.properties.setValue('originalUrl', originalUrl);
+                }
+                this.properties.setValue('width', img.naturalWidth);
+                this.properties.setValue('height', img.naturalHeight);
+                this.properties.setValue('isHDR', false);
+                this.markDirty();
+                this.cachedIPImage = null;
+                resolve();
+              };
+              img.onerror = () => {
+                URL.revokeObjectURL(blobUrl);
+                reject(new Error(`Failed to load HEIC image: ${url}`));
+              };
+              img.src = blobUrl;
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('[FileSource] HEIC loading failed, falling back to standard loading:', err);
+        // Fall through to standard image loading
+      }
+    }
+
     // Standard image loading via HTMLImageElement
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -1221,6 +1304,136 @@ export class FileSourceNode extends BaseSourceNode {
   }
 
   /**
+   * Load HEIC HDR file with gainmap
+   */
+  private async loadGainmapHEIC(
+    buffer: ArrayBuffer,
+    info: HEICGainmapInfo,
+    name: string,
+    url: string,
+    originalUrl?: string
+  ): Promise<void> {
+    const result = await decodeHEICGainmapToFloat32(buffer, info);
+
+    // Compute peak pixel value for metadata
+    let peakValue = 0;
+    for (let i = 0; i < Math.min(result.data.length, 500000); i++) {
+      if (result.data[i]! > peakValue) peakValue = result.data[i]!;
+    }
+
+    const metadata: ImageMetadata = {
+      colorSpace: 'linear',
+      sourcePath: originalUrl ?? url,
+      transferFunction: 'srgb',
+      colorPrimaries: 'bt709',
+      attributes: {
+        formatName: 'heic-gainmap',
+        headroom: info.headroom,
+        peakValue,
+      },
+    };
+
+    this.cachedIPImage = new IPImage({
+      width: result.width,
+      height: result.height,
+      channels: result.channels,
+      dataType: 'float32',
+      data: result.data.buffer as ArrayBuffer,
+      metadata,
+    });
+    this.cachedIPImage.metadata.frameNumber = 1;
+
+    this.url = url;
+    this.isEXR = false;
+    this._isHDRFormat = true;
+    this._formatName = 'heic-gainmap';
+    this.image = null;
+
+    this.metadata = {
+      name,
+      width: result.width,
+      height: result.height,
+      duration: 1,
+      fps: 24,
+    };
+
+    this.properties.setValue('url', url);
+    if (originalUrl) {
+      this.properties.setValue('originalUrl', originalUrl);
+    }
+    this.properties.setValue('width', result.width);
+    this.properties.setValue('height', result.height);
+    this.properties.setValue('isHDR', true);
+
+    this.canvasDirty = true;
+    this.markDirty();
+  }
+
+  /**
+   * Load HDR HEIC file using VideoFrame for GPU upload (preserves HDR values).
+   * Only works on Safari (which supports native HEVC decode).
+   */
+  private async loadHEICHDR(
+    buffer: ArrayBuffer,
+    colorInfo: HEICColorInfo,
+    name: string,
+    url: string,
+    originalUrl?: string
+  ): Promise<void> {
+    const blob = new Blob([buffer], { type: 'image/heic' });
+    const bitmap = await createImageBitmap(blob, { colorSpaceConversion: 'none' });
+    const videoFrame = new VideoFrame(bitmap, { timestamp: 0 });
+    bitmap.close();
+
+    const metadata: ImageMetadata = {
+      sourcePath: originalUrl ?? url,
+      frameNumber: 1,
+      transferFunction: colorInfo.transferFunction,
+      colorPrimaries: colorInfo.colorPrimaries,
+      colorSpace: colorInfo.colorPrimaries === 'bt2020' ? 'rec2020' : 'rec709',
+      attributes: {
+        hdr: true,
+        formatName: 'heic-hdr',
+      },
+    };
+
+    this.cachedIPImage = new IPImage({
+      width: videoFrame.displayWidth,
+      height: videoFrame.displayHeight,
+      channels: 4,
+      dataType: 'float32',
+      data: new ArrayBuffer(4), // minimal placeholder; VideoFrame is the pixel source
+      videoFrame,
+      metadata,
+    });
+
+    this.url = url;
+    this.isEXR = false;
+    this._isHDRFormat = true;
+    this._formatName = 'heic-hdr';
+    this.image = null;
+
+    this.metadata = {
+      name,
+      width: videoFrame.displayWidth,
+      height: videoFrame.displayHeight,
+      duration: 1,
+      fps: 24,
+    };
+
+    this.properties.setValue('url', url);
+    if (originalUrl) {
+      this.properties.setValue('originalUrl', originalUrl);
+    }
+    this.properties.setValue('width', videoFrame.displayWidth);
+    this.properties.setValue('height', videoFrame.displayHeight);
+    this.properties.setValue('isHDR', true);
+
+    this.canvasDirty = true;
+    this.markDirty();
+  }
+
+  /**
    * Load SDR JXL file from ArrayBuffer via @jsquash/jxl WASM decoder.
    */
   private async loadJXLFromBuffer(
@@ -1480,6 +1693,34 @@ export class FileSourceNode extends BaseSourceNode {
       } catch (err) {
         if (jxlBlobUrl) URL.revokeObjectURL(jxlBlobUrl);
         console.warn('[FileSource] JXL loading failed, falling back to standard loading:', err);
+        // Fall through to standard image loading
+      }
+    }
+
+    // Check if this is a HEIC file - detect HDR via gainmap or colr(nclx)
+    if (isHEICExtension(file.name)) {
+      try {
+        const buffer = await file.arrayBuffer();
+        if (isHEICFile(buffer)) {
+          // Check for gainmap FIRST
+          if (isGainmapHEIC(buffer)) {
+            const gmInfo = parseHEICGainmapInfo(buffer);
+            if (gmInfo) {
+              const url = URL.createObjectURL(file);
+              await this.loadGainmapHEIC(buffer, gmInfo, file.name, url);
+              return;
+            }
+          }
+          // Check nclx colr for HLG/PQ HDR
+          const colorInfo = parseHEICColorInfo(buffer);
+          if (colorInfo?.isHDR) {
+            const url = URL.createObjectURL(file);
+            await this.loadHEICHDR(buffer, colorInfo, file.name, url);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('[FileSource] HEIC HDR loading failed, falling back to standard loading:', err);
         // Fall through to standard image loading
       }
     }
