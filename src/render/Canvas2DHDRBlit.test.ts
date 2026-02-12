@@ -51,7 +51,7 @@ describe('Canvas2DHDRBlit', () => {
     document.createElement = vi.fn((tag: string) => {
       const el = origCreate(tag);
       if (tag === 'canvas') {
-        el.getContext = vi.fn(getContextFn) as any;
+        (el as HTMLCanvasElement).getContext = vi.fn(getContextFn) as any;
       }
       return el;
     }) as any;
@@ -145,7 +145,7 @@ describe('Canvas2DHDRBlit', () => {
       blit.uploadAndDisplay(pixels, 2, 2);
 
       expect(mockCtx.putImageData).toHaveBeenCalledTimes(1);
-      const imageData = mockCtx.putImageData.mock.calls[0][0];
+      const imageData = mockCtx.putImageData.mock.calls[0]![0];
       expect(imageData.width).toBe(2);
       expect(imageData.height).toBe(2);
     });
@@ -163,7 +163,7 @@ describe('Canvas2DHDRBlit', () => {
 
       blit.uploadAndDisplay(pixels, 2, 2);
 
-      const imageData = mockCtx.putImageData.mock.calls[0][0];
+      const imageData = mockCtx.putImageData.mock.calls[0]![0];
       const dst = imageData.data as Float32Array;
 
       // Canvas2D row 0 (top): should be green (from WebGL row 1)
@@ -178,7 +178,7 @@ describe('Canvas2DHDRBlit', () => {
     });
 
     it('should resize canvas when dimensions change', () => {
-      const { blit, mockCtx } = createInitializedBlit();
+      const { blit } = createInitializedBlit();
       const canvas = blit.getCanvas();
 
       blit.uploadAndDisplay(new Float32Array(4 * 4), 1, 1);
@@ -245,7 +245,7 @@ describe('Canvas2DHDRBlit', () => {
       const pixels = new Float32Array([3.5, 2.0, 1.5, 1.0]);
       blit.uploadAndDisplay(pixels, 1, 1);
 
-      const imageData = mockCtx.putImageData.mock.calls[0][0];
+      const imageData = mockCtx.putImageData.mock.calls[0]![0];
       const dst = imageData.data as Float32Array;
 
       // HDR values should be preserved, not clamped to 1.0
@@ -266,7 +266,7 @@ describe('Canvas2DHDRBlit', () => {
       ]);
       blit.uploadAndDisplay(pixels, 3, 1);
 
-      const imageData = mockCtx.putImageData.mock.calls[0][0];
+      const imageData = mockCtx.putImageData.mock.calls[0]![0];
       const dst = imageData.data as Float32Array;
 
       // Single row: input and output should be identical
@@ -314,7 +314,7 @@ describe('Canvas2DHDRBlit', () => {
 
       blit.uploadAndDisplay(pixels, 2, 3);
 
-      const imageData = mockCtx.putImageData.mock.calls[0][0];
+      const imageData = mockCtx.putImageData.mock.calls[0]![0];
       const dst = imageData.data as Float32Array;
       const rowStride = 2 * 4; // 2 pixels * 4 channels
 
@@ -358,7 +358,7 @@ describe('Canvas2DHDRBlit', () => {
       expect(mockCtx.putImageData).toHaveBeenCalledTimes(2);
 
       // Verify the second upload has correct flipped data
-      const imageData = mockCtx.putImageData.mock.calls[1][0];
+      const imageData = mockCtx.putImageData.mock.calls[1]![0];
       const dst = imageData.data as Float32Array;
 
       // Row 0 output = row 1 input (flipped)
@@ -376,7 +376,7 @@ describe('Canvas2DHDRBlit', () => {
       const pixels = new Float32Array([-0.1, 0.5, 1.5, 1.0]);
       blit.uploadAndDisplay(pixels, 1, 1);
 
-      const imageData = mockCtx.putImageData.mock.calls[0][0];
+      const imageData = mockCtx.putImageData.mock.calls[0]![0];
       const dst = imageData.data as Float32Array;
 
       // Negative values should be preserved (browser handles clipping)
