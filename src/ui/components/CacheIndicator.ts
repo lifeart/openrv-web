@@ -10,6 +10,7 @@
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { Session } from '../../core/session/Session';
+import { getThemeManager } from '../../utils/ui/ThemeManager';
 import type { Viewer } from './Viewer';
 
 export interface CacheIndicatorState {
@@ -42,6 +43,7 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
   private inPoint = 1;
   private outPoint = 1;
   private prerenderStatsSpan: HTMLSpanElement | null = null;
+  private boundOnThemeChange: () => void;
 
   // Colors for cache states - resolved from CSS variables at runtime
   private static getCachedColor(): string {
@@ -73,6 +75,7 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
       flex-direction: column;
       gap: 2px;
       padding: 2px 0;
+      background: var(--bg-secondary);
     `;
 
     // Create bar container (holds canvas)
@@ -160,6 +163,10 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
     this.session.on('durationChanged', () => this.scheduleUpdate());
     this.session.on('sourceLoaded', () => this.scheduleUpdate());
     this.session.on('inOutChanged', () => this.scheduleUpdate());
+
+    // Subscribe to theme changes to redraw with updated colors
+    this.boundOnThemeChange = () => this.scheduleUpdate();
+    getThemeManager().on('themeChanged', this.boundOnThemeChange);
 
     // Initial update
     this.scheduleUpdate();
@@ -418,6 +425,7 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
     if (this.viewer) {
       this.viewer.setOnPrerenderCacheUpdate(null);
     }
+    getThemeManager().off('themeChanged', this.boundOnThemeChange);
     this.container.remove();
     this.removeAllListeners();
   }

@@ -6,6 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { CacheIndicator } from './CacheIndicator';
+import { getThemeManager } from '../../utils/ui/ThemeManager';
 
 // Use fake timers to prevent RAF callbacks running after test teardown
 vi.useFakeTimers();
@@ -585,6 +586,167 @@ describe('CacheIndicator', () => {
 
       expect(scheduleSpy).toHaveBeenCalled();
     });
+  });
+});
+
+describe('CacheIndicator theme changes', () => {
+  let indicator: CacheIndicator;
+  let mockSession: ReturnType<typeof createMockSession>;
+
+  beforeEach(() => {
+    mockSession = createMockSession();
+    indicator = new CacheIndicator(mockSession as any);
+  });
+
+  afterEach(() => {
+    indicator.dispose();
+    vi.clearAllTimers();
+  });
+
+  it('CACHE-U100: schedules redraw when theme changes to light', () => {
+    const scheduleSpy = vi.spyOn(indicator, 'scheduleUpdate');
+    scheduleSpy.mockClear();
+
+    getThemeManager().emit('themeChanged', 'light');
+
+    expect(scheduleSpy).toHaveBeenCalled();
+  });
+
+  it('CACHE-U101: schedules redraw when theme changes to dark', () => {
+    const scheduleSpy = vi.spyOn(indicator, 'scheduleUpdate');
+    scheduleSpy.mockClear();
+
+    getThemeManager().emit('themeChanged', 'dark');
+
+    expect(scheduleSpy).toHaveBeenCalled();
+  });
+
+  it('CACHE-U102: does not redraw on theme change after dispose', () => {
+    const scheduleSpy = vi.spyOn(indicator, 'scheduleUpdate');
+    indicator.dispose();
+    scheduleSpy.mockClear();
+
+    getThemeManager().emit('themeChanged', 'light');
+
+    expect(scheduleSpy).not.toHaveBeenCalled();
+  });
+
+  it('CACHE-U103: dispose unsubscribes theme listener (no redraw on subsequent theme changes)', () => {
+    const scheduleSpy = vi.spyOn(indicator, 'scheduleUpdate');
+    indicator.dispose();
+    scheduleSpy.mockClear();
+
+    getThemeManager().emit('themeChanged', 'dark');
+    getThemeManager().emit('themeChanged', 'light');
+    getThemeManager().emit('themeChanged', 'dark');
+
+    expect(scheduleSpy).not.toHaveBeenCalled();
+  });
+
+  it('CACHE-U104: container uses CSS variable for background (not hardcoded)', () => {
+    const el = indicator.getElement();
+    expect(el.style.background).toBe('var(--bg-secondary)');
+  });
+
+  it('CACHE-U105: bar container uses CSS variable for background (not hardcoded)', () => {
+    const el = indicator.getElement();
+    const barContainer = el.firstElementChild as HTMLElement;
+    expect(barContainer.style.background).toBe('var(--bg-hover)');
+  });
+
+  it('CACHE-U106: info container uses CSS variable for text color (not hardcoded)', () => {
+    const el = indicator.getElement();
+    const info = el.querySelector('[data-testid="cache-indicator-info"]') as HTMLElement;
+    expect(info.style.color).toBe('var(--text-muted)');
+  });
+
+  it('CACHE-U107: clear button uses CSS variable for border (not hardcoded)', () => {
+    const el = indicator.getElement();
+    const clearBtn = el.querySelector('[data-testid="cache-indicator-clear"]') as HTMLElement;
+    expect(clearBtn.style.cssText).toContain('var(--border-secondary)');
+  });
+
+  it('CACHE-U108: clear button uses CSS variable for text color (not hardcoded)', () => {
+    const el = indicator.getElement();
+    const clearBtn = el.querySelector('[data-testid="cache-indicator-clear"]') as HTMLElement;
+    expect(clearBtn.style.color).toBe('var(--text-muted)');
+  });
+
+  it('CACHE-U109: prerender stats span uses CSS variable for color (not hardcoded)', () => {
+    const el = indicator.getElement();
+    const prerenderStats = el.querySelector('[data-testid="prerender-indicator-stats"]') as HTMLElement;
+    expect(prerenderStats.style.color).toBe('var(--accent-primary)');
+  });
+
+  it('CACHE-U110: multiple rapid theme switches all trigger redraws', () => {
+    const scheduleSpy = vi.spyOn(indicator, 'scheduleUpdate');
+    scheduleSpy.mockClear();
+
+    getThemeManager().emit('themeChanged', 'light');
+    getThemeManager().emit('themeChanged', 'dark');
+    getThemeManager().emit('themeChanged', 'light');
+
+    expect(scheduleSpy).toHaveBeenCalledTimes(3);
+  });
+
+  it('CACHE-U111: theme change while hidden does not crash', () => {
+    indicator.setVisible(false);
+
+    expect(() => {
+      getThemeManager().emit('themeChanged', 'light');
+      vi.advanceTimersByTime(16);
+    }).not.toThrow();
+  });
+
+  it('CACHE-U112: theme change while hidden, then shown, uses updated colors', () => {
+    indicator.setVisible(false);
+    getThemeManager().emit('themeChanged', 'light');
+    vi.advanceTimersByTime(16);
+
+    const scheduleSpy = vi.spyOn(indicator, 'scheduleUpdate');
+    scheduleSpy.mockClear();
+
+    indicator.setVisible(true);
+    // setVisible(true) triggers scheduleUpdate to redraw with current theme
+    expect(scheduleSpy).toHaveBeenCalled();
+  });
+
+  it('CACHE-U113: second CacheIndicator instance gets its own theme listener', () => {
+    const indicator2 = new CacheIndicator(mockSession as any);
+    const spy1 = vi.spyOn(indicator, 'scheduleUpdate');
+    const spy2 = vi.spyOn(indicator2, 'scheduleUpdate');
+    spy1.mockClear();
+    spy2.mockClear();
+
+    getThemeManager().emit('themeChanged', 'light');
+
+    expect(spy1).toHaveBeenCalled();
+    expect(spy2).toHaveBeenCalled();
+
+    // Disposing one should not affect the other
+    indicator2.dispose();
+    spy1.mockClear();
+
+    getThemeManager().emit('themeChanged', 'dark');
+    expect(spy1).toHaveBeenCalled();
+  });
+
+  it('CACHE-U114: no hardcoded dark-theme hex colors in container styles', () => {
+    const el = indicator.getElement();
+    const containerCss = el.style.cssText;
+    // Should not contain hardcoded dark-theme colors
+    expect(containerCss).not.toContain('#1a1a1a');
+    expect(containerCss).not.toContain('#252525');
+    expect(containerCss).not.toContain('#333333');
+    expect(containerCss).not.toContain('#374151');
+  });
+
+  it('CACHE-U115: no hardcoded dark-theme hex colors in info container styles', () => {
+    const el = indicator.getElement();
+    const info = el.querySelector('[data-testid="cache-indicator-info"]') as HTMLElement;
+    const infoCss = info.style.cssText;
+    expect(infoCss).not.toContain('#666666');
+    expect(infoCss).not.toContain('#e0e0e0');
   });
 });
 
