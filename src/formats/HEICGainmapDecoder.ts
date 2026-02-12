@@ -47,6 +47,10 @@ export interface HEICGainmapInfo {
   headroom: number;
   /** Raw hvcC box bytes for the gainmap item (needed by standalone wrapper) */
   gainmapHvcC: Uint8Array | null;
+  /** Gainmap image width from ispe property */
+  gainmapWidth: number;
+  /** Gainmap image height from ispe property */
+  gainmapHeight: number;
 }
 
 export interface HEICColorInfo {
@@ -334,8 +338,10 @@ export function parseHEICGainmapInfo(buffer: ArrayBuffer): HEICGainmapInfo | nul
     headroom = 2.0; // fallback
   }
 
-  // 7. Extract hvcC for gainmap item (needed by standalone HEIC wrapper)
+  // 7. Extract hvcC and ispe for gainmap item (needed by standalone HEIC wrapper)
   let gainmapHvcC: Uint8Array | null = null;
+  let gainmapWidth = 0;
+  let gainmapHeight = 0;
   if (ipma) {
     const properties = enumerateIpcoProperties(view, ipco.dataStart, ipco.dataEnd);
     const gainmapPropIndices = getItemPropertyIndices(view, ipma, gainmapItemId);
@@ -344,7 +350,24 @@ export function parseHEICGainmapInfo(buffer: ArrayBuffer): HEICGainmapInfo | nul
       if (prop && prop.type === 'hvcC') {
         // Copy the entire hvcC box (including header) for embedding in standalone wrapper
         gainmapHvcC = new Uint8Array(buffer.slice(prop.boxStart, prop.boxEnd));
-        break;
+      } else if (prop && prop.type === 'ispe') {
+        // ispe FullBox: header(8) + version+flags(4) + width(4) + height(4)
+        const ispeDataStart = prop.boxStart + 12;
+        if (ispeDataStart + 8 <= prop.boxEnd) {
+          gainmapWidth = view.getUint32(ispeDataStart);
+          gainmapHeight = view.getUint32(ispeDataStart + 4);
+        }
+      }
+    }
+    // Fallback: if gainmap has no hvcC, use primary's hvcC (shared decoder config)
+    if (!gainmapHvcC) {
+      const primaryPropIndices = getItemPropertyIndices(view, ipma, primaryItemId);
+      for (const propIdx of primaryPropIndices) {
+        const prop = properties.find(p => p.index === propIdx);
+        if (prop && prop.type === 'hvcC') {
+          gainmapHvcC = new Uint8Array(buffer.slice(prop.boxStart, prop.boxEnd));
+          break;
+        }
       }
     }
   }
@@ -358,6 +381,8 @@ export function parseHEICGainmapInfo(buffer: ArrayBuffer): HEICGainmapInfo | nul
     gainmapLength,
     headroom,
     gainmapHvcC,
+    gainmapWidth,
+    gainmapHeight,
   };
 }
 
@@ -441,8 +466,10 @@ export function parseHEICColorInfo(buffer: ArrayBuffer): HEICColorInfo | null {
  *
  * @param codedData - Raw HEVC coded data for the image item
  * @param hvcC - Complete hvcC box (including size+type header) from the source file
+ * @param width - Image width (from ispe property)
+ * @param height - Image height (from ispe property)
  */
-export function buildStandaloneHEIC(codedData: Uint8Array, hvcC: Uint8Array): ArrayBuffer {
+export function buildStandaloneHEIC(codedData: Uint8Array, hvcC: Uint8Array, width: number, height: number): ArrayBuffer {
   const parts: Uint8Array[] = [];
 
   function pushUint32BE(value: number): void {
@@ -468,26 +495,30 @@ export function buildStandaloneHEIC(codedData: Uint8Array, hvcC: Uint8Array): Ar
   }
 
   // --- ftyp box ---
-  pushUint32BE(16);
+  const ftypSize = 24; // size(4) + type(4) + major(4) + minor(4) + 2 compatible brands(8)
+  pushUint32BE(ftypSize);
   pushString('ftyp');
   pushString('heic');
   pushUint32BE(0); // minor_version
+  pushString('mif1'); // compatible brand (required by libheif)
+  pushString('heic'); // compatible brand
 
   // --- meta box (FullBox) ---
   const hdlrSize = 33;
   const pitmSize = 14;
   const infeSize = 20;
   const iinfSize = 14 + infeSize;
-  // ipco contains the hvcC box
-  const ipcoSize = 8 + hvcC.length;
-  // ipma: version=0, flags=0, entry_count(4) + item_id(2) + assoc_count(1) + entry(1)
-  const ipmaSize = 4 + 4 + 4 + 4 + 2 + 1 + 1;
+  // ipco contains hvcC + ispe boxes
+  const ispeSize = 20; // size(4) + type(4) + version+flags(4) + width(4) + height(4)
+  const ipcoSize = 8 + hvcC.length + ispeSize;
+  // ipma: version=0, flags=0, entry_count(4) + item_id(2) + assoc_count(1) + 2 entries(2)
+  const ipmaSize = 4 + 4 + 4 + 4 + 2 + 1 + 2;
   const iprpSize = 8 + ipcoSize + ipmaSize;
-  const ilocSize = 26;
+  const ilocSize = 30;
   const mdatSize = 8 + codedData.length;
   const metaContentSize = hdlrSize + pitmSize + iinfSize + iprpSize + ilocSize;
   const metaSize = 12 + metaContentSize;
-  const mdatDataOffset = 16 + metaSize + 8;
+  const mdatDataOffset = ftypSize + metaSize + 8;
 
   pushUint32BE(metaSize);
   pushString('meta');
@@ -528,19 +559,27 @@ export function buildStandaloneHEIC(codedData: Uint8Array, hvcC: Uint8Array): Ar
   pushUint32BE(iprpSize);
   pushString('iprp');
 
-  // ipco (contains hvcC box as-is)
+  // ipco (contains hvcC + ispe boxes)
   pushUint32BE(ipcoSize);
   pushString('ipco');
   parts.push(hvcC);
 
-  // ipma (associate item 1 with property 1 = hvcC)
+  // ispe (image spatial extents)
+  pushUint32BE(ispeSize);
+  pushString('ispe');
+  pushUint32BE(0); // version=0, flags=0
+  pushUint32BE(width);
+  pushUint32BE(height);
+
+  // ipma (associate item 1 with property 1=hvcC and property 2=ispe)
   pushUint32BE(ipmaSize);
   pushString('ipma');
   pushUint32BE(0); // version=0, flags=0
   pushUint32BE(1); // entry_count=1
   pushUint16BE(1); // item_id=1
-  pushBytes(1);    // association_count=1
-  pushBytes(0x81); // essential=1, property_index=1
+  pushBytes(2);    // association_count=2
+  pushBytes(0x81); // essential=1, property_index=1 (hvcC)
+  pushBytes(0x82); // essential=1, property_index=2 (ispe)
 
   // iloc (version 0, offset_size=4, length_size=4, base_offset_size=0)
   pushUint32BE(ilocSize);
@@ -643,7 +682,7 @@ export async function decodeHEICGainmapToFloat32(
 
     let gainmapBlob: Blob;
     if (info.gainmapHvcC) {
-      const gainmapHEIC = buildStandaloneHEIC(gainmapCodedData, info.gainmapHvcC);
+      const gainmapHEIC = buildStandaloneHEIC(gainmapCodedData, info.gainmapHvcC, info.gainmapWidth, info.gainmapHeight);
       gainmapBlob = new Blob([gainmapHEIC], { type: 'image/heic' });
     } else {
       gainmapBlob = new Blob([gainmapCodedData], { type: 'image/heic' });
@@ -679,11 +718,12 @@ export async function decodeHEICGainmapToFloat32(
     height = baseResult.height;
     baseData = baseResult.data;
 
-    // Decode gainmap: build standalone HEIC wrapper then decode via WASM
-    const gainmapBuffer = info.gainmapHvcC
-      ? buildStandaloneHEIC(gainmapCodedData, info.gainmapHvcC)
-      : buffer.slice(info.gainmapOffset, info.gainmapOffset + info.gainmapLength);
-    const gainResult = await decodeHEICToImageData(gainmapBuffer);
+    // Decode gainmap via standalone HEIC wrapper
+    if (!info.gainmapHvcC) {
+      throw new Error('Cannot decode HEIC gainmap: no hvcC decoder configuration found');
+    }
+    const gainmapHEIC = buildStandaloneHEIC(gainmapCodedData, info.gainmapHvcC, info.gainmapWidth, info.gainmapHeight);
+    const gainResult = await decodeHEICToImageData(gainmapHEIC);
 
     // Scale gainmap to base dimensions if they differ
     gainData = scaleImageData(

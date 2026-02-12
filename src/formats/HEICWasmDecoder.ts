@@ -106,3 +106,35 @@ export async function decodeHEICItemToImageData(
 
   return decodeHEICItemAtIndex(images, itemIndex);
 }
+
+/**
+ * Decode the first non-primary (auxiliary) image from a HEIC buffer.
+ * Used for gainmap extraction: libheif decodes all top-level images from the
+ * full container, and we pick the first one that isn't the primary.
+ */
+export async function decodeHEICAuxImageData(
+  buffer: ArrayBuffer
+): Promise<{ width: number; height: number; data: Uint8ClampedArray }> {
+  const libheif = await import('libheif-js');
+  const decoder = new libheif.HeifDecoder();
+  const images = decoder.decode(new Uint8Array(buffer));
+
+  if (!images || images.length < 2) {
+    if (images) for (const img of images) img.free();
+    throw new DecoderError('HEIC', 'No auxiliary image found (need at least 2 top-level images)');
+  }
+
+  // Find primary index
+  let primaryIndex = 0;
+  try {
+    const idx = images.findIndex(img => img.is_primary());
+    if (idx >= 0) primaryIndex = idx;
+  } catch {
+    // is_primary() not available — assume index 0
+  }
+
+  // Pick first non-primary image
+  const auxIndex = primaryIndex === 0 ? 1 : 0;
+
+  return decodeHEICItemAtIndex(images, auxIndex);
+}

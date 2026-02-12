@@ -962,7 +962,7 @@ describe('HEICGainmapDecoder', () => {
     it('HEIC-BUILD-001: produces valid ISOBMFF structure', () => {
       const testData = new Uint8Array([1, 2, 3, 4, 5]);
       const hvcC = createMinimalHvcCBox();
-      const result = buildStandaloneHEIC(testData, hvcC);
+      const result = buildStandaloneHEIC(testData, hvcC, 640, 480);
 
       expect(result.byteLength).toBeGreaterThan(testData.length);
 
@@ -977,7 +977,7 @@ describe('HEICGainmapDecoder', () => {
     it('HEIC-BUILD-002: ftyp has heic brand', () => {
       const testData = new Uint8Array([1]);
       const hvcC = createMinimalHvcCBox();
-      const result = buildStandaloneHEIC(testData, hvcC);
+      const result = buildStandaloneHEIC(testData, hvcC, 640, 480);
       const view = new DataView(result);
 
       const brand = String.fromCharCode(
@@ -989,12 +989,12 @@ describe('HEICGainmapDecoder', () => {
     it('HEIC-BUILD-003: contains meta box', () => {
       const testData = new Uint8Array([1, 2, 3]);
       const hvcC = createMinimalHvcCBox();
-      const result = buildStandaloneHEIC(testData, hvcC);
+      const result = buildStandaloneHEIC(testData, hvcC, 640, 480);
       const view = new DataView(result);
 
-      // meta box at offset 16
+      // meta box at offset 24 (ftyp is 24 bytes with compatible brands)
       const metaType = String.fromCharCode(
-        view.getUint8(20), view.getUint8(21), view.getUint8(22), view.getUint8(23)
+        view.getUint8(28), view.getUint8(29), view.getUint8(30), view.getUint8(31)
       );
       expect(metaType).toBe('meta');
     });
@@ -1002,7 +1002,7 @@ describe('HEICGainmapDecoder', () => {
     it('HEIC-BUILD-004: infe has hvc1 item type', () => {
       const testData = new Uint8Array([1]);
       const hvcC = createMinimalHvcCBox();
-      const result = buildStandaloneHEIC(testData, hvcC);
+      const result = buildStandaloneHEIC(testData, hvcC, 640, 480);
       const bytes = new Uint8Array(result);
 
       // Find 'infe' box
@@ -1028,7 +1028,7 @@ describe('HEICGainmapDecoder', () => {
       const hvcCData = new Uint8Array([0x01, 0x02, 0x03]);
       const hvcCBox = createHvcCBox(hvcCData);
       const testData = new Uint8Array([0xAA]);
-      const result = buildStandaloneHEIC(testData, hvcCBox);
+      const result = buildStandaloneHEIC(testData, hvcCBox, 640, 480);
       const bytes = new Uint8Array(result);
 
       // Find 'hvcC' in the output
@@ -1046,7 +1046,7 @@ describe('HEICGainmapDecoder', () => {
     it('HEIC-BUILD-006: mdat contains coded data', () => {
       const testData = new Uint8Array([0xDE, 0xAD, 0xBE, 0xEF]);
       const hvcC = createMinimalHvcCBox();
-      const result = buildStandaloneHEIC(testData, hvcC);
+      const result = buildStandaloneHEIC(testData, hvcC, 640, 480);
       const bytes = new Uint8Array(result);
 
       // Find mdat
@@ -1071,7 +1071,7 @@ describe('HEICGainmapDecoder', () => {
       const testData = new Uint8Array(42);
       for (let i = 0; i < 42; i++) testData[i] = i;
       const hvcC = createMinimalHvcCBox();
-      const result = buildStandaloneHEIC(testData, hvcC);
+      const result = buildStandaloneHEIC(testData, hvcC, 640, 480);
       const view = new DataView(result);
       const bytes = new Uint8Array(result);
 
@@ -1091,7 +1091,7 @@ describe('HEICGainmapDecoder', () => {
     it('HEIC-BUILD-008: iloc offset points to mdat data', () => {
       const testData = new Uint8Array([0x01, 0x02, 0x03]);
       const hvcC = createMinimalHvcCBox();
-      const result = buildStandaloneHEIC(testData, hvcC);
+      const result = buildStandaloneHEIC(testData, hvcC, 640, 480);
       const view = new DataView(result);
       const bytes = new Uint8Array(result);
 
@@ -1121,7 +1121,7 @@ describe('HEICGainmapDecoder', () => {
     it('HEIC-BUILD-009: empty coded data produces valid structure', () => {
       const testData = new Uint8Array(0);
       const hvcC = createMinimalHvcCBox();
-      const result = buildStandaloneHEIC(testData, hvcC);
+      const result = buildStandaloneHEIC(testData, hvcC, 640, 480);
       const view = new DataView(result);
 
       expect(result.byteLength).toBeGreaterThan(0);
@@ -1135,7 +1135,7 @@ describe('HEICGainmapDecoder', () => {
       const testData = new Uint8Array(100000);
       for (let i = 0; i < testData.length; i++) testData[i] = i & 0xFF;
       const hvcC = createMinimalHvcCBox();
-      const result = buildStandaloneHEIC(testData, hvcC);
+      const result = buildStandaloneHEIC(testData, hvcC, 640, 480);
       expect(result.byteLength).toBeGreaterThan(100000);
     });
   });
@@ -1220,6 +1220,8 @@ describe('HEICGainmapDecoder', () => {
         gainmapLength: 500,
         headroom: 4.0,
         gainmapHvcC: null,
+        gainmapWidth: 640,
+        gainmapHeight: 480,
       };
 
       expect(info.primaryItemId).toBeDefined();
@@ -1230,6 +1232,8 @@ describe('HEICGainmapDecoder', () => {
       expect(info.gainmapLength).toBeDefined();
       expect(info.headroom).toBeDefined();
       expect(info.gainmapHvcC).toBeDefined();
+      expect(info.gainmapWidth).toBeDefined();
+      expect(info.gainmapHeight).toBeDefined();
     });
   });
 
