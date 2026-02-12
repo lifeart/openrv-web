@@ -72,3 +72,4 @@ export {
   type HEICGainmapInfo,
   type HEICColorInfo,
 } from './HEICGainmapDecoder';
+export { decodeHEICToImageData } from './HEICWasmDecoder';

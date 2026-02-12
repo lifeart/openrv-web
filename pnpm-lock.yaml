@@ -17,6 +17,9 @@ importers:
       gto-js:
         specifier: 1.0.0
         version: 1.0.0
+      libheif-js:
+        specifier: ^1.19.8
+        version: 1.19.8
       mediabunny:
         specifier: ^1.28.0
         version: 1.28.0
@@ -850,6 +853,10 @@ packages:
     peerDependenciesMeta:
       canvas:
         optional: true
+
+  libheif-js@1.19.8:
+    resolution: {integrity: sha512-vQJWusIxO7wavpON1dusciL8Go9jsIQ+EUrckauFYAiSTjcmLAsuJh3SszLpvkwPci3JcL41ek2n+LUZGFpPIQ==}
+    engines: {node: '>=8.0.0'}
 
   local-pkg@0.5.1:
     resolution: {integrity: sha512-9rrA30MRRP3gBD3HTGnC6cDFpaE1kVDWxWgqWJUN0RvDNAo+Nz/9GxB+nHOH0ifbVFy0hSA1V6vFDvnx54lTEQ==}
@@ -1954,6 +1961,8 @@ snapshots:
       - bufferutil
       - supports-color
       - utf-8-validate
+
+  libheif-js@1.19.8: {}
 
   local-pkg@0.5.1:
     dependencies:

@@ -576,8 +576,49 @@ export function buildStandaloneHEIC(codedData: Uint8Array, hvcC: Uint8Array): Ar
 // =============================================================================
 
 /**
+ * Create canvas helper for pixel extraction.
+ */
+function createCanvas(w: number, h: number): OffscreenCanvas | HTMLCanvasElement {
+  if (typeof OffscreenCanvas !== 'undefined') {
+    return new OffscreenCanvas(w, h);
+  }
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  return c;
+}
+
+/**
+ * Scale a Uint8ClampedArray image to target dimensions via canvas.
+ * Used when gainmap dimensions differ from base image dimensions.
+ */
+function scaleImageData(
+  data: Uint8ClampedArray,
+  srcWidth: number,
+  srcHeight: number,
+  dstWidth: number,
+  dstHeight: number
+): Uint8ClampedArray {
+  if (srcWidth === dstWidth && srcHeight === dstHeight) {
+    return data;
+  }
+  const srcCanvas = createCanvas(srcWidth, srcHeight);
+  const srcCtx = srcCanvas.getContext('2d')! as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
+  const imgData = srcCtx.createImageData(srcWidth, srcHeight);
+  imgData.data.set(data);
+  srcCtx.putImageData(imgData, 0, 0);
+
+  const dstCanvas = createCanvas(dstWidth, dstHeight);
+  const dstCtx = dstCanvas.getContext('2d')! as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
+  dstCtx.drawImage(srcCanvas as CanvasImageSource, 0, 0, dstWidth, dstHeight);
+  return dstCtx.getImageData(0, 0, dstWidth, dstHeight).data;
+}
+
+/**
  * Decode a HEIC gainmap to a float32 image with HDR data.
- * Uses browser's HEIC decoder via createImageBitmap for both base and gain map.
+ *
+ * Uses browser's native HEIC decoder via createImageBitmap (Safari),
+ * with a WASM fallback via libheif-js for Chrome/Firefox/Edge.
  */
 export async function decodeHEICGainmapToFloat32(
   buffer: ArrayBuffer,
@@ -588,51 +629,71 @@ export async function decodeHEICGainmapToFloat32(
   data: Float32Array;
   channels: number;
 }> {
-  // Decode base image: pass entire buffer (browser picks primary item)
-  const baseBlob = new Blob([buffer], { type: 'image/heic' });
+  let baseData: Uint8ClampedArray;
+  let gainData: Uint8ClampedArray;
+  let width: number;
+  let height: number;
 
   // Build standalone HEIC for the gain map's coded data
   const gainmapCodedData = new Uint8Array(buffer, info.gainmapOffset, info.gainmapLength);
-  let gainmapBlob: Blob;
-  if (info.gainmapHvcC) {
-    const gainmapHEIC = buildStandaloneHEIC(gainmapCodedData, info.gainmapHvcC);
-    gainmapBlob = new Blob([gainmapHEIC], { type: 'image/heic' });
-  } else {
-    // No hvcC available — try passing raw coded data in minimal wrapper
-    gainmapBlob = new Blob([gainmapCodedData], { type: 'image/heic' });
-  }
 
-  const [baseBitmap, gainmapBitmap] = await Promise.all([
-    createImageBitmap(baseBlob),
-    createImageBitmap(gainmapBlob),
-  ]);
+  try {
+    // Native path (Safari)
+    const baseBlob = new Blob([buffer], { type: 'image/heic' });
 
-  const width = baseBitmap.width;
-  const height = baseBitmap.height;
-
-  function createCanvas(w: number, h: number): OffscreenCanvas | HTMLCanvasElement {
-    if (typeof OffscreenCanvas !== 'undefined') {
-      return new OffscreenCanvas(w, h);
+    let gainmapBlob: Blob;
+    if (info.gainmapHvcC) {
+      const gainmapHEIC = buildStandaloneHEIC(gainmapCodedData, info.gainmapHvcC);
+      gainmapBlob = new Blob([gainmapHEIC], { type: 'image/heic' });
+    } else {
+      gainmapBlob = new Blob([gainmapCodedData], { type: 'image/heic' });
     }
-    const c = document.createElement('canvas');
-    c.width = w;
-    c.height = h;
-    return c;
+
+    const [baseBitmap, gainmapBitmap] = await Promise.all([
+      createImageBitmap(baseBlob),
+      createImageBitmap(gainmapBlob),
+    ]);
+
+    width = baseBitmap.width;
+    height = baseBitmap.height;
+
+    // Draw base to canvas and get pixel data
+    const baseCanvas = createCanvas(width, height);
+    const baseCtx = baseCanvas.getContext('2d')! as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
+    baseCtx.drawImage(baseBitmap, 0, 0);
+    baseData = baseCtx.getImageData(0, 0, width, height).data;
+    baseBitmap.close();
+
+    // Gainmap may be smaller — scale up to base image size
+    const gainCanvas = createCanvas(width, height);
+    const gainCtx = gainCanvas.getContext('2d')! as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
+    gainCtx.drawImage(gainmapBitmap, 0, 0, width, height);
+    gainData = gainCtx.getImageData(0, 0, width, height).data;
+    gainmapBitmap.close();
+  } catch {
+    // WASM fallback (Chrome/Firefox/Edge)
+    const { decodeHEICToImageData } = await import('./HEICWasmDecoder');
+
+    const baseResult = await decodeHEICToImageData(buffer);
+    width = baseResult.width;
+    height = baseResult.height;
+    baseData = baseResult.data;
+
+    // Decode gainmap: build standalone HEIC wrapper then decode via WASM
+    const gainmapBuffer = info.gainmapHvcC
+      ? buildStandaloneHEIC(gainmapCodedData, info.gainmapHvcC)
+      : buffer.slice(info.gainmapOffset, info.gainmapOffset + info.gainmapLength);
+    const gainResult = await decodeHEICToImageData(gainmapBuffer);
+
+    // Scale gainmap to base dimensions if they differ
+    gainData = scaleImageData(
+      gainResult.data,
+      gainResult.width,
+      gainResult.height,
+      width,
+      height
+    );
   }
-
-  // Draw base to canvas and get pixel data
-  const baseCanvas = createCanvas(width, height);
-  const baseCtx = baseCanvas.getContext('2d')! as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
-  baseCtx.drawImage(baseBitmap, 0, 0);
-  const baseData = baseCtx.getImageData(0, 0, width, height).data;
-  baseBitmap.close();
-
-  // Gainmap may be smaller — scale up to base image size
-  const gainCanvas = createCanvas(width, height);
-  const gainCtx = gainCanvas.getContext('2d')! as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
-  gainCtx.drawImage(gainmapBitmap, 0, 0, width, height);
-  const gainData = gainCtx.getImageData(0, 0, width, height).data;
-  gainmapBitmap.close();
 
   // Apply HDR reconstruction per-pixel
   // HDR_linear = sRGB_to_linear(base) * exp2(gainmap_gray * headroom)

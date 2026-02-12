@@ -788,43 +788,15 @@ export class FileSourceNode extends BaseSourceNode {
               await this.loadHEICHDR(buffer, colorInfo, filename, url, originalUrl);
               return;
             }
-            // SDR fallback: blob URL (Safari can decode HEIC natively)
-            const blob = new Blob([buffer], { type: 'image/heic' });
-            const blobUrl = URL.createObjectURL(blob);
-            return new Promise<void>((resolve, reject) => {
-              const img = new Image();
-              img.crossOrigin = 'anonymous';
-              img.onload = () => {
-                URL.revokeObjectURL(blobUrl);
-                this.image = img;
-                this.url = url;
-                this.isEXR = false;
-                this._isHDRFormat = false;
-                this._formatName = 'heic';
-                this.metadata = {
-                  name: filename,
-                  width: img.naturalWidth,
-                  height: img.naturalHeight,
-                  duration: 1,
-                  fps: 24,
-                };
-                this.properties.setValue('url', url);
-                if (originalUrl) {
-                  this.properties.setValue('originalUrl', originalUrl);
-                }
-                this.properties.setValue('width', img.naturalWidth);
-                this.properties.setValue('height', img.naturalHeight);
-                this.properties.setValue('isHDR', false);
-                this.markDirty();
-                this.cachedIPImage = null;
-                resolve();
-              };
-              img.onerror = () => {
-                URL.revokeObjectURL(blobUrl);
-                reject(new Error(`Failed to load HEIC image: ${url}`));
-              };
-              img.src = blobUrl;
-            });
+            // SDR fallback: try native first (Safari), then WASM
+            try {
+              const loaded = await this.tryLoadHEICNative(buffer, filename, url, originalUrl);
+              if (loaded) return;
+            } catch {
+              // Native decode failed
+            }
+            await this.loadHEICSDRWasm(buffer, filename, url, originalUrl);
+            return;
           }
         }
       } catch (err) {
@@ -1536,6 +1508,117 @@ export class FileSourceNode extends BaseSourceNode {
   }
 
   /**
+   * Try to load HEIC as a standard SDR image using the browser's native decoder.
+   * Returns true if the browser supports HEIC natively (Safari) and the image loaded.
+   * Returns false if the browser can't decode HEIC (caller should fall back to WASM).
+   */
+  private tryLoadHEICNative(
+    buffer: ArrayBuffer,
+    name: string,
+    url: string,
+    originalUrl?: string
+  ): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
+      const blob = new Blob([buffer], { type: 'image/heic' });
+      const blobUrl = URL.createObjectURL(blob);
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        URL.revokeObjectURL(blobUrl);
+        this.image = img;
+        this.url = url;
+        this.isEXR = false;
+        this._isHDRFormat = false;
+        this._formatName = 'heic';
+        this.metadata = {
+          name,
+          width: img.naturalWidth,
+          height: img.naturalHeight,
+          duration: 1,
+          fps: 24,
+        };
+        this.properties.setValue('url', url);
+        if (originalUrl) {
+          this.properties.setValue('originalUrl', originalUrl);
+        }
+        this.properties.setValue('width', img.naturalWidth);
+        this.properties.setValue('height', img.naturalHeight);
+        this.properties.setValue('isHDR', false);
+        this.markDirty();
+        this.cachedIPImage = null;
+        resolve(true);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(blobUrl);
+        resolve(false); // Browser doesn't support HEIC natively
+      };
+      img.src = blobUrl;
+    });
+  }
+
+  /**
+   * Load SDR HEIC file from ArrayBuffer via libheif-js WASM decoder.
+   * Used as fallback on Chrome/Firefox/Edge which lack native HEIC support.
+   */
+  private async loadHEICSDRWasm(
+    buffer: ArrayBuffer,
+    name: string,
+    url: string,
+    originalUrl?: string
+  ): Promise<void> {
+    const { decodeHEICToImageData } = await import('../../formats/HEICWasmDecoder');
+    const result = await decodeHEICToImageData(buffer);
+
+    // Convert Uint8ClampedArray RGBA to Float32Array RGBA (0-255 → 0.0-1.0)
+    const totalPixels = result.width * result.height;
+    const float32 = new Float32Array(totalPixels * 4);
+    const scale = 1.0 / 255.0;
+    for (let i = 0; i < totalPixels * 4; i++) {
+      float32[i] = (result.data[i] ?? 0) * scale;
+    }
+
+    this.cachedIPImage = new IPImage({
+      width: result.width,
+      height: result.height,
+      channels: 4,
+      dataType: 'float32',
+      data: float32.buffer as ArrayBuffer,
+      metadata: {
+        sourcePath: originalUrl ?? url,
+        frameNumber: 1,
+        attributes: {
+          formatName: 'heic',
+        },
+      },
+    });
+
+    this.url = url;
+    this.isEXR = false;
+    this._isHDRFormat = false;
+    this._formatName = 'heic';
+    this.image = null;
+
+    this.metadata = {
+      name,
+      width: result.width,
+      height: result.height,
+      duration: 1,
+      fps: 24,
+    };
+
+    this.properties.setValue('url', url);
+    if (originalUrl) {
+      this.properties.setValue('originalUrl', originalUrl);
+    }
+    this.properties.setValue('width', result.width);
+    this.properties.setValue('height', result.height);
+    this.properties.setValue('isHDR', false);
+
+    this.canvasDirty = true;
+    this.markDirty();
+  }
+
+  /**
    * Get available EXR layers (only valid for EXR files)
    */
   getEXRLayers(): EXRLayerInfo[] {
@@ -1718,9 +1801,24 @@ export class FileSourceNode extends BaseSourceNode {
             await this.loadHEICHDR(buffer, colorInfo, file.name, url);
             return;
           }
+          // SDR: try native blob URL first (Safari), then WASM fallback
+          const heicBlobUrl = URL.createObjectURL(file);
+          try {
+            const loaded = await this.tryLoadHEICNative(buffer, file.name, heicBlobUrl);
+            if (loaded) return;
+          } catch {
+            // Native decode failed — fall through to WASM
+          }
+          try {
+            await this.loadHEICSDRWasm(buffer, file.name, heicBlobUrl);
+          } catch (err) {
+            URL.revokeObjectURL(heicBlobUrl);
+            throw err;
+          }
+          return;
         }
       } catch (err) {
-        console.warn('[FileSource] HEIC HDR loading failed, falling back to standard loading:', err);
+        console.warn('[FileSource] HEIC loading failed, falling back to standard loading:', err);
         // Fall through to standard image loading
       }
     }
