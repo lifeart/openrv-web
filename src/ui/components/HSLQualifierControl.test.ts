@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HSLQualifierControl } from './HSLQualifierControl';
 import { HSLQualifier } from './HSLQualifier';
 import { FalseColor } from './FalseColor';
+import { getThemeManager } from '../../utils/ui/ThemeManager';
 
 describe('HSLQualifierControl', () => {
   let control: HSLQualifierControl;
@@ -69,6 +70,43 @@ describe('HSLQualifierControl', () => {
       control.dispose();
 
       expect(unsubSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe('theme changes', () => {
+    it('HSL-U060: dropdown uses var(--bg-secondary) instead of hardcoded rgba', () => {
+      const el = control.render();
+      const dropdown = el.querySelector('[data-testid="hsl-qualifier-dropdown"]') as HTMLElement;
+      expect(dropdown).not.toBeNull();
+      expect(dropdown.style.background).toBe('var(--bg-secondary)');
+      expect(dropdown.style.background).not.toContain('rgba(30, 30, 30');
+    });
+
+    it('HSL-U061: themeChanged triggers button state update', () => {
+      const el = control.render();
+      const toggle = el.querySelector('[data-testid="hsl-qualifier-control-toggle"]') as HTMLElement;
+
+      // Tamper with button style to detect if updateButtonState re-applies it
+      toggle.style.color = 'red';
+
+      getThemeManager().emit('themeChanged', 'light');
+
+      // updateButtonState() re-applies var(--text-muted) for disabled state
+      expect(toggle.style.color).not.toBe('red');
+    });
+
+    it('HSL-U062: theme change after dispose does not update button', () => {
+      const el = control.render();
+      const toggle = el.querySelector('[data-testid="hsl-qualifier-control-toggle"]') as HTMLElement;
+      control.dispose();
+
+      // Tamper with button style
+      toggle.style.color = 'red';
+
+      getThemeManager().emit('themeChanged', 'light');
+
+      // Listener was removed — style stays tampered
+      expect(toggle.style.color).toBe('red');
     });
   });
 });

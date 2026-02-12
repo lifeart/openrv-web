@@ -10,6 +10,7 @@
  */
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { getThemeManager } from '../../utils/ui/ThemeManager';
 
 export type InfoPanelPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 
@@ -64,6 +65,7 @@ export class InfoPanel extends EventEmitter<InfoPanelEvents> {
   private position: InfoPanelPosition = 'top-left';
   private fields: InfoPanelFields = { ...DEFAULT_FIELDS };
   private currentData: InfoPanelData = {};
+  private boundOnThemeChange: (() => void) | null = null;
 
   constructor() {
     super();
@@ -73,8 +75,8 @@ export class InfoPanel extends EventEmitter<InfoPanelEvents> {
     this.container.dataset.testid = 'info-panel';
     this.container.style.cssText = `
       position: absolute;
-      background: rgba(0, 0, 0, 0.75);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: var(--overlay-bg);
+      border: 1px solid var(--overlay-border);
       border-radius: 6px;
       padding: 8px 12px;
       font-family: monospace;
@@ -93,6 +95,9 @@ export class InfoPanel extends EventEmitter<InfoPanelEvents> {
     this.container.appendChild(this.contentElement);
 
     this.updatePosition();
+
+    this.boundOnThemeChange = () => this.render();
+    getThemeManager().on('themeChanged', this.boundOnThemeChange);
   }
 
   /**
@@ -343,6 +348,10 @@ export class InfoPanel extends EventEmitter<InfoPanelEvents> {
    * Clean up
    */
   dispose(): void {
+    if (this.boundOnThemeChange) {
+      getThemeManager().off('themeChanged', this.boundOnThemeChange);
+      this.boundOnThemeChange = null;
+    }
     this.container.remove();
     this.removeAllListeners();
   }

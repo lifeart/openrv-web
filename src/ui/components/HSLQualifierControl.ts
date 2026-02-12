@@ -12,6 +12,7 @@
 
 import { HSLQualifier, HSLQualifierState } from './HSLQualifier';
 import { getIconSvg } from './shared/Icons';
+import { getThemeManager } from '../../utils/ui/ThemeManager';
 
 export class HSLQualifierControl {
   private container: HTMLElement;
@@ -20,6 +21,7 @@ export class HSLQualifierControl {
   private isDropdownOpen = false;
   private toggleButton: HTMLButtonElement;
   private boundHandleReposition: () => void;
+  private boundOnThemeChange: (() => void) | null = null;
   private eyedropperActive = false;
   private onEyedropperCallback: ((active: boolean) => void) | null = null;
   private unsubscribers: (() => void)[] = [];
@@ -64,7 +66,7 @@ export class HSLQualifierControl {
 
     this.toggleButton.addEventListener('mouseenter', () => {
       if (!this.hslQualifier.isEnabled()) {
-        this.toggleButton.style.background = 'rgba(255, 255, 255, 0.05)';
+        this.toggleButton.style.background = 'var(--bg-hover)';
         this.toggleButton.style.color = 'var(--text-primary)';
       }
     });
@@ -84,7 +86,7 @@ export class HSLQualifierControl {
     this.dropdown.dataset.testid = 'hsl-qualifier-dropdown';
     this.dropdown.style.cssText = `
       position: fixed;
-      background: rgba(30, 30, 30, 0.98);
+      background: var(--bg-secondary);
       border: 1px solid var(--border-primary);
       border-radius: 6px;
       padding: 10px;
@@ -107,6 +109,12 @@ export class HSLQualifierControl {
       this.updateButtonState();
       this.updateSliders();
     }));
+
+    // Listen for theme changes - CSS variables handle most updates automatically
+    this.boundOnThemeChange = () => {
+      this.updateButtonState();
+    };
+    getThemeManager().on('themeChanged', this.boundOnThemeChange);
   }
 
   private createDropdownContent(): void {
@@ -740,6 +748,11 @@ export class HSLQualifierControl {
    * Dispose
    */
   dispose(): void {
+    // Clean up theme change listener
+    if (this.boundOnThemeChange) {
+      getThemeManager().off('themeChanged', this.boundOnThemeChange);
+      this.boundOnThemeChange = null;
+    }
     document.removeEventListener('click', this.handleOutsideClick);
     window.removeEventListener('resize', this.boundHandleReposition);
     window.removeEventListener('scroll', this.boundHandleReposition, true);

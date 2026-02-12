@@ -9,6 +9,7 @@
 
 import { FalseColor, FalseColorPreset } from './FalseColor';
 import { getIconSvg } from './shared/Icons';
+import { getThemeManager } from '../../utils/ui/ThemeManager';
 
 export class FalseColorControl {
   private container: HTMLElement;
@@ -18,6 +19,7 @@ export class FalseColorControl {
   private toggleButton: HTMLButtonElement;
   private presetButtons: Map<FalseColorPreset, HTMLButtonElement> = new Map();
   private boundHandleReposition: () => void;
+  private boundOnThemeChange: (() => void) | null = null;
   private unsubscribers: (() => void)[] = [];
 
   constructor(falseColor: FalseColor) {
@@ -103,6 +105,12 @@ export class FalseColorControl {
       this.updatePresetButtons();
       this.updateLegend();
     }));
+
+    // Listen for theme changes
+    this.boundOnThemeChange = () => {
+      this.updateLegend();
+    };
+    getThemeManager().on('themeChanged', this.boundOnThemeChange);
   }
 
   private createDropdownContent(): void {
@@ -114,7 +122,7 @@ export class FalseColorControl {
       justify-content: space-between;
       padding: 6px 8px;
       margin-bottom: 8px;
-      background: rgba(255, 255, 255, 0.03);
+      background: var(--bg-hover);
       border-radius: 4px;
     `;
 
@@ -283,7 +291,7 @@ export class FalseColorControl {
         height: 12px;
         border-radius: 2px;
         background: ${item.color};
-        border: 1px solid rgba(255,255,255,0.2);
+        border: 1px solid var(--border-primary);
         flex-shrink: 0;
       `;
 
@@ -357,5 +365,9 @@ export class FalseColorControl {
     this.presetButtons.clear();
     this.unsubscribers.forEach((unsub) => unsub());
     this.unsubscribers = [];
+    if (this.boundOnThemeChange) {
+      getThemeManager().off('themeChanged', this.boundOnThemeChange);
+      this.boundOnThemeChange = null;
+    }
   }
 }

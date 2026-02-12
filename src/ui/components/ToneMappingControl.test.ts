@@ -11,6 +11,7 @@ import {
   TONE_MAPPING_OPERATORS,
 } from './ToneMappingControl';
 
+
 describe('ToneMappingControl', () => {
   let control: ToneMappingControl;
 
@@ -578,6 +579,17 @@ describe('ToneMappingControl', () => {
       const spans = params.querySelectorAll('span');
       const valueSpan = Array.from(spans).find(s => s.textContent === '4.0');
       expect(valueSpan).not.toBeNull();
+    });
+  });
+
+  describe('theme changes', () => {
+    it('TONE-U190: enable row uses var(--bg-hover) not hardcoded rgba', () => {
+      const el = control.render();
+      const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+      // The enable row is the first child div in the dropdown
+      const enableRow = dropdown.querySelector('div') as HTMLElement;
+      expect(enableRow.style.cssText).toContain('var(--bg-hover)');
+      expect(enableRow.style.cssText).not.toContain('rgba(255, 255, 255, 0.03)');
     });
   });
 

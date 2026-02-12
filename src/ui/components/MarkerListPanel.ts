@@ -12,6 +12,7 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { Session, Marker, MARKER_COLORS } from '../../core/session/Session';
 import { getIconSvg } from './shared/Icons';
+import { getThemeManager } from '../../utils/ui/ThemeManager';
 
 export interface MarkerListPanelEvents extends EventMap {
   visibilityChanged: boolean;
@@ -37,6 +38,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
   private boundOnMarksChanged: () => void;
   private boundOnFrameChanged: () => void;
   private boundOnKeyDown: (e: KeyboardEvent) => void;
+  private boundOnThemeChange: (() => void) | null = null;
 
   constructor(session: Session) {
     super();
@@ -160,6 +162,10 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
     // Add keyboard navigation support
     this.container.setAttribute('tabindex', '0');
     this.container.addEventListener('keydown', this.boundOnKeyDown);
+
+    // Subscribe to theme changes so marker entries pick up new CSS variable values
+    this.boundOnThemeChange = () => this.render();
+    getThemeManager().on('themeChanged', this.boundOnThemeChange);
 
     // Initial render
     this.render();
@@ -380,7 +386,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
       height: 16px;
       border-radius: ${isDurationMarker ? '3px' : '50%'};
       background: ${marker.color};
-      border: 2px solid rgba(255, 255, 255, 0.3);
+      border: 2px solid var(--border-secondary);
       cursor: pointer;
       flex-shrink: 0;
     `;
@@ -762,6 +768,11 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
     this.session.off('frameChanged', this.boundOnFrameChanged);
     // Remove keyboard listener
     this.container.removeEventListener('keydown', this.boundOnKeyDown);
+    // Remove theme change listener
+    if (this.boundOnThemeChange) {
+      getThemeManager().off('themeChanged', this.boundOnThemeChange);
+      this.boundOnThemeChange = null;
+    }
     this.removeAllListeners();
   }
 }

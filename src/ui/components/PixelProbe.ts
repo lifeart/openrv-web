@@ -18,6 +18,7 @@ import { getIconSvg } from './shared/Icons';
 import { clamp } from '../../utils/math';
 import { luminanceRec709 } from '../../color/ColorProcessingFacade';
 
+
 export interface PixelProbeEvents extends EventMap {
   stateChanged: PixelProbeState;
   valueCopied: string;
@@ -143,6 +144,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
   private sampleSizeButtons: Map<SampleSize, HTMLButtonElement> = new Map();
   private sourceModeButtons: Map<SourceMode, HTMLButtonElement> = new Map();
 
+
   constructor() {
     super();
 
@@ -161,7 +163,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     this.overlay.dataset.testid = 'pixel-probe-overlay';
     this.overlay.style.cssText = `
       position: fixed;
-      background: rgba(30, 30, 30, 0.95);
+      background: var(--bg-secondary);
       border: 1px solid var(--border-primary);
       border-radius: 6px;
       padding: 10px;
@@ -176,6 +178,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     `;
 
     this.createOverlayContent();
+
   }
 
   private createOverlayContent(): void {

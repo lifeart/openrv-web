@@ -11,6 +11,7 @@ import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 import type { DisplayCapabilities } from '../../color/ColorProcessingFacade';
 
+
 export type { ToneMappingOperator, ToneMappingState, ToneMappingOperatorInfo, HDROutputMode } from '../../core/types/effects';
 export { DEFAULT_TONE_MAPPING_STATE, TONE_MAPPING_OPERATORS } from '../../core/types/effects';
 
@@ -35,6 +36,7 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
   private toggleButton: HTMLButtonElement;
   private operatorButtons: Map<ToneMappingOperator, HTMLButtonElement> = new Map();
   private boundHandleReposition: () => void;
+
   private state: ToneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
 
   // Per-operator parameter section
@@ -129,6 +131,7 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
 
     // Close dropdown on outside click
     document.addEventListener('click', this.handleOutsideClick);
+
   }
 
   private createDropdownContent(): void {
@@ -140,7 +143,7 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
       justify-content: space-between;
       padding: 6px 8px;
       margin-bottom: 8px;
-      background: rgba(255, 255, 255, 0.03);
+      background: var(--bg-hover);
       border-radius: 4px;
     `;
 
