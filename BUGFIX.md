@@ -192,10 +192,38 @@ E2E verification:
 - Command: `npx playwright test e2e/zebra-stripes.spec.ts --workers=1 --reporter=line`
 - Result: `15 passed`.
 
+### Task 40 (P1): Fix session recovery reload race in `RECOVERY-E008`
+Problem:
+`e2e/session-recovery.spec.ts` failed in `RECOVERY-E008` with `hasMedia === false` right after clicking the reload dialog `Load` button.
+
+Root cause:
+The assertion read session state too early. After dialog close, media loading is still settling for a short window; `hasMedia` flips to `true` shortly after.
+
+Implemented fix:
+- Updated imports in `e2e/session-recovery.spec.ts` to use `waitForMediaLoaded`.
+- In `RECOVERY-E008`, added:
+  - explicit `Load` button enabled check before click,
+  - deterministic wait via `waitForMediaLoaded(page)` before asserting `getSessionState(page).hasMedia`.
+- Kept existing visual assertion (`viewer-image-canvas` visible) after state wait.
+
+Unit verification:
+- `N/A` (E2E-only deterministic timing fix).
+
+E2E verification:
+- Repro before fix:
+  - `npx playwright test e2e/session-recovery.spec.ts -g "RECOVERY-E008" --workers=1 --reporter=line`
+  - Result: `1 failed` (`Expected true, Received false` for `hasMedia`).
+- Verify after fix:
+  - `npx playwright test e2e/session-recovery.spec.ts --workers=1 --reporter=line`
+  - Result: `8 passed`.
+
 ### Additional sweep evidence
 - Global fail-fast command started:
   - `npx playwright test e2e --workers=1 --max-failures=1 --reporter=line`
 - Progress reached through early `composition.spec.ts` (~249 tests) without new failures in that scanned segment before stopping to record this update.
+- Post-fix continuation sweep from `session-recovery` onward:
+  - Command: `for f in $(ls e2e/*.spec.ts | sort); do if [[ "$f" > "e2e/session-recovery.spec.ts" ]]; then npx playwright test "$f" --workers=1 --reporter=line || break; fi; done`
+  - Result: all scanned suites passed (`smooth-zoom` through `zebra-stripes`), no additional failures found.
 
 ---
 
