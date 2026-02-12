@@ -88,11 +88,16 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
     // Panel will be appended to body when shown
 
     // Close panel on outside click
-    document.addEventListener('click', (e) => {
-      if (this.isPanelOpen && !this.container.contains(e.target as Node) && !this.panel.contains(e.target as Node)) {
-        this.hidePanel();
-      }
-    });
+    this.boundHandleDocumentClick = this.handleDocumentClick.bind(this);
+    document.addEventListener('click', this.boundHandleDocumentClick);
+  }
+
+  private boundHandleDocumentClick: (e: MouseEvent) => void;
+
+  private handleDocumentClick(e: MouseEvent): void {
+    if (this.isPanelOpen && !this.container.contains(e.target as Node) && !this.panel.contains(e.target as Node)) {
+      this.hidePanel();
+    }
   }
 
   private createPanelContent(): void {
@@ -483,6 +488,6 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
   }
 
   dispose(): void {
-    // Cleanup if needed
+    document.removeEventListener('click', this.boundHandleDocumentClick);
   }
 }

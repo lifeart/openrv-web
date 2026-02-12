@@ -91,12 +91,17 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
     this.container.appendChild(this.filterButton);
     // Panel will be appended to body when shown
 
-    // Close panel on outside click
-    document.addEventListener('click', (e) => {
-      if (this.isPanelOpen && !this.container.contains(e.target as Node) && !this.panel.contains(e.target as Node)) {
-        this.hide();
-      }
-    });
+    // Close on outside click
+    this.boundHandleDocumentClick = this.handleDocumentClick.bind(this);
+    document.addEventListener('click', this.boundHandleDocumentClick);
+  }
+
+  private boundHandleDocumentClick: (e: MouseEvent) => void;
+
+  private handleDocumentClick(e: MouseEvent): void {
+    if (this.isPanelOpen && !this.container.contains(e.target as Node) && !this.panel.contains(e.target as Node)) {
+      this.hide();
+    }
   }
 
   private createPanelContent(): void {
@@ -339,6 +344,6 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
   }
 
   dispose(): void {
-    // Cleanup if needed
+    document.removeEventListener('click', this.boundHandleDocumentClick);
   }
 }

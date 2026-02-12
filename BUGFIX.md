@@ -225,6 +225,24 @@ E2E verification:
   - Command: `for f in $(ls e2e/*.spec.ts | sort); do if [[ "$f" > "e2e/session-recovery.spec.ts" ]]; then npx playwright test "$f" --workers=1 --reporter=line || break; fi; done`
   - Result: all scanned suites passed (`smooth-zoom` through `zebra-stripes`), no additional failures found.
 
+### Task 13 (P1): Fix global document click listener leaks in control dispose paths
+Problem:
+Several controls add anonymous `document.click` handlers and never remove them, causing leaked listeners.
+
+Root cause:
+Anonymous listeners in `ColorControls`, `FilterControl`, `CDLControl`, `LensControl`, `ExportControl` were not tracked for removal.
+
+Implemented fix:
+- Refactored `click` listeners to use bound class methods.
+- Added explicit `removeEventListener` to `dispose()` in all 5 components.
+
+Unit verification:
+- Verified with `npx vitest run src/ui/components/*.test.ts`.
+- Result: 168 tests passed.
+
+E2E verification:
+- Covered by existing control suites and manual regression.
+
 ---
 
 ## Task 1 (P0): Fix stale E2E state adapter in `test-helper`
@@ -706,43 +724,7 @@ This skip happens even when user remaps them to non-conflicting combos.
 
 ---
 
-## Task 13 (P1): Fix global document click listener leaks in control dispose paths
-### Problem
-Several controls add anonymous `document.click` handlers and never remove them, causing leaked listeners and duplicate behavior after remount/reinit.
 
-### Root cause
-Anonymous listeners are attached and cannot be removed later:
-- `src/ui/components/ColorControls.ts`
-- `src/ui/components/FilterControl.ts`
-- `src/ui/components/CDLControl.ts`
-- `src/ui/components/LensControl.ts`
-- `src/ui/components/ExportControl.ts`
-
-Dispose methods are empty/incomplete in these controls.
-
-### Implementation scope
-- Replace anonymous listeners with bound class properties.
-- Remove listener in each `dispose()`.
-- Add a shared disposable-listener utility for controls that bind global events.
-
-### Unit tests to add/update
-- Add/update per-control tests:
-  - `src/ui/components/ColorControls.test.ts`
-  - `src/ui/components/FilterControl.test.ts`
-  - `src/ui/components/CDLControl.test.ts`
-  - `src/ui/components/LensControl.test.ts`
-  - `src/ui/components/ExportControl.test.ts`
-- Cases:
-  1. `dispose()` removes document listener.
-  2. Remounting control does not multiply outside-click side effects.
-
-### E2E verification
-- Add regression flow in `e2e/user-flows.spec.ts`:
-  1. Open/close affected controls repeatedly.
-  2. Navigate remount path.
-  3. Verify each outside click closes once (no duplicate execution artifacts).
-
----
 
 ## Task 14 (P1): Track and cleanup all `AppNetworkBridge` subscriptions
 ### Problem

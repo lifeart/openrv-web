@@ -449,4 +449,29 @@ describe('ColorControls', () => {
       expect(DEFAULT_COLOR_ADJUSTMENTS.brightness).toBe(0);
     });
   });
+
+  describe('dispose', () => {
+    it('COL-044: removes document click listener on dispose', () => {
+      const addSpy = vi.spyOn(document, 'addEventListener');
+      const removeSpy = vi.spyOn(document, 'removeEventListener');
+
+      const ctrl = new ColorControls();
+
+      // Find the click handler that was added by looking for the last call to addEventListener with 'click'
+      // Note: This assumes no other active global click listeners are added during test execution
+      const clickCalls = addSpy.mock.calls.filter(call => call[0] === 'click');
+      const lastClickCall = clickCalls[clickCalls.length - 1]; // The one added by constructor
+
+      expect(lastClickCall).toBeDefined();
+      const handler = lastClickCall![1];
+
+      ctrl.dispose();
+
+      // Verify it was removed
+      expect(removeSpy).toHaveBeenCalledWith('click', handler);
+
+      addSpy.mockRestore();
+      removeSpy.mockRestore();
+    });
+  });
 });

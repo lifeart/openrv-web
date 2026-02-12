@@ -105,12 +105,18 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     // Panel will be appended to body when shown
 
     // Close on outside click
-    document.addEventListener('click', (e) => {
-      if (this.isExpanded && !this.container.contains(e.target as Node) && !this.panel.contains(e.target as Node)) {
-        this.hide();
-      }
-    });
+    this.boundHandleDocumentClick = this.handleDocumentClick.bind(this);
+    document.addEventListener('click', this.boundHandleDocumentClick);
   }
+
+  private boundHandleDocumentClick: (e: MouseEvent) => void;
+
+  private handleDocumentClick(e: MouseEvent): void {
+    if (this.isExpanded && !this.container.contains(e.target as Node) && !this.panel.contains(e.target as Node)) {
+      this.hide();
+    }
+  }
+
 
   private createSliders(): void {
     const sliderConfigs: Array<{
@@ -670,6 +676,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
   }
 
   dispose(): void {
+    document.removeEventListener('click', this.boundHandleDocumentClick);
     if (this._inputThrottleTimer !== null) {
       clearTimeout(this._inputThrottleTimer);
       this._inputThrottleTimer = null;

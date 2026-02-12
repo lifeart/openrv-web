@@ -103,11 +103,16 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     this.container.appendChild(this.exportButton);
 
     // Close dropdown on outside click
-    document.addEventListener('click', (e) => {
-      if (this.isDropdownOpen && !this.container.contains(e.target as Node) && !this.dropdown.contains(e.target as Node)) {
-        this.closeDropdown();
-      }
-    });
+    this.boundHandleDocumentClick = this.handleDocumentClick.bind(this);
+    document.addEventListener('click', this.boundHandleDocumentClick);
+  }
+
+  private boundHandleDocumentClick: (e: MouseEvent) => void;
+
+  private handleDocumentClick(e: MouseEvent): void {
+    if (this.isDropdownOpen && !this.container.contains(e.target as Node) && !this.dropdown.contains(e.target as Node)) {
+      this.closeDropdown();
+    }
   }
 
   private createDropdownItems(): void {
@@ -330,6 +335,6 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
   }
 
   dispose(): void {
-    // Cleanup if needed
+    document.removeEventListener('click', this.boundHandleDocumentClick);
   }
 }
