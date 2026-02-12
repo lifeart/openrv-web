@@ -50,3 +50,9 @@ export {
   type HDRInfo,
   type HDRDecodeResult,
 } from './HDRDecoder';
+export {
+  isGainmapAVIF,
+  parseGainmapAVIF,
+  decodeAVIFGainmapToFloat32,
+  type AVIFGainmapInfo,
+} from './AVIFGainmapDecoder';

@@ -19,6 +19,7 @@ import {
 } from '../../formats/EXRDecoder';
 import { decoderRegistry } from '../../formats/DecoderRegistry';
 import { isGainmapJPEG, parseGainmapJPEG, decodeGainmapToFloat32 } from '../../formats/JPEGGainmapDecoder';
+import { isGainmapAVIF, parseGainmapAVIF, decodeAVIFGainmapToFloat32 } from '../../formats/AVIFGainmapDecoder';
 
 /**
  * Check if a filename has an EXR extension
@@ -144,62 +145,303 @@ function parseAVIFColorInfo(buffer: ArrayBuffer): AVIFColorInfo | null {
   }
 
   // Skip past ftyp box to find top-level meta box
-  if (length < 12) return null;
+  if (length < 12) { return null; }
   const ftypSize = view.getUint32(0);
-  if (ftypSize < 8 || ftypSize > length) return null;
+  if (ftypSize < 8 || ftypSize > length) { return null; }
 
   // Find 'meta' box (FullBox - has version+flags)
   const meta = findBox('meta', ftypSize, length, true);
-  if (!meta) return null;
+  if (!meta) { return null; }
 
   // Find 'iprp' box inside meta (plain container)
   const iprp = findBox('iprp', meta.contentStart, meta.contentEnd);
-  if (!iprp) return null;
+  if (!iprp) { return null; }
 
   // Find 'ipco' box inside iprp (plain container)
   const ipco = findBox('ipco', iprp.contentStart, iprp.contentEnd);
-  if (!ipco) return null;
+  if (!ipco) { return null; }
 
-  // Find 'colr' box inside ipco
-  const colr = findBox('colr', ipco.contentStart, ipco.contentEnd);
-  if (!colr) return null;
+  // Scan ALL 'colr' boxes inside ipco — AVIF files may have multiple
+  // (e.g. ICC profile 'prof'/'ricc' + coded 'nclx'). Collect nclx and ICC profile data.
+  let nclxColr: { contentStart: number; contentEnd: number } | null = null;
+  let iccProfileStart = -1;
+  let iccProfileEnd = -1;
+  {
+    let scanOffset = ipco.contentStart;
+    while (scanOffset + 8 <= ipco.contentEnd) {
+      const boxSize = view.getUint32(scanOffset);
+      const boxType = String.fromCharCode(
+        view.getUint8(scanOffset + 4), view.getUint8(scanOffset + 5),
+        view.getUint8(scanOffset + 6), view.getUint8(scanOffset + 7)
+      );
+      if (boxSize < 8 || scanOffset + boxSize > ipco.contentEnd) break;
 
-  // Check colour_type is 'nclx' (4 bytes at content start)
-  if (colr.contentStart + 4 > colr.contentEnd) return null;
-  const colourType = String.fromCharCode(
-    view.getUint8(colr.contentStart),
-    view.getUint8(colr.contentStart + 1),
-    view.getUint8(colr.contentStart + 2),
-    view.getUint8(colr.contentStart + 3)
-  );
-  if (colourType !== 'nclx') return null;
-
-  // nclx layout after colour_type:
-  //   colour_primaries (uint16)
-  //   transfer_characteristics (uint16)
-  //   matrix_coefficients (uint16)
-  //   full_range_flag (uint8)
-  if (colr.contentStart + 4 + 4 > colr.contentEnd) return null;
-
-  const primariesCode = view.getUint16(colr.contentStart + 4);
-  const transferCode = view.getUint16(colr.contentStart + 6);
-
-  // Map transfer characteristics
-  let transferFunction: TransferFunction;
-  if (transferCode === 16) {
-    transferFunction = 'pq'; // SMPTE ST 2084
-  } else if (transferCode === 18) {
-    transferFunction = 'hlg'; // ARIB STD-B67
-  } else {
-    transferFunction = 'srgb';
+      if (boxType === 'colr') {
+        const cStart = scanOffset + 8;
+        const cEnd = scanOffset + boxSize;
+        if (cStart + 4 <= cEnd) {
+          const ct = String.fromCharCode(
+            view.getUint8(cStart), view.getUint8(cStart + 1),
+            view.getUint8(cStart + 2), view.getUint8(cStart + 3)
+          );
+          if (ct === 'nclx') {
+            nclxColr = { contentStart: cStart, contentEnd: cEnd };
+          } else if (ct === 'prof' || ct === 'ricc') {
+            // ICC profile data starts after the 4-byte colour_type
+            iccProfileStart = cStart + 4;
+            iccProfileEnd = cEnd;
+          }
+        }
+      }
+      scanOffset += boxSize;
+    }
   }
 
-  // Map colour primaries
-  const colorPrimaries: ColorPrimaries = primariesCode === 9 ? 'bt2020' : 'bt709';
+  // Try nclx first
+  if (nclxColr) {
+    const colr = nclxColr;
+    if (colr.contentStart + 4 + 4 <= colr.contentEnd) {
+      const primariesCode = view.getUint16(colr.contentStart + 4);
+      const transferCode = view.getUint16(colr.contentStart + 6);
 
-  const isHDR = transferFunction === 'pq' || transferFunction === 'hlg';
+      let transferFunction: TransferFunction;
+      if (transferCode === 16) {
+        transferFunction = 'pq';
+      } else if (transferCode === 18) {
+        transferFunction = 'hlg';
+      } else {
+        transferFunction = 'srgb';
+      }
 
-  return { transferFunction, colorPrimaries, isHDR };
+      const colorPrimaries: ColorPrimaries = primariesCode === 9 ? 'bt2020' : 'bt709';
+      const isHDR = transferFunction === 'pq' || transferFunction === 'hlg';
+
+      if (isHDR) {
+        return { transferFunction, colorPrimaries, isHDR: true };
+      }
+    }
+  }
+
+  // Fallback: check ICC profile for HDR transfer curves (PQ / HLG).
+  // Some encoders signal HDR only via ICC profile, not nclx.
+  if (iccProfileStart > 0 && iccProfileEnd > iccProfileStart) {
+    const iccResult = detectHDRFromICCProfile(view, iccProfileStart, iccProfileEnd);
+    if (iccResult) {
+      return iccResult;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Detect HDR from an ICC profile embedded in a colr(prof) box.
+ *
+ * Checks:
+ * 1. Profile description tag ('desc') for PQ/HLG/HDR keywords
+ * 2. CICP tag ('cicp', ICC v4.4+) for PQ/HLG transfer characteristics
+ * 3. TRC curve tag ('rTRC') — parametric PQ curve detection
+ */
+function detectHDRFromICCProfile(
+  view: DataView,
+  start: number,
+  end: number
+): AVIFColorInfo | null {
+  const profileSize = end - start;
+
+  // ICC profile minimum: 128-byte header + 4-byte tag count
+  if (profileSize < 132) return null;
+
+  // Read tag count at offset 128
+  const tagCount = view.getUint32(start + 128);
+  if (tagCount > 100) return null; // sanity
+
+  // Scan tag table (starts at offset 132, each entry is 12 bytes: sig(4) + offset(4) + size(4))
+  let descText = '';
+  let cicpTransfer = -1;
+  let cicpPrimaries = -1;
+  let hasPQCurve = false;
+
+  for (let i = 0; i < tagCount; i++) {
+    const tagEntry = start + 132 + i * 12;
+    if (tagEntry + 12 > end) break;
+
+    const sig = String.fromCharCode(
+      view.getUint8(tagEntry), view.getUint8(tagEntry + 1),
+      view.getUint8(tagEntry + 2), view.getUint8(tagEntry + 3)
+    );
+    const tagOffset = view.getUint32(tagEntry + 4);
+    const tagSize = view.getUint32(tagEntry + 8);
+    const tagDataStart = start + tagOffset;
+    const tagDataEnd = Math.min(tagDataStart + tagSize, end);
+
+    if (tagDataStart >= end || tagDataEnd > end) continue;
+
+    // 1. 'desc' tag — profile description
+    if (sig === 'desc' && tagSize > 12) {
+      descText = readICCDescriptionTag(view, tagDataStart, tagDataEnd);
+    }
+
+    // 2. 'cicp' tag (ICC v4.4+) — CICP colour info
+    if (sig === 'cicp' && tagSize >= 12) {
+      // cicp tag: type signature(4) + reserved(4) + primaries(1) + transfer(1) + matrix(1) + range(1)
+      const typeTag = String.fromCharCode(
+        view.getUint8(tagDataStart), view.getUint8(tagDataStart + 1),
+        view.getUint8(tagDataStart + 2), view.getUint8(tagDataStart + 3)
+      );
+      if (typeTag === 'cicp') {
+        cicpPrimaries = view.getUint8(tagDataStart + 8);
+        cicpTransfer = view.getUint8(tagDataStart + 9);
+      }
+    }
+
+    // 3. 'rTRC' tag — check for parametric PQ curve
+    if (sig === 'rTRC' && tagSize >= 12) {
+      hasPQCurve = detectPQParametricCurve(view, tagDataStart, tagDataEnd);
+    }
+  }
+
+  // Check CICP tag first (most reliable)
+  if (cicpTransfer === 16) {
+    const colorPrimaries: ColorPrimaries = cicpPrimaries === 9 ? 'bt2020' : 'bt709';
+    return { transferFunction: 'pq', colorPrimaries, isHDR: true };
+  }
+  if (cicpTransfer === 18) {
+    const colorPrimaries: ColorPrimaries = cicpPrimaries === 9 ? 'bt2020' : 'bt709';
+    return { transferFunction: 'hlg', colorPrimaries, isHDR: true };
+  }
+
+  // Check profile description for HDR keywords
+  const descLower = descText.toLowerCase();
+  if (descLower.includes('pq') || descLower.includes('smpte st 2084') || descLower.includes('st2084')) {
+    return { transferFunction: 'pq', colorPrimaries: descLower.includes('2020') ? 'bt2020' : 'bt709', isHDR: true };
+  }
+  if (descLower.includes('hlg') || descLower.includes('std-b67') || descLower.includes('arib')) {
+    return { transferFunction: 'hlg', colorPrimaries: descLower.includes('2020') ? 'bt2020' : 'bt709', isHDR: true };
+  }
+  // Generic HDR keyword match (less precise, default to PQ)
+  if (descLower.includes('hdr') || descLower.includes('2100')) {
+    return { transferFunction: 'pq', colorPrimaries: descLower.includes('2020') ? 'bt2020' : 'bt709', isHDR: true };
+  }
+
+  // Check TRC curve
+  if (hasPQCurve) {
+    return { transferFunction: 'pq', colorPrimaries: 'bt709', isHDR: true };
+  }
+
+  // Wide gamut detection: Display P3 or BT.2020 ICC profiles benefit from
+  // the VideoFrame HDR path — preserves color volume and enables EDR output
+  // on HDR displays (brighter whites, more saturated colors).
+  const isP3 = /\bdisplay\s*p3\b/i.test(descText) || /\bp3\b/i.test(descText);
+  const isBT2020 = /\bbt\.?2020\b/i.test(descText) || /\brec\.?2020\b/i.test(descText);
+  if (isP3 || isBT2020) {
+    const colorPrimaries: ColorPrimaries = isBT2020 ? 'bt2020' : 'bt709';
+    return { transferFunction: 'srgb', colorPrimaries, isHDR: true };
+  }
+
+  return null;
+}
+
+/**
+ * Read the text from an ICC 'desc' (profileDescriptionTag) or 'mluc' tag.
+ */
+function readICCDescriptionTag(view: DataView, start: number, end: number): string {
+  if (start + 8 > end) return '';
+
+  const typeSig = String.fromCharCode(
+    view.getUint8(start), view.getUint8(start + 1),
+    view.getUint8(start + 2), view.getUint8(start + 3)
+  );
+
+  // 'desc' type (ICC v2): type(4) + reserved(4) + length(4) + ASCII string
+  if (typeSig === 'desc') {
+    if (start + 12 > end) return '';
+    const strLen = view.getUint32(start + 8);
+    const strStart = start + 12;
+    const strEnd = Math.min(strStart + strLen, end);
+    const chars: string[] = [];
+    for (let i = strStart; i < strEnd; i++) {
+      const c = view.getUint8(i);
+      if (c === 0) break;
+      chars.push(String.fromCharCode(c));
+    }
+    return chars.join('');
+  }
+
+  // 'mluc' type (ICC v4): multi-localized Unicode
+  if (typeSig === 'mluc') {
+    if (start + 16 > end) return '';
+    const recordCount = view.getUint32(start + 8);
+    if (recordCount === 0) return '';
+    // First record: language(2) + country(2) + length(4) + offset(4) at start+16
+    if (start + 28 > end) return '';
+    const strLength = view.getUint32(start + 20);
+    const strOffset = view.getUint32(start + 24);
+    const strStart = start + strOffset;
+    const strEnd = Math.min(strStart + strLength, end);
+    // mluc stores UTF-16BE strings
+    const chars: string[] = [];
+    for (let i = strStart; i + 1 < strEnd; i += 2) {
+      const code = view.getUint16(i);
+      if (code === 0) break;
+      chars.push(String.fromCharCode(code));
+    }
+    return chars.join('');
+  }
+
+  return '';
+}
+
+/**
+ * Detect if a TRC tag contains a PQ-like parametric curve.
+ * PQ (SMPTE ST 2084) uses a specific EOTF that's characterized by
+ * parametric curve type 4 with distinctive coefficients.
+ */
+function detectPQParametricCurve(view: DataView, start: number, end: number): boolean {
+  if (start + 8 > end) return false;
+
+  const typeSig = String.fromCharCode(
+    view.getUint8(start), view.getUint8(start + 1),
+    view.getUint8(start + 2), view.getUint8(start + 3)
+  );
+
+  // 'para' type: parametric curve
+  if (typeSig === 'para') {
+    if (start + 12 > end) return false;
+    const funcType = view.getUint16(start + 8);
+    // PQ is typically encoded as funcType 4 (Y = (aX+b)^g + c) with extreme gamma
+    // or as a large curv LUT. Check gamma for PQ-like values (gamma > 10 is suspicious).
+    if (funcType === 0 && start + 16 <= end) {
+      // Simple gamma: s15Fixed16 at offset 12
+      const gamma = view.getInt32(start + 12) / 65536.0;
+      if (gamma > 10) return true; // PQ effective gamma is very high
+    }
+    return false;
+  }
+
+  // 'curv' type: check if it's a large LUT (PQ profiles often have 4096+ entries)
+  if (typeSig === 'curv') {
+    if (start + 12 > end) return false;
+    const entryCount = view.getUint32(start + 8);
+    // PQ TRC LUTs are typically 1024-4096 entries with values that reach well above
+    // linear 1.0. Check the last few entries — PQ at max input maps to ~10000 nits.
+    if (entryCount >= 1024 && start + 12 + entryCount * 2 <= end) {
+      // Read last entry (uint16, max 65535 maps to 1.0 in SDR or higher in HDR)
+      // For a standard gamma curve, the last entry is 65535.
+      // For PQ, the curve shape is distinctive — check mid-point.
+      // SDR gamma: mid-point (~entry 512 of 1024) is ~46340 (sqrt(0.5)*65535)
+      // PQ: mid-point is much lower due to the steep curve at high values.
+      const midIdx = Math.floor(entryCount / 2);
+      const midVal = view.getUint16(start + 12 + midIdx * 2);
+      const endVal = view.getUint16(start + 12 + (entryCount - 1) * 2);
+      // PQ mid-point is typically very low relative to endpoint
+      // (PQ concentrates precision in darks). Ratio < 0.1 is a strong PQ signal.
+      if (endVal > 0 && midVal / endVal < 0.15) return true;
+    }
+    return false;
+  }
+
+  return false;
 }
 
 @RegisterNode('RVFileSource')
@@ -333,13 +575,24 @@ export class FileSourceNode extends BaseSourceNode {
       }
     }
 
-    // Check if this is an AVIF file - detect HDR via ISOBMFF colr box
+    // Check if this is an AVIF file - detect HDR via gainmap or ISOBMFF colr box
     if (isAVIFExtension(filename)) {
       try {
         const response = await fetch(url);
         if (response.ok) {
           const buffer = await response.arrayBuffer();
-          if (isAVIFFile(buffer)) {
+          const avifValid = isAVIFFile(buffer);
+          if (avifValid) {
+            // Check for gainmap FIRST (gainmap AVIF may also have nclx HDR markers)
+            const hasGainmap = isGainmapAVIF(buffer);
+            if (hasGainmap) {
+              const gmInfo = parseGainmapAVIF(buffer);
+              if (gmInfo) {
+                await this.loadGainmapAVIF(buffer, gmInfo, filename, url, originalUrl);
+                return;
+              }
+            }
+            // Check nclx colr for HLG/PQ HDR
             const colorInfo = parseAVIFColorInfo(buffer);
             if (colorInfo?.isHDR) {
               await this.loadAVIFHDR(buffer, colorInfo, filename, url, originalUrl);
@@ -612,17 +865,12 @@ export class FileSourceNode extends BaseSourceNode {
     url: string,
     originalUrl?: string
   ): Promise<void> {
-    console.log(`[FileSource] Loading JPEG gainmap: ${name}, headroom=${info.headroom}`);
     const result = await decodeGainmapToFloat32(buffer, info);
-    // Compute peak pixel value for diagnostics
+    // Compute peak pixel value for metadata
     let peakValue = 0;
     for (let i = 0; i < Math.min(result.data.length, 500000); i++) {
       if (result.data[i]! > peakValue) peakValue = result.data[i]!;
     }
-    console.log(
-      `[FileSource] Gainmap decoded: ${result.width}x${result.height}, float32, ${result.channels}ch` +
-      `, peak=${peakValue.toFixed(3)}, headroom=${info.headroom}`
-    );
 
     const metadata: ImageMetadata = {
       colorSpace: 'linear',
@@ -635,11 +883,6 @@ export class FileSourceNode extends BaseSourceNode {
         peakValue,
       },
     };
-
-    console.log(
-      `[FileSource] Gainmap IPImage metadata: tf=${metadata.transferFunction} cp=${metadata.colorPrimaries}` +
-      ` cs=${metadata.colorSpace} format=${metadata.attributes?.formatName}`
-    );
 
     this.cachedIPImage = new IPImage({
       width: result.width,
@@ -655,6 +898,72 @@ export class FileSourceNode extends BaseSourceNode {
     this.isEXR = false;
     this._isHDRFormat = true;
     this._formatName = 'jpeg-gainmap';
+    this.image = null;
+
+    this.metadata = {
+      name,
+      width: result.width,
+      height: result.height,
+      duration: 1,
+      fps: 24,
+    };
+
+    this.properties.setValue('url', url);
+    if (originalUrl) {
+      this.properties.setValue('originalUrl', originalUrl);
+    }
+    this.properties.setValue('width', result.width);
+    this.properties.setValue('height', result.height);
+    this.properties.setValue('isHDR', true);
+
+    this.canvasDirty = true;
+    this.markDirty();
+  }
+
+  /**
+   * Load AVIF HDR file with gainmap
+   */
+  private async loadGainmapAVIF(
+    buffer: ArrayBuffer,
+    info: import('../../formats/AVIFGainmapDecoder').AVIFGainmapInfo,
+    name: string,
+    url: string,
+    originalUrl?: string
+  ): Promise<void> {
+    const result = await decodeAVIFGainmapToFloat32(buffer, info);
+
+    // Compute peak pixel value for metadata
+    let peakValue = 0;
+    for (let i = 0; i < Math.min(result.data.length, 500000); i++) {
+      if (result.data[i]! > peakValue) peakValue = result.data[i]!;
+    }
+
+    const metadata: ImageMetadata = {
+      colorSpace: 'linear',
+      sourcePath: originalUrl ?? url,
+      transferFunction: 'srgb',
+      colorPrimaries: 'bt709',
+      attributes: {
+        formatName: 'avif-gainmap',
+        headroom: info.headroom,
+        peakValue,
+      },
+    };
+
+    this.cachedIPImage = new IPImage({
+      width: result.width,
+      height: result.height,
+      channels: result.channels,
+      dataType: 'float32',
+      data: result.data.buffer as ArrayBuffer,
+      metadata,
+    });
+    this.cachedIPImage.metadata.frameNumber = 1;
+
+    this.url = url;
+    this.isEXR = false;
+    this._isHDRFormat = true;
+    this._formatName = 'avif-gainmap';
     this.image = null;
 
     this.metadata = {
@@ -839,11 +1148,23 @@ export class FileSourceNode extends BaseSourceNode {
       }
     }
 
-    // Check if this is an AVIF file - detect HDR via ISOBMFF colr box
+    // Check if this is an AVIF file - detect HDR via gainmap or ISOBMFF colr box
     if (isAVIFExtension(file.name)) {
       try {
         const buffer = await file.arrayBuffer();
-        if (isAVIFFile(buffer)) {
+        const avifValid = isAVIFFile(buffer);
+        if (avifValid) {
+          // Check for gainmap FIRST (gainmap AVIF may also have nclx HDR markers)
+          const hasGainmap = isGainmapAVIF(buffer);
+          if (hasGainmap) {
+            const gmInfo = parseGainmapAVIF(buffer);
+            if (gmInfo) {
+              const url = URL.createObjectURL(file);
+              await this.loadGainmapAVIF(buffer, gmInfo, file.name, url);
+              return;
+            }
+          }
+          // Check nclx colr for HLG/PQ HDR
           const colorInfo = parseAVIFColorInfo(buffer);
           if (colorInfo?.isHDR) {
             const url = URL.createObjectURL(file);
