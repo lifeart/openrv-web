@@ -8,6 +8,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { HistoryPanel } from './HistoryPanel';
 import { HistoryManager } from '../../utils/HistoryManager';
+import { getThemeManager } from '../../utils/ui/ThemeManager';
 
 describe('HistoryPanel', () => {
   let panel: HistoryPanel;
@@ -241,6 +242,69 @@ describe('HistoryPanel', () => {
       expect(clearSpy).toHaveBeenCalledTimes(1);
       expect(panel.getState().entryCount).toBe(0);
       expect(panel.getState().currentIndex).toBe(-1);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // theme changes
+  // ---------------------------------------------------------------------------
+  describe('theme changes', () => {
+    it('HP-040: re-renders entries when theme changes', () => {
+      panel.show();
+      historyManager.recordAction('Theme test action', 'color', () => {});
+
+      const entriesEl = panel.getElement().querySelector('.history-entries')!;
+      // Grab a reference to the first child node before theme change
+      const oldChild = entriesEl.firstElementChild!;
+      expect(oldChild).toBeTruthy();
+
+      getThemeManager().emit('themeChanged', 'light');
+
+      // render() clears innerHTML and rebuilds — the old child is now detached
+      expect(entriesEl.contains(oldChild)).toBe(false);
+      // But the content is re-created with the same data
+      expect(entriesEl.textContent).toContain('Theme test action');
+    });
+
+    it('HP-041: uses CSS variables instead of hardcoded colors for container', () => {
+      const style = panel.getElement().style.cssText;
+      expect(style).toContain('var(--bg-secondary)');
+      expect(style).toContain('var(--border-primary)');
+      expect(style).not.toContain('rgba(30, 30, 30');
+      expect(style).not.toContain('rgba(255, 255, 255, 0.1)');
+    });
+
+    it('HP-042: uses CSS variables for header background and border', () => {
+      const header = panel.getElement().querySelector('.history-panel-header') as HTMLElement;
+      expect(header.style.cssText).toContain('var(--bg-tertiary)');
+      expect(header.style.cssText).toContain('var(--border-primary)');
+      expect(header.style.cssText).not.toContain('rgba(40, 40, 40');
+    });
+
+    it('HP-043: does not re-render on theme change after dispose', () => {
+      panel.show();
+      historyManager.recordAction('Action before dispose', 'color', () => {});
+      panel.dispose();
+
+      const htmlAfterDispose = panel.getElement().innerHTML;
+
+      getThemeManager().emit('themeChanged', 'light');
+
+      expect(panel.getElement().innerHTML).toBe(htmlAfterDispose);
+    });
+
+    it('HP-044: dispose unsubscribes theme listener (no re-render on subsequent theme changes)', () => {
+      panel.show();
+      historyManager.recordAction('Persistent action', 'paint', () => {});
+      panel.dispose();
+
+      const htmlAfterDispose = panel.getElement().innerHTML;
+
+      // Multiple theme changes should have no effect
+      getThemeManager().emit('themeChanged', 'dark');
+      getThemeManager().emit('themeChanged', 'light');
+
+      expect(panel.getElement().innerHTML).toBe(htmlAfterDispose);
     });
   });
 });
