@@ -546,6 +546,16 @@ export class ViewerGLRenderer {
     state.colorAdjustments = { ...state.colorAdjustments, gamma: 1 };
     state.displayColor = { ...state.displayColor, transferFunction: 0, displayGamma: 1, displayBrightness: 1 };
 
+    // Disable tone mapping for HLG/PQ content — the transfer function already
+    // encodes dynamic range for the display.
+    const tf = image.metadata?.transferFunction;
+    if (tf === 'hlg' || tf === 'pq') {
+      state.toneMappingState = { enabled: false, operator: 'off' };
+    }
+
+    // Gamut mapping: auto-detect based on image metadata and display capabilities
+    state.gamutMapping = this.detectGamutMapping(image);
+
     // Debug: log blit render state (once per image change)
     if (this._lastRenderedImage?.deref() !== image) {
       console.log(
@@ -553,7 +563,8 @@ export class ViewerGLRenderer {
         ` toneMapping=${state.toneMappingState.enabled ? state.toneMappingState.operator : 'OFF'}` +
         ` displayTransfer=${state.displayColor.transferFunction}` +
         ` exposure=${state.colorAdjustments.exposure}` +
-        ` gamma=${state.colorAdjustments.gamma}`
+        ` gamma=${state.colorAdjustments.gamma}` +
+        ` gamutMapping=${state.gamutMapping?.mode ?? 'none'}`
       );
     }
 
@@ -636,6 +647,29 @@ export class ViewerGLRenderer {
     const state = this.buildRenderState();
     state.colorAdjustments = { ...state.colorAdjustments, gamma: 1 };
     state.displayColor = { ...state.displayColor, transferFunction: 0, displayGamma: 1, displayBrightness: 1 };
+
+    // Disable tone mapping for HLG/PQ content — the transfer function already
+    // encodes dynamic range for the display.
+    const tf = image.metadata?.transferFunction;
+    if (tf === 'hlg' || tf === 'pq') {
+      state.toneMappingState = { enabled: false, operator: 'off' };
+    }
+
+    // Gamut mapping: auto-detect based on image metadata and display capabilities
+    state.gamutMapping = this.detectGamutMapping(image);
+
+    // Debug: log canvas2d blit render state (once per image change)
+    if (this._lastRenderedImage?.deref() !== image) {
+      console.log(
+        `[Canvas2D Blit] state:` +
+        ` toneMapping=${state.toneMappingState.enabled ? state.toneMappingState.operator : 'OFF'}` +
+        ` displayTransfer=${state.displayColor.transferFunction}` +
+        ` exposure=${state.colorAdjustments.exposure}` +
+        ` gamma=${state.colorAdjustments.gamma}` +
+        ` gamutMapping=${state.gamutMapping?.mode ?? 'none'}`
+      );
+    }
+
     renderer.applyRenderState(state);
     PerfTrace.end('canvas2dBlit.buildRenderState');
 

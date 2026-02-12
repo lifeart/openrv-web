@@ -11,7 +11,7 @@
  * This decoder handles the SDR WASM fallback path.
  */
 
-import { validateImageDimensions, toRGBA } from './shared';
+import { validateImageDimensions } from './shared';
 import { DecoderError } from '../core/errors';
 
 export interface JXLDecodeResult {
@@ -105,13 +105,10 @@ export async function decodeJXL(buffer: ArrayBuffer): Promise<JXLDecodeResult> {
     float32[i] = (data[i] ?? 0) * scale;
   }
 
-  // Already RGBA, no channel conversion needed
-  const rgbaData = toRGBA(float32, width, height, 4);
-
   return {
     width,
     height,
-    data: rgbaData,
+    data: float32,
     channels: 4,
     colorSpace: 'srgb',
     metadata: {

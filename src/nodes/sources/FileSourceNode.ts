@@ -455,15 +455,68 @@ function detectPQParametricCurve(view: DataView, start: number, end: number): bo
 
 /**
  * Parse JXL ISOBMFF container to extract color info from colr(nclx) box.
- * JXL ISOBMFF uses the same box structure as AVIF, so we reuse the same
- * parsing logic: ftyp → meta → iprp → ipco → colr(nclx).
+ *
+ * Unlike AVIF (which nests colr inside meta/iprp/ipco), JXL ISOBMFF containers
+ * place colr boxes at the top level (ISO 18181-2). We scan all top-level boxes
+ * after ftyp for colr(nclx).
  *
  * Returns null if no nclx colour info found (treat as SDR).
  */
 function parseJXLColorInfo(buffer: ArrayBuffer): AVIFColorInfo | null {
-  // JXL ISOBMFF container uses the same box hierarchy as AVIF.
-  // Reuse the existing AVIF parser since the colr(nclx) box format is identical.
-  return parseAVIFColorInfo(buffer);
+  const view = new DataView(buffer);
+  const length = buffer.byteLength;
+  if (length < 12) return null;
+
+  // Skip past ftyp box
+  const ftypSize = view.getUint32(0);
+  if (ftypSize < 8 || ftypSize > length) return null;
+
+  // Scan top-level boxes after ftyp for colr(nclx)
+  let offset = ftypSize;
+  while (offset + 8 <= length) {
+    const boxSize = view.getUint32(offset);
+    if (boxSize < 8 || offset + boxSize > length) break;
+
+    const boxType = String.fromCharCode(
+      view.getUint8(offset + 4), view.getUint8(offset + 5),
+      view.getUint8(offset + 6), view.getUint8(offset + 7)
+    );
+
+    if (boxType === 'colr') {
+      const cStart = offset + 8;
+      const cEnd = offset + boxSize;
+      if (cStart + 4 <= cEnd) {
+        const colourType = String.fromCharCode(
+          view.getUint8(cStart), view.getUint8(cStart + 1),
+          view.getUint8(cStart + 2), view.getUint8(cStart + 3)
+        );
+        if (colourType === 'nclx' && cStart + 4 + 4 <= cEnd) {
+          const primariesCode = view.getUint16(cStart + 4);
+          const transferCode = view.getUint16(cStart + 6);
+
+          let transferFunction: TransferFunction;
+          if (transferCode === 16) {
+            transferFunction = 'pq';
+          } else if (transferCode === 18) {
+            transferFunction = 'hlg';
+          } else {
+            transferFunction = 'srgb';
+          }
+
+          const colorPrimaries: ColorPrimaries = primariesCode === 9 ? 'bt2020' : 'bt709';
+          const isHDR = transferFunction === 'pq' || transferFunction === 'hlg';
+
+          if (isHDR) {
+            return { transferFunction, colorPrimaries, isHDR: true };
+          }
+        }
+      }
+    }
+
+    offset += boxSize;
+  }
+
+  return null;
 }
 
 @RegisterNode('RVFileSource')
@@ -1400,6 +1453,7 @@ export class FileSourceNode extends BaseSourceNode {
 
     // Check if this is a JXL file - detect HDR via ISOBMFF colr box, SDR via WASM decode
     if (isJXLExtension(file.name)) {
+      let jxlBlobUrl: string | null = null;
       try {
         const buffer = await file.arrayBuffer();
         if (isJXLFile(buffer)) {
@@ -1407,23 +1461,24 @@ export class FileSourceNode extends BaseSourceNode {
           if (isJXLContainer(buffer)) {
             const colorInfo = parseJXLColorInfo(buffer);
             if (colorInfo?.isHDR) {
-              const url = URL.createObjectURL(file);
-              await this.loadJXLHDR(buffer, colorInfo, file.name, url);
+              jxlBlobUrl = URL.createObjectURL(file);
+              await this.loadJXLHDR(buffer, colorInfo, file.name, jxlBlobUrl);
               return;
             }
           }
           // SDR path: try browser-native decode first (faster), fall back to WASM
-          const url = URL.createObjectURL(file);
+          jxlBlobUrl = URL.createObjectURL(file);
           try {
-            const loaded = await this.tryLoadJXLNative(buffer, file.name, url);
+            const loaded = await this.tryLoadJXLNative(buffer, file.name, jxlBlobUrl);
             if (loaded) return;
           } catch {
             // Browser doesn't support JXL natively — fall through to WASM
           }
-          await this.loadJXLFromBuffer(buffer, file.name, url);
+          await this.loadJXLFromBuffer(buffer, file.name, jxlBlobUrl);
           return;
         }
       } catch (err) {
+        if (jxlBlobUrl) URL.revokeObjectURL(jxlBlobUrl);
         console.warn('[FileSource] JXL loading failed, falling back to standard loading:', err);
         // Fall through to standard image loading
       }

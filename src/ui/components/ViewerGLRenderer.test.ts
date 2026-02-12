@@ -564,9 +564,10 @@ describe('ViewerGLRenderer', () => {
       const internal = glRenderer as unknown as TestableViewerGLRenderer;
       internal._glCanvas = document.createElement('canvas');
       internal._glRenderer = mockRendererObj as unknown as Renderer;
+      const blitCanvas = document.createElement('canvas');
       internal._webgpuBlit = {
         initialized: true,
-        getCanvas: () => document.createElement('canvas'),
+        getCanvas: () => blitCanvas,
         uploadAndDisplay: vi.fn(),
       };
 
@@ -688,6 +689,315 @@ describe('ViewerGLRenderer', () => {
       // In jsdom, WebGL2 is not available so result is null, but no crash means
       // the skip-worker path was taken (no OffscreenCanvas worker attempted).
       expect(result).toBeNull();
+    });
+  });
+
+  // =========================================================================
+  // Canvas2D blit path — render state & readback
+  // =========================================================================
+  describe('Canvas2D blit path render state', () => {
+    function setupCanvas2DBlitRenderer() {
+      const syncReadback = vi.fn(() => new Float32Array(100 * 100 * 4));
+      const asyncReadback = vi.fn(() => new Float32Array(100 * 100 * 4));
+      let pendingChanges = true;
+
+      const capturedStates: RenderState[] = [];
+      const mockRendererObj = {
+        getHDROutputMode: vi.fn(() => 'sdr'),
+        applyRenderState: vi.fn((state: RenderState) => {
+          capturedStates.push(JSON.parse(JSON.stringify(state)));
+        }),
+        resize: vi.fn(),
+        clear: vi.fn(),
+        renderImage: vi.fn(),
+        renderImageToFloat: syncReadback,
+        renderImageToFloatAsync: asyncReadback,
+        hasPendingStateChanges: vi.fn(() => pendingChanges),
+        dispose: vi.fn(),
+      };
+
+      const blitCtx = createMockContext();
+      (blitCtx.getTransformManager as ReturnType<typeof vi.fn>).mockReturnValue({
+        transform: { rotation: 0, flipH: false, flipV: false },
+      });
+
+      const glRenderer = new ViewerGLRenderer(blitCtx);
+      const internal = glRenderer as unknown as TestableViewerGLRenderer;
+      internal._glCanvas = document.createElement('canvas');
+      internal._glRenderer = mockRendererObj as unknown as Renderer;
+      const canvas2dBlitCanvas = document.createElement('canvas');
+      internal._canvas2dBlit = {
+        initialized: true,
+        getCanvas: () => canvas2dBlitCanvas,
+        uploadAndDisplay: vi.fn(),
+      };
+
+      vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(createDefaultRenderState());
+
+      return {
+        glRenderer, capturedStates, mockRendererObj, syncReadback, asyncReadback,
+        setPendingChanges: (v: boolean) => { pendingChanges = v; },
+      };
+    }
+
+    it('VGLR-070: Canvas2D blit path disables tone mapping for HLG content', () => {
+      const { glRenderer, capturedStates } = setupCanvas2DBlitRenderer();
+
+      const stateWithTM = createDefaultRenderState();
+      stateWithTM.toneMappingState = { enabled: true, operator: 'aces' };
+      vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithTM);
+
+      const image = new IPImage({
+        width: 10, height: 10, channels: 4, dataType: 'uint8',
+        metadata: { transferFunction: 'hlg' },
+      });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(capturedStates.length).toBe(1);
+      expect(capturedStates[0]!.toneMappingState.enabled).toBe(false);
+    });
+
+    it('VGLR-071: Canvas2D blit path disables tone mapping for PQ content', () => {
+      const { glRenderer, capturedStates } = setupCanvas2DBlitRenderer();
+
+      const stateWithTM = createDefaultRenderState();
+      stateWithTM.toneMappingState = { enabled: true, operator: 'reinhard' };
+      vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithTM);
+
+      const image = new IPImage({
+        width: 10, height: 10, channels: 4, dataType: 'uint8',
+        metadata: { transferFunction: 'pq' },
+      });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(capturedStates.length).toBe(1);
+      expect(capturedStates[0]!.toneMappingState.enabled).toBe(false);
+    });
+
+    it('VGLR-072: Canvas2D blit path preserves tone mapping for sRGB/linear content', () => {
+      const { glRenderer, capturedStates } = setupCanvas2DBlitRenderer();
+
+      const stateWithTM = createDefaultRenderState();
+      stateWithTM.toneMappingState = { enabled: true, operator: 'aces' };
+      vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithTM);
+
+      const image = new IPImage({
+        width: 10, height: 10, channels: 4, dataType: 'float32',
+        metadata: { transferFunction: 'srgb' },
+      });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(capturedStates.length).toBe(1);
+      expect(capturedStates[0]!.toneMappingState.enabled).toBe(true);
+      expect(capturedStates[0]!.toneMappingState.operator).toBe('aces');
+    });
+
+    it('VGLR-073: Canvas2D blit path sets displayColor overrides for linear-light output', () => {
+      const { glRenderer, capturedStates } = setupCanvas2DBlitRenderer();
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'float32' });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(capturedStates.length).toBe(1);
+      expect(capturedStates[0]!.displayColor.transferFunction).toBe(0);
+      expect(capturedStates[0]!.displayColor.displayGamma).toBe(1);
+      expect(capturedStates[0]!.displayColor.displayBrightness).toBe(1);
+    });
+
+    it('VGLR-074: Canvas2D blit path sets gamma override to 1', () => {
+      const { glRenderer, capturedStates } = setupCanvas2DBlitRenderer();
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'float32' });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(capturedStates.length).toBe(1);
+      expect(capturedStates[0]!.colorAdjustments.gamma).toBe(1);
+    });
+
+    it('VGLR-075: Canvas2D blit path uses sync readback when state has pending changes', () => {
+      const { glRenderer, syncReadback, asyncReadback, setPendingChanges } = setupCanvas2DBlitRenderer();
+      setPendingChanges(true);
+
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'float32' });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(syncReadback).toHaveBeenCalled();
+      expect(asyncReadback).not.toHaveBeenCalled();
+    });
+
+    it('VGLR-076: Canvas2D blit path uses async readback when no pending changes', () => {
+      const { glRenderer, syncReadback, asyncReadback, setPendingChanges } = setupCanvas2DBlitRenderer();
+      setPendingChanges(false);
+
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'float32' });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(asyncReadback).toHaveBeenCalled();
+      expect(syncReadback).not.toHaveBeenCalled();
+    });
+
+    it('VGLR-077: Canvas2D blit path calls uploadAndDisplay with readback pixels', () => {
+      const { glRenderer } = setupCanvas2DBlitRenderer();
+      const internal = glRenderer as unknown as TestableViewerGLRenderer;
+      const uploadFn = (internal._canvas2dBlit as any).uploadAndDisplay;
+
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'float32' });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(uploadFn).toHaveBeenCalledTimes(1);
+      expect(uploadFn).toHaveBeenCalledWith(expect.any(Float32Array), 100, 100);
+    });
+
+    it('VGLR-078: Canvas2D blit path skips render when same image, same dims, no pending changes', () => {
+      const { glRenderer, setPendingChanges } = setupCanvas2DBlitRenderer();
+      const internal = glRenderer as unknown as TestableViewerGLRenderer;
+      const uploadFn = (internal._canvas2dBlit as any).uploadAndDisplay;
+
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'float32' });
+
+      // First render
+      setPendingChanges(true);
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+      expect(uploadFn).toHaveBeenCalledTimes(1);
+
+      // Second render with same image, same dimensions, no pending changes → skip
+      setPendingChanges(false);
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+      expect(uploadFn).toHaveBeenCalledTimes(1); // not called again
+    });
+
+    it('VGLR-079: Canvas2D blit path hides WebGPU blit canvas on activation', () => {
+      const { glRenderer } = setupCanvas2DBlitRenderer();
+      const internal = glRenderer as unknown as TestableViewerGLRenderer;
+
+      // Also add a mock WebGPU blit canvas
+      const webgpuCanvas = document.createElement('canvas');
+      webgpuCanvas.style.display = 'block';
+      internal._webgpuBlit = {
+        initialized: false,
+        getCanvas: () => webgpuCanvas,
+      };
+
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'float32' });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      // WebGPU blit canvas should be hidden when Canvas2D blit takes over
+      expect(webgpuCanvas.style.display).toBe('none');
+    });
+  });
+
+  // =========================================================================
+  // WebGPU blit path — tone mapping & gamut mapping
+  // =========================================================================
+  describe('WebGPU blit path tone mapping', () => {
+    function setupWebGPUBlitRenderer() {
+      const syncReadback = vi.fn(() => new Float32Array(100 * 100 * 4));
+      const asyncReadback = vi.fn(() => new Float32Array(100 * 100 * 4));
+      let pendingChanges = true;
+
+      const capturedStates: RenderState[] = [];
+      const mockRendererObj = {
+        getHDROutputMode: vi.fn(() => 'sdr'),
+        applyRenderState: vi.fn((state: RenderState) => {
+          capturedStates.push(JSON.parse(JSON.stringify(state)));
+        }),
+        resize: vi.fn(),
+        clear: vi.fn(),
+        renderImage: vi.fn(),
+        renderImageToFloat: syncReadback,
+        renderImageToFloatAsync: asyncReadback,
+        hasPendingStateChanges: vi.fn(() => pendingChanges),
+        dispose: vi.fn(),
+      };
+
+      const blitCtx = createMockContext();
+      (blitCtx.getTransformManager as ReturnType<typeof vi.fn>).mockReturnValue({
+        transform: { rotation: 0, flipH: false, flipV: false },
+      });
+
+      const glRenderer = new ViewerGLRenderer(blitCtx);
+      const internal = glRenderer as unknown as TestableViewerGLRenderer;
+      internal._glCanvas = document.createElement('canvas');
+      internal._glRenderer = mockRendererObj as unknown as Renderer;
+      const webgpuBlitCanvas = document.createElement('canvas');
+      internal._webgpuBlit = {
+        initialized: true,
+        getCanvas: () => webgpuBlitCanvas,
+        uploadAndDisplay: vi.fn(),
+      };
+
+      vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(createDefaultRenderState());
+
+      return {
+        glRenderer, capturedStates, mockRendererObj,
+        setPendingChanges: (v: boolean) => { pendingChanges = v; },
+      };
+    }
+
+    it('VGLR-080: WebGPU blit path disables tone mapping for HLG content', () => {
+      const { glRenderer, capturedStates } = setupWebGPUBlitRenderer();
+
+      const stateWithTM = createDefaultRenderState();
+      stateWithTM.toneMappingState = { enabled: true, operator: 'aces' };
+      vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithTM);
+
+      const image = new IPImage({
+        width: 10, height: 10, channels: 4, dataType: 'uint8',
+        metadata: { transferFunction: 'hlg' },
+      });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(capturedStates.length).toBe(1);
+      expect(capturedStates[0]!.toneMappingState.enabled).toBe(false);
+    });
+
+    it('VGLR-081: WebGPU blit path disables tone mapping for PQ content', () => {
+      const { glRenderer, capturedStates } = setupWebGPUBlitRenderer();
+
+      const stateWithTM = createDefaultRenderState();
+      stateWithTM.toneMappingState = { enabled: true, operator: 'drago' };
+      vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithTM);
+
+      const image = new IPImage({
+        width: 10, height: 10, channels: 4, dataType: 'uint8',
+        metadata: { transferFunction: 'pq' },
+      });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(capturedStates.length).toBe(1);
+      expect(capturedStates[0]!.toneMappingState.enabled).toBe(false);
+    });
+
+    it('VGLR-082: WebGPU blit path preserves tone mapping for linear float content', () => {
+      const { glRenderer, capturedStates } = setupWebGPUBlitRenderer();
+
+      const stateWithTM = createDefaultRenderState();
+      stateWithTM.toneMappingState = { enabled: true, operator: 'aces' };
+      vi.spyOn(glRenderer, 'buildRenderState').mockReturnValue(stateWithTM);
+
+      const image = new IPImage({
+        width: 10, height: 10, channels: 4, dataType: 'float32',
+      });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(capturedStates.length).toBe(1);
+      expect(capturedStates[0]!.toneMappingState.enabled).toBe(true);
+      expect(capturedStates[0]!.toneMappingState.operator).toBe('aces');
+    });
+
+    it('VGLR-083: WebGPU blit path hides Canvas2D blit canvas on activation', () => {
+      const { glRenderer } = setupWebGPUBlitRenderer();
+      const internal = glRenderer as unknown as TestableViewerGLRenderer;
+
+      const canvas2dBlitCanvas = document.createElement('canvas');
+      canvas2dBlitCanvas.style.display = 'block';
+      internal._canvas2dBlit = {
+        initialized: false,
+        getCanvas: () => canvas2dBlitCanvas,
+      };
+
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'float32' });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(canvas2dBlitCanvas.style.display).toBe('none');
     });
   });
 });

@@ -56,6 +56,10 @@ export class Canvas2DHDRBlit {
   /**
    * Synchronous initialization: tries canvas 2D contexts with HDR settings.
    * Throws if no HDR-capable Canvas 2D context can be created.
+   *
+   * Each attempt uses a fresh canvas because once getContext('2d') succeeds
+   * on a canvas, subsequent calls return the SAME context with the original
+   * settings — making the fallback chain ineffective on a single canvas.
    */
   initialize(): void {
     if (this._initialized) return;
@@ -74,15 +78,18 @@ export class Canvas2DHDRBlit {
 
     for (const attempt of attempts) {
       try {
-        const ctx = this.canvas.getContext(
+        // Use a fresh canvas for each attempt because getContext('2d') on the
+        // same canvas always returns the same context with its original settings.
+        const testCanvas = document.createElement('canvas');
+        const ctx = testCanvas.getContext(
           '2d',
           attempt.settings as unknown as CanvasRenderingContext2DSettings
         );
         if (!ctx) continue;
 
         // Configure HDR extended range if available
-        if (typeof this.canvas.configureHighDynamicRange === 'function') {
-          this.canvas.configureHighDynamicRange({ mode: 'extended' });
+        if (typeof testCanvas.configureHighDynamicRange === 'function') {
+          testCanvas.configureHighDynamicRange({ mode: 'extended' });
         }
 
         // Validate: try creating a 1x1 float32 ImageData
@@ -96,6 +103,14 @@ export class Canvas2DHDRBlit {
           continue;
         }
 
+        // Success: adopt the working canvas, replacing the placeholder
+        const oldCanvas = this.canvas;
+        testCanvas.dataset.testid = oldCanvas.dataset.testid;
+        testCanvas.style.cssText = oldCanvas.style.cssText;
+        if (oldCanvas.parentNode) {
+          oldCanvas.parentNode.replaceChild(testCanvas, oldCanvas);
+        }
+        this.canvas = testCanvas;
         this.ctx = ctx;
         this._colorSpace = attempt.colorSpace;
         this._initialized = true;
@@ -119,6 +134,11 @@ export class Canvas2DHDRBlit {
    */
   uploadAndDisplay(pixels: Float32Array, width: number, height: number): void {
     if (!this._initialized || !this.ctx) {
+      return;
+    }
+
+    // Guard against zero or negative dimensions (ImageData requires positive values)
+    if (width <= 0 || height <= 0) {
       return;
     }
 
@@ -147,10 +167,7 @@ export class Canvas2DHDRBlit {
 
     for (let y = 0; y < height; y++) {
       const srcRow = (height - 1 - y) * rowStride;
-      const dstRow = y * rowStride;
-      for (let x = 0; x < rowStride; x++) {
-        dst[dstRow + x] = pixels[srcRow + x]!;
-      }
+      dst.set(pixels.subarray(srcRow, srcRow + rowStride), y * rowStride);
     }
 
     this.ctx.putImageData(imageData, 0, 0);
