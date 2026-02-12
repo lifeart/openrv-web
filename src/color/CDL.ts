@@ -6,6 +6,9 @@
  * Then saturation is applied.
  */
 
+import { clamp } from '../utils/math';
+import { luminanceRec709 } from './PixelMath';
+
 export interface CDLValues {
   // Slope (multiplier) - default 1.0 for each channel
   slope: { r: number; g: number; b: number };
@@ -52,7 +55,7 @@ export function applyCDLToValue(
   v = v * slope + offset;
 
   // Clamp before power to avoid NaN from negative values
-  v = Math.max(0, Math.min(1, v));
+  v = clamp(v, 0, 1);
 
   // Apply power (gamma)
   if (power !== 1.0 && v > 0) {
@@ -60,7 +63,7 @@ export function applyCDLToValue(
   }
 
   // Clamp final result
-  v = Math.max(0, Math.min(1, v));
+  v = clamp(v, 0, 1);
 
   // Return to 0-255 range
   return v * 255;
@@ -81,13 +84,13 @@ export function applySaturation(
   }
 
   // Calculate luminance using Rec. 709 weights
-  const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  const luma = luminanceRec709(r, g, b);
 
   // Interpolate between grayscale and color
   return {
-    r: Math.max(0, Math.min(255, luma + (r - luma) * saturation)),
-    g: Math.max(0, Math.min(255, luma + (g - luma) * saturation)),
-    b: Math.max(0, Math.min(255, luma + (b - luma) * saturation)),
+    r: clamp(luma + (r - luma) * saturation, 0, 255),
+    g: clamp(luma + (g - luma) * saturation, 0, 255),
+    b: clamp(luma + (b - luma) * saturation, 0, 255),
   };
 }
 

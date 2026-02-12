@@ -101,24 +101,24 @@ test.describe('Phase 1: Display P3 Wide Color Gamut', () => {
   });
 
   // ==========================================================================
-  // Active Output Color Space Label
+  // Browser Color/Gamut Info
   // ==========================================================================
 
-  test('HDR-P1-005: active output color space label is visible in display profile panel', async ({ page }) => {
+  test('HDR-P1-005: browser color space info is visible in display profile panel', async ({ page }) => {
     await openDisplayDropdown(page);
 
-    const label = page.locator('[data-testid="display-active-output"]');
-    await expect(label).toBeVisible();
+    const section = page.locator('[data-testid="display-colorspace-info"]');
+    await expect(section).toBeVisible();
   });
 
-  test('HDR-P1-006: active output label shows sRGB or P3', async ({ page }) => {
+  test('HDR-P1-006: browser color space label contains expected prefix', async ({ page }) => {
     await openDisplayDropdown(page);
 
-    const label = page.locator('[data-testid="display-active-output"]');
+    const label = page.locator('[data-testid="display-detected-colorspace"]');
+    await expect(label).toBeVisible();
     const text = await label.textContent();
     expect(text).toBeTruthy();
-    // Must be one of the two valid values
-    expect(['sRGB', 'P3']).toContain(text!.trim());
+    expect(text!.trim()).toContain('Browser color space:');
   });
 
   test('HDR-P1-007: detected color space info is displayed', async ({ page }) => {
@@ -140,102 +140,88 @@ test.describe('Phase 1: Display P3 Wide Color Gamut', () => {
   });
 
   // ==========================================================================
-  // Gamut Preference Selection
+  // Transfer Function Selection
   // ==========================================================================
 
-  test('HDR-P1-009: gamut preference section is visible in display profile panel', async ({ page }) => {
+  test('HDR-P1-009: transfer function section is visible in display profile panel', async ({ page }) => {
     await openDisplayDropdown(page);
 
-    const section = page.locator('[data-testid="display-gamut-preference"]');
+    const section = page.locator('[data-testid="display-profile-section"]');
     await expect(section).toBeVisible();
   });
 
-  test('HDR-P1-010: default gamut preference is Auto', async ({ page }) => {
+  test('HDR-P1-010: default transfer function is sRGB', async ({ page }) => {
     await openDisplayDropdown(page);
 
-    const autoOption = page.locator('[data-testid="gamut-pref-auto"]');
-    await expect(autoOption).toBeVisible();
-    await expect(autoOption).toHaveAttribute('aria-checked', 'true');
+    const srgbOption = page.locator('[data-testid="display-profile-srgb"]');
+    await expect(srgbOption).toHaveAttribute('aria-checked', 'true');
   });
 
-  test('HDR-P1-011: sRGB gamut preference option is visible', async ({ page }) => {
+  test('HDR-P1-011: sRGB transfer option is visible', async ({ page }) => {
     await openDisplayDropdown(page);
 
-    const srgbOption = page.locator('[data-testid="gamut-pref-srgb"]');
+    const srgbOption = page.locator('[data-testid="display-profile-srgb"]');
     await expect(srgbOption).toBeVisible();
   });
 
-  test('HDR-P1-012: Display P3 gamut preference option is visible', async ({ page }) => {
+  test('HDR-P1-012: gamma 2.4 transfer option is visible', async ({ page }) => {
     await openDisplayDropdown(page);
 
-    const p3Option = page.locator('[data-testid="gamut-pref-p3"]');
-    await expect(p3Option).toBeVisible();
+    const gamma24Option = page.locator('[data-testid="display-profile-gamma2.4"]');
+    await expect(gamma24Option).toBeVisible();
   });
 
-  test('HDR-P1-013: clicking sRGB gamut preference selects it', async ({ page }) => {
+  test('HDR-P1-013: clicking Rec.709 transfer profile selects it', async ({ page }) => {
     await openDisplayDropdown(page);
 
-    const srgbOption = page.locator('[data-testid="gamut-pref-srgb"]');
-    await srgbOption.click();
+    const rec709Option = page.locator('[data-testid="display-profile-rec709"]');
+    await rec709Option.click();
+    await page.waitForTimeout(100);
 
-    // Wait for state update
+    await expect(rec709Option).toHaveAttribute('aria-checked', 'true');
+    await expect(page.locator('[data-testid="display-profile-srgb"]')).toHaveAttribute('aria-checked', 'false');
+  });
+
+  test('HDR-P1-014: selecting sRGB transfer profile marks it active', async ({ page }) => {
+    await openDisplayDropdown(page);
+
+    const srgbOption = page.locator('[data-testid="display-profile-srgb"]');
+    await srgbOption.click();
     await page.waitForTimeout(100);
 
     await expect(srgbOption).toHaveAttribute('aria-checked', 'true');
-
-    // Auto should no longer be selected
-    const autoOption = page.locator('[data-testid="gamut-pref-auto"]');
-    await expect(autoOption).toHaveAttribute('aria-checked', 'false');
   });
 
-  test('HDR-P1-014: selecting sRGB forces active output to sRGB', async ({ page }) => {
+  test('HDR-P1-015: clicking Gamma 2.4 transfer profile selects it', async ({ page }) => {
     await openDisplayDropdown(page);
 
-    const srgbOption = page.locator('[data-testid="gamut-pref-srgb"]');
+    const gamma24Option = page.locator('[data-testid="display-profile-gamma2.4"]');
+    await gamma24Option.click();
+    await page.waitForTimeout(100);
+
+    await expect(gamma24Option).toHaveAttribute('aria-checked', 'true');
+    await expect(page.locator('[data-testid="display-profile-srgb"]')).toHaveAttribute('aria-checked', 'false');
+  });
+
+  test('HDR-P1-016: selecting sRGB after another profile resets selection to sRGB', async ({ page }) => {
+    await openDisplayDropdown(page);
+
+    await page.locator('[data-testid="display-profile-gamma2.4"]').click();
+    await page.waitForTimeout(100);
+
+    const srgbOption = page.locator('[data-testid="display-profile-srgb"]');
     await srgbOption.click();
     await page.waitForTimeout(100);
 
-    const label = page.locator('[data-testid="display-active-output"]');
-    await expect(label).toHaveText('sRGB');
+    await expect(srgbOption).toHaveAttribute('aria-checked', 'true');
+    await expect(page.locator('[data-testid="display-profile-gamma2.4"]')).toHaveAttribute('aria-checked', 'false');
   });
 
-  test('HDR-P1-015: clicking P3 gamut preference selects it', async ({ page }) => {
+  test('HDR-P1-017: transfer profile survives dropdown close and reopen', async ({ page }) => {
     await openDisplayDropdown(page);
 
-    const p3Option = page.locator('[data-testid="gamut-pref-p3"]');
-    await p3Option.click();
-    await page.waitForTimeout(100);
-
-    await expect(p3Option).toHaveAttribute('aria-checked', 'true');
-
-    // Auto should no longer be selected
-    const autoOption = page.locator('[data-testid="gamut-pref-auto"]');
-    await expect(autoOption).toHaveAttribute('aria-checked', 'false');
-  });
-
-  test('HDR-P1-016: selecting Auto resets gamut to auto-detect', async ({ page }) => {
-    await openDisplayDropdown(page);
-
-    // First select sRGB
-    const srgbOption = page.locator('[data-testid="gamut-pref-srgb"]');
-    await srgbOption.click();
-    await page.waitForTimeout(100);
-
-    // Then select Auto
-    const autoOption = page.locator('[data-testid="gamut-pref-auto"]');
-    await autoOption.click();
-    await page.waitForTimeout(100);
-
-    await expect(autoOption).toHaveAttribute('aria-checked', 'true');
-    await expect(srgbOption).toHaveAttribute('aria-checked', 'false');
-  });
-
-  test('HDR-P1-017: gamut preference survives dropdown close and reopen', async ({ page }) => {
-    await openDisplayDropdown(page);
-
-    // Select sRGB
-    const srgbOption = page.locator('[data-testid="gamut-pref-srgb"]');
-    await srgbOption.click();
+    const rec709Option = page.locator('[data-testid="display-profile-rec709"]');
+    await rec709Option.click();
     await page.waitForTimeout(100);
 
     // Close dropdown
@@ -246,17 +232,15 @@ test.describe('Phase 1: Display P3 Wide Color Gamut', () => {
     // Reopen dropdown
     await openDisplayDropdown(page);
 
-    // sRGB should still be selected
-    const srgbOptionAfter = page.locator('[data-testid="gamut-pref-srgb"]');
-    await expect(srgbOptionAfter).toHaveAttribute('aria-checked', 'true');
+    // Rec.709 should still be selected
+    const rec709OptionAfter = page.locator('[data-testid="display-profile-rec709"]');
+    await expect(rec709OptionAfter).toHaveAttribute('aria-checked', 'true');
   });
 
-  test('HDR-P1-018: reset button resets gamut preference to Auto', async ({ page }) => {
+  test('HDR-P1-018: reset button resets transfer profile to sRGB', async ({ page }) => {
     await openDisplayDropdown(page);
 
-    // Select sRGB
-    const srgbOption = page.locator('[data-testid="gamut-pref-srgb"]');
-    await srgbOption.click();
+    await page.locator('[data-testid="display-profile-gamma2.4"]').click();
     await page.waitForTimeout(100);
 
     // Click reset
@@ -264,42 +248,27 @@ test.describe('Phase 1: Display P3 Wide Color Gamut', () => {
     await resetButton.click();
     await page.waitForTimeout(100);
 
-    // Auto should be selected again
-    const autoOption = page.locator('[data-testid="gamut-pref-auto"]');
-    await expect(autoOption).toHaveAttribute('aria-checked', 'true');
+    await expect(page.locator('[data-testid="display-profile-srgb"]')).toHaveAttribute('aria-checked', 'true');
   });
 
   // ==========================================================================
   // P3 Support (hardware-dependent - skipped in CI)
   // ==========================================================================
 
-  test('HDR-P1-019: P3 gamut preference shows P3 when browser supports it', async ({ page }) => {
-    // Skip if the browser does not support P3 WebGL
-    const hasP3 = await page.evaluate(() => {
+  test('HDR-P1-019: detected gamut label reflects p3-capable environments', async ({ page }) => {
+    const hasP3Gamut = await page.evaluate(() => {
       try {
-        const c = document.createElement('canvas');
-        c.width = c.height = 1;
-        const gl = c.getContext('webgl2');
-        if (gl && 'drawingBufferColorSpace' in gl) {
-          (gl as any).drawingBufferColorSpace = 'display-p3';
-          const result = (gl as any).drawingBufferColorSpace === 'display-p3';
-          gl.getExtension('WEBGL_lose_context')?.loseContext();
-          return result;
-        }
-        return false;
+        return typeof matchMedia !== 'undefined' && matchMedia('(color-gamut: p3)').matches;
       } catch {
         return false;
       }
     });
-    test.skip(!hasP3, 'Browser does not support Display P3 WebGL');
+    test.skip(!hasP3Gamut, 'Environment does not report P3 gamut support');
 
     await openDisplayDropdown(page);
 
-    const p3Option = page.locator('[data-testid="gamut-pref-p3"]');
-    await p3Option.click();
-    await page.waitForTimeout(100);
-
-    const label = page.locator('[data-testid="display-active-output"]');
-    await expect(label).toHaveText('P3');
+    const label = page.locator('[data-testid="display-detected-gamut"]');
+    const text = (await label.textContent())?.toLowerCase() ?? '';
+    expect(text).toContain('p3');
   });
 });

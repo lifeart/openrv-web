@@ -9,59 +9,14 @@
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
-import type { DisplayCapabilities } from '../../color/DisplayCapabilities';
+import type { DisplayCapabilities } from '../../color/ColorProcessingFacade';
 
-/**
- * Tone mapping operator types
- */
-export type ToneMappingOperator = 'off' | 'reinhard' | 'filmic' | 'aces';
 
-/**
- * Tone mapping state
- */
-export interface ToneMappingState {
-  enabled: boolean;
-  operator: ToneMappingOperator;
-  // Per-operator parameters
-  reinhardWhitePoint?: number;    // 0.5 - 10.0, default 4.0
-  filmicExposureBias?: number;    // 0.5 - 8.0, default 2.0
-  filmicWhitePoint?: number;      // 2.0 - 20.0, default 11.2
-}
+export type { ToneMappingOperator, ToneMappingState, ToneMappingOperatorInfo, HDROutputMode } from '../../core/types/effects';
+export { DEFAULT_TONE_MAPPING_STATE, TONE_MAPPING_OPERATORS } from '../../core/types/effects';
 
-/**
- * Default tone mapping state
- */
-export const DEFAULT_TONE_MAPPING_STATE: ToneMappingState = {
-  enabled: false,
-  operator: 'off',
-  reinhardWhitePoint: 4.0,
-  filmicExposureBias: 2.0,
-  filmicWhitePoint: 11.2,
-};
-
-/**
- * Tone mapping operator info
- */
-export interface ToneMappingOperatorInfo {
-  key: ToneMappingOperator;
-  label: string;
-  description: string;
-}
-
-/**
- * Available tone mapping operators
- */
-export const TONE_MAPPING_OPERATORS: ToneMappingOperatorInfo[] = [
-  { key: 'off', label: 'Off', description: 'No tone mapping (linear)' },
-  { key: 'reinhard', label: 'Reinhard', description: 'Simple global operator' },
-  { key: 'filmic', label: 'Filmic', description: 'Film-like S-curve response' },
-  { key: 'aces', label: 'ACES', description: 'Academy Color Encoding System' },
-];
-
-/**
- * HDR output mode type
- */
-export type HDROutputMode = 'sdr' | 'hlg' | 'pq';
+import type { ToneMappingOperator, ToneMappingState, ToneMappingOperatorInfo, HDROutputMode } from '../../core/types/effects';
+import { DEFAULT_TONE_MAPPING_STATE, TONE_MAPPING_OPERATORS } from '../../core/types/effects';
 
 /**
  * Events emitted by ToneMappingControl
@@ -81,6 +36,7 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
   private toggleButton: HTMLButtonElement;
   private operatorButtons: Map<ToneMappingOperator, HTMLButtonElement> = new Map();
   private boundHandleReposition: () => void;
+
   private state: ToneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
 
   // Per-operator parameter section
@@ -175,6 +131,7 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
 
     // Close dropdown on outside click
     document.addEventListener('click', this.handleOutsideClick);
+
   }
 
   private createDropdownContent(): void {
@@ -186,7 +143,7 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
       justify-content: space-between;
       padding: 6px 8px;
       margin-bottom: 8px;
-      background: rgba(255, 255, 255, 0.03);
+      background: var(--bg-hover);
       border-radius: 4px;
     `;
 
@@ -415,6 +372,10 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
     value: number,
     onChange: (value: number) => void
   ): HTMLElement {
+    // Derive display precision from step value (e.g. step=0.1 → 1 decimal, step=0.01 → 2 decimals)
+    const stepStr = String(step);
+    const decimals = stepStr.includes('.') ? stepStr.split('.')[1]!.length : 0;
+
     const row = document.createElement('div');
     row.style.cssText = `
       display: flex;
@@ -435,7 +396,7 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
     labelSpan.style.cssText = 'color: var(--text-primary); font-size: 10px;';
 
     const valueSpan = document.createElement('span');
-    valueSpan.textContent = value.toFixed(1);
+    valueSpan.textContent = value.toFixed(decimals);
     valueSpan.style.cssText = 'color: var(--text-secondary); font-size: 10px;';
 
     labelRow.appendChild(labelSpan);
@@ -455,7 +416,7 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
 
     slider.addEventListener('input', () => {
       const newValue = parseFloat(slider.value);
-      valueSpan.textContent = newValue.toFixed(1);
+      valueSpan.textContent = newValue.toFixed(decimals);
       onChange(newValue);
     });
 
@@ -532,8 +493,43 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
       );
       this.parameterSection.appendChild(whitePointSlider);
 
+    } else if (op === 'drago') {
+      this.parameterSection.style.display = 'block';
+
+      const paramLabel = document.createElement('div');
+      paramLabel.textContent = 'Drago Parameters';
+      paramLabel.style.cssText = `
+        color: var(--text-secondary);
+        font-size: 10px;
+        text-transform: uppercase;
+        margin-bottom: 6px;
+      `;
+      this.parameterSection.appendChild(paramLabel);
+
+      const biasSlider = this.createSlider(
+        'Bias',
+        0.5, 1.0, 0.01,
+        this.state.dragoBias ?? 0.85,
+        (value) => {
+          this.state.dragoBias = value;
+          this.emit('stateChanged', { ...this.state });
+        }
+      );
+      this.parameterSection.appendChild(biasSlider);
+
+      const brightnessSlider = this.createSlider(
+        'Brightness',
+        0.5, 5.0, 0.1,
+        this.state.dragoBrightness ?? 2.0,
+        (value) => {
+          this.state.dragoBrightness = value;
+          this.emit('stateChanged', { ...this.state });
+        }
+      );
+      this.parameterSection.appendChild(brightnessSlider);
+
     } else {
-      // 'aces' or 'off': hide the section
+      // Other operators (aces, agx, pbrNeutral, gt, acesHill, off): hide the section
       this.parameterSection.style.display = 'none';
     }
   }
@@ -724,6 +720,22 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
     }
     if (state.filmicWhitePoint !== undefined && state.filmicWhitePoint !== this.state.filmicWhitePoint) {
       this.state.filmicWhitePoint = state.filmicWhitePoint;
+      changed = true;
+    }
+    if (state.dragoBias !== undefined && state.dragoBias !== this.state.dragoBias) {
+      this.state.dragoBias = state.dragoBias;
+      changed = true;
+    }
+    if (state.dragoLwa !== undefined && state.dragoLwa !== this.state.dragoLwa) {
+      this.state.dragoLwa = state.dragoLwa;
+      changed = true;
+    }
+    if (state.dragoLmax !== undefined && state.dragoLmax !== this.state.dragoLmax) {
+      this.state.dragoLmax = state.dragoLmax;
+      changed = true;
+    }
+    if (state.dragoBrightness !== undefined && state.dragoBrightness !== this.state.dragoBrightness) {
+      this.state.dragoBrightness = state.dragoBrightness;
       changed = true;
     }
     if (changed) {

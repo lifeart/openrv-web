@@ -6,7 +6,7 @@ import {
   STARVATION_TIMEOUT_MS,
   MAX_REVERSE_SPEED,
 } from './PlaybackTimingController';
-import type { SubFramePosition } from '../../utils/FrameInterpolator';
+import type { SubFramePosition } from '../../utils/media/FrameInterpolator';
 
 /**
  * Helper to create a fresh TimingState with sensible defaults.

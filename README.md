@@ -10,13 +10,29 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 ## Features
 
 ### Media Support
-- Single images (PNG, JPEG, WebP, EXR)
+- Single images (PNG, JPEG, WebP, JPEG XL, HEIC/HEIF, EXR, Radiance HDR)
 - **EXR Format Support** - full HDR image loading via WebAssembly decoder
   - Float32 texture support for HDR precision
   - Multi-layer EXR with AOV (Arbitrary Output Variable) selection
   - Channel remapping (custom channel-to-RGBA mapping)
   - Layer selection UI for multi-layer files (diffuse, specular, normals, depth, etc.)
   - **PIZ wavelet compression** support (most common VFX compression)
+- **Radiance HDR (.hdr/.pic)** - environment maps and light probes
+  - RGBE shared-exponent encoding with adaptive RLE decompression
+  - Header metadata (exposure, gamma, primaries)
+  - Automatic format detection via `#?RADIANCE` / `#?RGBE` magic bytes
+- **JPEG XL (.jxl)** - modern HDR-capable image format
+  - SDR decode via `@jsquash/jxl` WebAssembly decoder
+  - HDR path via browser-native `createImageBitmap` → `VideoFrame` (same pattern as AVIF HDR)
+  - ISOBMFF container parsing for `colr(nclx)` HDR transfer detection (HLG/PQ)
+  - Bare codestream (`0xFF 0x0A`) and container format support
+- **HEIC/HEIF (.heic/.heif)** - Apple iPhone photos with HDR gainmap support
+  - Native decoding via `createImageBitmap` on Safari
+  - Cross-browser WASM fallback via `libheif-js` for Chrome/Firefox/Edge
+  - **HDR Gainmap** decoding (Apple `urn:com:apple:photo:2020:aux:hdrgainmap` and ISO 21496-1 standard)
+  - ISOBMFF container parsing for gainmap extraction and `colr(nclx)` HDR transfer detection (HLG/PQ)
+  - HDR reconstruction: sRGB-to-linear base + gain map with configurable headroom
+  - Standalone HEIC builder for gainmap item decoding (wraps raw HEVC data with hvcC config)
 - Video files (MP4, WebM)
   - **ProRes/DNxHD Codec Detection** - identifies unsupported professional codecs and provides FFmpeg transcoding guidance
 - Image sequences (numbered files like `frame_001.png`, `file.0001.exr`)
@@ -88,6 +104,11 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
   - **User gamut preference** - force sRGB or Display P3 output via Display Profile settings
   - **HDR-aware scopes** - waveform, histogram, and vectorscope extend beyond 1.0 for HDR content
   - **WebGPU backend** - renderer abstraction with WebGPU migration path (rgba16float, extended tone mapping)
+  - **Canvas2D HDR fallback** - last-resort HDR display path when WebGL2 native HDR and WebGPU are unavailable
+    - Uses Canvas 2D API with `srgb-linear` or `rec2100-hlg` color spaces and float16 pixel storage
+    - Automatic fallback chain: srgb-linear + colorType → pixelFormat → rec2100-hlg + colorType → pixelFormat
+    - Float32 ImageData with browser-handled float32→float16 conversion
+    - Row-flipped readback from WebGL2 FBO for correct display
   - Full backward compatibility - all features are opt-in, fallback to sRGB on unsupported browsers
 
 ### Transform & Effects
@@ -488,7 +509,11 @@ src/
 │       └── PlaylistManager.ts  # Multi-clip playlist with EDL export & OTIO import
 ├── formats/
 │   ├── EXRDecoder.ts   # WebAssembly EXR decoder with multi-layer support
-│   └── EXRPIZCodec.ts  # PIZ wavelet compression codec (Huffman + Haar + LUT)
+│   ├── EXRPIZCodec.ts  # PIZ wavelet compression codec (Huffman + Haar + LUT)
+│   ├── HDRDecoder.ts   # Radiance HDR (.hdr/.pic) decoder with RLE support
+│   ├── JXLDecoder.ts   # JPEG XL decoder (WASM SDR + browser-native HDR)
+│   ├── HEICGainmapDecoder.ts  # HEIC HDR gainmap decoder (ISOBMFF parsing, HDR reconstruction)
+│   └── HEICWasmDecoder.ts     # HEIC WASM fallback via libheif-js (Chrome/Firefox/Edge)
 ├── nodes/
 │   ├── base/           # IPNode, NodeFactory with @RegisterNode decorator
 │   ├── sources/        # FileSourceNode, VideoSourceNode, SequenceSourceNode
@@ -496,6 +521,7 @@ src/
 ├── render/             # WebGL2 renderer and shaders (incl. tone mapping)
 │   ├── RendererBackend.ts      # Renderer abstraction (WebGL2/WebGPU backends)
 │   ├── WebGPUBackend.ts        # WebGPU HDR renderer (rgba16float, extended tone mapping)
+│   ├── Canvas2DHDRBlit.ts      # Canvas 2D API HDR fallback (float16, srgb-linear/rec2100-hlg)
 │   └── TextureCacheManager.ts  # LRU texture cache for GPU performance
 ├── ui/
 │   ├── components/     # Viewer, Timeline, Toolbar, Controls, TimelineEditor
@@ -613,7 +639,7 @@ const rootNode = session.graphParseResult?.rootNode;
 # Type check
 pnpm typecheck
 
-# Run unit tests (7700+ tests)
+# Run unit tests (10400+ tests)
 pnpm test
 
 # Run e2e tests (requires dev server running)
@@ -629,7 +655,7 @@ pnpm preview
 
 ### Test Coverage
 
-The codebase includes comprehensive test coverage with **7700+ unit tests** across 187 test files and **103 e2e test suites**:
+The codebase includes comprehensive test coverage with **10400+ unit tests** across 251 test files and **103 e2e test suites**:
 
 - **Color Tools**: ColorWheels (46 tests), FalseColor (30 tests), HSLQualifier (57 tests), Curves, CDL, LogCurves (27 tests), DisplayTransfer, DisplayProfileControl
 - **OCIO**: OCIOConfig, OCIOTransform, OCIOProcessor (color space transforms, config parsing, reverse transforms)
@@ -640,8 +666,8 @@ The codebase includes comprehensive test coverage with **7700+ unit tests** acro
 - **Overlays**: TimecodeOverlay (50 tests), SafeAreasOverlay (46 tests), SpotlightOverlay (62 tests)
 - **UI Components**: ThemeControl, HistoryPanel, InfoPanel, Modal, Button, CurveEditor (33 tests), AutoSaveIndicator (35 tests), TimelineEditor (25 tests), ThumbnailManager (12 tests), BackgroundPatternControl (32 tests), PARControl (13 tests)
 - **Core**: Session, Graph, GTO loading/export, SequenceLoader (88 tests), AutoSaveManager (28 tests), SessionSerializer (35 tests), SnapshotManager (16 tests), PlaylistManager (34 tests)
-- **Formats**: EXRDecoder (multi-layer, channel remapping), ChannelSelect (EXR layer UI)
-- **Render**: TextureCacheManager (22 tests)
+- **Formats**: EXRDecoder (multi-layer, channel remapping), HDRDecoder (34 tests), JXLDecoder, HEICGainmapDecoder, HEICWasmDecoder, DecoderRegistry, ChannelSelect (EXR layer UI)
+- **Render**: TextureCacheManager (22 tests), Canvas2DHDRBlit (23 tests)
 - **Export/Import**: AnnotationJSONExporter (33 tests incl. import), AnnotationPDFExporter (21 tests), OTIOParser (42 tests)
 - **Audio**: AudioPlaybackManager (36 tests), WaveformRenderer (35 tests)
 - **Filters**: NoiseReduction (18 tests), WebGLNoiseReduction
@@ -721,6 +747,20 @@ const physicalHeight = canvas.height;
 const imageData = ctx.getImageData(0, 0, physicalWidth, physicalHeight);
 ```
 
+### Adaptive Proxy Rendering
+
+The rendering pipeline adapts resolution across four layers to balance quality and performance:
+
+**Phase 1 — DPI-Aware Canvas**: The WebGL canvas renders at physical resolution (`logical × devicePixelRatio`) while the 2D canvas stays at logical resolution to avoid CPU effect regressions. CSS `width`/`height` on the GL canvas maps physical pixels back to logical layout. A `matchMedia('(resolution:…)')` listener detects DPR changes when windows move between displays. Physical dimensions are capped at `MAX_TEXTURE_SIZE` proportionally to prevent GL failures.
+
+**Phase 2 — Interaction Quality Tiering**: During zoom/scrub, `InteractionQualityManager` drops the GL viewport to 50% of physical resolution via `gl.viewport()` subrect, restoring full quality 200ms after the last interaction ends. Reference-counted `beginInteraction()`/`endInteraction()` handles overlapping interactions (e.g. simultaneous wheel zoom + timeline scrub).
+
+**Phase 3 — GL Mipmaps**: `generateMipmap()` is called for RGBA float textures (including 3-channel EXR padded to RGBA) and static SDR images. Guards skip mipmaps for `RGB32F` (not color-renderable), VideoFrame sources (too expensive per frame), and when `OES_texture_float_linear`/`EXT_color_buffer_float` are unavailable.
+
+**Phase 4 — Cache-Level Resize**: `createImageBitmap()` resize options downscale frames at extraction time to match display resolution. The frame cache stores a single entry per frame with lazy upgrade: proxy-resolution frames display immediately, then re-extract at full resolution in the background when interaction ends.
+
+Key files: `Viewer.ts` (dimension state), `ViewerGLRenderer.ts` (GL canvas sizing), `Renderer.ts` (mipmaps, viewport), `InteractionQualityManager.ts` (quality tiering), `MediabunnyFrameExtractor.ts` (cache-level resize).
+
 ### Adding a New Node Type
 
 1. Create node class extending `IPNode` or `BaseGroupNode`
@@ -753,11 +793,13 @@ export class MyGroupNode extends BaseGroupNode {
 - **Vitest** - Unit testing framework
 - **Playwright** - End-to-end testing
 - **WebGL2** - GPU-accelerated rendering (tone mapping, LUT processing, color transforms)
-- **WebAssembly** - High-performance EXR decoding
+- **WebAssembly** - High-performance EXR and JPEG XL decoding
 - **WebCodecs API** - Frame-accurate video decoding via [mediabunny](https://github.com/nickarora/mediabunny)
 - **Web Audio API** - Audio playback, waveform generation, volume control, and pitch correction
 - **Fullscreen API** - Native fullscreen and presentation modes
 - **Mediabunny** - Also used for audio extraction fallback when native fetch is blocked by CORS
+- **@jsquash/jxl** - JPEG XL WebAssembly decoder (libjxl)
+- **libheif-js** - HEIC/HEIF WebAssembly decoder (libheif) for cross-browser support
 - **gto-js** - RV/GTO file parsing
 - **gl-matrix** - Matrix/vector math
 

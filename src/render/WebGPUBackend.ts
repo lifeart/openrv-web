@@ -17,17 +17,15 @@
  */
 
 import type { IPImage } from '../core/image/Image';
-import { ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from '../ui/components/ColorControls';
-import { ToneMappingState, DEFAULT_TONE_MAPPING_STATE } from '../ui/components/ToneMappingControl';
+import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState } from '../core/types/color';
+import { DEFAULT_COLOR_ADJUSTMENTS } from '../core/types/color';
+import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState, GamutMappingState } from '../core/types/effects';
+import { DEFAULT_TONE_MAPPING_STATE } from '../core/types/effects';
+import type { BackgroundPatternState } from '../core/types/background';
 import type { DisplayCapabilities } from '../color/DisplayCapabilities';
 import type { RendererBackend, TextureHandle } from './RendererBackend';
 import type { CDLValues } from '../color/CDL';
-import type { ColorWheelsState } from '../ui/components/ColorWheels';
-import type { ZebraState } from '../ui/components/ZebraStripes';
-import type { BackgroundPatternState } from '../ui/components/BackgroundPatternControl';
 import type { CurveLUTs } from '../color/ColorCurves';
-import type { ChannelMode } from '../ui/components/ChannelSelect';
-import type { HSLQualifierState } from '../ui/components/HSLQualifier';
 import type { RenderState } from './RenderState';
 
 // ---------------------------------------------------------------------------
@@ -38,7 +36,8 @@ import type { RenderState } from './RenderState';
 
 /** Minimal GPUAdapter shape. */
 interface WGPUAdapter {
-  requestDevice(): Promise<WGPUDevice>;
+  limits?: { maxBufferSize?: number };
+  requestDevice(desc?: { requiredLimits?: Record<string, number> }): Promise<WGPUDevice>;
 }
 
 /** Minimal GPUDevice shape. */
@@ -79,7 +78,7 @@ export class WebGPUBackend implements RendererBackend {
   private colorAdjustments: ColorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
   private colorInversionEnabled = false;
   private toneMappingState: ToneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
-  private hdrOutputMode: 'sdr' | 'hlg' | 'pq' = 'sdr';
+  private hdrOutputMode: 'sdr' | 'hlg' | 'pq' | 'extended' = 'sdr';
 
   // Whether extended tone mapping is active (vs. standard fallback)
   private extendedToneMapping = false;
@@ -127,7 +126,12 @@ export class WebGPUBackend implements RendererBackend {
     if (!adapter) {
       throw new Error('WebGPU adapter not available');
     }
-    const device = await adapter.requestDevice();
+    // Request higher maxBufferSize for large HDR images (default 256MB is too small for 4K+ RGBA32Float)
+    const adapterMaxBuffer = adapter.limits?.maxBufferSize ?? 268435456;
+    const desiredMaxBuffer = Math.min(adapterMaxBuffer, 1024 * 1024 * 1024); // up to 1GB
+    const device = await adapter.requestDevice({
+      requiredLimits: { maxBufferSize: desiredMaxBuffer },
+    });
     this.device = device;
 
     // Configure canvas context with HDR settings
@@ -247,15 +251,19 @@ export class WebGPUBackend implements RendererBackend {
 
   // --- HDR output (IMPLEMENTED) ---
 
-  setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq', _capabilities: DisplayCapabilities): boolean {
+  setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq' | 'extended', _capabilities: DisplayCapabilities): boolean {
     // WebGPU handles HDR through canvas configuration rather than
     // drawingBufferColorSpace. For now, store the mode.
     this.hdrOutputMode = mode;
     return true;
   }
 
-  getHDROutputMode(): 'sdr' | 'hlg' | 'pq' {
+  getHDROutputMode(): 'sdr' | 'hlg' | 'pq' | 'extended' {
     return this.hdrOutputMode;
+  }
+
+  setHDRHeadroom(_headroom: number): void {
+    // TODO: implement for WebGPU pipeline when HDR rendering is added
   }
 
   // --- Texture management (STUBS - WebGPU uses GPUTexture, not WebGLTexture) ---
@@ -268,6 +276,14 @@ export class WebGPUBackend implements RendererBackend {
 
   deleteTexture(_texture: TextureHandle): void {
     // No-op for WebGPU backend; WebGLTexture is not applicable.
+  }
+
+  // --- Shader compilation status ---
+
+  isShaderReady(): boolean {
+    // WebGPU pipelines are created asynchronously in initAsync().
+    // Once initAsync() resolves, shaders are ready.
+    return this.device !== null;
   }
 
   // --- Context access ---
@@ -296,7 +312,7 @@ export class WebGPUBackend implements RendererBackend {
   setCDL(_cdl: CDLValues): void { /* STUB */ }
   setCurvesLUT(_luts: CurveLUTs | null): void { /* STUB */ }
   setColorWheels(_state: ColorWheelsState): void { /* STUB */ }
-  setFalseColor(_enabled: boolean, _lut: Uint8Array | null): void { /* STUB */ }
+  setFalseColor(_state: FalseColorState): void { /* STUB */ }
   setZebraStripes(_state: ZebraState): void { /* STUB */ }
   setChannelMode(_mode: ChannelMode): void { /* STUB */ }
 
@@ -307,11 +323,12 @@ export class WebGPUBackend implements RendererBackend {
   setDisplayColorState(_state: { transferFunction: number; displayGamma: number; displayBrightness: number; customGamma: number }): void { /* STUB */ }
 
   // --- Phase 1B: New GPU shader effects (stubs) ---
-  setHighlightsShadows(_highlights: number, _shadows: number, _whites: number, _blacks: number): void { /* STUB */ }
-  setVibrance(_vibrance: number, _skinProtection: boolean): void { /* STUB */ }
-  setClarity(_clarity: number): void { /* STUB */ }
-  setSharpen(_amount: number): void { /* STUB */ }
+  setHighlightsShadows(_state: HighlightsShadowsState): void { /* STUB */ }
+  setVibrance(_state: VibranceState): void { /* STUB */ }
+  setClarity(_state: ClarityState): void { /* STUB */ }
+  setSharpen(_state: SharpenState): void { /* STUB */ }
   setHSLQualifier(_state: HSLQualifierState): void { /* STUB */ }
+  setGamutMapping(_state: GamutMappingState): void { /* STUB */ }
 
   applyRenderState(state: RenderState): void {
     this.setColorAdjustments(state.colorAdjustments);
@@ -321,21 +338,23 @@ export class WebGPUBackend implements RendererBackend {
     this.setCDL(state.cdl);
     this.setCurvesLUT(state.curvesLUT);
     this.setColorWheels(state.colorWheels);
-    this.setFalseColor(state.falseColor.enabled, state.falseColor.lut);
+    this.setFalseColor(state.falseColor);
     this.setZebraStripes(state.zebraStripes);
     this.setChannelMode(state.channelMode);
     this.setLUT(state.lut.data, state.lut.size, state.lut.intensity);
     this.setDisplayColorState(state.displayColor);
-    this.setHighlightsShadows(
-      state.highlightsShadows.highlights,
-      state.highlightsShadows.shadows,
-      state.highlightsShadows.whites,
-      state.highlightsShadows.blacks,
-    );
-    this.setVibrance(state.vibrance.amount, state.vibrance.skinProtection);
-    this.setClarity(state.clarity);
-    this.setSharpen(state.sharpen);
+    this.setHighlightsShadows(state.highlightsShadows);
+    this.setVibrance({ vibrance: state.vibrance.amount, skinProtection: state.vibrance.skinProtection });
+    this.setClarity({ clarity: state.clarity });
+    this.setSharpen({ amount: state.sharpen });
     this.setHSLQualifier(state.hslQualifier);
+    if (state.gamutMapping) {
+      this.setGamutMapping(state.gamutMapping);
+    }
+  }
+
+  hasPendingStateChanges(): boolean {
+    return false;
   }
 
   // --- SDR frame rendering (Phase 1A) ---

@@ -11,6 +11,9 @@ import {
   DisplayCapabilities,
   DEFAULT_CAPABILITIES,
   detectDisplayCapabilities,
+  detectWebGPUHDR,
+  isHDROutputAvailable,
+  isHDROutputAvailableWithLog,
   queryHDRHeadroom,
   resolveActiveColorSpace,
 } from './DisplayCapabilities';
@@ -44,11 +47,20 @@ describe('DisplayCapabilities', () => {
       expect(DEFAULT_CAPABILITIES.activeHDRMode).toBe('sdr');
     });
 
+    it('DC-004b: webglDrawingBufferStorage defaults to false', () => {
+      expect(DEFAULT_CAPABILITIES.webglDrawingBufferStorage).toBe(false);
+    });
+
+    it('DC-004c: canvasExtendedHDR defaults to false', () => {
+      expect(DEFAULT_CAPABILITIES.canvasExtendedHDR).toBe(false);
+    });
+
     it('DC-005: is a complete DisplayCapabilities object', () => {
       const requiredKeys: Array<keyof DisplayCapabilities> = [
         'canvasP3', 'webglP3', 'displayGamut',
         'displayHDR', 'webglHLG', 'webglPQ', 'canvasHLG', 'canvasFloat16',
         'webgpuAvailable', 'webgpuHDR',
+        'webglDrawingBufferStorage', 'canvasExtendedHDR',
         'activeColorSpace', 'activeHDRMode',
       ];
       for (const key of requiredKeys) {
@@ -149,7 +161,17 @@ describe('DisplayCapabilities', () => {
 
     it('DC-019: activeHDRMode is a valid mode string', () => {
       const caps = detectDisplayCapabilities();
-      expect(['sdr', 'hlg', 'pq', 'none']).toContain(caps.activeHDRMode);
+      expect(['sdr', 'hlg', 'pq', 'extended', 'none']).toContain(caps.activeHDRMode);
+    });
+
+    it('DC-019b: webglDrawingBufferStorage is boolean', () => {
+      const caps = detectDisplayCapabilities();
+      expect(typeof caps.webglDrawingBufferStorage).toBe('boolean');
+    });
+
+    it('DC-019c: canvasExtendedHDR is boolean', () => {
+      const caps = detectDisplayCapabilities();
+      expect(typeof caps.canvasExtendedHDR).toBe('boolean');
     });
 
     it('DC-020: detects p3 display gamut when matchMedia matches', () => {
@@ -376,6 +398,241 @@ describe('DisplayCapabilities', () => {
       expect(result).toBeNull();
 
       delete (window as unknown as { getScreenDetails?: unknown }).getScreenDetails;
+    });
+  });
+
+  // ====================================================================
+  // detectWebGPUHDR
+  // ====================================================================
+  describe('detectWebGPUHDR', () => {
+    let originalGpu: PropertyDescriptor | undefined;
+
+    beforeEach(() => {
+      originalGpu = Object.getOwnPropertyDescriptor(navigator, 'gpu');
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      if (originalGpu) {
+        Object.defineProperty(navigator, 'gpu', originalGpu);
+      } else {
+        try {
+          delete (navigator as unknown as Record<string, unknown>)['gpu'];
+        } catch {
+          // Cannot delete non-configurable property
+        }
+      }
+    });
+
+    it('DC-WGPU-001: returns false when navigator.gpu is undefined', async () => {
+      // In jsdom, navigator.gpu is not defined by default
+      const result = await detectWebGPUHDR();
+      expect(result).toBe(false);
+    });
+
+    it('DC-WGPU-002: returns false when requestAdapter returns null', async () => {
+      Object.defineProperty(navigator, 'gpu', {
+        value: { requestAdapter: vi.fn().mockResolvedValue(null) },
+        configurable: true,
+        writable: true,
+      });
+
+      const result = await detectWebGPUHDR();
+      expect(result).toBe(false);
+    });
+
+    it('DC-WGPU-003: returns true when adapter is obtained', async () => {
+      const mockAdapter = { features: new Set<string>() };
+      Object.defineProperty(navigator, 'gpu', {
+        value: { requestAdapter: vi.fn().mockResolvedValue(mockAdapter) },
+        configurable: true,
+        writable: true,
+      });
+
+      const result = await detectWebGPUHDR();
+      expect(result).toBe(true);
+    });
+
+    it('DC-WGPU-004: returns false when requestAdapter throws', async () => {
+      Object.defineProperty(navigator, 'gpu', {
+        value: { requestAdapter: vi.fn().mockRejectedValue(new Error('GPU error')) },
+        configurable: true,
+        writable: true,
+      });
+
+      const result = await detectWebGPUHDR();
+      expect(result).toBe(false);
+    });
+
+    it('DC-WGPU-005: never throws (safe to call without try/catch)', async () => {
+      Object.defineProperty(navigator, 'gpu', {
+        value: { requestAdapter: vi.fn().mockRejectedValue(new Error('crash')) },
+        configurable: true,
+        writable: true,
+      });
+
+      await expect(detectWebGPUHDR()).resolves.not.toThrow();
+    });
+
+    it('DC-WGPU-006: does not create a device (lightweight probe)', async () => {
+      const mockRequestDevice = vi.fn();
+      const mockAdapter = {
+        features: new Set<string>(),
+        requestDevice: mockRequestDevice,
+      };
+      Object.defineProperty(navigator, 'gpu', {
+        value: { requestAdapter: vi.fn().mockResolvedValue(mockAdapter) },
+        configurable: true,
+        writable: true,
+      });
+
+      await detectWebGPUHDR();
+
+      // detectWebGPUHDR should NOT call requestDevice (lightweight adapter-only check)
+      expect(mockRequestDevice).not.toHaveBeenCalled();
+    });
+  });
+
+  // ====================================================================
+  // isHDROutputAvailable
+  // ====================================================================
+  describe('isHDROutputAvailable', () => {
+    it('DC-HDR-001: returns false for default capabilities (SDR)', () => {
+      expect(isHDROutputAvailable(DEFAULT_CAPABILITIES)).toBe(false);
+    });
+
+    it('DC-HDR-002: returns true when activeHDRMode is hlg', () => {
+      const caps: DisplayCapabilities = { ...DEFAULT_CAPABILITIES, activeHDRMode: 'hlg' };
+      expect(isHDROutputAvailable(caps)).toBe(true);
+    });
+
+    it('DC-HDR-003: returns true when activeHDRMode is pq', () => {
+      const caps: DisplayCapabilities = { ...DEFAULT_CAPABILITIES, activeHDRMode: 'pq' };
+      expect(isHDROutputAvailable(caps)).toBe(true);
+    });
+
+    it('DC-HDR-004: returns true when activeHDRMode is extended', () => {
+      const caps: DisplayCapabilities = { ...DEFAULT_CAPABILITIES, activeHDRMode: 'extended' };
+      expect(isHDROutputAvailable(caps)).toBe(true);
+    });
+
+    it('DC-HDR-005: returns true when webgpuHDR is true', () => {
+      const caps: DisplayCapabilities = { ...DEFAULT_CAPABILITIES, webgpuHDR: true };
+      expect(isHDROutputAvailable(caps)).toBe(true);
+    });
+
+    it('DC-HDR-006: returns true when display HDR + wide gamut + WebGPU available', () => {
+      const caps: DisplayCapabilities = {
+        ...DEFAULT_CAPABILITIES,
+        displayHDR: true,
+        displayGamut: 'p3',
+        webgpuAvailable: true,
+      };
+      expect(isHDROutputAvailable(caps)).toBe(true);
+    });
+
+    it('DC-HDR-007: returns true when display HDR + rec2020 + WebGPU available', () => {
+      const caps: DisplayCapabilities = {
+        ...DEFAULT_CAPABILITIES,
+        displayHDR: true,
+        displayGamut: 'rec2020',
+        webgpuAvailable: true,
+      };
+      expect(isHDROutputAvailable(caps)).toBe(true);
+    });
+
+    it('DC-HDR-008: returns false when display HDR but no WebGPU', () => {
+      const caps: DisplayCapabilities = {
+        ...DEFAULT_CAPABILITIES,
+        displayHDR: true,
+        displayGamut: 'p3',
+        webgpuAvailable: false,
+      };
+      expect(isHDROutputAvailable(caps)).toBe(false);
+    });
+
+    it('DC-HDR-009: returns false when display HDR + WebGPU but srgb gamut', () => {
+      const caps: DisplayCapabilities = {
+        ...DEFAULT_CAPABILITIES,
+        displayHDR: true,
+        displayGamut: 'srgb',
+        webgpuAvailable: true,
+      };
+      expect(isHDROutputAvailable(caps)).toBe(false);
+    });
+
+    it('DC-HDR-010: returns false when activeHDRMode is sdr', () => {
+      const caps: DisplayCapabilities = { ...DEFAULT_CAPABILITIES, activeHDRMode: 'sdr' };
+      expect(isHDROutputAvailable(caps)).toBe(false);
+    });
+
+    it('DC-HDR-011: returns false when activeHDRMode is none', () => {
+      const caps: DisplayCapabilities = { ...DEFAULT_CAPABILITIES, activeHDRMode: 'none' };
+      expect(isHDROutputAvailable(caps)).toBe(false);
+    });
+  });
+
+  // ====================================================================
+  // isHDROutputAvailableWithLog
+  // ====================================================================
+  describe('isHDROutputAvailableWithLog', () => {
+    beforeEach(() => {
+      vi.spyOn(console, 'log').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('DC-HDR-020: returns same result as isHDROutputAvailable for all modes', () => {
+      const modes: DisplayCapabilities['activeHDRMode'][] = ['sdr', 'hlg', 'pq', 'extended', 'none'];
+      for (const mode of modes) {
+        const caps: DisplayCapabilities = { ...DEFAULT_CAPABILITIES, activeHDRMode: mode };
+        expect(isHDROutputAvailableWithLog(caps)).toBe(isHDROutputAvailable(caps));
+      }
+    });
+
+    it('DC-HDR-021: logs diagnostic info', () => {
+      isHDROutputAvailableWithLog(DEFAULT_CAPABILITIES);
+      expect(console.log).toHaveBeenCalledWith('[HDR Display]', expect.objectContaining({
+        dynamicRange: 'standard',
+        activeHDRMode: 'sdr',
+      }));
+    });
+
+    it('DC-HDR-022: logs "Not capable" for SDR defaults', () => {
+      isHDROutputAvailableWithLog(DEFAULT_CAPABILITIES);
+      expect(console.log).toHaveBeenCalledWith('[HDR Display] Not capable');
+    });
+
+    it('DC-HDR-023: logs "Capable via WebGL native" for HLG', () => {
+      const caps: DisplayCapabilities = { ...DEFAULT_CAPABILITIES, activeHDRMode: 'hlg' };
+      isHDROutputAvailableWithLog(caps);
+      expect(console.log).toHaveBeenCalledWith('[HDR Display] Capable via WebGL native (hlg)');
+    });
+
+    it('DC-HDR-024: logs "Capable via WebGPU blit" when webgpuHDR is true', () => {
+      const caps: DisplayCapabilities = { ...DEFAULT_CAPABILITIES, webgpuHDR: true };
+      isHDROutputAvailableWithLog(caps);
+      expect(console.log).toHaveBeenCalledWith('[HDR Display] Capable via WebGPU blit');
+    });
+
+    it('DC-HDR-025: considers webgpuBlitReady from extraInfo', () => {
+      const caps: DisplayCapabilities = { ...DEFAULT_CAPABILITIES };
+      const result = isHDROutputAvailableWithLog(caps, { webgpuBlitReady: true });
+      expect(result).toBe(true);
+      expect(console.log).toHaveBeenCalledWith('[HDR Display] Capable via WebGPU blit');
+    });
+
+    it('DC-HDR-026: logs display HDR + wide gamut path', () => {
+      const caps: DisplayCapabilities = {
+        ...DEFAULT_CAPABILITIES,
+        displayHDR: true,
+        displayGamut: 'p3',
+        webgpuAvailable: true,
+      };
+      isHDROutputAvailableWithLog(caps);
+      expect(console.log).toHaveBeenCalledWith('[HDR Display] Capable via display HDR + wide gamut + WebGPU');
     });
   });
 });

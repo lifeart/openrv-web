@@ -57,6 +57,7 @@ function createMockRenderer(): RendererBackend {
     resetToneMappingState: vi.fn(),
     setHDROutputMode: vi.fn().mockReturnValue(true),
     getHDROutputMode: vi.fn().mockReturnValue('sdr'),
+    setHDRHeadroom: vi.fn(),
     createTexture: vi.fn().mockReturnValue(null),
     deleteTexture: vi.fn(),
     getContext: vi.fn().mockReturnValue(null),
@@ -75,7 +76,10 @@ function createMockRenderer(): RendererBackend {
     setClarity: vi.fn(),
     setSharpen: vi.fn(),
     setHSLQualifier: vi.fn(),
+    setGamutMapping: vi.fn(),
     applyRenderState: vi.fn(),
+    hasPendingStateChanges: vi.fn().mockReturnValue(false),
+    isShaderReady: vi.fn().mockReturnValue(true),
     renderSDRFrame: vi.fn().mockReturnValue(null),
     getCanvasElement: vi.fn().mockReturnValue(null),
   };
@@ -93,21 +97,19 @@ function applyRenderState(renderer: RendererBackend, state: RenderState): void {
   renderer.setCDL(state.cdl);
   renderer.setCurvesLUT(state.curvesLUT);
   renderer.setColorWheels(state.colorWheels);
-  renderer.setFalseColor(state.falseColor.enabled, state.falseColor.lut);
+  renderer.setFalseColor(state.falseColor);
   renderer.setZebraStripes(state.zebraStripes);
   renderer.setChannelMode(state.channelMode);
   renderer.setLUT(state.lut.data, state.lut.size, state.lut.intensity);
   renderer.setDisplayColorState(state.displayColor);
-  renderer.setHighlightsShadows(
-    state.highlightsShadows.highlights,
-    state.highlightsShadows.shadows,
-    state.highlightsShadows.whites,
-    state.highlightsShadows.blacks,
-  );
-  renderer.setVibrance(state.vibrance.amount, state.vibrance.skinProtection);
-  renderer.setClarity(state.clarity);
-  renderer.setSharpen(state.sharpen);
+  renderer.setHighlightsShadows(state.highlightsShadows);
+  renderer.setVibrance({ vibrance: state.vibrance.amount, skinProtection: state.vibrance.skinProtection });
+  renderer.setClarity({ clarity: state.clarity });
+  renderer.setSharpen({ amount: state.sharpen });
   renderer.setHSLQualifier(state.hslQualifier);
+  if (state.gamutMapping) {
+    renderer.setGamutMapping(state.gamutMapping);
+  }
 }
 
 describe('RenderState', () => {
@@ -220,14 +222,14 @@ describe('RenderState', () => {
       );
     });
 
-    it('passes false color as separate arguments', () => {
+    it('passes false color as state object', () => {
       const renderer = createMockRenderer();
       const state = createDefaultRenderState();
       const lut = new Uint8Array(256 * 3);
       state.falseColor = { enabled: true, lut };
       applyRenderState(renderer, state);
 
-      expect(renderer.setFalseColor).toHaveBeenCalledWith(true, lut);
+      expect(renderer.setFalseColor).toHaveBeenCalledWith({ enabled: true, lut });
     });
 
     it('passes LUT as separate arguments', () => {
@@ -240,22 +242,22 @@ describe('RenderState', () => {
       expect(renderer.setLUT).toHaveBeenCalledWith(lutData, 17, 0.8);
     });
 
-    it('passes highlights/shadows as separate arguments', () => {
+    it('passes highlights/shadows as state object', () => {
       const renderer = createMockRenderer();
       const state = createDefaultRenderState();
       state.highlightsShadows = { highlights: 25, shadows: -30, whites: 10, blacks: -5 };
       applyRenderState(renderer, state);
 
-      expect(renderer.setHighlightsShadows).toHaveBeenCalledWith(25, -30, 10, -5);
+      expect(renderer.setHighlightsShadows).toHaveBeenCalledWith({ highlights: 25, shadows: -30, whites: 10, blacks: -5 });
     });
 
-    it('passes vibrance as separate arguments', () => {
+    it('passes vibrance as state object', () => {
       const renderer = createMockRenderer();
       const state = createDefaultRenderState();
       state.vibrance = { amount: 50, skinProtection: false };
       applyRenderState(renderer, state);
 
-      expect(renderer.setVibrance).toHaveBeenCalledWith(50, false);
+      expect(renderer.setVibrance).toHaveBeenCalledWith({ vibrance: 50, skinProtection: false });
     });
 
     it('passes channel mode correctly', () => {
@@ -267,22 +269,22 @@ describe('RenderState', () => {
       expect(renderer.setChannelMode).toHaveBeenCalledWith('red');
     });
 
-    it('passes clarity correctly', () => {
+    it('passes clarity as state object', () => {
       const renderer = createMockRenderer();
       const state = createDefaultRenderState();
       state.clarity = 42;
       applyRenderState(renderer, state);
 
-      expect(renderer.setClarity).toHaveBeenCalledWith(42);
+      expect(renderer.setClarity).toHaveBeenCalledWith({ clarity: 42 });
     });
 
-    it('passes sharpen correctly', () => {
+    it('passes sharpen as state object', () => {
       const renderer = createMockRenderer();
       const state = createDefaultRenderState();
       state.sharpen = 75;
       applyRenderState(renderer, state);
 
-      expect(renderer.setSharpen).toHaveBeenCalledWith(75);
+      expect(renderer.setSharpen).toHaveBeenCalledWith({ amount: 75 });
     });
 
     it('passes display color config correctly', () => {
@@ -321,6 +323,40 @@ describe('RenderState', () => {
       expect(renderer.setToneMappingState).toHaveBeenCalledWith(
         expect.objectContaining({ enabled: false, operator: 'off' }),
       );
+    });
+  });
+
+  describe('gamutMapping forwarding', () => {
+    it('calls setGamutMapping when gamutMapping is present in state', () => {
+      const renderer = createMockRenderer();
+      const state = createDefaultRenderState();
+      state.gamutMapping = { mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb' };
+      applyRenderState(renderer, state);
+
+      expect(renderer.setGamutMapping).toHaveBeenCalledOnce();
+      expect(renderer.setGamutMapping).toHaveBeenCalledWith({
+        mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb',
+      });
+    });
+
+    it('does not call setGamutMapping when gamutMapping is undefined', () => {
+      const renderer = createMockRenderer();
+      const state = createDefaultRenderState();
+      // gamutMapping is optional and not set in default
+      applyRenderState(renderer, state);
+
+      expect(renderer.setGamutMapping).not.toHaveBeenCalled();
+    });
+
+    it('passes compress mode gamut mapping correctly', () => {
+      const renderer = createMockRenderer();
+      const state = createDefaultRenderState();
+      state.gamutMapping = { mode: 'compress', sourceGamut: 'rec2020', targetGamut: 'display-p3' };
+      applyRenderState(renderer, state);
+
+      expect(renderer.setGamutMapping).toHaveBeenCalledWith({
+        mode: 'compress', sourceGamut: 'rec2020', targetGamut: 'display-p3',
+      });
     });
   });
 

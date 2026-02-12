@@ -46,111 +46,18 @@ import { WebGPUBackend } from './render/WebGPUBackend';
 import { createRenderer } from './render/createRenderer';
 import type { RendererBackend } from './render/RendererBackend';
 
+// Shared mock factories
+import {
+  createMockRendererGL as createMockGL,
+  initRendererWithMockGL,
+} from '../test/mocks';
+
 // ============================================================================
 // Test Helpers
 // ============================================================================
 
 function makeCaps(overrides: Partial<DisplayCapabilities> = {}): DisplayCapabilities {
   return { ...DEFAULT_CAPABILITIES, ...overrides };
-}
-
-function createMockGL(opts: {
-  supportP3?: boolean;
-  supportHLG?: boolean;
-  supportPQ?: boolean;
-} = {}): WebGL2RenderingContext {
-  let currentColorSpace = 'srgb';
-  const supportedSpaces = new Set<string>(['srgb']);
-  if (opts.supportP3) supportedSpaces.add('display-p3');
-  if (opts.supportHLG) supportedSpaces.add('rec2100-hlg');
-  if (opts.supportPQ) supportedSpaces.add('rec2100-pq');
-
-  const gl = {
-    canvas: document.createElement('canvas'),
-    get drawingBufferColorSpace() { return currentColorSpace; },
-    set drawingBufferColorSpace(v: string) {
-      if (supportedSpaces.has(v)) currentColorSpace = v;
-    },
-    getExtension: vi.fn(() => null),
-    createProgram: vi.fn(() => ({})),
-    attachShader: vi.fn(),
-    linkProgram: vi.fn(),
-    getProgramParameter: vi.fn(() => true),
-    getProgramInfoLog: vi.fn(() => ''),
-    deleteShader: vi.fn(),
-    createShader: vi.fn(() => ({})),
-    shaderSource: vi.fn(),
-    compileShader: vi.fn(),
-    getShaderParameter: vi.fn(() => true),
-    getShaderInfoLog: vi.fn(() => ''),
-    createVertexArray: vi.fn(() => ({})),
-    bindVertexArray: vi.fn(),
-    createBuffer: vi.fn(() => ({})),
-    bindBuffer: vi.fn(),
-    bufferData: vi.fn(),
-    enableVertexAttribArray: vi.fn(),
-    vertexAttribPointer: vi.fn(),
-    getUniformLocation: vi.fn(() => ({})),
-    getAttribLocation: vi.fn(() => 0),
-    useProgram: vi.fn(),
-    uniform1f: vi.fn(),
-    uniform1i: vi.fn(),
-    uniform2fv: vi.fn(),
-    uniform3fv: vi.fn(),
-    uniformMatrix3fv: vi.fn(),
-    activeTexture: vi.fn(),
-    bindTexture: vi.fn(),
-    drawArrays: vi.fn(),
-    viewport: vi.fn(),
-    clearColor: vi.fn(),
-    clear: vi.fn(),
-    createTexture: vi.fn(() => ({})),
-    deleteTexture: vi.fn(),
-    deleteVertexArray: vi.fn(),
-    deleteBuffer: vi.fn(),
-    deleteProgram: vi.fn(),
-    texParameteri: vi.fn(),
-    texImage2D: vi.fn(),
-    isContextLost: vi.fn(() => false),
-    VERTEX_SHADER: 0x8b31,
-    FRAGMENT_SHADER: 0x8b30,
-    LINK_STATUS: 0x8b82,
-    COMPILE_STATUS: 0x8b81,
-    ARRAY_BUFFER: 0x8892,
-    STATIC_DRAW: 0x88e4,
-    FLOAT: 0x1406,
-    TEXTURE_2D: 0x0de1,
-    TEXTURE0: 0x84c0,
-    TRIANGLE_STRIP: 0x0005,
-    COLOR_BUFFER_BIT: 0x4000,
-    TEXTURE_WRAP_S: 0x2802,
-    TEXTURE_WRAP_T: 0x2803,
-    TEXTURE_MIN_FILTER: 0x2801,
-    TEXTURE_MAG_FILTER: 0x2800,
-    CLAMP_TO_EDGE: 0x812f,
-    LINEAR: 0x2601,
-    RGBA8: 0x8058,
-    RGBA: 0x1908,
-    UNSIGNED_BYTE: 0x1401,
-  } as unknown as WebGL2RenderingContext;
-
-  return gl;
-}
-
-function initRendererWithMockGL(
-  renderer: Renderer,
-  glOpts: { supportP3?: boolean; supportHLG?: boolean; supportPQ?: boolean } = {},
-): WebGL2RenderingContext {
-  const mockGL = createMockGL(glOpts);
-  const canvas = document.createElement('canvas');
-  const originalGetContext = canvas.getContext.bind(canvas);
-  canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
-    if (contextId === 'webgl2') return mockGL;
-    return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
-  }) as typeof canvas.getContext;
-
-  renderer.initialize(canvas);
-  return mockGL;
 }
 
 // ============================================================================
@@ -194,7 +101,7 @@ describe('Phase 1: Wide Color Gamut (Display P3)', () => {
       // String defaults
       expect(['srgb', 'p3', 'rec2020']).toContain(caps.displayGamut);
       expect(['srgb', 'display-p3']).toContain(caps.activeColorSpace);
-      expect(['sdr', 'hlg', 'pq', 'none']).toContain(caps.activeHDRMode);
+      expect(['sdr', 'hlg', 'pq', 'extended', 'none']).toContain(caps.activeHDRMode);
     });
 
     it('AC-P1-1.1c: detection uses throwaway canvases - no leaked DOM nodes', () => {

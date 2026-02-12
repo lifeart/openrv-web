@@ -1,26 +1,17 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg, type IconName } from './shared/Icons';
+import { DEFAULT_WIPE_STATE } from '../../core/types/wipe';
+import type { WipeMode, WipeSide, WipeState } from '../../core/types/wipe';
 
-export type WipeMode = 'off' | 'horizontal' | 'vertical' | 'quad' | 'splitscreen-h' | 'splitscreen-v';
-export type WipeSide = 'left' | 'right' | 'top' | 'bottom';
-
-export interface WipeState {
-  mode: WipeMode;
-  position: number;  // 0-1, position of wipe line
-  showOriginal: WipeSide;  // Which side shows original (no color adjustments)
-}
+// Re-export types and defaults for backward compatibility
+export type { WipeMode, WipeSide, WipeState };
+export { DEFAULT_WIPE_STATE };
 
 export interface WipeControlEvents extends EventMap {
   modeChanged: WipeMode;
   positionChanged: number;
   stateChanged: WipeState;
 }
-
-export const DEFAULT_WIPE_STATE: WipeState = {
-  mode: 'off',
-  position: 0.5,
-  showOriginal: 'left',
-};
 
 export class WipeControl extends EventEmitter<WipeControlEvents> {
   private container: HTMLElement;

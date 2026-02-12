@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ThemeControl } from './ThemeControl';
-import type { ThemeMode, ResolvedTheme } from '../../utils/ThemeManager';
+import type { ThemeMode, ResolvedTheme } from '../../utils/ui/ThemeManager';
 
 // Mock ThemeManager
 const mockThemeManager = {
@@ -17,7 +17,7 @@ const mockThemeManager = {
   off: vi.fn(),
 };
 
-vi.mock('../../utils/ThemeManager', () => ({
+vi.mock('../../utils/ui/ThemeManager', () => ({
   getThemeManager: () => mockThemeManager,
   ThemeMode: {},
 }));

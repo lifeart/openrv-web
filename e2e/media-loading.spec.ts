@@ -3,15 +3,13 @@ import {
   loadVideoFile,
   loadRvSession,
   waitForTestHelper,
+  waitForMediaLoaded,
   getSessionState,
   getViewerState,
   getPaintState,
   captureViewerScreenshot,
   imagesAreDifferent,
-  SAMPLE_VIDEO,
-  SAMPLE_RV_SESSION,
 } from './fixtures';
-import path from 'path';
 
 /**
  * Media Loading Tests
@@ -32,11 +30,16 @@ test.describe('Media Loading', () => {
       expect(state.hasMedia).toBe(false);
       expect(state.frameCount).toBe(0);
 
-      // Load video file
-      const filePath = path.resolve(process.cwd(), SAMPLE_VIDEO);
-      const fileInput = page.locator('input[type="file"]').first();
-      await fileInput.setInputFiles(filePath);
-      await page.waitForTimeout(1000);
+      // Load video file through shared helper and wait for state update
+      await loadVideoFile(page);
+      await waitForMediaLoaded(page);
+      await page.waitForFunction(
+        () => {
+          const state = window.__OPENRV_TEST__?.getSessionState();
+          return (state?.frameCount ?? 0) > 0;
+        },
+        { timeout: 5000 },
+      );
 
       // Verify media loaded
       state = await getSessionState(page);
@@ -147,10 +150,8 @@ test.describe('Media Loading', () => {
       await page.waitForSelector('#app');
       await waitForTestHelper(page);
 
-      // Load RV session
-      const filePath = path.resolve(process.cwd(), SAMPLE_RV_SESSION);
-      const fileInput = page.locator('input[type="file"]').first();
-      await fileInput.setInputFiles(filePath);
+      // Load RV session through shared helper
+      await loadRvSession(page);
       await page.waitForTimeout(1000);
 
       // App should be functional with session loaded

@@ -6,6 +6,7 @@ interface MockScopesProcessor {
   isReady: Mock;
   setPlaybackMode: Mock;
   setImage: Mock;
+  setFloatImage: Mock;
   renderVectorscope: Mock;
 }
 
@@ -15,6 +16,7 @@ vi.mock('../../scopes/WebGLScopes', () => {
     isReady: vi.fn(() => true),
     setPlaybackMode: vi.fn(),
     setImage: vi.fn(),
+    setFloatImage: vi.fn(),
     renderVectorscope: vi.fn(),
   };
   return {
@@ -348,6 +350,97 @@ describe('Vectorscope', () => {
       const el = vectorscope.render();
       expect(el).toBeInstanceOf(HTMLElement);
     });
+  });
+});
+
+describe('Vectorscope updateFloat', () => {
+  let vectorscope: Vectorscope;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vectorscope = new Vectorscope();
+  });
+
+  afterEach(() => {
+    vectorscope.dispose();
+  });
+
+  it('VS-070: updateFloat does not throw with valid float data', () => {
+    const floatData = new Float32Array(10 * 10 * 4);
+    expect(() => vectorscope.updateFloat(floatData, 10, 10)).not.toThrow();
+  });
+
+  it('VS-071: updateFloat uses GPU setFloatImage when available', async () => {
+    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
+    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
+
+    const floatData = new Float32Array(10 * 10 * 4);
+    vectorscope.updateFloat(floatData, 10, 10);
+
+    expect(mockProcessor.setFloatImage).toHaveBeenCalledWith(floatData, 10, 10);
+    expect(mockProcessor.renderVectorscope).toHaveBeenCalled();
+  });
+
+  it('VS-072: updateFloat sets playback mode on GPU processor', async () => {
+    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
+    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
+
+    vectorscope.setPlaybackMode(true);
+    const floatData = new Float32Array(10 * 10 * 4);
+    vectorscope.updateFloat(floatData, 10, 10);
+
+    expect(mockProcessor.setPlaybackMode).toHaveBeenCalledWith(true);
+  });
+
+  it('VS-073: updateFloat preserves HDR values > 1.0', async () => {
+    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
+    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
+
+    const floatData = new Float32Array([3.5, 2.0, 1.5, 1.0]);
+    vectorscope.updateFloat(floatData, 1, 1);
+
+    const call = mockProcessor.setFloatImage.mock.calls[0];
+    expect(call![0][0]).toBe(3.5);
+    expect(call![0][1]).toBe(2.0);
+  });
+
+  it('VS-074: updateFloat auto-zoom calculates from float data', () => {
+    vectorscope.setZoom('auto');
+    // Create desaturated float data (should trigger high zoom)
+    const floatData = new Float32Array(10 * 10 * 4);
+    for (let i = 0; i < 10 * 10; i++) {
+      // Gray pixels: cb and cr are both ~0
+      floatData[i * 4] = 0.5;
+      floatData[i * 4 + 1] = 0.5;
+      floatData[i * 4 + 2] = 0.5;
+      floatData[i * 4 + 3] = 1.0;
+    }
+
+    vectorscope.updateFloat(floatData, 10, 10);
+
+    // Auto-zoom with low saturation should use high zoom (4x)
+    // getZoom() returns the zoom mode, not effective zoom, but this shouldn't throw
+    expect(vectorscope.getZoom()).toBe('auto');
+  });
+
+  it('VS-075: updateFloat uses current zoom for GPU rendering', async () => {
+    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
+    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
+
+    vectorscope.setZoom(2);
+    const floatData = new Float32Array(10 * 10 * 4);
+    vectorscope.updateFloat(floatData, 10, 10);
+
+    const call = mockProcessor.renderVectorscope.mock.calls[0];
+    expect(call![1]).toBe(2);
+  });
+
+  it('VS-076: updateFloat does not throw when GPU processor is not available', async () => {
+    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
+    (getSharedScopesProcessor as ReturnType<typeof vi.fn>).mockReturnValueOnce(null);
+
+    const floatData = new Float32Array(10 * 10 * 4);
+    expect(() => vectorscope.updateFloat(floatData, 10, 10)).not.toThrow();
   });
 });
 

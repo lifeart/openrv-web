@@ -2,6 +2,7 @@ import { PropertyContainer } from '../../core/graph/Property';
 import { Signal } from '../../core/graph/Signal';
 import { IPImage } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
+import type { NodeProcessor } from './NodeProcessor';
 
 let nodeIdCounter = 0;
 
@@ -22,6 +23,14 @@ export abstract class IPNode {
   protected cachedImage: IPImage | null = null;
   protected cacheFrame = -1;
   protected dirty = true;
+
+  /**
+   * Optional external processor strategy.
+   * When set, the node delegates its `process()` call to this processor
+   * instead of using the built-in (subclass) implementation.
+   * This is opt-in: leave unset to use the default subclass behavior.
+   */
+  processor: NodeProcessor | null = null;
 
   constructor(type: string, name?: string) {
     this.id = `${type}_${++nodeIdCounter}`;
@@ -98,6 +107,8 @@ export abstract class IPNode {
   // Mark node as needing re-evaluation
   markDirty(): void {
     this.dirty = true;
+    // Notify external processor if attached
+    this.processor?.invalidate();
     // Notify outputs they might be dirty too
     for (const output of this._outputs) {
       output.markDirty();
@@ -126,8 +137,12 @@ export abstract class IPNode {
       inputImages.push(input.evaluate(context));
     }
 
-    // Perform node-specific evaluation
-    this.cachedImage = this.process(context, inputImages);
+    // Delegate to external processor if set, otherwise use built-in process()
+    if (this.processor) {
+      this.cachedImage = this.processor.process(context, inputImages);
+    } else {
+      this.cachedImage = this.process(context, inputImages);
+    }
     this.cacheFrame = context.frame;
     this.dirty = false;
 
@@ -144,6 +159,11 @@ export abstract class IPNode {
     this.outputsChanged.disconnectAll();
     this.propertyChanged.disconnectAll();
     this.cachedImage = null;
+    // Clean up external processor if attached
+    if (this.processor) {
+      this.processor.dispose();
+      this.processor = null;
+    }
   }
 }
 

@@ -79,7 +79,7 @@ describe('Viewer Integration Tests', () => {
   beforeEach(() => {
     session = new TestSession();
     paintEngine = new PaintEngine();
-    viewer = new Viewer(session, paintEngine);
+    viewer = new Viewer({ session, paintEngine });
 
     // Attach to DOM for proper sizing
     document.body.appendChild(viewer.getElement());

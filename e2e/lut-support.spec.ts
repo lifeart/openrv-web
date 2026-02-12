@@ -43,16 +43,9 @@ async function waitForLUTCleared(page: import('@playwright/test').Page) {
 // Helper to wait for color panel to be ready
 async function waitForColorPanel(page: import('@playwright/test').Page) {
   await page.click('button[data-tab-id="color"]');
-  await page.waitForFunction(
-    () => document.querySelector('button[data-tab-id="color"]')?.classList?.contains('active') ||
-          document.querySelector('[data-tab-id="color"][aria-selected="true"]') !== null,
-    { timeout: 5000 },
-  );
+  await page.waitForTimeout(150);
   await page.keyboard.press('c');
-  await page.waitForFunction(
-    () => document.querySelector('.color-controls-panel') !== null,
-    { timeout: 5000 },
-  );
+  await expect(page.locator('.color-controls-panel')).toBeVisible({ timeout: 5000 });
 }
 
 // Helper to wait for color state property to match expected value

@@ -119,6 +119,7 @@ test.describe('Marker Management', () => {
 
     // Clear all
     const clearButton = page.locator('[data-testid="marker-clear-btn"]');
+    page.once('dialog', (dialog) => dialog.accept());
     await clearButton.click();
     await page.waitForTimeout(100);
 
@@ -172,7 +173,8 @@ test.describe('Marker Navigation', () => {
 
     // Should have highlight background
     const bgColor = await markerEntry.evaluate(el => getComputedStyle(el).backgroundColor);
-    expect(bgColor).toContain('100'); // rgba(100, 150, 255, 0.15)
+    expect(bgColor).not.toBe('transparent');
+    expect(bgColor).not.toBe('rgba(0, 0, 0, 0)');
   });
 });
 

@@ -52,7 +52,15 @@ export class TabBar extends EventEmitter<TabBarEvents> {
       flex-shrink: 0;
       position: relative;
       user-select: none;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
     `;
+    // Hide scrollbar for WebKit browsers
+    const style = document.createElement('style');
+    style.textContent = `.tab-bar::-webkit-scrollbar { display: none; }`;
+    this.container.appendChild(style);
 
     // Create tab indicator (underline for active tab)
     this.indicator = document.createElement('div');
@@ -65,6 +73,9 @@ export class TabBar extends EventEmitter<TabBarEvents> {
       border-radius: 1px 1px 0 0;
     `;
     this.container.appendChild(this.indicator);
+
+    // Update indicator when container is scrolled
+    this.container.addEventListener('scroll', () => this.updateActiveState());
 
     this.createTabs();
   }
@@ -100,6 +111,8 @@ export class TabBar extends EventEmitter<TabBarEvents> {
       height: 100%;
       position: relative;
       letter-spacing: 0.3px;
+      flex-shrink: 0;
+      white-space: nowrap;
     `;
 
     // Icon
@@ -143,12 +156,13 @@ export class TabBar extends EventEmitter<TabBarEvents> {
       button.style.background = isActive ? 'var(--bg-hover)' : 'transparent';
     }
 
-    // Update indicator position
+    // Update indicator position (account for scroll offset)
     const activeButton = this.tabButtons.get(this._activeTab);
     if (activeButton) {
       const rect = activeButton.getBoundingClientRect();
       const containerRect = this.container.getBoundingClientRect();
-      this.indicator.style.left = `${rect.left - containerRect.left}px`;
+      const scrollLeft = this.container.scrollLeft;
+      this.indicator.style.left = `${rect.left - containerRect.left + scrollLeft}px`;
       this.indicator.style.width = `${rect.width}px`;
     }
   }
@@ -159,6 +173,12 @@ export class TabBar extends EventEmitter<TabBarEvents> {
     this._activeTab = id;
     this.updateActiveState();
     this.emit('tabChanged', id);
+
+    // Scroll the active tab into view on narrow screens
+    const activeButton = this.tabButtons.get(id);
+    if (activeButton?.scrollIntoView) {
+      activeButton.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+    }
   }
 
   get activeTab(): TabId {

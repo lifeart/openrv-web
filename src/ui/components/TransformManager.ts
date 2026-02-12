@@ -11,6 +11,7 @@
 
 import { Transform2D, DEFAULT_TRANSFORM } from './TransformControl';
 import { interpolateZoom } from './ViewerInteraction';
+import type { ManagerBase } from '../../core/ManagerBase';
 
 /**
  * Snapshot of all spatial transform state.
@@ -22,7 +23,7 @@ export interface TransformSnapshot {
   transform: Transform2D;
 }
 
-export class TransformManager {
+export class TransformManager implements ManagerBase {
   // --- Pan / Zoom ---
   private _panX = 0;
   private _panY = 0;
@@ -53,12 +54,24 @@ export class TransformManager {
   // --- Callback for requesting a render from the Viewer ---
   private _scheduleRender: (() => void) | null = null;
 
+  // --- Callbacks for interaction quality tiering ---
+  private _onInteractionStart: (() => void) | null = null;
+  private _onInteractionEnd: (() => void) | null = null;
+
   /**
    * Set the render callback. Called by the Viewer during construction so that
    * animation frames can request re-renders.
    */
   setScheduleRender(fn: () => void): void {
     this._scheduleRender = fn;
+  }
+
+  /**
+   * Set interaction callbacks for quality tiering during smooth zoom animations.
+   */
+  setInteractionCallbacks(onStart: () => void, onEnd: () => void): void {
+    this._onInteractionStart = onStart;
+    this._onInteractionEnd = onEnd;
   }
 
   private requestRender(): void {
@@ -219,6 +232,9 @@ export class TransformManager {
     this._zoomAnimationTargetPanX = panXTarget;
     this._zoomAnimationTargetPanY = panYTarget;
 
+    // Signal interaction start for quality tiering
+    this._onInteractionStart?.();
+
     const animate = (now: number): void => {
       const elapsed = now - this._zoomAnimationStartTime;
       const progress = Math.min(1, elapsed / this._zoomAnimationDuration);
@@ -249,6 +265,8 @@ export class TransformManager {
         this._panX = this._zoomAnimationTargetPanX;
         this._panY = this._zoomAnimationTargetPanY;
         this._zoomAnimationId = null;
+        // Signal interaction end for quality tiering
+        this._onInteractionEnd?.();
         this.requestRender();
       }
     };
@@ -264,6 +282,8 @@ export class TransformManager {
     if (this._zoomAnimationId !== null) {
       cancelAnimationFrame(this._zoomAnimationId);
       this._zoomAnimationId = null;
+      // Signal interaction end since animation was interrupted
+      this._onInteractionEnd?.();
     }
   }
 
@@ -305,5 +325,7 @@ export class TransformManager {
   dispose(): void {
     this.cancelZoomAnimation();
     this._scheduleRender = null;
+    this._onInteractionStart = null;
+    this._onInteractionEnd = null;
   }
 }

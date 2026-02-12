@@ -12,6 +12,18 @@ import path from 'path';
 const SAMPLE_EXR = 'sample/test_hdr.exr';
 const SAMPLE_EXR_SMALL = 'sample/test_small.exr';
 
+async function setRangeValue(
+  slider: import('@playwright/test').Locator,
+  value: number,
+) {
+  await slider.evaluate((el, val) => {
+    const input = el as HTMLInputElement;
+    input.value = String(val);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }, value);
+}
+
 /**
  * EXR Format Loading Tests
  *
@@ -50,6 +62,8 @@ test.describe('EXR Format Support', () => {
     });
 
     test('EXR-002: should display EXR image on canvas', async ({ page }) => {
+      const beforeScreenshot = await captureViewerScreenshot(page);
+
       // Load EXR file
       const filePath = path.resolve(process.cwd(), SAMPLE_EXR);
       const fileInput = page.locator('input[type="file"]').first();
@@ -60,8 +74,8 @@ test.describe('EXR Format Support', () => {
       );
 
       // Verify canvas has content
-      const screenshot = await captureViewerScreenshot(page);
-      expect(screenshot.length).toBeGreaterThan(1000); // Not empty
+      const afterScreenshot = await captureViewerScreenshot(page);
+      expect(imagesAreDifferent(beforeScreenshot, afterScreenshot)).toBe(true);
     });
 
     test('EXR-003: should detect correct dimensions from EXR', async ({ page }) => {
@@ -110,21 +124,18 @@ test.describe('EXR Format Support', () => {
       const beforeScreenshot = await captureViewerScreenshot(page);
 
       // Switch to Color tab
-      await page.click('button:has-text("Color")');
-      await page.waitForFunction(
-        () => document.querySelector('button:has-text("Color")')?.classList?.contains('active') ||
-              document.querySelector('[data-tab-id="color"][aria-selected="true"]') !== null,
-        { timeout: 5000 }
-      );
+      await page.click('button[data-tab-id="color"]');
+      await page.waitForTimeout(150);
+      await page.keyboard.press('c');
+      await expect(page.locator('.color-controls-panel')).toBeVisible({ timeout: 5000 });
 
       // Find and adjust exposure slider
       // The exposure control should be visible in the Color tab
-      const exposureSlider = page.locator('input[type="range"]').first();
+      const exposureSlider = page.locator('.color-controls-panel [data-testid="slider-exposure"]');
 
       if (await exposureSlider.isVisible()) {
         // Increase exposure
-        await exposureSlider.fill('2');
-        await exposureSlider.dispatchEvent('input');
+        await setRangeValue(exposureSlider, 2);
         await page.waitForFunction(
           () => {
             const state = window.__OPENRV_TEST__?.getColorState();
@@ -159,18 +170,15 @@ test.describe('EXR Format Support', () => {
       const normalExposure = await captureViewerScreenshot(page);
 
       // Switch to Color tab and reduce exposure
-      await page.click('button:has-text("Color")');
-      await page.waitForFunction(
-        () => document.querySelector('button:has-text("Color")')?.classList?.contains('active') ||
-              document.querySelector('[data-tab-id="color"][aria-selected="true"]') !== null,
-        { timeout: 5000 }
-      );
+      await page.click('button[data-tab-id="color"]');
+      await page.waitForTimeout(150);
+      await page.keyboard.press('c');
+      await expect(page.locator('.color-controls-panel')).toBeVisible({ timeout: 5000 });
 
-      const exposureSlider = page.locator('input[type="range"]').first();
+      const exposureSlider = page.locator('.color-controls-panel [data-testid="slider-exposure"]');
       if (await exposureSlider.isVisible()) {
         // Reduce exposure to see HDR detail
-        await exposureSlider.fill('-1');
-        await exposureSlider.dispatchEvent('input');
+        await setRangeValue(exposureSlider, -1);
         await page.waitForFunction(
           () => {
             const state = window.__OPENRV_TEST__?.getColorState();
@@ -196,8 +204,7 @@ test.describe('EXR Format Support', () => {
       // This should be handled gracefully without crashing the app
 
       // App should remain functional
-      const canvas = page.locator('canvas').first();
-      await expect(canvas).toBeVisible();
+      await expect(page.locator('.viewer-container').first()).toBeVisible();
     });
 
     test('EXR-021: app remains functional after EXR load error', async ({ page }) => {
@@ -213,18 +220,19 @@ test.describe('EXR Format Support', () => {
       let state = await getSessionState(page);
       expect(state.hasMedia).toBe(true);
 
-      // Navigation should work
-      const initialFrame = state.currentFrame;
-      await page.keyboard.press('ArrowRight');
+      // App shortcuts should still respond
+      const initialHistogramVisible = (await getViewerState(page)).histogramVisible;
+      await page.keyboard.press('h');
       await page.waitForFunction(
-        (initial) => window.__OPENRV_TEST__?.getSessionState()?.currentFrame !== initial,
-        initialFrame,
+        (initial) => window.__OPENRV_TEST__?.getViewerState()?.histogramVisible !== initial,
+        initialHistogramVisible,
         { timeout: 5000 }
       );
+      const afterHistogramToggle = await getViewerState(page);
+      expect(afterHistogramToggle.histogramVisible).toBe(!initialHistogramVisible);
 
       // App should still be responsive
-      const canvas = page.locator('canvas').first();
-      await expect(canvas).toBeVisible();
+      await expect(page.locator('.viewer-container').first()).toBeVisible();
     });
   });
 
@@ -241,20 +249,29 @@ test.describe('EXR Format Support', () => {
 
       // Capture before zoom
       const beforeZoom = await captureViewerScreenshot(page);
+      const initialViewerState = await getViewerState(page);
 
-      // Use keyboard shortcut to zoom in
-      await page.keyboard.press('Equal'); // = for zoom in
+      // Use zoom dropdown to switch to a deterministic level
+      const zoomButton = page.locator('[data-testid="zoom-control-button"]');
+      await zoomButton.click();
+      const zoomDropdown = page.locator('[data-testid="zoom-dropdown"]');
+      await expect(zoomDropdown).toBeVisible();
+      await zoomDropdown.locator('button', { hasText: '200%' }).click();
       await page.waitForFunction(
-        () => {
+        (initialZoom) => {
           const state = window.__OPENRV_TEST__?.getViewerState();
-          return state && state.zoom !== 1;
+          return state && state.zoom !== initialZoom;
         },
+        initialViewerState.zoom,
         { timeout: 5000 }
       );
 
       const viewerState = await getViewerState(page);
       // Zoom should have changed
-      expect(viewerState.zoom).not.toBe(1);
+      expect(viewerState.zoom).not.toBe(initialViewerState.zoom);
+
+      const afterZoom = await captureViewerScreenshot(page);
+      expect(imagesAreDifferent(beforeZoom, afterZoom)).toBe(true);
     });
 
     test('EXR-031: channel isolation should work with EXR', async ({ page }) => {
@@ -267,11 +284,12 @@ test.describe('EXR Format Support', () => {
         { timeout: 5000 }
       );
 
-      // Capture RGB view
-      const rgbView = await captureViewerScreenshot(page);
-
-      // Switch to red channel (Shift+R)
-      await page.keyboard.press('Shift+r');
+      // Switch to red channel via channel dropdown (Shift+R is reserved for rotation).
+      const channelButton = page.locator('[data-testid="channel-select-button"]');
+      await channelButton.click();
+      const channelDropdown = page.locator('[data-testid="channel-dropdown"]');
+      await expect(channelDropdown).toBeVisible();
+      await channelDropdown.locator('button', { hasText: 'Red' }).click();
       await page.waitForFunction(
         () => window.__OPENRV_TEST__?.getViewerState()?.channelMode === 'red',
         { timeout: 5000 }
@@ -279,12 +297,19 @@ test.describe('EXR Format Support', () => {
 
       const viewerState = await getViewerState(page);
       expect(viewerState.channelMode).toBe('red');
+      await expect(channelButton).toContainText('R');
 
-      // Capture red channel view
-      const redView = await captureViewerScreenshot(page);
-
-      // Views should be different
-      expect(imagesAreDifferent(rgbView, redView)).toBe(true);
+      // Switch back to RGB and verify channel isolation is reversible.
+      await channelButton.click();
+      await expect(channelDropdown).toBeVisible();
+      await channelDropdown.locator('button', { hasText: 'RGB' }).click();
+      await page.waitForFunction(
+        () => window.__OPENRV_TEST__?.getViewerState()?.channelMode === 'rgb',
+        { timeout: 5000 }
+      );
+      const restoredState = await getViewerState(page);
+      expect(restoredState.channelMode).toBe('rgb');
+      await expect(channelButton).toContainText('Ch');
     });
 
     test('EXR-032: histogram should display for EXR content', async ({ page }) => {

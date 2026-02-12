@@ -10,22 +10,21 @@
  */
 
 import { ColorAdjustments, DEFAULT_COLOR_ADJUSTMENTS } from './ColorControls';
-import { LUT3D } from '../../color/LUTLoader';
-import { WebGLLUTProcessor } from '../../color/WebGLLUT';
-import { LUTPipeline } from '../../color/pipeline/LUTPipeline';
-import { GPULUTChain } from '../../color/pipeline/GPULUTChain';
-import { CDLValues, DEFAULT_CDL } from '../../color/CDL';
 import {
-  ColorCurvesData,
+  type LUT3D,
+  WebGLLUTProcessor,
+  LUTPipeline,
+  GPULUTChain,
+  type CDLValues,
+  DEFAULT_CDL,
+  type ColorCurvesData,
   createDefaultCurvesData,
   CurveLUTCache,
-} from '../../color/ColorCurves';
-import { ToneMappingState, DEFAULT_TONE_MAPPING_STATE } from './ToneMappingControl';
-import {
-  DisplayColorState,
+  type DisplayColorState,
   DEFAULT_DISPLAY_COLOR_STATE,
-} from '../../color/DisplayTransfer';
-import { getSharedOCIOProcessor } from '../../color/OCIOProcessor';
+  getSharedOCIOProcessor,
+} from '../../color/ColorProcessingFacade';
+import { ToneMappingState, DEFAULT_TONE_MAPPING_STATE } from './ToneMappingControl';
 
 /**
  * Snapshot of all color pipeline state, used by the Viewer to sync state

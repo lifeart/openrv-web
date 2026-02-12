@@ -14,10 +14,12 @@ import {
   MediabunnyFrameExtractor,
   UnsupportedCodecException,
   type FrameResult,
-} from '../../utils/MediabunnyFrameExtractor';
-import type { VideoSample } from 'mediabunny';
-import { FramePreloadManager, type PreloadConfig } from '../../utils/FramePreloadManager';
-import type { CodecFamily, UnsupportedCodecError } from '../../utils/CodecUtils';
+} from '../../utils/media/MediabunnyFrameExtractor';
+import { FramePreloadManager, type PreloadConfig } from '../../utils/media/FramePreloadManager';
+import type { CodecFamily, UnsupportedCodecError } from '../../utils/media/CodecUtils';
+import { HDRFrameResizer, type HDRResizeTier } from '../../utils/media/HDRFrameResizer';
+import { LRUCache } from '../../utils/LRUCache';
+import { PerfTrace } from '../../utils/PerfTrace';
 
 /** Frame extraction mode */
 export type FrameExtractionMode = 'mediabunny' | 'html-video' | 'auto';
@@ -50,14 +52,37 @@ export class VideoSourceNode extends BaseSourceNode {
   private preloadManager: FramePreloadManager<FrameResult> | null = null;
   private pendingFrameRequest: Promise<FrameResult | null> | null = null;
 
-  // HDR async request and cached sample (separate from SDR pendingFrameRequest)
-  private pendingHDRRequest: Promise<VideoSample | null> | null = null;
-  private pendingHDRSample: VideoSample | null = null;
-  private pendingHDRFrame: number = -1;
+  // 500 MB memory budget for HDR frame cache (RGBA16F = 8 bytes/pixel)
+  private static readonly HDR_MEMORY_BUDGET_BYTES = 500 * 1024 * 1024;
+
+  // Minimum HDR cache capacity: must hold the full preload window (ahead + behind + current frame).
+  // updatePlaybackBuffer() uses ahead=8, behind=2, so minimum = 8 + 2 + 1 = 11.
+  private static readonly HDR_MIN_CACHE_FRAMES = 11;
+
+  // LRU cache of resized HDR IPImages for synchronous access by Viewer's render loop.
+  // Size is updated dynamically via updateHDRCacheSize() based on frame dimensions.
+  private hdrFrameCache = new LRUCache<number, IPImage>(
+    8, // safe initial default; updated dynamically once dimensions are known
+    (_key, image) => image.close(), // close VideoFrame on eviction
+  );
+
+  // HDR frame resizer (OffscreenCanvas with float16 backing store)
+  private hdrResizer: HDRFrameResizer | null = null;
+
+  // Track in-flight HDR frame fetches to prevent duplicate requests
+  private pendingHDRFetches = new Map<number, Promise<IPImage | null>>();
+
+  // Stable display-resolution target for HDR resize (not interaction-quality-reduced).
+  // Set by Viewer using actual display dimensions so cached HDR frames are always
+  // at full display quality, unlike SDR frames which use reduced quality during interaction.
+  private hdrTargetSize: { w: number; h: number } | undefined;
 
   // HDR state
   private isHDRVideo: boolean = false;
   private videoColorSpace: VideoColorSpaceInit | null = null;
+  // Pre-detected HDR canvas resize tier (from DisplayCapabilities.canvasHDRResizeTier).
+  // Stored so setFps() can re-pass it when reinitializing mediabunny.
+  private _hdrResizeTier: HDRResizeTier = 'none';
 
   // Playback state
   private playbackDirection: number = 1;
@@ -102,14 +127,17 @@ export class VideoSourceNode extends BaseSourceNode {
 
   /**
    * Load video from URL
+   * @param hdrResizeTier - Pre-detected HDR canvas resize tier from DisplayCapabilities
    */
-  async load(url: string, name?: string, fps: number = 24): Promise<void> {
+  async load(url: string, name?: string, fps: number = 24, hdrResizeTier: HDRResizeTier = 'none'): Promise<void> {
+    this._hdrResizeTier = hdrResizeTier;
+
     // Always load HTMLVideoElement as fallback and for playback
     await this.loadHtmlVideo(url, name, fps);
 
     // Try to initialize mediabunny if mode allows
     if (this.extractionMode !== 'html-video' && this.file) {
-      await this.tryInitMediabunny(this.file, fps);
+      await this.tryInitMediabunny(this.file, fps, hdrResizeTier);
     }
   }
 
@@ -164,8 +192,9 @@ export class VideoSourceNode extends BaseSourceNode {
   /**
    * Try to initialize mediabunny frame extractor
    * Returns VideoLoadResult with codec information
+   * @param hdrResizeTier - Pre-detected HDR canvas resize tier from DisplayCapabilities
    */
-  private async tryInitMediabunny(file: File | Blob, fps: number): Promise<VideoLoadResult> {
+  private async tryInitMediabunny(file: File | Blob, fps: number, hdrResizeTier: HDRResizeTier = 'none'): Promise<VideoLoadResult> {
     // Check if WebCodecs is supported
     if (!MediabunnyFrameExtractor.isSupported()) {
       this.useMediabunny = false;
@@ -188,13 +217,20 @@ export class VideoSourceNode extends BaseSourceNode {
       // Propagate HDR metadata
       this.isHDRVideo = metadata.isHDR;
       this.videoColorSpace = metadata.colorSpace;
-
       // Update duration from mediabunny (more accurate)
       this.metadata.duration = metadata.frameCount;
       this.properties.setValue('duration', metadata.frameCount);
 
-      // Initialize preload manager with optimized config for video playback
-      this.initPreloadManager(metadata.frameCount);
+      // Initialize HDR frame resizer if HDR content detected and canvas resize available
+      if (metadata.isHDR) {
+        this.initHDRResizer(hdrResizeTier);
+      }
+
+      // Initialize SDR preload manager only for non-HDR video.
+      // HDR video uses its own LRU cache + preloadHDRFrames() for preloading.
+      if (!metadata.isHDR) {
+        this.initPreloadManager(metadata.frameCount);
+      }
 
       return {
         success: true,
@@ -246,6 +282,36 @@ export class VideoSourceNode extends BaseSourceNode {
   }
 
   /**
+   * Initialize HDR frame resizer using the pre-detected canvas HDR resize tier.
+   * The tier comes from DisplayCapabilities.canvasHDRResizeTier, which is probed
+   * once at startup. This avoids duplicating the OffscreenCanvas float16 detection.
+   */
+  private initHDRResizer(tier: HDRResizeTier): void {
+    if (tier !== 'none') {
+      this.hdrResizer = new HDRFrameResizer(tier);
+    }
+
+    // Update HDR cache size now that metadata is available
+    this.updateHDRCacheSize();
+  }
+
+  /**
+   * Update HDR frame cache capacity based on frame dimensions and a fixed memory budget.
+   * Called when HDR target size or metadata changes.
+   */
+  private updateHDRCacheSize(): void {
+    const w = this.hdrTargetSize?.w ?? this.metadata.width;
+    const h = this.hdrTargetSize?.h ?? this.metadata.height;
+    const bytesPerFrame = w * h * 8; // RGBA16F = 8 bytes/pixel
+    if (bytesPerFrame <= 0) return;
+    const maxFrames = Math.max(VideoSourceNode.HDR_MIN_CACHE_FRAMES, Math.min(
+      this.metadata.duration, // never more than total frames
+      Math.floor(VideoSourceNode.HDR_MEMORY_BUDGET_BYTES / bytesPerFrame)
+    ));
+    this.hdrFrameCache.setCapacity(maxFrames);
+  }
+
+  /**
    * Initialize the frame preload manager
    */
   private initPreloadManager(totalFrames: number, config?: Partial<PreloadConfig>): void {
@@ -255,6 +321,7 @@ export class VideoSourceNode extends BaseSourceNode {
     // Create loader function that uses frameExtractor
     // Accepts optional AbortSignal for cancellation support
     // Returns null on failure instead of throwing to avoid breaking the app
+    // Reads currentTargetSize from preloadManager at call time for resolution-aware extraction
     const loader = async (frame: number, signal?: AbortSignal): Promise<FrameResult | null> => {
       if (!this.frameExtractor) {
         return null;
@@ -266,7 +333,8 @@ export class VideoSourceNode extends BaseSourceNode {
       }
 
       try {
-        const result = await this.frameExtractor.getFrame(frame, signal);
+        const targetSize = this.preloadManager?.getTargetSize();
+        const result = await this.frameExtractor.getFrame(frame, signal, targetSize);
         return result;
       } catch (error) {
         // Log error for debugging but don't break the app
@@ -277,10 +345,18 @@ export class VideoSourceNode extends BaseSourceNode {
       }
     };
 
+    // Disposer: close ImageBitmap when evicted from cache to release GPU memory.
+    // The ImageBitmap is the primary pixel data container returned by snapshotCanvas().
+    const disposer = (_frame: number, result: FrameResult): void => {
+      if (result.canvas && 'close' in result.canvas && typeof result.canvas.close === 'function') {
+        result.canvas.close();
+      }
+    };
+
     this.preloadManager = new FramePreloadManager<FrameResult>(
       totalFrames,
       loader,
-      undefined, // No special disposer needed for FrameResult
+      disposer,
       config // FramePreloadManager applies DEFAULT_PRELOAD_CONFIG internally
     );
   }
@@ -291,8 +367,10 @@ export class VideoSourceNode extends BaseSourceNode {
   /**
    * Load from File object
    * Returns VideoLoadResult with information about codec support
+   * @param hdrResizeTier - Pre-detected HDR canvas resize tier from DisplayCapabilities
    */
-  async loadFile(file: File, fps: number = 24): Promise<VideoLoadResult> {
+  async loadFile(file: File, fps: number = 24, hdrResizeTier: HDRResizeTier = 'none'): Promise<VideoLoadResult> {
+    this._hdrResizeTier = hdrResizeTier;
     this.file = file;
     this.lastUnsupportedCodecError = null;
     const url = URL.createObjectURL(file);
@@ -302,7 +380,7 @@ export class VideoSourceNode extends BaseSourceNode {
 
     // Try mediabunny initialization
     if (this.extractionMode !== 'html-video') {
-      const result = await this.tryInitMediabunny(file, fps);
+      const result = await this.tryInitMediabunny(file, fps, hdrResizeTier);
       return result;
     }
 
@@ -334,7 +412,7 @@ export class VideoSourceNode extends BaseSourceNode {
     // Update mediabunny extractor if active
     if (this.frameExtractor && this.file) {
       // Reinitialize with new fps
-      this.tryInitMediabunny(this.file, fps);
+      this.tryInitMediabunny(this.file, fps, this._hdrResizeTier);
     }
   }
 
@@ -412,13 +490,22 @@ export class VideoSourceNode extends BaseSourceNode {
   /**
    * Get frame using mediabunny (async, accurate)
    * Uses FramePreloadManager for intelligent caching and request coalescing
+   * @param frame - Frame number (1-based)
+   * @param targetSize - Optional target resolution for resized extraction
    */
-  async getFrameAsync(frame: number): Promise<FrameResult | null> {
-    if (!this.frameExtractor || !this.useMediabunny || !this.preloadManager) {
+  async getFrameAsync(frame: number, targetSize?: { w: number; h: number }): Promise<FrameResult | null> {
+    if (!this.frameExtractor || !this.useMediabunny) {
       return null;
     }
 
-    return this.preloadManager.getFrame(frame);
+    // HDR video: delegate to HDR fetch (used by PlaybackEngine for starvation recovery)
+    if (this.isHDRVideo) {
+      await this.fetchHDRFrame(frame);
+      return null; // Caller doesn't use the result for HDR; frame is in hdrFrameCache
+    }
+
+    if (!this.preloadManager) return null;
+    return this.preloadManager.getFrame(frame, targetSize);
   }
 
   /**
@@ -461,6 +548,9 @@ export class VideoSourceNode extends BaseSourceNode {
    * Check if a frame is cached and ready for immediate playback
    */
   hasFrameCached(frame: number): boolean {
+    if (this.isHDRVideo) {
+      return this.hdrFrameCache.has(frame);
+    }
     return this.preloadManager?.hasFrame(frame) ?? false;
   }
 
@@ -468,7 +558,7 @@ export class VideoSourceNode extends BaseSourceNode {
    * Get cached frame canvas directly for rendering (no IPImage conversion)
    * Returns null if frame is not cached
    */
-  getCachedFrameCanvas(frame: number): HTMLCanvasElement | OffscreenCanvas | null {
+  getCachedFrameCanvas(frame: number): HTMLCanvasElement | OffscreenCanvas | ImageBitmap | null {
     const cached = this.preloadManager?.getCachedFrame(frame);
     return cached?.canvas ?? null;
   }
@@ -477,6 +567,9 @@ export class VideoSourceNode extends BaseSourceNode {
    * Get the set of cached frame numbers
    */
   getCachedFrames(): Set<number> {
+    if (this.isHDRVideo) {
+      return this.hdrFrameCache.keys();
+    }
     return this.preloadManager?.getCachedFrames() ?? new Set();
   }
 
@@ -484,6 +577,9 @@ export class VideoSourceNode extends BaseSourceNode {
    * Get the set of pending (loading) frame numbers
    */
   getPendingFrames(): Set<number> {
+    if (this.isHDRVideo) {
+      return new Set(this.pendingHDRFetches.keys());
+    }
     return this.preloadManager?.getPendingFrames() ?? new Set();
   }
 
@@ -495,7 +591,21 @@ export class VideoSourceNode extends BaseSourceNode {
     pendingCount: number;
     totalFrames: number;
     maxCacheSize: number;
+    memorySizeMB?: number;
   } | null {
+    if (this.isHDRVideo) {
+      // HDR frames are RGBA16F (8 bytes/pixel) at resized display dimensions
+      const hdrW = this.hdrTargetSize?.w ?? this.metadata.width;
+      const hdrH = this.hdrTargetSize?.h ?? this.metadata.height;
+      const bytesPerFrame = hdrW * hdrH * 8; // RGBA16F = 8 bytes/pixel
+      return {
+        cachedCount: this.hdrFrameCache.size,
+        pendingCount: this.pendingHDRFetches.size,
+        totalFrames: this.metadata.duration,
+        maxCacheSize: this.hdrFrameCache.capacity,
+        memorySizeMB: (bytesPerFrame * this.hdrFrameCache.size) / (1024 * 1024),
+      };
+    }
     if (!this.preloadManager) return null;
     const stats = this.preloadManager.getStats();
     return {
@@ -507,10 +617,43 @@ export class VideoSourceNode extends BaseSourceNode {
   }
 
   /**
+   * Set the target resolution for frame extraction.
+   * Frames already cached at a lower resolution will be returned immediately
+   * (stale) but upgraded asynchronously on next access.
+   * Pass undefined to extract at full source resolution.
+   */
+  setTargetSize(targetSize?: { w: number; h: number }): void {
+    this.preloadManager?.setTargetSize(targetSize);
+  }
+
+  /**
+   * Set the HDR resize target to stable display dimensions.
+   * Unlike setTargetSize (which may use interaction-quality-reduced sizes for SDR),
+   * this uses the actual display resolution so HDR frames in the LRU cache
+   * are always at full display quality.
+   */
+  setHDRTargetSize(targetSize?: { w: number; h: number }): void {
+    // Skip recalculation when dimensions haven't changed (called every render frame)
+    if (this.hdrTargetSize?.w === targetSize?.w && this.hdrTargetSize?.h === targetSize?.h) return;
+    this.hdrTargetSize = targetSize;
+    if (this.isHDRVideo) {
+      this.updateHDRCacheSize();
+    }
+  }
+
+  /**
+   * Get the current target resolution for frame extraction.
+   */
+  getTargetSize(): { w: number; h: number } | undefined {
+    return this.preloadManager?.getTargetSize();
+  }
+
+  /**
    * Clear the frame cache
    */
   clearCache(): void {
     this.preloadManager?.clear();
+    this.hdrFrameCache.clear();
   }
 
   /**
@@ -581,8 +724,21 @@ export class VideoSourceNode extends BaseSourceNode {
    * FramePreloadManager handles buffer management internally
    */
   updatePlaybackBuffer(currentFrame: number): void {
-    if (!this.useMediabunny || !this.preloadManager) return;
+    if (!this.useMediabunny) return;
 
+    if (this.isHDRVideo) {
+      // HDR: preload via HDR LRU cache with direction-aware window.
+      // Clamp to cache capacity so preloading never evicts the current frame.
+      const maxWindow = Math.max(0, this.hdrFrameCache.capacity - 1);
+      const rawAhead = this.playbackDirection >= 0 ? 8 : 2;
+      const rawBehind = this.playbackDirection >= 0 ? 2 : 8;
+      const ahead = Math.min(rawAhead, maxWindow);
+      const behind = Math.min(rawBehind, maxWindow - ahead);
+      this.preloadHDRFrames(currentFrame, ahead, behind).catch(() => {});
+      return;
+    }
+
+    if (!this.preloadManager) return;
     // FramePreloadManager handles:
     // - Checking if more frames are needed
     // - Priority-based preloading
@@ -596,34 +752,29 @@ export class VideoSourceNode extends BaseSourceNode {
    */
   clearFrameCache(): void {
     this.preloadManager?.clear();
+    this.hdrFrameCache.clear();
   }
 
   protected process(context: EvalContext, _inputs: (IPImage | null)[]): IPImage | null {
-    // If using mediabunny, try to get from cache first
-    if (this.useMediabunny && this.frameExtractor && this.preloadManager) {
-      // HDR path: try to get HDR sample asynchronously
-      if (this.isHDRVideo) {
-        // Return cached HDR sample if we already have one for this frame
-        if (this.pendingHDRSample && this.pendingHDRFrame === context.frame) {
-          const image = this.hdrSampleToIPImage(this.pendingHDRSample, context.frame);
-          return image;
-        }
+    if (!this.useMediabunny || !this.frameExtractor) {
+      return this.processHtmlVideo(context);
+    }
 
-        // Start async HDR frame request (uses its own pendingHDRRequest, not shared pendingFrameRequest)
-        if (!this.pendingHDRRequest) {
-          this.pendingHDRRequest = this.frameExtractor.getFrameHDR(context.frame).then((sample) => {
-            this.pendingHDRRequest = null;
-            if (sample) {
-              this.pendingHDRSample = sample;
-              this.pendingHDRFrame = context.frame;
-              this.markDirty();
-            }
-            return sample;
-          });
-        }
-        // Fall through to SDR cached frame or HTML video fallback while waiting
+    // HDR path: check cache (sync), kick off fetchHDRFrame if missing.
+    // fetchHDRFrame is the single pipeline: decode → resize → cache.
+    if (this.isHDRVideo) {
+      const cached = this.hdrFrameCache.get(context.frame);
+      if (cached) return cached;
+
+      // Kick off async fetch (decode → resize → cache) if not already in flight
+      if (!this.pendingHDRFetches.has(context.frame)) {
+        this.fetchHDRFrame(context.frame).then(() => this.markDirty());
       }
+      return null;
+    }
 
+    // SDR path: use preloadManager cache
+    if (this.preloadManager) {
       const cached = this.preloadManager.getCachedFrame(context.frame);
       if (cached) {
         return this.frameResultToIPImage(cached, context.frame);
@@ -711,17 +862,45 @@ export class VideoSourceNode extends BaseSourceNode {
   /**
    * Convert a VideoSample to an HDR IPImage with VideoFrame attached
    */
-  private hdrSampleToIPImage(sample: { toVideoFrame(): VideoFrame }, frame: number): IPImage {
-    const videoFrame = sample.toVideoFrame();
+  private hdrSampleToIPImage(
+    sample: { toVideoFrame(): VideoFrame },
+    frame: number,
+    targetSize?: { w: number; h: number },
+  ): IPImage {
+    let videoFrame = sample.toVideoFrame();
 
-    const transferFunction = this.mapTransferFunction(this.videoColorSpace?.transfer ?? undefined);
-    const colorPrimaries = this.mapColorPrimaries(this.videoColorSpace?.primaries ?? undefined);
+    let transferFunction = this.mapTransferFunction(this.videoColorSpace?.transfer ?? undefined);
+    let colorPrimaries = this.mapColorPrimaries(this.videoColorSpace?.primaries ?? undefined);
+
+    // Use the track's display dimensions (which account for rotation) instead of
+    // the VideoFrame's raw dimensions (which are pre-rotation coded dimensions).
+    let width = this.metadata.width;
+    let height = this.metadata.height;
+    const rotation = this.frameExtractor?.getMetadata()?.rotation ?? 0;
+
+    // Resize via HDR OffscreenCanvas if target is smaller than source
+    if (targetSize && this.hdrResizer) {
+      const result = this.hdrResizer.resize(
+        videoFrame,
+        targetSize,
+        this.videoColorSpace ?? undefined,
+      );
+      videoFrame = result.videoFrame;
+      if (result.resized) {
+        width = result.width;
+        height = result.height;
+      }
+      if (result.metadataOverrides) {
+        transferFunction = result.metadataOverrides.transferFunction;
+        colorPrimaries = result.metadataOverrides.colorPrimaries;
+      }
+    }
 
     // Create IPImage with VideoFrame attached (minimal data buffer)
     // The VideoFrame is the actual pixel source; data is a placeholder
     return new IPImage({
-      width: videoFrame.displayWidth,
-      height: videoFrame.displayHeight,
+      width,
+      height,
       channels: 4,
       dataType: 'float32',
       data: new ArrayBuffer(4), // minimal placeholder; VideoFrame is the pixel source
@@ -735,6 +914,8 @@ export class VideoSourceNode extends BaseSourceNode {
         attributes: {
           hdr: true,
           videoColorSpace: this.videoColorSpace,
+          // VideoFrame pixels are unrotated; store rotation so Renderer can apply it via shader
+          videoRotation: rotation,
         },
       },
     });
@@ -746,18 +927,27 @@ export class VideoSourceNode extends BaseSourceNode {
   private frameResultToIPImage(result: FrameResult, frame: number): IPImage {
     const canvas = result.canvas;
     let ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
+    let imageData: ImageData;
 
-    if (canvas instanceof HTMLCanvasElement) {
-      ctx = canvas.getContext('2d');
+    if (canvas instanceof ImageBitmap) {
+      // ImageBitmap from createImageBitmap - draw to temp canvas to extract pixels
+      const tempCanvas = new OffscreenCanvas(canvas.width, canvas.height);
+      const tempCtx = tempCanvas.getContext('2d')!;
+      tempCtx.drawImage(canvas, 0, 0);
+      imageData = tempCtx.getImageData(0, 0, canvas.width, canvas.height);
     } else {
-      ctx = canvas.getContext('2d');
-    }
+      if (canvas instanceof HTMLCanvasElement) {
+        ctx = canvas.getContext('2d');
+      } else {
+        ctx = canvas.getContext('2d');
+      }
 
-    if (!ctx) {
-      throw new Error('Failed to get 2D context from frame canvas');
-    }
+      if (!ctx) {
+        throw new Error('Failed to get 2D context from frame canvas');
+      }
 
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    }
 
     return new IPImage({
       width: imageData.width,
@@ -790,21 +980,124 @@ export class VideoSourceNode extends BaseSourceNode {
   }
 
   /**
+   * Get cached HDR IPImage for a frame (synchronous, for Viewer render loop).
+   * Returns null if the frame hasn't been fetched yet.
+   */
+  getCachedHDRIPImage(frame: number): IPImage | null {
+    // Use peek() (no LRU refresh) to avoid Map delete+re-insert on every
+    // render frame. The render loop reads every frame sequentially; the
+    // preload window already keeps nearby frames alive.
+    return this.hdrFrameCache.peek(frame) ?? null;
+  }
+
+  /**
+   * Fetch an HDR frame and cache the resulting IPImage for synchronous access.
+   * Uses LRU cache — eviction automatically closes VideoFrames.
+   * When HDR resize is available, frames are resized to target display resolution.
+   */
+  async fetchHDRFrame(frame: number): Promise<IPImage | null> {
+    if (!this.isHDRVideo || !this.useMediabunny || !this.frameExtractor) {
+      return null;
+    }
+
+    // Check LRU cache first
+    const cached = this.hdrFrameCache.get(frame);
+    if (cached) return cached;
+
+    // If a fetch for this frame is already in flight, await it instead of starting a duplicate
+    const pending = this.pendingHDRFetches.get(frame);
+    if (pending) return pending;
+
+    // Create the fetch promise and track it
+    const fetchPromise = (async (): Promise<IPImage | null> => {
+      try {
+        // Guard: if dispose() was called before the async IIFE runs, bail out
+        if (!this.frameExtractor) return null;
+
+        PerfTrace.begin('getFrameHDR');
+        const sample = await this.frameExtractor.getFrameHDR(frame);
+        PerfTrace.end('getFrameHDR');
+
+        // Guard: dispose() may have been called while awaiting getFrameHDR
+        if (!sample || !this.frameExtractor) return null;
+
+        // Use stable HDR target size (actual display dims, not interaction-reduced)
+        const targetSize = this.hdrTargetSize;
+        PerfTrace.begin('hdrSampleToIPImage');
+        const ipImage = this.hdrSampleToIPImage(sample, frame, targetSize);
+        PerfTrace.end('hdrSampleToIPImage');
+        sample.close();
+
+        // Guard: dispose() may have been called during hdrSampleToIPImage/resize
+        if (!this.frameExtractor) {
+          ipImage.close(); // clean up since we won't cache it
+          return null;
+        }
+
+        // Store in LRU cache (eviction calls image.close() automatically)
+        this.hdrFrameCache.set(frame, ipImage);
+        return ipImage;
+      } catch {
+        return null;
+      }
+    })();
+
+    this.pendingHDRFetches.set(frame, fetchPromise);
+    try {
+      return await fetchPromise;
+    } finally {
+      this.pendingHDRFetches.delete(frame);
+    }
+  }
+
+  /**
+   * Preload HDR frames around the current position.
+   * Extracts and caches nearby frames sequentially (decoder is serialized).
+   * Skips frames already in the LRU cache.
+   */
+  async preloadHDRFrames(
+    centerFrame: number,
+    ahead: number = 8,
+    behind: number = 2,
+  ): Promise<void> {
+    if (!this.isHDRVideo || !this.useMediabunny || !this.frameExtractor) return;
+
+    // Clamp preload window to cache capacity to prevent evicting the current frame
+    const maxWindow = Math.max(0, this.hdrFrameCache.capacity - 1);
+    ahead = Math.min(ahead, maxWindow);
+    behind = Math.min(behind, maxWindow - ahead);
+
+    const maxFrame = this.metadata.duration;
+    const frames: number[] = [];
+
+    // Build list of frames to preload (skip already cached)
+    for (let i = -behind; i <= ahead; i++) {
+      if (i === 0) continue; // current frame already fetched
+      const f = centerFrame + i;
+      if (f >= 1 && f <= maxFrame && !this.hdrFrameCache.has(f)) {
+        frames.push(f);
+      }
+    }
+
+    // Extract sequentially — decoder serialization makes parallel extraction pointless
+    for (const frame of frames) {
+      // Bail if frame was cached by another request while we waited
+      if (this.hdrFrameCache.has(frame)) continue;
+      await this.fetchHDRFrame(frame);
+    }
+  }
+
+  /**
    * Get frame as IPImage (async, uses mediabunny when available)
    * For HDR video, attempts to get VideoFrame-backed IPImage first
    */
   async getFrameIPImage(frame: number): Promise<IPImage | null> {
     if (this.useMediabunny && this.frameExtractor) {
-      // HDR path: try to get HDR sample with VideoFrame
+      // HDR path: delegate to fetchHDRFrame (decode → resize → cache)
       if (this.isHDRVideo) {
-        try {
-          const sample = await this.frameExtractor.getFrameHDR(frame);
-          if (sample) {
-            return this.hdrSampleToIPImage(sample, frame);
-          }
-        } catch {
-          // Fall through to SDR path
-        }
+        const hdrImage = await this.fetchHDRFrame(frame);
+        if (hdrImage) return hdrImage;
+        // Fall through to SDR path on failure
       }
 
       const result = await this.getFrameAsync(frame);
@@ -887,9 +1180,15 @@ export class VideoSourceNode extends BaseSourceNode {
     this.file = null;
     this.isHDRVideo = false;
     this.videoColorSpace = null;
-    this.pendingHDRRequest = null;
-    this.pendingHDRSample = null;
-    this.pendingHDRFrame = -1;
+    // Clear pending HDR fetches (they will resolve but results won't be used)
+    this.pendingHDRFetches.clear();
+    // Clear HDR frame cache (onEvict closes VideoFrames)
+    this.hdrFrameCache.clear();
+    // Dispose HDR resizer
+    if (this.hdrResizer) {
+      this.hdrResizer.dispose();
+      this.hdrResizer = null;
+    }
     super.dispose();
   }
 

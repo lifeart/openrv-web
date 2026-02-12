@@ -9,6 +9,7 @@
 
 import { FalseColor, FalseColorPreset } from './FalseColor';
 import { getIconSvg } from './shared/Icons';
+import { getThemeManager } from '../../utils/ui/ThemeManager';
 
 export class FalseColorControl {
   private container: HTMLElement;
@@ -18,6 +19,8 @@ export class FalseColorControl {
   private toggleButton: HTMLButtonElement;
   private presetButtons: Map<FalseColorPreset, HTMLButtonElement> = new Map();
   private boundHandleReposition: () => void;
+  private boundOnThemeChange: (() => void) | null = null;
+  private unsubscribers: (() => void)[] = [];
 
   constructor(falseColor: FalseColor) {
     this.falseColor = falseColor;
@@ -97,11 +100,17 @@ export class FalseColorControl {
     document.addEventListener('click', this.handleOutsideClick);
 
     // Listen for state changes
-    this.falseColor.on('stateChanged', () => {
+    this.unsubscribers.push(this.falseColor.on('stateChanged', () => {
       this.updateButtonState();
       this.updatePresetButtons();
       this.updateLegend();
-    });
+    }));
+
+    // Listen for theme changes
+    this.boundOnThemeChange = () => {
+      this.updateLegend();
+    };
+    getThemeManager().on('themeChanged', this.boundOnThemeChange);
   }
 
   private createDropdownContent(): void {
@@ -113,7 +122,7 @@ export class FalseColorControl {
       justify-content: space-between;
       padding: 6px 8px;
       margin-bottom: 8px;
-      background: rgba(255, 255, 255, 0.03);
+      background: var(--bg-hover);
       border-radius: 4px;
     `;
 
@@ -130,9 +139,9 @@ export class FalseColorControl {
     });
 
     // Update checkbox when state changes
-    this.falseColor.on('stateChanged', (state) => {
+    this.unsubscribers.push(this.falseColor.on('stateChanged', (state) => {
       enableCheckbox.checked = state.enabled;
-    });
+    }));
 
     enableRow.appendChild(enableLabel);
     enableRow.appendChild(enableCheckbox);
@@ -282,7 +291,7 @@ export class FalseColorControl {
         height: 12px;
         border-radius: 2px;
         background: ${item.color};
-        border: 1px solid rgba(255,255,255,0.2);
+        border: 1px solid var(--border-primary);
         flex-shrink: 0;
       `;
 
@@ -354,5 +363,11 @@ export class FalseColorControl {
     window.removeEventListener('resize', this.boundHandleReposition);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     this.presetButtons.clear();
+    this.unsubscribers.forEach((unsub) => unsub());
+    this.unsubscribers = [];
+    if (this.boundOnThemeChange) {
+      getThemeManager().off('themeChanged', this.boundOnThemeChange);
+      this.boundOnThemeChange = null;
+    }
   }
 }

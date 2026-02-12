@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type { WorkerEffectsState } from '../utils/effectProcessing.shared';
+import type { WorkerEffectsState } from '../utils/effects/effectProcessing.shared';
 
 // Mock postMessage before importing the worker, since the worker calls
 // self.postMessage({ type: 'ready' }) on load and jsdom's window.postMessage

@@ -11,6 +11,7 @@ import {
   TONE_MAPPING_OPERATORS,
 } from './ToneMappingControl';
 
+
 describe('ToneMappingControl', () => {
   let control: ToneMappingControl;
 
@@ -174,7 +175,7 @@ describe('ToneMappingControl', () => {
       const el = control.render();
       const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
       const operatorButtons = dropdown.querySelectorAll('button[data-operator]');
-      expect(operatorButtons.length).toBe(4); // off, reinhard, filmic, aces
+      expect(operatorButtons.length).toBe(9); // off, reinhard, filmic, aces, agx, pbrNeutral, gt, acesHill, drago
     });
 
     it('TONE-U041: off operator button exists', () => {
@@ -203,6 +204,13 @@ describe('ToneMappingControl', () => {
       const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
       const acesBtn = dropdown.querySelector('[data-testid="tone-mapping-operator-aces"]');
       expect(acesBtn).not.toBeNull();
+    });
+
+    it('TONE-U044b: drago operator button exists', () => {
+      const el = control.render();
+      const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+      const dragoBtn = dropdown.querySelector('[data-testid="tone-mapping-operator-drago"]');
+      expect(dragoBtn).not.toBeNull();
     });
 
     it('TONE-U045: clicking operator button changes operator', () => {
@@ -358,6 +366,231 @@ describe('ToneMappingControl', () => {
 
       expect(listener).not.toHaveBeenCalled();
     });
+
+    it('TONE-U085: setState updates dragoBias', () => {
+      control.setState({ dragoBias: 0.9 });
+      expect(control.getState().dragoBias).toBe(0.9);
+    });
+
+    it('TONE-U086: setState updates dragoLwa', () => {
+      control.setState({ dragoLwa: 0.5 });
+      expect(control.getState().dragoLwa).toBe(0.5);
+    });
+
+    it('TONE-U087: setState updates dragoLmax', () => {
+      control.setState({ dragoLmax: 3.0 });
+      expect(control.getState().dragoLmax).toBe(3.0);
+    });
+
+    it('TONE-U088: setState with drago fields emits stateChanged', () => {
+      const listener = vi.fn();
+      control.on('stateChanged', listener);
+
+      control.setState({ dragoBias: 0.75 });
+
+      expect(listener).toHaveBeenCalledWith(expect.objectContaining({
+        dragoBias: 0.75,
+      }));
+    });
+  });
+
+  describe('parameter sections', () => {
+    it('TONE-U170: reinhard shows parameter section with white point slider', () => {
+      control.render();
+      control.setOperator('reinhard');
+      const params = control.render().querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+      expect(params.style.display).toBe('block');
+      expect(params.textContent).toContain('Reinhard Parameters');
+      expect(params.textContent).toContain('White Point');
+    });
+
+    it('TONE-U171: filmic shows parameter section with two sliders', () => {
+      control.render();
+      control.setOperator('filmic');
+      const params = control.render().querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+      expect(params.style.display).toBe('block');
+      expect(params.textContent).toContain('Filmic Parameters');
+      expect(params.textContent).toContain('Exposure Bias');
+      expect(params.textContent).toContain('White Point');
+    });
+
+    it('TONE-U172: drago shows parameter section with bias and brightness sliders', () => {
+      control.render();
+      control.setOperator('drago');
+      const params = control.render().querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+      expect(params.style.display).toBe('block');
+      expect(params.textContent).toContain('Drago Parameters');
+      expect(params.textContent).toContain('Bias');
+      expect(params.textContent).toContain('Brightness');
+      const sliders = params.querySelectorAll('input[type="range"]');
+      expect(sliders.length).toBe(2);
+    });
+
+    it('TONE-U173: drago bias slider has correct range attributes', () => {
+      control.render();
+      control.setOperator('drago');
+      const params = control.render().querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+      const sliders = params.querySelectorAll('input[type="range"]');
+      const biasSlider = sliders[0] as HTMLInputElement;
+      expect(biasSlider).not.toBeNull();
+      expect(biasSlider.min).toBe('0.5');
+      expect(biasSlider.max).toBe('1');
+      expect(biasSlider.step).toBe('0.01');
+      expect(biasSlider.value).toBe('0.85');
+    });
+
+    it('TONE-U173b: drago brightness slider has correct range attributes', () => {
+      control.render();
+      control.setOperator('drago');
+      const params = control.render().querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+      const sliders = params.querySelectorAll('input[type="range"]');
+      const brightnessSlider = sliders[1] as HTMLInputElement;
+      expect(brightnessSlider).not.toBeNull();
+      expect(brightnessSlider.min).toBe('0.5');
+      expect(brightnessSlider.max).toBe('5');
+      expect(brightnessSlider.step).toBe('0.1');
+      expect(brightnessSlider.value).toBe('2');
+    });
+
+    it('TONE-U174: drago bias slider emits stateChanged on input', () => {
+      control.render();
+      control.setOperator('drago');
+      const listener = vi.fn();
+      control.on('stateChanged', listener);
+      listener.mockClear(); // clear from setOperator call
+
+      const params = control.render().querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+      const sliders = params.querySelectorAll('input[type="range"]');
+      const biasSlider = sliders[0] as HTMLInputElement;
+      biasSlider.value = '0.9';
+      biasSlider.dispatchEvent(new Event('input'));
+
+      expect(listener).toHaveBeenCalledWith(expect.objectContaining({
+        dragoBias: 0.9,
+      }));
+    });
+
+    it('TONE-U174b: drago brightness slider emits stateChanged on input', () => {
+      control.render();
+      control.setOperator('drago');
+      const listener = vi.fn();
+      control.on('stateChanged', listener);
+      listener.mockClear();
+
+      const params = control.render().querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+      const sliders = params.querySelectorAll('input[type="range"]');
+      const brightnessSlider = sliders[1] as HTMLInputElement;
+      brightnessSlider.value = '3.0';
+      brightnessSlider.dispatchEvent(new Event('input'));
+
+      expect(listener).toHaveBeenCalledWith(expect.objectContaining({
+        dragoBrightness: 3.0,
+      }));
+    });
+
+    it('TONE-U175: aces hides parameter section', () => {
+      control.render();
+      control.setOperator('aces');
+      const params = control.render().querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+      expect(params.style.display).toBe('none');
+    });
+
+    it('TONE-U176: off hides parameter section', () => {
+      control.render();
+      // Start from a non-off operator, then switch to off
+      control.setOperator('reinhard');
+      control.setOperator('off');
+      const params = control.render().querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+      expect(params.style.display).toBe('none');
+    });
+
+    it('TONE-U177: switching from drago to aces hides parameter section', () => {
+      control.render();
+      control.setOperator('drago');
+      const params = control.render().querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+      expect(params.style.display).toBe('block');
+
+      control.setOperator('aces');
+      expect(params.style.display).toBe('none');
+    });
+
+    it('TONE-U178: drago bias value display shows 2 decimal places', () => {
+      control.render();
+      control.setOperator('drago');
+      const params = control.render().querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+      // The value display should show "0.85" (2 decimals), not "0.9" (1 decimal)
+      const spans = params.querySelectorAll('span');
+      const valueSpan = Array.from(spans).find(s => s.textContent === '0.85');
+      expect(valueSpan).not.toBeNull();
+    });
+
+    it('TONE-U179: setState with dragoBias updates slider when drago is active', () => {
+      control.render();
+      control.setOperator('drago');
+
+      // Update dragoBias externally via setState
+      control.setState({ dragoBias: 0.75 });
+
+      // The bias slider (first) should be recreated with the new value
+      const params = control.render().querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+      const sliders = params.querySelectorAll('input[type="range"]');
+      const biasSlider = sliders[0] as HTMLInputElement;
+      expect(biasSlider.value).toBe('0.75');
+      // Value display should show 0.75
+      const spans = params.querySelectorAll('span');
+      const valueSpan = Array.from(spans).find(s => s.textContent === '0.75');
+      expect(valueSpan).not.toBeNull();
+    });
+
+    it('TONE-U179b: setState with dragoBrightness updates brightness slider', () => {
+      control.render();
+      control.setOperator('drago');
+
+      control.setState({ dragoBrightness: 3.5 });
+
+      const params = control.render().querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+      const sliders = params.querySelectorAll('input[type="range"]');
+      const brightnessSlider = sliders[1] as HTMLInputElement;
+      expect(brightnessSlider.value).toBe('3.5');
+    });
+
+    it('TONE-U180: drago bias slider updates value display on input', () => {
+      control.render();
+      control.setOperator('drago');
+      const params = control.render().querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+      const sliders = params.querySelectorAll('input[type="range"]');
+      const biasSlider = sliders[0] as HTMLInputElement;
+
+      // Simulate user sliding to 0.90
+      biasSlider.value = '0.90';
+      biasSlider.dispatchEvent(new Event('input'));
+
+      // Value display should show "0.90"
+      const spans = params.querySelectorAll('span');
+      const valueSpan = Array.from(spans).find(s => s.textContent === '0.90');
+      expect(valueSpan).not.toBeNull();
+    });
+
+    it('TONE-U181: reinhard slider shows 1 decimal place', () => {
+      control.render();
+      control.setOperator('reinhard');
+      const params = control.render().querySelector('[data-testid="tone-mapping-params"]') as HTMLElement;
+      // Default white point is 4.0, should display "4.0" (1 decimal)
+      const spans = params.querySelectorAll('span');
+      const valueSpan = Array.from(spans).find(s => s.textContent === '4.0');
+      expect(valueSpan).not.toBeNull();
+    });
+  });
+
+  describe('theme changes', () => {
+    it('TONE-U190: enable row uses var(--bg-hover) not hardcoded rgba', () => {
+      const el = control.render();
+      const dropdown = el.querySelector('[data-testid="tone-mapping-dropdown"]') as HTMLElement;
+      // The enable row is the first child div in the dropdown
+      const enableRow = dropdown.querySelector('div') as HTMLElement;
+      expect(enableRow.style.cssText).toContain('var(--bg-hover)');
+      expect(enableRow.style.cssText).not.toContain('rgba(255, 255, 255, 0.03)');
+    });
   });
 
   describe('isEnabled', () => {
@@ -383,7 +616,7 @@ describe('ToneMappingControl', () => {
   describe('getOperators', () => {
     it('TONE-U100: getOperators returns all operators', () => {
       const operators = control.getOperators();
-      expect(operators.length).toBe(4);
+      expect(operators.length).toBe(9);
     });
 
     it('TONE-U101: getOperators returns copies', () => {
@@ -569,8 +802,8 @@ describe('ToneMappingControl', () => {
 });
 
 describe('TONE_MAPPING_OPERATORS', () => {
-  it('TONE-U200: has 4 operators', () => {
-    expect(TONE_MAPPING_OPERATORS.length).toBe(4);
+  it('TONE-U200: has 8 operators', () => {
+    expect(TONE_MAPPING_OPERATORS.length).toBe(9);
   });
 
   it('TONE-U201: each operator has key, label, and description', () => {

@@ -16,6 +16,7 @@ import {
   SourceMode,
 } from './PixelProbe';
 
+
 // Helper to create test ImageData
 function createTestImageData(width: number, height: number, fill?: { r: number; g: number; b: number; a: number }): ImageData {
   const data = new Uint8ClampedArray(width * height * 4);
@@ -1172,5 +1173,27 @@ describe('PixelProbe checkerboard display', () => {
 
     const state = pixelProbe.getState();
     expect(state.alpha).toBe(254);
+  });
+});
+
+describe('PixelProbe theme changes', () => {
+  let pixelProbe: PixelProbe;
+
+  beforeEach(() => {
+    pixelProbe = new PixelProbe();
+  });
+
+  afterEach(() => {
+    pixelProbe.dispose();
+  });
+
+  it('THEME-001: overlay uses var(--bg-secondary) instead of hardcoded rgba', () => {
+    pixelProbe.enable();
+    pixelProbe.show();
+
+    const overlay = document.querySelector('[data-testid="pixel-probe-overlay"]') as HTMLElement;
+    expect(overlay).not.toBeNull();
+    expect(overlay.style.cssText).toContain('var(--bg-secondary)');
+    expect(overlay.style.cssText).not.toContain('rgba(30, 30, 30');
   });
 });

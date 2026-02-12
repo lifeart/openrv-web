@@ -4,9 +4,10 @@
  * Tests for the false color dropdown control with presets and legend.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { FalseColorControl } from './FalseColorControl';
 import { FalseColor } from './FalseColor';
+import { getThemeManager } from '../../utils/ui/ThemeManager';
 
 // Create a mock FalseColor class
 function createMockFalseColor(): FalseColor {
@@ -332,6 +333,24 @@ describe('FalseColorControl', () => {
       // No error means cleanup was successful
       expect(true).toBe(true);
     });
+
+    it('FALSE-U073: dispose unsubscribes from state changes', () => {
+      const unsubSpy = vi.fn();
+      // Mock .on to return our spy
+      vi.spyOn(falseColor, 'on').mockReturnValue(unsubSpy);
+
+      // Re-create control to capture the mocked .on
+      control.dispose();
+      control = new FalseColorControl(falseColor);
+
+      // Verify subscription happened
+      expect(falseColor.on).toHaveBeenCalledWith('stateChanged', expect.any(Function));
+
+      control.dispose();
+
+      // Verify unsubscribe was called
+      expect(unsubSpy).toHaveBeenCalled();
+    });
   });
 
   describe('positioning', () => {
@@ -350,6 +369,59 @@ describe('FalseColorControl', () => {
     it('FALSE-U082: container has relative positioning', () => {
       const el = control.render();
       expect(el.style.position).toBe('relative');
+    });
+  });
+
+  describe('theme changes', () => {
+    it('FALSE-U090: enable row uses var(--bg-hover) instead of hardcoded rgba', () => {
+      const el = control.render();
+      const dropdown = el.querySelector('[data-testid="false-color-dropdown"]') as HTMLElement;
+      // The enable row is the first child div of the dropdown
+      const enableRow = dropdown.children[0] as HTMLElement;
+      expect(enableRow.style.cssText).toContain('var(--bg-hover)');
+      expect(enableRow.style.cssText).not.toContain('rgba(255, 255, 255, 0.03)');
+    });
+
+    it('FALSE-U091: legend swatch uses var(--border-primary) instead of hardcoded rgba', () => {
+      const el = control.render();
+      const dropdown = el.querySelector('[data-testid="false-color-dropdown"]') as HTMLElement;
+      const legendItems = dropdown.querySelector('.legend-items') as HTMLElement;
+      // Legend items are populated on creation; each row has a swatch div then a span
+      const firstRow = legendItems.children[0] as HTMLElement;
+      expect(firstRow).toBeTruthy();
+      const firstSwatch = firstRow.children[0] as HTMLElement;
+      expect(firstSwatch).toBeTruthy();
+      expect(firstSwatch.style.cssText).toContain('var(--border-primary)');
+      expect(firstSwatch.style.cssText).not.toContain('rgba(255, 255, 255, 0.2)');
+    });
+
+    it('FALSE-U092: themeChanged triggers legend re-render', () => {
+      const el = control.render();
+      const dropdown = el.querySelector('[data-testid="false-color-dropdown"]') as HTMLElement;
+      const legendItems = dropdown.querySelector('.legend-items') as HTMLElement;
+      const oldFirstRow = legendItems.firstElementChild!;
+      expect(oldFirstRow).toBeTruthy();
+
+      getThemeManager().emit('themeChanged', 'light');
+
+      // updateLegend() rebuilds legend — old child is detached
+      expect(legendItems.contains(oldFirstRow)).toBe(false);
+      // New legend items are created
+      expect(legendItems.children.length).toBeGreaterThan(0);
+    });
+
+    it('FALSE-U093: theme change after dispose does not re-render legend', () => {
+      const el = control.render();
+      const dropdown = el.querySelector('[data-testid="false-color-dropdown"]') as HTMLElement;
+      const legendItems = dropdown.querySelector('.legend-items') as HTMLElement;
+      control.dispose();
+
+      const htmlAfterDispose = legendItems.innerHTML;
+
+      getThemeManager().emit('themeChanged', 'light');
+
+      // Listener was removed — legend stays unchanged
+      expect(legendItems.innerHTML).toBe(htmlAfterDispose);
     });
   });
 });

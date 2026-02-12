@@ -8,9 +8,9 @@
  * - Session-driven from GTO matte settings
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import { setupHiDPICanvas } from '../../utils/HiDPICanvas';
+import type { EventMap } from '../../utils/EventEmitter';
 import type { MatteSettings } from '../../core/session/Session';
+import { CanvasOverlay } from './CanvasOverlay';
 
 export interface MatteOverlayEvents extends EventMap {
   settingsChanged: MatteSettings;
@@ -24,42 +24,19 @@ export const DEFAULT_MATTE_SETTINGS: MatteSettings = {
   centerPoint: [0, 0],
 };
 
-export class MatteOverlay extends EventEmitter<MatteOverlayEvents> {
-  private canvas: HTMLCanvasElement;
-  private ctx: CanvasRenderingContext2D;
+export class MatteOverlay extends CanvasOverlay<MatteOverlayEvents> {
   private settings: MatteSettings = { ...DEFAULT_MATTE_SETTINGS };
-  private displayWidth = 0;
-  private displayHeight = 0;
-  private offsetX = 0;
-  private offsetY = 0;
-  private canvasWidth = 0;
-  private canvasHeight = 0;
   private sourceAspect = 1; // Aspect ratio of the source content
 
   constructor() {
-    super();
-
-    this.canvas = document.createElement('canvas');
-    this.canvas.className = 'matte-overlay';
-    this.canvas.dataset.testid = 'matte-overlay';
-    this.canvas.style.cssText = `
-      position: absolute;
-      top: 0;
-      left: 0;
-      pointer-events: none;
-      z-index: 40;
-    `;
-
-    const ctx = this.canvas.getContext('2d');
-    if (!ctx) throw new Error('Failed to get 2D context for matte overlay');
-    this.ctx = ctx;
+    super('matte-overlay', 'matte-overlay', 40);
   }
 
   /**
    * Update canvas size and position to match viewer
    * canvasWidth/canvasHeight are logical (CSS) dimensions
    */
-  setViewerDimensions(
+  override setViewerDimensions(
     canvasWidth: number,
     canvasHeight: number,
     offsetX: number,
@@ -67,30 +44,12 @@ export class MatteOverlay extends EventEmitter<MatteOverlayEvents> {
     displayWidth: number,
     displayHeight: number
   ): void {
-    this.canvasWidth = canvasWidth;
-    this.canvasHeight = canvasHeight;
-    this.displayWidth = displayWidth;
-    this.displayHeight = displayHeight;
-    this.offsetX = offsetX;
-    this.offsetY = offsetY;
-
     // Calculate source aspect from display dimensions
     if (displayWidth > 0 && displayHeight > 0) {
       this.sourceAspect = displayWidth / displayHeight;
     }
 
-    // Setup hi-DPI canvas with logical dimensions
-    setupHiDPICanvas({
-      canvas: this.canvas,
-      ctx: this.ctx,
-      width: canvasWidth,
-      height: canvasHeight,
-      setStyle: true, // CSS dimensions must be set for correct HiDPI scaling
-    });
-
-    if (this.settings.show) {
-      this.render();
-    }
+    super.setViewerDimensions(canvasWidth, canvasHeight, offsetX, offsetY, displayWidth, displayHeight);
   }
 
   /**
@@ -256,19 +215,5 @@ export class MatteOverlay extends EventEmitter<MatteOverlayEvents> {
    */
   isVisible(): boolean {
     return this.settings.show;
-  }
-
-  /**
-   * Get the canvas element
-   */
-  getElement(): HTMLCanvasElement {
-    return this.canvas;
-  }
-
-  /**
-   * Dispose
-   */
-  dispose(): void {
-    // No cleanup needed
   }
 }

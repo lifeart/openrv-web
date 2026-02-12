@@ -9,6 +9,7 @@
  */
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { luminanceRec709 } from '../../color/ColorProcessingFacade';
 
 export interface FalseColorEvents extends EventMap {
   stateChanged: FalseColorState;
@@ -191,7 +192,7 @@ export class FalseColor extends EventEmitter<FalseColorEvents> {
       const b = data[i + 2]!;
 
       // Calculate luminance using Rec. 709 coefficients
-      const lum = Math.round(0.2126 * r + 0.7152 * g + 0.0722 * b);
+      const lum = Math.round(luminanceRec709(r, g, b));
       const lutIndex = lum * 3;
 
       // Map to false color

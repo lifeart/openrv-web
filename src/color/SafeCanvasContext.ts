@@ -27,6 +27,7 @@ export function safeCanvasContext2D(
 ): CanvasRenderingContext2D {
   if (colorSpace) {
     try {
+      // rec2100-hlg is not in PredefinedColorSpace yet; cast needed for HDR color spaces
       const ctx = canvas.getContext('2d', { ...baseOptions, colorSpace } as CanvasRenderingContext2DSettings);
       if (ctx) return ctx;
     } catch { /* fall through to sRGB fallback */ }
@@ -48,7 +49,7 @@ export function safeCanvasContext2D(
  */
 export function createViewerCanvas(
   caps: DisplayCapabilities,
-  hdrMode: 'sdr' | 'hlg' | 'pq',
+  hdrMode: 'sdr' | 'hlg' | 'pq' | 'extended',
 ): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
   const canvas = document.createElement('canvas');
   const baseOpts: CanvasRenderingContext2DSettings = { alpha: false, willReadFrequently: true };
@@ -56,6 +57,7 @@ export function createViewerCanvas(
   // Try HDR first (if requested and supported)
   if (hdrMode === 'hlg' && caps.canvasHLG) {
     try {
+      // rec2100-hlg is not in PredefinedColorSpace; pixelFormat is typed via webgl-hdr.d.ts
       const ctx = canvas.getContext('2d', {
         ...baseOpts,
         colorSpace: 'rec2100-hlg',
@@ -71,7 +73,7 @@ export function createViewerCanvas(
       const ctx = canvas.getContext('2d', {
         ...baseOpts,
         colorSpace: 'display-p3',
-      } as CanvasRenderingContext2DSettings);
+      });
       if (ctx) return { canvas, ctx };
     } catch { /* fall through */ }
   }

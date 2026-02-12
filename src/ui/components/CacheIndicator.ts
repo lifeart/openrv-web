@@ -10,6 +10,7 @@
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { Session } from '../../core/session/Session';
+import { getThemeManager } from '../../utils/ui/ThemeManager';
 import type { Viewer } from './Viewer';
 
 export interface CacheIndicatorState {
@@ -42,6 +43,7 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
   private inPoint = 1;
   private outPoint = 1;
   private prerenderStatsSpan: HTMLSpanElement | null = null;
+  private boundOnThemeChange: () => void;
 
   // Colors for cache states - resolved from CSS variables at runtime
   private static getCachedColor(): string {
@@ -73,6 +75,7 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
       flex-direction: column;
       gap: 2px;
       padding: 2px 0;
+      background: var(--bg-secondary);
     `;
 
     // Create bar container (holds canvas)
@@ -161,6 +164,10 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
     this.session.on('sourceLoaded', () => this.scheduleUpdate());
     this.session.on('inOutChanged', () => this.scheduleUpdate());
 
+    // Subscribe to theme changes to redraw with updated colors
+    this.boundOnThemeChange = () => this.scheduleUpdate();
+    getThemeManager().on('themeChanged', this.boundOnThemeChange);
+
     // Initial update
     this.scheduleUpdate();
   }
@@ -208,7 +215,8 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
     const pendingFrames = this.session.getPendingFrames();
     const source = this.session.currentSource;
     const totalFrames = source?.duration ?? 0;
-    const memorySizeMB = this.calculateMemorySizeMB(cachedFrames.size);
+    const stats = this.session.getCacheStats();
+    const memorySizeMB = stats?.memorySizeMB ?? this.calculateMemorySizeMB(cachedFrames.size);
 
     return {
       visible: this.visible,
@@ -296,7 +304,9 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
     // Update stats display
     const statsSpan = this.infoContainer.querySelector('.cache-stats') as HTMLSpanElement;
     if (statsSpan) {
-      const memorySizeMB = this.calculateMemorySizeMB(cachedFrames.size);
+      // Use accurate memory from stats when available (e.g. HDR resized frames),
+      // otherwise estimate from source dimensions
+      const memorySizeMB = stats?.memorySizeMB ?? this.calculateMemorySizeMB(cachedFrames.size);
       const memoryStr = this.formatMemorySize(memorySizeMB);
       statsSpan.textContent = `Cache: ${cachedFrames.size} / ${this.totalFrames} frames (${memoryStr})`;
       if (stats && pendingFrames.size > 0) {
@@ -415,6 +425,7 @@ export class CacheIndicator extends EventEmitter<CacheIndicatorEvents> {
     if (this.viewer) {
       this.viewer.setOnPrerenderCacheUpdate(null);
     }
+    getThemeManager().off('themeChanged', this.boundOnThemeChange);
     this.container.remove();
     this.removeAllListeners();
   }

@@ -48,7 +48,7 @@ describe('SessionGTOStore', () => {
   it('preserves base objects while updating session state', () => {
     const session = new Session();
     const paintEngine = new PaintEngine();
-    const viewer = new Viewer(session, paintEngine);
+    const viewer = new Viewer({ session, paintEngine });
 
     session.setInPoint(1);
     session.setOutPoint(8);

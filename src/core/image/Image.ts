@@ -38,6 +38,9 @@ export class IPImage {
   texture: WebGLTexture | null = null;
   textureNeedsUpdate = true;
 
+  // Cached TypedArray view over this.data to avoid re-creating on every getTypedArray() call
+  private cachedTypedArray: Uint8Array | Uint16Array | Float32Array | null = null;
+
   constructor(options: IPImageOptions) {
     this.width = options.width;
     this.height = options.height;
@@ -66,25 +69,43 @@ export class IPImage {
   }
 
   getTypedArray(): Uint8Array | Uint16Array | Float32Array {
+    if (this.cachedTypedArray !== null) {
+      return this.cachedTypedArray;
+    }
+
     switch (this.dataType) {
       case 'uint8':
-        return new Uint8Array(this.data);
+        this.cachedTypedArray = new Uint8Array(this.data);
+        break;
       case 'uint16':
-        return new Uint16Array(this.data);
+        this.cachedTypedArray = new Uint16Array(this.data);
+        break;
       case 'float32':
-        return new Float32Array(this.data);
+        this.cachedTypedArray = new Float32Array(this.data);
+        break;
     }
+
+    return this.cachedTypedArray;
   }
 
-  getPixel(x: number, y: number): number[] {
+  getPixel(x: number, y: number, out?: number[]): number[] {
     const arr = this.getTypedArray();
     const idx = (y * this.width + x) * this.channels;
-    const pixel: number[] = [];
+    const channels = this.channels;
 
-    for (let c = 0; c < this.channels; c++) {
-      pixel.push(arr[idx + c] ?? 0);
+    if (out) {
+      // Reuse caller-provided buffer to avoid allocation
+      for (let c = 0; c < channels; c++) {
+        out[c] = arr[idx + c] ?? 0;
+      }
+      out.length = channels;
+      return out;
     }
 
+    const pixel = new Array<number>(channels);
+    for (let c = 0; c < channels; c++) {
+      pixel[c] = arr[idx + c] ?? 0;
+    }
     return pixel;
   }
 
@@ -102,6 +123,30 @@ export class IPImage {
   /**
    * Release the VideoFrame if present. Must be called when the image
    * is no longer needed to avoid VRAM leaks.
+   *
+   * **WARNING:** VideoFrame objects hold GPU memory (VRAM) that is **not**
+   * released by JavaScript garbage collection. If you forget to call
+   * `close()`, the GPU memory remains allocated until the page is unloaded,
+   * which can quickly exhaust VRAM when processing many frames.
+   *
+   * This method is safe to call multiple times; subsequent calls are no-ops.
+   *
+   * @example
+   * ```ts
+   * const image = new IPImage({
+   *   width: 1920,
+   *   height: 1080,
+   *   channels: 4,
+   *   dataType: 'uint8',
+   *   videoFrame: someVideoFrame,
+   * });
+   *
+   * try {
+   *   // ... use image for rendering ...
+   * } finally {
+   *   image.close(); // Always release GPU memory
+   * }
+   * ```
    */
   close(): void {
     if (this.videoFrame) {
@@ -114,7 +159,46 @@ export class IPImage {
     }
   }
 
+  /**
+   * Create a lightweight clone that shares the same underlying ArrayBuffer
+   * (no data copy) but has independent metadata.
+   *
+   * This is the default because most callers only need different metadata
+   * with the same pixel data, and copying pixel buffers for large images
+   * (e.g. 4K HDR float32 at ~141 MB) is expensive.
+   *
+   * **Important constraints:**
+   * - The pixel data is **shared**: writing to one image's typed array
+   *   will be visible in the other. Only use this when the data will be
+   *   treated as read-only.
+   * - `videoFrame` is **not** copied because VideoFrame is a GPU resource
+   *   that cannot be safely shared between IPImage instances.
+   * - `texture` and `textureNeedsUpdate` are **not** copied because they
+   *   are renderer-specific state.
+   *
+   * If you need an independent copy of the pixel data, use {@link deepClone}.
+   */
   clone(): IPImage {
+    return new IPImage({
+      width: this.width,
+      height: this.height,
+      channels: this.channels,
+      dataType: this.dataType,
+      data: this.data,
+      metadata: { ...this.metadata },
+    });
+  }
+
+  /**
+   * Create a full deep clone with an independent copy of the pixel data.
+   *
+   * Use this when you need to mutate the pixel data of the clone without
+   * affecting the original image.
+   *
+   * `videoFrame` is **not** copied because VideoFrame is a GPU resource
+   * that cannot be safely shared between IPImage instances.
+   */
+  deepClone(): IPImage {
     return new IPImage({
       width: this.width,
       height: this.height,
@@ -123,6 +207,13 @@ export class IPImage {
       data: this.data.slice(0),
       metadata: { ...this.metadata },
     });
+  }
+
+  /**
+   * @deprecated Use {@link clone} instead, which now defaults to shallow (metadata-only) cloning.
+   */
+  cloneMetadataOnly(): IPImage {
+    return this.clone();
   }
 
   static fromImageData(imageData: ImageData): IPImage {

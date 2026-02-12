@@ -2,7 +2,8 @@ import { Session } from '../../core/session/Session';
 import { PaintEngine } from '../../paint/PaintEngine';
 import { WaveformRenderer } from '../../audio/WaveformRenderer';
 import { ThumbnailManager } from './ThumbnailManager';
-import { formatTimecode, formatFrameDisplay, TimecodeDisplayMode } from '../../utils/Timecode';
+import { formatTimecode, formatFrameDisplay, TimecodeDisplayMode } from '../../utils/media/Timecode';
+import { getThemeManager } from '../../utils/ui/ThemeManager';
 
 export class Timeline {
   private container: HTMLElement;
@@ -22,6 +23,7 @@ export class Timeline {
 
   // Bound event handlers for proper cleanup
   private boundHandleResize: () => void;
+  private boundOnThemeChange: () => void;
   private paintEngineSubscribed = false;
   private resizeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private initialRenderFrameId: number | null = null;
@@ -69,6 +71,8 @@ export class Timeline {
         this.draw();
       }, 150);
     };
+
+    this.boundOnThemeChange = () => this.draw();
 
     // Create container
     this.container = document.createElement('div');
@@ -126,6 +130,9 @@ export class Timeline {
     this.session.on('inOutChanged', () => this.draw());
     this.session.on('loopModeChanged', () => this.draw());
     this.session.on('marksChanged', () => this.draw());
+
+    // Listen to theme changes so canvas redraws with new colors
+    getThemeManager().on('themeChanged', this.boundOnThemeChange);
 
     // Listen to paint engine changes (only once)
     this.subscribeToPaintEngine();
@@ -614,6 +621,7 @@ export class Timeline {
     this.canvas.removeEventListener('mousedown', this.onMouseDown);
     this.canvas.removeEventListener('dblclick', this.onDoubleClick);
     this.thumbnailManager.dispose();
+    getThemeManager().off('themeChanged', this.boundOnThemeChange);
     if (this.resizeDebounceTimer) {
       clearTimeout(this.resizeDebounceTimer);
     }

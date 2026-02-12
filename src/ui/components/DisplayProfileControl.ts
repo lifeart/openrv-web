@@ -4,15 +4,16 @@
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import {
-  DisplayTransferFunction,
-  DisplayColorState,
+  type DisplayTransferFunction,
+  type DisplayColorState,
   DEFAULT_DISPLAY_COLOR_STATE,
   PROFILE_FULL_LABELS,
   PROFILE_CYCLE_ORDER,
   saveDisplayProfile,
   loadDisplayProfile,
   isDisplayStateActive,
-} from '../../color/DisplayTransfer';
+} from '../../color/ColorProcessingFacade';
+import { detectBrowserColorSpace, colorSpaceLabel, gamutLabel } from '../../color/BrowserColorSpace';
 import { getIconSvg } from './shared/Icons';
 
 export interface DisplayProfileControlEvents extends EventMap {
@@ -54,7 +55,7 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
     this.toggleButton.className = 'display-profile-toggle';
     this.toggleButton.dataset.testid = 'display-profile-button';
     this.toggleButton.innerHTML = `${getIconSvg('monitor', 'sm')} <span>Display</span> ${getIconSvg('chevron-down', 'sm')}`;
-    this.toggleButton.title = 'Display color profile (Shift+D)';
+    this.toggleButton.title = 'Display color profile (Shift+Alt+D)';
     this.toggleButton.setAttribute('aria-label', 'Display color profile options');
     this.toggleButton.setAttribute('aria-haspopup', 'menu');
     this.toggleButton.setAttribute('aria-expanded', 'false');
@@ -100,6 +101,7 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
 
     // Close on outside click
     document.addEventListener('click', this.handleOutsideClick);
+    document.addEventListener('keydown', this.handleDocumentKeydown);
 
     // Initial button state
     this.updateButtonState();
@@ -108,6 +110,7 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
   private createDropdownContent(): void {
     // Transfer function section
     const section = document.createElement('div');
+    section.dataset.testid = 'display-profile-section';
     section.style.cssText = 'margin-bottom: 10px;';
 
     const label = document.createElement('div');
@@ -116,6 +119,8 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
     section.appendChild(label);
 
     const list = document.createElement('div');
+    list.setAttribute('role', 'radiogroup');
+    list.setAttribute('aria-label', 'Display transfer profile');
     list.style.cssText = 'display: flex; flex-direction: column; gap: 4px;';
 
     const profiles: DisplayTransferFunction[] = ['linear', 'srgb', 'rec709', 'gamma2.2', 'gamma2.4', 'custom'];
@@ -179,8 +184,10 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
 
     // Display gamma slider
     const gammaSection = document.createElement('div');
+    gammaSection.dataset.testid = 'display-gamma-section';
     gammaSection.style.cssText = 'margin-bottom: 10px; border-top: 1px solid var(--border-secondary); padding-top: 8px;';
     this.gammaLabel = document.createElement('div');
+    this.gammaLabel.dataset.testid = 'display-gamma-value';
     this.gammaLabel.style.cssText = 'color: var(--text-secondary); font-size: 10px; margin-bottom: 4px;';
     this.gammaLabel.textContent = `Display Gamma: ${this.state.displayGamma.toFixed(1)}`;
     this.gammaSlider = document.createElement('input');
@@ -190,11 +197,16 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
     this.gammaSlider.step = '0.1';
     this.gammaSlider.value = String(this.state.displayGamma);
     this.gammaSlider.dataset.testid = 'display-gamma-slider';
+    this.gammaSlider.setAttribute('role', 'slider');
+    this.gammaSlider.setAttribute('aria-valuemin', this.gammaSlider.min);
+    this.gammaSlider.setAttribute('aria-valuemax', this.gammaSlider.max);
+    this.gammaSlider.setAttribute('aria-valuenow', this.gammaSlider.value);
     this.gammaSlider.style.cssText = 'width: 100%;';
     this.gammaSlider.addEventListener('input', () => {
       const val = parseFloat(this.gammaSlider!.value);
       this.state.displayGamma = val;
       this.gammaLabel!.textContent = `Display Gamma: ${val.toFixed(1)}`;
+      this.gammaSlider!.setAttribute('aria-valuenow', this.gammaSlider!.value);
       this.persistAndEmit();
     });
     gammaSection.appendChild(this.gammaLabel);
@@ -203,8 +215,10 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
 
     // Display brightness slider
     const brightnessSection = document.createElement('div');
+    brightnessSection.dataset.testid = 'display-brightness-section';
     brightnessSection.style.cssText = 'margin-bottom: 10px;';
     this.brightnessLabel = document.createElement('div');
+    this.brightnessLabel.dataset.testid = 'display-brightness-value';
     this.brightnessLabel.style.cssText = 'color: var(--text-secondary); font-size: 10px; margin-bottom: 4px;';
     this.brightnessLabel.textContent = `Display Brightness: ${this.state.displayBrightness.toFixed(1)}`;
     this.brightnessSlider = document.createElement('input');
@@ -214,16 +228,41 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
     this.brightnessSlider.step = '0.1';
     this.brightnessSlider.value = String(this.state.displayBrightness);
     this.brightnessSlider.dataset.testid = 'display-brightness-slider';
+    this.brightnessSlider.setAttribute('role', 'slider');
+    this.brightnessSlider.setAttribute('aria-valuemin', this.brightnessSlider.min);
+    this.brightnessSlider.setAttribute('aria-valuemax', this.brightnessSlider.max);
+    this.brightnessSlider.setAttribute('aria-valuenow', this.brightnessSlider.value);
     this.brightnessSlider.style.cssText = 'width: 100%;';
     this.brightnessSlider.addEventListener('input', () => {
       const val = parseFloat(this.brightnessSlider!.value);
       this.state.displayBrightness = val;
       this.brightnessLabel!.textContent = `Display Brightness: ${val.toFixed(1)}`;
+      this.brightnessSlider!.setAttribute('aria-valuenow', this.brightnessSlider!.value);
       this.persistAndEmit();
     });
     brightnessSection.appendChild(this.brightnessLabel);
     brightnessSection.appendChild(this.brightnessSlider);
     this.dropdown.appendChild(brightnessSection);
+
+    const colorSpaceSection = document.createElement('div');
+    colorSpaceSection.dataset.testid = 'display-colorspace-info';
+    colorSpaceSection.style.cssText = 'margin-bottom: 10px; border-top: 1px solid var(--border-secondary); padding-top: 8px;';
+
+    const browserInfo = detectBrowserColorSpace();
+
+    const detectedColorSpaceLabel = document.createElement('div');
+    detectedColorSpaceLabel.dataset.testid = 'display-detected-colorspace';
+    detectedColorSpaceLabel.style.cssText = 'color: var(--text-secondary); font-size: 10px; margin-bottom: 4px;';
+    detectedColorSpaceLabel.textContent = `Browser color space: ${colorSpaceLabel(browserInfo.colorSpace)}`;
+
+    const detectedGamutLabel = document.createElement('div');
+    detectedGamutLabel.dataset.testid = 'display-detected-gamut';
+    detectedGamutLabel.style.cssText = 'color: var(--text-secondary); font-size: 10px;';
+    detectedGamutLabel.textContent = `Detected gamut: ${gamutLabel(browserInfo.gamut)}`;
+
+    colorSpaceSection.appendChild(detectedColorSpaceLabel);
+    colorSpaceSection.appendChild(detectedGamutLabel);
+    this.dropdown.appendChild(colorSpaceSection);
 
     // Reset button
     const resetBtn = document.createElement('button');
@@ -292,8 +331,24 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
     this.setTransferFunction(next);
   }
 
-  handleKeyboard(key: string, shiftKey: boolean): boolean {
-    if (shiftKey && key.toLowerCase() === 'd') {
+  isDropdownVisible(): boolean {
+    return this.isDropdownOpen;
+  }
+
+  closeDropdown(): void {
+    if (!this.isDropdownOpen) {
+      return;
+    }
+
+    this.isDropdownOpen = false;
+    this.toggleButton.setAttribute('aria-expanded', 'false');
+    this.dropdown.style.display = 'none';
+    window.removeEventListener('resize', this.boundHandleReposition);
+    window.removeEventListener('scroll', this.boundHandleReposition, true);
+  }
+
+  handleKeyboard(key: string, shiftKey: boolean, altKey = false): boolean {
+    if (shiftKey && altKey && key.toLowerCase() === 'd') {
       this.cycleProfile();
       return true;
     }
@@ -303,7 +358,9 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
   render(): HTMLElement { return this.container; }
 
   dispose(): void {
+    this.closeDropdown();
     document.removeEventListener('click', this.handleOutsideClick);
+    document.removeEventListener('keydown', this.handleDocumentKeydown);
     window.removeEventListener('resize', this.boundHandleReposition);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     this.profileButtons.clear();
@@ -318,8 +375,10 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
 
   private updateSliders(): void {
     if (this.gammaSlider) this.gammaSlider.value = String(this.state.displayGamma);
+    if (this.gammaSlider) this.gammaSlider.setAttribute('aria-valuenow', this.gammaSlider.value);
     if (this.gammaLabel) this.gammaLabel.textContent = `Display Gamma: ${this.state.displayGamma.toFixed(1)}`;
     if (this.brightnessSlider) this.brightnessSlider.value = String(this.state.displayBrightness);
+    if (this.brightnessSlider) this.brightnessSlider.setAttribute('aria-valuenow', this.brightnessSlider.value);
     if (this.brightnessLabel) this.brightnessLabel.textContent = `Display Brightness: ${this.state.displayBrightness.toFixed(1)}`;
     if (this.customGammaSlider) this.customGammaSlider.value = String(this.state.customGamma);
     if (this.customGammaLabel) this.customGammaLabel.textContent = `Custom Gamma: ${this.state.customGamma.toFixed(1)}`;
@@ -362,17 +421,15 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
   }
 
   private toggleDropdown(): void {
-    this.isDropdownOpen = !this.isDropdownOpen;
-    this.toggleButton.setAttribute('aria-expanded', this.isDropdownOpen ? 'true' : 'false');
     if (this.isDropdownOpen) {
+      this.closeDropdown();
+    } else {
+      this.isDropdownOpen = true;
+      this.toggleButton.setAttribute('aria-expanded', 'true');
       this.dropdown.style.display = 'block';
       this.positionDropdown();
       window.addEventListener('resize', this.boundHandleReposition);
       window.addEventListener('scroll', this.boundHandleReposition, true);
-    } else {
-      this.dropdown.style.display = 'none';
-      window.removeEventListener('resize', this.boundHandleReposition);
-      window.removeEventListener('scroll', this.boundHandleReposition, true);
     }
   }
 
@@ -384,13 +441,13 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
 
   private handleOutsideClick = (e: MouseEvent): void => {
     if (!this.container.contains(e.target as Node)) {
-      if (this.isDropdownOpen) {
-        this.isDropdownOpen = false;
-        this.toggleButton.setAttribute('aria-expanded', 'false');
-        this.dropdown.style.display = 'none';
-        window.removeEventListener('resize', this.boundHandleReposition);
-        window.removeEventListener('scroll', this.boundHandleReposition, true);
-      }
+      this.closeDropdown();
+    }
+  };
+
+  private handleDocumentKeydown = (e: KeyboardEvent): void => {
+    if (e.key === 'Escape') {
+      this.closeDropdown();
     }
   };
 }

@@ -294,7 +294,7 @@ describe('IPImage', () => {
   });
 
   describe('clone', () => {
-    it('creates a deep copy of the image', () => {
+    it('creates a shallow copy sharing the same pixel data', () => {
       const image = new IPImage({
         width: 2,
         height: 2,
@@ -315,10 +315,10 @@ describe('IPImage', () => {
       expect(clone.getPixel(0, 0)).toEqual([255, 0, 0, 255]);
     });
 
-    it('cloned data is independent', () => {
+    it('shares the same underlying ArrayBuffer (no copy)', () => {
       const image = new IPImage({
-        width: 2,
-        height: 2,
+        width: 4,
+        height: 4,
         channels: 4,
         dataType: 'uint8',
       });
@@ -326,11 +326,11 @@ describe('IPImage', () => {
       image.setPixel(0, 0, [255, 0, 0, 255]);
 
       const clone = image.clone();
-      clone.setPixel(0, 0, [0, 255, 0, 255]);
 
-      // Original should be unchanged
-      expect(image.getPixel(0, 0)).toEqual([255, 0, 0, 255]);
-      expect(clone.getPixel(0, 0)).toEqual([0, 255, 0, 255]);
+      // The ArrayBuffer reference must be identical (same object)
+      expect(clone.data).toBe(image.data);
+      // Pixel data is visible through both handles
+      expect(clone.getPixel(0, 0)).toEqual([255, 0, 0, 255]);
     });
 
     it('cloned metadata is independent', () => {
@@ -347,6 +347,193 @@ describe('IPImage', () => {
 
       expect(image.metadata.colorSpace).toBeUndefined();
       expect(clone.metadata.colorSpace).toBe('ACEScg');
+    });
+  });
+
+  describe('deepClone', () => {
+    it('creates a full copy of the image with independent pixel data', () => {
+      const image = new IPImage({
+        width: 2,
+        height: 2,
+        channels: 4,
+        dataType: 'uint8',
+        metadata: { colorSpace: 'sRGB' },
+      });
+
+      image.setPixel(0, 0, [255, 0, 0, 255]);
+
+      const clone = image.deepClone();
+
+      expect(clone.width).toBe(image.width);
+      expect(clone.height).toBe(image.height);
+      expect(clone.channels).toBe(image.channels);
+      expect(clone.dataType).toBe(image.dataType);
+      expect(clone.metadata.colorSpace).toBe('sRGB');
+      expect(clone.getPixel(0, 0)).toEqual([255, 0, 0, 255]);
+    });
+
+    it('deep cloned data is independent', () => {
+      const image = new IPImage({
+        width: 2,
+        height: 2,
+        channels: 4,
+        dataType: 'uint8',
+      });
+
+      image.setPixel(0, 0, [255, 0, 0, 255]);
+
+      const clone = image.deepClone();
+      clone.setPixel(0, 0, [0, 255, 0, 255]);
+
+      // Original should be unchanged
+      expect(image.getPixel(0, 0)).toEqual([255, 0, 0, 255]);
+      expect(clone.getPixel(0, 0)).toEqual([0, 255, 0, 255]);
+    });
+
+    it('deep cloned data has a different ArrayBuffer', () => {
+      const image = new IPImage({
+        width: 2,
+        height: 2,
+        channels: 4,
+        dataType: 'uint8',
+      });
+
+      const clone = image.deepClone();
+
+      expect(clone.data).not.toBe(image.data);
+    });
+
+    it('deep cloned metadata is independent', () => {
+      const image = new IPImage({
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'uint8',
+        metadata: { attributes: { key: 'value' } },
+      });
+
+      const clone = image.deepClone();
+      clone.metadata.colorSpace = 'ACEScg';
+
+      expect(image.metadata.colorSpace).toBeUndefined();
+      expect(clone.metadata.colorSpace).toBe('ACEScg');
+    });
+
+    it('does not copy videoFrame', () => {
+      const mockVideoFrame = {
+        displayWidth: 10,
+        displayHeight: 10,
+        close: () => {},
+      } as unknown as VideoFrame;
+
+      const image = new IPImage({
+        width: 10,
+        height: 10,
+        channels: 4,
+        dataType: 'float32',
+        videoFrame: mockVideoFrame,
+      });
+
+      const cloned = image.deepClone();
+      expect(cloned.videoFrame).toBeNull();
+    });
+  });
+
+  describe('cloneMetadataOnly', () => {
+    it('shares the same underlying ArrayBuffer (no copy)', () => {
+      const image = new IPImage({
+        width: 4,
+        height: 4,
+        channels: 4,
+        dataType: 'uint8',
+      });
+
+      image.setPixel(0, 0, [255, 0, 0, 255]);
+
+      const shallow = image.cloneMetadataOnly();
+
+      // The ArrayBuffer reference must be identical (same object)
+      expect(shallow.data).toBe(image.data);
+      // Pixel data is visible through both handles
+      expect(shallow.getPixel(0, 0)).toEqual([255, 0, 0, 255]);
+    });
+
+    it('copies basic image properties', () => {
+      const image = new IPImage({
+        width: 20,
+        height: 10,
+        channels: 3,
+        dataType: 'float32',
+        metadata: { colorSpace: 'ACEScg', frameNumber: 7 },
+      });
+
+      const shallow = image.cloneMetadataOnly();
+
+      expect(shallow.width).toBe(20);
+      expect(shallow.height).toBe(10);
+      expect(shallow.channels).toBe(3);
+      expect(shallow.dataType).toBe('float32');
+      expect(shallow.metadata.colorSpace).toBe('ACEScg');
+      expect(shallow.metadata.frameNumber).toBe(7);
+    });
+
+    it('metadata is independent (changing clone does not affect original)', () => {
+      const image = new IPImage({
+        width: 2,
+        height: 2,
+        channels: 4,
+        dataType: 'uint8',
+        metadata: { colorSpace: 'sRGB', transferFunction: 'srgb' },
+      });
+
+      const shallow = image.cloneMetadataOnly();
+      shallow.metadata.colorSpace = 'ACEScg';
+      shallow.metadata.transferFunction = 'pq';
+      shallow.metadata.frameNumber = 99;
+
+      // Original metadata must be untouched
+      expect(image.metadata.colorSpace).toBe('sRGB');
+      expect(image.metadata.transferFunction).toBe('srgb');
+      expect(image.metadata.frameNumber).toBeUndefined();
+    });
+
+    it('does not copy videoFrame', () => {
+      const mockVideoFrame = {
+        displayWidth: 1920,
+        displayHeight: 1080,
+        close: () => {},
+      } as unknown as VideoFrame;
+
+      const image = new IPImage({
+        width: 1920,
+        height: 1080,
+        channels: 4,
+        dataType: 'float32',
+        videoFrame: mockVideoFrame,
+      });
+
+      const shallow = image.cloneMetadataOnly();
+
+      expect(image.videoFrame).toBe(mockVideoFrame);
+      expect(shallow.videoFrame).toBeNull();
+    });
+
+    it('does not copy texture or textureNeedsUpdate', () => {
+      const image = new IPImage({
+        width: 2,
+        height: 2,
+        channels: 4,
+        dataType: 'uint8',
+      });
+
+      // Simulate renderer having set these
+      image.texture = {} as WebGLTexture;
+      image.textureNeedsUpdate = false;
+
+      const shallow = image.cloneMetadataOnly();
+
+      expect(shallow.texture).toBeNull();
+      expect(shallow.textureNeedsUpdate).toBe(true);
     });
   });
 

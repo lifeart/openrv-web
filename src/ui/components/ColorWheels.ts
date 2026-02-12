@@ -13,39 +13,16 @@
  */
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { luminanceRec709 } from '../../color/ColorProcessingFacade';
 import { createDraggableContainer, createControlButton, DraggableContainer } from './shared/DraggableContainer';
-import { setupHiDPICanvas, clientToCanvasCoordinates } from '../../utils/HiDPICanvas';
-import { getThemeManager } from '../../utils/ThemeManager';
+import { setupHiDPICanvas, clientToCanvasCoordinates } from '../../utils/ui/HiDPICanvas';
+import { getThemeManager } from '../../utils/ui/ThemeManager';
 
-export interface WheelValues {
-  r: number;  // Red offset: -1.0 to +1.0
-  g: number;  // Green offset: -1.0 to +1.0
-  b: number;  // Blue offset: -1.0 to +1.0
-  y: number;  // Luminance: -1.0 to +1.0
-}
+export type { WheelValues, ColorWheelsState } from '../../core/types/color';
+export { DEFAULT_WHEEL_VALUES, DEFAULT_COLOR_WHEELS_STATE } from '../../core/types/color';
 
-export interface ColorWheelsState {
-  lift: WheelValues;    // Shadow adjustments
-  gamma: WheelValues;   // Midtone adjustments
-  gain: WheelValues;    // Highlight adjustments
-  master: WheelValues;  // Overall adjustments
-  linked: boolean;      // Link wheels for gang adjustments
-}
-
-export const DEFAULT_WHEEL_VALUES: WheelValues = {
-  r: 0,
-  g: 0,
-  b: 0,
-  y: 0,
-};
-
-export const DEFAULT_COLOR_WHEELS_STATE: ColorWheelsState = {
-  lift: { ...DEFAULT_WHEEL_VALUES },
-  gamma: { ...DEFAULT_WHEEL_VALUES },
-  gain: { ...DEFAULT_WHEEL_VALUES },
-  master: { ...DEFAULT_WHEEL_VALUES },
-  linked: false,
-};
+import type { WheelValues, ColorWheelsState } from '../../core/types/color';
+import { DEFAULT_WHEEL_VALUES, DEFAULT_COLOR_WHEELS_STATE } from '../../core/types/color';
 
 // Canvas size constants for wheel rendering
 const WHEEL_SIZE = 120;
@@ -724,7 +701,7 @@ export class ColorWheels extends EventEmitter<ColorWheelsEvents> {
       let b = data[i + 2]! / 255;
 
       // Calculate luminance (Rec. 709)
-      const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      const luma = luminanceRec709(r, g, b);
 
       // Apply Master (affects all tones equally)
       if (this.state.master.r !== 0 || this.state.master.g !== 0 ||

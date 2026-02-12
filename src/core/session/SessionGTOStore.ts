@@ -3,14 +3,12 @@ import type { GTOData, ObjectData, ComponentData, PropertyData } from 'gto-js';
 import type { Session } from './Session';
 import type { PaintEngine } from '../../paint/PaintEngine';
 import type { Viewer } from '../../ui/components/Viewer';
-import type { ScopesState } from '../../ui/components/ScopesControl';
+import type { ScopesState } from '../../core/types/scopes';
 import { SessionGTOExporter } from './SessionGTOExporter';
-import type { ColorAdjustments } from '../../ui/components/ColorControls';
-import { DEFAULT_TRANSFORM } from '../../ui/components/TransformControl';
-import { DEFAULT_CROP_STATE } from '../../ui/components/CropControl';
+import type { ColorAdjustments, ChannelMode } from '../../core/types/color';
+import { DEFAULT_TRANSFORM, DEFAULT_CROP_STATE } from '../../core/types/transform';
 import { isDefaultLensParams } from '../../transform/LensDistortion';
-import type { ChannelMode } from '../../ui/components/ChannelSelect';
-import type { StereoState } from '../../stereo/StereoRenderer';
+import type { StereoState } from '../types/stereo';
 
 interface UpdateContext {
   session: Session;

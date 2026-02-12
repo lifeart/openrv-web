@@ -15,7 +15,7 @@ import {
   DEFAULT_PAR_STATE,
   PAR_PRESETS,
   isPARActive,
-} from '../../utils/PixelAspectRatio';
+} from '../../utils/media/PixelAspectRatio';
 
 export interface PARControlEvents extends EventMap {
   stateChanged: PARState;

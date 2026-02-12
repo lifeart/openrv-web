@@ -422,14 +422,30 @@ describe('SafeAreasControl', () => {
     });
 
     it('SAFE-U102: dispose removes dropdown from body if present', () => {
-      const el = control.render();
-      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
-      button.click(); // Opens dropdown, adds to body
+      // Open dropdown
+      const btn = control.render().querySelector('button') as HTMLButtonElement;
+      btn.click();
+      
+      const dropdown = document.querySelector('.safe-areas-dropdown');
+      expect(document.body.contains(dropdown)).toBe(true);
+
+      control.dispose();
+      expect(document.body.contains(dropdown)).toBe(false);
+    });
+
+    it('SAFE-U103: dispose unsubscribes from state changes', () => {
+      const unsubSpy = vi.fn();
+      vi.spyOn(overlay, 'on').mockReturnValue(unsubSpy);
+
+      // Re-create to capture subscription
+      control.dispose();
+      control = new SafeAreasControl(overlay);
+
+      expect(overlay.on).toHaveBeenCalledWith('stateChanged', expect.any(Function));
 
       control.dispose();
 
-      const dropdown = document.querySelector('[data-testid="safe-areas-dropdown"]');
-      expect(dropdown).toBeNull();
+      expect(unsubSpy).toHaveBeenCalled();
     });
   });
 

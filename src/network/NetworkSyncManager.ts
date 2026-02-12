@@ -6,6 +6,7 @@
  */
 
 import { EventEmitter } from '../utils/EventEmitter';
+import type { ManagerBase } from '../core/ManagerBase';
 import { WebSocketClient } from './WebSocketClient';
 import { SyncStateManager } from './SyncStateManager';
 import {
@@ -45,7 +46,7 @@ import type {
 } from './types';
 import { DEFAULT_SYNC_SETTINGS, DEFAULT_NETWORK_SYNC_CONFIG, USER_COLORS } from './types';
 
-export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> {
+export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implements ManagerBase {
   private wsClient: WebSocketClient;
   private stateManager: SyncStateManager;
   private config: NetworkSyncConfig;

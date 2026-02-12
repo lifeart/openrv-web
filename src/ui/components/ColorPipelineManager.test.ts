@@ -5,11 +5,16 @@
 import { describe, it, expect } from 'vitest';
 import { ColorPipelineManager } from './ColorPipelineManager';
 import { DEFAULT_COLOR_ADJUSTMENTS, ColorAdjustments } from './ColorControls';
-import { DEFAULT_CDL, CDLValues } from '../../color/CDL';
-import { createDefaultCurvesData, ColorCurvesData } from '../../color/ColorCurves';
+import {
+  DEFAULT_CDL,
+  type CDLValues,
+  createDefaultCurvesData,
+  type ColorCurvesData,
+  DEFAULT_DISPLAY_COLOR_STATE,
+  type DisplayColorState,
+  type LUT3D,
+} from '../../color/ColorProcessingFacade';
 import { DEFAULT_TONE_MAPPING_STATE, ToneMappingState } from './ToneMappingControl';
-import { DEFAULT_DISPLAY_COLOR_STATE, DisplayColorState } from '../../color/DisplayTransfer';
-import { LUT3D } from '../../color/LUTLoader';
 
 /** Helper: create a minimal LUT3D for testing */
 function createMockLUT(title = 'TestLUT'): LUT3D {

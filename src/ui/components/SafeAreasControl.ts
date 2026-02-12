@@ -28,6 +28,7 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
   private dropdown: HTMLElement;
   private overlay: SafeAreasOverlay;
   private isOpen = false;
+  private unsubscribers: (() => void)[] = [];
 
   // Bound handlers for cleanup
   private boundHandleOutsideClick: (e: MouseEvent) => void;
@@ -100,11 +101,11 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
     this.dropdown = this.createDropdown();
 
     // Listen to overlay state changes
-    this.overlay.on('stateChanged', (state) => {
+    this.unsubscribers.push(this.overlay.on('stateChanged', (state) => {
       this.updateButtonLabel();
       this.updateDropdownState();
       this.emit('stateChanged', state);
-    });
+    }));
   }
 
   private createDropdown(): HTMLElement {
@@ -437,5 +438,7 @@ export class SafeAreasControl extends EventEmitter<SafeAreasControlEvents> {
     if (document.body.contains(this.dropdown)) {
       document.body.removeChild(this.dropdown);
     }
+    this.unsubscribers.forEach((unsub) => unsub());
+    this.unsubscribers = [];
   }
 }

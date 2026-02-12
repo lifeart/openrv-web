@@ -1,15 +1,11 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
 
-export interface FilterSettings {
-  blur: number;      // 0-20 pixels
-  sharpen: number;   // 0-100 amount
-}
+export type { FilterSettings } from '../../core/types/filter';
+export { DEFAULT_FILTER_SETTINGS } from '../../core/types/filter';
 
-export const DEFAULT_FILTER_SETTINGS: FilterSettings = {
-  blur: 0,
-  sharpen: 0,
-};
+import type { FilterSettings } from '../../core/types/filter';
+import { DEFAULT_FILTER_SETTINGS } from '../../core/types/filter';
 
 export interface FilterControlEvents extends EventMap {
   filtersChanged: FilterSettings;
@@ -95,12 +91,17 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
     this.container.appendChild(this.filterButton);
     // Panel will be appended to body when shown
 
-    // Close panel on outside click
-    document.addEventListener('click', (e) => {
-      if (this.isPanelOpen && !this.container.contains(e.target as Node) && !this.panel.contains(e.target as Node)) {
-        this.hide();
-      }
-    });
+    // Close on outside click
+    this.boundHandleDocumentClick = this.handleDocumentClick.bind(this);
+    document.addEventListener('click', this.boundHandleDocumentClick);
+  }
+
+  private boundHandleDocumentClick: (e: MouseEvent) => void;
+
+  private handleDocumentClick(e: MouseEvent): void {
+    if (this.isPanelOpen && !this.container.contains(e.target as Node) && !this.panel.contains(e.target as Node)) {
+      this.hide();
+    }
   }
 
   private createPanelContent(): void {
@@ -343,6 +344,6 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
   }
 
   dispose(): void {
-    // Cleanup if needed
+    document.removeEventListener('click', this.boundHandleDocumentClick);
   }
 }

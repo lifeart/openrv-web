@@ -19,8 +19,17 @@ import { loadImageFile, loadVideoFile, waitForTestHelper, captureViewerScreensho
  */
 async function openColorPanel(page: import('@playwright/test').Page) {
   await page.click('button[data-tab-id="color"]');
-  // Wait for the hue rotation slider to be visible (confirms panel is open and rendered)
-  const slider = page.locator('[data-testid="slider-hueRotation"]');
+  const slider = page.locator('.color-controls-panel [data-testid="slider-hueRotation"]').first();
+  if (!(await slider.isVisible().catch(() => false))) {
+    const toggle = page
+      .locator('button[title="Toggle color adjustments panel"], button[title*="color adjustments"]')
+      .first();
+    if (await toggle.isVisible().catch(() => false)) {
+      await toggle.click();
+    } else {
+      await page.keyboard.press('c');
+    }
+  }
   await expect(slider).toBeVisible();
 }
 
@@ -29,7 +38,7 @@ async function openColorPanel(page: import('@playwright/test').Page) {
  * Reads the slider's value attribute directly from the DOM element.
  */
 async function getHueRotationSliderValue(page: import('@playwright/test').Page): Promise<number> {
-  const slider = page.locator('[data-testid="slider-hueRotation"]');
+  const slider = page.locator('.color-controls-panel [data-testid="slider-hueRotation"]').first();
   const value = await slider.inputValue();
   return parseFloat(value);
 }
@@ -38,14 +47,17 @@ async function getHueRotationSliderValue(page: import('@playwright/test').Page):
  * Helper: Set the hue rotation slider to a given value via the UI.
  */
 async function setHueRotationViaSlider(page: import('@playwright/test').Page, degrees: number) {
-  const slider = page.locator('[data-testid="slider-hueRotation"]');
-  await slider.fill(String(degrees));
-  await slider.dispatchEvent('input');
-  await slider.dispatchEvent('change');
+  const slider = page.locator('.color-controls-panel [data-testid="slider-hueRotation"]').first();
+  await slider.evaluate((el, val) => {
+    const input = el as HTMLInputElement;
+    input.value = String(val);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }, degrees);
   // Wait for the slider value to actually update
   await page.waitForFunction(
     (expectedDegrees) => {
-      const sliderEl = document.querySelector('[data-testid="slider-hueRotation"]') as HTMLInputElement;
+      const sliderEl = document.querySelector('.color-controls-panel [data-testid="slider-hueRotation"]') as HTMLInputElement;
       return sliderEl && parseFloat(sliderEl.value) === expectedDegrees;
     },
     degrees,
@@ -65,7 +77,7 @@ test.describe('Hue Rotation Control', () => {
     // Open Color panel and check the slider's default value
     await openColorPanel(page);
 
-    const slider = page.locator('[data-testid="slider-hueRotation"]');
+    const slider = page.locator('.color-controls-panel [data-testid="slider-hueRotation"]').first();
     await expect(slider).toBeVisible();
 
     const value = await getHueRotationSliderValue(page);
@@ -78,7 +90,7 @@ test.describe('Hue Rotation Control', () => {
     await openColorPanel(page);
 
     // Look for the hue rotation slider by data-testid
-    const slider = page.locator('[data-testid="slider-hueRotation"]');
+    const slider = page.locator('.color-controls-panel [data-testid="slider-hueRotation"]').first();
     await expect(slider).toBeVisible();
   });
 
@@ -89,7 +101,7 @@ test.describe('Hue Rotation Control', () => {
     // Open the color panel
     await openColorPanel(page);
 
-    const slider = page.locator('[data-testid="slider-hueRotation"]');
+    const slider = page.locator('.color-controls-panel [data-testid="slider-hueRotation"]').first();
     await expect(slider).toBeVisible();
 
     // Set hue rotation to 180 degrees via the slider UI
@@ -122,7 +134,7 @@ test.describe('Hue Rotation Control', () => {
   test('HR-005: hue rotation slider has correct min/max range', async ({ page }) => {
     await openColorPanel(page);
 
-    const slider = page.locator('[data-testid="slider-hueRotation"]');
+    const slider = page.locator('.color-controls-panel [data-testid="slider-hueRotation"]').first();
     const min = await slider.getAttribute('min');
     const max = await slider.getAttribute('max');
 
@@ -200,7 +212,7 @@ test.describe('Hue Rotation Control', () => {
     // Wait for the slider value to be reset to 0
     await page.waitForFunction(
       () => {
-        const sliderEl = document.querySelector('[data-testid="slider-hueRotation"]') as HTMLInputElement;
+        const sliderEl = document.querySelector('.color-controls-panel [data-testid="slider-hueRotation"]') as HTMLInputElement;
         return sliderEl && parseFloat(sliderEl.value) === 0;
       },
       undefined,

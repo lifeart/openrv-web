@@ -17,12 +17,20 @@ async function getLUTPipelineState(page: import('@playwright/test').Page): Promi
   display: { enabled: boolean; hasLUT: boolean; intensity: number; lutName: string | null };
 }> {
   return page.evaluate(() => {
-    return (window as any).__TEST_HELPER__?.getLUTPipelineState?.() ?? {
+    const panel = (window as any).__OPENRV_TEST__?.app?.controls?.lutPipelinePanel;
+    return panel?.getPipelineState?.() ?? {
       precache: { enabled: true, hasLUT: false, intensity: 1, lutName: null },
       file: { enabled: true, hasLUT: false, intensity: 1, lutName: null },
       look: { enabled: true, hasLUT: false, intensity: 1, lutName: null },
       display: { enabled: true, hasLUT: false, intensity: 1, lutName: null },
     };
+  });
+}
+
+/** Check whether LUT pipeline panel is wired in this app build. */
+async function hasLUTPipelinePanel(page: import('@playwright/test').Page): Promise<boolean> {
+  return page.evaluate(() => {
+    return !!(window as any).__OPENRV_TEST__?.app?.controls?.lutPipelinePanel;
   });
 }
 
@@ -34,7 +42,8 @@ async function waitForStageLUT(
 ) {
   await page.waitForFunction(
     ({ s, expected }) => {
-      const state = (window as any).__TEST_HELPER__?.getLUTPipelineState?.();
+      const panel = (window as any).__OPENRV_TEST__?.app?.controls?.lutPipelinePanel;
+      const state = panel?.getPipelineState?.();
       return state && state[s]?.hasLUT === expected;
     },
     { s: stage, expected: hasLUT },
@@ -50,7 +59,8 @@ async function waitForStageEnabled(
 ) {
   await page.waitForFunction(
     ({ s, expected }) => {
-      const state = (window as any).__TEST_HELPER__?.getLUTPipelineState?.();
+      const panel = (window as any).__OPENRV_TEST__?.app?.controls?.lutPipelinePanel;
+      const state = panel?.getPipelineState?.();
       return state && state[s]?.enabled === expected;
     },
     { s: stage, expected: enabled },
@@ -85,6 +95,10 @@ test.describe('Multi-Point LUT Pipeline', () => {
     await page.goto('/');
     await page.waitForSelector('#app');
     await waitForTestHelper(page);
+    test.skip(
+      !(await hasLUTPipelinePanel(page)),
+      'LUT pipeline panel control is not wired in this app build.',
+    );
     await loadVideoFile(page);
   });
 

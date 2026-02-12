@@ -6,6 +6,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { InfoPanel, InfoPanelPosition } from './InfoPanel';
+import { getThemeManager } from '../../utils/ui/ThemeManager';
 
 describe('InfoPanel', () => {
   let panel: InfoPanel;
@@ -344,6 +345,44 @@ describe('InfoPanel', () => {
         panel.setPosition(position);
         expect(panel.getPosition()).toBe(position);
       });
+    });
+  });
+
+  describe('theme changes', () => {
+    it('INFO-U120: container uses CSS variables for background and border', () => {
+      const style = panel.getElement().style.cssText;
+      expect(style).toContain('var(--overlay-bg)');
+      expect(style).toContain('var(--overlay-border)');
+      expect(style).not.toContain('rgba(0, 0, 0, 0.75)');
+      expect(style).not.toContain('rgba(255, 255, 255, 0.1)');
+    });
+
+    it('INFO-U121: re-renders content when theme changes', () => {
+      panel.enable();
+      panel.update({ filename: 'theme-test.exr', width: 1920, height: 1080 });
+
+      const contentEl = panel.getElement().querySelector('.info-panel-content')!;
+      const oldChild = contentEl.firstChild;
+      expect(oldChild).toBeTruthy();
+
+      getThemeManager().emit('themeChanged', 'light');
+
+      // render() rebuilds innerHTML — old child is detached
+      expect(contentEl.contains(oldChild)).toBe(false);
+      // content is re-created with same data
+      expect(contentEl.textContent).toContain('theme-test.exr');
+    });
+
+    it('INFO-U122: does not re-render after dispose on theme change', () => {
+      panel.enable();
+      panel.update({ filename: 'dispose-test.exr' });
+      panel.dispose();
+
+      const htmlAfterDispose = panel.getElement().innerHTML;
+
+      getThemeManager().emit('themeChanged', 'light');
+
+      expect(panel.getElement().innerHTML).toBe(htmlAfterDispose);
     });
   });
 });

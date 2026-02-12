@@ -104,7 +104,8 @@ test.describe('Session Snapshots', () => {
       await page.keyboard.press('Control+Shift+Alt+s');
       await page.waitForTimeout(200);
 
-      const filterSelect = page.locator('select');
+      const panel = page.locator('[data-testid="snapshot-panel"]');
+      const filterSelect = panel.locator('select').first();
       await expect(filterSelect).toBeVisible();
     });
 
@@ -112,7 +113,8 @@ test.describe('Session Snapshots', () => {
       await page.keyboard.press('Control+Shift+Alt+s');
       await page.waitForTimeout(200);
 
-      const clearButton = page.locator('button:has-text("Clear All")');
+      const panel = page.locator('[data-testid="snapshot-panel"]');
+      const clearButton = panel.locator('button:has-text("Clear All")');
       await expect(clearButton).toBeVisible();
     });
 
@@ -177,7 +179,8 @@ test.describe('Session Snapshots', () => {
       await page.keyboard.press('Control+Shift+Alt+s');
       await page.waitForTimeout(200);
 
-      const filterSelect = page.locator('select');
+      const panel = page.locator('[data-testid="snapshot-panel"]');
+      const filterSelect = panel.locator('select').first();
       const options = filterSelect.locator('option');
 
       const count = await options.count();
@@ -282,8 +285,9 @@ test.describe('Session Snapshots', () => {
       await page.keyboard.press('Control+Shift+Alt+s');
       await page.waitForTimeout(200);
 
-      const manualBadge = page.locator('text=MANUAL').first();
-      if (await page.locator('.snapshot-item').first().isVisible()) {
+      const snapshotItem = page.locator('.snapshot-item').first();
+      const manualBadge = snapshotItem.locator('span', { hasText: 'MANUAL' });
+      if (await snapshotItem.isVisible()) {
         await expect(manualBadge).toBeVisible();
       }
     });

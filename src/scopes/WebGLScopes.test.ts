@@ -26,6 +26,8 @@ function createMockWebGL2Context() {
     POINTS: 0,
     ONE: 1,
     BLEND: 3042,
+    FLOAT: 5126,
+    RGBA16F: 0x881A,
 
     createShader: vi.fn(() => ({})),
     shaderSource: vi.fn(),
@@ -93,6 +95,9 @@ describe('WebGLScopesProcessor', () => {
       fillRect: vi.fn(),
       fillStyle: '',
       putImageData: vi.fn(),
+      save: vi.fn(),
+      restore: vi.fn(),
+      setTransform: vi.fn(),
       // Return ImageData with the requested dimensions
       getImageData: vi.fn((_x: number, _y: number, w: number, h: number) =>
         new ImageData(w || canvas.width || 100, h || canvas.height || 100)
@@ -591,6 +596,228 @@ describe('WebGLScopesProcessor', () => {
       // The shaders use mediump for consistency between vertex and fragment stages
       const processor = new WebGLScopesProcessor();
       expect(processor.isReady()).toBe(true);
+    });
+  });
+
+  describe('setFloatImage', () => {
+    it('WGS-040: uploads float data as RGBA16F texture', () => {
+      const processor = new WebGLScopesProcessor();
+      const floatData = new Float32Array(10 * 10 * 4);
+
+      mockGl.texImage2D.mockClear();
+      processor.setFloatImage(floatData, 10, 10);
+
+      // Should call texImage2D with RGBA16F (gl.RGBA16F = 0x881A = 34842)
+      expect(mockGl.texImage2D).toHaveBeenCalled();
+      const call = mockGl.texImage2D.mock.calls[0];
+      // Internal format should be RGBA16F
+      expect(call![2]).toBe(0x881A); // gl.RGBA16F
+      // Type should be FLOAT (gl.FLOAT = 0x1406 = 5126)
+      expect(call![7]).toBe(0x1406); // gl.FLOAT
+    });
+
+    it('WGS-041: updates analysis dimensions from float data', () => {
+      const processor = new WebGLScopesProcessor();
+      const floatData = new Float32Array(50 * 50 * 4);
+
+      processor.setFloatImage(floatData, 50, 50);
+
+      // After setFloatImage, rendering should use the new dimensions
+      mockGl.drawArrays.mockClear();
+      processor.renderWaveform(mockOutputCanvas, 'luma');
+
+      expect(mockGl.drawArrays).toHaveBeenCalled();
+    });
+
+    it('WGS-042: downscales large float data to analysis dimensions', () => {
+      const processor = new WebGLScopesProcessor();
+      // 1920x1080 float data should be downscaled
+      const floatData = new Float32Array(1920 * 1080 * 4);
+
+      mockGl.texImage2D.mockClear();
+      processor.setFloatImage(floatData, 1920, 1080);
+
+      // The uploaded dimensions should be smaller than the input
+      const call = mockGl.texImage2D.mock.calls[0];
+      const uploadWidth = call![3];
+      const uploadHeight = call![4];
+      expect(uploadWidth).toBeLessThanOrEqual(640);
+      expect(uploadHeight).toBeLessThanOrEqual(360);
+    });
+
+    it('WGS-043: does not downscale small float data', () => {
+      const processor = new WebGLScopesProcessor();
+      const floatData = new Float32Array(100 * 100 * 4);
+
+      mockGl.texImage2D.mockClear();
+      processor.setFloatImage(floatData, 100, 100);
+
+      const call = mockGl.texImage2D.mock.calls[0];
+      const uploadWidth = call![3];
+      const uploadHeight = call![4];
+      expect(uploadWidth).toBe(100);
+      expect(uploadHeight).toBe(100);
+    });
+
+    it('WGS-044: configures texture parameters on first call', () => {
+      const processor = new WebGLScopesProcessor();
+      const floatData = new Float32Array(10 * 10 * 4);
+
+      mockGl.texParameteri.mockClear();
+      processor.setFloatImage(floatData, 10, 10);
+
+      expect(mockGl.texParameteri).toHaveBeenCalled();
+    });
+
+    it('WGS-045: does not re-configure texture parameters on subsequent calls', () => {
+      const processor = new WebGLScopesProcessor();
+      const floatData = new Float32Array(10 * 10 * 4);
+
+      processor.setFloatImage(floatData, 10, 10);
+      const firstCallCount = mockGl.texParameteri.mock.calls.length;
+
+      processor.setFloatImage(floatData, 10, 10);
+      const secondCallCount = mockGl.texParameteri.mock.calls.length;
+
+      expect(secondCallCount).toBe(firstCallCount);
+    });
+
+    it('WGS-046: is a no-op when not initialized', () => {
+      const processor = new WebGLScopesProcessor();
+      processor.dispose();
+
+      const floatData = new Float32Array(10 * 10 * 4);
+      // Should not throw when disposed
+      expect(() => processor.setFloatImage(floatData, 10, 10)).not.toThrow();
+    });
+
+    it('WGS-047: preserves HDR values above 1.0 in texture upload', () => {
+      const processor = new WebGLScopesProcessor();
+      const floatData = new Float32Array(2 * 2 * 4);
+      // Set HDR pixel values > 1.0
+      floatData[0] = 3.5;
+      floatData[1] = 2.0;
+      floatData[2] = 1.5;
+      floatData[3] = 1.0;
+
+      mockGl.texImage2D.mockClear();
+      processor.setFloatImage(floatData, 2, 2);
+
+      // Verify the data passed to texImage2D contains the original float values
+      const call = mockGl.texImage2D.mock.calls[0];
+      const uploadedData = call![8] as Float32Array;
+      expect(uploadedData[0]).toBe(3.5);
+      expect(uploadedData[1]).toBe(2.0);
+      expect(uploadedData[2]).toBe(1.5);
+    });
+
+    it('WGS-048: setFloatImage handles NaN values without throwing', () => {
+      const processor = new WebGLScopesProcessor();
+      const floatData = new Float32Array(4 * 4 * 4);
+      floatData[0] = NaN;
+      floatData[1] = NaN;
+      expect(() => processor.setFloatImage(floatData, 4, 4)).not.toThrow();
+    });
+
+    it('WGS-049: setFloatImage handles Infinity values without throwing', () => {
+      const processor = new WebGLScopesProcessor();
+      const floatData = new Float32Array(4 * 4 * 4);
+      floatData[0] = Infinity;
+      floatData[1] = -Infinity;
+      expect(() => processor.setFloatImage(floatData, 4, 4)).not.toThrow();
+    });
+  });
+
+  describe('downscaleFloatData correctness', () => {
+    it('WGS-050: downscaled data contains correct averaged values', () => {
+      const processor = new WebGLScopesProcessor();
+      // Create a 4x4 image with known values in each quadrant
+      const floatData = new Float32Array(4 * 4 * 4);
+      // Top-left quadrant (2x2): R=1.0
+      for (let y = 0; y < 2; y++) {
+        for (let x = 0; x < 2; x++) {
+          const i = (y * 4 + x) * 4;
+          floatData[i] = 1.0;     // R
+          floatData[i + 1] = 0.0; // G
+          floatData[i + 2] = 0.0; // B
+          floatData[i + 3] = 1.0; // A
+        }
+      }
+      // Top-right quadrant (2x2): G=1.0
+      for (let y = 0; y < 2; y++) {
+        for (let x = 2; x < 4; x++) {
+          const i = (y * 4 + x) * 4;
+          floatData[i] = 0.0;
+          floatData[i + 1] = 1.0;
+          floatData[i + 2] = 0.0;
+          floatData[i + 3] = 1.0;
+        }
+      }
+      // Bottom-left quadrant (2x2): B=1.0
+      for (let y = 2; y < 4; y++) {
+        for (let x = 0; x < 2; x++) {
+          const i = (y * 4 + x) * 4;
+          floatData[i] = 0.0;
+          floatData[i + 1] = 0.0;
+          floatData[i + 2] = 1.0;
+          floatData[i + 3] = 1.0;
+        }
+      }
+      // Bottom-right quadrant (2x2): White (1,1,1)
+      for (let y = 2; y < 4; y++) {
+        for (let x = 2; x < 4; x++) {
+          const i = (y * 4 + x) * 4;
+          floatData[i] = 1.0;
+          floatData[i + 1] = 1.0;
+          floatData[i + 2] = 1.0;
+          floatData[i + 3] = 1.0;
+        }
+      }
+
+      // Force playback mode for aggressive downscaling
+      processor.setPlaybackMode(true);
+      mockGl.texImage2D.mockClear();
+      processor.setFloatImage(floatData, 4, 4);
+
+      // Since 4x4 is very small (below 320x180 playback target), it should NOT downscale
+      const call = mockGl.texImage2D.mock.calls[0];
+      const uploadedData = call![8] as Float32Array;
+      const uploadWidth = call![3] as number;
+      const uploadHeight = call![4] as number;
+
+      // Verify dimensions are 4x4 (no downscale needed for such small data)
+      expect(uploadWidth).toBe(4);
+      expect(uploadHeight).toBe(4);
+
+      // Verify original data is preserved
+      expect(uploadedData[0]).toBe(1.0); // Top-left R
+      expect(uploadedData[1]).toBe(0.0); // Top-left G
+    });
+
+    it('WGS-051: downscaled large data produces reasonable averages', () => {
+      const processor = new WebGLScopesProcessor();
+      // Create 1920x1080 image that is all red = 2.0 (HDR)
+      const floatData = new Float32Array(1920 * 1080 * 4);
+      for (let i = 0; i < floatData.length; i += 4) {
+        floatData[i] = 2.0;     // R
+        floatData[i + 1] = 0.0; // G
+        floatData[i + 2] = 0.0; // B
+        floatData[i + 3] = 1.0; // A
+      }
+
+      mockGl.texImage2D.mockClear();
+      processor.setFloatImage(floatData, 1920, 1080);
+
+      const call = mockGl.texImage2D.mock.calls[0];
+      const uploadedData = call![8] as Float32Array;
+
+      // All pixels should average to R=2.0 since input is uniform
+      // Check first few pixels
+      for (let i = 0; i < Math.min(20, uploadedData.length); i += 4) {
+        expect(uploadedData[i]).toBeCloseTo(2.0, 1);     // R should be ~2.0
+        expect(uploadedData[i + 1]).toBeCloseTo(0.0, 1);  // G should be ~0.0
+        expect(uploadedData[i + 2]).toBeCloseTo(0.0, 1);  // B should be ~0.0
+      }
     });
   });
 

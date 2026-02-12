@@ -56,11 +56,25 @@ test.describe('Grayscale Toggle', () => {
 
     // Enable grayscale
     await page.keyboard.press('Shift+L');
+    await page.waitForFunction(
+      () => window.__OPENRV_TEST__?.getViewerState()?.channelMode === 'luminance',
+      { timeout: 5000 }
+    );
 
-    // Disable grayscale (back to RGB)
-    await page.keyboard.press('Shift+N');
+    // Disable grayscale (back to RGB) via channel dropdown.
+    const channelButton = page.locator('[data-testid="channel-select-button"]');
+    await channelButton.click();
+    const channelDropdown = page.locator('[data-testid="channel-dropdown"]');
+    await expect(channelDropdown).toBeVisible();
+    await channelDropdown.locator('button', { hasText: 'RGB' }).click();
+    await page.waitForFunction(
+      () => window.__OPENRV_TEST__?.getViewerState()?.channelMode === 'rgb',
+      { timeout: 5000 }
+    );
 
     const restored = await captureViewerScreenshot(page);
+
+    expect(imagesAreDifferent(original, restored)).toBe(false);
 
     // Verify channel mode is back to rgb
     const state = await getViewerState(page);
@@ -118,8 +132,14 @@ test.describe('Grayscale Toggle', () => {
     await page.keyboard.press('Shift+L');
     const screenshotL = await captureViewerScreenshot(page);
 
-    // Reset to RGB
-    await page.keyboard.press('Shift+N');
+    // Reset to RGB via channel dropdown
+    await page.click('[data-testid="channel-select-button"]');
+    await expect(page.locator('[data-testid="channel-dropdown"]')).toBeVisible();
+    await page.click('[data-testid="channel-dropdown"] button:has-text("RGB")');
+    await page.waitForFunction(
+      () => window.__OPENRV_TEST__?.getViewerState()?.channelMode === 'rgb',
+      { timeout: 5000 }
+    );
 
     // Use Shift+Y
     await page.keyboard.press('Shift+Y');

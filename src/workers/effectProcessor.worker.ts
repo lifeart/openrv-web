@@ -42,7 +42,7 @@ import {
   getHueRotationMatrix,
   isIdentityHueRotation,
   // Tone mapping
-  applyToneMappingToChannel,
+  applyToneMappingToRGB,
   // Curve interpolation
   evaluateCurveAtPoint,
   // Types - main types
@@ -62,7 +62,7 @@ import {
   applyColorInversionSIMD,
   applyChannelIsolationGrayscale,
   applyLuminanceIsolation,
-} from '../utils/effectProcessing.shared';
+} from '../utils/effects/effectProcessing.shared';
 
 // ============================================================================
 // Reusable clarity buffers - allocated once and reused across frames
@@ -753,9 +753,8 @@ function applyMergedPerPixelEffects(
 
     // ---- 8. Tone Mapping ----
     if (hasToneMapping) {
-      r = applyToneMappingToChannel(r, tmOperator, tmParams);
-      g = applyToneMappingToChannel(g, tmOperator, tmParams);
-      b = applyToneMappingToChannel(b, tmOperator, tmParams);
+      const tm = applyToneMappingToRGB(r, g, b, tmOperator, tmParams);
+      r = tm.r; g = tm.g; b = tm.b;
     }
 
     // ---- 9. Color Inversion ----

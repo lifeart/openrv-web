@@ -578,6 +578,109 @@ export class WebGLScopesProcessor {
   }
 
   /**
+   * Upload float pixel data (RGBA Float32Array) as an RGBA16F texture.
+   *
+   * This preserves HDR values > 1.0 that would be clipped by the UNSIGNED_BYTE
+   * path in setImage(). The waveform and vectorscope shaders already handle
+   * values > 1.0 via u_waveformMaxValue and u_saturationScale uniforms.
+   *
+   * If the source data is larger than the target analysis resolution,
+   * a CPU box-filter downscale is applied (canvas drawImage clips to Uint8).
+   *
+   * @param data RGBA Float32Array in top-to-bottom row order
+   * @param width Source width
+   * @param height Source height
+   */
+  setFloatImage(data: Float32Array, width: number, height: number): void {
+    if (!this.isInitialized) return;
+
+    const gl = this.gl;
+
+    // Calculate analysis dimensions and downscale if needed
+    const targetDims = this.calculateAnalysisDimensions(width, height);
+
+    let uploadData = data;
+    let uploadWidth = width;
+    let uploadHeight = height;
+
+    if (targetDims.width !== width || targetDims.height !== height) {
+      // CPU box-filter downscale for float data (canvas drawImage clips to Uint8)
+      uploadData = this.downscaleFloatData(data, width, height, targetDims.width, targetDims.height);
+      uploadWidth = targetDims.width;
+      uploadHeight = targetDims.height;
+    }
+
+    this.analysisWidth = uploadWidth;
+    this.analysisHeight = uploadHeight;
+    this.vertexCount = this.analysisWidth * this.analysisHeight;
+
+    // Upload float data as RGBA16F texture
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.imageTexture);
+    gl.texImage2D(
+      gl.TEXTURE_2D, 0, gl.RGBA16F,
+      uploadWidth, uploadHeight, 0,
+      gl.RGBA, gl.FLOAT, uploadData,
+    );
+
+    if (!this.textureConfigured) {
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      this.textureConfigured = true;
+    }
+  }
+
+  /**
+   * CPU box-filter downscale for Float32Array RGBA data.
+   * Used instead of canvas drawImage which clips values to [0, 1] Uint8.
+   */
+  private downscaleFloatData(
+    src: Float32Array,
+    srcWidth: number,
+    srcHeight: number,
+    dstWidth: number,
+    dstHeight: number,
+  ): Float32Array {
+    const dst = new Float32Array(dstWidth * dstHeight * 4);
+    const scaleX = srcWidth / dstWidth;
+    const scaleY = srcHeight / dstHeight;
+
+    for (let dy = 0; dy < dstHeight; dy++) {
+      const srcY0 = Math.floor(dy * scaleY);
+      const srcY1 = Math.min(Math.floor((dy + 1) * scaleY), srcHeight);
+      for (let dx = 0; dx < dstWidth; dx++) {
+        const srcX0 = Math.floor(dx * scaleX);
+        const srcX1 = Math.min(Math.floor((dx + 1) * scaleX), srcWidth);
+
+        let r = 0, g = 0, b = 0, a = 0;
+        let count = 0;
+        for (let sy = srcY0; sy < srcY1; sy++) {
+          for (let sx = srcX0; sx < srcX1; sx++) {
+            const si = (sy * srcWidth + sx) * 4;
+            r += src[si]!;
+            g += src[si + 1]!;
+            b += src[si + 2]!;
+            a += src[si + 3]!;
+            count++;
+          }
+        }
+
+        if (count > 0) {
+          const di = (dy * dstWidth + dx) * 4;
+          dst[di] = r / count;
+          dst[di + 1] = g / count;
+          dst[di + 2] = b / count;
+          dst[di + 3] = a / count;
+        }
+      }
+    }
+
+    return dst;
+  }
+
+  /**
    * Render histogram bars from pre-computed histogram data.
    * @param outputCanvas Target canvas to render to
    * @param histogramData Object with red, green, blue, luminance Uint32Arrays (256 bins each) and maxValue
@@ -658,7 +761,13 @@ export class WebGLScopesProcessor {
     // Restore additive blending for waveform/vectorscope
     gl.blendFunc(gl.ONE, gl.ONE);
 
+    // Reset transform before drawImage: the output context may have a hi-DPI
+    // scale(dpr, dpr) applied by setupHiDPICanvas. Drawing without resetting
+    // would scale the already-physical-sized WebGL canvas by dpr again.
+    outputCtx.save();
+    outputCtx.setTransform(1, 0, 0, 1, 0, 0);
     outputCtx.drawImage(this.canvas, 0, 0);
+    outputCtx.restore();
   }
 
   renderWaveform(
@@ -712,7 +821,12 @@ export class WebGLScopesProcessor {
       }
     }
 
+    // Reset transform before drawImage: the output context may have a hi-DPI
+    // scale(dpr, dpr) applied by setupHiDPICanvas.
+    outputCtx.save();
+    outputCtx.setTransform(1, 0, 0, 1, 0, 0);
     outputCtx.drawImage(this.canvas, 0, 0);
+    outputCtx.restore();
   }
 
   renderVectorscope(
@@ -746,7 +860,12 @@ export class WebGLScopesProcessor {
 
     gl.drawArrays(gl.POINTS, 0, this.vertexCount);
 
+    // Reset transform before drawImage: the output context may have a hi-DPI
+    // scale(dpr, dpr) applied by setupHiDPICanvas.
+    outputCtx.save();
+    outputCtx.setTransform(1, 0, 0, 1, 0, 0);
     outputCtx.drawImage(this.canvas, 0, 0);
+    outputCtx.restore();
   }
 
   dispose(): void {

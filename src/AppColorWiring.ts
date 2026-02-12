@@ -1,0 +1,154 @@
+/**
+ * AppColorWiring - Wire color controls to session/viewer/bridges.
+ *
+ * Handles:
+ * - Color inversion toggle -> viewer
+ * - Color controls adjustments -> viewer (with debounced history recording)
+ * - LUT loaded/intensity -> viewer
+ * - CDL control -> viewer
+ * - Curves control -> viewer
+ * - OCIO control -> viewer (baked 3D LUT pipeline)
+ * - Display profile control -> viewer
+ */
+
+import type { AppWiringContext } from './AppWiringContext';
+import type { ColorControls } from './ui/components/ColorControls';
+import type { OCIOState } from './color/OCIOConfig';
+import { getGlobalHistoryManager } from './utils/HistoryManager';
+
+/**
+ * Mutable state for debounced color history recording.
+ * Returned so that App can clean up the timer on dispose.
+ */
+export interface ColorWiringState {
+  colorHistoryTimer: ReturnType<typeof setTimeout> | null;
+  colorHistoryPrevious: ReturnType<ColorControls['getAdjustments']> | null;
+}
+
+/**
+ * Wire all color-related controls to the viewer and bridges.
+ * Returns mutable state that the caller must clean up on dispose.
+ */
+export function wireColorControls(ctx: AppWiringContext): ColorWiringState {
+  const { viewer, controls, sessionBridge, persistenceManager } = ctx;
+
+  const state: ColorWiringState = {
+    colorHistoryTimer: null,
+    colorHistoryPrevious: controls.colorControls.getAdjustments(),
+  };
+
+  // Color inversion toggle -> viewer
+  controls.colorInversionToggle.on('inversionChanged', (enabled) => {
+    viewer.setColorInversion(enabled);
+    sessionBridge.scheduleUpdateScopes();
+  });
+
+  // Color controls adjustments -> viewer with debounced history recording
+  controls.colorControls.on('adjustmentsChanged', (adjustments) => {
+    viewer.setColorAdjustments(adjustments);
+    sessionBridge.scheduleUpdateScopes();
+    persistenceManager.syncGTOStore();
+
+    // Debounced history recording - records after user stops adjusting for 500ms
+    if (state.colorHistoryTimer) {
+      clearTimeout(state.colorHistoryTimer);
+    }
+
+    const previousSnapshot = { ...state.colorHistoryPrevious! };
+    state.colorHistoryTimer = setTimeout(() => {
+      const currentSnapshot = controls.colorControls.getAdjustments();
+
+      // Find what changed for the description
+      const changes: string[] = [];
+      for (const key of Object.keys(currentSnapshot) as Array<keyof typeof currentSnapshot>) {
+        if (previousSnapshot[key] !== currentSnapshot[key]) {
+          changes.push(key);
+        }
+      }
+
+      if (changes.length > 0) {
+        const description = changes.length === 1
+          ? `Adjust ${changes[0]}`
+          : `Adjust ${changes.length} color settings`;
+
+        const historyManager = getGlobalHistoryManager();
+        historyManager.recordAction(
+          description,
+          'color',
+          () => {
+            // Restore previous state
+            controls.colorControls.setAdjustments(previousSnapshot);
+            viewer.setColorAdjustments(previousSnapshot);
+            sessionBridge.scheduleUpdateScopes();
+          },
+          () => {
+            // Redo to current state
+            controls.colorControls.setAdjustments(currentSnapshot);
+            viewer.setColorAdjustments(currentSnapshot);
+            sessionBridge.scheduleUpdateScopes();
+          }
+        );
+      }
+
+      state.colorHistoryPrevious = currentSnapshot;
+      state.colorHistoryTimer = null;
+    }, 500);
+  });
+
+  // LUT events -> viewer
+  controls.colorControls.on('lutLoaded', (lut) => {
+    viewer.setLUT(lut);
+    sessionBridge.scheduleUpdateScopes();
+  });
+  controls.colorControls.on('lutIntensityChanged', (intensity) => {
+    viewer.setLUTIntensity(intensity);
+    sessionBridge.scheduleUpdateScopes();
+  });
+
+  // CDL control -> viewer
+  controls.cdlControl.on('cdlChanged', (cdl) => {
+    viewer.setCDL(cdl);
+    sessionBridge.scheduleUpdateScopes();
+  });
+
+  // Curves control -> viewer
+  controls.curvesControl.on('curvesChanged', (curves) => {
+    viewer.setCurves(curves);
+    sessionBridge.scheduleUpdateScopes();
+  });
+
+  // OCIO control -> viewer (baked 3D LUT)
+  controls.ocioControl.on('stateChanged', (state) => {
+    updateOCIOPipeline(ctx, state);
+    sessionBridge.scheduleUpdateScopes();
+    persistenceManager.syncGTOStore();
+  });
+
+  // Display profile control -> viewer
+  controls.displayProfileControl.on('stateChanged', (state) => {
+    viewer.setDisplayColorState(state);
+    sessionBridge.scheduleUpdateScopes();
+  });
+
+  return state;
+}
+
+/**
+ * Update the OCIO rendering pipeline when OCIO state changes.
+ *
+ * Bakes the current OCIO transform chain into a 3D LUT for GPU-accelerated
+ * processing and sends it to the Viewer for real-time display.
+ */
+export function updateOCIOPipeline(ctx: AppWiringContext, state: OCIOState): void {
+  const processor = ctx.controls.ocioControl.getProcessor();
+
+  if (state.enabled) {
+    // Bake the OCIO transform chain into a 3D LUT for GPU acceleration
+    // Size 33 provides a good balance of accuracy vs. memory/performance
+    const bakedLUT = processor.bakeTo3DLUT(33);
+    ctx.viewer.setOCIOBakedLUT(bakedLUT, true);
+  } else {
+    // Disable OCIO - clear the baked LUT
+    ctx.viewer.setOCIOBakedLUT(null, false);
+  }
+}

@@ -9,6 +9,7 @@
  */
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { luminanceRec709 } from '../../color/ColorProcessingFacade';
 
 export interface ClippingOverlayState {
   enabled: boolean;
@@ -62,7 +63,7 @@ export class ClippingOverlay extends EventEmitter<ClippingOverlayEvents> {
       const b = data[i + 2]!;
 
       // Calculate luminance to detect clipping
-      const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      const luma = luminanceRec709(r, g, b);
 
       // Check for highlight clipping (any channel at max)
       const isHighlightClipped = showHighlights && (r >= 254 || g >= 254 || b >= 254 || luma >= 254);

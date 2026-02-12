@@ -15,6 +15,9 @@
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
+import { clamp } from '../../utils/math';
+import { luminanceRec709 } from '../../color/ColorProcessingFacade';
+
 
 export interface PixelProbeEvents extends EventMap {
   stateChanged: PixelProbeState;
@@ -141,6 +144,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
   private sampleSizeButtons: Map<SampleSize, HTMLButtonElement> = new Map();
   private sourceModeButtons: Map<SourceMode, HTMLButtonElement> = new Map();
 
+
   constructor() {
     super();
 
@@ -159,7 +163,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     this.overlay.dataset.testid = 'pixel-probe-overlay';
     this.overlay.style.cssText = `
       position: fixed;
-      background: rgba(30, 30, 30, 0.95);
+      background: var(--bg-secondary);
       border: 1px solid var(--border-primary);
       border-radius: 6px;
       padding: 10px;
@@ -174,6 +178,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     `;
 
     this.createOverlayContent();
+
   }
 
   private createOverlayContent(): void {
@@ -607,8 +612,8 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     if (!this.state.enabled || this.state.locked) return;
 
     // Clamp coordinates
-    const px = Math.max(0, Math.min(displayWidth - 1, Math.floor(x)));
-    const py = Math.max(0, Math.min(displayHeight - 1, Math.floor(y)));
+    const px = clamp(Math.floor(x), 0, displayWidth - 1);
+    const py = clamp(Math.floor(y), 0, displayHeight - 1);
 
     // Choose image data based on source mode
     const activeImageData =
@@ -638,7 +643,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
 
     // Calculate luminance in IRE units (0-100)
     // Using Rec. 709 coefficients: Y = 0.2126R + 0.7152G + 0.0722B
-    const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    const luminance = luminanceRec709(r, g, b);
     const ire = Math.round((luminance / 255) * 100);
 
     // Update state
@@ -671,19 +676,19 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
   ): void {
     if (!this.state.enabled || this.state.locked) return;
 
-    const px = Math.max(0, Math.min(displayWidth - 1, Math.floor(x)));
-    const py = Math.max(0, Math.min(displayHeight - 1, Math.floor(y)));
+    const px = clamp(Math.floor(x), 0, displayWidth - 1);
+    const py = clamp(Math.floor(y), 0, displayHeight - 1);
 
     // Convert float values (0.0-1.0+ range) to 0-255 for legacy display formats
     // but preserve the raw floats for RGB01 display
-    const r255 = Math.round(Math.max(0, Math.min(255, r * 255)));
-    const g255 = Math.round(Math.max(0, Math.min(255, g * 255)));
-    const b255 = Math.round(Math.max(0, Math.min(255, b * 255)));
-    const a255 = Math.round(Math.max(0, Math.min(255, a * 255)));
+    const r255 = Math.round(clamp(r * 255, 0, 255));
+    const g255 = Math.round(clamp(g * 255, 0, 255));
+    const b255 = Math.round(clamp(b * 255, 0, 255));
+    const a255 = Math.round(clamp(a * 255, 0, 255));
 
     // Calculate luminance in IRE units using float values
-    const luminanceFloat = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    const ire = Math.round(Math.max(0, Math.min(100, luminanceFloat * 100)));
+    const luminanceFloat = luminanceRec709(r, g, b);
+    const ire = Math.round(clamp(luminanceFloat * 100, 0, 100));
 
     this.state.x = px;
     this.state.y = py;
@@ -776,7 +781,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
     // Update Nits (HDR luminance in cd/m²)
     if (this.hdrFloats) {
       this.nitsRow.style.display = 'flex';
-      const luminance = 0.2126 * this.hdrFloats.r + 0.7152 * this.hdrFloats.g + 0.0722 * this.hdrFloats.b;
+      const luminance = luminanceRec709(this.hdrFloats.r, this.hdrFloats.g, this.hdrFloats.b);
       const nits = luminance * 203;
       if (nits >= 1000) {
         this.nitsLabel.textContent = `${(nits / 1000).toFixed(2)} K cd/m\u00B2`;
@@ -871,7 +876,7 @@ export class PixelProbe extends EventEmitter<PixelProbeEvents> {
         break;
       case 'nits':
         if (this.hdrFloats) {
-          const luminance = 0.2126 * this.hdrFloats.r + 0.7152 * this.hdrFloats.g + 0.0722 * this.hdrFloats.b;
+          const luminance = luminanceRec709(this.hdrFloats.r, this.hdrFloats.g, this.hdrFloats.b);
           const nits = luminance * 203;
           value = nits >= 1000 ? `${(nits / 1000).toFixed(2)} K cd/m\u00B2` : `${Math.round(nits)} cd/m\u00B2`;
         }

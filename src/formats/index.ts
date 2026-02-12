@@ -11,6 +11,7 @@ export {
   unpackDPX10bit,
   DPXTransferFunction,
   type DPXInfo,
+  type DPXDecodeOptions,
   type DPXDecodeResult,
 } from './DPXDecoder';
 export {
@@ -18,6 +19,7 @@ export {
   getCineonInfo,
   decodeCineon,
   type CineonInfo,
+  type CineonDecodeOptions,
   type CineonDecodeResult,
 } from './CineonDecoder';
 export {
@@ -30,8 +32,10 @@ export {
 } from './TIFFFloatDecoder';
 export {
   DecoderRegistry,
+  decoderRegistry,
   type FormatName,
   type FormatDecoder,
+  type DecodeResult,
 } from './DecoderRegistry';
 export {
   isGainmapJPEG,
@@ -39,3 +43,33 @@ export {
   decodeGainmapToFloat32,
   type GainmapInfo,
 } from './JPEGGainmapDecoder';
+export {
+  isHDRFile,
+  getHDRInfo,
+  decodeHDR,
+  type HDRInfo,
+  type HDRDecodeResult,
+} from './HDRDecoder';
+export {
+  isGainmapAVIF,
+  parseGainmapAVIF,
+  decodeAVIFGainmapToFloat32,
+  type AVIFGainmapInfo,
+} from './AVIFGainmapDecoder';
+export {
+  isJXLFile,
+  isJXLContainer,
+  decodeJXL,
+  type JXLDecodeResult,
+} from './JXLDecoder';
+export {
+  isHEICFile,
+  isGainmapHEIC,
+  parseHEICGainmapInfo,
+  parseHEICColorInfo,
+  decodeHEICGainmapToFloat32,
+  buildStandaloneHEIC,
+  type HEICGainmapInfo,
+  type HEICColorInfo,
+} from './HEICGainmapDecoder';
+export { decodeHEICToImageData } from './HEICWasmDecoder';

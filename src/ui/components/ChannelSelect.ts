@@ -18,7 +18,9 @@ import { applyA11yFocus } from './shared/Button';
 import { DropdownMenu } from './shared/DropdownMenu';
 import type { EXRLayerInfo, EXRChannelRemapping } from '../../formats/EXRDecoder';
 
-export type ChannelMode = 'rgb' | 'red' | 'green' | 'blue' | 'alpha' | 'luminance';
+export type { ChannelMode } from '../../core/types/color';
+
+import type { ChannelMode } from '../../core/types/color';
 
 /**
  * State for EXR layer selection

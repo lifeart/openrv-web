@@ -14,6 +14,28 @@ import {
  * area averaging, source/rendered toggle, and alpha display.
  */
 
+async function clickPixelProbeSampleSize(page: import('@playwright/test').Page, size: 1 | 3 | 5 | 9): Promise<void> {
+  await page.evaluate((sampleSize) => {
+    const selector = `[data-testid="pixel-probe-sample-size"] button[data-sample-size="${sampleSize}"]`;
+    const button = document.querySelector(selector) as HTMLButtonElement | null;
+    if (!button) {
+      throw new Error(`Pixel probe sample size button not found: ${sampleSize}`);
+    }
+    button.click();
+  }, size);
+}
+
+async function clickPixelProbeSourceMode(page: import('@playwright/test').Page, mode: 'rendered' | 'source'): Promise<void> {
+  await page.evaluate((sourceMode) => {
+    const selector = `[data-testid="pixel-probe-source-mode"] button[data-source-mode="${sourceMode}"]`;
+    const button = document.querySelector(selector) as HTMLButtonElement | null;
+    if (!button) {
+      throw new Error(`Pixel probe source mode button not found: ${sourceMode}`);
+    }
+    button.click();
+  }, mode);
+}
+
 test.describe('Pixel Probe Display', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
@@ -261,8 +283,7 @@ test.describe('Pixel Probe Sample Size (Area Averaging)', () => {
   });
 
   test('PP-E042: clicking 3x3 changes sample size', async ({ page }) => {
-    const button3x3 = page.locator('[data-testid="pixel-probe-sample-size"] button[data-sample-size="3"]');
-    await button3x3.click();
+    await clickPixelProbeSampleSize(page, 3);
     await page.waitForTimeout(100);
 
     const state = await getPixelProbeState(page);
@@ -270,8 +291,7 @@ test.describe('Pixel Probe Sample Size (Area Averaging)', () => {
   });
 
   test('PP-E043: clicking 5x5 changes sample size', async ({ page }) => {
-    const button5x5 = page.locator('[data-testid="pixel-probe-sample-size"] button[data-sample-size="5"]');
-    await button5x5.click();
+    await clickPixelProbeSampleSize(page, 5);
     await page.waitForTimeout(100);
 
     const state = await getPixelProbeState(page);
@@ -279,8 +299,7 @@ test.describe('Pixel Probe Sample Size (Area Averaging)', () => {
   });
 
   test('PP-E044: clicking 9x9 changes sample size', async ({ page }) => {
-    const button9x9 = page.locator('[data-testid="pixel-probe-sample-size"] button[data-sample-size="9"]');
-    await button9x9.click();
+    await clickPixelProbeSampleSize(page, 9);
     await page.waitForTimeout(100);
 
     const state = await getPixelProbeState(page);
@@ -289,8 +308,7 @@ test.describe('Pixel Probe Sample Size (Area Averaging)', () => {
 
   test('PP-E045: sample size persists when moving mouse', async ({ page }) => {
     // Set sample size to 5x5
-    const button5x5 = page.locator('[data-testid="pixel-probe-sample-size"] button[data-sample-size="5"]');
-    await button5x5.click();
+    await clickPixelProbeSampleSize(page, 5);
     await page.waitForTimeout(100);
 
     // Move mouse over canvas
@@ -334,8 +352,7 @@ test.describe('Pixel Probe Source Mode (Source vs Rendered)', () => {
   });
 
   test('PP-E052: clicking Source changes source mode', async ({ page }) => {
-    const sourceButton = page.locator('[data-testid="pixel-probe-source-mode"] button[data-source-mode="source"]');
-    await sourceButton.click();
+    await clickPixelProbeSourceMode(page, 'source');
     await page.waitForTimeout(100);
 
     const state = await getPixelProbeState(page);
@@ -344,13 +361,11 @@ test.describe('Pixel Probe Source Mode (Source vs Rendered)', () => {
 
   test('PP-E053: clicking Rendered changes source mode back', async ({ page }) => {
     // First switch to source
-    const sourceButton = page.locator('[data-testid="pixel-probe-source-mode"] button[data-source-mode="source"]');
-    await sourceButton.click();
+    await clickPixelProbeSourceMode(page, 'source');
     await page.waitForTimeout(100);
 
     // Then switch back to rendered
-    const renderedButton = page.locator('[data-testid="pixel-probe-source-mode"] button[data-source-mode="rendered"]');
-    await renderedButton.click();
+    await clickPixelProbeSourceMode(page, 'rendered');
     await page.waitForTimeout(100);
 
     const state = await getPixelProbeState(page);
@@ -359,8 +374,7 @@ test.describe('Pixel Probe Source Mode (Source vs Rendered)', () => {
 
   test('PP-E054: source mode persists when moving mouse', async ({ page }) => {
     // Set source mode
-    const sourceButton = page.locator('[data-testid="pixel-probe-source-mode"] button[data-source-mode="source"]');
-    await sourceButton.click();
+    await clickPixelProbeSourceMode(page, 'source');
     await page.waitForTimeout(100);
 
     // Move mouse over canvas

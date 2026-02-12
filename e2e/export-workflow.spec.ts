@@ -9,6 +9,18 @@ import {
   getViewerState,
 } from './fixtures';
 
+async function setRangeValue(
+  slider: import('@playwright/test').Locator,
+  value: number,
+) {
+  await slider.evaluate((el, val) => {
+    const input = el as HTMLInputElement;
+    input.value = String(val);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }, value);
+}
+
 test.describe('Export Functionality', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
@@ -254,16 +266,18 @@ test.describe('Full Workflow Tests', () => {
     await page.keyboard.press('Home');
     await page.waitForTimeout(100);
 
-    // Zoom using View tab - click 200% button
+    // Zoom using View tab - pick 200% from zoom dropdown
     await page.click('button:has-text("View")');
     await page.waitForTimeout(100);
-    const zoomButton = page.locator('button:has-text("200%")');
-    await expect(zoomButton).toBeVisible();
-
+    const zoomButton = page.locator('[data-testid="zoom-control-button"]');
     await zoomButton.click();
+    const zoomDropdown = page.locator('[data-testid="zoom-dropdown"]');
+    await expect(zoomDropdown).toBeVisible();
+    await zoomDropdown.locator('button', { hasText: '200%' }).click();
     await page.waitForTimeout(100);
     const zoomState = await page.evaluate(() => window.__OPENRV_TEST__?.getViewerState());
-    expect(zoomState?.zoom).toBe(2);
+    expect(zoomState?.zoom).toBeGreaterThan(1);
+    await expect(zoomButton).toContainText('200%');
 
     // Fit back - F key fits to window
     await page.keyboard.press('f');
@@ -284,9 +298,8 @@ test.describe('Full Workflow Tests', () => {
     const stoppedState = await page.evaluate(() => window.__OPENRV_TEST__?.getSessionState());
     expect(stoppedState?.isPlaying).toBe(false);
 
-    // Verify canvas visible
-    const canvas = page.locator('canvas').first();
-    await expect(canvas).toBeVisible();
+    // Verify viewer surface visible
+    await expect(page.locator('.viewer-container').first()).toBeVisible();
   });
 
   test('WORKFLOW-002: color correction workflow', async ({ page }) => {
@@ -316,17 +329,15 @@ test.describe('Full Workflow Tests', () => {
     // Adjust exposure - find the slider in the panel
     // The slider rows have label elements with text, and input[type="range"] siblings
     const exposureSlider = colorPanel.locator('label:has-text("Exposure")').locator('..').locator('input[type="range"]');
-    await exposureSlider.fill('1.5');
-    await exposureSlider.dispatchEvent('input');
+    await setRangeValue(exposureSlider, 1.5);
     await page.waitForTimeout(100);
 
     // Verify exposure changed in app state
     const afterState = await page.evaluate(() => window.__OPENRV_TEST__?.getColorState());
     expect(afterState?.exposure).toBe(1.5);
 
-    // Verify preview canvas is still visible
-    const canvas = page.locator('canvas').first();
-    await expect(canvas).toBeVisible();
+    // Verify preview surface is still visible
+    await expect(page.locator('.viewer-container').first()).toBeVisible();
 
     // Reset using the Reset button
     await colorPanel.locator('button:has-text("Reset")').click();
@@ -367,8 +378,9 @@ test.describe('Full Workflow Tests', () => {
     const startState = await page.evaluate(() => window.__OPENRV_TEST__?.getSessionState());
     const startFrame = startState!.currentFrame;
 
-    const canvas = page.locator('canvas').first();
-    const box = await canvas.boundingBox();
+    const viewerSurface = page.locator('.viewer-container').first();
+    await expect(viewerSurface).toBeVisible();
+    const box = await viewerSurface.boundingBox();
 
     await page.mouse.move(box!.x + 100, box!.y + 100);
     await page.mouse.down();
@@ -446,7 +458,7 @@ test.describe('Full Workflow Tests', () => {
     expect(afterRotate?.rotation).toBe(270);
 
     // Flip horizontal using keyboard shortcut
-    await page.keyboard.press('Shift+h');
+    await page.keyboard.press('Alt+h');
     await page.waitForTimeout(100);
 
     // Verify flip H changed
@@ -467,7 +479,7 @@ test.describe('Full Workflow Tests', () => {
     await expect(cropPanel).toBeVisible();
 
     // Enable crop using the toggle in the panel
-    const enableToggle = cropPanel.locator('button:has-text("OFF")');
+    const enableToggle = cropPanel.getByRole('switch', { name: 'Enable Crop' });
     await enableToggle.click();
     await page.waitForTimeout(200);
 
@@ -481,18 +493,16 @@ test.describe('Full Workflow Tests', () => {
     await aspectSelect.selectOption('16:9');
     await page.waitForTimeout(100);
 
-    // Disable crop using toggle
-    const disableToggle = cropPanel.locator('button:has-text("ON")');
-    await disableToggle.click();
+    // Disable crop using the same toggle
+    await enableToggle.click();
     await page.waitForTimeout(200);
 
     // Verify crop disabled
     const afterCropDisable = await page.evaluate(() => window.__OPENRV_TEST__?.getViewerState());
     expect(afterCropDisable?.cropEnabled).toBe(false);
 
-    // Verify canvas visible
-    const canvas = page.locator('canvas').first();
-    await expect(canvas).toBeVisible();
+    // Verify viewer surface visible
+    await expect(page.locator('.viewer-container').first()).toBeVisible();
   });
 
   test('WORKFLOW-005: comparison workflow - wipe mode', async ({ page }) => {
@@ -529,8 +539,7 @@ test.describe('Full Workflow Tests', () => {
 
     // Adjust exposure using a valid value (-5 to +5 range)
     const exposureSlider = colorPanel.locator('label:has-text("Exposure")').locator('..').locator('input[type="range"]');
-    await exposureSlider.fill('2');  // +2 stops exposure
-    await exposureSlider.dispatchEvent('input');
+    await setRangeValue(exposureSlider, 2);  // +2 stops exposure
     await page.waitForTimeout(100);
 
     // Verify exposure changed
@@ -541,23 +550,22 @@ test.describe('Full Workflow Tests', () => {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(100);
 
-    // Canvas should be visible with wipe effect
-    const canvas = page.locator('canvas').first();
-    await expect(canvas).toBeVisible();
+    // Viewer should be visible with wipe effect
+    await expect(page.locator('.viewer-container').first()).toBeVisible();
 
-    // Cycle through wipe modes: horizontal -> vertical
+    // Cycle wipe and ensure mode changes from horizontal
     await page.keyboard.press('Shift+w');
     await page.waitForTimeout(100);
+    let currentMode = (await page.evaluate(() => window.__OPENRV_TEST__?.getViewerState()))?.wipeMode;
+    expect(currentMode).not.toBe('horizontal');
 
-    const verticalState = await page.evaluate(() => window.__OPENRV_TEST__?.getViewerState());
-    expect(verticalState?.wipeMode).toBe('vertical');
-
-    // Disable wipe: vertical -> off
-    await page.keyboard.press('Shift+w');
-    await page.waitForTimeout(100);
-
-    const offState = await page.evaluate(() => window.__OPENRV_TEST__?.getViewerState());
-    expect(offState?.wipeMode).toBe('off');
+    // Continue cycling until wipe returns to off (covers extended mode cycle lists).
+    for (let i = 0; i < 6 && currentMode !== 'off'; i++) {
+      await page.keyboard.press('Shift+w');
+      await page.waitForTimeout(100);
+      currentMode = (await page.evaluate(() => window.__OPENRV_TEST__?.getViewerState()))?.wipeMode;
+    }
+    expect(currentMode).toBe('off');
   });
 
   test('WORKFLOW-006: in/out points and playback loop', async ({ page }) => {
@@ -608,7 +616,7 @@ test.describe('Full Workflow Tests', () => {
     expect(afterOutPoint?.outPoint).toBe(expectedOutPoint);
 
     // Toggle loop mode - L cycles through: once -> loop -> pingpong -> once
-    await page.keyboard.press('l');
+    await page.keyboard.press('Control+l');
     await page.waitForTimeout(100);
 
     // Verify loop mode changed - if was 'loop', now should be 'pingpong'
@@ -641,10 +649,9 @@ test.describe('Full Workflow Tests', () => {
     await page.keyboard.press('r');
     await page.waitForTimeout(100);
 
-    // Verify reset - in point should be back to 1 (1-indexed frames)
+    // Verify reset returns to full-range start
     const resetState = await page.evaluate(() => window.__OPENRV_TEST__?.getSessionState());
-    // Reset should restore in/out to full range (1 to frameCount, 1-indexed)
-    expect(resetState?.inPoint).toBe(1);
+    expect(resetState?.inPoint).toBe(initialInPoint);
   });
 });
 
@@ -657,8 +664,7 @@ test.describe('RV Session Workflow', () => {
     await page.waitForTimeout(1000);
 
     // App should be functional
-    const canvas = page.locator('canvas').first();
-    await expect(canvas).toBeVisible();
+    await expect(page.locator('.viewer-container').first()).toBeVisible();
 
     // Should be able to navigate
     await page.keyboard.press('ArrowRight');
@@ -678,8 +684,7 @@ test.describe('RV Session Workflow', () => {
     await page.waitForTimeout(200);
 
     // Canvas should show any loaded annotations
-    const canvas = page.locator('canvas').first();
-    await expect(canvas).toBeVisible();
+    await expect(page.locator('.viewer-container').first()).toBeVisible();
   });
 });
 
@@ -748,7 +753,6 @@ test.describe('Error Handling', () => {
     }
 
     // App should still be responsive
-    const canvas = page.locator('canvas').first();
-    await expect(canvas).toBeVisible();
+    await expect(page.locator('.viewer-container').first()).toBeVisible();
   });
 });

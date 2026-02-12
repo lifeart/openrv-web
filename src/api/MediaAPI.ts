@@ -26,8 +26,16 @@ export class MediaAPI {
   }
 
   /**
-   * Get information about the currently loaded source
-   * @returns Source info or null if no media is loaded
+   * Get information about the currently loaded source.
+   *
+   * @returns A {@link SourceInfo} object with name, type, dimensions, duration, and fps,
+   *   or `null` if no media is loaded.
+   *
+   * @example
+   * ```ts
+   * const src = openrv.media.getCurrentSource();
+   * if (src) console.log(`${src.name}: ${src.width}x${src.height}`);
+   * ```
    */
   getCurrentSource(): SourceInfo | null {
     const source = this.session.currentSource;
@@ -44,21 +52,43 @@ export class MediaAPI {
   }
 
   /**
-   * Get total duration in frames
+   * Get total duration in frames.
+   *
+   * @returns The total number of frames in the current source, or 0 if no source is loaded.
+   *
+   * @example
+   * ```ts
+   * const frames = openrv.media.getDuration();
+   * ```
    */
   getDuration(): number {
     return this.session.currentSource?.duration ?? 0;
   }
 
   /**
-   * Get frames per second of current source
+   * Get the frames per second of the current source.
+   *
+   * @returns The FPS value for the active session.
+   *
+   * @example
+   * ```ts
+   * const fps = openrv.media.getFPS(); // e.g. 24
+   * ```
    */
   getFPS(): number {
     return this.session.fps;
   }
 
   /**
-   * Get resolution of current source
+   * Get the resolution of the current source.
+   *
+   * @returns An object with `width` and `height` in pixels, or `{ width: 0, height: 0 }` if
+   *   no source is loaded.
+   *
+   * @example
+   * ```ts
+   * const { width, height } = openrv.media.getResolution();
+   * ```
    */
   getResolution(): { width: number; height: number } {
     const source = this.session.currentSource;
@@ -69,14 +99,28 @@ export class MediaAPI {
   }
 
   /**
-   * Check if media is currently loaded
+   * Check if any media source is currently loaded.
+   *
+   * @returns `true` if a source is loaded, `false` otherwise.
+   *
+   * @example
+   * ```ts
+   * if (openrv.media.hasMedia()) { openrv.playback.play(); }
+   * ```
    */
   hasMedia(): boolean {
     return this.session.currentSource !== null;
   }
 
   /**
-   * Get the number of loaded sources
+   * Get the number of loaded sources.
+   *
+   * @returns The count of media sources currently loaded in the session.
+   *
+   * @example
+   * ```ts
+   * const count = openrv.media.getSourceCount();
+   * ```
    */
   getSourceCount(): number {
     return this.session.sourceCount;

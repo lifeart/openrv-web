@@ -363,8 +363,8 @@ describe('RenderWorkerProxy', () => {
 
   describe('Batch state optimization', () => {
     it('RWP-027: state setters batch into dirty state', () => {
-      proxy.setClarity(50);
-      proxy.setSharpen(25);
+      proxy.setClarity({ clarity: 50 });
+      proxy.setSharpen({ amount: 25 });
       // State is batched, not sent immediately
       const syncMessages = mockWorker.messageHistory.filter(m => m.type === 'syncState');
       expect(syncMessages.length).toBe(0);
@@ -372,8 +372,8 @@ describe('RenderWorkerProxy', () => {
 
     it('RWP-028: dirty state is flushed before render', async () => {
       mockWorker.simulateMessage({ type: 'ready' });
-      proxy.setClarity(50);
-      proxy.setSharpen(25);
+      proxy.setClarity({ clarity: 50 });
+      proxy.setSharpen({ amount: 25 });
 
       const promise = proxy.renderSDRFrameAsync(createMockBitmap());
 
@@ -477,6 +477,127 @@ describe('RenderWorkerProxy', () => {
   });
 
   // =============================================================================
+  // Disposal/cleanup lifecycle tests
+  // =============================================================================
+
+  describe('Disposal/cleanup lifecycle', () => {
+    it('RWP-D001: dispose terminates the worker', () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      proxy.dispose();
+      expect(mockWorker.terminated).toBe(true);
+    });
+
+    it('RWP-D002: double dispose does not throw', () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      proxy.dispose();
+      expect(() => proxy.dispose()).not.toThrow();
+    });
+
+    it('RWP-D003: worker reference is nulled after dispose', () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      proxy.dispose();
+      // getCanvasElement should return null since canvas is nulled
+      expect(proxy.getCanvasElement()).toBeNull();
+    });
+
+    it('RWP-D004: isReady returns false after dispose', () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      expect(proxy.isReady()).toBe(true);
+      proxy.dispose();
+      expect(proxy.isReady()).toBe(false);
+    });
+
+    it('RWP-D005: pending render promises are rejected on dispose', async () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+
+      const promise1 = proxy.renderSDRFrameAsync(createMockBitmap());
+      const promise2 = proxy.renderSDRFrameAsync(createMockBitmap());
+
+      proxy.dispose();
+
+      await expect(promise1).rejects.toThrow('disposed');
+      await expect(promise2).rejects.toThrow('disposed');
+    });
+
+    it('RWP-D006: pending pixel read promises are rejected on dispose', async () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+
+      const promise1 = proxy.readPixelFloatAsync(0, 0, 1, 1);
+      const promise2 = proxy.readPixelFloatAsync(10, 20, 1, 1);
+
+      proxy.dispose();
+
+      await expect(promise1).rejects.toThrow('disposed');
+      await expect(promise2).rejects.toThrow('disposed');
+    });
+
+    it('RWP-D007: renderSDRFrameAsync rejects after dispose', async () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      proxy.dispose();
+
+      await expect(
+        proxy.renderSDRFrameAsync(createMockBitmap())
+      ).rejects.toThrow('not available');
+    });
+
+    it('RWP-D008: renderHDRAsync rejects after dispose', async () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      proxy.dispose();
+
+      const image = {
+        data: new Float32Array(4),
+        width: 1,
+        height: 1,
+        channels: 4,
+        dataType: 'float32',
+        metadata: {},
+      } as any;
+
+      await expect(proxy.renderHDRAsync(image)).rejects.toThrow('not available');
+    });
+
+    it('RWP-D009: readPixelFloatAsync returns null after dispose', async () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      proxy.dispose();
+
+      const result = await proxy.readPixelFloatAsync(0, 0, 1, 1);
+      expect(result).toBeNull();
+    });
+
+    it('RWP-D010: state setters are no-ops after dispose (postMessage guards)', () => {
+      mockWorker.simulateMessage({ type: 'ready' });
+      proxy.dispose();
+
+      const msgCountBefore = mockWorker.messageHistory.length;
+
+      // These should all silently do nothing (no postMessage calls)
+      proxy.setColorAdjustments({ ...DEFAULT_COLOR_ADJUSTMENTS, exposure: 2.0 });
+      proxy.setColorInversion(true);
+      proxy.resize(1920, 1080);
+      proxy.clear();
+
+      // No new messages should have been sent
+      expect(mockWorker.messageHistory.length).toBe(msgCountBefore);
+    });
+
+    it('RWP-D011: init promise is rejected on dispose if not yet resolved', async () => {
+      // initPromise was created during createProxyWithMock() but never resolved
+      const initPromise = proxy.initAsync();
+      proxy.dispose();
+      await expect(initPromise).rejects.toThrow('disposed');
+    });
+
+    it('RWP-D012: initialize throws after dispose', () => {
+      proxy.dispose();
+
+      const canvas = document.createElement('canvas');
+      (canvas as any).transferControlToOffscreen = vi.fn(() => new OffscreenCanvas(100, 100));
+
+      expect(() => proxy.initialize(canvas)).toThrow('disposed');
+    });
+  });
+
+  // =============================================================================
   // Regression tests for ImageBitmap lifecycle fix
   // =============================================================================
 
@@ -541,12 +662,18 @@ describe('RenderWorkerProxy', () => {
       const originalCreateImageBitmap = globalThis.createImageBitmap;
       (globalThis as any).createImageBitmap = vi.fn(async () => mockBitmap);
 
+      // Capture the init promise before dispose to prevent unhandled rejection
+      const initPromise = proxy.initAsync().catch(() => {});
+
       try {
         // Prepare a frame but don't wait for it
         proxy.prepareFrame(canvas);
 
         // Immediately dispose (simulating cleanup before bitmap is consumed)
         proxy.dispose();
+
+        // Wait for init promise rejection to be handled
+        await initPromise;
 
         // Wait for async operations to settle
         await new Promise(resolve => setTimeout(resolve, 10));

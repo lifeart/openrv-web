@@ -60,7 +60,7 @@ export const DEFAULT_DISPLAY_COLOR_STATE: DisplayColorState = {
 };
 
 /**
- * Profile cycle order for Shift+D keyboard shortcut.
+ * Profile cycle order for Shift+Alt+D keyboard shortcut.
  * Linear is skipped during cycling since sRGB is the default start.
  */
 export const PROFILE_CYCLE_ORDER: DisplayTransferFunction[] = [

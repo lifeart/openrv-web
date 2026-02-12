@@ -84,11 +84,10 @@ describe('applyToneMapping', () => {
 
       applyToneMapping(imageData, 'reinhard');
 
-      // Reinhard formula: x / (1 + x) where x = 1 gives 0.5
-      // 255 / 255 = 1, then 1 / (1 + 1) = 0.5 -> 128
-      expect(imageData.data[0]).toBe(128);
-      expect(imageData.data[1]).toBe(128);
-      expect(imageData.data[2]).toBe(128);
+      // Extended Reinhard: x*(1+x/wp²)/(1+x) with wp=5, x=1 gives ~0.53 -> 135
+      expect(imageData.data[0]).toBe(135);
+      expect(imageData.data[1]).toBe(135);
+      expect(imageData.data[2]).toBe(135);
     });
 
     it('TONEMAPFN-012: reinhard preserves relative brightness ordering', () => {
@@ -122,9 +121,9 @@ describe('applyToneMapping', () => {
 
       applyToneMapping(imageData, 'reinhard');
 
-      // Allow some tolerance for rounding
-      expect(imageData.data[0]).toBeGreaterThanOrEqual(84);
-      expect(imageData.data[0]).toBeLessThanOrEqual(86);
+      // Extended Reinhard with wp=5: x*(1+x/25)/(1+x), x=128/255≈0.502 -> ~87
+      expect(imageData.data[0]).toBeGreaterThanOrEqual(86);
+      expect(imageData.data[0]).toBeLessThanOrEqual(89);
     });
   });
 
@@ -495,23 +494,20 @@ describe('applyToneMapping', () => {
 
   describe('mathematical correctness', () => {
     it('TONEMAPFN-100: reinhard formula verification for known value', () => {
-      // For input 0.5 (128/255), Reinhard: 0.5 / (1 + 0.5) = 0.333... -> ~85
+      // Extended Reinhard with wp=5: x*(1+x/wp²)/(1+x), x=128/255≈0.502 -> ~87
       const imageData = createTestImageData(128, 128, 128);
       applyToneMapping(imageData, 'reinhard');
 
-      // Reinhard: x / (1 + x) where x = 128/255 = 0.502
-      // 0.502 / 1.502 = 0.334 -> 85.2
-      expect(imageData.data[0]).toBeGreaterThanOrEqual(84);
-      expect(imageData.data[0]).toBeLessThanOrEqual(86);
+      expect(imageData.data[0]).toBeGreaterThanOrEqual(86);
+      expect(imageData.data[0]).toBeLessThanOrEqual(89);
     });
 
     it('TONEMAPFN-101: reinhard asymptotic behavior - very bright approaches 1', () => {
-      // Reinhard: as x -> infinity, output -> 1
+      // Extended Reinhard with wp=5: x*(1+x/25)/(1+x), x=1.0 -> 0.52 -> 133
       const imageData = createTestImageData(255, 255, 255);
       applyToneMapping(imageData, 'reinhard');
 
-      // x = 1.0, Reinhard: 1 / 2 = 0.5 -> 128
-      expect(imageData.data[0]).toBe(128);
+      expect(imageData.data[0]).toBe(135);
     });
 
     it('TONEMAPFN-102: aces clamps output to [0, 1] range', () => {
@@ -724,8 +720,10 @@ describe('applyToneMappingHDR', () => {
 describe('GPU/CPU Parity', () => {
   // Reference implementations matching the GPU shader code
   function gpuReinhard(x: number): number {
-    // GPU: return color / (color + vec3(1.0));
-    return x / (x + 1.0);
+    // GPU: x * (1 + x / wp²) / (1 + x) with wp=5.0 (default), headroom=1.0 (SDR)
+    const wp = 5.0;
+    const wp2 = wp * wp;
+    return x * (1.0 + x / wp2) / (1.0 + x);
   }
 
   function gpuFilmicCurve(x: number): number {

@@ -5,6 +5,7 @@
  */
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { clamp } from '../../utils/math';
 
 export type WatermarkPosition =
   | 'top-left'
@@ -322,8 +323,8 @@ export class WatermarkOverlay extends EventEmitter<WatermarkOverlayEvents> {
   }
 
   setCustomPosition(x: number, y: number): void {
-    const clampedX = Math.max(0, Math.min(1, x));
-    const clampedY = Math.max(0, Math.min(1, y));
+    const clampedX = clamp(x, 0, 1);
+    const clampedY = clamp(y, 0, 1);
     if (this.state.customX !== clampedX || this.state.customY !== clampedY) {
       this.state.customX = clampedX;
       this.state.customY = clampedY;
@@ -337,7 +338,7 @@ export class WatermarkOverlay extends EventEmitter<WatermarkOverlayEvents> {
   }
 
   setScale(scale: number): void {
-    const clamped = Math.max(0.1, Math.min(2.0, scale));
+    const clamped = clamp(scale, 0.1, 2.0);
     if (this.state.scale !== clamped) {
       this.state.scale = clamped;
       this.emit('stateChanged', { ...this.state });
@@ -349,7 +350,7 @@ export class WatermarkOverlay extends EventEmitter<WatermarkOverlayEvents> {
   }
 
   setOpacity(opacity: number): void {
-    const clamped = Math.max(0, Math.min(1, opacity));
+    const clamped = clamp(opacity, 0, 1);
     if (this.state.opacity !== clamped) {
       this.state.opacity = clamped;
       this.emit('stateChanged', { ...this.state });
@@ -361,7 +362,7 @@ export class WatermarkOverlay extends EventEmitter<WatermarkOverlayEvents> {
   }
 
   setMargin(margin: number): void {
-    const clamped = Math.max(0, Math.min(200, margin));
+    const clamped = clamp(margin, 0, 200);
     if (this.state.margin !== clamped) {
       this.state.margin = clamped;
       this.emit('stateChanged', { ...this.state });

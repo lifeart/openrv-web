@@ -1,47 +1,13 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import { LUT3D, isLUT3D } from '../../color/LUTLoader';
-import { parseLUT } from '../../color/LUTFormatDetect';
+import { type LUT3D, isLUT3D, parseLUT } from '../../color/ColorProcessingFacade';
 import { showAlert } from './shared/Modal';
 import { getIconSvg } from './shared/Icons';
 
-export interface ColorAdjustments {
-  exposure: number;      // -5 to +5 stops
-  gamma: number;         // 0.1 to 4.0
-  saturation: number;    // 0 to 2 (1 = normal)
-  vibrance: number;      // -100 to +100 (intelligent saturation)
-  vibranceSkinProtection: boolean;  // Protect skin tones from vibrance (default: true)
-  contrast: number;      // 0 to 2 (1 = normal)
-  clarity: number;       // -100 to +100 (local contrast / midtone detail)
-  hueRotation: number;   // 0 to 360 degrees (global hue shift)
-  temperature: number;   // -100 to +100 (kelvin shift)
-  tint: number;          // -100 to +100 (green/magenta)
-  brightness: number;    // -1 to +1
-  highlights: number;    // -100 to +100 (recover/boost highlights)
-  shadows: number;       // -100 to +100 (crush/recover shadows)
-  whites: number;        // -100 to +100 (white point adjustment)
-  blacks: number;        // -100 to +100 (black point adjustment)
-}
+export type { ColorAdjustments, NumericAdjustmentKey } from '../../core/types/color';
+export { DEFAULT_COLOR_ADJUSTMENTS } from '../../core/types/color';
 
-export const DEFAULT_COLOR_ADJUSTMENTS: ColorAdjustments = {
-  exposure: 0,
-  gamma: 1,
-  saturation: 1,
-  vibrance: 0,
-  vibranceSkinProtection: true,
-  contrast: 1,
-  clarity: 0,
-  hueRotation: 0,
-  temperature: 0,
-  tint: 0,
-  brightness: 0,
-  highlights: 0,
-  shadows: 0,
-  whites: 0,
-  blacks: 0,
-};
-
-// Type for numeric-only adjustment keys (excludes boolean vibranceSkinProtection)
-export type NumericAdjustmentKey = Exclude<keyof ColorAdjustments, 'vibranceSkinProtection'>;
+import type { ColorAdjustments, NumericAdjustmentKey } from '../../core/types/color';
+import { DEFAULT_COLOR_ADJUSTMENTS } from '../../core/types/color';
 
 export interface ColorControlsEvents extends EventMap {
   adjustmentsChanged: ColorAdjustments;
@@ -139,12 +105,18 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     // Panel will be appended to body when shown
 
     // Close on outside click
-    document.addEventListener('click', (e) => {
-      if (this.isExpanded && !this.container.contains(e.target as Node) && !this.panel.contains(e.target as Node)) {
-        this.hide();
-      }
-    });
+    this.boundHandleDocumentClick = this.handleDocumentClick.bind(this);
+    document.addEventListener('click', this.boundHandleDocumentClick);
   }
+
+  private boundHandleDocumentClick: (e: MouseEvent) => void;
+
+  private handleDocumentClick(e: MouseEvent): void {
+    if (this.isExpanded && !this.container.contains(e.target as Node) && !this.panel.contains(e.target as Node)) {
+      this.hide();
+    }
+  }
+
 
   private createSliders(): void {
     const sliderConfigs: Array<{
@@ -704,6 +676,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
   }
 
   dispose(): void {
+    document.removeEventListener('click', this.boundHandleDocumentClick);
     if (this._inputThrottleTimer !== null) {
       clearTimeout(this._inputThrottleTimer);
       this._inputThrottleTimer = null;

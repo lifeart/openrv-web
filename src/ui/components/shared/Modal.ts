@@ -32,6 +32,14 @@ export interface PromptOptions extends ModalOptions {
 
 // Singleton container for modals
 let modalContainer: HTMLElement | null = null;
+let customModalEscapeHandler: ((e: KeyboardEvent) => void) | null = null;
+
+function cleanupCustomModalEscapeHandler(): void {
+  if (customModalEscapeHandler) {
+    document.removeEventListener('keydown', customModalEscapeHandler);
+    customModalEscapeHandler = null;
+  }
+}
 
 function getModalContainer(): HTMLElement {
   if (!modalContainer) {
@@ -61,6 +69,7 @@ function showContainer(): void {
 }
 
 function hideContainer(): void {
+  cleanupCustomModalEscapeHandler();
   const container = getModalContainer();
   container.style.display = 'none';
   container.innerHTML = '';
@@ -142,6 +151,7 @@ function createModalBase(options: ModalOptions = {}): HTMLElement {
  */
 export function showAlert(message: string, options: AlertOptions = {}): Promise<void> {
   return new Promise((resolve) => {
+    cleanupCustomModalEscapeHandler();
     const { title = 'Alert', type = 'info', onClose } = options;
 
     const container = getModalContainer();
@@ -225,6 +235,7 @@ export function showAlert(message: string, options: AlertOptions = {}): Promise<
  */
 export function showConfirm(message: string, options: ConfirmOptions = {}): Promise<boolean> {
   return new Promise((resolve) => {
+    cleanupCustomModalEscapeHandler();
     const {
       title = 'Confirm',
       confirmText = 'OK',
@@ -308,6 +319,7 @@ export function showConfirm(message: string, options: ConfirmOptions = {}): Prom
  */
 export function showPrompt(message: string, options: PromptOptions = {}): Promise<string | null> {
   return new Promise((resolve) => {
+    cleanupCustomModalEscapeHandler();
     const {
       title = 'Input',
       placeholder = '',
@@ -421,6 +433,7 @@ export function showPrompt(message: string, options: PromptOptions = {}): Promis
  * Show a custom modal with any content
  */
 export function showModal(content: HTMLElement, options: ModalOptions = {}): { close: () => void } {
+  cleanupCustomModalEscapeHandler();
   const container = getModalContainer();
   container.innerHTML = '';
 
@@ -438,11 +451,22 @@ export function showModal(content: HTMLElement, options: ModalOptions = {}): { c
   container.appendChild(modal);
   showContainer();
 
+  const close = () => {
+    hideContainer();
+    options.onClose?.();
+  };
+
+  if (options.closable !== false) {
+    customModalEscapeHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        close();
+      }
+    };
+    document.addEventListener('keydown', customModalEscapeHandler);
+  }
+
   return {
-    close: () => {
-      hideContainer();
-      options.onClose?.();
-    },
+    close,
   };
 }
 
@@ -450,6 +474,7 @@ export function showModal(content: HTMLElement, options: ModalOptions = {}): { c
  * Close any open modal
  */
 export function closeModal(): void {
+  cleanupCustomModalEscapeHandler();
   hideContainer();
 }
 
@@ -471,6 +496,7 @@ export function showFileReloadPrompt(
   options: FileReloadOptions = {}
 ): Promise<File | null> {
   return new Promise((resolve) => {
+    cleanupCustomModalEscapeHandler();
     const {
       title = 'Reload File',
       accept = 'image/*,video/*',

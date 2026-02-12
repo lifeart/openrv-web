@@ -11,9 +11,7 @@
  * - Source selector (manual/ocio)
  */
 
-import { parseLUT } from '../../color/LUTFormatDetect';
-import { isLUT3D } from '../../color/LUTLoader';
-import type { LUT } from '../../color/LUTLoader';
+import { parseLUT, isLUT3D, type LUT } from '../../color/ColorProcessingFacade';
 import { showAlert } from './shared/Modal';
 
 export interface LUTStageControlConfig {

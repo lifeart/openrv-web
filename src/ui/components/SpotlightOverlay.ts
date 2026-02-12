@@ -10,8 +10,9 @@
  * - Handles to resize
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import { setupHiDPICanvas } from '../../utils/HiDPICanvas';
+import type { EventMap } from '../../utils/EventEmitter';
+import { CanvasOverlay } from './CanvasOverlay';
+import { clamp } from '../../utils/math';
 
 export interface SpotlightEvents extends EventMap {
   stateChanged: SpotlightState;
@@ -45,16 +46,8 @@ export const DEFAULT_SPOTLIGHT_STATE: SpotlightState = {
   feather: 0.05,
 };
 
-export class SpotlightOverlay extends EventEmitter<SpotlightEvents> {
-  private canvas: HTMLCanvasElement;
-  private ctx: CanvasRenderingContext2D;
+export class SpotlightOverlay extends CanvasOverlay<SpotlightEvents> {
   private state: SpotlightState = { ...DEFAULT_SPOTLIGHT_STATE };
-  private displayWidth = 0;
-  private displayHeight = 0;
-  private offsetX = 0;
-  private offsetY = 0;
-  private canvasWidth = 0;
-  private canvasHeight = 0;
 
   // Interaction state
   private isDragging = false;
@@ -66,22 +59,7 @@ export class SpotlightOverlay extends EventEmitter<SpotlightEvents> {
   private resizeHandle: 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw' | null = null;
 
   constructor() {
-    super();
-
-    this.canvas = document.createElement('canvas');
-    this.canvas.className = 'spotlight-overlay';
-    this.canvas.dataset.testid = 'spotlight-overlay';
-    this.canvas.style.cssText = `
-      position: absolute;
-      top: 0;
-      left: 0;
-      pointer-events: none;
-      z-index: 44;
-    `;
-
-    const ctx = this.canvas.getContext('2d');
-    if (!ctx) throw new Error('Failed to get 2D context for spotlight overlay');
-    this.ctx = ctx;
+    super('spotlight-overlay', 'spotlight-overlay', 44);
 
     this.bindEvents();
   }
@@ -187,8 +165,8 @@ export class SpotlightOverlay extends EventEmitter<SpotlightEvents> {
       const dy = y - this.dragStartY;
 
       this.setState({
-        x: Math.max(0, Math.min(1, this.initialX + dx)),
-        y: Math.max(0, Math.min(1, this.initialY + dy)),
+        x: clamp(this.initialX + dx, 0, 1),
+        y: clamp(this.initialY + dy, 0, 1),
       });
     } else if (this.isResizing && this.resizeHandle) {
       e.preventDefault();
@@ -300,41 +278,6 @@ export class SpotlightOverlay extends EventEmitter<SpotlightEvents> {
   }
 
   /**
-   * Update canvas size and position to match viewer
-   * canvasWidth/canvasHeight are logical (CSS) dimensions
-   */
-  setViewerDimensions(
-    canvasWidth: number,
-    canvasHeight: number,
-    offsetX: number,
-    offsetY: number,
-    displayWidth: number,
-    displayHeight: number
-  ): void {
-    // Store logical dimensions
-    this.canvasWidth = canvasWidth;
-    this.canvasHeight = canvasHeight;
-    this.displayWidth = displayWidth;
-    this.displayHeight = displayHeight;
-    this.offsetX = offsetX;
-    this.offsetY = offsetY;
-
-    // Setup hi-DPI canvas with logical dimensions
-    // Must set CSS style so canvas displays at correct logical size
-    setupHiDPICanvas({
-      canvas: this.canvas,
-      ctx: this.ctx,
-      width: canvasWidth,
-      height: canvasHeight,
-      setStyle: true,
-    });
-
-    if (this.state.enabled) {
-      this.render();
-    }
-  }
-
-  /**
    * Set the complete state
    */
   setState(state: Partial<SpotlightState>): void {
@@ -387,8 +330,8 @@ export class SpotlightOverlay extends EventEmitter<SpotlightEvents> {
    */
   setPosition(x: number, y: number): void {
     this.setState({
-      x: Math.max(0, Math.min(1, x)),
-      y: Math.max(0, Math.min(1, y)),
+      x: clamp(x, 0, 1),
+      y: clamp(y, 0, 1),
     });
   }
 
@@ -397,8 +340,8 @@ export class SpotlightOverlay extends EventEmitter<SpotlightEvents> {
    */
   setSize(width: number, height?: number): void {
     this.setState({
-      width: Math.max(0.01, Math.min(1, width)),
-      height: Math.max(0.01, Math.min(1, height ?? width)),
+      width: clamp(width, 0.01, 1),
+      height: clamp(height ?? width, 0.01, 1),
     });
   }
 
@@ -406,14 +349,14 @@ export class SpotlightOverlay extends EventEmitter<SpotlightEvents> {
    * Set dim amount (0-1)
    */
   setDimAmount(amount: number): void {
-    this.setState({ dimAmount: Math.max(0, Math.min(1, amount)) });
+    this.setState({ dimAmount: clamp(amount, 0, 1) });
   }
 
   /**
    * Set feather amount (0-1)
    */
   setFeather(amount: number): void {
-    this.setState({ feather: Math.max(0, Math.min(0.5, amount)) });
+    this.setState({ feather: clamp(amount, 0, 0.5) });
   }
 
   /**
@@ -597,21 +540,15 @@ export class SpotlightOverlay extends EventEmitter<SpotlightEvents> {
   }
 
   /**
-   * Get the canvas element
-   */
-  getElement(): HTMLCanvasElement {
-    return this.canvas;
-  }
-
-  /**
    * Dispose
    */
-  dispose(): void {
+  override dispose(): void {
     this.canvas.removeEventListener('pointerdown', this.onPointerDown);
     this.canvas.removeEventListener('pointermove', this.onPointerMove);
     this.canvas.removeEventListener('pointerup', this.onPointerUp);
     this.canvas.removeEventListener('pointercancel', this.onPointerUp);
     window.removeEventListener('pointermove', this.onPointerMove);
     window.removeEventListener('pointerup', this.onPointerUp);
+    super.dispose();
   }
 }

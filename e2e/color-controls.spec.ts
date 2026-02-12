@@ -291,7 +291,7 @@ test.describe('Color Controls', () => {
       await page.waitForTimeout(200);
 
       // Look for LUT load button in panel
-      const lutButton = page.locator('.color-controls-panel button:has-text("Load .cube")');
+      const lutButton = page.locator('.color-controls-panel button:has-text("Load LUT")');
       await expect(lutButton).toBeVisible();
     });
 

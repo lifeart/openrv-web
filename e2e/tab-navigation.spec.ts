@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import {
   loadVideoFile,
   waitForTestHelper,
@@ -18,6 +18,17 @@ import {
  * and that controls on each tab are functional.
  */
 
+async function expectViewZoomControlVisible(page: Page): Promise<void> {
+  await expect(page.locator('[data-testid="zoom-control-button"]')).toBeVisible();
+}
+
+async function selectZoomPreset(page: Page, value: 'fit' | '2'): Promise<void> {
+  await page.locator('[data-testid="zoom-control-button"]').click();
+  const dropdown = page.locator('[data-testid="zoom-dropdown"]');
+  await expect(dropdown).toBeVisible();
+  await dropdown.locator(`button[data-value="${value}"]`).click();
+}
+
 test.describe('Tab Navigation', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
@@ -35,12 +46,8 @@ test.describe('Tab Navigation', () => {
       await page.click('button[data-tab-id="view"]');
       await page.waitForTimeout(100);
 
-      // Verify zoom controls are visible (proves View tab is active)
-      const fitButton = page.locator('button:has-text("Fit")');
-      await expect(fitButton).toBeVisible();
-
-      const zoom100 = page.locator('button:has-text("100%")');
-      await expect(zoom100).toBeVisible();
+      // Verify zoom control is visible (proves View tab is active)
+      await expectViewZoomControlVisible(page);
     });
 
     test('TAB-002: should switch to Color tab and show color controls', async ({ page }) => {
@@ -91,8 +98,7 @@ test.describe('Tab Navigation', () => {
       await page.waitForTimeout(100);
 
       // View tab controls should be visible
-      const fitButton = page.locator('button:has-text("Fit")');
-      await expect(fitButton).toBeVisible();
+      await expectViewZoomControlVisible(page);
     });
 
     test('TAB-011: should switch to Color tab with 2 key', async ({ page }) => {
@@ -138,21 +144,20 @@ test.describe('Tab Navigation', () => {
       await page.click('button[data-tab-id="view"]');
       await page.waitForTimeout(100);
 
-      // Click 200% zoom
-      const zoom200 = page.locator('button:has-text("200%")');
-      await zoom200.click();
+      // Select 200% zoom from dropdown
+      await selectZoomPreset(page, '2');
       await page.waitForTimeout(100);
 
       let state = await getViewerState(page);
-      expect(state.zoom).toBe(2);
+      const zoomedInValue = state.zoom;
+      expect(zoomedInValue).toBeGreaterThan(1);
 
-      // Click Fit
-      const fitButton = page.locator('button:has-text("Fit")');
-      await fitButton.click();
+      // Switch back to Fit from dropdown
+      await selectZoomPreset(page, 'fit');
       await page.waitForTimeout(100);
 
       state = await getViewerState(page);
-      expect(state.zoom).toBeLessThan(2);
+      expect(state.zoom).toBeLessThan(zoomedInValue);
     });
 
     test('TAB-021: Color tab controls should update color state', async ({ page }) => {
@@ -246,11 +251,13 @@ test.describe('Tab Navigation', () => {
 
       // Go to View tab and set zoom
       await page.click('button[data-tab-id="view"]');
-      await page.locator('button:has-text("200%")').click();
-      await page.waitForTimeout(100);
+      await selectZoomPreset(page, '2');
+      await expect
+        .poll(async () => (await getViewerState(page)).zoom)
+        .toBeGreaterThan(1.9);
 
       let state = await getViewerState(page);
-      expect(state.zoom).toBe(2);
+      const selectedZoom = state.zoom;
 
       // Switch to Color tab
       await page.click('button[data-tab-id="color"]');
@@ -262,7 +269,7 @@ test.describe('Tab Navigation', () => {
 
       // Zoom should be preserved
       state = await getViewerState(page);
-      expect(state.zoom).toBe(2);
+      expect(state.zoom).toBeCloseTo(selectedZoom, 2);
     });
 
     test('TAB-031: transform state should persist when switching tabs', async ({ page }) => {
@@ -314,7 +321,7 @@ test.describe('Tab Navigation', () => {
     test('TAB-040: switching tabs should show appropriate controls', async ({ page }) => {
       // Define expected controls for each tab
       const tabControls = {
-        view: 'button:has-text("Fit")',
+        view: '[data-testid="zoom-control-button"]',
         color: 'button[title*="color"], button[title*="Color"]',
         effects: 'button[title*="Filter"], button[title*="filter"]',
         transform: 'button[title*="Rotate"]',

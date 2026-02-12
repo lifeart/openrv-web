@@ -21,6 +21,7 @@ import {
   applyEyeTransform,
 } from './StereoEyeTransform';
 import { applyAlignmentOverlay } from './StereoAlignOverlay';
+import { luminanceRec709 } from '../color/PixelMath';
 
 // Re-export types from StereoEyeTransform for convenience
 export type {
@@ -39,29 +40,12 @@ export {
 } from './StereoEyeTransform';
 export { applyAlignmentOverlay } from './StereoAlignOverlay';
 
-export type StereoMode =
-  | 'off'
-  | 'side-by-side'
-  | 'over-under'
-  | 'mirror'
-  | 'anaglyph'
-  | 'anaglyph-luminance'
-  | 'checkerboard'
-  | 'scanline';
+// Re-export types and defaults from centralized types for backward compatibility
+export type { StereoMode, StereoInputFormat, StereoState } from '../core/types/stereo';
+export { DEFAULT_STEREO_STATE } from '../core/types/stereo';
 
-export type StereoInputFormat = 'side-by-side' | 'over-under' | 'separate';
-
-export interface StereoState {
-  mode: StereoMode;
-  eyeSwap: boolean;
-  offset: number; // Relative eye offset as percentage of width (-50 to 50)
-}
-
-export const DEFAULT_STEREO_STATE: StereoState = {
-  mode: 'off',
-  eyeSwap: false,
-  offset: 0,
-};
+// Import for local use
+import type { StereoState, StereoMode, StereoInputFormat } from '../core/types/stereo';
 
 /**
  * Apply stereo rendering to source image data
@@ -414,8 +398,8 @@ function renderAnaglyph(left: ImageData, right: ImageData, useLuminance: boolean
       if (useLuminance) {
         // Luminance anaglyph - convert to grayscale first
         // Using Rec.709 luminance coefficients
-        const leftLuma = Math.round(0.2126 * leftR + 0.7152 * leftG + 0.0722 * leftB);
-        const rightLuma = Math.round(0.2126 * rightR + 0.7152 * rightG + 0.0722 * rightB);
+        const leftLuma = Math.round(luminanceRec709(leftR, leftG, leftB));
+        const rightLuma = Math.round(luminanceRec709(rightR, rightG, rightB));
 
         result.data[idx] = leftLuma;     // Red channel from left eye luminance
         result.data[idx + 1] = rightLuma; // Green channel from right eye luminance

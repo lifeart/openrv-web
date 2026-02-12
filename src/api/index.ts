@@ -27,6 +27,7 @@
 
 export { OpenRVAPI } from './OpenRVAPI';
 export type { OpenRVAPIConfig } from './OpenRVAPI';
+export type { ViewerProvider, ColorAdjustmentProvider, CDLProvider } from './types';
 
 export { PlaybackAPI } from './PlaybackAPI';
 export { MediaAPI } from './MediaAPI';
@@ -44,6 +45,22 @@ export type { OpenRVEventName, OpenRVEventData } from './EventsAPI';
 // Type augmentation for window.openrv
 declare global {
   interface Window {
+    /**
+     * OpenRV Web public scripting API.
+     *
+     * Provides programmatic access to playback, media, audio, loop, view,
+     * color, markers, and event subscription from the browser console or
+     * external scripts.
+     *
+     * @example
+     * ```js
+     * window.openrv.version;          // "1.0.0"
+     * window.openrv.isReady();        // true
+     * window.openrv.playback.play();
+     * window.openrv.view.setZoom(2);
+     * window.openrv.events.on('frameChange', (d) => console.log(d.frame));
+     * ```
+     */
     openrv?: import('./OpenRVAPI').OpenRVAPI;
   }
 }

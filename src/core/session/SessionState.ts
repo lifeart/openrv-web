@@ -5,18 +5,18 @@
  * and loading OpenRV Web projects (.orvproject files).
  */
 
-import type { ColorAdjustments } from '../../ui/components/ColorControls';
+import type { ColorAdjustments } from '../../core/types/color';
+import type { FilterSettings } from '../../core/types/filter';
+import type { Transform2D, CropState } from '../../core/types/transform';
+import type { BackgroundPatternState } from '../../core/types/background';
 import type { CDLValues } from '../../color/CDL';
-import type { FilterSettings } from '../../ui/components/FilterControl';
-import type { Transform2D } from '../../ui/components/TransformControl';
-import type { CropState } from '../../ui/components/CropControl';
 import type { LensDistortionParams } from '../../transform/LensDistortion';
-import type { WipeState } from '../../ui/components/WipeControl';
+import type { WipeState } from '../types/wipe';
 import type { StackLayer } from '../../ui/components/StackControl';
-import type { PARState } from '../../utils/PixelAspectRatio';
-import type { BackgroundPatternState } from '../../ui/components/BackgroundPatternControl';
+import type { PARState } from '../../utils/media/PixelAspectRatio';
 import type { Annotation, PaintEffects } from '../../paint/types';
-import type { LoopMode, MediaType, Marker } from './Session';
+import type { LoopMode, MediaType } from '../types/session';
+import type { Marker } from './Session';
 import type { PlaylistState } from './PlaylistManager';
 
 /** Schema version for migration support */

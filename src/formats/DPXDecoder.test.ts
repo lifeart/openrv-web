@@ -398,6 +398,175 @@ describe('DPXDecoder', () => {
     });
   });
 
+  describe('decodeDPX - error handling', () => {
+    it('should throw for unsupported bit depth', async () => {
+      // Create a DPX with bit depth 14 (unsupported)
+      const buffer = createTestDPX({ bitDepth: 10 });
+      const view = new DataView(buffer);
+      // Overwrite bit depth at offset 803 to unsupported value
+      view.setUint8(803, 14);
+
+      await expect(decodeDPX(buffer)).rejects.toThrow('Unsupported DPX bit depth: 14');
+    });
+
+    it('should throw when data offset exceeds file size', async () => {
+      const buffer = createTestDPX({ width: 2, height: 2, bigEndian: true });
+      const view = new DataView(buffer);
+      // Set data offset to beyond file size
+      view.setUint32(4, buffer.byteLength + 1000, false);
+
+      await expect(decodeDPX(buffer)).rejects.toThrow(/data offset.*exceeds file size/);
+    });
+
+    it('should throw for zero-width image', async () => {
+      const buffer = createTestDPX({ width: 2, height: 2, bigEndian: true });
+      const view = new DataView(buffer);
+      // Set width to 0
+      view.setUint32(772, 0, false);
+
+      await expect(decodeDPX(buffer)).rejects.toThrow(/Invalid DPX dimensions/);
+    });
+
+    it('should throw for zero-height image', async () => {
+      const buffer = createTestDPX({ width: 2, height: 2, bigEndian: true });
+      const view = new DataView(buffer);
+      // Set height to 0
+      view.setUint32(776, 0, false);
+
+      await expect(decodeDPX(buffer)).rejects.toThrow(/Invalid DPX dimensions/);
+    });
+
+    it('should throw for extremely large dimensions', async () => {
+      const buffer = createTestDPX({ width: 2, height: 2, bigEndian: true });
+      const view = new DataView(buffer);
+      // Set dimensions to exceed max dimension limit (65536)
+      view.setUint32(772, 100000, false);
+      view.setUint32(776, 100000, false);
+
+      await expect(decodeDPX(buffer)).rejects.toThrow(/exceed maximum/);
+    });
+  });
+
+  describe('decodeDPX - pixel value verification', () => {
+    it('should correctly decode 8-bit pixel values', async () => {
+      // Create a 1x1 8-bit DPX with known pixel data
+      const buffer = createTestDPX({ width: 1, height: 1, bitDepth: 8, channels: 3, bigEndian: true });
+      // Overwrite pixel data with known values: R=128, G=0, B=255
+      const pixelStart = 2048;
+      new Uint8Array(buffer)[pixelStart] = 128;
+      new Uint8Array(buffer)[pixelStart + 1] = 0;
+      new Uint8Array(buffer)[pixelStart + 2] = 255;
+
+      const result = await decodeDPX(buffer);
+
+      expect(result.data[0]).toBeCloseTo(128 / 255, 4); // R
+      expect(result.data[1]).toBeCloseTo(0 / 255, 4);   // G
+      expect(result.data[2]).toBeCloseTo(255 / 255, 4);  // B
+      expect(result.data[3]).toBe(1.0);                   // A
+    });
+
+    it('should correctly decode 16-bit pixel values', async () => {
+      // Create a 1x1 16-bit DPX with known values
+      const buffer = createTestDPX({ width: 1, height: 1, bitDepth: 16, channels: 3, bigEndian: true });
+      const pixelView = new DataView(buffer, 2048);
+      // R=32768, G=0, B=65535
+      pixelView.setUint16(0, 32768, false);
+      pixelView.setUint16(2, 0, false);
+      pixelView.setUint16(4, 65535, false);
+
+      const result = await decodeDPX(buffer);
+
+      expect(result.data[0]).toBeCloseTo(32768 / 65535, 4); // R
+      expect(result.data[1]).toBeCloseTo(0 / 65535, 4);     // G
+      expect(result.data[2]).toBeCloseTo(65535 / 65535, 4);  // B
+    });
+
+    it('should correctly decode 12-bit pixel values', async () => {
+      // Create a 1x1 12-bit DPX with known values
+      const buffer = createTestDPX({ width: 1, height: 1, bitDepth: 12, channels: 3, bigEndian: true });
+      const pixelView = new DataView(buffer, 2048);
+      // 12-bit value 2048 stored in upper 12 bits of 16-bit: 2048 << 4 = 32768
+      pixelView.setUint16(0, 2048 << 4, false); // R = 2048/4095
+      pixelView.setUint16(2, 0, false);          // G = 0/4095
+      pixelView.setUint16(4, 4095 << 4, false);  // B = 4095/4095
+
+      const result = await decodeDPX(buffer);
+
+      expect(result.data[0]).toBeCloseTo(2048 / 4095, 4); // R
+      expect(result.data[1]).toBeCloseTo(0 / 4095, 4);    // G
+      expect(result.data[2]).toBeCloseTo(4095 / 4095, 4);  // B
+    });
+
+    it('should handle 1x1 pixel image', async () => {
+      const buffer = createTestDPX({ width: 1, height: 1 });
+      const result = await decodeDPX(buffer);
+
+      expect(result.width).toBe(1);
+      expect(result.height).toBe(1);
+      expect(result.data.length).toBe(4); // RGBA
+    });
+
+    it('should not apply log-to-linear when transfer is linear even with applyLogToLinear flag', async () => {
+      const buffer = createTestDPX({ transfer: 0, bitDepth: 10 });
+      const resultNoFlag = await decodeDPX(buffer);
+      const resultWithFlag = await decodeDPX(buffer, { applyLogToLinear: true });
+
+      // Both should be linear and produce same values since transfer is already linear
+      expect(resultNoFlag.colorSpace).toBe('linear');
+      expect(resultWithFlag.colorSpace).toBe('linear');
+      // Values should be identical since applyLogToLinear is a no-op on linear data
+      for (let i = 0; i < resultNoFlag.data.length; i++) {
+        expect(resultNoFlag.data[i]).toBe(resultWithFlag.data[i]);
+      }
+    });
+
+    it('should report originalChannels in metadata', async () => {
+      const buffer3 = createTestDPX({ channels: 3 });
+      const result3 = await decodeDPX(buffer3);
+      expect(result3.metadata.originalChannels).toBe(3);
+
+      const buffer4 = createTestDPX({ channels: 4 });
+      const result4 = await decodeDPX(buffer4);
+      expect(result4.metadata.originalChannels).toBe(4);
+    });
+
+    it('should produce Float32Array output', async () => {
+      const buffer = createTestDPX();
+      const result = await decodeDPX(buffer);
+      expect(result.data).toBeInstanceOf(Float32Array);
+    });
+  });
+
+  describe('getDPXInfo - ABGR descriptor', () => {
+    it('should detect ABGR descriptor as 4 channels', () => {
+      // Create a DPX with default channels=3 and then override descriptor to ABGR (52)
+      const buffer = createTestDPX({ channels: 4, bigEndian: true });
+      const view = new DataView(buffer);
+      view.setUint8(800, 52); // ABGR descriptor
+
+      const info = getDPXInfo(buffer);
+      expect(info).not.toBeNull();
+      expect(info!.channels).toBe(4);
+    });
+
+    it('should default to 3 channels for unknown descriptor', () => {
+      const buffer = createTestDPX({ channels: 3, bigEndian: true });
+      const view = new DataView(buffer);
+      view.setUint8(800, 100); // Unknown descriptor
+
+      const info = getDPXInfo(buffer);
+      expect(info).not.toBeNull();
+      expect(info!.channels).toBe(3);
+    });
+
+    it('should report correct data offset', () => {
+      const buffer = createTestDPX({ dataOffset: 4096 });
+      const info = getDPXInfo(buffer);
+      expect(info).not.toBeNull();
+      expect(info!.dataOffset).toBe(4096);
+    });
+  });
+
   describe('dpxLogToLinear (re-exported)', () => {
     it('should be accessible from DPXDecoder module', () => {
       expect(typeof dpxLogToLinear).toBe('function');

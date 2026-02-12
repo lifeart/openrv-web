@@ -7,7 +7,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { CurvesControl } from './CurvesControl';
-import { ColorCurvesData, createDefaultCurve, CURVE_PRESETS } from '../../color/ColorCurves';
+import { type ColorCurvesData, createDefaultCurve, CURVE_PRESETS } from '../../color/ColorProcessingFacade';
 
 // Mock DraggableContainer
 vi.mock('./shared/DraggableContainer', () => ({

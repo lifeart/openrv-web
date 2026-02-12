@@ -4,12 +4,11 @@
  */
 
 import { Session } from '../../core/session/Session';
-import { PrerenderBufferManager } from '../../utils/PrerenderBufferManager';
-import { AllEffectsState } from '../../utils/EffectProcessor';
+import { PrerenderBufferManager } from '../../utils/effects/PrerenderBufferManager';
+import { AllEffectsState } from '../../utils/effects/EffectProcessor';
 import { ColorAdjustments } from './ColorControls';
 import { FilterSettings } from './FilterControl';
-import { CDLValues } from '../../color/CDL';
-import { ColorCurvesData } from '../../color/ColorCurves';
+import { type CDLValues, type ColorCurvesData } from '../../color/ColorProcessingFacade';
 import { ChannelMode } from './ChannelSelect';
 import { ColorWheels } from './ColorWheels';
 import { HSLQualifier } from './HSLQualifier';
@@ -21,7 +20,7 @@ import { ToneMappingState } from './ToneMappingControl';
  */
 export function createFrameLoader(
   session: Session
-): (frame: number) => HTMLCanvasElement | OffscreenCanvas | HTMLImageElement | null {
+): (frame: number) => HTMLCanvasElement | OffscreenCanvas | HTMLImageElement | ImageBitmap | null {
   return (frame: number) => {
     try {
       const source = session.currentSource;

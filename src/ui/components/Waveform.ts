@@ -13,14 +13,16 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { LUMINANCE_COEFFICIENTS } from './ChannelSelect';
 import { getSharedScopesProcessor, WaveformMode as GPUWaveformMode } from '../../scopes/WebGLScopes';
+import { clamp, floatRGBAToImageData } from '../../utils/math';
+import { luminanceRec709 } from '../../color/ColorProcessingFacade';
 import {
   createDraggableContainer,
   createControlButton,
   DraggableContainer,
 } from './shared/DraggableContainer';
-import { setupHiDPICanvas } from '../../utils/HiDPICanvas';
-import { getThemeManager } from '../../utils/ThemeManager';
-import { getCSSColor } from '../../utils/getCSSColor';
+import { setupHiDPICanvas } from '../../utils/ui/HiDPICanvas';
+import { getThemeManager } from '../../utils/ui/ThemeManager';
+import { getCSSColor } from '../../utils/ui/getCSSColor';
 
 export type WaveformMode = 'luma' | 'rgb' | 'parade' | 'ycbcr';
 
@@ -254,6 +256,33 @@ export class Waveform extends EventEmitter<WaveformEvents> {
   }
 
   /**
+   * Update waveform from HDR float data.
+   * Uploads the float data as an RGBA16F texture to the GPU scopes processor,
+   * preserving values > 1.0 that would be clipped by the UNSIGNED_BYTE path.
+   *
+   * @param floatData RGBA Float32Array (top-to-bottom row order)
+   * @param width Image width
+   * @param height Image height
+   */
+  updateFloat(floatData: Float32Array, width: number, height: number): void {
+    const gpuProcessor = getSharedScopesProcessor();
+    if (gpuProcessor && gpuProcessor.isReady()) {
+      gpuProcessor.setPlaybackMode(this.isPlaybackMode);
+      gpuProcessor.setFloatImage(floatData, width, height);
+      // Draw background and grid first (CPU)
+      this.ctx.fillStyle = getCSSColor('--bg-primary', '#111');
+      this.ctx.fillRect(0, 0, WAVEFORM_WIDTH, WAVEFORM_HEIGHT);
+      this.drawGrid();
+      // Then GPU waveform overlay
+      gpuProcessor.renderWaveform(this.canvas, this.mode as GPUWaveformMode);
+      return;
+    }
+
+    // Fallback: convert float to ImageData for CPU rendering
+    this.draw(floatRGBAToImageData(floatData, width, height));
+  }
+
+  /**
    * Set playback mode for performance optimization.
    * During playback, uses aggressive subsampling.
    * When paused, uses full quality rendering.
@@ -478,22 +507,22 @@ export class Waveform extends EventEmitter<WaveformEvents> {
           const b = data[i + 2]! / 255;
 
           // BT.709 YCbCr conversion
-          const y  =  0.2126 * r + 0.7152 * g + 0.0722 * b;
+          const y  = luminanceRec709(r, g, b);
           const cb = -0.1146 * r - 0.3854 * g + 0.5000 * b + 0.5;
           const cr =  0.5000 * r - 0.4542 * g - 0.0458 * b + 0.5;
 
           // Y channel (first column - white)
-          const yPos = canvasHeight - 1 - Math.floor(Math.max(0, Math.min(1, y)) * (canvasHeight - 1));
+          const yPos = canvasHeight - 1 - Math.floor(clamp(y, 0, 1) * (canvasHeight - 1));
           ctx.fillStyle = yColor;
           ctx.fillRect(x, yPos, 1, 1);
 
           // Cb channel (second column - blue)
-          const cbPos = canvasHeight - 1 - Math.floor(Math.max(0, Math.min(1, cb)) * (canvasHeight - 1));
+          const cbPos = canvasHeight - 1 - Math.floor(clamp(cb, 0, 1) * (canvasHeight - 1));
           ctx.fillStyle = cbColor;
           ctx.fillRect(sectionWidth + x, cbPos, 1, 1);
 
           // Cr channel (third column - red)
-          const crPos = canvasHeight - 1 - Math.floor(Math.max(0, Math.min(1, cr)) * (canvasHeight - 1));
+          const crPos = canvasHeight - 1 - Math.floor(clamp(cr, 0, 1) * (canvasHeight - 1));
           ctx.fillStyle = crColor;
           ctx.fillRect(sectionWidth * 2 + x, crPos, 1, 1);
         }
@@ -621,7 +650,7 @@ export class Waveform extends EventEmitter<WaveformEvents> {
    * Set trace intensity for RGB overlay
    */
   setIntensity(intensity: number): void {
-    this.intensity = Math.max(MIN_INTENSITY, Math.min(MAX_INTENSITY, intensity));
+    this.intensity = clamp(intensity, MIN_INTENSITY, MAX_INTENSITY);
 
     // Sync the slider if it exists
     if (this.intensitySlider) {

@@ -19,6 +19,7 @@
 import { IPImage, ImageMetadata } from '../core/image/Image';
 import { decompressPIZ } from './EXRPIZCodec';
 import { validateImageDimensions } from './shared';
+import { DecoderError } from '../core/errors';
 
 // EXR magic number
 const EXR_MAGIC = 0x01312f76;
@@ -163,7 +164,7 @@ class EXRDataReader {
 
   set position(value: number) {
     if (value < 0 || value > this.view.byteLength) {
-      throw new Error(`Invalid position: ${value} (buffer size: ${this.view.byteLength})`);
+      throw new DecoderError('EXR', `Invalid position: ${value} (buffer size: ${this.view.byteLength})`);
     }
     this.pos = value;
   }
@@ -178,7 +179,7 @@ class EXRDataReader {
 
   private checkBounds(bytesNeeded: number): void {
     if (this.pos + bytesNeeded > this.view.byteLength) {
-      throw new Error(
+      throw new DecoderError('EXR',
         `Unexpected end of EXR data: need ${bytesNeeded} bytes at position ${this.pos}, but only ${this.remaining} bytes remaining`
       );
     }
@@ -235,12 +236,12 @@ class EXRDataReader {
       this.pos++;
       length++;
       if (length > MAX_STRING_LENGTH) {
-        throw new Error(`String exceeds maximum length of ${MAX_STRING_LENGTH} bytes`);
+        throw new DecoderError('EXR', `String exceeds maximum length of ${MAX_STRING_LENGTH} bytes`);
       }
     }
 
     if (this.pos >= this.view.byteLength) {
-      throw new Error('Unterminated string in EXR header');
+      throw new DecoderError('EXR', 'Unterminated string in EXR header');
     }
 
     const bytes = new Uint8Array(this.view.buffer, start, this.pos - start);
@@ -250,7 +251,7 @@ class EXRDataReader {
 
   readBytes(length: number): Uint8Array {
     if (length < 0) {
-      throw new Error(`Invalid byte length: ${length}`);
+      throw new DecoderError('EXR', `Invalid byte length: ${length}`);
     }
     this.checkBounds(length);
     const bytes = new Uint8Array(this.view.buffer, this.pos, length);
@@ -260,7 +261,7 @@ class EXRDataReader {
 
   skip(bytes: number): void {
     if (bytes < 0) {
-      throw new Error(`Invalid skip size: ${bytes}`);
+      throw new DecoderError('EXR', `Invalid skip size: ${bytes}`);
     }
     this.checkBounds(bytes);
     this.pos += bytes;
@@ -311,7 +312,7 @@ function parseHeader(reader: EXRDataReader): EXRHeader {
   // Read and verify magic number
   const magic = reader.readUint32();
   if (magic !== EXR_MAGIC) {
-    throw new Error('Invalid EXR file: wrong magic number');
+    throw new DecoderError('EXR', 'Invalid EXR file: wrong magic number');
   }
 
   // Read version field
@@ -323,7 +324,7 @@ function parseHeader(reader: EXRDataReader): EXRHeader {
   const multiPart = (versionField & 0x1000) !== 0;
 
   if (version !== 2) {
-    throw new Error(`Unsupported EXR version: ${version}`);
+    throw new DecoderError('EXR', `Unsupported EXR version: ${version}`);
   }
 
   const header: EXRHeader = {
@@ -358,10 +359,10 @@ function parseHeader(reader: EXRDataReader): EXRHeader {
 
     // Validate attribute size
     if (attrSize < 0) {
-      throw new Error(`Invalid negative attribute size for '${attrName}': ${attrSize}`);
+      throw new DecoderError('EXR', `Invalid negative attribute size for '${attrName}': ${attrSize}`);
     }
     if (attrSize > MAX_ATTRIBUTE_SIZE) {
-      throw new Error(
+      throw new DecoderError('EXR',
         `Attribute '${attrName}' size ${attrSize} exceeds maximum of ${MAX_ATTRIBUTE_SIZE}`
       );
     }
@@ -418,13 +419,13 @@ function parseHeader(reader: EXRDataReader): EXRHeader {
 
   // Validate required attributes are present
   if (!hasChannels) {
-    throw new Error('Missing required EXR attribute: channels');
+    throw new DecoderError('EXR', 'Missing required EXR attribute: channels');
   }
   if (!hasDataWindow) {
-    throw new Error('Missing required EXR attribute: dataWindow');
+    throw new DecoderError('EXR', 'Missing required EXR attribute: dataWindow');
   }
   if (!hasDisplayWindow) {
-    throw new Error('Missing required EXR attribute: displayWindow');
+    throw new DecoderError('EXR', 'Missing required EXR attribute: displayWindow');
   }
 
   // Validate dataWindow dimensions
@@ -433,14 +434,14 @@ function parseHeader(reader: EXRDataReader): EXRHeader {
   const height = dw.yMax - dw.yMin + 1;
 
   if (width <= 0 || height <= 0) {
-    throw new Error(`Invalid EXR dimensions: ${width}x${height} (dataWindow: ${dw.xMin},${dw.yMin} to ${dw.xMax},${dw.yMax})`);
+    throw new DecoderError('EXR', `Invalid EXR dimensions: ${width}x${height} (dataWindow: ${dw.xMin},${dw.yMin} to ${dw.xMax},${dw.yMax})`);
   }
 
   validateImageDimensions(width, height, 'EXR');
 
   // Validate channels
   if (header.channels.length === 0) {
-    throw new Error('EXR file has no channels');
+    throw new DecoderError('EXR', 'EXR file has no channels');
   }
 
   // NOTE: Do NOT sort header.channels - they must remain in file order
@@ -471,10 +472,10 @@ function parseChannels(reader: EXRDataReader, size: number): EXRChannel[] {
     // Validate pixel type - only HALF and FLOAT are supported
     // UINT (type 0) is defined in EXR spec but not supported by this decoder
     if (pixelType === EXRPixelType.UINT) {
-      throw new Error(`Unsupported pixel type UINT for channel '${name}'. Only HALF and FLOAT are supported.`);
+      throw new DecoderError('EXR', `Unsupported pixel type UINT for channel '${name}'. Only HALF and FLOAT are supported.`);
     }
     if (pixelType !== EXRPixelType.HALF && pixelType !== EXRPixelType.FLOAT) {
-      throw new Error(`Invalid pixel type ${pixelType} for channel '${name}'`);
+      throw new DecoderError('EXR', `Invalid pixel type ${pixelType} for channel '${name}'`);
     }
 
     const pLinear = reader.readUint8();
@@ -484,7 +485,7 @@ function parseChannels(reader: EXRDataReader, size: number): EXRChannel[] {
 
     // Validate sampling (must be positive)
     if (xSampling <= 0 || ySampling <= 0) {
-      throw new Error(
+      throw new DecoderError('EXR',
         `Invalid sampling for channel '${name}': xSampling=${xSampling}, ySampling=${ySampling}`
       );
     }
@@ -532,7 +533,7 @@ async function decompressData(
 
     case EXRCompression.PIZ: {
       if (!pizContext) {
-        throw new Error('PIZ decompression requires channel context information');
+        throw new DecoderError('EXR', 'PIZ decompression requires channel context information');
       }
       return decompressPIZ(
         compressedData,
@@ -548,7 +549,7 @@ async function decompressData(
       return decompressRLE(compressedData, uncompressedSize);
 
     default:
-      throw new Error(`Unsupported EXR compression: ${compression}`);
+      throw new DecoderError('EXR', `Unsupported EXR compression: ${compression}`);
   }
 }
 
@@ -598,7 +599,7 @@ async function decompressZlib(
 
   // Fallback: simple deflate implementation for small files
   // For production, you'd want a proper zlib library
-  throw new Error('ZIP decompression requires DecompressionStream support');
+  throw new DecoderError('EXR', 'ZIP decompression requires DecompressionStream support');
 }
 
 /**
@@ -711,7 +712,7 @@ async function decodeScanlineImage(
   }
 
   if (outputMapping.size === 0) {
-    throw new Error('No supported channels found in EXR file');
+    throw new DecoderError('EXR', 'No supported channels found in EXR file');
   }
 
   // Always output 4 channels (RGBA)
@@ -847,7 +848,7 @@ export async function decodeEXR(
 ): Promise<EXRDecodeResult> {
   // Validate buffer size
   if (!buffer || buffer.byteLength < 8) {
-    throw new Error('Invalid EXR file: buffer too small (minimum 8 bytes for magic + version)');
+    throw new DecoderError('EXR', 'Invalid EXR file: buffer too small (minimum 8 bytes for magic + version)');
   }
 
   const reader = new EXRDataReader(buffer);
@@ -857,11 +858,11 @@ export async function decodeEXR(
 
   // Validate
   if (header.tiled) {
-    throw new Error('Tiled EXR images are not yet supported');
+    throw new DecoderError('EXR', 'Tiled EXR images are not yet supported');
   }
 
   if (header.multiPart) {
-    throw new Error('Multi-part EXR files are not yet supported');
+    throw new DecoderError('EXR', 'Multi-part EXR files are not yet supported');
   }
 
   // Validate compression type is supported
@@ -874,7 +875,7 @@ export async function decodeEXR(
   ];
   if (!supportedCompression.includes(header.compression)) {
     const compressionName = EXRCompression[header.compression] || `unknown(${header.compression})`;
-    throw new Error(
+    throw new DecoderError('EXR',
       `Unsupported EXR compression type: ${compressionName}. Supported types: NONE, RLE, ZIP, ZIPS, PIZ`
     );
   }

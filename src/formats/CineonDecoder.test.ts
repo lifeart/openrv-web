@@ -202,6 +202,143 @@ describe('CineonDecoder', () => {
     });
   });
 
+  describe('decodeCineon - error handling', () => {
+    it('should throw for unsupported bit depth (non-10-bit)', async () => {
+      // Create a Cineon and override bit depth to 8
+      const buffer = createTestCineon({ width: 2, height: 2 });
+      const view = new DataView(buffer);
+      view.setUint8(213, 8); // Set bit depth to 8
+
+      await expect(decodeCineon(buffer)).rejects.toThrow('Unsupported Cineon bit depth: 8');
+    });
+
+    it('should throw for bit depth 16', async () => {
+      const buffer = createTestCineon({ width: 2, height: 2 });
+      const view = new DataView(buffer);
+      view.setUint8(213, 16);
+
+      await expect(decodeCineon(buffer)).rejects.toThrow('Unsupported Cineon bit depth: 16');
+    });
+
+    it('should throw when data offset exceeds file size', async () => {
+      const buffer = createTestCineon({ width: 2, height: 2 });
+      const view = new DataView(buffer);
+      // Set data offset to beyond file size
+      view.setUint32(4, buffer.byteLength + 1000, false);
+
+      await expect(decodeCineon(buffer)).rejects.toThrow(/data offset.*exceeds file size/);
+    });
+
+    it('should throw for zero-width image', async () => {
+      const buffer = createTestCineon({ width: 2, height: 2 });
+      const view = new DataView(buffer);
+      // Set width to 0
+      view.setUint32(200, 0, false);
+
+      await expect(decodeCineon(buffer)).rejects.toThrow(/Invalid Cineon dimensions/);
+    });
+
+    it('should throw for zero-height image', async () => {
+      const buffer = createTestCineon({ width: 2, height: 2 });
+      const view = new DataView(buffer);
+      // Set height to 0
+      view.setUint32(204, 0, false);
+
+      await expect(decodeCineon(buffer)).rejects.toThrow(/Invalid Cineon dimensions/);
+    });
+
+    it('should throw for extremely large dimensions', async () => {
+      const buffer = createTestCineon({ width: 2, height: 2 });
+      const view = new DataView(buffer);
+      // Set dimensions to exceed max dimension limit (65536)
+      view.setUint32(200, 100000, false);
+      view.setUint32(204, 100000, false);
+
+      await expect(decodeCineon(buffer)).rejects.toThrow(/exceed maximum/);
+    });
+  });
+
+  describe('decodeCineon - pixel value verification', () => {
+    it('should handle 1x1 pixel image', async () => {
+      const buffer = createTestCineon({ width: 1, height: 1 });
+      const result = await decodeCineon(buffer, { applyLogToLinear: false });
+
+      expect(result.width).toBe(1);
+      expect(result.height).toBe(1);
+      expect(result.data.length).toBe(4); // RGBA
+      expect(result.data[3]).toBe(1.0); // Alpha
+    });
+
+    it('should correctly decode known 10-bit packed values', async () => {
+      // Create a 1x1 Cineon with known packed pixel values
+      const dataOffset = 1024;
+      const channels = 3;
+      const totalWords = Math.ceil(1 * 1 * channels / 3);
+      const pixelDataSize = totalWords * 4;
+      const totalSize = dataOffset + pixelDataSize;
+      const buffer = new ArrayBuffer(totalSize);
+      const view = new DataView(buffer);
+
+      // Set up Cineon header
+      view.setUint32(0, CINEON_MAGIC, false);
+      view.setUint32(4, dataOffset, false);
+      view.setUint32(200, 1, false); // width
+      view.setUint32(204, 1, false); // height
+      view.setUint8(213, 10);        // bit depth
+
+      // Pack known 10-bit values: R=512, G=256, B=768
+      const word = (512 << 22) | (256 << 12) | (768 << 2);
+      view.setUint32(dataOffset, word, false);
+
+      const result = await decodeCineon(buffer, { applyLogToLinear: false });
+
+      expect(result.data[0]).toBeCloseTo(512 / 1023, 4); // R
+      expect(result.data[1]).toBeCloseTo(256 / 1023, 4); // G
+      expect(result.data[2]).toBeCloseTo(768 / 1023, 4); // B
+      expect(result.data[3]).toBe(1.0);                   // A
+    });
+
+    it('should produce Float32Array output', async () => {
+      const buffer = createTestCineon();
+      const result = await decodeCineon(buffer);
+      expect(result.data).toBeInstanceOf(Float32Array);
+    });
+
+    it('should always output 4 channels regardless of input', async () => {
+      const buffer = createTestCineon({ width: 3, height: 3 });
+      const result = await decodeCineon(buffer);
+
+      // Cineon is always 3 channels in, but output should be 4 (RGBA)
+      expect(result.channels).toBe(4);
+      expect(result.data.length).toBe(3 * 3 * 4);
+    });
+
+    it('should handle larger images correctly', async () => {
+      const buffer = createTestCineon({ width: 64, height: 32 });
+      const result = await decodeCineon(buffer);
+
+      expect(result.width).toBe(64);
+      expect(result.height).toBe(32);
+      expect(result.data.length).toBe(64 * 32 * 4);
+    });
+  });
+
+  describe('getCineonInfo - edge cases', () => {
+    it('should return null when magic number is wrong', () => {
+      const buffer = new ArrayBuffer(1024);
+      const view = new DataView(buffer);
+      view.setUint32(0, 0x12345678, false); // Wrong magic
+      expect(getCineonInfo(buffer)).toBeNull();
+    });
+
+    it('should always report channels as 3', () => {
+      const buffer = createTestCineon();
+      const info = getCineonInfo(buffer);
+      expect(info).not.toBeNull();
+      expect(info!.channels).toBe(3);
+    });
+  });
+
   describe('cineonLogToLinear (re-exported)', () => {
     it('should be accessible from CineonDecoder module', () => {
       expect(typeof cineonLogToLinear).toBe('function');

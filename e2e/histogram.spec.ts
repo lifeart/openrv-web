@@ -12,6 +12,25 @@ import {
  * including visibility toggle, mode cycling, and log scale.
  */
 
+async function getHistogramModeButton(page: import('@playwright/test').Page) {
+  const modeButton = page.locator('[data-testid="histogram-mode-button"]');
+  await expect(modeButton).toBeVisible();
+  return modeButton;
+}
+
+async function setHistogramMode(page: import('@playwright/test').Page, target: 'rgb' | 'luminance' | 'separate') {
+  const modeButton = await getHistogramModeButton(page);
+  for (let i = 0; i < 4; i++) {
+    const state = await getViewerState(page);
+    if (state.histogramMode === target) {
+      return;
+    }
+    await modeButton.click();
+    await page.waitForTimeout(100);
+  }
+  throw new Error(`Could not set histogram mode to ${target}`);
+}
+
 test.describe('Histogram Display', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
@@ -59,26 +78,36 @@ test.describe('Histogram Display', () => {
   });
 
   test('HG-E005: clicking Histogram button in View tab toggles histogram', async ({ page }) => {
-    // Go to View tab
+    // The View tab now exposes scopes through the Scopes dropdown.
     await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
 
-    // Click the Histogram button
-    const histogramButton = page.locator('button:has-text("Histogram")');
-    await expect(histogramButton).toBeVisible();
-
-    await histogramButton.click();
-    await page.waitForTimeout(100);
-
     let state = await getViewerState(page);
-    expect(state.histogramVisible).toBe(true);
+    const initial = state.histogramVisible;
 
-    // Click again to hide
-    await histogramButton.click();
+    const scopesButton = page.locator('[data-testid="scopes-control-button"]');
+    await expect(scopesButton).toBeVisible();
+    const dropdown = page.locator('[data-testid="scopes-dropdown"]');
+    await scopesButton.click();
+
+    const histogramToggle = dropdown.locator('button[data-scope-type="histogram"]');
+    await expect(histogramToggle).toBeVisible();
+    await histogramToggle.click();
     await page.waitForTimeout(100);
 
     state = await getViewerState(page);
-    expect(state.histogramVisible).toBe(false);
+    expect(state.histogramVisible).toBe(!initial);
+
+    // Toggle again to return to initial state.
+    if (!(await dropdown.isVisible())) {
+      await scopesButton.click();
+    }
+    await expect(histogramToggle).toBeVisible();
+    await histogramToggle.click();
+    await page.waitForTimeout(100);
+
+    state = await getViewerState(page);
+    expect(state.histogramVisible).toBe(initial);
   });
 });
 
@@ -99,41 +128,30 @@ test.describe('Histogram Modes', () => {
   });
 
   test('HG-E011: cycling mode changes histogram mode state', async ({ page }) => {
-    // Use direct method call instead of button click
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.histogram?.cycleMode();
-    });
+    const modeButton = await getHistogramModeButton(page);
+
+    await modeButton.click();
     await page.waitForTimeout(100);
     let state = await getViewerState(page);
     expect(state.histogramMode).toBe('luminance');
 
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.histogram?.cycleMode();
-    });
+    await modeButton.click();
     await page.waitForTimeout(100);
     state = await getViewerState(page);
     expect(state.histogramMode).toBe('separate');
 
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.histogram?.cycleMode();
-    });
+    await modeButton.click();
     await page.waitForTimeout(100);
     state = await getViewerState(page);
     expect(state.histogramMode).toBe('rgb');
   });
 
   test('HG-E012: setMode changes histogram mode', async ({ page }) => {
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.histogram?.setMode('luminance');
-    });
-    await page.waitForTimeout(100);
+    await setHistogramMode(page, 'luminance');
     let state = await getViewerState(page);
     expect(state.histogramMode).toBe('luminance');
 
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.histogram?.setMode('separate');
-    });
-    await page.waitForTimeout(100);
+    await setHistogramMode(page, 'separate');
     state = await getViewerState(page);
     expect(state.histogramMode).toBe('separate');
   });
@@ -156,18 +174,16 @@ test.describe('Histogram Log Scale', () => {
   });
 
   test('HG-E021: toggleLogScale toggles log scale state', async ({ page }) => {
-    // Use direct method call
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.histogram?.toggleLogScale();
-    });
+    const logButton = page.locator('[data-testid="histogram-log-button"]');
+    await expect(logButton).toBeVisible();
+
+    await logButton.click();
     await page.waitForTimeout(100);
 
     let state = await getViewerState(page);
     expect(state.histogramLogScale).toBe(true);
 
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.histogram?.toggleLogScale();
-    });
+    await logButton.click();
     await page.waitForTimeout(100);
 
     state = await getViewerState(page);
@@ -187,10 +203,9 @@ test.describe('Histogram Closing', () => {
   });
 
   test('HG-E030: hide method hides histogram', async ({ page }) => {
-    // Use direct method call
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.histogram?.hide();
-    });
+    const closeButton = page.locator('[data-testid="histogram-close-button"]');
+    await expect(closeButton).toBeVisible();
+    await closeButton.click();
     await page.waitForTimeout(100);
 
     const state = await getViewerState(page);
@@ -325,11 +340,8 @@ test.describe('Histogram State Persistence', () => {
     await page.keyboard.press('h');
     await page.waitForTimeout(100);
 
-    // Change to luminance mode using direct method call
-    await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.histogram?.setMode('luminance');
-    });
-    await page.waitForTimeout(100);
+    // Change to luminance mode using UI mode button.
+    await setHistogramMode(page, 'luminance');
 
     let state = await getViewerState(page);
     expect(state.histogramMode).toBe('luminance');

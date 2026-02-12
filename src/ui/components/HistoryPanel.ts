@@ -10,6 +10,7 @@
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { HistoryManager, HistoryEntry } from '../../utils/HistoryManager';
+import { getThemeManager } from '../../utils/ui/ThemeManager';
 
 export interface HistoryPanelEvents extends EventMap {
   visibilityChanged: boolean;
@@ -22,6 +23,8 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
   private visible = false;
   private entriesContainer: HTMLElement;
   private headerElement: HTMLElement;
+  private unsubscribers: (() => void)[] = [];
+  private boundOnThemeChange: (() => void) | null = null;
 
   constructor(historyManager: HistoryManager) {
     super();
@@ -36,8 +39,8 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
       top: 60px;
       width: 280px;
       max-height: 400px;
-      background: rgba(30, 30, 30, 0.95);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
       border-radius: 8px;
       display: none;
       flex-direction: column;
@@ -45,7 +48,7 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
       font-size: 12px;
       color: var(--text-primary);
       z-index: 1000;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
       overflow: hidden;
     `;
 
@@ -57,8 +60,8 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
       justify-content: space-between;
       align-items: center;
       padding: 10px 12px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-      background: rgba(40, 40, 40, 0.8);
+      border-bottom: 1px solid var(--border-primary);
+      background: var(--bg-tertiary);
     `;
 
     const title = document.createElement('span');
@@ -116,8 +119,12 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
     this.container.appendChild(this.entriesContainer);
 
     // Listen to history changes
-    this.historyManager.on('historyChanged', () => this.render());
-    this.historyManager.on('currentIndexChanged', () => this.render());
+    this.unsubscribers.push(this.historyManager.on('historyChanged', () => this.render()));
+    this.unsubscribers.push(this.historyManager.on('currentIndexChanged', () => this.render()));
+
+    // Listen for theme changes to re-render with new colors
+    this.boundOnThemeChange = () => this.render();
+    getThemeManager().on('themeChanged', this.boundOnThemeChange);
 
     // Initial render
     this.render();
@@ -222,18 +229,18 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
       cursor: pointer;
       gap: 8px;
       transition: background 0.15s;
-      ${isCurrent ? 'background: rgba(100, 150, 255, 0.2);' : ''}
+      ${isCurrent ? 'background: rgba(var(--accent-primary-rgb), 0.2);' : ''}
       ${isFuture ? 'opacity: 0.4;' : ''}
     `;
 
     el.addEventListener('mouseenter', () => {
       if (!isCurrent) {
-        el.style.background = 'rgba(255, 255, 255, 0.05)';
+        el.style.background = 'var(--bg-hover)';
       }
     });
 
     el.addEventListener('mouseleave', () => {
-      el.style.background = isCurrent ? 'rgba(100, 150, 255, 0.2)' : '';
+      el.style.background = isCurrent ? 'rgba(var(--accent-primary-rgb), 0.2)' : '';
     });
 
     el.addEventListener('click', () => {
@@ -274,6 +281,21 @@ export class HistoryPanel extends EventEmitter<HistoryPanelEvents> {
     el.appendChild(time);
 
     return el;
+  }
+
+  /**
+   * Dispose of resources
+   */
+  dispose(): void {
+    for (const unsubscribe of this.unsubscribers) {
+      unsubscribe();
+    }
+    this.unsubscribers = [];
+    if (this.boundOnThemeChange) {
+      getThemeManager().off('themeChanged', this.boundOnThemeChange);
+      this.boundOnThemeChange = null;
+    }
+    this.container.remove();
   }
 
   /**

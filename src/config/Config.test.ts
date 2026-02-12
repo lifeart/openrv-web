@@ -66,7 +66,7 @@ import {
   COLOR_WHEEL_GAMMA_FACTOR as CW_GAMMA_ORIG,
   COLOR_WHEEL_GAIN_FACTOR as CW_GAIN_ORIG,
   HALF_RES_MIN_DIMENSION as HALF_RES_ORIG,
-} from '../utils/effectProcessing.shared';
+} from '../utils/effects/effectProcessing.shared';
 
 // ============================================================================
 // TimingConfig

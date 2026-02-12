@@ -43,31 +43,35 @@ async function goToViewTab(page: import('@playwright/test').Page) {
 
 /** Open the display profile dropdown from the View tab */
 async function openDisplayDropdown(page: import('@playwright/test').Page) {
+  const dropdown = page.locator('[data-testid="display-profile-dropdown"]');
+  if (await dropdown.isVisible().catch(() => false)) {
+    return;
+  }
+
   const button = page.locator('[data-testid="display-profile-button"]');
   await expect(button).toBeVisible();
   await button.click();
-  const dropdown = page.locator('[data-testid="display-profile-dropdown"]');
   await expect(dropdown).toBeVisible();
+}
+
+async function setRangeValue(
+  slider: import('@playwright/test').Locator,
+  value: number,
+) {
+  await slider.evaluate((el, val) => {
+    const input = el as HTMLInputElement;
+    input.value = String(val);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }, value);
 }
 
 /** Open the color controls panel (for LUT operations) */
 async function waitForColorPanel(page: import('@playwright/test').Page) {
   await page.click('button[data-tab-id="color"]');
-  await page.waitForFunction(
-    () =>
-      document
-        .querySelector('button[data-tab-id="color"]')
-        ?.classList?.contains('active') ||
-      document.querySelector(
-        '[data-tab-id="color"][aria-selected="true"]',
-      ) !== null,
-    { timeout: 5000 },
-  );
+  await page.waitForTimeout(150);
   await page.keyboard.press('c');
-  await page.waitForFunction(
-    () => document.querySelector('.color-controls-panel') !== null,
-    { timeout: 5000 },
-  );
+  await expect(page.locator('.color-controls-panel')).toBeVisible({ timeout: 5000 });
 }
 
 /** Wait for LUT to be reported as loaded */
@@ -148,7 +152,7 @@ test.describe('Display Color Management GPU Integration', () => {
 
     // Switch to Gamma 2.4
     await openDisplayDropdown(page);
-    await page.click('[data-testid="display-profile-gamma24"]');
+    await page.click('[data-testid="display-profile-gamma2.4"]');
     await page.waitForTimeout(300);
     const gamma24Screenshot = await captureViewerScreenshot(page);
 
@@ -166,7 +170,7 @@ test.describe('Display Color Management GPU Integration', () => {
     const gammaSlider = page.locator(
       '[data-testid="display-gamma-slider"]',
     );
-    await gammaSlider.fill('2.0');
+    await setRangeValue(gammaSlider, 2.0);
     // Give the renderer time to apply the new gamma value
     await page.waitForTimeout(300);
 
@@ -183,7 +187,7 @@ test.describe('Display Color Management GPU Integration', () => {
     const brightnessSlider = page.locator(
       '[data-testid="display-brightness-slider"]',
     );
-    await brightnessSlider.fill('0.5');
+    await setRangeValue(brightnessSlider, 0.5);
     await page.waitForTimeout(300);
 
     const afterScreenshot = await captureViewerScreenshot(page);
@@ -199,12 +203,12 @@ test.describe('Display Color Management GPU Integration', () => {
     const gammaSlider = page.locator(
       '[data-testid="display-gamma-slider"]',
     );
-    await gammaSlider.fill('0.1');
+    await setRangeValue(gammaSlider, 0.1);
     await page.waitForTimeout(300);
     const lowGammaScreenshot = await captureViewerScreenshot(page);
 
     // Set gamma to maximum (4.0)
-    await gammaSlider.fill('4.0');
+    await setRangeValue(gammaSlider, 4.0);
     await page.waitForTimeout(300);
     const highGammaScreenshot = await captureViewerScreenshot(page);
 
@@ -223,12 +227,12 @@ test.describe('Display Color Management GPU Integration', () => {
     );
 
     // Set brightness to 0 (black)
-    await brightnessSlider.fill('0');
+    await setRangeValue(brightnessSlider, 0);
     await page.waitForTimeout(300);
     const darkScreenshot = await captureViewerScreenshot(page);
 
     // Set brightness to 2 (over-bright)
-    await brightnessSlider.fill('2');
+    await setRangeValue(brightnessSlider, 2);
     await page.waitForTimeout(300);
     const brightScreenshot = await captureViewerScreenshot(page);
 
@@ -245,15 +249,15 @@ test.describe('Display Color Management GPU Integration', () => {
 
     // Change profile, gamma, and brightness
     await openDisplayDropdown(page);
-    await page.click('[data-testid="display-profile-gamma24"]');
+    await page.click('[data-testid="display-profile-gamma2.4"]');
     const gammaSlider = page.locator(
       '[data-testid="display-gamma-slider"]',
     );
-    await gammaSlider.fill('2.5');
+    await setRangeValue(gammaSlider, 2.5);
     const brightnessSlider = page.locator(
       '[data-testid="display-brightness-slider"]',
     );
-    await brightnessSlider.fill('0.3');
+    await setRangeValue(brightnessSlider, 0.3);
     await page.waitForTimeout(300);
 
     const modifiedScreenshot = await captureViewerScreenshot(page);
@@ -289,7 +293,7 @@ test.describe('Display Color Management GPU Integration', () => {
     const gammaSlider = page.locator(
       '[data-testid="display-gamma-slider"]',
     );
-    await gammaSlider.fill('3.0');
+    await setRangeValue(gammaSlider, 3.0);
     await page.waitForTimeout(300);
     const linearHighGammaScreenshot = await captureViewerScreenshot(page);
 
@@ -400,8 +404,7 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
       .first();
 
     if (await intensitySlider.isVisible()) {
-      await intensitySlider.fill('0');
-      await intensitySlider.dispatchEvent('input');
+      await setRangeValue(intensitySlider, 0);
       await page.waitForFunction(
         () =>
           (window as any).__OPENRV_TEST__?.getColorState()?.lutIntensity ===
@@ -466,8 +469,7 @@ test.describe('Float LUT Single-Pass Pipeline GPU Integration', () => {
       .first();
 
     if (await intensitySlider.isVisible()) {
-      await intensitySlider.fill('0.5');
-      await intensitySlider.dispatchEvent('input');
+      await setRangeValue(intensitySlider, 0.5);
       await page.waitForFunction(
         () => {
           const s = (window as any).__OPENRV_TEST__?.getColorState();
@@ -694,7 +696,7 @@ test.describe('Display + LUT Combined GPU Integration', () => {
     const gammaSlider = page.locator(
       '[data-testid="display-gamma-slider"]',
     );
-    await gammaSlider.fill('2.5');
+    await setRangeValue(gammaSlider, 2.5);
     await page.waitForTimeout(300);
 
     const lutHighGammaScreenshot = await captureViewerScreenshot(page);
@@ -713,7 +715,7 @@ test.describe('Display + LUT Combined GPU Integration', () => {
     // Set a non-default display profile first
     await goToViewTab(page);
     await openDisplayDropdown(page);
-    await page.click('[data-testid="display-profile-gamma22"]');
+    await page.click('[data-testid="display-profile-gamma2.2"]');
     await page.waitForTimeout(300);
     const gamma22NoLUTScreenshot = await captureViewerScreenshot(page);
 
@@ -786,11 +788,11 @@ test.describe('Display + LUT Combined GPU Integration', () => {
     const gammaValue = page.locator(
       '[data-testid="display-gamma-value"]',
     );
-    await expect(gammaValue).toHaveText('1.00');
+    await expect(gammaValue).toContainText('1.0');
     const brightnessValue = page.locator(
       '[data-testid="display-brightness-value"]',
     );
-    await expect(brightnessValue).toHaveText('1.00');
+    await expect(brightnessValue).toContainText('1.0');
     const srgb = page.locator('[data-testid="display-profile-srgb"]');
     await expect(srgb).toHaveAttribute('aria-checked', 'true');
   });

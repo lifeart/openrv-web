@@ -16,19 +16,15 @@
  */
 
 import type { IPImage } from '../core/image/Image';
-import type { ColorAdjustments } from '../ui/components/ColorControls';
-import { DEFAULT_COLOR_ADJUSTMENTS } from '../ui/components/ColorControls';
-import type { ToneMappingState } from '../ui/components/ToneMappingControl';
-import { DEFAULT_TONE_MAPPING_STATE } from '../ui/components/ToneMappingControl';
+import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState } from '../core/types/color';
+import { DEFAULT_COLOR_ADJUSTMENTS } from '../core/types/color';
+import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState, GamutMappingState } from '../core/types/effects';
+import { DEFAULT_TONE_MAPPING_STATE } from '../core/types/effects';
+import type { BackgroundPatternState } from '../core/types/background';
 import type { DisplayCapabilities } from '../color/DisplayCapabilities';
 import type { RendererBackend, TextureHandle } from './RendererBackend';
 import type { CDLValues } from '../color/CDL';
-import type { ColorWheelsState } from '../ui/components/ColorWheels';
-import type { ZebraState } from '../ui/components/ZebraStripes';
-import type { BackgroundPatternState } from '../ui/components/BackgroundPatternControl';
 import type { CurveLUTs } from '../color/ColorCurves';
-import type { ChannelMode } from '../ui/components/ChannelSelect';
-import type { HSLQualifierState } from '../ui/components/HSLQualifier';
 import type { RenderState } from './RenderState';
 import type {
   RenderWorkerMessage,
@@ -39,9 +35,11 @@ import {
   DATA_TYPE_CODES,
   TRANSFER_FUNCTION_CODES,
   COLOR_PRIMARIES_CODES,
+  RENDER_WORKER_PROTOCOL_VERSION,
 } from './renderWorker.messages';
 import RenderWorkerConstructor from '../workers/renderWorker.worker?worker';
 import { Logger } from '../utils/Logger';
+import { RenderError } from '../core/errors';
 
 const log = new Logger('RenderWorkerProxy');
 
@@ -93,7 +91,7 @@ export class RenderWorkerProxy implements RendererBackend {
   private colorAdjustments: ColorAdjustments = { ...DEFAULT_COLOR_ADJUSTMENTS };
   private colorInversionEnabled = false;
   private toneMappingState: ToneMappingState = { ...DEFAULT_TONE_MAPPING_STATE };
-  private hdrOutputMode: 'sdr' | 'hlg' | 'pq' = 'sdr';
+  private hdrOutputMode: 'sdr' | 'hlg' | 'pq' | 'extended' = 'sdr';
 
   // --- Batch state optimization ---
   private dirtyState: Partial<RendererSyncState> = {};
@@ -163,7 +161,7 @@ export class RenderWorkerProxy implements RendererBackend {
     }
     const hdrMode = await this.initPromise;
     if (hdrMode) {
-      this.hdrOutputMode = hdrMode as 'sdr' | 'hlg' | 'pq';
+      this.hdrOutputMode = hdrMode as 'sdr' | 'hlg' | 'pq' | 'extended';
     }
   }
 
@@ -200,7 +198,7 @@ export class RenderWorkerProxy implements RendererBackend {
 
     const hdrMode = await this.initPromise;
     if (hdrMode) {
-      this.hdrOutputMode = hdrMode as 'sdr' | 'hlg' | 'pq';
+      this.hdrOutputMode = hdrMode as 'sdr' | 'hlg' | 'pq' | 'extended';
     }
   }
 
@@ -221,9 +219,10 @@ export class RenderWorkerProxy implements RendererBackend {
 
     // Clean up any pending bitmap to avoid GPU memory leak
     if (this.pendingBitmap) {
-      this.pendingBitmap.then(bmp => { if (bmp) bmp.close(); }).catch(() => {});
+      const bitmapToClose = this.pendingBitmap;
       this.pendingBitmap = null;
       this.pendingBitmapSource = null;
+      bitmapToClose.then(bmp => { if (bmp) bmp.close(); }).catch((err) => { log.warn('Failed to close pending bitmap during dispose:', err); });
     }
 
     // Terminate worker
@@ -278,6 +277,10 @@ export class RenderWorkerProxy implements RendererBackend {
     this.postMessage({ type: 'resize', width, height });
   }
 
+  setViewport(width: number, height: number): void {
+    this.postMessage({ type: 'setViewport', width, height });
+  }
+
   clear(r = 0, g = 0, b = 0, a = 1): void {
     this.postMessage({ type: 'clear', r, g, b, a });
   }
@@ -294,7 +297,7 @@ export class RenderWorkerProxy implements RendererBackend {
     _scaleY = 1,
   ): void {
     // Fire-and-forget for the synchronous interface
-    this.renderHDRAsync(image).catch(() => { /* handled by proxy */ });
+    this.renderHDRAsync(image).catch((err) => { log.debug('renderImage fire-and-forget rejected', err); });
   }
 
   /**
@@ -303,7 +306,7 @@ export class RenderWorkerProxy implements RendererBackend {
    */
   async renderHDRAsync(image: IPImage): Promise<void> {
     if (this.disposed || !this.worker || this.contextLost) {
-      throw new Error('Renderer not available');
+      throw new RenderError('Renderer not available');
     }
 
     // Flush any dirty state before render
@@ -348,7 +351,7 @@ export class RenderWorkerProxy implements RendererBackend {
     source: HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | HTMLImageElement,
   ): HTMLCanvasElement | null {
     // Fire-and-forget for the synchronous interface
-    this.renderSDRFrameAsync(source).catch(() => { /* handled by proxy */ });
+    this.renderSDRFrameAsync(source).catch((err) => { log.debug('renderSDRFrame fire-and-forget rejected', err); });
     return this.canvas;
   }
 
@@ -360,7 +363,7 @@ export class RenderWorkerProxy implements RendererBackend {
     source: HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | HTMLImageElement | ImageBitmap,
   ): Promise<void> {
     if (this.disposed || !this.worker || this.contextLost) {
-      throw new Error('Renderer not available');
+      throw new RenderError('Renderer not available');
     }
 
     // Flush any dirty state before render
@@ -404,10 +407,10 @@ export class RenderWorkerProxy implements RendererBackend {
     if (this.disposed || this.pendingBitmapSource === source) return;
     // Close previously pending bitmap to avoid GPU memory leak
     if (this.pendingBitmap) {
-      this.pendingBitmap.then(bmp => { if (bmp) bmp.close(); }).catch(() => {});
+      this.pendingBitmap.then(bmp => { if (bmp) bmp.close(); }).catch((err) => { log.warn('Failed to close previous pending bitmap:', err); });
     }
     this.pendingBitmapSource = source;
-    this.pendingBitmap = createImageBitmap(source).catch(() => null) as Promise<ImageBitmap>;
+    this.pendingBitmap = createImageBitmap(source).catch((err) => { log.debug('prepareFrame createImageBitmap failed', err); return null; }) as Promise<ImageBitmap>;
   }
 
   /**
@@ -523,15 +526,19 @@ export class RenderWorkerProxy implements RendererBackend {
   // HDR output
   // ==========================================================================
 
-  setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq', capabilities: DisplayCapabilities): boolean {
+  setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq' | 'extended', capabilities: DisplayCapabilities): boolean {
     this.hdrOutputMode = mode;
     this.dirtyState.hdrOutputMode = { mode, capabilities };
     this.hasDirtyState = true;
     return true;
   }
 
-  getHDROutputMode(): 'sdr' | 'hlg' | 'pq' {
+  getHDROutputMode(): 'sdr' | 'hlg' | 'pq' | 'extended' {
     return this.hdrOutputMode;
+  }
+
+  setHDRHeadroom(_headroom: number): void {
+    // TODO: forward to worker when HDR headroom is supported in worker pipeline
   }
 
   // ==========================================================================
@@ -544,6 +551,16 @@ export class RenderWorkerProxy implements RendererBackend {
 
   deleteTexture(_texture: TextureHandle): void {
     // No-op: textures are managed in worker
+  }
+
+  // ==========================================================================
+  // Shader compilation status
+  // ==========================================================================
+
+  isShaderReady(): boolean {
+    // Worker-based rendering: shaders are compiled in the worker.
+    // Once initAsync() resolves, shaders are ready.
+    return this.workerReady;
   }
 
   // ==========================================================================
@@ -582,8 +599,8 @@ export class RenderWorkerProxy implements RendererBackend {
     this.hasDirtyState = true;
   }
 
-  setFalseColor(enabled: boolean, lut: Uint8Array | null): void {
-    this.dirtyState.falseColor = { enabled, lut };
+  setFalseColor(state: FalseColorState): void {
+    this.dirtyState.falseColor = state;
     this.hasDirtyState = true;
   }
 
@@ -607,29 +624,33 @@ export class RenderWorkerProxy implements RendererBackend {
     this.hasDirtyState = true;
   }
 
-  setHighlightsShadows(highlights: number, shadows: number, whites: number, blacks: number): void {
-    this.dirtyState.highlightsShadows = { highlights, shadows, whites, blacks };
+  setHighlightsShadows(state: HighlightsShadowsState): void {
+    this.dirtyState.highlightsShadows = state;
     this.hasDirtyState = true;
   }
 
-  setVibrance(vibrance: number, skinProtection: boolean): void {
-    this.dirtyState.vibrance = { vibrance, skinProtection };
+  setVibrance(state: VibranceState): void {
+    this.dirtyState.vibrance = state;
     this.hasDirtyState = true;
   }
 
-  setClarity(clarity: number): void {
-    this.dirtyState.clarity = clarity;
+  setClarity(state: ClarityState): void {
+    this.dirtyState.clarity = state.clarity;
     this.hasDirtyState = true;
   }
 
-  setSharpen(amount: number): void {
-    this.dirtyState.sharpen = amount;
+  setSharpen(state: SharpenState): void {
+    this.dirtyState.sharpen = state.amount;
     this.hasDirtyState = true;
   }
 
   setHSLQualifier(state: HSLQualifierState): void {
     this.dirtyState.hslQualifier = state;
     this.hasDirtyState = true;
+  }
+
+  setGamutMapping(_state: GamutMappingState): void {
+    // TODO: forward gamut mapping state to worker when supported
   }
 
   applyRenderState(state: RenderState): void {
@@ -640,21 +661,19 @@ export class RenderWorkerProxy implements RendererBackend {
     this.setCDL(state.cdl);
     this.setCurvesLUT(state.curvesLUT);
     this.setColorWheels(state.colorWheels);
-    this.setFalseColor(state.falseColor.enabled, state.falseColor.lut);
+    this.setFalseColor(state.falseColor);
     this.setZebraStripes(state.zebraStripes);
     this.setChannelMode(state.channelMode);
     this.setLUT(state.lut.data, state.lut.size, state.lut.intensity);
     this.setDisplayColorState(state.displayColor);
-    this.setHighlightsShadows(
-      state.highlightsShadows.highlights,
-      state.highlightsShadows.shadows,
-      state.highlightsShadows.whites,
-      state.highlightsShadows.blacks,
-    );
-    this.setVibrance(state.vibrance.amount, state.vibrance.skinProtection);
-    this.setClarity(state.clarity);
-    this.setSharpen(state.sharpen);
+    this.setHighlightsShadows(state.highlightsShadows);
+    this.setVibrance({ vibrance: state.vibrance.amount, skinProtection: state.vibrance.skinProtection });
+    this.setClarity({ clarity: state.clarity });
+    this.setSharpen({ amount: state.sharpen });
     this.setHSLQualifier(state.hslQualifier);
+    if (state.gamutMapping) {
+      this.setGamutMapping(state.gamutMapping);
+    }
   }
 
   // ==========================================================================
@@ -669,6 +688,10 @@ export class RenderWorkerProxy implements RendererBackend {
   /** Whether the WebGL context is lost in the worker. */
   isContextLost(): boolean {
     return this.contextLost;
+  }
+
+  hasPendingStateChanges(): boolean {
+    return this.hasDirtyState;
   }
 
   // ==========================================================================
@@ -701,9 +724,12 @@ export class RenderWorkerProxy implements RendererBackend {
 
   /**
    * Post a message to the worker with optional transferables.
+   * Automatically stamps each message with the current protocol version.
    */
   private postMessage(msg: RenderWorkerMessage, transfer?: Transferable[]): void {
     if (!this.worker || this.disposed) return;
+    // Stamp protocol version on every outgoing message
+    msg.protocolVersion = RENDER_WORKER_PROTOCOL_VERSION;
     try {
       if (transfer && transfer.length > 0) {
         this.worker.postMessage(msg, transfer);
@@ -729,7 +755,7 @@ export class RenderWorkerProxy implements RendererBackend {
       case 'initResult':
         if (msg.success) {
           if (msg.hdrMode) {
-            this.hdrOutputMode = msg.hdrMode as 'sdr' | 'hlg' | 'pq';
+            this.hdrOutputMode = msg.hdrMode as 'sdr' | 'hlg' | 'pq' | 'extended';
           }
           this.initResolve?.(msg.hdrMode);
         } else {

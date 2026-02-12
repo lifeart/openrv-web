@@ -4,7 +4,7 @@
  * Tests for the zebra stripes dropdown control with threshold sliders.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ZebraControl } from './ZebraControl';
 import { ZebraStripes } from './ZebraStripes';
 
@@ -417,6 +417,21 @@ describe('ZebraControl', () => {
         control.dispose();
         control.dispose();
       }).not.toThrow();
+    });
+
+    it('ZEBRA-U102: dispose unsubscribes from state changes', () => {
+      const unsubSpy = vi.fn();
+      vi.spyOn(zebraStripes, 'on').mockReturnValue(unsubSpy);
+
+      // Re-create to capture subscription
+      control.dispose();
+      control = new ZebraControl(zebraStripes);
+
+      expect(zebraStripes.on).toHaveBeenCalledWith('stateChanged', expect.any(Function));
+
+      control.dispose();
+
+      expect(unsubSpy).toHaveBeenCalled();
     });
   });
 

@@ -77,8 +77,8 @@ test.describe('A/B Compare UI Elements', () => {
     const buttonA = page.locator('[data-testid="compare-ab-a"]');
 
     // A button should have active styling (blue background)
-    const bgColor = await buttonA.evaluate(el => getComputedStyle(el).backgroundColor);
-    expect(bgColor).toContain('74'); // rgba(74, 158, 255, ...)
+    const bgColor = await buttonA.evaluate(el => (el as HTMLButtonElement).style.background);
+    expect(bgColor).toContain('accent-primary-rgb');
   });
 
   test('AB-E006: B button appears disabled/dimmed with single source', async ({ page }) => {
@@ -236,9 +236,8 @@ test.describe('A/B Button Interactions', () => {
     await page.waitForTimeout(100);
 
     // A should still be highlighted (check border color which is more stable)
-    const borderColor = await buttonA.evaluate(el => getComputedStyle(el).borderColor);
-    // Blue border indicates active state
-    expect(borderColor).toMatch(/74|158|255/); // rgb(74, 158, 255)
+    const borderColor = await buttonA.evaluate(el => (el as HTMLButtonElement).style.borderColor);
+    expect(borderColor).toContain('accent-primary');
   });
 
   test('AB-E041: Clicking disabled B button does not change state', async ({ page }) => {
@@ -257,10 +256,10 @@ test.describe('A/B Button Interactions', () => {
     await page.waitForTimeout(100);
 
     // A should still be highlighted, B should not
-    const aBorderColor = await buttonA.evaluate(el => getComputedStyle(el).borderColor);
-    const bBorderColor = await buttonB.evaluate(el => getComputedStyle(el).borderColor);
-    expect(aBorderColor).toMatch(/74|158|255/); // rgb(74, 158, 255)
-    expect(bBorderColor).not.toMatch(/74|158|255/);
+    const aBorderColor = await buttonA.evaluate(el => (el as HTMLButtonElement).style.borderColor);
+    const bBorderColor = await buttonB.evaluate(el => (el as HTMLButtonElement).style.borderColor);
+    expect(aBorderColor).toContain('accent-primary');
+    expect(bBorderColor).not.toContain('accent-primary');
   });
 });
 
@@ -296,10 +295,10 @@ test.describe('A/B Button Interactions (Two Sources)', () => {
     await page.waitForTimeout(100);
 
     // B should be highlighted, A should not
-    const aBorderColor = await buttonA.evaluate(el => getComputedStyle(el).borderColor);
-    const bBorderColor = await buttonB.evaluate(el => getComputedStyle(el).borderColor);
-    expect(bBorderColor).toMatch(/74|158|255/); // rgb(74, 158, 255)
-    expect(aBorderColor).not.toMatch(/74|158|255/);
+    const aBorderColor = await buttonA.evaluate(el => (el as HTMLButtonElement).style.borderColor);
+    const bBorderColor = await buttonB.evaluate(el => (el as HTMLButtonElement).style.borderColor);
+    expect(bBorderColor).toContain('accent-primary');
+    expect(aBorderColor).not.toContain('accent-primary');
   });
 
   test('AB-E043: Clicking A button switches back to A', async ({ page }) => {
@@ -330,10 +329,10 @@ test.describe('A/B Button Interactions (Two Sources)', () => {
     await page.waitForTimeout(100);
 
     // A should be highlighted, B should not
-    const aBorderColor = await buttonA.evaluate(el => getComputedStyle(el).borderColor);
-    const bBorderColor = await buttonB.evaluate(el => getComputedStyle(el).borderColor);
-    expect(aBorderColor).toMatch(/74|158|255/); // rgb(74, 158, 255)
-    expect(bBorderColor).not.toMatch(/74|158|255/);
+    const aBorderColor = await buttonA.evaluate(el => (el as HTMLButtonElement).style.borderColor);
+    const bBorderColor = await buttonB.evaluate(el => (el as HTMLButtonElement).style.borderColor);
+    expect(aBorderColor).toContain('accent-primary');
+    expect(bBorderColor).not.toContain('accent-primary');
   });
 });
 

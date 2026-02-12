@@ -56,6 +56,29 @@ async function openToneMappingDropdown(page: import('@playwright/test').Page) {
 }
 
 /**
+ * Helper: Close the tone mapping dropdown reliably.
+ */
+async function closeToneMappingDropdown(page: import('@playwright/test').Page) {
+  const dropdown = page.locator('[data-testid="tone-mapping-dropdown"]');
+  if (!(await dropdown.isVisible())) return;
+
+  // First attempt: keyboard dismiss.
+  await page.keyboard.press('Escape');
+  if (await dropdown.isHidden()) return;
+
+  // Second attempt: toggle via control button.
+  const control = page.locator('[data-testid="tone-mapping-control-button"]');
+  if (await control.isVisible()) {
+    await control.click();
+    if (await dropdown.isHidden()) return;
+  }
+
+  // Final fallback: click a safe viewport corner.
+  await page.mouse.click(8, 8);
+  await expect(dropdown).toBeHidden();
+}
+
+/**
  * Helper: Select a tone mapping operator via the dropdown UI.
  * Opens the View tab, opens the dropdown, then clicks the operator button.
  */
@@ -98,6 +121,22 @@ function getParamValueByLabel(page: import('@playwright/test').Page, label: stri
   return page
     .locator('[data-testid="tone-mapping-params"]')
     .locator(`xpath=.//div[.//span[text()="${label}"]]//span[2]`);
+}
+
+/**
+ * Helper: Set a range slider value and emit native input/change events.
+ * Playwright `fill()` is not reliable for input[type="range"] controls.
+ */
+async function setSliderValue(
+  slider: import('@playwright/test').Locator,
+  value: string
+) {
+  await slider.evaluate((el, nextValue) => {
+    const input = el as HTMLInputElement;
+    input.value = nextValue;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }, value);
 }
 
 test.describe('Tone Mapping Parameters - Reinhard Operator', () => {
@@ -356,8 +395,7 @@ test.describe('Tone Mapping Parameters - Value Persistence', () => {
     await openToneMappingDropdown(page);
 
     const whitePointSlider = getParamSliderByLabel(page, 'White Point');
-    await whitePointSlider.fill('7.5');
-    await whitePointSlider.dispatchEvent('input');
+    await setSliderValue(whitePointSlider, '7.5');
 
     // Verify value changed
     const valueDisplay = getParamValueByLabel(page, 'White Point');
@@ -384,8 +422,7 @@ test.describe('Tone Mapping Parameters - Value Persistence', () => {
     await openToneMappingDropdown(page);
 
     const exposureBiasSlider = getParamSliderByLabel(page, 'Exposure Bias');
-    await exposureBiasSlider.fill('5.0');
-    await exposureBiasSlider.dispatchEvent('input');
+    await setSliderValue(exposureBiasSlider, '5.0');
 
     // Switch to Reinhard
     await page.click('[data-testid="tone-mapping-operator-reinhard"]');
@@ -407,8 +444,7 @@ test.describe('Tone Mapping Parameters - Value Persistence', () => {
     await openToneMappingDropdown(page);
 
     const whitePointSlider = getParamSliderByLabel(page, 'White Point');
-    await whitePointSlider.fill('15.0');
-    await whitePointSlider.dispatchEvent('input');
+    await setSliderValue(whitePointSlider, '15.0');
 
     // Switch to ACES
     await page.click('[data-testid="tone-mapping-operator-aces"]');
@@ -430,11 +466,10 @@ test.describe('Tone Mapping Parameters - Value Persistence', () => {
     await openToneMappingDropdown(page);
 
     const whitePointSlider = getParamSliderByLabel(page, 'White Point');
-    await whitePointSlider.fill('6.0');
-    await whitePointSlider.dispatchEvent('input');
+    await setSliderValue(whitePointSlider, '6.0');
 
-    // Close dropdown by clicking outside
-    await page.click('canvas');
+    // Close dropdown
+    await closeToneMappingDropdown(page);
     await page.waitForTimeout(200);
 
     // Re-open dropdown
@@ -466,8 +501,7 @@ test.describe('Tone Mapping Parameters - Visual Impact', () => {
     // Open dropdown and change white point
     await openToneMappingDropdown(page);
     const whitePointSlider = getParamSliderByLabel(page, 'White Point');
-    await whitePointSlider.fill('1.0');
-    await whitePointSlider.dispatchEvent('input');
+    await setSliderValue(whitePointSlider, '1.0');
     await page.waitForTimeout(300);
 
     // Capture screenshot with modified white point
@@ -488,8 +522,7 @@ test.describe('Tone Mapping Parameters - Visual Impact', () => {
     // Open dropdown and change exposure bias
     await openToneMappingDropdown(page);
     const slider = getParamSliderByLabel(page, 'Exposure Bias');
-    await slider.fill('7.0');
-    await slider.dispatchEvent('input');
+    await setSliderValue(slider, '7.0');
     await page.waitForTimeout(300);
 
     // Capture screenshot with modified exposure bias
@@ -510,8 +543,7 @@ test.describe('Tone Mapping Parameters - Visual Impact', () => {
     // Open dropdown and change white point
     await openToneMappingDropdown(page);
     const slider = getParamSliderByLabel(page, 'White Point');
-    await slider.fill('3.0');
-    await slider.dispatchEvent('input');
+    await setSliderValue(slider, '3.0');
     await page.waitForTimeout(300);
 
     // Capture screenshot with modified white point
@@ -527,14 +559,12 @@ test.describe('Tone Mapping Parameters - Visual Impact', () => {
 
     // Set white point to 1.0 (low)
     const slider = getParamSliderByLabel(page, 'White Point');
-    await slider.fill('1.0');
-    await slider.dispatchEvent('input');
+    await setSliderValue(slider, '1.0');
     await page.waitForTimeout(300);
     const canvasStateLow = await captureCanvasState(page);
 
     // Set white point to 10.0 (high)
-    await slider.fill('10.0');
-    await slider.dispatchEvent('input');
+    await setSliderValue(slider, '10.0');
     await page.waitForTimeout(300);
     const canvasStateHigh = await captureCanvasState(page);
 
@@ -557,8 +587,7 @@ test.describe('Tone Mapping Parameters - Reset Behavior', () => {
     await openToneMappingDropdown(page);
 
     const whitePointSlider = getParamSliderByLabel(page, 'White Point');
-    await whitePointSlider.fill('8.0');
-    await whitePointSlider.dispatchEvent('input');
+    await setSliderValue(whitePointSlider, '8.0');
 
     // Disable tone mapping via checkbox
     const checkbox = page.locator('[data-testid="tone-mapping-enable-checkbox"]');
@@ -581,11 +610,10 @@ test.describe('Tone Mapping Parameters - Reset Behavior', () => {
     await openToneMappingDropdown(page);
 
     const slider = getParamSliderByLabel(page, 'Exposure Bias');
-    await slider.fill('6.0');
-    await slider.dispatchEvent('input');
+    await setSliderValue(slider, '6.0');
 
     // Close dropdown
-    await page.click('canvas');
+    await closeToneMappingDropdown(page);
     await page.waitForTimeout(200);
 
     // Toggle off with keyboard shortcut
@@ -662,15 +690,13 @@ test.describe('Tone Mapping Parameters - Slider Interaction', () => {
     const valueDisplay = getParamValueByLabel(page, 'White Point');
 
     // Set to a new value
-    await slider.fill('5.5');
-    await slider.dispatchEvent('input');
+    await setSliderValue(slider, '5.5');
 
     const displayText = await valueDisplay.textContent();
     expect(displayText).toBe('5.5');
 
     // Set to another value
-    await slider.fill('2.3');
-    await slider.dispatchEvent('input');
+    await setSliderValue(slider, '2.3');
 
     const displayText2 = await valueDisplay.textContent();
     expect(displayText2).toBe('2.3');

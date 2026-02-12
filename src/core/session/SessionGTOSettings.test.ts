@@ -159,7 +159,7 @@ describe('Session GTO settings round-trip', () => {
   beforeEach(() => {
     session = new Session();
     paintEngine = new PaintEngine();
-    viewer = new Viewer(session, paintEngine);
+    viewer = new Viewer({ session, paintEngine });
   });
 
   afterEach(() => {

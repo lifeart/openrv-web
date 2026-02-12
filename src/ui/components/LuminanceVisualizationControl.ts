@@ -25,6 +25,7 @@ export class LuminanceVisualizationControl {
   private luminanceVis: LuminanceVisualization;
   private isDropdownOpen = false;
   private boundHandleReposition: () => void;
+  private unsubscribers: (() => void)[] = [];
 
   constructor(luminanceVis: LuminanceVisualization) {
     this.luminanceVis = luminanceVis;
@@ -111,10 +112,10 @@ export class LuminanceVisualizationControl {
     document.addEventListener('click', this.handleOutsideClick);
 
     // Listen for state changes
-    this.luminanceVis.on('stateChanged', () => {
+    this.unsubscribers.push(this.luminanceVis.on('stateChanged', () => {
       this.updateButtonState();
       this.updateSubControls();
-    });
+    }));
   }
 
   private createDropdownContent(): void {
@@ -440,7 +441,7 @@ export class LuminanceVisualizationControl {
       display: none;
     `;
 
-    this.luminanceVis.on('stateChanged', (state) => {
+    this.unsubscribers.push(this.luminanceVis.on('stateChanged', (state) => {
       if (!this.badgeElement) return;
       if (state.mode === 'off') {
         this.badgeElement.style.display = 'none';
@@ -454,7 +455,7 @@ export class LuminanceVisualizationControl {
         }
         this.badgeElement.textContent = text;
       }
-    });
+    }));
 
     return this.badgeElement;
   }
@@ -467,5 +468,7 @@ export class LuminanceVisualizationControl {
     document.removeEventListener('click', this.handleOutsideClick);
     window.removeEventListener('resize', this.boundHandleReposition);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
+    this.unsubscribers.forEach((unsub) => unsub());
+    this.unsubscribers = [];
   }
 }

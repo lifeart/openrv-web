@@ -1,55 +1,61 @@
 import { Session } from '../../core/session/Session';
-import { PaintEngine, PaintTool } from '../../paint/PaintEngine';
+import { PaintEngine } from '../../paint/PaintEngine';
 import { PaintRenderer } from '../../paint/PaintRenderer';
-import { StrokePoint, ShapeType, Point } from '../../paint/types';
+import { PerfTrace } from '../../utils/PerfTrace';
 import { ColorAdjustments } from './ColorControls';
 import { WipeState, WipeMode } from './WipeControl';
 import { Transform2D } from './TransformControl';
 import { FilterSettings, DEFAULT_FILTER_SETTINGS } from './FilterControl';
-import { CropState, CropRegion, DEFAULT_CROP_STATE, DEFAULT_CROP_REGION, ASPECT_RATIOS, MIN_CROP_FRACTION, UncropState, DEFAULT_UNCROP_STATE } from './CropControl';
-import { LUT3D } from '../../color/LUTLoader';
-import { LUTPipeline } from '../../color/pipeline/LUTPipeline';
-import { GPULUTChain } from '../../color/pipeline/GPULUTChain';
-import { CDLValues, isDefaultCDL, applyCDLToImageData } from '../../color/CDL';
-import { ColorCurvesData, isDefaultCurves, buildAllCurveLUTs } from '../../color/ColorCurves';
+import { CropState, CropRegion, UncropState } from './CropControl';
+import { CropManager } from './CropManager';
+import {
+  type LUT3D,
+  LUTPipeline,
+  GPULUTChain,
+  type CDLValues,
+  isDefaultCDL,
+  applyCDLToImageData,
+  type ColorCurvesData,
+  isDefaultCurves,
+  applyColorInversion,
+  type DisplayColorState,
+  DEFAULT_DISPLAY_COLOR_STATE,
+  DISPLAY_TRANSFER_CODES,
+  applyDisplayColorManagementToImageData,
+  isDisplayStateActive,
+  type DisplayCapabilities,
+  safeCanvasContext2D,
+  applyHueRotation as applyHueRotationPixel,
+  isIdentityHueRotation,
+} from '../../color/ColorProcessingFacade';
 import type { LensDistortionParams } from '../../transform/LensDistortion';
-import { ExportFormat, exportCanvas as doExportCanvas, copyCanvasToClipboard } from '../../utils/FrameExporter';
-import { filterImageFiles, getBestSequence } from '../../utils/SequenceLoader';
+import { ExportFormat, exportCanvas as doExportCanvas, copyCanvasToClipboard } from '../../utils/export/FrameExporter';
 import { StackLayer } from './StackControl';
 import { compositeImageData, BlendMode } from '../../composite/BlendModes';
-import { showAlert } from './shared/Modal';
 import { getIconSvg } from './shared/Icons';
 import { ChannelMode, applyChannelIsolation } from './ChannelSelect';
-import { applyColorInversion } from '../../color/Inversion';
 import type { StereoState, StereoEyeTransformState, StereoAlignMode } from '../../stereo/StereoRenderer';
 import { DifferenceMatteState, DEFAULT_DIFFERENCE_MATTE_STATE, applyDifferenceMatte } from './DifferenceMatteControl';
 import { WebGLSharpenProcessor } from '../../filters/WebGLSharpen';
-import { SafeAreasOverlay } from './SafeAreasOverlay';
-import { MatteOverlay } from './MatteOverlay';
-import { PixelProbe } from './PixelProbe';
-import { FalseColor } from './FalseColor';
-import { LuminanceVisualization } from './LuminanceVisualization';
-import { TimecodeOverlay } from './TimecodeOverlay';
-import { ZebraStripes } from './ZebraStripes';
+import type { SafeAreasOverlay } from './SafeAreasOverlay';
+import type { MatteOverlay } from './MatteOverlay';
+import type { PixelProbe } from './PixelProbe';
+import type { FalseColor } from './FalseColor';
+import type { LuminanceVisualization } from './LuminanceVisualization';
+import type { TimecodeOverlay } from './TimecodeOverlay';
+import type { ZebraStripes } from './ZebraStripes';
 import { ColorWheels } from './ColorWheels';
-import { SpotlightOverlay } from './SpotlightOverlay';
-import { ClippingOverlay } from './ClippingOverlay';
+import type { SpotlightOverlay } from './SpotlightOverlay';
+import type { ClippingOverlay } from './ClippingOverlay';
 import { HSLQualifier } from './HSLQualifier';
-import { PrerenderBufferManager } from '../../utils/PrerenderBufferManager';
-import { getThemeManager } from '../../utils/ThemeManager';
-import { setupHiDPICanvas, resetCanvasFromHiDPI } from '../../utils/HiDPICanvas';
-import { DisplayColorState, DEFAULT_DISPLAY_COLOR_STATE, DISPLAY_TRANSFER_CODES, applyDisplayColorManagementToImageData, isDisplayStateActive } from '../../color/DisplayTransfer';
-import type { DisplayCapabilities } from '../../color/DisplayCapabilities';
-import { safeCanvasContext2D } from '../../color/SafeCanvasContext';
-import { Renderer } from '../../render/Renderer';
-import { RenderWorkerProxy } from '../../render/RenderWorkerProxy';
-import type { RenderState } from '../../render/RenderState';
-import type { IPImage } from '../../core/image/Image';
+import { OverlayManager } from './OverlayManager';
+import { PrerenderBufferManager } from '../../utils/effects/PrerenderBufferManager';
+import { getThemeManager } from '../../utils/ui/ThemeManager';
+import { setupHiDPICanvas, resetCanvasFromHiDPI } from '../../utils/ui/HiDPICanvas';
 
 // Extracted effect processing utilities
 import { applyHighlightsShadows, applyVibrance, applyClarity, applySharpenCPU, applyToneMapping } from './ViewerEffects';
-import { yieldToMain } from '../../utils/EffectProcessor';
-import { applyHueRotation as applyHueRotationPixel, isIdentityHueRotation } from '../../color/HueRotation';
+import { yieldToMain } from '../../utils/effects/EffectProcessor';
 import { WipeManager } from './WipeManager';
 import type { GhostFrameState } from './GhostFrameControl';
 import { ColorPipelineManager } from './ColorPipelineManager';
@@ -57,30 +63,26 @@ import { TransformManager } from './TransformManager';
 import { StereoManager } from './StereoManager';
 import { LensDistortionManager } from './LensDistortionManager';
 import { GhostFrameManager } from './GhostFrameManager';
+import { PixelSamplingManager } from './PixelSamplingManager';
+import { ViewerGLRenderer } from './ViewerGLRenderer';
+import type { GLRendererContext } from './ViewerGLRenderer';
+import { detectWebGPUHDR, isHDROutputAvailableWithLog } from '../../color/DisplayCapabilities';
+import { VideoFrameFetchTracker } from './VideoFrameFetchTracker';
 import { ToneMappingState } from './ToneMappingControl';
-import { PARState, DEFAULT_PAR_STATE, isPARActive, calculatePARCorrectedWidth } from '../../utils/PixelAspectRatio';
+import { PARState, DEFAULT_PAR_STATE, isPARActive, calculatePARCorrectedWidth } from '../../utils/media/PixelAspectRatio';
+import { Logger } from '../../utils/Logger';
 import { BackgroundPatternState, DEFAULT_BACKGROUND_PATTERN_STATE, drawBackgroundPattern, PATTERN_COLORS } from './BackgroundPatternControl';
-import { FrameInterpolator } from '../../utils/FrameInterpolator';
+import { FrameInterpolator } from '../../utils/media/FrameInterpolator';
 import {
-  PointerState,
-  getCanvasPoint as getCanvasPointUtil,
-  calculateWheelZoom,
-  calculateZoomPan,
-  calculatePinchDistance,
-  calculatePinchZoom,
   isViewerContentElement as isViewerContentElementUtil,
-  getPixelCoordinates,
-  getPixelColor,
 } from './ViewerInteraction';
 import {
   drawWithTransform as drawWithTransformUtil,
   FilterStringCache,
   getCanvasFilterString as getCanvasFilterStringUtil,
   buildContainerFilterString,
-  renderCropOverlay as renderCropOverlayUtil,
   drawPlaceholder as drawPlaceholderUtil,
   calculateDisplayDimensions,
-  isFullCropRegion,
 } from './ViewerRenderingUtils';
 import {
   createExportCanvas as createExportCanvasUtil,
@@ -94,6 +96,23 @@ import {
   PrerenderStats,
   EFFECTS_DEBOUNCE_MS,
 } from './ViewerPrerender';
+import { ViewerInputHandler } from './ViewerInputHandler';
+import { InteractionQualityManager } from './InteractionQualityManager';
+
+export interface ViewerConfig {
+  session: Session;
+  paintEngine: PaintEngine;
+  capabilities?: DisplayCapabilities;
+  // Optional overrides for testing / dependency injection
+  transformManager?: TransformManager;
+  colorPipeline?: ColorPipelineManager;
+  wipeManager?: WipeManager;
+  ghostFrameManager?: GhostFrameManager;
+  lensDistortionManager?: LensDistortionManager;
+  stereoManager?: StereoManager;
+}
+
+const log = new Logger('Viewer');
 
 export class Viewer {
   private container: HTMLElement;
@@ -107,22 +126,15 @@ export class Viewer {
   // Paint system
   private paintEngine: PaintEngine;
   private paintRenderer: PaintRenderer;
-  private isDrawing = false;
-  private livePoints: StrokePoint[] = [];
-
-  // Shape drawing state
-  private isDrawingShape = false;
-  private shapeStartPoint: Point | null = null;
-  private shapeCurrentPoint: Point | null = null;
 
   // Transform manager (owns pan/zoom/rotation/flip/animation state)
-  private transformManager = new TransformManager();
+  private transformManager: TransformManager;
 
-  // Interaction state
-  private isPanning = false;
-  private lastPointerX = 0;
-  private lastPointerY = 0;
-  private activePointers: Map<number, PointerState> = new Map();
+  // Input handler (owns pointer/wheel/drag-drop events, pan/zoom interaction, live paint state)
+  private inputHandler!: ViewerInputHandler;
+
+  // Interaction quality tiering (reduces GL viewport during zoom/scrub)
+  private interactionQuality: InteractionQualityManager;
 
   // Source dimensions for coordinate conversion
   private sourceWidth = 0;
@@ -131,6 +143,10 @@ export class Viewer {
   // Display dimensions
   private displayWidth = 0;
   private displayHeight = 0;
+
+  // Physical (DPR-scaled) dimensions for the GL canvas
+  private physicalWidth = 0;
+  private physicalHeight = 0;
 
   // Drop zone
   private dropOverlay: HTMLElement;
@@ -150,26 +166,14 @@ export class Viewer {
   // so that stale async operations can detect they've been superseded and bail out.
   private _asyncEffectsGeneration = 0;
 
-  // Pending video frame fetch tracking
-  private pendingVideoFrameFetch: Promise<void> | null = null;
-  private pendingVideoFrameNumber: number = 0; // Which frame is being fetched
-
-  // Pending source B video frame fetch tracking (for split screen)
-  private pendingSourceBFrameFetch: Promise<void> | null = null;
-  private pendingSourceBFrameNumber: number = 0;
-  private hasDisplayedSourceBMediabunnyFrame = false;
-  // Cache the last successfully rendered source B frame canvas to prevent flickering
-  // when the next frame is being fetched asynchronously
-  private lastSourceBFrameCanvas: HTMLCanvasElement | OffscreenCanvas | null = null;
-
-  // Track if we've ever displayed a mediabunny frame (for fallback logic)
-  private hasDisplayedMediabunnyFrame = false;
+  // Video frame fetch tracking (pending fetches, mediabunny frame state, source B cache)
+  private frameFetchTracker = new VideoFrameFetchTracker();
 
   // Color pipeline manager (owns all color correction state)
-  private colorPipeline = new ColorPipelineManager();
+  private colorPipeline: ColorPipelineManager;
 
   // Wipe + split-screen comparison manager
-  private wipeManager = new WipeManager();
+  private wipeManager: WipeManager;
 
   // LUT indicator badge (UI element, remains in Viewer)
   private lutIndicator: HTMLElement | null = null;
@@ -183,45 +187,15 @@ export class Viewer {
   private filterSettings: FilterSettings = { ...DEFAULT_FILTER_SETTINGS };
   private sharpenProcessor: WebGLSharpenProcessor | null = null;
 
-  // Crop state
-  private cropState: CropState = { ...DEFAULT_CROP_STATE, region: { ...DEFAULT_CROP_REGION } };
-  private uncropState: UncropState = { ...DEFAULT_UNCROP_STATE };
-  private cropOverlay: HTMLCanvasElement | null = null;
-  private cropCtx: CanvasRenderingContext2D | null = null;
-  private isDraggingCrop = false;
-  private cropDragHandle: 'tl' | 'tr' | 'bl' | 'br' | 'top' | 'bottom' | 'left' | 'right' | 'move' | null = null;
-  private cropDragStart: { x: number; y: number; region: CropRegion } | null = null;
-  private cropDragPointerId: number | null = null;
-  private cropRegionChangedCallback: ((region: CropRegion) => void) | null = null;
-  private isCropPanelOpen = false;
+  // Crop manager (owns crop/uncrop state, overlay, and drag interaction)
+  private cropManager!: CropManager;
 
-  // Safe areas overlay
-  private safeAreasOverlay: SafeAreasOverlay;
-
-  // Matte overlay
-  private matteOverlay: MatteOverlay;
-
-  // Timecode overlay
-  private timecodeOverlay: TimecodeOverlay;
-
-  // Pixel probe
-  private pixelProbe: PixelProbe;
-
-  // False color display
-  private falseColor: FalseColor;
-
-  // Luminance visualization modes (HSV, random color, contour, delegates false-color)
-  private luminanceVisualization: LuminanceVisualization;
-
-  // Zebra stripes overlay
-  private zebraStripes: ZebraStripes;
-  private clippingOverlay: ClippingOverlay;
+  // Overlay manager (owns safe areas, matte, timecode, pixel probe,
+  // false color, luminance visualization, zebra stripes, clipping, spotlight)
+  private overlayManager!: OverlayManager;
 
   // Lift/Gamma/Gain color wheels
   private colorWheels: ColorWheels;
-
-  // Spotlight overlay
-  private spotlightOverlay: SpotlightOverlay;
 
   // HSL Qualifier (secondary color correction)
   private hslQualifier: HSLQualifier;
@@ -230,7 +204,7 @@ export class Viewer {
   // Color curves state -> moved to colorPipeline
 
   // Lens distortion manager (owns lens correction state)
-  private lensDistortionManager = new LensDistortionManager();
+  private lensDistortionManager: LensDistortionManager;
 
   // Stack/composite state
   private stackLayers: StackLayer[] = [];
@@ -240,13 +214,13 @@ export class Viewer {
   private channelMode: ChannelMode = 'rgb';
 
   // Stereo manager (owns stereo/3D viewing state)
-  private stereoManager = new StereoManager();
+  private stereoManager: StereoManager;
 
   // Difference matte state
   private differenceMatteState: DifferenceMatteState = { ...DEFAULT_DIFFERENCE_MATTE_STATE };
 
   // Ghost frame manager (owns onion skin state + canvas pool)
-  private ghostFrameManager = new GhostFrameManager();
+  private ghostFrameManager: GhostFrameManager;
 
   // Tone mapping state -> moved to colorPipeline
 
@@ -274,16 +248,8 @@ export class Viewer {
   // Filter string cache for performance
   private filterStringCache: FilterStringCache = { filterString: null, cachedAdjustments: null };
 
-  // Cursor color callback for InfoPanel
-  private cursorColorCallback: ((color: { r: number; g: number; b: number } | null, position: { x: number; y: number } | null) => void) | null = null;
-
-  // Shared throttle timestamp for merged mousemove handler (probe + cursor color)
-  private lastMouseMoveUpdate = 0;
-
-  // Cached source image canvas for pixel probe "source" mode
-  // Reused to avoid creating new canvases on every mouse move
-  private sourceImageCanvas: HTMLCanvasElement | null = null;
-  private sourceImageCtx: CanvasRenderingContext2D | null = null;
+  // Pixel sampling manager (cursor color callback, probe handlers, source image cache)
+  private pixelSamplingManager!: PixelSamplingManager;
 
   // Theme change listener for runtime theme updates
   private boundOnThemeChange: (() => void) | null = null;
@@ -292,27 +258,94 @@ export class Viewer {
   private capabilities: DisplayCapabilities | undefined;
   private canvasColorSpace: 'display-p3' | undefined;
 
-  // WebGL HDR rendering
-  private glCanvas: HTMLCanvasElement | null = null;
-  private glRenderer: Renderer | null = null;
-  private hdrRenderActive = false;
+  // WebGL/HDR rendering manager (owns GL canvas, Renderer, worker proxy)
+  private glRendererManager!: ViewerGLRenderer;
 
-  // WebGL SDR rendering (Phase 1A: GPU shader pipeline for SDR sources)
-  private sdrWebGLRenderActive = false;
+  /**
+   * Create a GLRendererContext adapter that the ViewerGLRenderer uses
+   * to access Viewer state without tight coupling.
+   */
+  private asGLRendererContext(): GLRendererContext {
+    return {
+      getCanvasContainer: () => this.canvasContainer,
+      getImageCanvas: () => this.imageCanvas,
+      getPaintCanvas: () => this.paintCanvas,
+      getColorPipeline: () => this.colorPipeline,
+      getTransformManager: () => this.transformManager,
+      getFilterSettings: () => this.filterSettings,
+      getChannelMode: () => this.channelMode,
+      getBackgroundPatternState: () => this.backgroundPatternState,
+      getColorWheels: () => this.colorWheels,
+      getFalseColor: () => this.overlayManager.getFalseColor(),
+      getZebraStripes: () => this.overlayManager.getZebraStripes(),
+      getHSLQualifier: () => this.hslQualifier,
+      getSession: () => this.session,
+      applyColorFilters: () => this.applyColorFilters(),
+      scheduleRender: () => this.scheduleRender(),
+      isToneMappingEnabled: () => this.isToneMappingEnabled(),
+    };
+  }
 
-  // Phase 4: OffscreenCanvas worker proxy
-  private renderWorkerProxy: RenderWorkerProxy | null = null;
-  private isAsyncRenderer = false;
+  /**
+   * Create an adapter that the ViewerInputHandler uses to access Viewer
+   * state and invoke side-effects without tight coupling.
+   */
+  private asInputContext(): import('./ViewerInputHandler').ViewerInputContext {
+    return {
+      getContainer: () => this.container,
+      getCanvasContainer: () => this.canvasContainer,
+      getImageCanvas: () => this.imageCanvas,
+      getPaintCanvas: () => this.paintCanvas,
+      getPaintCtx: () => this.paintCtx,
+      getDisplayWidth: () => this.displayWidth,
+      getDisplayHeight: () => this.displayHeight,
+      getSourceWidth: () => this.sourceWidth,
+      getSourceHeight: () => this.sourceHeight,
+      getContainerRect: () => this.getContainerRect(),
+      getCanvasContainerRect: () => this.getCanvasContainerRect(),
+      getImageCanvasRect: () => this.getImageCanvasRect(),
+      getTransformManager: () => this.transformManager,
+      getWipeManager: () => this.wipeManager,
+      getCropManager: () => this.cropManager,
+      getPaintEngine: () => this.paintEngine,
+      getPaintRenderer: () => this.paintRenderer,
+      getSession: () => this.session,
+      getPixelProbe: () => this.overlayManager.getPixelProbe(),
+      getInteractionQuality: () => this.interactionQuality,
+      isViewerContentElement: (el: HTMLElement) => this.isViewerContentElement(el),
+      scheduleRender: () => this.scheduleRender(),
+      updateCanvasPosition: () => this.updateCanvasPosition(),
+      renderPaint: () => this.renderPaint(),
+    };
+  }
 
-  constructor(session: Session, paintEngine: PaintEngine, capabilities?: DisplayCapabilities) {
-    this.capabilities = capabilities;
+  constructor(config: ViewerConfig) {
+    this.capabilities = config.capabilities;
     this.canvasColorSpace = this.capabilities?.canvasP3 ? 'display-p3' : undefined;
-    this.session = session;
-    this.paintEngine = paintEngine;
+    this.session = config.session;
+    this.paintEngine = config.paintEngine;
     this.paintRenderer = new PaintRenderer(this.canvasColorSpace);
+
+    // Initialize managers from config or create defaults
+    this.transformManager = config.transformManager ?? new TransformManager();
+    this.colorPipeline = config.colorPipeline ?? new ColorPipelineManager();
+    this.wipeManager = config.wipeManager ?? new WipeManager();
+    this.ghostFrameManager = config.ghostFrameManager ?? new GhostFrameManager();
+    this.lensDistortionManager = config.lensDistortionManager ?? new LensDistortionManager();
+    this.stereoManager = config.stereoManager ?? new StereoManager();
 
     // Wire up transform manager's render callback
     this.transformManager.setScheduleRender(() => this.scheduleRender());
+
+    // Initialize interaction quality tiering
+    this.interactionQuality = new InteractionQualityManager();
+    this.interactionQuality.setOnQualityChange(() => this.scheduleRender());
+
+    // Wire up transform manager interaction callbacks for smooth zoom animations
+    this.transformManager.setInteractionCallbacks(
+      () => this.interactionQuality.beginInteraction(),
+      () => this.interactionQuality.endInteraction(),
+    );
 
     // Create container
     this.container = document.createElement('div');
@@ -332,6 +365,7 @@ export class Viewer {
 
     // Create canvas container for transforms
     this.canvasContainer = document.createElement('div');
+    this.canvasContainer.dataset.testid = 'viewer-canvas-container';
     this.canvasContainer.style.cssText = `
       position: absolute;
       top: 0;
@@ -342,19 +376,48 @@ export class Viewer {
 
     // Create image canvas (bottom layer)
     this.imageCanvas = document.createElement('canvas');
+    this.imageCanvas.dataset.testid = 'viewer-image-canvas';
     this.imageCanvas.style.cssText = `
       display: block;
       background: #000;
     `;
     this.canvasContainer.appendChild(this.imageCanvas);
 
-    // Create WebGL canvas for HDR rendering (between image canvas and paint canvas)
-    this.glCanvas = document.createElement('canvas');
-    this.glCanvas.style.cssText = 'position:absolute;top:0;left:0;display:none;';
-    this.canvasContainer.appendChild(this.glCanvas);
+    // Create WebGL/HDR rendering manager and its GL canvas (between image canvas and paint canvas)
+    this.glRendererManager = new ViewerGLRenderer(this.asGLRendererContext(), this.capabilities);
+    this.canvasContainer.appendChild(this.glRendererManager.createGLCanvas());
+
+    // Async WebGPU HDR detection: when the display supports HDR but WebGL2 has no
+    // native HDR output (no HLG/PQ/extended), probe WebGPU for HDR blit fallback.
+    // If WebGPU fails, try Canvas2D HDR blit as last resort.
+    if (this.capabilities?.displayHDR &&
+        !this.capabilities?.webglHLG && !this.capabilities?.webglPQ &&
+        !(this.capabilities?.webglDrawingBufferStorage && this.capabilities?.canvasExtendedHDR)) {
+      const tryCanvas2DFallback = () => {
+        if (this.capabilities && (this.capabilities.canvasHLG || this.capabilities.canvasFloat16)) {
+          console.log('[Viewer] Trying Canvas2D HDR blit as last resort');
+          this.glRendererManager.initCanvas2DHDRBlit();
+        }
+      };
+
+      if (this.capabilities?.webgpuAvailable) {
+        detectWebGPUHDR().then(available => {
+          if (available && this.capabilities) {
+            this.capabilities.webgpuHDR = available;
+            console.log('[Viewer] WebGPU HDR available, initializing blit');
+            this.glRendererManager.initWebGPUHDRBlit();
+          } else {
+            tryCanvas2DFallback();
+          }
+        }).catch(() => { tryCanvas2DFallback(); });
+      } else {
+        tryCanvas2DFallback();
+      }
+    }
 
     // Create paint canvas (top layer, overlaid)
     this.paintCanvas = document.createElement('canvas');
+    this.paintCanvas.dataset.testid = 'viewer-paint-canvas';
     this.paintCanvas.style.cssText = `
       position: absolute;
       top: 0;
@@ -363,61 +426,41 @@ export class Viewer {
     `;
     this.canvasContainer.appendChild(this.paintCanvas);
 
-    // Create crop overlay canvas
-    this.cropOverlay = document.createElement('canvas');
-    this.cropOverlay.style.cssText = `
-      position: absolute;
-      top: 0;
-      left: 0;
-      pointer-events: none;
-    `;
-    this.canvasContainer.appendChild(this.cropOverlay);
-    this.cropCtx = safeCanvasContext2D(this.cropOverlay, {}, this.canvasColorSpace);
+    // Create crop manager (creates and appends crop overlay canvas)
+    this.cropManager = new CropManager({
+      container: this.container,
+      canvasContainer: this.canvasContainer,
+      getSession: () => this.session,
+      getDisplayDimensions: () => ({ width: this.displayWidth, height: this.displayHeight }),
+      getSourceDimensions: () => ({ width: this.sourceWidth, height: this.sourceHeight }),
+      scheduleRender: () => this.scheduleRender(),
+    }, this.canvasColorSpace);
 
-    // Create safe areas overlay
-    this.safeAreasOverlay = new SafeAreasOverlay();
-    this.canvasContainer.appendChild(this.safeAreasOverlay.getElement());
-
-    // Create matte overlay (below safe areas, z-index 40)
-    this.matteOverlay = new MatteOverlay();
-    this.canvasContainer.appendChild(this.matteOverlay.getElement());
-
-    // Create timecode overlay
-    this.timecodeOverlay = new TimecodeOverlay(session);
-    this.canvasContainer.appendChild(this.timecodeOverlay.getElement());
-
-    // Create pixel probe
-    this.pixelProbe = new PixelProbe();
-
-    // Update cursor when pixel probe state changes
-    this.pixelProbe.on('stateChanged', (state) => {
-      this.updateCursorForProbe(state.enabled);
+    // Create overlay manager (safe areas, matte, timecode, pixel probe,
+    // false color, luminance visualization, zebra stripes, clipping, spotlight)
+    this.overlayManager = new OverlayManager(this.canvasContainer, this.session, {
+      refresh: () => this.refresh(),
+      onProbeStateChanged: (enabled) => this.updateCursorForProbe(enabled),
     });
 
-    // Create false color display
-    this.falseColor = new FalseColor();
-
-    // Create luminance visualization (manages HSV, random color, contour, and delegates false-color)
-    this.luminanceVisualization = new LuminanceVisualization(this.falseColor);
-    this.luminanceVisualization.on('stateChanged', () => {
-      this.refresh();
-    });
-
-    // Create zebra stripes overlay
-    this.zebraStripes = new ZebraStripes();
-    this.zebraStripes.on('stateChanged', (state) => {
-      if (state.enabled && (state.highEnabled || state.lowEnabled)) {
-        this.zebraStripes.startAnimation(() => this.refresh());
-      } else {
-        this.zebraStripes.stopAnimation();
-      }
-      this.refresh();
-    });
-
-    // Create clipping overlay
-    this.clippingOverlay = new ClippingOverlay();
-    this.clippingOverlay.on('stateChanged', () => {
-      this.refresh();
+    // Create pixel sampling manager (cursor color, probe mouse handlers, source image cache)
+    this.pixelSamplingManager = new PixelSamplingManager({
+      pixelProbe: this.overlayManager.getPixelProbe(),
+      getGLRenderer: () => this.glRendererManager.glRenderer,
+      getRenderWorkerProxy: () => this.glRendererManager.renderWorkerProxy,
+      isAsyncRenderer: () => this.glRendererManager.isAsyncRenderer,
+      isHDRRenderActive: () => this.glRendererManager.hdrRenderActive,
+      isSDRWebGLRenderActive: () => this.glRendererManager.sdrWebGLRenderActive,
+      getImageCanvas: () => this.imageCanvas,
+      getImageCtx: () => this.imageCtx,
+      getSession: () => this.session,
+      getDisplayDimensions: () => ({ width: this.displayWidth, height: this.displayHeight }),
+      getCanvasColorSpace: () => this.canvasColorSpace,
+      getImageCanvasRect: () => this.getImageCanvasRect(),
+      isViewerContentElement: (element: HTMLElement) => this.isViewerContentElement(element),
+      drawWithTransform: (ctx, element, w, h) => this.drawWithTransform(ctx, element, w, h),
+      getLastRenderedImage: () => this.glRendererManager.lastRenderedImage,
+      isPlaying: () => this.session.isPlaying,
     });
 
     // Create color wheels
@@ -426,10 +469,6 @@ export class Viewer {
       this.notifyEffectsChanged();
       this.refresh();
     });
-
-    // Create spotlight overlay
-    this.spotlightOverlay = new SpotlightOverlay();
-    this.canvasContainer.appendChild(this.spotlightOverlay.getElement());
 
     // Create HSL Qualifier (secondary color correction)
     this.hslQualifier = new HSLQualifier();
@@ -523,9 +562,15 @@ export class Viewer {
     });
     this.resizeObserver.observe(this.container);
 
+    // Create input handler (pointer/wheel/drag-drop events, pan/zoom, live paint)
+    this.inputHandler = new ViewerInputHandler(
+      this.asInputContext(),
+      this.dropOverlay,
+    );
+
     this.bindEvents();
     this.initializeCanvas();
-    this.updateCursor(this.paintEngine.tool);
+    this.inputHandler.updateCursor(this.paintEngine.tool);
 
     // Initialize color pipeline GPU resources
     this.colorPipeline.initLUTProcessor();
@@ -554,6 +599,13 @@ export class Viewer {
     this.sourceHeight = 360;
     this.displayWidth = 640;
     this.displayHeight = 360;
+
+    // Configure paint canvas at physical resolution for retina annotations
+    const dpr = window.devicePixelRatio || 1;
+    this.physicalWidth = Math.max(1, Math.round(this.displayWidth * dpr));
+    this.physicalHeight = Math.max(1, Math.round(this.displayHeight * dpr));
+    this.updatePaintCanvasSize(this.displayWidth, this.displayHeight);
+
     // Draw placeholder with hi-DPI support
     this.drawPlaceholder();
     this.updateOverlayDimensions();
@@ -563,43 +615,59 @@ export class Viewer {
   /**
    * Set canvas size for media rendering (standard mode, no hi-DPI scaling).
    * This resets any hi-DPI configuration from placeholder mode.
+   * The 2D canvases stay at logical resolution; the GL canvas is sized at
+   * physical (DPR-scaled) resolution for retina sharpness.
    */
   private setCanvasSize(width: number, height: number): void {
     this.displayWidth = width;
     this.displayHeight = height;
 
-    // Reset all canvases from hi-DPI mode using the utility
+    // Compute physical dimensions for GL path (DPR-aware)
+    const dpr = window.devicePixelRatio || 1;
+    this.physicalWidth = Math.max(1, Math.round(width * dpr));
+    this.physicalHeight = Math.max(1, Math.round(height * dpr));
+
+    // Cap physical dimensions at GPU MAX_TEXTURE_SIZE (proportional to preserve aspect ratio)
+    const maxSize = this.glRendererManager.getMaxTextureSize();
+    if (this.physicalWidth > maxSize || this.physicalHeight > maxSize) {
+      const capScale = maxSize / Math.max(this.physicalWidth, this.physicalHeight);
+      this.physicalWidth = Math.max(1, Math.round(this.physicalWidth * capScale));
+      this.physicalHeight = Math.max(1, Math.round(this.physicalHeight * capScale));
+    }
+
+    // Reset image canvas at LOGICAL resolution (no DPR scaling for CPU effects)
     resetCanvasFromHiDPI(this.imageCanvas, this.imageCtx, width, height);
-    resetCanvasFromHiDPI(this.paintCanvas, this.paintCtx, width, height);
 
-    if (this.cropOverlay && this.cropCtx) {
-      resetCanvasFromHiDPI(this.cropOverlay, this.cropCtx, width, height);
-    }
+    // Paint canvas at PHYSICAL resolution with CSS logical sizing for retina annotations
+    this.updatePaintCanvasSize(width, height);
 
-    // Resize WebGL canvas if HDR or SDR WebGL mode is active
-    if (this.glCanvas && (this.hdrRenderActive || this.sdrWebGLRenderActive) && this.glRenderer) {
-      this.glRenderer.resize(width, height);
-    }
+    this.cropManager.resetOverlayCanvas(width, height);
+
+    // Resize WebGL canvas at PHYSICAL resolution for retina sharpness.
+    // Pass logical (display) dims for exact CSS sizing (avoids rounding drift).
+    this.glRendererManager.resizeIfActive(this.physicalWidth, this.physicalHeight, width, height);
 
     this.updateOverlayDimensions();
     this.updateCanvasPosition();
   }
 
   /**
+   * Configure paint canvas at physical (DPR-scaled) resolution with CSS logical sizing.
+   * This ensures annotations render at retina quality matching the GL canvas.
+   */
+  private updatePaintCanvasSize(logicalWidth: number, logicalHeight: number): void {
+    this.paintCanvas.width = this.physicalWidth;
+    this.paintCanvas.height = this.physicalHeight;
+    this.paintCanvas.style.width = `${logicalWidth}px`;
+    this.paintCanvas.style.height = `${logicalHeight}px`;
+    this.paintCtx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+
+  /**
    * Update overlay dimensions to match display size.
    */
   private updateOverlayDimensions(): void {
-    const width = this.displayWidth;
-    const height = this.displayHeight;
-
-    // Update safe areas overlay dimensions
-    this.safeAreasOverlay.setViewerDimensions(width, height, 0, 0, width, height);
-
-    // Update matte overlay dimensions
-    this.matteOverlay.setViewerDimensions(width, height, 0, 0, width, height);
-
-    // Update spotlight overlay dimensions
-    this.spotlightOverlay.setViewerDimensions(width, height, 0, 0, width, height);
+    this.overlayManager.updateDimensions(this.displayWidth, this.displayHeight);
   }
 
   /**
@@ -620,39 +688,12 @@ export class Viewer {
   }
 
   private bindEvents(): void {
-    // Unified pointer events (works for mouse, touch, pen)
-    this.container.addEventListener('pointerdown', this.onPointerDown);
-    this.container.addEventListener('pointermove', this.onPointerMove);
-    this.container.addEventListener('pointerup', this.onPointerUp);
-    this.container.addEventListener('pointercancel', this.onPointerUp);
-    this.container.addEventListener('pointerleave', this.onPointerLeave);
-
-    // Wheel for zoom
-    this.container.addEventListener('wheel', this.onWheel, { passive: false });
-
-    // Drag and drop
-    this.container.addEventListener('dragenter', this.onDragEnter);
-    this.container.addEventListener('dragleave', this.onDragLeave);
-    this.container.addEventListener('dragover', this.onDragOver);
-    this.container.addEventListener('drop', this.onDrop);
-
-    // Prevent context menu on long press
-    this.container.addEventListener('contextmenu', (e) => {
-      if (this.paintEngine.tool !== 'none') {
-        e.preventDefault();
-      }
-    });
+    // Pointer, wheel, drag-drop, and context menu events (delegated to input handler)
+    this.inputHandler.bindEvents();
 
     // Session events
     this.session.on('sourceLoaded', () => {
-      this.hasDisplayedMediabunnyFrame = false;
-      this.pendingVideoFrameFetch = null;
-      this.pendingVideoFrameNumber = 0;
-      // Also reset source B tracking for split screen
-      this.hasDisplayedSourceBMediabunnyFrame = false;
-      this.pendingSourceBFrameFetch = null;
-      this.pendingSourceBFrameNumber = 0;
-      this.lastSourceBFrameCanvas = null;
+      this.frameFetchTracker.reset();
       this.scheduleRender();
     });
     this.session.on('frameChanged', () => {
@@ -669,10 +710,10 @@ export class Viewer {
 
       // Phase 4: Pre-create ImageBitmap for double-buffer pattern.
       // This starts bitmap creation before the next RAF, avoiding blocking.
-      if (this.isAsyncRenderer && this.renderWorkerProxy) {
+      if (this.glRendererManager.isAsyncRenderer && this.glRendererManager.renderWorkerProxy) {
         const source = this.session.currentSource;
-        if (source?.element && !(source.fileSourceNode?.isHDR())) {
-          this.renderWorkerProxy.prepareFrame(source.element as unknown as HTMLImageElement);
+        if (source?.element && !(source.fileSourceNode?.isHDR()) && !(source.videoSourceNode?.isHDR())) {
+          this.glRendererManager.renderWorkerProxy.prepareFrame(source.element as unknown as HTMLImageElement);
         }
       }
 
@@ -681,251 +722,55 @@ export class Viewer {
 
     // Paint events
     this.paintEngine.on('annotationsChanged', () => this.renderPaint());
-    this.paintEngine.on('toolChanged', (tool) => this.updateCursor(tool));
+    this.paintEngine.on('toolChanged', (tool) => this.inputHandler.updateCursor(tool));
 
     // Pixel probe + cursor color events - single handler for both consumers
-    this.container.addEventListener('mousemove', this.onMouseMoveForPixelSampling);
-    this.container.addEventListener('mouseleave', this.onMouseLeaveForCursorColor);
-    this.container.addEventListener('click', this.onClickForProbe);
+    this.container.addEventListener('mousemove', this.pixelSamplingManager.onMouseMoveForPixelSampling);
+    this.container.addEventListener('mouseleave', this.pixelSamplingManager.onMouseLeaveForCursorColor);
+    this.container.addEventListener('click', this.pixelSamplingManager.onClickForProbe);
+
+    // Listen for DPR changes (window moved between displays).
+    // matchMedia fires only when the query transitions from match→no-match,
+    // so we must re-register with the new DPR value after each change.
+    this.listenForDPRChange();
   }
 
   /**
-   * Merged mousemove handler for both pixel probe and cursor color consumers.
-   * Calls getBoundingClientRect() and getImageData() at most once per event,
-   * then dispatches results to both consumers as needed.
-   * Throttled to ~60fps (16ms) for performance.
+   * Listen for DPR changes (user moves window between displays).
+   * Re-registers the listener after each change since the media query
+   * is tied to a specific DPR value.
    */
-  private onMouseMoveForPixelSampling = (e: MouseEvent): void => {
-    const probeEnabled = this.pixelProbe.isEnabled();
-    const cursorColorEnabled = !!this.cursorColorCallback;
+  private _dprCleanup: (() => void) | null = null;
+  private listenForDPRChange(): void {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
 
-    // Early exit if neither consumer is active
-    if (!probeEnabled && !cursorColorEnabled) return;
-
-    // Single throttle for both consumers
-    const now = Date.now();
-    if (now - this.lastMouseMoveUpdate < 16) {
-      return;
-    }
-    this.lastMouseMoveUpdate = now;
-
-    // Single layout read shared by both consumers (cached per frame)
-    const canvasRect = this.getImageCanvasRect();
-
-    // Compute canvas-relative pixel coordinates once
-    const position = getPixelCoordinates(
-      e.clientX,
-      e.clientY,
-      canvasRect,
-      this.displayWidth,
-      this.displayHeight
-    );
-
-    // Handle out-of-bounds
-    if (!position) {
-      if (cursorColorEnabled) {
-        this.cursorColorCallback!(null, null);
+    const onDPRChange = () => {
+      // Recompute physical dims and re-render
+      if (this.displayWidth > 0 && this.displayHeight > 0) {
+        const dpr = window.devicePixelRatio || 1;
+        this.physicalWidth = Math.max(1, Math.round(this.displayWidth * dpr));
+        this.physicalHeight = Math.max(1, Math.round(this.displayHeight * dpr));
+        this.glRendererManager.resizeIfActive(this.physicalWidth, this.physicalHeight);
+        this.updatePaintCanvasSize(this.displayWidth, this.displayHeight);
+        this.scheduleRender();
       }
-      return;
-    }
+      // Re-register for the new DPR value
+      this.listenForDPRChange();
+    };
 
-    // HDR/SDR WebGL path: use WebGL readPixelFloat for accurate values
-    if ((this.hdrRenderActive || this.sdrWebGLRenderActive) && this.glRenderer) {
-      const sampleSize = this.pixelProbe.getSampleSize();
-      const halfSize = Math.floor(sampleSize / 2);
-      const rx = Math.max(0, Math.floor(position.x) - halfSize);
-      const ry = Math.max(0, Math.floor(position.y) - halfSize);
-      const rw = Math.min(sampleSize, this.displayWidth - rx);
-      const rh = Math.min(sampleSize, this.displayHeight - ry);
+    // Clean up previous listener
+    this._dprCleanup?.();
 
-      // Phase 4: Use async readback when worker renderer is active
-      if (this.isAsyncRenderer && this.renderWorkerProxy) {
-        this.renderWorkerProxy.readPixelFloatAsync(rx, ry, rw, rh).then((pixels) => {
-          this.handlePixelProbeData(pixels, position, rw, rh, probeEnabled, cursorColorEnabled, e);
-        }).catch(() => {
-          // Readback failed — ignore silently
-        });
-        if (probeEnabled) {
-          this.pixelProbe.setOverlayPosition(e.clientX, e.clientY);
-        }
-        return;
-      }
-
-      const pixels = this.glRenderer.readPixelFloat(rx, ry, rw, rh);
-
-      if (probeEnabled) {
-        if (pixels && pixels.length >= 4) {
-          // Average all pixels in the sample area
-          const count = rw * rh;
-          let tr = 0, tg = 0, tb = 0, ta = 0;
-          for (let i = 0; i < count; i++) {
-            tr += pixels[i * 4]!;
-            tg += pixels[i * 4 + 1]!;
-            tb += pixels[i * 4 + 2]!;
-            ta += pixels[i * 4 + 3]!;
-          }
-          this.pixelProbe.updateFromHDRValues(
-            position.x, position.y,
-            tr / count, tg / count, tb / count, ta / count,
-            this.displayWidth, this.displayHeight
-          );
-        }
-        this.pixelProbe.setOverlayPosition(e.clientX, e.clientY);
-      }
-
-      if (cursorColorEnabled) {
-        if (pixels && pixels.length >= 4) {
-          // Use center pixel for cursor color
-          const centerIdx = (Math.floor(rh / 2) * rw + Math.floor(rw / 2)) * 4;
-          const color = {
-            r: Math.round(Math.max(0, Math.min(255, pixels[centerIdx]! * 255))),
-            g: Math.round(Math.max(0, Math.min(255, pixels[centerIdx + 1]! * 255))),
-            b: Math.round(Math.max(0, Math.min(255, pixels[centerIdx + 2]! * 255))),
-          };
-          this.cursorColorCallback!(color, position);
-        } else {
-          this.cursorColorCallback!(null, null);
-        }
-      }
-      return;
-    }
-
-    // SDR path: read from 2D canvas
-    const imageData = this.getImageData();
-
-    // Dispatch to probe consumer
-    if (probeEnabled && imageData) {
-      // Get source image data (before color pipeline) for source mode
-      // Only fetch if source mode is selected to save performance
-      if (this.pixelProbe.getSourceMode() === 'source') {
-        const sourceImageData = this.getSourceImageData();
-        this.pixelProbe.setSourceImageData(sourceImageData);
-      } else {
-        this.pixelProbe.setSourceImageData(null);
-      }
-
-      this.pixelProbe.updateFromCanvas(
-        position.x, position.y, imageData,
-        this.displayWidth, this.displayHeight
-      );
-      this.pixelProbe.setOverlayPosition(e.clientX, e.clientY);
-    }
-
-    // Dispatch to cursor color consumer
-    if (cursorColorEnabled) {
-      if (!imageData) {
-        this.cursorColorCallback!(null, null);
-        return;
-      }
-      const color = getPixelColor(imageData, position.x, position.y);
-      if (!color) {
-        this.cursorColorCallback!(null, null);
-      } else {
-        this.cursorColorCallback!(color, position);
-      }
-    }
-  };
-
-  /**
-   * Handle mouse leave - clear cursor color
-   */
-  private onMouseLeaveForCursorColor = (): void => {
-    if (this.cursorColorCallback) {
-      this.cursorColorCallback(null, null);
-    }
-  };
-
-  /**
-   * Process pixel probe data from either sync or async readback.
-   * Used by both the sync and async (worker) paths.
-   */
-  private handlePixelProbeData(
-    pixels: Float32Array | null,
-    position: { x: number; y: number },
-    rw: number,
-    rh: number,
-    probeEnabled: boolean,
-    cursorColorEnabled: boolean,
-    e: MouseEvent,
-  ): void {
-    if (probeEnabled) {
-      if (pixels && pixels.length >= 4) {
-        const count = rw * rh;
-        let tr = 0, tg = 0, tb = 0, ta = 0;
-        for (let i = 0; i < count; i++) {
-          tr += pixels[i * 4]!;
-          tg += pixels[i * 4 + 1]!;
-          tb += pixels[i * 4 + 2]!;
-          ta += pixels[i * 4 + 3]!;
-        }
-        this.pixelProbe.updateFromHDRValues(
-          position.x, position.y,
-          tr / count, tg / count, tb / count, ta / count,
-          this.displayWidth, this.displayHeight
-        );
-      }
-      this.pixelProbe.setOverlayPosition(e.clientX, e.clientY);
-    }
-
-    if (cursorColorEnabled) {
-      if (pixels && pixels.length >= 4) {
-        const centerIdx = (Math.floor(rh / 2) * rw + Math.floor(rw / 2)) * 4;
-        const color = {
-          r: Math.round(Math.max(0, Math.min(255, pixels[centerIdx]! * 255))),
-          g: Math.round(Math.max(0, Math.min(255, pixels[centerIdx + 1]! * 255))),
-          b: Math.round(Math.max(0, Math.min(255, pixels[centerIdx + 2]! * 255))),
-        };
-        this.cursorColorCallback!(color, position);
-      } else {
-        this.cursorColorCallback!(null, null);
-      }
-    }
-  }
-
-  private onClickForProbe = (e: MouseEvent): void => {
-    if (!this.pixelProbe.isEnabled()) return;
-
-    // Only toggle lock if clicking on the canvas area (not on UI elements)
-    const target = e.target as HTMLElement;
-    if (this.isViewerContentElement(target)) {
-      this.pixelProbe.toggleLock();
-    }
-  };
-
-  private updateCursor(tool: PaintTool): void {
-    // Pixel probe takes priority over other tools
-    if (this.pixelProbe.isEnabled()) {
-      this.container.style.cursor = 'crosshair';
-      return;
-    }
-
-    switch (tool) {
-      case 'pen':
-      case 'eraser':
-      case 'rectangle':
-      case 'ellipse':
-      case 'line':
-      case 'arrow':
-        this.container.style.cursor = 'crosshair';
-        break;
-      case 'text':
-        this.container.style.cursor = 'text';
-        break;
-      default:
-        this.container.style.cursor = 'grab';
-    }
+    const mql = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+    mql.addEventListener('change', onDPRChange, { once: true });
+    this._dprCleanup = () => mql.removeEventListener('change', onDPRChange);
   }
 
   /**
    * Update cursor when pixel probe state changes
    */
   private updateCursorForProbe(enabled: boolean): void {
-    if (enabled) {
-      this.container.style.cursor = 'crosshair';
-    } else {
-      // Restore cursor based on current paint tool
-      this.updateCursor(this.paintEngine.tool);
-    }
+    this.inputHandler.updateCursorForProbe(enabled);
   }
 
   /**
@@ -939,447 +784,30 @@ export class Viewer {
       this.canvasContainer,
       this.imageCanvas,
       this.paintCanvas,
-      this.cropOverlay,
+      this.cropManager.getOverlayElement(),
       this.wipeManager.wipeLine,
       this.wipeManager.splitLine
     );
   }
 
-  private getCanvasPoint(clientX: number, clientY: number, pressure = 0.5): StrokePoint | null {
-    const rect = this.getImageCanvasRect();
-    return getCanvasPointUtil(clientX, clientY, rect, this.displayWidth, this.displayHeight, pressure);
-  }
-
-  private onPointerDown = (e: PointerEvent): void => {
-    // Only handle events that target the viewer content directly
-    // Don't capture events from overlay UI elements (curves control, etc.)
-    const target = e.target as HTMLElement;
-    if (!this.isViewerContentElement(target)) {
-      return;
-    }
-
-    // Capture pointer for tracking outside container
-    this.container.setPointerCapture(e.pointerId);
-
-    // Check for wipe line dragging first
-    if (this.wipeManager.handlePointerDown(e)) {
-      return;
-    }
-
-    // Check for crop handle dragging
-    if (this.handleCropPointerDown(e)) {
-      return;
-    }
-
-    this.activePointers.set(e.pointerId, {
-      pointerId: e.pointerId,
-      x: e.clientX,
-      y: e.clientY,
-    });
-
-    const tool = this.paintEngine.tool;
-
-    // Handle pinch zoom with two fingers
-    if (this.activePointers.size === 2) {
-      this.startPinchZoom();
-      return;
-    }
-
-    // Single pointer interaction
-    if (this.activePointers.size === 1) {
-      if (tool === 'pen' || tool === 'eraser') {
-        const point = this.getCanvasPoint(e.clientX, e.clientY, e.pressure || 0.5);
-        if (point) {
-          this.isDrawing = true;
-          this.livePoints = [point];
-          this.paintEngine.beginStroke(this.session.currentFrame, point);
-          this.renderLiveStroke();
-        }
-      } else if (tool === 'text') {
-        const point = this.getCanvasPoint(e.clientX, e.clientY);
-        if (point) {
-          const text = prompt('Enter text:');
-          if (text) {
-            this.paintEngine.addText(this.session.currentFrame, point, text);
-          }
-        }
-      } else if (this.isShapeTool(tool)) {
-        // Shape tools (rectangle, ellipse, line, arrow)
-        const point = this.getCanvasPoint(e.clientX, e.clientY);
-        if (point) {
-          this.isDrawingShape = true;
-          this.shapeStartPoint = { x: point.x, y: point.y };
-          this.shapeCurrentPoint = { x: point.x, y: point.y };
-          this.renderLiveShape();
-        }
-      } else if (e.button === 0 || e.pointerType === 'touch') {
-        // Pan mode
-        this.isPanning = true;
-        this.lastPointerX = e.clientX;
-        this.lastPointerY = e.clientY;
-        this.container.style.cursor = 'grabbing';
-      }
-    }
-  };
-
-  private onPointerMove = (e: PointerEvent): void => {
-    // Handle wipe/split dragging
-    if (this.wipeManager.isDragging) {
-      const canvasRect = this.getCanvasContainerRect();
-      const containerRect = this.getContainerRect();
-      if (this.wipeManager.handlePointerMove(e, canvasRect, containerRect, this.displayWidth, this.displayHeight)) {
-        this.scheduleRender();
-      }
-      return;
-    }
-
-    // Handle crop dragging
-    if (this.isDraggingCrop) {
-      this.handleCropPointerMove(e);
-      return;
-    }
-
-    // Update cursor for crop handles on hover (only when panel is open / editing)
-    if (this.cropState.enabled && this.isCropPanelOpen && !this.activePointers.size) {
-      const handle = this.getCropHandleAtPoint(e.clientX, e.clientY);
-      this.updateCropCursor(handle);
-    }
-
-    if (!this.activePointers.has(e.pointerId)) return;
-
-    // Update pointer position
-    const pointer = this.activePointers.get(e.pointerId)!;
-    pointer.x = e.clientX;
-    pointer.y = e.clientY;
-
-    // Handle pinch zoom
-    if (this.activePointers.size === 2 && this.transformManager.initialPinchDistance > 0) {
-      this.handlePinchZoom();
-      return;
-    }
-
-    if (this.isDrawing) {
-      const point = this.getCanvasPoint(e.clientX, e.clientY, e.pressure || 0.5);
-      if (point) {
-        this.livePoints.push(point);
-        this.paintEngine.continueStroke(point);
-        this.renderLiveStroke();
-      }
-    } else if (this.isDrawingShape) {
-      const point = this.getCanvasPoint(e.clientX, e.clientY);
-      if (point) {
-        this.shapeCurrentPoint = { x: point.x, y: point.y };
-        this.renderLiveShape();
-      }
-    } else if (this.isPanning) {
-      const dx = e.clientX - this.lastPointerX;
-      const dy = e.clientY - this.lastPointerY;
-
-      this.transformManager.panX += dx;
-      this.transformManager.panY += dy;
-
-      this.lastPointerX = e.clientX;
-      this.lastPointerY = e.clientY;
-
-      this.updateCanvasPosition();
-    }
-  };
-
-  private onPointerUp = (e: PointerEvent): void => {
-    this.container.releasePointerCapture(e.pointerId);
-
-    // Handle wipe/split dragging end
-    if (this.wipeManager.isDragging) {
-      this.wipeManager.handlePointerUp();
-      return;
-    }
-
-    // Handle crop dragging end
-    if (this.isDraggingCrop) {
-      this.handleCropPointerUp();
-      return;
-    }
-
-    this.activePointers.delete(e.pointerId);
-
-    // Reset pinch zoom state
-    if (this.activePointers.size < 2) {
-      this.transformManager.initialPinchDistance = 0;
-    }
-
-    if (this.isDrawing) {
-      this.isDrawing = false;
-      this.paintEngine.endStroke();
-      this.livePoints = [];
-      this.renderPaint();
-    }
-
-    if (this.isDrawingShape) {
-      this.finalizeShape();
-    }
-
-    if (this.isPanning) {
-      this.isPanning = false;
-      if (this.paintEngine.tool === 'none') {
-        this.container.style.cursor = 'grab';
-      } else {
-        this.updateCursor(this.paintEngine.tool);
-      }
-    }
-  };
-
-  private onPointerLeave = (e: PointerEvent): void => {
-    // Don't end drawing if pointer is captured
-    if (this.container.hasPointerCapture(e.pointerId)) return;
-
-    // Otherwise treat like pointer up
-    this.onPointerUp(e);
-  };
-
-  private startPinchZoom(): void {
-    const pointers = Array.from(this.activePointers.values());
-    if (pointers.length !== 2) return;
-
-    // Cancel any smooth zoom animation - pinch zoom should be instant
-    this.transformManager.cancelZoomAnimation();
-
-    this.transformManager.initialPinchDistance = calculatePinchDistance(pointers);
-    this.transformManager.initialZoom = this.transformManager.zoom;
-
-    // Cancel any drawing in progress
-    if (this.isDrawing) {
-      this.isDrawing = false;
-      this.livePoints = [];
-      this.paintEngine.endStroke();
-    }
-
-    // Cancel any shape drawing in progress
-    if (this.isDrawingShape) {
-      this.isDrawingShape = false;
-      this.shapeStartPoint = null;
-      this.shapeCurrentPoint = null;
-    }
-  }
-
-  private handlePinchZoom(): void {
-    const pointers = Array.from(this.activePointers.values());
-    const currentDistance = calculatePinchDistance(pointers);
-    const newZoom = calculatePinchZoom(this.transformManager.initialPinchDistance, currentDistance, this.transformManager.initialZoom);
-
-    if (newZoom !== null && Math.abs(newZoom - this.transformManager.zoom) > 0.01) {
-      this.transformManager.zoom = newZoom;
-      this.scheduleRender();
-    }
-  }
-
-  private onWheel = (e: WheelEvent): void => {
-    e.preventDefault();
-
-    // Cancel any smooth zoom animation - wheel zoom should be instant for responsiveness
-    this.transformManager.cancelZoomAnimation();
-
-    const rect = this.getContainerRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    const newZoom = calculateWheelZoom(e.deltaY, this.transformManager.zoom);
-    if (newZoom === null) return;
-
-    const containerWidth = rect.width || 640;
-    const containerHeight = rect.height || 360;
-
-    const { panX, panY } = calculateZoomPan(
-      mouseX,
-      mouseY,
-      containerWidth,
-      containerHeight,
-      this.sourceWidth,
-      this.sourceHeight,
-      this.transformManager.panX,
-      this.transformManager.panY,
-      this.transformManager.zoom,
-      newZoom
-    );
-
-    this.transformManager.panX = panX;
-    this.transformManager.panY = panY;
-    this.transformManager.zoom = newZoom;
-    this.scheduleRender();
-  };
-
-  private onDragEnter = (e: DragEvent): void => {
-    e.preventDefault();
-    this.dropOverlay.style.display = 'flex';
-  };
-
-  private onDragLeave = (e: DragEvent): void => {
-    e.preventDefault();
-    if (e.relatedTarget && this.container.contains(e.relatedTarget as Node)) return;
-    this.dropOverlay.style.display = 'none';
-  };
-
-  private onDragOver = (e: DragEvent): void => {
-    e.preventDefault();
-  };
-
-  private onDrop = async (e: DragEvent): Promise<void> => {
-    e.preventDefault();
-    this.dropOverlay.style.display = 'none';
-
-    const files = e.dataTransfer?.files;
-    if (!files || files.length === 0) return;
-
-    const fileArray = Array.from(files);
-
-    // Check if multiple image files were dropped - treat as sequence
-    const imageFiles = filterImageFiles(fileArray);
-    if (imageFiles.length > 1) {
-      // Use getBestSequence to handle mixed sequences - picks the longest one
-      const bestSequence = getBestSequence(imageFiles);
-      if (bestSequence && bestSequence.length > 1) {
-        try {
-          await this.session.loadSequence(bestSequence);
-          return;
-        } catch (err) {
-          console.error('Failed to load sequence:', err);
-          showAlert(`Failed to load sequence: ${err}`, { type: 'error', title: 'Load Error' });
-          return;
-        }
-      }
-    }
-
-    // Single file or mixed files - load individually
-    for (const file of fileArray) {
-      try {
-        if (file.name.endsWith('.rv') || file.name.endsWith('.gto')) {
-          // Load RV/GTO session files with annotations
-          const content = await file.arrayBuffer();
-          await this.session.loadFromGTO(content);
-        } else {
-          // Load image or video files
-          await this.session.loadFile(file);
-        }
-      } catch (err) {
-        console.error('Failed to load file:', err);
-        showAlert(`Failed to load ${file.name}: ${err}`, { type: 'error', title: 'Load Error' });
-      }
-    }
-  };
-
-  private renderLiveStroke(): void {
-    if (this.livePoints.length === 0) return;
-    if (this.displayWidth === 0 || this.displayHeight === 0) return;
-
-    const ctx = this.paintCtx;
-    const renderOptions = { width: this.displayWidth, height: this.displayHeight };
-
-    // Get existing annotations
-    const annotations = this.paintEngine.getAnnotationsWithGhost(this.session.currentFrame);
-
-    // Render all annotations to paintRenderer
-    this.paintRenderer.renderAnnotations(annotations, renderOptions);
-
-    // Then render live stroke on top
-    const isEraser = this.paintEngine.tool === 'eraser';
-    this.paintRenderer.renderLiveStroke(
-      this.livePoints,
-      this.paintEngine.color,
-      this.paintEngine.width,
-      this.paintEngine.brush,
-      isEraser,
-      renderOptions
-    );
-
-    // Copy to paint canvas
-    ctx.clearRect(0, 0, this.displayWidth, this.displayHeight);
-    ctx.drawImage(this.paintRenderer.getCanvas(), 0, 0);
-  }
-
-  private isShapeTool(tool: PaintTool): boolean {
-    return tool === 'rectangle' || tool === 'ellipse' || tool === 'line' || tool === 'arrow';
-  }
-
-  private getShapeType(tool: PaintTool): ShapeType {
-    switch (tool) {
-      case 'rectangle': return ShapeType.Rectangle;
-      case 'ellipse': return ShapeType.Ellipse;
-      case 'line': return ShapeType.Line;
-      case 'arrow': return ShapeType.Arrow;
-      default: return ShapeType.Rectangle;
-    }
-  }
-
-  private renderLiveShape(): void {
-    if (!this.shapeStartPoint || !this.shapeCurrentPoint) return;
-    if (this.displayWidth === 0 || this.displayHeight === 0) return;
-
-    const ctx = this.paintCtx;
-    const renderOptions = { width: this.displayWidth, height: this.displayHeight };
-
-    // Get existing annotations
-    const annotations = this.paintEngine.getAnnotationsWithGhost(this.session.currentFrame);
-
-    // Render all annotations to paintRenderer
-    this.paintRenderer.renderAnnotations(annotations, renderOptions);
-
-    // Then render live shape on top
-    const shapeType = this.getShapeType(this.paintEngine.tool);
-    this.paintRenderer.renderLiveShape(
-      shapeType,
-      this.shapeStartPoint,
-      this.shapeCurrentPoint,
-      this.paintEngine.color,
-      this.paintEngine.width,
-      renderOptions
-    );
-
-    // Copy to paint canvas
-    ctx.clearRect(0, 0, this.displayWidth, this.displayHeight);
-    ctx.drawImage(this.paintRenderer.getCanvas(), 0, 0);
-  }
-
-  private finalizeShape(): void {
-    if (!this.shapeStartPoint || !this.shapeCurrentPoint) {
-      this.isDrawingShape = false;
-      this.shapeStartPoint = null;
-      this.shapeCurrentPoint = null;
-      return;
-    }
-
-    const tool = this.paintEngine.tool;
-    const frame = this.session.currentFrame;
-    const shapeType = this.getShapeType(tool);
-
-    // Only add shape if there's meaningful size (prevent accidental clicks)
-    const dx = Math.abs(this.shapeCurrentPoint.x - this.shapeStartPoint.x);
-    const dy = Math.abs(this.shapeCurrentPoint.y - this.shapeStartPoint.y);
-    const minSize = 0.005; // Minimum 0.5% of canvas dimension
-
-    if (dx > minSize || dy > minSize) {
-      this.paintEngine.addShape(
-        frame,
-        shapeType,
-        this.shapeStartPoint,
-        this.shapeCurrentPoint
-      );
-    }
-
-    // Reset shape drawing state
-    this.isDrawingShape = false;
-    this.shapeStartPoint = null;
-    this.shapeCurrentPoint = null;
-    this.renderPaint();
-  }
+  // Interaction methods (getCanvasPoint, pointer/wheel/drag handlers, live stroke/shape,
+  // pinch zoom, cursor management) have been extracted to ViewerInputHandler.
 
   getElement(): HTMLElement {
     return this.container;
   }
 
   private scheduleRender(): void {
+    // During video playback, the tick loop handles all rendering via renderDirect().
+    // Skip scheduling to prevent render storm that starves the video decoder.
+    if (this.session.isPlaying) return;
+
     if (this.pendingRender) return;
     this.pendingRender = true;
 
     requestAnimationFrame(() => {
+      // Skip if renderDirect() already cleared pendingRender and rendered
+      if (!this.pendingRender) return;
       this.pendingRender = false;
       this.render();
     });
@@ -1391,6 +819,16 @@ export class Viewer {
 
   refresh(): void {
     this.scheduleRender();
+  }
+
+  /**
+   * Render immediately without scheduling via requestAnimationFrame.
+   * Used by the playback loop (App.tick) which already runs inside rAF,
+   * avoiding the double-rAF delay that would halve effective frame throughput.
+   */
+  renderDirect(): void {
+    this.pendingRender = false;
+    this.render();
   }
 
   fitToWindow(): void {
@@ -1494,373 +932,65 @@ export class Viewer {
     this._asyncEffectsGeneration++;
     // Invalidate layout cache once per frame - measurements are cached within the frame
     this.invalidateLayoutCache();
+
+    PerfTrace.count('render.calls');
     this.renderImage();
 
     // If actively drawing, render with live stroke/shape; otherwise just paint
-    if (this.isDrawing && this.livePoints.length > 0) {
-      this.renderLiveStroke();
-    } else if (this.isDrawingShape && this.shapeStartPoint && this.shapeCurrentPoint) {
-      this.renderLiveShape();
+    PerfTrace.begin('paint+crop');
+    if (this.inputHandler.drawing && this.inputHandler.currentLivePoints.length > 0) {
+      this.inputHandler.renderLiveStroke();
+    } else if (this.inputHandler.drawingShape && this.inputHandler.currentShapeStart && this.inputHandler.currentShapeCurrent) {
+      this.inputHandler.renderLiveShape();
     } else {
       this.renderPaint();
     }
 
     // Render crop overlay if enabled
-    this.renderCropOverlay();
-  }
-
-  private ensureGLRenderer(): Renderer | null {
-    if (this.glRenderer) return this.glRenderer;
-    if (!this.glCanvas) return null;
-
-    // Phase 4: Try OffscreenCanvas worker first for main-thread isolation.
-    // Only attempt once — if worker proxy already failed, skip directly to sync renderer.
-    if (!this.renderWorkerProxy && !this.isAsyncRenderer) {
-      try {
-        if (typeof OffscreenCanvas !== 'undefined' &&
-            'transferControlToOffscreen' in this.glCanvas &&
-            typeof Worker !== 'undefined') {
-          const proxy = new RenderWorkerProxy();
-          proxy.initialize(this.glCanvas, this.capabilities);
-          // initAsync runs in background — the proxy buffers messages until ready
-          proxy.initAsync().then(() => {
-            console.log(`[Viewer] Render worker initialized, HDR output: ${proxy.getHDROutputMode()}`);
-          }).catch((err) => {
-            console.warn('[Viewer] Render worker init failed, falling back to sync:', err);
-            this.fallbackToSyncRenderer();
-          });
-
-          // Set up context loss/restore callbacks
-          proxy.setOnContextLost(() => {
-            console.warn('[Viewer] Worker WebGL context lost');
-            if (this.hdrRenderActive) {
-              this.deactivateHDRMode();
-            }
-            if (this.sdrWebGLRenderActive) {
-              this.deactivateSDRWebGLMode();
-            }
-          });
-          proxy.setOnContextRestored(() => {
-            console.log('[Viewer] Worker WebGL context restored');
-          });
-
-          this.renderWorkerProxy = proxy;
-          this.isAsyncRenderer = true;
-          // glCanvas has been transferred — we cannot create a sync renderer on it anymore.
-          // The proxy acts as the renderer for state setters.
-          // For RendererBackend compatibility, create a facade Renderer that delegates.
-          // For now, we use the proxy as a "renderer" by wrapping it.
-          this.glRenderer = proxy as unknown as Renderer;
-          return this.glRenderer;
-        }
-      } catch (e) {
-        console.warn('[Viewer] OffscreenCanvas worker setup failed, using sync renderer:', e);
-        // Fall through to sync renderer. Need a fresh canvas since transferControlToOffscreen
-        // may have been called (irreversible). Recreate glCanvas.
-        this.recreateGLCanvas();
-      }
-    }
-
-    // Sync renderer fallback (tier 2)
     try {
-      const renderer = new Renderer();
-      // initialize() sets drawingBufferColorSpace to rec2100-hlg/pq immediately
-      // after context creation (before shaders/buffers) when displayHDR is true.
-      renderer.initialize(this.glCanvas, this.capabilities);
-      const hdrMode = renderer.getHDROutputMode();
-      console.log(`[Viewer] WebGL renderer initialized (sync), HDR output: ${hdrMode}`);
-      this.glRenderer = renderer;
-      return renderer;
-    } catch (e) {
-      console.warn('[Viewer] WebGL renderer init failed:', e);
-      return null;
+      this.cropManager.renderCropOverlay();
+    } catch (err) {
+      console.error('Crop overlay render failed:', err);
     }
+    PerfTrace.end('paint+crop');
   }
 
-  /**
-   * Fall back from async worker renderer to synchronous main-thread renderer.
-   * Used when the worker fails to initialize or crashes.
-   */
-  private fallbackToSyncRenderer(): void {
-    if (this.renderWorkerProxy) {
-      this.renderWorkerProxy.dispose();
-      this.renderWorkerProxy = null;
-    }
-    this.isAsyncRenderer = false;
-    this.glRenderer = null;
-
-    // Recreate glCanvas since the original was transferred
-    this.recreateGLCanvas();
+  // GL rendering methods delegated to ViewerGLRenderer.
+  // These wrappers forward physical (DPR-scaled) dimensions to the GL renderer,
+  // reduced by interaction quality factor during active zoom/scrub for responsiveness.
+  // The canvas buffer is resized to reduced dims while CSS stays at full logical
+  // size — the browser upscales the smaller buffer, providing fluid interaction.
+  private renderHDRWithWebGL(image: import('../../core/image/Image').IPImage, _displayWidth: number, _displayHeight: number) {
+    const { w, h } = this.interactionQuality.getEffectiveViewport(this.physicalWidth, this.physicalHeight);
+    return this.glRendererManager.renderHDRWithWebGL(image, w, h);
   }
-
-  /**
-   * Recreate the GL canvas element (needed after transferControlToOffscreen fails
-   * or worker dies, since the transfer is irreversible).
-   */
-  private recreateGLCanvas(): void {
-    if (this.glCanvas && this.glCanvas.parentNode) {
-      const parent = this.glCanvas.parentNode;
-      const nextSibling = this.glCanvas.nextSibling;
-      parent.removeChild(this.glCanvas);
-      this.glCanvas = document.createElement('canvas');
-      this.glCanvas.style.cssText = 'position:absolute;top:0;left:0;display:none;';
-      if (nextSibling) {
-        parent.insertBefore(this.glCanvas, nextSibling);
-      } else {
-        parent.appendChild(this.glCanvas);
-      }
-    }
-  }
-
-  /**
-   * Build a RenderState object aggregating all current Viewer state for the
-   * Renderer. The returned object can be modified (e.g. HDR overrides) before
-   * being passed to renderer.applyRenderState().
-   */
-  private buildRenderState(): RenderState {
-    const adj = this.colorPipeline.colorAdjustments;
-    const lut = this.colorPipeline.currentLUT;
-    return {
-      colorAdjustments: adj,
-      colorInversion: this.colorPipeline.colorInversionEnabled,
-      toneMappingState: this.colorPipeline.toneMappingState,
-      backgroundPattern: this.backgroundPatternState,
-      cdl: this.colorPipeline.cdlValues,
-      curvesLUT: isDefaultCurves(this.colorPipeline.curvesData) ? null : buildAllCurveLUTs(this.colorPipeline.curvesData),
-      colorWheels: this.colorWheels.getState(),
-      falseColor: { enabled: this.falseColor.isEnabled(), lut: this.falseColor.getColorLUT() },
-      zebraStripes: this.zebraStripes.getState(),
-      channelMode: this.channelMode,
-      lut: lut && this.colorPipeline.lutIntensity > 0
-        ? { data: lut.data, size: lut.size, intensity: this.colorPipeline.lutIntensity }
-        : { data: null, size: 0, intensity: 0 },
-      displayColor: {
-        transferFunction: DISPLAY_TRANSFER_CODES[this.colorPipeline.displayColorState.transferFunction],
-        displayGamma: this.colorPipeline.displayColorState.displayGamma,
-        displayBrightness: this.colorPipeline.displayColorState.displayBrightness,
-        customGamma: this.colorPipeline.displayColorState.customGamma,
-      },
-      highlightsShadows: { highlights: adj.highlights, shadows: adj.shadows, whites: adj.whites, blacks: adj.blacks },
-      vibrance: { amount: adj.vibrance, skinProtection: adj.vibranceSkinProtection },
-      clarity: adj.clarity,
-      sharpen: this.filterSettings.sharpen,
-      hslQualifier: this.hslQualifier.getState(),
-    };
-  }
-
-  private renderHDRWithWebGL(
-    image: IPImage,
-    displayWidth: number,
-    displayHeight: number,
-  ): boolean {
-    const renderer = this.ensureGLRenderer();
-    if (!renderer || !this.glCanvas) return false;
-
-    // Activate WebGL canvas
-    if (!this.hdrRenderActive) {
-      this.glCanvas.style.display = 'block';
-      this.imageCanvas.style.visibility = 'hidden';
-      this.hdrRenderActive = true;
-    }
-
-    // Resize if needed
-    if (this.glCanvas.width !== displayWidth || this.glCanvas.height !== displayHeight) {
-      renderer.resize(displayWidth, displayHeight);
-    }
-
-    // Build render state and apply HDR-specific overrides
-    const state = this.buildRenderState();
-    const isHDROutput = renderer.getHDROutputMode() !== 'sdr';
-    if (isHDROutput) {
-      // HDR output: values > 1.0 pass through to the rec2100-hlg/pq drawing buffer.
-      // - No tone mapping: the HDR display handles the extended luminance range
-      // - Gamma = 1 (linear): the browser applies the HLG/PQ OETF automatically
-      // Other adjustments (exposure, temperature, saturation, etc.) still apply.
-      state.colorAdjustments = { ...state.colorAdjustments, gamma: 1 };
-      state.toneMappingState = { enabled: false, operator: 'off' };
-    }
-    renderer.applyRenderState(state);
-
-    // Render
-    renderer.clear(0, 0, 0, 1);
-    renderer.renderImage(image, 0, 0, 1, 1);
-
-    // CSS transform for rotation/flip
-    const { rotation, flipH, flipV } = this.transformManager.transform;
-    const transforms: string[] = [];
-    if (rotation) transforms.push(`rotate(${rotation}deg)`);
-    if (flipH) transforms.push('scaleX(-1)');
-    if (flipV) transforms.push('scaleY(-1)');
-    this.glCanvas.style.transform = transforms.length ? transforms.join(' ') : '';
-
-    return true;
-  }
-
-  private deactivateHDRMode(): void {
-    if (!this.glCanvas) return;
-    this.glCanvas.style.display = 'none';
-    this.imageCanvas.style.visibility = 'visible';
-    this.hdrRenderActive = false;
-  }
-
-  private deactivateSDRWebGLMode(): void {
-    if (!this.glCanvas) return;
-    this.glCanvas.style.display = 'none';
-    this.imageCanvas.style.visibility = 'visible';
-    this.sdrWebGLRenderActive = false;
-    // Restore CSS filters for the 2D canvas path
-    this.applyColorFilters();
-  }
-
-  /**
-   * Check if any GPU-supported shader effects are active that justify routing
-   * SDR content through the WebGL pipeline instead of the 2D canvas path.
-   *
-   * Effects supported in the GPU shader:
-   * - exposure, gamma, saturation, contrast, brightness, temperature, tint
-   * - hue rotation, tone mapping, color inversion, channel isolation
-   * - CDL, curves, color wheels, false color, zebra stripes, 3D LUT
-   * - display color management, background pattern
-   * - highlights/shadows/whites/blacks, vibrance, clarity, sharpen
-   * - HSL qualifier (secondary color correction)
-   */
-  private hasGPUShaderEffectsActive(): boolean {
-    const adj = this.colorPipeline.colorAdjustments;
-    // Basic color adjustments
-    if (adj.exposure !== 0) return true;
-    if (adj.gamma !== 1) return true;
-    if (adj.saturation !== 1) return true;
-    if (adj.contrast !== 1) return true;
-    if (adj.brightness !== 0) return true;
-    if (adj.temperature !== 0) return true;
-    if (adj.tint !== 0) return true;
-    if (!isIdentityHueRotation(adj.hueRotation)) return true;
-
-    // Tone mapping
-    if (this.isToneMappingEnabled()) return true;
-
-    // Color inversion
-    if (this.colorPipeline.colorInversionEnabled) return true;
-
-    // Channel isolation
-    if (this.channelMode !== 'rgb') return true;
-
-    // CDL
-    if (!isDefaultCDL(this.colorPipeline.cdlValues)) return true;
-
-    // Curves
-    if (!isDefaultCurves(this.colorPipeline.curvesData)) return true;
-
-    // Color wheels
-    if (this.colorWheels.hasAdjustments()) return true;
-
-    // False color
-    if (this.falseColor.isEnabled()) return true;
-
-    // Zebra stripes
-    if (this.zebraStripes.isEnabled()) return true;
-
-    // 3D LUT
-    if (this.colorPipeline.currentLUT && this.colorPipeline.lutIntensity > 0) return true;
-
-    // Display color management
-    if (isDisplayStateActive(this.colorPipeline.displayColorState)) return true;
-
-    // Phase 1B: New GPU shader effects
-    // Highlights/shadows/whites/blacks
-    if (adj.highlights !== 0 || adj.shadows !== 0 || adj.whites !== 0 || adj.blacks !== 0) return true;
-    // Vibrance
-    if (adj.vibrance !== 0) return true;
-    // Clarity
-    if (adj.clarity !== 0) return true;
-    // Sharpen
-    if (this.filterSettings.sharpen > 0) return true;
-    // HSL qualifier
-    if (this.hslQualifier.isEnabled()) return true;
-
-    return false;
-  }
-
-  /**
-   * Check if any CPU-only effects are active that are not in the GPU shader.
-   * When these are active, the SDR path must fall back to the 2D canvas + pixel
-   * processing pipeline to get correct results.
-   *
-   * After Phase 1B, the only remaining CPU-only effect is blur (applied via CSS
-   * filter which doesn't work with the GL canvas).
-   */
-  private hasCPUOnlyEffectsActive(): boolean {
-    // Blur (applied via CSS filter which doesn't work with the GL canvas)
-    if (this.filterSettings.blur > 0) return true;
-    return false;
-  }
-
-  /**
-   * Render an SDR source through the WebGL shader pipeline for GPU-accelerated
-   * effects processing. This avoids the slow CPU pixel processing path for
-   * effects that are supported in the fragment shader.
-   *
-   * Returns true if the SDR content was rendered via WebGL, false if the caller
-   * should fall back to the 2D canvas path.
-   */
+  private deactivateHDRMode() { this.glRendererManager.deactivateHDRMode(); }
+  private deactivateSDRWebGLMode() { this.glRendererManager.deactivateSDRWebGLMode(); }
+  private hasGPUShaderEffectsActive() { return this.glRendererManager.hasGPUShaderEffectsActive(); }
+  private hasCPUOnlyEffectsActive() { return this.glRendererManager.hasCPUOnlyEffectsActive(); }
   private renderSDRWithWebGL(
-    source: HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | HTMLImageElement,
-    displayWidth: number,
-    displayHeight: number,
-  ): boolean {
-    const renderer = this.ensureGLRenderer();
-    if (!renderer || !this.glCanvas) return false;
-
-    // Activate WebGL canvas (show GL canvas, hide 2D canvas)
-    if (!this.sdrWebGLRenderActive) {
-      this.glCanvas.style.display = 'block';
-      this.imageCanvas.style.visibility = 'hidden';
-      this.sdrWebGLRenderActive = true;
-      this.applyColorFilters();
-    }
-
-    // Resize if needed
-    if (this.glCanvas.width !== displayWidth || this.glCanvas.height !== displayHeight) {
-      renderer.resize(displayWidth, displayHeight);
-    }
-
-    // Sync all render state (SDR: use as configured, no overrides)
-    renderer.applyRenderState(this.buildRenderState());
-
-    // Render
-    renderer.clear(0, 0, 0, 1);
-    const result = renderer.renderSDRFrame(source);
-
-    if (!result) {
-      // WebGL rendering failed - deactivate and let caller fall back to 2D canvas
-      this.deactivateSDRWebGLMode();
-      return false;
-    }
-
-    // CSS transform for rotation/flip
-    const { rotation, flipH, flipV } = this.transformManager.transform;
-    const transforms: string[] = [];
-    if (rotation) transforms.push(`rotate(${rotation}deg)`);
-    if (flipH) transforms.push('scaleX(-1)');
-    if (flipV) transforms.push('scaleY(-1)');
-    this.glCanvas.style.transform = transforms.length ? transforms.join(' ') : '';
-
-    return true;
+    source: HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | HTMLImageElement | ImageBitmap,
+    _displayWidth: number,
+    _displayHeight: number,
+  ) {
+    const { w, h } = this.interactionQuality.getEffectiveViewport(this.physicalWidth, this.physicalHeight);
+    return this.glRendererManager.renderSDRWithWebGL(source, w, h);
   }
 
   private renderImage(): void {
     const source = this.session.currentSource;
 
     // Deactivate HDR mode if current source isn't HDR, or if OCIO is active
-    // (OCIO requires the 2D canvas path since the GL shader has no OCIO support)
-    const isCurrentHDR = source?.fileSourceNode?.isHDR() === true;
+    // (unless WebGPU blit bypasses OCIO for HDR output)
+    const isCurrentHDR = source?.fileSourceNode?.isHDR() === true || source?.videoSourceNode?.isHDR() === true;
     const ocioActive = this.colorPipeline.ocioEnabled && this.colorPipeline.ocioBakedLUT !== null;
-    if (this.hdrRenderActive && (!isCurrentHDR || ocioActive)) {
+    const blitBypassesOCIO = this.glRendererManager.isWebGPUBlitReady;
+    if (this.glRendererManager.hdrRenderActive && (!isCurrentHDR || (ocioActive && !blitBypassesOCIO))) {
       this.deactivateHDRMode();
     }
 
     // Deactivate SDR WebGL mode if current source is HDR (HDR path takes over)
-    if (isCurrentHDR && this.sdrWebGLRenderActive) {
+    if (isCurrentHDR && this.glRendererManager.sdrWebGLRenderActive) {
       this.deactivateSDRWebGLMode();
     }
 
@@ -1870,7 +1000,7 @@ export class Viewer {
     const containerHeight = containerRect.height || 360;
 
     // For sequences and videos with mediabunny, get the current frame
-    let element: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | undefined;
+    let element: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | ImageBitmap | undefined;
     if (source?.type === 'sequence') {
       const frameImage = this.session.getSequenceFrameSync();
       if (frameImage) {
@@ -1905,39 +1035,40 @@ export class Viewer {
         } else {
           element = frameCanvas;
         }
-        this.hasDisplayedMediabunnyFrame = true;
-        this.pendingVideoFrameFetch = null;
-        this.pendingVideoFrameNumber = 0;
+        this.frameFetchTracker.hasDisplayedMediabunnyFrame = true;
+        this.frameFetchTracker.pendingVideoFrameFetch = null;
+        this.frameFetchTracker.pendingVideoFrameNumber = 0;
       } else {
         // Frame not cached - fetch it asynchronously
         // Start a new fetch if:
         // 1. No fetch is pending, OR
         // 2. The pending fetch is for a different frame (user navigated)
-        if (!this.pendingVideoFrameFetch || this.pendingVideoFrameNumber !== currentFrame) {
+        if (!this.frameFetchTracker.pendingVideoFrameFetch || this.frameFetchTracker.pendingVideoFrameNumber !== currentFrame) {
           // Cancel tracking of old fetch (it will complete but we'll ignore its refresh)
-          this.pendingVideoFrameNumber = currentFrame;
+          this.frameFetchTracker.pendingVideoFrameNumber = currentFrame;
           const frameToFetch = currentFrame;
 
-          this.pendingVideoFrameFetch = this.session.fetchCurrentVideoFrame(frameToFetch)
+          this.frameFetchTracker.pendingVideoFrameFetch = this.session.fetchCurrentVideoFrame(frameToFetch)
             .then(() => {
               // Only refresh if this fetch is still relevant (user hasn't navigated away)
-              if (this.pendingVideoFrameNumber === frameToFetch) {
-                this.pendingVideoFrameFetch = null;
-                this.pendingVideoFrameNumber = 0;
+              if (this.frameFetchTracker.pendingVideoFrameNumber === frameToFetch) {
+                this.frameFetchTracker.pendingVideoFrameFetch = null;
+                this.frameFetchTracker.pendingVideoFrameNumber = 0;
                 this.refresh();
               }
             })
-            .catch(() => {
-              if (this.pendingVideoFrameNumber === frameToFetch) {
-                this.pendingVideoFrameFetch = null;
-                this.pendingVideoFrameNumber = 0;
+            .catch((err) => {
+              log.warn('Failed to fetch video frame', err);
+              if (this.frameFetchTracker.pendingVideoFrameNumber === frameToFetch) {
+                this.frameFetchTracker.pendingVideoFrameFetch = null;
+                this.frameFetchTracker.pendingVideoFrameNumber = 0;
               }
             });
         }
 
         // Only use HTMLVideoElement fallback on first render (before any mediabunny frame shown)
         // After that, keep previous frame to ensure frame-accurate stepping
-        if (!this.hasDisplayedMediabunnyFrame) {
+        if (!this.frameFetchTracker.hasDisplayedMediabunnyFrame) {
           element = source.element;
         } else {
           // Keep canvas as-is until correct frame loads
@@ -1950,7 +1081,9 @@ export class Viewer {
       // HDR files: prefer WebGL rendering path (handled below after display dimensions are computed)
       // Set canvas fallback in case WebGL path fails or source isn't HDR
       if (!source.fileSourceNode.isHDR()) {
-        element = source.fileSourceNode.getCanvas() ?? undefined;
+        element = source.fileSourceNode.getCanvas()
+          ?? source.fileSourceNode.getElement(0)
+          ?? undefined;
       }
       // For HDR: element stays undefined here; we intercept after displayWidth/Height are calculated
     } else {
@@ -1960,7 +1093,8 @@ export class Viewer {
 
     // HDR sources may have no element (they render via WebGL); treat them as valid
     const hdrFileSource = source?.fileSourceNode?.isHDR() ? source.fileSourceNode : null;
-    if (!source || (!element && !hdrFileSource)) {
+    const isHDRVideo = source?.videoSourceNode?.isHDR() === true;
+    if (!source || (!element && !hdrFileSource && !isHDRVideo)) {
       // Placeholder mode
       this.sourceWidth = 640;
       this.sourceHeight = 360;
@@ -1987,7 +1121,7 @@ export class Viewer {
     this.sourceHeight = source.height;
 
     // Calculate uncrop padding and effective virtual canvas size
-    const uncropPad = this.getUncropPadding();
+    const uncropPad = this.cropManager.getUncropPadding();
     const uncropActive = this.isUncropActive();
     const baseWidth = uncropActive ? this.sourceWidth + uncropPad.left + uncropPad.right : this.sourceWidth;
     const virtualHeight = uncropActive ? this.sourceHeight + uncropPad.top + uncropPad.bottom : this.sourceHeight;
@@ -2022,11 +1156,61 @@ export class Viewer {
       this.setCanvasSize(displayWidth, displayHeight);
     }
 
+    // Phase 4: Set target extraction size for SDR video frame cache.
+    // Uses quality-reduced physical dims so frames are extracted at display resolution,
+    // not full source resolution. Capped at source dims (never upscale during extraction).
+    if (source.videoSourceNode && this.physicalWidth > 0 && this.physicalHeight > 0) {
+      const { w, h } = this.interactionQuality.getEffectiveViewport(this.physicalWidth, this.physicalHeight);
+      const cappedW = Math.min(w, source.width);
+      const cappedH = Math.min(h, source.height);
+      source.videoSourceNode.setTargetSize(
+        cappedW < source.width || cappedH < source.height
+          ? { w: cappedW, h: cappedH }
+          : undefined // full resolution
+      );
+
+      // Set stable HDR target size using actual display dimensions (not interaction-reduced).
+      // HDR frames are cached in an LRU and should always be at full display quality.
+      const hdrW = Math.min(this.physicalWidth, source.width);
+      const hdrH = Math.min(this.physicalHeight, source.height);
+      source.videoSourceNode.setHDRTargetSize(
+        hdrW < source.width || hdrH < source.height
+          ? { w: hdrW, h: hdrH }
+          : undefined
+      );
+    }
+
     // HDR WebGL rendering path: render via GPU shader pipeline and skip 2D canvas.
-    // When OCIO is active, skip the WebGL path and fall through to the 2D canvas
-    // where applyOCIOToCanvas() can apply the baked LUT as a post-process (the GL
-    // shader does not support OCIO transforms, mirroring the SDR WebGL guard).
-    if (hdrFileSource && !(this.colorPipeline.ocioEnabled && this.colorPipeline.ocioBakedLUT)) {
+    // When OCIO is active, normally skip the WebGL path and fall through to the
+    // 2D canvas where applyOCIOToCanvas() can apply the baked LUT as a post-process.
+    // Exception: when the WebGPU HDR blit is ready, bypass the OCIO guard so that
+    // HDR content can be displayed via the float FBO → WebGPU extended-range path.
+    if (isHDRVideo && (!ocioActive || blitBypassesOCIO)) {
+      // HDR video: get cached HDR IPImage with VideoFrame for GPU upload
+      const currentFrame = this.session.currentFrame;
+      PerfTrace.begin('getVideoHDRIPImage');
+      const hdrIPImage = this.session.getVideoHDRIPImage(currentFrame);
+      PerfTrace.end('getVideoHDRIPImage');
+      if (!hdrIPImage) PerfTrace.count('hdrIPImage.miss');
+      if (hdrIPImage && this.renderHDRWithWebGL(hdrIPImage, displayWidth, displayHeight)) {
+        this.updateCanvasPosition();
+        this.updateWipeLine();
+        // Preload nearby HDR frames in background for smoother scrubbing.
+        // Skip during playback — PlaybackEngine.update() already calls
+        // updatePlaybackBuffer() which triggers preloadHDRFrames().
+        if (!this.session.isPlaying) {
+          this.session.preloadVideoHDRFrames(currentFrame).catch(() => {});
+        }
+        return; // HDR video path complete
+      }
+      // Start async HDR frame fetch if not cached
+      if (!hdrIPImage) {
+        this.session.fetchVideoHDRFrame(currentFrame)
+          .then(() => this.refresh())
+          .catch((err) => console.warn('Failed to fetch HDR video frame:', err));
+      }
+      // Fall through to SDR while waiting (element was set by the video path above)
+    } else if (hdrFileSource && (!ocioActive || blitBypassesOCIO)) {
       const ipImage = hdrFileSource.getIPImage();
       if (ipImage && this.renderHDRWithWebGL(ipImage, displayWidth, displayHeight)) {
         this.updateCanvasPosition();
@@ -2058,7 +1242,7 @@ export class Viewer {
     // no active crop clipping (not yet handled in GL shader), and no complex features
     // that require the 2D canvas (wipe, split screen, stack, difference matte, uncrop,
     // stereo, lens distortion, ghost frames, OCIO).
-    const cropClipActiveForSDR = this.cropState.enabled && !isFullCropRegion(this.cropState.region);
+    const cropClipActiveForSDR = this.cropManager.isCropClipActive();
     const sdrWebGLEligible =
       element &&
       !isCurrentHDR &&
@@ -2076,11 +1260,12 @@ export class Viewer {
       (element instanceof HTMLImageElement ||
        element instanceof HTMLVideoElement ||
        element instanceof HTMLCanvasElement ||
+       element instanceof ImageBitmap ||
        (typeof OffscreenCanvas !== 'undefined' && element instanceof OffscreenCanvas));
 
     if (sdrWebGLEligible) {
       if (this.renderSDRWithWebGL(
-        element as HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | HTMLImageElement,
+        element as HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | HTMLImageElement | ImageBitmap,
         displayWidth,
         displayHeight,
       )) {
@@ -2089,7 +1274,7 @@ export class Viewer {
         return; // SDR WebGL path complete, skip 2D processing
       }
       // renderSDRWithWebGL failed — fall through to 2D canvas path
-    } else if (this.sdrWebGLRenderActive) {
+    } else if (this.glRendererManager.sdrWebGLRenderActive) {
       // Transitioning away from SDR WebGL: deactivate and restore 2D canvas path
       this.deactivateSDRWebGLMode();
     }
@@ -2104,7 +1289,7 @@ export class Viewer {
 
     // When uncrop is active, fill the padding area with a subtle pattern
     if (uncropActive) {
-      this.drawUncropBackground(displayWidth, displayHeight, uncropOffsetX, uncropOffsetY, imageDisplayW, imageDisplayH);
+      this.cropManager.drawUncropBackground(this.imageCtx, displayWidth, displayHeight, uncropOffsetX, uncropOffsetY, imageDisplayW, imageDisplayH);
     }
 
     // Enable high-quality image smoothing for best picture quality
@@ -2113,7 +1298,13 @@ export class Viewer {
 
     // Check if crop clipping should be applied (will be done AFTER all rendering)
     // Note: We can't use ctx.clip() because putImageData() ignores clip regions
-    let cropClipActive = this.cropState.enabled && !isFullCropRegion(this.cropState.region);
+    let cropClipActive = this.cropManager.isCropClipActive();
+
+    // Set target display size for prerender buffer so effects are processed at
+    // display resolution instead of full source resolution (e.g., 4K → display size)
+    if (this.prerenderBuffer && displayWidth > 0 && displayHeight > 0) {
+      this.prerenderBuffer.setTargetSize(displayWidth, displayHeight);
+    }
 
     // Try prerendered cache first during playback for smooth performance with effects
     if (this.session.isPlaying && this.prerenderBuffer) {
@@ -2132,7 +1323,7 @@ export class Viewer {
 
         // When uncrop is active, fill the padding area with a subtle pattern
         if (uncropActive) {
-          this.drawUncropBackground(displayWidth, displayHeight, uncropOffsetX, uncropOffsetY, imageDisplayW, imageDisplayH);
+          this.cropManager.drawUncropBackground(this.imageCtx, displayWidth, displayHeight, uncropOffsetX, uncropOffsetY, imageDisplayW, imageDisplayH);
         }
 
         // Draw cached pre-rendered frame scaled to display size
@@ -2145,34 +1336,58 @@ export class Viewer {
         // After drawing cached frame, apply effects not handled by worker
         // Render ghost frames (onion skin) on top of the main frame
         if (this.ghostFrameManager.enabled) {
-          this.renderGhostFrames(displayWidth, displayHeight);
+          try {
+            this.renderGhostFrames(displayWidth, displayHeight);
+          } catch (err) {
+            console.error('Ghost frame rendering failed:', err);
+          }
         }
 
         // Apply stereo viewing mode (transforms layout for 3D viewing)
         if (!this.stereoManager.isDefaultStereo()) {
-          if (this.stereoManager.needsEyeTransformApply()) {
-            this.stereoManager.applyStereoModeWithEyeTransforms(this.imageCtx, displayWidth, displayHeight);
-          } else {
-            this.stereoManager.applyStereoMode(this.imageCtx, displayWidth, displayHeight);
+          try {
+            if (this.stereoManager.needsEyeTransformApply()) {
+              this.stereoManager.applyStereoModeWithEyeTransforms(this.imageCtx, displayWidth, displayHeight);
+            } else {
+              this.stereoManager.applyStereoMode(this.imageCtx, displayWidth, displayHeight);
+            }
+          } catch (err) {
+            console.error('Stereo mode rendering failed:', err);
           }
         }
 
         // Apply lens distortion correction (geometric transform, applied before color effects)
         if (!this.lensDistortionManager.isDefault()) {
-          this.lensDistortionManager.applyToCtx(this.imageCtx, displayWidth, displayHeight);
+          try {
+            this.lensDistortionManager.applyToCtx(this.imageCtx, displayWidth, displayHeight);
+          } catch (err) {
+            console.error('Lens distortion rendering failed:', err);
+          }
         }
         // Apply GPU-accelerated color effects
         if (this.colorPipeline.currentLUT && this.colorPipeline.lutIntensity > 0) {
-          this.applyLUTToCanvas(this.imageCtx, displayWidth, displayHeight);
+          try {
+            this.applyLUTToCanvas(this.imageCtx, displayWidth, displayHeight);
+          } catch (err) {
+            console.error('LUT application failed:', err);
+          }
         }
         if (this.colorPipeline.ocioEnabled && this.colorPipeline.ocioBakedLUT) {
-          this.applyOCIOToCanvas(this.imageCtx, displayWidth, displayHeight);
+          try {
+            this.applyOCIOToCanvas(this.imageCtx, displayWidth, displayHeight);
+          } catch (err) {
+            console.error('OCIO application failed:', err);
+          }
         }
         // Apply lightweight diagnostic overlays and display management
-        this.applyLightweightEffects(this.imageCtx, displayWidth, displayHeight);
+        try {
+          this.applyLightweightEffects(this.imageCtx, displayWidth, displayHeight);
+        } catch (err) {
+          console.error('Lightweight effects processing failed:', err);
+        }
         // Apply crop clipping by clearing outside areas
         if (cropClipActive) {
-          this.clearOutsideCropRegion(displayWidth, displayHeight);
+          this.cropManager.clearOutsideCropRegion(this.imageCtx, displayWidth, displayHeight);
         }
         this.updateCanvasPosition();
         this.updateWipeLine();
@@ -2251,34 +1466,54 @@ export class Viewer {
 
     // Render ghost frames (onion skin) on top of the main frame
     if (this.ghostFrameManager.enabled) {
-      this.renderGhostFrames(displayWidth, displayHeight);
+      try {
+        this.renderGhostFrames(displayWidth, displayHeight);
+      } catch (err) {
+        console.error('Ghost frame rendering failed:', err);
+      }
     }
 
     // Apply post-processing effects (stereo, lens, LUT, color, sharpen) regardless of stack mode
     // Apply stereo viewing mode (transforms layout for 3D viewing)
     // Uses extended function when per-eye transforms or alignment overlays are active
     if (!this.stereoManager.isDefaultStereo()) {
-      if (this.stereoManager.needsEyeTransformApply()) {
-        this.stereoManager.applyStereoModeWithEyeTransforms(this.imageCtx, displayWidth, displayHeight);
-      } else {
-        this.stereoManager.applyStereoMode(this.imageCtx, displayWidth, displayHeight);
+      try {
+        if (this.stereoManager.needsEyeTransformApply()) {
+          this.stereoManager.applyStereoModeWithEyeTransforms(this.imageCtx, displayWidth, displayHeight);
+        } else {
+          this.stereoManager.applyStereoMode(this.imageCtx, displayWidth, displayHeight);
+        }
+      } catch (err) {
+        console.error('Stereo mode rendering failed:', err);
       }
     }
 
     // Apply lens distortion correction (geometric transform, applied first)
     if (!this.lensDistortionManager.isDefault()) {
-      this.lensDistortionManager.applyToCtx(this.imageCtx, displayWidth, displayHeight);
+      try {
+        this.lensDistortionManager.applyToCtx(this.imageCtx, displayWidth, displayHeight);
+      } catch (err) {
+        console.error('Lens distortion rendering failed:', err);
+      }
     }
 
     // Apply 3D LUT (GPU-accelerated color grading)
     if (this.colorPipeline.currentLUT && this.colorPipeline.lutIntensity > 0) {
-      this.applyLUTToCanvas(this.imageCtx, displayWidth, displayHeight);
+      try {
+        this.applyLUTToCanvas(this.imageCtx, displayWidth, displayHeight);
+      } catch (err) {
+        console.error('LUT application failed:', err);
+      }
     }
 
     // Apply OCIO display transform (GPU-accelerated via baked 3D LUT)
     // This runs after user-loaded LUTs but before color adjustments/CDL/curves
     if (this.colorPipeline.ocioEnabled && this.colorPipeline.ocioBakedLUT) {
-      this.applyOCIOToCanvas(this.imageCtx, displayWidth, displayHeight);
+      try {
+        this.applyOCIOToCanvas(this.imageCtx, displayWidth, displayHeight);
+      } catch (err) {
+        console.error('OCIO application failed:', err);
+      }
     }
 
     // Apply batched pixel-level effects (highlights/shadows, vibrance, clarity,
@@ -2303,13 +1538,17 @@ export class Viewer {
       // Skip the crop clipping below — it's handled inside the async method.
       cropClipActive = false;
     } else {
-      this.applyBatchedPixelEffects(this.imageCtx, displayWidth, displayHeight);
+      try {
+        this.applyBatchedPixelEffects(this.imageCtx, displayWidth, displayHeight);
+      } catch (err) {
+        console.error('Batched pixel effects processing failed:', err);
+      }
     }
 
     // Apply crop clipping by clearing areas outside the crop region
     // Note: This is done AFTER all effects because putImageData() ignores ctx.clip()
     if (cropClipActive) {
-      this.clearOutsideCropRegion(displayWidth, displayHeight);
+      this.cropManager.clearOutsideCropRegion(this.imageCtx, displayWidth, displayHeight);
     }
 
     this.updateCanvasPosition();
@@ -2418,7 +1657,7 @@ export class Viewer {
 
     // Determine the element to use for source A
     // For mediabunny videos, use the cached frame canvas
-    let elementA: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas = sourceA.element;
+    let elementA: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | ImageBitmap = sourceA.element;
     if (sourceA.type === 'video' && this.session.isUsingMediabunny()) {
       const frameCanvas = this.session.getVideoFrameCanvas(currentFrame);
       if (frameCanvas) {
@@ -2428,42 +1667,43 @@ export class Viewer {
 
     // Determine the element to use for source B
     // For mediabunny videos, use the cached frame canvas
-    let elementB: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas = sourceB.element;
+    let elementB: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | ImageBitmap = sourceB.element;
     if (sourceB.type === 'video' && this.session.isSourceBUsingMediabunny()) {
       const frameCanvas = this.session.getSourceBFrameCanvas(currentFrame);
       if (frameCanvas) {
         elementB = frameCanvas;
         // Cache this frame canvas to use as fallback while next frame loads
-        this.lastSourceBFrameCanvas = frameCanvas;
-        this.hasDisplayedSourceBMediabunnyFrame = true;
-        this.pendingSourceBFrameFetch = null;
-        this.pendingSourceBFrameNumber = 0;
+        this.frameFetchTracker.lastSourceBFrameCanvas = frameCanvas;
+        this.frameFetchTracker.hasDisplayedSourceBMediabunnyFrame = true;
+        this.frameFetchTracker.pendingSourceBFrameFetch = null;
+        this.frameFetchTracker.pendingSourceBFrameNumber = 0;
       } else {
         // Frame not cached - fetch it asynchronously
-        if (!this.pendingSourceBFrameFetch || this.pendingSourceBFrameNumber !== currentFrame) {
-          this.pendingSourceBFrameNumber = currentFrame;
+        if (!this.frameFetchTracker.pendingSourceBFrameFetch || this.frameFetchTracker.pendingSourceBFrameNumber !== currentFrame) {
+          this.frameFetchTracker.pendingSourceBFrameNumber = currentFrame;
           const frameToFetch = currentFrame;
 
-          this.pendingSourceBFrameFetch = this.session.fetchSourceBVideoFrame(frameToFetch)
+          this.frameFetchTracker.pendingSourceBFrameFetch = this.session.fetchSourceBVideoFrame(frameToFetch)
             .then(() => {
-              if (this.pendingSourceBFrameNumber === frameToFetch) {
-                this.pendingSourceBFrameFetch = null;
-                this.pendingSourceBFrameNumber = 0;
+              if (this.frameFetchTracker.pendingSourceBFrameNumber === frameToFetch) {
+                this.frameFetchTracker.pendingSourceBFrameFetch = null;
+                this.frameFetchTracker.pendingSourceBFrameNumber = 0;
                 this.refresh();
               }
             })
-            .catch(() => {
-              if (this.pendingSourceBFrameNumber === frameToFetch) {
-                this.pendingSourceBFrameFetch = null;
-                this.pendingSourceBFrameNumber = 0;
+            .catch((err) => {
+              log.warn('Failed to fetch source B video frame', err);
+              if (this.frameFetchTracker.pendingSourceBFrameNumber === frameToFetch) {
+                this.frameFetchTracker.pendingSourceBFrameFetch = null;
+                this.frameFetchTracker.pendingSourceBFrameNumber = 0;
               }
             });
         }
 
         // Use fallback while frame is being fetched
-        if (this.hasDisplayedSourceBMediabunnyFrame && this.lastSourceBFrameCanvas) {
+        if (this.frameFetchTracker.hasDisplayedSourceBMediabunnyFrame && this.frameFetchTracker.lastSourceBFrameCanvas) {
           // Use the last successfully rendered frame to prevent flickering
-          elementB = this.lastSourceBFrameCanvas;
+          elementB = this.frameFetchTracker.lastSourceBFrameCanvas;
         } else {
           // First render - use HTMLVideoElement as initial fallback
           elementB = sourceB.element;
@@ -2501,7 +1741,7 @@ export class Viewer {
    */
   private drawClippedSource(
     ctx: CanvasRenderingContext2D,
-    element: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas,
+    element: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | ImageBitmap,
     clipX: number,
     clipY: number,
     clipWidth: number,
@@ -2523,7 +1763,7 @@ export class Viewer {
    */
   private drawSourceToContext(
     ctx: CanvasRenderingContext2D,
-    element: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas,
+    element: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | ImageBitmap,
     width: number,
     height: number
   ): void {
@@ -2539,20 +1779,25 @@ export class Viewer {
     if (this.displayWidth === 0 || this.displayHeight === 0) return;
 
     const ctx = this.paintCtx;
-    ctx.clearRect(0, 0, this.displayWidth, this.displayHeight);
+    // Clear at physical resolution (no DPR scale on paint canvas context)
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, this.paintCanvas.width, this.paintCanvas.height);
 
     // Get annotations with ghost effect
     const annotations = this.paintEngine.getAnnotationsWithGhost(this.session.currentFrame);
 
     if (annotations.length === 0) return;
 
-    // Render annotations
+    const dpr = window.devicePixelRatio || 1;
+
+    // Render annotations at retina resolution (PaintRenderer applies DPR scaling internally)
     this.paintRenderer.renderAnnotations(annotations, {
       width: this.displayWidth,
       height: this.displayHeight,
+      dpr,
     });
 
-    // Copy to paint canvas
+    // Copy physical-resolution PaintRenderer canvas to physical-resolution paint canvas
     ctx.drawImage(this.paintRenderer.getCanvas(), 0, 0);
   }
 
@@ -2575,9 +1820,7 @@ export class Viewer {
 
   setColorAdjustments(adjustments: ColorAdjustments): void {
     this.colorPipeline.setColorAdjustments(adjustments);
-    if (this.glRenderer) {
-      this.glRenderer.setColorAdjustments(adjustments);
-    }
+    this.glRendererManager.setColorAdjustments(adjustments);
     this.applyColorFilters();
     this.notifyEffectsChanged();
     this.scheduleRender();
@@ -2597,9 +1840,7 @@ export class Viewer {
   // Color inversion methods
   setColorInversion(enabled: boolean): void {
     if (!this.colorPipeline.setColorInversion(enabled)) return;
-    if (this.glRenderer) {
-      this.glRenderer.setColorInversion(enabled);
-    }
+    this.glRendererManager.setColorInversion(enabled);
     this.notifyEffectsChanged();
     this.scheduleRender();
   }
@@ -2784,63 +2025,37 @@ export class Viewer {
     this.scheduleRender();
   }
 
-  // Crop methods
+  // Crop methods (delegate to CropManager)
   setCropState(state: CropState): void {
-    this.cropState = { ...state, region: { ...state.region } };
-    this.scheduleRender();
+    this.cropManager.setCropState(state);
   }
 
   getCropState(): CropState {
-    return { ...this.cropState, region: { ...this.cropState.region } };
+    return this.cropManager.getCropState();
   }
 
   setCropRegion(region: CropRegion): void {
-    this.cropState.region = { ...region };
-    this.scheduleRender();
+    this.cropManager.setCropRegion(region);
   }
 
   setCropEnabled(enabled: boolean): void {
-    this.cropState.enabled = enabled;
-    this.scheduleRender();
+    this.cropManager.setCropEnabled(enabled);
   }
 
-  // Uncrop methods
+  // Uncrop methods (delegate to CropManager)
   setUncropState(state: UncropState): void {
-    this.uncropState = { ...state };
-    this.scheduleRender();
+    this.cropManager.setUncropState(state);
   }
 
   getUncropState(): UncropState {
-    return { ...this.uncropState };
+    return this.cropManager.getUncropState();
   }
 
   /**
    * Check if uncrop is actively adding padding to the canvas.
    */
   isUncropActive(): boolean {
-    if (!this.uncropState.enabled) return false;
-    if (this.uncropState.paddingMode === 'uniform') {
-      return this.uncropState.padding > 0;
-    }
-    return this.uncropState.paddingTop > 0 || this.uncropState.paddingRight > 0 ||
-           this.uncropState.paddingBottom > 0 || this.uncropState.paddingLeft > 0;
-  }
-
-  /**
-   * Get effective padding in pixels for uncrop.
-   */
-  private getUncropPadding(): { top: number; right: number; bottom: number; left: number } {
-    if (!this.uncropState.enabled) return { top: 0, right: 0, bottom: 0, left: 0 };
-    if (this.uncropState.paddingMode === 'uniform') {
-      const p = Math.max(0, this.uncropState.padding);
-      return { top: p, right: p, bottom: p, left: p };
-    }
-    return {
-      top: Math.max(0, this.uncropState.paddingTop),
-      right: Math.max(0, this.uncropState.paddingRight),
-      bottom: Math.max(0, this.uncropState.paddingBottom),
-      left: Math.max(0, this.uncropState.paddingLeft),
-    };
+    return this.cropManager.isUncropActive();
   }
 
   // CDL methods
@@ -2898,10 +2113,10 @@ export class Viewer {
     const hasHueRotation = !isIdentityHueRotation(this.colorPipeline.colorAdjustments.hueRotation);
     const hasColorWheels = this.colorWheels.hasAdjustments();
     const hasHSLQualifier = this.hslQualifier.isEnabled();
-    const hasFalseColor = this.falseColor.isEnabled();
-    const hasLuminanceVis = this.luminanceVisualization.getMode() !== 'off' && this.luminanceVisualization.getMode() !== 'false-color';
-    const hasZebras = this.zebraStripes.isEnabled();
-    const hasClippingOverlay = this.clippingOverlay.isEnabled();
+    const hasFalseColor = this.overlayManager.getFalseColor().isEnabled();
+    const hasLuminanceVis = this.overlayManager.getLuminanceVisualization().getMode() !== 'off' && this.overlayManager.getLuminanceVisualization().getMode() !== 'false-color';
+    const hasZebras = this.overlayManager.getZebraStripes().isEnabled();
+    const hasClippingOverlay = this.overlayManager.getClippingOverlay().isEnabled();
     const hasToneMapping = this.isToneMappingEnabled();
     const hasInversion = this.colorPipeline.colorInversionEnabled;
     const hasDisplayColorMgmt = isDisplayStateActive(this.colorPipeline.displayColorState);
@@ -3001,22 +2216,22 @@ export class Viewer {
     // Apply luminance visualization modes (HSV, random color, contour) or false color
     // These replace pixel colors for analysis, so they're mutually exclusive
     if (hasLuminanceVis) {
-      this.luminanceVisualization.apply(imageData);
+      this.overlayManager.getLuminanceVisualization().apply(imageData);
     } else if (hasFalseColor) {
-      this.falseColor.apply(imageData);
+      this.overlayManager.getFalseColor().apply(imageData);
     }
 
     // Apply zebra stripes (overlay on top of other effects for exposure warnings)
     // Note: Zebras work on original image luminance, so they're applied after false color
     // (typically you'd use one or the other, not both)
     if (hasZebras && !hasFalseColor && !hasLuminanceVis) {
-      this.zebraStripes.apply(imageData);
+      this.overlayManager.getZebraStripes().apply(imageData);
     }
 
     // Apply clipping overlay (shows clipped highlights/shadows)
     // Applied last as it's a diagnostic overlay
     if (hasClippingOverlay && !hasFalseColor && !hasLuminanceVis && !hasZebras) {
-      this.clippingOverlay.apply(imageData);
+      this.overlayManager.getClippingOverlay().apply(imageData);
     }
 
     // Single putImageData call
@@ -3036,6 +2251,7 @@ export class Viewer {
     ctx: CanvasRenderingContext2D, width: number, height: number,
     generation: number, cropClipActive: boolean
   ): Promise<void> {
+    try {
     const hasCDL = !isDefaultCDL(this.colorPipeline.cdlValues);
     const hasCurves = !isDefaultCurves(this.colorPipeline.curvesData);
     const hasSharpen = this.filterSettings.sharpen > 0;
@@ -3047,10 +2263,10 @@ export class Viewer {
     const hasHueRotation = !isIdentityHueRotation(this.colorPipeline.colorAdjustments.hueRotation);
     const hasColorWheels = this.colorWheels.hasAdjustments();
     const hasHSLQualifier = this.hslQualifier.isEnabled();
-    const hasFalseColor = this.falseColor.isEnabled();
-    const hasLuminanceVis = this.luminanceVisualization.getMode() !== 'off' && this.luminanceVisualization.getMode() !== 'false-color';
-    const hasZebras = this.zebraStripes.isEnabled();
-    const hasClippingOverlay = this.clippingOverlay.isEnabled();
+    const hasFalseColor = this.overlayManager.getFalseColor().isEnabled();
+    const hasLuminanceVis = this.overlayManager.getLuminanceVisualization().getMode() !== 'off' && this.overlayManager.getLuminanceVisualization().getMode() !== 'false-color';
+    const hasZebras = this.overlayManager.getZebraStripes().isEnabled();
+    const hasClippingOverlay = this.overlayManager.getClippingOverlay().isEnabled();
     const hasToneMapping = this.isToneMappingEnabled();
     const hasInversion = this.colorPipeline.colorInversionEnabled;
     const hasDisplayColorMgmt = isDisplayStateActive(this.colorPipeline.displayColorState);
@@ -3160,17 +2376,17 @@ export class Viewer {
 
     // --- Pass 5: Diagnostic overlays ---
     if (hasLuminanceVis) {
-      this.luminanceVisualization.apply(imageData);
+      this.overlayManager.getLuminanceVisualization().apply(imageData);
     } else if (hasFalseColor) {
-      this.falseColor.apply(imageData);
+      this.overlayManager.getFalseColor().apply(imageData);
     }
 
     if (hasZebras && !hasFalseColor && !hasLuminanceVis) {
-      this.zebraStripes.apply(imageData);
+      this.overlayManager.getZebraStripes().apply(imageData);
     }
 
     if (hasClippingOverlay && !hasFalseColor && !hasLuminanceVis && !hasZebras) {
-      this.clippingOverlay.apply(imageData);
+      this.overlayManager.getClippingOverlay().apply(imageData);
     }
 
     // Final generation check before writing pixels — avoid overwriting a newer frame.
@@ -3181,7 +2397,10 @@ export class Viewer {
 
     // Apply crop clipping after putImageData (putImageData ignores clip regions)
     if (cropClipActive) {
-      this.clearOutsideCropRegion(width, height);
+      this.cropManager.clearOutsideCropRegion(ctx, width, height);
+    }
+    } catch (err) {
+      console.error('Async batched pixel effects processing failed:', err);
     }
   }
 
@@ -3193,10 +2412,10 @@ export class Viewer {
    */
   private applyLightweightEffects(ctx: CanvasRenderingContext2D, width: number, height: number): void {
     const hasChannel = this.channelMode !== 'rgb';
-    const hasFalseColor = this.falseColor.isEnabled();
-    const hasLuminanceVis = this.luminanceVisualization.getMode() !== 'off' && this.luminanceVisualization.getMode() !== 'false-color';
-    const hasZebras = this.zebraStripes.isEnabled();
-    const hasClippingOverlay = this.clippingOverlay.isEnabled();
+    const hasFalseColor = this.overlayManager.getFalseColor().isEnabled();
+    const hasLuminanceVis = this.overlayManager.getLuminanceVisualization().getMode() !== 'off' && this.overlayManager.getLuminanceVisualization().getMode() !== 'false-color';
+    const hasZebras = this.overlayManager.getZebraStripes().isEnabled();
+    const hasClippingOverlay = this.overlayManager.getClippingOverlay().isEnabled();
     const hasDisplayColorMgmt = isDisplayStateActive(this.colorPipeline.displayColorState);
 
     // Early return if no lightweight effects are active
@@ -3219,19 +2438,19 @@ export class Viewer {
 
     // Luminance visualization or false color (mutually exclusive)
     if (hasLuminanceVis) {
-      this.luminanceVisualization.apply(imageData);
+      this.overlayManager.getLuminanceVisualization().apply(imageData);
     } else if (hasFalseColor) {
-      this.falseColor.apply(imageData);
+      this.overlayManager.getFalseColor().apply(imageData);
     }
 
     // Zebra stripes
     if (hasZebras && !hasFalseColor && !hasLuminanceVis) {
-      this.zebraStripes.apply(imageData);
+      this.overlayManager.getZebraStripes().apply(imageData);
     }
 
     // Clipping overlay
     if (hasClippingOverlay && !hasFalseColor && !hasLuminanceVis && !hasZebras) {
-      this.clippingOverlay.apply(imageData);
+      this.overlayManager.getClippingOverlay().apply(imageData);
     }
 
     // Single putImageData call
@@ -3377,9 +2596,7 @@ export class Viewer {
   // Tone mapping methods
   setToneMappingState(state: ToneMappingState): void {
     this.colorPipeline.setToneMappingState(state);
-    if (this.glRenderer) {
-      this.glRenderer.setToneMappingState(state);
-    }
+    this.glRendererManager.setToneMappingState(state);
     this.notifyEffectsChanged();
     this.scheduleRender();
   }
@@ -3395,9 +2612,9 @@ export class Viewer {
   }
 
   // HDR output mode (delegates to renderer when available)
-  setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq'): void {
-    if (this.glRenderer && this.capabilities) {
-      this.glRenderer.setHDROutputMode(mode, this.capabilities);
+  setHDROutputMode(mode: 'sdr' | 'hlg' | 'pq' | 'extended'): void {
+    if (this.glRendererManager.glRenderer && this.glRendererManager.capabilities) {
+      this.glRendererManager.glRenderer.setHDROutputMode(mode, this.glRendererManager.capabilities);
     }
   }
 
@@ -3436,14 +2653,12 @@ export class Viewer {
   // Display color management methods
   setDisplayColorState(state: DisplayColorState): void {
     this.colorPipeline.setDisplayColorState(state);
-    if (this.glRenderer) {
-      this.glRenderer.setDisplayColorState({
-        transferFunction: DISPLAY_TRANSFER_CODES[state.transferFunction],
-        displayGamma: state.displayGamma,
-        displayBrightness: state.displayBrightness,
-        customGamma: state.customGamma,
-      });
-    }
+    this.glRendererManager.setDisplayColorState({
+      transferFunction: DISPLAY_TRANSFER_CODES[state.transferFunction],
+      displayGamma: state.displayGamma,
+      displayBrightness: state.displayBrightness,
+      customGamma: state.customGamma,
+    });
     this.notifyEffectsChanged();
     this.scheduleRender();
   }
@@ -3454,14 +2669,12 @@ export class Viewer {
 
   resetDisplayColorState(): void {
     this.colorPipeline.resetDisplayColorState();
-    if (this.glRenderer) {
-      this.glRenderer.setDisplayColorState({
-        transferFunction: DISPLAY_TRANSFER_CODES[DEFAULT_DISPLAY_COLOR_STATE.transferFunction],
-        displayGamma: DEFAULT_DISPLAY_COLOR_STATE.displayGamma,
-        displayBrightness: DEFAULT_DISPLAY_COLOR_STATE.displayBrightness,
-        customGamma: DEFAULT_DISPLAY_COLOR_STATE.customGamma,
-      });
-    }
+    this.glRendererManager.setDisplayColorState({
+      transferFunction: DISPLAY_TRANSFER_CODES[DEFAULT_DISPLAY_COLOR_STATE.transferFunction],
+      displayGamma: DEFAULT_DISPLAY_COLOR_STATE.displayGamma,
+      displayBrightness: DEFAULT_DISPLAY_COLOR_STATE.displayBrightness,
+      customGamma: DEFAULT_DISPLAY_COLOR_STATE.customGamma,
+    });
     this.notifyEffectsChanged();
     this.scheduleRender();
   }
@@ -3629,7 +2842,7 @@ export class Viewer {
         Math.pow(gfs.opacityFalloff, distance - 1);
 
       // Try to get the frame from prerender cache
-      let frameCanvas: HTMLCanvasElement | OffscreenCanvas | null = null;
+      let frameCanvas: HTMLCanvasElement | OffscreenCanvas | ImageBitmap | null = null;
 
       if (this.prerenderBuffer) {
         const cached = this.prerenderBuffer.getFrame(frame);
@@ -3769,113 +2982,8 @@ export class Viewer {
     return result;
   }
 
-  /**
-   * Draw the uncrop padding background - a subtle checkerboard pattern
-   * to visually distinguish the padding area from the image content.
-   */
-  private drawUncropBackground(
-    displayWidth: number,
-    displayHeight: number,
-    imageX: number,
-    imageY: number,
-    imageW: number,
-    imageH: number
-  ): void {
-    const ctx = this.imageCtx;
-    const tileSize = 8;
-
-    // Resolve theme colors for checker pattern
-    const style = getComputedStyle(document.documentElement);
-    const darkColor = style.getPropertyValue('--bg-primary').trim() || '#1a1a1a';
-    const lightColor = style.getPropertyValue('--bg-tertiary').trim() || '#2d2d2d';
-
-    // Draw checkerboard in the padding areas (top, bottom, left, right strips)
-    const regions = [
-      // Top strip
-      { x: 0, y: 0, w: displayWidth, h: imageY },
-      // Bottom strip
-      { x: 0, y: imageY + imageH, w: displayWidth, h: displayHeight - (imageY + imageH) },
-      // Left strip (between top and bottom)
-      { x: 0, y: imageY, w: imageX, h: imageH },
-      // Right strip (between top and bottom)
-      { x: imageX + imageW, y: imageY, w: displayWidth - (imageX + imageW), h: imageH },
-    ];
-
-    for (const region of regions) {
-      if (region.w <= 0 || region.h <= 0) continue;
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(region.x, region.y, region.w, region.h);
-      ctx.clip();
-
-      // Draw checkerboard
-      const startCol = Math.floor(region.x / tileSize);
-      const endCol = Math.ceil((region.x + region.w) / tileSize);
-      const startRow = Math.floor(region.y / tileSize);
-      const endRow = Math.ceil((region.y + region.h) / tileSize);
-
-      for (let row = startRow; row < endRow; row++) {
-        for (let col = startCol; col < endCol; col++) {
-          ctx.fillStyle = (row + col) % 2 === 0 ? darkColor : lightColor;
-          ctx.fillRect(col * tileSize, row * tileSize, tileSize, tileSize);
-        }
-      }
-      ctx.restore();
-    }
-
-    // Draw a subtle border around the image area to delineate it from padding
-    ctx.strokeStyle = style.getPropertyValue('--border-primary').trim() || '#444';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4, 4]);
-    ctx.strokeRect(imageX + 0.5, imageY + 0.5, imageW - 1, imageH - 1);
-    ctx.setLineDash([]);
-  }
-
-  private renderCropOverlay(): void {
-    if (!this.cropOverlay || !this.cropCtx) return;
-    // Show full editing overlay when panel is open or dragging, subtle indicator otherwise
-    const isEditing = this.isCropPanelOpen || this.isDraggingCrop;
-    renderCropOverlayUtil(this.cropCtx, this.cropState, this.displayWidth, this.displayHeight, isEditing);
-  }
-
-  /**
-   * Clear pixels outside the crop region to implement pixel-level clipping.
-   * This approach is used instead of ctx.clip() because putImageData() ignores clip regions.
-   */
-  private clearOutsideCropRegion(displayWidth: number, displayHeight: number): void {
-    const { x, y, width, height } = this.cropState.region;
-    // Use floor for positions and ceil for the far edge to avoid 1px gaps
-    const cropX = Math.floor(x * displayWidth);
-    const cropY = Math.floor(y * displayHeight);
-    const cropRight = Math.ceil((x + width) * displayWidth);
-    const cropBottom = Math.ceil((y + height) * displayHeight);
-    const cropH = cropBottom - cropY;
-
-    // Clear the four regions outside the crop area
-    // Top
-    if (cropY > 0) {
-      this.imageCtx.clearRect(0, 0, displayWidth, cropY);
-    }
-    // Bottom
-    if (cropBottom < displayHeight) {
-      this.imageCtx.clearRect(0, cropBottom, displayWidth, displayHeight - cropBottom);
-    }
-    // Left
-    if (cropX > 0) {
-      this.imageCtx.clearRect(0, cropY, cropX, cropH);
-    }
-    // Right
-    if (cropRight < displayWidth) {
-      this.imageCtx.clearRect(cropRight, cropY, displayWidth - cropRight, cropH);
-    }
-  }
-
-  /**
-   * Set whether the crop panel is currently open (for overlay rendering).
-   */
   setCropPanelOpen(isOpen: boolean): void {
-    this.isCropPanelOpen = isOpen;
-    this.renderCropOverlay();
+    this.cropManager.setCropPanelOpen(isOpen);
   }
 
   /**
@@ -3885,7 +2993,7 @@ export class Viewer {
    * Only one listener is supported — the App wires this to CropControl.setCropRegion.
    */
   setOnCropRegionChanged(callback: ((region: CropRegion) => void) | null): void {
-    this.cropRegionChangedCallback = callback;
+    this.cropManager.setOnCropRegionChanged(callback);
   }
 
   private updateWipeLine(): void {
@@ -3900,276 +3008,8 @@ export class Viewer {
     this.wipeManager.updateSplitScreenLine(containerRect, canvasRect, this.displayWidth, this.displayHeight);
   }
 
-  // Crop dragging methods
-  private getCropHandleAtPoint(clientX: number, clientY: number): typeof this.cropDragHandle {
-    if (!this.cropState.enabled || !this.cropOverlay || !this.isCropPanelOpen) return null;
-
-    const rect = this.cropOverlay.getBoundingClientRect();
-    const x = (clientX - rect.left) / rect.width;
-    const y = (clientY - rect.top) / rect.height;
-
-    const region = this.cropState.region;
-    // Hit area is 16px (2x the visual 8px handle in renderCropOverlay) for easier targeting.
-    // Use separate X/Y thresholds since normalized coords scale differently on non-square canvases.
-    const handleSizeX = 16 / rect.width;
-    const handleSizeY = 16 / rect.height;
-
-    // Check corners first (higher priority)
-    // Top-left
-    if (Math.abs(x - region.x) < handleSizeX && Math.abs(y - region.y) < handleSizeY) {
-      return 'tl';
-    }
-    // Top-right
-    if (Math.abs(x - (region.x + region.width)) < handleSizeX && Math.abs(y - region.y) < handleSizeY) {
-      return 'tr';
-    }
-    // Bottom-left
-    if (Math.abs(x - region.x) < handleSizeX && Math.abs(y - (region.y + region.height)) < handleSizeY) {
-      return 'bl';
-    }
-    // Bottom-right
-    if (Math.abs(x - (region.x + region.width)) < handleSizeX && Math.abs(y - (region.y + region.height)) < handleSizeY) {
-      return 'br';
-    }
-
-    // Check edges (only when region is large enough to have distinct edge zones)
-    const edgeThresholdX = handleSizeX / 2;
-    const edgeThresholdY = handleSizeY / 2;
-    const hasHorizontalEdge = region.width > 2 * handleSizeX;
-    const hasVerticalEdge = region.height > 2 * handleSizeY;
-
-    // Top edge
-    if (hasHorizontalEdge &&
-        x > region.x + handleSizeX && x < region.x + region.width - handleSizeX &&
-        Math.abs(y - region.y) < edgeThresholdY) {
-      return 'top';
-    }
-    // Bottom edge
-    if (hasHorizontalEdge &&
-        x > region.x + handleSizeX && x < region.x + region.width - handleSizeX &&
-        Math.abs(y - (region.y + region.height)) < edgeThresholdY) {
-      return 'bottom';
-    }
-    // Left edge
-    if (hasVerticalEdge &&
-        y > region.y + handleSizeY && y < region.y + region.height - handleSizeY &&
-        Math.abs(x - region.x) < edgeThresholdX) {
-      return 'left';
-    }
-    // Right edge
-    if (hasVerticalEdge &&
-        y > region.y + handleSizeY && y < region.y + region.height - handleSizeY &&
-        Math.abs(x - (region.x + region.width)) < edgeThresholdX) {
-      return 'right';
-    }
-
-    // Check if inside region (for moving)
-    if (x > region.x && x < region.x + region.width &&
-        y > region.y && y < region.y + region.height) {
-      return 'move';
-    }
-
-    return null;
-  }
-
-  private handleCropPointerDown(e: PointerEvent): boolean {
-    // Only intercept events when the crop panel is open (editing mode).
-    // When closed, let other tools (pan, zoom, paint, wipe) handle the event.
-    if (!this.cropState.enabled || !this.cropOverlay || !this.isCropPanelOpen) return false;
-
-    const handle = this.getCropHandleAtPoint(e.clientX, e.clientY);
-    if (!handle) return false;
-
-    this.isDraggingCrop = true;
-    this.cropDragHandle = handle;
-    this.cropDragPointerId = e.pointerId;
-
-    // Capture pointer so drag continues even if cursor leaves the container
-    this.container.setPointerCapture(e.pointerId);
-
-    const rect = this.cropOverlay.getBoundingClientRect();
-    this.cropDragStart = {
-      x: (e.clientX - rect.left) / rect.width,
-      y: (e.clientY - rect.top) / rect.height,
-      region: { ...this.cropState.region },
-    };
-
-    // Set appropriate cursor
-    this.updateCropCursor(handle);
-
-    return true;
-  }
-
-  private handleCropPointerMove(e: PointerEvent): void {
-    if (!this.isDraggingCrop || !this.cropDragStart || !this.cropDragHandle || !this.cropOverlay) return;
-
-    const rect = this.cropOverlay.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
-
-    const dx = x - this.cropDragStart.x;
-    const dy = y - this.cropDragStart.y;
-    const startRegion = this.cropDragStart.region;
-
-    let newRegion: CropRegion = { ...startRegion };
-
-    switch (this.cropDragHandle) {
-      case 'move':
-        newRegion.x = Math.max(0, Math.min(1 - startRegion.width, startRegion.x + dx));
-        newRegion.y = Math.max(0, Math.min(1 - startRegion.height, startRegion.y + dy));
-        break;
-      case 'tl':
-        newRegion.x = Math.max(0, Math.min(startRegion.x + startRegion.width - MIN_CROP_FRACTION, startRegion.x + dx));
-        newRegion.y = Math.max(0, Math.min(startRegion.y + startRegion.height - MIN_CROP_FRACTION, startRegion.y + dy));
-        newRegion.width = startRegion.x + startRegion.width - newRegion.x;
-        newRegion.height = startRegion.y + startRegion.height - newRegion.y;
-        break;
-      case 'tr':
-        newRegion.width = Math.max(MIN_CROP_FRACTION, Math.min(1 - startRegion.x, startRegion.width + dx));
-        newRegion.y = Math.max(0, Math.min(startRegion.y + startRegion.height - MIN_CROP_FRACTION, startRegion.y + dy));
-        newRegion.height = startRegion.y + startRegion.height - newRegion.y;
-        break;
-      case 'bl':
-        newRegion.x = Math.max(0, Math.min(startRegion.x + startRegion.width - MIN_CROP_FRACTION, startRegion.x + dx));
-        newRegion.width = startRegion.x + startRegion.width - newRegion.x;
-        newRegion.height = Math.max(MIN_CROP_FRACTION, Math.min(1 - startRegion.y, startRegion.height + dy));
-        break;
-      case 'br':
-        newRegion.width = Math.max(MIN_CROP_FRACTION, Math.min(1 - startRegion.x, startRegion.width + dx));
-        newRegion.height = Math.max(MIN_CROP_FRACTION, Math.min(1 - startRegion.y, startRegion.height + dy));
-        break;
-      case 'top':
-        newRegion.y = Math.max(0, Math.min(startRegion.y + startRegion.height - MIN_CROP_FRACTION, startRegion.y + dy));
-        newRegion.height = startRegion.y + startRegion.height - newRegion.y;
-        break;
-      case 'bottom':
-        newRegion.height = Math.max(MIN_CROP_FRACTION, Math.min(1 - startRegion.y, startRegion.height + dy));
-        break;
-      case 'left':
-        newRegion.x = Math.max(0, Math.min(startRegion.x + startRegion.width - MIN_CROP_FRACTION, startRegion.x + dx));
-        newRegion.width = startRegion.x + startRegion.width - newRegion.x;
-        break;
-      case 'right':
-        newRegion.width = Math.max(MIN_CROP_FRACTION, Math.min(1 - startRegion.x, startRegion.width + dx));
-        break;
-    }
-
-    // Apply aspect ratio constraint if set
-    if (this.cropState.aspectRatio && this.cropDragHandle !== 'move') {
-      newRegion = this.constrainToAspectRatio(newRegion, this.cropDragHandle);
-    }
-
-    // Enforce minimum crop size to prevent zero-area regions
-    newRegion.width = Math.max(MIN_CROP_FRACTION, newRegion.width);
-    newRegion.height = Math.max(MIN_CROP_FRACTION, newRegion.height);
-
-    this.cropState.region = newRegion;
-    this.scheduleRender();
-  }
-
-  private constrainToAspectRatio(region: CropRegion, handle: typeof this.cropDragHandle): CropRegion {
-    // Look up target pixel ratio from the shared ASPECT_RATIOS constant
-    const arEntry = ASPECT_RATIOS.find(a => a.value === this.cropState.aspectRatio);
-    if (!arEntry?.ratio) return region;
-
-    // Account for source aspect ratio: normalized coords don't map 1:1 to pixels
-    const source = this.session.currentSource;
-    const sourceWidth = source?.width ?? 1;
-    const sourceHeight = source?.height ?? 1;
-    if (sourceWidth <= 0 || sourceHeight <= 0) return region;
-    const sourceAspect = sourceWidth / sourceHeight;
-
-    // Convert target pixel ratio to normalized coordinate ratio
-    const normalizedTargetRatio = arEntry.ratio / sourceAspect;
-    if (!Number.isFinite(normalizedTargetRatio) || normalizedTargetRatio <= 0) return region;
-
-    const result = { ...region };
-
-    // Determine whether to adjust width or height based on the handle being dragged.
-    // Edge drags: adjust the dimension perpendicular to the edge being dragged.
-    // Corner drags: adjust whichever dimension is "too large" relative to the ratio.
-    const adjustWidth =
-      (handle === 'top' || handle === 'bottom')
-        ? true  // Vertical edge: user controls height, width follows
-        : (handle === 'left' || handle === 'right')
-          ? false  // Horizontal edge: user controls width, height follows
-          : (result.width / result.height > normalizedTargetRatio);  // Corner: shrink the larger dimension
-
-    if (adjustWidth) {
-      result.width = result.height * normalizedTargetRatio;
-    } else {
-      result.height = result.width / normalizedTargetRatio;
-    }
-
-    // For edge drags, preserve the anchor (the fixed opposite edge)
-    if (handle === 'left' || handle === 'tl' || handle === 'bl') {
-      const rightEdge = region.x + region.width;
-      result.x = rightEdge - result.width;
-    }
-    if (handle === 'top' || handle === 'tl' || handle === 'tr') {
-      const bottomEdge = region.y + region.height;
-      result.y = bottomEdge - result.height;
-    }
-
-    // Clamp to bounds while preserving aspect ratio (single pass).
-    // Compute the maximum size that fits within [0,1] at the current position,
-    // then take the minimum of current size and max allowed size.
-    const maxW = Math.min(result.width, 1 - Math.max(0, result.x));
-    const maxH = Math.min(result.height, 1 - Math.max(0, result.y));
-
-    // The constraining dimension is whichever hits the bound first
-    const wFromH = maxH * normalizedTargetRatio;
-    const hFromW = maxW / normalizedTargetRatio;
-
-    if (maxW < result.width || maxH < result.height) {
-      if (wFromH <= maxW) {
-        result.width = wFromH;
-        result.height = maxH;
-      } else {
-        result.width = maxW;
-        result.height = hFromW;
-      }
-    }
-
-    // Final position clamp
-    result.x = Math.max(0, Math.min(result.x, 1 - result.width));
-    result.y = Math.max(0, Math.min(result.y, 1 - result.height));
-
-    return result;
-  }
-
-  private handleCropPointerUp(): void {
-    if (this.isDraggingCrop && this.cropRegionChangedCallback) {
-      this.cropRegionChangedCallback({ ...this.cropState.region });
-    }
-    // Release pointer capture
-    if (this.cropDragPointerId !== null) {
-      try { this.container.releasePointerCapture(this.cropDragPointerId); } catch (e) { if (typeof console !== 'undefined') console.debug('Pointer capture already released', e); }
-      this.cropDragPointerId = null;
-    }
-    this.isDraggingCrop = false;
-    this.cropDragHandle = null;
-    this.cropDragStart = null;
-    this.container.style.cursor = 'grab';
-  }
-
-  private updateCropCursor(handle: typeof this.cropDragHandle): void {
-    const cursors: Record<string, string> = {
-      'tl': 'nwse-resize',
-      'br': 'nwse-resize',
-      'tr': 'nesw-resize',
-      'bl': 'nesw-resize',
-      'top': 'ns-resize',
-      'bottom': 'ns-resize',
-      'left': 'ew-resize',
-      'right': 'ew-resize',
-      'move': 'move',
-    };
-    this.container.style.cursor = handle ? (cursors[handle] || 'default') : 'default';
-  }
-
   private applyColorFilters(): void {
-    if (this.hdrRenderActive || this.sdrWebGLRenderActive) {
+    if (this.glRendererManager.hdrRenderActive || this.glRendererManager.sdrWebGLRenderActive) {
       // In HDR/SDR WebGL mode, CSS filters are skipped — the WebGL shader handles all adjustments
       this.canvasContainer.style.filter = 'none';
       return;
@@ -4203,7 +3043,7 @@ export class Viewer {
   }
 
   createExportCanvas(includeAnnotations: boolean, colorSpace?: 'srgb' | 'display-p3'): HTMLCanvasElement | null {
-    const cropRegion = this.cropState.enabled ? this.cropState.region : undefined;
+    const cropRegion = this.cropManager.getExportCropRegion();
     return createExportCanvasUtil(
       this.session,
       this.paintEngine,
@@ -4221,7 +3061,7 @@ export class Viewer {
    * Seeks to the frame, renders, and returns the canvas
    */
   async renderFrameToCanvas(frame: number, includeAnnotations: boolean): Promise<HTMLCanvasElement | null> {
-    const cropRegion = this.cropState.enabled ? this.cropState.region : undefined;
+    const cropRegion = this.cropManager.getExportCropRegion();
     return renderFrameToCanvasUtil(
       this.session,
       this.paintEngine,
@@ -4251,6 +3091,15 @@ export class Viewer {
 
     const totalFrames = this.session.frameCount;
     if (totalFrames <= 0) {
+      this.prerenderBuffer = null;
+      return;
+    }
+
+    // Skip CPU effects prerender for HDR video — effects are handled by the
+    // WebGL shader pipeline, so the PrerenderBufferManager would only waste
+    // memory caching unused SDR frames at full source resolution.
+    const source = this.session.currentSource;
+    if (source?.videoSourceNode?.isHDR()) {
       this.prerenderBuffer = null;
       return;
     }
@@ -4352,22 +3201,24 @@ export class Viewer {
   }
 
   dispose(): void {
+    // Clean up DPR change listener
+    this._dprCleanup?.();
+    this._dprCleanup = null;
+
+    // Dispose interaction quality manager (clears debounce timer)
+    this.interactionQuality.dispose();
+
     // Dispose transform manager (cancels zoom animation, clears callback)
     this.transformManager.dispose();
 
     this.resizeObserver.disconnect();
-    this.container.removeEventListener('pointerdown', this.onPointerDown);
-    this.container.removeEventListener('pointermove', this.onPointerMove);
-    this.container.removeEventListener('pointerup', this.onPointerUp);
-    this.container.removeEventListener('pointercancel', this.onPointerUp);
-    this.container.removeEventListener('pointerleave', this.onPointerLeave);
-    this.container.removeEventListener('wheel', this.onWheel);
-    this.container.removeEventListener('mousemove', this.onMouseMoveForPixelSampling);
-    this.container.removeEventListener('mouseleave', this.onMouseLeaveForCursorColor);
-    this.container.removeEventListener('click', this.onClickForProbe);
+    this.inputHandler.unbindEvents();
+    this.container.removeEventListener('mousemove', this.pixelSamplingManager.onMouseMoveForPixelSampling);
+    this.container.removeEventListener('mouseleave', this.pixelSamplingManager.onMouseLeaveForCursorColor);
+    this.container.removeEventListener('click', this.pixelSamplingManager.onClickForProbe);
 
-    // Clear cursor color callback
-    this.cursorColorCallback = null;
+    // Cleanup pixel sampling manager (clears cursor color callback and cached canvases)
+    this.pixelSamplingManager.dispose();
 
     // Cleanup theme change listener
     if (this.boundOnThemeChange) {
@@ -4402,63 +3253,58 @@ export class Viewer {
     // Cleanup ghost frame canvas pool
     this.ghostFrameManager.dispose();
 
-    // Cleanup overlays
-    this.clippingOverlay.dispose();
-    this.luminanceVisualization.dispose();
-    this.falseColor.dispose();
-    this.zebraStripes.dispose();
-    this.spotlightOverlay.dispose();
+    // Cleanup overlays (via overlay manager)
+    this.overlayManager.dispose();
     this.hslQualifier.dispose();
 
-    // Cleanup crop drag state
-    if (this.isDraggingCrop && this.cropDragPointerId !== null) {
-      try { this.container.releasePointerCapture(this.cropDragPointerId); } catch (e) { if (typeof console !== 'undefined') console.debug('Pointer capture already released', e); }
-    }
-    this.isDraggingCrop = false;
-    this.cropDragHandle = null;
-    this.cropDragStart = null;
-    this.cropDragPointerId = null;
-    this.cropRegionChangedCallback = null;
+    // Cleanup crop manager
+    this.cropManager.dispose();
 
-    // Cleanup render worker proxy (Phase 4)
-    if (this.renderWorkerProxy) {
-      this.renderWorkerProxy.dispose();
-      this.renderWorkerProxy = null;
-      this.isAsyncRenderer = false;
-    }
+    // Cleanup WebGL/HDR rendering manager (renderer, worker proxy, GL canvas)
+    this.glRendererManager.dispose();
 
-    // Cleanup WebGL HDR renderer
-    if (this.glRenderer) {
-      // Only dispose if not the worker proxy (already disposed above)
-      if (!this.isAsyncRenderer) {
-        this.glRenderer.dispose();
-      }
-      this.glRenderer = null;
-    }
-    this.glCanvas = null;
+    // Cleanup video frame fetch tracker
+    this.frameFetchTracker.dispose();
 
     // Cleanup wipe manager
     this.wipeManager.dispose();
 
-    // Cleanup cached source image canvas
-    this.sourceImageCanvas = null;
-    this.sourceImageCtx = null;
   }
 
   /**
    * Get ImageData from the current canvas for histogram analysis
    */
   getImageData(): ImageData | null {
-    const source = this.session.currentSource;
-    if (!source?.element) return null;
+    return this.pixelSamplingManager.getImageData();
+  }
 
-    // Get the displayed dimensions
-    const displayWidth = this.imageCanvas.width;
-    const displayHeight = this.imageCanvas.height;
+  /**
+   * Get image data optimized for scope analysis (histogram, waveform, vectorscope).
+   * When WebGL is active, returns float data preserving HDR values > 1.0.
+   * When 2D canvas is active, returns standard ImageData with floatData: null.
+   */
+  getScopeImageData(): import('./PixelSamplingManager').ScopeImageData | null {
+    return this.pixelSamplingManager.getScopeImageData();
+  }
 
-    if (displayWidth === 0 || displayHeight === 0) return null;
+  /**
+   * Get the WebGL2 renderer instance (for scope HDR headroom queries).
+   * Returns null when WebGL rendering is not active.
+   */
+  getGLRenderer(): import('../../render/Renderer').Renderer | null {
+    return this.glRendererManager.glRenderer;
+  }
 
-    return this.imageCtx.getImageData(0, 0, displayWidth, displayHeight);
+  /**
+   * Check if the display is HDR-capable (any HDR output path available).
+   * Delegates to DisplayCapabilities helper which checks WebGL native HDR,
+   * WebGPU blit, and display HDR + wide gamut + WebGPU availability.
+   */
+  isDisplayHDRCapable(): boolean {
+    if (!this.capabilities) return false;
+    return isHDROutputAvailableWithLog(this.capabilities, {
+      webgpuBlitReady: this.glRendererManager?.isWebGPUBlitReady ?? false,
+    });
   }
 
   /**
@@ -4467,55 +3313,7 @@ export class Viewer {
    * Uses a cached canvas to avoid creating new canvases on every mouse move
    */
   getSourceImageData(): ImageData | null {
-    const source = this.session.currentSource;
-    if (!source) return null;
-
-    // Get the displayed dimensions
-    const displayWidth = this.imageCanvas.width;
-    const displayHeight = this.imageCanvas.height;
-
-    if (displayWidth === 0 || displayHeight === 0) return null;
-
-    // Get the source element
-    let element: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | undefined;
-    if (source.type === 'sequence') {
-      element = this.session.getSequenceFrameSync() ?? source.element;
-    } else if (source.type === 'video' && this.session.isUsingMediabunny()) {
-      const frameCanvas = this.session.getVideoFrameCanvas(this.session.currentFrame);
-      element = frameCanvas ?? source.element;
-    } else if (source.fileSourceNode) {
-      element = source.fileSourceNode.getCanvas() ?? undefined;
-    } else {
-      element = source.element;
-    }
-
-    if (!element) return null;
-
-    // Reuse cached canvas or create new one if dimensions changed
-    if (!this.sourceImageCanvas || !this.sourceImageCtx ||
-        this.sourceImageCanvas.width !== displayWidth ||
-        this.sourceImageCanvas.height !== displayHeight) {
-      this.sourceImageCanvas = document.createElement('canvas');
-      this.sourceImageCanvas.width = displayWidth;
-      this.sourceImageCanvas.height = displayHeight;
-      this.sourceImageCtx = safeCanvasContext2D(this.sourceImageCanvas, { willReadFrequently: true }, this.canvasColorSpace);
-    }
-
-    if (!this.sourceImageCtx) return null;
-
-    // Clear and draw source with transform but without color pipeline
-    this.sourceImageCtx.clearRect(0, 0, displayWidth, displayHeight);
-    this.sourceImageCtx.imageSmoothingEnabled = true;
-    this.sourceImageCtx.imageSmoothingQuality = 'high';
-
-    try {
-      // Apply geometric transform only
-      this.drawWithTransform(this.sourceImageCtx, element as CanvasImageSource, displayWidth, displayHeight);
-      return this.sourceImageCtx.getImageData(0, 0, displayWidth, displayHeight);
-    } catch {
-      // Handle potential CORS issues
-      return null;
-    }
+    return this.pixelSamplingManager.getSourceImageData();
   }
 
   /**
@@ -4536,56 +3334,56 @@ export class Viewer {
    * Get the safe areas overlay instance
    */
   getSafeAreasOverlay(): SafeAreasOverlay {
-    return this.safeAreasOverlay;
+    return this.overlayManager.getSafeAreasOverlay();
   }
 
   /**
    * Get the matte overlay instance
    */
   getMatteOverlay(): MatteOverlay {
-    return this.matteOverlay;
+    return this.overlayManager.getMatteOverlay();
   }
 
   /**
    * Get the timecode overlay instance
    */
   getTimecodeOverlay(): TimecodeOverlay {
-    return this.timecodeOverlay;
+    return this.overlayManager.getTimecodeOverlay();
   }
 
   /**
    * Get the pixel probe instance
    */
   getPixelProbe(): PixelProbe {
-    return this.pixelProbe;
+    return this.overlayManager.getPixelProbe();
   }
 
   /**
    * Get the false color display instance
    */
   getFalseColor(): FalseColor {
-    return this.falseColor;
+    return this.overlayManager.getFalseColor();
   }
 
   /**
    * Get the luminance visualization instance
    */
   getLuminanceVisualization(): LuminanceVisualization {
-    return this.luminanceVisualization;
+    return this.overlayManager.getLuminanceVisualization();
   }
 
   /**
    * Get the zebra stripes instance
    */
   getZebraStripes(): ZebraStripes {
-    return this.zebraStripes;
+    return this.overlayManager.getZebraStripes();
   }
 
   /**
    * Get the clipping overlay instance
    */
   getClippingOverlay(): ClippingOverlay {
-    return this.clippingOverlay;
+    return this.overlayManager.getClippingOverlay();
   }
 
   /**
@@ -4599,7 +3397,7 @@ export class Viewer {
    * Get the spotlight overlay instance
    */
   getSpotlightOverlay(): SpotlightOverlay {
-    return this.spotlightOverlay;
+    return this.overlayManager.getSpotlightOverlay();
   }
 
   /**
@@ -4639,6 +3437,6 @@ export class Viewer {
    * @param callback The callback function, or null to unregister
    */
   onCursorColorChange(callback: ((color: { r: number; g: number; b: number } | null, position: { x: number; y: number } | null) => void) | null): void {
-    this.cursorColorCallback = callback;
+    this.pixelSamplingManager.onCursorColorChange(callback);
   }
 }

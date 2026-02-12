@@ -23,6 +23,7 @@ import {
   DATA_TYPE_FROM_CODE,
   TRANSFER_FUNCTION_FROM_CODE,
   COLOR_PRIMARIES_FROM_CODE,
+  RENDER_WORKER_PROTOCOL_VERSION,
 } from '../render/renderWorker.messages';
 import { Logger } from '../utils/Logger';
 
@@ -40,8 +41,10 @@ let isContextLost = false;
 
 /**
  * Post a message to the main thread.
+ * Automatically stamps each message with the current protocol version.
  */
 function post(msg: RenderWorkerResult, transfer?: Transferable[]): void {
+  msg.protocolVersion = RENDER_WORKER_PROTOCOL_VERSION;
   if (transfer && transfer.length > 0) {
     workerSelf.postMessage(msg, transfer);
   } else {
@@ -88,15 +91,14 @@ function applySyncState(msg: RenderWorkerMessage): void {
   if (state.curvesLUT !== undefined) renderer.setCurvesLUT(state.curvesLUT);
   if (state.colorWheels) renderer.setColorWheels(state.colorWheels);
   if (state.highlightsShadows) {
-    const hs = state.highlightsShadows;
-    renderer.setHighlightsShadows(hs.highlights, hs.shadows, hs.whites, hs.blacks);
+    renderer.setHighlightsShadows(state.highlightsShadows);
   }
-  if (state.vibrance) renderer.setVibrance(state.vibrance.vibrance, state.vibrance.skinProtection);
-  if (state.clarity !== undefined) renderer.setClarity(state.clarity);
-  if (state.sharpen !== undefined) renderer.setSharpen(state.sharpen);
+  if (state.vibrance) renderer.setVibrance(state.vibrance);
+  if (state.clarity !== undefined) renderer.setClarity({ clarity: state.clarity });
+  if (state.sharpen !== undefined) renderer.setSharpen({ amount: state.sharpen });
   if (state.hslQualifier) renderer.setHSLQualifier(state.hslQualifier);
   if (state.channelMode) renderer.setChannelMode(state.channelMode);
-  if (state.falseColor) renderer.setFalseColor(state.falseColor.enabled, state.falseColor.lut);
+  if (state.falseColor) renderer.setFalseColor(state.falseColor);
   if (state.zebraStripes) renderer.setZebraStripes(state.zebraStripes);
   if (state.lut) renderer.setLUT(state.lut.lutData, state.lut.lutSize, state.lut.intensity);
   if (state.displayColorState) renderer.setDisplayColorState(state.displayColorState);
@@ -109,6 +111,18 @@ function applySyncState(msg: RenderWorkerMessage): void {
  */
 workerSelf.onmessage = function (event: MessageEvent<RenderWorkerMessage>) {
   const msg = event.data;
+
+  // Protocol version check: warn on mismatch but continue processing
+  // for backward compatibility. Missing version (undefined) is acceptable
+  // from older senders that predate versioning.
+  if (
+    msg.protocolVersion !== undefined &&
+    msg.protocolVersion !== RENDER_WORKER_PROTOCOL_VERSION
+  ) {
+    log.warn(
+      `Protocol version mismatch: received v${msg.protocolVersion}, expected v${RENDER_WORKER_PROTOCOL_VERSION}. Message type: ${msg.type}`,
+    );
+  }
 
   switch (msg.type) {
     case 'init': {
@@ -148,6 +162,13 @@ workerSelf.onmessage = function (event: MessageEvent<RenderWorkerMessage>) {
     case 'resize': {
       if (renderer) {
         renderer.resize(msg.width, msg.height);
+      }
+      break;
+    }
+
+    case 'setViewport': {
+      if (renderer) {
+        renderer.setViewport(msg.width, msg.height);
       }
       break;
     }
@@ -239,19 +260,19 @@ workerSelf.onmessage = function (event: MessageEvent<RenderWorkerMessage>) {
       break;
 
     case 'setHighlightsShadows':
-      renderer?.setHighlightsShadows(msg.highlights, msg.shadows, msg.whites, msg.blacks);
+      renderer?.setHighlightsShadows(msg.state);
       break;
 
     case 'setVibrance':
-      renderer?.setVibrance(msg.vibrance, msg.skinProtection);
+      renderer?.setVibrance(msg.state);
       break;
 
     case 'setClarity':
-      renderer?.setClarity(msg.clarity);
+      renderer?.setClarity(msg.state);
       break;
 
     case 'setSharpen':
-      renderer?.setSharpen(msg.amount);
+      renderer?.setSharpen(msg.state);
       break;
 
     case 'setHSLQualifier':
@@ -267,7 +288,7 @@ workerSelf.onmessage = function (event: MessageEvent<RenderWorkerMessage>) {
       break;
 
     case 'setFalseColor':
-      renderer?.setFalseColor(msg.enabled, msg.lut);
+      renderer?.setFalseColor(msg.state);
       break;
 
     case 'setZebraStripes':

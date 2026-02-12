@@ -12,6 +12,8 @@
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { FalseColor } from './FalseColor';
+import { clamp } from '../../utils/math';
+import { luminanceRec709 } from '../../color/ColorProcessingFacade';
 
 export type LuminanceVisMode = 'off' | 'false-color' | 'hsv' | 'random-color' | 'contour';
 
@@ -39,11 +41,6 @@ export const DEFAULT_LUMINANCE_VIS_STATE: LuminanceVisState = {
   contourDesaturate: true,
   contourLineColor: [255, 255, 255],
 };
-
-// Rec. 709 luminance coefficients
-const LUMA_R = 0.2126;
-const LUMA_G = 0.7152;
-const LUMA_B = 0.0722;
 
 // Mode cycle order
 const MODE_CYCLE: LuminanceVisMode[] = ['off', 'false-color', 'hsv', 'random-color', 'contour'];
@@ -163,7 +160,7 @@ export class LuminanceVisualization extends EventEmitter<LuminanceVisEvents> {
   // --- Random color settings ---
 
   setRandomBandCount(count: number): void {
-    const clamped = Math.max(4, Math.min(64, Math.round(count)));
+    const clamped = clamp(Math.round(count), 4, 64);
     if (this.state.randomBandCount === clamped) return;
     this.state.randomBandCount = clamped;
     this.randomLUT = buildRandomPalette(clamped, this.state.randomSeed);
@@ -179,7 +176,7 @@ export class LuminanceVisualization extends EventEmitter<LuminanceVisEvents> {
   // --- Contour settings ---
 
   setContourLevels(levels: number): void {
-    const clamped = Math.max(2, Math.min(50, Math.round(levels)));
+    const clamped = clamp(Math.round(levels), 2, 50);
     if (this.state.contourLevels === clamped) return;
     this.state.contourLevels = clamped;
     this.emit('stateChanged', this.getState());
@@ -226,8 +223,8 @@ export class LuminanceVisualization extends EventEmitter<LuminanceVisEvents> {
       const r = data[i]!;
       const g = data[i + 1]!;
       const b = data[i + 2]!;
-      const lum = Math.round(LUMA_R * r + LUMA_G * g + LUMA_B * b);
-      const lutIdx = Math.min(255, Math.max(0, lum)) * 3;
+      const lum = Math.round(luminanceRec709(r, g, b));
+      const lutIdx = clamp(lum, 0, 255) * 3;
 
       data[i] = lut[lutIdx]!;
       data[i + 1] = lut[lutIdx + 1]!;
@@ -246,7 +243,7 @@ export class LuminanceVisualization extends EventEmitter<LuminanceVisEvents> {
       const r = data[i]!;
       const g = data[i + 1]!;
       const b = data[i + 2]!;
-      const lum = (LUMA_R * r + LUMA_G * g + LUMA_B * b) / 255;
+      const lum = luminanceRec709(r, g, b) / 255;
       const band = Math.min(Math.floor(lum * bandCount), bandCount - 1);
 
       data[i] = palette[band * 3]!;
@@ -266,7 +263,7 @@ export class LuminanceVisualization extends EventEmitter<LuminanceVisEvents> {
     const lum = new Float32Array(width * height);
     for (let i = 0; i < width * height; i++) {
       const idx = i * 4;
-      lum[i] = (LUMA_R * data[idx]! + LUMA_G * data[idx + 1]! + LUMA_B * data[idx + 2]!) / 255;
+      lum[i] = luminanceRec709(data[idx]!, data[idx + 1]!, data[idx + 2]!) / 255;
     }
 
     // Quantize function

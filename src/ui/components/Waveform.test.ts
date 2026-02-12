@@ -6,6 +6,7 @@ interface MockScopesProcessor {
   isReady: Mock;
   setPlaybackMode: Mock;
   setImage: Mock;
+  setFloatImage: Mock;
   renderWaveform: Mock;
 }
 
@@ -15,6 +16,7 @@ vi.mock('../../scopes/WebGLScopes', () => {
     isReady: vi.fn(() => true),
     setPlaybackMode: vi.fn(),
     setImage: vi.fn(),
+    setFloatImage: vi.fn(),
     renderWaveform: vi.fn(),
   };
   return {
@@ -542,6 +544,80 @@ describe('Waveform GPU rendering', () => {
   it('WF-055: setPlaybackMode is callable without update', () => {
     expect(() => waveform.setPlaybackMode(true)).not.toThrow();
     expect(() => waveform.setPlaybackMode(false)).not.toThrow();
+  });
+});
+
+describe('Waveform updateFloat', () => {
+  let waveform: Waveform;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    waveform = new Waveform();
+  });
+
+  afterEach(() => {
+    waveform.dispose();
+  });
+
+  it('WF-070: updateFloat does not throw with valid float data', () => {
+    const floatData = new Float32Array(10 * 10 * 4);
+    expect(() => waveform.updateFloat(floatData, 10, 10)).not.toThrow();
+  });
+
+  it('WF-071: updateFloat uses GPU setFloatImage when available', async () => {
+    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
+    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
+
+    const floatData = new Float32Array(10 * 10 * 4);
+    waveform.updateFloat(floatData, 10, 10);
+
+    expect(mockProcessor.setFloatImage).toHaveBeenCalledWith(floatData, 10, 10);
+    expect(mockProcessor.renderWaveform).toHaveBeenCalled();
+  });
+
+  it('WF-072: updateFloat sets playback mode on GPU processor', async () => {
+    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
+    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
+
+    waveform.setPlaybackMode(true);
+    const floatData = new Float32Array(10 * 10 * 4);
+    waveform.updateFloat(floatData, 10, 10);
+
+    expect(mockProcessor.setPlaybackMode).toHaveBeenCalledWith(true);
+  });
+
+  it('WF-073: updateFloat preserves HDR values > 1.0', async () => {
+    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
+    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
+
+    const floatData = new Float32Array([3.5, 2.0, 1.5, 1.0]);
+    waveform.updateFloat(floatData, 1, 1);
+
+    // setFloatImage should receive the original float data with HDR values
+    const call = mockProcessor.setFloatImage.mock.calls[0];
+    expect(call![0][0]).toBe(3.5);
+    expect(call![0][1]).toBe(2.0);
+  });
+
+  it('WF-074: updateFloat uses current waveform mode for rendering', async () => {
+    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
+    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
+
+    waveform.setMode('parade');
+    const floatData = new Float32Array(10 * 10 * 4);
+    waveform.updateFloat(floatData, 10, 10);
+
+    const call = mockProcessor.renderWaveform.mock.calls[0];
+    expect(call![1]).toBe('parade');
+  });
+
+  it('WF-075: updateFloat does not throw when GPU processor is not available', async () => {
+    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
+    // Override to return null (simulating no WebGL2)
+    (getSharedScopesProcessor as ReturnType<typeof vi.fn>).mockReturnValueOnce(null);
+
+    const floatData = new Float32Array(10 * 10 * 4);
+    expect(() => waveform.updateFloat(floatData, 10, 10)).not.toThrow();
   });
 });
 

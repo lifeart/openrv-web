@@ -9,22 +9,13 @@
  */
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { luminanceRec709 } from '../../color/ColorProcessingFacade';
 
-export interface ZebraState {
-  enabled: boolean;
-  highEnabled: boolean;        // Enable highlight clipping zebras
-  lowEnabled: boolean;         // Enable shadow clipping zebras
-  highThreshold: number;       // 0-100 IRE (default 95)
-  lowThreshold: number;        // 0-100 IRE (default 5)
-}
+export type { ZebraState } from '../../core/types/effects';
+export { DEFAULT_ZEBRA_STATE } from '../../core/types/effects';
 
-export const DEFAULT_ZEBRA_STATE: ZebraState = {
-  enabled: false,
-  highEnabled: true,
-  lowEnabled: false,
-  highThreshold: 95,
-  lowThreshold: 5,
-};
+import type { ZebraState } from '../../core/types/effects';
+import { DEFAULT_ZEBRA_STATE } from '../../core/types/effects';
 
 export interface ZebraStripesEvents extends EventMap {
   stateChanged: ZebraState;
@@ -173,7 +164,7 @@ export class ZebraStripes extends EventEmitter<ZebraStripesEvents> {
         const b = data[i + 2]!;
 
         // Calculate luminance (Rec. 709)
-        const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        const luma = luminanceRec709(r, g, b);
 
         let showZebra = false;
         let zebraColor: [number, number, number] = [255, 0, 0];

@@ -159,8 +159,9 @@ export class WorkerPool<TResult = unknown> {
       };
 
       // Insert into queue based on priority (lower = higher priority)
-      const insertIndex = this.taskQueue.findIndex(t => t.priority > priority);
-      if (insertIndex === -1) {
+      // Use binary search for O(log n) insertion point lookup instead of O(n) findIndex
+      const insertIndex = this.binarySearchInsertionPoint(priority);
+      if (insertIndex === this.taskQueue.length) {
         this.taskQueue.push(task);
       } else {
         this.taskQueue.splice(insertIndex, 0, task);
@@ -168,6 +169,24 @@ export class WorkerPool<TResult = unknown> {
 
       this.processQueue();
     });
+  }
+
+  /**
+   * Binary search for the first index where task.priority > target priority.
+   * Returns taskQueue.length if no such index exists (insert at end).
+   */
+  private binarySearchInsertionPoint(priority: number): number {
+    let lo = 0;
+    let hi = this.taskQueue.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (this.taskQueue[mid]!.priority > priority) {
+        hi = mid;
+      } else {
+        lo = mid + 1;
+      }
+    }
+    return lo;
   }
 
   /**

@@ -263,23 +263,41 @@ test.describe('Duration Markers', () => {
     await saveBtn.click();
     await page.waitForTimeout(200);
 
-    // Check if frame 15 is within the marker range (read-only evaluate)
+    // Check if frame 15 is within any duration marker range (read-only evaluate)
     const inRange = await page.evaluate(() => {
-      const app = (window as any).__OPENRV_TEST__?.app;
-      return app?.session?.isFrameInMarkerRange?.(15);
+      const marks = (window as any).__OPENRV_TEST__?.app?.session?.marks;
+      if (!marks) return false;
+      for (const marker of marks.values()) {
+        const start = marker.frame;
+        const end = typeof marker.endFrame === 'number' ? marker.endFrame : marker.frame;
+        if (15 >= start && 15 <= end) {
+          return true;
+        }
+      }
+      return false;
     });
     expect(inRange).toBe(true);
 
-    // Check if frame 25 is outside the range (read-only evaluate)
+    // Check if frame 25 is outside all duration marker ranges (read-only evaluate)
     const outOfRange = await page.evaluate(() => {
-      const app = (window as any).__OPENRV_TEST__?.app;
-      return app?.session?.isFrameInMarkerRange?.(25);
+      const marks = (window as any).__OPENRV_TEST__?.app?.session?.marks;
+      if (!marks) return true;
+      for (const marker of marks.values()) {
+        const start = marker.frame;
+        const end = typeof marker.endFrame === 'number' ? marker.endFrame : marker.frame;
+        if (25 >= start && 25 <= end) {
+          return false;
+        }
+      }
+      return true;
     });
-    expect(outOfRange).toBe(false);
+    expect(outOfRange).toBe(true);
   });
 
   // DM-008: Multiple duration markers can coexist
   test('DM-008: multiple duration markers can be created', async ({ page }) => {
+    const thirdMarkerFrame = 20;
+
     await loadVideoFile(page);
 
     // Create marker at frame 5
@@ -292,8 +310,8 @@ test.describe('Duration Markers', () => {
     await page.keyboard.press('m');
     await page.waitForTimeout(200);
 
-    // Create marker at frame 30
-    await navigateToFrame(page, 30);
+    // Create marker at frame 20
+    await navigateToFrame(page, thirdMarkerFrame);
     await page.keyboard.press('m');
     await page.waitForTimeout(200);
 
@@ -326,14 +344,14 @@ test.describe('Duration Markers', () => {
     await saveBtn.click();
     await page.waitForTimeout(200);
 
-    // Edit marker at frame 30: set note only (point marker)
-    editBtn = page.locator('[data-testid="marker-edit-30"]');
+    // Edit marker at frame 20: set note only (point marker)
+    editBtn = page.locator(`[data-testid="marker-edit-${thirdMarkerFrame}"]`);
     await editBtn.click();
     await page.waitForTimeout(200);
 
-    noteInput = page.locator('[data-testid="marker-note-input-30"]');
+    noteInput = page.locator(`[data-testid="marker-note-input-${thirdMarkerFrame}"]`);
     await noteInput.fill('Point marker');
-    saveBtn = page.locator('[data-testid="marker-save-30"]');
+    saveBtn = page.locator(`[data-testid="marker-save-${thirdMarkerFrame}"]`);
     await saveBtn.click();
     await page.waitForTimeout(200);
 
@@ -342,18 +360,18 @@ test.describe('Duration Markers', () => {
     expect(state.markers.length).toBe(3);
 
     // Verify endFrames via read-only evaluate
-    const endFrames = await page.evaluate(() => {
-      const app = (window as any).__OPENRV_TEST__?.app;
-      const marks = app?.session?.marks;
-      return {
-        ef5: marks?.get(5)?.endFrame,
-        ef15: marks?.get(15)?.endFrame,
-        ef30: marks?.get(30)?.endFrame,
-      };
-    });
-    expect(endFrames.ef5).toBe(10);
-    expect(endFrames.ef15).toBe(25);
-    expect(endFrames.ef30).toBeUndefined();
+	    const endFrames = await page.evaluate(() => {
+	      const app = (window as any).__OPENRV_TEST__?.app;
+	      const marks = app?.session?.marks;
+	      return {
+	        ef5: marks?.get(5)?.endFrame,
+	        ef15: marks?.get(15)?.endFrame,
+	        ef20: marks?.get(20)?.endFrame,
+	      };
+	    });
+	    expect(endFrames.ef5).toBe(10);
+	    expect(endFrames.ef15).toBe(25);
+	    expect(endFrames.ef20).toBeUndefined();
   });
 
   // DM-009: Marker panel shows end frame editing

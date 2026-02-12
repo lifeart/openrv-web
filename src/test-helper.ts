@@ -4,7 +4,7 @@
  */
 
 import type { App } from './App';
-import { getThemeManager } from './utils/ThemeManager';
+import { getThemeManager } from './utils/ui/ThemeManager';
 
 declare global {
   interface Window {
@@ -37,6 +37,9 @@ declare global {
       getPresentationState: () => PresentationTestState;
       getNetworkSyncState: () => NetworkSyncState;
       getLuminanceVisState: () => LuminanceVisTestState;
+      getDiagnostics: () => TestHelperDiagnostics;
+      clearDiagnostics: () => void;
+      setStrictMode: (enabled: boolean) => void;
       simulateFullscreenEnter: () => void;
       simulateFullscreenExit: () => void;
     };
@@ -114,7 +117,7 @@ export interface ViewerState {
   zoom: number;
   panX: number;
   panY: number;
-  wipeMode: 'off' | 'horizontal' | 'vertical' | 'quad';
+  wipeMode: 'off' | 'horizontal' | 'vertical' | 'quad' | 'splitscreen-h' | 'splitscreen-v';
   wipePosition: number;
   cropEnabled: boolean;
   cropRegion: {
@@ -136,6 +139,9 @@ export interface ViewerState {
   histogramVisible: boolean;
   histogramMode: 'rgb' | 'luminance' | 'separate';
   histogramLogScale: boolean;
+  histogramHDRActive: boolean;
+  histogramMaxValue: number;
+  histogramPixelCount: number;
   waveformVisible: boolean;
   waveformMode: 'luma' | 'rgb' | 'parade';
   vectorscopeVisible: boolean;
@@ -174,6 +180,8 @@ export interface ViewerState {
   backgroundCustomColor: string;
   // Color inversion state
   colorInversionEnabled: boolean;
+  // Viewer color pipeline adjustments snapshot (used by HDR/tone-mapping E2E)
+  colorAdjustments: Record<string, unknown>;
   // HDR format info
   formatName: string | null;
   bitDepth: number | null;
@@ -378,6 +386,12 @@ export interface OCIOState {
   panelVisible: boolean;
 }
 
+export interface TestHelperDiagnostics {
+  strictMode: boolean;
+  missingPaths: string[];
+  errors: string[];
+}
+
 /**
  * Creates a state getter that retrieves a component, calls getState() on it,
  * and merges the result with defaults using nullish coalescing (??) semantics.
@@ -385,11 +399,14 @@ export interface OCIOState {
  * are replaced by the corresponding default value.
  */
 function createStateGetter<T extends object>(
+  path: string,
   getComponent: () => any,
   defaults: T,
+  resolveComponent?: (path: string, getComponent: () => any) => any,
 ): () => T {
   return () => {
-    const state = getComponent()?.getState?.() ?? {};
+    const component = resolveComponent ? resolveComponent(path, getComponent) : getComponent();
+    const state = component?.getState?.() ?? {};
     const result = {} as Record<string, unknown>;
     for (const key of Object.keys(defaults)) {
       result[key] = state[key] ?? (defaults as Record<string, unknown>)[key];
@@ -401,33 +418,71 @@ function createStateGetter<T extends object>(
 export function exposeForTesting(app: App): void {
   // Access private properties through any cast (for testing only)
   const appAny = app as any;
+  let strictMode = false;
+  const missingPaths = new Set<string>();
+  const errors: string[] = [];
+
+  const addError = (path: string, error: unknown): void => {
+    const message = error instanceof Error ? error.message : String(error);
+    errors.push(`${path}: ${message}`);
+  };
+
+  const resolveComponent = (path: string, getComponent: () => any): any => {
+    try {
+      const component = getComponent();
+      if (component == null) {
+        missingPaths.add(path);
+        if (strictMode) {
+          throw new Error(`[OPENRV_TEST] Missing component at path: ${path}`);
+        }
+      }
+      return component;
+    } catch (error) {
+      addError(path, error);
+      if (strictMode) {
+        throw error instanceof Error ? error : new Error(String(error));
+      }
+      return null;
+    }
+  };
+
+  const getControls = (): any => {
+    return resolveComponent('app.controls', () => appAny.controls);
+  };
+
+  const getControl = (key: string): any => {
+    const controls = getControls();
+    return resolveComponent(`app.controls.${key}`, () => controls?.[key]);
+  };
 
   window.__OPENRV_TEST__ = {
     app,
 
     getSessionState: (): SessionState => {
-      const session = appAny.session;
-      const source = session.currentSource;
+      const session = resolveComponent('app.session', () => appAny.session);
+      const source = session?.currentSource;
+      const marksFromMap = Array.from(session?.marks?.keys?.() ?? []);
+      const marks = marksFromMap.length > 0 ? marksFromMap : (session?.markedFrames ?? []);
       return {
-        currentFrame: session.currentFrame,
+        currentFrame: session?.currentFrame ?? 0,
         // frameCount is the duration in the in/out range, use source?.duration for total
         frameCount: source?.duration ?? 0,
-        inPoint: session.inPoint,
-        outPoint: session.outPoint,
-        isPlaying: session.isPlaying,
-        isBuffering: session.isBuffering,
-        loopMode: session.loopMode,
-        playDirection: session.playDirection,
-        playbackSpeed: session.playbackSpeed,
-        preservesPitch: session.preservesPitch,
-        volume: session.volume,
-        muted: session.muted,
-        fps: session.fps,
+        inPoint: session?.inPoint ?? 0,
+        outPoint: session?.outPoint ?? 0,
+        isPlaying: session?.isPlaying ?? false,
+        isBuffering: session?.isBuffering ?? false,
+        loopMode: session?.loopMode ?? 'loop',
+        playDirection: session?.playDirection ?? 1,
+        playbackSpeed: session?.playbackSpeed ?? 1,
+        preservesPitch: session?.preservesPitch ?? false,
+        volume: session?.volume ?? 1,
+        muted: session?.muted ?? false,
+        fps: session?.fps ?? 24,
         hasMedia: !!source,
         mediaType: source?.type ?? null,
         mediaName: source?.name ?? null,
-        marks: session.markedFrames ?? [],
-        markers: Array.from(session.marks?.values?.() ?? []).map((m: unknown) => {
+        marks,
+        markers: Array.from(session?.marks?.values?.() ?? []).map((m: unknown) => {
           const marker = m as { frame: number; note: string; color: string };
           return {
             frame: marker.frame,
@@ -436,99 +491,121 @@ export function exposeForTesting(app: App): void {
           };
         }),
         // A/B Compare state
-        currentAB: session.currentAB,
-        sourceAIndex: session.sourceAIndex,
-        sourceBIndex: session.sourceBIndex,
-        abCompareAvailable: session.abCompareAvailable,
-        syncPlayhead: session.syncPlayhead,
+        currentAB: session?.currentAB ?? 'A',
+        sourceAIndex: session?.sourceAIndex ?? 0,
+        sourceBIndex: session?.sourceBIndex ?? 1,
+        abCompareAvailable: session?.abCompareAvailable ?? false,
+        syncPlayhead: session?.syncPlayhead ?? true,
       };
     },
 
     getViewerState: (): ViewerState => {
-      const viewer = appAny.viewer;
-      const histogram = appAny.histogram;
-      const waveform = appAny.waveform;
-      const vectorscope = appAny.vectorscope;
+      const viewer = resolveComponent('app.viewer', () => appAny.viewer);
+      const histogram = getControl('histogram');
+      const waveform = getControl('waveform');
+      const vectorscope = getControl('vectorscope');
+      const channelSelect = getControl('channelSelect');
+      const zoom = viewer?.getZoom?.() ?? 1;
+      const pan = viewer?.getPan?.() ?? { x: 0, y: 0 };
+      const wipeState = viewer?.getWipeState?.() ?? {};
+      const cropState = viewer?.getCropState?.() ?? {};
+      const uncropState = viewer?.getUncropState?.() ?? {};
+      const stereoState = viewer?.getStereoState?.() ?? {};
+      const stereoEyeTransformState = viewer?.getStereoEyeTransforms?.() ?? null;
+      const stereoAlignMode = viewer?.getStereoAlignMode?.() ?? 'off';
+      const differenceMatteState = viewer?.getDifferenceMatteState?.() ?? {};
+      const parState = viewer?.getPARState?.() ?? {};
+      const backgroundPatternState = viewer?.getBackgroundPatternState?.() ?? {};
+      const colorAdjustments = viewer?.getColorAdjustments?.() ?? {};
+      const exrLayerState = channelSelect?.getEXRLayerState?.() ?? {};
       return {
-        zoom: viewer.zoom ?? 1,
-        panX: viewer.panX ?? 0,
-        panY: viewer.panY ?? 0,
-        wipeMode: viewer.wipeState?.mode ?? 'off',
-        wipePosition: viewer.wipeState?.position ?? 0.5,
-        cropEnabled: viewer.cropState?.enabled ?? false,
+        zoom,
+        panX: pan.x ?? 0,
+        panY: pan.y ?? 0,
+        wipeMode: wipeState.mode ?? 'off',
+        wipePosition: wipeState.position ?? 0.5,
+        cropEnabled: cropState.enabled ?? false,
         cropRegion: {
-          x: viewer.cropState?.region?.x ?? 0,
-          y: viewer.cropState?.region?.y ?? 0,
-          width: viewer.cropState?.region?.width ?? 1,
-          height: viewer.cropState?.region?.height ?? 1,
+          x: cropState.region?.x ?? 0,
+          y: cropState.region?.y ?? 0,
+          width: cropState.region?.width ?? 1,
+          height: cropState.region?.height ?? 1,
         },
-        cropAspectRatio: viewer.cropState?.aspectRatio ?? null,
-        channelMode: viewer.channelMode ?? 'rgb',
-        stereoMode: viewer.stereoState?.mode ?? 'off',
-        stereoEyeSwap: viewer.stereoState?.eyeSwap ?? false,
-        stereoOffset: viewer.stereoState?.offset ?? 0,
+        cropAspectRatio: cropState.aspectRatio ?? null,
+        channelMode: viewer?.getChannelMode?.() ?? 'rgb',
+        stereoMode: stereoState.mode ?? 'off',
+        stereoEyeSwap: stereoState.eyeSwap ?? false,
+        stereoOffset: stereoState.offset ?? 0,
         // Per-eye transform state
-        stereoEyeTransformLeft: viewer.stereoEyeTransformState ? { ...viewer.stereoEyeTransformState.left } : { flipH: false, flipV: false, rotation: 0, scale: 1.0, translateX: 0, translateY: 0 },
-        stereoEyeTransformRight: viewer.stereoEyeTransformState ? { ...viewer.stereoEyeTransformState.right } : { flipH: false, flipV: false, rotation: 0, scale: 1.0, translateX: 0, translateY: 0 },
-        stereoEyeTransformLinked: viewer.stereoEyeTransformState?.linked ?? false,
-        stereoAlignMode: viewer.stereoAlignMode ?? 'off',
+        stereoEyeTransformLeft: stereoEyeTransformState ? { ...stereoEyeTransformState.left } : { flipH: false, flipV: false, rotation: 0, scale: 1.0, translateX: 0, translateY: 0 },
+        stereoEyeTransformRight: stereoEyeTransformState ? { ...stereoEyeTransformState.right } : { flipH: false, flipV: false, rotation: 0, scale: 1.0, translateX: 0, translateY: 0 },
+        stereoEyeTransformLinked: stereoEyeTransformState?.linked ?? false,
+        stereoAlignMode,
         histogramVisible: histogram?.isVisible?.() ?? false,
         histogramMode: histogram?.getMode?.() ?? 'rgb',
         histogramLogScale: histogram?.isLogScale?.() ?? false,
+        histogramHDRActive: histogram?.isHDRActive?.() ?? false,
+        histogramMaxValue: histogram?.getMaxValue?.() ?? 1.0,
+        histogramPixelCount: histogram?.getData?.()?.pixelCount ?? 0,
         waveformVisible: waveform?.isVisible?.() ?? false,
         waveformMode: waveform?.getMode?.() ?? 'luma',
         vectorscopeVisible: vectorscope?.isVisible?.() ?? false,
         vectorscopeZoom: vectorscope?.getZoom?.() ?? 1,
         // Difference matte state
-        differenceMatteEnabled: viewer.differenceMatteState?.enabled ?? false,
-        differenceMatteGain: viewer.differenceMatteState?.gain ?? 1,
-        differenceMatteHeatmap: viewer.differenceMatteState?.heatmap ?? false,
+        differenceMatteEnabled: differenceMatteState.enabled ?? false,
+        differenceMatteGain: differenceMatteState.gain ?? 1,
+        differenceMatteHeatmap: differenceMatteState.heatmap ?? false,
         // Clipping overlay state
-        clippingOverlayEnabled: viewer.getClippingOverlay?.()?.isEnabled?.() ?? false,
+        clippingOverlayEnabled: viewer?.getClippingOverlay?.()?.isEnabled?.() ?? false,
         histogramClipping: histogram?.getClipping?.() ?? null,
         // EXR layer state (from channelSelect component)
-        exrLayerCount: appAny.channelSelect?.getEXRLayerState?.()?.availableLayers?.length ?? 0,
-        exrSelectedLayer: appAny.channelSelect?.getEXRLayerState?.()?.selectedLayer ?? null,
-        exrAvailableLayers: appAny.channelSelect?.getEXRLayerState?.()?.availableLayers?.map((l: any) => l.name) ?? [],
+        exrLayerCount: exrLayerState.availableLayers?.length ?? 0,
+        exrSelectedLayer: exrLayerState.selectedLayer ?? null,
+        exrAvailableLayers: exrLayerState.availableLayers?.map((l: any) => l.name) ?? [],
         // Uncrop state
-        uncropEnabled: viewer.uncropState?.enabled ?? false,
-        uncropPaddingMode: viewer.uncropState?.paddingMode ?? 'uniform',
-        uncropPadding: viewer.uncropState?.padding ?? 0,
-        uncropPaddingTop: viewer.uncropState?.paddingTop ?? 0,
-        uncropPaddingRight: viewer.uncropState?.paddingRight ?? 0,
-        uncropPaddingBottom: viewer.uncropState?.paddingBottom ?? 0,
-        uncropPaddingLeft: viewer.uncropState?.paddingLeft ?? 0,
+        uncropEnabled: uncropState.enabled ?? false,
+        uncropPaddingMode: uncropState.paddingMode ?? 'uniform',
+        uncropPadding: uncropState.padding ?? 0,
+        uncropPaddingTop: uncropState.paddingTop ?? 0,
+        uncropPaddingRight: uncropState.paddingRight ?? 0,
+        uncropPaddingBottom: uncropState.paddingBottom ?? 0,
+        uncropPaddingLeft: uncropState.paddingLeft ?? 0,
         // PAR state
-        parEnabled: viewer.parState?.enabled ?? false,
-        parValue: viewer.parState?.par ?? 1.0,
-        parPreset: viewer.parState?.preset ?? 'square',
+        parEnabled: parState.enabled ?? false,
+        parValue: parState.par ?? 1.0,
+        parPreset: parState.preset ?? 'square',
         // Background pattern state
-        backgroundPattern: viewer.backgroundPatternState?.pattern ?? 'black',
-        backgroundCheckerSize: viewer.backgroundPatternState?.checkerSize ?? 'medium',
-        backgroundCustomColor: viewer.backgroundPatternState?.customColor ?? '#1a1a1a',
+        backgroundPattern: backgroundPatternState.pattern ?? 'black',
+        backgroundCheckerSize: backgroundPatternState.checkerSize ?? 'medium',
+        backgroundCustomColor: backgroundPatternState.customColor ?? '#1a1a1a',
         // Color inversion state
-        colorInversionEnabled: viewer.colorInversionEnabled ?? false,
+        colorInversionEnabled: viewer?.getColorInversion?.() ?? false,
+        colorAdjustments,
         // HDR format info
         formatName: (() => {
-          const source = appAny.session?.currentSource;
+          const session = resolveComponent('app.session', () => appAny.session);
+          const source = session?.currentSource;
           const fileSource = source?.getFileSource?.() ?? source;
           return fileSource?.formatName ?? null;
         })(),
         bitDepth: (() => {
-          const source = appAny.session?.currentSource;
+          const session = resolveComponent('app.session', () => appAny.session);
+          const source = session?.currentSource;
           const fileSource = source?.getFileSource?.() ?? source;
           const ipImage = fileSource?.cachedIPImage;
           const attrs = ipImage?.metadata?.attributes;
           return (attrs?.bitDepth as number) ?? (attrs?.bitsPerSample as number) ?? null;
         })(),
         dataType: (() => {
-          const source = appAny.session?.currentSource;
+          const session = resolveComponent('app.session', () => appAny.session);
+          const source = session?.currentSource;
           const fileSource = source?.getFileSource?.() ?? source;
           const ipImage = fileSource?.cachedIPImage;
           return ipImage?.dataType ?? null;
         })(),
         colorSpace: (() => {
-          const source = appAny.session?.currentSource;
+          const session = resolveComponent('app.session', () => appAny.session);
+          const source = session?.currentSource;
           const fileSource = source?.getFileSource?.() ?? source;
           const ipImage = fileSource?.cachedIPImage;
           return ipImage?.metadata?.colorSpace ?? null;
@@ -537,8 +614,8 @@ export function exposeForTesting(app: App): void {
     },
 
     getColorState: (): ColorState => {
-      const colorControls = appAny.colorControls;
-      const adjustments = colorControls?.adjustments ?? {};
+      const colorControls = getControl('colorControls');
+      const adjustments = colorControls?.getAdjustments?.() ?? {};
       return {
         exposure: adjustments.exposure ?? 0,
         gamma: adjustments.gamma ?? 1,
@@ -554,12 +631,13 @@ export function exposeForTesting(app: App): void {
         shadows: adjustments.shadows ?? 0,
         whites: adjustments.whites ?? 0,
         blacks: adjustments.blacks ?? 0,
-        hasLUT: !!colorControls?.currentLUT,
-        lutIntensity: colorControls?.lutIntensity ?? 1,
+        hasLUT: !!colorControls?.getLUT?.(),
+        lutIntensity: colorControls?.getLUTIntensity?.() ?? 1,
       };
     },
 
     getPixelProbeState: createStateGetter<PixelProbeState>(
+      'app.viewer.getPixelProbe',
       () => appAny.viewer?.getPixelProbe?.(),
       {
         enabled: false,
@@ -574,25 +652,31 @@ export function exposeForTesting(app: App): void {
         sampleSize: 1,
         sourceMode: 'rendered',
       },
+      resolveComponent,
     ),
 
     getFalseColorState: createStateGetter<FalseColorState>(
+      'app.viewer.getFalseColor',
       () => appAny.viewer?.getFalseColor?.(),
       {
         enabled: false,
         preset: 'standard',
       },
+      resolveComponent,
     ),
 
     getToneMappingState: createStateGetter<ToneMappingTestState>(
-      () => appAny.toneMappingControl,
+      'app.controls.toneMappingControl',
+      () => getControl('toneMappingControl'),
       {
         enabled: false,
         operator: 'off',
       },
+      resolveComponent,
     ),
 
     getSafeAreasState: createStateGetter<SafeAreasState>(
+      'app.viewer.getSafeAreasOverlay',
       () => appAny.viewer?.getSafeAreasOverlay?.(),
       {
         enabled: false,
@@ -602,9 +686,11 @@ export function exposeForTesting(app: App): void {
         ruleOfThirds: false,
         aspectRatio: null,
       },
+      resolveComponent,
     ),
 
     getTimecodeOverlayState: createStateGetter<TimecodeOverlayState>(
+      'app.viewer.getTimecodeOverlay',
       () => appAny.viewer?.getTimecodeOverlay?.(),
       {
         enabled: false,
@@ -612,9 +698,11 @@ export function exposeForTesting(app: App): void {
         fontSize: 'medium',
         showFrameCounter: true,
       },
+      resolveComponent,
     ),
 
     getZebraStripesState: createStateGetter<ZebraStripesState>(
+      'app.viewer.getZebraStripes',
       () => appAny.viewer?.getZebraStripes?.(),
       {
         enabled: false,
@@ -623,10 +711,11 @@ export function exposeForTesting(app: App): void {
         highThreshold: 95,
         lowThreshold: 5,
       },
+      resolveComponent,
     ),
 
     getColorWheelsState: (): ColorWheelsState => {
-      const viewer = appAny.viewer;
+      const viewer = resolveComponent('app.viewer', () => appAny.viewer);
       const colorWheels = viewer?.getColorWheels?.();
       const state = colorWheels?.getState?.() ?? {};
       return {
@@ -642,6 +731,7 @@ export function exposeForTesting(app: App): void {
     },
 
     getSpotlightState: createStateGetter<SpotlightState>(
+      'app.viewer.getSpotlightOverlay',
       () => appAny.viewer?.getSpotlightOverlay?.(),
       {
         enabled: false,
@@ -653,9 +743,11 @@ export function exposeForTesting(app: App): void {
         dimAmount: 0.7,
         feather: 0.05,
       },
+      resolveComponent,
     ),
 
     getHSLQualifierState: createStateGetter<HSLQualifierState>(
+      'app.viewer.getHSLQualifier',
       () => appAny.viewer?.getHSLQualifier?.(),
       {
         enabled: false,
@@ -666,10 +758,11 @@ export function exposeForTesting(app: App): void {
         invert: false,
         mattePreview: false,
       },
+      resolveComponent,
     ),
 
     getHistoryPanelState: (): HistoryPanelState => {
-      const historyPanel = appAny.historyPanel;
+      const historyPanel = getControl('historyPanel');
       const panelState = historyPanel?.getState?.() ?? {};
       const historyManager = historyPanel?.historyManager;
       const historyState = historyManager?.getState?.() ?? {};
@@ -683,8 +776,8 @@ export function exposeForTesting(app: App): void {
     },
 
     getInfoPanelState: (): InfoPanelState => {
-      const infoPanel = appAny.infoPanel;
-      const session = appAny.session;
+      const infoPanel = getControl('infoPanel');
+      const session = resolveComponent('app.session', () => appAny.session);
       const source = session?.currentSource;
       const state = infoPanel?.getState?.() ?? {};
       const currentData = (infoPanel as any)?.currentData ?? {};
@@ -701,7 +794,7 @@ export function exposeForTesting(app: App): void {
     },
 
     getTransformState: (): TransformState => {
-      const transformControl = appAny.transformControl;
+      const transformControl = getControl('transformControl');
       const transform = transformControl?.getTransform?.() ?? {};
       return {
         rotation: transform.rotation ?? 0,
@@ -712,7 +805,7 @@ export function exposeForTesting(app: App): void {
 
     getPaintState: (): PaintState => {
       const paintEngine = appAny.paintEngine;
-      const session = appAny.session;
+      const session = resolveComponent('app.session', () => appAny.session);
       // Map 'none' tool to 'pan' for test interface consistency
       const tool = paintEngine?.tool ?? 'none';
       const toolMap: Record<string, 'pan' | 'pen' | 'eraser' | 'text' | 'rectangle' | 'ellipse' | 'line' | 'arrow'> = {
@@ -758,8 +851,8 @@ export function exposeForTesting(app: App): void {
     },
 
     getCacheIndicatorState: (): CacheIndicatorState => {
-      const session = appAny.session;
-      const cacheIndicator = appAny.cacheIndicator;
+      const session = resolveComponent('app.session', () => appAny.session);
+      const cacheIndicator = getControl('cacheIndicator');
       const state = cacheIndicator?.getState?.() ?? {};
       const isUsingMediabunny = session?.isUsingMediabunny?.() ?? false;
       return {
@@ -780,7 +873,7 @@ export function exposeForTesting(app: App): void {
     },
 
     getMatteState: (): MatteState => {
-      const viewer = appAny.viewer;
+      const viewer = resolveComponent('app.viewer', () => appAny.viewer);
       const matteOverlay = viewer?.getMatteOverlay?.();
       const settings = matteOverlay?.getSettings?.() ?? {};
       return {
@@ -793,7 +886,7 @@ export function exposeForTesting(app: App): void {
     },
 
     getSessionMetadataState: (): SessionMetadataState => {
-      const session = appAny.session;
+      const session = resolveComponent('app.session', () => appAny.session);
       const metadata = session?.metadata ?? {};
       return {
         displayName: metadata.displayName ?? '',
@@ -805,7 +898,7 @@ export function exposeForTesting(app: App): void {
     },
 
     getStackState: (): StackState => {
-      const stackControl = appAny.stackControl;
+      const stackControl = getControl('stackControl');
       const layers = stackControl?.getLayers?.() ?? [];
       const activeLayer = stackControl?.getActiveLayer?.();
       return {
@@ -819,12 +912,12 @@ export function exposeForTesting(app: App): void {
         })),
         activeLayerId: activeLayer?.id ?? null,
         layerCount: layers.length,
-        isPanelOpen: stackControl?.isPanelOpen ?? false,
+        isPanelOpen: (stackControl as any)?.isPanelOpen ?? false,
       };
     },
 
     getOCIOState: (): OCIOState => {
-      const ocioControl = appAny.ocioControl;
+      const ocioControl = getControl('ocioControl');
       const state = ocioControl?.getState?.() ?? {};
       return {
         enabled: state.enabled ?? false,
@@ -836,12 +929,12 @@ export function exposeForTesting(app: App): void {
         view: state.view ?? 'ACES 1.0 SDR-video',
         look: state.look ?? 'None',
         lookDirection: state.lookDirection ?? 'forward',
-        panelVisible: ocioControl?.isExpanded ?? false,
+        panelVisible: (ocioControl as any)?.isExpanded ?? false,
       };
     },
 
     isUsingMediabunny: (): boolean => {
-      const session = appAny.session;
+      const session = resolveComponent('app.session', () => appAny.session);
       return session?.isUsingMediabunny?.() ?? false;
     },
 
@@ -854,15 +947,18 @@ export function exposeForTesting(app: App): void {
     },
 
     getPresentationState: createStateGetter<PresentationTestState>(
-      () => appAny.presentationMode,
+      'app.controls.presentationMode',
+      () => getControl('presentationMode'),
       {
         enabled: false,
         cursorAutoHide: true,
         cursorHideDelay: 3000,
       },
+      resolveComponent,
     ),
 
     getLuminanceVisState: createStateGetter<LuminanceVisTestState>(
+      'app.viewer.getLuminanceVisualization',
       () => appAny.viewer?.getLuminanceVisualization?.(),
       {
         mode: 'off',
@@ -873,11 +969,12 @@ export function exposeForTesting(app: App): void {
         contourDesaturate: true,
         contourLineColor: [255, 255, 255],
       },
+      resolveComponent,
     ),
 
     getNetworkSyncState: (): NetworkSyncState => {
-      const networkControl = appAny.networkControl;
-      const networkSyncManager = appAny.networkSyncManager;
+      const networkControl = getControl('networkControl');
+      const networkSyncManager = getControl('networkSyncManager');
       const controlState = networkControl?.getState?.() ?? {};
       return {
         connectionState: networkSyncManager?.connectionState ?? 'disconnected',
@@ -891,6 +988,21 @@ export function exposeForTesting(app: App): void {
         syncAnnotations: networkSyncManager?.syncSettings?.annotations ?? false,
         rtt: networkSyncManager?.rtt ?? 0,
       };
+    },
+
+    getDiagnostics: (): TestHelperDiagnostics => ({
+      strictMode,
+      missingPaths: Array.from(missingPaths),
+      errors: [...errors],
+    }),
+
+    clearDiagnostics: (): void => {
+      missingPaths.clear();
+      errors.length = 0;
+    },
+
+    setStrictMode: (enabled: boolean): void => {
+      strictMode = enabled;
     },
 
     simulateFullscreenEnter: (): void => {

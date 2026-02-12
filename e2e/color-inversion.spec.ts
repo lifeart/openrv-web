@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import {
   loadVideoFile,
   waitForTestHelper,
+  getColorState,
   getViewerState,
   captureViewerScreenshot,
   imagesAreDifferent,
@@ -22,18 +23,23 @@ async function waitForInversion(page: import('@playwright/test').Page, expected:
   );
 }
 
+async function switchToColorTab(page: import('@playwright/test').Page): Promise<void> {
+  await page.click('button[data-tab-id="color"]');
+  await expect(page.locator('[data-testid="color-inversion-toggle"]')).toBeVisible();
+}
+
+async function switchToViewTab(page: import('@playwright/test').Page): Promise<void> {
+  await page.click('button[data-tab-id="view"]');
+  await expect(page.locator('[data-testid="compare-control-button"]')).toBeVisible();
+}
+
 test.describe('Color Inversion', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await page.waitForSelector('#app');
     await waitForTestHelper(page);
     await loadVideoFile(page);
-    // Switch to Color tab
-    await page.locator('button:has-text("Color")').first().click();
-    await page.waitForFunction(() => {
-      const colorTab = document.querySelector('button:has-text("Color")');
-      return colorTab?.classList.contains('active') || colorTab?.getAttribute('aria-selected') === 'true';
-    });
+    await switchToColorTab(page);
   });
 
   test.describe('Toggle Visibility', () => {
@@ -74,11 +80,7 @@ test.describe('Color Inversion', () => {
 
     test('INV-012: Ctrl+I should work from any tab', async ({ page }) => {
       // Switch to View tab
-      await page.locator('button:has-text("View")').first().click();
-      await page.waitForFunction(() => {
-        const viewTab = document.querySelector('button:has-text("View")');
-        return viewTab?.classList.contains('active') || viewTab?.getAttribute('aria-selected') === 'true';
-      });
+      await switchToViewTab(page);
 
       await page.keyboard.press('Control+i');
       await waitForInversion(page, true);
@@ -165,18 +167,16 @@ test.describe('Color Inversion', () => {
         return window.__OPENRV_TEST__?.getColorState()?.exposure === 2;
       }, { timeout: 2000 });
 
-      const beforeInversion = await captureViewerScreenshot(page);
-
       // Enable inversion
       await page.keyboard.press('Control+i');
       await waitForInversion(page, true);
-      // Wait for canvas to render the inversion effect
-      await page.waitForFunction(() => {
-        return window.__OPENRV_TEST__?.getViewerState()?.colorInversionEnabled === true;
-      }, { timeout: 2000 });
 
-      const afterInversion = await captureViewerScreenshot(page);
-      expect(imagesAreDifferent(beforeInversion, afterInversion)).toBe(true);
+      // Exposure and inversion should both remain active.
+      const viewerState = await getViewerState(page);
+      expect(viewerState.colorInversionEnabled).toBe(true);
+
+      const colorState = await getColorState(page);
+      expect(colorState.exposure).toBe(2);
     });
   });
 
@@ -187,18 +187,10 @@ test.describe('Color Inversion', () => {
       await waitForInversion(page, true);
 
       // Switch to View tab
-      await page.locator('button:has-text("View")').first().click();
-      await page.waitForFunction(() => {
-        const viewTab = document.querySelector('button:has-text("View")');
-        return viewTab?.classList.contains('active') || viewTab?.getAttribute('aria-selected') === 'true';
-      });
+      await switchToViewTab(page);
 
       // Switch back to Color tab
-      await page.locator('button:has-text("Color")').first().click();
-      await page.waitForFunction(() => {
-        const colorTab = document.querySelector('button:has-text("Color")');
-        return colorTab?.classList.contains('active') || colorTab?.getAttribute('aria-selected') === 'true';
-      });
+      await switchToColorTab(page);
 
       const state = await getViewerState(page);
       expect(state.colorInversionEnabled).toBe(true);

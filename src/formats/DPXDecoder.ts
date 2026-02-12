@@ -13,6 +13,7 @@
 
 import { dpxLogToLinear as _dpxLogToLinear, type LogLinearOptions } from './LogLinear';
 import { validateImageDimensions, toRGBA, applyLogToLinearRGBA as sharedApplyLogToLinearRGBA } from './shared';
+import { DecoderError } from '../core/errors';
 
 // Re-export for backwards compatibility
 export { dpxLogToLinear } from './LogLinear';
@@ -34,6 +35,13 @@ export interface DPXInfo {
   transfer: string; // 'linear' | 'logarithmic'
   channels: number;
   dataOffset: number;
+}
+
+export interface DPXDecodeOptions {
+  /** Whether to convert log data to linear (default: false for DPX) */
+  applyLogToLinear?: boolean;
+  /** Custom log-to-linear conversion parameters */
+  logLinearOptions?: LogLinearOptions;
 }
 
 export interface DPXDecodeResult {
@@ -277,11 +285,11 @@ function applyLogToLinearRGBA(
  */
 export async function decodeDPX(
   buffer: ArrayBuffer,
-  options?: { applyLogToLinear?: boolean; logLinearOptions?: LogLinearOptions }
+  options?: DPXDecodeOptions
 ): Promise<DPXDecodeResult> {
   const info = getDPXInfo(buffer);
   if (!info) {
-    throw new Error('Invalid DPX file');
+    throw new DecoderError('DPX', 'Invalid DPX file');
   }
 
   const { width, height, bitDepth, bigEndian, transfer, channels: inputChannels, dataOffset } = info;
@@ -291,7 +299,7 @@ export async function decodeDPX(
 
   // Validate data offset
   if (dataOffset >= buffer.byteLength) {
-    throw new Error(`Invalid DPX file: data offset ${dataOffset} exceeds file size ${buffer.byteLength}`);
+    throw new DecoderError('DPX', `Invalid DPX file: data offset ${dataOffset} exceeds file size ${buffer.byteLength}`);
   }
 
   // Create DataView for pixel data
@@ -313,7 +321,7 @@ export async function decodeDPX(
       componentData = unpack16bit(pixelDataView, width, height, inputChannels, bigEndian);
       break;
     default:
-      throw new Error(`Unsupported DPX bit depth: ${bitDepth}`);
+      throw new DecoderError('DPX', `Unsupported DPX bit depth: ${bitDepth}`);
   }
 
   // Convert to RGBA

@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { DecoderRegistry, type FormatDecoder } from './DecoderRegistry';
+import { DecoderRegistry, decoderRegistry, type FormatDecoder } from './DecoderRegistry';
 
 // Magic numbers
 const EXR_MAGIC = 0x01312f76;
@@ -88,6 +88,39 @@ function createFloatTIFFMagic(): ArrayBuffer {
   return buffer;
 }
 
+function createJXLCodestreamMagic(): ArrayBuffer {
+  const buffer = new ArrayBuffer(4);
+  const view = new Uint8Array(buffer);
+  view[0] = 0xff;
+  view[1] = 0x0a;
+  return buffer;
+}
+
+function createJXLContainerMagic(): ArrayBuffer {
+  const buffer = new ArrayBuffer(12);
+  const view = new DataView(buffer);
+  view.setUint32(0, 12, false); // box size
+  // 'ftyp'
+  view.setUint8(4, 0x66); view.setUint8(5, 0x74);
+  view.setUint8(6, 0x79); view.setUint8(7, 0x70);
+  // 'jxl '
+  view.setUint8(8, 0x6a); view.setUint8(9, 0x78);
+  view.setUint8(10, 0x6c); view.setUint8(11, 0x20);
+  return buffer;
+}
+
+function createHDRMagic(): ArrayBuffer {
+  const header = '#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 2 +X 2\n';
+  const headerBytes = Array.from(header).map(c => c.charCodeAt(0));
+  // Add 4 pixels of uncompressed RGBE data (2x2 image)
+  const pixelBytes = [128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128, 128];
+  const buffer = new ArrayBuffer(headerBytes.length + pixelBytes.length);
+  const view = new Uint8Array(buffer);
+  view.set(headerBytes, 0);
+  view.set(pixelBytes, headerBytes.length);
+  return buffer;
+}
+
 function createNonFloatTIFFMagic(): ArrayBuffer {
   // Same as float TIFF but with SampleFormat=1 (uint)
   const buffer = new ArrayBuffer(512);
@@ -169,6 +202,21 @@ describe('DecoderRegistry', () => {
       expect(registry.detectFormat(createNonFloatTIFFMagic())).toBeNull();
     });
 
+    it('should detect HDR format', () => {
+      const registry = new DecoderRegistry();
+      expect(registry.detectFormat(createHDRMagic())).toBe('hdr');
+    });
+
+    it('should detect JXL format (codestream)', () => {
+      const registry = new DecoderRegistry();
+      expect(registry.detectFormat(createJXLCodestreamMagic())).toBe('jxl');
+    });
+
+    it('should detect JXL format (ISOBMFF container)', () => {
+      const registry = new DecoderRegistry();
+      expect(registry.detectFormat(createJXLContainerMagic())).toBe('jxl');
+    });
+
     it('should return null for unknown format', () => {
       const registry = new DecoderRegistry();
       const buffer = new ArrayBuffer(16);
@@ -209,6 +257,27 @@ describe('DecoderRegistry', () => {
       const decoder = registry.getDecoder(createFloatTIFFMagic());
       expect(decoder).not.toBeNull();
       expect(decoder!.formatName).toBe('tiff');
+    });
+
+    it('should return HDR decoder for HDR data', () => {
+      const registry = new DecoderRegistry();
+      const decoder = registry.getDecoder(createHDRMagic());
+      expect(decoder).not.toBeNull();
+      expect(decoder!.formatName).toBe('hdr');
+    });
+
+    it('should return JXL decoder for JXL codestream data', () => {
+      const registry = new DecoderRegistry();
+      const decoder = registry.getDecoder(createJXLCodestreamMagic());
+      expect(decoder).not.toBeNull();
+      expect(decoder!.formatName).toBe('jxl');
+    });
+
+    it('should return JXL decoder for JXL container data', () => {
+      const registry = new DecoderRegistry();
+      const decoder = registry.getDecoder(createJXLContainerMagic());
+      expect(decoder).not.toBeNull();
+      expect(decoder!.formatName).toBe('jxl');
     });
 
     it('should return null for unknown data', () => {
@@ -274,13 +343,141 @@ describe('DecoderRegistry', () => {
       expect(decoder!.formatName).toBe('exr');
     });
 
-    it('should have all four built-in decoders', () => {
+    it('should have all seven built-in decoders', () => {
       const registry = new DecoderRegistry();
       // Test each format is detectable
       expect(registry.getDecoder(createEXRMagic())?.formatName).toBe('exr');
       expect(registry.getDecoder(createDPXMagic())?.formatName).toBe('dpx');
       expect(registry.getDecoder(createCineonMagic())?.formatName).toBe('cineon');
       expect(registry.getDecoder(createFloatTIFFMagic())?.formatName).toBe('tiff');
+      expect(registry.getDecoder(createHDRMagic())?.formatName).toBe('hdr');
+      expect(registry.getDecoder(createJXLCodestreamMagic())?.formatName).toBe('jxl');
+      // JPEG Gainmap requires a valid JPEG+MPF buffer which is complex to create,
+      // but the decoder is registered and tested via isGainmapJPEG in its own test suite
+    });
+  });
+
+  describe('detectAndDecode', () => {
+    it('should return null for unknown format', async () => {
+      const registry = new DecoderRegistry();
+      const buffer = new ArrayBuffer(16);
+      const result = await registry.detectAndDecode(buffer);
+      expect(result).toBeNull();
+    });
+
+    it('should detect and decode HDR format end-to-end', async () => {
+      const registry = new DecoderRegistry();
+      const buffer = createHDRMagic();
+      const result = await registry.detectAndDecode(buffer);
+      expect(result).not.toBeNull();
+      expect(result!.formatName).toBe('hdr');
+      expect(result!.width).toBe(2);
+      expect(result!.height).toBe(2);
+      expect(result!.channels).toBe(4);
+      expect(result!.colorSpace).toBe('linear');
+      expect(result!.data).toBeInstanceOf(Float32Array);
+    });
+
+    it('should detect, decode, and include formatName in result', async () => {
+      const registry = new DecoderRegistry();
+      const customDecoder: FormatDecoder = {
+        formatName: 'test-format',
+        canDecode: (buffer: ArrayBuffer) => {
+          if (buffer.byteLength < 4) return false;
+          return new DataView(buffer).getUint32(0, false) === 0xcafebabe;
+        },
+        decode: async (_buffer: ArrayBuffer, options?: Record<string, unknown>) => ({
+          width: 10,
+          height: 20,
+          data: new Float32Array(10 * 20 * 4),
+          channels: 4,
+          colorSpace: options?.colorSpace as string ?? 'linear',
+          metadata: { custom: true },
+        }),
+      };
+
+      registry.registerDecoder(customDecoder);
+
+      const buffer = new ArrayBuffer(4);
+      new DataView(buffer).setUint32(0, 0xcafebabe, false);
+
+      const result = await registry.detectAndDecode(buffer);
+      expect(result).not.toBeNull();
+      expect(result!.formatName).toBe('test-format');
+      expect(result!.width).toBe(10);
+      expect(result!.height).toBe(20);
+      expect(result!.channels).toBe(4);
+      expect(result!.colorSpace).toBe('linear');
+      expect(result!.metadata).toEqual({ custom: true });
+    });
+
+    it('should pass options through to the matched decoder', async () => {
+      const registry = new DecoderRegistry();
+      const customDecoder: FormatDecoder = {
+        formatName: 'opts-format',
+        canDecode: (buffer: ArrayBuffer) => {
+          if (buffer.byteLength < 4) return false;
+          return new DataView(buffer).getUint32(0, false) === 0xf00dface;
+        },
+        decode: async (_buffer: ArrayBuffer, options?: Record<string, unknown>) => ({
+          width: 1,
+          height: 1,
+          data: new Float32Array(4),
+          channels: 4,
+          colorSpace: (options?.applyLogToLinear as boolean) ? 'linear' : 'log',
+          metadata: { receivedOptions: options ?? {} },
+        }),
+      };
+
+      registry.registerDecoder(customDecoder);
+
+      const buffer = new ArrayBuffer(4);
+      new DataView(buffer).setUint32(0, 0xf00dface, false);
+
+      const result = await registry.detectAndDecode(buffer, { applyLogToLinear: true });
+      expect(result).not.toBeNull();
+      expect(result!.colorSpace).toBe('linear');
+
+      const result2 = await registry.detectAndDecode(buffer, { applyLogToLinear: false });
+      expect(result2).not.toBeNull();
+      expect(result2!.colorSpace).toBe('log');
+    });
+  });
+
+  describe('singleton', () => {
+    it('should export a pre-populated singleton instance', () => {
+      expect(decoderRegistry).toBeInstanceOf(DecoderRegistry);
+      // Singleton should have all built-in decoders
+      expect(decoderRegistry.detectFormat(createEXRMagic())).toBe('exr');
+      expect(decoderRegistry.detectFormat(createDPXMagic())).toBe('dpx');
+      expect(decoderRegistry.detectFormat(createCineonMagic())).toBe('cineon');
+      expect(decoderRegistry.detectFormat(createFloatTIFFMagic())).toBe('tiff');
+      expect(decoderRegistry.detectFormat(createHDRMagic())).toBe('hdr');
+      expect(decoderRegistry.detectFormat(createJXLCodestreamMagic())).toBe('jxl');
+    });
+
+    it('should allow registering custom decoders on the singleton', () => {
+      const customDecoder: FormatDecoder = {
+        formatName: 'singleton-test',
+        canDecode: (buffer: ArrayBuffer) => {
+          if (buffer.byteLength < 4) return false;
+          return new DataView(buffer).getUint32(0, false) === 0xabcd1234;
+        },
+        decode: async () => ({
+          width: 1,
+          height: 1,
+          data: new Float32Array(4),
+          channels: 4,
+          colorSpace: 'linear',
+          metadata: {},
+        }),
+      };
+
+      decoderRegistry.registerDecoder(customDecoder);
+
+      const buffer = new ArrayBuffer(4);
+      new DataView(buffer).setUint32(0, 0xabcd1234, false);
+      expect(decoderRegistry.detectFormat(buffer)).toBe('singleton-test');
     });
   });
 });

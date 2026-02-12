@@ -431,19 +431,19 @@ test.describe('Timeline', () => {
       expect(state.loopMode).toBe('loop');
 
       // Cycle through modes
-      await page.keyboard.press('l');
+      await page.keyboard.press('Control+L');
       await page.waitForTimeout(100);
 
       state = await getSessionState(page);
       expect(state.loopMode).toBe('pingpong');
 
-      await page.keyboard.press('l');
+      await page.keyboard.press('Control+L');
       await page.waitForTimeout(100);
 
       state = await getSessionState(page);
       expect(state.loopMode).toBe('once');
 
-      await page.keyboard.press('l');
+      await page.keyboard.press('Control+L');
       await page.waitForTimeout(100);
 
       state = await getSessionState(page);

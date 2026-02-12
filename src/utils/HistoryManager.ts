@@ -7,6 +7,7 @@
 
 import { EventEmitter, EventMap } from './EventEmitter';
 import { getIconSvg } from '../ui/components/shared/Icons';
+import type { ManagerBase } from '../core/ManagerBase';
 
 export interface HistoryEntry {
   id: number;
@@ -33,7 +34,7 @@ export interface HistoryState {
 
 const MAX_HISTORY_LENGTH = 100;
 
-export class HistoryManager extends EventEmitter<HistoryEvents> {
+export class HistoryManager extends EventEmitter<HistoryEvents> implements ManagerBase {
   private entries: HistoryEntry[] = [];
   private currentIndex = -1; // -1 means at initial state (no history)
   private nextId = 0;
@@ -235,6 +236,14 @@ export class HistoryManager extends EventEmitter<HistoryEvents> {
    */
   static getCategoryLabel(category: HistoryEntry['category']): string {
     return HistoryManager.getCategoryIcon(category);
+  }
+
+  /**
+   * Release all resources and clear history.
+   */
+  dispose(): void {
+    this.clear();
+    this.removeAllListeners();
   }
 }
 

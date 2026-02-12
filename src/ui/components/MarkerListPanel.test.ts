@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MarkerListPanel } from './MarkerListPanel';
 import { Session, MARKER_COLORS } from '../../core/session/Session';
+import { getThemeManager } from '../../utils/ui/ThemeManager';
 
 describe('MarkerListPanel', () => {
   let panel: MarkerListPanel;
@@ -507,6 +508,50 @@ describe('MarkerListPanel', () => {
 
       const marker = session.getMarker(10);
       expect(marker?.endFrame).toBeUndefined();
+    });
+  });
+
+  describe('theme changes', () => {
+    it('MARK-U120: marker color buttons use var(--border-secondary) not hardcoded rgba', () => {
+      session.setMarker(10, 'Theme test', MARKER_COLORS[0]);
+      panel.show();
+
+      const colorBtn = panel.getElement().querySelector('[data-testid="marker-color-10"]') as HTMLElement;
+      expect(colorBtn).not.toBeNull();
+      expect(colorBtn.style.cssText).toContain('var(--border-secondary)');
+      expect(colorBtn.style.cssText).not.toContain('rgba(255, 255, 255, 0.3)');
+    });
+
+    it('MARK-U121: re-renders entries when theme changes', () => {
+      session.setMarker(10, 'Theme test marker', MARKER_COLORS[0]);
+      panel.show();
+
+      const entriesEl = panel.getElement().querySelector('[data-testid="marker-entries"]')!;
+      const oldChild = entriesEl.firstElementChild!;
+      expect(oldChild).toBeTruthy();
+
+      getThemeManager().emit('themeChanged', 'light');
+
+      // render() clears innerHTML and rebuilds - the old child is now detached
+      expect(entriesEl.contains(oldChild)).toBe(false);
+      // But the content is re-created with the same data
+      expect(entriesEl.textContent).toContain('Theme test marker');
+    });
+
+    it('MARK-U122: does not error on theme change after dispose', () => {
+      session.setMarker(10, 'Dispose test', MARKER_COLORS[0]);
+      panel.show();
+      panel.dispose();
+
+      const htmlAfterDispose = panel.getElement().innerHTML;
+
+      // Should not throw or cause errors
+      expect(() => {
+        getThemeManager().emit('themeChanged', 'light');
+      }).not.toThrow();
+
+      // Panel content should remain unchanged
+      expect(panel.getElement().innerHTML).toBe(htmlAfterDispose);
     });
   });
 });

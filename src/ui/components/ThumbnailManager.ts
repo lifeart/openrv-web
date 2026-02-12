@@ -9,6 +9,7 @@
  */
 
 import { Session } from '../../core/session/Session';
+import { LRUCache } from '../../utils/LRUCache';
 
 export interface ThumbnailSlot {
   frame: number;
@@ -16,11 +17,6 @@ export interface ThumbnailSlot {
   y: number;
   width: number;
   height: number;
-}
-
-interface CacheEntry {
-  canvas: HTMLCanvasElement | OffscreenCanvas;
-  lastAccessed: number;
 }
 
 /** Frames that need to be retried later */
@@ -36,8 +32,7 @@ const RETRY_DELAY_MS = 500;
 
 export class ThumbnailManager {
   private session: Session;
-  private cache: Map<string, CacheEntry> = new Map();
-  private maxCacheSize = 150;
+  private cache = new LRUCache<string, HTMLCanvasElement | OffscreenCanvas>(150);
   private pendingLoads: Map<number, Promise<void>> = new Map();
   private maxConcurrent = 2;
   private abortController: AbortController | null = null;
@@ -205,9 +200,8 @@ export class ThumbnailManager {
 
       const cacheKey = this.getCacheKey(slot.frame);
       if (this.cache.has(cacheKey)) {
-        // Already cached, update access time
-        const entry = this.cache.get(cacheKey)!;
-        entry.lastAccessed = Date.now();
+        // Already cached; get() refreshes LRU access order
+        this.cache.get(cacheKey);
         continue;
       }
 
@@ -280,6 +274,12 @@ export class ThumbnailManager {
 
       if (!sourceElement || signal.aborted) return;
 
+      // Guard against detached ImageBitmaps (closed before thumbnail generation)
+      if (sourceElement instanceof ImageBitmap && (sourceElement.width === 0 || sourceElement.height === 0)) {
+        this.queueRetry(frame);
+        return;
+      }
+
       // Use OffscreenCanvas if available for better performance
       let targetCanvas: HTMLCanvasElement | OffscreenCanvas;
       let targetCtx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
@@ -335,30 +335,7 @@ export class ThumbnailManager {
    */
   private addToCache(frame: number, canvas: HTMLCanvasElement): void {
     const key = this.getCacheKey(frame);
-
-    // Evict oldest entries if cache is full
-    while (this.cache.size >= this.maxCacheSize) {
-      let oldestKey: string | null = null;
-      let oldestTime = Infinity;
-
-      for (const [k, entry] of this.cache) {
-        if (entry.lastAccessed < oldestTime) {
-          oldestTime = entry.lastAccessed;
-          oldestKey = k;
-        }
-      }
-
-      if (oldestKey) {
-        this.cache.delete(oldestKey);
-      } else {
-        break;
-      }
-    }
-
-    this.cache.set(key, {
-      canvas,
-      lastAccessed: Date.now(),
-    });
+    this.cache.set(key, canvas);
   }
 
   /**
@@ -366,12 +343,7 @@ export class ThumbnailManager {
    */
   getThumbnail(frame: number): HTMLCanvasElement | OffscreenCanvas | null {
     const key = this.getCacheKey(frame);
-    const entry = this.cache.get(key);
-    if (entry) {
-      entry.lastAccessed = Date.now();
-      return entry.canvas;
-    }
-    return null;
+    return this.cache.get(key) ?? null;
   }
 
   /**

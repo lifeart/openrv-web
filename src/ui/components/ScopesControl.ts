@@ -9,13 +9,9 @@ import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg, IconName } from './shared/Icons';
 import { applyA11yFocus } from './shared/Button';
 
-export type ScopeType = 'histogram' | 'waveform' | 'vectorscope';
+export type { ScopeType, ScopesState } from '../../core/types/scopes';
 
-export interface ScopesState {
-  histogram: boolean;
-  waveform: boolean;
-  vectorscope: boolean;
-}
+import type { ScopeType, ScopesState } from '../../core/types/scopes';
 
 export interface ScopesControlEvents extends EventMap {
   scopeToggled: { scope: ScopeType; visible: boolean };

@@ -5,6 +5,9 @@
  * preserving edges while smoothing flat areas.
  */
 
+import { clamp } from '../utils/math';
+import { luminanceRec709 } from '../color/PixelMath';
+
 export interface NoiseReductionParams {
   strength: number;           // 0-100 (overall strength)
   luminanceStrength: number;  // 0-100 (defaults to strength)
@@ -23,7 +26,7 @@ export const DEFAULT_NOISE_REDUCTION_PARAMS: NoiseReductionParams = {
  * Calculate luminance from RGB using Rec.709 coefficients
  */
 function luminance(r: number, g: number, b: number): number {
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return luminanceRec709(r, g, b);
 }
 
 /**
@@ -89,8 +92,8 @@ export function applyNoiseReduction(
       for (let dy = -radius; dy <= radius; dy++) {
         for (let dx = -radius; dx <= radius; dx++) {
           // Clamp to image bounds
-          const nx = Math.min(width - 1, Math.max(0, x + dx));
-          const ny = Math.min(height - 1, Math.max(0, y + dy));
+          const nx = clamp(x + dx, 0, width - 1);
+          const ny = clamp(y + dy, 0, height - 1);
           const neighborIdx = (ny * width + nx) * 4;
 
           const nR = original[neighborIdx]!;
@@ -147,8 +150,8 @@ export function isNoiseReductionActive(params: NoiseReductionParams): boolean {
 export function createNoiseReductionParams(strength: number): NoiseReductionParams {
   return {
     ...DEFAULT_NOISE_REDUCTION_PARAMS,
-    strength: Math.max(0, Math.min(100, strength)),
-    luminanceStrength: Math.max(0, Math.min(100, strength)),
-    chromaStrength: Math.max(0, Math.min(100, Math.min(100, strength * 1.5))),
+    strength: clamp(strength, 0, 100),
+    luminanceStrength: clamp(strength, 0, 100),
+    chromaStrength: clamp(Math.min(100, strength * 1.5), 0, 100),
   };
 }

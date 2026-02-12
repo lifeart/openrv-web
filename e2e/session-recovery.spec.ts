@@ -1,4 +1,12 @@
-import { test, expect, SAMPLE_IMAGE, loadImageFile, getSessionState, waitForTestHelper } from './fixtures';
+import {
+  test,
+  expect,
+  SAMPLE_IMAGE,
+  loadImageFile,
+  getSessionState,
+  waitForTestHelper,
+  waitForMediaLoaded,
+} from './fixtures';
 import path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -118,7 +126,7 @@ test.describe('Session Recovery - Blob URL Handling', () => {
     await loadImageFile(page);
 
     // Wait for media to be fully loaded
-    await expect(page.locator('[data-testid="viewer-canvas"], canvas')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid="viewer-image-canvas"]')).toBeVisible({ timeout: 5000 });
 
     // Set up download handler to capture the saved project file
     const downloadPromise = page.waitForEvent('download', { timeout: 10000 });
@@ -323,13 +331,16 @@ test.describe('Session Recovery - Blob URL Handling', () => {
 
     // Click Load button (using data-testid)
     const loadButton = page.locator('[data-testid="file-reload-load"]');
+    await expect(loadButton).toBeEnabled();
     await loadButton.click();
 
     // Dialog should close
     await expect(fileReloadDialog).not.toBeVisible({ timeout: 3000 });
 
-    // Wait for media to be loaded and rendered
-    await expect(page.locator('[data-testid="viewer-canvas"], canvas')).toBeVisible({ timeout: 5000 });
+    // Wait for media to be loaded and rendered.
+    // The project-load success modal can appear before session state has fully settled.
+    await waitForMediaLoaded(page);
+    await expect(page.locator('[data-testid="viewer-image-canvas"]')).toBeVisible({ timeout: 5000 });
 
     // Verify media was loaded
     const sessionState = await getSessionState(page);

@@ -1,4 +1,4 @@
-import { test, expect, loadVideoFile, captureViewerScreenshot, imagesAreDifferent, exportFrame } from './fixtures';
+import { test, expect, loadVideoFile, captureViewerScreenshot, imagesAreDifferent, exportFrame, getSessionState } from './fixtures';
 
 /**
  * State Verification Tests
@@ -95,18 +95,15 @@ test.describe('State Verification - Frame Navigation', () => {
       await page.keyboard.press('ArrowRight');
     }
     await page.waitForTimeout(200);
-
-    const midScreenshot = await captureViewerScreenshot(page);
+    const midState = await getSessionState(page);
+    expect(midState.currentFrame).toBeGreaterThan(1);
 
     // Press Home
     await page.keyboard.press('Home');
     await page.waitForTimeout(200);
 
-    // Capture first frame
-    const startScreenshot = await captureViewerScreenshot(page);
-
-    // Going to first frame should change if we were in middle
-    expect(imagesAreDifferent(midScreenshot, startScreenshot)).toBe(true);
+    const startState = await getSessionState(page);
+    expect(startState.currentFrame).toBe(1);
   });
 });
 
@@ -385,7 +382,8 @@ test.describe('State Verification - Zoom', () => {
     // Zoom to 200%
     await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
-    await page.click('button:has-text("200%")');
+    await page.click('[data-testid="zoom-control-button"]');
+    await page.click('[data-testid="zoom-dropdown"] button[data-value="2"]');
     await page.waitForTimeout(300);
 
     const zoomedScreenshot = await captureViewerScreenshot(page);
@@ -397,7 +395,8 @@ test.describe('State Verification - Zoom', () => {
   test('STATE-051: fit to window should show full image', async ({ page }) => {
     // Zoom in first
     await page.click('button[data-tab-id="view"]');
-    await page.click('button:has-text("400%")');
+    await page.click('[data-testid="zoom-control-button"]');
+    await page.click('[data-testid="zoom-dropdown"] button[data-value="4"]');
     await page.waitForTimeout(300);
 
     const zoomedScreenshot = await captureViewerScreenshot(page);

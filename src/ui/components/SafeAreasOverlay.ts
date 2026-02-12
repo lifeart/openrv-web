@@ -10,8 +10,8 @@
  * - Customizable colors and opacity
  */
 
-import { EventEmitter, EventMap } from '../../utils/EventEmitter';
-import { setupHiDPICanvas } from '../../utils/HiDPICanvas';
+import type { EventMap } from '../../utils/EventEmitter';
+import { CanvasOverlay } from './CanvasOverlay';
 
 export interface SafeAreasEvents extends EventMap {
   stateChanged: SafeAreasState;
@@ -65,69 +65,12 @@ export const DEFAULT_SAFE_AREAS_STATE: SafeAreasState = {
   guideOpacity: 0.5,
 };
 
-export class SafeAreasOverlay extends EventEmitter<SafeAreasEvents> {
-  private canvas: HTMLCanvasElement;
-  private ctx: CanvasRenderingContext2D;
+export class SafeAreasOverlay extends CanvasOverlay<SafeAreasEvents> {
   private state: SafeAreasState = { ...DEFAULT_SAFE_AREAS_STATE };
-  private displayWidth = 0;
-  private displayHeight = 0;
-  private offsetX = 0;
-  private offsetY = 0;
   private customAspectRatio = 1;
-  private canvasWidth = 0;
-  private canvasHeight = 0;
 
   constructor() {
-    super();
-
-    this.canvas = document.createElement('canvas');
-    this.canvas.className = 'safe-areas-overlay';
-    this.canvas.dataset.testid = 'safe-areas-overlay';
-    this.canvas.style.cssText = `
-      position: absolute;
-      top: 0;
-      left: 0;
-      pointer-events: none;
-      z-index: 45;
-    `;
-
-    const ctx = this.canvas.getContext('2d');
-    if (!ctx) throw new Error('Failed to get 2D context for safe areas overlay');
-    this.ctx = ctx;
-  }
-
-  /**
-   * Update canvas size and position to match viewer
-   * canvasWidth/canvasHeight are logical (CSS) dimensions
-   */
-  setViewerDimensions(
-    canvasWidth: number,
-    canvasHeight: number,
-    offsetX: number,
-    offsetY: number,
-    displayWidth: number,
-    displayHeight: number
-  ): void {
-    // Store logical dimensions
-    this.canvasWidth = canvasWidth;
-    this.canvasHeight = canvasHeight;
-    this.displayWidth = displayWidth;
-    this.displayHeight = displayHeight;
-    this.offsetX = offsetX;
-    this.offsetY = offsetY;
-
-    // Setup hi-DPI canvas with logical dimensions
-    setupHiDPICanvas({
-      canvas: this.canvas,
-      ctx: this.ctx,
-      width: canvasWidth,
-      height: canvasHeight,
-      setStyle: true, // CSS dimensions must be set for correct HiDPI scaling
-    });
-
-    if (this.state.enabled) {
-      this.render();
-    }
+    super('safe-areas-overlay', 'safe-areas-overlay', 45);
   }
 
   /**
@@ -472,19 +415,5 @@ export class SafeAreasOverlay extends EventEmitter<SafeAreasEvents> {
    */
   isVisible(): boolean {
     return this.state.enabled;
-  }
-
-  /**
-   * Get the canvas element
-   */
-  getElement(): HTMLCanvasElement {
-    return this.canvas;
-  }
-
-  /**
-   * Dispose
-   */
-  dispose(): void {
-    // No cleanup needed
   }
 }

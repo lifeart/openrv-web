@@ -8,6 +8,9 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import type { SessionState } from './SessionState';
 import { SESSION_STATE_VERSION } from './SessionState';
+import { Logger } from '../../utils/Logger';
+
+const log = new Logger('AutoSaveManager');
 
 /** Auto-save configuration */
 export interface AutoSaveConfig {
@@ -337,8 +340,8 @@ export class AutoSaveManager extends EventEmitter<AutoSaveEvents> {
       this.emit('saved', { entry });
 
       // Check storage quota and warn if low (async, non-blocking)
-      this.checkStorageQuota().catch(() => {
-        // Ignore quota check errors
+      this.checkStorageQuota().catch((err) => {
+        log.debug('Storage quota check failed', err);
       });
 
       return entry;

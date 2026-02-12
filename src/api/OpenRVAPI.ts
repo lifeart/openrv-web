@@ -12,9 +12,7 @@
  */
 
 import type { Session } from '../core/session/Session';
-import type { Viewer } from '../ui/components/Viewer';
-import type { ColorControls } from '../ui/components/ColorControls';
-import type { CDLControl } from '../ui/components/CDLControl';
+import type { ViewerProvider, ColorAdjustmentProvider, CDLProvider } from './types';
 
 import { PlaybackAPI } from './PlaybackAPI';
 import { MediaAPI } from './MediaAPI';
@@ -26,13 +24,17 @@ import { MarkersAPI } from './MarkersAPI';
 import { EventsAPI } from './EventsAPI';
 
 /**
- * Configuration passed to initialize the API
+ * Configuration passed to initialize the API.
+ *
+ * Uses abstract provider interfaces so that any object implementing the
+ * required methods can be supplied — concrete UI classes (Viewer,
+ * ColorControls, CDLControl) satisfy these via structural typing.
  */
 export interface OpenRVAPIConfig {
   session: Session;
-  viewer: Viewer;
-  colorControls: ColorControls;
-  cdlControl: CDLControl;
+  viewer: ViewerProvider;
+  colorControls: ColorAdjustmentProvider;
+  cdlControl: CDLProvider;
 }
 
 /**
@@ -82,14 +84,27 @@ export class OpenRVAPI {
   }
 
   /**
-   * Check if the API is initialized and ready for use
+   * Check if the API is initialized and ready for use.
+   *
+   * @returns `true` once the constructor has completed, `false` after {@link dispose} is called.
+   *
+   * @example
+   * ```ts
+   * if (openrv.isReady()) { openrv.playback.play(); }
+   * ```
    */
   isReady(): boolean {
     return this._ready;
   }
 
   /**
-   * Clean up all listeners and resources
+   * Clean up all listeners and resources. After calling this, the API
+   * instance should not be used (isReady() will return false).
+   *
+   * @example
+   * ```ts
+   * openrv.dispose();
+   * ```
    */
   dispose(): void {
     this._ready = false;

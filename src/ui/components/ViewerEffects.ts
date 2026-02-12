@@ -4,6 +4,9 @@
  * vibrance, clarity, and sharpening effects.
  */
 
+import { clamp } from '../../utils/math';
+import { luminanceRec709 } from '../../color/ColorProcessingFacade';
+
 export interface HighlightsShadowsParams {
   highlights: number; // -100 to +100
   shadows: number; // -100 to +100
@@ -21,7 +24,7 @@ export interface VibranceParams {
  * Returns 0 when x <= edge0, 1 when x >= edge1, smooth interpolation between
  */
 function smoothstep(edge0: number, edge1: number, x: number): number {
-  const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+  const t = clamp((x - edge0) / (edge1 - edge0), 0, 1);
   return t * t * (3 - 2 * t);
 }
 
@@ -90,15 +93,15 @@ export function applyHighlightsShadows(imageData: ImageData, params: HighlightsS
       // Remap values from [blackPoint, whitePoint] to [0, 255]
       const range = whitePoint - blackPoint;
       if (range > 0) {
-        r = Math.max(0, Math.min(255, ((r - blackPoint) / range) * 255));
-        g = Math.max(0, Math.min(255, ((g - blackPoint) / range) * 255));
-        b = Math.max(0, Math.min(255, ((b - blackPoint) / range) * 255));
+        r = clamp(((r - blackPoint) / range) * 255, 0, 255);
+        g = clamp(((g - blackPoint) / range) * 255, 0, 255);
+        b = clamp(((b - blackPoint) / range) * 255, 0, 255);
       }
     }
 
     // Calculate luminance (Rec. 709) after whites/blacks adjustment
-    const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    const lumIndex = Math.min(255, Math.max(0, Math.round(lum)));
+    const lum = luminanceRec709(r, g, b);
+    const lumIndex = clamp(Math.round(lum), 0, 255);
 
     // Get masks from LUTs
     const highlightMask = highlightLUT[lumIndex]!;
@@ -109,18 +112,18 @@ export function applyHighlightsShadows(imageData: ImageData, params: HighlightsS
       // For highlights recovery (negative): compress towards midtones
       // For highlights boost (positive): push brighter
       const highlightAdjust = highlights * highlightMask * 128;
-      r = Math.max(0, Math.min(255, r - highlightAdjust));
-      g = Math.max(0, Math.min(255, g - highlightAdjust));
-      b = Math.max(0, Math.min(255, b - highlightAdjust));
+      r = clamp(r - highlightAdjust, 0, 255);
+      g = clamp(g - highlightAdjust, 0, 255);
+      b = clamp(b - highlightAdjust, 0, 255);
     }
 
     if (shadows !== 0) {
       // For shadow recovery (positive): lift shadows
       // For shadow crush (negative): push darker
       const shadowAdjust = shadows * shadowMask * 128;
-      r = Math.max(0, Math.min(255, r + shadowAdjust));
-      g = Math.max(0, Math.min(255, g + shadowAdjust));
-      b = Math.max(0, Math.min(255, b + shadowAdjust));
+      r = clamp(r + shadowAdjust, 0, 255);
+      g = clamp(g + shadowAdjust, 0, 255);
+      b = clamp(b + shadowAdjust, 0, 255);
     }
 
     data[i] = r;
@@ -194,7 +197,7 @@ export function applyVibrance(imageData: ImageData, params: VibranceParams): voi
 
     // Calculate new saturation
     let newS = s + adjustment;
-    newS = Math.max(0, Math.min(1, newS));
+    newS = clamp(newS, 0, 1);
 
     // If saturation didn't change, skip conversion back
     if (Math.abs(newS - s) < 0.001) continue;
@@ -247,7 +250,7 @@ function applyGaussianBlur5x5(
         let weightSum = 0;
 
         for (let k = -2; k <= 2; k++) {
-          const nx = Math.min(width - 1, Math.max(0, x + k));
+          const nx = clamp(x + k, 0, width - 1);
           const nidx = (y * width + nx) * 4 + c;
           const weight = kernel[k + 2]!;
           sum += data[nidx]! * weight;
@@ -270,7 +273,7 @@ function applyGaussianBlur5x5(
         let weightSum = 0;
 
         for (let k = -2; k <= 2; k++) {
-          const ny = Math.min(height - 1, Math.max(0, y + k));
+          const ny = clamp(y + k, 0, height - 1);
           const nidx = (ny * width + x) * 4 + c;
           const weight = kernel[k + 2]!;
           sum += temp[nidx]! * weight;
@@ -336,8 +339,8 @@ export function applyClarity(imageData: ImageData, clarity: number): void {
     const blurredB = blurred[i + 2]!;
 
     // Calculate luminance for midtone mask (Rec. 709)
-    const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    const lumIndex = Math.min(255, Math.max(0, Math.round(lum)));
+    const lum = luminanceRec709(r, g, b);
+    const lumIndex = clamp(Math.round(lum), 0, 255);
     const mask = midtoneMask[lumIndex]!;
 
     // Calculate high-frequency detail (original - blurred)
@@ -348,9 +351,9 @@ export function applyClarity(imageData: ImageData, clarity: number): void {
     // Add masked high-frequency detail back, scaled by clarity
     // Positive clarity: add detail; Negative clarity: subtract detail (softens)
     const adjustedMask = mask * effectScale;
-    data[i] = Math.max(0, Math.min(255, r + highR * adjustedMask));
-    data[i + 1] = Math.max(0, Math.min(255, g + highG * adjustedMask));
-    data[i + 2] = Math.max(0, Math.min(255, b + highB * adjustedMask));
+    data[i] = clamp(r + highR * adjustedMask, 0, 255);
+    data[i + 1] = clamp(g + highG * adjustedMask, 0, 255);
+    data[i + 2] = clamp(b + highB * adjustedMask, 0, 255);
     // Alpha unchanged
   }
 }
@@ -364,81 +367,7 @@ export function applyClarity(imageData: ImageData, clarity: number): void {
  */
 
 import { ToneMappingOperator } from './ToneMappingControl';
-
-/**
- * Reinhard tone mapping operator
- * Simple global operator that preserves detail in highlights.
- * Formula: output = input / (1 + input)
- * Reference: Reinhard et al., "Photographic Tone Reproduction for Digital Images"
- */
-function tonemapReinhard(value: number): number {
-  // Handle edge cases: NaN, Infinity, negative values
-  if (!Number.isFinite(value) || value < 0) {
-    return 0;
-  }
-  return value / (1.0 + value);
-}
-
-/**
- * Filmic tone mapping operator (Uncharted 2 style)
- * Provides an S-curve response similar to film stock.
- * Reference: John Hable, "Uncharted 2: HDR Lighting"
- */
-function filmicCurve(x: number): number {
-  const A = 0.15; // Shoulder strength
-  const B = 0.50; // Linear strength
-  const C = 0.10; // Linear angle
-  const D = 0.20; // Toe strength
-  const E = 0.02; // Toe numerator
-  const F = 0.30; // Toe denominator
-  return ((x * (A * x + C * B) + D * E) / (x * (A * x + B) + D * F)) - E / F;
-}
-
-function tonemapFilmic(value: number): number {
-  // Handle edge cases: NaN, Infinity, negative values
-  if (!Number.isFinite(value) || value < 0) {
-    return 0;
-  }
-  const exposureBias = 2.0;
-  const curr = filmicCurve(exposureBias * value);
-  const whiteScale = 1.0 / filmicCurve(11.2); // Linear white point
-  // Clamp to ensure non-negative output (filmicCurve can return slightly negative for very small inputs)
-  return Math.max(0, curr * whiteScale);
-}
-
-/**
- * ACES (Academy Color Encoding System) tone mapping
- * Industry standard for cinema color management.
- * Reference: Academy ACES Output Transform, fitted curve by Krzysztof Narkowicz
- */
-function tonemapACES(value: number): number {
-  // Handle edge cases: NaN, Infinity, negative values
-  if (!Number.isFinite(value) || value < 0) {
-    return 0;
-  }
-  const a = 2.51;
-  const b = 0.03;
-  const c = 2.43;
-  const d = 0.59;
-  const e = 0.14;
-  return Math.max(0, Math.min(1, (value * (a * value + b)) / (value * (c * value + d) + e)));
-}
-
-/**
- * Apply the selected tone mapping operator to a single value
- */
-function applyToneMappingToValue(value: number, operator: ToneMappingOperator): number {
-  switch (operator) {
-    case 'reinhard':
-      return tonemapReinhard(value);
-    case 'filmic':
-      return tonemapFilmic(value);
-    case 'aces':
-      return tonemapACES(value);
-    default:
-      return value;
-  }
-}
+import { applyToneMappingToRGB } from '../../utils/effects/effectProcessing.shared';
 
 /**
  * Apply tone mapping to ImageData in-place.
@@ -465,17 +394,15 @@ export function applyToneMapping(imageData: ImageData, operator: ToneMappingOper
     let g = data[i + 1]! / 255;
     let b = data[i + 2]! / 255;
 
-    // Apply tone mapping to each channel
-    // The individual tone mapping functions handle edge cases (NaN, Infinity, negative)
-    r = applyToneMappingToValue(r, operator);
-    g = applyToneMappingToValue(g, operator);
-    b = applyToneMappingToValue(b, operator);
+    // Apply tone mapping (cross-channel for agx, pbrNeutral, acesHill)
+    const tm = applyToneMappingToRGB(r, g, b, operator);
+    r = tm.r; g = tm.g; b = tm.b;
 
     // Convert back to 8-bit with safe clamping
     // Handle NaN that could have slipped through by treating it as 0
-    data[i] = Math.max(0, Math.min(255, Math.round(Number.isFinite(r) ? r * 255 : 0)));
-    data[i + 1] = Math.max(0, Math.min(255, Math.round(Number.isFinite(g) ? g * 255 : 0)));
-    data[i + 2] = Math.max(0, Math.min(255, Math.round(Number.isFinite(b) ? b * 255 : 0)));
+    data[i] = clamp(Math.round(Number.isFinite(r) ? r * 255 : 0), 0, 255);
+    data[i + 1] = clamp(Math.round(Number.isFinite(g) ? g * 255 : 0), 0, 255);
+    data[i + 2] = clamp(Math.round(Number.isFinite(b) ? b * 255 : 0), 0, 255);
     // Alpha unchanged
   }
 }
@@ -504,15 +431,14 @@ export function applyToneMappingHDR(
     let g = channels >= 2 ? hdrData[hdrIndex + 1]! : r;
     let b = channels >= 3 ? hdrData[hdrIndex + 2]! : r;
 
-    // Apply tone mapping to compress HDR to SDR range
-    r = applyToneMappingToValue(r, operator);
-    g = applyToneMappingToValue(g, operator);
-    b = applyToneMappingToValue(b, operator);
+    // Apply tone mapping to compress HDR to SDR range (cross-channel for agx, pbrNeutral, acesHill)
+    const tm = applyToneMappingToRGB(r, g, b, operator);
+    r = tm.r; g = tm.g; b = tm.b;
 
     // Convert to 8-bit
-    data[dataIndex] = Math.max(0, Math.min(255, Math.round(Number.isFinite(r) ? r * 255 : 0)));
-    data[dataIndex + 1] = Math.max(0, Math.min(255, Math.round(Number.isFinite(g) ? g * 255 : 0)));
-    data[dataIndex + 2] = Math.max(0, Math.min(255, Math.round(Number.isFinite(b) ? b * 255 : 0)));
+    data[dataIndex] = clamp(Math.round(Number.isFinite(r) ? r * 255 : 0), 0, 255);
+    data[dataIndex + 1] = clamp(Math.round(Number.isFinite(g) ? g * 255 : 0), 0, 255);
+    data[dataIndex + 2] = clamp(Math.round(Number.isFinite(b) ? b * 255 : 0), 0, 255);
     // Alpha unchanged
   }
 }
@@ -554,7 +480,7 @@ export function applySharpenCPU(
 
         // Blend between original and sharpened based on amount
         const originalValue = original[idx + c]!;
-        const sharpenedValue = Math.max(0, Math.min(255, sum));
+        const sharpenedValue = clamp(sum, 0, 255);
         data[idx + c] = Math.round(originalValue + (sharpenedValue - originalValue) * amount);
       }
     }

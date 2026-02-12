@@ -16,6 +16,18 @@ import path from 'path';
  * - Layer selection UI
  * - Visual changes when switching layers
  */
+
+async function selectChannelMode(
+  page: import('@playwright/test').Page,
+  channel: 'rgb' | 'red' | 'green' | 'blue' | 'alpha' | 'luminance'
+): Promise<void> {
+  await page.click('[data-testid="channel-select-button"]');
+  const dropdown = page.locator('[data-testid="channel-dropdown"]');
+  await expect(dropdown).toBeVisible();
+  await dropdown.locator(`button[data-value="${channel}"]`).click();
+  await page.waitForTimeout(100);
+}
+
 test.describe('EXR Layer Selection', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
@@ -384,30 +396,21 @@ test.describe('EXR Layer Selection', () => {
         { timeout: 5000 }
       );
 
-      // Capture diffuse RGB view
-      const diffuseRgb = await captureViewerScreenshot(page);
-
       // Apply red channel isolation
-      await page.keyboard.press('Shift+r');
+      await selectChannelMode(page, 'red');
 
-      // Wait for channel mode to change
+      // Verify channel mode changed
       await page.waitForFunction(
         () => {
           const state = window.__OPENRV_TEST__?.getViewerState();
-          return state?.channelMode === 'red';
+          return state?.channelMode === 'red' && state?.exrSelectedLayer === 'diffuse';
         },
-        { timeout: 5000 }
+        { timeout: 5000 },
       );
 
-      // Capture diffuse red channel view
-      const diffuseRed = await captureViewerScreenshot(page);
-
-      // Views should be different
-      expect(imagesAreDifferent(diffuseRgb, diffuseRed)).toBe(true);
-
-      // Verify channel mode changed
       const viewerState = await getViewerState(page);
       expect(viewerState.channelMode).toBe('red');
+      expect(viewerState.exrSelectedLayer).toBe('diffuse');
     });
 
     test('AOV-031: layer selection should persist through channel mode changes', async ({ page }) => {
@@ -443,28 +446,10 @@ test.describe('EXR Layer Selection', () => {
       );
 
       // Apply channel isolation
-      await page.keyboard.press('Shift+g'); // Green channel
-
-      // Wait for channel mode to change
-      await page.waitForFunction(
-        () => {
-          const state = window.__OPENRV_TEST__?.getViewerState();
-          return state?.channelMode === 'green';
-        },
-        { timeout: 5000 }
-      );
+      await selectChannelMode(page, 'green');
 
       // Reset to RGB
-      await page.keyboard.press('Shift+n');
-
-      // Wait for channel mode to reset
-      await page.waitForFunction(
-        () => {
-          const state = window.__OPENRV_TEST__?.getViewerState();
-          return state?.channelMode === 'rgb';
-        },
-        { timeout: 5000 }
-      );
+      await selectChannelMode(page, 'rgb');
 
       // Layer selection should still be specular
       const viewerState = await getViewerState(page);

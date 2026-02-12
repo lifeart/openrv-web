@@ -13,7 +13,7 @@ import { DEFAULT_FILTER_SETTINGS } from '../../ui/components/FilterControl';
 import { DEFAULT_TRANSFORM } from '../../ui/components/TransformControl';
 import { DEFAULT_CROP_STATE, DEFAULT_CROP_REGION } from '../../ui/components/CropControl';
 import { DEFAULT_LENS_PARAMS } from '../../transform/LensDistortion';
-import { DEFAULT_WIPE_STATE } from '../../ui/components/WipeControl';
+import { DEFAULT_WIPE_STATE } from '../types/wipe';
 
 // Create a valid mock session state using actual defaults
 const createMockSessionState = (name: string = 'Test Project'): SessionState => ({
@@ -250,6 +250,124 @@ describe('AutoSaveManager', () => {
 
       // Still dirty but no active manager
       expect(manager.hasUnsavedChanges()).toBe(true);
+    });
+  });
+
+  describe('disposal/cleanup lifecycle', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('AUTOSAVE-D001: dispose stops the auto-save interval timer', async () => {
+      manager = new AutoSaveManager({ enabled: true, interval: 1 });
+      // Manually trigger startTimer via setConfig to simulate initialized state
+      manager.setConfig({ enabled: true });
+
+      // Verify timer is running (there should be at least 1 timer active)
+      expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+      await manager.dispose();
+
+      // After dispose, timer should be cleared
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('AUTOSAVE-D002: dispose clears the debounce timer from markDirty', async () => {
+      manager = new AutoSaveManager({ enabled: false });
+      const state = createMockSessionState();
+
+      manager.markDirty(() => state);
+
+      // markDirty creates a 2-second debounce timer
+      expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+      await manager.dispose();
+
+      // After dispose, debounce timer should be cleared
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('AUTOSAVE-D003: double dispose does not throw', async () => {
+      manager = new AutoSaveManager();
+      await manager.dispose();
+      // Second dispose should be safe
+      await expect(manager.dispose()).resolves.toBeUndefined();
+    });
+
+    it('AUTOSAVE-D004: save returns null after dispose (isDisposing guard)', async () => {
+      manager = new AutoSaveManager();
+      await manager.dispose();
+
+      const state = createMockSessionState();
+      const result = await manager.save(state);
+
+      expect(result).toBeNull();
+    });
+
+    it('AUTOSAVE-D005: saveNow returns null after dispose', async () => {
+      manager = new AutoSaveManager();
+      await manager.dispose();
+
+      const state = createMockSessionState();
+      const result = await manager.saveNow(state);
+
+      expect(result).toBeNull();
+    });
+
+    it('AUTOSAVE-D006: listAutoSaves returns empty array after dispose (db is null)', async () => {
+      manager = new AutoSaveManager();
+      await manager.dispose();
+
+      const entries = await manager.listAutoSaves();
+      expect(entries).toEqual([]);
+    });
+
+    it('AUTOSAVE-D007: getAutoSave returns null after dispose (db is null)', async () => {
+      manager = new AutoSaveManager();
+      await manager.dispose();
+
+      const result = await manager.getAutoSave('some-id');
+      expect(result).toBeNull();
+    });
+
+    it('AUTOSAVE-D008: dispose nulls the database reference', async () => {
+      manager = new AutoSaveManager();
+      await manager.dispose();
+
+      // Verify db is null by checking that operations that depend on db return early
+      const entries = await manager.listAutoSaves();
+      expect(entries).toEqual([]);
+
+      const autoSave = await manager.getAutoSave('any-id');
+      expect(autoSave).toBeNull();
+
+      const mostRecent = await manager.getMostRecent();
+      expect(mostRecent).toBeNull();
+    });
+
+    it('AUTOSAVE-D009: markDirty after dispose still sets dirty flag but debounce timer fires harmlessly', async () => {
+      manager = new AutoSaveManager({ enabled: false });
+      await manager.dispose();
+
+      const state = createMockSessionState();
+      // markDirty should not throw after dispose
+      expect(() => manager.markDirty(() => state)).not.toThrow();
+      expect(manager.hasUnsavedChanges()).toBe(true);
+
+      // Advance past debounce window - the timer fires but save() will return null
+      vi.advanceTimersByTime(3000);
+    });
+
+    it('AUTOSAVE-D010: setConfig after dispose does not throw', async () => {
+      manager = new AutoSaveManager();
+      await manager.dispose();
+
+      expect(() => manager.setConfig({ interval: 10 })).not.toThrow();
+      expect(manager.getConfig().interval).toBe(10);
     });
   });
 

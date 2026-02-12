@@ -3,6 +3,8 @@
  * Supports .cube format (Adobe/Resolve standard)
  */
 
+import { clamp } from '../utils/math';
+
 export interface LUT3D {
   title: string;
   size: number;  // Cube dimension (e.g., 33 for 33x33x33)
@@ -174,9 +176,9 @@ export function applyLUT3D(
 
   // Clamp and scale to LUT indices
   const maxIdx = size - 1;
-  const ri = Math.max(0, Math.min(maxIdx, nr * maxIdx));
-  const gi = Math.max(0, Math.min(maxIdx, ng * maxIdx));
-  const bi = Math.max(0, Math.min(maxIdx, nb * maxIdx));
+  const ri = clamp(nr * maxIdx, 0, maxIdx);
+  const gi = clamp(ng * maxIdx, 0, maxIdx);
+  const bi = clamp(nb * maxIdx, 0, maxIdx);
 
   // Get integer and fractional parts
   const r0 = Math.floor(ri);
@@ -245,7 +247,7 @@ export function applyLUT1D(
 
     // Clamp and scale to LUT indices
     const maxIdx = size - 1;
-    const idx = Math.max(0, Math.min(maxIdx, normalized * maxIdx));
+    const idx = clamp(normalized * maxIdx, 0, maxIdx);
 
     // Get integer and fractional parts for linear interpolation
     const idx0 = Math.floor(idx);
@@ -281,9 +283,9 @@ export function applyLUTToImageData(imageData: ImageData, lut: LUT): void {
 
       const [outR, outG, outB] = applyLUT1D(lut, r, g, b);
 
-      data[i] = Math.round(Math.max(0, Math.min(1, outR)) * 255);
-      data[i + 1] = Math.round(Math.max(0, Math.min(1, outG)) * 255);
-      data[i + 2] = Math.round(Math.max(0, Math.min(1, outB)) * 255);
+      data[i] = Math.round(clamp(outR, 0, 1) * 255);
+      data[i + 1] = Math.round(clamp(outG, 0, 1) * 255);
+      data[i + 2] = Math.round(clamp(outB, 0, 1) * 255);
     }
   } else {
     for (let i = 0; i < data.length; i += 4) {
@@ -293,9 +295,9 @@ export function applyLUTToImageData(imageData: ImageData, lut: LUT): void {
 
       const [outR, outG, outB] = applyLUT3D(lut, r, g, b);
 
-      data[i] = Math.round(Math.max(0, Math.min(1, outR)) * 255);
-      data[i + 1] = Math.round(Math.max(0, Math.min(1, outG)) * 255);
-      data[i + 2] = Math.round(Math.max(0, Math.min(1, outB)) * 255);
+      data[i] = Math.round(clamp(outR, 0, 1) * 255);
+      data[i + 1] = Math.round(clamp(outG, 0, 1) * 255);
+      data[i + 2] = Math.round(clamp(outB, 0, 1) * 255);
     }
   }
 }

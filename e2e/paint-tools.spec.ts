@@ -824,6 +824,7 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       const initialOpacity = await holdButton.evaluate((el) => el.style.opacity);
       const initialColor = await holdButton.evaluate((el) => el.style.color);
       expect(initialOpacity).toBe('0.5');
+      expect(initialColor).toBe('var(--text-muted)');
 
       // Enable hold mode
       await holdButton.click();
@@ -832,11 +833,11 @@ test.describe('Paint Tools (Annotate Tab)', () => {
       let state = await getPaintState(page);
       expect(state.holdMode).toBe(true);
 
-      // Button should show active state (full opacity, blue color)
+      // Button should show active state (full opacity + accent token color)
       const activeOpacity = await holdButton.evaluate((el) => el.style.opacity);
       const activeColor = await holdButton.evaluate((el) => el.style.color);
       expect(activeOpacity).toBe('1');
-      expect(activeColor).toContain('74, 158, 255'); // #4a9eff in rgb format
+      expect(activeColor).toBe('var(--accent-primary)');
 
       // Disable hold mode
       await holdButton.click();
@@ -847,7 +848,9 @@ test.describe('Paint Tools (Annotate Tab)', () => {
 
       // Button should return to inactive styling
       const finalOpacity = await holdButton.evaluate((el) => el.style.opacity);
+      const finalColor = await holdButton.evaluate((el) => el.style.color);
       expect(finalOpacity).toBe('0.5');
+      expect(finalColor).toBe('var(--text-muted)');
     });
 
     test('HOLD-E004: annotations drawn with hold OFF do not persist to other frames', async ({ page }) => {

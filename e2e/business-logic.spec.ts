@@ -129,22 +129,22 @@ test.describe('Session State Management', () => {
     let state = await getSessionState(page);
     expect(state.loopMode).toBe('loop');
 
-    // Press L to cycle to 'pingpong'
-    await page.keyboard.press('l');
+    // Press Ctrl+L to cycle to 'pingpong'
+    await page.keyboard.press('Control+l');
     await page.waitForTimeout(100);
 
     state = await getSessionState(page);
     expect(state.loopMode).toBe('pingpong');
 
-    // Press L to cycle to 'once'
-    await page.keyboard.press('l');
+    // Press Ctrl+L to cycle to 'once'
+    await page.keyboard.press('Control+l');
     await page.waitForTimeout(100);
 
     state = await getSessionState(page);
     expect(state.loopMode).toBe('once');
 
-    // Press L to cycle back to 'loop'
-    await page.keyboard.press('l');
+    // Press Ctrl+L to cycle back to 'loop'
+    await page.keyboard.press('Control+l');
     await page.waitForTimeout(100);
 
     state = await getSessionState(page);
@@ -599,6 +599,18 @@ test.describe('Viewer State', () => {
     await page.waitForTimeout(100);
 
     state = await getViewerState(page);
+    expect(state.wipeMode).toBe('splitscreen-h');
+
+    await page.keyboard.press('Shift+w');
+    await page.waitForTimeout(100);
+
+    state = await getViewerState(page);
+    expect(state.wipeMode).toBe('splitscreen-v');
+
+    await page.keyboard.press('Shift+w');
+    await page.waitForTimeout(100);
+
+    state = await getViewerState(page);
     expect(state.wipeMode).toBe('off');
   });
 
@@ -606,15 +618,15 @@ test.describe('Viewer State', () => {
     let state = await getViewerState(page);
     expect(state.cropEnabled).toBe(false);
 
-    // Toggle crop with K
-    await page.keyboard.press('k');
+    // Toggle crop with Shift+K
+    await page.keyboard.press('Shift+k');
     await page.waitForTimeout(100);
 
     state = await getViewerState(page);
     expect(state.cropEnabled).toBe(true);
 
     // Toggle off
-    await page.keyboard.press('k');
+    await page.keyboard.press('Shift+k');
     await page.waitForTimeout(100);
 
     state = await getViewerState(page);
