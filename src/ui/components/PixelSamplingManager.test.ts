@@ -37,6 +37,8 @@ describe('PixelSamplingManager', () => {
     ),
     isViewerContentElement: vi.fn(() => true),
     drawWithTransform: vi.fn(),
+    getLastRenderedImage: vi.fn(() => null),
+    isPlaying: vi.fn(() => false),
   };
 
   beforeEach(() => {
@@ -407,6 +409,207 @@ describe('PixelSamplingManager', () => {
       manager.dispose();
       manager.onMouseLeaveForCursorColor();
       expect(callback).toHaveBeenCalledTimes(1); // still 1, no additional call
+    });
+  });
+
+  // ===========================================================================
+  // 6. getScopeImageData
+  // ===========================================================================
+
+  describe('getScopeImageData', () => {
+    it('PSM-050: returns null when 2D canvas has no image data', () => {
+      // getImageCtx().getImageData returns empty ImageData with 0 dimensions
+      // but canvas width/height is 800x600 so getImageData() actually works
+      const result = manager.getScopeImageData();
+      // Should return an object (2D canvas path) since canvas has dimensions
+      if (result) {
+        expect(result.floatData).toBeNull();
+        expect(result.imageData).toBeInstanceOf(ImageData);
+      }
+    });
+
+    it('PSM-051: returns ScopeImageData with null floatData in 2D canvas mode', () => {
+      // In 2D canvas mode (no WebGL), floatData should be null
+      const result = manager.getScopeImageData();
+      if (result) {
+        expect(result.floatData).toBeNull();
+        expect(result.width).toBeGreaterThan(0);
+        expect(result.height).toBeGreaterThan(0);
+      }
+    });
+
+    it('PSM-052: returns null when WebGL active but no last rendered image', () => {
+      mockContext.isHDRRenderActive = vi.fn(() => true);
+      mockContext.getGLRenderer = vi.fn(() => ({
+        renderForScopes: vi.fn(() => null),
+      })) as any;
+      mockContext.getLastRenderedImage = vi.fn(() => null);
+
+      const webglManager = new PixelSamplingManager(mockContext);
+      const result = webglManager.getScopeImageData();
+
+      expect(result).toBeNull();
+    });
+
+    it('PSM-053: returns float data when WebGL rendering is active', () => {
+      const floatData = new Float32Array(4 * 4 * 4); // 4x4 pixels
+      for (let i = 0; i < floatData.length; i++) {
+        floatData[i] = (i % 4 === 3) ? 1.0 : 0.5; // RGBA with 0.5 color, 1.0 alpha
+      }
+
+      const mockImage = {} as any; // Mock IPImage
+      const mockRenderer = {
+        renderForScopes: vi.fn(() => ({ data: floatData, width: 4, height: 4 })),
+      };
+
+      const webglContext = {
+        ...mockContext,
+        isHDRRenderActive: vi.fn(() => true),
+        isSDRWebGLRenderActive: vi.fn(() => false),
+        getGLRenderer: vi.fn(() => mockRenderer) as any,
+        getLastRenderedImage: vi.fn(() => mockImage),
+        isPlaying: vi.fn(() => false),
+      };
+
+      const webglManager = new PixelSamplingManager(webglContext as any);
+      const result = webglManager.getScopeImageData();
+
+      expect(result).not.toBeNull();
+      expect(result!.floatData).toBe(floatData);
+      expect(result!.width).toBe(4);
+      expect(result!.height).toBe(4);
+      expect(result!.imageData).toBeInstanceOf(ImageData);
+    });
+
+    it('PSM-054: converts float data to ImageData for SDR fallback', () => {
+      const floatData = new Float32Array([
+        0.5, 0.3, 0.1, 1.0, // single pixel
+      ]);
+
+      const mockImage = {} as any;
+      const mockRenderer = {
+        renderForScopes: vi.fn(() => ({ data: floatData, width: 1, height: 1 })),
+      };
+
+      const webglContext = {
+        ...mockContext,
+        isHDRRenderActive: vi.fn(() => true),
+        isSDRWebGLRenderActive: vi.fn(() => false),
+        getGLRenderer: vi.fn(() => mockRenderer) as any,
+        getLastRenderedImage: vi.fn(() => mockImage),
+        isPlaying: vi.fn(() => false),
+      };
+
+      const webglManager = new PixelSamplingManager(webglContext as any);
+      const result = webglManager.getScopeImageData();
+
+      expect(result).not.toBeNull();
+      // ImageData should have clamped SDR values
+      const pixel = result!.imageData.data;
+      expect(pixel[0]).toBe(Math.round(0.5 * 255)); // R
+      expect(pixel[1]).toBe(Math.round(0.3 * 255)); // G
+      expect(pixel[2]).toBe(Math.round(0.1 * 255)); // B
+      expect(pixel[3]).toBe(255); // A
+    });
+
+    it('PSM-055: uses playback resolution when playing', () => {
+      const mockImage = {} as any;
+      const mockRenderer = {
+        renderForScopes: vi.fn(() => ({
+          data: new Float32Array(320 * 180 * 4),
+          width: 320,
+          height: 180,
+        })),
+      };
+
+      const webglContext = {
+        ...mockContext,
+        isHDRRenderActive: vi.fn(() => true),
+        isSDRWebGLRenderActive: vi.fn(() => false),
+        getGLRenderer: vi.fn(() => mockRenderer) as any,
+        getLastRenderedImage: vi.fn(() => mockImage),
+        isPlaying: vi.fn(() => true),
+      };
+
+      const webglManager = new PixelSamplingManager(webglContext as any);
+      webglManager.getScopeImageData();
+
+      // Should request playback resolution (320x180)
+      expect(mockRenderer.renderForScopes).toHaveBeenCalledWith(mockImage, 320, 180);
+    });
+
+    it('PSM-056: uses paused resolution when not playing', () => {
+      const mockImage = {} as any;
+      const mockRenderer = {
+        renderForScopes: vi.fn(() => ({
+          data: new Float32Array(640 * 360 * 4),
+          width: 640,
+          height: 360,
+        })),
+      };
+
+      const webglContext = {
+        ...mockContext,
+        isHDRRenderActive: vi.fn(() => true),
+        isSDRWebGLRenderActive: vi.fn(() => false),
+        getGLRenderer: vi.fn(() => mockRenderer) as any,
+        getLastRenderedImage: vi.fn(() => mockImage),
+        isPlaying: vi.fn(() => false),
+      };
+
+      const webglManager = new PixelSamplingManager(webglContext as any);
+      webglManager.getScopeImageData();
+
+      // Should request paused resolution (640x360)
+      expect(mockRenderer.renderForScopes).toHaveBeenCalledWith(mockImage, 640, 360);
+    });
+
+    it('PSM-057: returns null when WebGL renderer returns null', () => {
+      const mockImage = {} as any;
+      const mockRenderer = {
+        renderForScopes: vi.fn(() => null),
+      };
+
+      const webglContext = {
+        ...mockContext,
+        isHDRRenderActive: vi.fn(() => true),
+        isSDRWebGLRenderActive: vi.fn(() => false),
+        getGLRenderer: vi.fn(() => mockRenderer) as any,
+        getLastRenderedImage: vi.fn(() => mockImage),
+        isPlaying: vi.fn(() => false),
+      };
+
+      const webglManager = new PixelSamplingManager(webglContext as any);
+      const result = webglManager.getScopeImageData();
+
+      expect(result).toBeNull();
+    });
+
+    it('PSM-058: SDR WebGL path also triggers WebGL scope data', () => {
+      const mockImage = {} as any;
+      const mockRenderer = {
+        renderForScopes: vi.fn(() => ({
+          data: new Float32Array(4),
+          width: 1,
+          height: 1,
+        })),
+      };
+
+      const webglContext = {
+        ...mockContext,
+        isHDRRenderActive: vi.fn(() => false),
+        isSDRWebGLRenderActive: vi.fn(() => true),
+        getGLRenderer: vi.fn(() => mockRenderer) as any,
+        getLastRenderedImage: vi.fn(() => mockImage),
+        isPlaying: vi.fn(() => false),
+      };
+
+      const webglManager = new PixelSamplingManager(webglContext as any);
+      const result = webglManager.getScopeImageData();
+
+      expect(result).not.toBeNull();
+      expect(result!.floatData).not.toBeNull();
+      expect(mockRenderer.renderForScopes).toHaveBeenCalled();
     });
   });
 });

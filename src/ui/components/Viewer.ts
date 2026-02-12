@@ -66,7 +66,7 @@ import { GhostFrameManager } from './GhostFrameManager';
 import { PixelSamplingManager } from './PixelSamplingManager';
 import { ViewerGLRenderer } from './ViewerGLRenderer';
 import type { GLRendererContext } from './ViewerGLRenderer';
-import { detectWebGPUHDR } from '../../color/DisplayCapabilities';
+import { detectWebGPUHDR, isHDROutputAvailableWithLog } from '../../color/DisplayCapabilities';
 import { VideoFrameFetchTracker } from './VideoFrameFetchTracker';
 import { ToneMappingState } from './ToneMappingControl';
 import { PARState, DEFAULT_PAR_STATE, isPARActive, calculatePARCorrectedWidth } from '../../utils/media/PixelAspectRatio';
@@ -445,6 +445,8 @@ export class Viewer {
       getImageCanvasRect: () => this.getImageCanvasRect(),
       isViewerContentElement: (element: HTMLElement) => this.isViewerContentElement(element),
       drawWithTransform: (ctx, element, w, h) => this.drawWithTransform(ctx, element, w, h),
+      getLastRenderedImage: () => this.glRendererManager.lastRenderedImage,
+      isPlaying: () => this.session.isPlaying,
     });
 
     // Create color wheels
@@ -3260,6 +3262,35 @@ export class Viewer {
    */
   getImageData(): ImageData | null {
     return this.pixelSamplingManager.getImageData();
+  }
+
+  /**
+   * Get image data optimized for scope analysis (histogram, waveform, vectorscope).
+   * When WebGL is active, returns float data preserving HDR values > 1.0.
+   * When 2D canvas is active, returns standard ImageData with floatData: null.
+   */
+  getScopeImageData(): import('./PixelSamplingManager').ScopeImageData | null {
+    return this.pixelSamplingManager.getScopeImageData();
+  }
+
+  /**
+   * Get the WebGL2 renderer instance (for scope HDR headroom queries).
+   * Returns null when WebGL rendering is not active.
+   */
+  getGLRenderer(): import('../../render/Renderer').Renderer | null {
+    return this.glRendererManager.glRenderer;
+  }
+
+  /**
+   * Check if the display is HDR-capable (any HDR output path available).
+   * Delegates to DisplayCapabilities helper which checks WebGL native HDR,
+   * WebGPU blit, and display HDR + wide gamut + WebGPU availability.
+   */
+  isDisplayHDRCapable(): boolean {
+    if (!this.capabilities) return false;
+    return isHDROutputAvailableWithLog(this.capabilities, {
+      webgpuBlitReady: this.glRendererManager?.isWebGPUBlitReady ?? false,
+    });
   }
 
   /**

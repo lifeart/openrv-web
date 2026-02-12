@@ -5,6 +5,7 @@
 
 import type { SessionBridgeContext } from '../AppSessionBridge';
 import type { EXRChannelRemapping } from '../formats/EXRDecoder';
+import { getSharedScopesProcessor } from '../scopes/WebGLScopes';
 
 /**
  * Handle sourceLoaded event: update info panel, crop, OCIO, HDR auto-config,
@@ -41,15 +42,36 @@ export function handleSourceLoaded(
     }
   }
   // Auto-configure display pipeline for HDR content.
-  // Always set ACES + gamma 2.2 as the SDR tone-mapped baseline.
-  // If the WebGL renderer achieves true HDR output (rec2100-hlg/pq),
-  // renderHDRWithWebGL() will override these with linear passthrough.
   const isHDR = source?.fileSourceNode?.isHDR?.() || source?.videoSourceNode?.isHDR?.();
+  const viewer = context.getViewer();
+  const isHDRDisplay = viewer.isDisplayHDRCapable();
+  const histogram = context.getHistogram();
+  const scopesProcessor = getSharedScopesProcessor();
+
   if (isHDR) {
     const formatName = source?.fileSourceNode?.formatName ?? 'unknown';
-    console.log(`[HDR] Detected HDR content (format: ${formatName}), applying ACES + gamma 2.2`);
-    context.getToneMappingControl().setState({ enabled: true, operator: 'aces' });
-    context.getColorControls().setAdjustments({ gamma: 2.2 });
+
+    if (isHDRDisplay) {
+      // HDR display: no tone mapping needed — the display can show the full range.
+      // renderHDRWithWebGL() will render with gamma=1 and tone mapping disabled.
+      // Scopes show the HDR output range.
+      console.log(`[HDR] Detected HDR content (format: ${formatName}), HDR display available — no tone mapping`);
+      const glRenderer = viewer.getGLRenderer?.();
+      const headroom = glRenderer?.getHDRHeadroom?.() ?? 4.0;
+      histogram.setHDRMode(true, Math.max(headroom, 4.0));
+      scopesProcessor?.setHDRMode(true, Math.max(headroom, 4.0));
+    } else {
+      // SDR display: apply ACES tone mapping + gamma 2.2 to compress HDR to displayable range.
+      // Scopes analyze the tone-mapped output which is SDR range (0-1.0).
+      console.log(`[HDR] Detected HDR content (format: ${formatName}), SDR display — applying ACES + gamma 2.2`);
+      context.getToneMappingControl().setState({ enabled: true, operator: 'aces' });
+      context.getColorControls().setAdjustments({ gamma: 2.2 });
+      histogram.setHDRMode(false);
+      scopesProcessor?.setHDRMode(false);
+    }
+  } else {
+    histogram.setHDRMode(false);
+    scopesProcessor?.setHDRMode(false);
   }
 
   // GTO store and stack updates
@@ -60,12 +82,15 @@ export function handleSourceLoaded(
   context.getViewer().initPrerenderBuffer();
   // Update EXR layer selector if this is an EXR file with multiple layers
   updateEXRLayers();
-  // Small delay to allow canvas to render before updating scopes
-  setTimeout(() => {
-    updateHistogram();
-    updateWaveform();
-    updateVectorscope();
-  }, 100);
+  // Use double-RAF to update scopes after the viewer has rendered the new source.
+  // This is more robust than setTimeout(100) as it's frame-aligned.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      updateHistogram();
+      updateWaveform();
+      updateVectorscope();
+    });
+  });
 }
 
 /**

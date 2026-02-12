@@ -334,6 +334,69 @@ export function detectDisplayCapabilities(): DisplayCapabilities {
 }
 
 // =============================================================================
+// HDR Output Availability
+// =============================================================================
+
+/**
+ * Check if any HDR output path is available based on detected capabilities.
+ *
+ * Returns true when:
+ * 1. WebGL native HDR (HLG/PQ/extended) is active, OR
+ * 2. WebGPU HDR blit was detected, OR
+ * 3. Display supports HDR + wide gamut (P3/Rec.2020) and WebGPU is available
+ *    (blit detection may still be in-flight)
+ *
+ * This is a pure function of the capabilities object — no runtime queries.
+ * For a log-friendly version with diagnostics, use isHDROutputAvailableWithLog().
+ */
+export function isHDROutputAvailable(caps: DisplayCapabilities): boolean {
+  // WebGL native HDR
+  if (caps.activeHDRMode !== 'sdr' && caps.activeHDRMode !== 'none') return true;
+  // WebGPU HDR (async-detected)
+  if (caps.webgpuHDR) return true;
+  // Display is HDR + wide gamut, WebGPU can provide the rendering path
+  if (caps.webgpuAvailable && caps.displayHDR &&
+      (caps.displayGamut === 'p3' || caps.displayGamut === 'rec2020')) return true;
+  return false;
+}
+
+/**
+ * Same as isHDROutputAvailable but logs the detection result with full diagnostics.
+ */
+export function isHDROutputAvailableWithLog(caps: DisplayCapabilities, extraInfo?: { webgpuBlitReady?: boolean }): boolean {
+  const blitReady = extraInfo?.webgpuBlitReady ?? false;
+
+  console.log('[HDR Display]', {
+    dynamicRange: caps.displayHDR ? 'high' : 'standard',
+    colorGamut: caps.displayGamut,
+    activeHDRMode: caps.activeHDRMode,
+    webgpuHDR: caps.webgpuHDR,
+    webgpuBlitReady: blitReady,
+    webgpuAvailable: caps.webgpuAvailable,
+  });
+
+  // WebGL native HDR
+  if (caps.activeHDRMode !== 'sdr' && caps.activeHDRMode !== 'none') {
+    console.log(`[HDR Display] Capable via WebGL native (${caps.activeHDRMode})`);
+    return true;
+  }
+  // WebGPU HDR blit (async-detected or already initialized)
+  if (caps.webgpuHDR || blitReady) {
+    console.log('[HDR Display] Capable via WebGPU blit');
+    return true;
+  }
+  // Display HDR + wide gamut + WebGPU available (blit detection may be in-flight)
+  if (caps.webgpuAvailable && caps.displayHDR &&
+      (caps.displayGamut === 'p3' || caps.displayGamut === 'rec2020')) {
+    console.log('[HDR Display] Capable via display HDR + wide gamut + WebGPU');
+    return true;
+  }
+
+  console.log('[HDR Display] Not capable');
+  return false;
+}
+
+// =============================================================================
 // Active Color Space Resolution
 // =============================================================================
 

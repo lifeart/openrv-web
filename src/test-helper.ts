@@ -139,6 +139,9 @@ export interface ViewerState {
   histogramVisible: boolean;
   histogramMode: 'rgb' | 'luminance' | 'separate';
   histogramLogScale: boolean;
+  histogramHDRActive: boolean;
+  histogramMaxValue: number;
+  histogramPixelCount: number;
   waveformVisible: boolean;
   waveformMode: 'luma' | 'rgb' | 'parade';
   vectorscopeVisible: boolean;
@@ -541,6 +544,9 @@ export function exposeForTesting(app: App): void {
         histogramVisible: histogram?.isVisible?.() ?? false,
         histogramMode: histogram?.getMode?.() ?? 'rgb',
         histogramLogScale: histogram?.isLogScale?.() ?? false,
+        histogramHDRActive: histogram?.isHDRActive?.() ?? false,
+        histogramMaxValue: histogram?.getMaxValue?.() ?? 1.0,
+        histogramPixelCount: histogram?.getData?.()?.pixelCount ?? 0,
         waveformVisible: waveform?.isVisible?.() ?? false,
         waveformMode: waveform?.getMode?.() ?? 'luma',
         vectorscopeVisible: vectorscope?.isVisible?.() ?? false,

@@ -30,10 +30,11 @@ function createMockContext(overrides: {
   const toneMappingControl = { setState: vi.fn() };
   const colorControls = { setAdjustments: vi.fn() };
   const persistenceManager = { setGTOStore: vi.fn(), syncGTOStore: vi.fn() };
-  const viewer = { initPrerenderBuffer: vi.fn(), refresh: vi.fn() };
+  const viewer = { initPrerenderBuffer: vi.fn(), refresh: vi.fn(), getGLRenderer: vi.fn(() => null), isDisplayHDRCapable: vi.fn(() => false) };
   const stackControl = { setAvailableSources: vi.fn() };
   const channelSelect = { clearEXRLayers: vi.fn(), setEXRLayers: vi.fn() };
   const infoPanel = { update: vi.fn() };
+  const histogram = { setHDRMode: vi.fn() };
 
   const session = {
     currentSource: overrides.currentSource !== undefined ? overrides.currentSource : null,
@@ -53,6 +54,7 @@ function createMockContext(overrides: {
     getStackControl: () => stackControl,
     getChannelSelect: () => channelSelect,
     getInfoPanel: () => infoPanel,
+    getHistogram: () => histogram,
   } as unknown as SessionBridgeContext;
 }
 
@@ -217,7 +219,7 @@ describe('handleSourceLoaded', () => {
     expect(updateEXR).toHaveBeenCalled();
   });
 
-  it('SLH-U015: updates scopes after a timeout', () => {
+  it('SLH-U015: updates scopes after double requestAnimationFrame', () => {
     const context = createMockContext();
     handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
 
@@ -225,11 +227,108 @@ describe('handleSourceLoaded', () => {
     expect(updateWaveform).not.toHaveBeenCalled();
     expect(updateVectorscope).not.toHaveBeenCalled();
 
-    vi.advanceTimersByTime(100);
+    // Double-RAF: advance through two animation frame callbacks
+    vi.advanceTimersByTime(16);
+    vi.advanceTimersByTime(16);
 
     expect(updateHistogram).toHaveBeenCalled();
     expect(updateWaveform).toHaveBeenCalled();
     expect(updateVectorscope).toHaveBeenCalled();
+  });
+
+  it('SLH-U016: SDR display + HDR content → tone mapping ON, scopes SDR', () => {
+    const context = createMockContext({
+      currentSource: {
+        name: 'test.exr',
+        width: 100,
+        height: 100,
+        fileSourceNode: { isHDR: () => true, formatName: 'EXR' },
+      },
+    });
+    // Default mock: isDisplayHDRCapable returns false (SDR display)
+
+    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+
+    // SDR display: tone mapping enabled to compress HDR for display
+    expect(context.getToneMappingControl().setState).toHaveBeenCalledWith({ enabled: true, operator: 'aces' });
+    expect(context.getColorControls().setAdjustments).toHaveBeenCalledWith({ gamma: 2.2 });
+    // Scopes show SDR range (tone-mapped output)
+    expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(false);
+  });
+
+  it('SLH-U017: SDR content → scopes SDR, no tone mapping', () => {
+    const context = createMockContext({
+      currentSource: {
+        name: 'test.jpg',
+        width: 100,
+        height: 100,
+        fileSourceNode: { isHDR: () => false },
+      },
+    });
+
+    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+
+    expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(false);
+    // No tone mapping for SDR content
+    expect(context.getToneMappingControl().setState).not.toHaveBeenCalled();
+  });
+
+  it('SLH-U018: HDR display + HDR content → no tone mapping, scopes HDR', () => {
+    const context = createMockContext({
+      currentSource: {
+        name: 'test.exr',
+        width: 100,
+        height: 100,
+        fileSourceNode: { isHDR: () => true, formatName: 'EXR' },
+      },
+    });
+    // Simulate HDR display
+    (context.getViewer() as any).isDisplayHDRCapable = vi.fn(() => true);
+
+    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+
+    // HDR display: no tone mapping needed
+    expect(context.getToneMappingControl().setState).not.toHaveBeenCalled();
+    // Scopes show HDR range
+    expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(true, expect.any(Number));
+    const headroom = (context.getHistogram().setHDRMode as ReturnType<typeof vi.fn>).mock.calls[0]![1];
+    expect(headroom).toBeGreaterThanOrEqual(4.0);
+  });
+
+  it('SLH-U019: HDR display + HDR video → no tone mapping, scopes HDR', () => {
+    const context = createMockContext({
+      currentSource: {
+        name: 'test.mov',
+        width: 100,
+        height: 100,
+        videoSourceNode: { isHDR: () => true },
+      },
+    });
+    (context.getViewer() as any).isDisplayHDRCapable = vi.fn(() => true);
+
+    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+
+    expect(context.getToneMappingControl().setState).not.toHaveBeenCalled();
+    expect(context.getHistogram().setHDRMode).toHaveBeenCalledWith(true, expect.any(Number));
+  });
+
+  it('SLH-U020a: HDR display uses GL renderer headroom when available', () => {
+    const mockGlRenderer = { getHDRHeadroom: vi.fn(() => 8.0) };
+    const context = createMockContext({
+      currentSource: {
+        name: 'test.exr',
+        width: 100,
+        height: 100,
+        fileSourceNode: { isHDR: () => true, formatName: 'EXR' },
+      },
+    });
+    (context.getViewer() as any).isDisplayHDRCapable = vi.fn(() => true);
+    (context.getViewer() as any).getGLRenderer = vi.fn(() => mockGlRenderer);
+
+    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+
+    const headroom = (context.getHistogram().setHDRMode as ReturnType<typeof vi.fn>).mock.calls[0]![1];
+    expect(headroom).toBe(8.0);
   });
 });
 

@@ -412,4 +412,86 @@ describe('Histogram HDR Mode', () => {
       expect(data.clipping.highlights).toBe(0);
     });
   });
+
+  describe('updateHDR method', () => {
+    it('P3-070: updateHDR does not throw with valid float data', () => {
+      histogram.setHDRMode(true, 4.0);
+      const floatData = new Float32Array([
+        0.5, 0.3, 0.1, 1.0,
+        2.0, 1.5, 0.8, 1.0,
+      ]);
+      expect(() => histogram.updateHDR(floatData, 2, 1)).not.toThrow();
+    });
+
+    it('P3-071: updateHDR processes float data through calculateHDR', () => {
+      histogram.setHDRMode(true, 4.0);
+      const spy = vi.spyOn(histogram, 'calculateHDR');
+      const floatData = new Float32Array([0.5, 0.3, 0.1, 1.0]);
+
+      histogram.updateHDR(floatData, 1, 1);
+
+      expect(spy).toHaveBeenCalledTimes(1);
+      spy.mockRestore();
+    });
+
+    it('P3-072: updateHDR bins HDR values > 1.0 correctly', () => {
+      histogram.setHDRMode(true, 4.0);
+      // Value 3.0 with maxValue=4.0: bin = round(3.0 * 255/4.0) = round(191.25) = 191
+      const floatData = new Float32Array([3.0, 0.0, 0.0, 1.0]);
+
+      histogram.updateHDR(floatData, 1, 1);
+
+      const data = histogram.getData();
+      expect(data).not.toBeNull();
+      const expectedBin = Math.round(3.0 * (255 / 4.0));
+      expect(data!.red[expectedBin]).toBe(1);
+    });
+
+    it('P3-073: updateHDR with zero-size data does not throw', () => {
+      histogram.setHDRMode(true, 4.0);
+      const floatData = new Float32Array(0);
+      expect(() => histogram.updateHDR(floatData, 0, 0)).not.toThrow();
+    });
+
+    it('P3-074: updateHDR updates clipping display', () => {
+      histogram.setHDRMode(true, 4.0);
+      const floatData = new Float32Array([
+        0.0, 0.0, 0.0, 1.0, // shadow pixel
+        4.0, 4.0, 4.0, 1.0, // highlight at max
+      ]);
+
+      histogram.updateHDR(floatData, 2, 1);
+
+      const data = histogram.getData();
+      expect(data).not.toBeNull();
+      expect(data!.clipping.shadows).toBeGreaterThan(0);
+      expect(data!.clipping.highlights).toBeGreaterThan(0);
+    });
+
+    it('P3-075: updateHDR handles NaN values without throwing', () => {
+      histogram.setHDRMode(true, 4.0);
+      const floatData = new Float32Array([NaN, NaN, NaN, 1.0, 0.5, 0.5, 0.5, 1.0]);
+      expect(() => histogram.updateHDR(floatData, 2, 1)).not.toThrow();
+      const data = histogram.getData();
+      expect(data).not.toBeNull();
+      expect(data!.pixelCount).toBe(2);
+    });
+
+    it('P3-076: updateHDR handles Infinity values without throwing', () => {
+      histogram.setHDRMode(true, 4.0);
+      const floatData = new Float32Array([Infinity, -Infinity, 0.5, 1.0]);
+      expect(() => histogram.updateHDR(floatData, 1, 1)).not.toThrow();
+      const data = histogram.getData();
+      expect(data).not.toBeNull();
+    });
+
+    it('P3-077: updateHDR clamps negative values to bin 0', () => {
+      histogram.setHDRMode(true, 4.0);
+      const floatData = new Float32Array([-0.5, -0.5, -0.5, 1.0]);
+      histogram.updateHDR(floatData, 1, 1);
+      const data = histogram.getData();
+      expect(data).not.toBeNull();
+      expect(data!.red[0]).toBe(1);
+    });
+  });
 });

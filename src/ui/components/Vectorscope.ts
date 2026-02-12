@@ -12,6 +12,7 @@
 
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getSharedScopesProcessor } from '../../scopes/WebGLScopes';
+import { floatRGBAToImageData } from '../../utils/math';
 import {
   createDraggableContainer,
   createControlButton,
@@ -274,6 +275,54 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
 
     // Fall back to CPU rendering
     this.drawCPU(imageData);
+  }
+
+  /**
+   * Update vectorscope from HDR float data.
+   * Uploads the float data as an RGBA16F texture to the GPU scopes processor,
+   * preserving values > 1.0 that would be clipped by the UNSIGNED_BYTE path.
+   *
+   * @param floatData RGBA Float32Array (top-to-bottom row order)
+   * @param width Image width
+   * @param height Image height
+   */
+  updateFloat(floatData: Float32Array, width: number, height: number): void {
+    // Calculate effective zoom for auto mode (sample float data)
+    if (this.zoomMode === 'auto') {
+      // Quick auto-zoom from float data: sample to estimate max chrominance
+      const sampleStep = Math.max(1, Math.floor(Math.sqrt(width * height / 5000)));
+      let maxDistance = 0;
+      for (let srcY = 0; srcY < height; srcY += sampleStep) {
+        for (let srcX = 0; srcX < width; srcX += sampleStep) {
+          const i = (srcY * width + srcX) * 4;
+          const r = floatData[i]!;
+          const g = floatData[i + 1]!;
+          const b = floatData[i + 2]!;
+          const cb = -0.169 * r - 0.331 * g + 0.5 * b;
+          const cr = 0.5 * r - 0.419 * g - 0.081 * b;
+          const distance = Math.sqrt(cb * cb + cr * cr);
+          if (distance > maxDistance) maxDistance = distance;
+        }
+      }
+      this.effectiveZoom = maxDistance < 0.10 ? 4 : maxDistance < 0.20 ? 2 : 1;
+      this.updateZoomButtonText();
+    } else {
+      this.effectiveZoom = this.zoomMode;
+    }
+
+    const gpuProcessor = getSharedScopesProcessor();
+    if (gpuProcessor && gpuProcessor.isReady()) {
+      gpuProcessor.setPlaybackMode(this.isPlaybackMode);
+      // Draw graticule first (CPU)
+      this.drawGraticule();
+      // Upload float data and render
+      gpuProcessor.setFloatImage(floatData, width, height);
+      gpuProcessor.renderVectorscope(this.canvas, this.effectiveZoom);
+      return;
+    }
+
+    // Fallback: convert float to ImageData for CPU rendering
+    this.drawCPU(floatRGBAToImageData(floatData, width, height));
   }
 
   /**

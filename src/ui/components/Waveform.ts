@@ -13,7 +13,7 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { LUMINANCE_COEFFICIENTS } from './ChannelSelect';
 import { getSharedScopesProcessor, WaveformMode as GPUWaveformMode } from '../../scopes/WebGLScopes';
-import { clamp } from '../../utils/math';
+import { clamp, floatRGBAToImageData } from '../../utils/math';
 import { luminanceRec709 } from '../../color/ColorProcessingFacade';
 import {
   createDraggableContainer,
@@ -253,6 +253,33 @@ export class Waveform extends EventEmitter<WaveformEvents> {
 
     // Fall back to CPU rendering
     this.draw(imageData);
+  }
+
+  /**
+   * Update waveform from HDR float data.
+   * Uploads the float data as an RGBA16F texture to the GPU scopes processor,
+   * preserving values > 1.0 that would be clipped by the UNSIGNED_BYTE path.
+   *
+   * @param floatData RGBA Float32Array (top-to-bottom row order)
+   * @param width Image width
+   * @param height Image height
+   */
+  updateFloat(floatData: Float32Array, width: number, height: number): void {
+    const gpuProcessor = getSharedScopesProcessor();
+    if (gpuProcessor && gpuProcessor.isReady()) {
+      gpuProcessor.setPlaybackMode(this.isPlaybackMode);
+      gpuProcessor.setFloatImage(floatData, width, height);
+      // Draw background and grid first (CPU)
+      this.ctx.fillStyle = getCSSColor('--bg-primary', '#111');
+      this.ctx.fillRect(0, 0, WAVEFORM_WIDTH, WAVEFORM_HEIGHT);
+      this.drawGrid();
+      // Then GPU waveform overlay
+      gpuProcessor.renderWaveform(this.canvas, this.mode as GPUWaveformMode);
+      return;
+    }
+
+    // Fallback: convert float to ImageData for CPU rendering
+    this.draw(floatRGBAToImageData(floatData, width, height));
   }
 
   /**

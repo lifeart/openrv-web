@@ -2,24 +2,20 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HSLQualifierControl } from './HSLQualifierControl';
 import { HSLQualifier } from './HSLQualifier';
-import { FalseColor } from './FalseColor';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 
 describe('HSLQualifierControl', () => {
   let control: HSLQualifierControl;
   let hslQualifier: HSLQualifier;
-  let falseColor: FalseColor;
 
   beforeEach(() => {
-    falseColor = new FalseColor();
-    hslQualifier = new HSLQualifier(falseColor);
+    hslQualifier = new HSLQualifier();
     control = new HSLQualifierControl(hslQualifier);
   });
 
   afterEach(() => {
     control.dispose();
     hslQualifier.dispose();
-    falseColor.dispose();
   });
 
   describe('initialization', () => {

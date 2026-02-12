@@ -355,6 +355,41 @@ export class Histogram extends EventEmitter<HistogramEvents> {
   }
 
   /**
+   * Update histogram from HDR float data and redraw.
+   * Constructs an ImageData-like wrapper around the float data so that
+   * calculateHDR() can bin values in the [0, headroom] range.
+   *
+   * @param floatData RGBA Float32Array (top-to-bottom row order)
+   * @param width Image width
+   * @param height Image height
+   */
+  updateHDR(floatData: Float32Array, width: number, height: number): void {
+    // Wrap the Float32Array as a pseudo-ImageData so calculateHDR can process it.
+    // calculateHDR checks `!(imageData.data instanceof Uint8ClampedArray)` to
+    // detect float data, which is true for Float32Array.
+    const pseudoImageData = {
+      data: floatData,
+      width,
+      height,
+      colorSpace: 'srgb' as PredefinedColorSpace,
+    } as unknown as ImageData;
+
+    this.calculateHDR(pseudoImageData);
+    this.updateClippingDisplay();
+
+    // Try GPU rendering for bar display
+    const gpuProcessor = getSharedScopesProcessor();
+    if (gpuProcessor && gpuProcessor.isReady() && this.mode !== 'separate' && this.data) {
+      this.ctx.fillStyle = getCSSColor('--bg-primary', '#111');
+      this.ctx.fillRect(0, 0, HISTOGRAM_WIDTH, HISTOGRAM_HEIGHT);
+      gpuProcessor.renderHistogram(this.canvas, this.data, this.mode, this.logScale);
+      return;
+    }
+
+    this.draw();
+  }
+
+  /**
    * Set playback mode for performance optimization.
    * Histogram calculation is always done on CPU, but we track playback state
    * for consistency with other scopes and potential future optimizations.

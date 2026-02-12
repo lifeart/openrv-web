@@ -112,6 +112,8 @@ export class ViewerGLRenderer {
   get capabilities(): DisplayCapabilities | undefined { return this._capabilities; }
   /** True when the WebGPU HDR blit module is initialized and ready to display. */
   get isWebGPUBlitReady(): boolean { return this._webgpuBlit?.initialized === true; }
+  /** Get the last rendered IPImage (for scope readback). Returns null if GC'd or not yet rendered. */
+  get lastRenderedImage(): IPImage | null { return this._lastRenderedImage?.deref() ?? null; }
 
   constructor(ctx: GLRendererContext, capabilities?: DisplayCapabilities) {
     this._capabilities = capabilities;

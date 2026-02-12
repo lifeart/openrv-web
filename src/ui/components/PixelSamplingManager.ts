@@ -21,9 +21,30 @@ import {
   getPixelCoordinates,
   getPixelColor,
 } from './ViewerInteraction';
+import type { IPImage } from '../../core/image/Image';
 import { Logger } from '../../utils/Logger';
+import { floatRGBAToImageData } from '../../utils/math';
 
 const log = new Logger('PixelSamplingManager');
+
+// Target resolution for scope analysis during playback (keeps scopes responsive)
+const SCOPE_PLAYBACK_WIDTH = 320;
+const SCOPE_PLAYBACK_HEIGHT = 180;
+// Target resolution for paused mode (higher quality)
+const SCOPE_PAUSED_WIDTH = 640;
+const SCOPE_PAUSED_HEIGHT = 360;
+
+/**
+ * Result of getScopeImageData() for scope consumption.
+ * When WebGL rendering is active, floatData contains full-range HDR values.
+ * imageData is always provided for SDR fallback paths.
+ */
+export interface ScopeImageData {
+  imageData: ImageData;
+  floatData: Float32Array | null;
+  width: number;
+  height: number;
+}
 
 /**
  * Context interface for what PixelSamplingManager needs from the Viewer.
@@ -44,6 +65,8 @@ export interface PixelSamplingContext {
   getImageCanvasRect(): DOMRect;
   isViewerContentElement(element: HTMLElement): boolean;
   drawWithTransform(ctx: CanvasRenderingContext2D, element: CanvasImageSource, displayWidth: number, displayHeight: number): void;
+  getLastRenderedImage(): IPImage | null;
+  isPlaying(): boolean;
 }
 
 export class PixelSamplingManager {
@@ -261,6 +284,56 @@ export class PixelSamplingManager {
     if (displayWidth === 0 || displayHeight === 0) return null;
 
     return this.context.getImageCtx().getImageData(0, 0, displayWidth, displayHeight);
+  }
+
+  /**
+   * Get image data optimized for scope consumption (histogram, waveform, vectorscope).
+   *
+   * When WebGL rendering is active (HDR or SDR), renders the current image at
+   * reduced scope resolution via the Renderer's RGBA16F FBO, producing float data
+   * that preserves HDR values > 1.0. Also converts to ImageData for SDR fallback.
+   *
+   * When 2D canvas rendering is active, returns getImageData() with floatData: null.
+   */
+  getScopeImageData(): ScopeImageData | null {
+    const glRenderer = this.context.getGLRenderer();
+    const isWebGLActive = this.context.isHDRRenderActive() || this.context.isSDRWebGLRenderActive();
+
+    if (isWebGLActive && glRenderer) {
+      const image = this.context.getLastRenderedImage();
+      if (!image) return null;
+
+      // Choose scope resolution based on playback state
+      const isPlaying = this.context.isPlaying();
+      const targetWidth = isPlaying ? SCOPE_PLAYBACK_WIDTH : SCOPE_PAUSED_WIDTH;
+      const targetHeight = isPlaying ? SCOPE_PLAYBACK_HEIGHT : SCOPE_PAUSED_HEIGHT;
+
+      const result = glRenderer.renderForScopes(image, targetWidth, targetHeight);
+      if (!result) {
+        // WebGL scope readback failed (e.g. EXT_color_buffer_float unavailable).
+        // Fall through to 2D canvas path below.
+        const imageData = this.getImageData();
+        if (!imageData) return null;
+        return { imageData, floatData: null, width: imageData.width, height: imageData.height };
+      }
+
+      // Convert float data to ImageData for SDR scope fallback paths
+      const { data: floatData, width, height } = result;
+      const imageData = floatRGBAToImageData(floatData, width, height);
+
+      return { imageData, floatData, width, height };
+    }
+
+    // 2D canvas path: read from the existing canvas context
+    const imageData = this.getImageData();
+    if (!imageData) return null;
+
+    return {
+      imageData,
+      floatData: null,
+      width: imageData.width,
+      height: imageData.height,
+    };
   }
 
   /**

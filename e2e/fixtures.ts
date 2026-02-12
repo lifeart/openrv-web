@@ -73,6 +73,9 @@ export interface ViewerState {
   histogramVisible: boolean;
   histogramMode: 'rgb' | 'luminance' | 'separate';
   histogramLogScale: boolean;
+  histogramHDRActive: boolean;
+  histogramMaxValue: number;
+  histogramPixelCount: number;
   waveformVisible: boolean;
   waveformMode: 'luma' | 'rgb' | 'parade';
   vectorscopeVisible: boolean;
@@ -382,6 +385,9 @@ export async function getViewerState(page: Page): Promise<ViewerState> {
       histogramVisible: false,
       histogramMode: 'rgb',
       histogramLogScale: false,
+      histogramHDRActive: false,
+      histogramMaxValue: 1.0,
+      histogramPixelCount: 0,
       waveformVisible: false,
       waveformMode: 'luma',
       vectorscopeVisible: false,

@@ -103,6 +103,21 @@ export class Renderer implements RendererBackend {
   private hdrPBOCachedPixels: Float32Array | null = null;  // data from previous frame
   private hdrPBOReady = false;       // true after first frame has been captured
 
+  // --- Dedicated FBO/PBO for scope readback (separate from display blit path) ---
+  // Scope analysis renders at reduced resolution (320×180 / 640×360), so using
+  // the display path's FBO/PBO would cause dimension ping-ponging and data corruption.
+  private scopeFBO: WebGLFramebuffer | null = null;
+  private scopeFBOTexture: WebGLTexture | null = null;
+  private scopeFBOWidth = 0;
+  private scopeFBOHeight = 0;
+  private scopePBOs: [WebGLBuffer | null, WebGLBuffer | null] = [null, null];
+  private scopePBOFences: [WebGLSync | null, WebGLSync | null] = [null, null];
+  private scopePBOWidth = 0;
+  private scopePBOHeight = 0;
+  private scopePBOCachedPixels: Float32Array | null = null;
+  private scopePBOReady = false;
+  private scopeTempRow: Float32Array | null = null; // cached Y-flip temp buffer
+
   // Mipmap support for float textures (requires OES_texture_float_linear + EXT_color_buffer_float)
   private _mipmapSupported = false;
 
@@ -859,6 +874,268 @@ export class Renderer implements RendererBackend {
     this.hdrHeadroom = Math.min(100.0, Math.max(1.0, headroom));
   }
 
+  /**
+   * Get the current HDR headroom value.
+   * Returns 1.0 for SDR, >1.0 for HDR displays.
+   */
+  getHDRHeadroom(): number {
+    return this.hdrHeadroom;
+  }
+
+  /**
+   * Render the current image through the full shader pipeline at reduced
+   * resolution for scope analysis (histogram, waveform, vectorscope).
+   *
+   * Uses the existing RGBA16F FBO + PBO async readback infrastructure to
+   * avoid GPU stalls. Returns float pixel data with rows in top-to-bottom
+   * order (Y-flipped from GL convention) so scopes can consume directly.
+   *
+   * When the framebuffer is not HDR (SDR path), UNSIGNED_BYTE data is still
+   * returned as float (divided by 255) via the existing readPixelFloat path.
+   *
+   * @param image The IPImage to render
+   * @param targetWidth Desired scope analysis width (e.g. 320 for playback, 640 for paused)
+   * @param targetHeight Desired scope analysis height (e.g. 180 for playback, 360 for paused)
+   * @returns Float32Array in RGBA top-to-bottom row order, or null on failure
+   */
+  renderForScopes(
+    image: IPImage,
+    targetWidth: number,
+    targetHeight: number,
+  ): { data: Float32Array; width: number; height: number } | null {
+    const gl = this.gl;
+    if (!gl || !this.displayShader) return null;
+
+    // Use dedicated scope FBO/PBO pool (separate from display blit path)
+    const pixels = this.renderImageToFloatAsyncForScopes(image, targetWidth, targetHeight);
+    if (!pixels) return null;
+
+    // Copy the PBO cached data so the Y-flip doesn't mutate the shared cache.
+    // At scope resolution this is small (~900KB for 320×180×4×4).
+    const result = new Float32Array(pixels);
+
+    // Y-flip: gl.readPixels returns bottom-to-top rows; scopes expect top-to-bottom.
+    const rowSize = targetWidth * RGBA_CHANNELS;
+    const halfHeight = targetHeight >> 1;
+    // Reuse cached temp row to avoid per-call allocation
+    if (!this.scopeTempRow || this.scopeTempRow.length !== rowSize) {
+      this.scopeTempRow = new Float32Array(rowSize);
+    }
+    for (let y = 0; y < halfHeight; y++) {
+      const topOffset = y * rowSize;
+      const bottomOffset = (targetHeight - 1 - y) * rowSize;
+      this.scopeTempRow.set(result.subarray(topOffset, topOffset + rowSize));
+      result.copyWithin(topOffset, bottomOffset, bottomOffset + rowSize);
+      result.set(this.scopeTempRow, bottomOffset);
+    }
+
+    return { data: result, width: targetWidth, height: targetHeight };
+  }
+
+  /**
+   * Async PBO readback using the dedicated scope FBO/PBO pool.
+   * Identical logic to renderImageToFloatAsync but uses scope-specific resources
+   * to avoid contention with the display blit path.
+   */
+  private renderImageToFloatAsyncForScopes(image: IPImage, width: number, height: number): Float32Array | null {
+    const gl = this.gl;
+    if (!gl || !this.displayShader) return null;
+
+    // Check EXT_color_buffer_float once (shared with display path)
+    if (this.hasColorBufferFloat === null) {
+      this.hasColorBufferFloat = gl.getExtension('EXT_color_buffer_float') !== null;
+    }
+    if (!this.hasColorBufferFloat) return null;
+
+    // Ensure scope FBO exists and matches dimensions
+    this.ensureScopeFBO(width, height);
+    if (!this.scopeFBO) return null;
+
+    // If dimensions changed, invalidate scope PBO state
+    if (this.scopePBOWidth !== width || this.scopePBOHeight !== height) {
+      this.disposeScopePBOs();
+    }
+
+    // Ensure scope PBOs exist
+    this.ensureScopePBOs(width, height);
+
+    // If PBO allocation failed, fall back to sync path using scope FBO
+    if (!this.scopePBOs[0] || !this.scopePBOs[1]) {
+      return this.renderImageToFloatSync(image, width, height, this.scopeFBO);
+    }
+
+    const pixelCount = width * height * RGBA_CHANNELS;
+    if (!this.scopePBOCachedPixels || this.scopePBOCachedPixels.length !== pixelCount) {
+      this.scopePBOCachedPixels = new Float32Array(pixelCount);
+    }
+
+    // Step 1: Render current frame to scope FBO
+    const prevViewport = gl.getParameter(gl.VIEWPORT) as Int32Array;
+    const prevHdrMode = this.hdrOutputMode;
+    this.hdrOutputMode = 'hlg';
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.scopeFBO);
+    gl.viewport(0, 0, width, height);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    this.renderImage(image, 0, 0, 1, 1);
+    this.hdrOutputMode = prevHdrMode;
+
+    // Step 2: Consume any PBO whose GPU fence has signaled
+    for (let i = 0; i < 2; i++) {
+      const fence = this.scopePBOFences[i];
+      if (fence && gl.getSyncParameter(fence, gl.SYNC_STATUS) === gl.SIGNALED) {
+        gl.deleteSync(fence);
+        this.scopePBOFences[i] = null;
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.scopePBOs[i]!);
+        gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, this.scopePBOCachedPixels!);
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+        this.scopePBOReady = true;
+      }
+    }
+
+    // Step 3: Start async readPixels into an idle PBO
+    for (let i = 0; i < 2; i++) {
+      if (!this.scopePBOFences[i]) {
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.scopePBOs[i]!);
+        gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, 0);
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+        this.scopePBOFences[i] = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+        gl.flush();
+        break;
+      }
+    }
+
+    // Step 4: First-frame fallback — sync readPixels (one-time stall)
+    if (!this.scopePBOReady) {
+      gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, this.scopePBOCachedPixels!);
+      this.scopePBOReady = true;
+    }
+
+    // Unbind FBO and restore viewport
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(prevViewport[0]!, prevViewport[1]!, prevViewport[2]!, prevViewport[3]!);
+
+    return this.scopePBOCachedPixels;
+  }
+
+  /**
+   * Synchronous float readback using a specific FBO (fallback when PBOs fail).
+   */
+  private renderImageToFloatSync(image: IPImage, width: number, height: number, fbo: WebGLFramebuffer): Float32Array | null {
+    const gl = this.gl;
+    if (!gl || !this.displayShader) return null;
+
+    const prevViewport = gl.getParameter(gl.VIEWPORT) as Int32Array;
+    const prevHdrMode = this.hdrOutputMode;
+    this.hdrOutputMode = 'hlg';
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.viewport(0, 0, width, height);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    this.renderImage(image, 0, 0, 1, 1);
+    this.hdrOutputMode = prevHdrMode;
+
+    const pixels = new Float32Array(width * height * RGBA_CHANNELS);
+    gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, pixels);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(prevViewport[0]!, prevViewport[1]!, prevViewport[2]!, prevViewport[3]!);
+
+    return gl.getError() === gl.NO_ERROR ? pixels : null;
+  }
+
+  /**
+   * Ensure scope-dedicated FBO exists and matches dimensions.
+   */
+  private ensureScopeFBO(width: number, height: number): void {
+    const gl = this.gl;
+    if (!gl) return;
+
+    if (this.scopeFBO && this.scopeFBOWidth === width && this.scopeFBOHeight === height) {
+      return;
+    }
+
+    if (this.scopeFBOTexture) { gl.deleteTexture(this.scopeFBOTexture); this.scopeFBOTexture = null; }
+    if (this.scopeFBO) { gl.deleteFramebuffer(this.scopeFBO); this.scopeFBO = null; }
+
+    const texture = gl.createTexture();
+    if (!texture) return;
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, width, height, 0, gl.RGBA, gl.FLOAT, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+    const fbo = gl.createFramebuffer();
+    if (!fbo) { gl.deleteTexture(texture); return; }
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+
+    const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+
+    if (status !== gl.FRAMEBUFFER_COMPLETE) {
+      gl.deleteFramebuffer(fbo);
+      gl.deleteTexture(texture);
+      return;
+    }
+
+    this.scopeFBO = fbo;
+    this.scopeFBOTexture = texture;
+    this.scopeFBOWidth = width;
+    this.scopeFBOHeight = height;
+  }
+
+  /**
+   * Ensure scope-dedicated PBOs exist.
+   */
+  private ensureScopePBOs(width: number, height: number): void {
+    const gl = this.gl;
+    if (!gl) return;
+    if (this.scopePBOs[0] && this.scopePBOs[1]) return;
+
+    const byteSize = width * height * RGBA_CHANNELS * Float32Array.BYTES_PER_ELEMENT;
+    const pbo0 = gl.createBuffer();
+    const pbo1 = gl.createBuffer();
+    if (!pbo0 || !pbo1) {
+      if (pbo0) gl.deleteBuffer(pbo0);
+      if (pbo1) gl.deleteBuffer(pbo1);
+      return;
+    }
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo0);
+    gl.bufferData(gl.PIXEL_PACK_BUFFER, byteSize, gl.DYNAMIC_READ);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo1);
+    gl.bufferData(gl.PIXEL_PACK_BUFFER, byteSize, gl.DYNAMIC_READ);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    this.scopePBOs[0] = pbo0;
+    this.scopePBOs[1] = pbo1;
+    this.scopePBOWidth = width;
+    this.scopePBOHeight = height;
+    this.scopePBOReady = false;
+    this.scopePBOCachedPixels = null;
+  }
+
+  /**
+   * Clean up scope-dedicated PBO resources.
+   */
+  private disposeScopePBOs(): void {
+    const gl = this.gl;
+    if (gl) {
+      if (this.scopePBOs[0]) { gl.deleteBuffer(this.scopePBOs[0]); this.scopePBOs[0] = null; }
+      if (this.scopePBOs[1]) { gl.deleteBuffer(this.scopePBOs[1]); this.scopePBOs[1] = null; }
+      if (this.scopePBOFences[0]) { gl.deleteSync(this.scopePBOFences[0]); this.scopePBOFences[0] = null; }
+      if (this.scopePBOFences[1]) { gl.deleteSync(this.scopePBOFences[1]); this.scopePBOFences[1] = null; }
+    }
+    this.scopePBOWidth = 0;
+    this.scopePBOHeight = 0;
+    this.scopePBOReady = false;
+    this.scopePBOCachedPixels = null;
+  }
+
   setBackgroundPattern(state: BackgroundPatternState): void {
     this.stateManager.setBackgroundPattern(state);
   }
@@ -1489,6 +1766,16 @@ export class Renderer implements RendererBackend {
 
     // Release PBO resources
     this.disposeHDRPBOs();
+
+    // Release scope-dedicated FBO/PBO resources
+    this.disposeScopePBOs();
+    if (this.scopeFBOTexture) gl.deleteTexture(this.scopeFBOTexture);
+    if (this.scopeFBO) gl.deleteFramebuffer(this.scopeFBO);
+    this.scopeFBOTexture = null;
+    this.scopeFBO = null;
+    this.scopeFBOWidth = 0;
+    this.scopeFBOHeight = 0;
+    this.scopeTempRow = null;
 
     this.parallelCompileExt = null;
     this.usingHalfFloatBackbuffer = false;
