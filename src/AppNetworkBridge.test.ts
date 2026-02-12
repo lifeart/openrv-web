@@ -17,10 +17,18 @@ class MockSession extends EventEmitter {
   goToFrame = vi.fn();
 }
 
+// Helper to track unsubscribers
+const networkUnsubscribers: Set<() => void> = new Set();
+const managerUnsubscribers: Set<() => void> = new Set();
+
 function createMockNetworkSyncManager() {
   return {
     isConnected: true,
-    on: vi.fn(() => vi.fn()),
+    on: vi.fn(() => {
+      const unsub = vi.fn();
+      managerUnsubscribers.add(unsub);
+      return unsub;
+    }),
     sendPlaybackSync: vi.fn(),
     sendFrameSync: vi.fn(),
     getSyncStateManager: vi.fn(() => ({
@@ -39,7 +47,11 @@ function createMockNetworkSyncManager() {
 
 function createMockNetworkControl() {
   return {
-    on: vi.fn(() => vi.fn()),
+    on: vi.fn(() => {
+      const unsub = vi.fn();
+      networkUnsubscribers.add(unsub);
+      return unsub;
+    }),
     render: vi.fn(() => document.createElement('div')),
     setConnectionState: vi.fn(),
     setRoomInfo: vi.fn(),
@@ -92,6 +104,8 @@ describe('AppNetworkBridge', () => {
   let bridge: AppNetworkBridge;
 
   beforeEach(() => {
+    networkUnsubscribers.clear();
+    managerUnsubscribers.clear();
     ctx = createContext();
     bridge = new AppNetworkBridge({
       session: ctx.session,
@@ -213,6 +227,32 @@ describe('AppNetworkBridge', () => {
     it('ANB-025: dispose() without prior setup() does not throw', () => {
       expect(() => bridge.dispose()).not.toThrow();
       expect((bridge as any).unsubscribers).toEqual([]);
+    });
+
+    it('ANB-030: dispose() calls unsubscribe for NetworkControl listeners', () => {
+      bridge.setup();
+      
+      // We expect at least one listener (e.g. createRoom)
+      expect(networkUnsubscribers.size).toBeGreaterThan(0);
+      
+      bridge.dispose();
+
+      for (const unsub of networkUnsubscribers) {
+        expect(unsub).toHaveBeenCalled();
+      }
+    });
+
+    it('ANB-031: dispose() calls unsubscribe for NetworkSyncManager listeners', () => {
+      bridge.setup();
+      
+      // We expect at least one listener (e.g. connectionStateChanged)
+      expect(managerUnsubscribers.size).toBeGreaterThan(0);
+      
+      bridge.dispose();
+
+      for (const unsub of managerUnsubscribers) {
+        expect(unsub).toHaveBeenCalled();
+      }
     });
   });
 });

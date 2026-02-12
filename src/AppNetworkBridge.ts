@@ -41,7 +41,7 @@ export class AppNetworkBridge {
     headerBar.setNetworkControl(networkControl.render());
 
     // Wire UI events to manager
-    networkControl.on('createRoom', () => {
+    this.unsubscribers.push(networkControl.on('createRoom', () => {
       networkSyncManager.simulateRoomCreated();
       const info = networkSyncManager.roomInfo;
       if (info) {
@@ -49,60 +49,60 @@ export class AppNetworkBridge {
         networkControl.setRoomInfo(info);
         networkControl.setUsers(info.users);
       }
-    });
+    }));
 
-    networkControl.on('joinRoom', ({ roomCode, userName }) => {
+    this.unsubscribers.push(networkControl.on('joinRoom', ({ roomCode, userName }) => {
       networkSyncManager.joinRoom(roomCode, userName);
-    });
+    }));
 
-    networkControl.on('leaveRoom', () => {
+    this.unsubscribers.push(networkControl.on('leaveRoom', () => {
       networkSyncManager.leaveRoom();
       networkControl.setConnectionState('disconnected');
       networkControl.setRoomInfo(null);
       networkControl.setUsers([]);
-    });
+    }));
 
-    networkControl.on('syncSettingsChanged', (settings) => {
+    this.unsubscribers.push(networkControl.on('syncSettingsChanged', (settings) => {
       networkSyncManager.setSyncSettings(settings);
-    });
+    }));
 
-    networkControl.on('copyLink', async (link) => {
+    this.unsubscribers.push(networkControl.on('copyLink', async (link) => {
       try {
         await navigator.clipboard.writeText(link);
       } catch {
         // Clipboard API may not be available
       }
-    });
+    }));
 
     // Wire manager events to UI
-    networkSyncManager.on('connectionStateChanged', (state) => {
+    this.unsubscribers.push(networkSyncManager.on('connectionStateChanged', (state) => {
       networkControl.setConnectionState(state);
-    });
+    }));
 
-    networkSyncManager.on('roomCreated', (info) => {
+    this.unsubscribers.push(networkSyncManager.on('roomCreated', (info) => {
       networkControl.setRoomInfo(info);
       networkControl.setUsers(info.users);
-    });
+    }));
 
-    networkSyncManager.on('roomJoined', (info) => {
+    this.unsubscribers.push(networkSyncManager.on('roomJoined', (info) => {
       networkControl.setRoomInfo(info);
       networkControl.setUsers(info.users);
-    });
+    }));
 
-    networkSyncManager.on('usersChanged', (users) => {
+    this.unsubscribers.push(networkSyncManager.on('usersChanged', (users) => {
       networkControl.setUsers(users);
-    });
+    }));
 
-    networkSyncManager.on('error', (err) => {
+    this.unsubscribers.push(networkSyncManager.on('error', (err) => {
       networkControl.showError(err.message);
-    });
+    }));
 
-    networkSyncManager.on('rttUpdated', (rtt) => {
+    this.unsubscribers.push(networkSyncManager.on('rttUpdated', (rtt) => {
       networkControl.setRTT(rtt);
-    });
+    }));
 
     // Wire incoming sync events to Session/Viewer
-    networkSyncManager.on('syncPlayback', (payload) => {
+    this.unsubscribers.push(networkSyncManager.on('syncPlayback', (payload) => {
       const sm = networkSyncManager.getSyncStateManager();
       sm.beginApplyRemote();
       try {
@@ -120,9 +120,9 @@ export class AppNetworkBridge {
       } finally {
         sm.endApplyRemote();
       }
-    });
+    }));
 
-    networkSyncManager.on('syncFrame', (payload) => {
+    this.unsubscribers.push(networkSyncManager.on('syncFrame', (payload) => {
       const sm = networkSyncManager.getSyncStateManager();
       if (sm.shouldApplyFrameSync(session.currentFrame, payload.currentFrame)) {
         sm.beginApplyRemote();
@@ -132,9 +132,9 @@ export class AppNetworkBridge {
           sm.endApplyRemote();
         }
       }
-    });
+    }));
 
-    networkSyncManager.on('syncView', (payload) => {
+    this.unsubscribers.push(networkSyncManager.on('syncView', (payload) => {
       const sm = networkSyncManager.getSyncStateManager();
       sm.beginApplyRemote();
       try {
@@ -142,7 +142,7 @@ export class AppNetworkBridge {
       } finally {
         sm.endApplyRemote();
       }
-    });
+    }));
 
     // Send outgoing sync when local state changes
     this.unsubscribers.push(session.on('playbackChanged', (isPlaying) => {

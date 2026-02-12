@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Timeline } from './Timeline';
 import { Session } from '../../core/session/Session';
 import { PaintEngine } from '../../paint/PaintEngine';
+import { getThemeManager } from '../../utils/ui/ThemeManager';
 import type { Annotation } from '../../paint/types';
 
 class TestTimeline extends Timeline {
@@ -156,6 +157,21 @@ describe('Timeline', () => {
         session.toggleMark(10); // Add mark
         session.toggleMark(10); // Remove mark
       }).not.toThrow();
+    });
+  });
+
+  describe('theme changes', () => {
+    it('TML-031: redraws when theme changes', () => {
+      timeline.drawCount = 0;
+      getThemeManager().emit('themeChanged', 'light');
+      expect(timeline.drawCount).toBeGreaterThan(0);
+    });
+
+    it('TML-032: does not redraw on theme change after dispose', () => {
+      timeline.drawCount = 0;
+      timeline.dispose();
+      getThemeManager().emit('themeChanged', 'light');
+      expect(timeline.drawCount).toBe(0);
     });
   });
 
