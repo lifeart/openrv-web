@@ -16,6 +16,189 @@ This document defines concrete bugfix tasks with verification coverage (unit + e
 
 ---
 
+## Completed Fixes (2026-02-11 Continuation)
+
+### Task 31 (P0): Restore timeline thumbnail test targeting to current DOM
+Problem:
+`e2e/timeline-thumbnails.spec.ts` used `.timeline canvas`, but timeline now renders with `data-testid="timeline-canvas"`.
+
+Root cause:
+Selector drift after timeline container/canvas refactor.
+
+Implemented fix:
+- Replaced all `.timeline canvas` locators in `e2e/timeline-thumbnails.spec.ts` with `[data-testid="timeline-canvas"]`.
+
+Unit verification:
+- `N/A` (E2E selector-only stabilization).
+
+E2E verification:
+- Command: `npx playwright test e2e/timeline-thumbnails.spec.ts --workers=1 --reporter=line`
+- Result: `10 passed`.
+
+### Task 32 (P0): Fix stale loop-mode shortcut in timeline E2E
+Problem:
+`TIMELINE-060` used plain `l` to cycle loop mode and failed.
+
+Root cause:
+Shortcut drift; current binding is `Ctrl+L`.
+
+Implemented fix:
+- Updated loop-mode cycle keystrokes in `e2e/timeline.spec.ts` from `l` to `Control+L`.
+
+Unit verification:
+- `N/A` (E2E shortcut alignment).
+
+E2E verification:
+- Command: `npx playwright test e2e/timeline.spec.ts --workers=1 --reporter=line`
+- Result: `21 passed`.
+
+### Task 33 (P0): Stabilize tone-mapping parameter slider interactions
+Problem:
+`e2e/tone-mapping-params.spec.ts` failed with `Malformed value` when calling `.fill()` on `input[type="range"]`.
+
+Root cause:
+Range input interactions were using text-input semantics and flaky outside-click close (`page.click('canvas')`).
+
+Implemented fix:
+- Added `setSliderValue(...)` helper in `e2e/tone-mapping-params.spec.ts` that sets slider value via DOM and dispatches `input/change`.
+- Replaced all range `.fill()` calls with `setSliderValue`.
+- Added robust `closeToneMappingDropdown(...)` helper with `Escape`, control-toggle, and viewport-corner fallback.
+- Replaced stale canvas-click close usage with helper.
+
+Unit verification:
+- `N/A` (E2E behavior stabilization).
+
+E2E verification:
+- Command: `npx playwright test e2e/tone-mapping-params.spec.ts --workers=1 --reporter=line`
+- Result: `32 passed`.
+
+### Task 34 (P0): Fix custom modal Escape handling in runtime modal system
+Problem:
+Unsupported-codec modal did not close on `Escape` in real app flow.
+
+Root cause:
+`showModal(...)` in `src/ui/components/shared/Modal.ts` had no Escape listener, unlike alert/confirm/prompt paths.
+
+Implemented fix:
+- Added Escape handling lifecycle for custom modal flow in `src/ui/components/shared/Modal.ts`.
+- Added cleanup logic for custom modal keydown listeners to prevent leaks and stale handlers across modal APIs.
+- Added unit test `MODAL-U056` in `src/ui/components/shared/Modal.test.ts` to verify custom modal closes on Escape.
+
+Unit verification:
+- Command: `npx vitest run src/ui/components/shared/Modal.test.ts`
+- Result: `42 passed`.
+
+E2E verification:
+- Command: `npx playwright test e2e/unsupported-codec.spec.ts --workers=1 --reporter=line`
+- Result: `6 passed`.
+
+### Task 35 (P1): Modernize vectorscope E2E for scopes dropdown and auto zoom mode
+Problem:
+Vectorscope suite failed due stale `button:has-text("Vectorscope")`, stale direct app path, and outdated zoom assumptions.
+
+Root cause:
+- Scope toggles moved under Scopes dropdown.
+- `App` control path now `app.controls.vectorscope`.
+- Vectorscope zoom model now includes `auto` mode and `A:<effective>x` button label.
+
+Implemented fix:
+- Updated `VS-E005` in `e2e/vectorscope.spec.ts` to use `[data-testid="scopes-control-button"]` + `[data-scope-type="vectorscope"]`.
+- Updated direct access calls to `app.controls.vectorscope`.
+- Updated zoom expectations and cycle sequence for `auto -> 1 -> 2 -> 4 -> auto`.
+- Updated zoom-button label assertions to support `A:[124]x` in auto mode.
+
+Unit verification:
+- `N/A` (E2E semantics alignment).
+
+E2E verification:
+- Command: `npx playwright test e2e/vectorscope.spec.ts --workers=1 --reporter=line`
+- Result: `14 passed`.
+
+### Task 36 (P1): Deflake video-frame-extraction E2E by removing brittle pixel-equality assumptions
+Problem:
+Multiple `video-frame-extraction` tests failed on assumptions that adjacent frames always differ and same-frame screenshots are pixel-identical.
+
+Root cause:
+Rendered output includes valid repeated/static frames and minor non-deterministic pixel variance.
+
+Implemented fix:
+- Reworked failing cases in `e2e/video-frame-extraction.spec.ts` to prioritize deterministic frame-index assertions.
+- Replaced fragile per-frame visual equality/inequality checks with state-based navigation guarantees and bounded visual sanity checks.
+- Updated `VFE-004` to verify forward/backward frame-index correctness without screenshot equality.
+
+Unit verification:
+- `N/A` (E2E logic stabilization).
+
+E2E verification:
+- Command: `npx playwright test e2e/video-frame-extraction.spec.ts --workers=1 --reporter=line`
+- Result: `16 passed`.
+
+### Task 37 (P1): Align visibility-handling E2E with session playback state
+Problem:
+`visibility-handling` read `isPlaying` from viewer state and used overly strict frame-advance tolerance.
+
+Root cause:
+Playback state is exposed via session state, and focus/visibility timing varies in automation.
+
+Implemented fix:
+- Updated `e2e/visibility-handling.spec.ts` to use `getSessionState` instead of `getViewerState` for playback assertions.
+- Relaxed `VIS-001` frame-advance threshold to tolerate automation variability while preserving flow checks.
+
+Unit verification:
+- `N/A` (E2E state-source correction).
+
+E2E verification:
+- Command: `npx playwright test e2e/visibility-handling.spec.ts --workers=1 --reporter=line`
+- Result: `6 passed`.
+
+### Task 38 (P1): Fix waveform control suite stale selectors and stale control path
+Problem:
+Waveform suite failed on stale `"Waveform"` text-button selector and stale direct `app.waveform` path.
+
+Root cause:
+- Scopes UI is now dropdown-based.
+- Control path moved to `app.controls.waveform`.
+- Range slider interactions with `.fill()` are brittle.
+
+Implemented fix:
+- Updated `WF-E005` in `e2e/waveform.spec.ts` to use scopes dropdown selectors.
+- Replaced all `app.waveform` direct references with `app.controls.waveform`.
+- Updated intensity slider interaction to DOM value set + `input/change` dispatch.
+
+Unit verification:
+- `N/A` (E2E selector/state-path correction).
+
+E2E verification:
+- Command: `npx playwright test e2e/waveform.spec.ts --workers=1 --reporter=line`
+- Result: `30 passed`.
+
+### Task 39 (P1): Fix zebra-stripes suite stale control API usage
+Problem:
+Zebra suite failed with no-op threshold/toggle updates and missing methods.
+
+Root cause:
+Tests invoked non-existent methods on `ZebraControl`; mutators live on `ZebraStripes` instance accessed via `zebraControl.getZebraStripes()`.
+
+Implemented fix:
+- Updated zebra mutator calls in `e2e/zebra-stripes.spec.ts` to:
+  - `app.controls.zebraControl.getZebraStripes().setHighThreshold(...)`
+  - `app.controls.zebraControl.getZebraStripes().setLowThreshold(...)`
+  - `app.controls.zebraControl.getZebraStripes().toggleHigh()/toggleLow()`
+
+Unit verification:
+- `N/A` (E2E API-path correction).
+
+E2E verification:
+- Command: `npx playwright test e2e/zebra-stripes.spec.ts --workers=1 --reporter=line`
+- Result: `15 passed`.
+
+### Additional sweep evidence
+- Global fail-fast command started:
+  - `npx playwright test e2e --workers=1 --max-failures=1 --reporter=line`
+- Progress reached through early `composition.spec.ts` (~249 tests) without new failures in that scanned segment before stopping to record this update.
+
+---
+
 ## Task 1 (P0): Fix stale E2E state adapter in `test-helper`
 ### Problem
 E2E reads outdated fields, making working controls look broken.

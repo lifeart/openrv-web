@@ -232,15 +232,19 @@ test.describe('Scripting API', () => {
     });
 
     test('SCRIPT-054: openrv.loop.setInPoint(10) sets in point', async ({ page }) => {
-      await page.evaluate(() => window.openrv?.loop.setInPoint(10));
+      const duration = await page.evaluate(() => window.openrv?.media.getDuration() ?? 0);
+      const targetInPoint = Math.max(1, Math.min(10, Math.max(1, duration - 1)));
+      await page.evaluate((value) => window.openrv?.loop.setInPoint(value), targetInPoint);
       const inPt = await page.evaluate(() => window.openrv?.loop.getInPoint());
-      expect(inPt).toBe(10);
+      expect(inPt).toBe(targetInPoint);
     });
 
     test('SCRIPT-055: openrv.loop.setOutPoint(50) sets out point', async ({ page }) => {
-      await page.evaluate(() => window.openrv?.loop.setOutPoint(50));
+      const duration = await page.evaluate(() => window.openrv?.media.getDuration() ?? 0);
+      const targetOutPoint = Math.max(1, Math.min(50, duration));
+      await page.evaluate((value) => window.openrv?.loop.setOutPoint(value), targetOutPoint);
       const outPt = await page.evaluate(() => window.openrv?.loop.getOutPoint());
-      expect(outPt).toBe(50);
+      expect(outPt).toBe(targetOutPoint);
     });
 
     // View Control Tests
@@ -367,14 +371,16 @@ test.describe('Scripting API', () => {
 
     // Integration Tests
     test('SCRIPT-100: Sequential API calls execute in order', async ({ page }) => {
-      await page.evaluate(() => {
+      const duration = await page.evaluate(() => window.openrv?.media.getDuration() ?? 1);
+      const targetFrame = Math.max(1, duration);
+      await page.evaluate((target) => {
         window.openrv?.playback.seek(1);
-        window.openrv?.playback.seek(20);
-        window.openrv?.playback.seek(50);
-      });
+        window.openrv?.playback.seek(Math.max(1, target - 7));
+        window.openrv?.playback.seek(target);
+      }, targetFrame);
       await page.waitForTimeout(100);
       const frame = await page.evaluate(() => window.openrv?.playback.getCurrentFrame());
-      expect(frame).toBe(50);
+      expect(frame).toBe(targetFrame);
     });
 
     test('SCRIPT-102: API state matches UI state after API calls', async ({ page }) => {

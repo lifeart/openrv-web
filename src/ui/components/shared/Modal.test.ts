@@ -352,6 +352,18 @@ describe('Modal keyboard handling', () => {
 
     await expect(promise).resolves.toBe('hello');
   });
+
+  it('MODAL-U056: custom modal closes on Escape', () => {
+    const content = document.createElement('div');
+    showModal(content);
+
+    const container = document.getElementById('modal-container');
+    expect(container?.style.display).toBe('flex');
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+    expect(container?.style.display).toBe('none');
+  });
 });
 
 describe('Modal event listener cleanup', () => {

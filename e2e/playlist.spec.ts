@@ -22,6 +22,14 @@ import {
  * Reference: Multi-clip sequencing / Edit Decision Lists
  */
 
+async function dismissBlockingModal(page: import('@playwright/test').Page): Promise<void> {
+  const okButton = page.locator('#modal-container button:has-text("OK")');
+  if (await okButton.isVisible()) {
+    await okButton.click();
+    await page.waitForTimeout(100);
+  }
+}
+
 test.describe('Multi-Clip Playlist', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
@@ -52,7 +60,8 @@ test.describe('Multi-Clip Playlist', () => {
       await page.keyboard.press('Shift+Alt+p');
       await page.waitForTimeout(200);
 
-      const title = page.locator('text=Playlist');
+      const panel = page.locator('[data-testid="playlist-panel"]');
+      const title = panel.getByText('Playlist', { exact: true });
       await expect(title).toBeVisible();
     });
 
@@ -118,6 +127,7 @@ test.describe('Multi-Clip Playlist', () => {
       const addButton = page.locator('button:has-text("Add Current")');
       await addButton.click();
       await page.waitForTimeout(200);
+      await dismissBlockingModal(page);
 
       // Should now have a clip
       const clipItem = page.locator('.playlist-clip-item');
@@ -132,6 +142,7 @@ test.describe('Multi-Clip Playlist', () => {
       const addButton = page.locator('button:has-text("Add Current")');
       await addButton.click();
       await page.waitForTimeout(200);
+      await dismissBlockingModal(page);
 
       // Clip should show source info
       const clipItem = page.locator('.playlist-clip-item').first();
@@ -148,6 +159,7 @@ test.describe('Multi-Clip Playlist', () => {
       const addButton = page.locator('button:has-text("Add Current")');
       await addButton.click();
       await page.waitForTimeout(200);
+      await dismissBlockingModal(page);
 
       // Clip should show in/out point info
       const inOutInfo = page.locator('text=/In:|Out:/');
@@ -162,14 +174,18 @@ test.describe('Multi-Clip Playlist', () => {
       const addButton = page.locator('button:has-text("Add Current")');
       await addButton.click();
       await page.waitForTimeout(100);
+      await dismissBlockingModal(page);
 
-      // Switch to second source
-      await page.keyboard.press('2');
+      // Switch to source B via A/B toggle
+      await page.keyboard.press('`');
       await page.waitForTimeout(200);
+      const abState = await getSessionState(page);
+      expect(abState.currentAB).toBe('B');
 
       // Add second clip
       await addButton.click();
       await page.waitForTimeout(100);
+      await dismissBlockingModal(page);
 
       // Should have two clips
       const clipItems = page.locator('.playlist-clip-item');
@@ -187,6 +203,7 @@ test.describe('Multi-Clip Playlist', () => {
       const addButton = page.locator('button:has-text("Add Current")');
       await addButton.click();
       await page.waitForTimeout(100);
+      await dismissBlockingModal(page);
 
       // Clip should have remove button (X icon)
       const clipItem = page.locator('.playlist-clip-item').first();
@@ -202,6 +219,7 @@ test.describe('Multi-Clip Playlist', () => {
       const addButton = page.locator('button:has-text("Add Current")');
       await addButton.click();
       await page.waitForTimeout(100);
+      await dismissBlockingModal(page);
 
       // Remove the clip
       const clipItem = page.locator('.playlist-clip-item').first();
@@ -274,6 +292,7 @@ test.describe('Multi-Clip Playlist', () => {
       const addButton = page.locator('button:has-text("Add Current")');
       await addButton.click();
       await page.waitForTimeout(100);
+      await dismissBlockingModal(page);
 
       // Footer should show "1 clip" or "1 clips"
       const footerInfo = page.locator('text=/\\d+\\s*clip/');
@@ -288,6 +307,7 @@ test.describe('Multi-Clip Playlist', () => {
       const addButton = page.locator('button:has-text("Add Current")');
       await addButton.click();
       await page.waitForTimeout(100);
+      await dismissBlockingModal(page);
 
       // Footer should show duration (e.g., "5s", "1m 30s")
       const durationInfo = page.locator('text=/\\d+[ms]/');
@@ -304,6 +324,7 @@ test.describe('Multi-Clip Playlist', () => {
       const addButton = page.locator('button:has-text("Add Current")');
       await addButton.click();
       await page.waitForTimeout(100);
+      await dismissBlockingModal(page);
 
       // Find and click enable button
       const enableButton = page.locator('button:has-text("Off")').first();
@@ -327,6 +348,7 @@ test.describe('Multi-Clip Playlist', () => {
       const addButton = page.locator('button:has-text("Add Current")');
       await addButton.click();
       await page.waitForTimeout(100);
+      await dismissBlockingModal(page);
 
       // Check that clip item has draggable attribute
       const clipItem = page.locator('.playlist-clip-item').first();
@@ -354,6 +376,7 @@ test.describe('Multi-Clip Playlist', () => {
       const addButton = page.locator('button:has-text("Add Current")');
       await addButton.click();
       await page.waitForTimeout(100);
+      await dismissBlockingModal(page);
 
       // Click the clip (should navigate to it)
       const clipItem = page.locator('.playlist-clip-item').first();

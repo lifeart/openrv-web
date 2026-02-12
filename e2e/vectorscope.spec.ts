@@ -63,18 +63,21 @@ test.describe('Vectorscope Display', () => {
     await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
 
-    // Click the Vectorscope button
-    const vectorscopeButton = page.locator('button:has-text("Vectorscope")');
-    await expect(vectorscopeButton).toBeVisible();
+    // Open scopes dropdown then toggle the vectorscope option
+    const scopesButton = page.locator('[data-testid="scopes-control-button"]');
+    await expect(scopesButton).toBeVisible();
+    await scopesButton.click();
 
-    await vectorscopeButton.click();
+    const vectorscopeOption = page.locator('[data-scope-type="vectorscope"]');
+    await expect(vectorscopeOption).toBeVisible();
+    await vectorscopeOption.click();
     await page.waitForTimeout(100);
 
     let state = await getViewerState(page);
     expect(state.vectorscopeVisible).toBe(true);
 
     // Click again to hide
-    await vectorscopeButton.click();
+    await vectorscopeOption.click();
     await page.waitForTimeout(100);
 
     state = await getViewerState(page);
@@ -93,45 +96,52 @@ test.describe('Vectorscope Zoom', () => {
     await page.waitForTimeout(100);
   });
 
-  test('VS-E010: default zoom is 1x', async ({ page }) => {
+  test('VS-E010: default zoom mode is auto', async ({ page }) => {
     const state = await getViewerState(page);
-    expect(state.vectorscopeZoom).toBe(1);
+    expect(state.vectorscopeZoom).toBe('auto');
   });
 
   test('VS-E011: cycling zoom changes vectorscope zoom state', async ({ page }) => {
     // Use direct method call
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.vectorscope?.cycleZoom();
+      (window as any).__OPENRV_TEST__?.app?.controls?.vectorscope?.cycleZoom?.();
     });
     await page.waitForTimeout(100);
     let state = await getViewerState(page);
+    expect(state.vectorscopeZoom).toBe(1);
+
+    await page.evaluate(() => {
+      (window as any).__OPENRV_TEST__?.app?.controls?.vectorscope?.cycleZoom?.();
+    });
+    await page.waitForTimeout(100);
+    state = await getViewerState(page);
     expect(state.vectorscopeZoom).toBe(2);
 
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.vectorscope?.cycleZoom();
+      (window as any).__OPENRV_TEST__?.app?.controls?.vectorscope?.cycleZoom?.();
     });
     await page.waitForTimeout(100);
     state = await getViewerState(page);
     expect(state.vectorscopeZoom).toBe(4);
 
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.vectorscope?.cycleZoom();
+      (window as any).__OPENRV_TEST__?.app?.controls?.vectorscope?.cycleZoom?.();
     });
     await page.waitForTimeout(100);
     state = await getViewerState(page);
-    expect(state.vectorscopeZoom).toBe(1);
+    expect(state.vectorscopeZoom).toBe('auto');
   });
 
   test('VS-E012: setZoom changes vectorscope zoom', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.vectorscope?.setZoom(2);
+      (window as any).__OPENRV_TEST__?.app?.controls?.vectorscope?.setZoom?.(2);
     });
     await page.waitForTimeout(100);
     let state = await getViewerState(page);
     expect(state.vectorscopeZoom).toBe(2);
 
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.vectorscope?.setZoom(4);
+      (window as any).__OPENRV_TEST__?.app?.controls?.vectorscope?.setZoom?.(4);
     });
     await page.waitForTimeout(100);
     state = await getViewerState(page);
@@ -153,7 +163,7 @@ test.describe('Vectorscope Closing', () => {
   test('VS-E030: hide method hides vectorscope', async ({ page }) => {
     // Use direct method call
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.vectorscope?.hide();
+      (window as any).__OPENRV_TEST__?.app?.controls?.vectorscope?.hide?.();
     });
     await page.waitForTimeout(100);
 
@@ -183,13 +193,21 @@ test.describe('Vectorscope Internal Button Controls', () => {
     // Find the zoom button by data-testid
     const zoomButton = page.locator('[data-testid="vectorscope-zoom-button"]');
     await expect(zoomButton).toBeVisible();
+    await expect(zoomButton).toHaveText(/A:[124]x/);
+
+    // Click to change from auto to 1x
+    await zoomButton.click();
+    await page.waitForTimeout(100);
+
+    let state = await getViewerState(page);
+    expect(state.vectorscopeZoom).toBe(1);
     await expect(zoomButton).toHaveText('1x');
 
     // Click to change from 1x to 2x
     await zoomButton.click();
     await page.waitForTimeout(100);
 
-    let state = await getViewerState(page);
+    state = await getViewerState(page);
     expect(state.vectorscopeZoom).toBe(2);
     await expect(zoomButton).toHaveText('2x');
 
@@ -201,13 +219,13 @@ test.describe('Vectorscope Internal Button Controls', () => {
     expect(state.vectorscopeZoom).toBe(4);
     await expect(zoomButton).toHaveText('4x');
 
-    // Click to change from 4x back to 1x
+    // Click to change from 4x back to auto
     await zoomButton.click();
     await page.waitForTimeout(100);
 
     state = await getViewerState(page);
-    expect(state.vectorscopeZoom).toBe(1);
-    await expect(zoomButton).toHaveText('1x');
+    expect(state.vectorscopeZoom).toBe('auto');
+    await expect(zoomButton).toHaveText(/A:[124]x/);
   });
 
   test('VS-E052: clicking close button inside vectorscope hides vectorscope', async ({ page }) => {
@@ -264,7 +282,7 @@ test.describe('Vectorscope State Persistence', () => {
 
     // Change to 2x zoom using direct method call
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.vectorscope?.setZoom(2);
+      (window as any).__OPENRV_TEST__?.app?.controls?.vectorscope?.setZoom?.(2);
     });
     await page.waitForTimeout(100);
 

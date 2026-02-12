@@ -84,7 +84,7 @@ test.describe('Safe Areas Guide Types', () => {
 
   test('SA-E014: toggling title safe updates state', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.safeAreasControl?.toggleTitleSafe();
+      (window as any).__OPENRV_TEST__?.app?.controls?.safeAreasControl?.getOverlay?.()?.toggleTitleSafe?.();
     });
     await page.waitForTimeout(100);
 
@@ -94,7 +94,7 @@ test.describe('Safe Areas Guide Types', () => {
 
   test('SA-E015: toggling action safe updates state', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.safeAreasControl?.toggleActionSafe();
+      (window as any).__OPENRV_TEST__?.app?.controls?.safeAreasControl?.getOverlay?.()?.toggleActionSafe?.();
     });
     await page.waitForTimeout(100);
 
@@ -104,7 +104,7 @@ test.describe('Safe Areas Guide Types', () => {
 
   test('SA-E016: toggling center crosshair updates state', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.safeAreasControl?.toggleCenterCrosshair();
+      (window as any).__OPENRV_TEST__?.app?.controls?.safeAreasControl?.getOverlay?.()?.toggleCenterCrosshair?.();
     });
     await page.waitForTimeout(100);
 
@@ -114,7 +114,7 @@ test.describe('Safe Areas Guide Types', () => {
 
   test('SA-E017: toggling rule of thirds updates state', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.safeAreasControl?.toggleRuleOfThirds();
+      (window as any).__OPENRV_TEST__?.app?.controls?.safeAreasControl?.getOverlay?.()?.toggleRuleOfThirds?.();
     });
     await page.waitForTimeout(100);
 
@@ -140,7 +140,7 @@ test.describe('Safe Areas Aspect Ratios', () => {
 
   test('SA-E021: setting 16:9 aspect ratio updates state', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.safeAreasControl?.setAspectRatio('16:9');
+      (window as any).__OPENRV_TEST__?.app?.controls?.safeAreasControl?.getOverlay?.()?.setAspectRatio?.('16:9');
     });
     await page.waitForTimeout(100);
 
@@ -150,7 +150,7 @@ test.describe('Safe Areas Aspect Ratios', () => {
 
   test('SA-E022: setting 2.39:1 aspect ratio updates state', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.safeAreasControl?.setAspectRatio('2.39:1');
+      (window as any).__OPENRV_TEST__?.app?.controls?.safeAreasControl?.getOverlay?.()?.setAspectRatio?.('2.39:1');
     });
     await page.waitForTimeout(100);
 
@@ -161,13 +161,13 @@ test.describe('Safe Areas Aspect Ratios', () => {
   test('SA-E023: clearing aspect ratio updates state', async ({ page }) => {
     // Set an aspect ratio first
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.safeAreasControl?.setAspectRatio('16:9');
+      (window as any).__OPENRV_TEST__?.app?.controls?.safeAreasControl?.getOverlay?.()?.setAspectRatio?.('16:9');
     });
     await page.waitForTimeout(100);
 
     // Clear it
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.safeAreasControl?.setAspectRatio(null);
+      (window as any).__OPENRV_TEST__?.app?.controls?.safeAreasControl?.getOverlay?.()?.setAspectRatio?.(null);
     });
     await page.waitForTimeout(100);
 
@@ -224,7 +224,7 @@ test.describe('Safe Areas State Persistence', () => {
 
     // Enable rule of thirds
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.safeAreasControl?.toggleRuleOfThirds();
+      (window as any).__OPENRV_TEST__?.app?.controls?.safeAreasControl?.getOverlay?.()?.toggleRuleOfThirds?.();
     });
     await page.waitForTimeout(100);
 

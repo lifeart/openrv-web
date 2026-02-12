@@ -33,12 +33,12 @@ test.describe('Timeline Thumbnails', () => {
 
   test.describe('Timeline Display', () => {
     test('THUMB-E001: timeline canvas exists', async ({ page }) => {
-      const timelineCanvas = page.locator('.timeline canvas');
+      const timelineCanvas = page.locator('[data-testid="timeline-canvas"]');
       await expect(timelineCanvas).toBeVisible();
     });
 
     test('THUMB-E002: timeline has visual content after video load', async ({ page }) => {
-      const timelineCanvas = page.locator('.timeline canvas');
+      const timelineCanvas = page.locator('[data-testid="timeline-canvas"]');
 
       // Take screenshot of timeline
       const screenshot = await timelineCanvas.screenshot();
@@ -60,7 +60,7 @@ test.describe('Timeline Thumbnails', () => {
       await page.waitForTimeout(200);
 
       // Take first screenshot
-      const timelineCanvas = page.locator('.timeline canvas');
+      const timelineCanvas = page.locator('[data-testid="timeline-canvas"]');
       const screenshot1 = await timelineCanvas.screenshot();
 
       // Wait for more thumbnails to load
@@ -75,7 +75,7 @@ test.describe('Timeline Thumbnails', () => {
     });
 
     test('THUMB-E004: timeline updates on frame navigation', async ({ page }) => {
-      const timelineCanvas = page.locator('.timeline canvas');
+      const timelineCanvas = page.locator('[data-testid="timeline-canvas"]');
 
       // Navigate to different frame
       await page.keyboard.press('ArrowRight');
@@ -91,7 +91,7 @@ test.describe('Timeline Thumbnails', () => {
   test.describe('Resize Behavior', () => {
     test('THUMB-E005: thumbnails recalculate on window resize', async ({ page }) => {
       // Get initial timeline state
-      const timelineCanvas = page.locator('.timeline canvas');
+      const timelineCanvas = page.locator('[data-testid="timeline-canvas"]');
       const initialBox = await timelineCanvas.boundingBox();
 
       // Resize window
@@ -109,7 +109,7 @@ test.describe('Timeline Thumbnails', () => {
 
   test.describe('Source Change', () => {
     test('THUMB-E006: thumbnails reload on source change', async ({ page }) => {
-      const timelineCanvas = page.locator('.timeline canvas');
+      const timelineCanvas = page.locator('[data-testid="timeline-canvas"]');
 
       // Take screenshot with first source
       const screenshot1 = await timelineCanvas.screenshot();
@@ -129,7 +129,7 @@ test.describe('Timeline Thumbnails', () => {
 
   test.describe('Timeline Interaction', () => {
     test('THUMB-E007: timeline responds to click for frame navigation', async ({ page }) => {
-      const timelineCanvas = page.locator('.timeline canvas');
+      const timelineCanvas = page.locator('[data-testid="timeline-canvas"]');
       const box = await timelineCanvas.boundingBox();
 
       if (box) {
@@ -143,7 +143,7 @@ test.describe('Timeline Thumbnails', () => {
     });
 
     test('THUMB-E008: timeline supports drag scrubbing', async ({ page }) => {
-      const timelineCanvas = page.locator('.timeline canvas');
+      const timelineCanvas = page.locator('[data-testid="timeline-canvas"]');
       const box = await timelineCanvas.boundingBox();
 
       if (box) {
@@ -175,14 +175,14 @@ test.describe('Timeline Thumbnails', () => {
       }
 
       // Timeline should still function
-      const timelineCanvas = page.locator('.timeline canvas');
+      const timelineCanvas = page.locator('[data-testid="timeline-canvas"]');
       await expect(timelineCanvas).toBeVisible();
     });
   });
 
   test.describe('Playback Integration', () => {
     test('THUMB-E010: timeline updates during playback', async ({ page }) => {
-      const timelineCanvas = page.locator('.timeline canvas');
+      const timelineCanvas = page.locator('[data-testid="timeline-canvas"]');
 
       // Start playback
       await page.keyboard.press('l');
