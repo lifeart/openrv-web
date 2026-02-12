@@ -23,6 +23,7 @@ export class ZebraControl {
   private lowSlider!: HTMLInputElement;
   private highValueLabel!: HTMLSpanElement;
   private lowValueLabel!: HTMLSpanElement;
+  private unsubscribers: (() => void)[] = [];
 
   constructor(zebraStripes: ZebraStripes) {
     this.zebraStripes = zebraStripes;
@@ -102,10 +103,10 @@ export class ZebraControl {
     document.addEventListener('click', this.handleOutsideClick);
 
     // Listen for state changes
-    this.zebraStripes.on('stateChanged', () => {
+    this.unsubscribers.push(this.zebraStripes.on('stateChanged', () => {
       this.updateButtonState();
       this.updateControlsState();
-    });
+    }));
   }
 
   private createDropdownContent(): void {
@@ -353,5 +354,7 @@ export class ZebraControl {
     document.removeEventListener('click', this.handleOutsideClick);
     window.removeEventListener('resize', this.boundHandleReposition);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
+    this.unsubscribers.forEach((unsub) => unsub());
+    this.unsubscribers = [];
   }
 }

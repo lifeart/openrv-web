@@ -18,6 +18,7 @@ export class FalseColorControl {
   private toggleButton: HTMLButtonElement;
   private presetButtons: Map<FalseColorPreset, HTMLButtonElement> = new Map();
   private boundHandleReposition: () => void;
+  private unsubscribers: (() => void)[] = [];
 
   constructor(falseColor: FalseColor) {
     this.falseColor = falseColor;
@@ -97,11 +98,11 @@ export class FalseColorControl {
     document.addEventListener('click', this.handleOutsideClick);
 
     // Listen for state changes
-    this.falseColor.on('stateChanged', () => {
+    this.unsubscribers.push(this.falseColor.on('stateChanged', () => {
       this.updateButtonState();
       this.updatePresetButtons();
       this.updateLegend();
-    });
+    }));
   }
 
   private createDropdownContent(): void {
@@ -130,9 +131,9 @@ export class FalseColorControl {
     });
 
     // Update checkbox when state changes
-    this.falseColor.on('stateChanged', (state) => {
+    this.unsubscribers.push(this.falseColor.on('stateChanged', (state) => {
       enableCheckbox.checked = state.enabled;
-    });
+    }));
 
     enableRow.appendChild(enableLabel);
     enableRow.appendChild(enableCheckbox);
@@ -354,5 +355,7 @@ export class FalseColorControl {
     window.removeEventListener('resize', this.boundHandleReposition);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     this.presetButtons.clear();
+    this.unsubscribers.forEach((unsub) => unsub());
+    this.unsubscribers = [];
   }
 }

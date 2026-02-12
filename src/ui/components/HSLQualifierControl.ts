@@ -22,6 +22,7 @@ export class HSLQualifierControl {
   private boundHandleReposition: () => void;
   private eyedropperActive = false;
   private onEyedropperCallback: ((active: boolean) => void) | null = null;
+  private unsubscribers: (() => void)[] = [];
 
   constructor(hslQualifier: HSLQualifier) {
     this.hslQualifier = hslQualifier;
@@ -102,10 +103,10 @@ export class HSLQualifierControl {
     document.addEventListener('click', this.handleOutsideClick);
 
     // Listen for state changes
-    this.hslQualifier.on('stateChanged', () => {
+    this.unsubscribers.push(this.hslQualifier.on('stateChanged', () => {
       this.updateButtonState();
       this.updateSliders();
-    });
+    }));
   }
 
   private createDropdownContent(): void {
@@ -154,9 +155,9 @@ export class HSLQualifierControl {
       this.hslQualifier.toggle();
     });
 
-    this.hslQualifier.on('stateChanged', (state) => {
+    this.unsubscribers.push(this.hslQualifier.on('stateChanged', (state) => {
       enableCheckbox.checked = state.enabled;
-    });
+    }));
 
     const title = document.createElement('span');
     title.textContent = 'HSL Qualifier';
@@ -532,9 +533,9 @@ export class HSLQualifierControl {
       this.hslQualifier.setInvert(invertCheckbox.checked);
     });
 
-    this.hslQualifier.on('stateChanged', (state) => {
+    this.unsubscribers.push(this.hslQualifier.on('stateChanged', (state) => {
       invertCheckbox.checked = state.invert;
-    });
+    }));
 
     const invertLabel = document.createElement('span');
     invertLabel.textContent = 'Invert';
@@ -562,9 +563,9 @@ export class HSLQualifierControl {
       this.hslQualifier.setMattePreview(matteCheckbox.checked);
     });
 
-    this.hslQualifier.on('stateChanged', (state) => {
+    this.unsubscribers.push(this.hslQualifier.on('stateChanged', (state) => {
       matteCheckbox.checked = state.mattePreview;
-    });
+    }));
 
     const matteLabel = document.createElement('span');
     matteLabel.textContent = 'Matte Preview';
@@ -742,5 +743,7 @@ export class HSLQualifierControl {
     document.removeEventListener('click', this.handleOutsideClick);
     window.removeEventListener('resize', this.boundHandleReposition);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
+    this.unsubscribers.forEach((unsub) => unsub());
+    this.unsubscribers = [];
   }
 }

@@ -4,7 +4,7 @@
  * Tests for the UI control component that manages luminance visualization modes.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { LuminanceVisualization } from './LuminanceVisualization';
 import { LuminanceVisualizationControl } from './LuminanceVisualizationControl';
 import { FalseColor } from './FalseColor';
@@ -94,5 +94,20 @@ describe('LuminanceVisualizationControl', () => {
       expect(contourBtn).not.toBeNull();
       expect(fcBtn).not.toBeNull();
     });
+  });
+
+  it('LUM-U050: dispose unsubscribes from state changes', () => {
+    const unsubSpy = vi.fn();
+    vi.spyOn(lumVis, 'on').mockReturnValue(unsubSpy);
+
+    // Re-create to capture subscription
+    control.dispose();
+    control = new LuminanceVisualizationControl(lumVis);
+
+    expect(lumVis.on).toHaveBeenCalledWith('stateChanged', expect.any(Function));
+
+    control.dispose();
+
+    expect(unsubSpy).toHaveBeenCalled();
   });
 });

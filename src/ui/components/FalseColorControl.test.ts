@@ -4,7 +4,7 @@
  * Tests for the false color dropdown control with presets and legend.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { FalseColorControl } from './FalseColorControl';
 import { FalseColor } from './FalseColor';
 
@@ -331,6 +331,24 @@ describe('FalseColorControl', () => {
       control.dispose();
       // No error means cleanup was successful
       expect(true).toBe(true);
+    });
+
+    it('FALSE-U073: dispose unsubscribes from state changes', () => {
+      const unsubSpy = vi.fn();
+      // Mock .on to return our spy
+      vi.spyOn(falseColor, 'on').mockReturnValue(unsubSpy);
+
+      // Re-create control to capture the mocked .on
+      control.dispose();
+      control = new FalseColorControl(falseColor);
+
+      // Verify subscription happened
+      expect(falseColor.on).toHaveBeenCalledWith('stateChanged', expect.any(Function));
+
+      control.dispose();
+
+      // Verify unsubscribe was called
+      expect(unsubSpy).toHaveBeenCalled();
     });
   });
 
