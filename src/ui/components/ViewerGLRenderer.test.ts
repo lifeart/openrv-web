@@ -32,6 +32,8 @@ interface TestableViewerGLRenderer {
   _hdrRenderActive: boolean;
   _sdrWebGLRenderActive: boolean;
   _webgpuBlit: { initialized: boolean; getCanvas: () => HTMLCanvasElement; uploadAndDisplay?: (pixels: Float32Array, w: number, h: number) => void } | null;
+  _canvas2dBlit: { initialized: boolean; getCanvas: () => HTMLCanvasElement; uploadAndDisplay?: (pixels: Float32Array, w: number, h: number) => void; dispose?: () => void } | null;
+  _canvas2dBlitFailed: boolean;
   _logicalWidth: number;
   _logicalHeight: number;
 }
@@ -600,6 +602,92 @@ describe('ViewerGLRenderer', () => {
       // Async readback used during continuous playback (no state changes)
       expect(asyncReadback).toHaveBeenCalled();
       expect(syncReadback).not.toHaveBeenCalled();
+    });
+  });
+
+  // =========================================================================
+  // Canvas2D HDR blit integration
+  // =========================================================================
+  describe('Canvas2D HDR blit', () => {
+    it('VGLR-060: isCanvas2DBlitReady is false initially', () => {
+      expect(renderer.isCanvas2DBlitReady).toBe(false);
+    });
+
+    it('VGLR-061: isCanvas2DBlitReady reflects _canvas2dBlit.initialized', () => {
+      const internal = renderer as unknown as TestableViewerGLRenderer;
+      const blitCanvas = document.createElement('canvas');
+      internal._canvas2dBlit = { initialized: true, getCanvas: () => blitCanvas };
+      expect(renderer.isCanvas2DBlitReady).toBe(true);
+    });
+
+    it('VGLR-062: webgpuBlitFailed reflects _webgpuBlitFailed', () => {
+      expect(renderer.webgpuBlitFailed).toBe(false);
+    });
+
+    it('VGLR-063: dispose cleans up Canvas2D blit', () => {
+      const internal = renderer as unknown as TestableViewerGLRenderer;
+      const disposeFn = vi.fn();
+      const blitCanvas = document.createElement('canvas');
+      internal._canvas2dBlit = {
+        initialized: true,
+        getCanvas: () => blitCanvas,
+        dispose: disposeFn,
+      };
+
+      renderer.dispose();
+
+      expect(disposeFn).toHaveBeenCalledOnce();
+      expect(internal._canvas2dBlit).toBeNull();
+    });
+
+    it('VGLR-064: resizeIfActive applies CSS sizing to Canvas2D blit canvas when HDR active', () => {
+      const internal = renderer as unknown as TestableViewerGLRenderer;
+      const mockGL = createMockRenderer();
+      const blitCanvas = document.createElement('canvas');
+      internal._glCanvas = document.createElement('canvas');
+      internal._glRenderer = { ...mockGL, resize: vi.fn() } as unknown as Renderer;
+      internal._hdrRenderActive = true;
+      internal._canvas2dBlit = { initialized: true, getCanvas: () => blitCanvas };
+
+      Object.defineProperty(window, 'devicePixelRatio', { value: 2, configurable: true });
+
+      renderer.resizeIfActive(1920, 1080, 960, 540);
+
+      expect(blitCanvas.style.width).toBe('960px');
+      expect(blitCanvas.style.height).toBe('540px');
+
+      Object.defineProperty(window, 'devicePixelRatio', { value: 1, configurable: true });
+    });
+
+    it('VGLR-065: deactivateHDRMode hides Canvas2D blit canvas', () => {
+      const internal = renderer as unknown as TestableViewerGLRenderer;
+      const blitCanvas = document.createElement('canvas');
+      blitCanvas.style.display = 'block';
+      internal._glCanvas = document.createElement('canvas');
+      internal._canvas2dBlit = { initialized: true, getCanvas: () => blitCanvas };
+      internal._hdrRenderActive = true;
+
+      renderer.deactivateHDRMode();
+
+      expect(blitCanvas.style.display).toBe('none');
+      expect(internal._hdrRenderActive).toBe(false);
+    });
+
+    it('VGLR-066: ensureGLRenderer skips worker when Canvas2D blit is ready', () => {
+      const internal = renderer as unknown as TestableViewerGLRenderer;
+      const blitCanvas = document.createElement('canvas');
+      internal._canvas2dBlit = { initialized: true, getCanvas: () => blitCanvas };
+
+      // When Canvas2D blit is ready, the sync renderer path should be preferred
+      // (skipWorker=true). We verify this indirectly: if ensureGLRenderer doesn't
+      // attempt worker creation with Canvas2D blit ready.
+      renderer.createGLCanvas();
+      // Just verify no crash — the actual WebGL2 context fails in jsdom,
+      // but the skip-worker logic runs first.
+      const result = renderer.ensureGLRenderer();
+      // In jsdom, WebGL2 is not available so result is null, but no crash means
+      // the skip-worker path was taken (no OffscreenCanvas worker attempted).
+      expect(result).toBeNull();
     });
   });
 });

@@ -13,6 +13,7 @@
 import { Renderer } from '../../render/Renderer';
 import { RenderWorkerProxy } from '../../render/RenderWorkerProxy';
 import { WebGPUHDRBlit } from '../../render/WebGPUHDRBlit';
+import { Canvas2DHDRBlit } from '../../render/Canvas2DHDRBlit';
 import type { RenderState } from '../../render/RenderState';
 import type { IPImage } from '../../core/image/Image';
 import {
@@ -84,6 +85,11 @@ export class ViewerGLRenderer {
   private _webgpuBlitInitializing = false;
   private _webgpuBlitFailed = false;
 
+  // Canvas2D HDR blit (last-resort fallback: WebGL2 FBO → readPixels → Canvas2D HDR canvas)
+  private _canvas2dBlit: Canvas2DHDRBlit | null = null;
+  private _canvas2dBlitInitializing = false;
+  private _canvas2dBlitFailed = false;
+
   // Render-skip cache: tracks last successfully rendered HDR frame so
   // redundant renders of the same image can be skipped when nothing changed.
   private _lastRenderedImage: WeakRef<IPImage> | null = null;
@@ -112,6 +118,10 @@ export class ViewerGLRenderer {
   get capabilities(): DisplayCapabilities | undefined { return this._capabilities; }
   /** True when the WebGPU HDR blit module is initialized and ready to display. */
   get isWebGPUBlitReady(): boolean { return this._webgpuBlit?.initialized === true; }
+  /** True when the Canvas2D HDR blit module is initialized and ready to display. */
+  get isCanvas2DBlitReady(): boolean { return this._canvas2dBlit?.initialized === true; }
+  /** True when the WebGPU HDR blit initialization failed. */
+  get webgpuBlitFailed(): boolean { return this._webgpuBlitFailed; }
   /** Get the last rendered IPImage (for scope readback). Returns null if GC'd or not yet rendered. */
   get lastRenderedImage(): IPImage | null { return this._lastRenderedImage?.deref() ?? null; }
 
@@ -196,7 +206,7 @@ export class ViewerGLRenderer {
     // Phase 4: Try OffscreenCanvas worker first for main-thread isolation.
     // Only attempt once — if worker proxy already failed, skip directly to sync renderer.
     // Skip worker path when WebGPU HDR blit is ready (blit needs FBO readback via sync Renderer).
-    const skipWorker = this._webgpuBlit?.initialized === true;
+    const skipWorker = this._webgpuBlit?.initialized === true || this._canvas2dBlit?.initialized === true;
     if (!skipWorker && !this._renderWorkerProxy && !this._isAsyncRenderer) {
       try {
         if (typeof OffscreenCanvas !== 'undefined' &&
@@ -383,6 +393,11 @@ export class ViewerGLRenderer {
     // Try WebGPU HDR blit path when WebGL2 has no native HDR output
     if (!isHDROutput && this._webgpuBlit?.initialized && hasFloatReadback) {
       return this.renderHDRWithWebGPUBlit(renderer, image, displayWidth, displayHeight);
+    }
+
+    // Try Canvas2D HDR blit path as last resort when WebGPU blit is not available
+    if (!isHDROutput && this._canvas2dBlit?.initialized && hasFloatReadback) {
+      return this.renderHDRWithCanvas2DBlit(renderer, image, displayWidth, displayHeight);
     }
 
     // Standard WebGL2 HDR path (HLG/PQ/extended) or SDR fallback
@@ -576,17 +591,96 @@ export class ViewerGLRenderer {
     this._lastRenderedWidth = displayWidth;
     this._lastRenderedHeight = displayHeight;
 
-    // Show WebGPU canvas, hide GL canvas
+    // Show WebGPU canvas, hide GL canvas and Canvas2D blit canvas
     const blitCanvas = this._webgpuBlit!.getCanvas();
     if (!this._hdrRenderActive) {
       this._glCanvas!.style.display = 'none';
       blitCanvas.style.display = 'block';
+      this.hideCanvas2DBlitCanvas();
       this.ctx.getImageCanvas().style.visibility = 'hidden';
       this._hdrRenderActive = true;
     }
 
     // Apply CSS sizing to match logical (CSS) dimensions — without this,
     // the canvas at physical pixel size appears too large on retina displays.
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = this._logicalWidth || Math.round(displayWidth / dpr);
+    const cssH = this._logicalHeight || Math.round(displayHeight / dpr);
+    blitCanvas.style.width = `${cssW}px`;
+    blitCanvas.style.height = `${cssH}px`;
+
+    // CSS transform for rotation/flip
+    this.applyTransformToCanvas(blitCanvas);
+
+    return true;
+  }
+
+  /**
+   * Hybrid WebGL2 → Canvas2D HDR blit render path.
+   * Renders via WebGL2 FBO, reads float pixels, uploads to Canvas2D HDR canvas.
+   * Last-resort fallback when WebGPU blit is not available.
+   */
+  private renderHDRWithCanvas2DBlit(
+    renderer: Renderer,
+    image: IPImage,
+    displayWidth: number,
+    displayHeight: number,
+  ): boolean {
+    // Ensure GL canvas is sized for FBO rendering (it stays hidden)
+    if (this._glCanvas!.width !== displayWidth || this._glCanvas!.height !== displayHeight) {
+      renderer.resize(displayWidth, displayHeight);
+    }
+
+    // Build render state with minimal HDR overrides for linear-light output.
+    PerfTrace.begin('canvas2dBlit.buildRenderState');
+    const state = this.buildRenderState();
+    state.colorAdjustments = { ...state.colorAdjustments, gamma: 1 };
+    state.displayColor = { ...state.displayColor, transferFunction: 0, displayGamma: 1, displayBrightness: 1 };
+    renderer.applyRenderState(state);
+    PerfTrace.end('canvas2dBlit.buildRenderState');
+
+    // Skip re-render if same image, same dimensions, and no state changes.
+    const sameImage = this._lastRenderedImage?.deref() === image;
+    const sameDims = displayWidth === this._lastRenderedWidth && displayHeight === this._lastRenderedHeight;
+    const hasPending = renderer.hasPendingStateChanges();
+    if (sameImage && sameDims && !hasPending) {
+      PerfTrace.count('canvas2dBlit.renderSkipped');
+      return true;
+    }
+
+    // Render to RGBA16F FBO and read float pixels.
+    // Use sync readback when shader state changed (hasPending=true) so the user
+    // sees immediate visual feedback after operator/setting changes. Use async
+    // PBO readback (1-frame lag) only for continuous playback.
+    PerfTrace.begin('canvas2dBlit.FBO+readPixels');
+    const hasAsyncReadback = typeof renderer.renderImageToFloatAsync === 'function';
+    const useAsync = hasAsyncReadback && !hasPending;
+    const pixels = useAsync
+      ? renderer.renderImageToFloatAsync!(image, displayWidth, displayHeight)
+      : renderer.renderImageToFloat!(image, displayWidth, displayHeight);
+    PerfTrace.end('canvas2dBlit.FBO+readPixels');
+    if (!pixels) return false;
+
+    // Upload to Canvas2D HDR canvas
+    PerfTrace.begin('canvas2dBlit.putImageData');
+    this._canvas2dBlit!.uploadAndDisplay(pixels, displayWidth, displayHeight);
+    PerfTrace.end('canvas2dBlit.putImageData');
+
+    this._lastRenderedImage = new WeakRef(image);
+    this._lastRenderedWidth = displayWidth;
+    this._lastRenderedHeight = displayHeight;
+
+    // Show Canvas2D canvas, hide GL canvas
+    const blitCanvas = this._canvas2dBlit!.getCanvas();
+    if (!this._hdrRenderActive) {
+      this._glCanvas!.style.display = 'none';
+      blitCanvas.style.display = 'block';
+      this.hideWebGPUBlitCanvas();
+      this.ctx.getImageCanvas().style.visibility = 'hidden';
+      this._hdrRenderActive = true;
+    }
+
+    // Apply CSS sizing to match logical (CSS) dimensions
     const dpr = window.devicePixelRatio || 1;
     const cssW = this._logicalWidth || Math.round(displayWidth / dpr);
     const cssH = this._logicalHeight || Math.round(displayHeight / dpr);
@@ -650,10 +744,56 @@ export class ViewerGLRenderer {
     }
   }
 
+  /**
+   * Initialize the Canvas2D HDR blit module lazily.
+   * Called as a last-resort fallback when both WebGL2 native HDR and WebGPU
+   * HDR blit are unavailable but the display supports HDR.
+   */
+  async initCanvas2DHDRBlit(): Promise<void> {
+    if (this._canvas2dBlit || this._canvas2dBlitInitializing || this._canvas2dBlitFailed) return;
+    this._canvas2dBlitInitializing = true;
+
+    try {
+      const blit = new Canvas2DHDRBlit();
+      blit.initialize();
+      this._canvas2dBlit = blit;
+
+      // Insert Canvas2D canvas before the paint canvas so annotations overlay it
+      const container = this.ctx.getCanvasContainer();
+      const paintCanvas = this.ctx.getPaintCanvas();
+      container.insertBefore(blit.getCanvas(), paintCanvas);
+
+      console.log('[Viewer] Canvas2D HDR blit initialized');
+
+      // If there's already a worker proxy renderer, switch to sync now
+      // so the next render uses the blit path with renderImageToFloat.
+      if (this._isAsyncRenderer) {
+        console.log('[Viewer] Canvas2D blit ready, switching from worker to sync renderer');
+        this.fallbackToSyncRenderer();
+      }
+
+      // Trigger a re-render so the current HDR content (if any) is re-rendered
+      // through the blit path.
+      this.ctx.scheduleRender();
+    } catch (e) {
+      console.warn('[Viewer] Canvas2D HDR blit init failed:', e);
+      this._canvas2dBlitFailed = true;
+    } finally {
+      this._canvas2dBlitInitializing = false;
+    }
+  }
+
   /** Hide the WebGPU blit canvas if it exists. */
   private hideWebGPUBlitCanvas(): void {
     if (this._webgpuBlit) {
       this._webgpuBlit.getCanvas().style.display = 'none';
+    }
+  }
+
+  /** Hide the Canvas2D blit canvas if it exists. */
+  private hideCanvas2DBlitCanvas(): void {
+    if (this._canvas2dBlit) {
+      this._canvas2dBlit.getCanvas().style.display = 'none';
     }
   }
 
@@ -664,6 +804,7 @@ export class ViewerGLRenderer {
     if (!this._glCanvas) return;
     this._glCanvas.style.display = 'none';
     this.hideWebGPUBlitCanvas();
+    this.hideCanvas2DBlitCanvas();
     this.ctx.getImageCanvas().style.visibility = 'visible';
     this._hdrRenderActive = false;
     this._lastRenderedImage = null; // Invalidate render cache
@@ -849,9 +990,14 @@ export class ViewerGLRenderer {
         this._glCanvas.style.width = `${cssW}px`;
         this._glCanvas.style.height = `${cssH}px`;
       }
-      // Also resize WebGPU blit canvas if active (HDR blit path)
+      // Also resize blit canvases if active (HDR blit path)
       if (this._webgpuBlit?.initialized && this._hdrRenderActive) {
         const blitCanvas = this._webgpuBlit.getCanvas();
+        blitCanvas.style.width = `${cssW}px`;
+        blitCanvas.style.height = `${cssH}px`;
+      }
+      if (this._canvas2dBlit?.initialized && this._hdrRenderActive) {
+        const blitCanvas = this._canvas2dBlit.getCanvas();
         blitCanvas.style.width = `${cssW}px`;
         blitCanvas.style.height = `${cssH}px`;
       }
@@ -913,6 +1059,12 @@ export class ViewerGLRenderer {
     if (this._webgpuBlit) {
       this._webgpuBlit.dispose();
       this._webgpuBlit = null;
+    }
+
+    // Cleanup Canvas2D HDR blit
+    if (this._canvas2dBlit) {
+      this._canvas2dBlit.dispose();
+      this._canvas2dBlit = null;
     }
 
     // Cleanup luminance analyzer

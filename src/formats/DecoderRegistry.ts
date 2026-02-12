@@ -15,8 +15,9 @@ import { isCineonFile } from './CineonDecoder';
 import { isTIFFFile, isFloatTIFF } from './TIFFFloatDecoder';
 import { isGainmapJPEG } from './JPEGGainmapDecoder';
 import { isHDRFile } from './HDRDecoder';
+import { isJXLFile } from './JXLDecoder';
 
-export type FormatName = 'exr' | 'dpx' | 'cineon' | 'tiff' | 'jpeg-gainmap' | 'hdr' | null;
+export type FormatName = 'exr' | 'dpx' | 'cineon' | 'tiff' | 'jpeg-gainmap' | 'hdr' | 'jxl' | null;
 
 /** Result returned by FormatDecoder.decode() and detectAndDecode() */
 export interface DecodeResult {
@@ -180,6 +181,27 @@ const hdrDecoder: FormatDecoder = {
 };
 
 /**
+ * JPEG XL format decoder adapter
+ * Detection is sync (magic byte check); decoding lazy-loads the full module.
+ */
+const jxlDecoder: FormatDecoder = {
+  formatName: 'jxl',
+  canDecode: isJXLFile,
+  async decode(buffer: ArrayBuffer) {
+    const { decodeJXL } = await import('./JXLDecoder');
+    const result = await decodeJXL(buffer);
+    return {
+      width: result.width,
+      height: result.height,
+      data: result.data,
+      channels: result.channels,
+      colorSpace: result.colorSpace,
+      metadata: result.metadata,
+    };
+  },
+};
+
+/**
  * Registry for image format decoders.
  * Detects format by magic number and dispatches to the appropriate decoder.
  */
@@ -195,6 +217,7 @@ export class DecoderRegistry {
     this.decoders.push(tiffDecoder);
     this.decoders.push(jpegGainmapDecoder);
     this.decoders.push(hdrDecoder);
+    this.decoders.push(jxlDecoder);
   }
 
   /**

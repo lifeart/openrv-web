@@ -56,3 +56,9 @@ export {
   decodeAVIFGainmapToFloat32,
   type AVIFGainmapInfo,
 } from './AVIFGainmapDecoder';
+export {
+  isJXLFile,
+  isJXLContainer,
+  decodeJXL,
+  type JXLDecodeResult,
+} from './JXLDecoder';

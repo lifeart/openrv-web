@@ -20,6 +20,7 @@ import {
 import { decoderRegistry } from '../../formats/DecoderRegistry';
 import { isGainmapJPEG, parseGainmapJPEG, decodeGainmapToFloat32 } from '../../formats/JPEGGainmapDecoder';
 import { isGainmapAVIF, parseGainmapAVIF, decodeAVIFGainmapToFloat32 } from '../../formats/AVIFGainmapDecoder';
+import { isJXLFile, isJXLContainer } from '../../formats/JXLDecoder';
 
 /**
  * Check if a filename has an EXR extension
@@ -77,6 +78,14 @@ function isJPEGExtension(filename: string): boolean {
 function isAVIFExtension(filename: string): boolean {
   const ext = filename.split('.').pop()?.toLowerCase();
   return ext === 'avif';
+}
+
+/**
+ * Check if a filename has a JXL extension
+ */
+function isJXLExtension(filename: string): boolean {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  return ext === 'jxl';
 }
 
 /**
@@ -444,6 +453,19 @@ function detectPQParametricCurve(view: DataView, start: number, end: number): bo
   return false;
 }
 
+/**
+ * Parse JXL ISOBMFF container to extract color info from colr(nclx) box.
+ * JXL ISOBMFF uses the same box structure as AVIF, so we reuse the same
+ * parsing logic: ftyp → meta → iprp → ipco → colr(nclx).
+ *
+ * Returns null if no nclx colour info found (treat as SDR).
+ */
+function parseJXLColorInfo(buffer: ArrayBuffer): AVIFColorInfo | null {
+  // JXL ISOBMFF container uses the same box hierarchy as AVIF.
+  // Reuse the existing AVIF parser since the colr(nclx) box format is identical.
+  return parseAVIFColorInfo(buffer);
+}
+
 @RegisterNode('RVFileSource')
 export class FileSourceNode extends BaseSourceNode {
   private image: HTMLImageElement | null = null;
@@ -639,6 +661,38 @@ export class FileSourceNode extends BaseSourceNode {
         }
       } catch (err) {
         console.warn('[FileSource] AVIF loading failed, falling back to standard loading:', err);
+        // Fall through to standard image loading
+      }
+    }
+
+    // Check if this is a JXL file - detect HDR via ISOBMFF colr box, SDR via WASM decode
+    if (isJXLExtension(filename)) {
+      try {
+        const response = await fetch(url);
+        if (response.ok) {
+          const buffer = await response.arrayBuffer();
+          if (isJXLFile(buffer)) {
+            // Check ISOBMFF container for HDR color info (same nclx parsing as AVIF)
+            if (isJXLContainer(buffer)) {
+              const colorInfo = parseJXLColorInfo(buffer);
+              if (colorInfo?.isHDR) {
+                await this.loadJXLHDR(buffer, colorInfo, filename, url, originalUrl);
+                return;
+              }
+            }
+            // SDR path: try browser-native decode first (faster), fall back to WASM
+            try {
+              const loaded = await this.tryLoadJXLNative(buffer, filename, url, originalUrl);
+              if (loaded) return;
+            } catch {
+              // Browser doesn't support JXL natively — fall through to WASM
+            }
+            await this.loadJXLFromBuffer(buffer, filename, url, originalUrl);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('[FileSource] JXL loading failed, falling back to standard loading:', err);
         // Fall through to standard image loading
       }
     }
@@ -1050,6 +1104,172 @@ export class FileSourceNode extends BaseSourceNode {
   }
 
   /**
+   * Load HDR JXL file using VideoFrame for GPU upload (preserves HDR values).
+   * Mirrors loadAVIFHDR — uses createImageBitmap → VideoFrame path.
+   */
+  private async loadJXLHDR(
+    buffer: ArrayBuffer,
+    colorInfo: AVIFColorInfo,
+    name: string,
+    url: string,
+    originalUrl?: string
+  ): Promise<void> {
+    const blob = new Blob([buffer], { type: 'image/jxl' });
+    const bitmap = await createImageBitmap(blob, { colorSpaceConversion: 'none' });
+    const videoFrame = new VideoFrame(bitmap, { timestamp: 0 });
+    bitmap.close();
+
+    const metadata: ImageMetadata = {
+      sourcePath: originalUrl ?? url,
+      frameNumber: 1,
+      transferFunction: colorInfo.transferFunction,
+      colorPrimaries: colorInfo.colorPrimaries,
+      colorSpace: colorInfo.colorPrimaries === 'bt2020' ? 'rec2020' : 'rec709',
+      attributes: {
+        hdr: true,
+        formatName: 'jxl-hdr',
+      },
+    };
+
+    this.cachedIPImage = new IPImage({
+      width: videoFrame.displayWidth,
+      height: videoFrame.displayHeight,
+      channels: 4,
+      dataType: 'float32',
+      data: new ArrayBuffer(4), // minimal placeholder; VideoFrame is the pixel source
+      videoFrame,
+      metadata,
+    });
+
+    this.url = url;
+    this.isEXR = false;
+    this._isHDRFormat = true;
+    this._formatName = 'jxl-hdr';
+    this.image = null;
+
+    this.metadata = {
+      name,
+      width: videoFrame.displayWidth,
+      height: videoFrame.displayHeight,
+      duration: 1,
+      fps: 24,
+    };
+
+    this.properties.setValue('url', url);
+    if (originalUrl) {
+      this.properties.setValue('originalUrl', originalUrl);
+    }
+    this.properties.setValue('width', videoFrame.displayWidth);
+    this.properties.setValue('height', videoFrame.displayHeight);
+    this.properties.setValue('isHDR', true);
+
+    this.canvasDirty = true;
+    this.markDirty();
+  }
+
+  /**
+   * Load SDR JXL file from ArrayBuffer via @jsquash/jxl WASM decoder.
+   */
+  private async loadJXLFromBuffer(
+    buffer: ArrayBuffer,
+    name: string,
+    url: string,
+    originalUrl?: string
+  ): Promise<void> {
+    const { decodeJXL } = await import('../../formats/JXLDecoder');
+    const result = await decodeJXL(buffer);
+
+    this.cachedIPImage = new IPImage({
+      width: result.width,
+      height: result.height,
+      channels: result.channels,
+      dataType: 'float32',
+      data: result.data.buffer as ArrayBuffer,
+      metadata: {
+        sourcePath: originalUrl ?? url,
+        frameNumber: 1,
+        attributes: {
+          formatName: 'jxl',
+        },
+      },
+    });
+
+    this.url = url;
+    this.isEXR = false;
+    this._isHDRFormat = false;
+    this._formatName = 'jxl';
+    this.image = null;
+
+    this.metadata = {
+      name,
+      width: result.width,
+      height: result.height,
+      duration: 1,
+      fps: 24,
+    };
+
+    this.properties.setValue('url', url);
+    if (originalUrl) {
+      this.properties.setValue('originalUrl', originalUrl);
+    }
+    this.properties.setValue('width', result.width);
+    this.properties.setValue('height', result.height);
+    this.properties.setValue('isHDR', false);
+
+    this.canvasDirty = true;
+    this.markDirty();
+  }
+
+  /**
+   * Try to load JXL as a standard SDR image using the browser's native decoder.
+   * Returns true if the browser supports JXL natively and the image loaded.
+   * Returns false if the browser can't decode JXL (caller should fall back to WASM).
+   */
+  private tryLoadJXLNative(
+    buffer: ArrayBuffer,
+    name: string,
+    url: string,
+    originalUrl?: string
+  ): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
+      const blob = new Blob([buffer], { type: 'image/jxl' });
+      const blobUrl = URL.createObjectURL(blob);
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        URL.revokeObjectURL(blobUrl);
+        this.image = img;
+        this.url = url;
+        this.isEXR = false;
+        this._isHDRFormat = false;
+        this._formatName = 'jxl';
+        this.metadata = {
+          name,
+          width: img.naturalWidth,
+          height: img.naturalHeight,
+          duration: 1,
+          fps: 24,
+        };
+        this.properties.setValue('url', url);
+        if (originalUrl) {
+          this.properties.setValue('originalUrl', originalUrl);
+        }
+        this.properties.setValue('width', img.naturalWidth);
+        this.properties.setValue('height', img.naturalHeight);
+        this.properties.setValue('isHDR', false);
+        this.markDirty();
+        this.cachedIPImage = null;
+        resolve(true);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(blobUrl);
+        resolve(false); // Browser doesn't support JXL natively
+      };
+      img.src = blobUrl;
+    });
+  }
+
+  /**
    * Get available EXR layers (only valid for EXR files)
    */
   getEXRLayers(): EXRLayerInfo[] {
@@ -1174,6 +1394,37 @@ export class FileSourceNode extends BaseSourceNode {
         }
       } catch (err) {
         console.warn('[FileSource] AVIF HDR loading failed, falling back to standard loading:', err);
+        // Fall through to standard image loading
+      }
+    }
+
+    // Check if this is a JXL file - detect HDR via ISOBMFF colr box, SDR via WASM decode
+    if (isJXLExtension(file.name)) {
+      try {
+        const buffer = await file.arrayBuffer();
+        if (isJXLFile(buffer)) {
+          // Check ISOBMFF container for HDR color info
+          if (isJXLContainer(buffer)) {
+            const colorInfo = parseJXLColorInfo(buffer);
+            if (colorInfo?.isHDR) {
+              const url = URL.createObjectURL(file);
+              await this.loadJXLHDR(buffer, colorInfo, file.name, url);
+              return;
+            }
+          }
+          // SDR path: try browser-native decode first (faster), fall back to WASM
+          const url = URL.createObjectURL(file);
+          try {
+            const loaded = await this.tryLoadJXLNative(buffer, file.name, url);
+            if (loaded) return;
+          } catch {
+            // Browser doesn't support JXL natively — fall through to WASM
+          }
+          await this.loadJXLFromBuffer(buffer, file.name, url);
+          return;
+        }
+      } catch (err) {
+        console.warn('[FileSource] JXL loading failed, falling back to standard loading:', err);
         // Fall through to standard image loading
       }
     }

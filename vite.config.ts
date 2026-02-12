@@ -16,6 +16,9 @@ export default defineConfig({
       },
     },
   },
+  optimizeDeps: {
+    exclude: ['@jsquash/jxl'],
+  },
   build: {
     target: 'es2022',
     sourcemap: true,

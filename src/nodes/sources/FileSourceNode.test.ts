@@ -1614,4 +1614,237 @@ describe('FileSourceNode', () => {
       expect(image.metadata.colorPrimaries).toBe('bt709');
     });
   });
+
+  describe('JXL support', () => {
+    /**
+     * Create a minimal JXL ISOBMFF container buffer with configurable nclx color info.
+     * Builds: ftyp(jxl ) + meta(iprp(ipco(colr(nclx)))) matching the AVIF pattern.
+     */
+    function createTestJXLBuffer(options: {
+      transferCharacteristics?: number;
+      colourPrimaries?: number;
+      includeColrBox?: boolean;
+    } = {}): ArrayBuffer {
+      const {
+        transferCharacteristics = 16, // PQ by default
+        colourPrimaries = 9, // BT.2020 by default
+        includeColrBox = true,
+      } = options;
+
+      const parts: Uint8Array[] = [];
+
+      function writeUint32BE(value: number): void {
+        const buf = new Uint8Array(4);
+        const view = new DataView(buf.buffer);
+        view.setUint32(0, value, false);
+        parts.push(buf);
+      }
+
+      function writeString(str: string): void {
+        const bytes = new Uint8Array(str.length);
+        for (let i = 0; i < str.length; i++) {
+          bytes[i] = str.charCodeAt(i);
+        }
+        parts.push(bytes);
+      }
+
+      // colr(nclx) box
+      let colrBox: Uint8Array | null = null;
+      if (includeColrBox) {
+        const colrParts: Uint8Array[] = [];
+        const colrDataSize = 8 + 4 + 4; // header(8) + 'nclx'(4) + primaries(2)+transfer(2)
+        const tempBuf = new Uint8Array(4);
+        const tempView = new DataView(tempBuf.buffer);
+        tempView.setUint32(0, colrDataSize, false);
+        colrParts.push(new Uint8Array(tempBuf));
+        // 'colr'
+        colrParts.push(new Uint8Array([0x63, 0x6f, 0x6c, 0x72]));
+        // 'nclx'
+        colrParts.push(new Uint8Array([0x6e, 0x63, 0x6c, 0x78]));
+        // primaries (2 bytes) + transfer (2 bytes)
+        const paramBuf = new Uint8Array(4);
+        const paramView = new DataView(paramBuf.buffer);
+        paramView.setUint16(0, colourPrimaries, false);
+        paramView.setUint16(2, transferCharacteristics, false);
+        colrParts.push(new Uint8Array(paramBuf));
+
+        const colrTotalLength = colrParts.reduce((s, p) => s + p.length, 0);
+        colrBox = new Uint8Array(colrTotalLength);
+        let cPos = 0;
+        for (const part of colrParts) {
+          colrBox.set(part, cPos);
+          cPos += part.length;
+        }
+      }
+
+      const ipcoContentSize = colrBox ? colrBox.length : 0;
+      const ipcoSize = 8 + ipcoContentSize;
+      const iprpSize = 8 + ipcoSize;
+      const metaSize = 12 + iprpSize;
+      const ftypSize = 16;
+
+      // ftyp
+      writeUint32BE(ftypSize);
+      writeString('ftyp');
+      writeString('jxl '); // JXL brand
+      writeUint32BE(0);
+
+      // meta (FullBox)
+      writeUint32BE(metaSize);
+      writeString('meta');
+      writeUint32BE(0); // version + flags
+
+      // iprp
+      writeUint32BE(iprpSize);
+      writeString('iprp');
+
+      // ipco
+      writeUint32BE(ipcoSize);
+      writeString('ipco');
+
+      // colr
+      if (colrBox) {
+        parts.push(colrBox);
+      }
+
+      const totalLength = parts.reduce((sum, p) => sum + p.length, 0);
+      const result = new Uint8Array(totalLength);
+      let pos = 0;
+      for (const part of parts) {
+        result.set(part, pos);
+        pos += part.length;
+      }
+      return result.buffer;
+    }
+
+    // Mock createImageBitmap and VideoFrame for HDR JXL tests
+    let origCreateImageBitmap: typeof globalThis.createImageBitmap;
+    let origVideoFrame: typeof globalThis.VideoFrame;
+
+    beforeEach(() => {
+      origCreateImageBitmap = globalThis.createImageBitmap;
+      origVideoFrame = globalThis.VideoFrame;
+
+      (globalThis as any).createImageBitmap = vi.fn(async () => ({
+        width: 32,
+        height: 32,
+        close: vi.fn(),
+      }));
+
+      (globalThis as any).VideoFrame = vi.fn((bitmap: any) => ({
+        displayWidth: bitmap.width ?? 32,
+        displayHeight: bitmap.height ?? 32,
+        close: vi.fn(),
+      }));
+    });
+
+    afterEach(() => {
+      globalThis.createImageBitmap = origCreateImageBitmap;
+      globalThis.VideoFrame = origVideoFrame;
+    });
+
+    it('FSN-080: JXL with PQ (TC=16) in ISOBMFF container detected as HDR', async () => {
+      const buffer = createTestJXLBuffer({ transferCharacteristics: 16, colourPrimaries: 9 });
+      const file = new File([buffer], 'hdr-scene.jxl', { type: 'image/jxl' });
+
+      await node.loadFile(file);
+
+      expect(node.isHDR()).toBe(true);
+      expect(node.formatName).toBe('jxl-hdr');
+    });
+
+    it('FSN-081: JXL with HLG (TC=18) in ISOBMFF container detected as HDR', async () => {
+      const buffer = createTestJXLBuffer({ transferCharacteristics: 18, colourPrimaries: 9 });
+      const file = new File([buffer], 'broadcast.jxl', { type: 'image/jxl' });
+
+      await node.loadFile(file);
+
+      expect(node.isHDR()).toBe(true);
+      expect(node.formatName).toBe('jxl-hdr');
+    });
+
+    it('FSN-082: JXL HDR metadata includes correct transferFunction and colorPrimaries', async () => {
+      const buffer = createTestJXLBuffer({ transferCharacteristics: 16, colourPrimaries: 9 });
+      const file = new File([buffer], 'cosmos.jxl', { type: 'image/jxl' });
+
+      await node.loadFile(file);
+
+      const ipImage = node.getIPImage();
+      expect(ipImage).not.toBeNull();
+      expect(ipImage!.metadata?.transferFunction).toBe('pq');
+      expect(ipImage!.metadata?.colorPrimaries).toBe('bt2020');
+    });
+
+    it('FSN-083: JXL HDR with BT.709 primaries (code=1)', async () => {
+      const buffer = createTestJXLBuffer({ transferCharacteristics: 16, colourPrimaries: 1 });
+      const file = new File([buffer], 'hdr-709.jxl', { type: 'image/jxl' });
+
+      await node.loadFile(file);
+
+      const ipImage = node.getIPImage();
+      expect(ipImage!.metadata?.colorPrimaries).toBe('bt709');
+    });
+
+    it('FSN-084: JXL ISOBMFF without colr box is still detected as JXL file', () => {
+      const buffer = createTestJXLBuffer({ includeColrBox: false });
+      // Verify magic bytes are present (ftyp + 'jxl ' brand)
+      const view = new DataView(buffer);
+      const boxType = String.fromCharCode(
+        view.getUint8(4), view.getUint8(5), view.getUint8(6), view.getUint8(7)
+      );
+      expect(boxType).toBe('ftyp');
+      const brand = String.fromCharCode(
+        view.getUint8(8), view.getUint8(9), view.getUint8(10), view.getUint8(11)
+      );
+      expect(brand).toBe('jxl ');
+    });
+
+    it('FSN-085: non-JXL file with .jxl extension falls through gracefully', async () => {
+      // Create a non-JXL buffer (PNG magic)
+      const fakeBuffer = new ArrayBuffer(100);
+      const view = new DataView(fakeBuffer);
+      view.setUint32(0, 0x89504e47, false); // PNG magic
+      const file = new File([fakeBuffer], 'fake.jxl', { type: 'image/jxl' });
+
+      await node.loadFile(file);
+
+      // Should fall through to standard image loading (SDR)
+      expect(node.isHDR()).toBe(false);
+    });
+
+    it('FSN-086: JXL ISOBMFF container with BT.709 (TC=1) should not be treated as HDR', async () => {
+      // BT.709 transfer (TC=1) is SDR
+      const buffer = createTestJXLBuffer({ transferCharacteristics: 1, colourPrimaries: 1 });
+      const file = new File([buffer], 'sdr-photo.jxl', { type: 'image/jxl' });
+
+      await node.loadFile(file);
+
+      // BT.709 is SDR, so isHDR should be false
+      expect(node.isHDR()).toBe(false);
+    });
+
+    it('FSN-087: JXL HDR metadata has correct transferFunction for PQ', async () => {
+      const buffer = createTestJXLBuffer({ transferCharacteristics: 16, colourPrimaries: 9 });
+      const file = new File([buffer], 'pq-scene.jxl', { type: 'image/jxl' });
+
+      await node.loadFile(file);
+
+      const img = node.getIPImage();
+      expect(img).not.toBeNull();
+      expect(img!.metadata.transferFunction).toBe('pq');
+      expect(img!.metadata.colorPrimaries).toBe('bt2020');
+    });
+
+    it('FSN-088: JXL HDR metadata has correct transferFunction for HLG', async () => {
+      const buffer = createTestJXLBuffer({ transferCharacteristics: 18, colourPrimaries: 9 });
+      const file = new File([buffer], 'hlg-broadcast.jxl', { type: 'image/jxl' });
+
+      await node.loadFile(file);
+
+      const img = node.getIPImage();
+      expect(img).not.toBeNull();
+      expect(img!.metadata.transferFunction).toBe('hlg');
+      expect(img!.metadata.colorPrimaries).toBe('bt2020');
+    });
+  });
 });

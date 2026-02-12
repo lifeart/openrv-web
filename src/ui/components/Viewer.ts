@@ -389,16 +389,30 @@ export class Viewer {
 
     // Async WebGPU HDR detection: when the display supports HDR but WebGL2 has no
     // native HDR output (no HLG/PQ/extended), probe WebGPU for HDR blit fallback.
-    if (this.capabilities?.webgpuAvailable && this.capabilities?.displayHDR &&
+    // If WebGPU fails, try Canvas2D HDR blit as last resort.
+    if (this.capabilities?.displayHDR &&
         !this.capabilities?.webglHLG && !this.capabilities?.webglPQ &&
         !(this.capabilities?.webglDrawingBufferStorage && this.capabilities?.canvasExtendedHDR)) {
-      detectWebGPUHDR().then(available => {
-        if (available && this.capabilities) {
-          this.capabilities.webgpuHDR = available;
-          console.log('[Viewer] WebGPU HDR available, initializing blit');
-          this.glRendererManager.initWebGPUHDRBlit();
+      const tryCanvas2DFallback = () => {
+        if (this.capabilities && (this.capabilities.canvasHLG || this.capabilities.canvasFloat16)) {
+          console.log('[Viewer] Trying Canvas2D HDR blit as last resort');
+          this.glRendererManager.initCanvas2DHDRBlit();
         }
-      }).catch(() => { /* WebGPU detection failed, stay on SDR path */ });
+      };
+
+      if (this.capabilities?.webgpuAvailable) {
+        detectWebGPUHDR().then(available => {
+          if (available && this.capabilities) {
+            this.capabilities.webgpuHDR = available;
+            console.log('[Viewer] WebGPU HDR available, initializing blit');
+            this.glRendererManager.initWebGPUHDRBlit();
+          } else {
+            tryCanvas2DFallback();
+          }
+        }).catch(() => { tryCanvas2DFallback(); });
+      } else {
+        tryCanvas2DFallback();
+      }
     }
 
     // Create paint canvas (top layer, overlaid)

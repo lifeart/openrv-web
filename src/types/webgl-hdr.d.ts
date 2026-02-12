@@ -150,6 +150,21 @@ interface HDRCanvasContextSettings {
 }
 
 // =============================================================================
+// ImageData HDR extensions
+// =============================================================================
+
+/**
+ * Augment ImageDataSettings with the experimental storageFormat property.
+ * When set to 'float32', ImageData uses Float32Array storage, enabling HDR
+ * pixel values > 1.0. Used by Canvas2DHDRBlit for putImageData with float data.
+ *
+ * @see https://html.spec.whatwg.org/multipage/canvas.html#imagedata
+ */
+interface ImageDataSettings {
+  storageFormat?: 'uint8' | 'uint16' | 'float32';
+}
+
+// =============================================================================
 // Screen Details API (experimental)
 // =============================================================================
 
