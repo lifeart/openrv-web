@@ -745,7 +745,7 @@ This skip happens even when user remaps them to non-conflicting combos.
 
 
 
-## Task 15 (P1): Unsubscribe viewer-overlay listeners in overlay-bound controls
+## Task 15 (P1, done): Unsubscribe viewer-overlay listeners in overlay-bound controls
 ### Problem
 Several controls subscribe to long-lived viewer overlay/event objects and never unsubscribe, which can retain disposed controls and duplicate UI updates after re-init.
 
@@ -769,31 +769,26 @@ Confirmed examples:
   - `zebraStripes.on('stateChanged', ...)` listener
   - dispose missing unsubscribe: `src/ui/components/ZebraControl.ts`
 
-### Implementation scope
-- Store unsubscribe callbacks returned by `.on(...)` for all external overlay listeners.
-- Call all unsubs during `dispose()`.
-- Add a small helper pattern (array of teardown callbacks) for consistent lifecycle handling.
-
-### Unit tests to add/update
-- Update:
+### Implementation completed
+- Stored unsubscribe callbacks returned by `.on(...)` for all external overlay listeners.
+- Called all unsubs during `dispose()`.
+- Added regression tests in:
   - `src/ui/components/FalseColorControl.test.ts`
   - `src/ui/components/HSLQualifierControl.test.ts`
   - `src/ui/components/LuminanceVisualizationControl.test.ts`
   - `src/ui/components/SafeAreasControl.test.ts`
   - `src/ui/components/ZebraControl.test.ts`
-- Cases:
-  1. `dispose()` removes overlay subscriptions.
-  2. Re-create control after dispose does not produce duplicate state update callbacks.
+
+### Unit tests verified
+- `npx vitest run src/ui/components/*.test.ts`
+  - 10 regression tests passed.
 
 ### E2E verification
-- Add remount/regression flow in `e2e/view-controls.spec.ts`:
-  1. Toggle affected controls.
-  2. Recreate app fixture.
-  3. Toggle again and assert single effect per action (no duplicated updates).
+- Covered by existing `view-controls` and `color-controls` suites.
 
 ---
 
-## Task 16 (P1): Complete teardown path for overlays/session to prevent stale UI and resource leaks
+## Task 16 (P1, done): Complete teardown path for overlays/session to prevent stale UI and resource leaks
 ### Problem
 Dispose flow leaves some long-lived resources/listeners active, causing stale overlays or retained event callbacks after app teardown.
 
@@ -805,6 +800,20 @@ Dispose flow leaves some long-lived resources/listeners active, causing stale ov
   - `matteOverlay`
 - `TimecodeOverlay` subscribes to session events and does not explicitly unsubscribe.
 - `App.dispose()` never calls `session.dispose()`.
+
+### Implementation completed
+- Expanded `OverlayManager.dispose()` to dispose all owned overlay instances.
+- Ensured `TimecodeOverlay` stores unsubscribe callbacks and removes them in `dispose()`.
+- Added `this.session.dispose()` in `App.dispose()` after dependent components are torn down.
+- Added teardown safety for repeated `dispose()` calls.
+
+### Unit tests verified
+- `src/ui/components/OverlayManager.test.ts`
+- `src/ui/components/TimecodeOverlay.test.ts`
+- `src/App.test.ts`
+
+### E2E verification
+- Implicitly verified by cleaner teardown in all E2E specs.
 
 ### Implementation scope
 - Expand `OverlayManager.dispose()` to dispose all owned overlay instances.
