@@ -10,7 +10,7 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 ## Features
 
 ### Media Support
-- Single images (PNG, JPEG, WebP, EXR, Radiance HDR)
+- Single images (PNG, JPEG, WebP, JPEG XL, EXR, Radiance HDR)
 - **EXR Format Support** - full HDR image loading via WebAssembly decoder
   - Float32 texture support for HDR precision
   - Multi-layer EXR with AOV (Arbitrary Output Variable) selection
@@ -21,6 +21,11 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
   - RGBE shared-exponent encoding with adaptive RLE decompression
   - Header metadata (exposure, gamma, primaries)
   - Automatic format detection via `#?RADIANCE` / `#?RGBE` magic bytes
+- **JPEG XL (.jxl)** - modern HDR-capable image format
+  - SDR decode via `@jsquash/jxl` WebAssembly decoder
+  - HDR path via browser-native `createImageBitmap` → `VideoFrame` (same pattern as AVIF HDR)
+  - ISOBMFF container parsing for `colr(nclx)` HDR transfer detection (HLG/PQ)
+  - Bare codestream (`0xFF 0x0A`) and container format support
 - Video files (MP4, WebM)
   - **ProRes/DNxHD Codec Detection** - identifies unsupported professional codecs and provides FFmpeg transcoding guidance
 - Image sequences (numbered files like `frame_001.png`, `file.0001.exr`)
@@ -92,6 +97,11 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
   - **User gamut preference** - force sRGB or Display P3 output via Display Profile settings
   - **HDR-aware scopes** - waveform, histogram, and vectorscope extend beyond 1.0 for HDR content
   - **WebGPU backend** - renderer abstraction with WebGPU migration path (rgba16float, extended tone mapping)
+  - **Canvas2D HDR fallback** - last-resort HDR display path when WebGL2 native HDR and WebGPU are unavailable
+    - Uses Canvas 2D API with `srgb-linear` or `rec2100-hlg` color spaces and float16 pixel storage
+    - Automatic fallback chain: srgb-linear + colorType → pixelFormat → rec2100-hlg + colorType → pixelFormat
+    - Float32 ImageData with browser-handled float32→float16 conversion
+    - Row-flipped readback from WebGL2 FBO for correct display
   - Full backward compatibility - all features are opt-in, fallback to sRGB on unsupported browsers
 
 ### Transform & Effects
@@ -493,7 +503,8 @@ src/
 ├── formats/
 │   ├── EXRDecoder.ts   # WebAssembly EXR decoder with multi-layer support
 │   ├── EXRPIZCodec.ts  # PIZ wavelet compression codec (Huffman + Haar + LUT)
-│   └── HDRDecoder.ts   # Radiance HDR (.hdr/.pic) decoder with RLE support
+│   ├── HDRDecoder.ts   # Radiance HDR (.hdr/.pic) decoder with RLE support
+│   └── JXLDecoder.ts   # JPEG XL decoder (WASM SDR + browser-native HDR)
 ├── nodes/
 │   ├── base/           # IPNode, NodeFactory with @RegisterNode decorator
 │   ├── sources/        # FileSourceNode, VideoSourceNode, SequenceSourceNode
@@ -501,6 +512,7 @@ src/
 ├── render/             # WebGL2 renderer and shaders (incl. tone mapping)
 │   ├── RendererBackend.ts      # Renderer abstraction (WebGL2/WebGPU backends)
 │   ├── WebGPUBackend.ts        # WebGPU HDR renderer (rgba16float, extended tone mapping)
+│   ├── Canvas2DHDRBlit.ts      # Canvas 2D API HDR fallback (float16, srgb-linear/rec2100-hlg)
 │   └── TextureCacheManager.ts  # LRU texture cache for GPU performance
 ├── ui/
 │   ├── components/     # Viewer, Timeline, Toolbar, Controls, TimelineEditor
@@ -618,7 +630,7 @@ const rootNode = session.graphParseResult?.rootNode;
 # Type check
 pnpm typecheck
 
-# Run unit tests (9700+ tests)
+# Run unit tests (10400+ tests)
 pnpm test
 
 # Run e2e tests (requires dev server running)
@@ -634,7 +646,7 @@ pnpm preview
 
 ### Test Coverage
 
-The codebase includes comprehensive test coverage with **9700+ unit tests** across 239 test files and **103 e2e test suites**:
+The codebase includes comprehensive test coverage with **10400+ unit tests** across 251 test files and **103 e2e test suites**:
 
 - **Color Tools**: ColorWheels (46 tests), FalseColor (30 tests), HSLQualifier (57 tests), Curves, CDL, LogCurves (27 tests), DisplayTransfer, DisplayProfileControl
 - **OCIO**: OCIOConfig, OCIOTransform, OCIOProcessor (color space transforms, config parsing, reverse transforms)
@@ -645,8 +657,8 @@ The codebase includes comprehensive test coverage with **9700+ unit tests** acro
 - **Overlays**: TimecodeOverlay (50 tests), SafeAreasOverlay (46 tests), SpotlightOverlay (62 tests)
 - **UI Components**: ThemeControl, HistoryPanel, InfoPanel, Modal, Button, CurveEditor (33 tests), AutoSaveIndicator (35 tests), TimelineEditor (25 tests), ThumbnailManager (12 tests), BackgroundPatternControl (32 tests), PARControl (13 tests)
 - **Core**: Session, Graph, GTO loading/export, SequenceLoader (88 tests), AutoSaveManager (28 tests), SessionSerializer (35 tests), SnapshotManager (16 tests), PlaylistManager (34 tests)
-- **Formats**: EXRDecoder (multi-layer, channel remapping), HDRDecoder (34 tests), DecoderRegistry, ChannelSelect (EXR layer UI)
-- **Render**: TextureCacheManager (22 tests)
+- **Formats**: EXRDecoder (multi-layer, channel remapping), HDRDecoder (34 tests), JXLDecoder, DecoderRegistry, ChannelSelect (EXR layer UI)
+- **Render**: TextureCacheManager (22 tests), Canvas2DHDRBlit (23 tests)
 - **Export/Import**: AnnotationJSONExporter (33 tests incl. import), AnnotationPDFExporter (21 tests), OTIOParser (42 tests)
 - **Audio**: AudioPlaybackManager (36 tests), WaveformRenderer (35 tests)
 - **Filters**: NoiseReduction (18 tests), WebGLNoiseReduction
@@ -772,11 +784,12 @@ export class MyGroupNode extends BaseGroupNode {
 - **Vitest** - Unit testing framework
 - **Playwright** - End-to-end testing
 - **WebGL2** - GPU-accelerated rendering (tone mapping, LUT processing, color transforms)
-- **WebAssembly** - High-performance EXR decoding
+- **WebAssembly** - High-performance EXR and JPEG XL decoding
 - **WebCodecs API** - Frame-accurate video decoding via [mediabunny](https://github.com/nickarora/mediabunny)
 - **Web Audio API** - Audio playback, waveform generation, volume control, and pitch correction
 - **Fullscreen API** - Native fullscreen and presentation modes
 - **Mediabunny** - Also used for audio extraction fallback when native fetch is blocked by CORS
+- **@jsquash/jxl** - JPEG XL WebAssembly decoder (libjxl)
 - **gto-js** - RV/GTO file parsing
 - **gl-matrix** - Matrix/vector math
 
