@@ -76,6 +76,7 @@ export class CropManager {
 
     // Create crop overlay canvas
     this.cropOverlay = document.createElement('canvas');
+    this.cropOverlay.dataset.testid = 'viewer-crop-overlay';
     this.cropOverlay.style.cssText = `
       position: absolute;
       top: 0;

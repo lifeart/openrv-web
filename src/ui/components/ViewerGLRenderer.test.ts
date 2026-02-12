@@ -31,6 +31,7 @@ function createMockContext(): GLRendererContext {
   return {
     getCanvasContainer: vi.fn(() => document.createElement('div')),
     getImageCanvas: vi.fn(() => document.createElement('canvas')),
+    getPaintCanvas: vi.fn(() => document.createElement('canvas')),
     getColorPipeline: vi.fn(),
     getTransformManager: vi.fn(),
     getFilterSettings: vi.fn(),

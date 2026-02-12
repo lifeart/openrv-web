@@ -49,6 +49,7 @@ import { PerfTrace } from '../../utils/PerfTrace';
 export interface GLRendererContext {
   getCanvasContainer(): HTMLElement;
   getImageCanvas(): HTMLCanvasElement;
+  getPaintCanvas(): HTMLCanvasElement;
   getColorPipeline(): ColorPipelineManager;
   getTransformManager(): TransformManager;
   getFilterSettings(): FilterSettings;
@@ -566,9 +567,10 @@ export class ViewerGLRenderer {
       await blit.initialize();
       this._webgpuBlit = blit;
 
-      // Append WebGPU canvas to the container (after GL canvas)
+      // Insert WebGPU canvas before the paint canvas so annotations overlay it
       const container = this.ctx.getCanvasContainer();
-      container.appendChild(blit.getCanvas());
+      const paintCanvas = this.ctx.getPaintCanvas();
+      container.insertBefore(blit.getCanvas(), paintCanvas);
 
       console.log('[Viewer] WebGPU HDR blit initialized');
 

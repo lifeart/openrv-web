@@ -269,6 +269,7 @@ export class Viewer {
     return {
       getCanvasContainer: () => this.canvasContainer,
       getImageCanvas: () => this.imageCanvas,
+      getPaintCanvas: () => this.paintCanvas,
       getColorPipeline: () => this.colorPipeline,
       getTransformManager: () => this.transformManager,
       getFilterSettings: () => this.filterSettings,
@@ -582,6 +583,13 @@ export class Viewer {
     this.sourceHeight = 360;
     this.displayWidth = 640;
     this.displayHeight = 360;
+
+    // Configure paint canvas at physical resolution for retina annotations
+    const dpr = window.devicePixelRatio || 1;
+    this.physicalWidth = Math.max(1, Math.round(this.displayWidth * dpr));
+    this.physicalHeight = Math.max(1, Math.round(this.displayHeight * dpr));
+    this.updatePaintCanvasSize(this.displayWidth, this.displayHeight);
+
     // Draw placeholder with hi-DPI support
     this.drawPlaceholder();
     this.updateOverlayDimensions();
@@ -611,9 +619,11 @@ export class Viewer {
       this.physicalHeight = Math.max(1, Math.round(this.physicalHeight * capScale));
     }
 
-    // Reset 2D canvases at LOGICAL resolution (no DPR scaling for CPU effects)
+    // Reset image canvas at LOGICAL resolution (no DPR scaling for CPU effects)
     resetCanvasFromHiDPI(this.imageCanvas, this.imageCtx, width, height);
-    resetCanvasFromHiDPI(this.paintCanvas, this.paintCtx, width, height);
+
+    // Paint canvas at PHYSICAL resolution with CSS logical sizing for retina annotations
+    this.updatePaintCanvasSize(width, height);
 
     this.cropManager.resetOverlayCanvas(width, height);
 
@@ -623,6 +633,18 @@ export class Viewer {
 
     this.updateOverlayDimensions();
     this.updateCanvasPosition();
+  }
+
+  /**
+   * Configure paint canvas at physical (DPR-scaled) resolution with CSS logical sizing.
+   * This ensures annotations render at retina quality matching the GL canvas.
+   */
+  private updatePaintCanvasSize(logicalWidth: number, logicalHeight: number): void {
+    this.paintCanvas.width = this.physicalWidth;
+    this.paintCanvas.height = this.physicalHeight;
+    this.paintCanvas.style.width = `${logicalWidth}px`;
+    this.paintCanvas.style.height = `${logicalHeight}px`;
+    this.paintCtx.setTransform(1, 0, 0, 1, 0, 0);
   }
 
   /**
@@ -713,6 +735,7 @@ export class Viewer {
         this.physicalWidth = Math.max(1, Math.round(this.displayWidth * dpr));
         this.physicalHeight = Math.max(1, Math.round(this.displayHeight * dpr));
         this.glRendererManager.resizeIfActive(this.physicalWidth, this.physicalHeight);
+        this.updatePaintCanvasSize(this.displayWidth, this.displayHeight);
         this.scheduleRender();
       }
       // Re-register for the new DPR value
@@ -1740,20 +1763,25 @@ export class Viewer {
     if (this.displayWidth === 0 || this.displayHeight === 0) return;
 
     const ctx = this.paintCtx;
-    ctx.clearRect(0, 0, this.displayWidth, this.displayHeight);
+    // Clear at physical resolution (no DPR scale on paint canvas context)
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, this.paintCanvas.width, this.paintCanvas.height);
 
     // Get annotations with ghost effect
     const annotations = this.paintEngine.getAnnotationsWithGhost(this.session.currentFrame);
 
     if (annotations.length === 0) return;
 
-    // Render annotations
+    const dpr = window.devicePixelRatio || 1;
+
+    // Render annotations at retina resolution (PaintRenderer applies DPR scaling internally)
     this.paintRenderer.renderAnnotations(annotations, {
       width: this.displayWidth,
       height: this.displayHeight,
+      dpr,
     });
 
-    // Copy to paint canvas
+    // Copy physical-resolution PaintRenderer canvas to physical-resolution paint canvas
     ctx.drawImage(this.paintRenderer.getCanvas(), 0, 0);
   }
 

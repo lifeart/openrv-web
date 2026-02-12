@@ -184,6 +184,7 @@ export class WebGPUHDRBlit {
 
   constructor() {
     this.canvas = document.createElement('canvas');
+    this.canvas.dataset.testid = 'viewer-webgpu-blit-canvas';
     this.canvas.style.cssText = 'position:absolute;top:0;left:0;display:none;';
   }
 

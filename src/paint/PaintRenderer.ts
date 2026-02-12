@@ -14,16 +14,18 @@ import {
 import { safeCanvasContext2D } from '../color/SafeCanvasContext';
 
 export interface RenderOptions {
-  width: number;  // Canvas width in pixels
-  height: number; // Canvas height in pixels
+  width: number;  // Canvas width in logical pixels
+  height: number; // Canvas height in logical pixels
   opacity?: number;
   ghostTintBefore?: string; // Tint for ghost annotations from before
   ghostTintAfter?: string;  // Tint for ghost annotations from after
+  dpr?: number;  // Device pixel ratio for retina support (default: 1)
 }
 
 export class PaintRenderer {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
+  private _dpr = 1;
 
   /**
    * Create a PaintRenderer.
@@ -47,13 +49,21 @@ export class PaintRenderer {
     return this.canvas;
   }
 
-  resize(width: number, height: number): void {
-    this.canvas.width = width;
-    this.canvas.height = height;
+  resize(width: number, height: number, dpr = 1): void {
+    this._dpr = dpr;
+    this.canvas.width = Math.round(width * dpr);
+    this.canvas.height = Math.round(height * dpr);
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (dpr !== 1) {
+      this.ctx.scale(dpr, dpr);
+    }
   }
 
   clear(): void {
+    this.ctx.save();
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.ctx.restore();
   }
 
   // Render all annotations with optional ghost effect
@@ -61,7 +71,7 @@ export class PaintRenderer {
     annotations: Array<{ annotation: Annotation; opacity: number }>,
     options: RenderOptions
   ): void {
-    this.resize(options.width, options.height);
+    this.resize(options.width, options.height, options.dpr);
     this.clear();
 
     for (const { annotation, opacity } of annotations) {
@@ -337,9 +347,10 @@ export class PaintRenderer {
     const ctx = this.ctx;
     const { width, height } = options;
 
-    // Save current state and reset transform for callout line
+    // Save current state and reset transform for callout line (preserve DPR scale)
     ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform
+    const dpr = this._dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.globalAlpha = opacity;
 
     // Convert positions to canvas coordinates
@@ -578,8 +589,11 @@ export class PaintRenderer {
     if (points.length === 0) return;
 
     // Ensure canvas is properly sized (don't clear - may have existing annotations)
-    if (this.canvas.width !== options.width || this.canvas.height !== options.height) {
-      this.resize(options.width, options.height);
+    const dpr = options.dpr ?? 1;
+    const expectedW = Math.round(options.width * dpr);
+    const expectedH = Math.round(options.height * dpr);
+    if (this.canvas.width !== expectedW || this.canvas.height !== expectedH) {
+      this.resize(options.width, options.height, dpr);
     }
 
     const tempStroke: PenStroke = {
@@ -613,8 +627,11 @@ export class PaintRenderer {
     options: RenderOptions
   ): void {
     // Ensure canvas is properly sized (don't clear - may have existing annotations)
-    if (this.canvas.width !== options.width || this.canvas.height !== options.height) {
-      this.resize(options.width, options.height);
+    const dpr = options.dpr ?? 1;
+    const expectedW = Math.round(options.width * dpr);
+    const expectedH = Math.round(options.height * dpr);
+    if (this.canvas.width !== expectedW || this.canvas.height !== expectedH) {
+      this.resize(options.width, options.height, dpr);
     }
 
     const tempShape: ShapeAnnotation = {

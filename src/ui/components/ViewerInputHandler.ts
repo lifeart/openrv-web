@@ -572,10 +572,12 @@ export class ViewerInputHandler {
     if (dw === 0 || dh === 0) return;
 
     const ctx = this.ctx.getPaintCtx();
+    const paintCanvas = this.ctx.getPaintCanvas();
     const paintEngine = this.ctx.getPaintEngine();
     const paintRenderer = this.ctx.getPaintRenderer();
     const session = this.ctx.getSession();
-    const renderOptions = { width: dw, height: dh };
+    const dpr = window.devicePixelRatio || 1;
+    const renderOptions = { width: dw, height: dh, dpr };
 
     const annotations = paintEngine.getAnnotationsWithGhost(session.currentFrame);
     paintRenderer.renderAnnotations(annotations, renderOptions);
@@ -590,7 +592,8 @@ export class ViewerInputHandler {
       renderOptions,
     );
 
-    ctx.clearRect(0, 0, dw, dh);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, paintCanvas.width, paintCanvas.height);
     ctx.drawImage(paintRenderer.getCanvas(), 0, 0);
   }
 
@@ -605,10 +608,12 @@ export class ViewerInputHandler {
     if (dw === 0 || dh === 0) return;
 
     const ctx = this.ctx.getPaintCtx();
+    const paintCanvas = this.ctx.getPaintCanvas();
     const paintEngine = this.ctx.getPaintEngine();
     const paintRenderer = this.ctx.getPaintRenderer();
     const session = this.ctx.getSession();
-    const renderOptions = { width: dw, height: dh };
+    const dpr = window.devicePixelRatio || 1;
+    const renderOptions = { width: dw, height: dh, dpr };
 
     const annotations = paintEngine.getAnnotationsWithGhost(session.currentFrame);
     paintRenderer.renderAnnotations(annotations, renderOptions);
@@ -623,7 +628,8 @@ export class ViewerInputHandler {
       renderOptions,
     );
 
-    ctx.clearRect(0, 0, dw, dh);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, paintCanvas.width, paintCanvas.height);
     ctx.drawImage(paintRenderer.getCanvas(), 0, 0);
   }
 

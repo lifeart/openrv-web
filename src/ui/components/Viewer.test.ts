@@ -25,6 +25,7 @@ interface TestableViewer {
   container: HTMLElement;
   canvasContainer: HTMLElement;
   imageCanvas: HTMLCanvasElement;
+  paintCanvas: HTMLCanvasElement;
 
   // Session reference (writable for mocking – loosely typed so tests can supply partial mocks)
   session: Partial<Session> & { currentSource?: MediaSource | null };
@@ -61,6 +62,12 @@ interface TestableViewer {
   // Display dimensions
   displayWidth: number;
   displayHeight: number;
+  physicalWidth: number;
+  physicalHeight: number;
+
+  // Canvas sizing
+  setCanvasSize(width: number, height: number): void;
+  initializeCanvas(): void;
 
   // Mouse / pixel probe internals
   pixelProbe: PixelProbe;
@@ -991,6 +998,112 @@ describe('Viewer', () => {
       expect(() => {
         paintEngine.emit('toolChanged', 'pen');
       }).not.toThrow();
+    });
+  });
+
+  describe('paint canvas retina support', () => {
+    it('VWR-060: paint canvas uses physical dimensions at DPR=1', () => {
+      const t = testable(viewer);
+      // At DPR=1, physical = logical
+      expect(t.paintCanvas.width).toBe(t.physicalWidth);
+      expect(t.paintCanvas.height).toBe(t.physicalHeight);
+      expect(t.paintCanvas.width).toBe(t.displayWidth);
+      expect(t.paintCanvas.height).toBe(t.displayHeight);
+    });
+
+    it('VWR-061: paint canvas has CSS logical sizing set', () => {
+      const t = testable(viewer);
+      expect(t.paintCanvas.style.width).toBe(`${t.displayWidth}px`);
+      expect(t.paintCanvas.style.height).toBe(`${t.displayHeight}px`);
+    });
+
+    it('VWR-062: paint canvas uses DPR-scaled dimensions at DPR=2', () => {
+      const originalDPR = window.devicePixelRatio;
+      try {
+        Object.defineProperty(window, 'devicePixelRatio', { value: 2, configurable: true });
+
+        const session2 = new Session();
+        const paintEngine2 = new PaintEngine();
+        const viewer2 = new Viewer({ session: session2, paintEngine: paintEngine2 });
+        const t = testable(viewer2);
+
+        // Paint canvas physical dimensions should be 2x logical
+        expect(t.physicalWidth).toBe(Math.round(t.displayWidth * 2));
+        expect(t.physicalHeight).toBe(Math.round(t.displayHeight * 2));
+        expect(t.paintCanvas.width).toBe(t.physicalWidth);
+        expect(t.paintCanvas.height).toBe(t.physicalHeight);
+
+        // CSS dimensions should be logical
+        expect(t.paintCanvas.style.width).toBe(`${t.displayWidth}px`);
+        expect(t.paintCanvas.style.height).toBe(`${t.displayHeight}px`);
+
+        viewer2.dispose();
+      } finally {
+        Object.defineProperty(window, 'devicePixelRatio', { value: originalDPR, configurable: true });
+      }
+    });
+
+    it('VWR-063: setCanvasSize updates paint canvas to physical resolution', () => {
+      const originalDPR = window.devicePixelRatio;
+      try {
+        Object.defineProperty(window, 'devicePixelRatio', { value: 2, configurable: true });
+
+        const session2 = new Session();
+        const paintEngine2 = new PaintEngine();
+        const viewer2 = new Viewer({ session: session2, paintEngine: paintEngine2 });
+        const t = testable(viewer2);
+
+        // Simulate media load with specific dimensions
+        t.setCanvasSize(800, 600);
+
+        expect(t.displayWidth).toBe(800);
+        expect(t.displayHeight).toBe(600);
+        expect(t.physicalWidth).toBe(1600);
+        expect(t.physicalHeight).toBe(1200);
+        expect(t.paintCanvas.width).toBe(1600);
+        expect(t.paintCanvas.height).toBe(1200);
+        expect(t.paintCanvas.style.width).toBe('800px');
+        expect(t.paintCanvas.style.height).toBe('600px');
+
+        viewer2.dispose();
+      } finally {
+        Object.defineProperty(window, 'devicePixelRatio', { value: originalDPR, configurable: true });
+      }
+    });
+
+    it('VWR-064: paint canvas physical area equals image canvas area times DPR squared', () => {
+      const originalDPR = window.devicePixelRatio;
+      try {
+        Object.defineProperty(window, 'devicePixelRatio', { value: 2, configurable: true });
+
+        const session2 = new Session();
+        const paintEngine2 = new PaintEngine();
+        const viewer2 = new Viewer({ session: session2, paintEngine: paintEngine2 });
+        const t = testable(viewer2);
+
+        t.setCanvasSize(960, 540);
+
+        const imageArea = t.imageCanvas.width * t.imageCanvas.height;
+        const paintArea = t.paintCanvas.width * t.paintCanvas.height;
+        const dprSquared = 4; // 2^2
+
+        // Paint canvas should have DPR^2 times the pixels of the logical image canvas
+        expect(paintArea).toBe(imageArea * dprSquared);
+
+        viewer2.dispose();
+      } finally {
+        Object.defineProperty(window, 'devicePixelRatio', { value: originalDPR, configurable: true });
+      }
+    });
+
+    it('VWR-065: paint canvas CSS dimensions match image canvas intrinsic dimensions', () => {
+      const t = testable(viewer);
+      t.setCanvasSize(1024, 768);
+
+      // Image canvas has no CSS styles (intrinsic = canvas.width/height)
+      // Paint canvas CSS should match image canvas intrinsic size
+      expect(t.paintCanvas.style.width).toBe(`${t.imageCanvas.width}px`);
+      expect(t.paintCanvas.style.height).toBe(`${t.imageCanvas.height}px`);
     });
   });
 
