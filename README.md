@@ -10,7 +10,7 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 ## Features
 
 ### Media Support
-- Single images (PNG, JPEG, WebP, JPEG XL, EXR, Radiance HDR)
+- Single images (PNG, JPEG, WebP, JPEG XL, HEIC/HEIF, EXR, Radiance HDR)
 - **EXR Format Support** - full HDR image loading via WebAssembly decoder
   - Float32 texture support for HDR precision
   - Multi-layer EXR with AOV (Arbitrary Output Variable) selection
@@ -26,6 +26,13 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
   - HDR path via browser-native `createImageBitmap` → `VideoFrame` (same pattern as AVIF HDR)
   - ISOBMFF container parsing for `colr(nclx)` HDR transfer detection (HLG/PQ)
   - Bare codestream (`0xFF 0x0A`) and container format support
+- **HEIC/HEIF (.heic/.heif)** - Apple iPhone photos with HDR gainmap support
+  - Native decoding via `createImageBitmap` on Safari
+  - Cross-browser WASM fallback via `libheif-js` for Chrome/Firefox/Edge
+  - **HDR Gainmap** decoding (Apple `urn:com:apple:photo:2020:aux:hdrgainmap` and ISO 21496-1 standard)
+  - ISOBMFF container parsing for gainmap extraction and `colr(nclx)` HDR transfer detection (HLG/PQ)
+  - HDR reconstruction: sRGB-to-linear base + gain map with configurable headroom
+  - Standalone HEIC builder for gainmap item decoding (wraps raw HEVC data with hvcC config)
 - Video files (MP4, WebM)
   - **ProRes/DNxHD Codec Detection** - identifies unsupported professional codecs and provides FFmpeg transcoding guidance
 - Image sequences (numbered files like `frame_001.png`, `file.0001.exr`)
@@ -504,7 +511,9 @@ src/
 │   ├── EXRDecoder.ts   # WebAssembly EXR decoder with multi-layer support
 │   ├── EXRPIZCodec.ts  # PIZ wavelet compression codec (Huffman + Haar + LUT)
 │   ├── HDRDecoder.ts   # Radiance HDR (.hdr/.pic) decoder with RLE support
-│   └── JXLDecoder.ts   # JPEG XL decoder (WASM SDR + browser-native HDR)
+│   ├── JXLDecoder.ts   # JPEG XL decoder (WASM SDR + browser-native HDR)
+│   ├── HEICGainmapDecoder.ts  # HEIC HDR gainmap decoder (ISOBMFF parsing, HDR reconstruction)
+│   └── HEICWasmDecoder.ts     # HEIC WASM fallback via libheif-js (Chrome/Firefox/Edge)
 ├── nodes/
 │   ├── base/           # IPNode, NodeFactory with @RegisterNode decorator
 │   ├── sources/        # FileSourceNode, VideoSourceNode, SequenceSourceNode
@@ -657,7 +666,7 @@ The codebase includes comprehensive test coverage with **10400+ unit tests** acr
 - **Overlays**: TimecodeOverlay (50 tests), SafeAreasOverlay (46 tests), SpotlightOverlay (62 tests)
 - **UI Components**: ThemeControl, HistoryPanel, InfoPanel, Modal, Button, CurveEditor (33 tests), AutoSaveIndicator (35 tests), TimelineEditor (25 tests), ThumbnailManager (12 tests), BackgroundPatternControl (32 tests), PARControl (13 tests)
 - **Core**: Session, Graph, GTO loading/export, SequenceLoader (88 tests), AutoSaveManager (28 tests), SessionSerializer (35 tests), SnapshotManager (16 tests), PlaylistManager (34 tests)
-- **Formats**: EXRDecoder (multi-layer, channel remapping), HDRDecoder (34 tests), JXLDecoder, DecoderRegistry, ChannelSelect (EXR layer UI)
+- **Formats**: EXRDecoder (multi-layer, channel remapping), HDRDecoder (34 tests), JXLDecoder, HEICGainmapDecoder, HEICWasmDecoder, DecoderRegistry, ChannelSelect (EXR layer UI)
 - **Render**: TextureCacheManager (22 tests), Canvas2DHDRBlit (23 tests)
 - **Export/Import**: AnnotationJSONExporter (33 tests incl. import), AnnotationPDFExporter (21 tests), OTIOParser (42 tests)
 - **Audio**: AudioPlaybackManager (36 tests), WaveformRenderer (35 tests)
@@ -790,6 +799,7 @@ export class MyGroupNode extends BaseGroupNode {
 - **Fullscreen API** - Native fullscreen and presentation modes
 - **Mediabunny** - Also used for audio extraction fallback when native fetch is blocked by CORS
 - **@jsquash/jxl** - JPEG XL WebAssembly decoder (libjxl)
+- **libheif-js** - HEIC/HEIF WebAssembly decoder (libheif) for cross-browser support
 - **gto-js** - RV/GTO file parsing
 - **gl-matrix** - Matrix/vector math
 
