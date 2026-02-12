@@ -851,4 +851,275 @@ describe('HeaderBar', () => {
       expect(sessionNameDisplay.style.background).toBe('transparent');
     });
   });
+
+  describe('image mode', () => {
+    const findPlayButton = (el: HTMLElement) =>
+      Array.from(el.querySelectorAll('button')).find(
+        (btn) => btn.title?.includes('Play') || btn.title?.includes('Pause')
+      ) as HTMLButtonElement;
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('HDR-U200: setImageMode(true) fades out playback group immediately', () => {
+      const el = headerBar.render();
+      headerBar.setImageMode(true);
+      const playBtn = findPlayButton(el);
+      const group = playBtn.parentElement!;
+      expect(group.style.opacity).toBe('0');
+      expect(group.style.pointerEvents).toBe('none');
+    });
+
+    it('HDR-U201: setImageMode(true) collapses playback group after transition', () => {
+      const el = headerBar.render();
+      headerBar.setImageMode(true);
+      vi.advanceTimersByTime(350);
+      const playBtn = findPlayButton(el);
+      const group = playBtn.parentElement!;
+      expect(group.style.display).toBe('none');
+    });
+
+    it('HDR-U202: setImageMode(true) hides timecode display after transition', () => {
+      headerBar.render();
+      headerBar.setImageMode(true);
+      vi.advanceTimersByTime(350);
+      const timecodeEl = headerBar.getTimecodeDisplay().render();
+      expect(timecodeEl.style.display).toBe('none');
+    });
+
+    it('HDR-U203: setImageMode(true) hides volume control after transition', () => {
+      headerBar.render();
+      headerBar.setImageMode(true);
+      vi.advanceTimersByTime(350);
+      const volumeEl = headerBar.getVolumeControl().render();
+      expect(volumeEl.style.display).toBe('none');
+    });
+
+    it('HDR-U204: setImageMode(false) restores playback group visibility', () => {
+      const el = headerBar.render();
+      headerBar.setImageMode(true);
+      vi.advanceTimersByTime(350);
+      headerBar.setImageMode(false);
+      const playBtn = findPlayButton(el);
+      const group = playBtn.parentElement!;
+      expect(group.style.display).not.toBe('none');
+      expect(group.style.opacity).toBe('1');
+    });
+
+    it('HDR-U205: setImageMode(false) restores timecode display', () => {
+      headerBar.render();
+      headerBar.setImageMode(true);
+      vi.advanceTimersByTime(350);
+      headerBar.setImageMode(false);
+      const timecodeEl = headerBar.getTimecodeDisplay().render();
+      expect(timecodeEl.style.display).not.toBe('none');
+    });
+
+    it('HDR-U206: setImageMode(false) restores volume control', () => {
+      headerBar.render();
+      headerBar.setImageMode(true);
+      vi.advanceTimersByTime(350);
+      headerBar.setImageMode(false);
+      const volumeEl = headerBar.getVolumeControl().render();
+      expect(volumeEl.style.display).not.toBe('none');
+    });
+
+    it('HDR-U207: setImageMode(true) twice is idempotent', () => {
+      headerBar.render();
+      expect(() => {
+        headerBar.setImageMode(true);
+        headerBar.setImageMode(true);
+        vi.advanceTimersByTime(350);
+      }).not.toThrow();
+    });
+
+    it('HDR-U208: setImageMode(false) when already visible is no-op', () => {
+      headerBar.render();
+      expect(() => {
+        headerBar.setImageMode(false);
+      }).not.toThrow();
+    });
+
+    it('HDR-U209: rapid toggle true→false cancels hide transition', () => {
+      const el = headerBar.render();
+      headerBar.setImageMode(true);
+      // Immediately restore before timer fires
+      headerBar.setImageMode(false);
+      vi.advanceTimersByTime(350);
+      const playBtn = findPlayButton(el);
+      const group = playBtn.parentElement!;
+      expect(group.style.display).not.toBe('none');
+    });
+
+    it('HDR-U210: file operation buttons remain visible in image mode', () => {
+      const el = headerBar.render();
+      headerBar.setImageMode(true);
+      vi.advanceTimersByTime(350);
+      const saveBtn = Array.from(el.querySelectorAll('button')).find(
+        (btn) => btn.title?.includes('Save project')
+      );
+      expect(saveBtn).toBeDefined();
+      expect((saveBtn as HTMLElement).style.display).not.toBe('none');
+      expect((saveBtn as HTMLElement).closest('[style*="display: none"]')).toBeNull();
+    });
+
+    it('HDR-U211: help button remains visible in image mode', () => {
+      const el = headerBar.render();
+      headerBar.setImageMode(true);
+      vi.advanceTimersByTime(350);
+      const helpBtn = Array.from(el.querySelectorAll('button')).find(
+        (btn) => btn.title?.includes('Keyboard shortcuts')
+      );
+      expect(helpBtn).toBeDefined();
+      expect((helpBtn as HTMLElement).closest('[style*="display: none"]')).toBeNull();
+    });
+
+    it('HDR-U212: dispose clears pending image transition timers', () => {
+      const el = headerBar.render();
+      headerBar.setImageMode(true);
+      // Dispose before transition completes
+      headerBar.dispose();
+      vi.advanceTimersByTime(350);
+      // Elements should NOT have been collapsed (timers should be cleared)
+      const playBtn = findPlayButton(el);
+      const group = playBtn.parentElement!;
+      // display was never set to 'none' because the timer was cleared
+      expect(group.style.display).not.toBe('none');
+    });
+
+    it('HDR-U213: setImageMode(true) sets aria-hidden on elements', () => {
+      const el = headerBar.render();
+      headerBar.setImageMode(true);
+      const playBtn = findPlayButton(el);
+      const group = playBtn.parentElement!;
+      expect(group.getAttribute('aria-hidden')).toBe('true');
+    });
+
+    it('HDR-U214: setImageMode(false) removes aria-hidden', () => {
+      headerBar.render();
+      headerBar.setImageMode(true);
+      vi.advanceTimersByTime(350);
+      headerBar.setImageMode(false);
+      const timecodeEl = headerBar.getTimecodeDisplay().render();
+      expect(timecodeEl.hasAttribute('aria-hidden')).toBe(false);
+    });
+
+    // --- Regression tests for QA/review findings ---
+
+    it('HDR-U215: dispose during fade-out does not collapse elements (regression: stale timer)', () => {
+      const el = headerBar.render();
+      headerBar.setImageMode(true);
+      // Opacity is set immediately, but display:none hasn't fired yet
+      const playBtn = findPlayButton(el);
+      const group = playBtn.parentElement!;
+      expect(group.style.opacity).toBe('0');
+      // Dispose mid-transition
+      headerBar.dispose();
+      vi.advanceTimersByTime(500);
+      // The display:none timer should have been cleared by dispose
+      expect(group.style.display).not.toBe('none');
+    });
+
+    it('HDR-U216: dispose during fade-in does not clear transition (regression: stale timer)', () => {
+      const el = headerBar.render();
+      headerBar.setImageMode(true);
+      vi.advanceTimersByTime(350);
+      headerBar.setImageMode(false);
+      // Now fading in, with a timer to clear the transition property
+      const playBtn = findPlayButton(el);
+      const group = playBtn.parentElement!;
+      expect(group.style.transition).toContain('opacity');
+      // Dispose mid-fade-in
+      headerBar.dispose();
+      vi.advanceTimersByTime(500);
+      // transition should NOT have been cleared (timer was cancelled)
+      expect(group.style.transition).toContain('opacity');
+    });
+
+    it('HDR-U217: transition duration matches PresentationMode (0.3s, regression: inconsistent timing)', () => {
+      const el = headerBar.render();
+      headerBar.setImageMode(true);
+      const playBtn = findPlayButton(el);
+      const group = playBtn.parentElement!;
+      expect(group.style.transition).toContain('0.3s');
+    });
+
+    it('HDR-U218: all hidden elements get aria-hidden (regression: missing accessibility)', () => {
+      const el = headerBar.render();
+      headerBar.setImageMode(true);
+      const playBtn = findPlayButton(el);
+      const group = playBtn.parentElement!;
+      // Check playback group
+      expect(group.getAttribute('aria-hidden')).toBe('true');
+      // Check timecode
+      const timecodeEl = headerBar.getTimecodeDisplay().render();
+      expect(timecodeEl.getAttribute('aria-hidden')).toBe('true');
+      // Check volume
+      const volumeEl = headerBar.getVolumeControl().render();
+      expect(volumeEl.getAttribute('aria-hidden')).toBe('true');
+    });
+
+    it('HDR-U219: all restored elements have aria-hidden removed (regression: stale aria)', () => {
+      const el = headerBar.render();
+      headerBar.setImageMode(true);
+      vi.advanceTimersByTime(350);
+      headerBar.setImageMode(false);
+      const playBtn = findPlayButton(el);
+      const group = playBtn.parentElement!;
+      expect(group.hasAttribute('aria-hidden')).toBe(false);
+      const timecodeEl = headerBar.getTimecodeDisplay().render();
+      expect(timecodeEl.hasAttribute('aria-hidden')).toBe(false);
+      const volumeEl = headerBar.getVolumeControl().render();
+      expect(volumeEl.hasAttribute('aria-hidden')).toBe(false);
+    });
+
+    it('HDR-U220: multiple rapid toggles do not accumulate timers (regression: timer leak)', () => {
+      const el = headerBar.render();
+      // Rapid toggling 5 times
+      headerBar.setImageMode(true);
+      headerBar.setImageMode(false);
+      headerBar.setImageMode(true);
+      headerBar.setImageMode(false);
+      headerBar.setImageMode(true);
+      vi.advanceTimersByTime(350);
+      // Final state should be image mode (hidden)
+      const playBtn = findPlayButton(el);
+      const group = playBtn.parentElement!;
+      expect(group.style.display).toBe('none');
+      // Restore
+      headerBar.setImageMode(false);
+      expect(group.style.display).not.toBe('none');
+      expect(group.style.opacity).toBe('1');
+    });
+
+    it('HDR-U221: dividers are hidden in image mode (regression: untested elements)', () => {
+      const el = headerBar.render();
+      // Count all 1px-wide dividers in the header
+      const allDividers = Array.from(el.children).filter(
+        (child) => (child as HTMLElement).style.width === '1px'
+      ) as HTMLElement[];
+      // There should be at least the two playback dividers
+      expect(allDividers.length).toBeGreaterThanOrEqual(2);
+
+      headerBar.setImageMode(true);
+      vi.advanceTimersByTime(350);
+
+      // The dividers flanking the playback group should be hidden
+      const hiddenDividers = allDividers.filter(
+        (d) => d.style.display === 'none'
+      );
+      expect(hiddenDividers.length).toBeGreaterThanOrEqual(2);
+
+      // Restore
+      headerBar.setImageMode(false);
+      const stillHidden = allDividers.filter(
+        (d) => d.style.display === 'none'
+      );
+      expect(stillHidden.length).toBe(0);
+    });
+  });
 });

@@ -1234,4 +1234,94 @@ describe('Session', () => {
     });
   });
 
+  describe('isSingleImage', () => {
+    it('SES-IMG-001: returns false when no source loaded', () => {
+      expect(session.isSingleImage).toBe(false);
+    });
+
+    it('SES-IMG-002: returns true for image source', () => {
+      session.setSources([{
+        name: 'photo.png', url: 'blob:test', type: 'image',
+        duration: 1, fps: 24, width: 1920, height: 1080,
+      }]);
+      expect(session.isSingleImage).toBe(true);
+    });
+
+    it('SES-IMG-003: returns false for video source', () => {
+      session.setSources([{
+        name: 'clip.mp4', url: 'blob:test', type: 'video',
+        duration: 100, fps: 24, width: 1920, height: 1080,
+        element: document.createElement('video'),
+      }]);
+      expect(session.isSingleImage).toBe(false);
+    });
+
+    it('SES-IMG-004: returns false for sequence source', () => {
+      session.setSources([{
+        name: 'frame_001.exr', url: 'blob:test', type: 'sequence',
+        duration: 50, fps: 24, width: 1920, height: 1080,
+      }]);
+      expect(session.isSingleImage).toBe(false);
+    });
+
+    it('SES-IMG-005: updates when switching sources', () => {
+      session.setSources([
+        { name: 'photo.png', url: 'blob:a', type: 'image', duration: 1, fps: 24, width: 100, height: 100 },
+        { name: 'clip.mp4', url: 'blob:b', type: 'video', duration: 100, fps: 24, width: 100, height: 100, element: document.createElement('video') },
+      ]);
+      session.setCurrentSource(0);
+      expect(session.isSingleImage).toBe(true);
+      session.setCurrentSource(1);
+      expect(session.isSingleImage).toBe(false);
+    });
+  });
+
+  describe('image mode edge cases', () => {
+    it('EDGE-IMG-001: togglePlayback with image source does not throw', () => {
+      session.setSources([{
+        name: 'photo.png', url: 'blob:test', type: 'image',
+        duration: 1, fps: 24, width: 100, height: 100,
+      }]);
+      expect(() => session.togglePlayback()).not.toThrow();
+      // Session allows play toggle (no error), frame stays at 1
+      expect(session.currentFrame).toBe(1);
+    });
+
+    it('EDGE-IMG-002: stepForward with image source is no-op', () => {
+      session.setSources([{
+        name: 'photo.png', url: 'blob:test', type: 'image',
+        duration: 1, fps: 24, width: 100, height: 100,
+      }]);
+      session.stepForward();
+      expect(session.currentFrame).toBe(1);
+    });
+
+    it('EDGE-IMG-003: stepBackward with image source is no-op', () => {
+      session.setSources([{
+        name: 'photo.png', url: 'blob:test', type: 'image',
+        duration: 1, fps: 24, width: 100, height: 100,
+      }]);
+      session.stepBackward();
+      expect(session.currentFrame).toBe(1);
+    });
+
+    it('EDGE-IMG-004: goToStart with image source stays at frame 1', () => {
+      session.setSources([{
+        name: 'photo.png', url: 'blob:test', type: 'image',
+        duration: 1, fps: 24, width: 100, height: 100,
+      }]);
+      session.goToStart();
+      expect(session.currentFrame).toBe(1);
+    });
+
+    it('EDGE-IMG-005: goToEnd with image source stays at frame 1', () => {
+      session.setSources([{
+        name: 'photo.png', url: 'blob:test', type: 'image',
+        duration: 1, fps: 24, width: 100, height: 100,
+      }]);
+      session.goToEnd();
+      expect(session.currentFrame).toBe(1);
+    });
+  });
+
 });

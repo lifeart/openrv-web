@@ -46,6 +46,15 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private fullscreenButton!: HTMLButtonElement;
   private presentationButton!: HTMLButtonElement;
 
+  // Image mode: elements to hide when viewing a single image
+  private playbackGroup!: HTMLElement;
+  private playbackDividerBefore!: HTMLElement;
+  private playbackDividerAfter!: HTMLElement;
+  private timecodeEl!: HTMLElement;
+  private volumeEl!: HTMLElement;
+  private _isImageMode = false;
+  private _imageTransitionTimers: ReturnType<typeof setTimeout>[] = [];
+
   constructor(session: Session) {
     super();
     this.session = session;
@@ -123,10 +132,12 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       margin-left: 8px;
     `;
     this.container.appendChild(this.autoSaveSlot);
-    this.addDivider();
+    this.playbackDividerBefore = this.createDivider();
+    this.container.appendChild(this.playbackDividerBefore);
 
     // === PLAYBACK CONTROLS GROUP ===
     const playbackGroup = this.createGroup();
+    this.playbackGroup = playbackGroup;
 
     playbackGroup.appendChild(this.createIconButton('skip-back', '', () => this.session.goToStart(), 'Go to start (Home)'));
     playbackGroup.appendChild(this.createIconButton('step-back', '', () => this.session.stepBackward(), 'Step back (\u2190)'));
@@ -154,10 +165,12 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     playbackGroup.appendChild(this.speedButton);
 
     this.container.appendChild(playbackGroup);
-    this.addDivider();
+    this.playbackDividerAfter = this.createDivider();
+    this.container.appendChild(this.playbackDividerAfter);
 
     // === TIMECODE DISPLAY ===
-    this.container.appendChild(this.timecodeDisplay.render());
+    this.timecodeEl = this.timecodeDisplay.render();
+    this.container.appendChild(this.timecodeEl);
 
     // === SPACER ===
     const spacer = document.createElement('div');
@@ -184,7 +197,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     utilityGroup.appendChild(this.fullscreenButton);
 
     // Volume control
-    utilityGroup.appendChild(this.volumeControl.render());
+    this.volumeEl = this.volumeControl.render();
+    utilityGroup.appendChild(this.volumeEl);
 
     // Theme control
     const themeElement = this.themeControl.render();
@@ -214,7 +228,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     return group;
   }
 
-  private addDivider(): void {
+  private createDivider(): HTMLElement {
     const divider = document.createElement('div');
     divider.style.cssText = `
       width: 1px;
@@ -222,7 +236,11 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       background: var(--border-primary);
       margin: 0 12px;
     `;
-    this.container.appendChild(divider);
+    return divider;
+  }
+
+  private addDivider(): void {
+    this.container.appendChild(this.createDivider());
   }
 
   private createIconButton(icon: string, label: string, onClick: () => void, title?: string): HTMLButtonElement {
@@ -810,6 +828,12 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   }
 
   dispose(): void {
+    // Clear image mode transition timers
+    for (const timer of this._imageTransitionTimers) {
+      clearTimeout(timer);
+    }
+    this._imageTransitionTimers = [];
+
     this.volumeControl.dispose();
     this.exportControl.dispose();
     this.timecodeDisplay.dispose();
@@ -866,6 +890,61 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       this.presentationButton.style.background = 'transparent';
       this.presentationButton.style.borderColor = 'transparent';
       this.presentationButton.style.color = 'var(--text-secondary)';
+    }
+  }
+
+  /**
+   * Toggle visibility of playback controls, timecode, and volume
+   * for single-image sources. Uses fade transition following
+   * the same pattern as PresentationMode.
+   */
+  setImageMode(isImage: boolean): void {
+    if (this._isImageMode === isImage) return;
+    this._isImageMode = isImage;
+
+    // Clear any pending transition timers to prevent race conditions
+    for (const timer of this._imageTransitionTimers) {
+      clearTimeout(timer);
+    }
+    this._imageTransitionTimers = [];
+
+    const elements = [
+      this.playbackGroup,
+      this.playbackDividerBefore,
+      this.playbackDividerAfter,
+      this.timecodeEl,
+      this.volumeEl,
+    ];
+
+    if (isImage) {
+      // Fade out then collapse
+      for (const el of elements) {
+        el.style.transition = 'opacity 0.3s ease';
+        el.style.opacity = '0';
+        el.style.pointerEvents = 'none';
+        el.setAttribute('aria-hidden', 'true');
+        const timer = setTimeout(() => {
+          if (this._isImageMode) {
+            el.style.display = 'none';
+          }
+        }, 300);
+        this._imageTransitionTimers.push(timer);
+      }
+    } else {
+      // Restore: un-collapse, force reflow, fade in
+      for (const el of elements) {
+        el.style.display = '';
+        el.style.pointerEvents = '';
+        el.removeAttribute('aria-hidden');
+        // Force reflow before changing opacity for animation
+        void el.offsetHeight;
+        el.style.transition = 'opacity 0.3s ease';
+        el.style.opacity = '1';
+        const timer = setTimeout(() => {
+          el.style.transition = '';
+        }, 300);
+        this._imageTransitionTimers.push(timer);
+      }
     }
   }
 }

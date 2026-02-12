@@ -65,6 +65,9 @@ export class App {
   private persistenceManager: AppPersistenceManager;
   private sessionBridge!: AppSessionBridge;
 
+  // Image mode: timer for timeline fade transition
+  private _imageTransitionTimer: ReturnType<typeof setTimeout> | null = null;
+
   // Display capabilities for wide color gamut / HDR support
   private displayCapabilities: DisplayCapabilities;
 
@@ -288,6 +291,63 @@ export class App {
       cacheIndicatorEl,
       timelineEl,
     ]);
+
+    // === IMAGE MODE: hide playback controls + timeline for single images ===
+    const updateImageMode = () => {
+      const isImage = this.session.isSingleImage;
+      this.headerBar.setImageMode(isImage);
+
+      // Clear pending timer to prevent race conditions on rapid toggles
+      if (this._imageTransitionTimer !== null) {
+        clearTimeout(this._imageTransitionTimer);
+        this._imageTransitionTimer = null;
+      }
+
+      if (isImage) {
+        timelineEl.style.transition = 'opacity 0.3s ease';
+        timelineEl.style.opacity = '0';
+        timelineEl.style.pointerEvents = 'none';
+        timelineEl.setAttribute('aria-hidden', 'true');
+        this._imageTransitionTimer = setTimeout(() => {
+          if (this.session.isSingleImage) {
+            timelineEl.style.display = 'none';
+            window.dispatchEvent(new Event('resize'));
+          }
+        }, 300);
+      } else {
+        timelineEl.style.display = '';
+        timelineEl.style.pointerEvents = '';
+        timelineEl.removeAttribute('aria-hidden');
+        void timelineEl.offsetHeight;
+        timelineEl.style.transition = 'opacity 0.3s ease';
+        timelineEl.style.opacity = '1';
+        this._imageTransitionTimer = setTimeout(() => {
+          timelineEl.style.transition = '';
+          window.dispatchEvent(new Event('resize'));
+        }, 300);
+      }
+    };
+
+    this.session.on('sourceLoaded', updateImageMode);
+    this.session.on('durationChanged', updateImageMode);
+
+    // Re-assert image mode after exiting presentation mode.
+    // Skip the fade transition to avoid a visible flash of the timeline.
+    this.controls.presentationMode.on('stateChanged', (state) => {
+      if (!state.enabled) {
+        const isImage = this.session.isSingleImage;
+        this.headerBar.setImageMode(isImage);
+        if (isImage) {
+          // Directly hide without fade to avoid flash
+          timelineEl.style.display = 'none';
+          timelineEl.style.opacity = '0';
+          timelineEl.style.pointerEvents = 'none';
+          timelineEl.setAttribute('aria-hidden', 'true');
+          timelineEl.style.transition = '';
+          window.dispatchEvent(new Event('resize'));
+        }
+      }
+    });
 
     // Add histogram overlay to viewer container
     this.viewer.getContainer().appendChild(this.controls.histogram.render());
@@ -694,6 +754,11 @@ export class App {
     if (this.colorWiringState.colorHistoryTimer) {
       clearTimeout(this.colorWiringState.colorHistoryTimer);
       this.colorWiringState.colorHistoryTimer = null;
+    }
+
+    if (this._imageTransitionTimer !== null) {
+      clearTimeout(this._imageTransitionTimer);
+      this._imageTransitionTimer = null;
     }
 
     if (this.animationId !== null) {

@@ -617,6 +617,15 @@ export class Session extends EventEmitter<SessionEvents> {
     return this.sources[this._currentSourceIndex] ?? null;
   }
 
+  /**
+   * Returns true when the current source is a single static image.
+   * Used to hide irrelevant playback controls and timeline.
+   */
+  get isSingleImage(): boolean {
+    const source = this.currentSource;
+    return source !== null && source.type === 'image';
+  }
+
   get allSources(): MediaSource[] {
     return this.sources;
   }
