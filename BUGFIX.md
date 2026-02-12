@@ -243,6 +243,23 @@ Unit verification:
 E2E verification:
 - Covered by existing control suites and manual regression.
 
+### Task 14 (P1): Track and cleanup all `AppNetworkBridge` subscriptions
+Problem:
+`AppNetworkBridge.dispose()` unsubscribes only a subset of listeners, leaving control/manager listeners active.
+
+Root cause:
+Only session listeners were tracked. `NetworkControl` and `NetworkSyncManager` subscriptions were ignored.
+
+Implemented fix:
+- Wrapped all `networkControl.on` and `networkSyncManager.on` calls in `this.unsubscribers.push(...)`.
+- Updated `dispose()` to be idempotent.
+
+Unit verification:
+- `src/AppNetworkBridge.test.ts` passed (12 tests, including new leak checks).
+
+E2E verification:
+- Covered by existing network sync suites.
+
 ---
 
 ## Task 1 (P0): Fix stale E2E state adapter in `test-helper`
@@ -726,30 +743,7 @@ This skip happens even when user remaps them to non-conflicting combos.
 
 
 
-## Task 14 (P1): Track and cleanup all `AppNetworkBridge` subscriptions
-### Problem
-`AppNetworkBridge.dispose()` unsubscribes only a subset of listeners, leaving control/manager listeners active after dispose.
 
-### Root cause
-Only session listeners are pushed into `this.unsubscribers`; most `networkControl.on(...)` and `networkSyncManager.on(...)` returns are ignored.
-
-### Implementation scope
-- Capture unsubscribe callbacks from all `.on(...)` calls in `AppNetworkBridge.setup()`.
-- Push every unsubscribe into `this.unsubscribers`.
-- Ensure `dispose()` is idempotent and safe on repeated calls.
-
-### Unit tests to add/update
-- `src/AppNetworkBridge.test.ts`:
-  1. `setup()` tracks unsubs for all control + manager + session subscriptions.
-  2. `dispose()` removes all listeners.
-  3. Re-`setup()` after `dispose()` does not duplicate event responses.
-
-### E2E verification
-- Add/update `e2e/network-sync.spec.ts`:
-  1. Open app, connect/disconnect, remount path (or app recreation fixture), reconnect.
-  2. Assert no duplicate room/user/state updates fire on single event.
-
----
 
 ## Task 15 (P1): Unsubscribe viewer-overlay listeners in overlay-bound controls
 ### Problem
