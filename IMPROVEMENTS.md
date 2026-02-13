@@ -30,14 +30,14 @@ Port per-pixel processing to a WASM module (e.g., via AssemblyScript or Rust/was
 ### Color Space Conversion (partial — OCIO integration done)
 **Priority:** MEDIUM
 
-Full input/output color space conversion UI with gamut diagrams and common presets (e.g., "ARRI LogC to Rec.709"). Core OCIO infrastructure exists.
+Full input/output color space conversion UI with gamut diagrams and common presets (e.g., "ARRI LogC to Rec.709"). Core OCIO infrastructure exists. Hue-preserving gamut clipping added for wide→narrow gamut paths (P3→sRGB, Rec.2020→sRGB, ProPhoto→sRGB). Direct sRGB↔Rec.709 transform path added.
 
-Unchecked test cases:
-- CS-001: sRGB to Rec.709 conversion accurate
-- CS-002: Log to linear conversion correct
-- CS-003: Wide gamut (P3) clips to Rec.709 properly
-- CS-004: Round-trip conversion preserves values
-- CS-005: Scopes display in output color space
+Checked test cases:
+- ~~CS-001: sRGB to Rec.709 conversion accurate~~
+- ~~CS-002: Log to linear conversion correct~~
+- ~~CS-003: Wide gamut (P3) clips to Rec.709 properly~~
+- ~~CS-004: Round-trip conversion preserves values~~
+- ~~CS-005: Scopes display in output color space~~
 
 ### ~~Film Emulation / Print Film LUT~~
 **Priority:** LOW
@@ -107,16 +107,15 @@ Dockable, floatable, tabbable panels with saveable workspace presets.
 - LAYOUT-004: Presets switch layout
 - LAYOUT-005: Window resize adjusts panels
 
-### Full Keyboard Navigation
+### ~~Full Keyboard Navigation~~
 **Priority:** MEDIUM
+**Status:** Done — `FocusManager.ts` implements F6 zone cycling (5 zones: headerBar, tabBar, contextToolbar, viewer, timeline), roving tabindex within toolbars, and modal focus trapping. `AriaAnnouncer.ts` provides `aria-live` screen reader announcements. `injectA11yStyles.ts` adds global `:focus-visible` outlines with `!important`. ARIA attributes on all layout components: `role="tablist/tab/tabpanel/toolbar/dialog/banner/main"`, `aria-selected`, `aria-controls`, `aria-labelledby`, `aria-modal`, `aria-label`. Skip link for keyboard users. 56 unit tests + 45 Playwright e2e tests.
 
-Complete keyboard navigation with tab order, focus indicators, ARIA labels, and screen reader support.
-
-- KEY-001: Tab moves through controls
-- KEY-002: Enter activates buttons
-- KEY-003: Escape closes modals
-- KEY-004: Focus visible at all times
-- KEY-005: Screen reader accessible
+- ~~KEY-001: Tab moves through controls~~
+- ~~KEY-002: Enter activates buttons~~
+- ~~KEY-003: Escape closes modals~~
+- ~~KEY-004: Focus visible at all times~~
+- ~~KEY-005: Screen reader accessible~~
 
 ---
 
