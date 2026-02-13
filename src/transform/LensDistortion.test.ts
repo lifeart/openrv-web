@@ -290,6 +290,73 @@ describe('LensDistortion', () => {
     });
   });
 
+  describe('radial direction regression', () => {
+    it('LENS-011: pincushion (positive k1) maps edge pixels outside source bounds', () => {
+      // Positive k1 means radialFactor = 1 + k1*r² > 1 at edges
+      // Each output pixel maps to a source pixel FARTHER from center
+      // Edge output pixels should map outside source → black (OOB)
+      const size = 21;
+      const imageData = createTestImageData(size, size, { r: 200, g: 200, b: 200, a: 255 });
+
+      const params: LensDistortionParams = {
+        ...DEFAULT_LENS_PARAMS,
+        k1: 0.8,  // Strong pincushion
+      };
+
+      const result = applyLensDistortion(imageData, params);
+
+      // Corner pixel (0, 0) is farthest from center → should map OOB → black
+      const cornerIdx = 0;
+      expect(result.data[cornerIdx]).toBe(0);
+      expect(result.data[cornerIdx + 1]).toBe(0);
+      expect(result.data[cornerIdx + 2]).toBe(0);
+
+      // Center pixel should still have source color (maps to center, r=0, factor=1)
+      const centerIdx = (10 * size + 10) * 4;
+      expect(result.data[centerIdx]).toBeGreaterThan(150);
+    });
+
+    it('LENS-012: barrel (negative k1) shrinks image, no OOB at center', () => {
+      // Negative k1 means radialFactor = 1 + k1*r² < 1 at edges
+      // Each output pixel maps to a source pixel CLOSER to center
+      // Edges should NOT be OOB, but map to interior source positions
+      const size = 21;
+      // Create gradient: R increases outward from center
+      const imageData = new ImageData(size, size);
+      for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+          const idx = (y * size + x) * 4;
+          const dx = (x - 10) / 10;
+          const dy = (y - 10) / 10;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          imageData.data[idx] = Math.min(255, Math.round(dist * 255));
+          imageData.data[idx + 1] = 100;
+          imageData.data[idx + 2] = 100;
+          imageData.data[idx + 3] = 255;
+        }
+      }
+
+      const params: LensDistortionParams = {
+        ...DEFAULT_LENS_PARAMS,
+        k1: -0.5,  // Barrel distortion
+      };
+
+      const result = applyLensDistortion(imageData, params);
+
+      // Edge pixel (20, 10) maps to source closer to center → R should be LOWER
+      // than original edge R value. Original edge R ≈ 255.
+      const edgeIdx = (10 * size + 20) * 4;
+      const edgeR = result.data[edgeIdx]!;
+      // Should be non-zero (not OOB) and lower than original
+      expect(edgeR).toBeGreaterThan(0);
+      expect(edgeR).toBeLessThan(255);
+
+      // Center should remain approximately unchanged
+      const centerIdx = (10 * size + 10) * 4;
+      expect(result.data[centerIdx]).toBeLessThan(20); // close to 0 at center
+    });
+  });
+
   describe('Brown-Conrady model', () => {
     it('center point remains unchanged', () => {
       const imageData = createTestImageData(21, 21, { r: 0, g: 0, b: 0, a: 255 });

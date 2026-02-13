@@ -19,6 +19,10 @@ function createMockContext() {
   const lensControl = new EventEmitter();
   const deinterlaceControl = new EventEmitter();
   const filmEmulationControl = new EventEmitter();
+  const perspectiveCorrectionControl = Object.assign(new EventEmitter(), {
+    setParams: vi.fn(),
+  });
+  const perspectiveGridOverlay = new EventEmitter();
 
   let capturedCropRegionCallback: ((region: unknown) => void) | null = null;
 
@@ -31,6 +35,8 @@ function createMockContext() {
     setLensParams: vi.fn(),
     setDeinterlaceParams: vi.fn(),
     setFilmEmulationParams: vi.fn(),
+    setPerspectiveParams: vi.fn(),
+    getPerspectiveGridOverlay: vi.fn(() => perspectiveGridOverlay),
     setOnCropRegionChanged: vi.fn((cb: (region: unknown) => void) => {
       capturedCropRegionCallback = cb;
     }),
@@ -52,6 +58,7 @@ function createMockContext() {
       lensControl,
       deinterlaceControl,
       filmEmulationControl,
+      perspectiveCorrectionControl,
     },
     sessionBridge,
     persistenceManager,
@@ -65,6 +72,8 @@ function createMockContext() {
     lensControl,
     deinterlaceControl,
     filmEmulationControl,
+    perspectiveCorrectionControl,
+    perspectiveGridOverlay,
     sessionBridge,
     persistenceManager,
     getCapturedCropRegionCallback: () => capturedCropRegionCallback,
@@ -160,6 +169,39 @@ describe('wireEffectsControls', () => {
     mock.filmEmulationControl.emit('filmEmulationChanged', params);
 
     expect(mock.viewer.setFilmEmulationParams).toHaveBeenCalledWith(params);
+    expect(mock.sessionBridge.scheduleUpdateScopes).toHaveBeenCalled();
+    expect(mock.persistenceManager.syncGTOStore).toHaveBeenCalled();
+  });
+
+  it('EW-011: perspectiveChanged calls viewer.setPerspectiveParams + scheduleUpdateScopes + syncGTOStore', () => {
+    const params = {
+      enabled: true,
+      topLeft: { x: 0.1, y: 0.1 },
+      topRight: { x: 0.9, y: 0.0 },
+      bottomRight: { x: 1.0, y: 1.0 },
+      bottomLeft: { x: 0.0, y: 0.9 },
+      quality: 'bilinear',
+    };
+    mock.perspectiveCorrectionControl.emit('perspectiveChanged', params);
+
+    expect(mock.viewer.setPerspectiveParams).toHaveBeenCalledWith(params);
+    expect(mock.sessionBridge.scheduleUpdateScopes).toHaveBeenCalled();
+    expect(mock.persistenceManager.syncGTOStore).toHaveBeenCalled();
+  });
+
+  it('EW-012: overlay cornersChanged calls control.setParams + viewer.setPerspectiveParams', () => {
+    const params = {
+      enabled: true,
+      topLeft: { x: 0.15, y: 0.1 },
+      topRight: { x: 0.85, y: 0.05 },
+      bottomRight: { x: 0.9, y: 0.95 },
+      bottomLeft: { x: 0.05, y: 0.9 },
+      quality: 'bilinear',
+    };
+    mock.perspectiveGridOverlay.emit('cornersChanged', params);
+
+    expect(mock.perspectiveCorrectionControl.setParams).toHaveBeenCalledWith(params);
+    expect(mock.viewer.setPerspectiveParams).toHaveBeenCalledWith(params);
     expect(mock.sessionBridge.scheduleUpdateScopes).toHaveBeenCalled();
     expect(mock.persistenceManager.syncGTOStore).toHaveBeenCalled();
   });

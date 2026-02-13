@@ -58,6 +58,7 @@ function createMockContext(): GLRendererContext {
     isToneMappingEnabled: vi.fn(() => false),
     getDeinterlaceParams: vi.fn(() => ({ enabled: false, method: 'bob', fieldOrder: 'tff' })),
     getFilmEmulationParams: vi.fn(() => ({ enabled: false, stock: 'kodak-portra-400', intensity: 100, grainIntensity: 30, grainSeed: 0 })),
+    getPerspectiveParams: vi.fn(() => ({ enabled: false, topLeft: { x: 0, y: 0 }, topRight: { x: 1, y: 0 }, bottomRight: { x: 1, y: 1 }, bottomLeft: { x: 0, y: 1 }, quality: 'bilinear' })),
   };
 }
 

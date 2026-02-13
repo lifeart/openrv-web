@@ -231,6 +231,75 @@ describe('Deinterlace', () => {
     });
   });
 
+  describe('Y-axis direction regression', () => {
+    it('DEINT-T012: bob TFF interpolates odd rows as average of (y-1) and (y+1)', () => {
+      // Create image where each row has a distinct value: row y → R = y * 25
+      const width = 4;
+      const height = 6;
+      const imageData = new ImageData(width, height);
+      for (let y = 0; y < height; y++) {
+        const value = y * 25; // row 0=0, 1=25, 2=50, 3=75, 4=100, 5=125
+        for (let x = 0; x < width; x++) {
+          const idx = (y * width + x) * 4;
+          imageData.data[idx] = value;
+          imageData.data[idx + 1] = value;
+          imageData.data[idx + 2] = value;
+          imageData.data[idx + 3] = 255;
+        }
+      }
+
+      applyDeinterlace(imageData, { method: 'bob', fieldOrder: 'tff', enabled: true });
+
+      const { data } = imageData;
+
+      // TFF keeps even rows (0, 2, 4) unchanged
+      expect(data[0 * width * 4]).toBe(0);      // row 0 → R=0
+      expect(data[2 * width * 4]).toBe(50);      // row 2 → R=50
+      expect(data[4 * width * 4]).toBe(100);     // row 4 → R=100
+
+      // Odd rows interpolated: avg of row above (y-1) and below (y+1)
+      // row 1 = avg(original_row0=0, original_row2=50) = 25
+      expect(data[1 * width * 4]).toBe(25);
+      // row 3 = avg(original_row2=50, original_row4=100) = 75
+      expect(data[3 * width * 4]).toBe(75);
+      // row 5 (last) = copy of row above (y-1) = original_row4 = 100
+      expect(data[5 * width * 4]).toBe(100);
+    });
+
+    it('DEINT-T013: bob BFF interpolates even rows as average of (y-1) and (y+1)', () => {
+      const width = 4;
+      const height = 6;
+      const imageData = new ImageData(width, height);
+      for (let y = 0; y < height; y++) {
+        const value = y * 25;
+        for (let x = 0; x < width; x++) {
+          const idx = (y * width + x) * 4;
+          imageData.data[idx] = value;
+          imageData.data[idx + 1] = value;
+          imageData.data[idx + 2] = value;
+          imageData.data[idx + 3] = 255;
+        }
+      }
+
+      applyDeinterlace(imageData, { method: 'bob', fieldOrder: 'bff', enabled: true });
+
+      const { data } = imageData;
+
+      // BFF keeps odd rows (1, 3, 5) unchanged
+      expect(data[1 * width * 4]).toBe(25);      // row 1 → R=25
+      expect(data[3 * width * 4]).toBe(75);       // row 3 → R=75
+      expect(data[5 * width * 4]).toBe(125);      // row 5 → R=125
+
+      // Even rows interpolated: avg of (y-1) and (y+1)
+      // row 0 (first) = copy of row below (y+1) = original_row1 = 25
+      expect(data[0 * width * 4]).toBe(25);
+      // row 2 = avg(original_row1=25, original_row3=75) = 50
+      expect(data[2 * width * 4]).toBe(50);
+      // row 4 = avg(original_row3=75, original_row5=125) = 100
+      expect(data[4 * width * 4]).toBe(100);
+    });
+  });
+
   describe('detectInterlacing', () => {
     it('DEINT-T005: returns high combMetric for interlaced pattern', () => {
       const imageData = createInterlacedPattern(40, 40);

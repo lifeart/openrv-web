@@ -51,6 +51,7 @@ export const DIRTY_LUT3D = 'lut3d';
 export const DIRTY_GAMUT_MAPPING = 'gamutMapping';
 export const DIRTY_DEINTERLACE = 'deinterlace';
 export const DIRTY_FILM_EMULATION = 'filmEmulation';
+export const DIRTY_PERSPECTIVE = 'perspective';
 
 /** All dirty flag names -- used to initialize on first render so all uniforms are set. */
 export const ALL_DIRTY_FLAGS = [
@@ -59,6 +60,7 @@ export const ALL_DIRTY_FLAGS = [
   DIRTY_DISPLAY, DIRTY_CLARITY, DIRTY_SHARPEN, DIRTY_FALSE_COLOR,
   DIRTY_CURVES, DIRTY_VIBRANCE, DIRTY_HIGHLIGHTS_SHADOWS, DIRTY_INVERSION,
   DIRTY_LUT3D, DIRTY_GAMUT_MAPPING, DIRTY_DEINTERLACE, DIRTY_FILM_EMULATION,
+  DIRTY_PERSPECTIVE,
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -111,6 +113,15 @@ const BG_PATTERN_CROSSHATCH = 3;
 const DEFAULT_ZEBRA_HIGH_THRESHOLD = 0.95;
 const DEFAULT_ZEBRA_LOW_THRESHOLD = 0.05;
 const DEFAULT_CHECKER_SIZE = 16;
+
+/** Compare two Float32Array instances element-by-element. */
+function float32ArrayEquals(a: Float32Array, b: Float32Array): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
 
 /** Parse hex color into an existing tuple (avoids allocation). */
 function hexToRgbInto(hex: string, out: [number, number, number]): void {
@@ -283,6 +294,11 @@ export interface InternalShaderState {
   filmGrainSeed: number;
   filmLUTData: Uint8Array | null;
   filmLUTDirty: boolean;
+
+  // Perspective Correction
+  perspectiveEnabled: boolean;
+  perspectiveInvH: Float32Array;
+  perspectiveQuality: number;
 }
 
 function createDefaultInternalState(): InternalShaderState {
@@ -367,6 +383,9 @@ function createDefaultInternalState(): InternalShaderState {
     filmGrainSeed: 0,
     filmLUTData: null,
     filmLUTDirty: false,
+    perspectiveEnabled: false,
+    perspectiveInvH: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]),
+    perspectiveQuality: 0,
   };
 }
 
@@ -806,6 +825,13 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     this.dirtyFlags.add(DIRTY_FILM_EMULATION);
   }
 
+  setPerspective(pState: { enabled: boolean; invH: Float32Array; quality: number }): void {
+    this.state.perspectiveEnabled = pState.enabled;
+    this.state.perspectiveInvH = pState.invH;
+    this.state.perspectiveQuality = pState.quality;
+    this.dirtyFlags.add(DIRTY_PERSPECTIVE);
+  }
+
   /** Set texel size (called by Renderer before applyUniforms, based on image dimensions). */
   setTexelSize(w: number, h: number): void {
     this.state.texelSize[0] = w;
@@ -1026,6 +1052,18 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
       }
     } else if (s.filmEnabled) {
       this.setFilmEmulation({ enabled: false, intensity: 0, saturation: 1, grainIntensity: 0, grainSeed: 0, lutData: null });
+    }
+
+    // --- Perspective correction (3 uniforms) ---
+    if (renderState.perspective) {
+      const pc = renderState.perspective;
+      if (pc.enabled !== s.perspectiveEnabled ||
+          pc.quality !== s.perspectiveQuality ||
+          !float32ArrayEquals(pc.invH, s.perspectiveInvH)) {
+        this.setPerspective(pc);
+      }
+    } else if (s.perspectiveEnabled) {
+      this.setPerspective({ enabled: false, invH: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]), quality: 0 });
     }
   }
 
@@ -1268,6 +1306,19 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
         shader.setUniform('u_filmSaturation', s.filmSaturation);
         shader.setUniform('u_filmGrainIntensity', s.filmGrainIntensity);
         shader.setUniform('u_filmGrainSeed', s.filmGrainSeed);
+      }
+    }
+
+    // Perspective Correction
+    if (dirty.has(DIRTY_PERSPECTIVE)) {
+      shader.setUniformInt('u_perspectiveEnabled', s.perspectiveEnabled ? 1 : 0);
+      if (s.perspectiveEnabled) {
+        shader.setUniformMatrix3('u_perspectiveInvH', s.perspectiveInvH);
+        shader.setUniformInt('u_perspectiveQuality', s.perspectiveQuality);
+        // Texel size needed for bicubic perspective interpolation
+        if (s.perspectiveQuality === 1) {
+          shader.setUniform('u_texelSize', s.texelSize);
+        }
       }
     }
 

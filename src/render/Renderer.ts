@@ -1632,6 +1632,10 @@ export class Renderer implements RendererBackend {
     this.stateManager.setGamutMapping(state);
   }
 
+  setPerspective(state: { enabled: boolean; invH: Float32Array; quality: number }): void {
+    this.stateManager.setPerspective(state);
+  }
+
   applyRenderState(state: RenderState): void {
     this.stateManager.applyRenderState(state);
   }

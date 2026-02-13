@@ -154,6 +154,11 @@
       uniform float u_filmGrainSeed;        // per-frame seed
       uniform sampler2D u_filmLUT;          // 256x1 RGB LUT texture
 
+      // Perspective Correction
+      uniform int u_perspectiveEnabled;    // 0=off, 1=on
+      uniform mat3 u_perspectiveInvH;     // Inverse homography (column-major)
+      uniform int u_perspectiveQuality;   // 0=bilinear, 1=bicubic
+
       // Luminance coefficients (Rec. 709)
       const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 
@@ -590,6 +595,14 @@
         );
       }
 
+      // Catmull-Rom spline weight for bicubic perspective interpolation
+      float catmullRom(float x) {
+        float ax = abs(x);
+        if (ax < 1.0) return 1.5*ax*ax*ax - 2.5*ax*ax + 1.0;
+        if (ax < 2.0) return -0.5*ax*ax*ax + 2.5*ax*ax - 4.0*ax + 2.0;
+        return 0.0;
+      }
+
       void main() {
         vec4 color = texture(u_texture, v_texCoord);
 
@@ -609,6 +622,39 @@
             float offset = isEvenRow ? u_texelSize.y : -u_texelSize.y;
             vec4 neighbor = texture(u_texture, v_texCoord + vec2(0.0, offset));
             color = (color + neighbor) * 0.5;
+          }
+        }
+
+        // 0a2. Perspective correction (geometric warp, after deinterlace, before EOTF)
+        // Interpolation happens in texture's native space (PQ/HLG/sRGB),
+        // consistent with other texture sampling in this shader.
+        if (u_perspectiveEnabled == 1) {
+          vec3 srcH = u_perspectiveInvH * vec3(v_texCoord, 1.0);
+          if (abs(srcH.z) < 1e-6) {
+            color = vec4(0.0, 0.0, 0.0, 0.0); // singularity guard
+          } else {
+            vec2 srcUV = srcH.xy / srcH.z;
+            if (srcUV.x < 0.0 || srcUV.x > 1.0 || srcUV.y < 0.0 || srcUV.y > 1.0) {
+              color = vec4(0.0, 0.0, 0.0, 0.0); // out of bounds
+            } else if (u_perspectiveQuality == 1) {
+              // Bicubic Catmull-Rom 4x4
+              vec2 texSize = 1.0 / u_texelSize;
+              vec2 fCoord = srcUV * texSize - 0.5;
+              vec2 f = fract(fCoord);
+              vec2 iCoord = floor(fCoord);
+              vec4 result = vec4(0.0);
+              for (int j = -1; j <= 2; j++) {
+                float wy = catmullRom(float(j) - f.y);
+                for (int i = -1; i <= 2; i++) {
+                  float wx = catmullRom(float(i) - f.x);
+                  vec2 sc = clamp((iCoord + vec2(float(i), float(j)) + 0.5) / texSize, vec2(0.0), vec2(1.0));
+                  result += texture(u_texture, sc) * wx * wy;
+                }
+              }
+              color = result;
+            } else {
+              color = texture(u_texture, srcUV); // bilinear (hardware)
+            }
           }
         }
 

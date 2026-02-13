@@ -64,4 +64,19 @@ export function wireEffectsControls(ctx: AppWiringContext): void {
     sessionBridge.scheduleUpdateScopes();
     persistenceManager.syncGTOStore();
   });
+
+  // Perspective correction control -> viewer + overlay
+  controls.perspectiveCorrectionControl.on('perspectiveChanged', (params) => {
+    viewer.setPerspectiveParams(params);
+    sessionBridge.scheduleUpdateScopes();
+    persistenceManager.syncGTOStore();
+  });
+
+  // Perspective grid overlay -> control + viewer (bidirectional)
+  viewer.getPerspectiveGridOverlay().on('cornersChanged', (params) => {
+    controls.perspectiveCorrectionControl.setParams(params);
+    viewer.setPerspectiveParams(params);
+    sessionBridge.scheduleUpdateScopes();
+    persistenceManager.syncGTOStore();
+  });
 }

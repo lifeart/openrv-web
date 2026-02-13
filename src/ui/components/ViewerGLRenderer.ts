@@ -39,6 +39,8 @@ import type { ColorAdjustments } from './ColorControls';
 import type { ToneMappingState } from './ToneMappingControl';
 import type { DeinterlaceParams } from '../../filters/Deinterlace';
 import { type FilmEmulationParams, getFilmStock } from '../../filters/FilmEmulation';
+import type { PerspectiveCorrectionParams } from '../../transform/PerspectiveCorrection';
+import { isPerspectiveActive, computeInverseHomographyFloat32 } from '../../transform/PerspectiveCorrection';
 import type { AutoExposureState, GamutMappingState, GamutIdentifier } from '../../core/types/effects';
 import { DEFAULT_AUTO_EXPOSURE_STATE, DEFAULT_GAMUT_MAPPING_STATE } from '../../core/types/effects';
 import { AutoExposureController } from '../../color/AutoExposureController';
@@ -68,6 +70,7 @@ export interface GLRendererContext {
   isToneMappingEnabled(): boolean;
   getDeinterlaceParams(): DeinterlaceParams;
   getFilmEmulationParams(): FilmEmulationParams;
+  getPerspectiveParams(): PerspectiveCorrectionParams;
 }
 
 // Deinterlace method → shader integer code
@@ -381,6 +384,7 @@ export class ViewerGLRenderer {
       hslQualifier: this.ctx.getHSLQualifier().getState(),
       deinterlace: this.buildDeinterlaceState(),
       filmEmulation: this.buildFilmEmulationState(),
+      perspective: this.buildPerspectiveState(),
     };
   }
 
@@ -412,6 +416,18 @@ export class ViewerGLRenderer {
       grainIntensity,
       grainSeed: fe.grainSeed,
       lutData,
+    };
+  }
+
+  private buildPerspectiveState(): RenderState['perspective'] {
+    const pc = this.ctx.getPerspectiveParams();
+    if (!isPerspectiveActive(pc)) {
+      return { enabled: false, invH: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]), quality: 0 };
+    }
+    return {
+      enabled: true,
+      invH: computeInverseHomographyFloat32(pc),
+      quality: pc.quality === 'bicubic' ? 1 : 0,
     };
   }
 
@@ -1002,6 +1018,9 @@ export class ViewerGLRenderer {
     // Film emulation
     const fe = this.ctx.getFilmEmulationParams();
     if (fe.enabled && fe.intensity > 0) return true;
+
+    // Perspective correction
+    if (isPerspectiveActive(this.ctx.getPerspectiveParams())) return true;
 
     return false;
   }

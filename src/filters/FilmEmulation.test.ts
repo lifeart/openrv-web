@@ -313,6 +313,46 @@ describe('FilmEmulation', () => {
       }
     });
 
+    it('FILM-005: grain envelope peaks at midtones, near-zero at both black and white', () => {
+      // Regression: verify grain envelope formula 4*luma*(1-luma) is symmetric
+      // and correctly minimal at BOTH extremes (black AND white)
+      const blackImg = createTestImageData(20, 20, [0, 0, 0, 255]);
+      const whiteImg = createTestImageData(20, 20, [255, 255, 255, 255]);
+      const midImg = createTestImageData(20, 20, [128, 128, 128, 255]);
+      const blackOrig = new Uint8ClampedArray(blackImg.data);
+      const whiteOrig = new Uint8ClampedArray(whiteImg.data);
+      const midOrig = new Uint8ClampedArray(midImg.data);
+
+      const grainParams = {
+        enabled: true as const,
+        stock: 'kodak-tri-x-400' as const,
+        intensity: 100,
+        grainIntensity: 100,
+        grainSeed: 42,
+      };
+
+      applyFilmEmulation(blackImg, grainParams);
+      applyFilmEmulation(whiteImg, grainParams);
+      applyFilmEmulation(midImg, grainParams);
+
+      let blackDiff = 0, whiteDiff = 0, midDiff = 0;
+      const pixelCount = 20 * 20;
+
+      for (let i = 0; i < blackImg.data.length; i += 4) {
+        blackDiff += Math.abs(blackImg.data[i]! - blackOrig[i]!);
+        whiteDiff += Math.abs(whiteImg.data[i]! - whiteOrig[i]!);
+        midDiff += Math.abs(midImg.data[i]! - midOrig[i]!);
+      }
+
+      blackDiff /= pixelCount;
+      whiteDiff /= pixelCount;
+      midDiff /= pixelCount;
+
+      // Midtones should have MORE grain than both black and white
+      expect(midDiff).toBeGreaterThan(blackDiff);
+      expect(midDiff).toBeGreaterThan(whiteDiff);
+    });
+
     it('grain should be luminance-dependent (stronger in midtones)', () => {
       // Black image: grain should be near zero
       const blackImg = createTestImageData(20, 20, [0, 0, 0, 255]);

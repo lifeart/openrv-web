@@ -66,6 +66,9 @@ import { ColorPipelineManager } from './ColorPipelineManager';
 import { TransformManager } from './TransformManager';
 import { StereoManager } from './StereoManager';
 import { LensDistortionManager } from './LensDistortionManager';
+import { PerspectiveCorrectionManager } from './PerspectiveCorrectionManager';
+import { PerspectiveGridOverlay } from './PerspectiveGridOverlay';
+import type { PerspectiveCorrectionParams } from '../../transform/PerspectiveCorrection';
 import { GhostFrameManager } from './GhostFrameManager';
 import { PixelSamplingManager } from './PixelSamplingManager';
 import { ViewerGLRenderer } from './ViewerGLRenderer';
@@ -113,6 +116,7 @@ export interface ViewerConfig {
   wipeManager?: WipeManager;
   ghostFrameManager?: GhostFrameManager;
   lensDistortionManager?: LensDistortionManager;
+  perspectiveCorrectionManager?: PerspectiveCorrectionManager;
   stereoManager?: StereoManager;
 }
 
@@ -216,6 +220,10 @@ export class Viewer {
   // Lens distortion manager (owns lens correction state)
   private lensDistortionManager: LensDistortionManager;
 
+  // Perspective correction manager (owns perspective warp state)
+  private perspectiveCorrectionManager: PerspectiveCorrectionManager;
+  private perspectiveGridOverlay: PerspectiveGridOverlay;
+
   // Stack/composite state
   private stackLayers: StackLayer[] = [];
   private stackEnabled = false;
@@ -295,6 +303,7 @@ export class Viewer {
       isToneMappingEnabled: () => this.isToneMappingEnabled(),
       getDeinterlaceParams: () => this.getDeinterlaceParams(),
       getFilmEmulationParams: () => this.getFilmEmulationParams(),
+      getPerspectiveParams: () => this.getPerspectiveParams(),
     };
   }
 
@@ -344,6 +353,7 @@ export class Viewer {
     this.wipeManager = config.wipeManager ?? new WipeManager();
     this.ghostFrameManager = config.ghostFrameManager ?? new GhostFrameManager();
     this.lensDistortionManager = config.lensDistortionManager ?? new LensDistortionManager();
+    this.perspectiveCorrectionManager = config.perspectiveCorrectionManager ?? new PerspectiveCorrectionManager();
     this.stereoManager = config.stereoManager ?? new StereoManager();
 
     // Wire up transform manager's render callback
@@ -437,6 +447,10 @@ export class Viewer {
       pointer-events: none;
     `;
     this.canvasContainer.appendChild(this.paintCanvas);
+
+    // Create perspective grid overlay
+    this.perspectiveGridOverlay = new PerspectiveGridOverlay();
+    this.canvasContainer.appendChild(this.perspectiveGridOverlay.getElement());
 
     // Create crop manager (creates and appends crop overlay canvas)
     this.cropManager = new CropManager({
@@ -660,6 +674,7 @@ export class Viewer {
     this.glRendererManager.resizeIfActive(this.physicalWidth, this.physicalHeight, width, height);
 
     this.updateOverlayDimensions();
+    this.perspectiveGridOverlay.setViewerDimensions(width, height);
     this.updateCanvasPosition();
   }
 
@@ -1376,6 +1391,14 @@ export class Viewer {
             console.error('Lens distortion rendering failed:', err);
           }
         }
+        // Apply perspective correction (after lens distortion)
+        if (!this.perspectiveCorrectionManager.isDefault()) {
+          try {
+            this.perspectiveCorrectionManager.applyToCtx(this.imageCtx, displayWidth, displayHeight);
+          } catch (err) {
+            console.error('Perspective correction rendering failed:', err);
+          }
+        }
         // Apply GPU-accelerated color effects
         if (this.colorPipeline.currentLUT && this.colorPipeline.lutIntensity > 0) {
           try {
@@ -1506,6 +1529,15 @@ export class Viewer {
         this.lensDistortionManager.applyToCtx(this.imageCtx, displayWidth, displayHeight);
       } catch (err) {
         console.error('Lens distortion rendering failed:', err);
+      }
+    }
+
+    // Apply perspective correction (after lens distortion)
+    if (!this.perspectiveCorrectionManager.isDefault()) {
+      try {
+        this.perspectiveCorrectionManager.applyToCtx(this.imageCtx, displayWidth, displayHeight);
+      } catch (err) {
+        console.error('Perspective correction rendering failed:', err);
       }
     }
 
@@ -2559,6 +2591,27 @@ export class Viewer {
   resetLensParams(): void {
     this.lensDistortionManager.resetLensParams();
     this.scheduleRender();
+  }
+
+  // Perspective correction methods (delegated to PerspectiveCorrectionManager)
+  setPerspectiveParams(params: PerspectiveCorrectionParams): void {
+    this.perspectiveCorrectionManager.setParams(params);
+    this.perspectiveGridOverlay.setParams(params);
+    this.scheduleRender();
+  }
+
+  getPerspectiveParams(): PerspectiveCorrectionParams {
+    return this.perspectiveCorrectionManager.getParams();
+  }
+
+  resetPerspectiveParams(): void {
+    this.perspectiveCorrectionManager.resetParams();
+    this.perspectiveGridOverlay.setParams(this.perspectiveCorrectionManager.getParams());
+    this.scheduleRender();
+  }
+
+  getPerspectiveGridOverlay(): PerspectiveGridOverlay {
+    return this.perspectiveGridOverlay;
   }
 
   // Channel isolation methods

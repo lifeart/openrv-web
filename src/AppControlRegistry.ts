@@ -19,6 +19,7 @@ import { CDLControl } from './ui/components/CDLControl';
 import { CurvesControl } from './ui/components/CurvesControl';
 import { LensControl } from './ui/components/LensControl';
 import { DeinterlaceControl } from './ui/components/DeinterlaceControl';
+import { PerspectiveCorrectionControl } from './ui/components/PerspectiveCorrectionControl';
 import { FilmEmulationControl } from './ui/components/FilmEmulationControl';
 import { StackControl } from './ui/components/StackControl';
 import { ChannelSelect } from './ui/components/ChannelSelect';
@@ -118,6 +119,7 @@ export class AppControlRegistry {
   readonly lensControl: LensControl;
   readonly deinterlaceControl: DeinterlaceControl;
   readonly filmEmulationControl: FilmEmulationControl;
+  readonly perspectiveCorrectionControl: PerspectiveCorrectionControl;
 
   // Transform tab
   readonly transformControl: TransformControl;
@@ -200,6 +202,7 @@ export class AppControlRegistry {
     this.lensControl = new LensControl();
     this.deinterlaceControl = new DeinterlaceControl();
     this.filmEmulationControl = new FilmEmulationControl();
+    this.perspectiveCorrectionControl = new PerspectiveCorrectionControl();
 
     // --- Transform tab ---
     this.transformControl = new TransformControl();
@@ -538,6 +541,8 @@ export class AppControlRegistry {
     effectsContent.appendChild(this.deinterlaceControl.render());
     effectsContent.appendChild(ContextToolbar.createDivider());
     effectsContent.appendChild(this.filmEmulationControl.render());
+    effectsContent.appendChild(ContextToolbar.createDivider());
+    effectsContent.appendChild(this.perspectiveCorrectionControl.render());
     contextToolbar.setTabContent('effects', effectsContent);
 
     // === TRANSFORM TAB ===
@@ -647,6 +652,7 @@ export class AppControlRegistry {
     this.lensControl.dispose();
     this.deinterlaceControl.dispose();
     this.filmEmulationControl.dispose();
+    this.perspectiveCorrectionControl.dispose();
     this.stackControl.dispose();
     this.channelSelect.dispose();
     this.parControl.dispose();

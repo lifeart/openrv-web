@@ -133,6 +133,9 @@ export interface StateAccessor {
   /** Set film emulation state for GPU shader. */
   setFilmEmulation(state: { enabled: boolean; intensity: number; saturation: number; grainIntensity: number; grainSeed: number; lutData: Uint8Array | null }): void;
 
+  /** Set perspective correction state for GPU shader. */
+  setPerspective(state: { enabled: boolean; invH: Float32Array; quality: number }): void;
+
   /** Set texel size (called before applyUniforms based on image dimensions). */
   setTexelSize(w: number, h: number): void;
 
