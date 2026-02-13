@@ -604,29 +604,35 @@
         color.rgb = mix(vec3(luma), color.rgb, u_saturation);
 
         // 5b. Highlights/Shadows/Whites/Blacks (before CDL/curves, matching CPU order)
+        // HDR-aware: scales masking and adjustments by peak luminance (u_hdrHeadroom)
         if (u_hsEnabled) {
-          // Whites/Blacks clipping
+          float hsPeak = max(u_hdrHeadroom, 1.0); // 1.0 for SDR, >1.0 for HDR
+
+          // Whites/Blacks clipping (scaled to HDR range)
           if (u_whites != 0.0 || u_blacks != 0.0) {
-            float whitePoint = 1.0 - u_whites * (55.0 / 255.0);
-            float blackPoint = u_blacks * (55.0 / 255.0);
+            float whitePoint = hsPeak * (1.0 - u_whites * (55.0 / 255.0));
+            float blackPoint = hsPeak * u_blacks * (55.0 / 255.0);
             float range = whitePoint - blackPoint;
             if (range > 0.0) {
-              color.rgb = clamp((color.rgb - blackPoint) / range, 0.0, 1.0);
+              color.rgb = clamp((color.rgb - blackPoint) / range * hsPeak, 0.0, hsPeak);
             }
           }
-          // Luminance for highlight/shadow masks
+
+          // Luminance for highlight/shadow masks (normalized to 0-1 for masking)
           float hsLum = dot(color.rgb, vec3(0.2126, 0.7152, 0.0722));
-          float highlightMask = smoothstep(0.5, 1.0, hsLum);
-          float shadowMask = 1.0 - smoothstep(0.0, 0.5, hsLum);
-          // Apply highlights (positive = darken highlights)
+          float hsLumNorm = hsLum / hsPeak;
+          float highlightMask = smoothstep(0.5, 1.0, hsLumNorm);
+          float shadowMask = 1.0 - smoothstep(0.0, 0.5, hsLumNorm);
+
+          // Apply highlights (positive = darken highlights, scaled to HDR range)
           if (u_highlights != 0.0) {
-            color.rgb -= u_highlights * highlightMask * (128.0 / 255.0);
+            color.rgb -= u_highlights * highlightMask * hsPeak * (128.0 / 255.0);
           }
-          // Apply shadows (positive = brighten shadows)
+          // Apply shadows (positive = brighten shadows, scaled to HDR range)
           if (u_shadows != 0.0) {
-            color.rgb += u_shadows * shadowMask * (128.0 / 255.0);
+            color.rgb += u_shadows * shadowMask * hsPeak * (128.0 / 255.0);
           }
-          color.rgb = clamp(color.rgb, 0.0, 1.0);
+          color.rgb = max(color.rgb, vec3(0.0));
         }
 
         // 5c. Vibrance (intelligent saturation - boosts less-saturated colors more)

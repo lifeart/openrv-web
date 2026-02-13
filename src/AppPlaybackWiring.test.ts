@@ -80,10 +80,10 @@ function createMockDeps(): PlaybackWiringDeps {
     getKeyboardHandler: vi.fn(() => ({
       showShortcutsDialog: vi.fn(),
       showCustomBindingsDialog: vi.fn(),
-    })),
+    })) as unknown as PlaybackWiringDeps['getKeyboardHandler'],
     getFullscreenManager: vi.fn(() => ({
       toggle: vi.fn(),
-    })),
+    })) as unknown as PlaybackWiringDeps['getFullscreenManager'],
   };
 }
 
@@ -169,13 +169,13 @@ describe('wirePlaybackControls', () => {
 
   it('PW-007: showShortcuts calls keyboardHandler.showShortcutsDialog()', () => {
     headerBar.emit('showShortcuts', undefined);
-    const handler = (deps.getKeyboardHandler as ReturnType<typeof vi.fn>).mock.results[0].value;
+    const handler = (deps.getKeyboardHandler as ReturnType<typeof vi.fn>).mock.results[0]!.value;
     expect(handler.showShortcutsDialog).toHaveBeenCalled();
   });
 
   it('PW-008: fullscreenToggle calls fullscreenManager.toggle()', () => {
     headerBar.emit('fullscreenToggle', undefined);
-    const manager = (deps.getFullscreenManager as ReturnType<typeof vi.fn>).mock.results[0].value;
+    const manager = (deps.getFullscreenManager as ReturnType<typeof vi.fn>).mock.results[0]!.value;
     expect(manager.toggle).toHaveBeenCalled();
   });
 });

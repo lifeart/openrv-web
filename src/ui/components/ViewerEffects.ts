@@ -134,6 +134,89 @@ export function applyHighlightsShadows(imageData: ImageData, params: HighlightsS
 }
 
 /**
+ * Apply highlight/shadow recovery for HDR float data (values can exceed 1.0).
+ * This is used for true HDR content like EXR files.
+ *
+ * Unlike the SDR version, this operates on Float32Array with arbitrary range,
+ * normalizing luminance masking by the peak value for proper HDR handling.
+ */
+export function applyHighlightsShadowsHDR(
+  imageData: ImageData,
+  params: HighlightsShadowsParams,
+  hdrData: Float32Array,
+  channels: number,
+  peak: number = 1.0
+): void {
+  const highlights = params.highlights / 100; // -1 to +1
+  const shadows = params.shadows / 100; // -1 to +1
+  const whites = params.whites / 100; // -1 to +1
+  const blacks = params.blacks / 100; // -1 to +1
+  const hdrPeak = Math.max(peak, 1.0);
+
+  const data = imageData.data;
+  const pixelCount = imageData.width * imageData.height;
+
+  // Calculate white and black clipping points scaled to HDR range
+  const whitePoint = hdrPeak * (1.0 - whites * (55 / 255));
+  const blackPoint = hdrPeak * blacks * (55 / 255);
+
+  for (let i = 0; i < pixelCount; i++) {
+    const hdrIndex = i * channels;
+    const dataIndex = i * 4;
+
+    // Get HDR values (may exceed 1.0)
+    let r = channels >= 1 ? hdrData[hdrIndex]! : 0;
+    let g = channels >= 2 ? hdrData[hdrIndex + 1]! : r;
+    let b = channels >= 3 ? hdrData[hdrIndex + 2]! : r;
+
+    // Apply whites/blacks clipping (scaled to HDR range)
+    if (whites !== 0 || blacks !== 0) {
+      const range = whitePoint - blackPoint;
+      if (range > 0) {
+        r = clamp(((r - blackPoint) / range) * hdrPeak, 0, hdrPeak);
+        g = clamp(((g - blackPoint) / range) * hdrPeak, 0, hdrPeak);
+        b = clamp(((b - blackPoint) / range) * hdrPeak, 0, hdrPeak);
+      }
+    }
+
+    // Calculate luminance (Rec. 709) and normalize to 0-1 for masking
+    const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    const lumNorm = lum / hdrPeak;
+
+    // Get masks using the same smoothstep curves as SDR, but on normalized luminance
+    const highlightMask = smoothstep(0.5, 1.0, lumNorm);
+    const shadowMask = 1.0 - smoothstep(0.0, 0.5, lumNorm);
+
+    // Apply highlights (scaled to HDR range)
+    if (highlights !== 0) {
+      const adjust = highlights * highlightMask * hdrPeak * (128 / 255);
+      r -= adjust;
+      g -= adjust;
+      b -= adjust;
+    }
+
+    // Apply shadows (scaled to HDR range)
+    if (shadows !== 0) {
+      const adjust = shadows * shadowMask * hdrPeak * (128 / 255);
+      r += adjust;
+      g += adjust;
+      b += adjust;
+    }
+
+    // Clamp to non-negative (preserve HDR range above 1.0)
+    r = Math.max(r, 0);
+    g = Math.max(g, 0);
+    b = Math.max(b, 0);
+
+    // Write to 8-bit ImageData (normalized to display range)
+    data[dataIndex] = clamp(Math.round(Number.isFinite(r) ? (r / hdrPeak) * 255 : 0), 0, 255);
+    data[dataIndex + 1] = clamp(Math.round(Number.isFinite(g) ? (g / hdrPeak) * 255 : 0), 0, 255);
+    data[dataIndex + 2] = clamp(Math.round(Number.isFinite(b) ? (b / hdrPeak) * 255 : 0), 0, 255);
+    // Alpha unchanged
+  }
+}
+
+/**
  * Apply vibrance effect to ImageData.
  * Vibrance is intelligent saturation that:
  * - Boosts less-saturated colors more than already-saturated ones

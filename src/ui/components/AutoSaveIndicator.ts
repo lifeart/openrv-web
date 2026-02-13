@@ -7,9 +7,13 @@
 
 import { getIconSvg } from './shared/Icons';
 import type { AutoSaveManager } from '../../core/session/AutoSaveManager';
+import type { AutoSaveConfig } from '../../core/session/AutoSaveManager';
 
 /** Auto-save status */
 export type AutoSaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'disabled';
+
+/** localStorage key for persisted config */
+const STORAGE_KEY = 'openrv-autosave-config';
 
 /**
  * AutoSaveIndicator component
@@ -28,10 +32,13 @@ export class AutoSaveIndicator {
     saving: () => void;
     saved: (data: { entry: { savedAt: string } }) => void;
     error: () => void;
-    configChanged: (config: { enabled: boolean }) => void;
+    configChanged: (config: { enabled: boolean; interval: number; maxVersions: number }) => void;
   } | null = null;
   private onRetryCallback: (() => void) | null = null;
   private boundClickHandler: () => void;
+  private popoverElement: HTMLElement | null = null;
+  private boundOutsideClickHandler: ((e: MouseEvent) => void) | null = null;
+  private boundEscapeHandler: ((e: KeyboardEvent) => void) | null = null;
 
   constructor() {
     this.container = document.createElement('div');
@@ -81,11 +88,17 @@ export class AutoSaveIndicator {
   }
 
   /**
-   * Handle click on the indicator (for retry on error)
+   * Handle click on the indicator
    */
   private handleClick(): void {
     if (this.status === 'error' && this.onRetryCallback) {
       this.onRetryCallback();
+      return;
+    }
+    if (this.popoverElement) {
+      this.hideSettingsPopover();
+    } else {
+      this.showSettingsPopover();
     }
   }
 
@@ -104,6 +117,12 @@ export class AutoSaveIndicator {
     this.disconnect();
 
     this.connectedManager = manager;
+
+    // Restore persisted config from localStorage
+    const savedConfig = AutoSaveIndicator.loadConfigFromStorage();
+    if (savedConfig) {
+      manager.setConfig(savedConfig);
+    }
 
     // Create bound event handlers so we can unsubscribe later
     this.boundEventHandlers = {
@@ -124,6 +143,7 @@ export class AutoSaveIndicator {
         } else if (this.status === 'disabled') {
           this.setStatus('idle');
         }
+        this.syncPopoverControls(config);
       },
     };
 
@@ -198,6 +218,206 @@ export class AutoSaveIndicator {
   }
 
   /**
+   * Show the settings popover
+   */
+  private showSettingsPopover(): void {
+    if (this.popoverElement || !this.connectedManager) return;
+
+    const config = this.connectedManager.getConfig();
+
+    const popover = document.createElement('div');
+    popover.dataset.testid = 'autosave-settings-popover';
+    popover.style.cssText = `
+      position: absolute;
+      top: 100%;
+      right: 0;
+      margin-top: 4px;
+      padding: 12px;
+      background: var(--bg-secondary, #2a2a2a);
+      border: 1px solid var(--border-color, #444);
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      z-index: 1000;
+      min-width: 220px;
+      font-size: 12px;
+      color: var(--text-primary, #eee);
+    `;
+
+    // Enable/disable toggle
+    const enableRow = document.createElement('label');
+    enableRow.style.cssText = `
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      cursor: pointer;
+    `;
+    const enableCheckbox = document.createElement('input');
+    enableCheckbox.type = 'checkbox';
+    enableCheckbox.checked = config.enabled;
+    enableCheckbox.dataset.testid = 'autosave-enable-toggle';
+    enableCheckbox.addEventListener('change', () => {
+      this.applyConfig({ enabled: enableCheckbox.checked });
+    });
+    enableRow.appendChild(enableCheckbox);
+    enableRow.appendChild(document.createTextNode('Enable auto-save'));
+    popover.appendChild(enableRow);
+
+    // Interval slider
+    const intervalLabel = document.createElement('div');
+    intervalLabel.style.cssText = 'margin-bottom: 4px;';
+    intervalLabel.dataset.testid = 'autosave-interval-label';
+    intervalLabel.textContent = `Interval: ${config.interval} min`;
+    popover.appendChild(intervalLabel);
+
+    const intervalSlider = document.createElement('input');
+    intervalSlider.type = 'range';
+    intervalSlider.min = '1';
+    intervalSlider.max = '30';
+    intervalSlider.value = String(config.interval);
+    intervalSlider.dataset.testid = 'autosave-interval-slider';
+    intervalSlider.style.cssText = 'width: 100%; margin-bottom: 12px;';
+    intervalSlider.addEventListener('input', () => {
+      const val = Number(intervalSlider.value);
+      intervalLabel.textContent = `Interval: ${val} min`;
+      this.applyConfig({ interval: val });
+    });
+    popover.appendChild(intervalSlider);
+
+    // Max versions slider
+    const versionsLabel = document.createElement('div');
+    versionsLabel.style.cssText = 'margin-bottom: 4px;';
+    versionsLabel.dataset.testid = 'autosave-versions-label';
+    versionsLabel.textContent = `Max versions: ${config.maxVersions}`;
+    popover.appendChild(versionsLabel);
+
+    const versionsSlider = document.createElement('input');
+    versionsSlider.type = 'range';
+    versionsSlider.min = '1';
+    versionsSlider.max = '50';
+    versionsSlider.value = String(config.maxVersions);
+    versionsSlider.dataset.testid = 'autosave-versions-slider';
+    versionsSlider.style.cssText = 'width: 100%;';
+    versionsSlider.addEventListener('input', () => {
+      const val = Number(versionsSlider.value);
+      versionsLabel.textContent = `Max versions: ${val}`;
+      this.applyConfig({ maxVersions: val });
+    });
+    popover.appendChild(versionsSlider);
+
+    // Position container as relative for absolute popover
+    this.container.style.position = 'relative';
+    this.container.appendChild(popover);
+    this.popoverElement = popover;
+
+    // Close on click outside
+    this.boundOutsideClickHandler = (e: MouseEvent) => {
+      if (!this.container.contains(e.target as Node)) {
+        this.hideSettingsPopover();
+      }
+    };
+    document.addEventListener('mousedown', this.boundOutsideClickHandler);
+
+    // Close on Escape
+    this.boundEscapeHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        this.hideSettingsPopover();
+      }
+    };
+    document.addEventListener('keydown', this.boundEscapeHandler);
+  }
+
+  /**
+   * Hide the settings popover
+   */
+  private hideSettingsPopover(): void {
+    if (this.popoverElement) {
+      this.popoverElement.remove();
+      this.popoverElement = null;
+    }
+    if (this.boundOutsideClickHandler) {
+      document.removeEventListener('mousedown', this.boundOutsideClickHandler);
+      this.boundOutsideClickHandler = null;
+    }
+    if (this.boundEscapeHandler) {
+      document.removeEventListener('keydown', this.boundEscapeHandler);
+      this.boundEscapeHandler = null;
+    }
+  }
+
+  /**
+   * Apply a config change to the manager and persist to localStorage
+   */
+  private applyConfig(partial: Partial<AutoSaveConfig>): void {
+    if (!this.connectedManager) return;
+    this.connectedManager.setConfig(partial);
+    const fullConfig = this.connectedManager.getConfig();
+    AutoSaveIndicator.saveConfigToStorage(fullConfig);
+  }
+
+  /**
+   * Sync popover controls with current config (if popover is open)
+   */
+  private syncPopoverControls(config: { enabled: boolean; interval: number; maxVersions: number }): void {
+    if (!this.popoverElement) return;
+
+    const toggle = this.popoverElement.querySelector<HTMLInputElement>('[data-testid="autosave-enable-toggle"]');
+    if (toggle) toggle.checked = config.enabled;
+
+    const intervalSlider = this.popoverElement.querySelector<HTMLInputElement>('[data-testid="autosave-interval-slider"]');
+    if (intervalSlider) intervalSlider.value = String(config.interval);
+
+    const intervalLabel = this.popoverElement.querySelector<HTMLElement>('[data-testid="autosave-interval-label"]');
+    if (intervalLabel) intervalLabel.textContent = `Interval: ${config.interval} min`;
+
+    const versionsSlider = this.popoverElement.querySelector<HTMLInputElement>('[data-testid="autosave-versions-slider"]');
+    if (versionsSlider) versionsSlider.value = String(config.maxVersions);
+
+    const versionsLabel = this.popoverElement.querySelector<HTMLElement>('[data-testid="autosave-versions-label"]');
+    if (versionsLabel) versionsLabel.textContent = `Max versions: ${config.maxVersions}`;
+  }
+
+  /**
+   * Load config from localStorage
+   */
+  static loadConfigFromStorage(): Partial<AutoSaveConfig> | null {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (typeof parsed !== 'object' || parsed === null) return null;
+      const result: Partial<AutoSaveConfig> = {};
+      if (typeof parsed.interval === 'number' && parsed.interval >= 1 && parsed.interval <= 30) {
+        result.interval = parsed.interval;
+      }
+      if (typeof parsed.enabled === 'boolean') {
+        result.enabled = parsed.enabled;
+      }
+      if (typeof parsed.maxVersions === 'number' && parsed.maxVersions >= 1 && parsed.maxVersions <= 100) {
+        result.maxVersions = parsed.maxVersions;
+      }
+      return Object.keys(result).length > 0 ? result : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Save config to localStorage
+   */
+  static saveConfigToStorage(config: AutoSaveConfig): void {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        interval: config.interval,
+        enabled: config.enabled,
+        maxVersions: config.maxVersions,
+      }));
+    } catch {
+      // Ignore storage errors
+    }
+  }
+
+  /**
    * Update the visual display
    * Uses CSS variables from ThemeManager for theme-consistent colors
    */
@@ -218,7 +438,7 @@ export class AutoSaveIndicator {
         this.iconElement.style.color = 'var(--success, #6bff6b)';
         this.textElement.textContent = 'Saved';
         this.container.title = `Saved at ${this.formatTime(this.lastSavedTime)}`;
-        this.container.style.cursor = 'default';
+        this.container.style.cursor = 'pointer';
         break;
 
       case 'error':
@@ -236,14 +456,14 @@ export class AutoSaveIndicator {
         this.iconElement.style.color = 'var(--text-muted, #666)';
         this.textElement.textContent = 'Auto-save off';
         this.container.title = 'Auto-save is disabled';
-        this.container.style.cursor = 'default';
+        this.container.style.cursor = 'pointer';
         break;
 
       case 'idle':
       default:
         this.iconElement.innerHTML = getIconSvg('cloud', 'sm');
         this.iconElement.style.animation = '';
-        this.container.style.cursor = 'default';
+        this.container.style.cursor = 'pointer';
 
         if (this.hasUnsavedChanges) {
           this.iconElement.style.color = 'var(--warning, #ffbb33)';
@@ -347,6 +567,9 @@ export class AutoSaveIndicator {
    * Dispose of the component
    */
   dispose(): void {
+    // Close popover if open
+    this.hideSettingsPopover();
+
     // Disconnect from manager (unsubscribe events)
     this.disconnect();
 

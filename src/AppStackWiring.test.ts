@@ -50,7 +50,6 @@ describe('wireStackControls', () => {
   let viewer: ReturnType<typeof createMockContext>['viewer'];
   let session: ReturnType<typeof createMockContext>['session'];
   let sessionBridge: ReturnType<typeof createMockContext>['sessionBridge'];
-  let controls: ReturnType<typeof createMockContext>['controls'];
   let stackControl: ReturnType<typeof createMockContext>['stackControl'];
   let state: StackWiringState;
 
@@ -60,7 +59,6 @@ describe('wireStackControls', () => {
     viewer = mock.viewer;
     session = mock.session;
     sessionBridge = mock.sessionBridge;
-    controls = mock.controls;
     stackControl = mock.stackControl;
 
     state = wireStackControls(ctx);

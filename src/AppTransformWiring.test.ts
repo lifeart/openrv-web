@@ -1,9 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { EventEmitter } from './utils/EventEmitter';
 import type { TransformControlEvents } from './ui/components/TransformControl';
 import type { AppWiringContext } from './AppWiringContext';
+import type { Transform2D } from './core/types/transform';
 
-const DEFAULT_TRANSFORM = { rotation: 0 as const, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
+const DEFAULT_TRANSFORM: Transform2D = { rotation: 0, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
 
 const mockRecordAction = vi.fn();
 
@@ -17,8 +18,8 @@ import { wireTransformControls } from './AppTransformWiring';
 
 function createMockContext() {
   const transformControl = new EventEmitter<TransformControlEvents>() as EventEmitter<TransformControlEvents> & {
-    setTransform: ReturnType<typeof vi.fn>;
-    getTransform: ReturnType<typeof vi.fn>;
+    setTransform: Mock<[Transform2D], void>;
+    getTransform: Mock<[], Transform2D>;
   };
   transformControl.setTransform = vi.fn();
   transformControl.getTransform = vi.fn(() => ({ ...DEFAULT_TRANSFORM }));
