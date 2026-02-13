@@ -15,6 +15,7 @@ import type { Viewer } from './ui/components/Viewer';
 import type { Histogram } from './ui/components/Histogram';
 import type { Waveform } from './ui/components/Waveform';
 import type { Vectorscope } from './ui/components/Vectorscope';
+import type { GamutDiagram } from './ui/components/GamutDiagram';
 import type { ScopesControl } from './ui/components/ScopesControl';
 import type { InfoPanel } from './ui/components/InfoPanel';
 import type { ChannelSelect } from './ui/components/ChannelSelect';
@@ -40,6 +41,7 @@ import {
   updateHistogram as _updateHistogram,
   updateWaveform as _updateWaveform,
   updateVectorscope as _updateVectorscope,
+  updateGamutDiagram as _updateGamutDiagram,
   createScopeScheduler,
 } from './handlers/scopeHandlers';
 import {
@@ -73,6 +75,7 @@ export interface SessionBridgeContext {
   getHistogram(): Histogram;
   getWaveform(): Waveform;
   getVectorscope(): Vectorscope;
+  getGamutDiagram(): GamutDiagram;
 
   // Info panel
   getInfoPanel(): InfoPanel;
@@ -117,6 +120,7 @@ export class AppSessionBridge {
       this.updateHistogram();
       this.updateWaveform();
       this.updateVectorscope();
+      this.updateGamutDiagram();
       this.updateInfoPanel();
     });
 
@@ -130,7 +134,8 @@ export class AppSessionBridge {
         () => this.updateEXRLayers(),
         () => this.updateHistogram(),
         () => this.updateWaveform(),
-        () => this.updateVectorscope()
+        () => this.updateVectorscope(),
+        () => this.updateGamutDiagram()
       );
     });
 
@@ -148,7 +153,8 @@ export class AppSessionBridge {
         isPlaying,
         () => this.updateHistogram(),
         () => this.updateWaveform(),
-        () => this.updateVectorscope()
+        () => this.updateVectorscope(),
+        () => this.updateGamutDiagram()
       );
     });
 
@@ -169,7 +175,8 @@ export class AppSessionBridge {
       (s, e, h) => this.on(s, e, h),
       () => this.updateHistogram(),
       () => this.updateWaveform(),
-      () => this.updateVectorscope()
+      () => this.updateVectorscope(),
+      () => this.updateGamutDiagram()
     );
   }
 
@@ -200,6 +207,13 @@ export class AppSessionBridge {
    */
   updateVectorscope(): void {
     _updateVectorscope(this.context);
+  }
+
+  /**
+   * Update gamut diagram with current frame data
+   */
+  updateGamutDiagram(): void {
+    _updateGamutDiagram(this.context);
   }
 
   /**

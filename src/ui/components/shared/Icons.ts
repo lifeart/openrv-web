@@ -177,6 +177,7 @@ const ICONS = {
   'histogram': '<rect x="3" y="12" width="4" height="9"/><rect x="10" y="6" width="4" height="15"/><rect x="17" y="9" width="4" height="12"/>',
   'waveform': '<path d="M2 12h2l2-6 3 12 3-8 2 4 2-2h6"/>',
   'vectorscope': '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/><line x1="12" y1="3" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="21"/><line x1="3" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="21" y2="12"/>',
+  'gamut': '<path d="M4 20 C4 8 8 4 12 4 C16 4 20 8 20 12 C20 16 16 20 12 20 Z" fill="none"/><polygon points="8,16 16,16 12,6" fill="none"/>',
 
   // Navigation
   'chevron-left': '<polyline points="15 18 9 12 15 6"/>',

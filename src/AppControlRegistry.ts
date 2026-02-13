@@ -30,6 +30,7 @@ import { StereoAlignControl } from './ui/components/StereoAlignControl';
 import { Histogram } from './ui/components/Histogram';
 import { Waveform } from './ui/components/Waveform';
 import { Vectorscope } from './ui/components/Vectorscope';
+import { GamutDiagram } from './ui/components/GamutDiagram';
 import { ZoomControl } from './ui/components/ZoomControl';
 import { ScopesControl } from './ui/components/ScopesControl';
 import { CompareControl } from './ui/components/CompareControl';
@@ -131,6 +132,7 @@ export class AppControlRegistry {
   readonly histogram: Histogram;
   readonly waveform: Waveform;
   readonly vectorscope: Vectorscope;
+  readonly gamutDiagram: GamutDiagram;
 
   // Panels
   readonly historyPanel: HistoryPanel;
@@ -215,6 +217,7 @@ export class AppControlRegistry {
     this.histogram = new Histogram();
     this.waveform = new Waveform();
     this.vectorscope = new Vectorscope();
+    this.gamutDiagram = new GamutDiagram();
 
     // --- Panels ---
     this.historyPanel = new HistoryPanel(getGlobalHistoryManager());
@@ -468,6 +471,9 @@ export class AppControlRegistry {
     this.registryUnsubscribers.push(this.vectorscope.on('visibilityChanged', (visible) => {
       this.scopesControl.setScopeVisible('vectorscope', visible);
     }));
+    this.registryUnsubscribers.push(this.gamutDiagram.on('visibilityChanged', (visible) => {
+      this.scopesControl.setScopeVisible('gamutDiagram', visible);
+    }));
 
     // Sync histogram clipping overlay toggle with Viewer
     this.registryUnsubscribers.push(this.histogram.on('clippingOverlayToggled', (enabled) => {
@@ -669,6 +675,7 @@ export class AppControlRegistry {
     this.histogram.dispose();
     this.waveform.dispose();
     this.vectorscope.dispose();
+    this.gamutDiagram.dispose();
     this.textFormattingToolbar.dispose();
     this.autoSaveIndicator.dispose();
     this.snapshotPanel.dispose();

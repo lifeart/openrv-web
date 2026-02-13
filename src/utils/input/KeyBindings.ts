@@ -157,6 +157,10 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyY',
     description: 'Toggle vectorscope'
   },
+  'panel.gamutDiagram': {
+    code: 'KeyG',
+    description: 'Toggle CIE gamut diagram'
+  },
   'panel.histogram': {
     code: 'KeyH',
     description: 'Toggle histogram'

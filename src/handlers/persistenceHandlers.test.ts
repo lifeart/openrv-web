@@ -63,6 +63,7 @@ function createMockContext(): SessionBridgeContext {
   const histogram = { show: vi.fn(), hide: vi.fn() };
   const waveform = { show: vi.fn(), hide: vi.fn() };
   const vectorscope = { show: vi.fn(), hide: vi.fn() };
+  const gamutDiagram = { show: vi.fn(), hide: vi.fn() };
 
   return {
     getSession: () => createMockSession(),
@@ -83,6 +84,7 @@ function createMockContext(): SessionBridgeContext {
     getHistogram: () => histogram,
     getWaveform: () => waveform,
     getVectorscope: () => vectorscope,
+    getGamutDiagram: () => gamutDiagram,
   } as unknown as SessionBridgeContext;
 }
 
@@ -93,6 +95,7 @@ describe('bindPersistenceHandlers', () => {
   let updateHistogram: ReturnType<typeof vi.fn>;
   let updateWaveform: ReturnType<typeof vi.fn>;
   let updateVectorscope: ReturnType<typeof vi.fn>;
+  let updateGamutDiagram: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     context = createMockContext();
@@ -102,8 +105,9 @@ describe('bindPersistenceHandlers', () => {
     updateHistogram = vi.fn();
     updateWaveform = vi.fn();
     updateVectorscope = vi.fn();
+    updateGamutDiagram = vi.fn();
 
-    bindPersistenceHandlers(context, session, mockOn.on, updateHistogram, updateWaveform, updateVectorscope);
+    bindPersistenceHandlers(context, session, mockOn.on, updateHistogram, updateWaveform, updateVectorscope, updateGamutDiagram);
   });
 
   it('PERH-U001: registers annotationsLoaded handler', () => {
@@ -315,6 +319,40 @@ describe('bindPersistenceHandlers', () => {
     expect(context.getVectorscope().show).toHaveBeenCalled();
     expect(updateVectorscope).toHaveBeenCalled();
     expect(context.getScopesControl().setScopeVisible).toHaveBeenCalledWith('vectorscope', true);
+  });
+
+  it('PERH-U032: settingsLoaded shows gamutDiagram and updates it', () => {
+    handlers.settingsLoaded!({
+      scopes: { histogram: false, waveform: false, vectorscope: false, gamutDiagram: true },
+    } as any);
+
+    expect(context.getGamutDiagram().show).toHaveBeenCalled();
+    expect(updateGamutDiagram).toHaveBeenCalled();
+    expect(context.getScopesControl().setScopeVisible).toHaveBeenCalledWith('gamutDiagram', true);
+  });
+
+  it('PERH-U033: settingsLoaded hides gamutDiagram when not visible', () => {
+    handlers.settingsLoaded!({
+      scopes: { histogram: false, waveform: false, vectorscope: false, gamutDiagram: false },
+    } as any);
+
+    expect(context.getGamutDiagram().hide).toHaveBeenCalled();
+    expect(context.getScopesControl().setScopeVisible).toHaveBeenCalledWith('gamutDiagram', false);
+  });
+
+  it('PERH-U034: settingsLoaded handles old settings without gamutDiagram property', () => {
+    // Simulates loading a session saved before gamutDiagram was added
+    handlers.settingsLoaded!({
+      scopes: { histogram: true, waveform: false, vectorscope: false },
+    } as any);
+
+    // histogram should show
+    expect(context.getHistogram().show).toHaveBeenCalled();
+    expect(context.getScopesControl().setScopeVisible).toHaveBeenCalledWith('histogram', true);
+    // gamutDiagram.show should NOT be called (undefined is falsy → hides instead)
+    expect(context.getGamutDiagram().show).not.toHaveBeenCalled();
+    expect(context.getGamutDiagram().hide).toHaveBeenCalled();
+    expect(context.getScopesControl().setScopeVisible).toHaveBeenCalledWith('gamutDiagram', undefined);
   });
 
   it('PERH-U030: settingsLoaded syncs GTO store after applying settings', () => {

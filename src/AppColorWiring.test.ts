@@ -63,6 +63,10 @@ function createContext() {
   const sessionBridge = createMockSessionBridge();
   const persistenceManager = createMockPersistenceManager();
 
+  const gamutDiagram = {
+    setColorSpaces: vi.fn(),
+  };
+
   const controls = {
     colorInversionToggle,
     colorControls,
@@ -70,6 +74,7 @@ function createContext() {
     curvesControl,
     ocioControl,
     displayProfileControl,
+    gamutDiagram,
   };
 
   return {
@@ -223,6 +228,75 @@ describe('wireColorControls', () => {
     expect(ctx._viewer.setOCIOBakedLUT).toHaveBeenCalledWith(null, false);
     expect(ctx._sessionBridge.scheduleUpdateScopes).toHaveBeenCalled();
     expect(ctx._persistenceManager.syncGTOStore).toHaveBeenCalled();
+  });
+
+  it('CW-008b: ocioControl stateChanged updates gamutDiagram color spaces', () => {
+    wireColorControls(ctx as any);
+
+    const ocioState = {
+      enabled: true,
+      configName: 'aces_1.0.3',
+      customConfigPath: null,
+      inputColorSpace: 'ACES - ACEScg',
+      detectedColorSpace: null,
+      workingColorSpace: 'ACEScg',
+      display: 'sRGB',
+      view: 'ACES 1.0 SDR-video',
+      look: '',
+    };
+    ctx._controls.ocioControl.emit('stateChanged', ocioState);
+
+    expect(ctx._controls.gamutDiagram.setColorSpaces).toHaveBeenCalledWith(
+      'ACES - ACEScg',
+      'ACEScg',
+      'sRGB',
+    );
+  });
+
+  it('CW-008c: ocioControl stateChanged resolves Auto input to detectedColorSpace', () => {
+    wireColorControls(ctx as any);
+
+    const ocioState = {
+      enabled: true,
+      configName: 'aces_1.0.3',
+      customConfigPath: null,
+      inputColorSpace: 'Auto',
+      detectedColorSpace: 'Rec.2020',
+      workingColorSpace: 'ACEScg',
+      display: 'sRGB',
+      view: 'ACES 1.0 SDR-video',
+      look: '',
+    };
+    ctx._controls.ocioControl.emit('stateChanged', ocioState);
+
+    expect(ctx._controls.gamutDiagram.setColorSpaces).toHaveBeenCalledWith(
+      'Rec.2020',
+      'ACEScg',
+      'sRGB',
+    );
+  });
+
+  it('CW-008d: ocioControl stateChanged with Auto and no detected falls back to sRGB', () => {
+    wireColorControls(ctx as any);
+
+    const ocioState = {
+      enabled: true,
+      configName: 'aces_1.0.3',
+      customConfigPath: null,
+      inputColorSpace: 'Auto',
+      detectedColorSpace: null,
+      workingColorSpace: 'ACEScg',
+      display: 'sRGB',
+      view: 'ACES 1.0 SDR-video',
+      look: '',
+    };
+    ctx._controls.ocioControl.emit('stateChanged', ocioState);
+
+    expect(ctx._controls.gamutDiagram.setColorSpaces).toHaveBeenCalledWith(
+      'sRGB',
+      'ACEScg',
+      'sRGB',
+    );
   });
 
   it('CW-010: returns ColorWiringState with null timer initially', () => {

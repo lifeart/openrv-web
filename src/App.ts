@@ -169,6 +169,7 @@ export class App {
       getHistogram: () => this.controls.histogram,
       getWaveform: () => this.controls.waveform,
       getVectorscope: () => this.controls.vectorscope,
+      getGamutDiagram: () => this.controls.gamutDiagram,
       getInfoPanel: () => this.controls.infoPanel,
       getCropControl: () => this.controls.cropControl,
       getOCIOControl: () => this.controls.ocioControl,
@@ -438,6 +439,9 @@ export class App {
     // Add vectorscope overlay to viewer container
     this.viewer.getContainer().appendChild(this.controls.vectorscope.render());
 
+    // Add gamut diagram overlay to viewer container
+    this.viewer.getContainer().appendChild(this.controls.gamutDiagram.render());
+
     // Add history panel to viewer container
     this.viewer.getContainer().appendChild(this.controls.historyPanel.getElement());
 
@@ -606,6 +610,7 @@ export class App {
       'panel.crop': () => this.controls.cropControl.toggle(),
       'panel.waveform': () => this.controls.scopesControl.toggleScope('waveform'),
       'panel.vectorscope': () => this.controls.scopesControl.toggleScope('vectorscope'),
+      'panel.gamutDiagram': () => this.controls.scopesControl.toggleScope('gamutDiagram'),
       'panel.histogram': () => this.controls.scopesControl.toggleScope('histogram'),
       'panel.ocio': () => this.controls.ocioControl.toggle(),
       'display.cycleProfile': () => this.controls.displayProfileControl.cycleProfile(),

@@ -120,6 +120,12 @@ export function wireColorControls(ctx: AppWiringContext): ColorWiringState {
   // OCIO control -> viewer (baked 3D LUT)
   controls.ocioControl.on('stateChanged', (state) => {
     updateOCIOPipeline(ctx, state);
+    // Update gamut diagram triangles with current OCIO color spaces
+    controls.gamutDiagram.setColorSpaces(
+      state.inputColorSpace === 'Auto' ? (state.detectedColorSpace ?? 'sRGB') : state.inputColorSpace,
+      state.workingColorSpace,
+      state.display
+    );
     sessionBridge.scheduleUpdateScopes();
     persistenceManager.syncGTOStore();
   });

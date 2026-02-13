@@ -34,6 +34,7 @@ function createMockContext() {
     updateHistogram: vi.fn(),
     updateWaveform: vi.fn(),
     updateVectorscope: vi.fn(),
+    updateGamutDiagram: vi.fn(),
     scheduleUpdateScopes: vi.fn(),
     handleEXRLayerChange: vi.fn(),
   };
@@ -54,6 +55,7 @@ function createMockContext() {
   const histogram = { show: vi.fn(), hide: vi.fn() };
   const waveform = { show: vi.fn(), hide: vi.fn() };
   const vectorscope = { show: vi.fn(), hide: vi.fn() };
+  const gamutDiagram = { show: vi.fn(), hide: vi.fn() };
 
   const compareControl = Object.assign(new EventEmitter(), {
     getWipePosition: vi.fn().mockReturnValue(0.5),
@@ -83,6 +85,7 @@ function createMockContext() {
     histogram,
     waveform,
     vectorscope,
+    gamutDiagram,
     compareControl,
     toneMappingControl,
     ghostFrameControl,
@@ -240,6 +243,21 @@ describe('wireViewControls', () => {
   it('VW-014: presentationMode stateChanged calls headerBar.setPresentationState()', () => {
     (controls.presentationMode as EventEmitter).emit('stateChanged', { enabled: true });
     expect(headerBar.setPresentationState).toHaveBeenCalledWith(true);
+  });
+
+  // VW-016
+  it('VW-016: scopeToggled gamutDiagram show calls gamutDiagram.show() and sessionBridge.updateGamutDiagram()', () => {
+    (controls.scopesControl as EventEmitter).emit('scopeToggled', { scope: 'gamutDiagram', visible: true });
+    expect(controls.gamutDiagram.show).toHaveBeenCalledOnce();
+    expect(sessionBridge.updateGamutDiagram).toHaveBeenCalledOnce();
+  });
+
+  // VW-017
+  it('VW-017: scopeToggled gamutDiagram hide calls gamutDiagram.hide()', () => {
+    (controls.scopesControl as EventEmitter).emit('scopeToggled', { scope: 'gamutDiagram', visible: false });
+    expect(controls.gamutDiagram.hide).toHaveBeenCalledOnce();
+    expect(controls.gamutDiagram.show).not.toHaveBeenCalled();
+    expect(sessionBridge.updateGamutDiagram).not.toHaveBeenCalled();
   });
 
   // VW-015

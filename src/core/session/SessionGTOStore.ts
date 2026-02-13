@@ -266,6 +266,7 @@ export class SessionGTOStore {
       { protocol: 'RVHistogram', key: 'histogram', name: 'histNode' },
       { protocol: 'RVWaveform', key: 'waveform', name: 'waveNode' },
       { protocol: 'RVVectorscope', key: 'vectorscope', name: 'vectorNode' },
+      { protocol: 'RVGamutDiagram', key: 'gamutDiagram', name: 'gamutNode' },
     ];
 
     for (const { protocol, key, name } of mappings) {

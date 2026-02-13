@@ -21,6 +21,7 @@ import {
   getViewsForDisplay,
   getLooks,
   OCIOProcessor,
+  WORKFLOW_PRESETS,
 } from '../../color/ColorProcessingFacade';
 import { getIconSvg } from './shared/Icons';
 import { DropdownMenu } from './shared/DropdownMenu';
@@ -306,6 +307,10 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
 
     this.panel.appendChild(configSection);
 
+    // Quick Presets section (collapsible)
+    const presetsSection = this.buildPresetsSection();
+    this.panel.appendChild(presetsSection);
+
     // Input section
     const inputSection = this.createSection('Input');
     const inputRow = this.createSelectRow('Color Space:', this.inputColorSpaceLabel, 'ocio-input-colorspace');
@@ -578,6 +583,120 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
     footer.appendChild(toggleContainer);
 
     return footer;
+  }
+
+  /**
+   * Build collapsible Quick Presets section
+   */
+  private buildPresetsSection(): HTMLElement {
+    const section = document.createElement('div');
+    section.style.cssText = 'margin-bottom: 12px;';
+
+    // Disclosure triangle header
+    const header = document.createElement('button');
+    header.dataset.testid = 'ocio-presets-toggle';
+    header.style.cssText = `
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      width: 100%;
+      background: none;
+      border: none;
+      padding: 4px 0;
+      cursor: pointer;
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--border-secondary);
+      margin-bottom: 6px;
+      padding-bottom: 4px;
+    `;
+    const arrow = document.createElement('span');
+    arrow.textContent = '\u25B6';
+    arrow.style.cssText = 'font-size: 8px; transition: transform 0.15s ease;';
+    const label = document.createElement('span');
+    label.textContent = 'Quick Presets';
+    header.appendChild(arrow);
+    header.appendChild(label);
+
+    const content = document.createElement('div');
+    content.dataset.testid = 'ocio-presets-content';
+    content.style.cssText = 'display: none;';
+
+    let collapsed = true;
+    header.addEventListener('click', () => {
+      collapsed = !collapsed;
+      content.style.display = collapsed ? 'none' : 'block';
+      arrow.style.transform = collapsed ? '' : 'rotate(90deg)';
+    });
+
+    // Group presets by category
+    const categories: Array<{ key: string; label: string }> = [
+      { key: 'camera', label: 'Camera' },
+      { key: 'aces', label: 'ACES' },
+      { key: 'display', label: 'Display' },
+      { key: 'hdr', label: 'HDR' },
+    ];
+
+    for (const cat of categories) {
+      const presets = WORKFLOW_PRESETS.filter((p) => p.category === cat.key);
+      if (presets.length === 0) continue;
+
+      const catLabel = document.createElement('div');
+      catLabel.textContent = cat.label;
+      catLabel.style.cssText = `
+        font-size: 10px;
+        color: var(--text-muted);
+        margin: 6px 0 4px 0;
+      `;
+      content.appendChild(catLabel);
+
+      const grid = document.createElement('div');
+      grid.style.cssText = `
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px;
+      `;
+
+      for (const preset of presets) {
+        const btn = document.createElement('button');
+        btn.textContent = preset.name;
+        btn.title = preset.description;
+        btn.dataset.testid = `ocio-preset-${preset.id}`;
+        btn.style.cssText = `
+          background: var(--bg-tertiary);
+          border: 1px solid var(--border-primary);
+          color: var(--text-primary);
+          padding: 4px 6px;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 10px;
+          text-align: center;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        `;
+        btn.addEventListener('mouseenter', () => {
+          btn.style.background = 'var(--bg-hover)';
+          btn.style.borderColor = 'var(--accent-primary)';
+        });
+        btn.addEventListener('mouseleave', () => {
+          btn.style.background = 'var(--bg-tertiary)';
+          btn.style.borderColor = 'var(--border-primary)';
+        });
+        btn.addEventListener('click', () => {
+          this.manager.applyPreset(preset.id);
+        });
+        grid.appendChild(btn);
+      }
+
+      content.appendChild(grid);
+    }
+
+    section.appendChild(header);
+    section.appendChild(content);
+    return section;
   }
 
   /**

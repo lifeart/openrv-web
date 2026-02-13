@@ -24,12 +24,14 @@ describe('ScopesControl', () => {
       expect(state.histogram).toBe(false);
       expect(state.waveform).toBe(false);
       expect(state.vectorscope).toBe(false);
+      expect(state.gamutDiagram).toBe(false);
     });
 
     it('SCOPE-U002: isScopeVisible returns false for all scopes initially', () => {
       expect(control.isScopeVisible('histogram')).toBe(false);
       expect(control.isScopeVisible('waveform')).toBe(false);
       expect(control.isScopeVisible('vectorscope')).toBe(false);
+      expect(control.isScopeVisible('gamutDiagram')).toBe(false);
     });
   });
 
@@ -111,6 +113,7 @@ describe('ScopesControl', () => {
         histogram: true,
         waveform: false,
         vectorscope: false,
+        gamutDiagram: false,
       });
     });
   });
@@ -173,6 +176,7 @@ describe('ScopesControl', () => {
         histogram: true,
         waveform: false,
         vectorscope: true,
+        gamutDiagram: false,
       });
     });
   });
@@ -195,7 +199,7 @@ describe('ScopesControl', () => {
       expect(button.textContent).toMatch(/Scopes\s*\(2\)/);
     });
 
-    it('SCOPE-U052: button shows Scopes (3) with all active', () => {
+    it('SCOPE-U052: button shows Scopes (3) with three active', () => {
       const el = control.render();
       control.toggleScope('histogram');
       control.toggleScope('waveform');
@@ -203,6 +207,17 @@ describe('ScopesControl', () => {
 
       const button = el.querySelector('[data-testid="scopes-control-button"]') as HTMLButtonElement;
       expect(button.textContent).toMatch(/Scopes\s*\(3\)/);
+    });
+
+    it('SCOPE-U056: button shows Scopes (4) with all four active', () => {
+      const el = control.render();
+      control.toggleScope('histogram');
+      control.toggleScope('waveform');
+      control.toggleScope('vectorscope');
+      control.toggleScope('gamutDiagram');
+
+      const button = el.querySelector('[data-testid="scopes-control-button"]') as HTMLButtonElement;
+      expect(button.textContent).toMatch(/Scopes\s*\(4\)/);
     });
 
     it('SCOPE-U053: button shows just Scopes when none active', () => {
@@ -243,7 +258,7 @@ describe('ScopesControl', () => {
   });
 
   describe('scope types', () => {
-    const scopeTypes: ScopeType[] = ['histogram', 'waveform', 'vectorscope'];
+    const scopeTypes: ScopeType[] = ['histogram', 'waveform', 'vectorscope', 'gamutDiagram'];
 
     scopeTypes.forEach((scope) => {
       it(`SCOPE-U070-${scope}: ${scope} can be toggled`, () => {
@@ -269,24 +284,29 @@ describe('ScopesControl', () => {
       control.toggleScope('histogram');
       control.toggleScope('waveform');
       control.toggleScope('vectorscope');
+      control.toggleScope('gamutDiagram');
 
       expect(control.isScopeVisible('histogram')).toBe(true);
       expect(control.isScopeVisible('waveform')).toBe(true);
       expect(control.isScopeVisible('vectorscope')).toBe(true);
+      expect(control.isScopeVisible('gamutDiagram')).toBe(true);
     });
 
     it('SCOPE-U081: can disable all scopes', () => {
       control.toggleScope('histogram');
       control.toggleScope('waveform');
       control.toggleScope('vectorscope');
+      control.toggleScope('gamutDiagram');
 
       control.toggleScope('histogram');
       control.toggleScope('waveform');
       control.toggleScope('vectorscope');
+      control.toggleScope('gamutDiagram');
 
       expect(control.isScopeVisible('histogram')).toBe(false);
       expect(control.isScopeVisible('waveform')).toBe(false);
       expect(control.isScopeVisible('vectorscope')).toBe(false);
+      expect(control.isScopeVisible('gamutDiagram')).toBe(false);
     });
 
     it('SCOPE-U082: scopes are independent', () => {
@@ -295,6 +315,7 @@ describe('ScopesControl', () => {
       expect(control.isScopeVisible('histogram')).toBe(true);
       expect(control.isScopeVisible('waveform')).toBe(false);
       expect(control.isScopeVisible('vectorscope')).toBe(false);
+      expect(control.isScopeVisible('gamutDiagram')).toBe(false);
     });
   });
 });
