@@ -19,6 +19,8 @@
  *   apple:hdrgainmapheadroom or hdrgm:GainMapMax
  */
 
+import { drawImageWithOrientation } from './shared';
+
 export interface GainmapInfo {
   baseImageOffset: number;
   baseImageLength: number;
@@ -122,6 +124,9 @@ export async function decodeGainmapToFloat32(
     { type: 'image/jpeg' }
   );
 
+  // Parse EXIF orientation from the original JPEG (applied by browser to base but not to gainmap)
+  const orientation = extractJPEGOrientation(buffer);
+
   // Decode both using browser's JPEG decoder
   const [baseBitmap, gainmapBitmap] = await Promise.all([
     createImageBitmap(baseBlob),
@@ -149,11 +154,12 @@ export async function decodeGainmapToFloat32(
   baseBitmap.close();
 
   // Gainmap may be smaller - scale up to base image size
+  // Apply orientation transform so gainmap pixels align with the display-rotated base
   const gainmapOrigWidth = gainmapBitmap.width;
   const gainmapOrigHeight = gainmapBitmap.height;
   const gainCanvas = createCanvas(width, height);
   const gainCtx = gainCanvas.getContext('2d')! as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
-  gainCtx.drawImage(gainmapBitmap, 0, 0, width, height);
+  drawImageWithOrientation(gainCtx, gainmapBitmap, width, height, orientation);
   const gainData = gainCtx.getImageData(0, 0, width, height).data;
   gainmapBitmap.close();
 
@@ -205,6 +211,103 @@ export async function decodeGainmapToFloat32(
   console.log(`[GainmapJPEG] HDR reconstruction complete: ${pixelCount} pixels, peak value=${maxValue.toFixed(3)}`);
 
   return { width, height, data: result, channels: 4 };
+}
+
+/**
+ * Extract EXIF orientation tag (tag 274) from a JPEG buffer.
+ * Scans APP1 markers for Exif\0\0 header, parses TIFF IFD0.
+ * Returns 1-8, defaults to 1 if not found or invalid.
+ */
+export function extractJPEGOrientation(buffer: ArrayBuffer): number {
+  if (buffer.byteLength < 4) return 1;
+  const view = new DataView(buffer);
+
+  // Verify JPEG SOI
+  if (view.getUint16(0) !== 0xFFD8) return 1;
+
+  let offset = 2;
+  const length = buffer.byteLength;
+
+  while (offset < length - 4) {
+    if (view.getUint8(offset) !== 0xFF) {
+      offset++;
+      continue;
+    }
+
+    const marker = view.getUint8(offset + 1);
+
+    // SOS or EOI — stop scanning
+    if (marker === 0xDA || marker === 0xD9) break;
+
+    // Skip padding bytes
+    if (marker === 0xFF) { offset++; continue; }
+
+    // Skip standalone markers
+    if ((marker >= 0xD0 && marker <= 0xD7) || marker === 0xD8 || marker === 0x01) {
+      offset += 2;
+      continue;
+    }
+
+    if (offset + 3 >= length) break;
+    const segmentLength = view.getUint16(offset + 2);
+
+    // APP1 marker (0xFFE1) — may contain EXIF
+    if (marker === 0xE1) {
+      // Check for 'Exif\0\0' identifier (6 bytes at offset+4)
+      if (
+        offset + 13 < length &&
+        view.getUint8(offset + 4) === 0x45 && // 'E'
+        view.getUint8(offset + 5) === 0x78 && // 'x'
+        view.getUint8(offset + 6) === 0x69 && // 'i'
+        view.getUint8(offset + 7) === 0x66 && // 'f'
+        view.getUint8(offset + 8) === 0x00 &&
+        view.getUint8(offset + 9) === 0x00
+      ) {
+        // TIFF header starts at offset+10
+        const tiffStart = offset + 10;
+        const segEnd = offset + 2 + segmentLength;
+        if (tiffStart + 8 > Math.min(segEnd, length)) break;
+
+        // Read byte order
+        const byteOrder = view.getUint16(tiffStart);
+        const isLE = byteOrder === 0x4949; // 'II' = little-endian
+        if (byteOrder !== 0x4949 && byteOrder !== 0x4D4D) break;
+
+        // Verify TIFF magic 0x002A
+        if (view.getUint16(tiffStart + 2, isLE) !== 0x002A) break;
+
+        // Read IFD0 offset (relative to tiffStart)
+        const ifdOffset = view.getUint32(tiffStart + 4, isLE);
+        const ifdStart = tiffStart + ifdOffset;
+
+        if (ifdStart + 2 > Math.min(segEnd, length)) break;
+
+        const entryCount = view.getUint16(ifdStart, isLE);
+
+        for (let i = 0; i < entryCount; i++) {
+          const entryStart = ifdStart + 2 + i * 12;
+          if (entryStart + 12 > Math.min(segEnd, length)) break;
+
+          const tag = view.getUint16(entryStart, isLE);
+          if (tag === 0x0112) { // Orientation tag (274)
+            const type = view.getUint16(entryStart + 2, isLE);
+            // type 3 = SHORT (uint16), value in first 2 bytes of value field
+            if (type === 3) {
+              const val = view.getUint16(entryStart + 8, isLE);
+              if (val >= 1 && val <= 8) return val;
+            }
+            return 1;
+          }
+        }
+        // EXIF found but no orientation tag
+        return 1;
+      }
+    }
+
+    offset += 2 + segmentLength;
+  }
+
+  return 1;
 }
 
 // =============================================================================

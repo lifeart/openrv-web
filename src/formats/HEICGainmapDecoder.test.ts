@@ -12,7 +12,7 @@ import {
   type HEICGainmapInfo,
   type HEICColorInfo,
 } from './HEICGainmapDecoder';
-import { parseHeadroomFromXMPText } from './AVIFGainmapDecoder';
+import { parseHeadroomFromXMPText, readBox, findBox } from './AVIFGainmapDecoder';
 
 // =============================================================================
 // Helper: build a test HEIC buffer with ISOBMFF gainmap structure
@@ -1351,3 +1351,133 @@ function createHvcCBox(data: Uint8Array): Uint8Array {
   box.set(data, 8);
   return box;
 }
+
+// =============================================================================
+// N. buildStandaloneHEIC irot/imir support Tests
+// =============================================================================
+
+describe('buildStandaloneHEIC irot/imir support', () => {
+  // Shared test data
+  const codedData = new Uint8Array([0xCA, 0xFE, 0xBA, 0xBE]);
+  const hvcC = createMinimalHvcCBox();
+
+  /**
+   * Navigate into the ipco box inside the output buffer.
+   * Returns the ipco BoxInfo and the DataView for the buffer.
+   */
+  function getIpcoFromBuffer(buffer: ArrayBuffer): { view: DataView; ipco: { dataStart: number; dataEnd: number } } {
+    const view = new DataView(buffer);
+    const end = buffer.byteLength;
+
+    // Skip ftyp
+    const ftyp = readBox(view, 0, end);
+    expect(ftyp).not.toBeNull();
+
+    // Find meta (FullBox)
+    const meta = findBox(view, 'meta', ftyp!.boxEnd, end, true);
+    expect(meta).not.toBeNull();
+
+    // Find iprp inside meta
+    const iprp = findBox(view, 'iprp', meta!.dataStart, meta!.dataEnd);
+    expect(iprp).not.toBeNull();
+
+    // Find ipco inside iprp
+    const ipco = findBox(view, 'ipco', iprp!.dataStart, iprp!.dataEnd);
+    expect(ipco).not.toBeNull();
+
+    return { view, ipco: ipco! };
+  }
+
+  /**
+   * Scan ipco for a box of the given type. Returns the box or null.
+   */
+  function findBoxInIpco(buffer: ArrayBuffer, boxType: string): ReturnType<typeof readBox> {
+    const { view, ipco } = getIpcoFromBuffer(buffer);
+    return findBox(view, boxType, ipco.dataStart, ipco.dataEnd);
+  }
+
+  /**
+   * Find the ipma box and return its association count for item 1.
+   */
+  function getIpmaAssociationCount(buffer: ArrayBuffer): number {
+    const view = new DataView(buffer);
+    const end = buffer.byteLength;
+
+    const ftyp = readBox(view, 0, end);
+    const meta = findBox(view, 'meta', ftyp!.boxEnd, end, true);
+    const iprp = findBox(view, 'iprp', meta!.dataStart, meta!.dataEnd);
+    // ipma follows ipco inside iprp
+    const ipma = findBox(view, 'ipma', iprp!.dataStart, iprp!.dataEnd, true);
+    expect(ipma).not.toBeNull();
+
+    // ipma FullBox: version+flags already skipped by readBox with isFullBox=true
+    // Data layout: entry_count(4) + entries
+    // Each entry (version 0, flags < 1): item_ID(2) + association_count(1) + associations
+    const dataStart = ipma!.dataStart;
+    // entry_count is a uint32
+    // const entryCount = view.getUint32(dataStart);
+    // First entry starts at dataStart + 4
+    const firstEntryStart = dataStart + 4;
+    // item_ID (uint16)
+    const itemId = view.getUint16(firstEntryStart);
+    expect(itemId).toBe(1);
+    // association_count (uint8)
+    const assocCount = view.getUint8(firstEntryStart + 2);
+    return assocCount;
+  }
+
+  it('HEIC-BUILD-020: output contains irot box when irotAngle provided', () => {
+    const result = buildStandaloneHEIC(codedData, hvcC, 100, 200, 2);
+    const irotBox = findBoxInIpco(result, 'irot');
+    expect(irotBox).not.toBeNull();
+    expect(irotBox!.boxEnd - irotBox!.boxStart).toBe(9);
+
+    // The angle byte is at dataStart (1 byte after the 8-byte header)
+    const view = new DataView(result);
+    const angleByte = view.getUint8(irotBox!.dataStart);
+    expect(angleByte).toBe(2);
+  });
+
+  it('HEIC-BUILD-021: output contains imir box when imirAxis provided', () => {
+    const result = buildStandaloneHEIC(codedData, hvcC, 100, 200, undefined, 1);
+    const imirBox = findBoxInIpco(result, 'imir');
+    expect(imirBox).not.toBeNull();
+    expect(imirBox!.boxEnd - imirBox!.boxStart).toBe(9);
+
+    const view = new DataView(result);
+    const axisByte = view.getUint8(imirBox!.dataStart);
+    expect(axisByte).toBe(1);
+  });
+
+  it('HEIC-BUILD-022: output contains both irot and imir when both provided', () => {
+    const result = buildStandaloneHEIC(codedData, hvcC, 100, 200, 3, 0);
+
+    const irotBox = findBoxInIpco(result, 'irot');
+    expect(irotBox).not.toBeNull();
+    const view = new DataView(result);
+    const angleByte = view.getUint8(irotBox!.dataStart);
+    expect(angleByte).toBe(3);
+
+    const imirBox = findBoxInIpco(result, 'imir');
+    expect(imirBox).not.toBeNull();
+    const axisByte = view.getUint8(imirBox!.dataStart);
+    expect(axisByte).toBe(0);
+  });
+
+  it('HEIC-BUILD-023: no irot/imir when params omitted (backwards compatible)', () => {
+    const result = buildStandaloneHEIC(codedData, hvcC, 100, 200);
+
+    const irotBox = findBoxInIpco(result, 'irot');
+    expect(irotBox).toBeNull();
+
+    const imirBox = findBoxInIpco(result, 'imir');
+    expect(imirBox).toBeNull();
+  });
+
+  it('HEIC-BUILD-024: ipma has correct association count', () => {
+    const result = buildStandaloneHEIC(codedData, hvcC, 100, 200, 1, 0);
+    const assocCount = getIpmaAssociationCount(result);
+    // hvcC(1) + ispe(2) + irot(3) + imir(4) = 4 associations
+    expect(assocCount).toBe(4);
+  });
+});

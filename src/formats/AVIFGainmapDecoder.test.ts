@@ -8,6 +8,8 @@ import {
   parseGainmapAVIF,
   buildStandaloneAVIF,
   parseHeadroomFromXMPText,
+  parseISOBMFFOrientation,
+  parseISOBMFFTransforms,
   type AVIFGainmapInfo,
 } from './AVIFGainmapDecoder';
 
@@ -834,6 +836,173 @@ describe('AVIFGainmapDecoder', () => {
         }
         expect(computed).toBeCloseTo(linear, 2);
       }
+    });
+  });
+
+  // ===========================================================================
+  // Helper: build a minimal meta box content for orientation/transform tests
+  // ===========================================================================
+
+  /**
+   * Build meta box content (the bytes between metaStart and metaEnd) containing:
+   *   pitm (primary item ID = 1)
+   *   iprp ( ipco ( [irot] [imir] ) + ipma (item 1 → listed properties) )
+   *
+   * Properties are 1-indexed in ipco. If irotAngle is provided, it becomes
+   * property 1 (or 2 if imir comes first — but here irot always comes first).
+   */
+  function buildMetaContent(options: { irotAngle?: number; imirAxis?: number } = {}): ArrayBuffer {
+    const parts: number[] = [];
+
+    // --- pitm (FullBox, version=0): 14 bytes ---
+    // size(4) + "pitm"(4) + version+flags(4) + item_id(2)
+    parts.push(...uint32BE(14));
+    parts.push(...strBytes('pitm'));
+    parts.push(0, 0, 0, 0); // version=0, flags=0
+    parts.push(...uint16BE(1)); // primary item ID = 1
+
+    // --- Build ipco property boxes ---
+    const ipcoProperties: number[][] = [];
+    if (options.irotAngle !== undefined) {
+      // irot: plain box, 9 bytes: size(4) + "irot"(4) + angle(1)
+      ipcoProperties.push([
+        ...uint32BE(9),
+        0x69, 0x72, 0x6F, 0x74, // "irot"
+        options.irotAngle & 0x03,
+      ]);
+    }
+    if (options.imirAxis !== undefined) {
+      // imir: plain box, 9 bytes: size(4) + "imir"(4) + axis(1)
+      ipcoProperties.push([
+        ...uint32BE(9),
+        0x69, 0x6D, 0x69, 0x72, // "imir"
+        options.imirAxis & 0x01,
+      ]);
+    }
+
+    const ipcoContentBytes: number[] = [];
+    for (const prop of ipcoProperties) ipcoContentBytes.push(...prop);
+    const ipcoSize = 8 + ipcoContentBytes.length; // size(4) + "ipco"(4) + content
+
+    // --- Build ipma (FullBox, version=0, flags=0) ---
+    // Associates item 1 with all properties in ipco (1-indexed)
+    const propCount = ipcoProperties.length;
+    // ipma: size(4) + "ipma"(4) + version+flags(4) + entry_count(4)
+    //       + item_id(2) + assoc_count(1) + N * association(1 each)
+    const ipmaSize = 4 + 4 + 4 + 4 + 2 + 1 + propCount;
+    const ipmaBytes: number[] = [];
+    ipmaBytes.push(...uint32BE(ipmaSize));
+    ipmaBytes.push(...strBytes('ipma'));
+    ipmaBytes.push(0, 0, 0, 0); // version=0, flags=0
+    ipmaBytes.push(...uint32BE(propCount > 0 ? 1 : 0)); // entry_count (1 entry for item 1, or 0 if no props)
+    if (propCount > 0) {
+      ipmaBytes.push(...uint16BE(1)); // item_id = 1 (primary)
+      ipmaBytes.push(propCount); // association count
+      for (let i = 1; i <= propCount; i++) {
+        ipmaBytes.push(0x80 | i); // essential=1, property_index=i (8-bit: 1 bit essential + 7 bits index)
+      }
+    }
+
+    // --- Build iprp (plain box) wrapping ipco + ipma ---
+    const iprpSize = 8 + ipcoSize + ipmaBytes.length;
+    parts.push(...uint32BE(iprpSize));
+    parts.push(...strBytes('iprp'));
+    // ipco
+    parts.push(...uint32BE(ipcoSize));
+    parts.push(...strBytes('ipco'));
+    parts.push(...ipcoContentBytes);
+    // ipma
+    parts.push(...ipmaBytes);
+
+    const buf = new ArrayBuffer(parts.length);
+    const u8 = new Uint8Array(buf);
+    for (let i = 0; i < parts.length; i++) u8[i] = parts[i]!;
+    return buf;
+  }
+
+  // ===========================================================================
+  // parseISOBMFFOrientation tests
+  // ===========================================================================
+
+  describe('parseISOBMFFOrientation', () => {
+    it('AGM-050: returns 1 when no irot/imir boxes exist', () => {
+      const buf = buildMetaContent({}); // no irot, no imir
+      const view = new DataView(buf);
+      expect(parseISOBMFFOrientation(view, 0, buf.byteLength)).toBe(1);
+    });
+
+    it('AGM-051: returns 6 for irot angle=3 (270 CCW = 90 CW)', () => {
+      const buf = buildMetaContent({ irotAngle: 3 });
+      const view = new DataView(buf);
+      expect(parseISOBMFFOrientation(view, 0, buf.byteLength)).toBe(6);
+    });
+
+    it('AGM-052: returns 8 for irot angle=1 (90 CCW)', () => {
+      const buf = buildMetaContent({ irotAngle: 1 });
+      const view = new DataView(buf);
+      expect(parseISOBMFFOrientation(view, 0, buf.byteLength)).toBe(8);
+    });
+
+    it('AGM-053: returns 3 for irot angle=2 (180)', () => {
+      const buf = buildMetaContent({ irotAngle: 2 });
+      const view = new DataView(buf);
+      expect(parseISOBMFFOrientation(view, 0, buf.byteLength)).toBe(3);
+    });
+
+    it('AGM-054: returns 2 for imir axis=0 (flip H) without irot', () => {
+      const buf = buildMetaContent({ imirAxis: 0 });
+      const view = new DataView(buf);
+      expect(parseISOBMFFOrientation(view, 0, buf.byteLength)).toBe(2);
+    });
+
+    it('AGM-055: returns 5 for imir axis=0 + irot angle=1 (flip H + 90 CCW)', () => {
+      const buf = buildMetaContent({ irotAngle: 1, imirAxis: 0 });
+      const view = new DataView(buf);
+      expect(parseISOBMFFOrientation(view, 0, buf.byteLength)).toBe(5);
+    });
+
+    it('AGM-056: returns 4 for imir axis=1 (flip V) without irot', () => {
+      const buf = buildMetaContent({ imirAxis: 1 });
+      const view = new DataView(buf);
+      expect(parseISOBMFFOrientation(view, 0, buf.byteLength)).toBe(4);
+    });
+  });
+
+  // ===========================================================================
+  // parseISOBMFFTransforms tests
+  // ===========================================================================
+
+  describe('parseISOBMFFTransforms', () => {
+    it('AGM-060: returns empty {} when no irot/imir', () => {
+      const buf = buildMetaContent({});
+      const view = new DataView(buf);
+      const result = parseISOBMFFTransforms(view, 0, buf.byteLength);
+      expect(result.irotAngle).toBeUndefined();
+      expect(result.imirAxis).toBeUndefined();
+    });
+
+    it('AGM-061: returns { irotAngle: 3 } for 90 CW rotation', () => {
+      const buf = buildMetaContent({ irotAngle: 3 });
+      const view = new DataView(buf);
+      const result = parseISOBMFFTransforms(view, 0, buf.byteLength);
+      expect(result.irotAngle).toBe(3);
+      expect(result.imirAxis).toBeUndefined();
+    });
+
+    it('AGM-062: returns { imirAxis: 1 } for flip V only', () => {
+      const buf = buildMetaContent({ imirAxis: 1 });
+      const view = new DataView(buf);
+      const result = parseISOBMFFTransforms(view, 0, buf.byteLength);
+      expect(result.irotAngle).toBeUndefined();
+      expect(result.imirAxis).toBe(1);
+    });
+
+    it('AGM-063: returns both irotAngle and imirAxis when combined', () => {
+      const buf = buildMetaContent({ irotAngle: 2, imirAxis: 0 });
+      const view = new DataView(buf);
+      const result = parseISOBMFFTransforms(view, 0, buf.byteLength);
+      expect(result.irotAngle).toBe(2);
+      expect(result.imirAxis).toBe(0);
     });
   });
 });
