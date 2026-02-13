@@ -13,14 +13,15 @@ Items carried over from completed plan files. Organized by priority.
 
 Port per-pixel processing to a WASM module (e.g., via AssemblyScript or Rust/wasm-pack). WASM can leverage SIMD instructions (`v128`) to process 4 color channels simultaneously. Expected 2-4x speedup for arithmetic-heavy effects.
 
-### Lazy Loading for Long Sequences
+### ~~Lazy Loading for Long Sequences~~
 **Priority:** MEDIUM
+**Status:** Done — `SequenceSourceNode` now uses `FramePreloadManager` for on-demand frame loading with LRU cache eviction, direction-aware preloading, and priority queue. Playback state methods (`setPlaybackDirection`, `setPlaybackActive`, `updatePlaybackBuffer`) available for future PlaybackEngine integration.
 
-Load frames on-demand for very long sequences instead of all at once.
-- Only load frames near current position
-- Preload frames in playback direction
-- Unload distant frames to save memory
-- Background loading with priority queue
+~~Load frames on-demand for very long sequences instead of all at once.~~
+- ~~Only load frames near current position~~
+- ~~Preload frames in playback direction~~
+- ~~Unload distant frames to save memory~~
+- ~~Background loading with priority queue~~
 
 ---
 
