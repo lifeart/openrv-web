@@ -989,24 +989,15 @@ async function getViewerRenderCanvas(page: Page): Promise<ReturnType<Page['locat
   }
 
   const imageCanvas = page.locator('canvas[data-testid="viewer-image-canvas"]:visible').first();
-  if (await imageCanvas.isVisible().catch(() => false)) {
-    return imageCanvas;
-  }
-
-  const fallback = page.locator('.viewer-container canvas:visible').first();
-  await expect(fallback).toBeVisible({ timeout: 5000 });
-  return fallback;
+  await expect(imageCanvas).toBeVisible({ timeout: 5000 });
+  return imageCanvas;
 }
 
 /**
  * Resolve the 2D image canvas used for pixel sampling/state probes.
  */
 async function getViewerImageCanvas(page: Page): Promise<ReturnType<Page['locator']>> {
-  const imageCanvas = page.locator('canvas[data-testid="viewer-image-canvas"]');
-  if ((await imageCanvas.count()) > 0) {
-    return imageCanvas.first();
-  }
-  return page.locator('.viewer-container canvas').first();
+  return page.locator('canvas[data-testid="viewer-image-canvas"]').first();
 }
 
 /**
@@ -1038,14 +1029,12 @@ async function captureViewerCanvasDataUrl(page: Page): Promise<string | null> {
       }
     };
 
-    // Prefer visible canvases in order of render significance.
+    // Only consider explicit viewer render canvases (excludes crop, paint, blit overlays).
     pushCanvases('canvas[data-testid="viewer-gl-canvas"]', true);
     pushCanvases('canvas[data-testid="viewer-image-canvas"]', true);
-    pushCanvases('.viewer-container canvas', true);
     // Fallback to attached canvases even if currently hidden.
     pushCanvases('canvas[data-testid="viewer-gl-canvas"]', false);
     pushCanvases('canvas[data-testid="viewer-image-canvas"]', false);
-    pushCanvases('.viewer-container canvas', false);
 
     for (const canvas of candidates) {
       if (canvas.width < 1 || canvas.height < 1) {
@@ -1503,11 +1492,11 @@ export function screenshotsMatch(img1: Buffer, img2: Buffer, tolerance: number =
 
 // Tab selectors
 export const TABS = {
-  view: '[data-tab="view"], button:has-text("View")',
-  color: '[data-tab="color"], button:has-text("Color")',
-  effects: '[data-tab="effects"], button:has-text("Effects")',
-  transform: '[data-tab="transform"], button:has-text("Transform")',
-  annotate: '[data-tab="annotate"], button:has-text("Annotate")',
+  view: 'button[data-tab-id="view"]',
+  color: 'button[data-tab-id="color"]',
+  effects: 'button[data-tab-id="effects"]',
+  transform: 'button[data-tab-id="transform"]',
+  annotate: 'button[data-tab-id="annotate"]',
 };
 
 // Common selectors
@@ -1527,15 +1516,7 @@ export const SELECTORS = {
 
 // Helper to click a tab
 export async function clickTab(page: Page, tabName: 'view' | 'color' | 'effects' | 'transform' | 'annotate'): Promise<void> {
-  const tabTexts: Record<string, string> = {
-    view: 'View',
-    color: 'Color',
-    effects: 'Effects',
-    transform: 'Transform',
-    annotate: 'Annotate',
-  };
-
-  await page.click(`button:has-text("${tabTexts[tabName]}")`);
+  await page.click(`button[data-tab-id="${tabName}"]`);
   await page.waitForTimeout(100);
 }
 

@@ -123,11 +123,8 @@ test.describe('OTIO Import', () => {
       ]);
 
       const result = await page.evaluate((json) => {
-        const app = (window as any).__OPENRV_TEST__?.app;
-        if (!app) return null;
-        // Access parseOTIO through the PlaylistManager's fromOTIO by testing the parser indirectly
-        // We construct the call by accessing the module directly via the app's playlist manager
-        const pm = (app as any).controls?.playlistManager ?? (app as any).playlistManager;
+        const pm = (window as any).__OPENRV_TEST__?.mutations?.getPlaylistManager();
+        if (!pm) return null;
         // Call fromOTIO with a resolver that always succeeds to verify parsing works
         const count = pm.fromOTIO(json, (name: string) => {
           return { index: 0, frameCount: 100 };
@@ -142,9 +139,8 @@ test.describe('OTIO Import', () => {
 
     test('OTIO-E002: parseOTIO returns 0 clips for invalid JSON', async ({ page }) => {
       const result = await page.evaluate(() => {
-        const app = (window as any).__OPENRV_TEST__?.app;
-        if (!app) return null;
-        const pm = (app as any).controls?.playlistManager ?? (app as any).playlistManager;
+        const pm = (window as any).__OPENRV_TEST__?.mutations?.getPlaylistManager();
+        if (!pm) return null;
         const count = pm.fromOTIO('not valid json {', (name: string) => {
           return { index: 0, frameCount: 100 };
         });
@@ -162,9 +158,8 @@ test.describe('OTIO Import', () => {
       });
 
       const result = await page.evaluate((json) => {
-        const app = (window as any).__OPENRV_TEST__?.app;
-        if (!app) return null;
-        const pm = (app as any).controls?.playlistManager ?? (app as any).playlistManager;
+        const pm = (window as any).__OPENRV_TEST__?.mutations?.getPlaylistManager();
+        if (!pm) return null;
         const count = pm.fromOTIO(json, () => ({ index: 0, frameCount: 100 }));
         return { importedCount: count };
       }, badJson);
@@ -183,9 +178,8 @@ test.describe('OTIO Import', () => {
       ]);
 
       const result = await page.evaluate((json) => {
-        const app = (window as any).__OPENRV_TEST__?.app;
-        if (!app) return null;
-        const pm = (app as any).controls?.playlistManager ?? (app as any).playlistManager;
+        const pm = (window as any).__OPENRV_TEST__?.mutations?.getPlaylistManager();
+        if (!pm) return null;
         pm.clear(); // Start fresh
         const count = pm.fromOTIO(json, (name: string) => {
           return { index: 0, frameCount: 200 };
@@ -213,9 +207,8 @@ test.describe('OTIO Import', () => {
       ]);
 
       const result = await page.evaluate((json) => {
-        const app = (window as any).__OPENRV_TEST__?.app;
-        if (!app) return null;
-        const pm = (app as any).controls?.playlistManager ?? (app as any).playlistManager;
+        const pm = (window as any).__OPENRV_TEST__?.mutations?.getPlaylistManager();
+        if (!pm) return null;
         pm.clear();
         pm.fromOTIO(json, () => ({ index: 0, frameCount: 200 }));
         const clips = pm.getClips();
@@ -242,9 +235,8 @@ test.describe('OTIO Import', () => {
       ]);
 
       const result = await page.evaluate((json) => {
-        const app = (window as any).__OPENRV_TEST__?.app;
-        if (!app) return null;
-        const pm = (app as any).controls?.playlistManager ?? (app as any).playlistManager;
+        const pm = (window as any).__OPENRV_TEST__?.mutations?.getPlaylistManager();
+        if (!pm) return null;
         pm.clear();
         const count = pm.fromOTIO(json, (name: string) => {
           if (name === 'missing_clip') return null;
@@ -273,9 +265,8 @@ test.describe('OTIO Import', () => {
       );
 
       const result = await page.evaluate((json) => {
-        const app = (window as any).__OPENRV_TEST__?.app;
-        if (!app) return null;
-        const pm = (app as any).controls?.playlistManager ?? (app as any).playlistManager;
+        const pm = (window as any).__OPENRV_TEST__?.mutations?.getPlaylistManager();
+        if (!pm) return null;
         pm.clear();
         const count = pm.fromOTIO(json, () => ({ index: 0, frameCount: 200 }));
         const clips = pm.getClips();
@@ -300,9 +291,8 @@ test.describe('OTIO Import', () => {
       const otioJson = buildOTIOJson([]);
 
       const result = await page.evaluate((json) => {
-        const app = (window as any).__OPENRV_TEST__?.app;
-        if (!app) return null;
-        const pm = (app as any).controls?.playlistManager ?? (app as any).playlistManager;
+        const pm = (window as any).__OPENRV_TEST__?.mutations?.getPlaylistManager();
+        if (!pm) return null;
         pm.clear();
         const count = pm.fromOTIO(json, () => ({ index: 0, frameCount: 200 }));
         return { importedCount: count, clipCount: pm.getClipCount() };
@@ -319,9 +309,8 @@ test.describe('OTIO Import', () => {
       ]);
 
       const result = await page.evaluate((json) => {
-        const app = (window as any).__OPENRV_TEST__?.app;
-        if (!app) return null;
-        const pm = (app as any).controls?.playlistManager ?? (app as any).playlistManager;
+        const pm = (window as any).__OPENRV_TEST__?.mutations?.getPlaylistManager();
+        if (!pm) return null;
         pm.clear();
         let receivedName = '';
         let receivedUrl = '';
@@ -348,9 +337,8 @@ test.describe('OTIO Import', () => {
 
       // Import clips via API
       await page.evaluate((json) => {
-        const app = (window as any).__OPENRV_TEST__?.app;
-        if (!app) return;
-        const pm = (app as any).controls?.playlistManager ?? (app as any).playlistManager;
+        const pm = (window as any).__OPENRV_TEST__?.mutations?.getPlaylistManager();
+        if (!pm) return;
         pm.clear();
         pm.fromOTIO(json, () => ({ index: 0, frameCount: 200 }));
       }, otioJson);
@@ -374,9 +362,8 @@ test.describe('OTIO Import', () => {
       ]);
 
       await page.evaluate((json) => {
-        const app = (window as any).__OPENRV_TEST__?.app;
-        if (!app) return;
-        const pm = (app as any).controls?.playlistManager ?? (app as any).playlistManager;
+        const pm = (window as any).__OPENRV_TEST__?.mutations?.getPlaylistManager();
+        if (!pm) return;
         pm.clear();
         pm.fromOTIO(json, () => ({ index: 0, frameCount: 200 }));
       }, otioJson);
@@ -397,9 +384,8 @@ test.describe('OTIO Import', () => {
       ]);
 
       await page.evaluate((json) => {
-        const app = (window as any).__OPENRV_TEST__?.app;
-        if (!app) return;
-        const pm = (app as any).controls?.playlistManager ?? (app as any).playlistManager;
+        const pm = (window as any).__OPENRV_TEST__?.mutations?.getPlaylistManager();
+        if (!pm) return;
         pm.clear();
         pm.fromOTIO(json, () => ({ index: 0, frameCount: 200 }));
       }, otioJson);
@@ -425,9 +411,8 @@ test.describe('OTIO Import', () => {
 
       // Import clips
       await page.evaluate((json) => {
-        const app = (window as any).__OPENRV_TEST__?.app;
-        if (!app) return;
-        const pm = (app as any).controls?.playlistManager ?? (app as any).playlistManager;
+        const pm = (window as any).__OPENRV_TEST__?.mutations?.getPlaylistManager();
+        if (!pm) return;
         pm.clear();
         pm.fromOTIO(json, () => ({ index: 0, frameCount: 200 }));
       }, otioJson);
@@ -460,9 +445,8 @@ test.describe('OTIO Import', () => {
       ]);
 
       const result = await page.evaluate((json) => {
-        const app = (window as any).__OPENRV_TEST__?.app;
-        if (!app) return null;
-        const pm = (app as any).controls?.playlistManager ?? (app as any).playlistManager;
+        const pm = (window as any).__OPENRV_TEST__?.mutations?.getPlaylistManager();
+        if (!pm) return null;
         pm.clear();
         const count = pm.fromOTIO(json, (name: string) => {
           // Map first clip to source 0, second to source 1
@@ -492,9 +476,8 @@ test.describe('OTIO Import', () => {
       ]);
 
       const result = await page.evaluate((json) => {
-        const app = (window as any).__OPENRV_TEST__?.app;
-        if (!app) return null;
-        const pm = (app as any).controls?.playlistManager ?? (app as any).playlistManager;
+        const pm = (window as any).__OPENRV_TEST__?.mutations?.getPlaylistManager();
+        if (!pm) return null;
         pm.clear();
         // Add a manual clip first
         pm.addClip(0, 'manual_clip', 1, 50);
@@ -520,9 +503,8 @@ test.describe('OTIO Import', () => {
       ]);
 
       const result = await page.evaluate((json) => {
-        const app = (window as any).__OPENRV_TEST__?.app;
-        if (!app) return null;
-        const pm = (app as any).controls?.playlistManager ?? (app as any).playlistManager;
+        const pm = (window as any).__OPENRV_TEST__?.mutations?.getPlaylistManager();
+        if (!pm) return null;
         // Add some clips first
         pm.addClip(0, 'old_clip_1', 1, 30);
         pm.addClip(0, 'old_clip_2', 1, 20);
@@ -549,9 +531,8 @@ test.describe('OTIO Import', () => {
       ]);
 
       const result = await page.evaluate((json) => {
-        const app = (window as any).__OPENRV_TEST__?.app;
-        if (!app) return null;
-        const pm = (app as any).controls?.playlistManager ?? (app as any).playlistManager;
+        const pm = (window as any).__OPENRV_TEST__?.mutations?.getPlaylistManager();
+        if (!pm) return null;
         pm.clear();
         pm.fromOTIO(json, () => ({ index: 0, frameCount: 200 }));
         const clips = pm.getClips();
@@ -575,9 +556,8 @@ test.describe('OTIO Import', () => {
       ]);
 
       const result = await page.evaluate((json) => {
-        const app = (window as any).__OPENRV_TEST__?.app;
-        if (!app) return null;
-        const pm = (app as any).controls?.playlistManager ?? (app as any).playlistManager;
+        const pm = (window as any).__OPENRV_TEST__?.mutations?.getPlaylistManager();
+        if (!pm) return null;
         pm.clear();
         pm.fromOTIO(json, () => ({ index: 0, frameCount: 100000 }));
         return { totalDuration: pm.getTotalDuration() };
@@ -594,9 +574,8 @@ test.describe('OTIO Import', () => {
       ]);
 
       const result = await page.evaluate((json) => {
-        const app = (window as any).__OPENRV_TEST__?.app;
-        if (!app) return null;
-        const pm = (app as any).controls?.playlistManager ?? (app as any).playlistManager;
+        const pm = (window as any).__OPENRV_TEST__?.mutations?.getPlaylistManager();
+        if (!pm) return null;
         pm.clear();
         const count = pm.fromOTIO(json, () => null);
         return { importedCount: count, clipCount: pm.getClipCount() };
@@ -614,9 +593,8 @@ test.describe('OTIO Import', () => {
       ]);
 
       const result = await page.evaluate((json) => {
-        const app = (window as any).__OPENRV_TEST__?.app;
-        if (!app) return null;
-        const pm = (app as any).controls?.playlistManager ?? (app as any).playlistManager;
+        const pm = (window as any).__OPENRV_TEST__?.mutations?.getPlaylistManager();
+        if (!pm) return null;
         pm.clear();
         pm.fromOTIO(json, () => ({ index: 0, frameCount: 200 }));
         const clips = pm.getClips();

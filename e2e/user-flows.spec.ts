@@ -345,7 +345,7 @@ test.describe('Transform and Export Workflow', () => {
     expect(imagesAreDifferent(baseline, rotated)).toBe(true);
 
     // Flip horizontal
-    const flipHButton = page.locator('button[title*="Flip horizontal"], button:has-text("Flip H")').first();
+    const flipHButton = page.locator('[data-testid="transform-flip-horizontal"]');
     if (await flipHButton.isVisible()) {
       await flipHButton.click();
       await page.waitForTimeout(200);

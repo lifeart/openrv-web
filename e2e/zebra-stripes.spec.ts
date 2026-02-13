@@ -91,7 +91,7 @@ test.describe('Zebra Stripes Thresholds', () => {
 
   test('ZB-E014: changing high threshold updates state', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.controls?.zebraControl?.getZebraStripes?.()?.setHighThreshold(90);
+      (window as any).__OPENRV_TEST__?.mutations?.setZebraHighThreshold(90);
     });
     await page.waitForTimeout(100);
 
@@ -101,7 +101,7 @@ test.describe('Zebra Stripes Thresholds', () => {
 
   test('ZB-E015: changing low threshold updates state', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.controls?.zebraControl?.getZebraStripes?.()?.setLowThreshold(10);
+      (window as any).__OPENRV_TEST__?.mutations?.setZebraLowThreshold(10);
     });
     await page.waitForTimeout(100);
 
@@ -125,7 +125,7 @@ test.describe('Zebra Stripes Toggle Controls', () => {
     expect(state.highEnabled).toBe(true);
 
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.controls?.zebraControl?.getZebraStripes?.()?.toggleHigh?.();
+      (window as any).__OPENRV_TEST__?.mutations?.toggleZebraHigh();
     });
     await page.waitForTimeout(100);
 
@@ -133,7 +133,7 @@ test.describe('Zebra Stripes Toggle Controls', () => {
     expect(state.highEnabled).toBe(false);
 
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.controls?.zebraControl?.getZebraStripes?.()?.toggleHigh?.();
+      (window as any).__OPENRV_TEST__?.mutations?.toggleZebraHigh();
     });
     await page.waitForTimeout(100);
 
@@ -146,7 +146,7 @@ test.describe('Zebra Stripes Toggle Controls', () => {
     expect(state.lowEnabled).toBe(false);
 
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.controls?.zebraControl?.getZebraStripes?.()?.toggleLow?.();
+      (window as any).__OPENRV_TEST__?.mutations?.toggleZebraLow();
     });
     await page.waitForTimeout(100);
 
@@ -154,7 +154,7 @@ test.describe('Zebra Stripes Toggle Controls', () => {
     expect(state.lowEnabled).toBe(true);
 
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.controls?.zebraControl?.getZebraStripes?.()?.toggleLow?.();
+      (window as any).__OPENRV_TEST__?.mutations?.toggleZebraLow();
     });
     await page.waitForTimeout(100);
 
@@ -211,7 +211,7 @@ test.describe('Zebra Stripes State Persistence', () => {
 
     // Change threshold
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.controls?.zebraControl?.getZebraStripes?.()?.setHighThreshold(85);
+      (window as any).__OPENRV_TEST__?.mutations?.setZebraHighThreshold(85);
     });
     await page.waitForTimeout(100);
 

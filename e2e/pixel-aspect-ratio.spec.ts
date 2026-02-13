@@ -24,7 +24,7 @@ test.describe('Pixel Aspect Ratio (PAR)', () => {
 
   test('PAR-002: PAR control is visible in View tab', async ({ page }) => {
     // Click View tab
-    await page.click('button:has-text("View")');
+    await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
 
     const control = page.locator('[data-testid="par-control"]');
@@ -32,7 +32,7 @@ test.describe('Pixel Aspect Ratio (PAR)', () => {
   });
 
   test('PAR-003: PAR button exists with correct label', async ({ page }) => {
-    await page.click('button:has-text("View")');
+    await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
 
     const button = page.locator('[data-testid="par-control-button"]');
@@ -41,7 +41,7 @@ test.describe('Pixel Aspect Ratio (PAR)', () => {
   });
 
   test('PAR-004: clicking PAR button opens dropdown', async ({ page }) => {
-    await page.click('button:has-text("View")');
+    await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
 
     await page.click('[data-testid="par-control-button"]');
@@ -52,7 +52,7 @@ test.describe('Pixel Aspect Ratio (PAR)', () => {
   });
 
   test('PAR-005: dropdown shows presets', async ({ page }) => {
-    await page.click('button:has-text("View")');
+    await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
 
     await page.click('[data-testid="par-control-button"]');
@@ -70,7 +70,7 @@ test.describe('Pixel Aspect Ratio (PAR)', () => {
   });
 
   test('PAR-006: selecting anamorphic 2:1 updates state', async ({ page }) => {
-    await page.click('button:has-text("View")');
+    await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
 
     await page.click('[data-testid="par-control-button"]');
@@ -90,7 +90,7 @@ test.describe('Pixel Aspect Ratio (PAR)', () => {
     const before = await captureViewerScreenshot(page);
 
     // Enable anamorphic 2:1
-    await page.click('button:has-text("View")');
+    await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
     await page.click('[data-testid="par-control-button"]');
     await page.waitForTimeout(100);
@@ -106,7 +106,7 @@ test.describe('Pixel Aspect Ratio (PAR)', () => {
 
   test('PAR-008: Shift+P toggles PAR correction', async ({ page }) => {
     // First set a non-square PAR so toggle has visible effect
-    await page.click('button:has-text("View")');
+    await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
     await page.click('[data-testid="par-control-button"]');
     await page.waitForTimeout(100);
@@ -133,7 +133,7 @@ test.describe('Pixel Aspect Ratio (PAR)', () => {
 
   test('PAR-009: PAR state persists across frame changes', async ({ page }) => {
     // Enable anamorphic PAR
-    await page.click('button:has-text("View")');
+    await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
     await page.click('[data-testid="par-control-button"]');
     await page.waitForTimeout(100);
@@ -156,7 +156,7 @@ test.describe('Pixel Aspect Ratio (PAR)', () => {
 
   test('PAR-010: selecting square pixels resets to 1.0', async ({ page }) => {
     // First set anamorphic
-    await page.click('button:has-text("View")');
+    await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
     await page.click('[data-testid="par-control-button"]');
     await page.waitForTimeout(100);
@@ -182,7 +182,7 @@ test.describe('Pixel Aspect Ratio (PAR)', () => {
   });
 
   test('PAR-011: enable checkbox toggles PAR correction', async ({ page }) => {
-    await page.click('button:has-text("View")');
+    await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
     await page.click('[data-testid="par-control-button"]');
     await page.waitForTimeout(100);

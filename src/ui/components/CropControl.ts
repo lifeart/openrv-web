@@ -106,7 +106,8 @@ export class CropControl extends EventEmitter<CropControlEvents> {
     // Create crop button
     this.cropButton = document.createElement('button');
     this.cropButton.innerHTML = `${getIconSvg('crop', 'sm')}<span style="margin-left: 6px;">Crop</span>`;
-    this.cropButton.title = 'Crop image (K)';
+    this.cropButton.dataset.testid = 'crop-control-button';
+    this.cropButton.title = 'Crop image (Shift+K)';
     this.cropButton.style.cssText = `
       background: transparent;
       border: 1px solid transparent;

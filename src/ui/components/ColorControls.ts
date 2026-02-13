@@ -53,6 +53,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     // Create toggle button
     this.toggleButton = document.createElement('button');
     this.toggleButton.innerHTML = `${getIconSvg('palette', 'sm')}<span style="margin-left: 6px;">Color</span>`;
+    this.toggleButton.dataset.testid = 'color-control-button';
     this.toggleButton.title = 'Toggle color adjustments panel';
     this.toggleButton.style.cssText = `
       background: transparent;
@@ -220,6 +221,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     // LUT load button
     const lutLoadBtn = document.createElement('button');
     lutLoadBtn.textContent = 'Load LUT';
+    lutLoadBtn.dataset.testid = 'lut-load-button';
     lutLoadBtn.title = 'Load a LUT file (.cube, .3dl, .csp, .itx, .look, .lut, .nk, .mga)';
     lutLoadBtn.style.cssText = `
       background: var(--border-secondary);
@@ -684,5 +686,9 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     this._pendingAdjustments = null;
     this.sliders.clear();
     this.valueLabels.clear();
+    // Remove body-mounted panel if present
+    if (this.panel.parentNode) {
+      this.panel.parentNode.removeChild(this.panel);
+    }
   }
 }

@@ -293,18 +293,20 @@ Support for stereoscopic 3D content viewing with multiple display modes.
 **Description:**
 Import OpenTimelineIO files for timeline interchange with editorial systems.
 
+**Status:** COMPLETED
+
 **Requirements:**
-- [ ] Parse OTIO JSON format
-- [ ] Create sequence from OTIO clips
-- [ ] Support transitions (dissolves)
-- [ ] Support markers
-- [ ] Handle missing media gracefully
+- [x] Parse OTIO JSON format
+- [x] Create sequence from OTIO clips
+- [x] Support transitions (dissolves)
+- [x] Support markers
+- [x] Handle missing media gracefully
 
 **Dependencies:**
 - Consider using [opentimelineio-js](https://github.com/OpenTimelineIO/OpenTimelineIO) if available, or implement subset
 
-**Files to create:**
-- `src/formats/OTIOLoader.ts`
+**Files:**
+- `src/utils/media/OTIOParser.ts`
 
 ---
 

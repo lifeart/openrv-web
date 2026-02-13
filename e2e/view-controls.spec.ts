@@ -322,7 +322,7 @@ test.describe('View Controls', () => {
       expect(state.cropEnabled).toBe(true);
 
       // Click crop button to open panel with aspect ratio options
-      const cropButton = page.locator('button[title*="Crop"]').first();
+      const cropButton = page.locator('[data-testid="crop-control-button"]').first();
       await cropButton.click();
       await page.waitForTimeout(200);
 
@@ -352,7 +352,7 @@ test.describe('View Controls', () => {
       expect(state.cropEnabled).toBe(false);
 
       // Click crop button to open panel
-      const cropButton = page.locator('button[title*="Crop"]').first();
+      const cropButton = page.locator('[data-testid="crop-control-button"]').first();
       await cropButton.click();
       await page.waitForTimeout(200);
 
@@ -391,7 +391,7 @@ test.describe('View Controls', () => {
       await page.waitForTimeout(200);
 
       // Click crop button to open panel
-      const cropButton = page.locator('button[title*="Crop"]').first();
+      const cropButton = page.locator('[data-testid="crop-control-button"]').first();
       await cropButton.click();
       await page.waitForTimeout(200);
 
@@ -428,7 +428,7 @@ test.describe('View Controls', () => {
       await page.waitForTimeout(200);
 
       // Open crop panel (handles only work when panel is open)
-      const cropButton = page.locator('button[title*="Crop"]').first();
+      const cropButton = page.locator('[data-testid="crop-control-button"]').first();
       await cropButton.click();
       await page.waitForTimeout(200);
 

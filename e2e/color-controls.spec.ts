@@ -25,8 +25,8 @@ test.describe('Color Controls', () => {
     await page.waitForSelector('#app');
     await waitForTestHelper(page);
     await loadVideoFile(page);
-    // Switch to Color tab (use text match instead of data attribute)
-    await page.locator('button:has-text("Color")').first().click();
+    // Switch to Color tab
+    await page.locator('button[data-tab-id="color"]').click();
     await page.waitForTimeout(200);
   });
 
@@ -291,7 +291,7 @@ test.describe('Color Controls', () => {
       await page.waitForTimeout(200);
 
       // Look for LUT load button in panel
-      const lutButton = page.locator('.color-controls-panel button:has-text("Load LUT")');
+      const lutButton = page.locator('.color-controls-panel [data-testid="lut-load-button"]');
       await expect(lutButton).toBeVisible();
     });
 

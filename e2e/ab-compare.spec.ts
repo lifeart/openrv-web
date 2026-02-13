@@ -465,7 +465,7 @@ test.describe('A/B Wipe Labels', () => {
   test('WIPE-E002: wipe labels appear when horizontal wipe is enabled', async ({ page }) => {
     // Enable horizontal wipe
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipeMode('horizontal');
+      (window as any).__OPENRV_TEST__?.mutations?.setWipeMode('horizontal');
     });
     await page.waitForTimeout(100);
 
@@ -478,12 +478,12 @@ test.describe('A/B Wipe Labels', () => {
   test('WIPE-E003: default wipe labels are Original and Graded', async ({ page }) => {
     // Enable wipe
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipeMode('horizontal');
+      (window as any).__OPENRV_TEST__?.mutations?.setWipeMode('horizontal');
     });
     await page.waitForTimeout(100);
 
     const labels = await page.evaluate(() => {
-      return (window as any).__OPENRV_TEST__?.app?.viewer?.getWipeLabels();
+      return (window as any).__OPENRV_TEST__?.mutations?.getWipeLabels();
     });
 
     expect(labels.labelA).toBe('Original');
@@ -493,13 +493,13 @@ test.describe('A/B Wipe Labels', () => {
   test('WIPE-E004: setWipeLabels updates label text', async ({ page }) => {
     // Enable wipe
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipeMode('horizontal');
+      (window as any).__OPENRV_TEST__?.mutations?.setWipeMode('horizontal');
     });
     await page.waitForTimeout(100);
 
     // Set custom labels
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipeLabels('Before', 'After');
+      (window as any).__OPENRV_TEST__?.mutations?.setWipeLabels('Before', 'After');
     });
     await page.waitForTimeout(100);
 
@@ -512,8 +512,8 @@ test.describe('A/B Wipe Labels', () => {
   test('WIPE-E005: label A is hidden at left boundary (position <= 10%)', async ({ page }) => {
     // Enable wipe and set position to 5%
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipeMode('horizontal');
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipePosition(0.05);
+      (window as any).__OPENRV_TEST__?.mutations?.setWipeMode('horizontal');
+      (window as any).__OPENRV_TEST__?.mutations?.setWipePosition(0.05);
     });
     await page.waitForTimeout(100);
 
@@ -524,8 +524,8 @@ test.describe('A/B Wipe Labels', () => {
   test('WIPE-E006: label B is hidden at right boundary (position >= 90%)', async ({ page }) => {
     // Enable wipe and set position to 95%
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipeMode('horizontal');
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipePosition(0.95);
+      (window as any).__OPENRV_TEST__?.mutations?.setWipeMode('horizontal');
+      (window as any).__OPENRV_TEST__?.mutations?.setWipePosition(0.95);
     });
     await page.waitForTimeout(100);
 
@@ -536,8 +536,8 @@ test.describe('A/B Wipe Labels', () => {
   test('WIPE-E007: both labels visible at center position (50%)', async ({ page }) => {
     // Enable wipe at center
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipeMode('horizontal');
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipePosition(0.5);
+      (window as any).__OPENRV_TEST__?.mutations?.setWipeMode('horizontal');
+      (window as any).__OPENRV_TEST__?.mutations?.setWipePosition(0.5);
     });
     await page.waitForTimeout(100);
 
@@ -550,7 +550,7 @@ test.describe('A/B Wipe Labels', () => {
   test('WIPE-E010: vertical wipe shows labels correctly', async ({ page }) => {
     // Enable vertical wipe
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipeMode('vertical');
+      (window as any).__OPENRV_TEST__?.mutations?.setWipeMode('vertical');
     });
     await page.waitForTimeout(100);
 
@@ -562,8 +562,8 @@ test.describe('A/B Wipe Labels', () => {
 
   test('WIPE-E011: vertical wipe label A hidden at top boundary', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipeMode('vertical');
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipePosition(0.05);
+      (window as any).__OPENRV_TEST__?.mutations?.setWipeMode('vertical');
+      (window as any).__OPENRV_TEST__?.mutations?.setWipePosition(0.05);
     });
     await page.waitForTimeout(100);
 
@@ -573,8 +573,8 @@ test.describe('A/B Wipe Labels', () => {
 
   test('WIPE-E012: vertical wipe label B hidden at bottom boundary', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipeMode('vertical');
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipePosition(0.95);
+      (window as any).__OPENRV_TEST__?.mutations?.setWipeMode('vertical');
+      (window as any).__OPENRV_TEST__?.mutations?.setWipePosition(0.95);
     });
     await page.waitForTimeout(100);
 

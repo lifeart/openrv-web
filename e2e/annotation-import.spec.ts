@@ -133,8 +133,7 @@ test.describe('Annotation Import', () => {
 
       // Export the annotations JSON, then clear and re-import
       const result = await page.evaluate(() => {
-        const app = (window as any).__OPENRV_TEST__?.app;
-        const paintEngine = (app as any)?.paintEngine;
+        const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
         if (!paintEngine) return { success: false, error: 'no paint engine' };
 
         // Dynamically import the exporter functions
@@ -201,8 +200,7 @@ test.describe('Annotation Import', () => {
       const importJson = buildAnnotationJSON();
 
       const result = await page.evaluate((jsonStr) => {
-        const app = (window as any).__OPENRV_TEST__?.app;
-        const paintEngine = (app as any)?.paintEngine;
+        const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
         if (!paintEngine) return { success: false, error: 'no paint engine' };
 
         const data = JSON.parse(jsonStr);
@@ -274,8 +272,7 @@ test.describe('Annotation Import', () => {
       });
 
       const result = await page.evaluate((jsonStr) => {
-        const app = (window as any).__OPENRV_TEST__?.app;
-        const paintEngine = (app as any)?.paintEngine;
+        const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
         if (!paintEngine) return { success: false, error: 'no paint engine' };
 
         const data = JSON.parse(jsonStr);
@@ -367,8 +364,7 @@ test.describe('Annotation Import', () => {
 
       const result = await page.evaluate(
         ({ first, second }) => {
-          const app = (window as any).__OPENRV_TEST__?.app;
-          const paintEngine = (app as any)?.paintEngine;
+          const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
           if (!paintEngine) return { success: false, error: 'no paint engine' };
 
           // First import (replace mode - load fresh)
@@ -453,8 +449,7 @@ test.describe('Annotation Import', () => {
       });
 
       const result = await page.evaluate((jsonStr) => {
-        const app = (window as any).__OPENRV_TEST__?.app;
-        const paintEngine = (app as any)?.paintEngine;
+        const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
         if (!paintEngine) return { success: false, error: 'no paint engine' };
 
         const data = JSON.parse(jsonStr);
@@ -555,8 +550,7 @@ test.describe('Annotation Import', () => {
 
       const result = await page.evaluate(
         ({ jsonStr, offset }) => {
-          const app = (window as any).__OPENRV_TEST__?.app;
-          const paintEngine = (app as any)?.paintEngine;
+          const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
           if (!paintEngine) return { success: false, error: 'no paint engine' };
 
           const data = JSON.parse(jsonStr);
@@ -715,8 +709,7 @@ test.describe('Annotation Import', () => {
       const emptyJson = buildAnnotationJSON({ frames: {} });
 
       const result = await page.evaluate((jsonStr) => {
-        const app = (window as any).__OPENRV_TEST__?.app;
-        const paintEngine = (app as any)?.paintEngine;
+        const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
         if (!paintEngine) return { success: false, error: 'no paint engine' };
 
         const data = JSON.parse(jsonStr);
@@ -767,8 +760,7 @@ test.describe('Annotation Import', () => {
       const emptyJson = buildAnnotationJSON({ frames: {} });
 
       const result = await page.evaluate((jsonStr) => {
-        const app = (window as any).__OPENRV_TEST__?.app;
-        const paintEngine = (app as any)?.paintEngine;
+        const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
         if (!paintEngine) return { success: false, error: 'no paint engine' };
 
         const data = JSON.parse(jsonStr);
@@ -810,8 +802,7 @@ test.describe('Annotation Import', () => {
 
       // Merge empty annotations (no-op - should preserve existing)
       const result = await page.evaluate(() => {
-        const app = (window as any).__OPENRV_TEST__?.app;
-        const paintEngine = (app as any)?.paintEngine;
+        const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
         if (!paintEngine) return { success: false, error: 'no paint engine' };
 
         // Merge mode: don't clear, just add (nothing in this case)
@@ -847,8 +838,7 @@ test.describe('Annotation Import', () => {
       });
 
       const result = await page.evaluate((jsonStr) => {
-        const app = (window as any).__OPENRV_TEST__?.app;
-        const paintEngine = (app as any)?.paintEngine;
+        const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
         if (!paintEngine) return { success: false, error: 'no paint engine' };
 
         const data = JSON.parse(jsonStr);
@@ -951,8 +941,7 @@ test.describe('Annotation Import', () => {
       });
 
       const result = await page.evaluate((jsonStr) => {
-        const app = (window as any).__OPENRV_TEST__?.app;
-        const paintEngine = (app as any)?.paintEngine;
+        const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
         if (!paintEngine) return { success: false, error: 'no paint engine' };
 
         const data = JSON.parse(jsonStr);
@@ -1048,8 +1037,7 @@ test.describe('Annotation Import', () => {
       });
 
       const result = await page.evaluate((jsonStr) => {
-        const app = (window as any).__OPENRV_TEST__?.app;
-        const paintEngine = (app as any)?.paintEngine;
+        const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
         if (!paintEngine) return { success: false, error: 'no paint engine' };
 
         const data = JSON.parse(jsonStr);

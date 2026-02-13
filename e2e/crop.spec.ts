@@ -329,7 +329,7 @@ test.describe('Crop Controls', () => {
       const state = await getViewerState(page);
       // Compute actual pixel ratio from normalized crop region and source dimensions
       const sourceDims = await page.evaluate(() => {
-        const source = (window as any).__OPENRV_TEST__?.app?.session?.currentSource;
+        const source = (window as any).__OPENRV_TEST__?.mutations?.getSession()?.currentSource;
         return { width: source?.width ?? 1, height: source?.height ?? 1 };
       });
       const actualPixelRatio = (state.cropRegion.width * sourceDims.width) / (state.cropRegion.height * sourceDims.height);
@@ -355,7 +355,7 @@ test.describe('Crop Controls', () => {
       expect(state.cropAspectRatio).toBe('1:1');
       // For 1:1, the pixel dimensions should be equal (not normalized coords)
       const sourceDims = await page.evaluate(() => {
-        const source = (window as any).__OPENRV_TEST__?.app?.session?.currentSource;
+        const source = (window as any).__OPENRV_TEST__?.mutations?.getSession()?.currentSource;
         return { width: source?.width ?? 1, height: source?.height ?? 1 };
       });
       const pixelWidth = state.cropRegion.width * sourceDims.width;
@@ -381,7 +381,7 @@ test.describe('Crop Controls', () => {
       const state = await getViewerState(page);
       expect(state.cropAspectRatio).toBe('4:3');
       const sourceDims = await page.evaluate(() => {
-        const source = (window as any).__OPENRV_TEST__?.app?.session?.currentSource;
+        const source = (window as any).__OPENRV_TEST__?.mutations?.getSession()?.currentSource;
         return { width: source?.width ?? 1, height: source?.height ?? 1 };
       });
       const actualPixelRatio = (state.cropRegion.width * sourceDims.width) / (state.cropRegion.height * sourceDims.height);
@@ -406,7 +406,7 @@ test.describe('Crop Controls', () => {
       const state = await getViewerState(page);
       expect(state.cropAspectRatio).toBe('9:16');
       const sourceDims = await page.evaluate(() => {
-        const source = (window as any).__OPENRV_TEST__?.app?.session?.currentSource;
+        const source = (window as any).__OPENRV_TEST__?.mutations?.getSession()?.currentSource;
         return { width: source?.width ?? 1, height: source?.height ?? 1 };
       });
       const actualPixelRatio = (state.cropRegion.width * sourceDims.width) / (state.cropRegion.height * sourceDims.height);
@@ -747,7 +747,7 @@ test.describe('Crop Controls', () => {
     // Helper to get source dimensions
     async function getSourceDimensions(page: any) {
       return page.evaluate(() => {
-        const source = (window as any).__OPENRV_TEST__?.app?.session?.currentSource;
+        const source = (window as any).__OPENRV_TEST__?.mutations?.getSession()?.currentSource;
         return { width: source?.width ?? 1, height: source?.height ?? 1 };
       });
     }
@@ -1206,7 +1206,7 @@ test.describe('Crop Controls', () => {
       expect(state.cropEnabled).toBe(true);
 
       // Flip
-      await page.keyboard.press('Shift+h');
+      await page.keyboard.press('Alt+h');
       await page.waitForTimeout(200);
 
       // Crop should still be enabled
@@ -1333,7 +1333,7 @@ test.describe('Crop Controls', () => {
       const initialCropRegion = { ...state.cropRegion };
 
       // Apply horizontal flip
-      await page.keyboard.press('Shift+h');
+      await page.keyboard.press('Alt+h');
       await page.waitForTimeout(200);
 
       // Crop should still be enabled after flip with same dimensions

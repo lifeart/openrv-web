@@ -91,14 +91,10 @@ test.describe('3D LUT Support', () => {
       const initialScreenshot = await captureViewerScreenshot(page);
 
       // Find the LUT load button
-      const lutLoadButton = page.locator('button:has-text("Load .cube")').first();
+      const lutLoadButton = page.locator('[data-testid="lut-load-button"]');
       if (!(await lutLoadButton.isVisible())) {
-        // Try alternative selector
-        const altButton = page.locator('.color-controls-panel button:has-text("Load")').first();
-        if (!(await altButton.isVisible())) {
-          test.skip();
-          return;
-        }
+        test.skip();
+        return;
       }
 
       // Set up file input

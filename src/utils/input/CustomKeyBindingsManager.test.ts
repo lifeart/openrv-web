@@ -135,6 +135,64 @@ describe('CustomKeyBindingsManager', () => {
     });
   });
 
+  describe('conflict detection', () => {
+    it('CKBM-014: rejects combo already used by another action', () => {
+      // playback.toggle uses Space by default
+      const spaceCombo = { code: 'Space' };
+      expect(() => {
+        manager.setCustomBinding('playback.stepForward', spaceCombo);
+      }).toThrow('Key combination already used by "playback.toggle"');
+    });
+
+    it('CKBM-015: allows setting same combo on same action (self-reassignment)', () => {
+      // playback.toggle uses Space; re-assigning Space to playback.toggle should work
+      expect(() => {
+        manager.setCustomBinding('playback.toggle', { code: 'Space' });
+      }).not.toThrow();
+    });
+
+    it('CKBM-016: non-conflicting combo persists successfully', () => {
+      // F12 is unlikely to conflict with any default
+      const customCombo = { code: 'F12', ctrl: true, shift: true };
+      manager.setCustomBinding('playback.toggle', customCombo);
+      expect(manager.getEffectiveCombo('playback.toggle')).toEqual(customCombo);
+    });
+
+    it('CKBM-017: force flag overrides conflict rejection', () => {
+      const spaceCombo = { code: 'Space' };
+      expect(() => {
+        manager.setCustomBinding('playback.stepForward', spaceCombo, true);
+      }).not.toThrow();
+      expect(manager.getEffectiveCombo('playback.stepForward')).toEqual(spaceCombo);
+    });
+
+    it('CKBM-018: findConflictingAction returns owning action', () => {
+      const spaceCombo = { code: 'Space' };
+      expect(manager.findConflictingAction(spaceCombo)).toBe('playback.toggle');
+    });
+
+    it('CKBM-019: findConflictingAction returns null for unused combo', () => {
+      const unusedCombo = { code: 'F12', ctrl: true, shift: true, alt: true };
+      expect(manager.findConflictingAction(unusedCombo)).toBeNull();
+    });
+
+    it('CKBM-020: findConflictingAction excludes specified action', () => {
+      const spaceCombo = { code: 'Space' };
+      expect(manager.findConflictingAction(spaceCombo, 'playback.toggle')).toBeNull();
+    });
+
+    it('CKBM-021: detects conflicts with custom bindings, not just defaults', () => {
+      // Give playback.toggle a custom combo
+      const customCombo = { code: 'KeyX', alt: true };
+      manager.setCustomBinding('playback.toggle', customCombo);
+
+      // Now trying to assign that same custom combo to another action should conflict
+      expect(() => {
+        manager.setCustomBinding('playback.stepForward', customCombo);
+      }).toThrow('Key combination already used by "playback.toggle"');
+    });
+  });
+
   describe('available actions', () => {
     it('CKBM-012: returns all available actions with descriptions', () => {
       const actions = manager.getAvailableActions();

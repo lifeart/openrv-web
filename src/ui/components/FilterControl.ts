@@ -37,7 +37,8 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
     // Create filter button
     this.filterButton = document.createElement('button');
     this.filterButton.innerHTML = `${getIconSvg('sliders', 'sm')}<span style="margin-left: 6px;">Filters</span>`;
-    this.filterButton.title = 'Filter effects (G)';
+    this.filterButton.dataset.testid = 'filter-control-button';
+    this.filterButton.title = 'Filter effects (Shift+Alt+E)';
     this.filterButton.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -345,5 +346,9 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
 
   dispose(): void {
     document.removeEventListener('click', this.boundHandleDocumentClick);
+    // Remove body-mounted panel if present
+    if (this.panel.parentNode) {
+      this.panel.parentNode.removeChild(this.panel);
+    }
   }
 }

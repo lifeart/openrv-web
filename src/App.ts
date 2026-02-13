@@ -614,11 +614,27 @@ export class App {
           this.controls.presentationMode.toggle();
           return;
         }
+        // Close all transient floating panels/dropdowns
         if (this.controls.colorControls) {
           this.controls.colorControls.hide();
         }
         if (this.controls.cropControl) {
           this.controls.cropControl.hidePanel();
+        }
+        if (this.controls.filterControl?.isOpen) {
+          this.controls.filterControl.hide();
+        }
+        if (this.controls.curvesControl) {
+          this.controls.curvesControl.hide();
+        }
+        if (this.controls.ocioControl) {
+          this.controls.ocioControl.hide();
+        }
+        if (this.controls.compareControl?.isDropdownVisible()) {
+          this.controls.compareControl.close();
+        }
+        if (this.controls.networkControl) {
+          this.controls.networkControl.closePanel();
         }
         // Close stereo eye transform panel
         if (this.controls.stereoEyeTransformControl.isPanelVisible()) {

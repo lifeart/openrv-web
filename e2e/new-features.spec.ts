@@ -67,7 +67,7 @@ test.describe('Highlight/Shadow Recovery Controls', () => {
     await waitForTestHelper(page);
     await loadVideoFile(page);
     // Switch to Color tab
-    await page.locator('button:has-text("Color")').first().click();
+    await page.locator('button[data-tab-id="color"]').click();
     await page.waitForTimeout(200);
     // Open color panel
     await page.keyboard.press('c');
@@ -928,7 +928,7 @@ test.describe('Feature Combinations', () => {
     const falseColorOnly = await captureViewerScreenshot(page);
 
     // Adjust shadows
-    await page.locator('button:has-text("Color")').first().click();
+    await page.locator('button[data-tab-id="color"]').click();
     await page.waitForTimeout(100);
     await page.keyboard.press('c');
     await page.waitForTimeout(200);
@@ -1882,10 +1882,7 @@ test.describe('Markers with Notes', () => {
   test('MARK-005: setMarker should create marker with note and color via API', async ({ page }) => {
     // Use the API to create a marker with note and color
     await page.evaluate(() => {
-      const session = (window as any).__OPENRV_TEST__?.app?.session;
-      if (session) {
-        session.setMarker(10, 'Test note', '#44ff44');
-      }
+      (window as any).__OPENRV_TEST__?.mutations?.setMarker(10, 'Test note', '#44ff44');
     });
     await page.waitForTimeout(100);
 
@@ -1907,10 +1904,7 @@ test.describe('Markers with Notes', () => {
 
     // Update the note via API
     await page.evaluate((f) => {
-      const session = (window as any).__OPENRV_TEST__?.app?.session;
-      if (session) {
-        session.setMarkerNote(f, 'Updated note');
-      }
+      (window as any).__OPENRV_TEST__?.mutations?.setMarkerNote(f, 'Updated note');
     }, frame);
     await page.waitForTimeout(100);
 
@@ -1929,10 +1923,7 @@ test.describe('Markers with Notes', () => {
 
     // Update the color via API
     await page.evaluate((f) => {
-      const session = (window as any).__OPENRV_TEST__?.app?.session;
-      if (session) {
-        session.setMarkerColor(f, '#4444ff');
-      }
+      (window as any).__OPENRV_TEST__?.mutations?.setMarkerColor(f, '#4444ff');
     }, frame);
     await page.waitForTimeout(100);
 
@@ -1957,7 +1948,7 @@ test.describe('Spotlight / Focus Tool', () => {
     await waitForTestHelper(page);
     await loadVideoFile(page);
     // Switch to View tab
-    await page.locator('button:has-text("View")').first().click();
+    await page.locator('button[data-tab-id="view"]').click();
     await page.waitForTimeout(200);
   });
 
@@ -2019,11 +2010,7 @@ test.describe('Spotlight / Focus Tool', () => {
 
     // Change to rectangle via API
     await page.evaluate(() => {
-      const viewer = (window as any).__OPENRV_TEST__?.app?.viewer;
-      const spotlight = viewer?.getSpotlightOverlay?.();
-      if (spotlight) {
-        spotlight.setShape('rectangle');
-      }
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightShape('rectangle');
     });
     await page.waitForTimeout(100);
 
@@ -2037,11 +2024,7 @@ test.describe('Spotlight / Focus Tool', () => {
 
     // Move spotlight via API
     await page.evaluate(() => {
-      const viewer = (window as any).__OPENRV_TEST__?.app?.viewer;
-      const spotlight = viewer?.getSpotlightOverlay?.();
-      if (spotlight) {
-        spotlight.setPosition(0.25, 0.75);
-      }
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightPosition(0.25, 0.75);
     });
     await page.waitForTimeout(100);
 
@@ -2056,11 +2039,7 @@ test.describe('Spotlight / Focus Tool', () => {
 
     // Resize spotlight via API
     await page.evaluate(() => {
-      const viewer = (window as any).__OPENRV_TEST__?.app?.viewer;
-      const spotlight = viewer?.getSpotlightOverlay?.();
-      if (spotlight) {
-        spotlight.setSize(0.3, 0.4);
-      }
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightSize(0.3, 0.4);
     });
     await page.waitForTimeout(100);
 
@@ -2075,11 +2054,7 @@ test.describe('Spotlight / Focus Tool', () => {
 
     // Change dim amount via API
     await page.evaluate(() => {
-      const viewer = (window as any).__OPENRV_TEST__?.app?.viewer;
-      const spotlight = viewer?.getSpotlightOverlay?.();
-      if (spotlight) {
-        spotlight.setDimAmount(0.9);
-      }
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightDimAmount(0.9);
     });
     await page.waitForTimeout(100);
 
@@ -2093,11 +2068,7 @@ test.describe('Spotlight / Focus Tool', () => {
 
     // Change feather via API
     await page.evaluate(() => {
-      const viewer = (window as any).__OPENRV_TEST__?.app?.viewer;
-      const spotlight = viewer?.getSpotlightOverlay?.();
-      if (spotlight) {
-        spotlight.setFeather(0.15);
-      }
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightFeather(0.15);
     });
     await page.waitForTimeout(100);
 
@@ -2113,11 +2084,7 @@ test.describe('Spotlight / Focus Tool', () => {
 
     // Move spotlight to corner
     await page.evaluate(() => {
-      const viewer = (window as any).__OPENRV_TEST__?.app?.viewer;
-      const spotlight = viewer?.getSpotlightOverlay?.();
-      if (spotlight) {
-        spotlight.setPosition(0.2, 0.2);
-      }
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightPosition(0.2, 0.2);
     });
     await page.waitForTimeout(200);
 
@@ -2141,7 +2108,7 @@ test.describe('Text Annotations Enhancement', () => {
     await waitForTestHelper(page);
     await loadVideoFile(page);
     // Switch to Annotate tab
-    await page.locator('button:has-text("Annotate")').first().click();
+    await page.locator('button[data-tab-id="annotate"]').click();
     await page.waitForTimeout(200);
   });
 
@@ -2150,7 +2117,7 @@ test.describe('Text Annotations Enhancement', () => {
 
     // Create bold text annotation via API
     const result = await page.evaluate(() => {
-      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
       if (paintEngine) {
         const annotation = paintEngine.addText(1, { x: 0.5, y: 0.5 }, 'Bold Text', 32, { bold: true });
         return { id: annotation.id, bold: annotation.bold };
@@ -2168,7 +2135,7 @@ test.describe('Text Annotations Enhancement', () => {
 
   test('TEXT-002: can create text annotation with italic style via API', async ({ page }) => {
     const result = await page.evaluate(() => {
-      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
       if (paintEngine) {
         const annotation = paintEngine.addText(1, { x: 0.5, y: 0.5 }, 'Italic Text', 32, { italic: true });
         return { id: annotation.id, italic: annotation.italic };
@@ -2184,7 +2151,7 @@ test.describe('Text Annotations Enhancement', () => {
     const initialScreenshot = await captureViewerScreenshot(page);
 
     const result = await page.evaluate(() => {
-      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
       if (paintEngine) {
         const annotation = paintEngine.addText(1, { x: 0.5, y: 0.5 }, 'Underlined Text', 32, { underline: true });
         return { id: annotation.id, underline: annotation.underline };
@@ -2204,7 +2171,7 @@ test.describe('Text Annotations Enhancement', () => {
     const initialScreenshot = await captureViewerScreenshot(page);
 
     const result = await page.evaluate(() => {
-      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
       if (paintEngine) {
         const annotation = paintEngine.addText(1, { x: 0.5, y: 0.5 }, 'Highlighted Text', 32, {
           backgroundColor: [1, 1, 0, 0.8] // Yellow highlight
@@ -2231,7 +2198,7 @@ test.describe('Text Annotations Enhancement', () => {
     const initialScreenshot = await captureViewerScreenshot(page);
 
     const result = await page.evaluate(() => {
-      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
       if (paintEngine) {
         const annotation = paintEngine.addText(1, { x: 0.3, y: 0.7 }, 'Callout Text', 24, {
           calloutPoint: { x: 0.6, y: 0.3 } // Arrow points to this location
@@ -2257,7 +2224,7 @@ test.describe('Text Annotations Enhancement', () => {
   test('TEXT-006: can update text annotation with multiple styles via API', async ({ page }) => {
     // Create basic text first
     const created = await page.evaluate(() => {
-      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
       if (paintEngine) {
         const annotation = paintEngine.addText(1, { x: 0.5, y: 0.5 }, 'Styled Text', 28);
         return { id: annotation.id, frame: annotation.frame };
@@ -2269,7 +2236,7 @@ test.describe('Text Annotations Enhancement', () => {
 
     // Update with multiple styles
     const updated = await page.evaluate((data) => {
-      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
       if (paintEngine && data) {
         const success = paintEngine.updateTextAnnotation(data.frame, data.id, {
           bold: true,
@@ -2302,7 +2269,7 @@ test.describe('Text Annotations Enhancement', () => {
 
   test('TEXT-007: can set different font family via API', async ({ page }) => {
     const result = await page.evaluate(() => {
-      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
       if (paintEngine) {
         const annotation = paintEngine.addText(1, { x: 0.5, y: 0.5 }, 'Monospace Text', 24, {
           font: 'monospace'
@@ -2320,7 +2287,7 @@ test.describe('Text Annotations Enhancement', () => {
     const initialScreenshot = await captureViewerScreenshot(page);
 
     await page.evaluate(() => {
-      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
       if (paintEngine) {
         paintEngine.addText(1, { x: 0.2, y: 0.8 }, 'Important Note', 28, {
           bold: true,
@@ -2353,7 +2320,7 @@ test.describe('Shape Tools', () => {
     await waitForTestHelper(page);
     await loadVideoFile(page);
     // Switch to Annotate tab
-    await page.locator('button:has-text("Annotate")').first().click();
+    await page.locator('button[data-tab-id="annotate"]').click();
     await page.waitForTimeout(200);
   });
 
@@ -2361,7 +2328,7 @@ test.describe('Shape Tools', () => {
     const initialScreenshot = await captureViewerScreenshot(page);
 
     const result = await page.evaluate(() => {
-      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
       if (paintEngine) {
         const shape = paintEngine.addRectangle(
           1,
@@ -2390,7 +2357,7 @@ test.describe('Shape Tools', () => {
     const initialScreenshot = await captureViewerScreenshot(page);
 
     const result = await page.evaluate(() => {
-      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
       if (paintEngine) {
         const shape = paintEngine.addEllipse(
           1,
@@ -2419,7 +2386,7 @@ test.describe('Shape Tools', () => {
     const initialScreenshot = await captureViewerScreenshot(page);
 
     const result = await page.evaluate(() => {
-      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
       if (paintEngine) {
         const shape = paintEngine.addArrow(
           1,
@@ -2448,7 +2415,7 @@ test.describe('Shape Tools', () => {
 
   test('SHAPE-004: can create line shape via API', async ({ page }) => {
     const result = await page.evaluate(() => {
-      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
       if (paintEngine) {
         const shape = paintEngine.addLine(
           1,
@@ -2473,7 +2440,7 @@ test.describe('Shape Tools', () => {
     const initialScreenshot = await captureViewerScreenshot(page);
 
     await page.evaluate(() => {
-      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
       if (paintEngine) {
         paintEngine.addRectangle(
           1,
@@ -2497,7 +2464,7 @@ test.describe('Shape Tools', () => {
     const initialScreenshot = await captureViewerScreenshot(page);
 
     const result = await page.evaluate(() => {
-      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
       if (paintEngine) {
         const shape = paintEngine.addRectangle(
           1,
@@ -2525,7 +2492,7 @@ test.describe('Shape Tools', () => {
   test('SHAPE-007: can update shape properties via API', async ({ page }) => {
     // Create a shape first
     const created = await page.evaluate(() => {
-      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
       if (paintEngine) {
         const shape = paintEngine.addRectangle(
           1,
@@ -2541,7 +2508,7 @@ test.describe('Shape Tools', () => {
 
     // Update the shape
     const updated = await page.evaluate((data) => {
-      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
       if (paintEngine && data) {
         const success = paintEngine.updateShapeAnnotation(data.frame, data.id, {
           endPoint: { x: 0.8, y: 0.8 },
@@ -2570,7 +2537,7 @@ test.describe('Shape Tools', () => {
     const initialScreenshot = await captureViewerScreenshot(page);
 
     await page.evaluate(() => {
-      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
       if (paintEngine) {
         paintEngine.addEllipse(
           1,
@@ -2594,7 +2561,7 @@ test.describe('Shape Tools', () => {
     const initialScreenshot = await captureViewerScreenshot(page);
 
     const count = await page.evaluate(() => {
-      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
       if (paintEngine) {
         // Add multiple shapes
         paintEngine.addRectangle(1, { x: 0.1, y: 0.1 }, { x: 0.3, y: 0.3 });
@@ -2617,7 +2584,7 @@ test.describe('Shape Tools', () => {
 
   test('SHAPE-010: arrow with custom arrowhead size', async ({ page }) => {
     const result = await page.evaluate(() => {
-      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
       if (paintEngine) {
         const shape = paintEngine.addArrow(
           1,
@@ -2635,7 +2602,7 @@ test.describe('Shape Tools', () => {
 
   test('SHAPE-011: polygon tool creates polygon with multiple points', async ({ page }) => {
     const result = await page.evaluate(() => {
-      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
       if (paintEngine) {
         const shape = paintEngine.addPolygon(
           1,
@@ -2666,7 +2633,7 @@ test.describe('Shape Tools', () => {
     const initialScreenshot = await captureViewerScreenshot(page);
 
     await page.evaluate(() => {
-      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
       if (paintEngine) {
         paintEngine.addPolygon(
           1,
@@ -2693,7 +2660,7 @@ test.describe('Shape Tools', () => {
 
   test('SHAPE-013: polygon with fill color', async ({ page }) => {
     const result = await page.evaluate(() => {
-      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
       if (paintEngine) {
         const shape = paintEngine.addPolygon(
           1,
@@ -2726,7 +2693,7 @@ test.describe('Shape Tools', () => {
     await rectButton.click();
 
     const activeTool = await page.evaluate(() => {
-      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
       return paintEngine?.tool;
     });
 
@@ -2739,7 +2706,7 @@ test.describe('Shape Tools', () => {
     await ellipseButton.click();
 
     const activeTool = await page.evaluate(() => {
-      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
       return paintEngine?.tool;
     });
 
@@ -2752,7 +2719,7 @@ test.describe('Shape Tools', () => {
     await lineButton.click();
 
     const activeTool = await page.evaluate(() => {
-      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
       return paintEngine?.tool;
     });
 
@@ -2765,7 +2732,7 @@ test.describe('Shape Tools', () => {
     await arrowButton.click();
 
     const activeTool = await page.evaluate(() => {
-      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
+      const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
       return paintEngine?.tool;
     });
 
@@ -2775,22 +2742,22 @@ test.describe('Shape Tools', () => {
   test('SHAPE-018: shape tool buttons switch correctly', async ({ page }) => {
     // Click rectangle, verify it's active
     await page.locator('[data-testid="paint-tool-rectangle"]').click();
-    let tool = await page.evaluate(() => (window as any).__OPENRV_TEST__?.app?.paintEngine?.tool);
+    let tool = await page.evaluate(() => (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine()?.tool);
     expect(tool).toBe('rectangle');
 
     // Click ellipse, verify rectangle is no longer active
     await page.locator('[data-testid="paint-tool-ellipse"]').click();
-    tool = await page.evaluate(() => (window as any).__OPENRV_TEST__?.app?.paintEngine?.tool);
+    tool = await page.evaluate(() => (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine()?.tool);
     expect(tool).toBe('ellipse');
 
     // Click arrow, verify ellipse is no longer active
     await page.locator('[data-testid="paint-tool-arrow"]').click();
-    tool = await page.evaluate(() => (window as any).__OPENRV_TEST__?.app?.paintEngine?.tool);
+    tool = await page.evaluate(() => (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine()?.tool);
     expect(tool).toBe('arrow');
 
     // Click line, verify arrow is no longer active
     await page.locator('[data-testid="paint-tool-line"]').click();
-    tool = await page.evaluate(() => (window as any).__OPENRV_TEST__?.app?.paintEngine?.tool);
+    tool = await page.evaluate(() => (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine()?.tool);
     expect(tool).toBe('line');
   });
 });
@@ -2812,7 +2779,7 @@ test.describe('History Panel', () => {
     await waitForTestHelper(page);
     await loadVideoFile(page);
     // Switch to Annotate tab where the history button is
-    await page.locator('button:has-text("Annotate")').first().click();
+    await page.locator('button[data-tab-id="annotate"]').click();
     await page.waitForTimeout(200);
   });
 
@@ -2867,8 +2834,8 @@ test.describe('History Panel', () => {
 
     // Add a stroke via API (simulating drawing)
     await page.evaluate(() => {
-      const paintEngine = (window as any).__OPENRV_TEST__?.app?.paintEngine;
-      const historyManager = (window as any).__OPENRV_TEST__?.app?.historyPanel?.historyManager;
+      const paintEngine = (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine();
+      const historyManager = (window as any).__OPENRV_TEST__?.mutations?.getHistoryManager();
       if (paintEngine && historyManager) {
         // Record an action in history manager
         historyManager.recordAction('Test stroke', 'paint', () => {}, () => {});
@@ -2888,7 +2855,7 @@ test.describe('History Panel', () => {
 
     // Add some history entries
     await page.evaluate(() => {
-      const historyManager = (window as any).__OPENRV_TEST__?.app?.historyPanel?.historyManager;
+      const historyManager = (window as any).__OPENRV_TEST__?.mutations?.getHistoryManager();
       if (historyManager) {
         historyManager.recordAction('Action 1', 'paint', () => {}, () => {});
         historyManager.recordAction('Action 2', 'paint', () => {}, () => {});
@@ -2930,7 +2897,7 @@ test.describe('History Panel', () => {
   test('HIST-007: history manager undo should update current index', async ({ page }) => {
     // Add some history entries
     await page.evaluate(() => {
-      const historyManager = (window as any).__OPENRV_TEST__?.app?.historyPanel?.historyManager;
+      const historyManager = (window as any).__OPENRV_TEST__?.mutations?.getHistoryManager();
       if (historyManager) {
         historyManager.recordAction('Action 1', 'paint', () => {}, () => {});
         historyManager.recordAction('Action 2', 'paint', () => {}, () => {});
@@ -2943,7 +2910,7 @@ test.describe('History Panel', () => {
 
     // Undo
     await page.evaluate(() => {
-      const historyManager = (window as any).__OPENRV_TEST__?.app?.historyPanel?.historyManager;
+      const historyManager = (window as any).__OPENRV_TEST__?.mutations?.getHistoryManager();
       if (historyManager) {
         historyManager.undo();
       }
@@ -2959,7 +2926,7 @@ test.describe('History Panel', () => {
   test('HIST-008: history manager jump should navigate to specific entry', async ({ page }) => {
     // Add multiple history entries
     await page.evaluate(() => {
-      const historyManager = (window as any).__OPENRV_TEST__?.app?.historyPanel?.historyManager;
+      const historyManager = (window as any).__OPENRV_TEST__?.mutations?.getHistoryManager();
       if (historyManager) {
         historyManager.recordAction('Action 1', 'paint', () => {}, () => {});
         historyManager.recordAction('Action 2', 'paint', () => {}, () => {});
@@ -2973,7 +2940,7 @@ test.describe('History Panel', () => {
 
     // Jump to first entry
     await page.evaluate(() => {
-      const historyManager = (window as any).__OPENRV_TEST__?.app?.historyPanel?.historyManager;
+      const historyManager = (window as any).__OPENRV_TEST__?.mutations?.getHistoryManager();
       if (historyManager) {
         historyManager.jumpTo(0);
       }
@@ -2994,7 +2961,7 @@ test.describe('History Panel', () => {
     const initialCount = state.entryCount;
 
     // Switch to Color tab
-    await page.locator('button:has-text("Color")').first().click();
+    await page.locator('button[data-tab-id="color"]').click();
     await page.waitForTimeout(200);
 
     // Click the Color toggle button to expand the color panel
@@ -3070,7 +3037,7 @@ test.describe('Info Panel', () => {
     await waitForTestHelper(page);
     await loadVideoFile(page);
     // Switch to View tab where the info button is
-    await page.locator('button:has-text("View")').first().click();
+    await page.locator('button[data-tab-id="view"]').click();
     await page.waitForTimeout(200);
   });
 

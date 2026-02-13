@@ -267,7 +267,7 @@ test.describe('Full Workflow Tests', () => {
     await page.waitForTimeout(100);
 
     // Zoom using View tab - pick 200% from zoom dropdown
-    await page.click('button:has-text("View")');
+    await page.click('button[data-tab-id="view"]');
     await page.waitForTimeout(100);
     const zoomButton = page.locator('[data-testid="zoom-control-button"]');
     await zoomButton.click();
@@ -314,7 +314,7 @@ test.describe('Full Workflow Tests', () => {
     expect(initialState?.exposure).toBe(0);
 
     // First click the Color tab in the sidebar
-    await page.locator('button:has-text("Color")').first().click();
+    await page.locator('button[data-tab-id="color"]').click();
     await page.waitForTimeout(200);
 
     // Now click the Color dropdown button in the content area (second "Color" button)
@@ -360,7 +360,7 @@ test.describe('Full Workflow Tests', () => {
     expect(initialPaint?.annotatedFrames).toEqual([]);
 
     // Switch to Annotate tab
-    await page.click('button:has-text("Annotate")');
+    await page.click('button[data-tab-id="annotate"]');
     await page.waitForTimeout(200);
 
     // Select pen tool
@@ -446,7 +446,7 @@ test.describe('Full Workflow Tests', () => {
     expect(initialTransform?.flipV).toBe(false);
 
     // Switch to Transform tab
-    await page.click('button:has-text("Transform")');
+    await page.click('button[data-tab-id="transform"]');
     await page.waitForTimeout(200);
 
     // Rotate using Shift+R keyboard shortcut (rotates left/counter-clockwise = 270)
@@ -526,7 +526,7 @@ test.describe('Full Workflow Tests', () => {
 
     // Make color adjustment to see difference in wipe
     // First click Color tab, then the Color dropdown button
-    await page.locator('button:has-text("Color")').first().click();
+    await page.locator('button[data-tab-id="color"]').click();
     await page.waitForTimeout(200);
 
     // Click the Color dropdown button in content area
@@ -680,7 +680,7 @@ test.describe('RV Session Workflow', () => {
 
     // Check if annotations were loaded
     // Switch to annotate tab
-    await page.click('button:has-text("Annotate")');
+    await page.click('button[data-tab-id="annotate"]');
     await page.waitForTimeout(200);
 
     // Canvas should show any loaded annotations

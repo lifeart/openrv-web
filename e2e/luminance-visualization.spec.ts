@@ -37,7 +37,7 @@ async function waitForLuminanceVisMode(page: import('@playwright/test').Page, ex
 // Helper to set mode and wait for it to take effect
 async function setModeAndWait(page: import('@playwright/test').Page, mode: string) {
   await page.evaluate((m) => {
-    (window as any).__OPENRV_TEST__?.app?.viewer?.getLuminanceVisualization?.()?.setMode(m);
+    (window as any).__OPENRV_TEST__?.mutations?.setLuminanceVisMode(m);
   }, mode);
   await waitForLuminanceVisMode(page, mode);
 }
@@ -158,7 +158,7 @@ test.describe('Luminance Visualization - Random Colorization Controls', () => {
 
   test('LV-E021: band count slider changes bands', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getLuminanceVisualization?.()?.setRandomBandCount(8);
+      (window as any).__OPENRV_TEST__?.mutations?.setLuminanceVisRandomBandCount(8);
     });
     await page.waitForFunction(
       () => (window as any).__OPENRV_TEST__?.getLuminanceVisState()?.randomBandCount === 8,
@@ -191,7 +191,7 @@ test.describe('Luminance Visualization - Random Colorization Controls', () => {
 
   test('LV-E023: band count persists in state', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getLuminanceVisualization?.()?.setRandomBandCount(32);
+      (window as any).__OPENRV_TEST__?.mutations?.setLuminanceVisRandomBandCount(32);
     });
     await page.waitForFunction(
       () => (window as any).__OPENRV_TEST__?.getLuminanceVisState()?.randomBandCount === 32,
@@ -216,7 +216,7 @@ test.describe('Luminance Visualization - Contour Controls', () => {
 
   test('LV-E031: level slider changes contour density', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getLuminanceVisualization?.()?.setContourLevels(5);
+      (window as any).__OPENRV_TEST__?.mutations?.setLuminanceVisContourLevels(5);
     });
     await page.waitForFunction(
       () => (window as any).__OPENRV_TEST__?.getLuminanceVisState()?.contourLevels === 5,
@@ -233,7 +233,7 @@ test.describe('Luminance Visualization - Contour Controls', () => {
     expect(state.contourDesaturate).toBe(true);
 
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getLuminanceVisualization?.()?.setContourDesaturate(false);
+      (window as any).__OPENRV_TEST__?.mutations?.setLuminanceVisContourDesaturate(false);
     });
     await page.waitForFunction(
       () => (window as any).__OPENRV_TEST__?.getLuminanceVisState()?.contourDesaturate === false,
@@ -247,7 +247,7 @@ test.describe('Luminance Visualization - Contour Controls', () => {
 
   test('LV-E035: contour level count persists', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getLuminanceVisualization?.()?.setContourLevels(25);
+      (window as any).__OPENRV_TEST__?.mutations?.setLuminanceVisContourLevels(25);
     });
     await page.waitForFunction(
       () => (window as any).__OPENRV_TEST__?.getLuminanceVisState()?.contourLevels === 25,
@@ -269,7 +269,7 @@ test.describe('Luminance Visualization - UI Controls', () => {
   });
 
   test('LV-E040: mode selector exists in View tab', async ({ page }) => {
-    await page.click('button:has-text("View")');
+    await page.click('button[data-tab-id="view"]');
 
     const selector = page.locator('[data-testid="luminance-vis-selector"]');
     await expect(selector).toBeVisible();
@@ -301,8 +301,8 @@ test.describe('Luminance Visualization - State Persistence', () => {
     await setModeAndWait(page, 'hsv');
 
     // Switch tabs
-    await page.click('button:has-text("Color")');
-    await page.click('button:has-text("View")');
+    await page.click('button[data-tab-id="color"]');
+    await page.click('button[data-tab-id="view"]');
 
     const state = await getLuminanceVisState(page);
     expect(state.mode).toBe('hsv');
@@ -311,9 +311,8 @@ test.describe('Luminance Visualization - State Persistence', () => {
   test('LV-E051: settings persist when switching modes', async ({ page }) => {
     // Set random bands to 32
     await page.evaluate(() => {
-      const lv = (window as any).__OPENRV_TEST__?.app?.viewer?.getLuminanceVisualization?.();
-      lv?.setMode('random-color');
-      lv?.setRandomBandCount(32);
+      (window as any).__OPENRV_TEST__?.mutations?.setLuminanceVisMode('random-color');
+      (window as any).__OPENRV_TEST__?.mutations?.setLuminanceVisRandomBandCount(32);
     });
     await page.waitForFunction(
       () => (window as any).__OPENRV_TEST__?.getLuminanceVisState()?.randomBandCount === 32,

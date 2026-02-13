@@ -2145,7 +2145,7 @@ Configurable info overlay showing file metadata, frame info, and color values.
 12. ✅ Annotation Export (5.4)
 13. Perspective Correction (6.1)
 14. ✅ DPX Support (7.2)
-15. OTIO Import (7.4)
+15. ✅ OTIO Import (7.4)
 16. ✅ Session Version History (8.2)
 17. ✅ Multi-Clip Playlist (8.3)
 18. ✅ GPU Texture Caching (9.2)
