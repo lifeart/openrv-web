@@ -22,7 +22,8 @@ export function bindPersistenceHandlers(
   ) => void,
   updateHistogram: () => void,
   updateWaveform: () => void,
-  updateVectorscope: () => void
+  updateVectorscope: () => void,
+  updateGamutDiagram?: () => void
 ): void {
   // Load annotations from GTO files
   on(session, 'annotationsLoaded', ({ annotations, effects }) => {
@@ -69,7 +70,7 @@ export function bindPersistenceHandlers(
 
   // Settings loaded from GTO session
   on(session, 'settingsLoaded', (settings) => {
-    handleSettingsLoaded(context, settings, updateHistogram, updateWaveform, updateVectorscope);
+    handleSettingsLoaded(context, settings, updateHistogram, updateWaveform, updateVectorscope, updateGamutDiagram);
   });
 }
 
@@ -81,7 +82,8 @@ function handleSettingsLoaded(
   settings: SessionEvents['settingsLoaded'],
   updateHistogram: () => void,
   updateWaveform: () => void,
-  updateVectorscope: () => void
+  updateVectorscope: () => void,
+  updateGamutDiagram?: () => void
 ): void {
   if (settings.colorAdjustments) {
     context.getColorControls().setAdjustments(settings.colorAdjustments);
@@ -115,7 +117,7 @@ function handleSettingsLoaded(
     context.getStereoAlignControl().setMode(settings.stereoAlignMode);
   }
   if (settings.scopes) {
-    const applyScope = (scope: 'histogram' | 'waveform' | 'vectorscope', visible: boolean): void => {
+    const applyScope = (scope: 'histogram' | 'waveform' | 'vectorscope' | 'gamutDiagram', visible: boolean): void => {
       if (scope === 'histogram') {
         if (visible) {
           context.getHistogram().show();
@@ -137,6 +139,13 @@ function handleSettingsLoaded(
         } else {
           context.getVectorscope().hide();
         }
+      } else if (scope === 'gamutDiagram') {
+        if (visible) {
+          context.getGamutDiagram().show();
+          updateGamutDiagram?.();
+        } else {
+          context.getGamutDiagram().hide();
+        }
       }
       context.getScopesControl().setScopeVisible(scope, visible);
     };
@@ -144,6 +153,7 @@ function handleSettingsLoaded(
     applyScope('histogram', settings.scopes.histogram);
     applyScope('waveform', settings.scopes.waveform);
     applyScope('vectorscope', settings.scopes.vectorscope);
+    applyScope('gamutDiagram', settings.scopes.gamutDiagram);
   }
 
   context.getPersistenceManager().syncGTOStore();

@@ -33,7 +33,7 @@ test.describe('Vibrance Control', () => {
     await waitForTestHelper(page);
     await loadVideoFile(page);
     // Switch to Color tab
-    await page.locator('button:has-text("Color")').first().click();
+    await page.locator('button[data-tab-id="color"]').click();
     await page.waitForTimeout(200);
   });
 

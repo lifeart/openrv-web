@@ -399,7 +399,7 @@ test.describe('Dropdown Menu Item Selection', () => {
   test('DM-E023: selected item is visually highlighted', async ({ page }) => {
     // Set zoom to 100% first
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setZoom?.(1);
+      (window as any).__OPENRV_TEST__?.mutations?.setViewerZoom(1);
     });
     await page.waitForTimeout(100);
 

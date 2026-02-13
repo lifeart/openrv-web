@@ -71,6 +71,10 @@ export function createButton(
   button.type = 'button';
   button.disabled = disabled;
   button.title = title || '';
+  // Set aria-label for icon-only buttons (no text label)
+  if (!text && title) {
+    button.setAttribute('aria-label', title);
+  }
 
   const variantStyle = VARIANT_STYLES[variant];
   const sizeStyle = SIZE_STYLES[size];

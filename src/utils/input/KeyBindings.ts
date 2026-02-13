@@ -157,6 +157,10 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyY',
     description: 'Toggle vectorscope'
   },
+  'panel.gamutDiagram': {
+    code: 'KeyG',
+    description: 'Toggle CIE gamut diagram'
+  },
   'panel.histogram': {
     code: 'KeyH',
     description: 'Toggle histogram'
@@ -540,6 +544,17 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     shift: true,
     ctrl: true,
     description: 'Quick disconnect from sync room'
+  },
+
+  // Focus zone navigation
+  'focus.nextZone': {
+    code: 'F6',
+    description: 'Focus next zone'
+  },
+  'focus.previousZone': {
+    code: 'F6',
+    shift: true,
+    description: 'Focus previous zone'
   },
 };
 /**

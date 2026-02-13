@@ -5,6 +5,15 @@
  */
 
 import { createButton } from './Button';
+import type { FocusManager } from '../../a11y/FocusManager';
+
+// Module-level focus manager setter to avoid circular deps
+let focusManager: FocusManager | null = null;
+export function setModalFocusManager(fm: FocusManager): void {
+  focusManager = fm;
+}
+
+let modalTitleCounter = 0;
 
 export interface ModalOptions {
   title?: string;
@@ -33,6 +42,8 @@ export interface PromptOptions extends ModalOptions {
 // Singleton container for modals
 let modalContainer: HTMLElement | null = null;
 let customModalEscapeHandler: ((e: KeyboardEvent) => void) | null = null;
+// Pre-trap focus saved when no FocusManager is available (fallback)
+let preTrapFocus: Element | null = null;
 
 function cleanupCustomModalEscapeHandler(): void {
   if (customModalEscapeHandler) {
@@ -66,10 +77,24 @@ function getModalContainer(): HTMLElement {
 function showContainer(): void {
   const container = getModalContainer();
   container.style.display = 'flex';
+  if (focusManager) {
+    // FocusManager handles saving/restoring focus internally
+    focusManager.trapFocus(container);
+  } else {
+    preTrapFocus = document.activeElement;
+  }
 }
 
 function hideContainer(): void {
   cleanupCustomModalEscapeHandler();
+  if (focusManager) {
+    // FocusManager restores focus to the element saved in trapFocus()
+    focusManager.releaseFocus();
+  } else if (preTrapFocus instanceof HTMLElement) {
+    // Fallback: restore focus manually when no FocusManager
+    preTrapFocus.focus();
+  }
+  preTrapFocus = null;
   const container = getModalContainer();
   container.style.display = 'none';
   container.innerHTML = '';
@@ -78,8 +103,15 @@ function hideContainer(): void {
 function createModalBase(options: ModalOptions = {}): HTMLElement {
   const { title, width = '400px', closable = true, onClose } = options;
 
+  const modalTitleId = `modal-title-${++modalTitleCounter}`;
+
   const modal = document.createElement('div');
   modal.className = 'modal';
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  if (title) {
+    modal.setAttribute('aria-labelledby', modalTitleId);
+  }
   modal.style.cssText = `
     background: var(--bg-secondary);
     border: 1px solid var(--border-primary);
@@ -118,6 +150,7 @@ function createModalBase(options: ModalOptions = {}): HTMLElement {
     `;
 
     const titleEl = document.createElement('h3');
+    titleEl.id = modalTitleId;
     titleEl.textContent = title || '';
     titleEl.style.cssText = `
       margin: 0;

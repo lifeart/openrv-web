@@ -10,6 +10,7 @@ import {
   updateHistogram,
   updateWaveform,
   updateVectorscope,
+  updateGamutDiagram,
   createScopeScheduler,
 } from './scopeHandlers';
 import type { SessionBridgeContext } from '../AppSessionBridge';
@@ -18,6 +19,7 @@ function createMockContext(overrides: {
   histogramVisible?: boolean;
   waveformVisible?: boolean;
   vectorscopeVisible?: boolean;
+  gamutDiagramVisible?: boolean;
   imageData?: ImageData | null;
   floatData?: Float32Array | null;
   hdrActive?: boolean;
@@ -51,6 +53,11 @@ function createMockContext(overrides: {
     update: vi.fn(),
     updateFloat: vi.fn(),
   };
+  const gamutDiagram = {
+    isVisible: vi.fn(() => overrides.gamutDiagramVisible ?? false),
+    update: vi.fn(),
+    updateFloat: vi.fn(),
+  };
   const viewer = {
     getImageData: vi.fn(() => imageData),
     getScopeImageData: vi.fn(() => scopeImageData),
@@ -60,6 +67,7 @@ function createMockContext(overrides: {
     getHistogram: () => histogram,
     getWaveform: () => waveform,
     getVectorscope: () => vectorscope,
+    getGamutDiagram: () => gamutDiagram,
     getViewer: () => viewer,
   } as unknown as SessionBridgeContext;
 }
@@ -210,6 +218,49 @@ describe('updateVectorscope', () => {
   });
 });
 
+describe('updateGamutDiagram', () => {
+  it('SCH-U040: updates gamut diagram when visible and image data exists', () => {
+    const imgData = new ImageData(2, 2);
+    const context = createMockContext({ gamutDiagramVisible: true, imageData: imgData });
+
+    updateGamutDiagram(context);
+
+    expect(context.getGamutDiagram().update).toHaveBeenCalledWith(imgData);
+  });
+
+  it('SCH-U041: does not update gamut diagram when not visible', () => {
+    const context = createMockContext({ gamutDiagramVisible: false });
+
+    updateGamutDiagram(context);
+
+    expect(context.getViewer().getScopeImageData).not.toHaveBeenCalled();
+    expect(context.getGamutDiagram().update).not.toHaveBeenCalled();
+  });
+
+  it('SCH-U042: does not update gamut diagram when image data is null', () => {
+    const context = createMockContext({ gamutDiagramVisible: true, imageData: null });
+
+    updateGamutDiagram(context);
+
+    expect(context.getGamutDiagram().update).not.toHaveBeenCalled();
+  });
+
+  it('SCH-U043: routes to updateFloat when floatData available', () => {
+    const imgData = new ImageData(2, 2);
+    const floatData = new Float32Array(2 * 2 * 4);
+    const context = createMockContext({
+      gamutDiagramVisible: true,
+      imageData: imgData,
+      floatData,
+    });
+
+    updateGamutDiagram(context);
+
+    expect(context.getGamutDiagram().updateFloat).toHaveBeenCalledWith(floatData, 2, 2);
+    expect(context.getGamutDiagram().update).not.toHaveBeenCalled();
+  });
+});
+
 describe('createScopeScheduler', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -314,6 +365,7 @@ describe('createScopeScheduler', () => {
       histogramVisible: true,
       waveformVisible: true,
       vectorscopeVisible: true,
+      gamutDiagramVisible: true,
       imageData: imgData,
       floatData,
       hdrActive: true,
@@ -332,6 +384,25 @@ describe('createScopeScheduler', () => {
     // Vectorscope should use float path
     expect(context.getVectorscope().updateFloat).toHaveBeenCalledWith(floatData, 2, 2);
     expect(context.getVectorscope().update).not.toHaveBeenCalled();
+    // Gamut diagram should use float path
+    expect(context.getGamutDiagram().updateFloat).toHaveBeenCalledWith(floatData, 2, 2);
+    expect(context.getGamutDiagram().update).not.toHaveBeenCalled();
+  });
+
+  it('SCH-U037: scheduler SDR path updates gamut diagram with ImageData', () => {
+    const imgData = new ImageData(2, 2);
+    const context = createMockContext({
+      gamutDiagramVisible: true,
+      imageData: imgData,
+    });
+    const scheduler = createScopeScheduler(context);
+
+    scheduler.schedule();
+    vi.advanceTimersByTime(32);
+
+    // Gamut diagram should use SDR path when no floatData
+    expect(context.getGamutDiagram().update).toHaveBeenCalledWith(imgData);
+    expect(context.getGamutDiagram().updateFloat).not.toHaveBeenCalled();
   });
 
   it('SCH-U036: scheduler calls getScopeImageData only once for all three scopes', () => {

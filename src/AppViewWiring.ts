@@ -54,6 +54,13 @@ export function wireViewControls(ctx: AppWiringContext): void {
       } else {
         controls.vectorscope.hide();
       }
+    } else if (scope === 'gamutDiagram') {
+      if (visible) {
+        controls.gamutDiagram.show();
+        sessionBridge.updateGamutDiagram();
+      } else {
+        controls.gamutDiagram.hide();
+      }
     }
     persistenceManager.syncGTOStore();
   });

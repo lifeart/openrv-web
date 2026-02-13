@@ -30,7 +30,7 @@ test.describe('Effects Controls', () => {
     await waitForTestHelper(page);
     await loadVideoFile(page);
     // Switch to Effects tab using text matching
-    await page.locator('button:has-text("Effects")').first().click();
+    await page.locator('button[data-tab-id="effects"]').click();
     await page.waitForTimeout(200);
   });
 

@@ -49,6 +49,9 @@ export const DIRTY_HIGHLIGHTS_SHADOWS = 'highlightsShadows';
 export const DIRTY_INVERSION = 'inversion';
 export const DIRTY_LUT3D = 'lut3d';
 export const DIRTY_GAMUT_MAPPING = 'gamutMapping';
+export const DIRTY_DEINTERLACE = 'deinterlace';
+export const DIRTY_FILM_EMULATION = 'filmEmulation';
+export const DIRTY_PERSPECTIVE = 'perspective';
 
 /** All dirty flag names -- used to initialize on first render so all uniforms are set. */
 export const ALL_DIRTY_FLAGS = [
@@ -56,7 +59,8 @@ export const ALL_DIRTY_FLAGS = [
   DIRTY_HSL, DIRTY_ZEBRA, DIRTY_CHANNELS, DIRTY_BACKGROUND,
   DIRTY_DISPLAY, DIRTY_CLARITY, DIRTY_SHARPEN, DIRTY_FALSE_COLOR,
   DIRTY_CURVES, DIRTY_VIBRANCE, DIRTY_HIGHLIGHTS_SHADOWS, DIRTY_INVERSION,
-  DIRTY_LUT3D, DIRTY_GAMUT_MAPPING,
+  DIRTY_LUT3D, DIRTY_GAMUT_MAPPING, DIRTY_DEINTERLACE, DIRTY_FILM_EMULATION,
+  DIRTY_PERSPECTIVE,
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -109,6 +113,15 @@ const BG_PATTERN_CROSSHATCH = 3;
 const DEFAULT_ZEBRA_HIGH_THRESHOLD = 0.95;
 const DEFAULT_ZEBRA_LOW_THRESHOLD = 0.05;
 const DEFAULT_CHECKER_SIZE = 16;
+
+/** Compare two Float32Array instances element-by-element. */
+function float32ArrayEquals(a: Float32Array, b: Float32Array): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
 
 /** Parse hex color into an existing tuple (avoids allocation). */
 function hexToRgbInto(hex: string, out: [number, number, number]): void {
@@ -267,6 +280,25 @@ export interface InternalShaderState {
   gamutMappingModeCode: number;
   gamutSourceCode: number;
   gamutTargetCode: number;
+
+  // Deinterlace
+  deinterlaceEnabled: boolean;
+  deinterlaceMethod: number;    // 0=bob, 1=weave, 2=blend
+  deinterlaceFieldOrder: number; // 0=tff, 1=bff
+
+  // Film Emulation
+  filmEnabled: boolean;
+  filmIntensity: number;
+  filmSaturation: number;
+  filmGrainIntensity: number;
+  filmGrainSeed: number;
+  filmLUTData: Uint8Array | null;
+  filmLUTDirty: boolean;
+
+  // Perspective Correction
+  perspectiveEnabled: boolean;
+  perspectiveInvH: Float32Array;
+  perspectiveQuality: number;
 }
 
 function createDefaultInternalState(): InternalShaderState {
@@ -341,6 +373,19 @@ function createDefaultInternalState(): InternalShaderState {
     gamutMappingModeCode: 0,
     gamutSourceCode: 0,
     gamutTargetCode: 0,
+    deinterlaceEnabled: false,
+    deinterlaceMethod: 0,
+    deinterlaceFieldOrder: 0,
+    filmEnabled: false,
+    filmIntensity: 0,
+    filmSaturation: 1,
+    filmGrainIntensity: 0,
+    filmGrainSeed: 0,
+    filmLUTData: null,
+    filmLUTDirty: false,
+    perspectiveEnabled: false,
+    perspectiveInvH: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]),
+    perspectiveQuality: 0,
   };
 }
 
@@ -364,6 +409,8 @@ export interface TextureCallbacks {
   bindFalseColorLUTTexture(): void;
   /** Ensure 3D LUT texture exists, upload if dirty, activate TEXTURE3, bind. */
   bindLUT3DTexture(): void;
+  /** Ensure film LUT texture exists, upload if dirty, activate TEXTURE4, bind. */
+  bindFilmLUTTexture(): void;
   /** Get the current canvas dimensions for u_resolution. */
   getCanvasSize(): { width: number; height: number };
 }
@@ -446,16 +493,17 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
    * Clear a texture-specific dirty flag after the Renderer has uploaded
    * the corresponding texture data to the GPU.
    */
-  clearTextureDirtyFlag(flag: 'curvesLUTDirty' | 'falseColorLUTDirty' | 'lut3DDirty'): void {
+  clearTextureDirtyFlag(flag: 'curvesLUTDirty' | 'falseColorLUTDirty' | 'lut3DDirty' | 'filmLUTDirty'): void {
     this.state[flag] = false;
     // Invalidate the corresponding cached snapshot since dirty changed
     if (flag === 'curvesLUTDirty') {
       this.cachedCurvesSnapshot = null;
     } else if (flag === 'falseColorLUTDirty') {
       this.cachedFalseColorSnapshot = null;
-    } else {
+    } else if (flag === 'lut3DDirty') {
       this.cachedLUT3DSnapshot = null;
     }
+    // filmLUTDirty has no cached snapshot
   }
 
   // -----------------------------------------------------------------------
@@ -757,6 +805,33 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     return { mode, sourceGamut: source, targetGamut: target };
   }
 
+  setDeinterlace(diState: { enabled: boolean; method: number; fieldOrder: number }): void {
+    this.state.deinterlaceEnabled = diState.enabled && diState.method !== 1; // not weave
+    this.state.deinterlaceMethod = diState.method;
+    this.state.deinterlaceFieldOrder = diState.fieldOrder;
+    this.dirtyFlags.add(DIRTY_DEINTERLACE);
+  }
+
+  setFilmEmulation(feState: { enabled: boolean; intensity: number; saturation: number; grainIntensity: number; grainSeed: number; lutData: Uint8Array | null }): void {
+    this.state.filmEnabled = feState.enabled && feState.intensity > 0;
+    this.state.filmIntensity = feState.intensity;
+    this.state.filmSaturation = feState.saturation;
+    this.state.filmGrainIntensity = feState.grainIntensity;
+    this.state.filmGrainSeed = feState.grainSeed;
+    if (feState.lutData) {
+      this.state.filmLUTData = feState.lutData;
+      this.state.filmLUTDirty = true;
+    }
+    this.dirtyFlags.add(DIRTY_FILM_EMULATION);
+  }
+
+  setPerspective(pState: { enabled: boolean; invH: Float32Array; quality: number }): void {
+    this.state.perspectiveEnabled = pState.enabled;
+    this.state.perspectiveInvH = pState.invH;
+    this.state.perspectiveQuality = pState.quality;
+    this.dirtyFlags.add(DIRTY_PERSPECTIVE);
+  }
+
   /** Set texel size (called by Renderer before applyUniforms, based on image dimensions). */
   setTexelSize(w: number, h: number): void {
     this.state.texelSize[0] = w;
@@ -948,6 +1023,47 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
           newTargetCode !== s.gamutTargetCode) {
         this.setGamutMapping(gm);
       }
+    }
+
+    // --- Deinterlace (3 uniforms) ---
+    if (renderState.deinterlace) {
+      const di = renderState.deinterlace;
+      const newEnabled = di.enabled && di.method !== 1;
+      if (newEnabled !== s.deinterlaceEnabled ||
+          di.method !== s.deinterlaceMethod ||
+          di.fieldOrder !== s.deinterlaceFieldOrder) {
+        this.setDeinterlace(di);
+      }
+    } else if (s.deinterlaceEnabled) {
+      this.setDeinterlace({ enabled: false, method: 1, fieldOrder: 0 });
+    }
+
+    // --- Film emulation (5 uniforms + LUT texture) ---
+    if (renderState.filmEmulation) {
+      const fe = renderState.filmEmulation;
+      const newEnabled = fe.enabled && fe.intensity > 0;
+      if (newEnabled !== s.filmEnabled ||
+          fe.intensity !== s.filmIntensity ||
+          fe.saturation !== s.filmSaturation ||
+          fe.grainIntensity !== s.filmGrainIntensity ||
+          fe.grainSeed !== s.filmGrainSeed ||
+          fe.lutData !== s.filmLUTData) {
+        this.setFilmEmulation(fe);
+      }
+    } else if (s.filmEnabled) {
+      this.setFilmEmulation({ enabled: false, intensity: 0, saturation: 1, grainIntensity: 0, grainSeed: 0, lutData: null });
+    }
+
+    // --- Perspective correction (3 uniforms) ---
+    if (renderState.perspective) {
+      const pc = renderState.perspective;
+      if (pc.enabled !== s.perspectiveEnabled ||
+          pc.quality !== s.perspectiveQuality ||
+          !float32ArrayEquals(pc.invH, s.perspectiveInvH)) {
+        this.setPerspective(pc);
+      }
+    } else if (s.perspectiveEnabled) {
+      this.setPerspective({ enabled: false, invH: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]), quality: 0 });
     }
   }
 
@@ -1168,6 +1284,44 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
       }
     }
 
+    // Deinterlace
+    if (dirty.has(DIRTY_DEINTERLACE)) {
+      shader.setUniformInt('u_deinterlaceEnabled', s.deinterlaceEnabled ? 1 : 0);
+      if (s.deinterlaceEnabled) {
+        shader.setUniformInt('u_deinterlaceMethod', s.deinterlaceMethod);
+        shader.setUniformInt('u_deinterlaceFieldOrder', s.deinterlaceFieldOrder);
+      }
+    }
+
+    // Texel size - also needed for deinterlace
+    if ((dirty.has(DIRTY_DEINTERLACE)) && s.deinterlaceEnabled) {
+      shader.setUniform('u_texelSize', s.texelSize);
+    }
+
+    // Film Emulation
+    if (dirty.has(DIRTY_FILM_EMULATION)) {
+      shader.setUniformInt('u_filmEnabled', s.filmEnabled ? 1 : 0);
+      if (s.filmEnabled) {
+        shader.setUniform('u_filmIntensity', s.filmIntensity);
+        shader.setUniform('u_filmSaturation', s.filmSaturation);
+        shader.setUniform('u_filmGrainIntensity', s.filmGrainIntensity);
+        shader.setUniform('u_filmGrainSeed', s.filmGrainSeed);
+      }
+    }
+
+    // Perspective Correction
+    if (dirty.has(DIRTY_PERSPECTIVE)) {
+      shader.setUniformInt('u_perspectiveEnabled', s.perspectiveEnabled ? 1 : 0);
+      if (s.perspectiveEnabled) {
+        shader.setUniformMatrix3('u_perspectiveInvH', s.perspectiveInvH);
+        shader.setUniformInt('u_perspectiveQuality', s.perspectiveQuality);
+        // Texel size needed for bicubic perspective interpolation
+        if (s.perspectiveQuality === 1) {
+          shader.setUniform('u_texelSize', s.texelSize);
+        }
+      }
+    }
+
     // --- Bind effect textures ---
     // IMPORTANT: Always set sampler uniform-to-unit bindings unconditionally,
     // even when the effect is disabled. In WebGL2, all sampler uniforms default
@@ -1191,6 +1345,12 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     shader.setUniformInt('u_lut3D', 3);
     if (s.lut3DEnabled) {
       texCb.bindLUT3DTexture();
+    }
+
+    // Texture unit 4: film emulation LUT
+    shader.setUniformInt('u_filmLUT', 4);
+    if (s.filmEnabled) {
+      texCb.bindFilmLUTTexture();
     }
 
     // Clear all dirty flags after uniforms have been set

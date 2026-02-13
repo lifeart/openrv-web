@@ -152,6 +152,20 @@ export interface WorkerToneMappingState {
   dragoBrightness?: number;       // Post-Drago brightness multiplier (default 2.0)
 }
 
+export interface WorkerDeinterlaceParams {
+  method: string;   // 'bob' | 'weave' | 'blend'
+  fieldOrder: string; // 'tff' | 'bff'
+  enabled: boolean;
+}
+
+export interface WorkerFilmEmulationParams {
+  enabled: boolean;
+  stock: string;
+  intensity: number;       // 0-100
+  grainIntensity: number;  // 0-100
+  grainSeed: number;
+}
+
 /**
  * All effects state bundled together for worker processing
  */
@@ -165,6 +179,8 @@ export interface WorkerEffectsState {
   hslQualifierState: WorkerHSLQualifierState;
   toneMappingState: WorkerToneMappingState;
   colorInversionEnabled: boolean;
+  deinterlaceParams?: WorkerDeinterlaceParams;
+  filmEmulationParams?: WorkerFilmEmulationParams;
 }
 
 // ============================================================================
@@ -1133,5 +1149,229 @@ export function applyLUTToRGB(data: Uint8ClampedArray, lut: Uint8Array): void {
     data[i + 1] = lut[data[i + 1]!]!;
     data[i + 2] = lut[data[i + 2]!]!;
     // Alpha unchanged
+  }
+}
+
+// ============================================================================
+// Worker-safe Deinterlace
+// ============================================================================
+
+/**
+ * Apply deinterlace to raw Uint8ClampedArray pixel data (worker-safe, no ImageData).
+ * Bob: keep one field, interpolate the other by averaging neighbors.
+ * Blend: average each line with its adjacent neighbor.
+ */
+export function applyDeinterlaceWorker(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  params: WorkerDeinterlaceParams,
+): void {
+  if (!params.enabled || params.method === 'weave') return;
+
+  const stride = width * 4;
+
+  if (params.method === 'bob') {
+    const original = new Uint8ClampedArray(data);
+    const interpolateEven = params.fieldOrder === 'bff';
+
+    for (let y = 0; y < height; y++) {
+      const isEvenLine = y % 2 === 0;
+      if (interpolateEven ? !isEvenLine : isEvenLine) continue;
+
+      const rowOffset = y * stride;
+      if (y === 0) {
+        const belowOffset = stride;
+        for (let i = 0; i < stride; i++) data[rowOffset + i] = original[belowOffset + i]!;
+      } else if (y === height - 1) {
+        const aboveOffset = (height - 2) * stride;
+        for (let i = 0; i < stride; i++) data[rowOffset + i] = original[aboveOffset + i]!;
+      } else {
+        const aboveOffset = (y - 1) * stride;
+        const belowOffset = (y + 1) * stride;
+        for (let i = 0; i < stride; i++) {
+          data[rowOffset + i] = (original[aboveOffset + i]! + original[belowOffset + i]!) >> 1;
+        }
+      }
+    }
+  } else if (params.method === 'blend') {
+    const original = new Uint8ClampedArray(data);
+    for (let y = 0; y < height; y++) {
+      const rowOffset = y * stride;
+      const neighborY = y % 2 === 0
+        ? Math.min(y + 1, height - 1)
+        : Math.max(y - 1, 0);
+      const neighborOffset = neighborY * stride;
+      for (let i = 0; i < stride; i++) {
+        data[rowOffset + i] = (original[rowOffset + i]! + original[neighborOffset + i]!) >> 1;
+      }
+    }
+  }
+}
+
+// ============================================================================
+// Worker-safe Film Emulation
+// ============================================================================
+
+// Inline film stock profiles (worker-safe: no external deps beyond LUMA constants)
+function softSCurveWorker(x: number): number {
+  const t = clamp(x, 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
+function strongSCurveWorker(x: number): number {
+  return softSCurveWorker(softSCurveWorker(x));
+}
+
+function liftGammaWorker(x: number, lift: number, gamma: number): number {
+  return clamp(lift + (1 - lift) * Math.pow(clamp(x, 0, 1), gamma), 0, 1);
+}
+
+interface WorkerFilmStockProfile {
+  id: string;
+  toneCurve: (r: number, g: number, b: number) => [number, number, number];
+  saturation: number;
+  grainAmount: number;
+}
+
+const WORKER_FILM_STOCKS: WorkerFilmStockProfile[] = [
+  {
+    id: 'kodak-portra-400',
+    toneCurve(r, g, b) {
+      const cr = liftGammaWorker(r * 1.03 + 0.01, 0.03, 0.95);
+      const cg = liftGammaWorker(g * 1.00, 0.02, 0.97);
+      const cb = liftGammaWorker(b * 0.95, 0.01, 1.02);
+      return [softSCurveWorker(cr), softSCurveWorker(cg), softSCurveWorker(cb)];
+    },
+    saturation: 0.85,
+    grainAmount: 0.35,
+  },
+  {
+    id: 'kodak-ektar-100',
+    toneCurve(r, g, b) {
+      const cr = strongSCurveWorker(r * 1.05);
+      const cg = strongSCurveWorker(g * 1.02);
+      const cb = strongSCurveWorker(b * 1.06);
+      return [clamp(cr, 0, 1), clamp(cg, 0, 1), clamp(cb, 0, 1)];
+    },
+    saturation: 1.3,
+    grainAmount: 0.15,
+  },
+  {
+    id: 'fuji-pro-400h',
+    toneCurve(r, g, b) {
+      const cr = liftGammaWorker(r * 0.97, 0.02, 0.98);
+      const cg = liftGammaWorker(g * 1.01 + 0.01, 0.02, 0.96);
+      const cb = liftGammaWorker(b * 1.04 + 0.02, 0.03, 0.95);
+      return [softSCurveWorker(cr), softSCurveWorker(cg), softSCurveWorker(cb)];
+    },
+    saturation: 0.88,
+    grainAmount: 0.3,
+  },
+  {
+    id: 'fuji-velvia-50',
+    toneCurve(r, g, b) {
+      const cr = strongSCurveWorker(r * 1.08);
+      const cg = strongSCurveWorker(g * 1.06);
+      const cb = strongSCurveWorker(b * 1.1);
+      return [clamp(cr, 0, 1), clamp(cg, 0, 1), clamp(cb, 0, 1)];
+    },
+    saturation: 1.5,
+    grainAmount: 0.1,
+  },
+  {
+    id: 'kodak-tri-x-400',
+    toneCurve(r, g, b) {
+      const luma = LUMA_R * r + LUMA_G * g + LUMA_B * b;
+      const curved = liftGammaWorker(luma, 0.02, 0.9);
+      const v = softSCurveWorker(curved);
+      return [v, v, v];
+    },
+    saturation: 0,
+    grainAmount: 0.55,
+  },
+  {
+    id: 'ilford-hp5',
+    toneCurve(r, g, b) {
+      const luma = LUMA_R * r + LUMA_G * g + LUMA_B * b;
+      const curved = liftGammaWorker(luma, 0.03, 0.95);
+      const v = softSCurveWorker(curved);
+      return [v, v, v];
+    },
+    saturation: 0,
+    grainAmount: 0.3,
+  },
+];
+
+function getWorkerFilmStock(id: string): WorkerFilmStockProfile | undefined {
+  return WORKER_FILM_STOCKS.find(s => s.id === id);
+}
+
+/**
+ * Apply film emulation to raw Uint8ClampedArray pixel data (worker-safe).
+ * Applies tone curves, saturation, grain, and intensity blending.
+ */
+export function applyFilmEmulationWorker(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+  params: WorkerFilmEmulationParams,
+): void {
+  if (!params.enabled || params.intensity <= 0) return;
+
+  const stock = getWorkerFilmStock(params.stock);
+  if (!stock) return;
+
+  const intensity = clamp(params.intensity, 0, 100) / 100;
+  const grainStrength = (clamp(params.grainIntensity, 0, 100) / 100) * stock.grainAmount;
+
+  // Deterministic PRNG (xorshift32) for grain
+  let rngState = (params.grainSeed | 0) || 1;
+  function nextRng(): number {
+    rngState ^= rngState << 13;
+    rngState ^= rngState >> 17;
+    rngState ^= rngState << 5;
+    return ((rngState & 0xffff) / 0x8000) - 1;
+  }
+
+  const totalPixels = width * height;
+  for (let p = 0; p < totalPixels; p++) {
+    const i = p * 4;
+    const origR = data[i]!;
+    const origG = data[i + 1]!;
+    const origB = data[i + 2]!;
+
+    let r = origR / 255;
+    let g = origG / 255;
+    let b = origB / 255;
+
+    // Apply tone curve
+    const [cr, cg, cb] = stock.toneCurve(r, g, b);
+
+    // Apply saturation
+    const luma = LUMA_R * cr + LUMA_G * cg + LUMA_B * cb;
+    const sat = stock.saturation;
+    r = luma + (cr - luma) * sat;
+    g = luma + (cg - luma) * sat;
+    b = luma + (cb - luma) * sat;
+
+    // Apply grain
+    if (grainStrength > 0) {
+      const grainEnvelope = 4 * luma * (1 - luma);
+      const grainAmount = grainStrength * grainEnvelope;
+      const noise = nextRng() * grainAmount;
+      r += noise;
+      g += noise;
+      b += noise;
+    }
+
+    // Blend with original
+    r = origR / 255 * (1 - intensity) + clamp(r, 0, 1) * intensity;
+    g = origG / 255 * (1 - intensity) + clamp(g, 0, 1) * intensity;
+    b = origB / 255 * (1 - intensity) + clamp(b, 0, 1) * intensity;
+
+    data[i] = Math.round(clamp(r, 0, 1) * 255);
+    data[i + 1] = Math.round(clamp(g, 0, 1) * 255);
+    data[i + 2] = Math.round(clamp(b, 0, 1) * 255);
   }
 }

@@ -31,28 +31,25 @@ test.describe('Unsupported Codec Error Handling', () => {
       // This exercises the actual App.showUnsupportedCodecModal() code path
       // which creates the modal with close button, codec info, and ffmpeg guidance.
       await page.evaluate(() => {
-        const session = (window as any).__OPENRV_TEST__?.app?.session;
-        if (session && typeof session.emit === 'function') {
-          session.emit('unsupportedCodec', {
-            filename: 'test_prores.mov',
-            codec: 'apch',
-            codecFamily: 'prores',
-            error: {
-              title: 'ProRes Format Not Supported',
-              message: 'This video uses Apple ProRes HQ, which is not supported in browsers.',
-              codecInfo: {
-                family: 'prores',
-                fourcc: 'apch',
-                displayName: 'Apple ProRes HQ',
-                isSupported: false,
-                variant: 'prores_hq',
-                bitDepth: 10,
-              },
-              details: 'File: test_prores.mov',
-              recommendation: 'ffmpeg -i test_prores.mov -c:v libx264 output.mp4',
+        (window as any).__OPENRV_TEST__?.mutations?.emitSessionEvent('unsupportedCodec', {
+          filename: 'test_prores.mov',
+          codec: 'apch',
+          codecFamily: 'prores',
+          error: {
+            title: 'ProRes Format Not Supported',
+            message: 'This video uses Apple ProRes HQ, which is not supported in browsers.',
+            codecInfo: {
+              family: 'prores',
+              fourcc: 'apch',
+              displayName: 'Apple ProRes HQ',
+              isSupported: false,
+              variant: 'prores_hq',
+              bitDepth: 10,
             },
-          });
-        }
+            details: 'File: test_prores.mov',
+            recommendation: 'ffmpeg -i test_prores.mov -c:v libx264 output.mp4',
+          },
+        });
       });
 
       await page.waitForTimeout(300);
@@ -78,26 +75,23 @@ test.describe('Unsupported Codec Error Handling', () => {
     test('UC-002: modal should close on Escape key', async ({ page }) => {
       // Trigger the real unsupported codec modal via session event emission
       await page.evaluate(() => {
-        const session = (window as any).__OPENRV_TEST__?.app?.session;
-        if (session && typeof session.emit === 'function') {
-          session.emit('unsupportedCodec', {
-            filename: 'test_dnxhd.mxf',
-            codec: 'AVdn',
-            codecFamily: 'dnxhd',
-            error: {
-              title: 'DNxHD Format Not Supported',
-              message: 'This video uses Avid DNxHD, which is not supported in browsers.',
-              codecInfo: {
-                family: 'dnxhd',
-                fourcc: 'AVdn',
-                displayName: 'Avid DNxHD',
-                isSupported: false,
-              },
-              details: 'File: test_dnxhd.mxf',
-              recommendation: 'ffmpeg -i test_dnxhd.mxf -c:v libx264 output.mp4',
+        (window as any).__OPENRV_TEST__?.mutations?.emitSessionEvent('unsupportedCodec', {
+          filename: 'test_dnxhd.mxf',
+          codec: 'AVdn',
+          codecFamily: 'dnxhd',
+          error: {
+            title: 'DNxHD Format Not Supported',
+            message: 'This video uses Avid DNxHD, which is not supported in browsers.',
+            codecInfo: {
+              family: 'dnxhd',
+              fourcc: 'AVdn',
+              displayName: 'Avid DNxHD',
+              isSupported: false,
             },
-          });
-        }
+            details: 'File: test_dnxhd.mxf',
+            recommendation: 'ffmpeg -i test_dnxhd.mxf -c:v libx264 output.mp4',
+          },
+        });
       });
 
       await page.waitForTimeout(300);
@@ -180,9 +174,7 @@ test.describe('Unsupported Codec Error Handling', () => {
       // Verify the session event system is functional and the unsupported codec
       // handler is connected. This confirms the real code path exists.
       const isWired = await page.evaluate(() => {
-        const session = (window as any).__OPENRV_TEST__?.app?.session;
-        // The session should be an event emitter that supports 'unsupportedCodec' events
-        return session != null && typeof session.on === 'function';
+        return (window as any).__OPENRV_TEST__?.mutations?.isSessionEventEmitter() ?? false;
       });
 
       expect(isWired).toBe(true);

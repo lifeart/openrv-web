@@ -18,6 +18,9 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
   private container: HTMLElement;
   private contentContainer: HTMLElement;
   private _activeTab: TabId = 'view';
+  private fadeLeft: HTMLElement;
+  private fadeRight: HTMLElement;
+  private boundUpdateFades: () => void;
 
   // Tab content containers
   private tabContents: Map<TabId, HTMLElement> = new Map();
@@ -25,9 +28,13 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
   constructor() {
     super();
 
+    this.boundUpdateFades = () => this.updateFades();
+
     // Create container
     this.container = document.createElement('div');
     this.container.className = 'context-toolbar';
+    this.container.setAttribute('role', 'toolbar');
+    this.container.setAttribute('aria-label', 'View controls');
     this.container.style.cssText = `
       height: 44px;
       background: var(--bg-secondary);
@@ -39,6 +46,44 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
       flex-shrink: 0;
       overflow-x: auto;
       overflow-y: hidden;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      position: relative;
+    `;
+    // Hide scrollbar for WebKit browsers
+    const style = document.createElement('style');
+    style.textContent = `.context-toolbar::-webkit-scrollbar { display: none; }`;
+    this.container.appendChild(style);
+
+    // Create fade overlays for overflow indication
+    this.fadeLeft = document.createElement('div');
+    this.fadeLeft.className = 'context-toolbar-fade-left';
+    this.fadeLeft.style.cssText = `
+      position: sticky;
+      left: 0;
+      top: 0;
+      width: 24px;
+      height: 100%;
+      pointer-events: none;
+      background: linear-gradient(to right, var(--bg-secondary), transparent);
+      flex-shrink: 0;
+      z-index: 1;
+      display: none;
+    `;
+
+    this.fadeRight = document.createElement('div');
+    this.fadeRight.className = 'context-toolbar-fade-right';
+    this.fadeRight.style.cssText = `
+      position: sticky;
+      right: 0;
+      top: 0;
+      width: 24px;
+      height: 100%;
+      pointer-events: none;
+      background: linear-gradient(to left, var(--bg-secondary), transparent);
+      flex-shrink: 0;
+      z-index: 1;
+      display: none;
     `;
 
     // Create content container for smooth transitions
@@ -49,7 +94,13 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
       gap: 6px;
       height: 100%;
     `;
+
+    this.container.appendChild(this.fadeLeft);
     this.container.appendChild(this.contentContainer);
+    this.container.appendChild(this.fadeRight);
+
+    // Listen for scroll events to update fade visibility
+    this.container.addEventListener('scroll', this.boundUpdateFades);
 
     // Initialize empty content for each tab
     this.initTabContents();
@@ -61,6 +112,9 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
     for (const tabId of tabs) {
       const content = document.createElement('div');
       content.className = `context-content-${tabId}`;
+      content.id = `tabpanel-${tabId}`;
+      content.setAttribute('role', 'tabpanel');
+      content.setAttribute('aria-labelledby', `tab-${tabId}`);
       content.style.cssText = `
         display: none;
         align-items: center;
@@ -125,8 +179,34 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
   setActiveTab(tabId: TabId): void {
     if (tabId === this._activeTab) return;
 
+    // Check if focus is inside the previous tab content before hiding
+    const prevContent = this.tabContents.get(this._activeTab);
+    const focusInPrevTab = prevContent && prevContent.contains(document.activeElement);
+
     this._activeTab = tabId;
     this.showTabContent(tabId);
+
+    // Update toolbar aria-label to match tab
+    const tabLabels: Record<TabId, string> = {
+      view: 'View controls',
+      color: 'Color controls',
+      effects: 'Effects controls',
+      transform: 'Transform controls',
+      annotate: 'Annotate controls',
+    };
+    this.container.setAttribute('aria-label', tabLabels[tabId]);
+
+    // If focus was in the previous tab, move it to the new tab's roving element
+    if (focusInPrevTab) {
+      const newContent = this.tabContents.get(tabId);
+      if (newContent) {
+        const focusTarget = newContent.querySelector<HTMLElement>('[tabindex="0"]') ||
+          newContent.querySelector<HTMLElement>('button:not([disabled])');
+        if (focusTarget) {
+          focusTarget.focus();
+        }
+      }
+    }
   }
 
   get activeTab(): TabId {
@@ -225,6 +305,9 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
     const iconSize = options.size === 'md' ? 'md' : 'sm';
     button.innerHTML = getIconSvg(icon, iconSize);
     button.title = options.title || '';
+    if (options.title) {
+      button.setAttribute('aria-label', options.title);
+    }
 
     const btnSize = options.size === 'md' ? '32px' : '28px';
     button.style.cssText = `
@@ -331,11 +414,33 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
     return container;
   }
 
+  /**
+   * Update fade overlay visibility based on scroll position
+   */
+  private updateFades(): void {
+    const { scrollLeft, scrollWidth, clientWidth } = this.container;
+    const hasOverflow = scrollWidth > clientWidth;
+
+    this.fadeLeft.style.display = hasOverflow && scrollLeft > 0 ? 'block' : 'none';
+    this.fadeRight.style.display = hasOverflow && scrollLeft + clientWidth < scrollWidth - 1 ? 'block' : 'none';
+  }
+
+  /**
+   * Scroll a control element into view within the toolbar
+   */
+  scrollActiveControlIntoView(element: HTMLElement): void {
+    element.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+  }
+
+  getContainer(): HTMLElement {
+    return this.container;
+  }
+
   render(): HTMLElement {
     return this.container;
   }
 
   dispose(): void {
-    // Cleanup if needed
+    this.container.removeEventListener('scroll', this.boundUpdateFades);
   }
 }

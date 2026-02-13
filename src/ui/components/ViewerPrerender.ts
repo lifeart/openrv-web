@@ -13,6 +13,10 @@ import { ChannelMode } from './ChannelSelect';
 import { ColorWheels } from './ColorWheels';
 import { HSLQualifier } from './HSLQualifier';
 import { ToneMappingState } from './ToneMappingControl';
+import type { DeinterlaceParams } from '../../filters/Deinterlace';
+import { DEFAULT_DEINTERLACE_PARAMS } from '../../filters/Deinterlace';
+import type { FilmEmulationParams } from '../../filters/FilmEmulation';
+import { DEFAULT_FILM_EMULATION_PARAMS } from '../../filters/FilmEmulation';
 
 /**
  * Create a frame loader function for the prerender buffer.
@@ -65,7 +69,9 @@ export function buildEffectsState(
   colorWheels: ColorWheels,
   hslQualifier: HSLQualifier,
   toneMappingState: ToneMappingState,
-  colorInversionEnabled = false
+  colorInversionEnabled = false,
+  deinterlaceParams: DeinterlaceParams = { ...DEFAULT_DEINTERLACE_PARAMS },
+  filmEmulationParams: FilmEmulationParams = { ...DEFAULT_FILM_EMULATION_PARAMS },
 ): AllEffectsState {
   return {
     colorAdjustments: { ...colorAdjustments },
@@ -82,6 +88,8 @@ export function buildEffectsState(
     hslQualifierState: hslQualifier.getState(),
     toneMappingState: { ...toneMappingState },
     colorInversionEnabled,
+    deinterlaceParams: { ...deinterlaceParams },
+    filmEmulationParams: { ...filmEmulationParams },
   };
 }
 

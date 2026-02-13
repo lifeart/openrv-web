@@ -208,7 +208,7 @@ test.describe('State Verification - Transform', () => {
     const originalScreenshot = await captureViewerScreenshot(page);
 
     // Flip horizontal
-    await page.keyboard.press('Shift+h');
+    await page.keyboard.press('Alt+h');
     await page.waitForTimeout(300);
 
     // Capture flipped
@@ -241,9 +241,9 @@ test.describe('State Verification - Transform', () => {
     const originalScreenshot = await captureViewerScreenshot(page);
 
     // Flip twice
-    await page.keyboard.press('Shift+h');
+    await page.keyboard.press('Alt+h');
     await page.waitForTimeout(200);
-    await page.keyboard.press('Shift+h');
+    await page.keyboard.press('Alt+h');
     await page.waitForTimeout(300);
 
     const doubleFlipScreenshot = await captureViewerScreenshot(page);

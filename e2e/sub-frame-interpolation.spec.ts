@@ -13,11 +13,7 @@ import { loadVideoFile, getSessionState, waitForTestHelper } from './fixtures';
 /** Helper: enable interpolation via the public session property */
 async function enableInterpolation(page: import('@playwright/test').Page): Promise<void> {
   await page.evaluate(() => {
-    // Access via session -- this is the programmatic interface for enabling interpolation
-    const session = (window as any).__OPENRV_TEST__?.app?.session;
-    if (session) {
-      session.interpolationEnabled = true;
-    }
+    (window as any).__OPENRV_TEST__?.mutations?.setInterpolationEnabled(true);
   });
   await page.waitForTimeout(100);
 }
@@ -25,10 +21,7 @@ async function enableInterpolation(page: import('@playwright/test').Page): Promi
 /** Helper: disable interpolation via the public session property */
 async function disableInterpolation(page: import('@playwright/test').Page): Promise<void> {
   await page.evaluate(() => {
-    const session = (window as any).__OPENRV_TEST__?.app?.session;
-    if (session) {
-      session.interpolationEnabled = false;
-    }
+    (window as any).__OPENRV_TEST__?.mutations?.setInterpolationEnabled(false);
   });
   await page.waitForTimeout(100);
 }
@@ -36,16 +29,14 @@ async function disableInterpolation(page: import('@playwright/test').Page): Prom
 /** Helper: read interpolation enabled state (verification only) */
 async function getInterpolationEnabled(page: import('@playwright/test').Page): Promise<boolean> {
   return page.evaluate(() => {
-    const session = (window as any).__OPENRV_TEST__?.app?.session;
-    return session?.interpolationEnabled ?? false;
+    return (window as any).__OPENRV_TEST__?.mutations?.getInterpolationEnabled() ?? false;
   });
 }
 
 /** Helper: read sub-frame position state (verification only) */
 async function getSubFramePosition(page: import('@playwright/test').Page): Promise<unknown> {
   return page.evaluate(() => {
-    const session = (window as any).__OPENRV_TEST__?.app?.session;
-    return session?.subFramePosition ?? null;
+    return (window as any).__OPENRV_TEST__?.mutations?.getSubFramePosition() ?? null;
   });
 }
 
@@ -185,8 +176,7 @@ test.describe('Sub-frame Interpolation', () => {
   test('SFI-010: interpolation capability is available', async ({ page }) => {
     // Verify the session supports interpolation by checking the property exists
     const hasInterpolation = await page.evaluate(() => {
-      const session = (window as any).__OPENRV_TEST__?.app?.session;
-      return typeof session?.interpolationEnabled === 'boolean';
+      return typeof (window as any).__OPENRV_TEST__?.mutations?.getInterpolationEnabled() === 'boolean';
     });
     expect(hasInterpolation).toBe(true);
   });

@@ -102,7 +102,7 @@ test.describe('Spotlight Properties', () => {
 
   test('SL-E013: changing position updates state', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setPosition(0.3, 0.7);
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightPosition(0.3, 0.7);
     });
     await page.waitForTimeout(100);
 
@@ -113,7 +113,7 @@ test.describe('Spotlight Properties', () => {
 
   test('SL-E014: changing size updates state', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setSize(0.4, 0.4);
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightSize(0.4, 0.4);
     });
     await page.waitForTimeout(100);
 
@@ -124,7 +124,7 @@ test.describe('Spotlight Properties', () => {
 
   test('SL-E015: changing dim amount updates state', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setDimAmount(0.5);
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightDimAmount(0.5);
     });
     await page.waitForTimeout(100);
 
@@ -134,7 +134,7 @@ test.describe('Spotlight Properties', () => {
 
   test('SL-E016: changing feather updates state', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setFeather(0.1);
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightFeather(0.1);
     });
     await page.waitForTimeout(100);
 
@@ -155,7 +155,7 @@ test.describe('Spotlight Shape', () => {
 
   test('SL-E020: changing shape to rectangle updates state', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setShape('rectangle');
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightShape('rectangle');
     });
     await page.waitForTimeout(100);
 
@@ -172,7 +172,7 @@ test.describe('Spotlight Shape', () => {
     });
 
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setShape('rectangle');
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightShape('rectangle');
     });
     await page.waitForTimeout(200);
 
@@ -301,7 +301,7 @@ test.describe('Spotlight Interaction', () => {
 
     // Change position via API
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setPosition(0.25, 0.75);
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightPosition(0.25, 0.75);
     });
     await page.waitForTimeout(100);
 
@@ -317,7 +317,7 @@ test.describe('Spotlight Interaction', () => {
 
     // Move position again
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setPosition(0.75, 0.25);
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightPosition(0.75, 0.25);
     });
     await page.waitForTimeout(100);
 
@@ -519,7 +519,7 @@ test.describe('Spotlight Regression Tests', () => {
   test('SL-R005: spotlight resize handles work correctly', async ({ page }) => {
     // Increase spotlight size for easier handle targeting
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setSize(0.3, 0.3);
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightSize(0.3, 0.3);
     });
     await page.waitForTimeout(100);
 
@@ -627,7 +627,7 @@ test.describe('Spotlight State Persistence', () => {
 
     // Change position
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setPosition(0.3, 0.7);
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightPosition(0.3, 0.7);
     });
     await page.waitForTimeout(100);
 
@@ -765,7 +765,7 @@ test.describe('Spotlight Shape Switching', () => {
     expect(state.shape).toBe('circle');
 
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setShape('rectangle');
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightShape('rectangle');
     });
     await page.waitForTimeout(100);
 
@@ -776,7 +776,7 @@ test.describe('Spotlight Shape Switching', () => {
   test('SL-E071: can switch from rectangle back to circle', async ({ page }) => {
     // Set to rectangle first
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setShape('rectangle');
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightShape('rectangle');
     });
     await page.waitForTimeout(100);
 
@@ -785,7 +785,7 @@ test.describe('Spotlight Shape Switching', () => {
 
     // Switch back to circle
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setShape('circle');
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightShape('circle');
     });
     await page.waitForTimeout(100);
 
@@ -802,7 +802,7 @@ test.describe('Spotlight Shape Switching', () => {
 
     // Switch to rectangle
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setShape('rectangle');
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightShape('rectangle');
     });
     await page.waitForTimeout(200);
 
@@ -820,9 +820,8 @@ test.describe('Spotlight Shape Switching', () => {
 
   test('SL-E073: rectangle shape has 8 resize handles', async ({ page }) => {
     await page.evaluate(() => {
-      const spotlight = (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.();
-      spotlight?.setShape('rectangle');
-      spotlight?.setSize(0.3, 0.3);
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightShape('rectangle');
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightSize(0.3, 0.3);
     });
     await page.waitForTimeout(100);
 
@@ -880,7 +879,7 @@ test.describe('Spotlight Feather and Dim Amount', () => {
 
     // Increase feather to max
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setFeather(0.5);
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightFeather(0.5);
     });
     await page.waitForTimeout(200);
 
@@ -899,7 +898,7 @@ test.describe('Spotlight Feather and Dim Amount', () => {
 
   test('SL-E081: setting feather to 0 produces hard edge', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setFeather(0);
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightFeather(0);
     });
     await page.waitForTimeout(100);
 
@@ -916,7 +915,7 @@ test.describe('Spotlight Feather and Dim Amount', () => {
 
     // Set dim to maximum
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setDimAmount(1.0);
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightDimAmount(1.0);
     });
     await page.waitForTimeout(200);
 
@@ -935,7 +934,7 @@ test.describe('Spotlight Feather and Dim Amount', () => {
 
   test('SL-E083: setting dim amount to 0 removes dimming', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setDimAmount(0);
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightDimAmount(0);
     });
     await page.waitForTimeout(100);
 
@@ -946,7 +945,7 @@ test.describe('Spotlight Feather and Dim Amount', () => {
   test('SL-E084: feather is clamped to valid range', async ({ page }) => {
     // Try setting feather above max
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setFeather(1.5);
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightFeather(1.5);
     });
     await page.waitForTimeout(100);
 
@@ -955,7 +954,7 @@ test.describe('Spotlight Feather and Dim Amount', () => {
 
     // Try setting feather below min
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setFeather(-0.5);
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightFeather(-0.5);
     });
     await page.waitForTimeout(100);
 
@@ -981,7 +980,7 @@ test.describe('Spotlight Edge Cases', () => {
 
   test('SL-E090: spotlight at corner position (0, 0)', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setPosition(0, 0);
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightPosition(0, 0);
     });
     await page.waitForTimeout(100);
 
@@ -992,7 +991,7 @@ test.describe('Spotlight Edge Cases', () => {
 
   test('SL-E091: spotlight at corner position (1, 1)', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setPosition(1, 1);
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightPosition(1, 1);
     });
     await page.waitForTimeout(100);
 
@@ -1003,7 +1002,7 @@ test.describe('Spotlight Edge Cases', () => {
 
   test('SL-E092: position is clamped to valid range', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setPosition(-0.5, 1.5);
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightPosition(-0.5, 1.5);
     });
     await page.waitForTimeout(100);
 
@@ -1016,7 +1015,7 @@ test.describe('Spotlight Edge Cases', () => {
 
   test('SL-E093: minimum spotlight size is enforced', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setSize(0.001, 0.001);
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightSize(0.001, 0.001);
     });
     await page.waitForTimeout(100);
 
@@ -1028,7 +1027,7 @@ test.describe('Spotlight Edge Cases', () => {
 
   test('SL-E094: very large spotlight size is handled', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setSize(1, 1);
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightSize(1, 1);
     });
     await page.waitForTimeout(100);
 
@@ -1039,7 +1038,7 @@ test.describe('Spotlight Edge Cases', () => {
 
   test('SL-E095: spotlight size beyond maximum is clamped', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setSize(2, 2);
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightSize(2, 2);
     });
     await page.waitForTimeout(100);
 
@@ -1051,7 +1050,7 @@ test.describe('Spotlight Edge Cases', () => {
   test('SL-E096: spotlight works with very small resize', async ({ page }) => {
     // Set initial size
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getSpotlightOverlay?.()?.setSize(0.3, 0.3);
+      (window as any).__OPENRV_TEST__?.mutations?.setSpotlightSize(0.3, 0.3);
     });
     await page.waitForTimeout(100);
 
@@ -1103,7 +1102,7 @@ test.describe('Spotlight Feature Interactions', () => {
 
     // Zoom viewer
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setZoom?.(2);
+      (window as any).__OPENRV_TEST__?.mutations?.setViewerZoom(2);
     });
     await page.waitForTimeout(200);
 
@@ -1122,11 +1121,7 @@ test.describe('Spotlight Feature Interactions', () => {
 
     // Pan the viewer (not the spotlight)
     await page.evaluate(() => {
-      const viewer = (window as any).__OPENRV_TEST__?.app?.viewer;
-      if (viewer) {
-        viewer.panX = 50;
-        viewer.panY = 50;
-      }
+      (window as any).__OPENRV_TEST__?.mutations?.setViewerPan(50, 50);
     });
     await page.waitForTimeout(100);
 

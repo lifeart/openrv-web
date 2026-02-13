@@ -776,6 +776,35 @@ function applyLookTransform(rgb: RGB, lookName: string, direction: 'forward' | '
 }
 
 // =============================================================================
+// Gamut Clipping
+// =============================================================================
+
+/**
+ * Hue-preserving gamut clip.
+ *
+ * When converting from a wide gamut (P3, Rec.2020) to a narrow gamut (sRGB/Rec.709),
+ * out-of-gamut colors may have negative or >1 RGB components. Simple `clamp(0,1)`
+ * shifts hue. This function desaturates toward the achromatic axis instead,
+ * preserving hue direction and approximate luminance.
+ */
+export function gamutClip(r: number, g: number, b: number): [number, number, number] {
+  if (r >= 0 && r <= 1 && g >= 0 && g <= 1 && b >= 0 && b <= 1) {
+    return [r, g, b];
+  }
+  // Rec.709 luminance
+  const L = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  const Lc = Math.max(0, Math.min(1, L));
+  if (Lc <= 0) return [0, 0, 0];
+  if (Lc >= 1) return [1, 1, 1];
+  let t = 1;
+  for (const c of [r, g, b]) {
+    if (c > 1) t = Math.min(t, (1 - Lc) / (c - Lc));
+    else if (c < 0) t = Math.min(t, Lc / (Lc - c));
+  }
+  return [Lc + t * (r - Lc), Lc + t * (g - Lc), Lc + t * (b - Lc)];
+}
+
+// =============================================================================
 // OCIOTransform Class
 // =============================================================================
 
@@ -804,7 +833,8 @@ type TransformStep =
   | { type: 'gamma_encode'; func: TransferFunctionName }
   | { type: 'gamma_decode'; func: TransferFunctionName }
   | { type: 'tonemap'; func: 'aces' }
-  | { type: 'look'; name: string; direction: 'forward' | 'inverse' };
+  | { type: 'look'; name: string; direction: 'forward' | 'inverse' }
+  | { type: 'gamut_clip' };
 
 /**
  * Color space transform chain
@@ -856,6 +886,20 @@ export class OCIOTransform {
 
     // Linear sRGB to sRGB
     if (input === 'Linear sRGB' && output === 'sRGB') {
+      this.steps.push({ type: 'gamma_encode', func: 'srgb' });
+      return;
+    }
+
+    // sRGB to Rec.709 (same primaries, different OETF)
+    if (input === 'sRGB' && output === 'Rec.709') {
+      this.steps.push({ type: 'gamma_decode', func: 'srgb' });
+      this.steps.push({ type: 'gamma_encode', func: 'rec709' });
+      return;
+    }
+
+    // Rec.709 to sRGB (same primaries, different OETF)
+    if (input === 'Rec.709' && output === 'sRGB') {
+      this.steps.push({ type: 'gamma_decode', func: 'rec709' });
       this.steps.push({ type: 'gamma_encode', func: 'srgb' });
       return;
     }
@@ -942,6 +986,7 @@ export class OCIOTransform {
       // Already in same white point (D65)
       this.steps.push({ type: 'matrix', matrix: DCIP3_TO_XYZ });
       this.steps.push({ type: 'matrix', matrix: XYZ_TO_SRGB });
+      this.steps.push({ type: 'gamut_clip' });
       this.steps.push({ type: 'gamma_encode', func: 'srgb' });
       return;
     }
@@ -967,6 +1012,7 @@ export class OCIOTransform {
     if (input === 'Rec.2020' && output === 'sRGB') {
       this.steps.push({ type: 'matrix', matrix: REC2020_TO_XYZ });
       this.steps.push({ type: 'matrix', matrix: XYZ_TO_SRGB });
+      this.steps.push({ type: 'gamut_clip' });
       this.steps.push({ type: 'gamma_encode', func: 'srgb' });
       return;
     }
@@ -1002,6 +1048,7 @@ export class OCIOTransform {
       this.steps.push({ type: 'matrix', matrix: PROPHOTO_TO_XYZ_D50 });
       this.steps.push({ type: 'matrix', matrix: D50_TO_D65 });
       this.steps.push({ type: 'matrix', matrix: XYZ_TO_SRGB });
+      this.steps.push({ type: 'gamut_clip' });
       this.steps.push({ type: 'gamma_encode', func: 'srgb' });
       return;
     }
@@ -1239,6 +1286,9 @@ export class OCIOTransform {
           break;
         case 'look':
           rgb = applyLookTransform(rgb, step.name, step.direction);
+          break;
+        case 'gamut_clip':
+          rgb = gamutClip(rgb[0], rgb[1], rgb[2]);
           break;
       }
     }

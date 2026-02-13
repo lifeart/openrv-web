@@ -14,7 +14,8 @@ export function handlePlaybackChanged(
   isPlaying: boolean,
   updateHistogram: () => void,
   updateWaveform: () => void,
-  updateVectorscope: () => void
+  updateVectorscope: () => void,
+  updateGamutDiagram?: () => void
 ): void {
   const session = context.getSession();
 
@@ -43,5 +44,6 @@ export function handlePlaybackChanged(
     updateHistogram();
     updateWaveform();
     updateVectorscope();
+    updateGamutDiagram?.();
   }
 }

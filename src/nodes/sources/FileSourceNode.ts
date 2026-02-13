@@ -30,6 +30,7 @@ import {
   type HEICGainmapInfo,
   type HEICColorInfo,
 } from '../../formats/HEICGainmapDecoder';
+import { isRAWExtension, extractRAWPreview, type RAWExifMetadata } from '../../formats/RAWPreviewDecoder';
 
 /**
  * Check if a filename has an EXR extension
@@ -551,6 +552,9 @@ export class FileSourceNode extends BaseSourceNode {
   private currentExrLayer: string | null = null;
   private currentExrRemapping: EXRChannelRemapping | null = null;
 
+  // RAW preview EXIF metadata
+  private _rawExifMetadata: RAWExifMetadata | null = null;
+
   // Canvas cache for HDR rendering (avoids creating new canvas on every getCanvas() call)
   private cachedCanvas: HTMLCanvasElement | null = null;
   private canvasDirty: boolean = true;
@@ -572,6 +576,13 @@ export class FileSourceNode extends BaseSourceNode {
    */
   get formatName(): string | null {
     return this._formatName;
+  }
+
+  /**
+   * Get the RAW EXIF metadata (only available for RAW preview files)
+   */
+  get rawExifMetadata(): RAWExifMetadata | null {
+    return this._rawExifMetadata;
   }
 
   /**
@@ -801,6 +812,21 @@ export class FileSourceNode extends BaseSourceNode {
         }
       } catch (err) {
         console.warn('[FileSource] HEIC loading failed, falling back to standard loading:', err);
+        // Fall through to standard image loading
+      }
+    }
+
+    // Check if this is a RAW file - extract embedded JPEG preview
+    if (isRAWExtension(filename)) {
+      try {
+        const response = await fetch(url);
+        if (response.ok) {
+          const buffer = await response.arrayBuffer();
+          const loaded = await this.loadRAWPreview(buffer, filename, url, originalUrl);
+          if (loaded) return;
+        }
+      } catch (err) {
+        console.warn('[FileSource] RAW preview loading failed, falling back to standard loading:', err);
         // Fall through to standard image loading
       }
     }
@@ -1557,6 +1583,58 @@ export class FileSourceNode extends BaseSourceNode {
   }
 
   /**
+   * Load RAW preview by extracting the largest embedded JPEG from the RAW file.
+   * Follows the tryLoadJXLNative pattern: blob → objectURL → Image element.
+   * Returns true if preview was loaded, false otherwise.
+   */
+  private loadRAWPreview(
+    buffer: ArrayBuffer,
+    name: string,
+    url: string,
+    originalUrl?: string
+  ): Promise<boolean> {
+    const preview = extractRAWPreview(buffer);
+    if (!preview) return Promise.resolve(false);
+
+    return new Promise<boolean>((resolve) => {
+      const blobUrl = URL.createObjectURL(preview.jpegBlob);
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        URL.revokeObjectURL(blobUrl);
+        this.image = img;
+        this.url = url;
+        this.isEXR = false;
+        this._isHDRFormat = false;
+        this._formatName = 'raw-preview';
+        this._rawExifMetadata = preview.exif;
+        this.metadata = {
+          name,
+          width: img.naturalWidth,
+          height: img.naturalHeight,
+          duration: 1,
+          fps: 24,
+        };
+        this.properties.setValue('url', url);
+        if (originalUrl) {
+          this.properties.setValue('originalUrl', originalUrl);
+        }
+        this.properties.setValue('width', img.naturalWidth);
+        this.properties.setValue('height', img.naturalHeight);
+        this.properties.setValue('isHDR', false);
+        this.markDirty();
+        this.cachedIPImage = null;
+        resolve(true);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(blobUrl);
+        resolve(false);
+      };
+      img.src = blobUrl;
+    });
+  }
+
+  /**
    * Load SDR HEIC file from ArrayBuffer via libheif-js WASM decoder.
    * Used as fallback on Chrome/Firefox/Edge which lack native HEIC support.
    */
@@ -1823,6 +1901,22 @@ export class FileSourceNode extends BaseSourceNode {
       }
     }
 
+    // Check if this is a RAW file - extract embedded JPEG preview
+    if (isRAWExtension(file.name)) {
+      let rawBlobUrl: string | null = null;
+      try {
+        const buffer = await file.arrayBuffer();
+        rawBlobUrl = URL.createObjectURL(file);
+        const loaded = await this.loadRAWPreview(buffer, file.name, rawBlobUrl);
+        if (loaded) return;
+        URL.revokeObjectURL(rawBlobUrl);
+      } catch (err) {
+        if (rawBlobUrl) URL.revokeObjectURL(rawBlobUrl);
+        console.warn('[FileSource] RAW preview loading failed, falling back to standard loading:', err);
+        // Fall through to standard image loading
+      }
+    }
+
     // Standard image loading
     const url = URL.createObjectURL(file);
     await this.load(url, file.name);
@@ -1987,6 +2081,7 @@ export class FileSourceNode extends BaseSourceNode {
     this.isEXR = false;
     this._isHDRFormat = false;
     this._formatName = null;
+    this._rawExifMetadata = null;
     // Clean up cached canvas
     this.cachedCanvas = null;
     this.canvasDirty = true;

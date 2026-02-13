@@ -141,6 +141,24 @@
       uniform int u_sourceGamut;       // 0=sRGB, 1=Rec.2020, 2=Display-P3
       uniform int u_targetGamut;       // 0=sRGB, 1=Rec.2020, 2=Display-P3
 
+      // Deinterlace
+      uniform int u_deinterlaceEnabled;    // 0=off, 1=on
+      uniform int u_deinterlaceMethod;     // 0=bob, 1=weave, 2=blend
+      uniform int u_deinterlaceFieldOrder; // 0=tff, 1=bff
+
+      // Film Emulation
+      uniform int u_filmEnabled;
+      uniform float u_filmIntensity;        // 0.0-1.0
+      uniform float u_filmSaturation;       // stock saturation multiplier
+      uniform float u_filmGrainIntensity;   // pre-multiplied: grainIntensity * stock.grainAmount
+      uniform float u_filmGrainSeed;        // per-frame seed
+      uniform sampler2D u_filmLUT;          // 256x1 RGB LUT texture
+
+      // Perspective Correction
+      uniform int u_perspectiveEnabled;    // 0=off, 1=on
+      uniform mat3 u_perspectiveInvH;     // Inverse homography (column-major)
+      uniform int u_perspectiveQuality;   // 0=bilinear, 1=bicubic
+
       // Luminance coefficients (Rec. 709)
       const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 
@@ -577,10 +595,70 @@
         );
       }
 
+      // Catmull-Rom spline weight for bicubic perspective interpolation
+      float catmullRom(float x) {
+        float ax = abs(x);
+        if (ax < 1.0) return 1.5*ax*ax*ax - 2.5*ax*ax + 1.0;
+        if (ax < 2.0) return -0.5*ax*ax*ax + 2.5*ax*ax - 4.0*ax + 2.0;
+        return 0.0;
+      }
+
       void main() {
         vec4 color = texture(u_texture, v_texCoord);
 
-        // 0. Input EOTF: convert from transfer function to linear light
+        // 0a. Deinterlace (before EOTF, operates on raw texels)
+        if (u_deinterlaceEnabled == 1 && u_deinterlaceMethod != 1) { // not weave
+          float row = v_texCoord.y / u_texelSize.y;
+          int rowInt = int(floor(row));
+          bool isEvenRow = (rowInt - 2 * (rowInt / 2)) == 0; // modulo 2 without bitwise
+          if (u_deinterlaceMethod == 0) { // bob
+            bool interpolate = (u_deinterlaceFieldOrder == 0) ? !isEvenRow : isEvenRow;
+            if (interpolate) {
+              vec4 above = texture(u_texture, v_texCoord - vec2(0.0, u_texelSize.y));
+              vec4 below = texture(u_texture, v_texCoord + vec2(0.0, u_texelSize.y));
+              color = (above + below) * 0.5;
+            }
+          } else if (u_deinterlaceMethod == 2) { // blend
+            float offset = isEvenRow ? u_texelSize.y : -u_texelSize.y;
+            vec4 neighbor = texture(u_texture, v_texCoord + vec2(0.0, offset));
+            color = (color + neighbor) * 0.5;
+          }
+        }
+
+        // 0a2. Perspective correction (geometric warp, after deinterlace, before EOTF)
+        // Interpolation happens in texture's native space (PQ/HLG/sRGB),
+        // consistent with other texture sampling in this shader.
+        if (u_perspectiveEnabled == 1) {
+          vec3 srcH = u_perspectiveInvH * vec3(v_texCoord, 1.0);
+          if (abs(srcH.z) < 1e-6) {
+            color = vec4(0.0, 0.0, 0.0, 0.0); // singularity guard
+          } else {
+            vec2 srcUV = srcH.xy / srcH.z;
+            if (srcUV.x < 0.0 || srcUV.x > 1.0 || srcUV.y < 0.0 || srcUV.y > 1.0) {
+              color = vec4(0.0, 0.0, 0.0, 0.0); // out of bounds
+            } else if (u_perspectiveQuality == 1) {
+              // Bicubic Catmull-Rom 4x4
+              vec2 texSize = 1.0 / u_texelSize;
+              vec2 fCoord = srcUV * texSize - 0.5;
+              vec2 f = fract(fCoord);
+              vec2 iCoord = floor(fCoord);
+              vec4 result = vec4(0.0);
+              for (int j = -1; j <= 2; j++) {
+                float wy = catmullRom(float(j) - f.y);
+                for (int i = -1; i <= 2; i++) {
+                  float wx = catmullRom(float(i) - f.x);
+                  vec2 sc = clamp((iCoord + vec2(float(i), float(j)) + 0.5) / texSize, vec2(0.0), vec2(1.0));
+                  result += texture(u_texture, sc) * wx * wy;
+                }
+              }
+              color = result;
+            } else {
+              color = texture(u_texture, srcUV); // bilinear (hardware)
+            }
+          }
+        }
+
+        // 0b. Input EOTF: convert from transfer function to linear light
         if (u_inputTransfer == 1) {
           color.rgb = hlgToLinear(color.rgb);
         } else if (u_inputTransfer == 2) {
@@ -604,29 +682,35 @@
         color.rgb = mix(vec3(luma), color.rgb, u_saturation);
 
         // 5b. Highlights/Shadows/Whites/Blacks (before CDL/curves, matching CPU order)
+        // HDR-aware: scales masking and adjustments by peak luminance (u_hdrHeadroom)
         if (u_hsEnabled) {
-          // Whites/Blacks clipping
+          float hsPeak = max(u_hdrHeadroom, 1.0); // 1.0 for SDR, >1.0 for HDR
+
+          // Whites/Blacks clipping (scaled to HDR range)
           if (u_whites != 0.0 || u_blacks != 0.0) {
-            float whitePoint = 1.0 - u_whites * (55.0 / 255.0);
-            float blackPoint = u_blacks * (55.0 / 255.0);
+            float whitePoint = hsPeak * (1.0 - u_whites * (55.0 / 255.0));
+            float blackPoint = hsPeak * u_blacks * (55.0 / 255.0);
             float range = whitePoint - blackPoint;
             if (range > 0.0) {
-              color.rgb = clamp((color.rgb - blackPoint) / range, 0.0, 1.0);
+              color.rgb = clamp((color.rgb - blackPoint) / range * hsPeak, 0.0, hsPeak);
             }
           }
-          // Luminance for highlight/shadow masks
+
+          // Luminance for highlight/shadow masks (normalized to 0-1 for masking)
           float hsLum = dot(color.rgb, vec3(0.2126, 0.7152, 0.0722));
-          float highlightMask = smoothstep(0.5, 1.0, hsLum);
-          float shadowMask = 1.0 - smoothstep(0.0, 0.5, hsLum);
-          // Apply highlights (positive = darken highlights)
+          float hsLumNorm = hsLum / hsPeak;
+          float highlightMask = smoothstep(0.5, 1.0, hsLumNorm);
+          float shadowMask = 1.0 - smoothstep(0.0, 0.5, hsLumNorm);
+
+          // Apply highlights (positive = darken highlights, scaled to HDR range)
           if (u_highlights != 0.0) {
-            color.rgb -= u_highlights * highlightMask * (128.0 / 255.0);
+            color.rgb -= u_highlights * highlightMask * hsPeak * (128.0 / 255.0);
           }
-          // Apply shadows (positive = brighten shadows)
+          // Apply shadows (positive = brighten shadows, scaled to HDR range)
           if (u_shadows != 0.0) {
-            color.rgb += u_shadows * shadowMask * (128.0 / 255.0);
+            color.rgb += u_shadows * shadowMask * hsPeak * (128.0 / 255.0);
           }
-          color.rgb = clamp(color.rgb, 0.0, 1.0);
+          color.rgb = max(color.rgb, vec3(0.0));
         }
 
         // 5c. Vibrance (intelligent saturation - boosts less-saturated colors more)
@@ -776,6 +860,30 @@
             float newL = clamp((hslQ.z * (1.0 - matte)) + (hslQ.z * u_hslCorrLumScale * matte), 0.0, 1.0);
             color.rgb = hslToRgb(newH, newS, newL);
           }
+        }
+
+        // 6f. Film Emulation (after CDL/curves/HSL, before tone mapping)
+        if (u_filmEnabled == 1) {
+          vec3 origFilm = color.rgb;
+          // Sample per-channel LUT (clamped to 0-1 for LUT lookup)
+          vec3 cc = clamp(color.rgb, 0.0, 1.0);
+          vec3 filmColor = vec3(
+            texture(u_filmLUT, vec2(cc.r, 0.5)).r,
+            texture(u_filmLUT, vec2(cc.g, 0.5)).g,
+            texture(u_filmLUT, vec2(cc.b, 0.5)).b
+          );
+          // Apply stock saturation
+          float filmLuma = dot(filmColor, LUMA);
+          filmColor = mix(vec3(filmLuma), filmColor, u_filmSaturation);
+          // Add grain (hash-based noise, luminance-dependent)
+          if (u_filmGrainIntensity > 0.0) {
+            float n = fract(sin(dot(gl_FragCoord.xy + u_filmGrainSeed, vec2(12.9898, 78.233))) * 43758.5453);
+            float grain = (n * 2.0 - 1.0) * u_filmGrainIntensity;
+            float envelope = 4.0 * filmLuma * (1.0 - filmLuma); // midtone peak
+            filmColor += grain * envelope;
+          }
+          // Blend with original based on intensity
+          color.rgb = mix(origFilm, filmColor, u_filmIntensity);
         }
 
         // 7. Tone mapping (applied before display transfer for proper HDR handling)

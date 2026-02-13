@@ -13,10 +13,9 @@ import {
   SequenceFrame,
   createSequenceInfo,
   loadFrameImage,
-  preloadFrames,
-  releaseDistantFrames,
   disposeSequence,
 } from '../../utils/media/SequenceLoader';
+import { FramePreloadManager } from '../../utils/media/FramePreloadManager';
 
 @RegisterNode('RVSequenceSource')
 export class SequenceSourceNode extends BaseSourceNode {
@@ -24,6 +23,9 @@ export class SequenceSourceNode extends BaseSourceNode {
   private frames: SequenceFrame[] = [];
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
+  private preloadManager: FramePreloadManager<HTMLImageElement> | null = null;
+  private playbackDirection: number = 1;
+  private isPlaybackActive: boolean = false;
 
   constructor(name?: string) {
     super('RVSequenceSource', name ?? 'Sequence Source');
@@ -70,7 +72,40 @@ export class SequenceSourceNode extends BaseSourceNode {
     this.properties.setValue('endFrame', info.endFrame);
     this.properties.setValue('fps', info.fps);
 
+    this.initPreloadManager();
+
     this.markDirty();
+  }
+
+  private initPreloadManager(): void {
+    this.preloadManager?.dispose();
+
+    const totalFrames = this.frames.length;
+
+    const loader = async (frame: number, signal?: AbortSignal): Promise<HTMLImageElement | null> => {
+      const idx = frame - 1;
+      const frameData = this.frames[idx];
+      if (!frameData) return null;
+      return loadFrameImage(frameData, signal);
+    };
+
+    const disposer = (frame: number, _data: HTMLImageElement): void => {
+      const idx = frame - 1;
+      const frameData = this.frames[idx];
+      if (frameData) {
+        if (frameData.url) {
+          URL.revokeObjectURL(frameData.url);
+          frameData.url = undefined;
+        }
+        frameData.image = undefined;
+      }
+    };
+
+    this.preloadManager = new FramePreloadManager<HTMLImageElement>(
+      totalFrames,
+      loader,
+      disposer,
+    );
   }
 
   isReady(): boolean {
@@ -78,7 +113,10 @@ export class SequenceSourceNode extends BaseSourceNode {
   }
 
   getElement(frame: number): HTMLImageElement | null {
-    const idx = frame - 1; // Convert 1-based to 0-based
+    if (this.preloadManager) {
+      return this.preloadManager.getCachedFrame(frame);
+    }
+    const idx = frame - 1;
     const frameData = this.frames[idx];
     return frameData?.image ?? null;
   }
@@ -87,32 +125,33 @@ export class SequenceSourceNode extends BaseSourceNode {
    * Get frame image, loading if necessary
    */
   async getFrameImage(frame: number): Promise<HTMLImageElement | null> {
+    if (this.preloadManager) {
+      const image = await this.preloadManager.getFrame(frame);
+      this.preloadManager.preloadAround(frame);
+      return image;
+    }
+
+    // Fallback when no preload manager (before loadFiles)
     const idx = frame - 1;
     const frameData = this.frames[idx];
     if (!frameData) return null;
-
-    const image = await loadFrameImage(frameData);
-
-    // Preload adjacent frames
-    preloadFrames(this.frames, idx, 5);
-
-    // Release distant frames
-    releaseDistantFrames(this.frames, idx, 20);
-
-    return image;
+    return loadFrameImage(frameData);
   }
 
   protected process(context: EvalContext, _inputs: (IPImage | null)[]): IPImage | null {
     const idx = context.frame - 1;
-    const frame = this.frames[idx];
+    const frameData = this.frames[idx];
 
-    if (!frame?.image) {
+    // Cache-first: check preload manager, then fall back to frame data
+    const image = this.preloadManager?.getCachedFrame(context.frame) ?? frameData?.image;
+
+    if (!image) {
       // Trigger async load (will be available next frame)
       this.getFrameImage(context.frame);
       return null;
     }
 
-    this.ctx.drawImage(frame.image, 0, 0);
+    this.ctx.drawImage(image, 0, 0);
     const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
 
     const ipImage = new IPImage({
@@ -122,7 +161,7 @@ export class SequenceSourceNode extends BaseSourceNode {
       dataType: 'uint8',
       data: imageData.data.buffer.slice(0),
       metadata: {
-        sourcePath: frame.file?.name,
+        sourcePath: frameData?.file?.name,
         frameNumber: context.frame,
       },
     });
@@ -130,7 +169,38 @@ export class SequenceSourceNode extends BaseSourceNode {
     return ipImage;
   }
 
+  /**
+   * Set playback direction for optimized preloading
+   */
+  setPlaybackDirection(direction: number): void {
+    this.playbackDirection = direction >= 0 ? 1 : -1;
+    if (this.isPlaybackActive && this.preloadManager) {
+      this.preloadManager.setPlaybackState(true, this.playbackDirection);
+    }
+  }
+
+  /**
+   * Set playback active state.
+   * When active, preloading prioritizes frames ahead in playback direction.
+   * When inactive (scrubbing), preloading uses symmetric window.
+   */
+  setPlaybackActive(isActive: boolean): void {
+    this.isPlaybackActive = isActive;
+    this.preloadManager?.setPlaybackState(isActive, this.playbackDirection);
+  }
+
+  /**
+   * Update playback buffer around current frame
+   */
+  updatePlaybackBuffer(currentFrame: number): void {
+    this.preloadManager?.preloadAround(currentFrame);
+  }
+
   override dispose(): void {
+    if (this.preloadManager) {
+      this.preloadManager.dispose();
+      this.preloadManager = null;
+    }
     if (this.frames.length > 0) {
       disposeSequence(this.frames);
     }

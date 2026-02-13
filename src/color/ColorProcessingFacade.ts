@@ -129,6 +129,12 @@ export { parseOCIOConfig, validateOCIOConfig } from './OCIOConfigParser';
 export type { OCIOConfigValidation } from './OCIOConfigParser';
 
 // =============================================================================
+// OCIO Workflow Presets
+// =============================================================================
+export type { WorkflowPreset } from './OCIOPresets';
+export { WORKFLOW_PRESETS, getPresetsByCategory, getPresetById } from './OCIOPresets';
+
+// =============================================================================
 // WebGL LUT Processing
 // =============================================================================
 export { WebGLLUTProcessor } from './WebGLLUT';

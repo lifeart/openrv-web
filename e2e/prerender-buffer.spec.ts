@@ -18,7 +18,7 @@ import {
 // Helper to open color controls panel
 async function openColorPanel(page: import('@playwright/test').Page) {
   // Navigate to Color tab
-  await page.locator('button:has-text("Color")').first().click();
+  await page.locator('button[data-tab-id="color"]').click();
   await page.waitForTimeout(200);
 }
 
@@ -88,7 +88,7 @@ test.describe('Prerender Buffer', () => {
 
     test('PRB-002: effects should remain applied during playback', async ({ page }) => {
       // Navigate to Effects tab
-      await page.locator('button:has-text("Effects")').first().click();
+      await page.locator('button[data-tab-id="effects"]').click();
       await page.waitForTimeout(200);
 
       // Open filter panel
@@ -128,7 +128,7 @@ test.describe('Prerender Buffer', () => {
 
     test('PRB-003: changing effects should invalidate cache and update display', async ({ page }) => {
       // Navigate to Effects tab
-      await page.locator('button:has-text("Effects")').first().click();
+      await page.locator('button[data-tab-id="effects"]').click();
       await page.waitForTimeout(200);
 
       // Open filter panel
@@ -167,7 +167,7 @@ test.describe('Prerender Buffer', () => {
       const initialScreenshot = await captureViewerScreenshot(page);
 
       // Navigate to Effects tab and apply sharpen
-      await page.locator('button:has-text("Effects")').first().click();
+      await page.locator('button[data-tab-id="effects"]').click();
       await page.waitForTimeout(200);
 
       const filterButton = page.locator('button[title*="Filter"]');
@@ -187,7 +187,7 @@ test.describe('Prerender Buffer', () => {
       expect(imagesAreDifferent(initialScreenshot, withSharpenScreenshot)).toBe(true);
 
       // Navigate to Color tab and apply saturation
-      await page.locator('button:has-text("Color")').first().click();
+      await page.locator('button[data-tab-id="color"]').click();
       await page.waitForTimeout(200);
 
       const colorButton = page.locator('button[title*="Color"]').first();
@@ -211,7 +211,7 @@ test.describe('Prerender Buffer', () => {
   test.describe('Frame Navigation', () => {
     test('PRB-020: effects should persist when scrubbing timeline', async ({ page }) => {
       // Navigate to Effects tab
-      await page.locator('button:has-text("Effects")').first().click();
+      await page.locator('button[data-tab-id="effects"]').click();
       await page.waitForTimeout(200);
 
       // Open filter panel
@@ -255,7 +255,7 @@ test.describe('Prerender Buffer', () => {
 
     test('PRB-021: keyboard navigation should work with effects applied', async ({ page }) => {
       // Apply an effect via CDL
-      await page.locator('button:has-text("Color")').first().click();
+      await page.locator('button[data-tab-id="color"]').click();
       await page.waitForTimeout(200);
 
       const cdlButton = page.locator('button[title*="CDL"]');
@@ -291,7 +291,7 @@ test.describe('Prerender Buffer', () => {
   test.describe('Performance', () => {
     test('PRB-030: rapid effect changes should not cause errors', async ({ page }) => {
       // Navigate to Color tab
-      await page.locator('button:has-text("Color")').first().click();
+      await page.locator('button[data-tab-id="color"]').click();
       await page.waitForTimeout(200);
 
       const colorButton = page.locator('button[title*="Color"]').first();
@@ -324,7 +324,7 @@ test.describe('Prerender Buffer', () => {
       await page.waitForTimeout(200);
 
       // Navigate to Effects and change effect during playback
-      await page.locator('button:has-text("Effects")').first().click();
+      await page.locator('button[data-tab-id="effects"]').click();
       await page.waitForTimeout(100);
 
       const filterButton = page.locator('button[title*="Filter"]');
@@ -358,7 +358,7 @@ test.describe('Prerender Buffer', () => {
       const initialScreenshot = await captureViewerScreenshot(page);
 
       // Navigate to View tab
-      await page.locator('button:has-text("View")').first().click();
+      await page.locator('button[data-tab-id="view"]').click();
       await page.waitForTimeout(200);
 
       // Find and click channel select
@@ -401,7 +401,7 @@ test.describe('Prerender Buffer', () => {
       const initialScreenshot = await captureViewerScreenshot(page);
 
       // Apply effect
-      await page.locator('button:has-text("Effects")').first().click();
+      await page.locator('button[data-tab-id="effects"]').click();
       await page.waitForTimeout(200);
 
       const filterButton = page.locator('button[title*="Filter"]');
@@ -430,7 +430,7 @@ test.describe('Prerender Buffer', () => {
       const initialScreenshot = await captureViewerScreenshot(page);
 
       // Apply effect
-      await page.locator('button:has-text("Effects")').first().click();
+      await page.locator('button[data-tab-id="effects"]').click();
       await page.waitForTimeout(200);
 
       const filterButton = page.locator('button[title*="Filter"]');
@@ -453,7 +453,7 @@ test.describe('Prerender Buffer', () => {
 
     test('PRB-052: resetting effects should clear prerender cache', async ({ page }) => {
       // Apply effect
-      await page.locator('button:has-text("Effects")').first().click();
+      await page.locator('button[data-tab-id="effects"]').click();
       await page.waitForTimeout(200);
 
       const filterButton = page.locator('button[title*="Filter"]');
@@ -493,7 +493,7 @@ test.describe('Prerender Buffer', () => {
       expect(Number.isFinite(initialColorState.saturation)).toBe(true);
 
       // Apply an effect
-      await page.locator('button:has-text("Color")').first().click();
+      await page.locator('button[data-tab-id="color"]').click();
       await page.waitForTimeout(200);
 
       const colorButton = page.locator('button[title*="Color"]').first();
@@ -518,7 +518,7 @@ test.describe('Prerender Buffer', () => {
 
     test('PRB-061: playback state updates correctly during play/pause', async ({ page }) => {
       // Apply an effect before testing playback
-      await page.locator('button:has-text("Effects")').first().click();
+      await page.locator('button[data-tab-id="effects"]').click();
       await page.waitForTimeout(200);
 
       const filterButton = page.locator('button[title*="Filter"]');
@@ -559,7 +559,7 @@ test.describe('Prerender Buffer', () => {
 
     test('PRB-062: effects persist across multiple playback cycles', async ({ page }) => {
       // Apply an effect
-      await page.locator('button:has-text("Color")').first().click();
+      await page.locator('button[data-tab-id="color"]').click();
       await page.waitForTimeout(200);
 
       const colorButton = page.locator('button[title*="Color"]').first();

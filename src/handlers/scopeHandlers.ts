@@ -71,6 +71,24 @@ export function updateVectorscope(context: SessionBridgeContext, scopeData?: Sco
 }
 
 /**
+ * Update gamut diagram with current frame data.
+ * Routes to float path when WebGL rendering provides HDR data.
+ */
+export function updateGamutDiagram(context: SessionBridgeContext, scopeData?: ScopeImageData | null): void {
+  const gamutDiagram = context.getGamutDiagram();
+  if (!gamutDiagram.isVisible()) return;
+
+  const data = scopeData !== undefined ? scopeData : getScopeData(context);
+  if (!data) return;
+
+  if (data.floatData) {
+    gamutDiagram.updateFloat(data.floatData, data.width, data.height);
+  } else {
+    gamutDiagram.update(data.imageData);
+  }
+}
+
+/**
  * Creates a scope update scheduler that coalesces multiple update requests
  * into a single post-render update using double requestAnimationFrame.
  *
@@ -97,6 +115,7 @@ export function createScopeScheduler(
           updateHistogram(context, scopeData);
           updateWaveform(context, scopeData);
           updateVectorscope(context, scopeData);
+          updateGamutDiagram(context, scopeData);
         });
       });
     },

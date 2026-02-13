@@ -55,7 +55,7 @@ test.describe('Tab Navigation', () => {
       await page.waitForTimeout(100);
 
       // Color controls should be visible (proves Color tab is active)
-      const colorButton = page.locator('button[title*="color"], button[title*="Color"]').first();
+      const colorButton = page.locator('[data-testid="color-control-button"]').first();
       await expect(colorButton).toBeVisible();
     });
 
@@ -64,7 +64,7 @@ test.describe('Tab Navigation', () => {
       await page.waitForTimeout(100);
 
       // Effects controls should be visible (proves Effects tab is active)
-      const filterButton = page.locator('button[title*="Filter"], button[title*="filter"]').first();
+      const filterButton = page.locator('[data-testid="filter-control-button"]').first();
       await expect(filterButton).toBeVisible();
     });
 
@@ -73,7 +73,7 @@ test.describe('Tab Navigation', () => {
       await page.waitForTimeout(100);
 
       // Transform controls should be visible (proves Transform tab is active)
-      const rotateButton = page.locator('button[title*="Rotate"]').first();
+      const rotateButton = page.locator('[data-testid="transform-rotate-right"]').first();
       await expect(rotateButton).toBeVisible();
     });
 
@@ -106,7 +106,7 @@ test.describe('Tab Navigation', () => {
       await page.waitForTimeout(100);
 
       // Color controls should be visible
-      const colorButton = page.locator('button[title*="color"], button[title*="Color"]').first();
+      const colorButton = page.locator('[data-testid="color-control-button"]').first();
       await expect(colorButton).toBeVisible();
     });
 
@@ -115,7 +115,7 @@ test.describe('Tab Navigation', () => {
       await page.waitForTimeout(100);
 
       // Effects controls should be visible
-      const filterButton = page.locator('button[title*="Filter"], button[title*="filter"]').first();
+      const filterButton = page.locator('[data-testid="filter-control-button"]').first();
       await expect(filterButton).toBeVisible();
     });
 
@@ -124,7 +124,7 @@ test.describe('Tab Navigation', () => {
       await page.waitForTimeout(100);
 
       // Transform controls should be visible
-      const rotateButton = page.locator('button[title*="Rotate"]').first();
+      const rotateButton = page.locator('[data-testid="transform-rotate-right"]').first();
       await expect(rotateButton).toBeVisible();
     });
 
@@ -146,18 +146,22 @@ test.describe('Tab Navigation', () => {
 
       // Select 200% zoom from dropdown
       await selectZoomPreset(page, '2');
-      await page.waitForTimeout(100);
 
-      let state = await getViewerState(page);
+      // Poll until zoom animation completes (zoom > 1)
+      await expect
+        .poll(async () => (await getViewerState(page)).zoom)
+        .toBeGreaterThan(1);
+
+      const state = await getViewerState(page);
       const zoomedInValue = state.zoom;
-      expect(zoomedInValue).toBeGreaterThan(1);
 
       // Switch back to Fit from dropdown
       await selectZoomPreset(page, 'fit');
-      await page.waitForTimeout(100);
 
-      state = await getViewerState(page);
-      expect(state.zoom).toBeLessThan(zoomedInValue);
+      // Poll until zoom decreases after fit animation
+      await expect
+        .poll(async () => (await getViewerState(page)).zoom)
+        .toBeLessThan(zoomedInValue);
     });
 
     test('TAB-021: Color tab controls should update color state', async ({ page }) => {
@@ -182,7 +186,7 @@ test.describe('Tab Navigation', () => {
       await page.waitForTimeout(100);
 
       // Click filter button to open panel
-      const filterButton = page.locator('button[title*="Filter"], button[title*="filter"]').first();
+      const filterButton = page.locator('[data-testid="filter-control-button"]').first();
       await filterButton.click();
       await page.waitForTimeout(200);
 
@@ -201,7 +205,7 @@ test.describe('Tab Navigation', () => {
       const initialScreenshot = await captureViewerScreenshot(page);
 
       // Click rotate button
-      const rotateRight = page.locator('button[title*="Rotate right"]').first();
+      const rotateRight = page.locator('[data-testid="transform-rotate-right"]');
       await rotateRight.click();
       await page.waitForTimeout(200);
 
@@ -265,11 +269,11 @@ test.describe('Tab Navigation', () => {
 
       // Switch back to View tab
       await page.click('button[data-tab-id="view"]');
-      await page.waitForTimeout(100);
 
-      // Zoom should be preserved
-      state = await getViewerState(page);
-      expect(state.zoom).toBeCloseTo(selectedZoom, 2);
+      // Poll until zoom stabilizes back to the persisted value
+      await expect
+        .poll(async () => (await getViewerState(page)).zoom)
+        .toBeCloseTo(selectedZoom, 2);
     });
 
     test('TAB-031: transform state should persist when switching tabs', async ({ page }) => {
@@ -322,9 +326,9 @@ test.describe('Tab Navigation', () => {
       // Define expected controls for each tab
       const tabControls = {
         view: '[data-testid="zoom-control-button"]',
-        color: 'button[title*="color"], button[title*="Color"]',
-        effects: 'button[title*="Filter"], button[title*="filter"]',
-        transform: 'button[title*="Rotate"]',
+        color: '[data-testid="color-control-button"]',
+        effects: '[data-testid="filter-control-button"]',
+        transform: '[data-testid="transform-rotate-right"]',
         annotate: 'button[title*="Pen"], button[title*="pen"]',
       };
 

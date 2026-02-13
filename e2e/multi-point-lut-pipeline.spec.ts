@@ -17,7 +17,7 @@ async function getLUTPipelineState(page: import('@playwright/test').Page): Promi
   display: { enabled: boolean; hasLUT: boolean; intensity: number; lutName: string | null };
 }> {
   return page.evaluate(() => {
-    const panel = (window as any).__OPENRV_TEST__?.app?.controls?.lutPipelinePanel;
+    const panel = (window as any).__OPENRV_TEST__?.mutations?.getLUTPipelinePanel();
     return panel?.getPipelineState?.() ?? {
       precache: { enabled: true, hasLUT: false, intensity: 1, lutName: null },
       file: { enabled: true, hasLUT: false, intensity: 1, lutName: null },
@@ -30,7 +30,7 @@ async function getLUTPipelineState(page: import('@playwright/test').Page): Promi
 /** Check whether LUT pipeline panel is wired in this app build. */
 async function hasLUTPipelinePanel(page: import('@playwright/test').Page): Promise<boolean> {
   return page.evaluate(() => {
-    return !!(window as any).__OPENRV_TEST__?.app?.controls?.lutPipelinePanel;
+    return !!(window as any).__OPENRV_TEST__?.mutations?.getLUTPipelinePanel();
   });
 }
 
@@ -42,7 +42,7 @@ async function waitForStageLUT(
 ) {
   await page.waitForFunction(
     ({ s, expected }) => {
-      const panel = (window as any).__OPENRV_TEST__?.app?.controls?.lutPipelinePanel;
+      const panel = (window as any).__OPENRV_TEST__?.mutations?.getLUTPipelinePanel();
       const state = panel?.getPipelineState?.();
       return state && state[s]?.hasLUT === expected;
     },
@@ -59,7 +59,7 @@ async function waitForStageEnabled(
 ) {
   await page.waitForFunction(
     ({ s, expected }) => {
-      const panel = (window as any).__OPENRV_TEST__?.app?.controls?.lutPipelinePanel;
+      const panel = (window as any).__OPENRV_TEST__?.mutations?.getLUTPipelinePanel();
       const state = panel?.getPipelineState?.();
       return state && state[s]?.enabled === expected;
     },

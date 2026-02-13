@@ -28,7 +28,7 @@ test.describe('Transform Controls', () => {
 
   test.describe('Rotation Controls', () => {
     test('TRANSFORM-001: transform tab should show rotation controls', async ({ page }) => {
-      const rotateButton = page.locator('button[title*="Rotate"]').first();
+      const rotateButton = page.locator('[data-testid="transform-rotate-left"]');
       await expect(rotateButton).toBeVisible();
     });
 
@@ -38,7 +38,7 @@ test.describe('Transform Controls', () => {
 
       const initialScreenshot = await captureViewerScreenshot(page);
 
-      const rotateLeftButton = page.locator('button[title*="Rotate left"]').first();
+      const rotateLeftButton = page.locator('[data-testid="transform-rotate-left"]');
       await rotateLeftButton.click();
       await page.waitForTimeout(200);
 
@@ -55,7 +55,7 @@ test.describe('Transform Controls', () => {
 
       const initialScreenshot = await captureViewerScreenshot(page);
 
-      const rotateRightButton = page.locator('button[title*="Rotate right"]').first();
+      const rotateRightButton = page.locator('[data-testid="transform-rotate-right"]');
       await rotateRightButton.click();
       await page.waitForTimeout(200);
 
@@ -131,8 +131,8 @@ test.describe('Transform Controls', () => {
 
   test.describe('Flip Controls', () => {
     test('TRANSFORM-010: transform tab should show flip controls', async ({ page }) => {
-      const flipHButton = page.locator('button[title*="Flip horizontal"]').first();
-      const flipVButton = page.locator('button[title*="Flip vertical"]').first();
+      const flipHButton = page.locator('[data-testid="transform-flip-horizontal"]');
+      const flipVButton = page.locator('[data-testid="transform-flip-vertical"]');
       await expect(flipHButton).toBeVisible();
       await expect(flipVButton).toBeVisible();
     });
@@ -143,7 +143,7 @@ test.describe('Transform Controls', () => {
 
       const initialScreenshot = await captureViewerScreenshot(page);
 
-      const flipHButton = page.locator('button[title*="Flip horizontal"]').first();
+      const flipHButton = page.locator('[data-testid="transform-flip-horizontal"]');
       await flipHButton.click();
       await page.waitForTimeout(200);
 
@@ -167,7 +167,7 @@ test.describe('Transform Controls', () => {
 
       const initialScreenshot = await captureViewerScreenshot(page);
 
-      const flipVButton = page.locator('button[title*="Flip vertical"]').first();
+      const flipVButton = page.locator('[data-testid="transform-flip-vertical"]');
       await flipVButton.click();
       await page.waitForTimeout(200);
 
@@ -246,7 +246,7 @@ test.describe('Transform Controls', () => {
       expect(viewState.cropEnabled).toBe(false);
 
       // Click Crop button to open crop panel
-      const cropButton = page.locator('button:has-text("Crop")').first();
+      const cropButton = page.locator('[data-testid="crop-control-button"]');
       await cropButton.click();
       await page.waitForTimeout(200);
 
@@ -279,7 +279,7 @@ test.describe('Transform Controls', () => {
 
     test('TRANSFORM-022: crop mode should show aspect ratio presets', async ({ page }) => {
       // Open crop panel
-      const cropButton = page.locator('button:has-text("Crop")').first();
+      const cropButton = page.locator('[data-testid="crop-control-button"]');
       await cropButton.click();
       await page.waitForTimeout(200);
 
@@ -304,9 +304,14 @@ test.describe('Transform Controls', () => {
 
       const initialScreenshot = await captureViewerScreenshot(page);
 
-      const aspect169 = page.locator('button:has-text("16:9")').first();
-      if (await aspect169.isVisible()) {
-        await aspect169.click();
+      // Open crop panel and select 16:9 from aspect ratio dropdown
+      const cropButton = page.locator('[data-testid="crop-control-button"]');
+      await cropButton.click();
+      await page.waitForTimeout(200);
+
+      const aspectSelect = page.locator('[data-testid="crop-aspect-select"]');
+      if (await aspectSelect.isVisible()) {
+        await aspectSelect.selectOption('16:9');
         await page.waitForTimeout(200);
 
         const aspectScreenshot = await captureViewerScreenshot(page);
@@ -323,7 +328,7 @@ test.describe('Transform Controls', () => {
       const noOverlayScreenshot = await captureViewerScreenshot(page);
 
       // Open crop panel and force non-full crop to make guides visible
-      const cropButton = page.locator('button[title*="Crop"]').first();
+      const cropButton = page.locator('[data-testid="crop-control-button"]');
       await cropButton.click();
       await page.waitForTimeout(200);
 
@@ -404,7 +409,7 @@ test.describe('Transform Controls', () => {
       expect(state.flipH).toBe(true);
 
       // Look for reset button
-      const resetButton = page.locator('button[title*="Reset"]').first();
+      const resetButton = page.locator('[data-testid="transform-reset"]');
       if (await resetButton.isVisible()) {
         await resetButton.click();
         await page.waitForTimeout(200);

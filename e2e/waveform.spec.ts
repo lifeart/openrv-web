@@ -104,28 +104,28 @@ test.describe('Waveform Modes', () => {
   test('WF-E011: cycling mode changes waveform mode state', async ({ page }) => {
     // Use direct method call
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.controls?.waveform?.cycleMode();
+      (window as any).__OPENRV_TEST__?.mutations?.cycleWaveformMode();
     });
     await page.waitForTimeout(100);
     let state = await getViewerState(page);
     expect(state.waveformMode).toBe('rgb');
 
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.controls?.waveform?.cycleMode();
+      (window as any).__OPENRV_TEST__?.mutations?.cycleWaveformMode();
     });
     await page.waitForTimeout(100);
     state = await getViewerState(page);
     expect(state.waveformMode).toBe('parade');
 
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.controls?.waveform?.cycleMode();
+      (window as any).__OPENRV_TEST__?.mutations?.cycleWaveformMode();
     });
     await page.waitForTimeout(100);
     state = await getViewerState(page);
     expect(state.waveformMode).toBe('ycbcr');
 
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.controls?.waveform?.cycleMode();
+      (window as any).__OPENRV_TEST__?.mutations?.cycleWaveformMode();
     });
     await page.waitForTimeout(100);
     state = await getViewerState(page);
@@ -134,21 +134,21 @@ test.describe('Waveform Modes', () => {
 
   test('WF-E012: setMode changes waveform mode', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.controls?.waveform?.setMode('rgb');
+      (window as any).__OPENRV_TEST__?.mutations?.setWaveformMode('rgb');
     });
     await page.waitForTimeout(100);
     let state = await getViewerState(page);
     expect(state.waveformMode).toBe('rgb');
 
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.controls?.waveform?.setMode('parade');
+      (window as any).__OPENRV_TEST__?.mutations?.setWaveformMode('parade');
     });
     await page.waitForTimeout(100);
     state = await getViewerState(page);
     expect(state.waveformMode).toBe('parade');
 
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.controls?.waveform?.setMode('ycbcr');
+      (window as any).__OPENRV_TEST__?.mutations?.setWaveformMode('ycbcr');
     });
     await page.waitForTimeout(100);
     state = await getViewerState(page);
@@ -169,7 +169,7 @@ test.describe('YCbCr Waveform Mode', () => {
 
   test('YCBCR-001: YCbCr mode is selectable via setMode', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.controls?.waveform?.setMode('ycbcr');
+      (window as any).__OPENRV_TEST__?.mutations?.setWaveformMode('ycbcr');
     });
     await page.waitForTimeout(100);
 
@@ -179,7 +179,7 @@ test.describe('YCbCr Waveform Mode', () => {
 
   test('YCBCR-002: mode button shows YCbCr label in YCbCr mode', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.controls?.waveform?.setMode('ycbcr');
+      (window as any).__OPENRV_TEST__?.mutations?.setWaveformMode('ycbcr');
     });
     await page.waitForTimeout(100);
 
@@ -189,7 +189,7 @@ test.describe('YCbCr Waveform Mode', () => {
 
   test('YCBCR-003: RGB controls are hidden in YCbCr mode', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.controls?.waveform?.setMode('ycbcr');
+      (window as any).__OPENRV_TEST__?.mutations?.setWaveformMode('ycbcr');
     });
     await page.waitForTimeout(100);
 
@@ -199,7 +199,7 @@ test.describe('YCbCr Waveform Mode', () => {
 
   test('YCBCR-004: waveform canvas is visible in YCbCr mode', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.controls?.waveform?.setMode('ycbcr');
+      (window as any).__OPENRV_TEST__?.mutations?.setWaveformMode('ycbcr');
     });
     await page.waitForTimeout(100);
 
@@ -222,7 +222,7 @@ test.describe('Waveform Closing', () => {
   test('WF-E030: hide method hides waveform', async ({ page }) => {
     // Use direct method call
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.controls?.waveform?.hide();
+      (window as any).__OPENRV_TEST__?.mutations?.hideWaveform();
     });
     await page.waitForTimeout(100);
 
@@ -341,7 +341,7 @@ test.describe('Waveform State Persistence', () => {
 
     // Change to parade mode using direct method call
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.controls?.waveform?.setMode('parade');
+      (window as any).__OPENRV_TEST__?.mutations?.setWaveformMode('parade');
     });
     await page.waitForTimeout(100);
 
@@ -390,7 +390,7 @@ test.describe('RGB Overlay Waveform Controls', () => {
     await page.waitForTimeout(100);
     // Cycle to RGB mode
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.controls?.waveform?.setMode('rgb');
+      (window as any).__OPENRV_TEST__?.mutations?.setWaveformMode('rgb');
     });
     await page.waitForTimeout(100);
   });
@@ -403,7 +403,7 @@ test.describe('RGB Overlay Waveform Controls', () => {
   test('RGBW-E002: RGB controls are hidden in Luma mode', async ({ page }) => {
     // Switch back to luma mode
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.controls?.waveform?.setMode('luma');
+      (window as any).__OPENRV_TEST__?.mutations?.setWaveformMode('luma');
     });
     await page.waitForTimeout(100);
 
@@ -413,7 +413,7 @@ test.describe('RGB Overlay Waveform Controls', () => {
 
   test('RGBW-E003: RGB controls are hidden in Parade mode', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.controls?.waveform?.setMode('parade');
+      (window as any).__OPENRV_TEST__?.mutations?.setWaveformMode('parade');
     });
     await page.waitForTimeout(100);
 
@@ -465,12 +465,12 @@ test.describe('RGB Overlay Waveform Controls', () => {
   test('RGBW-E021: toggling channels updates state', async ({ page }) => {
     // Disable R channel
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.controls?.waveform?.setChannel('r', false);
+      (window as any).__OPENRV_TEST__?.mutations?.setWaveformChannel('r', false);
     });
     await page.waitForTimeout(100);
 
     const channels = await page.evaluate(() => {
-      return (window as any).__OPENRV_TEST__?.app?.controls?.waveform?.getEnabledChannels();
+      return (window as any).__OPENRV_TEST__?.mutations?.getWaveformEnabledChannels();
     });
 
     expect(channels.r).toBe(false);
@@ -502,7 +502,7 @@ test.describe('RGB Overlay Waveform Controls', () => {
     await page.waitForTimeout(100);
 
     const intensity = await page.evaluate(() => {
-      return (window as any).__OPENRV_TEST__?.app?.controls?.waveform?.getIntensity();
+      return (window as any).__OPENRV_TEST__?.mutations?.getWaveformIntensity();
     });
 
     expect(intensity).toBe(0.3);
@@ -511,7 +511,7 @@ test.describe('RGB Overlay Waveform Controls', () => {
   test('RGBW-E033: setIntensity syncs slider value', async ({ page }) => {
     // Set intensity programmatically
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.controls?.waveform?.setIntensity(0.2);
+      (window as any).__OPENRV_TEST__?.mutations?.setWaveformIntensity(0.2);
     });
     await page.waitForTimeout(100);
 

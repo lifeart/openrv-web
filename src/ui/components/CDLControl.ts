@@ -489,5 +489,9 @@ export class CDLControl extends EventEmitter<CDLControlEvents> {
 
   dispose(): void {
     document.removeEventListener('click', this.boundHandleDocumentClick);
+    // Remove body-mounted panel if present
+    if (this.panel.parentNode) {
+      this.panel.parentNode.removeChild(this.panel);
+    }
   }
 }

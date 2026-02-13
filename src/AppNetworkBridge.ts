@@ -41,14 +41,8 @@ export class AppNetworkBridge {
     headerBar.setNetworkControl(networkControl.render());
 
     // Wire UI events to manager
-    this.unsubscribers.push(networkControl.on('createRoom', () => {
-      networkSyncManager.simulateRoomCreated();
-      const info = networkSyncManager.roomInfo;
-      if (info) {
-        networkControl.setConnectionState('connected');
-        networkControl.setRoomInfo(info);
-        networkControl.setUsers(info.users);
-      }
+    this.unsubscribers.push(networkControl.on('createRoom', ({ userName }) => {
+      networkSyncManager.createRoom(userName);
     }));
 
     this.unsubscribers.push(networkControl.on('joinRoom', ({ roomCode, userName }) => {

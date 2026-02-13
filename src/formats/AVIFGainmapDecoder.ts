@@ -13,6 +13,8 @@
  *   HDR_linear = sRGB_to_linear(base) * exp2(gainmap_gray * headroom)
  */
 
+import { drawImageWithOrientation } from './shared';
+
 export interface AVIFGainmapInfo {
   primaryItemId: number;
   gainmapItemId: number;
@@ -684,6 +686,200 @@ function parseTmapHeadroom(view: DataView, start: number, end: number): number |
 }
 
 // =============================================================================
+// ISOBMFF orientation parsing
+// =============================================================================
+
+/**
+ * Get all property indices associated with an item ID from ipma box.
+ * Shared helper used by both HEIC and AVIF decoders.
+ */
+export function getItemPropertyIndices(view: DataView, ipma: BoxInfo, itemId: number): number[] {
+  let pos = ipma.dataStart;
+  const version = view.getUint8(ipma.boxStart + 8);
+  const flags = view.getUint8(ipma.boxStart + 11);
+
+  if (pos + 4 > ipma.dataEnd) return [];
+  const entryCount = view.getUint32(pos);
+  pos += 4;
+
+  for (let i = 0; i < entryCount && pos < ipma.dataEnd; i++) {
+    let currentItemId: number;
+    if (version < 1) {
+      if (pos + 2 > ipma.dataEnd) return [];
+      currentItemId = view.getUint16(pos);
+      pos += 2;
+    } else {
+      if (pos + 4 > ipma.dataEnd) return [];
+      currentItemId = view.getUint32(pos);
+      pos += 4;
+    }
+
+    if (pos + 1 > ipma.dataEnd) return [];
+    const assocCount = view.getUint8(pos);
+    pos += 1;
+
+    const indices: number[] = [];
+    for (let j = 0; j < assocCount && pos < ipma.dataEnd; j++) {
+      let propIdx: number;
+      if (flags & 1) {
+        if (pos + 2 > ipma.dataEnd) return [];
+        propIdx = view.getUint16(pos) & 0x7FFF;
+        pos += 2;
+      } else {
+        if (pos + 1 > ipma.dataEnd) return [];
+        propIdx = view.getUint8(pos) & 0x7F;
+        pos += 1;
+      }
+      indices.push(propIdx);
+    }
+
+    if (currentItemId === itemId) return indices;
+  }
+
+  return [];
+}
+
+/**
+ * Raw ISOBMFF transform info (irot angle + imir axis).
+ * Used to embed matching transforms in standalone wrappers.
+ */
+export interface ISOBMFFTransformInfo {
+  irotAngle?: number;
+  imirAxis?: number;
+}
+
+/**
+ * Parse raw irot/imir transform boxes from ISOBMFF meta box.
+ * Returns the raw angle and axis values for embedding in standalone wrappers.
+ *
+ * Finds transforms associated with the primary item via ipma.
+ */
+export function parseISOBMFFTransforms(
+  view: DataView,
+  metaStart: number,
+  metaEnd: number,
+): ISOBMFFTransformInfo {
+  const result: ISOBMFFTransformInfo = {};
+
+  // Find primary item ID
+  const primaryItemId = parsePitm(view, metaStart, metaEnd);
+  if (primaryItemId === null) return result;
+
+  // Find iprp → ipco, ipma
+  const iprp = findBox(view, 'iprp', metaStart, metaEnd);
+  if (!iprp) return result;
+
+  const ipco = findBox(view, 'ipco', iprp.dataStart, iprp.dataEnd);
+  if (!ipco) return result;
+
+  const ipma = findBox(view, 'ipma', iprp.dataStart, iprp.dataEnd, true);
+  if (!ipma) return result;
+
+  // Get property indices for primary item
+  const propIndices = getItemPropertyIndices(view, ipma, primaryItemId);
+
+  // Enumerate ipco properties
+  const properties: { index: number; type: string; boxStart: number; boxEnd: number }[] = [];
+  let idx = 0;
+  let offset = ipco.dataStart;
+  while (offset + 8 <= ipco.dataEnd) {
+    const box = readBox(view, offset, ipco.dataEnd);
+    if (!box) break;
+    idx++;
+    properties.push({ index: idx, type: box.type, boxStart: box.boxStart, boxEnd: box.boxEnd });
+    offset = box.boxEnd;
+  }
+
+  // Find irot and imir among primary item's properties
+  for (const propIdx of propIndices) {
+    const prop = properties.find(p => p.index === propIdx);
+    if (!prop) continue;
+
+    if (prop.type === 'irot') {
+      // irot: plain Box (9 bytes): size(4) + type(4) + angle(1)
+      const angleOffset = prop.boxStart + 8;
+      if (angleOffset < prop.boxEnd) {
+        result.irotAngle = view.getUint8(angleOffset) & 0x03;
+      }
+    } else if (prop.type === 'imir') {
+      // imir: plain Box (9 bytes): size(4) + type(4) + axis(1)
+      const axisOffset = prop.boxStart + 8;
+      if (axisOffset < prop.boxEnd) {
+        result.imirAxis = view.getUint8(axisOffset) & 0x01;
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Parse ISOBMFF orientation from irot/imir boxes into EXIF-equivalent orientation (1-8).
+ *
+ * irot angle → rotation (all CCW):
+ *   0 = 0°, 1 = 90° CCW, 2 = 180°, 3 = 270° CCW (= 90° CW)
+ *
+ * imir axis: 0 = flip around vertical axis (flip H), 1 = flip around horizontal axis (flip V)
+ *
+ * Combined mapping:
+ *   No mirror + irot 0 → EXIF 1
+ *   No mirror + irot 1 → EXIF 8
+ *   No mirror + irot 2 → EXIF 3
+ *   No mirror + irot 3 → EXIF 6
+ *   imir 0 (flip H) + irot 0 → EXIF 2
+ *   imir 0 (flip H) + irot 1 → EXIF 5
+ *   imir 0 (flip H) + irot 2 → EXIF 4
+ *   imir 0 (flip H) + irot 3 → EXIF 7
+ *   imir 1 (flip V) + irot 0 → EXIF 4
+ *   imir 1 (flip V) + irot 1 → EXIF 7
+ *   imir 1 (flip V) + irot 2 → EXIF 2
+ *   imir 1 (flip V) + irot 3 → EXIF 5
+ */
+export function parseISOBMFFOrientation(
+  view: DataView,
+  metaStart: number,
+  metaEnd: number,
+): number {
+  const transforms = parseISOBMFFTransforms(view, metaStart, metaEnd);
+
+  const angle = transforms.irotAngle ?? 0;
+  const hasImir = transforms.imirAxis !== undefined;
+  const axis = transforms.imirAxis ?? 0;
+
+  if (!hasImir) {
+    // Rotation only
+    switch (angle) {
+      case 0: return 1;
+      case 1: return 8;
+      case 2: return 3;
+      case 3: return 6;
+      default: return 1;
+    }
+  }
+
+  // Mirror + rotation
+  if (axis === 0) {
+    // Flip horizontal
+    switch (angle) {
+      case 0: return 2;
+      case 1: return 5;
+      case 2: return 4;
+      case 3: return 7;
+      default: return 2;
+    }
+  } else {
+    // Flip vertical
+    switch (angle) {
+      case 0: return 4;
+      case 1: return 7;
+      case 2: return 2;
+      case 3: return 5;
+      default: return 4;
+    }
+  }
+}
+
+// =============================================================================
 // Decoding
 // =============================================================================
 
@@ -820,6 +1016,12 @@ export async function decodeAVIFGainmapToFloat32(
   data: Float32Array;
   channels: number;
 }> {
+  // Parse orientation from ISOBMFF container
+  const view = new DataView(buffer);
+  const ftypSize = view.getUint32(0);
+  const meta = findBox(view, 'meta', ftypSize, buffer.byteLength, true);
+  const orientation = meta ? parseISOBMFFOrientation(view, meta.dataStart, meta.dataEnd) : 1;
+
   // Decode base image: pass entire buffer (browser picks primary item)
   const baseBlob = new Blob([buffer], { type: 'image/avif' });
 
@@ -854,9 +1056,10 @@ export async function decodeAVIFGainmapToFloat32(
   baseBitmap.close();
 
   // Gainmap may be smaller — scale up to base image size
+  // Apply orientation transform so gainmap pixels align with the display-rotated base
   const gainCanvas = createCanvas(width, height);
   const gainCtx = gainCanvas.getContext('2d')! as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
-  gainCtx.drawImage(gainmapBitmap, 0, 0, width, height);
+  drawImageWithOrientation(gainCtx, gainmapBitmap, width, height, orientation);
   const gainData = gainCtx.getImageData(0, 0, width, height).data;
   gainmapBitmap.close();
 

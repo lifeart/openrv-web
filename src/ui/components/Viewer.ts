@@ -6,6 +6,12 @@ import { ColorAdjustments } from './ColorControls';
 import { WipeState, WipeMode } from './WipeControl';
 import { Transform2D } from './TransformControl';
 import { FilterSettings, DEFAULT_FILTER_SETTINGS } from './FilterControl';
+import type { DeinterlaceParams } from '../../filters/Deinterlace';
+import { DEFAULT_DEINTERLACE_PARAMS, isDeinterlaceActive, applyDeinterlace } from '../../filters/Deinterlace';
+import type { FilmEmulationParams } from '../../filters/FilmEmulation';
+import { DEFAULT_FILM_EMULATION_PARAMS, isFilmEmulationActive, applyFilmEmulation } from '../../filters/FilmEmulation';
+import type { StabilizationParams } from '../../filters/StabilizeMotion';
+import { DEFAULT_STABILIZATION_PARAMS, isStabilizationActive, applyStabilization } from '../../filters/StabilizeMotion';
 import { CropState, CropRegion, UncropState } from './CropControl';
 import { CropManager } from './CropManager';
 import {
@@ -62,6 +68,9 @@ import { ColorPipelineManager } from './ColorPipelineManager';
 import { TransformManager } from './TransformManager';
 import { StereoManager } from './StereoManager';
 import { LensDistortionManager } from './LensDistortionManager';
+import { PerspectiveCorrectionManager } from './PerspectiveCorrectionManager';
+import { PerspectiveGridOverlay } from './PerspectiveGridOverlay';
+import type { PerspectiveCorrectionParams } from '../../transform/PerspectiveCorrection';
 import { GhostFrameManager } from './GhostFrameManager';
 import { PixelSamplingManager } from './PixelSamplingManager';
 import { ViewerGLRenderer } from './ViewerGLRenderer';
@@ -109,6 +118,7 @@ export interface ViewerConfig {
   wipeManager?: WipeManager;
   ghostFrameManager?: GhostFrameManager;
   lensDistortionManager?: LensDistortionManager;
+  perspectiveCorrectionManager?: PerspectiveCorrectionManager;
   stereoManager?: StereoManager;
 }
 
@@ -187,6 +197,15 @@ export class Viewer {
   private filterSettings: FilterSettings = { ...DEFAULT_FILTER_SETTINGS };
   private sharpenProcessor: WebGLSharpenProcessor | null = null;
 
+  // Deinterlace preview
+  private deinterlaceParams: DeinterlaceParams = { ...DEFAULT_DEINTERLACE_PARAMS };
+
+  // Film emulation
+  private filmEmulationParams: FilmEmulationParams = { ...DEFAULT_FILM_EMULATION_PARAMS };
+
+  // Stabilization preview
+  private stabilizationParams: StabilizationParams = { ...DEFAULT_STABILIZATION_PARAMS };
+
   // Crop manager (owns crop/uncrop state, overlay, and drag interaction)
   private cropManager!: CropManager;
 
@@ -205,6 +224,10 @@ export class Viewer {
 
   // Lens distortion manager (owns lens correction state)
   private lensDistortionManager: LensDistortionManager;
+
+  // Perspective correction manager (owns perspective warp state)
+  private perspectiveCorrectionManager: PerspectiveCorrectionManager;
+  private perspectiveGridOverlay: PerspectiveGridOverlay;
 
   // Stack/composite state
   private stackLayers: StackLayer[] = [];
@@ -283,6 +306,9 @@ export class Viewer {
       applyColorFilters: () => this.applyColorFilters(),
       scheduleRender: () => this.scheduleRender(),
       isToneMappingEnabled: () => this.isToneMappingEnabled(),
+      getDeinterlaceParams: () => this.getDeinterlaceParams(),
+      getFilmEmulationParams: () => this.getFilmEmulationParams(),
+      getPerspectiveParams: () => this.getPerspectiveParams(),
     };
   }
 
@@ -332,6 +358,7 @@ export class Viewer {
     this.wipeManager = config.wipeManager ?? new WipeManager();
     this.ghostFrameManager = config.ghostFrameManager ?? new GhostFrameManager();
     this.lensDistortionManager = config.lensDistortionManager ?? new LensDistortionManager();
+    this.perspectiveCorrectionManager = config.perspectiveCorrectionManager ?? new PerspectiveCorrectionManager();
     this.stereoManager = config.stereoManager ?? new StereoManager();
 
     // Wire up transform manager's render callback
@@ -425,6 +452,10 @@ export class Viewer {
       pointer-events: none;
     `;
     this.canvasContainer.appendChild(this.paintCanvas);
+
+    // Create perspective grid overlay
+    this.perspectiveGridOverlay = new PerspectiveGridOverlay();
+    this.canvasContainer.appendChild(this.perspectiveGridOverlay.getElement());
 
     // Create crop manager (creates and appends crop overlay canvas)
     this.cropManager = new CropManager({
@@ -648,6 +679,7 @@ export class Viewer {
     this.glRendererManager.resizeIfActive(this.physicalWidth, this.physicalHeight, width, height);
 
     this.updateOverlayDimensions();
+    this.perspectiveGridOverlay.setViewerDimensions(width, height);
     this.updateCanvasPosition();
   }
 
@@ -1364,6 +1396,14 @@ export class Viewer {
             console.error('Lens distortion rendering failed:', err);
           }
         }
+        // Apply perspective correction (after lens distortion)
+        if (!this.perspectiveCorrectionManager.isDefault()) {
+          try {
+            this.perspectiveCorrectionManager.applyToCtx(this.imageCtx, displayWidth, displayHeight);
+          } catch (err) {
+            console.error('Perspective correction rendering failed:', err);
+          }
+        }
         // Apply GPU-accelerated color effects
         if (this.colorPipeline.currentLUT && this.colorPipeline.lutIntensity > 0) {
           try {
@@ -1494,6 +1534,15 @@ export class Viewer {
         this.lensDistortionManager.applyToCtx(this.imageCtx, displayWidth, displayHeight);
       } catch (err) {
         console.error('Lens distortion rendering failed:', err);
+      }
+    }
+
+    // Apply perspective correction (after lens distortion)
+    if (!this.perspectiveCorrectionManager.isDefault()) {
+      try {
+        this.perspectiveCorrectionManager.applyToCtx(this.imageCtx, displayWidth, displayHeight);
+      } catch (err) {
+        console.error('Perspective correction rendering failed:', err);
       }
     }
 
@@ -2025,6 +2074,57 @@ export class Viewer {
     this.scheduleRender();
   }
 
+  // Deinterlace methods
+  setDeinterlaceParams(params: DeinterlaceParams): void {
+    this.deinterlaceParams = { ...params };
+    this.notifyEffectsChanged();
+    this.scheduleRender();
+  }
+
+  getDeinterlaceParams(): DeinterlaceParams {
+    return { ...this.deinterlaceParams };
+  }
+
+  resetDeinterlaceParams(): void {
+    this.deinterlaceParams = { ...DEFAULT_DEINTERLACE_PARAMS };
+    this.notifyEffectsChanged();
+    this.scheduleRender();
+  }
+
+  // Film emulation methods
+  setFilmEmulationParams(params: FilmEmulationParams): void {
+    this.filmEmulationParams = { ...params };
+    this.notifyEffectsChanged();
+    this.scheduleRender();
+  }
+
+  getFilmEmulationParams(): FilmEmulationParams {
+    return { ...this.filmEmulationParams };
+  }
+
+  resetFilmEmulationParams(): void {
+    this.filmEmulationParams = { ...DEFAULT_FILM_EMULATION_PARAMS };
+    this.notifyEffectsChanged();
+    this.scheduleRender();
+  }
+
+  // Stabilization methods
+  setStabilizationParams(params: StabilizationParams): void {
+    this.stabilizationParams = { ...params };
+    this.notifyEffectsChanged();
+    this.scheduleRender();
+  }
+
+  getStabilizationParams(): StabilizationParams {
+    return { ...this.stabilizationParams };
+  }
+
+  resetStabilizationParams(): void {
+    this.stabilizationParams = { ...DEFAULT_STABILIZATION_PARAMS };
+    this.notifyEffectsChanged();
+    this.scheduleRender();
+  }
+
   // Crop methods (delegate to CropManager)
   setCropState(state: CropState): void {
     this.cropManager.setCropState(state);
@@ -2120,15 +2220,28 @@ export class Viewer {
     const hasToneMapping = this.isToneMappingEnabled();
     const hasInversion = this.colorPipeline.colorInversionEnabled;
     const hasDisplayColorMgmt = isDisplayStateActive(this.colorPipeline.displayColorState);
+    const hasDeinterlace = isDeinterlaceActive(this.deinterlaceParams);
+    const hasFilmEmulation = isFilmEmulationActive(this.filmEmulationParams);
+    const hasStabilization = isStabilizationActive(this.stabilizationParams) && this.stabilizationParams.cropAmount > 0;
 
     // Early return if no pixel effects are active
     // Note: OCIO is handled via GPU-accelerated 3D LUT in the main render pipeline (applyOCIOToCanvas)
-    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasHueRotation && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasLuminanceVis && !hasZebras && !hasClippingOverlay && !hasToneMapping && !hasInversion && !hasDisplayColorMgmt) {
+    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasHueRotation && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasLuminanceVis && !hasZebras && !hasClippingOverlay && !hasToneMapping && !hasInversion && !hasDisplayColorMgmt && !hasDeinterlace && !hasFilmEmulation && !hasStabilization) {
       return;
     }
 
     // Single getImageData call
     const imageData = ctx.getImageData(0, 0, width, height);
+
+    // Apply stabilization (spatial transform, before deinterlace)
+    if (hasStabilization) {
+      applyStabilization(imageData, { dx: 0, dy: 0, cropAmount: this.stabilizationParams.cropAmount });
+    }
+
+    // Apply deinterlace (spatial, before color adjustments)
+    if (hasDeinterlace) {
+      applyDeinterlace(imageData, this.deinterlaceParams);
+    }
 
     // Apply highlight/shadow recovery (before other adjustments for best results)
     if (hasHighlightsShadows) {
@@ -2196,6 +2309,11 @@ export class Viewer {
     // Apply color inversion (after all color corrections, before sharpen/channel isolation)
     if (hasInversion) {
       applyColorInversion(imageData);
+    }
+
+    // Apply film emulation (after color corrections, before sharpen/channel isolation)
+    if (hasFilmEmulation) {
+      applyFilmEmulation(imageData, this.filmEmulationParams);
     }
 
     // Apply sharpen filter
@@ -2270,25 +2388,42 @@ export class Viewer {
     const hasToneMapping = this.isToneMappingEnabled();
     const hasInversion = this.colorPipeline.colorInversionEnabled;
     const hasDisplayColorMgmt = isDisplayStateActive(this.colorPipeline.displayColorState);
+    const hasDeinterlace = isDeinterlaceActive(this.deinterlaceParams);
+    const hasFilmEmulation = isFilmEmulationActive(this.filmEmulationParams);
+    const hasStabilization = isStabilizationActive(this.stabilizationParams) && this.stabilizationParams.cropAmount > 0;
 
     // Early return if no pixel effects are active
-    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasHueRotation && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasLuminanceVis && !hasZebras && !hasClippingOverlay && !hasToneMapping && !hasInversion && !hasDisplayColorMgmt) {
+    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasHueRotation && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasLuminanceVis && !hasZebras && !hasClippingOverlay && !hasToneMapping && !hasInversion && !hasDisplayColorMgmt && !hasDeinterlace && !hasFilmEmulation && !hasStabilization) {
       return;
     }
 
     // Single getImageData call
     const imageData = ctx.getImageData(0, 0, width, height);
 
-    // --- Pass 1: Clarity (most expensive - 5x5 Gaussian blur, inter-pixel dependency) ---
+    // --- Pass 0: Stabilization (spatial transform, before deinterlace) ---
+    if (hasStabilization) {
+      applyStabilization(imageData, { dx: 0, dy: 0, cropAmount: this.stabilizationParams.cropAmount });
+      await yieldToMain();
+      if (this._asyncEffectsGeneration !== generation) return;
+    }
+
+    // --- Pass 1: Deinterlace (spatial, before color adjustments) ---
+    if (hasDeinterlace) {
+      applyDeinterlace(imageData, this.deinterlaceParams);
+      await yieldToMain();
+      if (this._asyncEffectsGeneration !== generation) return;
+    }
+
+    // --- Pass 2: Clarity (most expensive - 5x5 Gaussian blur, inter-pixel dependency) ---
     if (hasClarity) {
       applyClarity(imageData, this.colorPipeline.colorAdjustments.clarity);
       await yieldToMain();
       if (this._asyncEffectsGeneration !== generation) return; // superseded by newer render
     }
 
-    // --- Pass 2: Per-pixel color effects (merged where possible) ---
+    // --- Pass 3: Per-pixel color effects (merged where possible) ---
     const hasPerPixelEffects = hasHighlightsShadows || hasVibrance || hasHueRotation ||
-      hasColorWheels || hasCDL || hasCurves || hasHSLQualifier || hasToneMapping || hasInversion;
+      hasColorWheels || hasCDL || hasCurves || hasHSLQualifier || hasToneMapping || hasInversion || hasFilmEmulation;
 
     if (hasPerPixelEffects) {
       // Apply highlight/shadow recovery
@@ -2354,18 +2489,23 @@ export class Viewer {
         applyColorInversion(imageData);
       }
 
+      // Apply film emulation
+      if (hasFilmEmulation) {
+        applyFilmEmulation(imageData, this.filmEmulationParams);
+      }
+
       await yieldToMain();
       if (this._asyncEffectsGeneration !== generation) return; // superseded by newer render
     }
 
-    // --- Pass 3: Sharpen (inter-pixel dependency - 3x3 kernel) ---
+    // --- Pass 4: Sharpen (inter-pixel dependency - 3x3 kernel) ---
     if (hasSharpen) {
       this.applySharpenToImageData(imageData);
       await yieldToMain();
       if (this._asyncEffectsGeneration !== generation) return; // superseded by newer render
     }
 
-    // --- Pass 4: Channel isolation + display color management ---
+    // --- Pass 5: Channel isolation + display color management ---
     if (hasChannel) {
       applyChannelIsolation(imageData, this.channelMode);
     }
@@ -2374,7 +2514,7 @@ export class Viewer {
       applyDisplayColorManagementToImageData(imageData, this.colorPipeline.displayColorState);
     }
 
-    // --- Pass 5: Diagnostic overlays ---
+    // --- Pass 6: Diagnostic overlays ---
     if (hasLuminanceVis) {
       this.overlayManager.getLuminanceVisualization().apply(imageData);
     } else if (hasFalseColor) {
@@ -2487,6 +2627,27 @@ export class Viewer {
   resetLensParams(): void {
     this.lensDistortionManager.resetLensParams();
     this.scheduleRender();
+  }
+
+  // Perspective correction methods (delegated to PerspectiveCorrectionManager)
+  setPerspectiveParams(params: PerspectiveCorrectionParams): void {
+    this.perspectiveCorrectionManager.setParams(params);
+    this.perspectiveGridOverlay.setParams(params);
+    this.scheduleRender();
+  }
+
+  getPerspectiveParams(): PerspectiveCorrectionParams {
+    return this.perspectiveCorrectionManager.getParams();
+  }
+
+  resetPerspectiveParams(): void {
+    this.perspectiveCorrectionManager.resetParams();
+    this.perspectiveGridOverlay.setParams(this.perspectiveCorrectionManager.getParams());
+    this.scheduleRender();
+  }
+
+  getPerspectiveGridOverlay(): PerspectiveGridOverlay {
+    return this.perspectiveGridOverlay;
   }
 
   // Channel isolation methods
@@ -3159,7 +3320,9 @@ export class Viewer {
       this.colorWheels,
       this.hslQualifier,
       this.colorPipeline.toneMappingState,
-      this.colorPipeline.colorInversionEnabled
+      this.colorPipeline.colorInversionEnabled,
+      this.deinterlaceParams,
+      this.filmEmulationParams,
     );
 
     this.prerenderBuffer.updateEffects(effectsState);

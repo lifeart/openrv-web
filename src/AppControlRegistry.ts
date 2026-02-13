@@ -18,6 +18,10 @@ import { CropControl } from './ui/components/CropControl';
 import { CDLControl } from './ui/components/CDLControl';
 import { CurvesControl } from './ui/components/CurvesControl';
 import { LensControl } from './ui/components/LensControl';
+import { DeinterlaceControl } from './ui/components/DeinterlaceControl';
+import { PerspectiveCorrectionControl } from './ui/components/PerspectiveCorrectionControl';
+import { FilmEmulationControl } from './ui/components/FilmEmulationControl';
+import { StabilizationControl } from './ui/components/StabilizationControl';
 import { StackControl } from './ui/components/StackControl';
 import { ChannelSelect } from './ui/components/ChannelSelect';
 import { StereoControl } from './ui/components/StereoControl';
@@ -26,6 +30,7 @@ import { StereoAlignControl } from './ui/components/StereoAlignControl';
 import { Histogram } from './ui/components/Histogram';
 import { Waveform } from './ui/components/Waveform';
 import { Vectorscope } from './ui/components/Vectorscope';
+import { GamutDiagram } from './ui/components/GamutDiagram';
 import { ZoomControl } from './ui/components/ZoomControl';
 import { ScopesControl } from './ui/components/ScopesControl';
 import { CompareControl } from './ui/components/CompareControl';
@@ -114,6 +119,10 @@ export class AppControlRegistry {
   // Effects tab
   readonly filterControl: FilterControl;
   readonly lensControl: LensControl;
+  readonly deinterlaceControl: DeinterlaceControl;
+  readonly filmEmulationControl: FilmEmulationControl;
+  readonly perspectiveCorrectionControl: PerspectiveCorrectionControl;
+  readonly stabilizationControl: StabilizationControl;
 
   // Transform tab
   readonly transformControl: TransformControl;
@@ -123,6 +132,7 @@ export class AppControlRegistry {
   readonly histogram: Histogram;
   readonly waveform: Waveform;
   readonly vectorscope: Vectorscope;
+  readonly gamutDiagram: GamutDiagram;
 
   // Panels
   readonly historyPanel: HistoryPanel;
@@ -144,6 +154,9 @@ export class AppControlRegistry {
   readonly presentationMode: PresentationMode;
   readonly networkSyncManager: NetworkSyncManager;
   readonly networkControl: NetworkControl;
+
+  /** Unsubscribe callbacks for registry-level .on() listeners created in setupTabContents */
+  private registryUnsubscribers: (() => void)[] = [];
 
   constructor(deps: ControlRegistryDeps) {
     const { session, viewer, paintEngine, displayCapabilities } = deps;
@@ -191,6 +204,10 @@ export class AppControlRegistry {
     // --- Effects tab ---
     this.filterControl = new FilterControl();
     this.lensControl = new LensControl();
+    this.deinterlaceControl = new DeinterlaceControl();
+    this.filmEmulationControl = new FilmEmulationControl();
+    this.perspectiveCorrectionControl = new PerspectiveCorrectionControl();
+    this.stabilizationControl = new StabilizationControl();
 
     // --- Transform tab ---
     this.transformControl = new TransformControl();
@@ -200,6 +217,7 @@ export class AppControlRegistry {
     this.histogram = new Histogram();
     this.waveform = new Waveform();
     this.vectorscope = new Vectorscope();
+    this.gamutDiagram = new GamutDiagram();
 
     // --- Panels ---
     this.historyPanel = new HistoryPanel(getGlobalHistoryManager());
@@ -269,22 +287,29 @@ export class AppControlRegistry {
     viewContent.appendChild(this.displayProfileControl.render());
 
     // Trigger re-render when false color state changes
-    viewer.getFalseColor().on('stateChanged', () => {
+    this.registryUnsubscribers.push(viewer.getFalseColor().on('stateChanged', () => {
       viewer.refresh();
-    });
+    }));
 
     // Add luminance visualization badge to canvas overlay
     const lumVisBadge = this.luminanceVisControl.createBadge();
     viewer.getCanvasContainer().appendChild(lumVisBadge);
 
     // Setup eyedropper for color picking from viewer
+    let pendingEyedropperHandler: ((e: MouseEvent) => void) | null = null;
     this.hslQualifierControl.setEyedropperCallback((active) => {
       const viewerContainer = viewer.getContainer();
+      // Remove any existing pending handler before adding a new one
+      if (pendingEyedropperHandler) {
+        viewerContainer.removeEventListener('click', pendingEyedropperHandler);
+        pendingEyedropperHandler = null;
+      }
       if (active) {
         // Set cursor to crosshair when eyedropper is active
         viewerContainer.style.cursor = 'crosshair';
         // Add click handler for color picking
         const clickHandler = (e: MouseEvent) => {
+          pendingEyedropperHandler = null;
           const rect = viewerContainer.getBoundingClientRect();
           const x = e.clientX - rect.left;
           const y = e.clientY - rect.top;
@@ -308,8 +333,8 @@ export class AppControlRegistry {
           // Deactivate eyedropper after picking
           this.hslQualifierControl.deactivateEyedropper();
           viewerContainer.style.cursor = '';
-          viewerContainer.removeEventListener('click', clickHandler);
         };
+        pendingEyedropperHandler = clickHandler;
         viewerContainer.addEventListener('click', clickHandler, { once: true });
       } else {
         viewerContainer.style.cursor = '';
@@ -329,7 +354,7 @@ export class AppControlRegistry {
     viewContent.appendChild(pixelProbeButton);
 
     // Update pixel probe button state
-    viewer.getPixelProbe().on('stateChanged', (state) => {
+    this.registryUnsubscribers.push(viewer.getPixelProbe().on('stateChanged', (state) => {
       if (state.enabled) {
         pixelProbeButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
         pixelProbeButton.style.borderColor = 'var(--accent-primary)';
@@ -339,7 +364,7 @@ export class AppControlRegistry {
         pixelProbeButton.style.borderColor = 'transparent';
         pixelProbeButton.style.color = 'var(--text-secondary)';
       }
-    });
+    }));
 
     // Spotlight Tool toggle button
     const spotlightButton = ContextToolbar.createIconButton('sun', () => {
@@ -349,7 +374,7 @@ export class AppControlRegistry {
     viewContent.appendChild(spotlightButton);
 
     // Update spotlight button state when visibility changes
-    viewer.getSpotlightOverlay().on('stateChanged', (state) => {
+    this.registryUnsubscribers.push(viewer.getSpotlightOverlay().on('stateChanged', (state) => {
       if (state.enabled) {
         spotlightButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
         spotlightButton.style.borderColor = 'var(--accent-primary)';
@@ -359,7 +384,7 @@ export class AppControlRegistry {
         spotlightButton.style.borderColor = 'transparent';
         spotlightButton.style.color = 'var(--text-secondary)';
       }
-    });
+    }));
 
     // Info Panel toggle button
     const infoPanelButton = ContextToolbar.createIconButton('info', () => {
@@ -372,7 +397,7 @@ export class AppControlRegistry {
     viewContent.appendChild(infoPanelButton);
 
     // Update button state when visibility changes
-    this.infoPanel.on('visibilityChanged', (visible) => {
+    this.registryUnsubscribers.push(this.infoPanel.on('visibilityChanged', (visible) => {
       if (visible) {
         infoPanelButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
         infoPanelButton.style.borderColor = 'var(--accent-primary)';
@@ -382,27 +407,82 @@ export class AppControlRegistry {
         infoPanelButton.style.borderColor = 'transparent';
         infoPanelButton.style.color = 'var(--text-secondary)';
       }
-    });
+    }));
+
+    // Snapshot Panel toggle button
+    let snapshotPanelOpen = false;
+    const snapshotButton = ContextToolbar.createIconButton('camera', () => {
+      this.snapshotPanel.toggle();
+      snapshotPanelOpen = !snapshotPanelOpen;
+      updateSnapshotButtonStyle();
+    }, { title: 'Snapshots (Ctrl+Shift+S)' });
+    snapshotButton.dataset.testid = 'snapshot-panel-toggle';
+    viewContent.appendChild(snapshotButton);
+
+    const updateSnapshotButtonStyle = () => {
+      if (snapshotPanelOpen) {
+        snapshotButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+        snapshotButton.style.borderColor = 'var(--accent-primary)';
+        snapshotButton.style.color = 'var(--accent-primary)';
+      } else {
+        snapshotButton.style.background = 'transparent';
+        snapshotButton.style.borderColor = 'transparent';
+        snapshotButton.style.color = 'var(--text-secondary)';
+      }
+    };
+    this.registryUnsubscribers.push(this.snapshotPanel.on('closed', () => {
+      snapshotPanelOpen = false;
+      updateSnapshotButtonStyle();
+    }));
+
+    // Playlist Panel toggle button
+    let playlistPanelOpen = false;
+    const playlistButton = ContextToolbar.createIconButton('film', () => {
+      this.playlistPanel.toggle();
+      playlistPanelOpen = !playlistPanelOpen;
+      updatePlaylistButtonStyle();
+    }, { title: 'Playlist (Shift+Alt+P)' });
+    playlistButton.dataset.testid = 'playlist-panel-toggle';
+    viewContent.appendChild(playlistButton);
+
+    const updatePlaylistButtonStyle = () => {
+      if (playlistPanelOpen) {
+        playlistButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+        playlistButton.style.borderColor = 'var(--accent-primary)';
+        playlistButton.style.color = 'var(--accent-primary)';
+      } else {
+        playlistButton.style.background = 'transparent';
+        playlistButton.style.borderColor = 'transparent';
+        playlistButton.style.color = 'var(--text-secondary)';
+      }
+    };
+    this.registryUnsubscribers.push(this.playlistPanel.on('closed', () => {
+      playlistPanelOpen = false;
+      updatePlaylistButtonStyle();
+    }));
 
     // Sync scope visibility with ScopesControl
-    this.histogram.on('visibilityChanged', (visible) => {
+    this.registryUnsubscribers.push(this.histogram.on('visibilityChanged', (visible) => {
       this.scopesControl.setScopeVisible('histogram', visible);
-    });
-    this.waveform.on('visibilityChanged', (visible) => {
+    }));
+    this.registryUnsubscribers.push(this.waveform.on('visibilityChanged', (visible) => {
       this.scopesControl.setScopeVisible('waveform', visible);
-    });
-    this.vectorscope.on('visibilityChanged', (visible) => {
+    }));
+    this.registryUnsubscribers.push(this.vectorscope.on('visibilityChanged', (visible) => {
       this.scopesControl.setScopeVisible('vectorscope', visible);
-    });
+    }));
+    this.registryUnsubscribers.push(this.gamutDiagram.on('visibilityChanged', (visible) => {
+      this.scopesControl.setScopeVisible('gamutDiagram', visible);
+    }));
 
     // Sync histogram clipping overlay toggle with Viewer
-    this.histogram.on('clippingOverlayToggled', (enabled) => {
+    this.registryUnsubscribers.push(this.histogram.on('clippingOverlayToggled', (enabled) => {
       if (enabled) {
         viewer.getClippingOverlay().enable();
       } else {
         viewer.getClippingOverlay().disable();
       }
-    });
+    }));
 
     contextToolbar.setTabContent('view', viewContent);
 
@@ -429,7 +509,7 @@ export class AppControlRegistry {
     colorContent.appendChild(curvesButton);
 
     // Update button state when visibility changes
-    this.curvesControl.on('visibilityChanged', (visible) => {
+    this.registryUnsubscribers.push(this.curvesControl.on('visibilityChanged', (visible) => {
       if (visible) {
         curvesButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
         curvesButton.style.borderColor = 'var(--accent-primary)';
@@ -437,7 +517,7 @@ export class AppControlRegistry {
         curvesButton.style.background = '';
         curvesButton.style.borderColor = '';
       }
-    });
+    }));
 
     // Color Wheels toggle button
     const colorWheels = viewer.getColorWheels();
@@ -448,7 +528,7 @@ export class AppControlRegistry {
     colorContent.appendChild(colorWheelsButton);
 
     // Update button state when visibility changes
-    colorWheels.on('visibilityChanged', (visible) => {
+    this.registryUnsubscribers.push(colorWheels.on('visibilityChanged', (visible) => {
       if (visible) {
         colorWheelsButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
         colorWheelsButton.style.borderColor = 'var(--accent-primary)';
@@ -456,7 +536,7 @@ export class AppControlRegistry {
         colorWheelsButton.style.background = '';
         colorWheelsButton.style.borderColor = '';
       }
-    });
+    }));
 
     contextToolbar.setTabContent('color', colorContent);
 
@@ -466,6 +546,14 @@ export class AppControlRegistry {
     effectsContent.appendChild(this.filterControl.render());
     effectsContent.appendChild(ContextToolbar.createDivider());
     effectsContent.appendChild(this.lensControl.render());
+    effectsContent.appendChild(ContextToolbar.createDivider());
+    effectsContent.appendChild(this.deinterlaceControl.render());
+    effectsContent.appendChild(ContextToolbar.createDivider());
+    effectsContent.appendChild(this.filmEmulationControl.render());
+    effectsContent.appendChild(ContextToolbar.createDivider());
+    effectsContent.appendChild(this.perspectiveCorrectionControl.render());
+    effectsContent.appendChild(ContextToolbar.createDivider());
+    effectsContent.appendChild(this.stabilizationControl.render());
     contextToolbar.setTabContent('effects', effectsContent);
 
     // === TRANSFORM TAB ===
@@ -496,7 +584,7 @@ export class AppControlRegistry {
     annotateContent.appendChild(historyButton);
 
     // Update button state when visibility changes
-    this.historyPanel.on('visibilityChanged', (visible) => {
+    this.registryUnsubscribers.push(this.historyPanel.on('visibilityChanged', (visible) => {
       if (visible) {
         historyButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
         historyButton.style.borderColor = 'var(--accent-primary)';
@@ -504,7 +592,7 @@ export class AppControlRegistry {
         historyButton.style.background = '';
         historyButton.style.borderColor = '';
       }
-    });
+    }));
 
     // Markers panel toggle button
     const markersButton = ContextToolbar.createButton('Markers', () => {
@@ -514,7 +602,7 @@ export class AppControlRegistry {
     annotateContent.appendChild(markersButton);
 
     // Update button state when visibility changes
-    this.markerListPanel.on('visibilityChanged', (visible) => {
+    this.registryUnsubscribers.push(this.markerListPanel.on('visibilityChanged', (visible) => {
       if (visible) {
         markersButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
         markersButton.style.borderColor = 'var(--accent-primary)';
@@ -522,7 +610,7 @@ export class AppControlRegistry {
         markersButton.style.background = '';
         markersButton.style.borderColor = '';
       }
-    });
+    }));
 
     contextToolbar.setTabContent('annotate', annotateContent);
   }
@@ -542,6 +630,12 @@ export class AppControlRegistry {
    * Dispose all controls and managers.
    */
   dispose(): void {
+    // Unsubscribe all registry-level listeners before disposing child controls
+    for (const unsub of this.registryUnsubscribers) {
+      unsub();
+    }
+    this.registryUnsubscribers = [];
+
     this.ocioControl.dispose();
     this.ghostFrameControl.dispose();
     this.safeAreasControl.dispose();
@@ -567,6 +661,10 @@ export class AppControlRegistry {
     this.displayProfileControl.dispose();
     this.curvesControl.dispose();
     this.lensControl.dispose();
+    this.deinterlaceControl.dispose();
+    this.filmEmulationControl.dispose();
+    this.perspectiveCorrectionControl.dispose();
+    this.stabilizationControl.dispose();
     this.stackControl.dispose();
     this.channelSelect.dispose();
     this.parControl.dispose();
@@ -577,6 +675,7 @@ export class AppControlRegistry {
     this.histogram.dispose();
     this.waveform.dispose();
     this.vectorscope.dispose();
+    this.gamutDiagram.dispose();
     this.textFormattingToolbar.dispose();
     this.autoSaveIndicator.dispose();
     this.snapshotPanel.dispose();

@@ -35,6 +35,12 @@ import { AppControlRegistry } from './AppControlRegistry';
 import { PerfTrace } from './utils/PerfTrace';
 import type { AppWiringContext } from './AppWiringContext';
 
+// A11Y utilities
+import { FocusManager } from './ui/a11y/FocusManager';
+import { AriaAnnouncer } from './ui/a11y/AriaAnnouncer';
+import { injectA11yStyles } from './ui/a11y/injectA11yStyles';
+import { setModalFocusManager } from './ui/components/shared/Modal';
+
 // Wiring modules
 import { wireColorControls, updateOCIOPipeline, type ColorWiringState } from './AppColorWiring';
 import { wireViewControls } from './AppViewWiring';
@@ -64,6 +70,8 @@ export class App {
   private networkBridge: AppNetworkBridge;
   private persistenceManager: AppPersistenceManager;
   private sessionBridge!: AppSessionBridge;
+  private focusManager!: FocusManager;
+  private ariaAnnouncer!: AriaAnnouncer;
 
   // Image mode: timer for timeline fade transition
   private _imageTransitionTimer: ReturnType<typeof setTimeout> | null = null;
@@ -161,6 +169,7 @@ export class App {
       getHistogram: () => this.controls.histogram,
       getWaveform: () => this.controls.waveform,
       getVectorscope: () => this.controls.vectorscope,
+      getGamutDiagram: () => this.controls.gamutDiagram,
       getInfoPanel: () => this.controls.infoPanel,
       getCropControl: () => this.controls.cropControl,
       getOCIOControl: () => this.controls.ocioControl,
@@ -247,6 +256,9 @@ export class App {
   private createLayout(): void {
     if (!this.container) return;
 
+    // === A11Y SETUP ===
+    injectA11yStyles();
+
     // === HEADER BAR (file ops, playback, volume, help) ===
     const headerBarEl = this.headerBar.render();
 
@@ -263,12 +275,78 @@ export class App {
     const timelineEl = this.timeline.render();
     const cacheIndicatorEl = this.controls.cacheIndicator.getElement();
 
+    // Set viewer ARIA attributes
+    viewerEl.id = 'main-content';
+    viewerEl.setAttribute('role', 'main');
+    viewerEl.setAttribute('aria-label', 'Image viewer');
+    viewerEl.setAttribute('tabindex', '0');
+
+    // Create skip link and prepend to container
+    this.focusManager = new FocusManager();
+    const skipLink = this.focusManager.createSkipLink('main-content');
+    this.container.appendChild(skipLink);
+
     this.container.appendChild(headerBarEl);
     this.container.appendChild(tabBarEl);
     this.container.appendChild(contextToolbarEl);
     this.container.appendChild(viewerEl);
     this.container.appendChild(cacheIndicatorEl);
     this.container.appendChild(timelineEl);
+
+    // Register focus zones (order defines F6 cycling order)
+    this.focusManager.addZone({
+      name: 'headerBar',
+      container: this.headerBar.getContainer(),
+      getItems: () => Array.from(this.headerBar.getContainer().querySelectorAll<HTMLElement>('button:not([disabled])')),
+      orientation: 'horizontal',
+    });
+    this.focusManager.addZone({
+      name: 'tabBar',
+      container: this.tabBar.getContainer(),
+      getItems: () => this.tabBar.getButtons(),
+      orientation: 'horizontal',
+    });
+    this.focusManager.addZone({
+      name: 'contextToolbar',
+      container: this.contextToolbar.getContainer(),
+      getItems: () => Array.from(this.contextToolbar.getContainer().querySelectorAll<HTMLElement>('button:not([disabled])')),
+      orientation: 'horizontal',
+    });
+    this.focusManager.addZone({
+      name: 'viewer',
+      container: viewerEl,
+      getItems: () => [viewerEl],
+      orientation: 'horizontal',
+    });
+    this.focusManager.addZone({
+      name: 'timeline',
+      container: timelineEl,
+      getItems: () => Array.from(timelineEl.querySelectorAll<HTMLElement>('button:not([disabled]), input, [tabindex="0"]')),
+      orientation: 'horizontal',
+    });
+
+    // Wire modal focus trap
+    setModalFocusManager(this.focusManager);
+
+    // Create AriaAnnouncer
+    this.ariaAnnouncer = new AriaAnnouncer();
+
+    // Announce tab changes
+    this.tabBar.on('tabChanged', (tabId: TabId) => {
+      const tabLabels: Record<TabId, string> = {
+        view: 'View', color: 'Color', effects: 'Effects',
+        transform: 'Transform', annotate: 'Annotate',
+      };
+      this.ariaAnnouncer.announce(`${tabLabels[tabId]} tab`);
+    });
+
+    // Announce file loaded
+    this.session.on('sourceLoaded', () => {
+      const name = this.session.metadata?.displayName;
+      if (name) {
+        this.ariaAnnouncer.announce(`File loaded: ${name}`);
+      }
+    });
 
     // Initialize FullscreenManager with the app container
     this.fullscreenManager = new FullscreenManager(this.container);
@@ -360,6 +438,9 @@ export class App {
 
     // Add vectorscope overlay to viewer container
     this.viewer.getContainer().appendChild(this.controls.vectorscope.render());
+
+    // Add gamut diagram overlay to viewer container
+    this.viewer.getContainer().appendChild(this.controls.gamutDiagram.render());
 
     // Add history panel to viewer container
     this.viewer.getContainer().appendChild(this.controls.historyPanel.getElement());
@@ -529,6 +610,7 @@ export class App {
       'panel.crop': () => this.controls.cropControl.toggle(),
       'panel.waveform': () => this.controls.scopesControl.toggleScope('waveform'),
       'panel.vectorscope': () => this.controls.scopesControl.toggleScope('vectorscope'),
+      'panel.gamutDiagram': () => this.controls.scopesControl.toggleScope('gamutDiagram'),
       'panel.histogram': () => this.controls.scopesControl.toggleScope('histogram'),
       'panel.ocio': () => this.controls.ocioControl.toggle(),
       'display.cycleProfile': () => this.controls.displayProfileControl.cycleProfile(),
@@ -614,11 +696,33 @@ export class App {
           this.controls.presentationMode.toggle();
           return;
         }
+        // Close all transient floating panels/dropdowns
         if (this.controls.colorControls) {
           this.controls.colorControls.hide();
         }
         if (this.controls.cropControl) {
           this.controls.cropControl.hidePanel();
+        }
+        if (this.controls.filterControl?.isOpen) {
+          this.controls.filterControl.hide();
+        }
+        if (this.controls.deinterlaceControl?.isOpen) {
+          this.controls.deinterlaceControl.hide();
+        }
+        if (this.controls.filmEmulationControl?.isOpen) {
+          this.controls.filmEmulationControl.hide();
+        }
+        if (this.controls.curvesControl) {
+          this.controls.curvesControl.hide();
+        }
+        if (this.controls.ocioControl) {
+          this.controls.ocioControl.hide();
+        }
+        if (this.controls.compareControl?.isDropdownVisible()) {
+          this.controls.compareControl.close();
+        }
+        if (this.controls.networkControl) {
+          this.controls.networkControl.closePanel();
         }
         // Close stereo eye transform panel
         if (this.controls.stereoEyeTransformControl.isPanelVisible()) {
@@ -650,6 +754,12 @@ export class App {
         if (this.controls.networkSyncManager.isConnected) {
           this.controls.networkSyncManager.leaveRoom();
         }
+      },
+      'focus.nextZone': () => {
+        this.focusManager.focusNextZone();
+      },
+      'focus.previousZone': () => {
+        this.focusManager.focusPreviousZone();
       },
     };
   }
@@ -780,6 +890,8 @@ export class App {
     this.sessionBridge.dispose();
     this.keyboardHandler.dispose();
     this.keyboardManager.detach();
+    this.focusManager?.dispose();
+    this.ariaAnnouncer?.dispose();
 
     // Dispose all controls via the registry
     this.controls.dispose();

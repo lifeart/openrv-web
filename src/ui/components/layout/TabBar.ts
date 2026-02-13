@@ -41,6 +41,7 @@ export class TabBar extends EventEmitter<TabBarEvents> {
     // Create container
     this.container = document.createElement('div');
     this.container.className = 'tab-bar';
+    this.container.setAttribute('role', 'tablist');
     this.container.style.cssText = `
       height: 36px;
       background: var(--bg-primary);
@@ -94,6 +95,10 @@ export class TabBar extends EventEmitter<TabBarEvents> {
   private createTabButton(tab: Tab): HTMLButtonElement {
     const button = document.createElement('button');
     button.dataset.tabId = tab.id;
+    button.id = `tab-${tab.id}`;
+    button.setAttribute('role', 'tab');
+    button.setAttribute('aria-selected', tab.id === this._activeTab ? 'true' : 'false');
+    button.setAttribute('aria-controls', `tabpanel-${tab.id}`);
     button.title = `${tab.label} (${tab.shortcut})`;
     button.style.cssText = `
       background: transparent;
@@ -154,6 +159,8 @@ export class TabBar extends EventEmitter<TabBarEvents> {
       const isActive = id === this._activeTab;
       button.style.color = isActive ? 'var(--text-primary)' : 'var(--text-muted)';
       button.style.background = isActive ? 'var(--bg-hover)' : 'transparent';
+      button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+      button.setAttribute('tabindex', isActive ? '0' : '-1');
     }
 
     // Update indicator position (account for scroll offset)
@@ -195,6 +202,14 @@ export class TabBar extends EventEmitter<TabBarEvents> {
       return true;
     }
     return false;
+  }
+
+  getContainer(): HTMLElement {
+    return this.container;
+  }
+
+  getButtons(): HTMLButtonElement[] {
+    return Array.from(this.tabButtons.values());
   }
 
   render(): HTMLElement {

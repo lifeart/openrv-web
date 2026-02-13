@@ -203,6 +203,7 @@ describe('AutoSaveIndicator', () => {
         on: vi.fn(),
         off: vi.fn(),
         getConfig: vi.fn().mockReturnValue({ enabled: true, interval: 5, maxVersions: 10 }),
+        setConfig: vi.fn(),
         getLastSaveTime: vi.fn().mockReturnValue(null),
         hasUnsavedChanges: vi.fn().mockReturnValue(false),
       };
@@ -215,6 +216,7 @@ describe('AutoSaveIndicator', () => {
         on: vi.fn(),
         off: vi.fn(),
         getConfig: vi.fn().mockReturnValue({ enabled: false, interval: 5, maxVersions: 10 }),
+        setConfig: vi.fn(),
         getLastSaveTime: vi.fn().mockReturnValue(null),
         hasUnsavedChanges: vi.fn().mockReturnValue(false),
       };
@@ -264,22 +266,22 @@ describe('AutoSaveIndicator', () => {
       expect(element.style.cursor).toBe('pointer');
     });
 
-    it('AUTOSAVE-UI-032: non-error states show default cursor', () => {
-      indicator.setStatus('idle');
+    it('AUTOSAVE-UI-032: saving status shows default cursor, other non-error states show pointer', () => {
+      indicator.setStatus('saving');
       let element = indicator.render();
       expect(element.style.cursor).toBe('default');
 
-      indicator.setStatus('saving');
+      indicator.setStatus('idle');
       element = indicator.render();
-      expect(element.style.cursor).toBe('default');
+      expect(element.style.cursor).toBe('pointer');
 
       indicator.setStatus('saved');
       element = indicator.render();
-      expect(element.style.cursor).toBe('default');
+      expect(element.style.cursor).toBe('pointer');
 
       indicator.setStatus('disabled');
       element = indicator.render();
-      expect(element.style.cursor).toBe('default');
+      expect(element.style.cursor).toBe('pointer');
     });
   });
 
@@ -313,6 +315,210 @@ describe('AutoSaveIndicator', () => {
     it('AUTOSAVE-UI-035: container uses CSS variable for text color', () => {
       const element = indicator.render();
       expect(element.style.color).toBe('var(--text-muted, #888)');
+    });
+  });
+
+  describe('settings popover', () => {
+    function createMockManager(configOverrides: Partial<{ enabled: boolean; interval: number; maxVersions: number }> = {}) {
+      const config = { enabled: true, interval: 5, maxVersions: 10, ...configOverrides };
+      return {
+        on: vi.fn(),
+        off: vi.fn(),
+        getConfig: vi.fn().mockReturnValue(config),
+        setConfig: vi.fn().mockImplementation((partial: Record<string, unknown>) => {
+          Object.assign(config, partial);
+        }),
+        getLastSaveTime: vi.fn().mockReturnValue(null),
+        hasUnsavedChanges: vi.fn().mockReturnValue(false),
+      };
+    }
+
+    beforeEach(() => {
+      localStorage.clear();
+    });
+
+    it('AUTOSAVE-U030: clicking indicator (non-error) opens settings popover', () => {
+      const manager = createMockManager();
+      indicator.connect(manager as any);
+      const element = indicator.render();
+
+      element.click();
+
+      const popover = element.querySelector('[data-testid="autosave-settings-popover"]');
+      expect(popover).not.toBeNull();
+    });
+
+    it('AUTOSAVE-U031: popover shows interval slider with current value', () => {
+      const manager = createMockManager({ interval: 10 });
+      indicator.connect(manager as any);
+      const element = indicator.render();
+
+      element.click();
+
+      const slider = element.querySelector<HTMLInputElement>('[data-testid="autosave-interval-slider"]');
+      expect(slider).not.toBeNull();
+      expect(slider!.value).toBe('10');
+
+      const label = element.querySelector('[data-testid="autosave-interval-label"]');
+      expect(label?.textContent).toBe('Interval: 10 min');
+    });
+
+    it('AUTOSAVE-U032: popover shows enable/disable toggle with current state', () => {
+      const manager = createMockManager({ enabled: false });
+      indicator.connect(manager as any);
+      const element = indicator.render();
+
+      element.click();
+
+      const toggle = element.querySelector<HTMLInputElement>('[data-testid="autosave-enable-toggle"]');
+      expect(toggle).not.toBeNull();
+      expect(toggle!.checked).toBe(false);
+    });
+
+    it('AUTOSAVE-U033: popover shows max versions slider with current value', () => {
+      const manager = createMockManager({ maxVersions: 20 });
+      indicator.connect(manager as any);
+      const element = indicator.render();
+
+      element.click();
+
+      const slider = element.querySelector<HTMLInputElement>('[data-testid="autosave-versions-slider"]');
+      expect(slider).not.toBeNull();
+      expect(slider!.value).toBe('20');
+
+      const label = element.querySelector('[data-testid="autosave-versions-label"]');
+      expect(label?.textContent).toBe('Max versions: 20');
+    });
+
+    it('AUTOSAVE-U034: changing interval slider calls manager.setConfig with new interval', () => {
+      const manager = createMockManager();
+      indicator.connect(manager as any);
+      const element = indicator.render();
+
+      element.click();
+
+      const slider = element.querySelector<HTMLInputElement>('[data-testid="autosave-interval-slider"]')!;
+      slider.value = '15';
+      slider.dispatchEvent(new Event('input'));
+
+      expect(manager.setConfig).toHaveBeenCalledWith({ interval: 15 });
+    });
+
+    it('AUTOSAVE-U035: toggling enable/disable calls manager.setConfig', () => {
+      const manager = createMockManager({ enabled: true });
+      indicator.connect(manager as any);
+      const element = indicator.render();
+
+      element.click();
+
+      const toggle = element.querySelector<HTMLInputElement>('[data-testid="autosave-enable-toggle"]')!;
+      toggle.checked = false;
+      toggle.dispatchEvent(new Event('change'));
+
+      expect(manager.setConfig).toHaveBeenCalledWith({ enabled: false });
+    });
+
+    it('AUTOSAVE-U036: clicking indicator again closes popover', () => {
+      const manager = createMockManager();
+      indicator.connect(manager as any);
+      const element = indicator.render();
+
+      // Open
+      element.click();
+      expect(element.querySelector('[data-testid="autosave-settings-popover"]')).not.toBeNull();
+
+      // Close
+      element.click();
+      expect(element.querySelector('[data-testid="autosave-settings-popover"]')).toBeNull();
+    });
+
+    it('AUTOSAVE-U037: clicking outside popover closes it', () => {
+      const manager = createMockManager();
+      indicator.connect(manager as any);
+      const element = indicator.render();
+      document.body.appendChild(element);
+
+      element.click();
+      expect(element.querySelector('[data-testid="autosave-settings-popover"]')).not.toBeNull();
+
+      // Click outside
+      document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      expect(element.querySelector('[data-testid="autosave-settings-popover"]')).toBeNull();
+
+      document.body.removeChild(element);
+    });
+
+    it('AUTOSAVE-U038: error status click still triggers retry (not popover)', () => {
+      const callback = vi.fn();
+      indicator.setRetryCallback(callback);
+
+      const manager = createMockManager();
+      indicator.connect(manager as any);
+      indicator.setStatus('error');
+
+      const element = indicator.render();
+      element.click();
+
+      expect(callback).toHaveBeenCalledTimes(1);
+      expect(element.querySelector('[data-testid="autosave-settings-popover"]')).toBeNull();
+    });
+
+    it('AUTOSAVE-U039: settings persist to localStorage on change', () => {
+      const manager = createMockManager();
+      indicator.connect(manager as any);
+      const element = indicator.render();
+
+      element.click();
+
+      const slider = element.querySelector<HTMLInputElement>('[data-testid="autosave-interval-slider"]')!;
+      slider.value = '20';
+      slider.dispatchEvent(new Event('input'));
+
+      const stored = JSON.parse(localStorage.getItem('openrv-autosave-config')!);
+      expect(stored.interval).toBe(20);
+    });
+
+    it('AUTOSAVE-U040: settings restored from localStorage on connect', () => {
+      localStorage.setItem('openrv-autosave-config', JSON.stringify({
+        interval: 15,
+        enabled: false,
+        maxVersions: 25,
+      }));
+
+      const manager = createMockManager();
+      indicator.connect(manager as any);
+
+      expect(manager.setConfig).toHaveBeenCalledWith({
+        interval: 15,
+        enabled: false,
+        maxVersions: 25,
+      });
+    });
+
+    it('AUTOSAVE-U041: invalid localStorage data is ignored gracefully', () => {
+      localStorage.setItem('openrv-autosave-config', 'not-valid-json{{{');
+
+      const manager = createMockManager();
+      // Should not throw
+      expect(() => indicator.connect(manager as any)).not.toThrow();
+
+      // setConfig should not have been called with saved config (only initial connect calls)
+      // The first call would be from loadConfigFromStorage, which should return null
+      // So setConfig should not be called at all if the data is invalid
+      const setConfigCalls = manager.setConfig.mock.calls;
+      expect(setConfigCalls.length).toBe(0);
+    });
+
+    it('AUTOSAVE-U042: Escape key closes popover', () => {
+      const manager = createMockManager();
+      indicator.connect(manager as any);
+      const element = indicator.render();
+
+      element.click();
+      expect(element.querySelector('[data-testid="autosave-settings-popover"]')).not.toBeNull();
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      expect(element.querySelector('[data-testid="autosave-settings-popover"]')).toBeNull();
     });
   });
 });

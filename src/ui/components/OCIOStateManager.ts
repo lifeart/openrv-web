@@ -16,6 +16,7 @@ import {
   OCIOProcessor,
   parseOCIOConfig,
   validateOCIOConfig,
+  getPresetById,
 } from '../../color/ColorProcessingFacade';
 
 /**
@@ -238,6 +239,23 @@ export class OCIOStateManager extends EventEmitter<OCIOStateManagerEvents> {
       }
     };
     reader.readAsText(file);
+  }
+
+  // ==========================================================================
+  // Workflow Presets
+  // ==========================================================================
+
+  /**
+   * Apply a workflow preset by ID.
+   * Sets the full OCIO pipeline state in a single call.
+   */
+  applyPreset(presetId: string): void {
+    const preset = getPresetById(presetId);
+    if (!preset) {
+      console.warn(`[OCIO] Unknown preset ID: "${presetId}"`);
+      return;
+    }
+    this.processor.setState({ ...preset.state, enabled: true });
   }
 
   // ==========================================================================

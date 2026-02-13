@@ -812,6 +812,98 @@ describe('CompareControl', () => {
     });
   });
 
+  describe('aria attributes', () => {
+    function openDropdown(): HTMLElement {
+      const el = control.render();
+      document.body.appendChild(el);
+      const button = el.querySelector('[data-testid="compare-control-button"]') as HTMLButtonElement;
+      button.click();
+      return document.querySelector('[data-testid="compare-dropdown"]')!;
+    }
+
+    afterEach(() => {
+      // Clean up any appended elements
+      document.querySelectorAll('.compare-control, .compare-dropdown').forEach(el => el.remove());
+    });
+
+    it('CMP-U130: A button has aria-pressed=true when source is A', () => {
+      const dropdown = openDropdown();
+      const aButton = dropdown.querySelector('[data-testid="compare-ab-a"]') as HTMLButtonElement;
+      expect(aButton.getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('CMP-U131: B button has aria-pressed=false when source is A', () => {
+      const dropdown = openDropdown();
+      const bButton = dropdown.querySelector('[data-testid="compare-ab-b"]') as HTMLButtonElement;
+      expect(bButton.getAttribute('aria-pressed')).toBe('false');
+    });
+
+    it('CMP-U132: B button has aria-disabled=true when A/B unavailable', () => {
+      const dropdown = openDropdown();
+      const bButton = dropdown.querySelector('[data-testid="compare-ab-b"]') as HTMLButtonElement;
+      expect(bButton.getAttribute('aria-disabled')).toBe('true');
+    });
+
+    it('CMP-U133: toggle button has aria-disabled=true when A/B unavailable', () => {
+      const dropdown = openDropdown();
+      const toggle = dropdown.querySelector('[data-testid="compare-ab-toggle"]') as HTMLButtonElement;
+      expect(toggle.getAttribute('aria-disabled')).toBe('true');
+    });
+
+    it('CMP-U134: B button aria-pressed=true after switching to B source', () => {
+      control.setABAvailable(true);
+      control.setABSource('B');
+      const dropdown = openDropdown();
+      const aButton = dropdown.querySelector('[data-testid="compare-ab-a"]') as HTMLButtonElement;
+      const bButton = dropdown.querySelector('[data-testid="compare-ab-b"]') as HTMLButtonElement;
+      expect(bButton.getAttribute('aria-pressed')).toBe('true');
+      expect(aButton.getAttribute('aria-pressed')).toBe('false');
+    });
+
+    it('CMP-U135: B button aria-disabled=false when A/B available', () => {
+      control.setABAvailable(true);
+      const dropdown = openDropdown();
+      const bButton = dropdown.querySelector('[data-testid="compare-ab-b"]') as HTMLButtonElement;
+      expect(bButton.getAttribute('aria-disabled')).toBe('false');
+    });
+
+    it('CMP-U136: wipe option aria-pressed matches active mode', () => {
+      control.setWipeMode('horizontal');
+      const dropdown = openDropdown();
+      const hOption = dropdown.querySelector('[data-wipe-mode="horizontal"]') as HTMLButtonElement;
+      const offOption = dropdown.querySelector('[data-wipe-mode="off"]') as HTMLButtonElement;
+      expect(hOption.getAttribute('aria-pressed')).toBe('true');
+      expect(offOption.getAttribute('aria-pressed')).toBe('false');
+    });
+
+    it('CMP-U137: diff matte toggle aria-pressed reflects enabled state', () => {
+      control.setABAvailable(true);
+      control.setDifferenceMatteEnabled(true);
+      const dropdown = openDropdown();
+      const diffToggle = dropdown.querySelector('[data-testid="diff-matte-toggle"]') as HTMLButtonElement;
+      expect(diffToggle.getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('CMP-U138: heatmap toggle aria-pressed reflects heatmap state', () => {
+      control.setABAvailable(true);
+      control.setDifferenceMatteEnabled(true);
+      control.setDifferenceMatteHeatmap(true);
+      const dropdown = openDropdown();
+      const heatmap = dropdown.querySelector('[data-testid="diff-matte-heatmap"]') as HTMLButtonElement;
+      expect(heatmap.getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('CMP-U139: blend mode button aria-pressed matches active mode', () => {
+      control.setABAvailable(true);
+      control.setBlendMode('onionskin');
+      const dropdown = openDropdown();
+      const onionBtn = dropdown.querySelector('[data-blend-mode="onionskin"]') as HTMLButtonElement;
+      const flickerBtn = dropdown.querySelector('[data-blend-mode="flicker"]') as HTMLButtonElement;
+      expect(onionBtn.getAttribute('aria-pressed')).toBe('true');
+      expect(flickerBtn.getAttribute('aria-pressed')).toBe('false');
+    });
+  });
+
   describe('dispose', () => {
     it('CMP-U120: dispose cleans up without error', () => {
       expect(() => control.dispose()).not.toThrow();

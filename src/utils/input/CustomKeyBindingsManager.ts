@@ -27,12 +27,53 @@ export class CustomKeyBindingsManager {
   }
 
   /**
-   * Set a custom key binding for an action
+   * Convert a KeyCombination to a canonical string ID for comparison
    */
-  setCustomBinding(action: string, customCombo: KeyCombination): void {
+  comboToId(combo: KeyCombination): string {
+    const parts = [];
+    if (combo.ctrl) parts.push('ctrl');
+    if (combo.shift) parts.push('shift');
+    if (combo.alt) parts.push('alt');
+    if (combo.meta && !combo.ctrl) parts.push('meta');
+    parts.push(combo.code.toLowerCase());
+    return parts.join('+');
+  }
+
+  /**
+   * Find the action currently bound to a given key combination.
+   * Returns the action name or null if no action uses the combo.
+   * Checks both custom bindings and default bindings.
+   * @param combo The key combination to look up
+   * @param excludeAction Optional action to exclude from the search (for self-reassignment)
+   */
+  findConflictingAction(combo: KeyCombination, excludeAction?: string): string | null {
+    const targetId = this.comboToId(combo);
+
+    for (const actionName of Object.keys(DEFAULT_KEY_BINDINGS)) {
+      if (actionName === excludeAction) continue;
+      const effective = this.getEffectiveCombo(actionName);
+      if (this.comboToId(effective) === targetId) {
+        return actionName;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Set a custom key binding for an action.
+   * Throws if the combo is already used by another action, unless force is true.
+   */
+  setCustomBinding(action: string, customCombo: KeyCombination, force = false): void {
     const defaultBinding = DEFAULT_KEY_BINDINGS[action as KeyBindingKeys];
     if (!defaultBinding) {
       throw new Error(`Unknown action: ${action}`);
+    }
+
+    if (!force) {
+      const conflict = this.findConflictingAction(customCombo, action);
+      if (conflict) {
+        throw new Error(`Key combination already used by "${conflict}"`);
+      }
     }
 
     // Extract the KeyCombination part (without description)

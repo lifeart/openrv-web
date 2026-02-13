@@ -39,11 +39,7 @@ async function applyColorAdjustments(
   adjustments: Record<string, number | boolean>
 ): Promise<void> {
   await page.evaluate((adj) => {
-    const app = (window as any).__OPENRV_TEST__?.app;
-    if (!app) throw new Error('Test helper not available');
-    const colorControls = (app as any).controls?.colorControls ?? (app as any).colorControls;
-    if (!colorControls) throw new Error('Color controls not available');
-    colorControls.setAdjustments(adj);
+    (window as any).__OPENRV_TEST__?.mutations?.setColorAdjustments(adj);
   }, adjustments);
 }
 
@@ -52,11 +48,7 @@ async function applyColorAdjustments(
  */
 async function resetColorAdjustments(page: import('@playwright/test').Page): Promise<void> {
   await page.evaluate(() => {
-    const app = (window as any).__OPENRV_TEST__?.app;
-    if (!app) throw new Error('Test helper not available');
-    const colorControls = (app as any).controls?.colorControls ?? (app as any).colorControls;
-    if (!colorControls) throw new Error('Color controls not available');
-    colorControls.reset();
+    (window as any).__OPENRV_TEST__?.mutations?.resetColorAdjustments();
   });
 }
 

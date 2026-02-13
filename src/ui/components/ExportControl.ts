@@ -336,5 +336,9 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
 
   dispose(): void {
     document.removeEventListener('click', this.boundHandleDocumentClick);
+    // Remove body-mounted dropdown if present
+    if (this.dropdown.parentNode) {
+      this.dropdown.parentNode.removeChild(this.dropdown);
+    }
   }
 }

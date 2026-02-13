@@ -76,9 +76,8 @@ test.describe('A/B Compare UI Elements', () => {
 
     const buttonA = page.locator('[data-testid="compare-ab-a"]');
 
-    // A button should have active styling (blue background)
-    const bgColor = await buttonA.evaluate(el => (el as HTMLButtonElement).style.background);
-    expect(bgColor).toContain('accent-primary-rgb');
+    // A button should be semantically pressed
+    await expect(buttonA).toHaveAttribute('aria-pressed', 'true');
   });
 
   test('AB-E006: B button appears disabled/dimmed with single source', async ({ page }) => {
@@ -91,9 +90,8 @@ test.describe('A/B Compare UI Elements', () => {
 
     const buttonB = page.locator('[data-testid="compare-ab-b"]');
 
-    // B button should be visually dimmed (opacity 0.5)
-    const opacity = await buttonB.evaluate(el => getComputedStyle(el).opacity);
-    expect(parseFloat(opacity)).toBeLessThan(1);
+    // B button should be semantically disabled
+    await expect(buttonB).toHaveAttribute('aria-disabled', 'true');
   });
 
   test('AB-E007: Toggle button appears disabled with single source', async ({ page }) => {
@@ -106,9 +104,8 @@ test.describe('A/B Compare UI Elements', () => {
 
     const toggleButton = page.locator('[data-testid="compare-ab-toggle"]');
 
-    // Toggle should be visually dimmed
-    const opacity = await toggleButton.evaluate(el => getComputedStyle(el).opacity);
-    expect(parseFloat(opacity)).toBeLessThan(1);
+    // Toggle should be semantically disabled
+    await expect(toggleButton).toHaveAttribute('aria-disabled', 'true');
   });
 
   test('AB-E008: A button has tooltip', async ({ page }) => {
@@ -235,9 +232,8 @@ test.describe('A/B Button Interactions', () => {
     await page.mouse.move(0, 0);
     await page.waitForTimeout(100);
 
-    // A should still be highlighted (check border color which is more stable)
-    const borderColor = await buttonA.evaluate(el => (el as HTMLButtonElement).style.borderColor);
-    expect(borderColor).toContain('accent-primary');
+    // A should still be semantically pressed
+    await expect(buttonA).toHaveAttribute('aria-pressed', 'true');
   });
 
   test('AB-E041: Clicking disabled B button does not change state', async ({ page }) => {
@@ -255,11 +251,9 @@ test.describe('A/B Button Interactions', () => {
     await buttonB.click({ force: true });
     await page.waitForTimeout(100);
 
-    // A should still be highlighted, B should not
-    const aBorderColor = await buttonA.evaluate(el => (el as HTMLButtonElement).style.borderColor);
-    const bBorderColor = await buttonB.evaluate(el => (el as HTMLButtonElement).style.borderColor);
-    expect(aBorderColor).toContain('accent-primary');
-    expect(bBorderColor).not.toContain('accent-primary');
+    // A should still be pressed, B should not
+    await expect(buttonA).toHaveAttribute('aria-pressed', 'true');
+    await expect(buttonB).toHaveAttribute('aria-pressed', 'false');
   });
 });
 
@@ -294,11 +288,9 @@ test.describe('A/B Button Interactions (Two Sources)', () => {
     await page.mouse.move(0, 0);
     await page.waitForTimeout(100);
 
-    // B should be highlighted, A should not
-    const aBorderColor = await buttonA.evaluate(el => (el as HTMLButtonElement).style.borderColor);
-    const bBorderColor = await buttonB.evaluate(el => (el as HTMLButtonElement).style.borderColor);
-    expect(bBorderColor).toContain('accent-primary');
-    expect(aBorderColor).not.toContain('accent-primary');
+    // B should be pressed, A should not
+    await expect(buttonB).toHaveAttribute('aria-pressed', 'true');
+    await expect(buttonA).toHaveAttribute('aria-pressed', 'false');
   });
 
   test('AB-E043: Clicking A button switches back to A', async ({ page }) => {
@@ -328,11 +320,9 @@ test.describe('A/B Button Interactions (Two Sources)', () => {
     await page.mouse.move(0, 0);
     await page.waitForTimeout(100);
 
-    // A should be highlighted, B should not
-    const aBorderColor = await buttonA.evaluate(el => (el as HTMLButtonElement).style.borderColor);
-    const bBorderColor = await buttonB.evaluate(el => (el as HTMLButtonElement).style.borderColor);
-    expect(aBorderColor).toContain('accent-primary');
-    expect(bBorderColor).not.toContain('accent-primary');
+    // A should be pressed, B should not
+    await expect(buttonA).toHaveAttribute('aria-pressed', 'true');
+    await expect(buttonB).toHaveAttribute('aria-pressed', 'false');
   });
 });
 
@@ -465,7 +455,7 @@ test.describe('A/B Wipe Labels', () => {
   test('WIPE-E002: wipe labels appear when horizontal wipe is enabled', async ({ page }) => {
     // Enable horizontal wipe
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipeMode('horizontal');
+      (window as any).__OPENRV_TEST__?.mutations?.setWipeMode('horizontal');
     });
     await page.waitForTimeout(100);
 
@@ -478,12 +468,12 @@ test.describe('A/B Wipe Labels', () => {
   test('WIPE-E003: default wipe labels are Original and Graded', async ({ page }) => {
     // Enable wipe
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipeMode('horizontal');
+      (window as any).__OPENRV_TEST__?.mutations?.setWipeMode('horizontal');
     });
     await page.waitForTimeout(100);
 
     const labels = await page.evaluate(() => {
-      return (window as any).__OPENRV_TEST__?.app?.viewer?.getWipeLabels();
+      return (window as any).__OPENRV_TEST__?.mutations?.getWipeLabels();
     });
 
     expect(labels.labelA).toBe('Original');
@@ -493,13 +483,13 @@ test.describe('A/B Wipe Labels', () => {
   test('WIPE-E004: setWipeLabels updates label text', async ({ page }) => {
     // Enable wipe
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipeMode('horizontal');
+      (window as any).__OPENRV_TEST__?.mutations?.setWipeMode('horizontal');
     });
     await page.waitForTimeout(100);
 
     // Set custom labels
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipeLabels('Before', 'After');
+      (window as any).__OPENRV_TEST__?.mutations?.setWipeLabels('Before', 'After');
     });
     await page.waitForTimeout(100);
 
@@ -512,8 +502,8 @@ test.describe('A/B Wipe Labels', () => {
   test('WIPE-E005: label A is hidden at left boundary (position <= 10%)', async ({ page }) => {
     // Enable wipe and set position to 5%
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipeMode('horizontal');
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipePosition(0.05);
+      (window as any).__OPENRV_TEST__?.mutations?.setWipeMode('horizontal');
+      (window as any).__OPENRV_TEST__?.mutations?.setWipePosition(0.05);
     });
     await page.waitForTimeout(100);
 
@@ -524,8 +514,8 @@ test.describe('A/B Wipe Labels', () => {
   test('WIPE-E006: label B is hidden at right boundary (position >= 90%)', async ({ page }) => {
     // Enable wipe and set position to 95%
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipeMode('horizontal');
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipePosition(0.95);
+      (window as any).__OPENRV_TEST__?.mutations?.setWipeMode('horizontal');
+      (window as any).__OPENRV_TEST__?.mutations?.setWipePosition(0.95);
     });
     await page.waitForTimeout(100);
 
@@ -536,8 +526,8 @@ test.describe('A/B Wipe Labels', () => {
   test('WIPE-E007: both labels visible at center position (50%)', async ({ page }) => {
     // Enable wipe at center
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipeMode('horizontal');
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipePosition(0.5);
+      (window as any).__OPENRV_TEST__?.mutations?.setWipeMode('horizontal');
+      (window as any).__OPENRV_TEST__?.mutations?.setWipePosition(0.5);
     });
     await page.waitForTimeout(100);
 
@@ -550,7 +540,7 @@ test.describe('A/B Wipe Labels', () => {
   test('WIPE-E010: vertical wipe shows labels correctly', async ({ page }) => {
     // Enable vertical wipe
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipeMode('vertical');
+      (window as any).__OPENRV_TEST__?.mutations?.setWipeMode('vertical');
     });
     await page.waitForTimeout(100);
 
@@ -562,8 +552,8 @@ test.describe('A/B Wipe Labels', () => {
 
   test('WIPE-E011: vertical wipe label A hidden at top boundary', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipeMode('vertical');
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipePosition(0.05);
+      (window as any).__OPENRV_TEST__?.mutations?.setWipeMode('vertical');
+      (window as any).__OPENRV_TEST__?.mutations?.setWipePosition(0.05);
     });
     await page.waitForTimeout(100);
 
@@ -573,8 +563,8 @@ test.describe('A/B Wipe Labels', () => {
 
   test('WIPE-E012: vertical wipe label B hidden at bottom boundary', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipeMode('vertical');
-      (window as any).__OPENRV_TEST__?.app?.viewer?.setWipePosition(0.95);
+      (window as any).__OPENRV_TEST__?.mutations?.setWipeMode('vertical');
+      (window as any).__OPENRV_TEST__?.mutations?.setWipePosition(0.95);
     });
     await page.waitForTimeout(100);
 

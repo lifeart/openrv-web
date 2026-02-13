@@ -109,9 +109,7 @@ test.describe('Duration Markers', () => {
 
     // Verify the endFrame is set
     const hasEndFrame = await page.evaluate(() => {
-      const app = (window as any).__OPENRV_TEST__?.app;
-      const marker = app?.session?.marks?.get(5);
-      return marker?.endFrame;
+      return (window as any).__OPENRV_TEST__?.mutations?.getMarkerEndFrame(5);
     });
     expect(hasEndFrame).toBe(15);
   });
@@ -176,8 +174,7 @@ test.describe('Duration Markers', () => {
 
     // Verify the endFrame was set
     const endFrame = await page.evaluate(() => {
-      const app = (window as any).__OPENRV_TEST__?.app;
-      return app?.session?.marks?.get(10)?.endFrame;
+      return (window as any).__OPENRV_TEST__?.mutations?.getMarkerEndFrame(10);
     });
     expect(endFrame).toBe(20);
   });
@@ -210,8 +207,7 @@ test.describe('Duration Markers', () => {
 
     // Verify endFrame is set
     let endFrame = await page.evaluate(() => {
-      const app = (window as any).__OPENRV_TEST__?.app;
-      return app?.session?.marks?.get(5)?.endFrame;
+      return (window as any).__OPENRV_TEST__?.mutations?.getMarkerEndFrame(5);
     });
     expect(endFrame).toBe(15);
 
@@ -232,8 +228,7 @@ test.describe('Duration Markers', () => {
 
     // Verify endFrame is cleared
     endFrame = await page.evaluate(() => {
-      const app = (window as any).__OPENRV_TEST__?.app;
-      return app?.session?.marks?.get(5)?.endFrame;
+      return (window as any).__OPENRV_TEST__?.mutations?.getMarkerEndFrame(5);
     });
     expect(endFrame).toBeUndefined();
   });
@@ -265,14 +260,13 @@ test.describe('Duration Markers', () => {
 
     // Check if frame 15 is within any duration marker range (read-only evaluate)
     const inRange = await page.evaluate(() => {
-      const marks = (window as any).__OPENRV_TEST__?.app?.session?.marks;
-      if (!marks) return false;
-      for (const marker of marks.values()) {
+      const endFrames = (window as any).__OPENRV_TEST__?.mutations?.getMarkerEndFrames() ?? {};
+      const state = (window as any).__OPENRV_TEST__?.getSessionState();
+      if (!state) return false;
+      for (const marker of state.markers) {
         const start = marker.frame;
-        const end = typeof marker.endFrame === 'number' ? marker.endFrame : marker.frame;
-        if (15 >= start && 15 <= end) {
-          return true;
-        }
+        const end = typeof endFrames[start] === 'number' ? endFrames[start] : start;
+        if (15 >= start && 15 <= end) return true;
       }
       return false;
     });
@@ -280,14 +274,13 @@ test.describe('Duration Markers', () => {
 
     // Check if frame 25 is outside all duration marker ranges (read-only evaluate)
     const outOfRange = await page.evaluate(() => {
-      const marks = (window as any).__OPENRV_TEST__?.app?.session?.marks;
-      if (!marks) return true;
-      for (const marker of marks.values()) {
+      const endFrames = (window as any).__OPENRV_TEST__?.mutations?.getMarkerEndFrames() ?? {};
+      const state = (window as any).__OPENRV_TEST__?.getSessionState();
+      if (!state) return true;
+      for (const marker of state.markers) {
         const start = marker.frame;
-        const end = typeof marker.endFrame === 'number' ? marker.endFrame : marker.frame;
-        if (25 >= start && 25 <= end) {
-          return false;
-        }
+        const end = typeof endFrames[start] === 'number' ? endFrames[start] : start;
+        if (25 >= start && 25 <= end) return false;
       }
       return true;
     });
@@ -361,12 +354,11 @@ test.describe('Duration Markers', () => {
 
     // Verify endFrames via read-only evaluate
 	    const endFrames = await page.evaluate(() => {
-	      const app = (window as any).__OPENRV_TEST__?.app;
-	      const marks = app?.session?.marks;
+	      const m = (window as any).__OPENRV_TEST__?.mutations;
 	      return {
-	        ef5: marks?.get(5)?.endFrame,
-	        ef15: marks?.get(15)?.endFrame,
-	        ef20: marks?.get(20)?.endFrame,
+	        ef5: m?.getMarkerEndFrame(5),
+	        ef15: m?.getMarkerEndFrame(15),
+	        ef20: m?.getMarkerEndFrame(20),
 	      };
 	    });
 	    expect(endFrames.ef5).toBe(10);
@@ -416,8 +408,7 @@ test.describe('Duration Markers', () => {
 
     // The marker should exist but without endFrame (since 5 < 10 is invalid)
     const endFrame = await page.evaluate(() => {
-      const app = (window as any).__OPENRV_TEST__?.app;
-      return app?.session?.marks?.get(10)?.endFrame;
+      return (window as any).__OPENRV_TEST__?.mutations?.getMarkerEndFrame(10);
     });
     expect(endFrame).toBeUndefined();
   });

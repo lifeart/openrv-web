@@ -1829,5 +1829,190 @@ describe('EffectProcessor', () => {
         expect(EffectProcessor.CHUNK_ROWS).toBeLessThanOrEqual(256);
       });
     });
+
+    describe('Deinterlace & Film Emulation Integration', () => {
+      it('EP-DI-001: hasActiveEffects returns true when deinterlace bob is active', () => {
+        const state = createDefaultEffectsState();
+        state.deinterlaceParams.enabled = true;
+        state.deinterlaceParams.method = 'bob';
+        expect(hasActiveEffects(state)).toBe(true);
+      });
+
+      it('EP-DI-002: hasActiveEffects returns false for deinterlace weave mode', () => {
+        const state = createDefaultEffectsState();
+        state.deinterlaceParams.enabled = true;
+        state.deinterlaceParams.method = 'weave';
+        expect(hasActiveEffects(state)).toBe(false);
+      });
+
+      it('EP-DI-003: hasActiveEffects returns false when deinterlace is disabled', () => {
+        const state = createDefaultEffectsState();
+        state.deinterlaceParams.enabled = false;
+        state.deinterlaceParams.method = 'bob';
+        expect(hasActiveEffects(state)).toBe(false);
+      });
+
+      it('EP-FE-001: hasActiveEffects returns true when film emulation is active', () => {
+        const state = createDefaultEffectsState();
+        state.filmEmulationParams.enabled = true;
+        state.filmEmulationParams.intensity = 50;
+        expect(hasActiveEffects(state)).toBe(true);
+      });
+
+      it('EP-FE-002: hasActiveEffects returns false when film emulation intensity is 0', () => {
+        const state = createDefaultEffectsState();
+        state.filmEmulationParams.enabled = true;
+        state.filmEmulationParams.intensity = 0;
+        expect(hasActiveEffects(state)).toBe(false);
+      });
+
+      it('EP-FE-003: hasActiveEffects returns false when film emulation is disabled', () => {
+        const state = createDefaultEffectsState();
+        state.filmEmulationParams.enabled = false;
+        state.filmEmulationParams.intensity = 100;
+        expect(hasActiveEffects(state)).toBe(false);
+      });
+
+      it('EP-DI-004: computeEffectsHash changes when deinterlace is toggled', () => {
+        const state1 = createDefaultEffectsState();
+        const state2 = createDefaultEffectsState();
+        state2.deinterlaceParams.enabled = true;
+        expect(computeEffectsHash(state1)).not.toBe(computeEffectsHash(state2));
+      });
+
+      it('EP-DI-005: computeEffectsHash changes when deinterlace method changes', () => {
+        const state1 = createDefaultEffectsState();
+        state1.deinterlaceParams.enabled = true;
+        state1.deinterlaceParams.method = 'bob';
+        const state2 = createDefaultEffectsState();
+        state2.deinterlaceParams.enabled = true;
+        state2.deinterlaceParams.method = 'blend';
+        expect(computeEffectsHash(state1)).not.toBe(computeEffectsHash(state2));
+      });
+
+      it('EP-DI-006: computeEffectsHash changes when deinterlace fieldOrder changes', () => {
+        const state1 = createDefaultEffectsState();
+        state1.deinterlaceParams.enabled = true;
+        state1.deinterlaceParams.fieldOrder = 'tff';
+        const state2 = createDefaultEffectsState();
+        state2.deinterlaceParams.enabled = true;
+        state2.deinterlaceParams.fieldOrder = 'bff';
+        expect(computeEffectsHash(state1)).not.toBe(computeEffectsHash(state2));
+      });
+
+      it('EP-FE-004: computeEffectsHash changes when film emulation stock changes', () => {
+        const state1 = createDefaultEffectsState();
+        state1.filmEmulationParams.enabled = true;
+        state1.filmEmulationParams.stock = 'kodak-portra-400';
+        const state2 = createDefaultEffectsState();
+        state2.filmEmulationParams.enabled = true;
+        state2.filmEmulationParams.stock = 'fuji-velvia-50';
+        expect(computeEffectsHash(state1)).not.toBe(computeEffectsHash(state2));
+      });
+
+      it('EP-FE-005: computeEffectsHash changes when film emulation intensity changes', () => {
+        const state1 = createDefaultEffectsState();
+        state1.filmEmulationParams.enabled = true;
+        state1.filmEmulationParams.intensity = 50;
+        const state2 = createDefaultEffectsState();
+        state2.filmEmulationParams.enabled = true;
+        state2.filmEmulationParams.intensity = 100;
+        expect(computeEffectsHash(state1)).not.toBe(computeEffectsHash(state2));
+      });
+
+      it('EP-DI-007: applyEffects applies deinterlace bob mode', () => {
+        // 4x4 interlaced image: even rows=200, odd rows=50
+        const img = createTestImageData(4, 4, { r: 0, g: 0, b: 0, a: 255 });
+        for (let y = 0; y < 4; y++) {
+          const val = y % 2 === 0 ? 200 : 50;
+          for (let x = 0; x < 4; x++) {
+            const i = (y * 4 + x) * 4;
+            img.data[i] = val;
+            img.data[i + 1] = val;
+            img.data[i + 2] = val;
+          }
+        }
+
+        const state = createDefaultEffectsState();
+        state.deinterlaceParams.enabled = true;
+        state.deinterlaceParams.method = 'bob';
+        state.deinterlaceParams.fieldOrder = 'tff';
+
+        processor.applyEffects(img, 4, 4, state);
+
+        // TFF bob interpolates odd rows. Row 1 = avg(row0=200, row2=200) = 200
+        expect(img.data[1 * 4 * 4]).toBe(200);
+      });
+
+      it('EP-FE-006: applyEffects applies film emulation', () => {
+        const img = createTestImageData(4, 4, { r: 128, g: 128, b: 128, a: 255 });
+        const originalR = img.data[0];
+
+        const state = createDefaultEffectsState();
+        state.filmEmulationParams.enabled = true;
+        state.filmEmulationParams.stock = 'kodak-portra-400';
+        state.filmEmulationParams.intensity = 100;
+        state.filmEmulationParams.grainIntensity = 0;
+
+        processor.applyEffects(img, 4, 4, state);
+
+        // Tone curve should modify the pixel
+        expect(img.data[0]).not.toBe(originalR);
+      });
+
+      it('EP-SIMD-GUARD-001: SIMD fast-path does not skip deinterlace when combined with inversion', () => {
+        // This is a critical regression test. If the SIMD fast-path guard
+        // omits !hasDeinterlace, deinterlace would be silently skipped.
+        const img = createTestImageData(4, 4, { r: 0, g: 0, b: 0, a: 255 });
+        // Even rows=200, odd rows=50
+        for (let y = 0; y < 4; y++) {
+          const val = y % 2 === 0 ? 200 : 50;
+          for (let x = 0; x < 4; x++) {
+            const i = (y * 4 + x) * 4;
+            img.data[i] = val;
+            img.data[i + 1] = val;
+            img.data[i + 2] = val;
+          }
+        }
+
+        const state = createDefaultEffectsState();
+        state.colorInversionEnabled = true;
+        state.deinterlaceParams.enabled = true;
+        state.deinterlaceParams.method = 'bob';
+        state.deinterlaceParams.fieldOrder = 'tff';
+
+        processor.applyEffects(img, 4, 4, state);
+
+        // If deinterlace was applied, odd rows get interpolated to 200,
+        // then inversion makes it 55. If skipped, odd row stays 50, inverted = 205.
+        const row1R = img.data[1 * 4 * 4];
+        expect(row1R).toBe(55); // 255 - 200 = 55 (deinterlace + inversion)
+      });
+
+      it('EP-SIMD-GUARD-002: SIMD fast-path does not skip film emulation when combined with channel isolation', () => {
+        const img = createTestImageData(4, 4, { r: 128, g: 128, b: 128, a: 255 });
+
+        const state = createDefaultEffectsState();
+        state.channelMode = 'red';
+        state.filmEmulationParams.enabled = true;
+        state.filmEmulationParams.stock = 'kodak-ektar-100';
+        state.filmEmulationParams.intensity = 100;
+        state.filmEmulationParams.grainIntensity = 0;
+
+        processor.applyEffects(img, 4, 4, state);
+
+        // If film emulation was skipped (SIMD fast-path), R channel would just be
+        // shown as grayscale of original value. With film emulation, tone curve
+        // modifies the pixel first, then channel isolation extracts red.
+        // The key test: the R value should differ from what pure channel isolation
+        // would produce (128 → grayscale 128).
+        const imgChannelOnly = createTestImageData(4, 4, { r: 128, g: 128, b: 128, a: 255 });
+        const channelOnlyState = createDefaultEffectsState();
+        channelOnlyState.channelMode = 'red';
+        processor.applyEffects(imgChannelOnly, 4, 4, channelOnlyState);
+
+        expect(img.data[0]).not.toBe(imgChannelOnly.data[0]);
+      });
+    });
   });
 });

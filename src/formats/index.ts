@@ -41,6 +41,7 @@ export {
   isGainmapJPEG,
   parseGainmapJPEG,
   decodeGainmapToFloat32,
+  extractJPEGOrientation,
   type GainmapInfo,
 } from './JPEGGainmapDecoder';
 export {
@@ -54,7 +55,11 @@ export {
   isGainmapAVIF,
   parseGainmapAVIF,
   decodeAVIFGainmapToFloat32,
+  parseISOBMFFOrientation,
+  parseISOBMFFTransforms,
+  getItemPropertyIndices,
   type AVIFGainmapInfo,
+  type ISOBMFFTransformInfo,
 } from './AVIFGainmapDecoder';
 export {
   isJXLFile,
@@ -73,3 +78,11 @@ export {
   type HEICColorInfo,
 } from './HEICGainmapDecoder';
 export { decodeHEICToImageData } from './HEICWasmDecoder';
+export { drawImageWithOrientation, applyOrientationRGBA } from './shared';
+export {
+  isRAWExtension,
+  isRAWFile,
+  extractRAWPreview,
+  type RAWExifMetadata,
+  type RAWPreviewResult,
+} from './RAWPreviewDecoder';

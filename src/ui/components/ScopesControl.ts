@@ -22,6 +22,7 @@ const SCOPE_CONFIG: { type: ScopeType; label: string; icon: IconName; shortcut: 
   { type: 'histogram', label: 'Histogram', icon: 'histogram', shortcut: 'H' },
   { type: 'waveform', label: 'Waveform', icon: 'waveform', shortcut: 'w' },
   { type: 'vectorscope', label: 'Vectorscope', icon: 'vectorscope', shortcut: 'y' },
+  { type: 'gamutDiagram', label: 'CIE Diagram', icon: 'gamut', shortcut: 'G' },
 ];
 
 export class ScopesControl extends EventEmitter<ScopesControlEvents> {
@@ -32,6 +33,7 @@ export class ScopesControl extends EventEmitter<ScopesControlEvents> {
     histogram: false,
     waveform: false,
     vectorscope: false,
+    gamutDiagram: false,
   };
   private isOpen = false;
   private boundHandleOutsideClick: (e: MouseEvent) => void;
@@ -55,7 +57,7 @@ export class ScopesControl extends EventEmitter<ScopesControlEvents> {
     // Create button
     this.button = document.createElement('button');
     this.button.dataset.testid = 'scopes-control-button';
-    this.button.title = 'Video scopes (H: histogram, w: waveform, y: vectorscope)';
+    this.button.title = 'Video scopes (H: histogram, w: waveform, y: vectorscope, G: CIE diagram)';
     this.button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -201,13 +203,14 @@ export class ScopesControl extends EventEmitter<ScopesControlEvents> {
   }
 
   private hasActiveScopes(): boolean {
-    return this.state.histogram || this.state.waveform || this.state.vectorscope;
+    return this.state.histogram || this.state.waveform || this.state.vectorscope || this.state.gamutDiagram;
   }
 
   private getActiveCount(): number {
     return (this.state.histogram ? 1 : 0) +
            (this.state.waveform ? 1 : 0) +
-           (this.state.vectorscope ? 1 : 0);
+           (this.state.vectorscope ? 1 : 0) +
+           (this.state.gamutDiagram ? 1 : 0);
   }
 
   private handleOutsideClick(e: MouseEvent): void {

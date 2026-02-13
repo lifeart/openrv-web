@@ -36,21 +36,26 @@ export class TransformControl extends EventEmitter<TransformControlEvents> {
 
   private createControls(): void {
     // Rotate left (counter-clockwise)
-    this.createButton('rotate-ccw', () => this.rotateLeft(), 'Rotate left 90° (Shift+R)');
+    const rotateLBtn = this.createButton('rotate-ccw', () => this.rotateLeft(), 'Rotate left 90° (Shift+R)');
+    rotateLBtn.dataset.testid = 'transform-rotate-left';
 
     // Rotate right (clockwise)
-    this.createButton('rotate-cw', () => this.rotateRight(), 'Rotate right 90° (R)');
+    const rotateRBtn = this.createButton('rotate-cw', () => this.rotateRight(), 'Rotate right 90° (Alt+R)');
+    rotateRBtn.dataset.testid = 'transform-rotate-right';
 
     // Flip horizontal
-    const flipHBtn = this.createButton('flip-horizontal', () => this.toggleFlipH(), 'Flip horizontal (H)');
+    const flipHBtn = this.createButton('flip-horizontal', () => this.toggleFlipH(), 'Flip horizontal (Alt+H)');
     flipHBtn.dataset.action = 'flipH';
+    flipHBtn.dataset.testid = 'transform-flip-horizontal';
 
     // Flip vertical
-    const flipVBtn = this.createButton('flip-vertical', () => this.toggleFlipV(), 'Flip vertical (V)');
+    const flipVBtn = this.createButton('flip-vertical', () => this.toggleFlipV(), 'Flip vertical (Shift+V)');
     flipVBtn.dataset.action = 'flipV';
+    flipVBtn.dataset.testid = 'transform-flip-vertical';
 
     // Reset button
-    this.createButton('reset', () => this.reset(), 'Reset transforms');
+    const resetBtn = this.createButton('reset', () => this.reset(), 'Reset transforms');
+    resetBtn.dataset.testid = 'transform-reset';
   }
 
   private createButton(icon: IconName, onClick: () => void, title: string): HTMLButtonElement {

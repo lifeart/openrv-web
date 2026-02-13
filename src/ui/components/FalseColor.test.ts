@@ -402,6 +402,62 @@ describe('FalseColor', () => {
     });
   });
 
+  describe('LUT signature validation', () => {
+    it('FC-100: different presets produce different LUT data', () => {
+      // Get LUT for standard preset (default)
+      const standardLUT = new Uint8Array(falseColor.getColorLUT());
+
+      // Switch to ARRI and get its LUT
+      falseColor.setPreset('arri');
+      const arriLUT = new Uint8Array(falseColor.getColorLUT());
+
+      // LUTs must differ — different palettes map different colors
+      let differences = 0;
+      for (let i = 0; i < standardLUT.length; i++) {
+        if (standardLUT[i] !== arriLUT[i]) differences++;
+      }
+      expect(differences).toBeGreaterThan(0);
+
+      // Switch to RED and compare with ARRI
+      falseColor.setPreset('red');
+      const redLUT = new Uint8Array(falseColor.getColorLUT());
+
+      let redVsArri = 0;
+      for (let i = 0; i < arriLUT.length; i++) {
+        if (arriLUT[i] !== redLUT[i]) redVsArri++;
+      }
+      expect(redVsArri).toBeGreaterThan(0);
+    });
+
+    it('FC-101: getState().preset and LUT stay in sync after changes', () => {
+      // Start with standard
+      expect(falseColor.getState().preset).toBe('standard');
+      const standardLUT = new Uint8Array(falseColor.getColorLUT());
+
+      // Change to arri
+      falseColor.setPreset('arri');
+      expect(falseColor.getState().preset).toBe('arri');
+      const arriLUT = falseColor.getColorLUT();
+
+      // LUT should have changed
+      let changed = false;
+      for (let i = 0; i < standardLUT.length; i++) {
+        if (standardLUT[i] !== arriLUT[i]) { changed = true; break; }
+      }
+      expect(changed).toBe(true);
+
+      // Change back to standard
+      falseColor.setPreset('standard');
+      expect(falseColor.getState().preset).toBe('standard');
+      const backToStandard = falseColor.getColorLUT();
+
+      // LUT should match original standard
+      for (let i = 0; i < standardLUT.length; i++) {
+        expect(backToStandard[i]).toBe(standardLUT[i]);
+      }
+    });
+  });
+
   describe('performance', () => {
     it('FC-090: processes large images efficiently using pre-computed LUT', () => {
       falseColor.enable();

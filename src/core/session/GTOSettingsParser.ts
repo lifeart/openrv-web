@@ -402,6 +402,7 @@ export function parseScopes(dto: GTODTO): ScopesState | null {
     histogram: false,
     waveform: false,
     vectorscope: false,
+    gamutDiagram: false,
   };
 
   const applyScope = (protocol: string, key: keyof ScopesState): void => {
@@ -421,8 +422,10 @@ export function parseScopes(dto: GTODTO): ScopesState | null {
   applyScope('RVWaveform', 'waveform');
   applyScope('Vectorscope', 'vectorscope');
   applyScope('RVVectorscope', 'vectorscope');
+  applyScope('GamutDiagram', 'gamutDiagram');
+  applyScope('RVGamutDiagram', 'gamutDiagram');
 
-  if (scopes.histogram || scopes.waveform || scopes.vectorscope) {
+  if (scopes.histogram || scopes.waveform || scopes.vectorscope || scopes.gamutDiagram) {
     return scopes;
   }
 

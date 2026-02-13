@@ -73,7 +73,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     // Create button
     this.button = document.createElement('button');
     this.button.dataset.testid = 'compare-control-button';
-    this.button.title = 'Comparison tools: Wipe (W) and A/B (`)';
+    this.button.title = 'Comparison tools: Wipe (Shift+W) and A/B (`)';
     this.button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -622,6 +622,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     const isActive = this.manager.getWipeMode() === mode;
     option.style.background = isActive ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent';
     option.style.color = isActive ? 'var(--accent-primary)' : 'var(--text-primary)';
+    option.setAttribute('aria-pressed', String(isActive));
   }
 
   private updateDropdownStates(): void {
@@ -646,6 +647,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
         aButton.style.background = isActive ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent';
         aButton.style.borderColor = isActive ? 'var(--accent-primary)' : 'var(--border-secondary)';
         aButton.style.color = isActive ? 'var(--accent-primary)' : 'var(--text-primary)';
+        aButton.setAttribute('aria-pressed', String(isActive));
       }
 
       if (bButton) {
@@ -655,11 +657,16 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
         bButton.style.color = isActive ? 'var(--accent-primary)' : 'var(--text-primary)';
         bButton.disabled = !state.abAvailable;
         bButton.style.opacity = state.abAvailable ? '1' : '0.5';
+        bButton.title = state.abAvailable ? 'Switch to B source' : 'Load a second source to enable A/B compare';
+        bButton.setAttribute('aria-pressed', String(isActive));
+        bButton.setAttribute('aria-disabled', String(!state.abAvailable));
       }
 
       if (toggleButton) {
         toggleButton.disabled = !state.abAvailable;
         toggleButton.style.opacity = state.abAvailable ? '1' : '0.5';
+        toggleButton.title = state.abAvailable ? 'Toggle between A and B' : 'Load a second source to enable A/B toggle';
+        toggleButton.setAttribute('aria-disabled', String(!state.abAvailable));
       }
     }
 
@@ -676,6 +683,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
         // Disable if A/B not available
         diffToggle.disabled = !state.abAvailable;
         diffToggle.style.opacity = state.abAvailable ? '1' : '0.5';
+        diffToggle.title = state.abAvailable ? 'Toggle difference matte' : 'Load a second source to enable difference matte';
       }
 
       if (heatmapToggle) {
@@ -707,6 +715,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
           this.updateBlendModeButtonStyle(button, mode);
           button.disabled = !state.abAvailable;
           button.style.opacity = state.abAvailable ? '1' : '0.5';
+          if (!state.abAvailable) button.title = 'Load a second source to enable blend modes';
         }
       }
 
@@ -746,18 +755,21 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     const isActive = this.manager.getBlendMode() === mode;
     button.style.background = isActive ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent';
     button.style.color = isActive ? 'var(--accent-primary)' : 'var(--text-primary)';
+    button.setAttribute('aria-pressed', String(isActive));
   }
 
   private updateDiffToggleStyle(toggle: HTMLButtonElement): void {
     const isActive = this.manager.isDifferenceMatteEnabled();
     toggle.style.background = isActive ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent';
     toggle.style.color = isActive ? 'var(--accent-primary)' : 'var(--text-primary)';
+    toggle.setAttribute('aria-pressed', String(isActive));
   }
 
   private updateHeatmapToggleStyle(toggle: HTMLButtonElement): void {
     const isActive = this.manager.getDifferenceMatteState().heatmap;
     toggle.style.background = isActive ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent';
     toggle.style.color = isActive ? 'var(--accent-primary)' : 'var(--text-primary)';
+    toggle.setAttribute('aria-pressed', String(isActive));
   }
 
   private handleOutsideClick(e: MouseEvent): void {
@@ -809,6 +821,18 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     document.removeEventListener('click', this.boundHandleOutsideClick);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     window.removeEventListener('resize', this.boundHandleReposition);
+  }
+
+  /** Close the dropdown if currently open (public API for panel.close). */
+  close(): void {
+    if (this.isOpen) {
+      this.closeDropdown();
+    }
+  }
+
+  /** Returns true when the dropdown is visible. */
+  isDropdownVisible(): boolean {
+    return this.isOpen;
   }
 
   // === Public API: delegates to ComparisonManager ===

@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { MarkerListPanel } from './MarkerListPanel';
+import { MarkerListPanel, MarkerExportData } from './MarkerListPanel';
 import { Session, MARKER_COLORS } from '../../core/session/Session';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 
@@ -552,6 +552,308 @@ describe('MarkerListPanel', () => {
 
       // Panel content should remain unchanged
       expect(panel.getElement().innerHTML).toBe(htmlAfterDispose);
+    });
+  });
+
+  describe('marker export', () => {
+    it('MARK-U130: export produces valid JSON with correct structure', () => {
+      session.setMarker(10, 'Note A', MARKER_COLORS[0]);
+      session.setMarker(50, 'Note B', MARKER_COLORS[1]);
+      panel.show();
+
+      // Capture the JSON string passed to Blob constructor
+      let capturedJson = '';
+      const OrigBlob = globalThis.Blob;
+      globalThis.Blob = class extends OrigBlob {
+        constructor(parts?: BlobPart[], options?: BlobPropertyBag) {
+          super(parts, options);
+          if (parts?.[0] && typeof parts[0] === 'string') capturedJson = parts[0];
+        }
+      } as any;
+      URL.createObjectURL = vi.fn().mockReturnValue('blob:test');
+      URL.revokeObjectURL = vi.fn();
+
+      panel.exportMarkers();
+
+      globalThis.Blob = OrigBlob;
+
+      expect(capturedJson).not.toBe('');
+      const data = JSON.parse(capturedJson) as MarkerExportData;
+
+      expect(data.version).toBe(1);
+      expect(typeof data.exportedAt).toBe('string');
+      expect(typeof data.fps).toBe('number');
+      expect(Array.isArray(data.markers)).toBe(true);
+      expect(data.markers.length).toBe(2);
+    });
+
+    it('MARK-U131: export includes all marker fields', () => {
+      session.setMarker(10, 'Duration marker', MARKER_COLORS[2], 30);
+      panel.show();
+
+      let capturedJson = '';
+      const OrigBlob = globalThis.Blob;
+      globalThis.Blob = class extends OrigBlob {
+        constructor(parts?: BlobPart[], options?: BlobPropertyBag) {
+          super(parts, options);
+          if (parts?.[0] && typeof parts[0] === 'string') capturedJson = parts[0];
+        }
+      } as any;
+      URL.createObjectURL = vi.fn().mockReturnValue('blob:test');
+      URL.revokeObjectURL = vi.fn();
+
+      panel.exportMarkers();
+      globalThis.Blob = OrigBlob;
+
+      const data = JSON.parse(capturedJson) as MarkerExportData;
+      const marker = data.markers[0]!;
+
+      expect(marker.frame).toBe(10);
+      expect(marker.note).toBe('Duration marker');
+      expect(marker.color).toBe(MARKER_COLORS[2]);
+      expect(marker.endFrame).toBe(30);
+    });
+
+    it('MARK-U132: export with no markers produces empty array', () => {
+      panel.show();
+
+      let capturedJson = '';
+      const OrigBlob = globalThis.Blob;
+      globalThis.Blob = class extends OrigBlob {
+        constructor(parts?: BlobPart[], options?: BlobPropertyBag) {
+          super(parts, options);
+          if (parts?.[0] && typeof parts[0] === 'string') capturedJson = parts[0];
+        }
+      } as any;
+      URL.createObjectURL = vi.fn().mockReturnValue('blob:test');
+      URL.revokeObjectURL = vi.fn();
+
+      panel.exportMarkers();
+      globalThis.Blob = OrigBlob;
+
+      const data = JSON.parse(capturedJson) as MarkerExportData;
+
+      expect(data.markers).toEqual([]);
+    });
+
+    it('MARK-U133: export button exists in header', () => {
+      panel.show();
+      const exportBtn = panel.getElement().querySelector('[data-testid="marker-export-btn"]');
+      expect(exportBtn).not.toBeNull();
+      expect(exportBtn?.textContent).toBe('Export');
+    });
+  });
+
+  describe('marker import', () => {
+    // Helper to simulate file import by calling applyImportedMarkers directly
+    function applyImport(
+      panel: MarkerListPanel,
+      data: unknown,
+      mode: 'replace' | 'merge' = 'merge'
+    ): void {
+      // Access private method via type assertion for testing
+      (panel as any).applyImportedMarkers(data, mode);
+    }
+
+    it('MARK-U140: import with valid JSON adds markers to session', () => {
+      panel.show();
+      const importData: MarkerExportData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        fps: 24,
+        markers: [
+          { frame: 10, note: 'Imported A', color: '#ff4444' },
+          { frame: 20, note: 'Imported B', color: '#44ff44' },
+        ],
+      };
+
+      applyImport(panel, importData);
+
+      expect(session.hasMarker(10)).toBe(true);
+      expect(session.hasMarker(20)).toBe(true);
+      expect(session.getMarker(10)?.note).toBe('Imported A');
+      expect(session.getMarker(20)?.note).toBe('Imported B');
+    });
+
+    it('MARK-U141: import with merge mode preserves existing markers', () => {
+      session.setMarker(10, 'Existing', MARKER_COLORS[0]);
+      panel.show();
+
+      const importData: MarkerExportData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        fps: 24,
+        markers: [
+          { frame: 10, note: 'New note', color: '#44ff44' },
+          { frame: 30, note: 'New marker', color: '#4444ff' },
+        ],
+      };
+
+      applyImport(panel, importData, 'merge');
+
+      // Existing marker at frame 10 should be preserved (not overwritten)
+      expect(session.getMarker(10)?.note).toBe('Existing');
+      expect(session.getMarker(10)?.color).toBe(MARKER_COLORS[0]);
+      // New marker at frame 30 should be added
+      expect(session.hasMarker(30)).toBe(true);
+      expect(session.getMarker(30)?.note).toBe('New marker');
+    });
+
+    it('MARK-U142: import with replace mode clears existing markers first', () => {
+      session.setMarker(10, 'Old', MARKER_COLORS[0]);
+      session.setMarker(20, 'Also old', MARKER_COLORS[1]);
+      panel.show();
+
+      const importData: MarkerExportData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        fps: 24,
+        markers: [
+          { frame: 50, note: 'Replaced', color: '#ff4444' },
+        ],
+      };
+
+      applyImport(panel, importData, 'replace');
+
+      expect(session.hasMarker(10)).toBe(false);
+      expect(session.hasMarker(20)).toBe(false);
+      expect(session.hasMarker(50)).toBe(true);
+      expect(session.getMarker(50)?.note).toBe('Replaced');
+    });
+
+    it('MARK-U143: import rejects invalid JSON (missing markers array)', () => {
+      panel.show();
+      const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+      applyImport(panel, { version: 1 });
+
+      expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('Invalid marker file'));
+      expect(session.marks.size).toBe(0);
+      alertSpy.mockRestore();
+    });
+
+    it('MARK-U144: import rejects data without version field', () => {
+      panel.show();
+      const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+      applyImport(panel, { markers: [] });
+
+      expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('Invalid marker file'));
+      alertSpy.mockRestore();
+    });
+
+    it('MARK-U145: import skips markers with invalid frames', () => {
+      panel.show();
+      const importData: MarkerExportData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        fps: 24,
+        markers: [
+          { frame: 10, note: 'Valid', color: '#ff4444' },
+          { frame: -5, note: 'Negative', color: '#ff4444' },
+          { frame: NaN, note: 'NaN', color: '#ff4444' },
+          { frame: Infinity, note: 'Infinity', color: '#ff4444' },
+        ] as any,
+      };
+
+      applyImport(panel, importData);
+
+      expect(session.hasMarker(10)).toBe(true);
+      expect(session.marks.size).toBe(1);
+    });
+
+    it('MARK-U146: import skips markers with bad types', () => {
+      panel.show();
+      const importData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        fps: 24,
+        markers: [
+          { frame: 'not a number', note: 'Bad', color: '#ff4444' },
+          { frame: 10, note: 123, color: '#ff4444' },
+          { frame: 20, note: 'OK', color: 42 },
+          { frame: 30, note: 'Valid', color: '#44ff44' },
+        ],
+      };
+
+      applyImport(panel, importData);
+
+      // Only the fully valid marker should be added
+      expect(session.hasMarker(30)).toBe(true);
+      expect(session.marks.size).toBe(1);
+    });
+
+    it('MARK-U147: import handles duration markers with endFrame', () => {
+      panel.show();
+      const importData: MarkerExportData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        fps: 24,
+        markers: [
+          { frame: 10, note: 'Range', color: '#ff4444', endFrame: 25 },
+        ],
+      };
+
+      applyImport(panel, importData);
+
+      expect(session.getMarker(10)?.endFrame).toBe(25);
+    });
+
+    it('MARK-U148: round-trip export then import produces identical markers', () => {
+      session.setMarker(10, 'First', MARKER_COLORS[0]);
+      session.setMarker(30, 'Second', MARKER_COLORS[2], 50);
+      session.setMarker(60, 'Third', MARKER_COLORS[4]);
+      panel.show();
+
+      // Export
+      let capturedJson = '';
+      const OrigBlob = globalThis.Blob;
+      globalThis.Blob = class extends OrigBlob {
+        constructor(parts?: BlobPart[], options?: BlobPropertyBag) {
+          super(parts, options);
+          if (parts?.[0] && typeof parts[0] === 'string') capturedJson = parts[0];
+        }
+      } as any;
+      URL.createObjectURL = vi.fn().mockReturnValue('blob:test');
+      URL.revokeObjectURL = vi.fn();
+
+      panel.exportMarkers();
+      globalThis.Blob = OrigBlob;
+
+      const exportData = JSON.parse(capturedJson) as MarkerExportData;
+
+      // Clear markers and import
+      session.clearMarks();
+      expect(session.marks.size).toBe(0);
+
+      applyImport(panel, exportData, 'replace');
+
+      expect(session.marks.size).toBe(3);
+      expect(session.getMarker(10)?.note).toBe('First');
+      expect(session.getMarker(10)?.color).toBe(MARKER_COLORS[0]);
+      expect(session.getMarker(30)?.note).toBe('Second');
+      expect(session.getMarker(30)?.endFrame).toBe(50);
+      expect(session.getMarker(60)?.note).toBe('Third');
+    });
+
+    it('MARK-U149: import button exists in header', () => {
+      panel.show();
+      const importBtn = panel.getElement().querySelector('[data-testid="marker-import-btn"]');
+      expect(importBtn).not.toBeNull();
+      expect(importBtn?.textContent).toBe('Import');
+    });
+
+    it('MARK-U150: import rejects non-object data', () => {
+      panel.show();
+      const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+      applyImport(panel, 'just a string');
+      expect(alertSpy).toHaveBeenCalled();
+
+      applyImport(panel, null);
+      expect(alertSpy).toHaveBeenCalledTimes(2);
+
+      alertSpy.mockRestore();
     });
   });
 });

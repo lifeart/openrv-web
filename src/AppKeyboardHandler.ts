@@ -63,34 +63,37 @@ export class AppKeyboardHandler {
   private registerKeyboardShortcuts(): void {
     const actionHandlers = this.context.getActionHandlers();
 
-    // Some actions intentionally share keys with higher-priority global shortcuts.
-    // Skip registering these to avoid overriding the intended behavior.
-    const conflictingShortcuts = new Set([
+    // Actions whose *default* combos conflict with higher-priority global shortcuts.
+    // These are only skipped when still using their default combo; if the user has set
+    // a custom (non-conflicting) combo, we register them normally.
+    const conflictingDefaults = new Set([
       'paint.line',      // L key - handled by playback.faster
       'paint.rectangle', // R key - handled by timeline.resetInOut
       'paint.ellipse',   // O key - handled by timeline.setOutPoint
       'channel.red',     // Shift+R is reserved for transform.rotateLeft
+      'channel.blue',    // Shift+B is reserved for view.cycleBackgroundPattern
+      'channel.none',    // Shift+N is reserved for network.togglePanel
     ]);
 
     // Register all keyboard shortcuts using effective combos (custom or default)
     for (const [action, defaultBinding] of Object.entries(DEFAULT_KEY_BINDINGS)) {
-      // Skip known conflicts handled elsewhere or intentionally reserved
-      if (conflictingShortcuts.has(action)) {
+      const handler = actionHandlers[action];
+      if (!handler) continue;
+
+      // Use effective combo if custom key bindings manager is available, otherwise use default
+      const effectiveCombo = this.customKeyBindingsManager
+        ? this.customKeyBindingsManager.getEffectiveCombo(action)
+        : (() => {
+            const { description: _, ...combo } = defaultBinding;
+            return combo as KeyCombination;
+          })();
+
+      // Skip conflicting defaults only when still using the default combo
+      if (conflictingDefaults.has(action) && !this.customKeyBindingsManager?.hasCustomBinding(action)) {
         continue;
       }
 
-      const handler = actionHandlers[action];
-      if (handler) {
-        // Use effective combo if custom key bindings manager is available, otherwise use default
-        const effectiveCombo = this.customKeyBindingsManager
-          ? this.customKeyBindingsManager.getEffectiveCombo(action)
-          : (() => {
-              // Extract KeyCombination from default binding (remove description)
-              const { description: _, ...combo } = defaultBinding;
-              return combo as KeyCombination;
-            })();
-        this.keyboardManager.register(effectiveCombo, handler, defaultBinding.description);
-      }
+      this.keyboardManager.register(effectiveCombo, handler, defaultBinding.description);
     }
   }
 
@@ -116,7 +119,7 @@ export class AppKeyboardHandler {
       'VIEW': ['view.fitToWindow', 'view.fitToWindowAlt', 'view.zoom50', 'view.toggleAB', 'view.toggleABAlt', 'view.toggleSpotlight', 'color.toggleHSLQualifier'],
       'MOUSE CONTROLS': [], // Special case - not in DEFAULT_KEY_BINDINGS
       'CHANNEL ISOLATION': ['channel.red', 'channel.green', 'channel.blue', 'channel.alpha', 'channel.luminance', 'channel.grayscale', 'channel.none'],
-      'SCOPES': ['panel.histogram', 'panel.waveform', 'panel.vectorscope'],
+      'SCOPES': ['panel.histogram', 'panel.waveform', 'panel.vectorscope', 'panel.gamutDiagram'],
       'TIMELINE': ['timeline.setInPoint', 'timeline.setInPointAlt', 'timeline.setOutPoint', 'timeline.setOutPointAlt', 'timeline.resetInOut', 'timeline.toggleMark', 'timeline.cycleLoopMode'],
       'PAINT (Annotate tab)': ['paint.pan', 'paint.pen', 'paint.eraser', 'paint.text', 'paint.rectangle', 'paint.ellipse', 'paint.line', 'paint.arrow', 'paint.toggleBrush', 'paint.toggleGhost', 'paint.toggleHold', 'edit.undo', 'edit.redo'],
       'COLOR': ['panel.color', 'panel.curves', 'panel.ocio', 'display.cycleProfile'],
@@ -517,11 +520,37 @@ export class AppKeyboardHandler {
       // Display the combination
       keyDisplay.textContent = this.formatKeyCombo(combo);
 
+      // Check for conflicts with other actions
+      const conflictAction = this.customKeyBindingsManager.findConflictingAction(combo, action);
+
+      // Remove any previous conflict warning
+      const existingWarning = promptContent.querySelector('.conflict-warning');
+      if (existingWarning) existingWarning.remove();
+
+      // Show conflict warning if needed
+      let forceOverride = false;
+      if (conflictAction) {
+        const warning = document.createElement('div');
+        warning.className = 'conflict-warning';
+        warning.style.cssText = `
+          color: #f5a623;
+          background: rgba(245, 166, 35, 0.1);
+          border: 1px solid rgba(245, 166, 35, 0.3);
+          border-radius: 4px;
+          padding: 8px 12px;
+          margin-top: 8px;
+          font-size: 12px;
+        `;
+        warning.textContent = `This combo is already used by "${conflictAction}". Confirming will override it.`;
+        keyDisplay.insertAdjacentElement('afterend', warning);
+        forceOverride = true;
+      }
+
       // Confirm button
       const confirmButton = document.createElement('button');
-      confirmButton.textContent = 'Confirm';
+      confirmButton.textContent = conflictAction ? 'Override' : 'Confirm';
       confirmButton.style.cssText = `
-        background: var(--accent-primary);
+        background: ${conflictAction ? '#f5a623' : 'var(--accent-primary)'};
         border: none;
         color: white;
         padding: 8px 16px;
@@ -531,7 +560,7 @@ export class AppKeyboardHandler {
       `;
       confirmButton.onclick = () => {
         try {
-          this.customKeyBindingsManager.setCustomBinding(action, combo);
+          this.customKeyBindingsManager.setCustomBinding(action, combo, forceOverride);
           keyCell.textContent = this.formatKeyCombo(combo);
           this.refresh(); // Update keyboard shortcuts immediately
           cleanup();

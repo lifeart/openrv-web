@@ -29,8 +29,11 @@ import {
   findAuxlItem,
   extractHeadroom,
   srgbToLinear,
-  type BoxInfo,
+  getItemPropertyIndices,
+  parseISOBMFFOrientation,
+  parseISOBMFFTransforms,
 } from './AVIFGainmapDecoder';
+import { drawImageWithOrientation } from './shared';
 
 // =============================================================================
 // Types
@@ -217,54 +220,7 @@ function enumerateIpcoProperties(view: DataView, ipcoStart: number, ipcoEnd: num
   return properties;
 }
 
-/**
- * Get all property indices associated with an item ID from ipma box.
- */
-function getItemPropertyIndices(view: DataView, ipma: BoxInfo, itemId: number): number[] {
-  let pos = ipma.dataStart;
-  const version = view.getUint8(ipma.boxStart + 8);
-  const flags = view.getUint8(ipma.boxStart + 11);
-
-  if (pos + 4 > ipma.dataEnd) return [];
-  const entryCount = view.getUint32(pos);
-  pos += 4;
-
-  for (let i = 0; i < entryCount && pos < ipma.dataEnd; i++) {
-    let currentItemId: number;
-    if (version < 1) {
-      if (pos + 2 > ipma.dataEnd) return [];
-      currentItemId = view.getUint16(pos);
-      pos += 2;
-    } else {
-      if (pos + 4 > ipma.dataEnd) return [];
-      currentItemId = view.getUint32(pos);
-      pos += 4;
-    }
-
-    if (pos + 1 > ipma.dataEnd) return [];
-    const assocCount = view.getUint8(pos);
-    pos += 1;
-
-    const indices: number[] = [];
-    for (let j = 0; j < assocCount && pos < ipma.dataEnd; j++) {
-      let propIdx: number;
-      if (flags & 1) {
-        if (pos + 2 > ipma.dataEnd) return [];
-        propIdx = view.getUint16(pos) & 0x7FFF;
-        pos += 2;
-      } else {
-        if (pos + 1 > ipma.dataEnd) return [];
-        propIdx = view.getUint8(pos) & 0x7F;
-        pos += 1;
-      }
-      indices.push(propIdx);
-    }
-
-    if (currentItemId === itemId) return indices;
-  }
-
-  return [];
-}
+// getItemPropertyIndices is imported from AVIFGainmapDecoder
 
 /**
  * Parse a HEIC gainmap file and extract item IDs, offsets, headroom, and hvcC.
@@ -468,8 +424,13 @@ export function parseHEICColorInfo(buffer: ArrayBuffer): HEICColorInfo | null {
  * @param hvcC - Complete hvcC box (including size+type header) from the source file
  * @param width - Image width (from ispe property)
  * @param height - Image height (from ispe property)
+ * @param irotAngle - Optional irot rotation angle (0-3) to embed
+ * @param imirAxis - Optional imir mirror axis (0 or 1) to embed
  */
-export function buildStandaloneHEIC(codedData: Uint8Array, hvcC: Uint8Array, width: number, height: number): ArrayBuffer {
+export function buildStandaloneHEIC(
+  codedData: Uint8Array, hvcC: Uint8Array, width: number, height: number,
+  irotAngle?: number, imirAxis?: number,
+): ArrayBuffer {
   const parts: Uint8Array[] = [];
 
   function pushUint32BE(value: number): void {
@@ -508,11 +469,16 @@ export function buildStandaloneHEIC(codedData: Uint8Array, hvcC: Uint8Array, wid
   const pitmSize = 14;
   const infeSize = 20;
   const iinfSize = 14 + infeSize;
-  // ipco contains hvcC + ispe boxes
+  // ipco contains hvcC + ispe boxes, plus optional irot and imir
   const ispeSize = 20; // size(4) + type(4) + version+flags(4) + width(4) + height(4)
-  const ipcoSize = 8 + hvcC.length + ispeSize;
-  // ipma: version=0, flags=0, entry_count(4) + item_id(2) + assoc_count(1) + 2 entries(2)
-  const ipmaSize = 4 + 4 + 4 + 4 + 2 + 1 + 2;
+  const hasIrot = irotAngle !== undefined;
+  const hasImir = imirAxis !== undefined;
+  const irotBoxSize = hasIrot ? 9 : 0; // size(4) + type(4) + angle(1)
+  const imirBoxSize = hasImir ? 9 : 0; // size(4) + type(4) + axis(1)
+  const ipcoSize = 8 + hvcC.length + ispeSize + irotBoxSize + imirBoxSize;
+  // ipma: version=0, flags=0, entry_count(4) + item_id(2) + assoc_count(1) + N entries
+  const assocCount = 2 + (hasIrot ? 1 : 0) + (hasImir ? 1 : 0);
+  const ipmaSize = 4 + 4 + 4 + 4 + 2 + 1 + assocCount;
   const iprpSize = 8 + ipcoSize + ipmaSize;
   const ilocSize = 30;
   const mdatSize = 8 + codedData.length;
@@ -559,7 +525,7 @@ export function buildStandaloneHEIC(codedData: Uint8Array, hvcC: Uint8Array, wid
   pushUint32BE(iprpSize);
   pushString('iprp');
 
-  // ipco (contains hvcC + ispe boxes)
+  // ipco (contains hvcC + ispe + optional irot + optional imir boxes)
   pushUint32BE(ipcoSize);
   pushString('ipco');
   parts.push(hvcC);
@@ -571,15 +537,37 @@ export function buildStandaloneHEIC(codedData: Uint8Array, hvcC: Uint8Array, wid
   pushUint32BE(width);
   pushUint32BE(height);
 
-  // ipma (associate item 1 with property 1=hvcC and property 2=ispe)
+  // Optional irot box (property index = 3 if present)
+  if (hasIrot) {
+    pushUint32BE(9);
+    pushString('irot');
+    pushBytes(irotAngle! & 0x03);
+  }
+
+  // Optional imir box (property index = 3 or 4 depending on irot)
+  if (hasImir) {
+    pushUint32BE(9);
+    pushString('imir');
+    pushBytes(imirAxis! & 0x01);
+  }
+
+  // ipma (associate item 1 with properties)
   pushUint32BE(ipmaSize);
   pushString('ipma');
   pushUint32BE(0); // version=0, flags=0
   pushUint32BE(1); // entry_count=1
   pushUint16BE(1); // item_id=1
-  pushBytes(2);    // association_count=2
+  pushBytes(assocCount); // association_count
   pushBytes(0x81); // essential=1, property_index=1 (hvcC)
   pushBytes(0x82); // essential=1, property_index=2 (ispe)
+  let nextPropIdx = 3;
+  if (hasIrot) {
+    pushBytes(0x80 | nextPropIdx); // essential=1, property_index for irot
+    nextPropIdx++;
+  }
+  if (hasImir) {
+    pushBytes(0x80 | nextPropIdx); // essential=1, property_index for imir
+  }
 
   // iloc (version 0, offset_size=4, length_size=4, base_offset_size=0)
   pushUint32BE(ilocSize);
@@ -673,6 +661,12 @@ export async function decodeHEICGainmapToFloat32(
   let width: number;
   let height: number;
 
+  // Parse orientation from HEIC ISOBMFF container
+  const heicView = new DataView(buffer);
+  const ftypSize = heicView.getUint32(0);
+  const meta = findBox(heicView, 'meta', ftypSize, buffer.byteLength, true);
+  const orientation = meta ? parseISOBMFFOrientation(heicView, meta.dataStart, meta.dataEnd) : 1;
+
   // Build standalone HEIC for the gain map's coded data
   const gainmapCodedData = new Uint8Array(buffer, info.gainmapOffset, info.gainmapLength);
 
@@ -704,13 +698,16 @@ export async function decodeHEICGainmapToFloat32(
     baseBitmap.close();
 
     // Gainmap may be smaller — scale up to base image size
+    // Apply orientation transform so gainmap pixels align with the display-rotated base
     const gainCanvas = createCanvas(width, height);
     const gainCtx = gainCanvas.getContext('2d')! as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
-    gainCtx.drawImage(gainmapBitmap, 0, 0, width, height);
+    drawImageWithOrientation(gainCtx, gainmapBitmap, width, height, orientation);
     gainData = gainCtx.getImageData(0, 0, width, height).data;
     gainmapBitmap.close();
   } catch {
     // WASM fallback (Chrome/Firefox/Edge)
+    // Embed matching irot/imir boxes so libheif applies the same rotation to gainmap
+    const transforms = meta ? parseISOBMFFTransforms(heicView, meta.dataStart, meta.dataEnd) : {};
     const { decodeHEICToImageData } = await import('./HEICWasmDecoder');
 
     const baseResult = await decodeHEICToImageData(buffer);
@@ -718,11 +715,14 @@ export async function decodeHEICGainmapToFloat32(
     height = baseResult.height;
     baseData = baseResult.data;
 
-    // Decode gainmap via standalone HEIC wrapper
+    // Decode gainmap via standalone HEIC wrapper with matching transforms
     if (!info.gainmapHvcC) {
       throw new Error('Cannot decode HEIC gainmap: no hvcC decoder configuration found');
     }
-    const gainmapHEIC = buildStandaloneHEIC(gainmapCodedData, info.gainmapHvcC, info.gainmapWidth, info.gainmapHeight);
+    const gainmapHEIC = buildStandaloneHEIC(
+      gainmapCodedData, info.gainmapHvcC, info.gainmapWidth, info.gainmapHeight,
+      transforms.irotAngle, transforms.imirAxis
+    );
     const gainResult = await decodeHEICToImageData(gainmapHEIC);
 
     // Scale gainmap to base dimensions if they differ

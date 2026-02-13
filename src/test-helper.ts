@@ -42,8 +42,94 @@ declare global {
       setStrictMode: (enabled: boolean) => void;
       simulateFullscreenEnter: () => void;
       simulateFullscreenExit: () => void;
+      /** Stable mutation helpers – E2E specs should call these instead of reaching into app.* */
+      mutations: TestMutations;
     };
   }
+}
+
+export interface TestMutations {
+  // Viewer / Wipe
+  setWipeMode(mode: string): void;
+  setWipePosition(position: number): void;
+  getWipeLabels(): { labelA: string; labelB: string };
+  setWipeLabels(labelA: string, labelB: string): void;
+  setViewerZoom(level: number): void;
+  // Spotlight
+  setSpotlightPosition(x: number, y: number): void;
+  setSpotlightSize(width: number, height: number): void;
+  setSpotlightShape(shape: 'circle' | 'rectangle'): void;
+  setSpotlightDimAmount(amount: number): void;
+  setSpotlightFeather(feather: number): void;
+  // Zebra Stripes
+  setZebraHighThreshold(value: number): void;
+  setZebraLowThreshold(value: number): void;
+  toggleZebraHigh(): void;
+  toggleZebraLow(): void;
+  // Waveform
+  cycleWaveformMode(): void;
+  setWaveformMode(mode: string): void;
+  setWaveformChannel(channel: string, enabled: boolean): void;
+  getWaveformEnabledChannels(): { r: boolean; g: boolean; b: boolean };
+  getWaveformIntensity(): number;
+  setWaveformIntensity(value: number): void;
+  hideWaveform(): void;
+  // Vectorscope
+  cycleVectorscopeZoom(): void;
+  setVectorscopeZoom(level: number | string): void;
+  hideVectorscope(): void;
+  // Safe Areas
+  toggleSafeAreasTitleSafe(): void;
+  toggleSafeAreasActionSafe(): void;
+  toggleSafeAreasCenterCrosshair(): void;
+  toggleSafeAreasRuleOfThirds(): void;
+  setSafeAreasAspectRatio(ratio: string | null): void;
+  // Luminance Visualization
+  setLuminanceVisMode(mode: string): void;
+  setLuminanceVisRandomBandCount(count: number): void;
+  setLuminanceVisContourLevels(levels: number): void;
+  setLuminanceVisContourDesaturate(enabled: boolean): void;
+  // False Color
+  setFalseColorPreset(preset: string): void;
+  getFalseColorLUT(): number[];
+  // Matte Overlay
+  enableMatteOverlay(): void;
+  // Session
+  emitSessionEvent(event: string, data: unknown): void;
+  isSessionEventEmitter(): boolean;
+  setInterpolationEnabled(enabled: boolean): void;
+  getInterpolationEnabled(): boolean;
+  getSubFramePosition(): unknown;
+  getMarkerEndFrame(frame: number): number | undefined;
+  getMarkerEndFrames(): Record<number, number | undefined>;
+  setMarker(frame: number, note: string, color: string): void;
+  setMarkerNote(frame: number, note: string): void;
+  setMarkerColor(frame: number, color: string): void;
+  // Viewer pan
+  setViewerPan(x: number, y: number): void;
+  // Matte overlay
+  toggleMatteOverlay(): void;
+  setMatteAspect(aspect: number): void;
+  setMatteOpacity(opacity: number): void;
+  setMatteCenterPoint(x: number, y: number): void;
+  getMatteSettings(): any;
+  // Stable component accessors (for complex multi-step operations)
+  getPaintEngine(): any;
+  getPlaylistManager(): any;
+  getSession(): any;
+  getHistoryManager(): any;
+  getLUTPipelinePanel(): any;
+  setSessionFrame(frame: number): void;
+  getSessionSourceCount(): number;
+  // Color adjustments
+  setColorAdjustments(adjustments: Record<string, number | boolean>): void;
+  resetColorAdjustments(): void;
+  // Deinterlace
+  setDeinterlaceParams(params: Record<string, unknown>): void;
+  resetDeinterlace(): void;
+  // Film emulation
+  setFilmEmulationParams(params: Record<string, unknown>): void;
+  resetFilmEmulation(): void;
 }
 
 export interface LuminanceVisTestState {
@@ -1021,6 +1107,244 @@ export function exposeForTesting(app: App): void {
         fullscreenManager._isFullscreen = false;
         fullscreenManager.emit('fullscreenChanged', false);
       }
+    },
+
+    mutations: {
+      // ── Viewer / Wipe ──
+      setWipeMode(mode: string) {
+        appAny.viewer?.setWipeMode?.(mode);
+      },
+      setWipePosition(position: number) {
+        appAny.viewer?.setWipePosition?.(position);
+      },
+      getWipeLabels() {
+        return appAny.viewer?.getWipeLabels?.() ?? { labelA: 'Original', labelB: 'Graded' };
+      },
+      setWipeLabels(labelA: string, labelB: string) {
+        appAny.viewer?.setWipeLabels?.(labelA, labelB);
+      },
+      setViewerZoom(level: number) {
+        appAny.viewer?.setZoom?.(level);
+      },
+      setViewerPan(x: number, y: number) {
+        const viewer = appAny.viewer;
+        if (viewer) { viewer.panX = x; viewer.panY = y; }
+      },
+
+      // ── Spotlight ──
+      setSpotlightPosition(x: number, y: number) {
+        appAny.viewer?.getSpotlightOverlay?.()?.setPosition(x, y);
+      },
+      setSpotlightSize(width: number, height: number) {
+        appAny.viewer?.getSpotlightOverlay?.()?.setSize(width, height);
+      },
+      setSpotlightShape(shape: 'circle' | 'rectangle') {
+        appAny.viewer?.getSpotlightOverlay?.()?.setShape(shape);
+      },
+      setSpotlightDimAmount(amount: number) {
+        appAny.viewer?.getSpotlightOverlay?.()?.setDimAmount(amount);
+      },
+      setSpotlightFeather(feather: number) {
+        appAny.viewer?.getSpotlightOverlay?.()?.setFeather(feather);
+      },
+
+      // ── Zebra Stripes ──
+      setZebraHighThreshold(value: number) {
+        getControl('zebraControl')?.getZebraStripes?.()?.setHighThreshold(value);
+      },
+      setZebraLowThreshold(value: number) {
+        getControl('zebraControl')?.getZebraStripes?.()?.setLowThreshold(value);
+      },
+      toggleZebraHigh() {
+        getControl('zebraControl')?.getZebraStripes?.()?.toggleHigh?.();
+      },
+      toggleZebraLow() {
+        getControl('zebraControl')?.getZebraStripes?.()?.toggleLow?.();
+      },
+
+      // ── Waveform ──
+      cycleWaveformMode() {
+        getControl('waveform')?.cycleMode();
+      },
+      setWaveformMode(mode: string) {
+        getControl('waveform')?.setMode(mode);
+      },
+      setWaveformChannel(channel: string, enabled: boolean) {
+        getControl('waveform')?.setChannel(channel, enabled);
+      },
+      getWaveformEnabledChannels() {
+        return getControl('waveform')?.getEnabledChannels() ?? { r: true, g: true, b: true };
+      },
+      getWaveformIntensity() {
+        return getControl('waveform')?.getIntensity() ?? 0.1;
+      },
+      setWaveformIntensity(value: number) {
+        getControl('waveform')?.setIntensity(value);
+      },
+      hideWaveform() {
+        getControl('waveform')?.hide();
+      },
+
+      // ── Vectorscope ──
+      cycleVectorscopeZoom() {
+        getControl('vectorscope')?.cycleZoom?.();
+      },
+      setVectorscopeZoom(level: number | string) {
+        getControl('vectorscope')?.setZoom?.(level);
+      },
+      hideVectorscope() {
+        getControl('vectorscope')?.hide?.();
+      },
+
+      // ── Safe Areas ──
+      toggleSafeAreasTitleSafe() {
+        getControl('safeAreasControl')?.getOverlay?.()?.toggleTitleSafe?.();
+      },
+      toggleSafeAreasActionSafe() {
+        getControl('safeAreasControl')?.getOverlay?.()?.toggleActionSafe?.();
+      },
+      toggleSafeAreasCenterCrosshair() {
+        getControl('safeAreasControl')?.getOverlay?.()?.toggleCenterCrosshair?.();
+      },
+      toggleSafeAreasRuleOfThirds() {
+        getControl('safeAreasControl')?.getOverlay?.()?.toggleRuleOfThirds?.();
+      },
+      setSafeAreasAspectRatio(ratio: string | null) {
+        getControl('safeAreasControl')?.getOverlay?.()?.setAspectRatio?.(ratio);
+      },
+
+      // ── Luminance Visualization ──
+      setLuminanceVisMode(mode: string) {
+        appAny.viewer?.getLuminanceVisualization?.()?.setMode(mode);
+      },
+      setLuminanceVisRandomBandCount(count: number) {
+        appAny.viewer?.getLuminanceVisualization?.()?.setRandomBandCount(count);
+      },
+      setLuminanceVisContourLevels(levels: number) {
+        appAny.viewer?.getLuminanceVisualization?.()?.setContourLevels(levels);
+      },
+      setLuminanceVisContourDesaturate(enabled: boolean) {
+        appAny.viewer?.getLuminanceVisualization?.()?.setContourDesaturate(enabled);
+      },
+
+      // ── False Color ──
+      setFalseColorPreset(preset: string) {
+        appAny.viewer?.getFalseColor?.()?.setPreset?.(preset);
+      },
+      getFalseColorLUT() {
+        const lut: Uint8Array | undefined = appAny.viewer?.getFalseColor?.()?.getColorLUT?.();
+        return lut ? Array.from(lut.slice(0, 64)) : [];
+      },
+
+      // ── Matte Overlay ──
+      enableMatteOverlay() {
+        appAny.viewer?.getMatteOverlay?.()?.enable?.();
+      },
+
+      // ── Session ──
+      emitSessionEvent(event: string, data: unknown) {
+        const session = appAny.session;
+        if (session && typeof session.emit === 'function') {
+          session.emit(event, data);
+        }
+      },
+      isSessionEventEmitter() {
+        const session = appAny.session;
+        return session != null && typeof session.on === 'function';
+      },
+      setInterpolationEnabled(enabled: boolean) {
+        const session = appAny.session;
+        if (session) { session.interpolationEnabled = enabled; }
+      },
+      getInterpolationEnabled() {
+        return appAny.session?.interpolationEnabled ?? false;
+      },
+      getSubFramePosition() {
+        return appAny.session?.subFramePosition ?? null;
+      },
+      getMarkerEndFrame(frame: number) {
+        return appAny.session?.marks?.get(frame)?.endFrame;
+      },
+      getMarkerEndFrames() {
+        const marks = appAny.session?.marks;
+        if (!marks) return {};
+        const result: Record<number, number | undefined> = {};
+        for (const [frame, marker] of marks.entries()) {
+          result[frame] = (marker as any).endFrame;
+        }
+        return result;
+      },
+      setMarker(frame: number, note: string, color: string) {
+        appAny.session?.setMarker?.(frame, note, color);
+      },
+      setMarkerNote(frame: number, note: string) {
+        appAny.session?.setMarkerNote?.(frame, note);
+      },
+      setMarkerColor(frame: number, color: string) {
+        appAny.session?.setMarkerColor?.(frame, color);
+      },
+
+      // ── Matte Overlay ──
+      toggleMatteOverlay() {
+        appAny.viewer?.getMatteOverlay?.()?.toggle?.();
+      },
+      setMatteAspect(aspect: number) {
+        appAny.viewer?.getMatteOverlay?.()?.setAspect?.(aspect);
+      },
+      setMatteOpacity(opacity: number) {
+        appAny.viewer?.getMatteOverlay?.()?.setOpacity?.(opacity);
+      },
+      setMatteCenterPoint(x: number, y: number) {
+        appAny.viewer?.getMatteOverlay?.()?.setCenterPoint?.(x, y);
+      },
+      getMatteSettings() {
+        return appAny.viewer?.getMatteOverlay?.()?.getSettings?.() ?? {};
+      },
+
+      // ── Stable component accessors ──
+      getPaintEngine() {
+        return appAny.paintEngine ?? null;
+      },
+      getPlaylistManager() {
+        return getControl('playlistManager') ?? null;
+      },
+      getSession() {
+        return appAny.session ?? null;
+      },
+      getHistoryManager() {
+        return getControl('historyPanel')?.historyManager ?? null;
+      },
+      getLUTPipelinePanel() {
+        return getControl('lutPipelinePanel') ?? null;
+      },
+      setSessionFrame(frame: number) {
+        const session = appAny.session;
+        if (session) { session.currentFrame = frame; }
+      },
+      getSessionSourceCount() {
+        return appAny.session?.sources?.length ?? 0;
+      },
+      // ── Color Adjustments ──
+      setColorAdjustments(adjustments: Record<string, number | boolean>) {
+        getControl('colorControls')?.setAdjustments?.(adjustments);
+      },
+      resetColorAdjustments() {
+        getControl('colorControls')?.reset?.();
+      },
+      // ── Deinterlace ──
+      setDeinterlaceParams(params: Record<string, unknown>) {
+        getControl('deinterlaceControl')?.setParams?.(params);
+      },
+      resetDeinterlace() {
+        getControl('deinterlaceControl')?.reset?.();
+      },
+      // ── Film Emulation ──
+      setFilmEmulationParams(params: Record<string, unknown>) {
+        getControl('filmEmulationControl')?.setParams?.(params);
+      },
+      resetFilmEmulation() {
+        getControl('filmEmulationControl')?.reset?.();
+      },
     },
   };
 }

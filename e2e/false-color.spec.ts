@@ -32,17 +32,13 @@ async function waitForFalseColorPreset(page: import('@playwright/test').Page, pr
 
 async function setFalseColorPreset(page: import('@playwright/test').Page, preset: 'standard' | 'arri' | 'red' | 'custom') {
   await page.evaluate((nextPreset) => {
-    const falseColor = (window as any).__OPENRV_TEST__?.app?.viewer?.getFalseColor?.();
-    falseColor?.setPreset?.(nextPreset);
+    (window as any).__OPENRV_TEST__?.mutations?.setFalseColorPreset(nextPreset);
   }, preset);
 }
 
 async function getFalseColorLutSignature(page: import('@playwright/test').Page): Promise<number[]> {
   return page.evaluate(() => {
-    const falseColor = (window as any).__OPENRV_TEST__?.app?.viewer?.getFalseColor?.();
-    const lut: Uint8Array | undefined = falseColor?.getColorLUT?.();
-    if (!lut) return [];
-    return Array.from(lut.slice(0, 64));
+    return (window as any).__OPENRV_TEST__?.mutations?.getFalseColorLUT() ?? [];
   });
 }
 

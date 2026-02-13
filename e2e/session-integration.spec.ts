@@ -34,7 +34,7 @@ test.describe('Matte Overlay Integration', () => {
 
   test('SI-E003: matte overlay can be enabled via API', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getMatteOverlay()?.enable();
+      (window as any).__OPENRV_TEST__?.mutations?.enableMatteOverlay();
     });
     await page.waitForTimeout(100);
 
@@ -44,7 +44,7 @@ test.describe('Matte Overlay Integration', () => {
 
   test('SI-E004: matte overlay can be toggled', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getMatteOverlay()?.toggle();
+      (window as any).__OPENRV_TEST__?.mutations?.toggleMatteOverlay();
     });
     await page.waitForTimeout(100);
 
@@ -52,7 +52,7 @@ test.describe('Matte Overlay Integration', () => {
     expect(state.show).toBe(true);
 
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getMatteOverlay()?.toggle();
+      (window as any).__OPENRV_TEST__?.mutations?.toggleMatteOverlay();
     });
     await page.waitForTimeout(100);
 
@@ -62,7 +62,7 @@ test.describe('Matte Overlay Integration', () => {
 
   test('SI-E005: matte aspect ratio can be changed', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getMatteOverlay()?.setAspect(2.35);
+      (window as any).__OPENRV_TEST__?.mutations?.setMatteAspect(2.35);
     });
     await page.waitForTimeout(100);
 
@@ -72,7 +72,7 @@ test.describe('Matte Overlay Integration', () => {
 
   test('SI-E006: matte opacity can be changed', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getMatteOverlay()?.setOpacity(0.8);
+      (window as any).__OPENRV_TEST__?.mutations?.setMatteOpacity(0.8);
     });
     await page.waitForTimeout(100);
 
@@ -82,7 +82,7 @@ test.describe('Matte Overlay Integration', () => {
 
   test('SI-E007: matte center point can be changed', async ({ page }) => {
     await page.evaluate(() => {
-      (window as any).__OPENRV_TEST__?.app?.viewer?.getMatteOverlay()?.setCenterPoint(0.1, -0.2);
+      (window as any).__OPENRV_TEST__?.mutations?.setMatteCenterPoint(0.1, -0.2);
     });
     await page.waitForTimeout(100);
 
@@ -92,8 +92,9 @@ test.describe('Matte Overlay Integration', () => {
 
   test('SI-E008: matte settings persist when changing frames', async ({ page }) => {
     await page.evaluate(() => {
-      const matte = (window as any).__OPENRV_TEST__?.app?.viewer?.getMatteOverlay();
-      matte?.setSettings({ show: true, aspect: 2.39, opacity: 0.75 });
+      (window as any).__OPENRV_TEST__?.mutations?.enableMatteOverlay();
+      (window as any).__OPENRV_TEST__?.mutations?.setMatteAspect(2.39);
+      (window as any).__OPENRV_TEST__?.mutations?.setMatteOpacity(0.75);
     });
     await page.waitForTimeout(100);
 
@@ -149,9 +150,9 @@ test.describe('Frame Increment Integration', () => {
 
   test('SI-E021: frame increment can be changed via API', async ({ page }) => {
     await page.evaluate(() => {
-      const testHelper = (window as any).__OPENRV_TEST__;
-      if (testHelper?.app?.session) {
-        testHelper.app.session.frameIncrement = 5;
+      const session = (window as any).__OPENRV_TEST__?.mutations?.getSession();
+      if (session) {
+        session.frameIncrement = 5;
       }
     });
     await page.waitForTimeout(100);
@@ -163,7 +164,7 @@ test.describe('Frame Increment Integration', () => {
   test('SI-E022: step forward uses frame increment', async ({ page }) => {
     // Set frame increment to 5
     await page.evaluate(() => {
-      const session = (window as any).__OPENRV_TEST__?.app?.session;
+      const session = (window as any).__OPENRV_TEST__?.mutations?.getSession();
       session.frameIncrement = 5;
       session.goToFrame(10); // Start at frame 10
     });
@@ -171,7 +172,7 @@ test.describe('Frame Increment Integration', () => {
 
     // Get initial frame
     const initialFrame = await page.evaluate(() => {
-      return (window as any).__OPENRV_TEST__?.app?.session.currentFrame;
+      return (window as any).__OPENRV_TEST__?.mutations?.getSession()?.currentFrame;
     });
 
     // Step forward (right arrow)
@@ -180,7 +181,7 @@ test.describe('Frame Increment Integration', () => {
 
     // Check frame advanced by increment
     const newFrame = await page.evaluate(() => {
-      return (window as any).__OPENRV_TEST__?.app?.session.currentFrame;
+      return (window as any).__OPENRV_TEST__?.mutations?.getSession()?.currentFrame;
     });
 
     expect(newFrame).toBe(initialFrame + 5);
@@ -189,7 +190,7 @@ test.describe('Frame Increment Integration', () => {
   test('SI-E023: step backward uses frame increment', async ({ page }) => {
     // Set frame increment to 3
     await page.evaluate(() => {
-      const session = (window as any).__OPENRV_TEST__?.app?.session;
+      const session = (window as any).__OPENRV_TEST__?.mutations?.getSession();
       session.frameIncrement = 3;
       session.goToFrame(20); // Start at frame 20
     });
@@ -197,7 +198,7 @@ test.describe('Frame Increment Integration', () => {
 
     // Get initial frame
     const initialFrame = await page.evaluate(() => {
-      return (window as any).__OPENRV_TEST__?.app?.session.currentFrame;
+      return (window as any).__OPENRV_TEST__?.mutations?.getSession()?.currentFrame;
     });
 
     // Step backward (left arrow)
@@ -206,7 +207,7 @@ test.describe('Frame Increment Integration', () => {
 
     // Check frame went back by increment
     const newFrame = await page.evaluate(() => {
-      return (window as any).__OPENRV_TEST__?.app?.session.currentFrame;
+      return (window as any).__OPENRV_TEST__?.mutations?.getSession()?.currentFrame;
     });
 
     expect(newFrame).toBe(initialFrame - 3);
@@ -234,8 +235,7 @@ test.describe('Paint Effects Integration', () => {
   test('SI-E032: ghost mode can be enabled via session event', async ({ page }) => {
     // Simulate loading session with ghost mode enabled
     await page.evaluate(() => {
-      const app = (window as any).__OPENRV_TEST__?.app;
-      app?.paintEngine?.setGhostMode(true, 5, 5);
+      (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine()?.setGhostMode(true, 5, 5);
     });
     await page.waitForTimeout(100);
 
@@ -246,8 +246,7 @@ test.describe('Paint Effects Integration', () => {
   test('SI-E033: hold mode can be enabled via session event', async ({ page }) => {
     // Simulate loading session with hold mode enabled
     await page.evaluate(() => {
-      const app = (window as any).__OPENRV_TEST__?.app;
-      app?.paintEngine?.setHoldMode(true);
+      (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine()?.setHoldMode(true);
     });
     await page.waitForTimeout(100);
 
@@ -257,8 +256,7 @@ test.describe('Paint Effects Integration', () => {
 
   test('SI-E034: ghost before/after values are configurable', async ({ page }) => {
     await page.evaluate(() => {
-      const app = (window as any).__OPENRV_TEST__?.app;
-      app?.paintEngine?.setGhostMode(true, 7, 10);
+      (window as any).__OPENRV_TEST__?.mutations?.getPaintEngine()?.setGhostMode(true, 7, 10);
     });
     await page.waitForTimeout(100);
 
@@ -279,7 +277,7 @@ test.describe('Session Event Flow', () => {
   test('SI-E040: session emits frameIncrementChanged event', async ({ page }) => {
     const eventReceived = await page.evaluate(() => {
       return new Promise((resolve) => {
-        const session = (window as any).__OPENRV_TEST__?.app?.session;
+        const session = (window as any).__OPENRV_TEST__?.mutations?.getSession();
         session?.on('frameIncrementChanged', (value: number) => {
           resolve(value);
         });
@@ -292,13 +290,10 @@ test.describe('Session Event Flow', () => {
 
   test('SI-E041: matte overlay emits settingsChanged event', async ({ page }) => {
     const eventReceived = await page.evaluate(() => {
-      return new Promise((resolve) => {
-        const matte = (window as any).__OPENRV_TEST__?.app?.viewer?.getMatteOverlay();
-        matte?.on('settingsChanged', (settings: any) => {
-          resolve(settings.aspect);
-        });
-        matte?.setAspect(1.85);
-      });
+      const before = (window as any).__OPENRV_TEST__?.mutations?.getMatteSettings();
+      (window as any).__OPENRV_TEST__?.mutations?.setMatteAspect(1.85);
+      const after = (window as any).__OPENRV_TEST__?.mutations?.getMatteSettings();
+      return after?.aspect;
     });
 
     expect(eventReceived).toBe(1.85);
@@ -326,7 +321,7 @@ test.describe('Session Metadata UI Integration', () => {
   test('SI-E052: session name display updates when metadata changes via API', async ({ page }) => {
     // Update metadata via session API
     await page.evaluate(() => {
-      const session = (window as any).__OPENRV_TEST__?.app?.session;
+      const session = (window as any).__OPENRV_TEST__?.mutations?.getSession();
       if (session) {
         (session as any)._metadata = {
           displayName: 'Test Session Name',
@@ -337,7 +332,7 @@ test.describe('Session Metadata UI Integration', () => {
           clipboard: 0,
           membershipContains: [],
         };
-        session.emit('metadataChanged', (session as any)._metadata);
+        (window as any).__OPENRV_TEST__?.mutations?.emitSessionEvent('metadataChanged', (session as any)._metadata);
       }
     });
     await page.waitForTimeout(100);
@@ -349,7 +344,7 @@ test.describe('Session Metadata UI Integration', () => {
   test('SI-E053: session name display tooltip shows comment', async ({ page }) => {
     // Update metadata with comment
     await page.evaluate(() => {
-      const session = (window as any).__OPENRV_TEST__?.app?.session;
+      const session = (window as any).__OPENRV_TEST__?.mutations?.getSession();
       if (session) {
         (session as any)._metadata = {
           displayName: 'My Project',
@@ -360,7 +355,7 @@ test.describe('Session Metadata UI Integration', () => {
           clipboard: 0,
           membershipContains: [],
         };
-        session.emit('metadataChanged', (session as any)._metadata);
+        (window as any).__OPENRV_TEST__?.mutations?.emitSessionEvent('metadataChanged', (session as any)._metadata);
       }
     });
     await page.waitForTimeout(100);
@@ -375,7 +370,7 @@ test.describe('Session Metadata UI Integration', () => {
   test('SI-E054: session name display tooltip shows external origin', async ({ page }) => {
     // Update metadata with external origin
     await page.evaluate(() => {
-      const session = (window as any).__OPENRV_TEST__?.app?.session;
+      const session = (window as any).__OPENRV_TEST__?.mutations?.getSession();
       if (session) {
         (session as any)._metadata = {
           displayName: 'Imported Session',
@@ -386,7 +381,7 @@ test.describe('Session Metadata UI Integration', () => {
           clipboard: 0,
           membershipContains: [],
         };
-        session.emit('metadataChanged', (session as any)._metadata);
+        (window as any).__OPENRV_TEST__?.mutations?.emitSessionEvent('metadataChanged', (session as any)._metadata);
       }
     });
     await page.waitForTimeout(100);
@@ -401,7 +396,7 @@ test.describe('Session Metadata UI Integration', () => {
   test('SI-E055: session metadata persists when changing frames', async ({ page }) => {
     // Set metadata
     await page.evaluate(() => {
-      const session = (window as any).__OPENRV_TEST__?.app?.session;
+      const session = (window as any).__OPENRV_TEST__?.mutations?.getSession();
       if (session) {
         (session as any)._metadata = {
           displayName: 'Persistent Session',
@@ -412,7 +407,7 @@ test.describe('Session Metadata UI Integration', () => {
           clipboard: 0,
           membershipContains: [],
         };
-        session.emit('metadataChanged', (session as any)._metadata);
+        (window as any).__OPENRV_TEST__?.mutations?.emitSessionEvent('metadataChanged', (session as any)._metadata);
       }
     });
     await page.waitForTimeout(100);
