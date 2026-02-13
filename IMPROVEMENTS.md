@@ -70,15 +70,14 @@ Basic 2D motion stabilization for shaky footage analysis (preview only, not prod
 - STAB-003: Smoothing affects result
 - STAB-004: Crop removes edges
 
-### Deinterlace Preview
+### ~~Deinterlace Preview~~
 **Priority:** LOW
+**Status:** Done — `Deinterlace.ts` implements bob (field interpolation), weave (identity/no-op), and blend (adjacent line averaging) methods with TFF/BFF field order selection. Auto-detection via comb metric analysis. Integrated as `DeinterlaceEffect` adapter in the unified effect pipeline.
 
-Preview deinterlacing (bob, weave, blend) for interlaced sources with field order selection.
-
-- DEINT-001: Bob creates smooth motion
-- DEINT-002: Weave combines fields
-- DEINT-003: Field order selection works
-- DEINT-004: Auto-detect identifies interlaced
+- ~~DEINT-001: Bob creates smooth motion~~
+- ~~DEINT-002: Weave combines fields~~
+- ~~DEINT-003: Field order selection works~~
+- ~~DEINT-004: Auto-detect identifies interlaced~~
 
 ### ~~RAW Image Preview~~
 **Priority:** LOW
