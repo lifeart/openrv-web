@@ -25,3 +25,4 @@ export { highlightsShadowsEffect } from './adapters/HighlightsShadowsEffect';
 export { toneMappingEffect } from './adapters/ToneMappingEffect';
 export { deinterlaceEffect } from './adapters/DeinterlaceEffect';
 export { filmEmulationEffect } from './adapters/FilmEmulationEffect';
+export { stabilizationEffect } from './adapters/StabilizationEffect';

@@ -58,15 +58,14 @@ Checked test cases:
 - ~~PERSP-004: Numeric input precise values~~
 - ~~PERSP-005: Quality options affect output~~
 
-### Stabilization Preview
+### ~~Stabilization Preview~~
 **Priority:** LOW
+**Status:** Done — `StabilizeMotion.ts` implements block-matching motion estimation with downsampling for performance, MAD-based outlier rejection, scene-cut detection via confidence metric, EMA smoothing on cumulative motion path, bilinear interpolation pixel shifting, and border cropping. Integrated as `StabilizationEffect` adapter in the unified effect pipeline. 55 unit tests.
 
-Basic 2D motion stabilization for shaky footage analysis (preview only, not production).
-
-- STAB-001: Analysis completes on sequence
-- STAB-002: Stabilized preview reduces shake
-- STAB-003: Smoothing affects result
-- STAB-004: Crop removes edges
+- ~~STAB-001: Analysis completes on sequence~~
+- ~~STAB-002: Stabilized preview reduces shake~~
+- ~~STAB-003: Smoothing affects result~~
+- ~~STAB-004: Crop removes edges~~
 
 ### ~~Deinterlace Preview~~
 **Priority:** LOW

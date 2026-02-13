@@ -21,6 +21,7 @@ import { LensControl } from './ui/components/LensControl';
 import { DeinterlaceControl } from './ui/components/DeinterlaceControl';
 import { PerspectiveCorrectionControl } from './ui/components/PerspectiveCorrectionControl';
 import { FilmEmulationControl } from './ui/components/FilmEmulationControl';
+import { StabilizationControl } from './ui/components/StabilizationControl';
 import { StackControl } from './ui/components/StackControl';
 import { ChannelSelect } from './ui/components/ChannelSelect';
 import { StereoControl } from './ui/components/StereoControl';
@@ -120,6 +121,7 @@ export class AppControlRegistry {
   readonly deinterlaceControl: DeinterlaceControl;
   readonly filmEmulationControl: FilmEmulationControl;
   readonly perspectiveCorrectionControl: PerspectiveCorrectionControl;
+  readonly stabilizationControl: StabilizationControl;
 
   // Transform tab
   readonly transformControl: TransformControl;
@@ -203,6 +205,7 @@ export class AppControlRegistry {
     this.deinterlaceControl = new DeinterlaceControl();
     this.filmEmulationControl = new FilmEmulationControl();
     this.perspectiveCorrectionControl = new PerspectiveCorrectionControl();
+    this.stabilizationControl = new StabilizationControl();
 
     // --- Transform tab ---
     this.transformControl = new TransformControl();
@@ -543,6 +546,8 @@ export class AppControlRegistry {
     effectsContent.appendChild(this.filmEmulationControl.render());
     effectsContent.appendChild(ContextToolbar.createDivider());
     effectsContent.appendChild(this.perspectiveCorrectionControl.render());
+    effectsContent.appendChild(ContextToolbar.createDivider());
+    effectsContent.appendChild(this.stabilizationControl.render());
     contextToolbar.setTabContent('effects', effectsContent);
 
     // === TRANSFORM TAB ===
@@ -653,6 +658,7 @@ export class AppControlRegistry {
     this.deinterlaceControl.dispose();
     this.filmEmulationControl.dispose();
     this.perspectiveCorrectionControl.dispose();
+    this.stabilizationControl.dispose();
     this.stackControl.dispose();
     this.channelSelect.dispose();
     this.parControl.dispose();

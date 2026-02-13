@@ -72,6 +72,13 @@ export function wireEffectsControls(ctx: AppWiringContext): void {
     persistenceManager.syncGTOStore();
   });
 
+  // Stabilization control -> viewer
+  controls.stabilizationControl.on('stabilizationChanged', (params) => {
+    viewer.setStabilizationParams(params);
+    sessionBridge.scheduleUpdateScopes();
+    persistenceManager.syncGTOStore();
+  });
+
   // Perspective grid overlay -> control + viewer (bidirectional)
   viewer.getPerspectiveGridOverlay().on('cornersChanged', (params) => {
     controls.perspectiveCorrectionControl.setParams(params);

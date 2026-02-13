@@ -19,6 +19,7 @@ function createMockContext() {
   const lensControl = new EventEmitter();
   const deinterlaceControl = new EventEmitter();
   const filmEmulationControl = new EventEmitter();
+  const stabilizationControl = new EventEmitter();
   const perspectiveCorrectionControl = Object.assign(new EventEmitter(), {
     setParams: vi.fn(),
   });
@@ -35,6 +36,7 @@ function createMockContext() {
     setLensParams: vi.fn(),
     setDeinterlaceParams: vi.fn(),
     setFilmEmulationParams: vi.fn(),
+    setStabilizationParams: vi.fn(),
     setPerspectiveParams: vi.fn(),
     getPerspectiveGridOverlay: vi.fn(() => perspectiveGridOverlay),
     setOnCropRegionChanged: vi.fn((cb: (region: unknown) => void) => {
@@ -58,6 +60,7 @@ function createMockContext() {
       lensControl,
       deinterlaceControl,
       filmEmulationControl,
+      stabilizationControl,
       perspectiveCorrectionControl,
     },
     sessionBridge,
@@ -72,6 +75,7 @@ function createMockContext() {
     lensControl,
     deinterlaceControl,
     filmEmulationControl,
+    stabilizationControl,
     perspectiveCorrectionControl,
     perspectiveGridOverlay,
     sessionBridge,
@@ -202,6 +206,15 @@ describe('wireEffectsControls', () => {
 
     expect(mock.perspectiveCorrectionControl.setParams).toHaveBeenCalledWith(params);
     expect(mock.viewer.setPerspectiveParams).toHaveBeenCalledWith(params);
+    expect(mock.sessionBridge.scheduleUpdateScopes).toHaveBeenCalled();
+    expect(mock.persistenceManager.syncGTOStore).toHaveBeenCalled();
+  });
+
+  it('EW-013: stabilizationChanged calls viewer.setStabilizationParams + scheduleUpdateScopes + syncGTOStore', () => {
+    const params = { enabled: true, smoothingStrength: 75, cropAmount: 16 };
+    mock.stabilizationControl.emit('stabilizationChanged', params);
+
+    expect(mock.viewer.setStabilizationParams).toHaveBeenCalledWith(params);
     expect(mock.sessionBridge.scheduleUpdateScopes).toHaveBeenCalled();
     expect(mock.persistenceManager.syncGTOStore).toHaveBeenCalled();
   });
