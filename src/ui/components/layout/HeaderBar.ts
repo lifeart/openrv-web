@@ -66,6 +66,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Create container
     this.container = document.createElement('div');
     this.container.className = 'header-bar';
+    this.container.setAttribute('role', 'banner');
     this.container.style.cssText = `
       height: 40px;
       background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
@@ -85,6 +86,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private createControls(): void {
     // === FILE OPERATIONS GROUP ===
     const fileGroup = this.createGroup();
+    fileGroup.setAttribute('role', 'toolbar');
+    fileGroup.setAttribute('aria-label', 'File operations');
 
     // Hidden file input for media
     this.fileInput = document.createElement('input');
@@ -137,6 +140,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
     // === PLAYBACK CONTROLS GROUP ===
     const playbackGroup = this.createGroup();
+    playbackGroup.setAttribute('role', 'toolbar');
+    playbackGroup.setAttribute('aria-label', 'Playback controls');
     this.playbackGroup = playbackGroup;
 
     playbackGroup.appendChild(this.createIconButton('skip-back', '', () => this.session.goToStart(), 'Go to start (Home)'));
@@ -179,6 +184,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
     // === UTILITY GROUP ===
     const utilityGroup = this.createGroup();
+    utilityGroup.setAttribute('role', 'toolbar');
+    utilityGroup.setAttribute('aria-label', 'Utility controls');
 
     // Network sync slot (populated by App.ts)
     this.networkSlot = document.createElement('div');
@@ -246,6 +253,10 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private createIconButton(icon: string, label: string, onClick: () => void, title?: string): HTMLButtonElement {
     const button = document.createElement('button');
     button.title = title || label;
+    // Set aria-label for icon-only buttons (no text label)
+    if (!label && title) {
+      button.setAttribute('aria-label', title);
+    }
     button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -816,6 +827,10 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
   getExportControl(): ExportControl {
     return this.exportControl;
+  }
+
+  getContainer(): HTMLElement {
+    return this.container;
   }
 
   render(): HTMLElement {

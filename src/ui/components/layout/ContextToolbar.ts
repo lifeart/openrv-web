@@ -33,6 +33,8 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
     // Create container
     this.container = document.createElement('div');
     this.container.className = 'context-toolbar';
+    this.container.setAttribute('role', 'toolbar');
+    this.container.setAttribute('aria-label', 'View controls');
     this.container.style.cssText = `
       height: 44px;
       background: var(--bg-secondary);
@@ -110,6 +112,9 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
     for (const tabId of tabs) {
       const content = document.createElement('div');
       content.className = `context-content-${tabId}`;
+      content.id = `tabpanel-${tabId}`;
+      content.setAttribute('role', 'tabpanel');
+      content.setAttribute('aria-labelledby', `tab-${tabId}`);
       content.style.cssText = `
         display: none;
         align-items: center;
@@ -174,8 +179,34 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
   setActiveTab(tabId: TabId): void {
     if (tabId === this._activeTab) return;
 
+    // Check if focus is inside the previous tab content before hiding
+    const prevContent = this.tabContents.get(this._activeTab);
+    const focusInPrevTab = prevContent && prevContent.contains(document.activeElement);
+
     this._activeTab = tabId;
     this.showTabContent(tabId);
+
+    // Update toolbar aria-label to match tab
+    const tabLabels: Record<TabId, string> = {
+      view: 'View controls',
+      color: 'Color controls',
+      effects: 'Effects controls',
+      transform: 'Transform controls',
+      annotate: 'Annotate controls',
+    };
+    this.container.setAttribute('aria-label', tabLabels[tabId]);
+
+    // If focus was in the previous tab, move it to the new tab's roving element
+    if (focusInPrevTab) {
+      const newContent = this.tabContents.get(tabId);
+      if (newContent) {
+        const focusTarget = newContent.querySelector<HTMLElement>('[tabindex="0"]') ||
+          newContent.querySelector<HTMLElement>('button:not([disabled])');
+        if (focusTarget) {
+          focusTarget.focus();
+        }
+      }
+    }
   }
 
   get activeTab(): TabId {
@@ -274,6 +305,9 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
     const iconSize = options.size === 'md' ? 'md' : 'sm';
     button.innerHTML = getIconSvg(icon, iconSize);
     button.title = options.title || '';
+    if (options.title) {
+      button.setAttribute('aria-label', options.title);
+    }
 
     const btnSize = options.size === 'md' ? '32px' : '28px';
     button.style.cssText = `
@@ -396,6 +430,10 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
    */
   scrollActiveControlIntoView(element: HTMLElement): void {
     element.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+  }
+
+  getContainer(): HTMLElement {
+    return this.container;
   }
 
   render(): HTMLElement {

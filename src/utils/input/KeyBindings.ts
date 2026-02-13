@@ -541,6 +541,17 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     ctrl: true,
     description: 'Quick disconnect from sync room'
   },
+
+  // Focus zone navigation
+  'focus.nextZone': {
+    code: 'F6',
+    description: 'Focus next zone'
+  },
+  'focus.previousZone': {
+    code: 'F6',
+    shift: true,
+    description: 'Focus previous zone'
+  },
 };
 /**
  * Get a human-readable description of a key combination
