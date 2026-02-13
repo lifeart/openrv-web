@@ -14,6 +14,16 @@ import { Session, Marker, MARKER_COLORS } from '../../core/session/Session';
 import { getIconSvg } from './shared/Icons';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 
+/**
+ * Marker export JSON structure
+ */
+export interface MarkerExportData {
+  version: 1;
+  exportedAt: string;
+  fps: number;
+  markers: Marker[];
+}
+
 export interface MarkerListPanelEvents extends EventMap {
   visibilityChanged: boolean;
   markerSelected: number;
@@ -121,6 +131,36 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
     `;
     clearBtn.addEventListener('click', () => this.clearAllMarkers());
 
+    const exportBtn = document.createElement('button');
+    exportBtn.textContent = 'Export';
+    exportBtn.title = 'Export markers to JSON file';
+    exportBtn.dataset.testid = 'marker-export-btn';
+    exportBtn.style.cssText = `
+      background: rgba(var(--accent-primary-rgb), 0.15);
+      border: 1px solid var(--accent-primary);
+      color: var(--accent-primary);
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      cursor: pointer;
+    `;
+    exportBtn.addEventListener('click', () => this.exportMarkers());
+
+    const importBtn = document.createElement('button');
+    importBtn.textContent = 'Import';
+    importBtn.title = 'Import markers from JSON file (merge)';
+    importBtn.dataset.testid = 'marker-import-btn';
+    importBtn.style.cssText = `
+      background: rgba(var(--accent-primary-rgb), 0.15);
+      border: 1px solid var(--accent-primary);
+      color: var(--accent-primary);
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      cursor: pointer;
+    `;
+    importBtn.addEventListener('click', () => this.importMarkers('merge'));
+
     const closeBtn = document.createElement('button');
     closeBtn.textContent = '×';
     closeBtn.title = 'Close';
@@ -138,6 +178,8 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
 
     headerButtons.appendChild(addBtn);
     headerButtons.appendChild(clearBtn);
+    headerButtons.appendChild(exportBtn);
+    headerButtons.appendChild(importBtn);
     headerButtons.appendChild(closeBtn);
     this.headerElement.appendChild(title);
     this.headerElement.appendChild(headerButtons);
@@ -240,6 +282,98 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
     if (confirmed) {
       this.session.clearMarks();
     }
+  }
+
+  /**
+   * Export markers to a JSON file download
+   */
+  exportMarkers(): void {
+    const markers = Array.from(this.session.marks.values()).sort((a, b) => a.frame - b.frame);
+    const exportData: MarkerExportData = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      fps: this.session.fps || 24,
+      markers,
+    };
+    const json = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const date = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `markers-export-${date}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  /**
+   * Import markers from a JSON file
+   * @param mode 'merge' preserves existing markers, 'replace' clears them first
+   */
+  importMarkers(mode: 'replace' | 'merge' = 'merge'): void {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.style.display = 'none';
+    input.addEventListener('change', () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const data = JSON.parse(reader.result as string);
+          this.applyImportedMarkers(data, mode);
+        } catch {
+          window.alert('Invalid JSON file. Could not parse marker data.');
+        }
+      };
+      reader.readAsText(file);
+    });
+    document.body.appendChild(input);
+    input.click();
+    document.body.removeChild(input);
+  }
+
+  /**
+   * Validate and apply imported marker data
+   */
+  private applyImportedMarkers(data: unknown, mode: 'replace' | 'merge'): void {
+    if (!this.validateImportData(data)) {
+      window.alert('Invalid marker file. Expected { version, markers: [...] } format.');
+      return;
+    }
+    const validMarkers = (data as MarkerExportData).markers.filter(
+      (m) =>
+        typeof m.frame === 'number' &&
+        Number.isFinite(m.frame) &&
+        m.frame >= 0 &&
+        typeof m.note === 'string' &&
+        typeof m.color === 'string'
+    );
+
+    if (mode === 'replace') {
+      this.session.clearMarks();
+    }
+
+    for (const m of validMarkers) {
+      if (mode === 'merge' && this.session.hasMarker(m.frame)) {
+        continue;
+      }
+      this.session.setMarker(m.frame, m.note, m.color, m.endFrame);
+    }
+  }
+
+  /**
+   * Validate imported data has required structure
+   */
+  private validateImportData(data: unknown): data is MarkerExportData {
+    if (typeof data !== 'object' || data === null) return false;
+    const obj = data as Record<string, unknown>;
+    if (typeof obj.version !== 'number') return false;
+    if (!Array.isArray(obj.markers)) return false;
+    return true;
   }
 
   /**

@@ -130,7 +130,7 @@ Small gaps in otherwise-completed features:
 | Feature | Missing Item | Notes |
 |---------|-------------|-------|
 | Highlight/Shadow Recovery | HL-006: Works correctly with HDR content | Requires HDR test content |
-| LUT Support | LUT-002: .3dl file loads correctly | Only .cube implemented |
-| Parade Scope | PARADE-006: YCbCr mode | Optional, not yet implemented |
-| Markers | MARK-008–011: UI editing, navigation panel, duration markers, export/import | Core API done, UI pending |
+| ~~LUT Support~~ | ~~LUT-002: .3dl file loads correctly~~ | Done — `.3dl` parser in `LUTFormats.ts` |
+| ~~Parade Scope~~ | ~~PARADE-006: YCbCr mode~~ | Done — YCbCr mode in `Waveform.ts` + `WebGLScopes.ts` |
+| ~~Markers~~ | ~~MARK-008–011: UI editing, navigation panel, duration markers, export/import~~ | Done — all implemented in `MarkerListPanel.ts` |
 | Auto-Save | AUTOSAVE-005: Auto-save interval configurable via UI | Settings panel pending |
