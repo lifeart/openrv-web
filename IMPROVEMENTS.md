@@ -80,15 +80,14 @@ Preview deinterlacing (bob, weave, blend) for interlaced sources with field orde
 - DEINT-003: Field order selection works
 - DEINT-004: Auto-detect identifies interlaced
 
-### RAW Image Preview
+### ~~RAW Image Preview~~
 **Priority:** LOW
+**Status:** Done — `RAWPreviewDecoder.ts` extracts largest embedded JPEG preview from TIFF-based RAW files (CR2, CR3, NEF, ARW, DNG, RAF, ORF, RW2, PEF, SRW) via IFD chain walking + SubIFD traversal. EXIF metadata (make, model, ISO, exposure, f-number, focal length, date, orientation) extracted from IFD0. Integrated into `FileSourceNode` for both URL and File loading paths.
 
-Extract and display embedded preview/thumbnail from camera RAW formats (CR2, NEF, ARW).
-
-- RAW-001: Preview extracts from CR2
-- RAW-002: EXIF metadata displayed
-- RAW-003: Preview indicator visible
-- RAW-004: Multiple RAW formats supported
+- ~~RAW-001: Preview extracts from CR2~~
+- ~~RAW-002: EXIF metadata displayed~~
+- ~~RAW-003: Preview indicator visible~~
+- ~~RAW-004: Multiple RAW formats supported~~
 
 ### Comparison Annotations
 **Priority:** LOW

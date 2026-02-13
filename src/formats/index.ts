@@ -73,3 +73,10 @@ export {
   type HEICColorInfo,
 } from './HEICGainmapDecoder';
 export { decodeHEICToImageData } from './HEICWasmDecoder';
+export {
+  isRAWExtension,
+  isRAWFile,
+  extractRAWPreview,
+  type RAWExifMetadata,
+  type RAWPreviewResult,
+} from './RAWPreviewDecoder';
