@@ -62,6 +62,53 @@ describe('HeaderBar', () => {
     });
   });
 
+  describe('mobile scroll support', () => {
+    it('HDR-U013: container has overflow-x auto for horizontal scrolling', () => {
+      const el = headerBar.render();
+      expect(el.style.overflowX).toBe('auto');
+    });
+
+    it('HDR-U014: container has overflow-y hidden', () => {
+      const el = headerBar.render();
+      expect(el.style.overflowY).toBe('hidden');
+    });
+
+    it('HDR-U015: container hides scrollbar via scrollbar-width none', () => {
+      const el = headerBar.render();
+      expect(el.style.scrollbarWidth).toBe('none');
+    });
+
+    it('HDR-U016: webkit scrollbar style element is present', () => {
+      const el = headerBar.render();
+      const styleEl = el.querySelector('style');
+      expect(styleEl).not.toBeNull();
+      expect(styleEl!.textContent).toContain('::-webkit-scrollbar');
+      expect(styleEl!.textContent).toContain('display: none');
+    });
+
+    it('HDR-U017: control groups have flex-shrink 0 to prevent compression', () => {
+      const el = headerBar.render();
+      const groups = el.querySelectorAll('[role="toolbar"]');
+      expect(groups.length).toBeGreaterThanOrEqual(3);
+      groups.forEach((group) => {
+        expect((group as HTMLElement).style.flexShrink).toBe('0');
+      });
+    });
+
+    it('HDR-U018: dividers have flex-shrink 0', () => {
+      const el = headerBar.render();
+      // Dividers are 1px-wide elements with border-primary background
+      const children = Array.from(el.children) as HTMLElement[];
+      const dividers = children.filter(
+        (c) => c.style.width === '1px' && c.style.height === '24px'
+      );
+      expect(dividers.length).toBeGreaterThan(0);
+      for (const d of dividers) {
+        expect(d.style.flexShrink).toBe('0');
+      }
+    });
+  });
+
   describe('file operations', () => {
     it('HDR-U020: has file input element', () => {
       const el = headerBar.render();

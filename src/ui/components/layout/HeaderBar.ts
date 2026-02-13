@@ -77,7 +77,15 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       gap: 0;
       flex-shrink: 0;
       user-select: none;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
     `;
+    // Hide scrollbar for WebKit browsers
+    const scrollStyle = document.createElement('style');
+    scrollStyle.textContent = `.header-bar::-webkit-scrollbar { display: none; }`;
+    this.container.appendChild(scrollStyle);
 
     this.createControls();
     this.bindEvents();
@@ -133,6 +141,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       display: flex;
       align-items: center;
       margin-left: 8px;
+      flex-shrink: 0;
     `;
     this.container.appendChild(this.autoSaveSlot);
     this.playbackDividerBefore = this.createDivider();
@@ -175,6 +184,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
     // === TIMECODE DISPLAY ===
     this.timecodeEl = this.timecodeDisplay.render();
+    this.timecodeEl.style.flexShrink = '0';
     this.container.appendChild(this.timecodeEl);
 
     // === SPACER ===
@@ -231,6 +241,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       display: flex;
       align-items: center;
       gap: 2px;
+      flex-shrink: 0;
     `;
     return group;
   }
@@ -242,6 +253,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       height: 24px;
       background: var(--border-primary);
       margin: 0 12px;
+      flex-shrink: 0;
     `;
     return divider;
   }
@@ -381,6 +393,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       border-radius: 4px;
       cursor: default;
       transition: background 0.12s ease;
+      flex-shrink: 0;
     `;
 
     // Icon
