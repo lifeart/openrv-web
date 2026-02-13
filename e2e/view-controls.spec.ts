@@ -364,7 +364,7 @@ test.describe('View Controls', () => {
       expect(panelBox!.y).toBeGreaterThanOrEqual(0);
 
       // Click the toggle switch inside the crop panel to enable crop
-      const toggleSwitch = cropPanel.locator('button:has-text("OFF")').first();
+      const toggleSwitch = cropPanel.getByRole('switch', { name: 'Enable Crop' });
       await expect(toggleSwitch).toBeVisible();
       await toggleSwitch.click();
       await page.waitForTimeout(200);
@@ -372,9 +372,8 @@ test.describe('View Controls', () => {
       state = await getViewerState(page);
       expect(state.cropEnabled).toBe(true);
 
-      // Toggle off by clicking ON button
-      const toggleOn = cropPanel.locator('button:has-text("ON")').first();
-      await toggleOn.click();
+      // Toggle off by clicking the same switch (state changes aria-checked, not selector)
+      await toggleSwitch.click();
       await page.waitForTimeout(200);
 
       state = await getViewerState(page);

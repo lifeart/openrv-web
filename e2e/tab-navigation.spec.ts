@@ -146,18 +146,22 @@ test.describe('Tab Navigation', () => {
 
       // Select 200% zoom from dropdown
       await selectZoomPreset(page, '2');
-      await page.waitForTimeout(100);
 
-      let state = await getViewerState(page);
+      // Poll until zoom animation completes (zoom > 1)
+      await expect
+        .poll(async () => (await getViewerState(page)).zoom)
+        .toBeGreaterThan(1);
+
+      const state = await getViewerState(page);
       const zoomedInValue = state.zoom;
-      expect(zoomedInValue).toBeGreaterThan(1);
 
       // Switch back to Fit from dropdown
       await selectZoomPreset(page, 'fit');
-      await page.waitForTimeout(100);
 
-      state = await getViewerState(page);
-      expect(state.zoom).toBeLessThan(zoomedInValue);
+      // Poll until zoom decreases after fit animation
+      await expect
+        .poll(async () => (await getViewerState(page)).zoom)
+        .toBeLessThan(zoomedInValue);
     });
 
     test('TAB-021: Color tab controls should update color state', async ({ page }) => {
@@ -265,11 +269,11 @@ test.describe('Tab Navigation', () => {
 
       // Switch back to View tab
       await page.click('button[data-tab-id="view"]');
-      await page.waitForTimeout(100);
 
-      // Zoom should be preserved
-      state = await getViewerState(page);
-      expect(state.zoom).toBeCloseTo(selectedZoom, 2);
+      // Poll until zoom stabilizes back to the persisted value
+      await expect
+        .poll(async () => (await getViewerState(page)).zoom)
+        .toBeCloseTo(selectedZoom, 2);
     });
 
     test('TAB-031: transform state should persist when switching tabs', async ({ page }) => {

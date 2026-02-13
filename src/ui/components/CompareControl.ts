@@ -622,6 +622,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     const isActive = this.manager.getWipeMode() === mode;
     option.style.background = isActive ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent';
     option.style.color = isActive ? 'var(--accent-primary)' : 'var(--text-primary)';
+    option.setAttribute('aria-pressed', String(isActive));
   }
 
   private updateDropdownStates(): void {
@@ -646,6 +647,7 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
         aButton.style.background = isActive ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent';
         aButton.style.borderColor = isActive ? 'var(--accent-primary)' : 'var(--border-secondary)';
         aButton.style.color = isActive ? 'var(--accent-primary)' : 'var(--text-primary)';
+        aButton.setAttribute('aria-pressed', String(isActive));
       }
 
       if (bButton) {
@@ -656,12 +658,15 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
         bButton.disabled = !state.abAvailable;
         bButton.style.opacity = state.abAvailable ? '1' : '0.5';
         bButton.title = state.abAvailable ? 'Switch to B source' : 'Load a second source to enable A/B compare';
+        bButton.setAttribute('aria-pressed', String(isActive));
+        bButton.setAttribute('aria-disabled', String(!state.abAvailable));
       }
 
       if (toggleButton) {
         toggleButton.disabled = !state.abAvailable;
         toggleButton.style.opacity = state.abAvailable ? '1' : '0.5';
         toggleButton.title = state.abAvailable ? 'Toggle between A and B' : 'Load a second source to enable A/B toggle';
+        toggleButton.setAttribute('aria-disabled', String(!state.abAvailable));
       }
     }
 
@@ -750,18 +755,21 @@ export class CompareControl extends EventEmitter<CompareControlEvents> {
     const isActive = this.manager.getBlendMode() === mode;
     button.style.background = isActive ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent';
     button.style.color = isActive ? 'var(--accent-primary)' : 'var(--text-primary)';
+    button.setAttribute('aria-pressed', String(isActive));
   }
 
   private updateDiffToggleStyle(toggle: HTMLButtonElement): void {
     const isActive = this.manager.isDifferenceMatteEnabled();
     toggle.style.background = isActive ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent';
     toggle.style.color = isActive ? 'var(--accent-primary)' : 'var(--text-primary)';
+    toggle.setAttribute('aria-pressed', String(isActive));
   }
 
   private updateHeatmapToggleStyle(toggle: HTMLButtonElement): void {
     const isActive = this.manager.getDifferenceMatteState().heatmap;
     toggle.style.background = isActive ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent';
     toggle.style.color = isActive ? 'var(--accent-primary)' : 'var(--text-primary)';
+    toggle.setAttribute('aria-pressed', String(isActive));
   }
 
   private handleOutsideClick(e: MouseEvent): void {

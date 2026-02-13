@@ -291,6 +291,7 @@ export class CropControl extends EventEmitter<CropControlEvents> {
     // Reset button
     const resetBtn = document.createElement('button');
     resetBtn.textContent = 'Reset Crop';
+    resetBtn.setAttribute('aria-label', 'Reset Crop');
     resetBtn.style.cssText = `
       width: 100%;
       background: var(--border-secondary);

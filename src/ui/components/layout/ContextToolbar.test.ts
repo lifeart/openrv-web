@@ -300,6 +300,47 @@ describe('ContextToolbar', () => {
     });
   });
 
+  describe('overflow affordances', () => {
+    it('CTX-U100: scrollbar is hidden via CSS', () => {
+      const el = toolbar.render();
+      expect(el.style.scrollbarWidth).toBe('none');
+    });
+
+    it('CTX-U101: fade overlays exist in container', () => {
+      const el = toolbar.render();
+      const fadeLeft = el.querySelector('.context-toolbar-fade-left');
+      const fadeRight = el.querySelector('.context-toolbar-fade-right');
+      expect(fadeLeft).not.toBeNull();
+      expect(fadeRight).not.toBeNull();
+    });
+
+    it('CTX-U102: fade overlays are hidden by default (no overflow)', () => {
+      const el = toolbar.render();
+      const fadeLeft = el.querySelector('.context-toolbar-fade-left') as HTMLElement;
+      const fadeRight = el.querySelector('.context-toolbar-fade-right') as HTMLElement;
+      expect(fadeLeft.style.display).toBe('none');
+      expect(fadeRight.style.display).toBe('none');
+    });
+
+    it('CTX-U103: scrollActiveControlIntoView calls scrollIntoView on element', () => {
+      const mockEl = document.createElement('div');
+      mockEl.scrollIntoView = vi.fn();
+      toolbar.scrollActiveControlIntoView(mockEl);
+      expect(mockEl.scrollIntoView).toHaveBeenCalledWith({
+        behavior: 'smooth',
+        block: 'nearest',
+        inline: 'nearest',
+      });
+    });
+
+    it('CTX-U104: webkit scrollbar style element is present', () => {
+      const el = toolbar.render();
+      const styleEl = el.querySelector('style');
+      expect(styleEl).not.toBeNull();
+      expect(styleEl!.textContent).toContain('::-webkit-scrollbar');
+    });
+  });
+
   describe('all tabs', () => {
     const tabs: TabId[] = ['view', 'color', 'effects', 'transform', 'annotate'];
 
