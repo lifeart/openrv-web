@@ -39,15 +39,14 @@ Unchecked test cases:
 - CS-004: Round-trip conversion preserves values
 - CS-005: Scopes display in output color space
 
-### Film Emulation / Print Film LUT
+### ~~Film Emulation / Print Film LUT~~
 **Priority:** LOW
+**Status:** Done — `FilmEmulation.ts` implements 6 film stock presets (Kodak Portra 400, Ektar 100, Fuji Pro 400H, Velvia 50, Kodak Tri-X 400, Ilford HP5) with per-channel tone curves, saturation adjustment, luminance-dependent grain with seeded PRNG for per-frame animation, and intensity blending. Integrated as `FilmEmulationEffect` adapter in the unified effect pipeline.
 
-Built-in film stock emulation presets mimicking classic film stocks (Kodak, Fuji, etc.) with grain overlay and intensity control.
-
-- FILM-001: Preset applies characteristic look
-- FILM-002: Intensity scales effect properly
-- FILM-003: Grain animates over frames
-- FILM-004: Multiple presets can be compared
+- ~~FILM-001: Preset applies characteristic look~~
+- ~~FILM-002: Intensity scales effect properly~~
+- ~~FILM-003: Grain animates over frames~~
+- ~~FILM-004: Multiple presets can be compared~~
 
 ### Perspective Correction
 **Priority:** MEDIUM

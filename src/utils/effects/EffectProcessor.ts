@@ -22,6 +22,10 @@ import { isIdentityHueRotation } from '../../color/HueRotation';
 import { ColorWheelsState, DEFAULT_COLOR_WHEELS_STATE } from '../../ui/components/ColorWheels';
 import { HSLQualifierState, DEFAULT_HSL_QUALIFIER_STATE } from '../../ui/components/HSLQualifier';
 import { ToneMappingState, DEFAULT_TONE_MAPPING_STATE } from '../../ui/components/ToneMappingControl';
+import type { DeinterlaceParams } from '../../filters/Deinterlace';
+import { DEFAULT_DEINTERLACE_PARAMS, isDeinterlaceActive, applyDeinterlace } from '../../filters/Deinterlace';
+import type { FilmEmulationParams } from '../../filters/FilmEmulation';
+import { DEFAULT_FILM_EMULATION_PARAMS, isFilmEmulationActive, applyFilmEmulation } from '../../filters/FilmEmulation';
 
 // Import shared constants and helpers from the file shared with the worker
 import {
@@ -84,6 +88,8 @@ export interface AllEffectsState {
   hslQualifierState: HSLQualifierState;
   toneMappingState: ToneMappingState;
   colorInversionEnabled: boolean;
+  deinterlaceParams: DeinterlaceParams;
+  filmEmulationParams: FilmEmulationParams;
 }
 
 /**
@@ -100,6 +106,8 @@ export function createDefaultEffectsState(): AllEffectsState {
     hslQualifierState: JSON.parse(JSON.stringify(DEFAULT_HSL_QUALIFIER_STATE)),
     toneMappingState: { ...DEFAULT_TONE_MAPPING_STATE },
     colorInversionEnabled: false,
+    deinterlaceParams: { ...DEFAULT_DEINTERLACE_PARAMS },
+    filmEmulationParams: { ...DEFAULT_FILM_EMULATION_PARAMS },
   };
 }
 
@@ -215,6 +223,20 @@ export function computeEffectsHash(state: AllEffectsState): string {
   // Color inversion
   hashBool(state.colorInversionEnabled);
 
+  // Deinterlace
+  const di = state.deinterlaceParams;
+  hashBool(di.enabled);
+  hashStr(di.method);
+  hashStr(di.fieldOrder);
+
+  // Film emulation
+  const fe = state.filmEmulationParams;
+  hashBool(fe.enabled);
+  hashStr(fe.stock);
+  hashNum(fe.intensity);
+  hashNum(fe.grainIntensity);
+  hashNum(fe.grainSeed);
+
   return (hash >>> 0).toString(36);
 }
 
@@ -237,10 +259,13 @@ export function hasActiveEffects(state: AllEffectsState): boolean {
   const hasHSLQualifier = state.hslQualifierState.enabled;
   const hasToneMapping = state.toneMappingState.enabled && state.toneMappingState.operator !== 'off';
   const hasInversion = state.colorInversionEnabled;
+  const hasDeinterlace = state.deinterlaceParams.enabled && state.deinterlaceParams.method !== 'weave';
+  const hasFilmEmulation = state.filmEmulationParams.enabled && state.filmEmulationParams.intensity > 0;
 
   return hasCDL || hasCurves || hasSharpen || hasChannel ||
          hasHighlightsShadows || hasVibrance || hasClarity || hasHueRotation ||
-         hasColorWheels || hasHSLQualifier || hasToneMapping || hasInversion;
+         hasColorWheels || hasHSLQualifier || hasToneMapping || hasInversion ||
+         hasDeinterlace || hasFilmEmulation;
 }
 
 /**
@@ -411,15 +436,22 @@ export class EffectProcessor {
     const hasHSLQualifier = state.hslQualifierState.enabled;
     const hasToneMapping = state.toneMappingState.enabled && state.toneMappingState.operator !== 'off';
     const hasInversion = state.colorInversionEnabled;
+    const hasDeinterlace = isDeinterlaceActive(state.deinterlaceParams);
+    const hasFilmEmulation = isFilmEmulationActive(state.filmEmulationParams);
 
     // Check if any per-pixel effects are active
     const hasPerPixelEffects = hasHighlightsShadows || hasVibrance || hasHueRotation ||
       hasColorWheels || hasCDL || hasCurves || hasHSLQualifier || hasToneMapping ||
-      hasInversion || hasChannel;
+      hasInversion || hasChannel || hasFilmEmulation;
 
     // Early return if no pixel effects are active
-    if (!hasPerPixelEffects && !hasSharpen && !hasClarity) {
+    if (!hasPerPixelEffects && !hasSharpen && !hasClarity && !hasDeinterlace) {
       return;
+    }
+
+    // Pass 0: Deinterlace (spatial, before everything)
+    if (hasDeinterlace) {
+      applyDeinterlace(imageData, state.deinterlaceParams);
     }
 
     // ---- SIMD fast-path: when only simple bitwise operations are needed ----
@@ -429,7 +461,7 @@ export class EffectProcessor {
     const hasComplexEffects = hasHighlightsShadows || hasVibrance || hasHueRotation ||
       hasColorWheels || hasCDL || hasCurves || hasHSLQualifier || hasToneMapping;
 
-    if (!hasComplexEffects && !hasClarity && !hasSharpen && (hasInversion || hasChannel)) {
+    if (!hasComplexEffects && !hasClarity && !hasSharpen && !hasDeinterlace && !hasFilmEmulation && (hasInversion || hasChannel)) {
       // Apply inversion first (step 9 in pipeline order)
       if (hasInversion) {
         applyColorInversionSIMD(imageData.data);
@@ -465,6 +497,11 @@ export class EffectProcessor {
     // Pass 2: All per-pixel effects merged into a single loop
     if (hasPerPixelEffects) {
       this.applyMergedPerPixelEffects(imageData, width, height, state);
+    }
+
+    // Pass 2b: Film emulation (separate pass - has its own per-pixel processing)
+    if (hasFilmEmulation) {
+      applyFilmEmulation(imageData, state.filmEmulationParams);
     }
 
     // Pass 3: Sharpen (inter-pixel dependency - must be separate, applied last)
@@ -504,22 +541,30 @@ export class EffectProcessor {
     const hasHSLQualifier = state.hslQualifierState.enabled;
     const hasToneMapping = state.toneMappingState.enabled && state.toneMappingState.operator !== 'off';
     const hasInversion = state.colorInversionEnabled;
+    const hasDeinterlace = isDeinterlaceActive(state.deinterlaceParams);
+    const hasFilmEmulation = isFilmEmulationActive(state.filmEmulationParams);
 
     // Check if any per-pixel effects are active
     const hasPerPixelEffects = hasHighlightsShadows || hasVibrance || hasHueRotation ||
       hasColorWheels || hasCDL || hasCurves || hasHSLQualifier || hasToneMapping ||
-      hasInversion || hasChannel;
+      hasInversion || hasChannel || hasFilmEmulation;
 
     // Early return if no pixel effects are active
-    if (!hasPerPixelEffects && !hasSharpen && !hasClarity) {
+    if (!hasPerPixelEffects && !hasSharpen && !hasClarity && !hasDeinterlace) {
       return;
+    }
+
+    // Pass 0: Deinterlace (spatial, before everything)
+    if (hasDeinterlace) {
+      applyDeinterlace(imageData, state.deinterlaceParams);
+      await yieldToMain();
     }
 
     // ---- SIMD fast-path (same as sync version) ----
     const hasComplexEffects = hasHighlightsShadows || hasVibrance || hasHueRotation ||
       hasColorWheels || hasCDL || hasCurves || hasHSLQualifier || hasToneMapping;
 
-    if (!hasComplexEffects && !hasClarity && !hasSharpen && (hasInversion || hasChannel)) {
+    if (!hasComplexEffects && !hasClarity && !hasSharpen && !hasDeinterlace && !hasFilmEmulation && (hasInversion || hasChannel)) {
       if (hasInversion) {
         applyColorInversionSIMD(imageData.data);
       }
@@ -554,6 +599,12 @@ export class EffectProcessor {
     // Pass 2: All per-pixel effects merged into a single loop
     if (hasPerPixelEffects) {
       this.applyMergedPerPixelEffects(imageData, width, height, state);
+      await yieldToMain();
+    }
+
+    // Pass 2b: Film emulation (separate pass - has its own per-pixel processing)
+    if (hasFilmEmulation) {
+      applyFilmEmulation(imageData, state.filmEmulationParams);
       await yieldToMain();
     }
 

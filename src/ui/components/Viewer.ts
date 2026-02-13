@@ -6,6 +6,10 @@ import { ColorAdjustments } from './ColorControls';
 import { WipeState, WipeMode } from './WipeControl';
 import { Transform2D } from './TransformControl';
 import { FilterSettings, DEFAULT_FILTER_SETTINGS } from './FilterControl';
+import type { DeinterlaceParams } from '../../filters/Deinterlace';
+import { DEFAULT_DEINTERLACE_PARAMS, isDeinterlaceActive, applyDeinterlace } from '../../filters/Deinterlace';
+import type { FilmEmulationParams } from '../../filters/FilmEmulation';
+import { DEFAULT_FILM_EMULATION_PARAMS, isFilmEmulationActive, applyFilmEmulation } from '../../filters/FilmEmulation';
 import { CropState, CropRegion, UncropState } from './CropControl';
 import { CropManager } from './CropManager';
 import {
@@ -187,6 +191,12 @@ export class Viewer {
   private filterSettings: FilterSettings = { ...DEFAULT_FILTER_SETTINGS };
   private sharpenProcessor: WebGLSharpenProcessor | null = null;
 
+  // Deinterlace preview
+  private deinterlaceParams: DeinterlaceParams = { ...DEFAULT_DEINTERLACE_PARAMS };
+
+  // Film emulation
+  private filmEmulationParams: FilmEmulationParams = { ...DEFAULT_FILM_EMULATION_PARAMS };
+
   // Crop manager (owns crop/uncrop state, overlay, and drag interaction)
   private cropManager!: CropManager;
 
@@ -283,6 +293,8 @@ export class Viewer {
       applyColorFilters: () => this.applyColorFilters(),
       scheduleRender: () => this.scheduleRender(),
       isToneMappingEnabled: () => this.isToneMappingEnabled(),
+      getDeinterlaceParams: () => this.getDeinterlaceParams(),
+      getFilmEmulationParams: () => this.getFilmEmulationParams(),
     };
   }
 
@@ -2025,6 +2037,40 @@ export class Viewer {
     this.scheduleRender();
   }
 
+  // Deinterlace methods
+  setDeinterlaceParams(params: DeinterlaceParams): void {
+    this.deinterlaceParams = { ...params };
+    this.notifyEffectsChanged();
+    this.scheduleRender();
+  }
+
+  getDeinterlaceParams(): DeinterlaceParams {
+    return { ...this.deinterlaceParams };
+  }
+
+  resetDeinterlaceParams(): void {
+    this.deinterlaceParams = { ...DEFAULT_DEINTERLACE_PARAMS };
+    this.notifyEffectsChanged();
+    this.scheduleRender();
+  }
+
+  // Film emulation methods
+  setFilmEmulationParams(params: FilmEmulationParams): void {
+    this.filmEmulationParams = { ...params };
+    this.notifyEffectsChanged();
+    this.scheduleRender();
+  }
+
+  getFilmEmulationParams(): FilmEmulationParams {
+    return { ...this.filmEmulationParams };
+  }
+
+  resetFilmEmulationParams(): void {
+    this.filmEmulationParams = { ...DEFAULT_FILM_EMULATION_PARAMS };
+    this.notifyEffectsChanged();
+    this.scheduleRender();
+  }
+
   // Crop methods (delegate to CropManager)
   setCropState(state: CropState): void {
     this.cropManager.setCropState(state);
@@ -2120,15 +2166,22 @@ export class Viewer {
     const hasToneMapping = this.isToneMappingEnabled();
     const hasInversion = this.colorPipeline.colorInversionEnabled;
     const hasDisplayColorMgmt = isDisplayStateActive(this.colorPipeline.displayColorState);
+    const hasDeinterlace = isDeinterlaceActive(this.deinterlaceParams);
+    const hasFilmEmulation = isFilmEmulationActive(this.filmEmulationParams);
 
     // Early return if no pixel effects are active
     // Note: OCIO is handled via GPU-accelerated 3D LUT in the main render pipeline (applyOCIOToCanvas)
-    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasHueRotation && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasLuminanceVis && !hasZebras && !hasClippingOverlay && !hasToneMapping && !hasInversion && !hasDisplayColorMgmt) {
+    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasHueRotation && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasLuminanceVis && !hasZebras && !hasClippingOverlay && !hasToneMapping && !hasInversion && !hasDisplayColorMgmt && !hasDeinterlace && !hasFilmEmulation) {
       return;
     }
 
     // Single getImageData call
     const imageData = ctx.getImageData(0, 0, width, height);
+
+    // Apply deinterlace (spatial, before color adjustments)
+    if (hasDeinterlace) {
+      applyDeinterlace(imageData, this.deinterlaceParams);
+    }
 
     // Apply highlight/shadow recovery (before other adjustments for best results)
     if (hasHighlightsShadows) {
@@ -2196,6 +2249,11 @@ export class Viewer {
     // Apply color inversion (after all color corrections, before sharpen/channel isolation)
     if (hasInversion) {
       applyColorInversion(imageData);
+    }
+
+    // Apply film emulation (after color corrections, before sharpen/channel isolation)
+    if (hasFilmEmulation) {
+      applyFilmEmulation(imageData, this.filmEmulationParams);
     }
 
     // Apply sharpen filter
@@ -2270,14 +2328,23 @@ export class Viewer {
     const hasToneMapping = this.isToneMappingEnabled();
     const hasInversion = this.colorPipeline.colorInversionEnabled;
     const hasDisplayColorMgmt = isDisplayStateActive(this.colorPipeline.displayColorState);
+    const hasDeinterlace = isDeinterlaceActive(this.deinterlaceParams);
+    const hasFilmEmulation = isFilmEmulationActive(this.filmEmulationParams);
 
     // Early return if no pixel effects are active
-    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasHueRotation && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasLuminanceVis && !hasZebras && !hasClippingOverlay && !hasToneMapping && !hasInversion && !hasDisplayColorMgmt) {
+    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasHueRotation && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasLuminanceVis && !hasZebras && !hasClippingOverlay && !hasToneMapping && !hasInversion && !hasDisplayColorMgmt && !hasDeinterlace && !hasFilmEmulation) {
       return;
     }
 
     // Single getImageData call
     const imageData = ctx.getImageData(0, 0, width, height);
+
+    // --- Pass 0: Deinterlace (spatial, before everything) ---
+    if (hasDeinterlace) {
+      applyDeinterlace(imageData, this.deinterlaceParams);
+      await yieldToMain();
+      if (this._asyncEffectsGeneration !== generation) return;
+    }
 
     // --- Pass 1: Clarity (most expensive - 5x5 Gaussian blur, inter-pixel dependency) ---
     if (hasClarity) {
@@ -2288,7 +2355,7 @@ export class Viewer {
 
     // --- Pass 2: Per-pixel color effects (merged where possible) ---
     const hasPerPixelEffects = hasHighlightsShadows || hasVibrance || hasHueRotation ||
-      hasColorWheels || hasCDL || hasCurves || hasHSLQualifier || hasToneMapping || hasInversion;
+      hasColorWheels || hasCDL || hasCurves || hasHSLQualifier || hasToneMapping || hasInversion || hasFilmEmulation;
 
     if (hasPerPixelEffects) {
       // Apply highlight/shadow recovery
@@ -2352,6 +2419,11 @@ export class Viewer {
       // Apply color inversion
       if (hasInversion) {
         applyColorInversion(imageData);
+      }
+
+      // Apply film emulation
+      if (hasFilmEmulation) {
+        applyFilmEmulation(imageData, this.filmEmulationParams);
       }
 
       await yieldToMain();
@@ -3159,7 +3231,9 @@ export class Viewer {
       this.colorWheels,
       this.hslQualifier,
       this.colorPipeline.toneMappingState,
-      this.colorPipeline.colorInversionEnabled
+      this.colorPipeline.colorInversionEnabled,
+      this.deinterlaceParams,
+      this.filmEmulationParams,
     );
 
     this.prerenderBuffer.updateEffects(effectsState);

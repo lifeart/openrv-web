@@ -124,6 +124,12 @@ export interface TestMutations {
   // Color adjustments
   setColorAdjustments(adjustments: Record<string, number | boolean>): void;
   resetColorAdjustments(): void;
+  // Deinterlace
+  setDeinterlaceParams(params: Record<string, unknown>): void;
+  resetDeinterlace(): void;
+  // Film emulation
+  setFilmEmulationParams(params: Record<string, unknown>): void;
+  resetFilmEmulation(): void;
 }
 
 export interface LuminanceVisTestState {
@@ -1324,6 +1330,20 @@ export function exposeForTesting(app: App): void {
       },
       resetColorAdjustments() {
         getControl('colorControls')?.reset?.();
+      },
+      // ── Deinterlace ──
+      setDeinterlaceParams(params: Record<string, unknown>) {
+        getControl('deinterlaceControl')?.setParams?.(params);
+      },
+      resetDeinterlace() {
+        getControl('deinterlaceControl')?.reset?.();
+      },
+      // ── Film Emulation ──
+      setFilmEmulationParams(params: Record<string, unknown>) {
+        getControl('filmEmulationControl')?.setParams?.(params);
+      },
+      resetFilmEmulation() {
+        getControl('filmEmulationControl')?.reset?.();
       },
     },
   };

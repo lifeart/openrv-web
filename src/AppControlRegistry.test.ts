@@ -79,6 +79,8 @@ vi.mock('./ui/components/AutoSaveIndicator', () => ({ AutoSaveIndicator: createM
 vi.mock('./ui/components/SnapshotPanel', () => ({ SnapshotPanel: createMockClass('SnapshotPanel') }));
 vi.mock('./ui/components/PlaylistPanel', () => ({ PlaylistPanel: createMockClass('PlaylistPanel') }));
 vi.mock('./ui/components/NetworkControl', () => ({ NetworkControl: createMockClass('NetworkControl') }));
+vi.mock('./ui/components/DeinterlaceControl', () => ({ DeinterlaceControl: createMockClass('DeinterlaceControl') }));
+vi.mock('./ui/components/FilmEmulationControl', () => ({ FilmEmulationControl: createMockClass('FilmEmulationControl') }));
 
 // Manager / utility mocks
 vi.mock('./core/session/AutoSaveManager', () => ({ AutoSaveManager: createAsyncDisposeMockClass('AutoSaveManager') }));
@@ -159,6 +161,8 @@ describe('AppControlRegistry', () => {
       'DisplayProfileControl',
       'CurvesControl',
       'LensControl',
+      'DeinterlaceControl',
+      'FilmEmulationControl',
       'StackControl',
       'ChannelSelect',
       'PARControl',

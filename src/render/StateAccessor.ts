@@ -127,6 +127,12 @@ export interface StateAccessor {
   /** Get the current gamut mapping state. */
   getGamutMapping(): GamutMappingState;
 
+  /** Set deinterlace state for GPU shader. */
+  setDeinterlace(state: { enabled: boolean; method: number; fieldOrder: number }): void;
+
+  /** Set film emulation state for GPU shader. */
+  setFilmEmulation(state: { enabled: boolean; intensity: number; saturation: number; grainIntensity: number; grainSeed: number; lutData: Uint8Array | null }): void;
+
   /** Set texel size (called before applyUniforms based on image dimensions). */
   setTexelSize(w: number, h: number): void;
 
@@ -166,5 +172,5 @@ export interface StateAccessor {
    * Clear a texture-specific dirty flag after the Renderer has uploaded
    * the corresponding texture data to the GPU.
    */
-  clearTextureDirtyFlag(flag: 'curvesLUTDirty' | 'falseColorLUTDirty' | 'lut3DDirty'): void;
+  clearTextureDirtyFlag(flag: 'curvesLUTDirty' | 'falseColorLUTDirty' | 'lut3DDirty' | 'filmLUTDirty'): void;
 }

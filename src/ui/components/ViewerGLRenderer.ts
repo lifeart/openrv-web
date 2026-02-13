@@ -37,6 +37,8 @@ import type { ZebraStripes } from './ZebraStripes';
 import type { HSLQualifier } from './HSLQualifier';
 import type { ColorAdjustments } from './ColorControls';
 import type { ToneMappingState } from './ToneMappingControl';
+import type { DeinterlaceParams } from '../../filters/Deinterlace';
+import { type FilmEmulationParams, getFilmStock } from '../../filters/FilmEmulation';
 import type { AutoExposureState, GamutMappingState, GamutIdentifier } from '../../core/types/effects';
 import { DEFAULT_AUTO_EXPOSURE_STATE, DEFAULT_GAMUT_MAPPING_STATE } from '../../core/types/effects';
 import { AutoExposureController } from '../../color/AutoExposureController';
@@ -64,6 +66,43 @@ export interface GLRendererContext {
   applyColorFilters(): void;
   scheduleRender(): void;
   isToneMappingEnabled(): boolean;
+  getDeinterlaceParams(): DeinterlaceParams;
+  getFilmEmulationParams(): FilmEmulationParams;
+}
+
+// Deinterlace method → shader integer code
+const DEINTERLACE_METHOD_CODES: Record<string, number> = { bob: 0, weave: 1, blend: 2 };
+const DEINTERLACE_FIELD_ORDER_CODES: Record<string, number> = { tff: 0, bff: 1 };
+
+// Cache for baked film LUT (256x1 RGBA texture data)
+let _filmLUTCache: { stockId: string; data: Uint8Array } | null = null;
+
+/**
+ * Bake a 256x1 per-channel RGBA LUT from a film stock's tone curve.
+ * Each texel i encodes: R = stock.toneCurve(i/255, 0, 0)[0]*255 etc.
+ * The LUT captures the tone curve in isolation; saturation/grain are
+ * applied via separate shader uniforms.
+ */
+function bakeFilmLUT(stockId: string): Uint8Array | null {
+  if (_filmLUTCache && _filmLUTCache.stockId === stockId) {
+    return _filmLUTCache.data;
+  }
+  const stock = getFilmStock(stockId as Parameters<typeof getFilmStock>[0]);
+  if (!stock) return null;
+
+  const data = new Uint8Array(256 * 4);
+  for (let i = 0; i < 256; i++) {
+    const v = i / 255;
+    // Evaluate the tone curve for each channel independently
+    // For per-channel curves, we pass the same value through each channel position
+    const [cr, cg, cb] = stock.toneCurve(v, v, v);
+    data[i * 4] = Math.round(Math.max(0, Math.min(1, cr)) * 255);
+    data[i * 4 + 1] = Math.round(Math.max(0, Math.min(1, cg)) * 255);
+    data[i * 4 + 2] = Math.round(Math.max(0, Math.min(1, cb)) * 255);
+    data[i * 4 + 3] = 255;
+  }
+  _filmLUTCache = { stockId, data };
+  return data;
 }
 
 export class ViewerGLRenderer {
@@ -340,6 +379,39 @@ export class ViewerGLRenderer {
       clarity: adj.clarity,
       sharpen: this.ctx.getFilterSettings().sharpen,
       hslQualifier: this.ctx.getHSLQualifier().getState(),
+      deinterlace: this.buildDeinterlaceState(),
+      filmEmulation: this.buildFilmEmulationState(),
+    };
+  }
+
+  private buildDeinterlaceState(): RenderState['deinterlace'] {
+    const di = this.ctx.getDeinterlaceParams();
+    return {
+      enabled: di.enabled,
+      method: DEINTERLACE_METHOD_CODES[di.method] ?? 1,
+      fieldOrder: DEINTERLACE_FIELD_ORDER_CODES[di.fieldOrder] ?? 0,
+    };
+  }
+
+  private buildFilmEmulationState(): RenderState['filmEmulation'] {
+    const fe = this.ctx.getFilmEmulationParams();
+    if (!fe.enabled || fe.intensity <= 0) {
+      return { enabled: false, intensity: 0, saturation: 1, grainIntensity: 0, grainSeed: 0, lutData: null };
+    }
+    const stock = getFilmStock(fe.stock as Parameters<typeof getFilmStock>[0]);
+    if (!stock) {
+      return { enabled: false, intensity: 0, saturation: 1, grainIntensity: 0, grainSeed: 0, lutData: null };
+    }
+    const lutData = bakeFilmLUT(fe.stock) ?? null;
+    const intensity = Math.max(0, Math.min(1, fe.intensity / 100));
+    const grainIntensity = (Math.max(0, Math.min(1, fe.grainIntensity / 100))) * stock.grainAmount;
+    return {
+      enabled: true,
+      intensity,
+      saturation: stock.saturation,
+      grainIntensity,
+      grainSeed: fe.grainSeed,
+      lutData,
     };
   }
 
@@ -923,6 +995,14 @@ export class ViewerGLRenderer {
     // HSL qualifier
     if (this.ctx.getHSLQualifier().isEnabled()) return true;
 
+    // Deinterlace
+    const di = this.ctx.getDeinterlaceParams();
+    if (di.enabled && di.method !== 'weave') return true;
+
+    // Film emulation
+    const fe = this.ctx.getFilmEmulationParams();
+    if (fe.enabled && fe.intensity > 0) return true;
+
     return false;
   }
 
@@ -937,6 +1017,20 @@ export class ViewerGLRenderer {
   hasCPUOnlyEffectsActive(): boolean {
     // Blur (applied via CSS filter which doesn't work with the GL canvas)
     if (this.ctx.getFilterSettings().blur > 0) return true;
+    return false;
+  }
+
+  /**
+   * Check if deinterlace or film emulation are active.
+   * These effects have both CPU and GPU (shader) implementations.
+   * The GPU shader handles them for the HDR path; this helper is used
+   * by the SDR path to decide whether to route through GPU rendering.
+   */
+  hasDeinterlaceOrFilmEmulationActive(): boolean {
+    const di = this.ctx.getDeinterlaceParams();
+    if (di.enabled && di.method !== 'weave') return true;
+    const fe = this.ctx.getFilmEmulationParams();
+    if (fe.enabled && fe.intensity > 0) return true;
     return false;
   }
 

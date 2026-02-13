@@ -83,6 +83,7 @@ export class Renderer implements RendererBackend {
   private curvesLUTTexture: WebGLTexture | null = null;
   private falseColorLUTTexture: WebGLTexture | null = null;
   private lut3DTexture: WebGLTexture | null = null;
+  private filmLUTTexture: WebGLTexture | null = null;
 
   // --- Pre-allocated temp buffers for LUT conversions ---
   private falseColorRGBABuffer: Uint8Array | null = null;
@@ -471,6 +472,11 @@ export class Renderer implements RendererBackend {
         gl.activeTexture(gl.TEXTURE3);
         gl.bindTexture(gl.TEXTURE_3D, this.lut3DTexture);
       },
+      bindFilmLUTTexture: () => {
+        this.ensureFilmLUTTexture();
+        gl.activeTexture(gl.TEXTURE4);
+        gl.bindTexture(gl.TEXTURE_2D, this.filmLUTTexture);
+      },
       getCanvasSize: () => ({
         width: this.canvas?.width ?? 0,
         height: this.canvas?.height ?? 0,
@@ -540,6 +546,30 @@ export class Renderer implements RendererBackend {
       }
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, LUT_1D_SIZE, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, rgba);
       this.stateManager.clearTextureDirtyFlag('falseColorLUTDirty');
+    }
+  }
+
+  private ensureFilmLUTTexture(): void {
+    const gl = this.gl;
+    if (!gl) return;
+
+    const sm = this.stateManager as ShaderStateManager;
+    const s = sm.getInternalState();
+
+    if (!this.filmLUTTexture) {
+      this.filmLUTTexture = gl.createTexture();
+    }
+
+    if (s.filmLUTDirty && s.filmLUTData) {
+      gl.activeTexture(gl.TEXTURE4);
+      gl.bindTexture(gl.TEXTURE_2D, this.filmLUTTexture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      // Film LUT is 256x1 RGB packed as RGBA (alpha=255)
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, LUT_1D_SIZE, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, s.filmLUTData);
+      sm.clearTextureDirtyFlag('filmLUTDirty');
     }
   }
 
@@ -1784,6 +1814,7 @@ export class Renderer implements RendererBackend {
     if (this.curvesLUTTexture) gl.deleteTexture(this.curvesLUTTexture);
     if (this.falseColorLUTTexture) gl.deleteTexture(this.falseColorLUTTexture);
     if (this.lut3DTexture) gl.deleteTexture(this.lut3DTexture);
+    if (this.filmLUTTexture) gl.deleteTexture(this.filmLUTTexture);
 
     // Release cached LUT conversion buffers
     this.falseColorRGBABuffer = null;

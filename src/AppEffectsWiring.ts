@@ -50,4 +50,18 @@ export function wireEffectsControls(ctx: AppWiringContext): void {
     sessionBridge.scheduleUpdateScopes();
     persistenceManager.syncGTOStore();
   });
+
+  // Deinterlace control -> viewer
+  controls.deinterlaceControl.on('deinterlaceChanged', (params) => {
+    viewer.setDeinterlaceParams(params);
+    sessionBridge.scheduleUpdateScopes();
+    persistenceManager.syncGTOStore();
+  });
+
+  // Film emulation control -> viewer
+  controls.filmEmulationControl.on('filmEmulationChanged', (params) => {
+    viewer.setFilmEmulationParams(params);
+    sessionBridge.scheduleUpdateScopes();
+    persistenceManager.syncGTOStore();
+  });
 }

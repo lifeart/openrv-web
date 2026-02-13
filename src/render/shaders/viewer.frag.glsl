@@ -141,6 +141,19 @@
       uniform int u_sourceGamut;       // 0=sRGB, 1=Rec.2020, 2=Display-P3
       uniform int u_targetGamut;       // 0=sRGB, 1=Rec.2020, 2=Display-P3
 
+      // Deinterlace
+      uniform int u_deinterlaceEnabled;    // 0=off, 1=on
+      uniform int u_deinterlaceMethod;     // 0=bob, 1=weave, 2=blend
+      uniform int u_deinterlaceFieldOrder; // 0=tff, 1=bff
+
+      // Film Emulation
+      uniform int u_filmEnabled;
+      uniform float u_filmIntensity;        // 0.0-1.0
+      uniform float u_filmSaturation;       // stock saturation multiplier
+      uniform float u_filmGrainIntensity;   // pre-multiplied: grainIntensity * stock.grainAmount
+      uniform float u_filmGrainSeed;        // per-frame seed
+      uniform sampler2D u_filmLUT;          // 256x1 RGB LUT texture
+
       // Luminance coefficients (Rec. 709)
       const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 
@@ -580,7 +593,26 @@
       void main() {
         vec4 color = texture(u_texture, v_texCoord);
 
-        // 0. Input EOTF: convert from transfer function to linear light
+        // 0a. Deinterlace (before EOTF, operates on raw texels)
+        if (u_deinterlaceEnabled == 1 && u_deinterlaceMethod != 1) { // not weave
+          float row = v_texCoord.y / u_texelSize.y;
+          int rowInt = int(floor(row));
+          bool isEvenRow = (rowInt - 2 * (rowInt / 2)) == 0; // modulo 2 without bitwise
+          if (u_deinterlaceMethod == 0) { // bob
+            bool interpolate = (u_deinterlaceFieldOrder == 0) ? !isEvenRow : isEvenRow;
+            if (interpolate) {
+              vec4 above = texture(u_texture, v_texCoord - vec2(0.0, u_texelSize.y));
+              vec4 below = texture(u_texture, v_texCoord + vec2(0.0, u_texelSize.y));
+              color = (above + below) * 0.5;
+            }
+          } else if (u_deinterlaceMethod == 2) { // blend
+            float offset = isEvenRow ? u_texelSize.y : -u_texelSize.y;
+            vec4 neighbor = texture(u_texture, v_texCoord + vec2(0.0, offset));
+            color = (color + neighbor) * 0.5;
+          }
+        }
+
+        // 0b. Input EOTF: convert from transfer function to linear light
         if (u_inputTransfer == 1) {
           color.rgb = hlgToLinear(color.rgb);
         } else if (u_inputTransfer == 2) {
@@ -782,6 +814,30 @@
             float newL = clamp((hslQ.z * (1.0 - matte)) + (hslQ.z * u_hslCorrLumScale * matte), 0.0, 1.0);
             color.rgb = hslToRgb(newH, newS, newL);
           }
+        }
+
+        // 6f. Film Emulation (after CDL/curves/HSL, before tone mapping)
+        if (u_filmEnabled == 1) {
+          vec3 origFilm = color.rgb;
+          // Sample per-channel LUT (clamped to 0-1 for LUT lookup)
+          vec3 cc = clamp(color.rgb, 0.0, 1.0);
+          vec3 filmColor = vec3(
+            texture(u_filmLUT, vec2(cc.r, 0.5)).r,
+            texture(u_filmLUT, vec2(cc.g, 0.5)).g,
+            texture(u_filmLUT, vec2(cc.b, 0.5)).b
+          );
+          // Apply stock saturation
+          float filmLuma = dot(filmColor, LUMA);
+          filmColor = mix(vec3(filmLuma), filmColor, u_filmSaturation);
+          // Add grain (hash-based noise, luminance-dependent)
+          if (u_filmGrainIntensity > 0.0) {
+            float n = fract(sin(dot(gl_FragCoord.xy + u_filmGrainSeed, vec2(12.9898, 78.233))) * 43758.5453);
+            float grain = (n * 2.0 - 1.0) * u_filmGrainIntensity;
+            float envelope = 4.0 * filmLuma * (1.0 - filmLuma); // midtone peak
+            filmColor += grain * envelope;
+          }
+          // Blend with original based on intensity
+          color.rgb = mix(origFilm, filmColor, u_filmIntensity);
         }
 
         // 7. Tone mapping (applied before display transfer for proper HDR handling)

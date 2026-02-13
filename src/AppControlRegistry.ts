@@ -18,6 +18,8 @@ import { CropControl } from './ui/components/CropControl';
 import { CDLControl } from './ui/components/CDLControl';
 import { CurvesControl } from './ui/components/CurvesControl';
 import { LensControl } from './ui/components/LensControl';
+import { DeinterlaceControl } from './ui/components/DeinterlaceControl';
+import { FilmEmulationControl } from './ui/components/FilmEmulationControl';
 import { StackControl } from './ui/components/StackControl';
 import { ChannelSelect } from './ui/components/ChannelSelect';
 import { StereoControl } from './ui/components/StereoControl';
@@ -114,6 +116,8 @@ export class AppControlRegistry {
   // Effects tab
   readonly filterControl: FilterControl;
   readonly lensControl: LensControl;
+  readonly deinterlaceControl: DeinterlaceControl;
+  readonly filmEmulationControl: FilmEmulationControl;
 
   // Transform tab
   readonly transformControl: TransformControl;
@@ -194,6 +198,8 @@ export class AppControlRegistry {
     // --- Effects tab ---
     this.filterControl = new FilterControl();
     this.lensControl = new LensControl();
+    this.deinterlaceControl = new DeinterlaceControl();
+    this.filmEmulationControl = new FilmEmulationControl();
 
     // --- Transform tab ---
     this.transformControl = new TransformControl();
@@ -528,6 +534,10 @@ export class AppControlRegistry {
     effectsContent.appendChild(this.filterControl.render());
     effectsContent.appendChild(ContextToolbar.createDivider());
     effectsContent.appendChild(this.lensControl.render());
+    effectsContent.appendChild(ContextToolbar.createDivider());
+    effectsContent.appendChild(this.deinterlaceControl.render());
+    effectsContent.appendChild(ContextToolbar.createDivider());
+    effectsContent.appendChild(this.filmEmulationControl.render());
     contextToolbar.setTabContent('effects', effectsContent);
 
     // === TRANSFORM TAB ===
@@ -635,6 +645,8 @@ export class AppControlRegistry {
     this.displayProfileControl.dispose();
     this.curvesControl.dispose();
     this.lensControl.dispose();
+    this.deinterlaceControl.dispose();
+    this.filmEmulationControl.dispose();
     this.stackControl.dispose();
     this.channelSelect.dispose();
     this.parControl.dispose();

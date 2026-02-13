@@ -37,4 +37,6 @@ export interface RenderState {
   sharpen: number;
   hslQualifier: HSLQualifierState;
   gamutMapping?: GamutMappingState;
+  deinterlace?: { enabled: boolean; method: number; fieldOrder: number };
+  filmEmulation?: { enabled: boolean; intensity: number; saturation: number; grainIntensity: number; grainSeed: number; lutData: Uint8Array | null };
 }

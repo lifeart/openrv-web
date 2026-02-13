@@ -56,6 +56,8 @@ function createMockContext(): GLRendererContext {
     applyColorFilters: vi.fn(),
     scheduleRender: vi.fn(),
     isToneMappingEnabled: vi.fn(() => false),
+    getDeinterlaceParams: vi.fn(() => ({ enabled: false, method: 'bob', fieldOrder: 'tff' })),
+    getFilmEmulationParams: vi.fn(() => ({ enabled: false, stock: 'kodak-portra-400', intensity: 100, grainIntensity: 30, grainSeed: 0 })),
   };
 }
 

@@ -17,6 +17,8 @@ function createMockContext() {
     setCropRegion: vi.fn(),
   });
   const lensControl = new EventEmitter();
+  const deinterlaceControl = new EventEmitter();
+  const filmEmulationControl = new EventEmitter();
 
   let capturedCropRegionCallback: ((region: unknown) => void) | null = null;
 
@@ -27,6 +29,8 @@ function createMockContext() {
     setCropPanelOpen: vi.fn(),
     setUncropState: vi.fn(),
     setLensParams: vi.fn(),
+    setDeinterlaceParams: vi.fn(),
+    setFilmEmulationParams: vi.fn(),
     setOnCropRegionChanged: vi.fn((cb: (region: unknown) => void) => {
       capturedCropRegionCallback = cb;
     }),
@@ -46,6 +50,8 @@ function createMockContext() {
       filterControl,
       cropControl,
       lensControl,
+      deinterlaceControl,
+      filmEmulationControl,
     },
     sessionBridge,
     persistenceManager,
@@ -57,6 +63,8 @@ function createMockContext() {
     filterControl,
     cropControl,
     lensControl,
+    deinterlaceControl,
+    filmEmulationControl,
     sessionBridge,
     persistenceManager,
     getCapturedCropRegionCallback: () => capturedCropRegionCallback,
@@ -134,6 +142,24 @@ describe('wireEffectsControls', () => {
     mock.lensControl.emit('lensChanged', params);
 
     expect(mock.viewer.setLensParams).toHaveBeenCalledWith(params);
+    expect(mock.sessionBridge.scheduleUpdateScopes).toHaveBeenCalled();
+    expect(mock.persistenceManager.syncGTOStore).toHaveBeenCalled();
+  });
+
+  it('EW-009: deinterlaceChanged calls viewer.setDeinterlaceParams + scheduleUpdateScopes + syncGTOStore', () => {
+    const params = { method: 'bob', fieldOrder: 'tff', enabled: true };
+    mock.deinterlaceControl.emit('deinterlaceChanged', params);
+
+    expect(mock.viewer.setDeinterlaceParams).toHaveBeenCalledWith(params);
+    expect(mock.sessionBridge.scheduleUpdateScopes).toHaveBeenCalled();
+    expect(mock.persistenceManager.syncGTOStore).toHaveBeenCalled();
+  });
+
+  it('EW-010: filmEmulationChanged calls viewer.setFilmEmulationParams + scheduleUpdateScopes + syncGTOStore', () => {
+    const params = { enabled: true, stock: 'kodak-portra-400', intensity: 80, grainIntensity: 30, grainSeed: 42 };
+    mock.filmEmulationControl.emit('filmEmulationChanged', params);
+
+    expect(mock.viewer.setFilmEmulationParams).toHaveBeenCalledWith(params);
     expect(mock.sessionBridge.scheduleUpdateScopes).toHaveBeenCalled();
     expect(mock.persistenceManager.syncGTOStore).toHaveBeenCalled();
   });

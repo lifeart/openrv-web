@@ -62,6 +62,9 @@ import {
   applyColorInversionSIMD,
   applyChannelIsolationGrayscale,
   applyLuminanceIsolation,
+  // Deinterlace and film emulation (worker-safe)
+  applyDeinterlaceWorker,
+  applyFilmEmulationWorker,
 } from '../utils/effects/effectProcessing.shared';
 
 // ============================================================================
@@ -833,13 +836,15 @@ function processEffects(
     state.toneMappingState.enabled &&
     state.toneMappingState.operator !== 'off';
   const hasInversion = state.colorInversionEnabled;
+  const hasDeinterlace = !!(state.deinterlaceParams && state.deinterlaceParams.enabled && state.deinterlaceParams.method !== 'weave');
+  const hasFilmEmulation = !!(state.filmEmulationParams && state.filmEmulationParams.enabled && state.filmEmulationParams.intensity > 0);
 
   const hasPerPixelEffects = hasHS || hasVibrance || hasHueRotation ||
     hasColorWheels || hasCDL || hasCurves || hasHSLQualifier || hasToneMapping ||
     hasInversion || hasChannel;
 
   // Early return if no effects are active
-  if (!hasPerPixelEffects && !hasSharpen && !hasClarity) {
+  if (!hasPerPixelEffects && !hasSharpen && !hasClarity && !hasDeinterlace && !hasFilmEmulation) {
     return;
   }
 
@@ -847,7 +852,7 @@ function processEffects(
   const hasComplexEffects = hasHS || hasVibrance || hasHueRotation ||
     hasColorWheels || hasCDL || hasCurves || hasHSLQualifier || hasToneMapping;
 
-  if (!hasComplexEffects && !hasClarity && !hasSharpen && (hasInversion || hasChannel)) {
+  if (!hasComplexEffects && !hasClarity && !hasSharpen && !hasDeinterlace && !hasFilmEmulation && (hasInversion || hasChannel)) {
     if (hasInversion) {
       applyColorInversionSIMD(data);
     }
@@ -871,6 +876,11 @@ function processEffects(
     return;
   }
 
+  // Pass 0: Deinterlace (inter-pixel dependency - before all other effects)
+  if (hasDeinterlace) {
+    applyDeinterlaceWorker(data, width, height, state.deinterlaceParams!);
+  }
+
   // Pass 1: Clarity (inter-pixel dependency - must be separate, applied first)
   if (hasClarity) {
     applyClarity(data, width, height, ca);
@@ -879,6 +889,11 @@ function processEffects(
   // Pass 2: All per-pixel effects merged into a single loop
   if (hasPerPixelEffects) {
     applyMergedPerPixelEffects(data, state);
+  }
+
+  // Pass 2.5: Film emulation (per-pixel, after grading but before sharpen)
+  if (hasFilmEmulation) {
+    applyFilmEmulationWorker(data, width, height, state.filmEmulationParams!);
   }
 
   // Pass 3: Sharpen (inter-pixel dependency - must be separate, applied last)

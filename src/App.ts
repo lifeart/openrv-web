@@ -624,6 +624,12 @@ export class App {
         if (this.controls.filterControl?.isOpen) {
           this.controls.filterControl.hide();
         }
+        if (this.controls.deinterlaceControl?.isOpen) {
+          this.controls.deinterlaceControl.hide();
+        }
+        if (this.controls.filmEmulationControl?.isOpen) {
+          this.controls.filmEmulationControl.hide();
+        }
         if (this.controls.curvesControl) {
           this.controls.curvesControl.hide();
         }
