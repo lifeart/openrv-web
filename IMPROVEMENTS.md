@@ -48,16 +48,15 @@ Unchecked test cases:
 - ~~FILM-003: Grain animates over frames~~
 - ~~FILM-004: Multiple presets can be compared~~
 
-### Perspective Correction
+### ~~Perspective Correction~~
 **Priority:** MEDIUM
+**Status:** Done — `PerspectiveCorrection.ts` implements four-corner homography (DLT algorithm) with CPU bilinear/bicubic inverse mapping and GPU fragment shader path. `PerspectiveCorrectionControl.ts` provides numeric inputs + quality dropdown. `PerspectiveGridOverlay.ts` renders interactive grid with draggable corner handles. Bidirectional wiring between control, overlay, and viewer. 20+ unit tests including direction regression tests.
 
-Four-corner perspective warp with grid overlay, numeric inputs, and interpolation quality options.
-
-- PERSP-001: Dragging corner warps image
-- PERSP-002: Grid overlay aligns with edges
-- PERSP-003: Reset returns to original
-- PERSP-004: Numeric input precise values
-- PERSP-005: Quality options affect output
+- ~~PERSP-001: Dragging corner warps image~~
+- ~~PERSP-002: Grid overlay aligns with edges~~
+- ~~PERSP-003: Reset returns to original~~
+- ~~PERSP-004: Numeric input precise values~~
+- ~~PERSP-005: Quality options affect output~~
 
 ### Stabilization Preview
 **Priority:** LOW
