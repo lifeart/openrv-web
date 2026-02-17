@@ -7,7 +7,7 @@ Issues are grouped by severity and ordered by impact within each group.
 
 ## CRITICAL / HIGH SEVERITY
 
-### H-01: KeyboardManager does not suppress `<select>` elements
+### ~~H-01: KeyboardManager does not suppress `<select>` elements~~ FIXED
 
 **File:** `src/utils/input/KeyboardManager.ts:144-168`
 
@@ -28,7 +28,7 @@ if (target instanceof HTMLSelectElement) {
 
 ---
 
-### H-02: LensControl slider thumbs invisible in WebKit/Blink
+### ~~H-02: LensControl slider thumbs invisible in WebKit/Blink~~ FIXED
 
 **File:** `src/ui/components/LensControl.ts`
 
@@ -44,7 +44,7 @@ if (target instanceof HTMLSelectElement) {
 
 ---
 
-### H-03: CurveEditor drag uses mouse events without pointer capture
+### ~~H-03: CurveEditor drag uses mouse events without pointer capture~~ FIXED
 
 **File:** `src/ui/components/CurveEditor.ts:157-159`
 
@@ -62,7 +62,7 @@ if (target instanceof HTMLSelectElement) {
 
 ---
 
-### H-04: Text tool uses `window.prompt()` instead of inline input
+### ~~H-04: Text tool uses `window.prompt()` instead of inline input~~ FIXED
 
 **File:** `src/ui/components/ViewerInputHandler.ts:266`
 
@@ -93,7 +93,7 @@ if (target instanceof HTMLSelectElement) {
 
 ---
 
-### H-05: Timeline has no touch event support
+### ~~H-05: Timeline has no touch event support~~ FIXED
 
 **File:** `src/ui/components/Timeline.ts:105-109`
 
@@ -111,7 +111,7 @@ if (target instanceof HTMLSelectElement) {
 
 ---
 
-### H-06: Volume slider inaccessible on mobile (hover-only reveal)
+### ~~H-06: Volume slider inaccessible on mobile (hover-only reveal)~~ FIXED
 
 **File:** `src/ui/components/VolumeControl.ts:75-81`
 
@@ -128,7 +128,7 @@ if (target instanceof HTMLSelectElement) {
 
 ---
 
-### H-07: Five view controls append dropdowns to container instead of `document.body`
+### ~~H-07: Five view controls append dropdowns to container instead of `document.body`~~ FIXED
 
 **Files:**
 - `src/ui/components/ToneMappingControl.ts:130`
@@ -154,7 +154,7 @@ if (target instanceof HTMLSelectElement) {
 
 ---
 
-### H-08: Left panel opens to 0px width when uncollapsing
+### ~~H-08: Left panel opens to 0px width when uncollapsing~~ FIXED
 
 **File:** `src/ui/layout/LayoutStore.ts:68`
 
@@ -170,7 +170,7 @@ if (target instanceof HTMLSelectElement) {
 
 ---
 
-### H-09: Side panels never populated with content
+### ~~H-09: Side panels never populated with content~~ FIXED
 
 **File:** `src/App.ts` (missing `addPanelTab` calls)
 
@@ -188,7 +188,7 @@ if (target instanceof HTMLSelectElement) {
 
 ---
 
-### H-10: Export menu items are `<div>` elements, not keyboard-accessible
+### ~~H-10: Export menu items are `<div>` elements, not keyboard-accessible~~ FIXED
 
 **File:** `src/ui/components/ExportControl.ts:172-215`
 
@@ -207,7 +207,7 @@ if (target instanceof HTMLSelectElement) {
 
 ---
 
-### H-11: Header buttons have no keyboard focus ring
+### ~~H-11: Header buttons have no keyboard focus ring~~ FIXED
 
 **File:** `src/ui/components/layout/HeaderBar.ts:265-325`
 
@@ -223,7 +223,7 @@ if (target instanceof HTMLSelectElement) {
 
 ---
 
-### H-12: SVG icons missing `aria-hidden="true"`
+### ~~H-12: SVG icons missing `aria-hidden="true"`~~ FIXED
 
 **File:** `src/ui/components/shared/Icons.ts:48`
 
@@ -242,7 +242,7 @@ Also add it to `HeaderBar.ts` `getIcon()` method SVGs.
 
 ---
 
-### H-13: No opacity control for paint annotations
+### ~~H-13: No opacity control for paint annotations~~ FIXED
 
 **File:** `src/ui/components/PaintToolbar.ts:316`
 
@@ -261,7 +261,7 @@ Also add it to `HeaderBar.ts` `getIcon()` method SVGs.
 
 ## SYSTEMIC MEDIUM SEVERITY
 
-### M-14: No Escape key to close popup panels (11 controls)
+### ~~M-14: No Escape key to close popup panels (11 controls)~~ FIXED
 
 **Files:**
 - `src/ui/components/FilterControl.ts`
@@ -288,7 +288,7 @@ Also add it to `HeaderBar.ts` `getIcon()` method SVGs.
 
 ---
 
-### M-15: Missing ARIA attributes on ~15 controls
+### ~~M-15: Missing ARIA attributes on ~15 controls~~ FIXED
 
 **Controls affected:** FalseColorControl, ZebraControl, HSLQualifierControl, LuminanceVisualizationControl, GamutMappingControl, GhostFrameControl, ScopesControl, CompareControl, FilterControl, LensControl, DeinterlaceControl, FilmEmulationControl, PerspectiveCorrectionControl, StabilizationControl, ExportControl
 
@@ -327,7 +327,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### M-17: Missing `setPointerCapture` on drag interactions (2 controls)
+### ~~M-17: Missing `setPointerCapture` on drag interactions (2 controls)~~ FIXED
 
 **Files:**
 - `src/ui/components/PerspectiveGridOverlay.ts:204-213`
@@ -359,7 +359,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### M-19: Checkbox labels use click handler instead of `for`/`id` association (4 controls)
+### ~~M-19: Checkbox labels use click handler instead of `for`/`id` association (4 controls)~~ FIXED
 
 **Files:**
 - `src/ui/components/DeinterlaceControl.ts:189`
@@ -378,7 +378,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### M-20: Border-color not reset on mouseleave when inactive (3 controls)
+### ~~M-20: Border-color not reset on mouseleave when inactive (3 controls)~~ FIXED
 
 **Files:**
 - `src/ui/components/ZebraControl.ts:76-77`
@@ -395,7 +395,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### M-21: Always-on outside click listeners (5 controls)
+### ~~M-21: Always-on outside click listeners (5 controls)~~ FIXED
 
 **Files:**
 - `src/ui/components/ToneMappingControl.ts:133`
@@ -418,7 +418,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ## INDIVIDUAL MEDIUM SEVERITY
 
-### M-22: Speed menu popup not keyboard-accessible
+### ~~M-22: Speed menu popup not keyboard-accessible~~ FIXED
 
 **File:** `src/ui/components/layout/HeaderBar.ts:522-643`
 
@@ -436,7 +436,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### M-23: FocusManager hidden zone detection uses fragile AND logic
+### ~~M-23: FocusManager hidden zone detection uses fragile AND logic~~ FIXED
 
 **File:** `src/ui/a11y/FocusManager.ts:73`
 
@@ -451,7 +451,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### M-24: ContextToolbar `createSlider()` lacks ARIA attributes
+### ~~M-24: ContextToolbar `createSlider()` lacks ARIA attributes~~ FIXED
 
 **File:** `src/ui/components/layout/ContextToolbar.ts:356-415`
 
@@ -484,7 +484,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### M-26: Inline `outline: none` may suppress focus indicators
+### ~~M-26: Inline `outline: none` may suppress focus indicators~~ FIXED
 
 **File:** `src/ui/components/layout/ContextToolbar.ts:264,326`
 
@@ -499,7 +499,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### M-27: Rotation buttons have no active state indicator
+### ~~M-27: Rotation buttons have no active state indicator~~ FIXED
 
 **File:** `src/ui/components/TransformControl.ts:95-116`
 
@@ -548,7 +548,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### M-30: No active preset indicator in layout preset bar
+### ~~M-30: No active preset indicator in layout preset bar~~ FIXED
 
 **File:** `src/ui/layout/LayoutManager.ts:292-341`
 

@@ -15,6 +15,7 @@ export class LensControl extends EventEmitter<LensControlEvents> {
 
   private sliders: Map<string, HTMLInputElement> = new Map();
   private valueLabels: Map<string, HTMLSpanElement> = new Map();
+  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
 
   constructor() {
     super();
@@ -33,6 +34,8 @@ export class LensControl extends EventEmitter<LensControlEvents> {
     this.lensButton = document.createElement('button');
     this.lensButton.innerHTML = `${getIconSvg('aperture', 'sm')}<span style="margin-left: 6px;">Lens</span>`;
     this.lensButton.title = 'Lens distortion correction';
+    this.lensButton.setAttribute('aria-haspopup', 'dialog');
+    this.lensButton.setAttribute('aria-expanded', 'false');
     this.lensButton.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -66,6 +69,8 @@ export class LensControl extends EventEmitter<LensControlEvents> {
     // Create panel (rendered at body level)
     this.panel = document.createElement('div');
     this.panel.className = 'lens-panel';
+    this.panel.setAttribute('role', 'dialog');
+    this.panel.setAttribute('aria-label', 'Lens Correction Settings');
     this.panel.style.cssText = `
       position: fixed;
       background: var(--bg-secondary);
@@ -86,6 +91,13 @@ export class LensControl extends EventEmitter<LensControlEvents> {
     // Close panel on outside click
     this.boundHandleDocumentClick = this.handleDocumentClick.bind(this);
     document.addEventListener('click', this.boundHandleDocumentClick);
+
+    // Close on Escape key
+    this.boundHandleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && this.isPanelOpen) {
+        this.hidePanel();
+      }
+    };
   }
 
   private boundHandleDocumentClick: (e: MouseEvent) => void;
@@ -282,6 +294,32 @@ export class LensControl extends EventEmitter<LensControlEvents> {
       cursor: pointer;
     `;
 
+    // Style the slider thumb
+    const styleId = 'lens-slider-style';
+    if (!document.getElementById(styleId)) {
+      const style = document.createElement('style');
+      style.id = styleId;
+      style.textContent = `
+        .lens-panel input[type="range"]::-webkit-slider-thumb {
+          -webkit-appearance: none;
+          width: 12px;
+          height: 12px;
+          background: var(--accent-primary);
+          border-radius: 50%;
+          cursor: pointer;
+        }
+        .lens-panel input[type="range"]::-moz-range-thumb {
+          width: 12px;
+          height: 12px;
+          background: var(--accent-primary);
+          border-radius: 50%;
+          cursor: pointer;
+          border: none;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
     this.sliders.set(key, slider);
     this.valueLabels.set(key, valueEl);
 
@@ -349,13 +387,24 @@ export class LensControl extends EventEmitter<LensControlEvents> {
 
     this.isPanelOpen = true;
     this.panel.style.display = 'block';
+    this.lensButton.setAttribute('aria-expanded', 'true');
     this.updateButtonState();
+    document.addEventListener('keydown', this.boundHandleKeyDown);
+
+    // Move focus to the first interactive element in the panel
+    const firstSlider = this.sliders.get('k1');
+    firstSlider?.focus();
   }
 
   hidePanel(): void {
     this.isPanelOpen = false;
     this.panel.style.display = 'none';
+    this.lensButton.setAttribute('aria-expanded', 'false');
     this.updateButtonState();
+    document.removeEventListener('keydown', this.boundHandleKeyDown);
+
+    // Return focus to the toggle button
+    this.lensButton.focus();
   }
 
   reset(): void {
@@ -385,10 +434,13 @@ export class LensControl extends EventEmitter<LensControlEvents> {
   }
 
   dispose(): void {
+    document.removeEventListener('keydown', this.boundHandleKeyDown);
     document.removeEventListener('click', this.boundHandleDocumentClick);
     // Remove body-mounted panel if present
     if (this.panel.parentNode) {
       this.panel.parentNode.removeChild(this.panel);
     }
+    const styleEl = document.getElementById('lens-slider-style');
+    if (styleEl) styleEl.remove();
   }
 }

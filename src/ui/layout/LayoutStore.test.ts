@@ -448,6 +448,77 @@ describe('LayoutStore', () => {
     });
   });
 
+  describe('LS-H08: Uncollapsing panel clamps size to minimum', () => {
+    it('LS-H08a: toggling a collapsed panel with size 0 sets size to at least MIN_SIDE_PANEL_WIDTH', () => {
+      // Left panel defaults to size: 0, collapsed: true
+      expect(store.panels.left.size).toBe(0);
+      expect(store.panels.left.collapsed).toBe(true);
+
+      store.togglePanelCollapsed('left');
+
+      expect(store.panels.left.collapsed).toBe(false);
+      expect(store.panels.left.size).toBe(MIN_SIDE_PANEL_WIDTH);
+    });
+
+    it('LS-H08b: toggling a collapsed panel with size below minimum clamps to MIN_SIDE_PANEL_WIDTH', () => {
+      // Manually set up a panel with size below minimum but collapsed
+      store.setPanelCollapsed('right', false);
+      store.setPanelSize('right', 300);
+      // Now collapse it and manually set size below minimum to simulate stored state
+      store.setPanelCollapsed('right', true);
+      // Directly manipulate the internal state to set size below minimum
+      (store.panels.right as any).size = 100;
+
+      expect(store.panels.right.size).toBe(100);
+      expect(store.panels.right.collapsed).toBe(true);
+
+      store.togglePanelCollapsed('right');
+
+      expect(store.panels.right.collapsed).toBe(false);
+      expect(store.panels.right.size).toBe(MIN_SIDE_PANEL_WIDTH);
+    });
+
+    it('LS-H08c: toggling a collapsed panel with size above minimum preserves the stored size', () => {
+      // Set right panel to a valid size and collapse it
+      store.setPanelCollapsed('right', false);
+      store.setPanelSize('right', 300);
+      store.setPanelCollapsed('right', true);
+
+      expect(store.panels.right.size).toBe(300);
+      expect(store.panels.right.collapsed).toBe(true);
+
+      store.togglePanelCollapsed('right');
+
+      expect(store.panels.right.collapsed).toBe(false);
+      expect(store.panels.right.size).toBe(300);
+    });
+
+    it('LS-H08d2: toggling a collapsed bottom panel with size below MIN_BOTTOM_PANEL_HEIGHT clamps to MIN_BOTTOM_PANEL_HEIGHT', () => {
+      // Force bottom panel to collapsed with tiny size
+      store.setPanelCollapsed('bottom', true);
+      (store.panels.bottom as any).size = 20;
+
+      expect(store.panels.bottom.collapsed).toBe(true);
+      expect(store.panels.bottom.size).toBe(20);
+
+      store.togglePanelCollapsed('bottom');
+
+      expect(store.panels.bottom.collapsed).toBe(false);
+      expect(store.panels.bottom.size).toBe(MIN_BOTTOM_PANEL_HEIGHT);
+    });
+
+    it('LS-H08d: after uncollapsing, getEffectiveSize returns the clamped size', () => {
+      // Left panel defaults to size: 0, collapsed: true
+      expect(store.getEffectiveSize('left')).toBe(COLLAPSED_RAIL_SIZE);
+
+      store.setPanelCollapsed('left', false);
+
+      // Size should have been clamped to MIN_SIDE_PANEL_WIDTH
+      expect(store.getEffectiveSize('left')).toBe(MIN_SIDE_PANEL_WIDTH);
+      expect(store.panels.left.size).toBe(MIN_SIDE_PANEL_WIDTH);
+    });
+  });
+
   describe('General', () => {
     it('emits layoutChanged on state changes', () => {
       const spy = vi.fn();

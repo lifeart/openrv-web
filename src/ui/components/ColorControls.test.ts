@@ -450,6 +450,49 @@ describe('ColorControls', () => {
     });
   });
 
+  describe('Escape key handling (M-14)', () => {
+    it('COL-M14a: pressing Escape while the panel is open should close it', () => {
+      const handler = vi.fn();
+      controls.on('visibilityChanged', handler);
+
+      controls.show();
+      expect(handler).toHaveBeenCalledWith(true);
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+      expect(handler).toHaveBeenCalledWith(false);
+    });
+
+    it('COL-M14b: pressing Escape while the panel is closed should have no effect', () => {
+      const handler = vi.fn();
+      controls.on('visibilityChanged', handler);
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('COL-M14c: the keydown listener should be removed when the panel closes', () => {
+      const spy = vi.spyOn(document, 'removeEventListener');
+
+      controls.show();
+      controls.hide();
+
+      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
+      spy.mockRestore();
+    });
+
+    it('COL-M14d: the keydown listener should be removed on dispose', () => {
+      const spy = vi.spyOn(document, 'removeEventListener');
+
+      controls.show();
+      controls.dispose();
+
+      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
+      spy.mockRestore();
+    });
+  });
+
   describe('dispose', () => {
     it('COL-044: removes document click listener on dispose', () => {
       const addSpy = vi.spyOn(document, 'addEventListener');

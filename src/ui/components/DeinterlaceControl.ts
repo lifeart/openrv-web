@@ -33,6 +33,7 @@ export class DeinterlaceControl extends EventEmitter<DeinterlaceControlEvents> {
   private fieldOrderSelect: HTMLSelectElement | null = null;
 
   private boundHandleDocumentClick: (e: MouseEvent) => void;
+  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
 
   constructor() {
     super();
@@ -50,6 +51,8 @@ export class DeinterlaceControl extends EventEmitter<DeinterlaceControlEvents> {
     this.button.innerHTML = `${getIconSvg('filter', 'sm')}<span style="margin-left: 6px;">Deinterlace</span>`;
     this.button.dataset.testid = 'deinterlace-control-button';
     this.button.title = 'Deinterlace preview';
+    this.button.setAttribute('aria-haspopup', 'dialog');
+    this.button.setAttribute('aria-expanded', 'false');
     this.button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -86,6 +89,8 @@ export class DeinterlaceControl extends EventEmitter<DeinterlaceControlEvents> {
     this.panel = document.createElement('div');
     this.panel.className = 'deinterlace-panel';
     this.panel.dataset.testid = 'deinterlace-panel';
+    this.panel.setAttribute('role', 'dialog');
+    this.panel.setAttribute('aria-label', 'Deinterlace Settings');
     this.panel.style.cssText = `
       position: fixed;
       background: var(--bg-secondary);
@@ -103,6 +108,13 @@ export class DeinterlaceControl extends EventEmitter<DeinterlaceControlEvents> {
 
     this.boundHandleDocumentClick = this.handleDocumentClick.bind(this);
     document.addEventListener('click', this.boundHandleDocumentClick);
+
+    // Close on Escape key
+    this.boundHandleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && this.isPanelOpen) {
+        this.hide();
+      }
+    };
   }
 
   private handleDocumentClick(e: MouseEvent): void {
@@ -179,14 +191,15 @@ export class DeinterlaceControl extends EventEmitter<DeinterlaceControlEvents> {
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.checked = initialValue;
+    checkbox.id = 'deinterlace-enabled-checkbox';
     checkbox.dataset.testid = 'deinterlace-enabled-checkbox';
     checkbox.style.cssText = 'cursor: pointer;';
     checkbox.addEventListener('change', () => onChange(checkbox.checked));
 
     const labelEl = document.createElement('label');
+    labelEl.htmlFor = 'deinterlace-enabled-checkbox';
     labelEl.textContent = label;
     labelEl.style.cssText = 'color: var(--text-secondary); font-size: 12px; cursor: pointer;';
-    labelEl.addEventListener('click', () => { checkbox.click(); });
 
     row.appendChild(checkbox);
     row.appendChild(labelEl);
@@ -265,13 +278,23 @@ export class DeinterlaceControl extends EventEmitter<DeinterlaceControlEvents> {
     this.panel.style.left = `${Math.max(8, rect.right - 240)}px`;
     this.isPanelOpen = true;
     this.panel.style.display = 'block';
+    this.button.setAttribute('aria-expanded', 'true');
     this.updateButtonState();
+    document.addEventListener('keydown', this.boundHandleKeyDown);
+
+    // Move focus to the first interactive element in the panel
+    this.enabledCheckbox?.focus();
   }
 
   hide(): void {
     this.isPanelOpen = false;
     this.panel.style.display = 'none';
+    this.button.setAttribute('aria-expanded', 'false');
     this.updateButtonState();
+    document.removeEventListener('keydown', this.boundHandleKeyDown);
+
+    // Return focus to the toggle button
+    this.button.focus();
   }
 
   reset(): void {
@@ -303,6 +326,7 @@ export class DeinterlaceControl extends EventEmitter<DeinterlaceControlEvents> {
   }
 
   dispose(): void {
+    document.removeEventListener('keydown', this.boundHandleKeyDown);
     document.removeEventListener('click', this.boundHandleDocumentClick);
     if (this.panel.parentNode) {
       this.panel.parentNode.removeChild(this.panel);

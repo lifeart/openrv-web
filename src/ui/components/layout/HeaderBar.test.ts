@@ -1169,4 +1169,360 @@ describe('HeaderBar', () => {
       expect(stillHidden.length).toBe(0);
     });
   });
+
+  describe('keyboard focus ring (H-11)', () => {
+    it('HB-H11a: createIconButton() should call applyA11yFocus on the created button', () => {
+      const el = headerBar.render();
+      // Pick an icon button - the help button
+      const helpBtn = Array.from(el.querySelectorAll('button')).find(
+        (btn) => btn.title?.includes('Keyboard shortcuts')
+      ) as HTMLButtonElement;
+
+      // applyA11yFocus registers a focus listener that sets outline on keyboard focus.
+      // Simulate keyboard focus (no preceding mousedown).
+      helpBtn.dispatchEvent(new Event('focus'));
+      expect(helpBtn.style.outline).toBe('2px solid var(--accent-primary)');
+      expect(helpBtn.style.outlineOffset).toBe('2px');
+    });
+
+    it('HB-H11b: createCompactButton() should call applyA11yFocus on the created button', () => {
+      const el = headerBar.render();
+      // The loop button is created via createCompactButton
+      const loopBtn = Array.from(el.querySelectorAll('button')).find(
+        (btn) => btn.title?.includes('loop mode')
+      ) as HTMLButtonElement;
+
+      // Simulate keyboard focus (no preceding mousedown).
+      loopBtn.dispatchEvent(new Event('focus'));
+      expect(loopBtn.style.outline).toBe('2px solid var(--accent-primary)');
+      expect(loopBtn.style.outlineOffset).toBe('2px');
+    });
+
+    it('HB-H11c: when a header button receives focus via keyboard (Tab), it should have a visible focus ring', () => {
+      const el = headerBar.render();
+      // Pick the fullscreen button
+      const fullscreenBtn = el.querySelector('[data-testid="fullscreen-toggle-button"]') as HTMLButtonElement;
+
+      // Simulate Tab focus (no mousedown before focus)
+      fullscreenBtn.dispatchEvent(new Event('focus'));
+      expect(fullscreenBtn.style.outline).toBe('2px solid var(--accent-primary)');
+      expect(fullscreenBtn.style.outlineOffset).toBe('2px');
+    });
+
+    it('HB-H11d: when a header button receives focus via mouse click, it should NOT show the focus ring', () => {
+      const el = headerBar.render();
+      // Pick the fullscreen button
+      const fullscreenBtn = el.querySelector('[data-testid="fullscreen-toggle-button"]') as HTMLButtonElement;
+
+      // Simulate mouse click: mousedown fires before focus
+      fullscreenBtn.dispatchEvent(new Event('mousedown'));
+      fullscreenBtn.dispatchEvent(new Event('focus'));
+      expect(fullscreenBtn.style.outline).not.toBe('2px solid var(--accent-primary)');
+    });
+  });
+
+  describe('SVG icons aria-hidden (H-12)', () => {
+    it('ICN-H12c: HeaderBar getIcon() SVGs should have aria-hidden="true"', () => {
+      const el = headerBar.render();
+      // All SVG elements within buttons should have aria-hidden="true"
+      const svgs = el.querySelectorAll('button svg');
+      expect(svgs.length).toBeGreaterThan(0);
+      svgs.forEach((svg) => {
+        expect(svg.getAttribute('aria-hidden')).toBe('true');
+      });
+    });
+
+    it('ICN-H12c-play: play button icon SVG has aria-hidden="true"', () => {
+      const el = headerBar.render();
+      const playBtn = Array.from(el.querySelectorAll('button')).find(
+        (btn) => btn.title?.includes('Play') || btn.title?.includes('Pause')
+      ) as HTMLButtonElement;
+      const svg = playBtn.querySelector('svg');
+      expect(svg).not.toBeNull();
+      expect(svg!.getAttribute('aria-hidden')).toBe('true');
+    });
+
+    it('ICN-H12c-update: play button icon SVG retains aria-hidden after playback state change', () => {
+      const el = headerBar.render();
+      const playBtn = Array.from(el.querySelectorAll('button')).find(
+        (btn) => btn.title?.includes('Play') || btn.title?.includes('Pause')
+      ) as HTMLButtonElement;
+
+      // Simulate playback started (switches to pause icon)
+      (session as any)._isPlaying = true;
+      session.emit('playbackChanged', true);
+
+      const svg = playBtn.querySelector('svg');
+      expect(svg).not.toBeNull();
+      expect(svg!.getAttribute('aria-hidden')).toBe('true');
+    });
+
+    it('ICN-H12c-fullscreen: fullscreen button icon SVG has aria-hidden after state change', () => {
+      const el = headerBar.render();
+      const fullscreenBtn = el.querySelector('[data-testid="fullscreen-toggle-button"]') as HTMLButtonElement;
+
+      // Toggle fullscreen state (switches icon from maximize to minimize)
+      headerBar.setFullscreenState(true);
+
+      const svg = fullscreenBtn.querySelector('svg');
+      expect(svg).not.toBeNull();
+      expect(svg!.getAttribute('aria-hidden')).toBe('true');
+    });
+
+    it('ICN-H12c-session: session name display icon SVG has aria-hidden="true"', () => {
+      const el = headerBar.render();
+      const sessionDisplay = el.querySelector('[data-testid="session-name-display"]') as HTMLElement;
+      const svg = sessionDisplay.querySelector('svg');
+      expect(svg).not.toBeNull();
+      expect(svg!.getAttribute('aria-hidden')).toBe('true');
+    });
+  });
+
+  describe('speed menu keyboard accessibility (M-22)', () => {
+    /** Helper: opens the speed menu and returns the menu element */
+    function openSpeedMenu(el: HTMLElement, method: 'contextmenu' | 'shift-enter' | 'shift-space' = 'contextmenu'): HTMLElement {
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
+      if (method === 'contextmenu') {
+        speedBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+      } else if (method === 'shift-enter') {
+        speedBtn.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true }));
+      } else if (method === 'shift-space') {
+        speedBtn.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', shiftKey: true, bubbles: true }));
+      }
+      const menu = document.getElementById('speed-preset-menu');
+      expect(menu).not.toBeNull();
+      return menu!;
+    }
+
+    afterEach(() => {
+      // Cleanup any leftover menus
+      document.getElementById('speed-preset-menu')?.remove();
+    });
+
+    it('SPD-M22a: Shift+Enter on the speed button should open the speed preset menu', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
+      speedBtn.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true }));
+
+      const menu = document.getElementById('speed-preset-menu');
+      expect(menu).not.toBeNull();
+
+      document.body.removeChild(el);
+    });
+
+    it('SPD-M22a-space: Shift+Space on the speed button should open the speed preset menu', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
+      speedBtn.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', shiftKey: true, bubbles: true }));
+
+      const menu = document.getElementById('speed-preset-menu');
+      expect(menu).not.toBeNull();
+
+      document.body.removeChild(el);
+    });
+
+    it('SPD-M22a-haspopup: speed button should have aria-haspopup="menu"', () => {
+      const el = headerBar.render();
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
+      expect(speedBtn.getAttribute('aria-haspopup')).toBe('menu');
+    });
+
+    it('SPD-M22b: Speed menu container should have role="menu"', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const menu = openSpeedMenu(el);
+      expect(menu.getAttribute('role')).toBe('menu');
+
+      document.body.removeChild(el);
+    });
+
+    it('SPD-M22c: Speed menu items should have role="menuitem"', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const menu = openSpeedMenu(el);
+      const menuItems = menu.querySelectorAll('[role="menuitem"]');
+      // Should have speed presets + pitch correction toggle
+      expect(menuItems.length).toBe(PLAYBACK_SPEED_PRESETS.length + 1);
+
+      document.body.removeChild(el);
+    });
+
+    it('SPD-M22d: ArrowDown should navigate to next speed menu item', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const menu = openSpeedMenu(el);
+      const menuItems = Array.from(menu.querySelectorAll('[role="menuitem"]')) as HTMLElement[];
+
+      // Focus the first item
+      menuItems[0]!.focus();
+      expect(document.activeElement).toBe(menuItems[0]);
+
+      // Press ArrowDown
+      menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      expect(document.activeElement).toBe(menuItems[1]);
+
+      document.body.removeChild(el);
+    });
+
+    it('SPD-M22d-up: ArrowUp should navigate to previous speed menu item', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const menu = openSpeedMenu(el);
+      const menuItems = Array.from(menu.querySelectorAll('[role="menuitem"]')) as HTMLElement[];
+
+      // Focus the second item
+      menuItems[1]!.focus();
+      expect(document.activeElement).toBe(menuItems[1]);
+
+      // Press ArrowUp
+      menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+      expect(document.activeElement).toBe(menuItems[0]);
+
+      document.body.removeChild(el);
+    });
+
+    it('SPD-M22d-wrap-down: ArrowDown wraps from last to first item', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const menu = openSpeedMenu(el);
+      const menuItems = Array.from(menu.querySelectorAll('[role="menuitem"]')) as HTMLElement[];
+      const lastItem = menuItems[menuItems.length - 1]!;
+
+      // Focus the last item
+      lastItem.focus();
+      expect(document.activeElement).toBe(lastItem);
+
+      // Press ArrowDown should wrap to first
+      menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      expect(document.activeElement).toBe(menuItems[0]);
+
+      document.body.removeChild(el);
+    });
+
+    it('SPD-M22d-wrap-up: ArrowUp wraps from first to last item', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const menu = openSpeedMenu(el);
+      const menuItems = Array.from(menu.querySelectorAll('[role="menuitem"]')) as HTMLElement[];
+
+      // Focus the first item
+      menuItems[0]!.focus();
+      expect(document.activeElement).toBe(menuItems[0]);
+
+      // Press ArrowUp should wrap to last
+      menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+      expect(document.activeElement).toBe(menuItems[menuItems.length - 1]);
+
+      document.body.removeChild(el);
+    });
+
+    it('SPD-M22e: Pressing Escape should close the speed menu', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const menu = openSpeedMenu(el);
+      expect(document.getElementById('speed-preset-menu')).not.toBeNull();
+
+      // Press Escape
+      menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      expect(document.getElementById('speed-preset-menu')).toBeNull();
+
+      document.body.removeChild(el);
+    });
+
+    it('SPD-M22e-focus: Pressing Escape returns focus to the speed button', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
+      const menu = openSpeedMenu(el);
+
+      // Press Escape
+      menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      expect(document.activeElement).toBe(speedBtn);
+
+      document.body.removeChild(el);
+    });
+
+    it('SPD-M22f: The currently active speed should have aria-checked="true"', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      // Default speed is 1x
+      const menu = openSpeedMenu(el);
+      const activeItem = menu.querySelector('[data-testid="speed-preset-1"]') as HTMLElement;
+      expect(activeItem).not.toBeNull();
+      expect(activeItem.getAttribute('aria-checked')).toBe('true');
+
+      // Other items should NOT have aria-checked
+      const otherItem = menu.querySelector('[data-testid="speed-preset-2"]') as HTMLElement;
+      expect(otherItem.hasAttribute('aria-checked')).toBe(false);
+
+      document.body.removeChild(el);
+    });
+
+    it('SPD-M22f-2x: When speed is 2x, the 2x item should have aria-checked="true"', () => {
+      session.playbackSpeed = 2;
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const menu = openSpeedMenu(el);
+      const item2x = menu.querySelector('[data-testid="speed-preset-2"]') as HTMLElement;
+      expect(item2x.getAttribute('aria-checked')).toBe('true');
+
+      const item1x = menu.querySelector('[data-testid="speed-preset-1"]') as HTMLElement;
+      expect(item1x.hasAttribute('aria-checked')).toBe(false);
+
+      document.body.removeChild(el);
+    });
+
+    it('SPD-M22f-visual: The active speed item should have accent background color', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const menu = openSpeedMenu(el);
+      const activeItem = menu.querySelector('[data-testid="speed-preset-1"]') as HTMLElement;
+      expect(activeItem.style.background).toContain('var(--accent-primary)');
+      expect(activeItem.style.color).toBe('white');
+
+      document.body.removeChild(el);
+    });
+
+    it('SPD-M22-focus-active: Menu should focus the active speed item on open', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      // Default speed is 1x, so the 1x item should be focused
+      openSpeedMenu(el);
+      const activeItem = document.querySelector('[data-testid="speed-preset-1"]') as HTMLElement;
+      expect(document.activeElement).toBe(activeItem);
+
+      document.body.removeChild(el);
+    });
+
+    it('SPD-M22-tab: Tab should close the menu and return focus to button', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
+      const menu = openSpeedMenu(el);
+
+      // Press Tab
+      menu.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+      expect(document.getElementById('speed-preset-menu')).toBeNull();
+      expect(document.activeElement).toBe(speedBtn);
+
+      document.body.removeChild(el);
+    });
+  });
 });

@@ -588,6 +588,114 @@ describe('StackControl', () => {
   });
 });
 
+describe('StackControl layer button hover states', () => {
+  let control: StackControl;
+
+  beforeEach(() => {
+    control = new StackControl();
+  });
+
+  afterEach(() => {
+    control.dispose();
+  });
+
+  function addTwoLayersAndShowPanel(): void {
+    control.addLayer({ name: 'Layer 1', visible: true, opacity: 1, blendMode: 'normal', sourceIndex: 0 });
+    control.addLayer({ name: 'Layer 2', visible: true, opacity: 1, blendMode: 'normal', sourceIndex: 1 });
+    control.render();
+    control.showPanel();
+  }
+
+  it('SC-M28a: Layer visibility button should change style on hover', () => {
+    addTwoLayersAndShowPanel();
+
+    const layers = control.getLayers();
+    const visBtn = document.querySelector(`[data-testid="stack-layer-visibility-${layers[0]!.id}"]`) as HTMLButtonElement;
+    expect(visBtn).toBeTruthy();
+
+    const originalColor = visBtn.style.color;
+    visBtn.dispatchEvent(new MouseEvent('mouseenter'));
+    expect(visBtn.style.color).toBe('var(--text-primary)');
+
+    visBtn.dispatchEvent(new MouseEvent('mouseleave'));
+    expect(visBtn.style.color).toBe(originalColor);
+  });
+
+  it('SC-M28b: Layer move-up button should change style on hover', () => {
+    addTwoLayersAndShowPanel();
+
+    const layers = control.getLayers();
+    // Layer at index 0 (bottom) has move-up enabled
+    const moveUpBtn = document.querySelector(`[data-testid="stack-layer-move-up-${layers[0]!.id}"]`) as HTMLButtonElement;
+    expect(moveUpBtn).toBeTruthy();
+    expect(moveUpBtn.disabled).toBe(false);
+
+    moveUpBtn.dispatchEvent(new MouseEvent('mouseenter'));
+    expect(moveUpBtn.style.background).toBe('var(--bg-hover)');
+    expect(moveUpBtn.style.borderColor).toBe('var(--border-primary)');
+    expect(moveUpBtn.style.color).toBe('var(--text-primary)');
+
+    moveUpBtn.dispatchEvent(new MouseEvent('mouseleave'));
+    expect(moveUpBtn.style.background).toBe('transparent');
+    expect(moveUpBtn.style.borderColor).toBe('transparent');
+  });
+
+  it('SC-M28c: Layer move-down button should change style on hover', () => {
+    addTwoLayersAndShowPanel();
+
+    const layers = control.getLayers();
+    // Layer at index 1 (top) has move-down enabled
+    const moveDownBtn = document.querySelector(`[data-testid="stack-layer-move-down-${layers[1]!.id}"]`) as HTMLButtonElement;
+    expect(moveDownBtn).toBeTruthy();
+    expect(moveDownBtn.disabled).toBe(false);
+
+    moveDownBtn.dispatchEvent(new MouseEvent('mouseenter'));
+    expect(moveDownBtn.style.background).toBe('var(--bg-hover)');
+    expect(moveDownBtn.style.borderColor).toBe('var(--border-primary)');
+    expect(moveDownBtn.style.color).toBe('var(--text-primary)');
+
+    moveDownBtn.dispatchEvent(new MouseEvent('mouseleave'));
+    expect(moveDownBtn.style.background).toBe('transparent');
+    expect(moveDownBtn.style.borderColor).toBe('transparent');
+  });
+
+  it('SC-M28d: Layer delete button should change style on hover', () => {
+    addTwoLayersAndShowPanel();
+
+    const layers = control.getLayers();
+    const deleteBtn = document.querySelector(`[data-testid="stack-layer-delete-${layers[0]!.id}"]`) as HTMLButtonElement;
+    expect(deleteBtn).toBeTruthy();
+
+    deleteBtn.dispatchEvent(new MouseEvent('mouseenter'));
+    expect(deleteBtn.style.background).toBe('rgba(var(--error-rgb, 255, 100, 100), 0.15)');
+    expect(deleteBtn.style.borderColor).toBe('var(--error)');
+
+    deleteBtn.dispatchEvent(new MouseEvent('mouseleave'));
+    expect(deleteBtn.style.background).toBe('transparent');
+    expect(deleteBtn.style.borderColor).toBe('transparent');
+  });
+
+  it('SC-M28e: Disabled buttons should NOT change style on hover', () => {
+    addTwoLayersAndShowPanel();
+
+    const layers = control.getLayers();
+    // Layer at index 1 (top, last in array) has move-up disabled
+    const moveUpBtn = document.querySelector(`[data-testid="stack-layer-move-up-${layers[1]!.id}"]`) as HTMLButtonElement;
+    expect(moveUpBtn).toBeTruthy();
+    expect(moveUpBtn.disabled).toBe(true);
+
+    const bgBefore = moveUpBtn.style.background;
+    const borderBefore = moveUpBtn.style.borderColor;
+    const colorBefore = moveUpBtn.style.color;
+
+    moveUpBtn.dispatchEvent(new MouseEvent('mouseenter'));
+    // Styles should NOT change for disabled button
+    expect(moveUpBtn.style.background).toBe(bgBefore);
+    expect(moveUpBtn.style.borderColor).toBe(borderBefore);
+    expect(moveUpBtn.style.color).toBe(colorBefore);
+  });
+});
+
 describe('StackControl source selection', () => {
   let control: StackControl;
 
@@ -815,5 +923,156 @@ describe('StackControl source validation', () => {
     availableSources = control.getAvailableSources();
     isValid = availableSources.some(s => s.index === layer.sourceIndex);
     expect(isValid).toBe(false);
+  });
+});
+
+describe('StackControl drag-and-drop reordering', () => {
+  let control: StackControl;
+
+  // jsdom does not provide DragEvent or DataTransfer, so we create
+  // a minimal mock DataTransfer and use plain Event with a dataTransfer property.
+  class MockDataTransfer {
+    private data: Record<string, string> = {};
+    effectAllowed = 'uninitialized';
+    dropEffect = 'none';
+    setData(format: string, value: string): void {
+      this.data[format] = value;
+    }
+    getData(format: string): string {
+      return this.data[format] ?? '';
+    }
+  }
+
+  function createDragEvent(type: string, dataTransfer?: MockDataTransfer): Event {
+    const event = new Event(type, { bubbles: true, cancelable: true });
+    (event as unknown as Record<string, unknown>).dataTransfer = dataTransfer ?? null;
+    return event;
+  }
+
+  beforeEach(() => {
+    control = new StackControl();
+  });
+
+  afterEach(() => {
+    control.dispose();
+  });
+
+  function addThreeLayers(): void {
+    control.addLayer({ name: 'Bottom', visible: true, opacity: 1, blendMode: 'normal', sourceIndex: 0 });
+    control.addLayer({ name: 'Middle', visible: true, opacity: 1, blendMode: 'normal', sourceIndex: 1 });
+    control.addLayer({ name: 'Top', visible: true, opacity: 1, blendMode: 'normal', sourceIndex: 2 });
+  }
+
+  function getLayerElement(layerId: string): HTMLElement | null {
+    control.showPanel();
+    const panel = document.querySelector('[data-testid="stack-panel"]');
+    return panel?.querySelector(`[data-testid="stack-layer-${layerId}"]`) as HTMLElement | null;
+  }
+
+  it('SC-M29a: layer items should have draggable="true" attribute', () => {
+    addThreeLayers();
+    const layers = control.getLayers();
+    const el = getLayerElement(layers[0]!.id);
+    expect(el).not.toBeNull();
+    expect(el!.draggable).toBe(true);
+    expect(el!.getAttribute('data-layer-id')).toBe(layers[0]!.id);
+  });
+
+  it('SC-M29b: dragstart should set the dragged layer index in dataTransfer', () => {
+    addThreeLayers();
+    const layers = control.getLayers();
+    // Layer at array index 0 is "Bottom"
+    const el = getLayerElement(layers[0]!.id);
+    expect(el).not.toBeNull();
+
+    const dt = new MockDataTransfer();
+    const dragStartEvent = createDragEvent('dragstart', dt);
+
+    el!.dispatchEvent(dragStartEvent);
+
+    // The layer at array index 0 should store '0' in dataTransfer
+    expect(dt.getData('text/plain')).toBe('0');
+    // Element should become semi-transparent
+    expect(el!.style.opacity).toBe('0.5');
+  });
+
+  it('SC-M29c: dragover on a different layer should show a drop indicator', () => {
+    addThreeLayers();
+    const layers = control.getLayers();
+    // "Top" layer (index 2) - get its element
+    const topEl = getLayerElement(layers[2]!.id);
+    expect(topEl).not.toBeNull();
+
+    const dt = new MockDataTransfer();
+    const dragOverEvent = createDragEvent('dragover', dt);
+
+    topEl!.dispatchEvent(dragOverEvent);
+
+    // Should show a drop indicator (border-top changed)
+    expect(topEl!.style.borderTop).toContain('2px solid');
+    // Event should have been prevented (allow drop)
+    expect(dragOverEvent.defaultPrevented).toBe(true);
+  });
+
+  it('SC-M29d: drop should reorder the layer and emit the change event', () => {
+    addThreeLayers();
+    const layers = control.getLayers();
+    expect(layers.map(l => l.name)).toEqual(['Bottom', 'Middle', 'Top']);
+
+    const callback = vi.fn();
+    control.on('layerReordered', callback);
+
+    // Simulate dragging "Bottom" (array index 0) onto "Top" (array index 2)
+    const topEl = getLayerElement(layers[2]!.id);
+    expect(topEl).not.toBeNull();
+
+    const dt = new MockDataTransfer();
+    dt.setData('text/plain', '0'); // dragging from array index 0
+
+    const dropEvent = createDragEvent('drop', dt);
+
+    topEl!.dispatchEvent(dropEvent);
+
+    // After move: "Bottom" should have moved to index 2
+    const reorderedLayers = control.getLayers();
+    expect(reorderedLayers.map(l => l.name)).toEqual(['Middle', 'Top', 'Bottom']);
+
+    // layerReordered should have been emitted
+    expect(callback).toHaveBeenCalledWith({
+      layerId: layers[0]!.id,
+      newIndex: 2,
+    });
+  });
+
+  it('SC-M29e: dragend should clean up the drop indicator', () => {
+    addThreeLayers();
+    const layers = control.getLayers();
+    const el = getLayerElement(layers[1]!.id);
+    expect(el).not.toBeNull();
+
+    // First simulate dragstart to set opacity
+    const dt1 = new MockDataTransfer();
+    const dragStartEvent = createDragEvent('dragstart', dt1);
+    el!.dispatchEvent(dragStartEvent);
+    expect(el!.style.opacity).toBe('0.5');
+
+    // Simulate dragover on another element to create a drop indicator
+    const otherEl = getLayerElement(layers[0]!.id);
+    const dt2 = new MockDataTransfer();
+    const dragOverEvent = createDragEvent('dragover', dt2);
+    otherEl!.dispatchEvent(dragOverEvent);
+    expect(otherEl!.style.borderTop).toContain('2px solid');
+
+    // Now simulate dragend on the source element
+    const dragEndEvent = createDragEvent('dragend');
+    el!.dispatchEvent(dragEndEvent);
+
+    // Opacity should be restored
+    expect(el!.style.opacity).toBe('1');
+    // Drop indicators should be cleared (border-top reset to empty)
+    const allLayerEls = document.querySelectorAll('.layer-item');
+    allLayerEls.forEach((item) => {
+      expect((item as HTMLElement).style.borderTop).toBe('');
+    });
   });
 });

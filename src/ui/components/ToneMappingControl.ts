@@ -127,10 +127,6 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
     `;
 
     this.createDropdownContent();
-    this.container.appendChild(this.dropdown);
-
-    // Close dropdown on outside click
-    document.addEventListener('click', this.handleOutsideClick);
 
   }
 
@@ -621,12 +617,17 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
     this.isDropdownOpen = !this.isDropdownOpen;
     this.toggleButton.setAttribute('aria-expanded', this.isDropdownOpen ? 'true' : 'false');
     if (this.isDropdownOpen) {
+      if (!document.body.contains(this.dropdown)) {
+        document.body.appendChild(this.dropdown);
+      }
       this.dropdown.style.display = 'block';
       this.positionDropdown();
+      document.addEventListener('click', this.handleOutsideClick);
       window.addEventListener('resize', this.boundHandleReposition);
       window.addEventListener('scroll', this.boundHandleReposition, true);
     } else {
       this.dropdown.style.display = 'none';
+      document.removeEventListener('click', this.handleOutsideClick);
       window.removeEventListener('resize', this.boundHandleReposition);
       window.removeEventListener('scroll', this.boundHandleReposition, true);
     }
@@ -639,11 +640,12 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
   }
 
   private handleOutsideClick = (e: MouseEvent): void => {
-    if (!this.container.contains(e.target as Node)) {
+    if (!this.container.contains(e.target as Node) && !this.dropdown.contains(e.target as Node)) {
       if (this.isDropdownOpen) {
         this.isDropdownOpen = false;
         this.toggleButton.setAttribute('aria-expanded', 'false');
         this.dropdown.style.display = 'none';
+        document.removeEventListener('click', this.handleOutsideClick);
         window.removeEventListener('resize', this.boundHandleReposition);
         window.removeEventListener('scroll', this.boundHandleReposition, true);
       }
@@ -786,6 +788,9 @@ export class ToneMappingControl extends EventEmitter<ToneMappingControlEvents> {
     document.removeEventListener('click', this.handleOutsideClick);
     window.removeEventListener('resize', this.boundHandleReposition);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
+    if (document.body.contains(this.dropdown)) {
+      document.body.removeChild(this.dropdown);
+    }
     this.operatorButtons.clear();
     this.hdrModeButtons.clear();
   }

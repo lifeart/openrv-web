@@ -381,12 +381,95 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
   const nodeInfos = new Map<string, GTONodeInfo>();
   const allObjects = dto.objects();
 
+  // Parse connection objects for graph topology (fallback when mode.inputs is absent)
+  // connections object has protocol 'connection' with:
+  //   evaluation.lhs[] / evaluation.rhs[] - parallel arrays: lhs[i] feeds into rhs[i]
+  //   top.nodes[] - root evaluation nodes
+  const connectionEdges: Array<{ lhs: string; rhs: string }> = [];
+  let connectionTopNodes: string[] = [];
+
+  for (const obj of allObjects) {
+    if (obj.protocol === 'connection') {
+      const evalComp = obj.component('evaluation');
+      if (evalComp?.exists()) {
+        const lhs = evalComp.property('lhs').value();
+        const rhs = evalComp.property('rhs').value();
+
+        if (Array.isArray(lhs) && Array.isArray(rhs)) {
+          if (lhs.length !== rhs.length) {
+            console.warn(
+              `connections object has mismatched lhs/rhs lengths: ${lhs.length} vs ${rhs.length}, using minimum`
+            );
+          }
+          const len = Math.min(lhs.length, rhs.length);
+          for (let i = 0; i < len; i++) {
+            const l = lhs[i];
+            const r = rhs[i];
+            if (typeof l === 'string' && typeof r === 'string') {
+              connectionEdges.push({ lhs: l, rhs: r });
+            }
+          }
+        } else {
+          console.warn('connections object has malformed evaluation: missing or invalid lhs/rhs arrays');
+        }
+      }
+
+      const topComp = obj.component('top');
+      if (topComp?.exists()) {
+        const topNodes = topComp.property('nodes').value();
+        if (Array.isArray(topNodes)) {
+          connectionTopNodes = topNodes.filter((v): v is string => typeof v === 'string');
+        }
+      }
+    }
+  }
+
+  // Track RVSourceGroup containers and their child source nodes
+  // In desktop OpenRV, source groups (e.g., 'sourceGroup000000') contain
+  // source nodes (e.g., 'sourceGroup000000_source'). The connections object
+  // references the group name, not the source node directly.
+  const sourceGroupChildren = new Map<string, string[]>();
+  for (const obj of allObjects) {
+    if (obj.protocol === 'RVSourceGroup') {
+      // Find child source nodes by naming convention: <groupName>_source
+      const groupName = obj.name;
+      const children: string[] = [];
+      for (const child of allObjects) {
+        if (child.name.startsWith(groupName + '_') &&
+            (child.protocol === 'RVFileSource' || child.protocol === 'RVImageSource' || child.protocol === 'RVMovieSource')) {
+          children.push(child.name);
+        }
+      }
+      if (children.length > 0) {
+        sourceGroupChildren.set(groupName, children);
+      }
+    }
+  }
+
+  // Build a map from rhs -> lhs[] for connection-based inputs (fallback)
+  // Resolve source group names to their child source nodes
+  const connectionInputsMap = new Map<string, string[]>();
+  for (const edge of connectionEdges) {
+    if (!connectionInputsMap.has(edge.rhs)) {
+      connectionInputsMap.set(edge.rhs, []);
+    }
+    const inputs = connectionInputsMap.get(edge.rhs)!;
+
+    // If lhs is a source group, resolve to its child source nodes
+    const children = sourceGroupChildren.get(edge.lhs);
+    if (children) {
+      inputs.push(...children);
+    } else {
+      inputs.push(edge.lhs);
+    }
+  }
+
   for (const obj of allObjects) {
     const protocol = obj.protocol;
     const name = obj.name;
 
     // Skip non-node objects
-    if (!protocol || protocol === 'RVSession') continue;
+    if (!protocol || protocol === 'RVSession' || protocol === 'connection') continue;
 
     const nodeInfo: GTONodeInfo = {
       name,
@@ -1856,18 +1939,42 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
     graph.addNode(node);
   }
 
-  // Establish connections
+  // Establish connections from mode.inputs (authoritative per-node source)
+  const nodesConnectedViaModeInputs = new Set<string>();
   for (const [name, info] of nodeInfos) {
     const node = nodes.get(name);
     if (!node) continue;
 
-    for (const inputName of info.inputs) {
-      const inputNode = nodes.get(inputName);
-      if (inputNode) {
+    if (info.inputs.length > 0) {
+      nodesConnectedViaModeInputs.add(name);
+      for (const inputName of info.inputs) {
+        const inputNode = nodes.get(inputName);
+        if (inputNode) {
+          try {
+            graph.connect(inputNode, node);
+          } catch (err) {
+            console.warn(`Failed to connect ${inputName} -> ${name}:`, err);
+          }
+        }
+      }
+    }
+  }
+
+  // Fallback: use connections object edges for nodes that had no mode.inputs
+  for (const [rhsName, lhsNames] of connectionInputsMap) {
+    // Skip if this node already got inputs from mode.inputs
+    if (nodesConnectedViaModeInputs.has(rhsName)) continue;
+
+    const rhsNode = nodes.get(rhsName);
+    if (!rhsNode) continue;
+
+    for (const lhsName of lhsNames) {
+      const lhsNode = nodes.get(lhsName);
+      if (lhsNode) {
         try {
-          graph.connect(inputNode, node);
+          graph.connect(lhsNode, rhsNode);
         } catch (err) {
-          console.warn(`Failed to connect ${inputName} -> ${name}:`, err);
+          console.warn(`Failed to connect (from connections) ${lhsName} -> ${rhsName}:`, err);
         }
       }
     }
@@ -1876,6 +1983,17 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
   // Find root/view node
   if (sessionInfo.viewNode) {
     rootNode = nodes.get(sessionInfo.viewNode) ?? null;
+  }
+
+  // Fallback: use top.nodes from connections object
+  if (!rootNode && connectionTopNodes.length > 0) {
+    for (const topNodeName of connectionTopNodes) {
+      const topNode = nodes.get(topNodeName);
+      if (topNode) {
+        rootNode = topNode;
+        break;
+      }
+    }
   }
 
   // If no view node specified, find the node with no outputs (leaf node)

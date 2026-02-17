@@ -9,6 +9,7 @@
 
 import { ZebraStripes } from './ZebraStripes';
 import { getIconSvg } from './shared/Icons';
+import { applyA11yFocus } from './shared/Button';
 
 export class ZebraControl {
   private container: HTMLElement;
@@ -44,6 +45,8 @@ export class ZebraControl {
     this.toggleButton.dataset.testid = 'zebra-control-button';
     this.toggleButton.innerHTML = `${getIconSvg('stripes', 'sm')} <span>Zebra</span> ${getIconSvg('chevron-down', 'sm')}`;
     this.toggleButton.title = 'Zebra stripes exposure warnings (Shift+Alt+Z)';
+    this.toggleButton.setAttribute('aria-haspopup', 'dialog');
+    this.toggleButton.setAttribute('aria-expanded', 'false');
     this.toggleButton.style.cssText = `
       display: flex;
       align-items: center;
@@ -74,9 +77,12 @@ export class ZebraControl {
     this.toggleButton.addEventListener('mouseleave', () => {
       if (!this.zebraStripes.isEnabled()) {
         this.toggleButton.style.background = 'transparent';
+        this.toggleButton.style.borderColor = 'transparent';
         this.toggleButton.style.color = 'var(--text-muted)';
       }
     });
+
+    applyA11yFocus(this.toggleButton);
 
     this.container.appendChild(this.toggleButton);
 
@@ -84,6 +90,8 @@ export class ZebraControl {
     this.dropdown = document.createElement('div');
     this.dropdown.className = 'zebra-dropdown';
     this.dropdown.dataset.testid = 'zebra-dropdown';
+    this.dropdown.setAttribute('role', 'dialog');
+    this.dropdown.setAttribute('aria-label', 'Zebra Settings');
     this.dropdown.style.cssText = `
       position: fixed;
       background: var(--bg-secondary);
@@ -97,10 +105,6 @@ export class ZebraControl {
     `;
 
     this.createDropdownContent();
-    this.container.appendChild(this.dropdown);
-
-    // Close dropdown on outside click
-    document.addEventListener('click', this.handleOutsideClick);
 
     // Listen for state changes
     this.unsubscribers.push(this.zebraStripes.on('stateChanged', () => {
@@ -304,13 +308,19 @@ export class ZebraControl {
 
   private toggleDropdown(): void {
     this.isDropdownOpen = !this.isDropdownOpen;
+    this.toggleButton.setAttribute('aria-expanded', String(this.isDropdownOpen));
     if (this.isDropdownOpen) {
+      if (!document.body.contains(this.dropdown)) {
+        document.body.appendChild(this.dropdown);
+      }
       this.dropdown.style.display = 'block';
       this.positionDropdown();
+      document.addEventListener('click', this.handleOutsideClick);
       window.addEventListener('resize', this.boundHandleReposition);
       window.addEventListener('scroll', this.boundHandleReposition, true);
     } else {
       this.dropdown.style.display = 'none';
+      document.removeEventListener('click', this.handleOutsideClick);
       window.removeEventListener('resize', this.boundHandleReposition);
       window.removeEventListener('scroll', this.boundHandleReposition, true);
     }
@@ -323,10 +333,12 @@ export class ZebraControl {
   }
 
   private handleOutsideClick = (e: MouseEvent): void => {
-    if (!this.container.contains(e.target as Node)) {
+    if (!this.container.contains(e.target as Node) && !this.dropdown.contains(e.target as Node)) {
       if (this.isDropdownOpen) {
         this.isDropdownOpen = false;
+        this.toggleButton.setAttribute('aria-expanded', 'false');
         this.dropdown.style.display = 'none';
+        document.removeEventListener('click', this.handleOutsideClick);
         window.removeEventListener('resize', this.boundHandleReposition);
         window.removeEventListener('scroll', this.boundHandleReposition, true);
       }
@@ -354,6 +366,9 @@ export class ZebraControl {
     document.removeEventListener('click', this.handleOutsideClick);
     window.removeEventListener('resize', this.boundHandleReposition);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
+    if (document.body.contains(this.dropdown)) {
+      document.body.removeChild(this.dropdown);
+    }
     this.unsubscribers.forEach((unsub) => unsub());
     this.unsubscribers = [];
   }

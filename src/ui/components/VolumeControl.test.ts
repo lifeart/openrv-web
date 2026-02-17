@@ -2,7 +2,7 @@
  * VolumeControl Unit Tests
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { VolumeControl } from './VolumeControl';
 
 describe('VolumeControl', () => {
@@ -10,6 +10,11 @@ describe('VolumeControl', () => {
 
   beforeEach(() => {
     volumeControl = new VolumeControl();
+  });
+
+  afterEach(() => {
+    volumeControl.dispose();
+    document.body.innerHTML = '';
   });
 
   describe('initialization', () => {
@@ -144,6 +149,151 @@ describe('VolumeControl', () => {
       const element = volumeControl.render();
       expect(element).toBeInstanceOf(HTMLElement);
       expect(element.className).toBe('volume-control-container');
+    });
+  });
+
+  describe('slider visibility (H-06 mobile/touch/keyboard)', () => {
+    it('VOL-H06a: clicking the mute button toggles the slider expanded state', () => {
+      const element = volumeControl.render();
+      document.body.appendChild(element);
+
+      const muteButton = element.querySelector('button')!;
+      expect(volumeControl.isSliderExpanded()).toBe(false);
+
+      // First click should expand
+      muteButton.click();
+      expect(volumeControl.isSliderExpanded()).toBe(true);
+
+      // Second click should collapse
+      muteButton.click();
+      expect(volumeControl.isSliderExpanded()).toBe(false);
+    });
+
+    it('VOL-H06b: when expanded via click, slider remains visible on mouseleave', () => {
+      const element = volumeControl.render();
+      document.body.appendChild(element);
+
+      const muteButton = element.querySelector('button')!;
+      const sliderContainer = element.querySelector('div')!;
+
+      // Click to expand
+      muteButton.click();
+      expect(volumeControl.isSliderExpanded()).toBe(true);
+      expect(sliderContainer.style.width).toBe('96px');
+
+      // Simulate mouseleave on the container
+      element.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
+
+      // Should still be expanded because it was pinned via click
+      expect(volumeControl.isSliderExpanded()).toBe(true);
+      expect(sliderContainer.style.width).toBe('96px');
+    });
+
+    it('VOL-H06c: the slider is focusable via keyboard when expanded', () => {
+      const element = volumeControl.render();
+      document.body.appendChild(element);
+
+      const muteButton = element.querySelector('button')!;
+      const slider = element.querySelector('input[type="range"]') as HTMLInputElement;
+
+      // Click to expand
+      muteButton.click();
+      expect(volumeControl.isSliderExpanded()).toBe(true);
+
+      // The slider container should have non-zero width, making the slider reachable
+      const sliderContainer = slider.parentElement!;
+      expect(sliderContainer.style.width).toBe('96px');
+
+      // The slider should be focusable
+      slider.focus();
+      expect(document.activeElement).toBe(slider);
+    });
+
+    it('VOL-H06d: clicking outside the volume control area collapses the slider', () => {
+      const element = volumeControl.render();
+      document.body.appendChild(element);
+
+      const muteButton = element.querySelector('button')!;
+
+      // Click to expand
+      muteButton.click();
+      expect(volumeControl.isSliderExpanded()).toBe(true);
+
+      // Click outside (on document body, not inside the control)
+      const outsideElement = document.createElement('div');
+      document.body.appendChild(outsideElement);
+      outsideElement.click();
+
+      expect(volumeControl.isSliderExpanded()).toBe(false);
+      const sliderContainer = element.querySelector('div')!;
+      expect(sliderContainer.style.width).toBe('0px');
+    });
+
+    it('VOL-H06e: the mute button has aria-label attribute', () => {
+      const element = volumeControl.render();
+      const muteButton = element.querySelector('button')!;
+
+      expect(muteButton.getAttribute('aria-label')).toBe('Toggle mute');
+    });
+
+    it('VOL-H06f: hover-only expand still collapses on mouseleave when not pinned', () => {
+      const element = volumeControl.render();
+      document.body.appendChild(element);
+
+      const sliderContainer = element.querySelector('div')!;
+
+      // Hover to expand (without clicking)
+      element.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+      expect(sliderContainer.style.width).toBe('96px');
+
+      // Mouse leave should collapse since not pinned
+      element.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
+      expect(sliderContainer.style.width).toBe('0px');
+      expect(volumeControl.isSliderExpanded()).toBe(false);
+    });
+
+    it('VOL-H06g: focusout collapses slider when focus leaves control area', () => {
+      const element = volumeControl.render();
+      document.body.appendChild(element);
+
+      const muteButton = element.querySelector('button')!;
+
+      // Click to expand
+      muteButton.click();
+      expect(volumeControl.isSliderExpanded()).toBe(true);
+
+      // Create an external element to receive focus
+      const externalButton = document.createElement('button');
+      document.body.appendChild(externalButton);
+
+      // Dispatch focusout with relatedTarget outside the control
+      element.dispatchEvent(new FocusEvent('focusout', {
+        bubbles: true,
+        relatedTarget: externalButton,
+      }));
+
+      expect(volumeControl.isSliderExpanded()).toBe(false);
+    });
+
+    it('VOL-H06h: focusout does NOT collapse when focus moves within control', () => {
+      const element = volumeControl.render();
+      document.body.appendChild(element);
+
+      const muteButton = element.querySelector('button')!;
+      const slider = element.querySelector('input[type="range"]')!;
+
+      // Click to expand
+      muteButton.click();
+      expect(volumeControl.isSliderExpanded()).toBe(true);
+
+      // Dispatch focusout with relatedTarget inside the control (e.g., moving from button to slider)
+      element.dispatchEvent(new FocusEvent('focusout', {
+        bubbles: true,
+        relatedTarget: slider,
+      }));
+
+      // Should still be expanded
+      expect(volumeControl.isSliderExpanded()).toBe(true);
     });
   });
 });

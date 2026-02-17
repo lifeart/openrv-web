@@ -13,6 +13,8 @@ import {
   DIRTY_BACKGROUND,
   DIRTY_DISPLAY,
   DIRTY_GAMUT_MAPPING,
+  DIRTY_LINEARIZE,
+  DIRTY_INLINE_LUT,
   ALL_DIRTY_FLAGS,
 } from './ShaderStateManager';
 import type { RenderState } from './RenderState';
@@ -377,6 +379,204 @@ describe('ShaderStateManager', () => {
   // getDisplayColorState
   // =================================================================
 
+  // =================================================================
+  // Per-channel RGB uniforms (exposure, gamma, contrast)
+  // =================================================================
+
+  describe('per-channel RGB uniforms', () => {
+    it('SSM-080: per-channel exposureRGB [0.5, 1.0, 1.5] produces correct vec3 uniform', () => {
+      const uniformCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
+        setUniformInt: (_name: string, _value: number) => {},
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        exposure: 0.5,
+        exposureRGB: [0.5, 1.0, 1.5],
+      });
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(uniformCalls['u_exposureRGB']).toEqual([0.5, 1.0, 1.5]);
+    });
+
+    it('SSM-081: scalar exposure 2.0 produces uniform vec3(2.0, 2.0, 2.0)', () => {
+      const uniformCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
+        setUniformInt: (_name: string, _value: number) => {},
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        exposure: 2.0,
+        // no exposureRGB -> broadcasts scalar
+      });
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(uniformCalls['u_exposureRGB']).toEqual([2.0, 2.0, 2.0]);
+    });
+
+    it('SSM-082: gammaRGB = [0, 0, 0] does not produce NaN (clamped to epsilon)', () => {
+      const uniformCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
+        setUniformInt: (_name: string, _value: number) => {},
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        gamma: 0,
+        gammaRGB: [0, 0, 0],
+      });
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      const gammaRGB = uniformCalls['u_gammaRGB'] as number[];
+      expect(gammaRGB).toBeDefined();
+      // All values should be clamped to a small positive epsilon, not 0 or NaN
+      for (const v of gammaRGB) {
+        expect(v).toBeGreaterThan(0);
+        expect(Number.isFinite(v)).toBe(true);
+      }
+    });
+
+    it('SSM-083: exposureRGB = [Infinity, -Infinity, NaN] is sanitized to [0, 0, 0]', () => {
+      const uniformCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
+        setUniformInt: (_name: string, _value: number) => {},
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        exposure: 0,
+        exposureRGB: [Infinity, -Infinity, NaN],
+      });
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      const expRGB = uniformCalls['u_exposureRGB'] as number[];
+      expect(expRGB).toBeDefined();
+      // All non-finite values sanitized to 0
+      expect(expRGB).toEqual([0, 0, 0]);
+    });
+
+    it('SSM-084: per-channel contrastRGB is sent as vec3', () => {
+      const uniformCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
+        setUniformInt: (_name: string, _value: number) => {},
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        contrast: 1.0,
+        contrastRGB: [0.8, 1.0, 1.2],
+      });
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(uniformCalls['u_contrastRGB']).toEqual([0.8, 1.0, 1.2]);
+    });
+
+    it('SSM-085: scalar gamma broadcasts to vec3', () => {
+      const uniformCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
+        setUniformInt: (_name: string, _value: number) => {},
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        gamma: 2.2,
+        // no gammaRGB -> broadcasts scalar
+      });
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(uniformCalls['u_gammaRGB']).toEqual([2.2, 2.2, 2.2]);
+    });
+
+    it('SSM-086: applyRenderState detects per-channel changes', () => {
+      const rs = createDefaultRenderState();
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Change only exposureRGB
+      rs.colorAdjustments = {
+        ...rs.colorAdjustments,
+        exposureRGB: [0.1, 0.2, 0.3],
+      };
+      mgr.applyRenderState(rs);
+      expect(flags.has('color')).toBe(true);
+    });
+  });
+
   describe('getDisplayColorState', () => {
     it('SSM-070: getDisplayColorState returns initial defaults', () => {
       const dc = mgr.getDisplayColorState();
@@ -425,6 +625,417 @@ describe('ShaderStateManager', () => {
         customGamma: 2.2,
       });
       expect(flags.has(DIRTY_DISPLAY)).toBe(true);
+    });
+  });
+
+  // =================================================================
+  // setLinearize / getLinearize
+  // =================================================================
+
+  describe('setLinearize / getLinearize', () => {
+    it('SSM-090: setLinearize marks DIRTY_LINEARIZE flag', () => {
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+      expect(flags.has(DIRTY_LINEARIZE)).toBe(false);
+
+      mgr.setLinearize({
+        logType: 1,
+        sRGB2linear: false,
+        rec709ToLinear: false,
+        fileGamma: 1.0,
+        alphaType: 0,
+      });
+      expect(flags.has(DIRTY_LINEARIZE)).toBe(true);
+    });
+
+    it('SSM-091: getLinearize returns correct state after setLinearize', () => {
+      mgr.setLinearize({
+        logType: 3,
+        sRGB2linear: true,
+        rec709ToLinear: false,
+        fileGamma: 2.2,
+        alphaType: 1,
+      });
+
+      const state = mgr.getLinearize();
+      expect(state.logType).toBe(3);
+      expect(state.sRGB2linear).toBe(true);
+      expect(state.rec709ToLinear).toBe(false);
+      expect(state.fileGamma).toBe(2.2);
+      expect(state.alphaType).toBe(1);
+    });
+
+    it('SSM-092: getLinearize returns defaults before any setLinearize call', () => {
+      const state = mgr.getLinearize();
+      expect(state.logType).toBe(0);
+      expect(state.sRGB2linear).toBe(false);
+      expect(state.rec709ToLinear).toBe(false);
+      expect(state.fileGamma).toBe(1.0);
+      expect(state.alphaType).toBe(0);
+    });
+
+    it('SSM-093: DIRTY_LINEARIZE is included in ALL_DIRTY_FLAGS', () => {
+      expect(ALL_DIRTY_FLAGS).toContain(DIRTY_LINEARIZE);
+    });
+
+    it('SSM-094: setLinearize uploads correct uniforms via applyUniforms', () => {
+      const uniformCalls: Record<string, unknown> = {};
+      const intCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
+        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setLinearize({
+        logType: 1,
+        sRGB2linear: true,
+        rec709ToLinear: false,
+        fileGamma: 2.2,
+        alphaType: 0,
+      });
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(intCalls['u_linearizeLogType']).toBe(1);
+      expect(uniformCalls['u_linearizeFileGamma']).toBe(2.2);
+      expect(intCalls['u_linearizeSRGB2linear']).toBe(1);
+      expect(intCalls['u_linearizeRec709ToLinear']).toBe(0);
+    });
+
+    it('SSM-095: setLinearize with rec709ToLinear=true uploads 1', () => {
+      const intCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: () => {},
+        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformMatrix3: () => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setLinearize({
+        logType: 0,
+        sRGB2linear: false,
+        rec709ToLinear: true,
+        fileGamma: 1.0,
+        alphaType: 0,
+      });
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(intCalls['u_linearizeRec709ToLinear']).toBe(1);
+    });
+
+    it('SSM-096: getLinearize round-trips all fields', () => {
+      const input = {
+        logType: 2 as const,
+        sRGB2linear: true,
+        rec709ToLinear: true,
+        fileGamma: 0.4545,
+        alphaType: 1,
+      };
+      mgr.setLinearize(input);
+      const output = mgr.getLinearize();
+      expect(output).toEqual(input);
+    });
+  });
+
+  // =================================================================
+  // applyRenderState - linearize handling
+  // =================================================================
+
+  describe('applyRenderState linearize', () => {
+    it('SSM-100: applyRenderState with linearize field marks DIRTY_LINEARIZE and sets state', () => {
+      const rs = createDefaultRenderState();
+      rs.linearize = {
+        logType: 1,
+        sRGB2linear: false,
+        rec709ToLinear: false,
+        fileGamma: 2.2,
+        alphaType: 0,
+      };
+
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_LINEARIZE)).toBe(true);
+
+      // Verify the state was actually set
+      const lz = mgr.getLinearize();
+      expect(lz.logType).toBe(1);
+      expect(lz.fileGamma).toBe(2.2);
+    });
+
+    it('SSM-101: applyRenderState with same linearize state does NOT mark dirty (steady-state)', () => {
+      const rs = createDefaultRenderState();
+      rs.linearize = {
+        logType: 3,
+        sRGB2linear: true,
+        rec709ToLinear: false,
+        fileGamma: 1.5,
+        alphaType: 1,
+      };
+
+      // First apply to seed the state
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Second apply with identical linearize -> should NOT mark dirty
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_LINEARIZE)).toBe(false);
+    });
+
+    it('SSM-102: applyRenderState resets linearize when field is absent and state is non-default', () => {
+      // First set a non-default linearize
+      mgr.setLinearize({
+        logType: 1,
+        sRGB2linear: true,
+        rec709ToLinear: false,
+        fileGamma: 2.2,
+        alphaType: 0,
+      });
+
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Apply render state without linearize field
+      const rs = createDefaultRenderState();
+      // rs.linearize is undefined
+      mgr.applyRenderState(rs);
+
+      expect(flags.has(DIRTY_LINEARIZE)).toBe(true);
+      const lz = mgr.getLinearize();
+      expect(lz.logType).toBe(0);
+      expect(lz.sRGB2linear).toBe(false);
+      expect(lz.fileGamma).toBe(1.0);
+    });
+
+    it('SSM-103: applyRenderState without linearize does NOT mark dirty when already at defaults', () => {
+      const rs = createDefaultRenderState();
+      // First apply to consume initial dirty flags
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Apply again without linearize (already at defaults) -> no dirty
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_LINEARIZE)).toBe(false);
+    });
+  });
+
+  // =================================================================
+  // setInlineLUT / inline LUT state management
+  // =================================================================
+
+  describe('setInlineLUT', () => {
+    it('SSM-110: setInlineLUT marks DIRTY_INLINE_LUT flag', () => {
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      const lutData = new Float32Array(256);
+      mgr.setInlineLUT(lutData, 1);
+      expect(flags.has(DIRTY_INLINE_LUT)).toBe(true);
+    });
+
+    it('SSM-111: setInlineLUT with 3-channel data sets correct state', () => {
+      const lutData = new Float32Array(768);
+      mgr.setInlineLUT(lutData, 3);
+
+      const state = mgr.getInternalState();
+      expect(state.inlineLUTEnabled).toBe(true);
+      expect(state.inlineLUTChannels).toBe(3);
+      expect(state.inlineLUTSize).toBe(256); // 768 / 3
+      expect(state.inlineLUTData).toBe(lutData);
+      expect(state.inlineLUTDirty).toBe(true);
+    });
+
+    it('SSM-112: setInlineLUT with 1-channel data sets correct state', () => {
+      const lutData = new Float32Array(256);
+      mgr.setInlineLUT(lutData, 1);
+
+      const state = mgr.getInternalState();
+      expect(state.inlineLUTEnabled).toBe(true);
+      expect(state.inlineLUTChannels).toBe(1);
+      expect(state.inlineLUTSize).toBe(256);
+      expect(state.inlineLUTData).toBe(lutData);
+    });
+
+    it('SSM-113: setInlineLUT(null) disables inline LUT', () => {
+      // First enable
+      mgr.setInlineLUT(new Float32Array(256), 1);
+      // Then disable
+      mgr.setInlineLUT(null, 1);
+
+      const state = mgr.getInternalState();
+      expect(state.inlineLUTEnabled).toBe(false);
+      expect(state.inlineLUTData).toBeNull();
+      expect(state.inlineLUTSize).toBe(0);
+    });
+
+    it('SSM-114: setInlineLUT with empty Float32Array disables LUT', () => {
+      mgr.setInlineLUT(new Float32Array(0), 1);
+
+      const state = mgr.getInternalState();
+      expect(state.inlineLUTEnabled).toBe(false);
+    });
+
+    it('SSM-115: DIRTY_INLINE_LUT is included in ALL_DIRTY_FLAGS', () => {
+      expect(ALL_DIRTY_FLAGS).toContain(DIRTY_INLINE_LUT);
+    });
+  });
+
+  describe('getColorAdjustments with inlineLUT', () => {
+    it('SSM-120: getColorAdjustments returns inlineLUT data after setColorAdjustments', () => {
+      const lutData = new Float32Array(768);
+      mgr.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        inlineLUT: lutData,
+        lutChannels: 3,
+      });
+
+      const result = mgr.getColorAdjustments();
+      expect(result.inlineLUT).toBe(lutData);
+      expect(result.lutChannels).toBe(3);
+    });
+
+    it('SSM-121: getColorAdjustments returns undefined inlineLUT when not set', () => {
+      const result = mgr.getColorAdjustments();
+      expect(result.inlineLUT).toBeUndefined();
+      expect(result.lutChannels).toBeUndefined();
+    });
+  });
+
+  describe('applyUniforms with inline LUT', () => {
+    it('SSM-130: applyUniforms sets u_inlineLUTEnabled=1 when LUT is active', () => {
+      const intCalls: Record<string, unknown> = {};
+      const uniformCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
+        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      let inlineLUTBound = false;
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => { inlineLUTBound = true; },
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setInlineLUT(new Float32Array(768), 3);
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(intCalls['u_inlineLUTEnabled']).toBe(1);
+      expect(intCalls['u_inlineLUTChannels']).toBe(3);
+      expect(uniformCalls['u_inlineLUTSize']).toBe(256);
+      expect(inlineLUTBound).toBe(true);
+    });
+
+    it('SSM-131: applyUniforms sets u_inlineLUTEnabled=0 when LUT is disabled', () => {
+      const intCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (_name: string, _value: unknown) => {},
+        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      let inlineLUTBound = false;
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => { inlineLUTBound = true; },
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setInlineLUT(null, 1);
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(intCalls['u_inlineLUTEnabled']).toBe(0);
+      expect(inlineLUTBound).toBe(false);
+    });
+  });
+
+  describe('applyRenderState with inlineLUT', () => {
+    it('SSM-140: applyRenderState detects inlineLUT change and marks DIRTY_INLINE_LUT', () => {
+      const rs = createDefaultRenderState();
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Add inlineLUT to color adjustments
+      const lutData = new Float32Array(256);
+      rs.colorAdjustments = {
+        ...rs.colorAdjustments,
+        inlineLUT: lutData,
+        lutChannels: 1,
+      };
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_INLINE_LUT)).toBe(true);
+    });
+
+    it('SSM-141: applyRenderState does NOT mark DIRTY_INLINE_LUT when LUT is unchanged', () => {
+      const lutData = new Float32Array(256);
+      const rs = createDefaultRenderState();
+      rs.colorAdjustments = {
+        ...rs.colorAdjustments,
+        inlineLUT: lutData,
+        lutChannels: 1,
+      };
+
+      // First apply to seed state
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Apply again with same reference -> should NOT mark dirty
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_INLINE_LUT)).toBe(false);
+    });
+
+    it('SSM-142: applyRenderState detects channel change on same LUT data', () => {
+      const lutData = new Float32Array(768);
+      const rs = createDefaultRenderState();
+      rs.colorAdjustments = {
+        ...rs.colorAdjustments,
+        inlineLUT: lutData,
+        lutChannels: 3,
+      };
+
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Change only channels (same LUT data reference but different channels)
+      rs.colorAdjustments = {
+        ...rs.colorAdjustments,
+        inlineLUT: lutData,
+        lutChannels: 1,
+      };
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_INLINE_LUT)).toBe(true);
     });
   });
 });

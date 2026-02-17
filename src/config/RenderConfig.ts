@@ -107,6 +107,18 @@ export const INPUT_TRANSFER_HLG = 1;
 /** PQ (Perceptual Quantizer) input */
 export const INPUT_TRANSFER_PQ = 2;
 
+/** Cineon log input (RVLinearize logtype=1 or 2) */
+export const INPUT_TRANSFER_CINEON = 3;
+
+/** ARRI LogC3 input (RVLinearize logtype=3) */
+export const INPUT_TRANSFER_LOGC3 = 4;
+
+/** sRGB-to-linear EOTF (RVLinearize sRGB2linear=1) */
+export const INPUT_TRANSFER_SRGB_TO_LINEAR = 5;
+
+/** Rec.709-to-linear EOTF (RVLinearize Rec709ToLinear=1) */
+export const INPUT_TRANSFER_REC709_TO_LINEAR = 6;
+
 // ---------------------------------------------------------------------------
 // Render Pipeline — Output Mode Shader Codes
 // ---------------------------------------------------------------------------

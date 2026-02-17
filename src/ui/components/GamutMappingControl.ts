@@ -1,5 +1,6 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from './shared/Icons';
+import { applyA11yFocus } from './shared/Button';
 import type { GamutMappingState, GamutMappingMode, GamutIdentifier } from '../../core/types/effects';
 import { DEFAULT_GAMUT_MAPPING_STATE } from '../../core/types/effects';
 
@@ -58,6 +59,7 @@ export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents>
   private highlightCheckbox: HTMLInputElement | null = null;
 
   private boundHandleDocumentClick: (e: MouseEvent) => void;
+  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
 
   constructor() {
     super();
@@ -74,6 +76,8 @@ export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents>
     this.button.innerHTML = `${getIconSvg('gamut', 'sm')}<span style="margin-left: 6px;">Gamut</span>`;
     this.button.dataset.testid = 'gamut-mapping-control-button';
     this.button.title = 'Gamut mapping (source \u2192 target gamut conversion)';
+    this.button.setAttribute('aria-haspopup', 'dialog');
+    this.button.setAttribute('aria-expanded', 'false');
     this.button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -106,9 +110,13 @@ export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents>
       }
     });
 
+    applyA11yFocus(this.button);
+
     this.panel = document.createElement('div');
     this.panel.className = 'gamut-mapping-panel';
     this.panel.dataset.testid = 'gamut-mapping-panel';
+    this.panel.setAttribute('role', 'dialog');
+    this.panel.setAttribute('aria-label', 'Gamut Mapping Settings');
     this.panel.style.cssText = `
       position: fixed;
       background: var(--bg-secondary);
@@ -126,6 +134,13 @@ export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents>
 
     this.boundHandleDocumentClick = this.handleDocumentClick.bind(this);
     document.addEventListener('click', this.boundHandleDocumentClick);
+
+    // Close on Escape key
+    this.boundHandleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && this.isPanelOpen) {
+        this.hide();
+      }
+    };
   }
 
   private handleDocumentClick(e: MouseEvent): void {
@@ -353,13 +368,23 @@ export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents>
     this.panel.style.left = `${Math.max(8, rect.right - 240)}px`;
     this.isPanelOpen = true;
     this.panel.style.display = 'block';
+    this.button.setAttribute('aria-expanded', 'true');
     this.updateButtonState();
+    document.addEventListener('keydown', this.boundHandleKeyDown);
+
+    // Move focus to the first interactive element in the panel
+    this.modeSelect?.focus();
   }
 
   hide(): void {
     this.isPanelOpen = false;
     this.panel.style.display = 'none';
+    this.button.setAttribute('aria-expanded', 'false');
     this.updateButtonState();
+    document.removeEventListener('keydown', this.boundHandleKeyDown);
+
+    // Return focus to the toggle button
+    this.button.focus();
   }
 
   reset(): void {
@@ -395,6 +420,7 @@ export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents>
   }
 
   dispose(): void {
+    document.removeEventListener('keydown', this.boundHandleKeyDown);
     document.removeEventListener('click', this.boundHandleDocumentClick);
     if (this.panel.parentNode) {
       this.panel.parentNode.removeChild(this.panel);

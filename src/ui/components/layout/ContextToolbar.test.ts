@@ -222,6 +222,34 @@ describe('ContextToolbar', () => {
 
       expect(btn.style.background).toBe('transparent');
     });
+
+    it('CT-M26a: buttons created by createButton() should NOT have inline outline: none', () => {
+      const btn = ContextToolbar.createButton('Test', () => {});
+      expect(btn.style.outline).not.toBe('none');
+    });
+
+    it('CT-M26c: keyboard-focused createButton() should display a visible focus indicator', () => {
+      const btn = ContextToolbar.createButton('Test', () => {});
+      // Simulate keyboard focus (no preceding mousedown)
+      btn.dispatchEvent(new FocusEvent('focus'));
+      expect(btn.style.outline).toBe('2px solid var(--accent-primary)');
+      expect(btn.style.outlineOffset).toBe('2px');
+    });
+  });
+
+  describe('static createIconButton', () => {
+    it('CT-M26b: buttons created by createIconButton() should NOT have inline outline: none', () => {
+      const btn = ContextToolbar.createIconButton('zoom-in', () => {});
+      expect(btn.style.outline).not.toBe('none');
+    });
+
+    it('CT-M26c: keyboard-focused createIconButton() should display a visible focus indicator', () => {
+      const btn = ContextToolbar.createIconButton('zoom-in', () => {}, { title: 'Zoom In' });
+      // Simulate keyboard focus (no preceding mousedown)
+      btn.dispatchEvent(new FocusEvent('focus'));
+      expect(btn.style.outline).toBe('2px solid var(--accent-primary)');
+      expect(btn.style.outlineOffset).toBe('2px');
+    });
   });
 
   describe('static createSlider', () => {
@@ -284,6 +312,60 @@ describe('ContextToolbar', () => {
       input.dispatchEvent(new MouseEvent('dblclick'));
 
       expect(onDoubleClick).toHaveBeenCalled();
+    });
+
+    it('CT-M24a: sliders created by createSlider() should have aria-label matching the label text', () => {
+      const container = ContextToolbar.createSlider('Brightness');
+      const input = container.querySelector('input[type="range"]') as HTMLInputElement;
+      expect(input.getAttribute('aria-label')).toBe('Brightness');
+    });
+
+    it('CT-M24a: aria-labelledby links slider to the label element', () => {
+      const container = ContextToolbar.createSlider('Exposure');
+      const input = container.querySelector('input[type="range"]') as HTMLInputElement;
+      const labelEl = container.querySelector('span') as HTMLSpanElement;
+      expect(labelEl.id).toBeTruthy();
+      expect(input.getAttribute('aria-labelledby')).toBe(labelEl.id);
+    });
+
+    it('CT-M24b: sliders should have aria-valuemin matching the min attribute', () => {
+      const container = ContextToolbar.createSlider('Test', { min: 10 });
+      const input = container.querySelector('input[type="range"]') as HTMLInputElement;
+      expect(input.getAttribute('aria-valuemin')).toBe('10');
+    });
+
+    it('CT-M24b: sliders should have default aria-valuemin of 0', () => {
+      const container = ContextToolbar.createSlider('Test');
+      const input = container.querySelector('input[type="range"]') as HTMLInputElement;
+      expect(input.getAttribute('aria-valuemin')).toBe('0');
+    });
+
+    it('CT-M24c: sliders should have aria-valuemax matching the max attribute', () => {
+      const container = ContextToolbar.createSlider('Test', { max: 200 });
+      const input = container.querySelector('input[type="range"]') as HTMLInputElement;
+      expect(input.getAttribute('aria-valuemax')).toBe('200');
+    });
+
+    it('CT-M24c: sliders should have default aria-valuemax of 100', () => {
+      const container = ContextToolbar.createSlider('Test');
+      const input = container.querySelector('input[type="range"]') as HTMLInputElement;
+      expect(input.getAttribute('aria-valuemax')).toBe('100');
+    });
+
+    it('CT-M24d: sliders should have aria-valuenow updated when the value changes', () => {
+      const container = ContextToolbar.createSlider('Test', { value: 50 });
+      const input = container.querySelector('input[type="range"]') as HTMLInputElement;
+      expect(input.getAttribute('aria-valuenow')).toBe('50');
+
+      input.value = '75';
+      input.dispatchEvent(new Event('input'));
+      expect(input.getAttribute('aria-valuenow')).toBe('75');
+    });
+
+    it('CT-M24d: aria-valuenow is set to the initial value', () => {
+      const container = ContextToolbar.createSlider('Test', { value: 30 });
+      const input = container.querySelector('input[type="range"]') as HTMLInputElement;
+      expect(input.getAttribute('aria-valuenow')).toBe('30');
     });
   });
 

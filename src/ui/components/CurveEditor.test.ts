@@ -9,6 +9,33 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { CurveEditor, CurveChannelType } from './CurveEditor';
 import { type ColorCurvesData, createDefaultCurve } from '../../color/ColorProcessingFacade';
 
+// Polyfill PointerEvent for jsdom which does not support it
+if (typeof globalThis.PointerEvent === 'undefined') {
+  class PointerEventPolyfill extends MouseEvent {
+    readonly pointerId: number;
+    readonly width: number;
+    readonly height: number;
+    readonly pressure: number;
+    readonly tiltX: number;
+    readonly tiltY: number;
+    readonly pointerType: string;
+    readonly isPrimary: boolean;
+
+    constructor(type: string, params: PointerEventInit & MouseEventInit = {}) {
+      super(type, params);
+      this.pointerId = params.pointerId ?? 0;
+      this.width = params.width ?? 1;
+      this.height = params.height ?? 1;
+      this.pressure = params.pressure ?? 0;
+      this.tiltX = params.tiltX ?? 0;
+      this.tiltY = params.tiltY ?? 0;
+      this.pointerType = params.pointerType ?? '';
+      this.isPrimary = params.isPrimary ?? false;
+    }
+  }
+  globalThis.PointerEvent = PointerEventPolyfill as unknown as typeof PointerEvent;
+}
+
 describe('CurveEditor', () => {
   let editor: CurveEditor;
 
@@ -263,11 +290,10 @@ describe('CurveEditor', () => {
 
       editor.dispose();
 
-      // Should have removed all 6 event listeners
-      expect(removeSpy).toHaveBeenCalledWith('mousedown', expect.any(Function));
-      expect(removeSpy).toHaveBeenCalledWith('mousemove', expect.any(Function));
-      expect(removeSpy).toHaveBeenCalledWith('mouseup', expect.any(Function));
-      expect(removeSpy).toHaveBeenCalledWith('mouseleave', expect.any(Function));
+      // Should have removed all 5 event listeners (pointer events + dblclick + contextmenu)
+      expect(removeSpy).toHaveBeenCalledWith('pointerdown', expect.any(Function));
+      expect(removeSpy).toHaveBeenCalledWith('pointermove', expect.any(Function));
+      expect(removeSpy).toHaveBeenCalledWith('pointerup', expect.any(Function));
       expect(removeSpy).toHaveBeenCalledWith('dblclick', expect.any(Function));
       expect(removeSpy).toHaveBeenCalledWith('contextmenu', expect.any(Function));
 
@@ -305,7 +331,7 @@ describe('CurveEditor', () => {
 
       // The removed handlers should match the added handlers (same function reference)
       // This ensures we're not creating new bound functions in dispose()
-      expect(removeSpy).toHaveBeenCalledTimes(6);
+      expect(removeSpy).toHaveBeenCalledTimes(5);
 
       addSpy.mockRestore();
       removeSpy.mockRestore();
@@ -475,5 +501,222 @@ describe('CurveEditor curve modifications', () => {
 
     expect(result.master.points.length).toBe(6);
     expect(result.master.points[2]).toEqual({ x: 0.4, y: 0.45 });
+  });
+});
+
+describe('CurveEditor pointer events (H-03)', () => {
+  let editor: CurveEditor;
+
+  beforeEach(() => {
+    editor = new CurveEditor();
+  });
+
+  afterEach(() => {
+    editor.dispose();
+  });
+
+  it('CE-H03a: CurveEditor canvas should register pointerdown (not mousedown) listener', () => {
+    const el = editor.render_element();
+    const canvas = el.querySelector('[data-testid="curve-canvas"]') as HTMLCanvasElement;
+
+    const addSpy = vi.spyOn(canvas, 'addEventListener');
+
+    // Create a new editor to observe its event registration
+    const newEditor = new CurveEditor();
+    const newEl = newEditor.render_element();
+    const newCanvas = newEl.querySelector('[data-testid="curve-canvas"]') as HTMLCanvasElement;
+
+    // Spy on the new canvas and verify registered events by checking dispose
+    const removeSpy = vi.spyOn(newCanvas, 'removeEventListener');
+    newEditor.dispose();
+
+    const removedEventTypes = removeSpy.mock.calls.map((call) => call[0]);
+    expect(removedEventTypes).toContain('pointerdown');
+    expect(removedEventTypes).not.toContain('mousedown');
+
+    addSpy.mockRestore();
+    removeSpy.mockRestore();
+  });
+
+  it('CE-H03b: CurveEditor canvas should register pointermove (not mousemove) listener', () => {
+    const newEditor = new CurveEditor();
+    const newEl = newEditor.render_element();
+    const newCanvas = newEl.querySelector('[data-testid="curve-canvas"]') as HTMLCanvasElement;
+
+    const removeSpy = vi.spyOn(newCanvas, 'removeEventListener');
+    newEditor.dispose();
+
+    const removedEventTypes = removeSpy.mock.calls.map((call) => call[0]);
+    expect(removedEventTypes).toContain('pointermove');
+    expect(removedEventTypes).not.toContain('mousemove');
+
+    removeSpy.mockRestore();
+  });
+
+  it('CE-H03c: CurveEditor canvas should register pointerup (not mouseup) listener', () => {
+    const newEditor = new CurveEditor();
+    const newEl = newEditor.render_element();
+    const newCanvas = newEl.querySelector('[data-testid="curve-canvas"]') as HTMLCanvasElement;
+
+    const removeSpy = vi.spyOn(newCanvas, 'removeEventListener');
+    newEditor.dispose();
+
+    const removedEventTypes = removeSpy.mock.calls.map((call) => call[0]);
+    expect(removedEventTypes).toContain('pointerup');
+    expect(removedEventTypes).not.toContain('mouseup');
+
+    removeSpy.mockRestore();
+  });
+
+  it('CE-H03d: On pointerdown while over a control point, setPointerCapture should be called with the pointer ID', () => {
+    // Use a curve with a known point at (0,0) which maps to canvas coords (padding, size-padding)
+    // Default curve has point at (0,0) -> canvas (10, 190) and (1,1) -> canvas (190, 10)
+    const el = editor.render_element();
+    const canvas = el.querySelector('[data-testid="curve-canvas"]') as HTMLCanvasElement;
+
+    // Mock setPointerCapture
+    const setCaptureSpy = vi.fn();
+    canvas.setPointerCapture = setCaptureSpy;
+
+    // Mock getBoundingClientRect to return known canvas position
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+      left: 0, top: 0, right: 200, bottom: 200, width: 200, height: 200,
+      x: 0, y: 0, toJSON: () => {},
+    });
+
+    // The second point (1,1) maps to canvas position (190, 10)
+    // clientX/clientY should match the canvas position of that point
+    const pointerDownEvent = new PointerEvent('pointerdown', {
+      clientX: 190,
+      clientY: 10,
+      pointerId: 42,
+      bubbles: true,
+    });
+
+    canvas.dispatchEvent(pointerDownEvent);
+
+    expect(setCaptureSpy).toHaveBeenCalledWith(42);
+  });
+
+  it('CE-H03e: On pointerup, releasePointerCapture should be called with the pointer ID', () => {
+    const el = editor.render_element();
+    const canvas = el.querySelector('[data-testid="curve-canvas"]') as HTMLCanvasElement;
+
+    // Mock pointer capture methods
+    const setCaptureSpy = vi.fn();
+    const releaseCaptureSpy = vi.fn();
+    canvas.setPointerCapture = setCaptureSpy;
+    canvas.releasePointerCapture = releaseCaptureSpy;
+
+    // Mock getBoundingClientRect
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+      left: 0, top: 0, right: 200, bottom: 200, width: 200, height: 200,
+      x: 0, y: 0, toJSON: () => {},
+    });
+
+    // First, pointerdown on a control point to start dragging
+    // Point (1,1) is at canvas (190, 10)
+    const pointerDownEvent = new PointerEvent('pointerdown', {
+      clientX: 190,
+      clientY: 10,
+      pointerId: 7,
+      bubbles: true,
+    });
+    canvas.dispatchEvent(pointerDownEvent);
+
+    expect(setCaptureSpy).toHaveBeenCalledWith(7);
+
+    // Now pointerup to end the drag
+    const pointerUpEvent = new PointerEvent('pointerup', {
+      clientX: 190,
+      clientY: 10,
+      pointerId: 7,
+      bubbles: true,
+    });
+    canvas.dispatchEvent(pointerUpEvent);
+
+    expect(releaseCaptureSpy).toHaveBeenCalledWith(7);
+  });
+
+  it('CE-H03f: Dragging a point should continue tracking even when pointer leaves canvas bounds (via pointer capture)', () => {
+    const el = editor.render_element();
+    const canvas = el.querySelector('[data-testid="curve-canvas"]') as HTMLCanvasElement;
+
+    // Mock pointer capture methods
+    canvas.setPointerCapture = vi.fn();
+    canvas.releasePointerCapture = vi.fn();
+
+    // Mock getBoundingClientRect
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+      left: 0, top: 0, right: 200, bottom: 200, width: 200, height: 200,
+      x: 0, y: 0, toJSON: () => {},
+    });
+
+    const curveChangedSpy = vi.fn();
+    editor.on('curveChanged', curveChangedSpy);
+
+    // Start drag on point (1,1) at canvas position (190, 10)
+    const pointerDownEvent = new PointerEvent('pointerdown', {
+      clientX: 190,
+      clientY: 10,
+      pointerId: 1,
+      bubbles: true,
+    });
+    canvas.dispatchEvent(pointerDownEvent);
+
+    // Verify setPointerCapture was called (this is what enables tracking outside bounds)
+    expect(canvas.setPointerCapture).toHaveBeenCalledWith(1);
+
+    // Move pointer outside canvas bounds (e.g., clientX=300 is well outside the 200px canvas)
+    // With pointer capture, this event still reaches the canvas
+    const pointerMoveEvent = new PointerEvent('pointermove', {
+      clientX: 300,
+      clientY: -50,
+      pointerId: 1,
+      bubbles: true,
+    });
+    canvas.dispatchEvent(pointerMoveEvent);
+
+    // curveChanged should fire because dragging is still active (pointer capture keeps tracking)
+    expect(curveChangedSpy).toHaveBeenCalled();
+
+    // No mouseleave handler should have terminated the drag - verify drag still active
+    // by doing another move
+    curveChangedSpy.mockClear();
+    const pointerMoveEvent2 = new PointerEvent('pointermove', {
+      clientX: 400,
+      clientY: -100,
+      pointerId: 1,
+      bubbles: true,
+    });
+    canvas.dispatchEvent(pointerMoveEvent2);
+
+    // Drag should still be active - curveChanged should fire again
+    expect(curveChangedSpy).toHaveBeenCalled();
+
+    // End the drag
+    const pointerUpEvent = new PointerEvent('pointerup', {
+      clientX: 400,
+      clientY: -100,
+      pointerId: 1,
+      bubbles: true,
+    });
+    canvas.dispatchEvent(pointerUpEvent);
+
+    expect(canvas.releasePointerCapture).toHaveBeenCalledWith(1);
+  });
+
+  it('CE-H03g: mouseleave handler should not exist (no silent drag termination on leave)', () => {
+    const newEditor = new CurveEditor();
+    const newEl = newEditor.render_element();
+    const newCanvas = newEl.querySelector('[data-testid="curve-canvas"]') as HTMLCanvasElement;
+
+    const removeSpy = vi.spyOn(newCanvas, 'removeEventListener');
+    newEditor.dispose();
+
+    const removedEventTypes = removeSpy.mock.calls.map((call) => call[0]);
+    expect(removedEventTypes).not.toContain('mouseleave');
+
+    removeSpy.mockRestore();
   });
 });

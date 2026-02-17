@@ -28,6 +28,7 @@ export function createIcon(name: IconName, size: IconSize = 'md'): SVGSVGElement
   svg.setAttribute('stroke-width', '2');
   svg.setAttribute('stroke-linecap', 'round');
   svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
   svg.style.cssText = 'display: inline-block; vertical-align: middle; flex-shrink: 0;';
 
   const path = ICONS[name];
@@ -45,7 +46,7 @@ export function getIconSvg(name: IconName, size: IconSize = 'md'): string {
   const iconSize = ICON_SIZES[size];
   const path = ICONS[name] || '';
 
-  return `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle; flex-shrink: 0;">${path}</svg>`;
+  return `<svg aria-hidden="true" width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle; flex-shrink: 0;">${path}</svg>`;
 }
 
 export type IconName = keyof typeof ICONS;

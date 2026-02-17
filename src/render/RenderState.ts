@@ -5,7 +5,7 @@
  * making the Viewer→Renderer data contract explicit and testable.
  */
 
-import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState } from '../core/types/color';
+import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState, LinearizeState } from '../core/types/color';
 import type { ToneMappingState, ZebraState, HighlightsShadowsState, FalseColorState, GamutMappingState } from '../core/types/effects';
 import type { BackgroundPatternState } from '../core/types/background';
 import type { CDLValues } from '../color/CDL';
@@ -40,4 +40,5 @@ export interface RenderState {
   deinterlace?: { enabled: boolean; method: number; fieldOrder: number };
   filmEmulation?: { enabled: boolean; intensity: number; saturation: number; grainIntensity: number; grainSeed: number; lutData: Uint8Array | null };
   perspective?: { enabled: boolean; invH: Float32Array; quality: number };
+  linearize?: LinearizeState;
 }

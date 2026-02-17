@@ -751,21 +751,25 @@ describe('Phase 2: HDR Extended Range Output', () => {
       const caps1 = makeCaps({ displayHDR: true, webglHLG: true, webglPQ: true });
       const control1 = new ToneMappingControl(caps1);
       const el1 = control1.render();
-      expect(el1.querySelector('[data-testid="hdr-output-section"]')).not.toBeNull();
+      // Open dropdown so it is appended to document.body
+      (el1.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement).click();
+      expect(document.body.querySelector('[data-testid="hdr-output-section"]')).not.toBeNull();
       control1.dispose();
 
       // Only HLG available
       const caps2 = makeCaps({ displayHDR: true, webglHLG: true, webglPQ: false });
       const control2 = new ToneMappingControl(caps2);
       const el2 = control2.render();
-      expect(el2.querySelector('[data-testid="hdr-output-section"]')).not.toBeNull();
+      (el2.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement).click();
+      expect(document.body.querySelector('[data-testid="hdr-output-section"]')).not.toBeNull();
       control2.dispose();
 
       // Only PQ available
       const caps3 = makeCaps({ displayHDR: true, webglHLG: false, webglPQ: true });
       const control3 = new ToneMappingControl(caps3);
       const el3 = control3.render();
-      expect(el3.querySelector('[data-testid="hdr-output-section"]')).not.toBeNull();
+      (el3.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement).click();
+      expect(document.body.querySelector('[data-testid="hdr-output-section"]')).not.toBeNull();
       control3.dispose();
     });
 
@@ -812,7 +816,8 @@ describe('Phase 2: HDR Extended Range Output', () => {
       const caps = makeCaps({ displayHDR: true, webglHLG: true, webglPQ: true });
       const control = new ToneMappingControl(caps);
       const el = control.render();
-      expect(el.querySelector('[data-testid="hdr-mode-sdr"]')).not.toBeNull();
+      (el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement).click();
+      expect(document.body.querySelector('[data-testid="hdr-mode-sdr"]')).not.toBeNull();
       control.dispose();
     });
 
@@ -820,9 +825,10 @@ describe('Phase 2: HDR Extended Range Output', () => {
       const caps = makeCaps({ displayHDR: true, webglHLG: true, webglPQ: true });
       const control = new ToneMappingControl(caps);
       const el = control.render();
-      expect(el.querySelector('[data-testid="hdr-mode-sdr"]')).not.toBeNull();
-      expect(el.querySelector('[data-testid="hdr-mode-hlg"]')).not.toBeNull();
-      expect(el.querySelector('[data-testid="hdr-mode-pq"]')).not.toBeNull();
+      (el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement).click();
+      expect(document.body.querySelector('[data-testid="hdr-mode-sdr"]')).not.toBeNull();
+      expect(document.body.querySelector('[data-testid="hdr-mode-hlg"]')).not.toBeNull();
+      expect(document.body.querySelector('[data-testid="hdr-mode-pq"]')).not.toBeNull();
       control.dispose();
     });
 
@@ -840,7 +846,8 @@ describe('Phase 2: HDR Extended Range Output', () => {
       control.on('hdrModeChanged', listener);
 
       const el = control.render();
-      const hlgBtn = el.querySelector('[data-testid="hdr-mode-hlg"]') as HTMLButtonElement;
+      (el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement).click();
+      const hlgBtn = document.body.querySelector('[data-testid="hdr-mode-hlg"]') as HTMLButtonElement;
       hlgBtn.click();
 
       expect(listener).toHaveBeenCalledWith('hlg');
@@ -855,7 +862,8 @@ describe('Phase 2: HDR Extended Range Output', () => {
       control.on('hdrModeChanged', listener);
 
       const el = control.render();
-      const pqBtn = el.querySelector('[data-testid="hdr-mode-pq"]') as HTMLButtonElement;
+      (el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement).click();
+      const pqBtn = document.body.querySelector('[data-testid="hdr-mode-pq"]') as HTMLButtonElement;
       pqBtn.click();
 
       expect(listener).toHaveBeenCalledWith('pq');
@@ -874,7 +882,8 @@ describe('Phase 2: HDR Extended Range Output', () => {
       control.on('hdrModeChanged', listener);
 
       const el = control.render();
-      const sdrBtn = el.querySelector('[data-testid="hdr-mode-sdr"]') as HTMLButtonElement;
+      (el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement).click();
+      const sdrBtn = document.body.querySelector('[data-testid="hdr-mode-sdr"]') as HTMLButtonElement;
       sdrBtn.click();
 
       expect(listener).toHaveBeenCalledWith('sdr');
@@ -890,7 +899,8 @@ describe('Phase 2: HDR Extended Range Output', () => {
 
       // SDR is already the default, clicking it should not emit
       const el = control.render();
-      const sdrBtn = el.querySelector('[data-testid="hdr-mode-sdr"]') as HTMLButtonElement;
+      (el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement).click();
+      const sdrBtn = document.body.querySelector('[data-testid="hdr-mode-sdr"]') as HTMLButtonElement;
       sdrBtn.click();
 
       expect(listener).not.toHaveBeenCalled();
@@ -901,10 +911,11 @@ describe('Phase 2: HDR Extended Range Output', () => {
       const caps = makeCaps({ displayHDR: true, webglHLG: true, webglPQ: true });
       const control = new ToneMappingControl(caps);
       const el = control.render();
+      (el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement).click();
 
-      const sdrBtn = el.querySelector('[data-testid="hdr-mode-sdr"]') as HTMLButtonElement;
-      const hlgBtn = el.querySelector('[data-testid="hdr-mode-hlg"]') as HTMLButtonElement;
-      const pqBtn = el.querySelector('[data-testid="hdr-mode-pq"]') as HTMLButtonElement;
+      const sdrBtn = document.body.querySelector('[data-testid="hdr-mode-sdr"]') as HTMLButtonElement;
+      const hlgBtn = document.body.querySelector('[data-testid="hdr-mode-hlg"]') as HTMLButtonElement;
+      const pqBtn = document.body.querySelector('[data-testid="hdr-mode-pq"]') as HTMLButtonElement;
 
       expect(sdrBtn.getAttribute('role')).toBe('menuitemradio');
       expect(hlgBtn.getAttribute('role')).toBe('menuitemradio');
@@ -922,9 +933,10 @@ describe('Phase 2: HDR Extended Range Output', () => {
       const caps = makeCaps({ displayHDR: true, webglHLG: true, webglPQ: true });
       const control = new ToneMappingControl(caps);
       const el = control.render();
+      (el.querySelector('[data-testid="tone-mapping-control-button"]') as HTMLButtonElement).click();
 
-      const sdrBtn = el.querySelector('[data-testid="hdr-mode-sdr"]') as HTMLButtonElement;
-      const hlgBtn = el.querySelector('[data-testid="hdr-mode-hlg"]') as HTMLButtonElement;
+      const sdrBtn = document.body.querySelector('[data-testid="hdr-mode-sdr"]') as HTMLButtonElement;
+      const hlgBtn = document.body.querySelector('[data-testid="hdr-mode-hlg"]') as HTMLButtonElement;
 
       hlgBtn.click();
 

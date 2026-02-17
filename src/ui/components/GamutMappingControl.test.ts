@@ -367,6 +367,45 @@ describe('GamutMappingControl', () => {
     });
   });
 
+  describe('Escape key handling (M-14)', () => {
+    it('GM-M14a: pressing Escape while the panel is open should close it', () => {
+      control.show();
+      expect(control.isOpen).toBe(true);
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+      expect(control.isOpen).toBe(false);
+    });
+
+    it('GM-M14b: pressing Escape while the panel is closed should have no effect', () => {
+      expect(control.isOpen).toBe(false);
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+      expect(control.isOpen).toBe(false);
+    });
+
+    it('GM-M14c: the keydown listener should be removed when the panel closes', () => {
+      const spy = vi.spyOn(document, 'removeEventListener');
+
+      control.show();
+      control.hide();
+
+      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
+      spy.mockRestore();
+    });
+
+    it('GM-M14d: the keydown listener should be removed on dispose', () => {
+      const spy = vi.spyOn(document, 'removeEventListener');
+
+      control.show();
+      control.dispose();
+
+      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
+      spy.mockRestore();
+    });
+  });
+
   describe('disposal', () => {
     it('GM-050: dispose removes panel from DOM', () => {
       control.show();
@@ -460,6 +499,79 @@ describe('GamutMappingControl', () => {
 
       const state = control.getState();
       expect(state.highlightOutOfGamut).toBe(true);
+    });
+  });
+
+  describe('focus management (M-18)', () => {
+    it('GM-M18a: when the panel opens, focus should move to the first interactive element inside it', () => {
+      control.show();
+      const modeSelect = document.querySelector('[data-testid="gamut-mapping-mode-select"]') as HTMLSelectElement;
+      expect(document.activeElement).toBe(modeSelect);
+    });
+
+    it('GM-M18b: when the panel closes, focus should return to the toggle button', () => {
+      control.show();
+      control.hide();
+      const button = control.render().querySelector('[data-testid="gamut-mapping-control-button"]') as HTMLButtonElement;
+      expect(document.activeElement).toBe(button);
+    });
+  });
+
+  describe('keyboard focus ring (M-16)', () => {
+    it('GM-M16a: toggle button should have focus/blur event listeners added by applyA11yFocus', () => {
+      const btn = control.render().querySelector('[data-testid="gamut-mapping-control-button"]') as HTMLButtonElement;
+
+      // applyA11yFocus registers a focus listener that sets outline on keyboard focus.
+      btn.dispatchEvent(new Event('focus'));
+      expect(btn.style.outline).toBe('2px solid var(--accent-primary)');
+    });
+
+    it('GM-M16b: keyboard focus (Tab) should apply visible focus ring', () => {
+      const btn = control.render().querySelector('[data-testid="gamut-mapping-control-button"]') as HTMLButtonElement;
+
+      // Simulate keyboard focus (no preceding mousedown)
+      btn.dispatchEvent(new Event('focus'));
+      expect(btn.style.outline).toBe('2px solid var(--accent-primary)');
+      expect(btn.style.outlineOffset).toBe('2px');
+    });
+
+    it('GM-M16c: mouse focus (click) should not apply focus ring', () => {
+      const btn = control.render().querySelector('[data-testid="gamut-mapping-control-button"]') as HTMLButtonElement;
+
+      // Simulate mouse click: mousedown then focus
+      btn.dispatchEvent(new Event('mousedown'));
+      btn.dispatchEvent(new Event('focus'));
+      expect(btn.style.outline).not.toBe('2px solid var(--accent-primary)');
+    });
+  });
+
+  describe('ARIA attributes (M-15)', () => {
+    it('GM-M15a: toggle button should have aria-haspopup attribute', () => {
+      const btn = control.render().querySelector('[data-testid="gamut-mapping-control-button"]') as HTMLButtonElement;
+      expect(btn.getAttribute('aria-haspopup')).toBe('dialog');
+    });
+
+    it('GM-M15b: toggle button aria-expanded should be "false" when panel is closed', () => {
+      const btn = control.render().querySelector('[data-testid="gamut-mapping-control-button"]') as HTMLButtonElement;
+      expect(btn.getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('GM-M15c: toggle button aria-expanded should be "true" when panel is open', () => {
+      const btn = control.render().querySelector('[data-testid="gamut-mapping-control-button"]') as HTMLButtonElement;
+      control.show();
+      expect(btn.getAttribute('aria-expanded')).toBe('true');
+    });
+
+    it('GM-M15d: panel container should have role="dialog" attribute', () => {
+      control.show();
+      const panel = document.querySelector('[data-testid="gamut-mapping-panel"]') as HTMLElement;
+      expect(panel.getAttribute('role')).toBe('dialog');
+    });
+
+    it('GM-M15e: panel container should have aria-label attribute', () => {
+      control.show();
+      const panel = document.querySelector('[data-testid="gamut-mapping-panel"]') as HTMLElement;
+      expect(panel.getAttribute('aria-label')).toBe('Gamut Mapping Settings');
     });
   });
 });

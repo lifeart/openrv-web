@@ -25,6 +25,7 @@ export class FilmEmulationControl extends EventEmitter<FilmEmulationControlEvent
   private grainValueLabel: HTMLSpanElement | null = null;
 
   private boundHandleDocumentClick: (e: MouseEvent) => void;
+  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
 
   constructor() {
     super();
@@ -42,6 +43,8 @@ export class FilmEmulationControl extends EventEmitter<FilmEmulationControlEvent
     this.button.innerHTML = `${getIconSvg('film', 'sm')}<span style="margin-left: 6px;">Film</span>`;
     this.button.dataset.testid = 'film-emulation-control-button';
     this.button.title = 'Film stock emulation';
+    this.button.setAttribute('aria-haspopup', 'dialog');
+    this.button.setAttribute('aria-expanded', 'false');
     this.button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -78,6 +81,8 @@ export class FilmEmulationControl extends EventEmitter<FilmEmulationControlEvent
     this.panel = document.createElement('div');
     this.panel.className = 'film-emulation-panel';
     this.panel.dataset.testid = 'film-emulation-panel';
+    this.panel.setAttribute('role', 'dialog');
+    this.panel.setAttribute('aria-label', 'Film Emulation Settings');
     this.panel.style.cssText = `
       position: fixed;
       background: var(--bg-secondary);
@@ -95,6 +100,13 @@ export class FilmEmulationControl extends EventEmitter<FilmEmulationControlEvent
 
     this.boundHandleDocumentClick = this.handleDocumentClick.bind(this);
     document.addEventListener('click', this.boundHandleDocumentClick);
+
+    // Close on Escape key
+    this.boundHandleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && this.isPanelOpen) {
+        this.hide();
+      }
+    };
   }
 
   private handleDocumentClick(e: MouseEvent): void {
@@ -197,14 +209,15 @@ export class FilmEmulationControl extends EventEmitter<FilmEmulationControlEvent
     const checkbox = document.createElement('input');
     checkbox.type = 'checkbox';
     checkbox.checked = initialValue;
+    checkbox.id = 'film-emulation-enabled-checkbox';
     checkbox.dataset.testid = 'film-emulation-enabled-checkbox';
     checkbox.style.cssText = 'cursor: pointer;';
     checkbox.addEventListener('change', () => onChange(checkbox.checked));
 
     const labelEl = document.createElement('label');
+    labelEl.htmlFor = 'film-emulation-enabled-checkbox';
     labelEl.textContent = label;
     labelEl.style.cssText = 'color: var(--text-secondary); font-size: 12px; cursor: pointer;';
-    labelEl.addEventListener('click', () => { checkbox.click(); });
 
     row.appendChild(checkbox);
     row.appendChild(labelEl);
@@ -371,13 +384,23 @@ export class FilmEmulationControl extends EventEmitter<FilmEmulationControlEvent
     this.panel.style.left = `${Math.max(8, rect.right - 280)}px`;
     this.isPanelOpen = true;
     this.panel.style.display = 'block';
+    this.button.setAttribute('aria-expanded', 'true');
     this.updateButtonState();
+    document.addEventListener('keydown', this.boundHandleKeyDown);
+
+    // Move focus to the first interactive element in the panel
+    this.enabledCheckbox?.focus();
   }
 
   hide(): void {
     this.isPanelOpen = false;
     this.panel.style.display = 'none';
+    this.button.setAttribute('aria-expanded', 'false');
     this.updateButtonState();
+    document.removeEventListener('keydown', this.boundHandleKeyDown);
+
+    // Return focus to the toggle button
+    this.button.focus();
   }
 
   reset(): void {
@@ -425,6 +448,7 @@ export class FilmEmulationControl extends EventEmitter<FilmEmulationControlEvent
   }
 
   dispose(): void {
+    document.removeEventListener('keydown', this.boundHandleKeyDown);
     document.removeEventListener('click', this.boundHandleDocumentClick);
     if (this.panel.parentNode) {
       this.panel.parentNode.removeChild(this.panel);

@@ -8,6 +8,19 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { LayoutStore, COLLAPSED_RAIL_SIZE } from './LayoutStore';
 import { LayoutManager } from './LayoutManager';
 
+// Polyfill PointerEvent for jsdom (which does not implement it)
+if (typeof globalThis.PointerEvent === 'undefined') {
+  (globalThis as any).PointerEvent = class PointerEvent extends MouseEvent {
+    readonly pointerId: number;
+    readonly pointerType: string;
+    constructor(type: string, params: PointerEventInit & MouseEventInit = {}) {
+      super(type, params);
+      this.pointerId = params.pointerId ?? 0;
+      this.pointerType = params.pointerType ?? '';
+    }
+  };
+}
+
 describe('LayoutManager', () => {
   let store: LayoutStore;
   let manager: LayoutManager;
@@ -97,6 +110,10 @@ describe('LayoutManager', () => {
     });
 
     it('LM-011: expanding panel shows full width', () => {
+      // Register content so the panel can expand
+      const tab = document.createElement('div');
+      manager.addPanelTab('right', 'Tab', tab);
+
       store.setPanelCollapsed('right', false);
       store.setPanelSize('right', 300);
 
@@ -106,6 +123,10 @@ describe('LayoutManager', () => {
     });
 
     it('LM-012: collapse button click toggles panel', () => {
+      // Register content so the panel can expand
+      const tab = document.createElement('div');
+      manager.addPanelTab('right', 'Tab', tab);
+
       const root = manager.getElement();
       const rightBtn = root.querySelector('[data-testid="layout-collapse-right"]') as HTMLButtonElement;
 
@@ -206,6 +227,10 @@ describe('LayoutManager', () => {
 
   describe('Preset switching', () => {
     it('LM-030: clicking preset button applies preset', () => {
+      // Register content on both panels so they can expand
+      manager.addPanelTab('left', 'Tab', document.createElement('div'));
+      manager.addPanelTab('right', 'Tab', document.createElement('div'));
+
       const root = manager.getElement();
       const colorBtn = root.querySelector('[data-testid="layout-preset-color"]') as HTMLButtonElement;
       colorBtn.click();
@@ -221,6 +246,80 @@ describe('LayoutManager', () => {
     });
   });
 
+  describe('Active preset indicator (M-30)', () => {
+    it('LM-M30a: after applying "Color" preset, the Color button should have active styling', () => {
+      const root = manager.getElement();
+      store.applyPreset('color');
+
+      const colorBtn = root.querySelector('[data-testid="layout-preset-color"]') as HTMLElement;
+      expect(colorBtn.style.background).toBe('var(--accent-primary)');
+      expect(colorBtn.style.borderColor).toBe('var(--accent-primary)');
+    });
+
+    it('LM-M30b: after applying "Color" preset, other preset buttons should NOT have active styling', () => {
+      const root = manager.getElement();
+      store.applyPreset('color');
+
+      const defaultBtn = root.querySelector('[data-testid="layout-preset-default"]') as HTMLElement;
+      const reviewBtn = root.querySelector('[data-testid="layout-preset-review"]') as HTMLElement;
+      const paintBtn = root.querySelector('[data-testid="layout-preset-paint"]') as HTMLElement;
+
+      expect(defaultBtn.style.background).toBe('transparent');
+      expect(reviewBtn.style.background).toBe('transparent');
+      expect(paintBtn.style.background).toBe('transparent');
+    });
+
+    it('LM-M30c: active button should have aria-pressed="true"', () => {
+      const root = manager.getElement();
+      store.applyPreset('color');
+
+      const colorBtn = root.querySelector('[data-testid="layout-preset-color"]') as HTMLElement;
+      expect(colorBtn.getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('LM-M30d: inactive buttons should have aria-pressed="false"', () => {
+      const root = manager.getElement();
+      store.applyPreset('color');
+
+      const defaultBtn = root.querySelector('[data-testid="layout-preset-default"]') as HTMLElement;
+      const reviewBtn = root.querySelector('[data-testid="layout-preset-review"]') as HTMLElement;
+      const paintBtn = root.querySelector('[data-testid="layout-preset-paint"]') as HTMLElement;
+
+      expect(defaultBtn.getAttribute('aria-pressed')).toBe('false');
+      expect(reviewBtn.getAttribute('aria-pressed')).toBe('false');
+      expect(paintBtn.getAttribute('aria-pressed')).toBe('false');
+    });
+
+    it('LM-M30e: switching preset updates active state from one button to another', () => {
+      const root = manager.getElement();
+
+      // Apply color first
+      store.applyPreset('color');
+      const colorBtn = root.querySelector('[data-testid="layout-preset-color"]') as HTMLElement;
+      const reviewBtn = root.querySelector('[data-testid="layout-preset-review"]') as HTMLElement;
+
+      expect(colorBtn.getAttribute('aria-pressed')).toBe('true');
+      expect(reviewBtn.getAttribute('aria-pressed')).toBe('false');
+
+      // Switch to review
+      store.applyPreset('review');
+
+      expect(colorBtn.getAttribute('aria-pressed')).toBe('false');
+      expect(colorBtn.style.background).toBe('transparent');
+      expect(reviewBtn.getAttribute('aria-pressed')).toBe('true');
+      expect(reviewBtn.style.background).toBe('var(--accent-primary)');
+    });
+
+    it('LM-M30f: all preset buttons have aria-pressed="false" initially (no preset applied)', () => {
+      const root = manager.getElement();
+
+      for (const preset of store.getPresets()) {
+        const btn = root.querySelector(`[data-testid="layout-preset-${preset.id}"]`) as HTMLElement;
+        expect(btn.getAttribute('aria-pressed')).toBe('false');
+      }
+    });
+  });
+
   describe('Keyboard shortcuts', () => {
     it('LM-040: Alt+1 applies default preset', () => {
       const handled = manager.handleKeyboard('1', true);
@@ -228,6 +327,9 @@ describe('LayoutManager', () => {
     });
 
     it('LM-041: Alt+3 applies color preset', () => {
+      // Register content on left panel so it can expand
+      manager.addPanelTab('left', 'Tab', document.createElement('div'));
+
       const handled = manager.handleKeyboard('3', true);
       expect(handled).toBe(true);
       expect(store.panels.left.collapsed).toBe(false); // color preset opens left
@@ -312,6 +414,62 @@ describe('LayoutManager', () => {
     });
   });
 
+  describe('Pointer capture on drag', () => {
+    it('LM-M17c: onDragStart should call setPointerCapture on the handle element', () => {
+      const root = manager.getElement();
+      const leftHandle = root.querySelector('[data-testid="layout-handle-left"]') as HTMLElement;
+
+      // Expand left panel so the handle is visible
+      store.setPanelCollapsed('left', false);
+
+      const setCaptureSpy = vi.fn();
+      leftHandle.setPointerCapture = setCaptureSpy;
+
+      const pointerDown = new PointerEvent('pointerdown', {
+        pointerId: 7,
+        clientX: 100,
+        clientY: 200,
+        bubbles: true,
+      });
+      leftHandle.dispatchEvent(pointerDown);
+
+      expect(setCaptureSpy).toHaveBeenCalledWith(7);
+    });
+
+    it('LM-M17d: onDragEnd should call releasePointerCapture', () => {
+      const root = manager.getElement();
+      const leftHandle = root.querySelector('[data-testid="layout-handle-left"]') as HTMLElement;
+
+      // Expand left panel so the handle is visible
+      store.setPanelCollapsed('left', false);
+
+      const setCaptureSpy = vi.fn();
+      const releaseCaptureSpy = vi.fn();
+      leftHandle.setPointerCapture = setCaptureSpy;
+      leftHandle.releasePointerCapture = releaseCaptureSpy;
+
+      // Start drag
+      const pointerDown = new PointerEvent('pointerdown', {
+        pointerId: 7,
+        clientX: 100,
+        clientY: 200,
+        bubbles: true,
+      });
+      leftHandle.dispatchEvent(pointerDown);
+
+      // End drag
+      const pointerUp = new PointerEvent('pointerup', {
+        pointerId: 7,
+        clientX: 120,
+        clientY: 200,
+        bubbles: true,
+      });
+      document.dispatchEvent(pointerUp);
+
+      expect(releaseCaptureSpy).toHaveBeenCalledWith(7);
+    });
+  });
+
   describe('Bottom panel collapse/expand', () => {
     it('LM-070: bottom panel is visible when not collapsed', () => {
       const root = manager.getElement();
@@ -351,6 +509,124 @@ describe('LayoutManager', () => {
 
       const bottomSlot = manager.getBottomSlot();
       expect(bottomSlot.style.height).toBe('200px');
+    });
+  });
+
+  describe('H-09: Empty panels stay collapsed', () => {
+    it('LP-H09a: layout presets that expand side panels should only do so if the panel has content registered', () => {
+      // No tabs registered for left or right panels
+      expect(manager.hasPanelContent('left')).toBe(false);
+      expect(manager.hasPanelContent('right')).toBe(false);
+
+      // Apply "color" preset which normally expands both side panels
+      store.applyPreset('color');
+
+      const root = manager.getElement();
+      const leftPanel = root.querySelector('[data-testid="layout-panel-left"]') as HTMLElement;
+      const rightPanel = root.querySelector('[data-testid="layout-panel-right"]') as HTMLElement;
+
+      // Both should remain at collapsed rail width since there's no content
+      expect(leftPanel.style.width).toBe(`${COLLAPSED_RAIL_SIZE}px`);
+      expect(rightPanel.style.width).toBe(`${COLLAPSED_RAIL_SIZE}px`);
+
+      // Content areas should be hidden
+      const leftContent = root.querySelector('.layout-panel-content-left') as HTMLElement;
+      const rightContent = root.querySelector('.layout-panel-content-right') as HTMLElement;
+      expect(leftContent.style.display).toBe('none');
+      expect(rightContent.style.display).toBe('none');
+    });
+
+    it('LP-H09a2: layout presets expand panels that have registered content', () => {
+      // Register content on right panel
+      const tab = document.createElement('div');
+      tab.textContent = 'Some content';
+      manager.addPanelTab('right', 'Info', tab);
+
+      // Apply "review" preset which expands right panel
+      store.applyPreset('review');
+
+      const root = manager.getElement();
+      const rightPanel = root.querySelector('[data-testid="layout-panel-right"]') as HTMLElement;
+
+      // Right panel should be expanded since it has content
+      expect(rightPanel.style.width).toBe('300px');
+
+      // Left panel should stay collapsed (no content)
+      const leftPanel = root.querySelector('[data-testid="layout-panel-left"]') as HTMLElement;
+      expect(leftPanel.style.width).toBe(`${COLLAPSED_RAIL_SIZE}px`);
+    });
+
+    it('LP-H09b: if no panel tabs are registered, the collapse toggle should be hidden', () => {
+      const root = manager.getElement();
+
+      // No tabs registered, collapse buttons should be hidden
+      const leftBtn = root.querySelector('[data-testid="layout-collapse-left"]') as HTMLElement;
+      const rightBtn = root.querySelector('[data-testid="layout-collapse-right"]') as HTMLElement;
+
+      expect(leftBtn.style.display).toBe('none');
+      expect(rightBtn.style.display).toBe('none');
+    });
+
+    it('LP-H09b2: collapse toggle is visible when panel has registered content', () => {
+      const tab = document.createElement('div');
+      manager.addPanelTab('right', 'Tab', tab);
+
+      const root = manager.getElement();
+      const rightBtn = root.querySelector('[data-testid="layout-collapse-right"]') as HTMLElement;
+
+      expect(rightBtn.style.display).toBe('flex');
+    });
+
+    it('LP-H09c: applying a preset with side panels when no tabs registered should keep panels collapsed', () => {
+      // Apply "color" preset (expands left: 260px, right: 300px)
+      store.applyPreset('color');
+
+      // Store should have been corrected to collapsed
+      expect(store.panels.left.collapsed).toBe(true);
+      expect(store.panels.right.collapsed).toBe(true);
+
+      // DOM should show collapsed rail width
+      const root = manager.getElement();
+      const leftPanel = root.querySelector('[data-testid="layout-panel-left"]') as HTMLElement;
+      const rightPanel = root.querySelector('[data-testid="layout-panel-right"]') as HTMLElement;
+
+      expect(leftPanel.style.width).toBe(`${COLLAPSED_RAIL_SIZE}px`);
+      expect(rightPanel.style.width).toBe(`${COLLAPSED_RAIL_SIZE}px`);
+    });
+
+    it('LP-H09c2: applying preset when only one side has content expands only that side', () => {
+      // Register content on left panel only
+      const tab = document.createElement('div');
+      manager.addPanelTab('left', 'Browser', tab);
+
+      // Apply "color" preset (expands left: 260px, right: 300px)
+      store.applyPreset('color');
+
+      // Left should be expanded (has content)
+      expect(store.panels.left.collapsed).toBe(false);
+      const root = manager.getElement();
+      const leftPanel = root.querySelector('[data-testid="layout-panel-left"]') as HTMLElement;
+      expect(leftPanel.style.width).toBe('260px');
+
+      // Right should be collapsed (no content)
+      expect(store.panels.right.collapsed).toBe(true);
+      const rightPanel = root.querySelector('[data-testid="layout-panel-right"]') as HTMLElement;
+      expect(rightPanel.style.width).toBe(`${COLLAPSED_RAIL_SIZE}px`);
+    });
+
+    it('LP-H09d: hasPanelContent returns correct state', () => {
+      expect(manager.hasPanelContent('left')).toBe(false);
+      expect(manager.hasPanelContent('right')).toBe(false);
+
+      const tab = document.createElement('div');
+      manager.addPanelTab('left', 'Tab', tab);
+
+      expect(manager.hasPanelContent('left')).toBe(true);
+      expect(manager.hasPanelContent('right')).toBe(false);
+
+      manager.clearPanelTabs('left');
+
+      expect(manager.hasPanelContent('left')).toBe(false);
     });
   });
 });

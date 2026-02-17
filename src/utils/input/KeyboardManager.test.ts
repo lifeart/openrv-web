@@ -1030,4 +1030,144 @@ describe('KeyboardManager', () => {
       expect(mockHandler).toHaveBeenCalled();
     });
   });
+
+  describe('select element isolation', () => {
+    it('KM-H01a: when a <select> is focused, pressing letter keys should NOT trigger action handlers', () => {
+      keyboardManager.register({ code: 'KeyA' }, mockHandler, 'Some action');
+
+      const mockSelect = document.createElement('select');
+
+      const mockEvent = {
+        code: 'KeyA',
+        key: 'a',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: mockSelect
+      } as any;
+
+      keyboardManager['handleKeydown'](mockEvent);
+
+      expect(mockHandler).not.toHaveBeenCalled();
+    });
+
+    it('KM-H01b: when a <select> is focused, pressing arrow keys should NOT trigger action handlers', () => {
+      const stepForward = vi.fn();
+      const stepBackward = vi.fn();
+      keyboardManager.register({ code: 'ArrowDown' }, stepForward, 'Step forward');
+      keyboardManager.register({ code: 'ArrowUp' }, stepBackward, 'Step backward');
+
+      const mockSelect = document.createElement('select');
+
+      const downEvent = {
+        code: 'ArrowDown',
+        key: 'ArrowDown',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: mockSelect
+      } as any;
+
+      const upEvent = {
+        code: 'ArrowUp',
+        key: 'ArrowUp',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: mockSelect
+      } as any;
+
+      keyboardManager['handleKeydown'](downEvent);
+      keyboardManager['handleKeydown'](upEvent);
+
+      expect(stepForward).not.toHaveBeenCalled();
+      expect(stepBackward).not.toHaveBeenCalled();
+    });
+
+    it('KM-H01c: when a <select> is focused, modifier combos (Ctrl+Z) should still be handled by the manager', () => {
+      const undoHandler = vi.fn();
+      keyboardManager.register({ code: 'KeyZ', ctrl: true }, undoHandler, 'Undo');
+
+      const mockSelect = document.createElement('select');
+
+      const mockEvent = {
+        code: 'KeyZ',
+        key: 'z',
+        ctrlKey: true,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: mockSelect
+      } as any;
+
+      keyboardManager['handleKeydown'](mockEvent);
+
+      expect(undoHandler).toHaveBeenCalledTimes(1);
+    });
+
+    it('KM-H01c2: when a <select> is focused, Meta+key combos (Cmd+Z on macOS) should still be handled by the manager', () => {
+      const undoHandler = vi.fn();
+      keyboardManager.register({ code: 'KeyZ', ctrl: true }, undoHandler, 'Undo');
+
+      const mockSelect = document.createElement('select');
+
+      const mockEvent = {
+        code: 'KeyZ',
+        key: 'z',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: true,
+        preventDefault: vi.fn(),
+        target: mockSelect
+      } as any;
+
+      keyboardManager['handleKeydown'](mockEvent);
+
+      expect(undoHandler).toHaveBeenCalledTimes(1);
+    });
+
+    it('KM-H01d: after <select> loses focus (blur), keyboard shortcuts resume working normally', () => {
+      keyboardManager.register({ code: 'KeyA' }, mockHandler, 'Some action');
+
+      const mockSelect = document.createElement('select');
+
+      // First, press key while select is focused - should be skipped
+      const eventOnSelect = {
+        code: 'KeyA',
+        key: 'a',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: mockSelect
+      } as any;
+
+      keyboardManager['handleKeydown'](eventOnSelect);
+      expect(mockHandler).not.toHaveBeenCalled();
+
+      // After blur, press same key on body - should trigger handler
+      const eventOnBody = {
+        code: 'KeyA',
+        key: 'a',
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        metaKey: false,
+        preventDefault: vi.fn(),
+        target: document.body
+      } as any;
+
+      keyboardManager['handleKeydown'](eventOnBody);
+      expect(mockHandler).toHaveBeenCalledTimes(1);
+    });
+  });
 });

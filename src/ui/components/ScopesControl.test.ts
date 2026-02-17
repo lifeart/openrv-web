@@ -318,4 +318,41 @@ describe('ScopesControl', () => {
       expect(control.isScopeVisible('gamutDiagram')).toBe(false);
     });
   });
+
+  describe('ARIA attributes (M-15)', () => {
+    it('SCOPE-M15a: toggle button should have aria-haspopup attribute', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="scopes-control-button"]') as HTMLButtonElement;
+      expect(button.getAttribute('aria-haspopup')).toBe('menu');
+    });
+
+    it('SCOPE-M15b: toggle button aria-expanded should be "false" when dropdown is closed', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="scopes-control-button"]') as HTMLButtonElement;
+      expect(button.getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('SCOPE-M15c: toggle button aria-expanded should be "true" when dropdown is open', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="scopes-control-button"]') as HTMLButtonElement;
+      button.click();
+      expect(button.getAttribute('aria-expanded')).toBe('true');
+    });
+
+    it('SCOPE-M15d: dropdown container should have role="menu" attribute', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="scopes-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="scopes-dropdown"]') as HTMLElement;
+      expect(dropdown.getAttribute('role')).toBe('menu');
+    });
+
+    it('SCOPE-M15e: dropdown container should have aria-label attribute', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="scopes-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="scopes-dropdown"]') as HTMLElement;
+      expect(dropdown.getAttribute('aria-label')).toBe('Scopes Settings');
+    });
+  });
 });

@@ -308,6 +308,72 @@ describe('DeinterlaceControl', () => {
     });
   });
 
+  describe('label/checkbox accessibility (M-19)', () => {
+    it('DC-M19a: checkbox has a unique id attribute', () => {
+      control.show();
+      const checkbox = document.querySelector('[data-testid="deinterlace-enabled-checkbox"]') as HTMLInputElement;
+      expect(checkbox.id).toBe('deinterlace-enabled-checkbox');
+    });
+
+    it('DC-M19b: label has htmlFor matching the checkbox id', () => {
+      control.show();
+      const checkbox = document.querySelector('[data-testid="deinterlace-enabled-checkbox"]') as HTMLInputElement;
+      const label = checkbox.parentElement!.querySelector('label') as HTMLLabelElement;
+      expect(label.htmlFor).toBe(checkbox.id);
+    });
+
+    it('DC-M19c: clicking the label toggles the checkbox state', () => {
+      control.show();
+      const checkbox = document.querySelector('[data-testid="deinterlace-enabled-checkbox"]') as HTMLInputElement;
+      const label = checkbox.parentElement!.querySelector('label') as HTMLLabelElement;
+
+      expect(checkbox.checked).toBe(false);
+      label.click();
+      expect(checkbox.checked).toBe(true);
+      label.click();
+      expect(checkbox.checked).toBe(false);
+    });
+  });
+
+  describe('Escape key handling (M-14)', () => {
+    it('DC-M14a: pressing Escape while the panel is open should close it', () => {
+      control.show();
+      expect(control.isOpen).toBe(true);
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+      expect(control.isOpen).toBe(false);
+    });
+
+    it('DC-M14b: pressing Escape while the panel is closed should have no effect', () => {
+      expect(control.isOpen).toBe(false);
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+      expect(control.isOpen).toBe(false);
+    });
+
+    it('DC-M14c: the keydown listener should be removed when the panel closes', () => {
+      const spy = vi.spyOn(document, 'removeEventListener');
+
+      control.show();
+      control.hide();
+
+      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
+      spy.mockRestore();
+    });
+
+    it('DC-M14d: the keydown listener should be removed on dispose', () => {
+      const spy = vi.spyOn(document, 'removeEventListener');
+
+      control.show();
+      control.dispose();
+
+      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
+      spy.mockRestore();
+    });
+  });
+
   describe('dispose', () => {
     it('DC-015: dispose removes panel from body', () => {
       control.show();
@@ -332,6 +398,57 @@ describe('DeinterlaceControl', () => {
       expect(() => {
         document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       }).not.toThrow();
+    });
+  });
+
+  describe('focus management (M-18)', () => {
+    it('DC-M18a: when the panel opens, focus should move to the first interactive element inside it', () => {
+      control.show();
+      const checkbox = document.querySelector('[data-testid="deinterlace-enabled-checkbox"]') as HTMLInputElement;
+      expect(document.activeElement).toBe(checkbox);
+    });
+
+    it('DC-M18b: when the panel closes, focus should return to the toggle button', () => {
+      const el = control.render();
+      document.body.appendChild(el);
+      control.show();
+      control.hide();
+      const button = el.querySelector('[data-testid="deinterlace-control-button"]') as HTMLButtonElement;
+      expect(document.activeElement).toBe(button);
+      document.body.removeChild(el);
+    });
+  });
+
+  describe('ARIA attributes (M-15)', () => {
+    it('DC-M15a: toggle button should have aria-haspopup attribute', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="deinterlace-control-button"]') as HTMLButtonElement;
+      expect(button.getAttribute('aria-haspopup')).toBe('dialog');
+    });
+
+    it('DC-M15b: toggle button aria-expanded should be "false" when panel is closed', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="deinterlace-control-button"]') as HTMLButtonElement;
+      expect(button.getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('DC-M15c: toggle button aria-expanded should be "true" when panel is open', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="deinterlace-control-button"]') as HTMLButtonElement;
+      control.show();
+      expect(button.getAttribute('aria-expanded')).toBe('true');
+    });
+
+    it('DC-M15d: panel container should have role="dialog" attribute', () => {
+      control.show();
+      const panel = document.querySelector('[data-testid="deinterlace-panel"]') as HTMLElement;
+      expect(panel.getAttribute('role')).toBe('dialog');
+    });
+
+    it('DC-M15e: panel container should have aria-label attribute', () => {
+      control.show();
+      const panel = document.querySelector('[data-testid="deinterlace-panel"]') as HTMLElement;
+      expect(panel.getAttribute('aria-label')).toBe('Deinterlace Settings');
     });
   });
 });

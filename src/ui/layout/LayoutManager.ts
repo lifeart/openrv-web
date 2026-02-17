@@ -38,12 +38,16 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
   private bottomHandle!: HTMLElement;
   private panels: Record<'left' | 'right', PanelElements> = {} as any;
   private presetBar!: HTMLElement;
+  private _presetButtons: Map<LayoutPresetId, HTMLButtonElement> = new Map();
 
   // Store event unsubscribe functions
   private _unsubLayoutChanged: (() => void) | null = null;
+  private _unsubPresetApplied: (() => void) | null = null;
 
   // Drag state
   private _dragging: { panel: PanelId; startPos: number; startSize: number } | null = null;
+  private _dragCaptureTarget: HTMLElement | null = null;
+  private _dragPointerId: number = -1;
   private _boundPointerMove: ((e: PointerEvent) => void) | null = null;
   private _boundPointerUp: ((e: PointerEvent) => void) | null = null;
   private _resizeRaf: number | null = null;
@@ -63,6 +67,9 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
     // Listen only to layoutChanged (applyPreset already emits layoutChanged via notifyAndSave,
     // so a separate presetApplied listener would cause a redundant double applyLayout call).
     this._unsubLayoutChanged = this.store.on('layoutChanged', () => this.applyLayout());
+
+    // Listen to presetApplied to update the active preset button styling
+    this._unsubPresetApplied = this.store.on('presetApplied', (presetId) => this.updatePresetBarActiveState(presetId));
 
     // Window resize
     window.addEventListener('resize', this.handleWindowResize);
@@ -116,6 +123,8 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
     this.viewerSlot = document.createElement('div');
     this.viewerSlot.className = 'layout-viewer';
     this.viewerSlot.style.cssText = `
+      display: flex;
+      flex-direction: column;
       flex: 1;
       position: relative;
       overflow: hidden;
@@ -314,6 +323,7 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
       btn.textContent = preset.label;
       btn.dataset.testid = `layout-preset-${preset.id}`;
       btn.title = `Switch to ${preset.label} layout`;
+      btn.setAttribute('aria-pressed', 'false');
       btn.style.cssText = `
         background: transparent;
         border: 1px solid var(--border-primary);
@@ -327,17 +337,38 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
       `;
       btn.addEventListener('click', () => this.store.applyPreset(preset.id));
       btn.addEventListener('mouseenter', () => {
-        btn.style.background = 'var(--bg-hover)';
-        btn.style.color = 'var(--text-primary)';
+        if (btn.getAttribute('aria-pressed') !== 'true') {
+          btn.style.background = 'var(--bg-hover)';
+          btn.style.color = 'var(--text-primary)';
+        }
       });
       btn.addEventListener('mouseleave', () => {
-        btn.style.background = 'transparent';
-        btn.style.color = 'var(--text-secondary)';
+        if (btn.getAttribute('aria-pressed') !== 'true') {
+          btn.style.background = 'transparent';
+          btn.style.color = 'var(--text-secondary)';
+        }
       });
+      this._presetButtons.set(preset.id, btn);
       bar.appendChild(btn);
     }
 
     return bar;
+  }
+
+  private updatePresetBarActiveState(activePresetId: LayoutPresetId): void {
+    for (const [presetId, btn] of this._presetButtons) {
+      if (presetId === activePresetId) {
+        btn.setAttribute('aria-pressed', 'true');
+        btn.style.background = 'var(--accent-primary)';
+        btn.style.borderColor = 'var(--accent-primary)';
+        btn.style.color = 'var(--text-on-accent, #fff)';
+      } else {
+        btn.setAttribute('aria-pressed', 'false');
+        btn.style.background = 'transparent';
+        btn.style.borderColor = 'var(--border-primary)';
+        btn.style.color = 'var(--text-secondary)';
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -349,6 +380,11 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
     const panel = this.store.panels[panelId];
     const startPos = panelId === 'bottom' ? e.clientY : e.clientX;
     this._dragging = { panel: panelId, startPos, startSize: panel.size };
+
+    const target = e.target as HTMLElement;
+    target.setPointerCapture(e.pointerId);
+    this._dragCaptureTarget = target;
+    this._dragPointerId = e.pointerId;
 
     this._boundPointerMove = (ev: PointerEvent) => this.onDragMove(ev);
     this._boundPointerUp = (ev: PointerEvent) => this.onDragEnd(ev);
@@ -385,6 +421,11 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
   }
 
   private onDragEnd(_e: PointerEvent): void {
+    if (this._dragCaptureTarget && this._dragPointerId >= 0) {
+      this._dragCaptureTarget.releasePointerCapture(this._dragPointerId);
+    }
+    this._dragCaptureTarget = null;
+    this._dragPointerId = -1;
     this._dragging = null;
     if (this._boundPointerMove) {
       document.removeEventListener('pointermove', this._boundPointerMove);
@@ -416,20 +457,31 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
     for (const id of ['left', 'right'] as const) {
       const panel = panels[id];
       const els = this.panels[id];
-      if (panel.collapsed) {
+      const hasContent = this._panelTabs[id].length > 0;
+
+      // If panel has no registered content, force it collapsed and hide the rail toggle
+      const effectivelyCollapsed = panel.collapsed || !hasContent;
+
+      if (effectivelyCollapsed) {
         els.wrapper.style.width = `${COLLAPSED_RAIL_SIZE}px`;
         els.content.style.display = 'none';
         els.handle.style.display = 'none';
+        // If the store thinks it's expanded but there's no content, correct the store
+        if (!panel.collapsed && !hasContent) {
+          this.store.setPanelCollapsed(id, true);
+        }
       } else {
         els.wrapper.style.width = `${panel.size}px`;
         els.content.style.display = 'flex';
         els.handle.style.display = '';
       }
-      // Update collapse button icon direction
-      const btn = els.rail.querySelector('button');
+
+      // Hide or show the collapse toggle button based on whether panel has content
+      const btn = els.rail.querySelector('button') as HTMLElement | null;
       if (btn) {
+        btn.style.display = hasContent ? 'flex' : 'none';
         const isLeft = id === 'left';
-        if (panel.collapsed) {
+        if (effectivelyCollapsed) {
           btn.innerHTML = getIconSvg(isLeft ? 'chevron-right' : 'chevron-left', 'sm');
         } else {
           btn.innerHTML = getIconSvg(isLeft ? 'chevron-left' : 'chevron-right', 'sm');
@@ -516,6 +568,11 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
     return this.bottomSlot;
   }
 
+  /** Check whether a side panel has any registered tab content. */
+  hasPanelContent(panelId: 'left' | 'right'): boolean {
+    return this._panelTabs[panelId].length > 0;
+  }
+
   /** Register a tab in a side panel. */
   addPanelTab(panelId: 'left' | 'right', label: string, element: HTMLElement): void {
     this._panelTabs[panelId].push({ label, element });
@@ -551,6 +608,8 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
     // Unsubscribe from store events
     this._unsubLayoutChanged?.();
     this._unsubLayoutChanged = null;
+    this._unsubPresetApplied?.();
+    this._unsubPresetApplied = null;
 
     window.removeEventListener('resize', this.handleWindowResize);
     if (this._resizeRaf !== null) {

@@ -92,6 +92,8 @@ export class Timeline {
       width: 100%;
       height: 100%;
       display: block;
+      cursor: pointer;
+      touch-action: none;
     `;
     this.container.appendChild(this.canvas);
 
@@ -103,10 +105,10 @@ export class Timeline {
   }
 
   private bindEvents(): void {
-    this.canvas.addEventListener('mousedown', this.onMouseDown);
+    this.canvas.addEventListener('pointerdown', this.onPointerDown);
     this.canvas.addEventListener('dblclick', this.onDoubleClick);
-    window.addEventListener('mousemove', this.onMouseMove);
-    window.addEventListener('mouseup', this.onMouseUp);
+    this.canvas.addEventListener('pointermove', this.onPointerMove);
+    this.canvas.addEventListener('pointerup', this.onPointerUp);
 
     // Listen to session changes
     this.session.on('frameChanged', () => this.draw());
@@ -296,7 +298,7 @@ export class Timeline {
     this.session.goToFrame(nearestFrame);
   }
 
-  private onMouseDown = (e: MouseEvent): void => {
+  private onPointerDown = (e: PointerEvent): void => {
     // Check if click is on the frame counter area (top region above the track)
     const rect = this.canvas.getBoundingClientRect();
     const y = e.clientY - rect.top;
@@ -310,15 +312,19 @@ export class Timeline {
     }
 
     this.isDragging = true;
+    this.canvas.setPointerCapture(e.pointerId);
     this.seekToPosition(e.clientX);
   };
 
-  private onMouseMove = (e: MouseEvent): void => {
+  private onPointerMove = (e: PointerEvent): void => {
     if (!this.isDragging) return;
     this.seekToPosition(e.clientX);
   };
 
-  private onMouseUp = (): void => {
+  private onPointerUp = (e: PointerEvent): void => {
+    if (this.isDragging) {
+      this.canvas.releasePointerCapture(e.pointerId);
+    }
     this.isDragging = false;
   };
 
@@ -615,10 +621,10 @@ export class Timeline {
       cancelAnimationFrame(this.initialRenderFrameId);
       this.initialRenderFrameId = null;
     }
-    window.removeEventListener('mousemove', this.onMouseMove);
-    window.removeEventListener('mouseup', this.onMouseUp);
+    this.canvas.removeEventListener('pointermove', this.onPointerMove);
+    this.canvas.removeEventListener('pointerup', this.onPointerUp);
     window.removeEventListener('resize', this.boundHandleResize);
-    this.canvas.removeEventListener('mousedown', this.onMouseDown);
+    this.canvas.removeEventListener('pointerdown', this.onPointerDown);
     this.canvas.removeEventListener('dblclick', this.onDoubleClick);
     this.thumbnailManager.dispose();
     getThemeManager().off('themeChanged', this.boundOnThemeChange);

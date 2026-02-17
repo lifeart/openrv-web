@@ -7,10 +7,11 @@
  * - Scanline images (tiled images not yet supported)
  * - Uncompressed (NONE), RLE, ZIP, ZIPS, and PIZ compression
  * - Data window / display window handling
+ * - Multi-part EXR files (scanline parts; part selection via partIndex)
  *
  * Not yet supported:
  * - Tiled images
- * - Multi-part EXR files
+ * - Deep data (deepscanline / deeptile)
  * - PXR24, B44, B44A, DWAA, DWAB compression
  *
  * Based on the OpenEXR file format specification.
@@ -87,6 +88,13 @@ export interface EXRHeader {
   screenWindowCenter?: [number, number];
   screenWindowWidth?: number;
 
+  // Multi-part: type attribute ("scanlineimage", "tiledimage", "deepscanline", "deeptile")
+  type?: string;
+  // Multi-part: name attribute
+  name?: string;
+  // Multi-part: view attribute (for stereo: "left" / "right")
+  view?: string;
+
   // All attributes for metadata
   attributes: Map<string, { type: string; value: unknown }>;
 }
@@ -101,6 +109,30 @@ export interface EXRDecodeResult {
   layers?: EXRLayerInfo[];
   /** The layer that was decoded (undefined = default RGBA) */
   decodedLayer?: string;
+  /** For multi-part files: info about all available parts */
+  parts?: EXRPartInfo[];
+  /** For multi-part files: which part index was decoded */
+  decodedPartIndex?: number;
+}
+
+/**
+ * Information about a part in a multi-part EXR file
+ */
+export interface EXRPartInfo {
+  /** Part index (0-based) */
+  index: number;
+  /** Part name (from "name" attribute) */
+  name?: string;
+  /** Part type (e.g., "scanlineimage", "tiledimage") */
+  type?: string;
+  /** View name for stereo (e.g., "left", "right") */
+  view?: string;
+  /** Channel names in this part */
+  channels: string[];
+  /** Data window for this part */
+  dataWindow: EXRBox2i;
+  /** Compression used for this part */
+  compression: string;
 }
 
 /**
@@ -138,6 +170,8 @@ export interface EXRDecodeOptions {
   layer?: string;
   /** Custom channel remapping configuration */
   channelRemapping?: EXRChannelRemapping;
+  /** For multi-part EXR: index of the part to decode (0-based). Defaults to 0 (first part). */
+  partIndex?: number;
 }
 
 // Maximum string length in EXR header (prevent denial of service)
@@ -306,16 +340,36 @@ function halfToFloat(h: number): number {
 }
 
 /**
- * Parse EXR header
+ * Read a string value attribute (null-terminated string within known size)
  */
-function parseHeader(reader: EXRDataReader): EXRHeader {
-  // Read and verify magic number
+function readStringValue(reader: EXRDataReader, size: number): string {
+  const bytes = reader.readBytes(size);
+  // Remove null terminator if present
+  let end = bytes.length;
+  for (let i = 0; i < bytes.length; i++) {
+    if (bytes[i] === 0) {
+      end = i;
+      break;
+    }
+  }
+  return new TextDecoder().decode(bytes.subarray(0, end));
+}
+
+/**
+ * Read the version/flags field from the EXR file and return parsed version info.
+ */
+function parseVersionField(reader: EXRDataReader): {
+  version: number;
+  tiled: boolean;
+  longNames: boolean;
+  nonImage: boolean;
+  multiPart: boolean;
+} {
   const magic = reader.readUint32();
   if (magic !== EXR_MAGIC) {
     throw new DecoderError('EXR', 'Invalid EXR file: wrong magic number');
   }
 
-  // Read version field
   const versionField = reader.readUint32();
   const version = versionField & 0xff;
   const tiled = (versionField & 0x200) !== 0;
@@ -327,12 +381,21 @@ function parseHeader(reader: EXRDataReader): EXRHeader {
     throw new DecoderError('EXR', `Unsupported EXR version: ${version}`);
   }
 
-  const header: EXRHeader = {
-    version,
-    tiled,
-    longNames,
-    nonImage,
-    multiPart,
+  return { version, tiled, longNames, nonImage, multiPart };
+}
+
+/**
+ * Parse attributes for one header (single-part or one part of multi-part).
+ * Reads until the empty-string terminator.
+ * Returns a partially-populated EXRHeader (without version flags).
+ */
+function parseHeaderAttributes(reader: EXRDataReader): {
+  header: Omit<EXRHeader, 'version' | 'tiled' | 'longNames' | 'nonImage' | 'multiPart'>;
+  hasChannels: boolean;
+  hasDataWindow: boolean;
+  hasDisplayWindow: boolean;
+} {
+  const header: Omit<EXRHeader, 'version' | 'tiled' | 'longNames' | 'nonImage' | 'multiPart'> = {
     channels: [],
     compression: EXRCompression.NONE,
     dataWindow: { xMin: 0, yMin: 0, xMax: 0, yMax: 0 },
@@ -342,22 +405,19 @@ function parseHeader(reader: EXRDataReader): EXRHeader {
     attributes: new Map(),
   };
 
-  // Track which required attributes we've seen
   let hasChannels = false;
   let hasDataWindow = false;
   let hasDisplayWindow = false;
 
-  // Read attributes
   while (true) {
     const attrName = reader.readString();
     if (attrName === '') {
-      break; // End of header
+      break; // End of this header
     }
 
     const attrType = reader.readString();
     const attrSize = reader.readInt32();
 
-    // Validate attribute size
     if (attrSize < 0) {
       throw new DecoderError('EXR', `Invalid negative attribute size for '${attrName}': ${attrSize}`);
     }
@@ -369,7 +429,6 @@ function parseHeader(reader: EXRDataReader): EXRHeader {
 
     const attrStart = reader.position;
 
-    // Parse known attributes
     switch (attrName) {
       case 'channels':
         header.channels = parseChannels(reader, attrSize);
@@ -404,8 +463,16 @@ function parseHeader(reader: EXRDataReader): EXRHeader {
           header.chromaticities[i] = reader.readFloat32();
         }
         break;
+      case 'type':
+        header.type = readStringValue(reader, attrSize);
+        break;
+      case 'name':
+        header.name = readStringValue(reader, attrSize);
+        break;
+      case 'view':
+        header.view = readStringValue(reader, attrSize);
+        break;
       default:
-        // Store unknown attributes as raw data
         header.attributes.set(attrName, {
           type: attrType,
           value: reader.readBytes(attrSize),
@@ -413,42 +480,113 @@ function parseHeader(reader: EXRDataReader): EXRHeader {
         break;
     }
 
-    // Ensure we've read the correct number of bytes
     reader.position = attrStart + attrSize;
   }
 
-  // Validate required attributes are present
+  return { header, hasChannels, hasDataWindow, hasDisplayWindow };
+}
+
+/**
+ * Validate a parsed header has the required attributes and valid dimensions.
+ */
+function validateHeaderAttributes(
+  header: Omit<EXRHeader, 'version' | 'tiled' | 'longNames' | 'nonImage' | 'multiPart'>,
+  hasChannels: boolean,
+  hasDataWindow: boolean,
+  hasDisplayWindow: boolean,
+  partLabel?: string
+): void {
+  const prefix = partLabel ? `Part '${partLabel}': ` : '';
+
   if (!hasChannels) {
-    throw new DecoderError('EXR', 'Missing required EXR attribute: channels');
+    throw new DecoderError('EXR', `${prefix}Missing required EXR attribute: channels`);
   }
   if (!hasDataWindow) {
-    throw new DecoderError('EXR', 'Missing required EXR attribute: dataWindow');
+    throw new DecoderError('EXR', `${prefix}Missing required EXR attribute: dataWindow`);
   }
   if (!hasDisplayWindow) {
-    throw new DecoderError('EXR', 'Missing required EXR attribute: displayWindow');
+    throw new DecoderError('EXR', `${prefix}Missing required EXR attribute: displayWindow`);
   }
 
-  // Validate dataWindow dimensions
   const dw = header.dataWindow;
   const width = dw.xMax - dw.xMin + 1;
   const height = dw.yMax - dw.yMin + 1;
 
   if (width <= 0 || height <= 0) {
-    throw new DecoderError('EXR', `Invalid EXR dimensions: ${width}x${height} (dataWindow: ${dw.xMin},${dw.yMin} to ${dw.xMax},${dw.yMax})`);
+    throw new DecoderError('EXR', `${prefix}Invalid EXR dimensions: ${width}x${height} (dataWindow: ${dw.xMin},${dw.yMin} to ${dw.xMax},${dw.yMax})`);
   }
 
   validateImageDimensions(width, height, 'EXR');
 
-  // Validate channels
   if (header.channels.length === 0) {
-    throw new DecoderError('EXR', 'EXR file has no channels');
+    throw new DecoderError('EXR', `${prefix}EXR file has no channels`);
   }
+}
 
-  // NOTE: Do NOT sort header.channels - they must remain in file order
-  // because EXR stores pixel data in alphabetical channel order.
-  // The output channel mapping is handled in decodeScanlineImage.
+/**
+ * Parse EXR header (single-part file)
+ */
+function parseHeader(reader: EXRDataReader): EXRHeader {
+  const versionInfo = parseVersionField(reader);
+
+  const { header: attrs, hasChannels, hasDataWindow, hasDisplayWindow } = parseHeaderAttributes(reader);
+
+  validateHeaderAttributes(attrs, hasChannels, hasDataWindow, hasDisplayWindow);
+
+  const header: EXRHeader = {
+    ...versionInfo,
+    ...attrs,
+  };
 
   return header;
+}
+
+/**
+ * Maximum number of parts allowed in a multi-part EXR file
+ */
+const MAX_MULTI_PART_COUNT = 1024;
+
+/**
+ * Parse all part headers from a multi-part EXR file.
+ * The reader should be positioned right after the version field.
+ * Returns the version info and an array of per-part headers.
+ */
+function parseMultiPartHeaders(reader: EXRDataReader): {
+  versionInfo: { version: number; tiled: boolean; longNames: boolean; nonImage: boolean; multiPart: boolean };
+  partHeaders: EXRHeader[];
+} {
+  const versionInfo = parseVersionField(reader);
+
+  const partHeaders: EXRHeader[] = [];
+
+  // Read part headers. Each part header is terminated by an empty attribute name.
+  // The list of part headers is terminated by another empty attribute name (empty header).
+  while (partHeaders.length < MAX_MULTI_PART_COUNT) {
+    // Peek at the next byte: if it's a null byte, we've reached the end of all headers
+    const nextByte = reader.readUint8();
+    if (nextByte === 0) {
+      // Empty header = end of part headers
+      break;
+    }
+    // Put back the byte by rewinding - we need to re-read it as part of the attribute name
+    reader.position = reader.position - 1;
+
+    const { header: attrs, hasChannels, hasDataWindow, hasDisplayWindow } = parseHeaderAttributes(reader);
+    const partLabel = attrs.name || `part ${partHeaders.length}`;
+
+    validateHeaderAttributes(attrs, hasChannels, hasDataWindow, hasDisplayWindow, partLabel);
+
+    partHeaders.push({
+      ...versionInfo,
+      ...attrs,
+    });
+  }
+
+  if (partHeaders.length === 0) {
+    throw new DecoderError('EXR', 'Multi-part EXR file contains no parts');
+  }
+
+  return { versionInfo, partHeaders };
 }
 
 /**
@@ -837,10 +975,340 @@ async function decodeScanlineImage(
 }
 
 /**
+ * Decode scanline image data from a multi-part EXR file.
+ * Multi-part chunks have an extra part number field before each scanline block.
+ */
+async function decodeMultiPartScanlineImage(
+  reader: EXRDataReader,
+  header: EXRHeader,
+  targetPartIndex: number,
+  channelMapping?: Map<string, string>
+): Promise<Float32Array> {
+  const dataWindow = header.dataWindow;
+  const width = dataWindow.xMax - dataWindow.xMin + 1;
+  const height = dataWindow.yMax - dataWindow.yMin + 1;
+
+  // Build channel lookup
+  const channelLookup = new Map<string, EXRChannel>();
+  for (const ch of header.channels) {
+    channelLookup.set(ch.name, ch);
+  }
+
+  // Determine output channel mapping
+  let outputMapping: Map<string, string>;
+  if (channelMapping && channelMapping.size > 0) {
+    outputMapping = channelMapping;
+  } else {
+    outputMapping = new Map();
+    if (channelLookup.has('R')) outputMapping.set('R', 'R');
+    if (channelLookup.has('G')) outputMapping.set('G', 'G');
+    if (channelLookup.has('B')) outputMapping.set('B', 'B');
+    if (channelLookup.has('A')) outputMapping.set('A', 'A');
+    if (channelLookup.has('Y') && !channelLookup.has('R')) {
+      outputMapping.set('R', 'Y');
+      outputMapping.set('G', 'Y');
+      outputMapping.set('B', 'Y');
+    }
+  }
+
+  if (outputMapping.size === 0) {
+    throw new DecoderError('EXR', 'No supported channels found in EXR file');
+  }
+
+  const numOutputChannels = 4;
+  const output = new Float32Array(width * height * numOutputChannels);
+
+  if (!outputMapping.has('A')) {
+    for (let i = 3; i < output.length; i += 4) {
+      output[i] = 1.0;
+    }
+  }
+
+  const sourceToOutputIndices = new Map<string, number[]>();
+  const outputChannelIndices: Record<string, number> = { R: 0, G: 1, B: 2, A: 3 };
+
+  for (const [outputCh, sourceCh] of outputMapping.entries()) {
+    const outputIdx = outputChannelIndices[outputCh];
+    if (outputIdx !== undefined) {
+      const existing = sourceToOutputIndices.get(sourceCh) || [];
+      existing.push(outputIdx);
+      sourceToOutputIndices.set(sourceCh, existing);
+    }
+  }
+
+  const scanlineBytes = header.channels.reduce((sum, ch) => {
+    const bytes = ch.pixelType === EXRPixelType.HALF ? 2 : 4;
+    return sum + bytes * width;
+  }, 0);
+
+  const linesPerBlock =
+    header.compression === EXRCompression.PIZ
+      ? 32
+      : header.compression === EXRCompression.ZIP
+        ? 16
+        : 1;
+
+  const numBlocks = Math.ceil(height / linesPerBlock);
+
+  // Read each scanline block (multi-part has part_number prefix on each chunk)
+  const MAX_CHUNKS = numBlocks * 1024 * 2; // generous upper bound for interleaved parts
+  let totalChunksRead = 0;
+  for (let blockIdx = 0; blockIdx < numBlocks; blockIdx++) {
+    if (++totalChunksRead > MAX_CHUNKS) {
+      throw new DecoderError('EXR', 'Too many chunks read while seeking target part, file may be corrupt');
+    }
+    const partNumber = reader.readInt32(); // Part number (multi-part specific)
+    if (partNumber !== targetPartIndex) {
+      // Skip this block - it belongs to a different part
+      // We still need to read past it
+      reader.readInt32(); // y coordinate
+      const packedSize = reader.readInt32();
+      reader.skip(packedSize);
+      // Re-decrement blockIdx since we didn't process a block for our part
+      blockIdx--;
+      continue;
+    }
+
+    const y = reader.readInt32();
+    const packedSize = reader.readInt32();
+
+    const blockLines = Math.min(linesPerBlock, height - blockIdx * linesPerBlock);
+    const uncompressedSize = blockLines * scanlineBytes;
+
+    const packedData = reader.readBytes(packedSize);
+
+    let unpackedData: Uint8Array;
+    if (header.compression === EXRCompression.NONE) {
+      unpackedData = packedData;
+    } else {
+      const pizContext = header.compression === EXRCompression.PIZ
+        ? {
+            width,
+            numChannels: header.channels.length,
+            numLines: blockLines,
+            channelSizes: header.channels.map(ch =>
+              ch.pixelType === EXRPixelType.HALF ? 2 : 4
+            ),
+          }
+        : undefined;
+      unpackedData = await decompressData(packedData, header.compression, uncompressedSize, pizContext);
+    }
+
+    const dataView = new DataView(unpackedData.buffer, unpackedData.byteOffset, unpackedData.byteLength);
+
+    for (let line = 0; line < blockLines; line++) {
+      const outputY = y - dataWindow.yMin + line;
+      if (outputY < 0 || outputY >= height) continue;
+
+      let channelOffset = 0;
+
+      for (const ch of header.channels) {
+        const channelBytes = ch.pixelType === EXRPixelType.HALF ? 2 : 4;
+        const lineDataOffset = line * scanlineBytes + channelOffset;
+
+        const outputIndices = sourceToOutputIndices.get(ch.name);
+
+        if (outputIndices && outputIndices.length > 0) {
+          for (let x = 0; x < width; x++) {
+            const srcOffset = lineDataOffset + x * channelBytes;
+
+            let value: number;
+            if (ch.pixelType === EXRPixelType.HALF) {
+              const half = dataView.getUint16(srcOffset, true);
+              value = halfToFloat(half);
+            } else {
+              value = dataView.getFloat32(srcOffset, true);
+            }
+
+            for (const outputIdx of outputIndices) {
+              const dstIdx = (outputY * width + x) * numOutputChannels + outputIdx;
+              output[dstIdx] = value;
+            }
+          }
+        }
+
+        channelOffset += width * channelBytes;
+      }
+    }
+  }
+
+  return output;
+}
+
+/**
+ * Supported compression types for validation
+ */
+const SUPPORTED_COMPRESSION = [
+  EXRCompression.NONE,
+  EXRCompression.RLE,
+  EXRCompression.ZIPS,
+  EXRCompression.ZIP,
+  EXRCompression.PIZ,
+];
+
+/**
+ * Deep data types that we don't yet support
+ */
+const DEEP_DATA_TYPES = ['deepscanline', 'deeptile'];
+
+/**
+ * Validate compression type is supported
+ */
+function validateCompression(compression: EXRCompression, partLabel?: string): void {
+  if (!SUPPORTED_COMPRESSION.includes(compression)) {
+    const compressionName = EXRCompression[compression] || `unknown(${compression})`;
+    const prefix = partLabel ? `Part '${partLabel}': ` : '';
+    throw new DecoderError('EXR',
+      `${prefix}Unsupported EXR compression type: ${compressionName}. Supported types: NONE, RLE, ZIP, ZIPS, PIZ`
+    );
+  }
+}
+
+/**
+ * Decode a single-part EXR file
+ */
+async function decodeSinglePart(
+  reader: EXRDataReader,
+  header: EXRHeader,
+  options?: EXRDecodeOptions
+): Promise<EXRDecodeResult> {
+  if (header.tiled) {
+    throw new DecoderError('EXR', 'Tiled EXR images are not yet supported');
+  }
+
+  validateCompression(header.compression);
+
+  const channelMapping = resolveChannelMapping(header, options);
+  const data = await decodeScanlineImage(reader, header, channelMapping);
+
+  const dataWindow = header.dataWindow;
+  const width = dataWindow.xMax - dataWindow.xMin + 1;
+  const height = dataWindow.yMax - dataWindow.yMin + 1;
+  const layers = extractLayerInfo(header.channels);
+
+  return {
+    width,
+    height,
+    data,
+    channels: 4,
+    header,
+    layers,
+    decodedLayer: options?.layer,
+  };
+}
+
+/**
+ * Decode a multi-part EXR file
+ */
+async function decodeMultiPart(
+  reader: EXRDataReader,
+  partHeaders: EXRHeader[],
+  options?: EXRDecodeOptions
+): Promise<EXRDecodeResult> {
+  const partIndex = options?.partIndex ?? 0;
+
+  if (typeof partIndex !== 'number' || !Number.isFinite(partIndex) || !Number.isInteger(partIndex)) {
+    throw new DecoderError('EXR', `Invalid part index: ${partIndex}. Must be a non-negative integer.`);
+  }
+
+  if (partIndex < 0 || partIndex >= partHeaders.length) {
+    throw new DecoderError('EXR',
+      `Part index ${partIndex} is out of range. File has ${partHeaders.length} part(s) (indices 0-${partHeaders.length - 1}).`
+    );
+  }
+
+  const selectedHeader = partHeaders[partIndex]!;
+  const partLabel = selectedHeader.name || `part ${partIndex}`;
+
+  // Check for deep data types
+  if (selectedHeader.type && DEEP_DATA_TYPES.includes(selectedHeader.type)) {
+    throw new DecoderError('EXR',
+      `Part '${partLabel}' has type '${selectedHeader.type}' which is deep data. ` +
+      `Deep data (deepscanline/deeptile) is not yet supported. ` +
+      `Only scanline image parts can be decoded.`
+    );
+  }
+
+  // Check for tiled parts
+  if (selectedHeader.type === 'tiledimage' || selectedHeader.tiled) {
+    throw new DecoderError('EXR',
+      `Part '${partLabel}' is a tiled image. Tiled EXR images are not yet supported.`
+    );
+  }
+
+  validateCompression(selectedHeader.compression, partLabel);
+
+  // Build part info for all parts
+  const partsInfo: EXRPartInfo[] = partHeaders.map((ph, idx) => ({
+    index: idx,
+    name: ph.name,
+    type: ph.type,
+    view: ph.view,
+    channels: ph.channels.map(ch => ch.name),
+    dataWindow: ph.dataWindow,
+    compression: EXRCompression[ph.compression] || `unknown(${ph.compression})`,
+  }));
+
+  // In multi-part EXR, after all part headers, offset tables come for each part.
+  // Each part has its own offset table, and the data for each part follows.
+  // We need to read the offset tables for all parts to find where our part's data starts.
+
+  // Read offset tables for all parts
+  const partOffsetTables: bigint[][] = [];
+  for (let p = 0; p < partHeaders.length; p++) {
+    const ph = partHeaders[p]!;
+    const dw = ph.dataWindow;
+    const partHeight = dw.yMax - dw.yMin + 1;
+
+    const linesPerBlock =
+      ph.compression === EXRCompression.PIZ
+        ? 32
+        : ph.compression === EXRCompression.ZIP
+          ? 16
+          : 1;
+    const numBlocks = Math.ceil(partHeight / linesPerBlock);
+
+    const offsets: bigint[] = [];
+    for (let i = 0; i < numBlocks; i++) {
+      offsets.push(reader.readUint64());
+    }
+    partOffsetTables.push(offsets);
+  }
+
+  // Position reader to the start of the selected part's data using offset table.
+  // In multi-part EXR, each chunk starts with: partNumber (int32) + y (int32) + packedSize (int32) + data
+  // The offset table entries point to the start of each chunk (at the partNumber field).
+  if (partOffsetTables[partIndex]!.length > 0) {
+    reader.position = Number(partOffsetTables[partIndex]![0]!);
+  }
+
+  // Decode scanlines for the selected part
+  const channelMapping = resolveChannelMapping(selectedHeader, options);
+  const data = await decodeMultiPartScanlineImage(reader, selectedHeader, partIndex, channelMapping);
+
+  const dataWindow = selectedHeader.dataWindow;
+  const width = dataWindow.xMax - dataWindow.xMin + 1;
+  const height = dataWindow.yMax - dataWindow.yMin + 1;
+  const layers = extractLayerInfo(selectedHeader.channels);
+
+  return {
+    width,
+    height,
+    data,
+    channels: 4,
+    header: selectedHeader,
+    layers,
+    decodedLayer: options?.layer,
+    parts: partsInfo,
+    decodedPartIndex: partIndex,
+  };
+}
+
+/**
  * Main EXR decode function
  *
  * @param buffer - The EXR file data
- * @param options - Optional decode settings for layer selection and channel remapping
+ * @param options - Optional decode settings for layer selection, channel remapping, and part selection
  */
 export async function decodeEXR(
   buffer: ArrayBuffer,
@@ -853,55 +1321,24 @@ export async function decodeEXR(
 
   const reader = new EXRDataReader(buffer);
 
-  // Parse header
-  const header = parseHeader(reader);
-
-  // Validate
-  if (header.tiled) {
-    throw new DecoderError('EXR', 'Tiled EXR images are not yet supported');
+  // Peek at the version field to check if this is multi-part
+  const magic = reader.readUint32();
+  if (magic !== EXR_MAGIC) {
+    throw new DecoderError('EXR', 'Invalid EXR file: wrong magic number');
   }
+  const versionField = reader.readUint32();
+  const isMultiPart = (versionField & 0x1000) !== 0;
 
-  if (header.multiPart) {
-    throw new DecoderError('EXR', 'Multi-part EXR files are not yet supported');
+  // Reset reader to start for full parsing
+  reader.position = 0;
+
+  if (isMultiPart) {
+    const { partHeaders } = parseMultiPartHeaders(reader);
+    return decodeMultiPart(reader, partHeaders, options);
+  } else {
+    const header = parseHeader(reader);
+    return decodeSinglePart(reader, header, options);
   }
-
-  // Validate compression type is supported
-  const supportedCompression = [
-    EXRCompression.NONE,
-    EXRCompression.RLE,
-    EXRCompression.ZIPS,
-    EXRCompression.ZIP,
-    EXRCompression.PIZ,
-  ];
-  if (!supportedCompression.includes(header.compression)) {
-    const compressionName = EXRCompression[header.compression] || `unknown(${header.compression})`;
-    throw new DecoderError('EXR',
-      `Unsupported EXR compression type: ${compressionName}. Supported types: NONE, RLE, ZIP, ZIPS, PIZ`
-    );
-  }
-
-  // Resolve channel mapping based on options
-  const channelMapping = resolveChannelMapping(header, options);
-
-  // Decode image data with channel mapping
-  const data = await decodeScanlineImage(reader, header, channelMapping);
-
-  const dataWindow = header.dataWindow;
-  const width = dataWindow.xMax - dataWindow.xMin + 1;
-  const height = dataWindow.yMax - dataWindow.yMin + 1;
-
-  // Extract layer info for the result
-  const layers = extractLayerInfo(header.channels);
-
-  return {
-    width,
-    height,
-    data,
-    channels: 4, // Always output RGBA
-    header,
-    layers,
-    decodedLayer: options?.layer,
-  };
 }
 
 /**
@@ -921,6 +1358,9 @@ export function exrToIPImage(result: EXRDecodeResult, sourcePath?: string): IPIm
       exrDecodedLayer: result.decodedLayer,
       // Include all available channels
       exrChannels: result.header.channels.map(ch => ch.name),
+      // Multi-part info
+      exrParts: result.parts,
+      exrDecodedPartIndex: result.decodedPartIndex,
     },
   };
 
@@ -958,20 +1398,58 @@ export function getEXRInfo(buffer: ArrayBuffer): {
   channels: string[];
   compression: string;
   layers: EXRLayerInfo[];
+  /** Number of parts (1 for single-part, >1 for multi-part) */
+  partCount?: number;
+  /** Part info for multi-part files */
+  parts?: EXRPartInfo[];
 } | null {
   try {
     const reader = new EXRDataReader(buffer);
-    const header = parseHeader(reader);
 
-    const dataWindow = header.dataWindow;
-    const layers = extractLayerInfo(header.channels);
-    return {
-      width: dataWindow.xMax - dataWindow.xMin + 1,
-      height: dataWindow.yMax - dataWindow.yMin + 1,
-      channels: header.channels.map((ch) => ch.name),
-      compression: EXRCompression[header.compression] || 'UNKNOWN',
-      layers,
-    };
+    // Peek at multi-part flag
+    reader.readUint32(); // magic
+    const versionField = reader.readUint32();
+    const isMultiPart = (versionField & 0x1000) !== 0;
+    reader.position = 0;
+
+    if (isMultiPart) {
+      const { partHeaders } = parseMultiPartHeaders(reader);
+      const firstHeader = partHeaders[0]!;
+      const dataWindow = firstHeader.dataWindow;
+      const layers = extractLayerInfo(firstHeader.channels);
+
+      const parts: EXRPartInfo[] = partHeaders.map((ph, idx) => ({
+        index: idx,
+        name: ph.name,
+        type: ph.type,
+        view: ph.view,
+        channels: ph.channels.map(ch => ch.name),
+        dataWindow: ph.dataWindow,
+        compression: EXRCompression[ph.compression] || 'UNKNOWN',
+      }));
+
+      return {
+        width: dataWindow.xMax - dataWindow.xMin + 1,
+        height: dataWindow.yMax - dataWindow.yMin + 1,
+        channels: firstHeader.channels.map((ch) => ch.name),
+        compression: EXRCompression[firstHeader.compression] || 'UNKNOWN',
+        layers,
+        partCount: partHeaders.length,
+        parts,
+      };
+    } else {
+      const header = parseHeader(reader);
+      const dataWindow = header.dataWindow;
+      const layers = extractLayerInfo(header.channels);
+      return {
+        width: dataWindow.xMax - dataWindow.xMin + 1,
+        height: dataWindow.yMax - dataWindow.yMin + 1,
+        channels: header.channels.map((ch) => ch.name),
+        compression: EXRCompression[header.compression] || 'UNKNOWN',
+        layers,
+        partCount: 1,
+      };
+    }
   } catch {
     return null;
   }

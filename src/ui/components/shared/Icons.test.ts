@@ -158,6 +158,44 @@ describe('getIconSvg', () => {
   });
 });
 
+describe('accessibility: aria-hidden', () => {
+  it('ICN-H12a: getIconSvg() output should contain aria-hidden="true" on the <svg> element', () => {
+    const svg = getIconSvg('play');
+    expect(svg).toContain('aria-hidden="true"');
+    // Verify it appears on the svg element itself (before any child content)
+    expect(svg).toMatch(/^<svg\s[^>]*aria-hidden="true"/);
+  });
+
+  it('ICN-H12b: all icon SVGs rendered via getIconSvg() should have aria-hidden="true"', () => {
+    const iconNames = Object.keys(ICONS) as IconName[];
+    for (const name of iconNames) {
+      const svg = getIconSvg(name);
+      expect(svg).toContain('aria-hidden="true"');
+    }
+  });
+
+  it('ICN-H12b-sizes: getIconSvg() includes aria-hidden="true" for all sizes', () => {
+    const sizes: IconSize[] = ['sm', 'md', 'lg'];
+    for (const size of sizes) {
+      const svg = getIconSvg('play', size);
+      expect(svg).toContain('aria-hidden="true"');
+    }
+  });
+
+  it('ICN-H12-create: createIcon() sets aria-hidden="true" on the SVG element', () => {
+    const icon = createIcon('play');
+    expect(icon.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('ICN-H12-create-all: all icons created via createIcon() have aria-hidden="true"', () => {
+    const iconNames = Object.keys(ICONS) as IconName[];
+    for (const name of iconNames) {
+      const icon = createIcon(name);
+      expect(icon.getAttribute('aria-hidden')).toBe('true');
+    }
+  });
+});
+
 describe('ICONS constant', () => {
   describe('icon categories', () => {
     it('ICON-U060: has file operation icons', () => {

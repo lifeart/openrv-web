@@ -178,6 +178,8 @@ export class StereoControl extends EventEmitter<StereoControlEvents> {
       }
     });
 
+    applyA11yFocus(this.eyeSwapButton);
+
     // Create offset slider container
     const offsetContainer = document.createElement('div');
     offsetContainer.className = 'stereo-offset-container';

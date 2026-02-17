@@ -15,6 +15,7 @@ import { TimecodeDisplay } from '../TimecodeDisplay';
 import { ThemeControl } from '../ThemeControl';
 import { showAlert } from '../shared/Modal';
 import { getIconSvg, IconName } from '../shared/Icons';
+import { applyA11yFocus } from '../shared/Button';
 
 export interface HeaderBarEvents extends EventMap {
   showShortcuts: void;
@@ -321,6 +322,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     });
 
     button.addEventListener('click', onClick);
+    applyA11yFocus(button);
     return button;
   }
 
@@ -356,25 +358,26 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     });
 
     button.addEventListener('click', onClick);
+    applyA11yFocus(button);
     return button;
   }
 
   private getIcon(name: string): string {
     const icons: Record<string, string> = {
-      'folder': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
-      'folder-open': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 19a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2v1M3 13h18l-2 7H5l-2-7z"/></svg>',
-      'save': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>',
-      'skip-back': '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="19,20 9,12 19,4"/><line x1="5" y1="4" x2="5" y2="20" stroke="currentColor" stroke-width="2"/></svg>',
-      'step-back': '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="19,20 9,12 19,4"/></svg>',
-      'play': '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>',
-      'pause': '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>',
-      'step-forward': '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,4 15,12 5,20"/></svg>',
-      'skip-forward': '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,4 15,12 5,20"/><line x1="19" y1="4" x2="19" y2="20" stroke="currentColor" stroke-width="2"/></svg>',
-      'help': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
-      'keyboard': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"/><path d="m6 8h.01"/><path d="m10 8h.01"/><path d="m14 8h.01"/><path d="m18 8h.01"/><path d="m8 12h.01"/><path d="m12 12h.01"/><path d="m16 12h.01"/><path d="m7 16h10"/></svg>',
-      'maximize': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>',
-      'minimize': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>',
-      'monitor': '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
+      'folder': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
+      'folder-open': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 19a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2v1M3 13h18l-2 7H5l-2-7z"/></svg>',
+      'save': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>',
+      'skip-back': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="19,20 9,12 19,4"/><line x1="5" y1="4" x2="5" y2="20" stroke="currentColor" stroke-width="2"/></svg>',
+      'step-back': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="19,20 9,12 19,4"/></svg>',
+      'play': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>',
+      'pause': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>',
+      'step-forward': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,4 15,12 5,20"/></svg>',
+      'skip-forward': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,4 15,12 5,20"/><line x1="19" y1="4" x2="19" y2="20" stroke="currentColor" stroke-width="2"/></svg>',
+      'help': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+      'keyboard': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"/><path d="m6 8h.01"/><path d="m10 8h.01"/><path d="m14 8h.01"/><path d="m18 8h.01"/><path d="m8 12h.01"/><path d="m12 12h.01"/><path d="m16 12h.01"/><path d="m7 16h10"/></svg>',
+      'maximize': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>',
+      'minimize': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>',
+      'monitor': '<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
     };
     return icons[name] || '';
   }
@@ -398,7 +401,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
     // Icon
     const icon = document.createElement('span');
-    icon.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>';
+    icon.innerHTML = '<svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>';
     icon.style.cssText = `
       color: var(--text-muted);
       display: flex;
@@ -468,7 +471,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private createSpeedButton(): HTMLButtonElement {
     const button = document.createElement('button');
     button.dataset.testid = 'playback-speed-button';
-    button.title = 'Playback speed: Click to increase, Shift+Click to decrease, Right-click for menu (J/K/L keys)';
+    button.title = 'Playback speed: Click to increase, Shift+Click to decrease, Right-click or Shift+Enter for menu (J/K/L keys)';
+    button.setAttribute('aria-haspopup', 'menu');
     button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -514,6 +518,14 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       this.showSpeedMenu(button);
     });
 
+    // Keyboard activation: Shift+Enter or Shift+Space opens the speed menu
+    button.addEventListener('keydown', (e) => {
+      if (e.shiftKey && (e.key === 'Enter' || e.key === ' ')) {
+        e.preventDefault();
+        this.showSpeedMenu(button);
+      }
+    });
+
     // Initial state
     this.updateSpeedButtonText(button);
     return button;
@@ -528,6 +540,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
     const menu = document.createElement('div');
     menu.id = 'speed-preset-menu';
+    menu.setAttribute('role', 'menu');
     menu.style.cssText = `
       position: fixed;
       background: var(--bg-secondary);
@@ -540,22 +553,33 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     `;
 
     const currentSpeed = this.session.playbackSpeed;
+    let activeItem: HTMLButtonElement | null = null;
 
     for (const preset of PLAYBACK_SPEED_PRESETS) {
       const item = document.createElement('button');
       item.dataset.testid = `speed-preset-${preset}`;
+      item.setAttribute('role', 'menuitem');
+      item.tabIndex = -1;
       item.textContent = `${preset}x`;
+
+      const isActive = preset === currentSpeed;
+      if (isActive) {
+        item.setAttribute('aria-checked', 'true');
+        activeItem = item;
+      }
+
       item.style.cssText = `
         display: block;
         width: 100%;
         padding: 6px 12px;
-        background: ${preset === currentSpeed ? 'var(--accent-primary)' : 'transparent'};
-        color: ${preset === currentSpeed ? 'white' : 'var(--text-primary)'};
+        background: ${isActive ? 'var(--accent-primary)' : 'transparent'};
+        color: ${isActive ? 'white' : 'var(--text-primary)'};
         border: none;
         text-align: left;
         cursor: pointer;
         font-size: 12px;
         font-family: monospace;
+        outline: none;
       `;
 
       item.addEventListener('mouseenter', () => {
@@ -565,6 +589,18 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       });
 
       item.addEventListener('mouseleave', () => {
+        if (preset !== currentSpeed) {
+          item.style.background = 'transparent';
+        }
+      });
+
+      item.addEventListener('focus', () => {
+        if (preset !== currentSpeed) {
+          item.style.background = 'var(--bg-hover)';
+        }
+      });
+
+      item.addEventListener('blur', () => {
         if (preset !== currentSpeed) {
           item.style.background = 'transparent';
         }
@@ -590,6 +626,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Pitch correction toggle
     const pitchItem = document.createElement('button');
     pitchItem.dataset.testid = 'pitch-correction-toggle';
+    pitchItem.setAttribute('role', 'menuitem');
+    pitchItem.tabIndex = -1;
     const pitchEnabled = this.session.preservesPitch;
     pitchItem.textContent = `${pitchEnabled ? '\u2713 ' : '  '}Preserve Pitch`;
     pitchItem.style.cssText = `
@@ -603,6 +641,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       cursor: pointer;
       font-size: 12px;
       font-family: monospace;
+      outline: none;
     `;
 
     pitchItem.addEventListener('mouseenter', () => {
@@ -613,6 +652,14 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       pitchItem.style.background = 'transparent';
     });
 
+    pitchItem.addEventListener('focus', () => {
+      pitchItem.style.background = 'var(--bg-hover)';
+    });
+
+    pitchItem.addEventListener('blur', () => {
+      pitchItem.style.background = 'transparent';
+    });
+
     pitchItem.addEventListener('click', () => {
       this.session.preservesPitch = !this.session.preservesPitch;
       removeMenu();
@@ -620,12 +667,55 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
     menu.appendChild(pitchItem);
 
+    // Keyboard navigation for the menu
+    const getMenuItems = (): HTMLElement[] => {
+      return Array.from(menu.querySelectorAll('[role="menuitem"]'));
+    };
+
+    menu.addEventListener('keydown', (e: KeyboardEvent) => {
+      const items = getMenuItems();
+      const currentIndex = items.indexOf(document.activeElement as HTMLElement);
+
+      switch (e.key) {
+        case 'ArrowDown': {
+          e.preventDefault();
+          const nextIndex = currentIndex < items.length - 1 ? currentIndex + 1 : 0;
+          items[nextIndex]?.focus();
+          break;
+        }
+        case 'ArrowUp': {
+          e.preventDefault();
+          const prevIndex = currentIndex > 0 ? currentIndex - 1 : items.length - 1;
+          items[prevIndex]?.focus();
+          break;
+        }
+        case 'Escape': {
+          e.preventDefault();
+          removeMenu();
+          anchor.focus();
+          break;
+        }
+        case 'Tab': {
+          e.preventDefault();
+          removeMenu();
+          anchor.focus();
+          break;
+        }
+      }
+    });
+
     // Position the menu below the button
     const rect = anchor.getBoundingClientRect();
     menu.style.left = `${rect.left}px`;
     menu.style.top = `${rect.bottom + 4}px`;
 
     document.body.appendChild(menu);
+
+    // Focus the active item, or the first item if none is active
+    const focusTarget = activeItem || getMenuItems()[0];
+    if (focusTarget) {
+      focusTarget.focus();
+    }
 
     // Cleanup function to remove menu and listener
     const removeMenu = () => {

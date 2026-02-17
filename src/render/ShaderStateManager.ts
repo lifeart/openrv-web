@@ -14,7 +14,7 @@
 
 import type { ManagerBase } from '../core/ManagerBase';
 import type { ShaderProgram } from './ShaderProgram';
-import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState } from '../core/types/color';
+import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState, LinearizeState } from '../core/types/color';
 import { DEFAULT_COLOR_ADJUSTMENTS } from '../core/types/color';
 import type { ToneMappingState, ToneMappingOperator, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState, GamutMappingState, GamutIdentifier } from '../core/types/effects';
 import { DEFAULT_TONE_MAPPING_STATE, DEFAULT_GAMUT_MAPPING_STATE } from '../core/types/effects';
@@ -52,6 +52,8 @@ export const DIRTY_GAMUT_MAPPING = 'gamutMapping';
 export const DIRTY_DEINTERLACE = 'deinterlace';
 export const DIRTY_FILM_EMULATION = 'filmEmulation';
 export const DIRTY_PERSPECTIVE = 'perspective';
+export const DIRTY_LINEARIZE = 'linearize';
+export const DIRTY_INLINE_LUT = 'inlineLUT';
 
 /** All dirty flag names -- used to initialize on first render so all uniforms are set. */
 export const ALL_DIRTY_FLAGS = [
@@ -61,6 +63,8 @@ export const ALL_DIRTY_FLAGS = [
   DIRTY_CURVES, DIRTY_VIBRANCE, DIRTY_HIGHLIGHTS_SHADOWS, DIRTY_INVERSION,
   DIRTY_LUT3D, DIRTY_GAMUT_MAPPING, DIRTY_DEINTERLACE, DIRTY_FILM_EMULATION,
   DIRTY_PERSPECTIVE,
+  DIRTY_LINEARIZE,
+  DIRTY_INLINE_LUT,
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -152,6 +156,11 @@ function assignColorAdjustments(dst: ColorAdjustments, src: Readonly<ColorAdjust
   dst.shadows = src.shadows;
   dst.whites = src.whites;
   dst.blacks = src.blacks;
+  dst.exposureRGB = src.exposureRGB;
+  dst.gammaRGB = src.gammaRGB;
+  dst.contrastRGB = src.contrastRGB;
+  dst.inlineLUT = src.inlineLUT;
+  dst.lutChannels = src.lutChannels;
 }
 
 /** Copy all properties from src to dst for ToneMappingState. */
@@ -300,6 +309,20 @@ export interface InternalShaderState {
   perspectiveEnabled: boolean;
   perspectiveInvH: Float32Array;
   perspectiveQuality: number;
+
+  // Linearize (RVLinearize log-to-linear conversion)
+  linearizeLogType: number;  // 0=none, 1=cineon, 2=viper(cineon), 3=logc3
+  linearizeSRGB2linear: boolean;
+  linearizeRec709ToLinear: boolean;
+  linearizeFileGamma: number;
+  linearizeAlphaType: number;
+
+  // Inline 1D LUT (from RVColor luminanceLUT)
+  inlineLUTEnabled: boolean;
+  inlineLUTChannels: number;   // 1=luminance, 3=per-channel RGB
+  inlineLUTSize: number;       // number of entries per channel
+  inlineLUTData: Float32Array | null;
+  inlineLUTDirty: boolean;
 }
 
 function createDefaultInternalState(): InternalShaderState {
@@ -388,6 +411,16 @@ function createDefaultInternalState(): InternalShaderState {
     perspectiveEnabled: false,
     perspectiveInvH: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]),
     perspectiveQuality: 0,
+    linearizeLogType: 0,
+    linearizeSRGB2linear: false,
+    linearizeRec709ToLinear: false,
+    linearizeFileGamma: 1.0,
+    linearizeAlphaType: 0,
+    inlineLUTEnabled: false,
+    inlineLUTChannels: 1,
+    inlineLUTSize: 0,
+    inlineLUTData: null,
+    inlineLUTDirty: false,
   };
 }
 
@@ -413,6 +446,8 @@ export interface TextureCallbacks {
   bindLUT3DTexture(): void;
   /** Ensure film LUT texture exists, upload if dirty, activate TEXTURE4, bind. */
   bindFilmLUTTexture(): void;
+  /** Ensure inline LUT texture exists, upload if dirty, activate TEXTURE5, bind. */
+  bindInlineLUTTexture(): void;
   /** Get the current canvas dimensions for u_resolution. */
   getCanvasSize(): { width: number; height: number };
 }
@@ -495,7 +530,7 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
    * Clear a texture-specific dirty flag after the Renderer has uploaded
    * the corresponding texture data to the GPU.
    */
-  clearTextureDirtyFlag(flag: 'curvesLUTDirty' | 'falseColorLUTDirty' | 'lut3DDirty' | 'filmLUTDirty'): void {
+  clearTextureDirtyFlag(flag: 'curvesLUTDirty' | 'falseColorLUTDirty' | 'lut3DDirty' | 'filmLUTDirty' | 'inlineLUTDirty'): void {
     this.state[flag] = false;
     // Invalidate the corresponding cached snapshot since dirty changed
     if (flag === 'curvesLUTDirty') {
@@ -835,6 +870,41 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     this.dirtyFlags.add(DIRTY_PERSPECTIVE);
   }
 
+  setLinearize(lzState: LinearizeState): void {
+    this.state.linearizeLogType = lzState.logType;
+    this.state.linearizeSRGB2linear = lzState.sRGB2linear;
+    this.state.linearizeRec709ToLinear = lzState.rec709ToLinear;
+    this.state.linearizeFileGamma = lzState.fileGamma;
+    this.state.linearizeAlphaType = lzState.alphaType;
+    this.dirtyFlags.add(DIRTY_LINEARIZE);
+  }
+
+  getLinearize(): LinearizeState {
+    return {
+      logType: this.state.linearizeLogType as 0 | 1 | 2 | 3,
+      sRGB2linear: this.state.linearizeSRGB2linear,
+      rec709ToLinear: this.state.linearizeRec709ToLinear,
+      fileGamma: this.state.linearizeFileGamma,
+      alphaType: this.state.linearizeAlphaType,
+    };
+  }
+
+  setInlineLUT(lutData: Float32Array | null, channels: 1 | 3): void {
+    this.dirtyFlags.add(DIRTY_INLINE_LUT);
+    if (!lutData || lutData.length === 0) {
+      this.state.inlineLUTEnabled = false;
+      this.state.inlineLUTData = null;
+      this.state.inlineLUTSize = 0;
+      this.state.inlineLUTChannels = 1;
+      return;
+    }
+    this.state.inlineLUTEnabled = true;
+    this.state.inlineLUTChannels = channels;
+    this.state.inlineLUTSize = channels === 3 ? lutData.length / 3 : lutData.length;
+    this.state.inlineLUTData = lutData;
+    this.state.inlineLUTDirty = true;
+  }
+
   /** Set texel size (called by Renderer before applyUniforms, based on image dimensions). */
   setTexelSize(w: number, h: number): void {
     this.state.texelSize[0] = w;
@@ -855,15 +925,30 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
   applyRenderState(renderState: RenderState): void {
     const s = this.state;
 
-    // --- Color adjustments (8 uniforms) ---
+    // --- Color adjustments (8+ uniforms) ---
     {
       const a = renderState.colorAdjustments;
       const c = s.colorAdjustments;
+      const rgbChanged = (aRGB: [number, number, number] | undefined, cRGB: [number, number, number] | undefined): boolean => {
+        if (aRGB === cRGB) return false; // both undefined or same reference
+        if (!aRGB || !cRGB) return true; // one is undefined
+        return aRGB[0] !== cRGB[0] || aRGB[1] !== cRGB[1] || aRGB[2] !== cRGB[2];
+      };
       if (a.exposure !== c.exposure || a.gamma !== c.gamma ||
           a.saturation !== c.saturation || a.contrast !== c.contrast ||
           a.brightness !== c.brightness || a.temperature !== c.temperature ||
-          a.tint !== c.tint || a.hueRotation !== c.hueRotation) {
+          a.tint !== c.tint || a.hueRotation !== c.hueRotation ||
+          rgbChanged(a.exposureRGB, c.exposureRGB) ||
+          rgbChanged(a.gammaRGB, c.gammaRGB) ||
+          rgbChanged(a.contrastRGB, c.contrastRGB)) {
         this.setColorAdjustments(a);
+      }
+
+      // Inline LUT (part of color adjustments but uses separate texture)
+      const newLUT = a.inlineLUT ?? null;
+      const newChannels = a.lutChannels ?? 1;
+      if (newLUT !== s.inlineLUTData || newChannels !== s.inlineLUTChannels) {
+        this.setInlineLUT(newLUT, newChannels);
       }
     }
 
@@ -1070,6 +1155,20 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     } else if (s.perspectiveEnabled) {
       this.setPerspective({ enabled: false, invH: new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]), quality: 0 });
     }
+
+    // --- Linearize (log-to-linear conversion, 4 uniforms) ---
+    if (renderState.linearize) {
+      const lz = renderState.linearize;
+      if (lz.logType !== s.linearizeLogType ||
+          lz.sRGB2linear !== s.linearizeSRGB2linear ||
+          lz.rec709ToLinear !== s.linearizeRec709ToLinear ||
+          lz.fileGamma !== s.linearizeFileGamma ||
+          lz.alphaType !== s.linearizeAlphaType) {
+        this.setLinearize(lz);
+      }
+    } else if (s.linearizeLogType !== 0 || s.linearizeSRGB2linear || s.linearizeRec709ToLinear || s.linearizeFileGamma !== 1.0 || s.linearizeAlphaType !== 0) {
+      this.setLinearize({ logType: 0, sRGB2linear: false, rec709ToLinear: false, fileGamma: 1.0, alphaType: 0 });
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -1094,16 +1193,36 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
 
     // Color adjustments
     if (dirty.has(DIRTY_COLOR)) {
-      shader.setUniform('u_exposure', s.colorAdjustments.exposure);
-      shader.setUniform('u_gamma', s.colorAdjustments.gamma);
-      shader.setUniform('u_saturation', s.colorAdjustments.saturation);
-      shader.setUniform('u_contrast', s.colorAdjustments.contrast);
-      shader.setUniform('u_brightness', s.colorAdjustments.brightness);
-      shader.setUniform('u_temperature', s.colorAdjustments.temperature);
-      shader.setUniform('u_tint', s.colorAdjustments.tint);
+      // Per-channel vec3 uniforms: broadcast scalar when per-channel data is absent
+      const adj = s.colorAdjustments;
+      const expRGB = adj.exposureRGB ?? [adj.exposure, adj.exposure, adj.exposure];
+      const gamRGB = adj.gammaRGB ?? [adj.gamma, adj.gamma, adj.gamma];
+      const conRGB = adj.contrastRGB ?? [adj.contrast, adj.contrast, adj.contrast];
+
+      // Sanitize: clamp gamma to avoid division by zero in shader (1.0/0.0 = Inf)
+      const safeGammaRGB: [number, number, number] = [
+        gamRGB[0] <= 0 ? 1e-4 : gamRGB[0],
+        gamRGB[1] <= 0 ? 1e-4 : gamRGB[1],
+        gamRGB[2] <= 0 ? 1e-4 : gamRGB[2],
+      ];
+
+      // Sanitize exposure: replace non-finite values with 0
+      const safeExposureRGB: [number, number, number] = [
+        Number.isFinite(expRGB[0]) ? expRGB[0] : 0,
+        Number.isFinite(expRGB[1]) ? expRGB[1] : 0,
+        Number.isFinite(expRGB[2]) ? expRGB[2] : 0,
+      ];
+
+      shader.setUniform('u_exposureRGB', safeExposureRGB);
+      shader.setUniform('u_gammaRGB', safeGammaRGB);
+      shader.setUniform('u_contrastRGB', conRGB);
+      shader.setUniform('u_saturation', adj.saturation);
+      shader.setUniform('u_brightness', adj.brightness);
+      shader.setUniform('u_temperature', adj.temperature);
+      shader.setUniform('u_tint', adj.tint);
 
       // Hue rotation
-      const hueRotationDegrees = s.colorAdjustments.hueRotation;
+      const hueRotationDegrees = adj.hueRotation;
       if (isIdentityHueRotation(hueRotationDegrees)) {
         shader.setUniformInt('u_hueRotationEnabled', 0);
       } else {
@@ -1147,6 +1266,15 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     // Curves LUT
     if (dirty.has(DIRTY_CURVES)) {
       shader.setUniformInt('u_curvesEnabled', s.curvesEnabled ? 1 : 0);
+    }
+
+    // Inline 1D LUT (from RVColor luminanceLUT)
+    if (dirty.has(DIRTY_INLINE_LUT)) {
+      shader.setUniformInt('u_inlineLUTEnabled', s.inlineLUTEnabled ? 1 : 0);
+      if (s.inlineLUTEnabled) {
+        shader.setUniformInt('u_inlineLUTChannels', s.inlineLUTChannels);
+        shader.setUniform('u_inlineLUTSize', s.inlineLUTSize);
+      }
     }
 
     // Color Wheels
@@ -1317,6 +1445,14 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
       }
     }
 
+    // Linearize (log-to-linear conversion)
+    if (dirty.has(DIRTY_LINEARIZE)) {
+      shader.setUniformInt('u_linearizeLogType', s.linearizeLogType);
+      shader.setUniform('u_linearizeFileGamma', s.linearizeFileGamma);
+      shader.setUniformInt('u_linearizeSRGB2linear', s.linearizeSRGB2linear ? 1 : 0);
+      shader.setUniformInt('u_linearizeRec709ToLinear', s.linearizeRec709ToLinear ? 1 : 0);
+    }
+
     // Perspective Correction
     if (dirty.has(DIRTY_PERSPECTIVE)) {
       shader.setUniformInt('u_perspectiveEnabled', s.perspectiveEnabled ? 1 : 0);
@@ -1359,6 +1495,12 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     shader.setUniformInt('u_filmLUT', 4);
     if (s.filmEnabled) {
       texCb.bindFilmLUTTexture();
+    }
+
+    // Texture unit 5: inline 1D LUT (RVColor luminanceLUT)
+    shader.setUniformInt('u_inlineLUT', 5);
+    if (s.inlineLUTEnabled) {
+      texCb.bindInlineLUTTexture();
     }
 
     // Clear all dirty flags after uniforms have been set

@@ -27,7 +27,7 @@ import {
   getNumberArray as _getNumberArray,
   getStringValue as _getStringValue,
 } from './AnnotationStore';
-import type { ColorAdjustments, ChannelMode } from '../../core/types/color';
+import type { ColorAdjustments, ChannelMode, LinearizeState } from '../../core/types/color';
 import type { FilterSettings } from '../../core/types/filter';
 import type { Transform2D, CropState } from '../../core/types/transform';
 import type { ScopesState } from '../../core/types/scopes';
@@ -48,6 +48,7 @@ import {
   parseChannelMode as _parseChannelMode,
   parseStereo as _parseStereo,
   parseScopes as _parseScopes,
+  parseLinearize as _parseLinearize,
 } from './GTOSettingsParser';
 import type { GTOParseResult } from './GTOGraphLoader';
 import type { SubFramePosition } from '../../utils/media/FrameInterpolator';
@@ -97,6 +98,7 @@ export interface GTOViewSettings {
   stereoEyeTransform?: StereoEyeTransformState;
   stereoAlignMode?: StereoAlignMode;
   scopes?: ScopesState;
+  linearize?: LinearizeState;
 }
 
 /**
@@ -1283,6 +1285,11 @@ export class Session extends EventEmitter<SessionEvents> {
   // @ts-ignore TS6133 - accessed by tests via (session as any).parseScopes()
   private parseScopes(dto: GTODTO): ScopesState | null {
     return _parseScopes(dto);
+  }
+
+  // @ts-ignore TS6133 - accessed by tests via (session as any).parseLinearize()
+  private parseLinearize(dto: GTODTO): LinearizeState | null {
+    return _parseLinearize(dto);
   }
 
   // Annotation parsing methods - delegate to AnnotationStore.

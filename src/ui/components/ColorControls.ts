@@ -37,6 +37,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
   // Throttle state for slider input events
   private _inputThrottleTimer: ReturnType<typeof setTimeout> | null = null;
   private _pendingAdjustments: ColorAdjustments | null = null;
+  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
 
   constructor() {
     super();
@@ -108,6 +109,13 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     // Close on outside click
     this.boundHandleDocumentClick = this.handleDocumentClick.bind(this);
     document.addEventListener('click', this.boundHandleDocumentClick);
+
+    // Close on Escape key
+    this.boundHandleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && this.isExpanded) {
+        this.hide();
+      }
+    };
   }
 
   private boundHandleDocumentClick: (e: MouseEvent) => void;
@@ -601,6 +609,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     this.toggleButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
     this.toggleButton.style.borderColor = 'var(--accent-primary)';
     this.toggleButton.style.color = 'var(--accent-primary)';
+    document.addEventListener('keydown', this.boundHandleKeyDown);
     this.emit('visibilityChanged', true);
   }
 
@@ -612,6 +621,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
     this.toggleButton.style.background = 'transparent';
     this.toggleButton.style.borderColor = 'transparent';
     this.toggleButton.style.color = 'var(--text-muted)';
+    document.removeEventListener('keydown', this.boundHandleKeyDown);
     this.emit('visibilityChanged', false);
   }
 
@@ -678,6 +688,7 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
   }
 
   dispose(): void {
+    document.removeEventListener('keydown', this.boundHandleKeyDown);
     document.removeEventListener('click', this.boundHandleDocumentClick);
     if (this._inputThrottleTimer !== null) {
       clearTimeout(this._inputThrottleTimer);

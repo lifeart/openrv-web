@@ -5,11 +5,11 @@
       out vec4 fragColor;
       uniform sampler2D u_texture;
 
-      // Color adjustments
-      uniform float u_exposure;      // -5 to +5 stops
-      uniform float u_gamma;         // 0.1 to 4.0
+      // Color adjustments (per-channel vec3: scalar broadcast when uniform)
+      uniform vec3 u_exposureRGB;    // -5 to +5 stops per channel
+      uniform vec3 u_gammaRGB;       // 0.1 to 4.0 per channel
       uniform float u_saturation;    // 0 to 2
-      uniform float u_contrast;      // 0 to 2
+      uniform vec3 u_contrastRGB;    // 0 to 2 per channel
       uniform float u_brightness;    // -1 to +1
       uniform float u_temperature;   // -100 to +100
       uniform float u_tint;          // -100 to +100
@@ -44,6 +44,7 @@
       uniform vec3 u_cdlOffset;
       uniform vec3 u_cdlPower;
       uniform float u_cdlSaturation;
+      uniform int u_cdlColorspace;  // 0=rec709/direct, 1=ACEScct
 
       // Curves (1D LUT texture)
       uniform sampler2D u_curvesLUT;    // 256x1 RGBA (R=red, G=green, B=blue, A=master)
@@ -142,6 +143,12 @@
       uniform int u_targetGamut;       // 0=sRGB, 1=Rec.2020, 2=Display-P3
       uniform bool u_gamutHighlightEnabled; // highlight out-of-gamut pixels
 
+      // Linearize (RVLinearize log-to-linear conversion)
+      uniform int u_linearizeLogType;    // 0=none, 1=cineon, 2=viper(cineon), 3=logc3
+      uniform float u_linearizeFileGamma; // 1.0 = no-op
+      uniform int u_linearizeSRGB2linear; // 0=no, 1=yes
+      uniform int u_linearizeRec709ToLinear; // 0=no, 1=yes
+
       // Deinterlace
       uniform int u_deinterlaceEnabled;    // 0=off, 1=on
       uniform int u_deinterlaceMethod;     // 0=bob, 1=weave, 2=blend
@@ -159,6 +166,12 @@
       uniform int u_perspectiveEnabled;    // 0=off, 1=on
       uniform mat3 u_perspectiveInvH;     // Inverse homography (column-major)
       uniform int u_perspectiveQuality;   // 0=bilinear, 1=bicubic
+
+      // Inline 1D LUT (from RVColor luminanceLUT)
+      uniform int u_inlineLUTEnabled;     // 0=off, 1=on
+      uniform int u_inlineLUTChannels;    // 1=luminance, 3=per-channel RGB
+      uniform float u_inlineLUTSize;      // entries per channel (e.g., 256)
+      uniform sampler2D u_inlineLUT;      // 1D LUT stored as texture
 
       // Luminance coefficients (Rec. 709)
       const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
@@ -552,6 +565,124 @@
         return c; // tf == 0 (linear)
       }
 
+      // --- Linearize functions (RVLinearize log-to-linear conversion) ---
+
+      // Cineon log-to-linear: refBlack=95, refWhite=685 (out of 1023), softClip=0
+      float cineonLogToLinear(float x) {
+        float refBlack = 95.0 / 1023.0;
+        float refWhite = 685.0 / 1023.0;
+        float gain = 1.0 / (1.0 - pow(10.0, (refBlack - refWhite) * 0.002 / 0.6));
+        float offset = gain - 1.0;
+        return (gain * pow(10.0, (x - refWhite) * 0.002 / 0.6)) - offset;
+      }
+
+      // ARRI LogC3-to-linear (EI 800)
+      float logC3ToLinear(float x) {
+        float cut = 0.010591;
+        float a = 5.555556;
+        float b = 0.052272;
+        float c = 0.247190;
+        float d = 0.385537;
+        float e = 5.367655;
+        float f = 0.092809;
+        if (x > e * cut + f) {
+          return (pow(10.0, (x - d) / c) - b) / a;
+        } else {
+          return (x - f) / e;
+        }
+      }
+
+      // sRGB EOTF (sRGB signal -> linear light)
+      float srgbEOTF(float x) {
+        if (x <= 0.04045) {
+          return x / 12.92;
+        } else {
+          return pow((x + 0.055) / 1.055, 2.4);
+        }
+      }
+
+      // Rec.709 EOTF (Rec.709 signal -> linear light)
+      float rec709EOTF(float x) {
+        if (x < 0.081) {
+          return x / 4.5;
+        } else {
+          return pow((x + 0.099) / 1.099, 1.0 / 0.45);
+        }
+      }
+
+      // Apply linearize step: log/gamma-to-linear conversion
+      // When active, this OVERRIDES the auto-detected u_inputTransfer.
+      vec3 applyLinearize(vec3 color, out bool linearizeActive) {
+        linearizeActive = false;
+
+        // Log type conversion (Cineon or LogC3)
+        if (u_linearizeLogType == 1 || u_linearizeLogType == 2) {
+          // Cineon (type 1) and Viper (type 2, treated as Cineon)
+          color = vec3(
+            cineonLogToLinear(color.r),
+            cineonLogToLinear(color.g),
+            cineonLogToLinear(color.b)
+          );
+          linearizeActive = true;
+        } else if (u_linearizeLogType == 3) {
+          // ARRI LogC3
+          color = vec3(
+            logC3ToLinear(color.r),
+            logC3ToLinear(color.g),
+            logC3ToLinear(color.b)
+          );
+          linearizeActive = true;
+        }
+
+        // sRGB-to-linear EOTF
+        if (u_linearizeSRGB2linear == 1) {
+          color = vec3(
+            srgbEOTF(color.r),
+            srgbEOTF(color.g),
+            srgbEOTF(color.b)
+          );
+          linearizeActive = true;
+        }
+
+        // Rec.709-to-linear EOTF
+        if (u_linearizeRec709ToLinear == 1) {
+          color = vec3(
+            rec709EOTF(color.r),
+            rec709EOTF(color.g),
+            rec709EOTF(color.b)
+          );
+          linearizeActive = true;
+        }
+
+        // File gamma (pow(color, fileGamma))
+        if (u_linearizeFileGamma != 1.0) {
+          color = pow(max(color, vec3(0.0)), vec3(u_linearizeFileGamma));
+          linearizeActive = true;
+        }
+
+        return color;
+      }
+
+      // Apply inline 1D LUT (from RVColor luminanceLUT)
+      vec3 applyInlineLUT(vec3 color) {
+        if (u_inlineLUTEnabled == 0) return color;
+        float invSize = 1.0 / u_inlineLUTSize;
+        float halfTexel = 0.5 * invSize;
+
+        if (u_inlineLUTChannels == 3) {
+          // 3-channel: R table in row 0, G table in row 1, B table in row 2
+          color.r = texture(u_inlineLUT, vec2(clamp(color.r, 0.0, 1.0) * (1.0 - invSize) + halfTexel, (0.5 / 3.0))).r;
+          color.g = texture(u_inlineLUT, vec2(clamp(color.g, 0.0, 1.0) * (1.0 - invSize) + halfTexel, (1.5 / 3.0))).r;
+          color.b = texture(u_inlineLUT, vec2(clamp(color.b, 0.0, 1.0) * (1.0 - invSize) + halfTexel, (2.5 / 3.0))).r;
+        } else {
+          // 1-channel luminance: single row
+          color.r = texture(u_inlineLUT, vec2(clamp(color.r, 0.0, 1.0) * (1.0 - invSize) + halfTexel, 0.5)).r;
+          color.g = texture(u_inlineLUT, vec2(clamp(color.g, 0.0, 1.0) * (1.0 - invSize) + halfTexel, 0.5)).r;
+          color.b = texture(u_inlineLUT, vec2(clamp(color.b, 0.0, 1.0) * (1.0 - invSize) + halfTexel, 0.5)).r;
+        }
+        return color;
+      }
+
       // --- RGB↔HSL conversion helpers (used by vibrance and HSL qualifier) ---
 
       // Convert RGB (0-1 each) to HSL (h: 0-360, s: 0-1, l: 0-1)
@@ -605,6 +736,46 @@
           hueToRgb(p, q, hNorm + 1.0 / 3.0),
           hueToRgb(p, q, hNorm),
           hueToRgb(p, q, hNorm - 1.0 / 3.0)
+        );
+      }
+
+      // --- ACEScct conversion functions (for CDL colorspace wrapping) ---
+
+      // Linear (ACES) to ACEScct
+      // Reference: ACES Technical Bulletin TB-2014-004.2
+      float linearToACEScctChannel(float x) {
+        const float CUT = 0.0078125;  // 2^(-7)
+        const float A = 10.5402377416545;  // (log2(65504) + 9.72) / 17.52
+        if (x <= CUT) {
+          return (x * 10.5402377416545 + 0.0729055341958355) / 17.52;
+        } else {
+          return (log2(x) + 9.72) / 17.52;
+        }
+      }
+
+      vec3 linearToACEScct(vec3 color) {
+        return vec3(
+          linearToACEScctChannel(color.r),
+          linearToACEScctChannel(color.g),
+          linearToACEScctChannel(color.b)
+        );
+      }
+
+      // ACEScct to linear (ACES)
+      float ACEScctToLinearChannel(float x) {
+        const float CUT_OUT = 0.155251141552511;  // (log2(0.0078125) + 9.72) / 17.52
+        if (x <= CUT_OUT) {
+          return (x * 17.52 - 0.0729055341958355) / 10.5402377416545;
+        } else {
+          return pow(2.0, x * 17.52 - 9.72);
+        }
+      }
+
+      vec3 ACEScctToLinear(vec3 color) {
+        return vec3(
+          ACEScctToLinearChannel(color.r),
+          ACEScctToLinearChannel(color.g),
+          ACEScctToLinearChannel(color.b)
         );
       }
 
@@ -671,15 +842,26 @@
           }
         }
 
-        // 0b. Input EOTF: convert from transfer function to linear light
-        if (u_inputTransfer == 1) {
-          color.rgb = hlgToLinear(color.rgb);
-        } else if (u_inputTransfer == 2) {
-          color.rgb = pqToLinear(color.rgb);
+        // 0b. Linearize (RVLinearize log-to-linear conversion)
+        // When active, overrides the auto-detected input transfer function.
+        bool linearizeActive = false;
+        color.rgb = applyLinearize(color.rgb, linearizeActive);
+
+        // 0c. Input EOTF: convert from transfer function to linear light
+        // Skipped when linearize is active (linearize already handled the conversion)
+        if (!linearizeActive) {
+          if (u_inputTransfer == 1) {
+            color.rgb = hlgToLinear(color.rgb);
+          } else if (u_inputTransfer == 2) {
+            color.rgb = pqToLinear(color.rgb);
+          }
         }
 
-        // 1. Exposure (in stops, applied in linear space)
-        color.rgb *= pow(2.0, u_exposure);
+        // 1. Exposure (in stops, applied in linear space, per-channel)
+        color.rgb *= exp2(u_exposureRGB);
+
+        // 1b. Inline 1D LUT (from RVColor luminanceLUT, applied after exposure, before contrast)
+        color.rgb = applyInlineLUT(color.rgb);
 
         // 2. Temperature and tint
         color.rgb = applyTemperature(color.rgb, u_temperature, u_tint);
@@ -687,8 +869,8 @@
         // 3. Brightness (simple offset)
         color.rgb += u_brightness;
 
-        // 4. Contrast (pivot at 0.5)
-        color.rgb = (color.rgb - 0.5) * u_contrast + 0.5;
+        // 4. Contrast (pivot at 0.5, per-channel)
+        color.rgb = (color.rgb - 0.5) * u_contrastRGB + 0.5;
 
         // 5. Saturation
         float luma = dot(color.rgb, LUMA);
@@ -809,9 +991,18 @@
 
         // 6b. CDL (Color Decision List)
         if (u_cdlEnabled) {
+          // Convert to ACEScct if colorspace requires it
+          if (u_cdlColorspace == 1) {
+            color.rgb = linearToACEScct(color.rgb);
+          }
+          // CDL SOP + Saturation
           color.rgb = pow(max(color.rgb * u_cdlSlope + u_cdlOffset, vec3(0.0)), u_cdlPower);
           float cdlLuma = dot(color.rgb, LUMA);
           color.rgb = mix(vec3(cdlLuma), color.rgb, u_cdlSaturation);
+          // Convert back from ACEScct to linear
+          if (u_cdlColorspace == 1) {
+            color.rgb = ACEScctToLinear(color.rgb);
+          }
         }
 
         // 6c. Curves (1D LUT)
@@ -927,11 +1118,11 @@
           color.rgb = sharpOriginal + (sharpened - sharpOriginal) * u_sharpenAmount;
         }
 
-        // 8. Display transfer function (replaces simple gamma)
+        // 8. Display transfer function (replaces simple gamma, per-channel)
         if (u_displayTransfer > 0) {
           color.rgb = applyDisplayTransfer(color.rgb, u_displayTransfer);
         } else {
-          color.rgb = pow(max(color.rgb, 0.0), vec3(1.0 / u_gamma));
+          color.rgb = pow(max(color.rgb, 0.0), 1.0 / u_gammaRGB);
         }
 
         // 8b. Display gamma override

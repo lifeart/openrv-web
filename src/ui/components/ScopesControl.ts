@@ -58,6 +58,8 @@ export class ScopesControl extends EventEmitter<ScopesControlEvents> {
     this.button = document.createElement('button');
     this.button.dataset.testid = 'scopes-control-button';
     this.button.title = 'Video scopes (H: histogram, w: waveform, y: vectorscope, G: CIE diagram)';
+    this.button.setAttribute('aria-haspopup', 'menu');
+    this.button.setAttribute('aria-expanded', 'false');
     this.button.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -102,6 +104,8 @@ export class ScopesControl extends EventEmitter<ScopesControlEvents> {
     this.dropdown = document.createElement('div');
     this.dropdown.className = 'scopes-dropdown';
     this.dropdown.dataset.testid = 'scopes-dropdown';
+    this.dropdown.setAttribute('role', 'menu');
+    this.dropdown.setAttribute('aria-label', 'Scopes Settings');
     this.dropdown.style.cssText = `
       position: fixed;
       background: var(--bg-secondary);
@@ -246,6 +250,7 @@ export class ScopesControl extends EventEmitter<ScopesControlEvents> {
     this.isOpen = true;
     this.positionDropdown();
     this.dropdown.style.display = 'flex';
+    this.button.setAttribute('aria-expanded', 'true');
     this.button.style.background = 'var(--bg-hover)';
     this.button.style.borderColor = 'var(--border-primary)';
 
@@ -257,6 +262,7 @@ export class ScopesControl extends EventEmitter<ScopesControlEvents> {
   private closeDropdown(): void {
     this.isOpen = false;
     this.dropdown.style.display = 'none';
+    this.button.setAttribute('aria-expanded', 'false');
     this.updateButtonLabel();
 
     document.removeEventListener('click', this.boundHandleOutsideClick);

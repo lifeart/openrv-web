@@ -22,6 +22,8 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
   private _volume = 0.7;
   private _muted = false;
   private _previousVolume = 0.7;
+  private _sliderExpanded = false;
+  private _boundDocumentClick: (e: MouseEvent) => void;
 
   constructor() {
     super();
@@ -40,6 +42,7 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
     this.muteButton = document.createElement('button');
     this.updateMuteButton();
     this.muteButton.title = 'Toggle mute (M in video mode)';
+    this.muteButton.setAttribute('aria-label', 'Toggle mute');
     this.muteButton.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -55,7 +58,10 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
       outline: none;
     `;
 
-    this.muteButton.addEventListener('click', () => this.toggleMute());
+    this.muteButton.addEventListener('click', () => {
+      this.toggleMute();
+      this.toggleSliderExpanded();
+    });
     this.muteButton.addEventListener('mouseenter', () => {
       this.muteButton.style.background = 'var(--bg-hover)';
       this.muteButton.style.borderColor = 'var(--border-primary)';
@@ -102,14 +108,35 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
 
     this.volumeContainer.appendChild(this.volumeSlider);
 
-    // Show slider on hover
+    // Show slider on hover (but don't collapse if pinned open via click)
     this.container.addEventListener('mouseenter', () => {
       this.volumeContainer.style.width = '96px';
     });
 
     this.container.addEventListener('mouseleave', () => {
-      this.volumeContainer.style.width = '0';
+      if (!this._sliderExpanded) {
+        this.volumeContainer.style.width = '0';
+      }
     });
+
+    // Collapse slider when focus leaves the volume control area (keyboard a11y)
+    this.container.addEventListener('focusout', (e: FocusEvent) => {
+      const relatedTarget = e.relatedTarget as Node | null;
+      if (relatedTarget && this.container.contains(relatedTarget)) {
+        return; // Focus moved within the control, keep expanded
+      }
+      if (this._sliderExpanded) {
+        this.collapseSlider();
+      }
+    });
+
+    // Collapse slider when clicking outside the volume control area
+    this._boundDocumentClick = (e: MouseEvent) => {
+      if (this._sliderExpanded && !this.container.contains(e.target as Node)) {
+        this.collapseSlider();
+      }
+    };
+    document.addEventListener('click', this._boundDocumentClick);
 
     this.container.appendChild(this.muteButton);
     this.container.appendChild(this.volumeContainer);
@@ -123,6 +150,23 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
     } else {
       this.muteButton.innerHTML = getIconSvg('volume-high', 'sm');
     }
+  }
+
+  /** Toggle the slider expanded (pinned open) state. */
+  private toggleSliderExpanded(): void {
+    this._sliderExpanded = !this._sliderExpanded;
+    this.volumeContainer.style.width = this._sliderExpanded ? '96px' : '0';
+  }
+
+  /** Collapse the slider and clear the expanded flag. */
+  private collapseSlider(): void {
+    this._sliderExpanded = false;
+    this.volumeContainer.style.width = '0';
+  }
+
+  /** Returns whether the slider is currently pinned open via click/tap. */
+  isSliderExpanded(): boolean {
+    return this._sliderExpanded;
   }
 
   toggleMute(): void {
@@ -200,6 +244,6 @@ export class VolumeControl extends EventEmitter<VolumeControlEvents> {
   }
 
   dispose(): void {
-    // Cleanup if needed
+    document.removeEventListener('click', this._boundDocumentClick);
   }
 }

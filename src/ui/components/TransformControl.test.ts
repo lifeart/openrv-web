@@ -300,6 +300,78 @@ describe('TransformControl', () => {
     });
   });
 
+  describe('rotation status indicator', () => {
+    function getIndicator(): HTMLElement | null {
+      return control.render().querySelector('[data-testid="rotation-indicator"]');
+    }
+
+    it('TC-M27a: when rotation is 0, rotation indicator is hidden', () => {
+      const indicator = getIndicator();
+      expect(indicator).not.toBeNull();
+      expect(indicator!.style.display).toBe('none');
+      expect(indicator!.textContent).toBe('');
+    });
+
+    it('TC-M27b-90: when rotation is 90, indicator shows 90\u00B0', () => {
+      control.rotateRight();
+      const indicator = getIndicator();
+      expect(indicator!.style.display).toBe('');
+      expect(indicator!.textContent).toBe('90\u00B0');
+    });
+
+    it('TC-M27b-180: when rotation is 180, indicator shows 180\u00B0', () => {
+      control.rotateRight();
+      control.rotateRight();
+      const indicator = getIndicator();
+      expect(indicator!.style.display).toBe('');
+      expect(indicator!.textContent).toBe('180\u00B0');
+    });
+
+    it('TC-M27b-270: when rotation is 270, indicator shows 270\u00B0', () => {
+      control.rotateLeft();
+      const indicator = getIndicator();
+      expect(indicator!.style.display).toBe('');
+      expect(indicator!.textContent).toBe('270\u00B0');
+    });
+
+    it('TC-M27c: after reset, indicator disappears', () => {
+      control.rotateRight(); // 90
+      control.rotateRight(); // 180
+      const indicator = getIndicator();
+      expect(indicator!.style.display).toBe('');
+      expect(indicator!.textContent).toBe('180\u00B0');
+
+      control.reset();
+      expect(indicator!.style.display).toBe('none');
+      expect(indicator!.textContent).toBe('');
+    });
+
+    it('TC-M27d: setTransform updates indicator', () => {
+      control.setTransform({ ...DEFAULT_TRANSFORM, rotation: 270 });
+      const indicator = getIndicator();
+      expect(indicator!.style.display).toBe('');
+      expect(indicator!.textContent).toBe('270\u00B0');
+    });
+
+    it('TC-M27e: setTransform to 0 hides indicator', () => {
+      control.rotateRight();
+      control.setTransform({ ...DEFAULT_TRANSFORM, rotation: 0 });
+      const indicator = getIndicator();
+      expect(indicator!.style.display).toBe('none');
+      expect(indicator!.textContent).toBe('');
+    });
+
+    it('TC-M27f: full rotation cycle returns indicator to hidden', () => {
+      control.rotateRight(); // 90
+      control.rotateRight(); // 180
+      control.rotateRight(); // 270
+      control.rotateRight(); // 0
+      const indicator = getIndicator();
+      expect(indicator!.style.display).toBe('none');
+      expect(indicator!.textContent).toBe('');
+    });
+  });
+
   describe('dispose', () => {
     it('TRN-039: dispose does not throw', () => {
       expect(() => control.dispose()).not.toThrow();

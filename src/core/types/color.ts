@@ -1,3 +1,5 @@
+export type RGB3 = [number, number, number];
+
 export interface ColorAdjustments {
   exposure: number;
   gamma: number;
@@ -14,6 +16,20 @@ export interface ColorAdjustments {
   shadows: number;
   whites: number;
   blacks: number;
+  /** Per-channel exposure (R, G, B) in stops. When set, overrides scalar `exposure`. */
+  exposureRGB?: RGB3;
+  /** Per-channel gamma (R, G, B). When set, overrides scalar `gamma`. */
+  gammaRGB?: RGB3;
+  /** Per-channel contrast (R, G, B). When set, overrides scalar `contrast`. */
+  contrastRGB?: RGB3;
+  /**
+   * Inline 1D LUT from RVColor luminanceLUT component.
+   * For 1-channel LUTs, contains N float values mapping luminance.
+   * For 3-channel LUTs, contains N*3 float values (R table, G table, B table interleaved per entry).
+   */
+  inlineLUT?: Float32Array;
+  /** Number of channels in inlineLUT: 1 = luminance, 3 = per-channel RGB */
+  lutChannels?: 1 | 3;
 }
 
 export const DEFAULT_COLOR_ADJUSTMENTS: ColorAdjustments = {
@@ -34,9 +50,36 @@ export const DEFAULT_COLOR_ADJUSTMENTS: ColorAdjustments = {
   blacks: 0,
 };
 
-export type NumericAdjustmentKey = Exclude<keyof ColorAdjustments, 'vibranceSkinProtection'>;
+export type NumericAdjustmentKey = Exclude<keyof ColorAdjustments, 'vibranceSkinProtection' | 'exposureRGB' | 'gammaRGB' | 'contrastRGB' | 'inlineLUT' | 'lutChannels'>;
 
 export type ChannelMode = 'rgb' | 'red' | 'green' | 'blue' | 'alpha' | 'luminance';
+
+/**
+ * Linearization state parsed from RVLinearize GTO nodes.
+ *
+ * Controls how log-encoded or gamma-encoded source media is converted to
+ * linear light before entering the grading pipeline.
+ */
+export interface LinearizeState {
+  /** Log curve type: 0=none, 1=cineon, 2=viper (treated as cineon with warning), 3=ARRI LogC3 */
+  logType: 0 | 1 | 2 | 3;
+  /** Apply sRGB-to-linear EOTF */
+  sRGB2linear: boolean;
+  /** Apply Rec.709-to-linear EOTF */
+  rec709ToLinear: boolean;
+  /** File gamma (1.0 = no-op, applies pow(v, fileGamma) before other operations) */
+  fileGamma: number;
+  /** Alpha handling: 0=normal, 1=premultiplied */
+  alphaType: number;
+}
+
+export const DEFAULT_LINEARIZE_STATE: LinearizeState = {
+  logType: 0,
+  sRGB2linear: false,
+  rec709ToLinear: false,
+  fileGamma: 1.0,
+  alphaType: 0,
+};
 
 export interface WheelValues {
   r: number;

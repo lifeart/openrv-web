@@ -12,7 +12,7 @@
  */
 
 import type { ShaderProgram } from './ShaderProgram';
-import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState } from '../core/types/color';
+import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState, LinearizeState } from '../core/types/color';
 import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState, GamutMappingState } from '../core/types/effects';
 import type { BackgroundPatternState } from '../core/types/background';
 import type { CDLValues } from '../color/CDL';
@@ -136,6 +136,15 @@ export interface StateAccessor {
   /** Set perspective correction state for GPU shader. */
   setPerspective(state: { enabled: boolean; invH: Float32Array; quality: number }): void;
 
+  /** Set linearize state (log-to-linear conversion from RVLinearize). */
+  setLinearize(state: LinearizeState): void;
+
+  /** Get the current linearize state. */
+  getLinearize(): LinearizeState;
+
+  /** Set inline 1D LUT data (from RVColor luminanceLUT). Null disables. */
+  setInlineLUT(lutData: Float32Array | null, channels: 1 | 3): void;
+
   /** Set texel size (called before applyUniforms based on image dimensions). */
   setTexelSize(w: number, h: number): void;
 
@@ -175,5 +184,5 @@ export interface StateAccessor {
    * Clear a texture-specific dirty flag after the Renderer has uploaded
    * the corresponding texture data to the GPU.
    */
-  clearTextureDirtyFlag(flag: 'curvesLUTDirty' | 'falseColorLUTDirty' | 'lut3DDirty' | 'filmLUTDirty'): void;
+  clearTextureDirtyFlag(flag: 'curvesLUTDirty' | 'falseColorLUTDirty' | 'lut3DDirty' | 'filmLUTDirty' | 'inlineLUTDirty'): void;
 }

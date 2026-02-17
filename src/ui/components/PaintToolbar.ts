@@ -8,6 +8,9 @@ export class PaintToolbar {
   private paintEngine: PaintEngine;
   private buttons: Map<PaintTool, HTMLButtonElement> = new Map();
   private colorPicker!: HTMLInputElement;
+  private opacitySlider!: HTMLInputElement;
+  private opacityLabel!: HTMLSpanElement;
+  private _opacity: number = 1;
   private widthSlider!: HTMLInputElement;
   private widthLabel!: HTMLSpanElement;
   private brushButton!: HTMLButtonElement;
@@ -102,6 +105,34 @@ export class PaintToolbar {
       this.container.appendChild(preset);
     }
 
+    // Opacity slider
+    this.opacityLabel = document.createElement('span');
+    this.opacityLabel.dataset.testid = 'paint-opacity-label';
+    this.opacityLabel.textContent = '100%';
+    this.opacityLabel.style.cssText = 'color: var(--text-secondary); font-size: 10px; min-width: 28px; text-align: right; margin-left: 8px;';
+    this.container.appendChild(this.opacityLabel);
+
+    this.opacitySlider = document.createElement('input');
+    this.opacitySlider.type = 'range';
+    this.opacitySlider.min = '0';
+    this.opacitySlider.max = '100';
+    this.opacitySlider.value = '100';
+    this.opacitySlider.title = 'Stroke opacity';
+    this.opacitySlider.dataset.testid = 'paint-opacity-slider';
+    this.opacitySlider.style.cssText = `
+      width: 60px;
+      height: 4px;
+      cursor: pointer;
+      accent-color: var(--accent-primary);
+    `;
+    this.opacitySlider.addEventListener('input', () => {
+      const percent = parseInt(this.opacitySlider.value, 10);
+      this._opacity = percent / 100;
+      this.opacityLabel.textContent = `${percent}%`;
+      this.paintEngine.color = this.hexToRgba(this.colorPicker.value);
+    });
+    this.container.appendChild(this.opacitySlider);
+
     // Width slider
     this.widthLabel = document.createElement('span');
     this.widthLabel.textContent = `${this.paintEngine.width}`;
@@ -114,6 +145,7 @@ export class PaintToolbar {
     this.widthSlider.max = '50';
     this.widthSlider.value = String(this.paintEngine.width);
     this.widthSlider.title = 'Stroke width';
+    this.widthSlider.dataset.testid = 'paint-width-slider';
     this.widthSlider.style.cssText = `
       width: 60px;
       height: 4px;
@@ -313,7 +345,7 @@ export class PaintToolbar {
     const r = parseInt(hex.slice(1, 3), 16) / 255;
     const g = parseInt(hex.slice(3, 5), 16) / 255;
     const b = parseInt(hex.slice(5, 7), 16) / 255;
-    return [r, g, b, 1];
+    return [r, g, b, this._opacity];
   }
 
   render(): HTMLElement {

@@ -169,6 +169,16 @@ export class LayoutStore extends EventEmitter<LayoutStoreEvents> {
   setPanelCollapsed(id: PanelId, collapsed: boolean): void {
     if (this._layout.panels[id].collapsed === collapsed) return;
     this._layout.panels[id].collapsed = collapsed;
+
+    // When uncollapsing, ensure size is at least the minimum so the panel is visible
+    if (!collapsed) {
+      const panel = this._layout.panels[id];
+      const minSize = id === 'bottom' ? MIN_BOTTOM_PANEL_HEIGHT : MIN_SIDE_PANEL_WIDTH;
+      if (panel.size < minSize) {
+        panel.size = minSize;
+      }
+    }
+
     this.notifyAndSave();
   }
 

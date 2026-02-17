@@ -84,11 +84,14 @@ export class Renderer implements RendererBackend {
   private falseColorLUTTexture: WebGLTexture | null = null;
   private lut3DTexture: WebGLTexture | null = null;
   private filmLUTTexture: WebGLTexture | null = null;
+  private inlineLUTTexture: WebGLTexture | null = null;
 
   // --- Pre-allocated temp buffers for LUT conversions ---
   private falseColorRGBABuffer: Uint8Array | null = null;
   private lut3DRGBABuffer: Float32Array | null = null;
   private lut3DRGBABufferSize = 0; // tracks the LUT size the buffer was allocated for
+  private inlineLUTDeinterleavedBuffer: Float32Array | null = null;
+  private inlineLUTDeinterleavedBufferSize = 0; // tracks (lutSize * channels) for cache invalidation
 
   // --- RGBA16F FBO for renderImageToFloat (WebGPU HDR blit path) ---
   private hdrFBO: WebGLFramebuffer | null = null;
@@ -477,6 +480,11 @@ export class Renderer implements RendererBackend {
         gl.activeTexture(gl.TEXTURE4);
         gl.bindTexture(gl.TEXTURE_2D, this.filmLUTTexture);
       },
+      bindInlineLUTTexture: () => {
+        this.ensureInlineLUTTexture();
+        gl.activeTexture(gl.TEXTURE5);
+        gl.bindTexture(gl.TEXTURE_2D, this.inlineLUTTexture);
+      },
       getCanvasSize: () => ({
         width: this.canvas?.width ?? 0,
         height: this.canvas?.height ?? 0,
@@ -570,6 +578,56 @@ export class Renderer implements RendererBackend {
       // Film LUT is 256x1 RGB packed as RGBA (alpha=255)
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, LUT_1D_SIZE, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, s.filmLUTData);
       sm.clearTextureDirtyFlag('filmLUTDirty');
+    }
+  }
+
+  private ensureInlineLUTTexture(): void {
+    const gl = this.gl;
+    if (!gl) return;
+
+    const sm = this.stateManager as ShaderStateManager;
+    const s = sm.getInternalState();
+
+    if (!this.inlineLUTTexture) {
+      this.inlineLUTTexture = gl.createTexture();
+    }
+
+    if (s.inlineLUTDirty && s.inlineLUTData) {
+      const lutSize = s.inlineLUTSize;
+      const channels = s.inlineLUTChannels;
+
+      gl.activeTexture(gl.TEXTURE5);
+      gl.bindTexture(gl.TEXTURE_2D, this.inlineLUTTexture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+      if (channels === 3) {
+        // 3-channel: de-interleave [R0,G0,B0, R1,G1,B1, ...] into 3 rows:
+        //   row 0: [R0, R1, ..., R(n-1)]
+        //   row 1: [G0, G1, ..., G(n-1)]
+        //   row 2: [B0, B1, ..., B(n-1)]
+        // Upload as (lutSize x 3) R32F texture
+        const totalElements = lutSize * 3;
+        if (!this.inlineLUTDeinterleavedBuffer || this.inlineLUTDeinterleavedBufferSize !== totalElements) {
+          this.inlineLUTDeinterleavedBuffer = new Float32Array(totalElements);
+          this.inlineLUTDeinterleavedBufferSize = totalElements;
+        }
+        const dst = this.inlineLUTDeinterleavedBuffer;
+        const src = s.inlineLUTData;
+        for (let i = 0; i < lutSize; i++) {
+          dst[i] = src[i * 3]!;                 // R row
+          dst[lutSize + i] = src[i * 3 + 1]!;   // G row
+          dst[lutSize * 2 + i] = src[i * 3 + 2]!; // B row
+        }
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, lutSize, 3, 0, gl.RED, gl.FLOAT, dst);
+      } else {
+        // 1-channel luminance: upload as (lutSize x 1) R32F texture
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, lutSize, 1, 0, gl.RED, gl.FLOAT, s.inlineLUTData);
+      }
+
+      sm.clearTextureDirtyFlag('inlineLUTDirty');
     }
   }
 
@@ -1819,11 +1877,14 @@ export class Renderer implements RendererBackend {
     if (this.falseColorLUTTexture) gl.deleteTexture(this.falseColorLUTTexture);
     if (this.lut3DTexture) gl.deleteTexture(this.lut3DTexture);
     if (this.filmLUTTexture) gl.deleteTexture(this.filmLUTTexture);
+    if (this.inlineLUTTexture) gl.deleteTexture(this.inlineLUTTexture);
 
     // Release cached LUT conversion buffers
     this.falseColorRGBABuffer = null;
     this.lut3DRGBABuffer = null;
     this.lut3DRGBABufferSize = 0;
+    this.inlineLUTDeinterleavedBuffer = null;
+    this.inlineLUTDeinterleavedBufferSize = 0;
 
     // Release HDR FBO resources
     if (this.hdrFBOTexture) gl.deleteTexture(this.hdrFBOTexture);

@@ -13,6 +13,7 @@ export interface TransformControlEvents extends EventMap {
 
 export class TransformControl extends EventEmitter<TransformControlEvents> {
   private container: HTMLElement;
+  private rotationIndicator: HTMLElement;
   private transform: Transform2D = {
     ...DEFAULT_TRANSFORM,
     scale: { ...DEFAULT_TRANSFORM.scale },
@@ -29,6 +30,17 @@ export class TransformControl extends EventEmitter<TransformControlEvents> {
       display: flex;
       align-items: center;
       gap: 4px;
+    `;
+
+    // Create rotation status indicator
+    this.rotationIndicator = document.createElement('span');
+    this.rotationIndicator.dataset.testid = 'rotation-indicator';
+    this.rotationIndicator.style.cssText = `
+      font-size: 11px;
+      color: var(--accent-primary);
+      font-variant-numeric: tabular-nums;
+      min-width: 0;
+      display: none;
     `;
 
     this.createControls();
@@ -56,6 +68,9 @@ export class TransformControl extends EventEmitter<TransformControlEvents> {
     // Reset button
     const resetBtn = this.createButton('reset', () => this.reset(), 'Reset transforms');
     resetBtn.dataset.testid = 'transform-reset';
+
+    // Append rotation indicator after buttons
+    this.container.appendChild(this.rotationIndicator);
   }
 
   private createButton(icon: IconName, onClick: () => void, title: string): HTMLButtonElement {
@@ -118,12 +133,24 @@ export class TransformControl extends EventEmitter<TransformControlEvents> {
   private updateAllButtons(): void {
     const buttons = this.container.querySelectorAll('button[data-action]');
     buttons.forEach((btn) => this.updateButtonState(btn as HTMLButtonElement));
+    this.updateRotationIndicator();
+  }
+
+  private updateRotationIndicator(): void {
+    if (this.transform.rotation !== 0) {
+      this.rotationIndicator.textContent = `${this.transform.rotation}\u00B0`;
+      this.rotationIndicator.style.display = '';
+    } else {
+      this.rotationIndicator.textContent = '';
+      this.rotationIndicator.style.display = 'none';
+    }
   }
 
   rotateRight(): void {
     const rotations: Array<0 | 90 | 180 | 270> = [0, 90, 180, 270];
     const currentIndex = rotations.indexOf(this.transform.rotation);
     this.transform.rotation = rotations[(currentIndex + 1) % 4]!;
+    this.updateRotationIndicator();
     this.emitChange();
   }
 
@@ -131,6 +158,7 @@ export class TransformControl extends EventEmitter<TransformControlEvents> {
     const rotations: Array<0 | 90 | 180 | 270> = [0, 90, 180, 270];
     const currentIndex = rotations.indexOf(this.transform.rotation);
     this.transform.rotation = rotations[(currentIndex + 3) % 4]!; // +3 is same as -1 mod 4
+    this.updateRotationIndicator();
     this.emitChange();
   }
 

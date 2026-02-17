@@ -63,6 +63,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
 
   private boundHandleOutsideClick: (e: MouseEvent) => void;
   private boundHandleReposition: () => void;
+  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
 
   constructor() {
     super();
@@ -78,6 +79,11 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
 
     this.boundHandleOutsideClick = (e: MouseEvent) => this.handleOutsideClick(e);
     this.boundHandleReposition = () => this.positionPanel();
+    this.boundHandleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && this.isOpen) {
+        this.closePanel();
+      }
+    };
 
     // Container
     this.container = document.createElement('div');
@@ -554,6 +560,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     // Add listeners
     requestAnimationFrame(() => {
       document.addEventListener('click', this.boundHandleOutsideClick);
+      document.addEventListener('keydown', this.boundHandleKeyDown);
       window.addEventListener('scroll', this.boundHandleReposition, true);
       window.addEventListener('resize', this.boundHandleReposition);
     });
@@ -570,6 +577,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
 
     // Remove listeners
     document.removeEventListener('click', this.boundHandleOutsideClick);
+    document.removeEventListener('keydown', this.boundHandleKeyDown);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
     window.removeEventListener('resize', this.boundHandleReposition);
 

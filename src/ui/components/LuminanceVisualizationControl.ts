@@ -7,6 +7,7 @@
 
 import { LuminanceVisualization, LuminanceVisMode } from './LuminanceVisualization';
 import { getIconSvg } from './shared/Icons';
+import { applyA11yFocus } from './shared/Button';
 
 const MODE_LABELS: Record<LuminanceVisMode, string> = {
   'off': 'Off',
@@ -46,6 +47,8 @@ export class LuminanceVisualizationControl {
     this.toggleButton.dataset.testid = 'luminance-vis-selector';
     this.toggleButton.innerHTML = `${getIconSvg('contrast', 'sm')} <span>Lum Vis</span> ${getIconSvg('chevron-down', 'sm')}`;
     this.toggleButton.title = 'Luminance Visualization (Shift+Alt+V)';
+    this.toggleButton.setAttribute('aria-haspopup', 'dialog');
+    this.toggleButton.setAttribute('aria-expanded', 'false');
     this.toggleButton.style.cssText = `
       display: flex;
       align-items: center;
@@ -76,15 +79,20 @@ export class LuminanceVisualizationControl {
     this.toggleButton.addEventListener('mouseleave', () => {
       if (this.luminanceVis.getMode() === 'off') {
         this.toggleButton.style.background = 'transparent';
+        this.toggleButton.style.borderColor = 'transparent';
         this.toggleButton.style.color = 'var(--text-muted)';
       }
     });
+
+    applyA11yFocus(this.toggleButton);
 
     this.container.appendChild(this.toggleButton);
 
     // Create dropdown panel
     this.dropdown = document.createElement('div');
     this.dropdown.className = 'luminance-vis-dropdown';
+    this.dropdown.setAttribute('role', 'dialog');
+    this.dropdown.setAttribute('aria-label', 'Luminance Visualization Settings');
     this.dropdown.style.cssText = `
       position: fixed;
       background: var(--bg-secondary);
@@ -106,10 +114,6 @@ export class LuminanceVisualizationControl {
     `;
 
     this.createDropdownContent();
-    this.container.appendChild(this.dropdown);
-
-    // Close dropdown on outside click
-    document.addEventListener('click', this.handleOutsideClick);
 
     // Listen for state changes
     this.unsubscribers.push(this.luminanceVis.on('stateChanged', () => {
@@ -390,13 +394,19 @@ export class LuminanceVisualizationControl {
 
   private toggleDropdown(): void {
     this.isDropdownOpen = !this.isDropdownOpen;
+    this.toggleButton.setAttribute('aria-expanded', String(this.isDropdownOpen));
     if (this.isDropdownOpen) {
+      if (!document.body.contains(this.dropdown)) {
+        document.body.appendChild(this.dropdown);
+      }
       this.dropdown.style.display = 'block';
       this.positionDropdown();
+      document.addEventListener('click', this.handleOutsideClick);
       window.addEventListener('resize', this.boundHandleReposition);
       window.addEventListener('scroll', this.boundHandleReposition, true);
     } else {
       this.dropdown.style.display = 'none';
+      document.removeEventListener('click', this.handleOutsideClick);
       window.removeEventListener('resize', this.boundHandleReposition);
       window.removeEventListener('scroll', this.boundHandleReposition, true);
     }
@@ -409,10 +419,12 @@ export class LuminanceVisualizationControl {
   }
 
   private handleOutsideClick = (e: MouseEvent): void => {
-    if (!this.container.contains(e.target as Node)) {
+    if (!this.container.contains(e.target as Node) && !this.dropdown.contains(e.target as Node)) {
       if (this.isDropdownOpen) {
         this.isDropdownOpen = false;
+        this.toggleButton.setAttribute('aria-expanded', 'false');
         this.dropdown.style.display = 'none';
+        document.removeEventListener('click', this.handleOutsideClick);
         window.removeEventListener('resize', this.boundHandleReposition);
         window.removeEventListener('scroll', this.boundHandleReposition, true);
       }
@@ -468,6 +480,9 @@ export class LuminanceVisualizationControl {
     document.removeEventListener('click', this.handleOutsideClick);
     window.removeEventListener('resize', this.boundHandleReposition);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
+    if (document.body.contains(this.dropdown)) {
+      document.body.removeChild(this.dropdown);
+    }
     this.unsubscribers.forEach((unsub) => unsub());
     this.unsubscribers = [];
   }

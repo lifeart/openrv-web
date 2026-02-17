@@ -31,6 +31,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
   private dropdown: HTMLElement;
   private isDropdownOpen = false;
   private annotationsCheckbox: HTMLInputElement | null = null;
+  private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
 
   constructor() {
     super();
@@ -49,6 +50,8 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     this.exportButton = document.createElement('button');
     this.exportButton.innerHTML = `${getIconSvg('download', 'sm')}<span style="margin-left: 6px;">Export</span>`;
     this.exportButton.title = 'Export current frame (Ctrl+S)';
+    this.exportButton.setAttribute('aria-haspopup', 'menu');
+    this.exportButton.setAttribute('aria-expanded', 'false');
     this.exportButton.style.cssText = `
       background: transparent;
       border: 1px solid transparent;
@@ -86,6 +89,8 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     // Create dropdown menu (rendered at body level)
     this.dropdown = document.createElement('div');
     this.dropdown.className = 'export-dropdown';
+    this.dropdown.setAttribute('role', 'menu');
+    this.dropdown.setAttribute('aria-label', 'Export Settings');
     this.dropdown.style.cssText = `
       position: fixed;
       background: var(--bg-secondary);
@@ -100,11 +105,35 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
 
     this.createDropdownItems();
 
+    // Keyboard navigation for dropdown menu
+    this.dropdown.addEventListener('keydown', (e: KeyboardEvent) => {
+      this.handleDropdownKeydown(e);
+    });
+
+    // Keyboard support on export button (Escape to close, ArrowDown to open)
+    this.exportButton.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && this.isDropdownOpen) {
+        e.preventDefault();
+        this.closeDropdown();
+        this.exportButton.focus();
+      } else if (e.key === 'ArrowDown' && !this.isDropdownOpen) {
+        e.preventDefault();
+        this.openDropdown();
+      }
+    });
+
     this.container.appendChild(this.exportButton);
 
     // Close dropdown on outside click
     this.boundHandleDocumentClick = this.handleDocumentClick.bind(this);
     document.addEventListener('click', this.boundHandleDocumentClick);
+
+    // Close on Escape key
+    this.boundHandleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && this.isDropdownOpen) {
+        this.closeDropdown();
+      }
+    };
   }
 
   private boundHandleDocumentClick: (e: MouseEvent) => void;
@@ -169,7 +198,10 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     action: () => void,
     shortcut?: string
   ): void {
-    const row = document.createElement('div');
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.setAttribute('role', 'menuitem');
+    row.tabIndex = -1;
     row.style.cssText = `
       display: flex;
       align-items: center;
@@ -178,6 +210,13 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
       transition: background 0.1s ease;
       gap: 8px;
       color: var(--text-muted);
+      background: transparent;
+      border: none;
+      width: 100%;
+      text-align: left;
+      font-family: inherit;
+      font-size: inherit;
+      outline: none;
     `;
 
     row.addEventListener('mouseenter', () => {
@@ -185,6 +224,14 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
       row.style.color = 'var(--text-primary)';
     });
     row.addEventListener('mouseleave', () => {
+      row.style.background = 'transparent';
+      row.style.color = 'var(--text-muted)';
+    });
+    row.addEventListener('focus', () => {
+      row.style.background = 'var(--bg-hover)';
+      row.style.color = 'var(--text-primary)';
+    });
+    row.addEventListener('blur', () => {
       row.style.background = 'transparent';
       row.style.color = 'var(--text-muted)';
     });
@@ -265,6 +312,43 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     }
   }
 
+  private getMenuItems(): HTMLElement[] {
+    return Array.from(this.dropdown.querySelectorAll('[role="menuitem"]'));
+  }
+
+  private handleDropdownKeydown(e: KeyboardEvent): void {
+    const items = this.getMenuItems();
+    const currentIndex = items.indexOf(document.activeElement as HTMLElement);
+
+    switch (e.key) {
+      case 'ArrowDown': {
+        e.preventDefault();
+        const nextIndex = currentIndex < items.length - 1 ? currentIndex + 1 : 0;
+        items[nextIndex]?.focus();
+        break;
+      }
+      case 'ArrowUp': {
+        e.preventDefault();
+        const prevIndex = currentIndex > 0 ? currentIndex - 1 : items.length - 1;
+        items[prevIndex]?.focus();
+        break;
+      }
+      case 'Escape': {
+        e.preventDefault();
+        this.closeDropdown();
+        this.exportButton.focus();
+        break;
+      }
+      case 'Tab': {
+        // Prevent tabbing out; close the menu instead
+        e.preventDefault();
+        this.closeDropdown();
+        this.exportButton.focus();
+        break;
+      }
+    }
+  }
+
   private openDropdown(): void {
     if (!document.body.contains(this.dropdown)) {
       document.body.appendChild(this.dropdown);
@@ -276,17 +360,28 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
 
     this.isDropdownOpen = true;
     this.dropdown.style.display = 'block';
+    this.exportButton.setAttribute('aria-expanded', 'true');
     this.exportButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
     this.exportButton.style.borderColor = 'var(--accent-primary)';
     this.exportButton.style.color = 'var(--accent-primary)';
+
+    // Focus the first menu item
+    const firstItem = this.getMenuItems()[0];
+    if (firstItem) {
+      firstItem.focus();
+    }
+
+    document.addEventListener('keydown', this.boundHandleKeyDown);
   }
 
   private closeDropdown(): void {
     this.isDropdownOpen = false;
     this.dropdown.style.display = 'none';
+    this.exportButton.setAttribute('aria-expanded', 'false');
     this.exportButton.style.background = 'transparent';
     this.exportButton.style.borderColor = 'transparent';
     this.exportButton.style.color = 'var(--text-muted)';
+    document.removeEventListener('keydown', this.boundHandleKeyDown);
   }
 
   private getIncludeAnnotations(): boolean {
@@ -335,6 +430,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
   }
 
   dispose(): void {
+    document.removeEventListener('keydown', this.boundHandleKeyDown);
     document.removeEventListener('click', this.boundHandleDocumentClick);
     // Remove body-mounted dropdown if present
     if (this.dropdown.parentNode) {

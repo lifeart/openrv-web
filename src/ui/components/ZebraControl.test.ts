@@ -61,16 +61,17 @@ describe('ZebraControl', () => {
       expect(button.title).toContain('Shift+Alt+Z');
     });
 
-    it('ZEBRA-U015: container has dropdown element', () => {
+    it('ZEBRA-U015: dropdown is appended to document.body when opened', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="zebra-dropdown"]');
-      expect(dropdown).not.toBeNull();
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      expect(document.querySelector('[data-testid="zebra-dropdown"]')).toBeNull();
+      button.click();
+      expect(document.querySelector('[data-testid="zebra-dropdown"]')).not.toBeNull();
     });
 
-    it('ZEBRA-U016: dropdown is hidden by default', () => {
-      const el = control.render();
-      const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
-      expect(dropdown.style.display).toBe('none');
+    it('ZEBRA-U016: dropdown is not in DOM by default', () => {
+      control.render();
+      expect(document.querySelector('[data-testid="zebra-dropdown"]')).toBeNull();
     });
   });
 
@@ -111,52 +112,69 @@ describe('ZebraControl', () => {
       button.dispatchEvent(new MouseEvent('mouseleave'));
       expect(button.style.background).toBe('transparent');
     });
+
+    it('ZEBRA-M20a: borderColor resets to transparent on mouseleave when inactive', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.dispatchEvent(new MouseEvent('mouseenter'));
+      expect(button.style.borderColor).toBe('var(--border-primary)');
+      button.dispatchEvent(new MouseEvent('mouseleave'));
+      expect(button.style.borderColor).toBe('transparent');
+    });
+
+    it('ZEBRA-M20b: borderColor remains accent color on mouseleave when active', () => {
+      const el = control.render();
+      zebraStripes.enable();
+      zebraStripes.setState({ highEnabled: true });
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.dispatchEvent(new MouseEvent('mouseenter'));
+      button.dispatchEvent(new MouseEvent('mouseleave'));
+      expect(button.style.borderColor).toBe('var(--accent-primary)');
+    });
   });
 
   describe('dropdown behavior', () => {
-    it('ZEBRA-U030: clicking button opens dropdown', () => {
+    function openDropdown(): HTMLElement {
       const el = control.render();
       const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
-      const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
-
       button.click();
+      return document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+    }
 
+    it('ZEBRA-U030: clicking button opens dropdown', () => {
+      const dropdown = openDropdown();
       expect(dropdown.style.display).toBe('block');
     });
 
     it('ZEBRA-U031: clicking button twice closes dropdown', () => {
       const el = control.render();
       const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
-      const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
 
       button.click(); // open
       button.click(); // close
 
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
       expect(dropdown.style.display).toBe('none');
     });
 
     it('ZEBRA-U032: dropdown has high zebras section', () => {
-      const el = control.render();
-      const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      const dropdown = openDropdown();
       expect(dropdown.textContent).toContain('High Zebras');
     });
 
     it('ZEBRA-U033: dropdown has low zebras section', () => {
-      const el = control.render();
-      const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      const dropdown = openDropdown();
       expect(dropdown.textContent).toContain('Low Zebras');
     });
 
     it('ZEBRA-U034: dropdown has high zebras checkbox', () => {
-      const el = control.render();
-      const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      const dropdown = openDropdown();
       const checkboxes = dropdown.querySelectorAll('input[type="checkbox"]');
       expect(checkboxes.length).toBeGreaterThanOrEqual(2);
     });
 
     it('ZEBRA-U035: dropdown has threshold sliders', () => {
-      const el = control.render();
-      const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      const dropdown = openDropdown();
       const sliders = dropdown.querySelectorAll('input[type="range"]');
       expect(sliders.length).toBe(2); // high and low threshold
     });
@@ -165,7 +183,9 @@ describe('ZebraControl', () => {
   describe('high zebras controls', () => {
     it('ZEBRA-U040: high checkbox is checked by default', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
       const checkboxes = dropdown.querySelectorAll('input[type="checkbox"]');
       const highCheckbox = checkboxes[0] as HTMLInputElement;
 
@@ -174,7 +194,9 @@ describe('ZebraControl', () => {
 
     it('ZEBRA-U041: clicking high checkbox toggles highEnabled', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
       const checkboxes = dropdown.querySelectorAll('input[type="checkbox"]');
       const highCheckbox = checkboxes[0] as HTMLInputElement;
 
@@ -188,7 +210,9 @@ describe('ZebraControl', () => {
 
     it('ZEBRA-U042: high threshold slider has correct initial value', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
       const sliders = dropdown.querySelectorAll('input[type="range"]');
       const highSlider = sliders[0] as HTMLInputElement;
 
@@ -197,7 +221,9 @@ describe('ZebraControl', () => {
 
     it('ZEBRA-U043: changing high slider updates threshold', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
       const sliders = dropdown.querySelectorAll('input[type="range"]');
       const highSlider = sliders[0] as HTMLInputElement;
 
@@ -209,7 +235,9 @@ describe('ZebraControl', () => {
 
     it('ZEBRA-U044: high slider has correct min/max', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
       const sliders = dropdown.querySelectorAll('input[type="range"]');
       const highSlider = sliders[0] as HTMLInputElement;
 
@@ -221,7 +249,9 @@ describe('ZebraControl', () => {
   describe('low zebras controls', () => {
     it('ZEBRA-U050: low checkbox is unchecked by default', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
       const checkboxes = dropdown.querySelectorAll('input[type="checkbox"]');
       const lowCheckbox = checkboxes[1] as HTMLInputElement;
 
@@ -230,7 +260,9 @@ describe('ZebraControl', () => {
 
     it('ZEBRA-U051: clicking low checkbox toggles lowEnabled', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
       const checkboxes = dropdown.querySelectorAll('input[type="checkbox"]');
       const lowCheckbox = checkboxes[1] as HTMLInputElement;
 
@@ -242,7 +274,9 @@ describe('ZebraControl', () => {
 
     it('ZEBRA-U052: low threshold slider has correct initial value', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
       const sliders = dropdown.querySelectorAll('input[type="range"]');
       const lowSlider = sliders[1] as HTMLInputElement;
 
@@ -251,7 +285,9 @@ describe('ZebraControl', () => {
 
     it('ZEBRA-U053: changing low slider updates threshold', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
       const sliders = dropdown.querySelectorAll('input[type="range"]');
       const lowSlider = sliders[1] as HTMLInputElement;
 
@@ -263,7 +299,9 @@ describe('ZebraControl', () => {
 
     it('ZEBRA-U054: low slider has correct min/max', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
       const sliders = dropdown.querySelectorAll('input[type="range"]');
       const lowSlider = sliders[1] as HTMLInputElement;
 
@@ -275,21 +313,27 @@ describe('ZebraControl', () => {
   describe('value labels', () => {
     it('ZEBRA-U060: high threshold value label shows percentage', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
 
       expect(dropdown.textContent).toContain('95%');
     });
 
     it('ZEBRA-U061: low threshold value label shows percentage', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
 
       expect(dropdown.textContent).toContain('5%');
     });
 
     it('ZEBRA-U062: value label updates when slider changes', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
       const sliders = dropdown.querySelectorAll('input[type="range"]');
       const highSlider = sliders[0] as HTMLInputElement;
 
@@ -318,7 +362,9 @@ describe('ZebraControl', () => {
 
     it('ZEBRA-U071: checkboxes update when state changes externally', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
       const checkboxes = dropdown.querySelectorAll('input[type="checkbox"]');
       const lowCheckbox = checkboxes[1] as HTMLInputElement;
 
@@ -331,7 +377,9 @@ describe('ZebraControl', () => {
 
     it('ZEBRA-U072: sliders update when state changes externally', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
       const sliders = dropdown.querySelectorAll('input[type="range"]');
       const highSlider = sliders[0] as HTMLInputElement;
 
@@ -380,19 +428,25 @@ describe('ZebraControl', () => {
   describe('dropdown content', () => {
     it('ZEBRA-U090: dropdown has description for high zebras', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
       expect(dropdown.textContent).toContain('overexposed');
     });
 
     it('ZEBRA-U091: dropdown has description for low zebras', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
       expect(dropdown.textContent).toContain('underexposed');
     });
 
     it('ZEBRA-U092: dropdown has divider between sections', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
       const dividers = dropdown.querySelectorAll('div');
 
       // Find divider by style
@@ -404,6 +458,71 @@ describe('ZebraControl', () => {
       });
 
       expect(hasDivider).toBe(true);
+    });
+  });
+
+  describe('outside click listener lifecycle', () => {
+    it('ZEBRA-M21a: outside click listener should NOT be registered when dropdown is closed', () => {
+      const addSpy = vi.spyOn(document, 'addEventListener');
+      control.dispose();
+      zebraStripes.dispose();
+      addSpy.mockClear();
+
+      zebraStripes = new ZebraStripes();
+      control = new ZebraControl(zebraStripes);
+
+      const clickCalls = addSpy.mock.calls.filter(
+        ([event]) => event === 'click'
+      );
+      expect(clickCalls.length).toBe(0);
+      addSpy.mockRestore();
+    });
+
+    it('ZEBRA-M21b: outside click listener should be registered when dropdown opens', () => {
+      const addSpy = vi.spyOn(document, 'addEventListener');
+      const el = control.render();
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+
+      addSpy.mockClear();
+      button.click(); // open
+
+      const clickCalls = addSpy.mock.calls.filter(
+        ([event]) => event === 'click'
+      );
+      expect(clickCalls.length).toBe(1);
+      addSpy.mockRestore();
+    });
+
+    it('ZEBRA-M21c: outside click listener should be removed when dropdown closes', () => {
+      const removeSpy = vi.spyOn(document, 'removeEventListener');
+      const el = control.render();
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+
+      button.click(); // open
+      removeSpy.mockClear();
+      button.click(); // close
+
+      const clickCalls = removeSpy.mock.calls.filter(
+        ([event]) => event === 'click'
+      );
+      expect(clickCalls.length).toBe(1);
+      removeSpy.mockRestore();
+    });
+
+    it('ZEBRA-M21d: dispose should remove outside click listener regardless of dropdown state', () => {
+      const removeSpy = vi.spyOn(document, 'removeEventListener');
+      const el = control.render();
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+
+      button.click(); // open dropdown
+      removeSpy.mockClear();
+      control.dispose();
+
+      const clickCalls = removeSpy.mock.calls.filter(
+        ([event]) => event === 'click'
+      );
+      expect(clickCalls.length).toBe(1);
+      removeSpy.mockRestore();
     });
   });
 
@@ -438,13 +557,17 @@ describe('ZebraControl', () => {
   describe('positioning', () => {
     it('ZEBRA-U110: dropdown has fixed positioning', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
       expect(dropdown.style.position).toBe('fixed');
     });
 
     it('ZEBRA-U111: dropdown has high z-index', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
       expect(parseInt(dropdown.style.zIndex, 10)).toBeGreaterThan(1000);
     });
 
@@ -457,7 +580,9 @@ describe('ZebraControl', () => {
   describe('color indicators', () => {
     it('ZEBRA-U120: high zebras section has color indicator', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
 
       // Check for diagonal stripe pattern element
       const elements = dropdown.querySelectorAll('div');
@@ -474,7 +599,9 @@ describe('ZebraControl', () => {
 
     it('ZEBRA-U121: low zebras section has color indicator', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
 
       // Check for diagonal stripe pattern element (left-leaning)
       const elements = dropdown.querySelectorAll('div');
@@ -487,6 +614,135 @@ describe('ZebraControl', () => {
       });
 
       expect(hasLowIndicator).toBe(true);
+    });
+  });
+
+  describe('ARIA attributes (M-15)', () => {
+    it('ZEBRA-M15a: toggle button should have aria-haspopup attribute', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      expect(button.getAttribute('aria-haspopup')).toBe('dialog');
+    });
+
+    it('ZEBRA-M15b: toggle button aria-expanded should be "false" when dropdown is closed', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      expect(button.getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('ZEBRA-M15c: toggle button aria-expanded should be "true" when dropdown is open', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.click();
+      expect(button.getAttribute('aria-expanded')).toBe('true');
+    });
+
+    it('ZEBRA-M15d: dropdown container should have role="dialog" attribute', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      expect(dropdown.getAttribute('role')).toBe('dialog');
+    });
+
+    it('ZEBRA-M15e: dropdown container should have aria-label attribute', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      expect(dropdown.getAttribute('aria-label')).toBe('Zebra Settings');
+    });
+  });
+
+  describe('keyboard focus ring (M-16)', () => {
+    it('ZEBRA-M16a: toggle button should have focus/blur event listeners added by applyA11yFocus', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+
+      // applyA11yFocus registers a focus listener that sets outline on keyboard focus.
+      button.dispatchEvent(new Event('focus'));
+      expect(button.style.outline).toBe('2px solid var(--accent-primary)');
+    });
+
+    it('ZEBRA-M16b: keyboard focus (Tab) should apply visible focus ring', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+
+      // Simulate keyboard focus (no preceding mousedown)
+      button.dispatchEvent(new Event('focus'));
+      expect(button.style.outline).toBe('2px solid var(--accent-primary)');
+      expect(button.style.outlineOffset).toBe('2px');
+    });
+
+    it('ZEBRA-M16c: mouse focus (click) should not apply focus ring', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+
+      // Simulate mouse click: mousedown then focus
+      button.dispatchEvent(new Event('mousedown'));
+      button.dispatchEvent(new Event('focus'));
+      expect(button.style.outline).not.toBe('2px solid var(--accent-primary)');
+    });
+  });
+
+  describe('dropdown body append (H-07)', () => {
+    it('ZC-H07c: dropdown should be appended to document.body when opened', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+
+      expect(document.body.contains(document.querySelector('[data-testid="zebra-dropdown"]'))).toBe(false);
+
+      button.click();
+
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      expect(document.body.contains(dropdown)).toBe(true);
+      expect(el.contains(dropdown)).toBe(false);
+    });
+
+    it('ZC-H07f: dropdown should be removed from document.body on close', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+
+      button.click(); // open
+      button.click(); // close
+
+      const dropdown = document.querySelector('[data-testid="zebra-dropdown"]') as HTMLElement;
+      expect(dropdown.style.display).toBe('none');
+    });
+
+    it('ZC-H07g: dropdown should be removed from document.body on dispose', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+
+      button.click(); // open
+      expect(document.body.querySelector('[data-testid="zebra-dropdown"]')).not.toBeNull();
+
+      control.dispose();
+      expect(document.body.querySelector('[data-testid="zebra-dropdown"]')).toBeNull();
+    });
+
+    it('ZC-H07h: dropdown should reposition on window scroll', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      const scrollSpy = vi.spyOn(window, 'addEventListener');
+
+      button.click();
+
+      const scrollCalls = scrollSpy.mock.calls.filter(([event]) => event === 'scroll');
+      expect(scrollCalls.length).toBeGreaterThanOrEqual(1);
+      scrollSpy.mockRestore();
+    });
+
+    it('ZC-H07i: dropdown should reposition on window resize', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="zebra-control-button"]') as HTMLButtonElement;
+      const resizeSpy = vi.spyOn(window, 'addEventListener');
+
+      button.click();
+
+      const resizeCalls = resizeSpy.mock.calls.filter(([event]) => event === 'resize');
+      expect(resizeCalls.length).toBeGreaterThanOrEqual(1);
+      resizeSpy.mockRestore();
     });
   });
 });

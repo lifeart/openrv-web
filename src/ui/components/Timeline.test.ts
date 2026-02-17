@@ -23,6 +23,19 @@ class TestTimeline extends Timeline {
   }
 }
 
+// Polyfill PointerEvent for jsdom (which does not implement it)
+if (typeof globalThis.PointerEvent === 'undefined') {
+  (globalThis as any).PointerEvent = class PointerEvent extends MouseEvent {
+    readonly pointerId: number;
+    readonly pointerType: string;
+    constructor(type: string, params: PointerEventInit & MouseEventInit = {}) {
+      super(type, params);
+      this.pointerId = params.pointerId ?? 0;
+      this.pointerType = params.pointerType ?? '';
+    }
+  };
+}
+
 // Mock WaveformRenderer
 vi.mock('../../audio/WaveformRenderer', () => ({
   WaveformRenderer: vi.fn().mockImplementation(() => ({
@@ -300,6 +313,170 @@ describe('Timeline', () => {
       timeline.drawCount = 0;
       timeline.toggleTimecodeDisplay();
       expect(timeline.drawCount).toBeGreaterThan(0);
+    });
+  });
+
+  describe('pointer events (touch support)', () => {
+    /**
+     * Helper to get the canvas element from a timeline's rendered container.
+     */
+    function getCanvas(tl: TestTimeline): HTMLCanvasElement {
+      const container = tl.render();
+      return container.querySelector('canvas')!;
+    }
+
+    it('TL-H05a: should register pointerdown (not mousedown) listener', () => {
+      // Create a fresh timeline so we can spy before bindEvents runs
+      const freshSession = new Session();
+      (freshSession as any).addSource({
+        id: 'test-source',
+        name: 'test.mp4',
+        type: 'video',
+        duration: 100,
+        fps: 24,
+        width: 1920,
+        height: 1080,
+        element: document.createElement('video'),
+      });
+
+      // Spy on HTMLCanvasElement prototype before construction
+      const addEventSpy = vi.spyOn(HTMLCanvasElement.prototype, 'addEventListener');
+
+      const tl = new TestTimeline(freshSession, paintEngine);
+
+      const registeredEvents = addEventSpy.mock.calls.map(call => call[0]);
+      expect(registeredEvents).toContain('pointerdown');
+      expect(registeredEvents).not.toContain('mousedown');
+
+      addEventSpy.mockRestore();
+      tl.dispose();
+    });
+
+    it('TL-H05b: should register pointermove (not mousemove) listener', () => {
+      const freshSession = new Session();
+      (freshSession as any).addSource({
+        id: 'test-source',
+        name: 'test.mp4',
+        type: 'video',
+        duration: 100,
+        fps: 24,
+        width: 1920,
+        height: 1080,
+        element: document.createElement('video'),
+      });
+
+      const canvasAddEventSpy = vi.spyOn(HTMLCanvasElement.prototype, 'addEventListener');
+
+      const tl = new TestTimeline(freshSession, paintEngine);
+
+      const canvasEvents = canvasAddEventSpy.mock.calls.map(call => call[0]);
+      expect(canvasEvents).toContain('pointermove');
+      expect(canvasEvents).not.toContain('mousemove');
+
+      canvasAddEventSpy.mockRestore();
+      tl.dispose();
+    });
+
+    it('TL-H05c: should register pointerup (not mouseup) listener', () => {
+      const freshSession = new Session();
+      (freshSession as any).addSource({
+        id: 'test-source',
+        name: 'test.mp4',
+        type: 'video',
+        duration: 100,
+        fps: 24,
+        width: 1920,
+        height: 1080,
+        element: document.createElement('video'),
+      });
+
+      const canvasAddEventSpy = vi.spyOn(HTMLCanvasElement.prototype, 'addEventListener');
+
+      const tl = new TestTimeline(freshSession, paintEngine);
+
+      const canvasEvents = canvasAddEventSpy.mock.calls.map(call => call[0]);
+      expect(canvasEvents).toContain('pointerup');
+      expect(canvasEvents).not.toContain('mouseup');
+
+      canvasAddEventSpy.mockRestore();
+      tl.dispose();
+    });
+
+    it('TL-H05d: pointerdown on the timeline should call setPointerCapture', () => {
+      const canvas = getCanvas(timeline);
+
+      // Mock getBoundingClientRect on canvas for seekToPosition
+      vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+        width: 1000,
+        height: 100,
+        top: 0,
+        left: 0,
+        bottom: 100,
+        right: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => {},
+      } as DOMRect);
+
+      // jsdom does not implement setPointerCapture, so we add a mock
+      canvas.setPointerCapture = vi.fn();
+      canvas.releasePointerCapture = vi.fn();
+
+      // Dispatch pointerdown on the track area (y > 35 to avoid timecode toggle)
+      const pointerDownEvent = new PointerEvent('pointerdown', {
+        clientX: 500,
+        clientY: 50,
+        pointerId: 1,
+        bubbles: true,
+      });
+      canvas.dispatchEvent(pointerDownEvent);
+
+      expect(canvas.setPointerCapture).toHaveBeenCalledWith(1);
+    });
+
+    it('TL-H05e: pointerup should call releasePointerCapture', () => {
+      const canvas = getCanvas(timeline);
+
+      vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+        width: 1000,
+        height: 100,
+        top: 0,
+        left: 0,
+        bottom: 100,
+        right: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => {},
+      } as DOMRect);
+
+      // jsdom does not implement pointer capture methods, so we add mocks
+      canvas.setPointerCapture = vi.fn();
+      canvas.releasePointerCapture = vi.fn();
+
+      // First pointerdown to start dragging
+      const pointerDownEvent = new PointerEvent('pointerdown', {
+        clientX: 500,
+        clientY: 50,
+        pointerId: 42,
+        bubbles: true,
+      });
+      canvas.dispatchEvent(pointerDownEvent);
+
+      // Now pointerup to stop dragging
+      const pointerUpEvent = new PointerEvent('pointerup', {
+        clientX: 500,
+        clientY: 50,
+        pointerId: 42,
+        bubbles: true,
+      });
+      canvas.dispatchEvent(pointerUpEvent);
+
+      expect(canvas.releasePointerCapture).toHaveBeenCalledWith(42);
+    });
+
+    it('TL-H05f: timeline canvas cursor style should be pointer', () => {
+      const canvas = getCanvas(timeline);
+      expect(canvas.style.cursor).toBe('pointer');
     });
   });
 

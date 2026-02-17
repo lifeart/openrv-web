@@ -10,7 +10,8 @@ import {
   getNumberArray,
   getStringValue,
 } from './AnnotationStore';
-import type { ColorAdjustments, ChannelMode } from '../../core/types/color';
+import type { ColorAdjustments, ChannelMode, LinearizeState } from '../../core/types/color';
+import { DEFAULT_LINEARIZE_STATE } from '../../core/types/color';
 import type { Transform2D, CropState } from '../../core/types/transform';
 import type { ScopesState } from '../../core/types/scopes';
 import type { CDLValues } from '../../color/CDL';
@@ -68,7 +69,119 @@ export function parseInitialSettings(
     settings.scopes = scopes;
   }
 
+  const linearize = parseLinearize(dto);
+  if (linearize) {
+    settings.linearize = linearize;
+  }
+
   return Object.keys(settings).length > 0 ? settings : null;
+}
+
+/**
+ * Parse linearization settings from RVLinearize protocol nodes.
+ *
+ * Maps the OpenRV logtype integer to our LogCurveId system:
+ *   0 = none, 1 = Cineon, 2 = Viper (treated as Cineon with console warning), 3 = ARRI LogC3
+ *
+ * Also extracts sRGB2linear, Rec709ToLinear, fileGamma, and alphaType.
+ * Returns null when no RVLinearize node exists or all values are at defaults.
+ */
+export function parseLinearize(dto: GTODTO): LinearizeState | null {
+  const nodes = dto.byProtocol('RVLinearize');
+  if (nodes.length === 0) return null;
+
+  const node = nodes.first();
+
+  // Check node-level active flag
+  const nodeComp = node.component('node');
+  if (nodeComp?.exists()) {
+    const active = getNumberValue(nodeComp.property('active').value());
+    if (active !== undefined && active === 0) return null;
+  }
+
+  const colorComp = node.component('color');
+  if (!colorComp?.exists()) return null;
+
+  // Check color-level active flag
+  const colorActive = getNumberValue(colorComp.property('active').value());
+  if (colorActive !== undefined && colorActive === 0) return null;
+
+  const rawLogType = getNumberValue(colorComp.property('logtype').value()) ?? 0;
+  const sRGB2linear = getNumberValue(colorComp.property('sRGB2linear').value());
+  const rec709ToLinear = getNumberValue(colorComp.property('Rec709ToLinear').value());
+  const fileGamma = getNumberValue(colorComp.property('fileGamma').value());
+  const alphaType = getNumberValue(colorComp.property('alphaType').value());
+
+  // Map logtype: 0=none, 1=cineon, 2=viper (fallback to cineon), 3=logc3
+  let logType: 0 | 1 | 2 | 3 = 0;
+  if (rawLogType === 1) {
+    logType = 1;
+  } else if (rawLogType === 2) {
+    console.warn('RVLinearize: Viper log type (2) is not natively supported; falling back to Cineon.');
+    logType = 2;
+  } else if (rawLogType === 3) {
+    logType = 3;
+  }
+
+  const result: LinearizeState = {
+    logType,
+    sRGB2linear: sRGB2linear === 1,
+    rec709ToLinear: rec709ToLinear === 1,
+    fileGamma: typeof fileGamma === 'number' && Number.isFinite(fileGamma) ? fileGamma : 1.0,
+    alphaType: typeof alphaType === 'number' ? alphaType : 0,
+  };
+
+  // Return null if all values are at defaults (no actual linearize settings)
+  if (
+    result.logType === DEFAULT_LINEARIZE_STATE.logType &&
+    result.sRGB2linear === DEFAULT_LINEARIZE_STATE.sRGB2linear &&
+    result.rec709ToLinear === DEFAULT_LINEARIZE_STATE.rec709ToLinear &&
+    result.fileGamma === DEFAULT_LINEARIZE_STATE.fileGamma &&
+    result.alphaType === DEFAULT_LINEARIZE_STATE.alphaType
+  ) {
+    return null;
+  }
+
+  return result;
+}
+
+/**
+ * Sanitize a number: replace NaN and Infinity with a fallback value.
+ */
+function sanitizeNumber(value: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return value;
+}
+
+/**
+ * Extract a scalar value and optional per-channel RGB triple from a GTO property.
+ *
+ * If the property value is a number array with >= 3 elements, the first 3 are
+ * used as the per-channel triple. The scalar is still set from the first element
+ * to maintain backward compatibility. Arrays with 1 or 2 elements use the first
+ * element as the scalar. Empty arrays return undefined for both.
+ */
+function extractScalarAndRGB(
+  rawValue: unknown,
+  defaultScalar: number,
+): { scalar: number | undefined; rgb: [number, number, number] | undefined } {
+  const arr = getNumberArray(rawValue);
+  if (arr && arr.length >= 3) {
+    const r = sanitizeNumber(arr[0]!, defaultScalar);
+    const g = sanitizeNumber(arr[1]!, defaultScalar);
+    const b = sanitizeNumber(arr[2]!, defaultScalar);
+    return { scalar: r, rgb: [r, g, b] };
+  }
+  if (arr && arr.length >= 1) {
+    const scalar = sanitizeNumber(arr[0]!, defaultScalar);
+    return { scalar, rgb: undefined };
+  }
+  // Not an array — try as scalar
+  const scalar = getNumberValue(rawValue);
+  if (typeof scalar === 'number') {
+    return { scalar: sanitizeNumber(scalar, defaultScalar), rgb: undefined };
+  }
+  return { scalar: undefined, rgb: undefined };
 }
 
 /**
@@ -79,20 +192,52 @@ export function parseColorAdjustments(dto: GTODTO): Partial<ColorAdjustments> | 
   const colorNodes = dto.byProtocol('RVColor');
 
   if (colorNodes.length > 0) {
-    const colorComp = colorNodes.first().component('color');
+    const rvColorNode = colorNodes.first();
+    const colorComp = rvColorNode.component('color');
     if (colorComp?.exists()) {
-      const exposure = getNumberValue(colorComp.property('exposure').value());
-      const gamma = getNumberValue(colorComp.property('gamma').value());
-      const contrast = getNumberValue(colorComp.property('contrast').value());
+      // Exposure: default 0 (stops)
+      const exposureResult = extractScalarAndRGB(colorComp.property('exposure').value(), 0);
+      if (typeof exposureResult.scalar === 'number') adjustments.exposure = exposureResult.scalar;
+      if (exposureResult.rgb) adjustments.exposureRGB = exposureResult.rgb;
+
+      // Gamma: default 1
+      const gammaResult = extractScalarAndRGB(colorComp.property('gamma').value(), 1);
+      if (typeof gammaResult.scalar === 'number') adjustments.gamma = gammaResult.scalar;
+      if (gammaResult.rgb) adjustments.gammaRGB = gammaResult.rgb;
+
+      // Contrast: default 1 (0 means identity in OpenRV, map to 1)
+      const contrastResult = extractScalarAndRGB(colorComp.property('contrast').value(), 1);
+      if (typeof contrastResult.scalar === 'number') {
+        adjustments.contrast = contrastResult.scalar === 0 ? 1 : contrastResult.scalar;
+      }
+      if (contrastResult.rgb) {
+        adjustments.contrastRGB = [
+          contrastResult.rgb[0] === 0 ? 1 : contrastResult.rgb[0],
+          contrastResult.rgb[1] === 0 ? 1 : contrastResult.rgb[1],
+          contrastResult.rgb[2] === 0 ? 1 : contrastResult.rgb[2],
+        ];
+      }
+
       const saturation = getNumberValue(colorComp.property('saturation').value());
       const offset = getNumberValue(colorComp.property('offset').value());
 
-      if (typeof exposure === 'number') adjustments.exposure = exposure;
-      if (typeof gamma === 'number') adjustments.gamma = gamma;
-      if (typeof contrast === 'number') adjustments.contrast = contrast === 0 ? 1 : contrast;
       if (typeof saturation === 'number') adjustments.saturation = saturation;
       if (typeof offset === 'number' && adjustments.brightness === undefined) {
         adjustments.brightness = offset;
+      }
+    }
+
+    // Extract luminanceLUT component (separate from 'color' component on RVColor node)
+    const lumLutComp = rvColorNode.component('luminanceLUT');
+    if (lumLutComp?.exists()) {
+      const active = getNumberValue(lumLutComp.property('active').value());
+      if (active != null && active !== 0) {
+        const lutArray = getNumberArray(lumLutComp.property('lut').value());
+        if (lutArray && lutArray.length > 0) {
+          const channels: 1 | 3 = (lutArray.length % 3 === 0) ? 3 : 1;
+          adjustments.inlineLUT = new Float32Array(lutArray);
+          adjustments.lutChannels = channels;
+        }
       }
     }
   }

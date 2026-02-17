@@ -469,6 +469,72 @@ describe('FilmEmulationControl', () => {
     });
   });
 
+  describe('label/checkbox accessibility (M-19)', () => {
+    it('FEC-M19a: checkbox has a unique id attribute', () => {
+      control.show();
+      const checkbox = document.querySelector('[data-testid="film-emulation-enabled-checkbox"]') as HTMLInputElement;
+      expect(checkbox.id).toBe('film-emulation-enabled-checkbox');
+    });
+
+    it('FEC-M19b: label has htmlFor matching the checkbox id', () => {
+      control.show();
+      const checkbox = document.querySelector('[data-testid="film-emulation-enabled-checkbox"]') as HTMLInputElement;
+      const label = checkbox.parentElement!.querySelector('label') as HTMLLabelElement;
+      expect(label.htmlFor).toBe(checkbox.id);
+    });
+
+    it('FEC-M19c: clicking the label toggles the checkbox state', () => {
+      control.show();
+      const checkbox = document.querySelector('[data-testid="film-emulation-enabled-checkbox"]') as HTMLInputElement;
+      const label = checkbox.parentElement!.querySelector('label') as HTMLLabelElement;
+
+      expect(checkbox.checked).toBe(false);
+      label.click();
+      expect(checkbox.checked).toBe(true);
+      label.click();
+      expect(checkbox.checked).toBe(false);
+    });
+  });
+
+  describe('Escape key handling (M-14)', () => {
+    it('FEC-M14a: pressing Escape while the panel is open should close it', () => {
+      control.show();
+      expect(control.isOpen).toBe(true);
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+      expect(control.isOpen).toBe(false);
+    });
+
+    it('FEC-M14b: pressing Escape while the panel is closed should have no effect', () => {
+      expect(control.isOpen).toBe(false);
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+      expect(control.isOpen).toBe(false);
+    });
+
+    it('FEC-M14c: the keydown listener should be removed when the panel closes', () => {
+      const spy = vi.spyOn(document, 'removeEventListener');
+
+      control.show();
+      control.hide();
+
+      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
+      spy.mockRestore();
+    });
+
+    it('FEC-M14d: the keydown listener should be removed on dispose', () => {
+      const spy = vi.spyOn(document, 'removeEventListener');
+
+      control.show();
+      control.dispose();
+
+      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
+      spy.mockRestore();
+    });
+  });
+
   describe('dispose', () => {
     it('FEC-018: dispose removes panel from body', () => {
       control.show();
@@ -502,6 +568,57 @@ describe('FilmEmulationControl', () => {
 
       control.dispose();
       expect(document.getElementById('film-emulation-slider-style')).toBeNull();
+    });
+  });
+
+  describe('focus management (M-18)', () => {
+    it('FEC-M18a: when the panel opens, focus should move to the first interactive element inside it', () => {
+      control.show();
+      const checkbox = document.querySelector('[data-testid="film-emulation-enabled-checkbox"]') as HTMLInputElement;
+      expect(document.activeElement).toBe(checkbox);
+    });
+
+    it('FEC-M18b: when the panel closes, focus should return to the toggle button', () => {
+      const el = control.render();
+      document.body.appendChild(el);
+      control.show();
+      control.hide();
+      const button = el.querySelector('[data-testid="film-emulation-control-button"]') as HTMLButtonElement;
+      expect(document.activeElement).toBe(button);
+      document.body.removeChild(el);
+    });
+  });
+
+  describe('ARIA attributes (M-15)', () => {
+    it('FEC-M15a: toggle button should have aria-haspopup attribute', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="film-emulation-control-button"]') as HTMLButtonElement;
+      expect(button.getAttribute('aria-haspopup')).toBe('dialog');
+    });
+
+    it('FEC-M15b: toggle button aria-expanded should be "false" when panel is closed', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="film-emulation-control-button"]') as HTMLButtonElement;
+      expect(button.getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('FEC-M15c: toggle button aria-expanded should be "true" when panel is open', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="film-emulation-control-button"]') as HTMLButtonElement;
+      control.show();
+      expect(button.getAttribute('aria-expanded')).toBe('true');
+    });
+
+    it('FEC-M15d: panel container should have role="dialog" attribute', () => {
+      control.show();
+      const panel = document.querySelector('[data-testid="film-emulation-panel"]') as HTMLElement;
+      expect(panel.getAttribute('role')).toBe('dialog');
+    });
+
+    it('FEC-M15e: panel container should have aria-label attribute', () => {
+      control.show();
+      const panel = document.querySelector('[data-testid="film-emulation-panel"]') as HTMLElement;
+      expect(panel.getAttribute('aria-label')).toBe('Film Emulation Settings');
     });
   });
 });

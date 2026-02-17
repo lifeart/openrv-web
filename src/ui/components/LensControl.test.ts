@@ -337,4 +337,123 @@ describe('LensControl', () => {
       }).not.toThrow();
     });
   });
+
+  describe('Escape key handling (M-14)', () => {
+    it('LENS-M14a: pressing Escape while the panel is open should close it', () => {
+      control.showPanel();
+      const panel = document.querySelector('.lens-panel') as HTMLElement;
+      expect(panel.style.display).toBe('block');
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+      expect(panel.style.display).toBe('none');
+    });
+
+    it('LENS-M14b: pressing Escape while the panel is closed should have no effect', () => {
+      // Panel is not open - dispatching Escape should be a no-op
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+
+      // Verify the control still works after the no-op
+      control.showPanel();
+      const panel = document.querySelector('.lens-panel') as HTMLElement;
+      expect(panel.style.display).toBe('block');
+    });
+
+    it('LENS-M14c: the keydown listener should be removed when the panel closes', () => {
+      const spy = vi.spyOn(document, 'removeEventListener');
+
+      control.showPanel();
+      control.hidePanel();
+
+      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
+      spy.mockRestore();
+    });
+
+    it('LENS-M14d: the keydown listener should be removed on dispose', () => {
+      const spy = vi.spyOn(document, 'removeEventListener');
+
+      control.showPanel();
+      control.dispose();
+
+      expect(spy).toHaveBeenCalledWith('keydown', expect.any(Function));
+      spy.mockRestore();
+    });
+  });
+
+  describe('slider thumb styling', () => {
+    it('LENS-H02a: LensControl should inject a <style> element into the document on construction', () => {
+      expect(document.getElementById('lens-slider-style')).not.toBeNull();
+    });
+
+    it('LENS-H02b: injected style should contain ::-webkit-slider-thumb rules for .lens-panel input[type="range"]', () => {
+      const styleEl = document.getElementById('lens-slider-style');
+      expect(styleEl).not.toBeNull();
+      expect(styleEl!.textContent).toContain('.lens-panel input[type="range"]::-webkit-slider-thumb');
+    });
+
+    it('LENS-H02c: injected style should contain ::-moz-range-thumb rules for .lens-panel input[type="range"]', () => {
+      const styleEl = document.getElementById('lens-slider-style');
+      expect(styleEl).not.toBeNull();
+      expect(styleEl!.textContent).toContain('.lens-panel input[type="range"]::-moz-range-thumb');
+    });
+
+    it('LENS-H02d: dispose should remove the injected style element from the document', () => {
+      expect(document.getElementById('lens-slider-style')).not.toBeNull();
+
+      control.dispose();
+      expect(document.getElementById('lens-slider-style')).toBeNull();
+    });
+  });
+
+  describe('focus management (M-18)', () => {
+    it('LENS-M18a: when the panel opens, focus should move to the first interactive element inside it', () => {
+      control.showPanel();
+      const panel = document.querySelector('.lens-panel') as HTMLElement;
+      const firstInput = panel.querySelector('input[type="range"]') as HTMLInputElement;
+      expect(document.activeElement).toBe(firstInput);
+    });
+
+    it('LENS-M18b: when the panel closes, focus should return to the toggle button', () => {
+      const el = control.render();
+      document.body.appendChild(el);
+      control.showPanel();
+      control.hidePanel();
+      const button = el.querySelector('button') as HTMLButtonElement;
+      expect(document.activeElement).toBe(button);
+      document.body.removeChild(el);
+    });
+  });
+
+  describe('ARIA attributes (M-15)', () => {
+    it('LENS-M15a: toggle button should have aria-haspopup attribute', () => {
+      const el = control.render();
+      const button = el.querySelector('button') as HTMLButtonElement;
+      expect(button.getAttribute('aria-haspopup')).toBe('dialog');
+    });
+
+    it('LENS-M15b: toggle button aria-expanded should be "false" when panel is closed', () => {
+      const el = control.render();
+      const button = el.querySelector('button') as HTMLButtonElement;
+      expect(button.getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('LENS-M15c: toggle button aria-expanded should be "true" when panel is open', () => {
+      const el = control.render();
+      const button = el.querySelector('button') as HTMLButtonElement;
+      control.showPanel();
+      expect(button.getAttribute('aria-expanded')).toBe('true');
+    });
+
+    it('LENS-M15d: panel container should have role="dialog" attribute', () => {
+      control.showPanel();
+      const panel = document.querySelector('.lens-panel') as HTMLElement;
+      expect(panel.getAttribute('role')).toBe('dialog');
+    });
+
+    it('LENS-M15e: panel container should have aria-label attribute', () => {
+      control.showPanel();
+      const panel = document.querySelector('.lens-panel') as HTMLElement;
+      expect(panel.getAttribute('aria-label')).toBe('Lens Correction Settings');
+    });
+  });
 });

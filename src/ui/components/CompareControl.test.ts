@@ -916,4 +916,44 @@ describe('CompareControl', () => {
       }).not.toThrow();
     });
   });
+
+  describe('ARIA attributes (M-15)', () => {
+    it('CMP-M15a: toggle button should have aria-haspopup attribute', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="compare-control-button"]') as HTMLButtonElement;
+      expect(button.getAttribute('aria-haspopup')).toBe('dialog');
+    });
+
+    it('CMP-M15b: toggle button aria-expanded should be "false" when dropdown is closed', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="compare-control-button"]') as HTMLButtonElement;
+      expect(button.getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('CMP-M15c: toggle button aria-expanded should be "true" when dropdown is open', () => {
+      const el = control.render();
+      document.body.appendChild(el);
+      const button = el.querySelector('[data-testid="compare-control-button"]') as HTMLButtonElement;
+      button.click();
+      expect(button.getAttribute('aria-expanded')).toBe('true');
+    });
+
+    it('CMP-M15d: dropdown container should have role="dialog" attribute', () => {
+      const el = control.render();
+      document.body.appendChild(el);
+      const button = el.querySelector('[data-testid="compare-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="compare-dropdown"]') as HTMLElement;
+      expect(dropdown.getAttribute('role')).toBe('dialog');
+    });
+
+    it('CMP-M15e: dropdown container should have aria-label attribute', () => {
+      const el = control.render();
+      document.body.appendChild(el);
+      const button = el.querySelector('[data-testid="compare-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="compare-dropdown"]') as HTMLElement;
+      expect(dropdown.getAttribute('aria-label')).toBe('Compare Settings');
+    });
+  });
 });
