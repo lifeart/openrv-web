@@ -536,6 +536,25 @@ describe('Waveform GPU rendering', () => {
     });
   });
 
+  it('WF-052c: channel and intensity controls update GPU options on redraw', async () => {
+    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
+    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
+
+    waveform.setMode('rgb');
+    const imageData = new ImageData(10, 10);
+    waveform.update(imageData);
+    mockProcessor.renderWaveform.mockClear();
+
+    waveform.toggleChannel('r');
+    waveform.setIntensity(0.25);
+
+    const lastCall = mockProcessor.renderWaveform.mock.calls.at(-1);
+    expect(lastCall?.[2]).toEqual({
+      channels: { r: false, g: true, b: true },
+      intensity: 0.25,
+    });
+  });
+
   it('WF-053: setPlaybackMode updates GPU processor', async () => {
     const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
     const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;

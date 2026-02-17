@@ -1358,9 +1358,15 @@ export class Viewer {
     let cropClipActive = this.cropManager.isCropClipActive();
 
     // Set target display size for prerender buffer so effects are processed at
-    // display resolution instead of full source resolution (e.g., 4K → display size)
+    // display resolution instead of full source resolution (e.g., 4K → display size).
+    // Cache frames remain untransformed source-space frames, so 90/270 uses
+    // swapped targets to preserve source aspect before draw-time rotation.
     if (this.prerenderBuffer && displayWidth > 0 && displayHeight > 0) {
-      this.prerenderBuffer.setTargetSize(displayWidth, displayHeight);
+      const prerenderDisplayW = uncropActive ? imageDisplayW : displayWidth;
+      const prerenderDisplayH = uncropActive ? imageDisplayH : displayHeight;
+      const prerenderTargetW = userRotation === 90 || userRotation === 270 ? prerenderDisplayH : prerenderDisplayW;
+      const prerenderTargetH = userRotation === 90 || userRotation === 270 ? prerenderDisplayW : prerenderDisplayH;
+      this.prerenderBuffer.setTargetSize(prerenderTargetW, prerenderTargetH);
     }
 
     // Try prerendered cache first during playback for smooth performance with effects
@@ -1383,11 +1389,14 @@ export class Viewer {
           this.cropManager.drawUncropBackground(this.imageCtx, displayWidth, displayHeight, uncropOffsetX, uncropOffsetY, imageDisplayW, imageDisplayH);
         }
 
-        // Draw cached pre-rendered frame scaled to display size
+        // Draw cached pre-rendered frame with current transform.
         if (uncropActive) {
-          this.imageCtx.drawImage(cached.canvas, uncropOffsetX, uncropOffsetY, imageDisplayW, imageDisplayH);
+          this.imageCtx.save();
+          this.imageCtx.translate(uncropOffsetX, uncropOffsetY);
+          this.drawWithTransform(this.imageCtx, cached.canvas, imageDisplayW, imageDisplayH);
+          this.imageCtx.restore();
         } else {
-          this.imageCtx.drawImage(cached.canvas, 0, 0, displayWidth, displayHeight);
+          this.drawWithTransform(this.imageCtx, cached.canvas, displayWidth, displayHeight);
         }
 
         // After drawing cached frame, apply effects not handled by worker
@@ -1677,7 +1686,7 @@ export class Viewer {
       ctx.rect(0, 0, splitX, displayHeight);
       ctx.clip();
       ctx.filter = 'none';
-      ctx.drawImage(element, 0, 0, displayWidth, displayHeight);
+      this.drawWithTransform(ctx, element, displayWidth, displayHeight);
       ctx.restore();
 
       // Draw adjusted (right side)
@@ -1686,7 +1695,7 @@ export class Viewer {
       ctx.rect(splitX, 0, displayWidth - splitX, displayHeight);
       ctx.clip();
       ctx.filter = this.getCanvasFilterString();
-      ctx.drawImage(element, 0, 0, displayWidth, displayHeight);
+      this.drawWithTransform(ctx, element, displayWidth, displayHeight);
       ctx.restore();
 
     } else if (this.wipeManager.mode === 'vertical') {
@@ -1700,7 +1709,7 @@ export class Viewer {
       ctx.rect(0, 0, displayWidth, splitY);
       ctx.clip();
       ctx.filter = 'none';
-      ctx.drawImage(element, 0, 0, displayWidth, displayHeight);
+      this.drawWithTransform(ctx, element, displayWidth, displayHeight);
       ctx.restore();
 
       // Draw adjusted (bottom side)
@@ -1709,7 +1718,7 @@ export class Viewer {
       ctx.rect(0, splitY, displayWidth, displayHeight - splitY);
       ctx.clip();
       ctx.filter = this.getCanvasFilterString();
-      ctx.drawImage(element, 0, 0, displayWidth, displayHeight);
+      this.drawWithTransform(ctx, element, displayWidth, displayHeight);
       ctx.restore();
     }
 
@@ -3113,7 +3122,7 @@ export class Viewer {
       if (gfs.colorTint) {
         // Apply color tint using composite operations
         // First draw the frame
-        ctx.drawImage(frameCanvas, 0, 0, displayWidth, displayHeight);
+        this.drawWithTransform(ctx, frameCanvas, displayWidth, displayHeight);
 
         // Then overlay color tint
         ctx.globalCompositeOperation = 'multiply';
@@ -3122,7 +3131,7 @@ export class Viewer {
         ctx.globalCompositeOperation = 'source-over';
       } else {
         // Just draw with opacity
-        ctx.drawImage(frameCanvas, 0, 0, displayWidth, displayHeight);
+        this.drawWithTransform(ctx, frameCanvas, displayWidth, displayHeight);
       }
 
       ctx.restore();
@@ -3160,7 +3169,13 @@ export class Viewer {
     width: number,
     height: number
   ): ImageData | null {
-    return renderSourceToImageDataUtil(this.session, sourceIndex, width, height);
+    return renderSourceToImageDataUtil(
+      this.session,
+      sourceIndex,
+      width,
+      height,
+      this.transformManager.transform
+    );
   }
 
   /**

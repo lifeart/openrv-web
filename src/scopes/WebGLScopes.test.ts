@@ -341,6 +341,33 @@ describe('WebGLScopesProcessor', () => {
 
       expect(mockGl.drawArrays).toHaveBeenCalledTimes(3);
     });
+
+    it('WGS-018b: RGB waveform respects enabled channel options', () => {
+      const processor = new WebGLScopesProcessor();
+      processor.setImage(new ImageData(100, 100));
+
+      mockGl.drawArrays.mockClear();
+      mockGl.uniform1i.mockClear();
+      processor.renderWaveform(mockOutputCanvas, 'rgb', {
+        channels: { r: true, g: false, b: true },
+      });
+
+      expect(mockGl.drawArrays).toHaveBeenCalledTimes(2);
+      const channelUniformCalls = mockGl.uniform1i.mock.calls.filter((call) => call[0]?.name === 'u_channel');
+      expect(channelUniformCalls.map((call) => call[1])).toEqual([0, 2]);
+    });
+
+    it('WGS-018c: RGB waveform uses provided intensity for opacity', () => {
+      const processor = new WebGLScopesProcessor();
+      processor.setImage(new ImageData(100, 100));
+
+      mockGl.uniform1f.mockClear();
+      processor.renderWaveform(mockOutputCanvas, 'rgb', { intensity: 0.2 });
+
+      const opacityCall = mockGl.uniform1f.mock.calls.find((call) => call[0]?.name === 'u_opacity');
+      expect(opacityCall).toBeDefined();
+      expect(opacityCall![1]).toBe(0.2);
+    });
   });
 
   describe('renderVectorscope', () => {

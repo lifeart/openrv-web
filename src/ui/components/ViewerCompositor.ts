@@ -379,7 +379,7 @@ export class ViewerCompositor {
       ctx.rect(0, 0, splitX, displayHeight);
       ctx.clip();
       ctx.filter = 'none';
-      ctx.drawImage(element, 0, 0, displayWidth, displayHeight);
+      drawWithTransformUtil(ctx, element, displayWidth, displayHeight, this.ctx.getTransform());
       ctx.restore();
 
       // Draw adjusted (right side)
@@ -388,7 +388,7 @@ export class ViewerCompositor {
       ctx.rect(splitX, 0, displayWidth - splitX, displayHeight);
       ctx.clip();
       ctx.filter = getCanvasFilterStringUtil(colorAdjustments, filterStringCache);
-      ctx.drawImage(element, 0, 0, displayWidth, displayHeight);
+      drawWithTransformUtil(ctx, element, displayWidth, displayHeight, this.ctx.getTransform());
       ctx.restore();
 
     } else if (wipeManager.mode === 'vertical') {
@@ -400,7 +400,7 @@ export class ViewerCompositor {
       ctx.rect(0, 0, displayWidth, splitY);
       ctx.clip();
       ctx.filter = 'none';
-      ctx.drawImage(element, 0, 0, displayWidth, displayHeight);
+      drawWithTransformUtil(ctx, element, displayWidth, displayHeight, this.ctx.getTransform());
       ctx.restore();
 
       // Draw adjusted (bottom side)
@@ -409,7 +409,7 @@ export class ViewerCompositor {
       ctx.rect(0, splitY, displayWidth, displayHeight - splitY);
       ctx.clip();
       ctx.filter = getCanvasFilterStringUtil(colorAdjustments, filterStringCache);
-      ctx.drawImage(element, 0, 0, displayWidth, displayHeight);
+      drawWithTransformUtil(ctx, element, displayWidth, displayHeight, this.ctx.getTransform());
       ctx.restore();
     }
 
@@ -584,7 +584,13 @@ export class ViewerCompositor {
     for (const layer of this.stackLayers) {
       if (!layer.visible || layer.opacity === 0) continue;
 
-      const layerData = renderSourceToImageDataUtil(session, layer.sourceIndex, width, height);
+      const layerData = renderSourceToImageDataUtil(
+        session,
+        layer.sourceIndex,
+        width,
+        height,
+        this.ctx.getTransform()
+      );
       if (!layerData) continue;
 
       // Composite this layer onto result
@@ -626,8 +632,20 @@ export class ViewerCompositor {
     if (!sourceA?.element || !sourceB?.element) return null;
 
     // Render both sources to ImageData
-    const dataA = renderSourceToImageDataUtil(session, session.sourceAIndex, width, height);
-    const dataB = renderSourceToImageDataUtil(session, session.sourceBIndex, width, height);
+    const dataA = renderSourceToImageDataUtil(
+      session,
+      session.sourceAIndex,
+      width,
+      height,
+      this.ctx.getTransform()
+    );
+    const dataB = renderSourceToImageDataUtil(
+      session,
+      session.sourceBIndex,
+      width,
+      height,
+      this.ctx.getTransform()
+    );
 
     if (!dataA || !dataB) return null;
 

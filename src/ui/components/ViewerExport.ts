@@ -9,6 +9,7 @@ import { PaintRenderer } from '../../paint/PaintRenderer';
 import { Transform2D } from './TransformControl';
 import { CropRegion } from './CropControl';
 import {
+  drawWithTransform,
   drawWithTransformFill,
   isFullCropRegion,
   getEffectiveDimensions,
@@ -308,7 +309,8 @@ export function renderSourceToImageData(
   session: Session,
   sourceIndex: number,
   width: number,
-  height: number
+  height: number,
+  transform?: Transform2D,
 ): ImageData | null {
   const source = session.getSourceByIndex(sourceIndex);
   if (!source) return null;
@@ -347,8 +349,15 @@ export function renderSourceToImageData(
   tempCtx.imageSmoothingEnabled = true;
   tempCtx.imageSmoothingQuality = 'high';
 
-  // Draw source element
-  tempCtx.drawImage(element, 0, 0, width, height);
+  const hasTransform = !!transform && (transform.rotation !== 0 || transform.flipH || transform.flipV);
+
+  // Draw source element with optional transform so compositing modes
+  // (blend/difference/stack) match the main viewer orientation.
+  if (hasTransform) {
+    drawWithTransform(tempCtx, element, width, height, transform!);
+  } else {
+    tempCtx.drawImage(element, 0, 0, width, height);
+  }
 
   return tempCtx.getImageData(0, 0, width, height);
 }

@@ -31,6 +31,7 @@ interface TestableViewerGLRenderer {
   _isAsyncRenderer: boolean;
   _hdrRenderActive: boolean;
   _sdrWebGLRenderActive: boolean;
+  _lastHDRBlitFrame: { data: Float32Array; width: number; height: number } | null;
   _webgpuBlit: { initialized: boolean; getCanvas: () => HTMLCanvasElement; uploadAndDisplay?: (pixels: Float32Array, w: number, h: number) => void } | null;
   _canvas2dBlit: { initialized: boolean; getCanvas: () => HTMLCanvasElement; uploadAndDisplay?: (pixels: Float32Array, w: number, h: number) => void; dispose?: () => void } | null;
   _canvas2dBlitFailed: boolean;
@@ -124,6 +125,10 @@ describe('ViewerGLRenderer', () => {
       expect(r.capabilities).toBe(caps);
       expect(r.capabilities!.displayHDR).toBe(true);
       expect(r.capabilities!.webglHLG).toBe(true);
+    });
+
+    it('VGLR-084: lastHDRBlitFrame is null initially', () => {
+      expect(renderer.lastHDRBlitFrame).toBeNull();
     });
   });
 
@@ -850,6 +855,22 @@ describe('ViewerGLRenderer', () => {
       expect(uploadFn).toHaveBeenCalledWith(expect.any(Float32Array), 100, 100);
     });
 
+    it('VGLR-085: Canvas2D blit path stores lastHDRBlitFrame for picker sampling', () => {
+      const { glRenderer, mockRendererObj, setPendingChanges } = setupCanvas2DBlitRenderer();
+      setPendingChanges(true);
+
+      const pixels = new Float32Array(100 * 100 * 4);
+      (mockRendererObj.renderImageToFloat as ReturnType<typeof vi.fn>).mockReturnValue(pixels);
+
+      const image = new IPImage({ width: 10, height: 10, channels: 4, dataType: 'float32' });
+      glRenderer.renderHDRWithWebGL(image, 100, 100);
+
+      expect(glRenderer.lastHDRBlitFrame).not.toBeNull();
+      expect(glRenderer.lastHDRBlitFrame?.data).toBe(pixels);
+      expect(glRenderer.lastHDRBlitFrame?.width).toBe(100);
+      expect(glRenderer.lastHDRBlitFrame?.height).toBe(100);
+    });
+
     it('VGLR-078: Canvas2D blit path skips render when same image, same dims, no pending changes', () => {
       const { glRenderer, setPendingChanges } = setupCanvas2DBlitRenderer();
       const internal = glRenderer as unknown as TestableViewerGLRenderer;
@@ -1002,6 +1023,17 @@ describe('ViewerGLRenderer', () => {
       glRenderer.renderHDRWithWebGL(image, 100, 100);
 
       expect(canvas2dBlitCanvas.style.display).toBe('none');
+    });
+
+    it('VGLR-086: deactivateHDRMode clears lastHDRBlitFrame cache', () => {
+      const internal = renderer as unknown as TestableViewerGLRenderer;
+      internal._glCanvas = document.createElement('canvas');
+      internal._hdrRenderActive = true;
+      internal._lastHDRBlitFrame = { data: new Float32Array(4), width: 1, height: 1 };
+
+      renderer.deactivateHDRMode();
+
+      expect(renderer.lastHDRBlitFrame).toBeNull();
     });
   });
 
