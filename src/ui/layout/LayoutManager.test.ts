@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { LayoutStore, COLLAPSED_RAIL_SIZE } from './LayoutStore';
+import { LayoutStore, COLLAPSED_RAIL_SIZE, DEFAULT_PANEL_STATES } from './LayoutStore';
 import { LayoutManager } from './LayoutManager';
 
 // Polyfill PointerEvent for jsdom (which does not implement it)
@@ -595,6 +595,41 @@ describe('LayoutManager', () => {
     });
   });
 
+  describe('L-36: Double-click-to-reset on layout splitters', () => {
+    it('LM-L36a: double-clicking a side panel handle resets its size to the default preset value', () => {
+      // Register content so the panel can expand
+      const tab = document.createElement('div');
+      manager.addPanelTab('right', 'Tab', tab);
+
+      // Expand and resize the right panel to a non-default size
+      store.setPanelCollapsed('right', false);
+      store.setPanelSize('right', 450);
+      expect(store.panels.right.size).toBe(450);
+
+      // Double-click the right handle
+      const root = manager.getElement();
+      const rightHandle = root.querySelector('[data-testid="layout-handle-right"]') as HTMLElement;
+      rightHandle.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+
+      // Size should be reset to default
+      expect(store.panels.right.size).toBe(DEFAULT_PANEL_STATES.right.size);
+    });
+
+    it('LM-L36b: double-clicking the bottom panel handle resets its height to the default', () => {
+      // Resize bottom panel to a non-default size
+      store.setPanelSize('bottom', 250);
+      expect(store.panels.bottom.size).toBe(250);
+
+      // Double-click the bottom handle
+      const root = manager.getElement();
+      const bottomHandle = root.querySelector('[data-testid="layout-handle-bottom"]') as HTMLElement;
+      bottomHandle.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+
+      // Size should be reset to default
+      expect(store.panels.bottom.size).toBe(DEFAULT_PANEL_STATES.bottom.size);
+    });
+  });
+
   describe('Bottom panel collapse/expand', () => {
     it('LM-070: bottom panel is visible when not collapsed', () => {
       const root = manager.getElement();
@@ -752,6 +787,56 @@ describe('LayoutManager', () => {
       manager.clearPanelTabs('left');
 
       expect(manager.hasPanelContent('left')).toBe(false);
+    });
+  });
+
+  describe('L-37: Bottom panel collapse toggle button', () => {
+    it('LM-L37a: Bottom panel should have a collapse/expand toggle button', () => {
+      const root = manager.getElement();
+      const btn = root.querySelector('[data-testid="layout-collapse-bottom"]');
+      expect(btn).not.toBeNull();
+      expect(btn).toBeInstanceOf(HTMLButtonElement);
+    });
+
+    it('LM-L37b: Clicking the button should toggle the bottom panel collapsed state', () => {
+      const root = manager.getElement();
+      const btn = root.querySelector('[data-testid="layout-collapse-bottom"]') as HTMLButtonElement;
+
+      // Bottom panel starts expanded
+      expect(store.panels.bottom.collapsed).toBe(false);
+
+      // Click to collapse
+      btn.click();
+      expect(store.panels.bottom.collapsed).toBe(true);
+
+      // Click to expand
+      btn.click();
+      expect(store.panels.bottom.collapsed).toBe(false);
+    });
+
+    it('LM-L37c: The button icon should reflect the current collapsed state (chevron direction)', () => {
+      const root = manager.getElement();
+      const btn = root.querySelector('[data-testid="layout-collapse-bottom"]') as HTMLButtonElement;
+
+      // chevron-down path: points="6 9 12 15 18 9"
+      // chevron-up path: points="18 15 12 9 6 15"
+      const chevronDownPoints = '6 9 12 15 18 9';
+      const chevronUpPoints = '18 15 12 9 6 15';
+
+      // When expanded, icon should be chevron-down (collapse direction)
+      expect(btn.innerHTML).toContain(chevronDownPoints);
+
+      // Collapse the bottom panel
+      store.setPanelCollapsed('bottom', true);
+
+      // When collapsed, icon should be chevron-up (expand direction)
+      expect(btn.innerHTML).toContain(chevronUpPoints);
+
+      // Expand again
+      store.setPanelCollapsed('bottom', false);
+
+      // Should go back to chevron-down
+      expect(btn.innerHTML).toContain(chevronDownPoints);
     });
   });
 });

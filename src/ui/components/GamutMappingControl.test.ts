@@ -406,6 +406,50 @@ describe('GamutMappingControl', () => {
     });
   });
 
+  describe('scroll/resize repositioning (L-38)', () => {
+    it('GM-L38a: should register a scroll listener when the panel opens', () => {
+      const spy = vi.spyOn(window, 'addEventListener');
+      control.show();
+      expect(spy).toHaveBeenCalledWith('scroll', expect.any(Function), true);
+      spy.mockRestore();
+    });
+
+    it('GM-L38b: should register a resize listener when the panel opens', () => {
+      const spy = vi.spyOn(window, 'addEventListener');
+      control.show();
+      expect(spy).toHaveBeenCalledWith('resize', expect.any(Function));
+      spy.mockRestore();
+    });
+
+    it('GM-L38c: on window resize, the panel should update its position', () => {
+      control.show();
+      const panel = document.querySelector('[data-testid="gamut-mapping-panel"]') as HTMLElement;
+
+      // Mock getBoundingClientRect to return a different position
+      vi.spyOn(
+        control.render().querySelector('[data-testid="gamut-mapping-control-button"]')!,
+        'getBoundingClientRect',
+      ).mockReturnValue({
+        top: 100, bottom: 130, left: 200, right: 300, width: 100, height: 30, x: 200, y: 100, toJSON: () => ({}),
+      });
+
+      window.dispatchEvent(new Event('resize'));
+
+      expect(panel.style.top).toBe('134px'); // 130 + 4
+      expect(panel.style.left).toBe(`${Math.max(8, 300 - 240)}px`);
+    });
+
+    it('GM-L38d: listeners should be removed when the panel closes', () => {
+      control.show();
+      const spy = vi.spyOn(window, 'removeEventListener');
+      control.hide();
+
+      expect(spy).toHaveBeenCalledWith('scroll', expect.any(Function), true);
+      expect(spy).toHaveBeenCalledWith('resize', expect.any(Function));
+      spy.mockRestore();
+    });
+  });
+
   describe('disposal', () => {
     it('GM-050: dispose removes panel from DOM', () => {
       control.show();

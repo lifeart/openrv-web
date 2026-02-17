@@ -29,7 +29,7 @@ import {
 } from './AnnotationStore';
 import type { ColorAdjustments, ChannelMode, LinearizeState } from '../../core/types/color';
 import type { FilterSettings } from '../../core/types/filter';
-import type { Transform2D, CropState } from '../../core/types/transform';
+import type { Transform2D, CropState, UncropState } from '../../core/types/transform';
 import type { ScopesState } from '../../core/types/scopes';
 import type { CDLValues } from '../../color/CDL';
 import type { LensDistortionParams } from '../../transform/LensDistortion';
@@ -99,6 +99,7 @@ export interface GTOViewSettings {
   stereoAlignMode?: StereoAlignMode;
   scopes?: ScopesState;
   linearize?: LinearizeState;
+  uncrop?: UncropState;
 }
 
 /**

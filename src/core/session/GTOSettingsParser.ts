@@ -12,7 +12,7 @@ import {
 } from './AnnotationStore';
 import type { ColorAdjustments, ChannelMode, LinearizeState } from '../../core/types/color';
 import { DEFAULT_LINEARIZE_STATE } from '../../core/types/color';
-import type { Transform2D, CropState } from '../../core/types/transform';
+import type { Transform2D, CropState, UncropState } from '../../core/types/transform';
 import type { ScopesState } from '../../core/types/scopes';
 import type { CDLValues } from '../../color/CDL';
 import type { LensDistortionParams } from '../../transform/LensDistortion';
@@ -72,6 +72,11 @@ export function parseInitialSettings(
   const linearize = parseLinearize(dto);
   if (linearize) {
     settings.linearize = linearize;
+  }
+
+  const uncrop = parseUncrop(dto);
+  if (uncrop) {
+    settings.uncrop = uncrop;
   }
 
   return Object.keys(settings).length > 0 ? settings : null;
@@ -575,4 +580,39 @@ export function parseScopes(dto: GTODTO): ScopesState | null {
   }
 
   return null;
+}
+
+/**
+ * Parse uncrop settings from RVFormat protocol nodes.
+ *
+ * Extracts the `uncrop` component which contains:
+ *   - active: 0 or 1
+ *   - x, y: offset of data window inside display window
+ *   - width, height: display window dimensions
+ *
+ * Returns null when:
+ *   - No RVFormat node exists
+ *   - No uncrop component exists
+ *   - active is 0 or undefined
+ *   - width or height is <= 0
+ */
+export function parseUncrop(dto: GTODTO): UncropState | null {
+  const nodes = dto.byProtocol('RVFormat');
+  if (nodes.length === 0) return null;
+
+  const uncropComp = nodes.first().component('uncrop');
+  if (!uncropComp?.exists()) return null;
+
+  const active = getNumberValue(uncropComp.property('active').value());
+  if (active !== 1) return null;
+
+  const x = getNumberValue(uncropComp.property('x').value()) ?? 0;
+  const y = getNumberValue(uncropComp.property('y').value()) ?? 0;
+  const width = getNumberValue(uncropComp.property('width').value()) ?? 0;
+  const height = getNumberValue(uncropComp.property('height').value()) ?? 0;
+
+  // Treat non-positive dimensions as inactive
+  if (width <= 0 || height <= 0) return null;
+
+  return { active: true, x, y, width, height };
 }

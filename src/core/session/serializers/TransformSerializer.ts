@@ -168,6 +168,19 @@ export interface FormatSettings {
     /** Bottom edge (in pixels) */
     ymax?: number;
   };
+  /** Uncrop (data window -> display window) settings */
+  uncrop?: {
+    /** Uncrop is active */
+    active?: boolean;
+    /** X offset of data window inside display window (pixels) */
+    x?: number;
+    /** Y offset of data window inside display window (pixels) */
+    y?: number;
+    /** Display window width (pixels) */
+    width?: number;
+    /** Display window height (pixels) */
+    height?: number;
+  };
   /** Channel mapping names */
   channels?: string[];
 }
@@ -353,6 +366,19 @@ export const TransformSerializer = {
         .float('ymin', crop.ymin ?? 0)
         .float('xmax', crop.xmax ?? 0)
         .float('ymax', crop.ymax ?? 0)
+        .end();
+    }
+
+    // Uncrop component
+    if (settings.uncrop) {
+      const uncrop = settings.uncrop;
+      formatObject
+        .component('uncrop')
+        .int('active', uncrop.active !== false ? 1 : 0)
+        .int('x', uncrop.x ?? 0)
+        .int('y', uncrop.y ?? 0)
+        .int('width', uncrop.width ?? 0)
+        .int('height', uncrop.height ?? 0)
         .end();
     }
 

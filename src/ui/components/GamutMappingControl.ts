@@ -60,6 +60,7 @@ export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents>
 
   private boundHandleDocumentClick: (e: MouseEvent) => void;
   private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
+  private readonly boundHandleReposition: () => void;
 
   constructor() {
     super();
@@ -139,6 +140,15 @@ export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents>
     this.boundHandleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && this.isPanelOpen) {
         this.hide();
+      }
+    };
+
+    // Reposition on scroll/resize
+    this.boundHandleReposition = () => {
+      if (this.isPanelOpen) {
+        const rect = this.button.getBoundingClientRect();
+        this.panel.style.top = `${rect.bottom + 4}px`;
+        this.panel.style.left = `${Math.max(8, rect.right - 240)}px`;
       }
     };
   }
@@ -371,6 +381,8 @@ export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents>
     this.button.setAttribute('aria-expanded', 'true');
     this.updateButtonState();
     document.addEventListener('keydown', this.boundHandleKeyDown);
+    window.addEventListener('scroll', this.boundHandleReposition, true);
+    window.addEventListener('resize', this.boundHandleReposition);
 
     // Move focus to the first interactive element in the panel
     this.modeSelect?.focus();
@@ -382,6 +394,8 @@ export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents>
     this.button.setAttribute('aria-expanded', 'false');
     this.updateButtonState();
     document.removeEventListener('keydown', this.boundHandleKeyDown);
+    window.removeEventListener('scroll', this.boundHandleReposition, true);
+    window.removeEventListener('resize', this.boundHandleReposition);
 
     // Return focus to the toggle button
     this.button.focus();
@@ -422,6 +436,8 @@ export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents>
   dispose(): void {
     document.removeEventListener('keydown', this.boundHandleKeyDown);
     document.removeEventListener('click', this.boundHandleDocumentClick);
+    window.removeEventListener('scroll', this.boundHandleReposition, true);
+    window.removeEventListener('resize', this.boundHandleReposition);
     if (this.panel.parentNode) {
       this.panel.parentNode.removeChild(this.panel);
     }

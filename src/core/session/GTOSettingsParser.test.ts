@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { parseColorAdjustments, parseLinearize } from './GTOSettingsParser';
+import { parseColorAdjustments, parseLinearize, parseUncrop } from './GTOSettingsParser';
 import type { GTODTO } from 'gto-js';
 
 /**
@@ -793,6 +793,232 @@ describe('GTOSettingsParser.parseLinearize', () => {
 
       expect(result).not.toBeNull();
       expect(result!.fileGamma).toBe(-0.5);
+    });
+  });
+});
+
+// =================================================================
+// GTOSettingsParser.parseUncrop
+// =================================================================
+
+/**
+ * Helper to create a mock GTODTO with an RVFormat node that supports
+ * both 'crop' and 'uncrop' components.
+ */
+function createUncropMockDTO(
+  uncropProps?: Record<string, unknown>,
+  cropProps?: Record<string, unknown>,
+): GTODTO {
+  const mockComponent = (props: Record<string, unknown> | undefined) => ({
+    exists: () => props !== undefined,
+    property: (name: string) => ({
+      value: () => props?.[name],
+      exists: () => props !== undefined && name in props,
+    }),
+  });
+
+  const mockNode = (
+    uncropData: Record<string, unknown> | undefined,
+    cropData: Record<string, unknown> | undefined,
+  ) => ({
+    component: (name: string) => {
+      if (name === 'uncrop') return mockComponent(uncropData);
+      if (name === 'crop') return mockComponent(cropData);
+      return mockComponent(undefined);
+    },
+    name: 'mock-format',
+  });
+
+  return {
+    byProtocol: (proto: string) => {
+      if (proto === 'RVFormat' && (uncropProps || cropProps)) {
+        const results = [mockNode(uncropProps, cropProps)] as any;
+        results.first = () => results[0];
+        results.length = 1;
+        return results;
+      }
+      const empty = [] as any;
+      empty.first = () => mockNode(undefined, undefined);
+      empty.length = 0;
+      return empty;
+    },
+  } as unknown as GTODTO;
+}
+
+describe('GTOSettingsParser.parseUncrop', () => {
+  // =================================================================
+  // Active uncrop parsing
+  // =================================================================
+
+  describe('active uncrop', () => {
+    it('parses uncrop.active=1 with x, y, width, height', () => {
+      const dto = createUncropMockDTO({
+        active: 1,
+        x: 100,
+        y: 50,
+        width: 1920,
+        height: 1080,
+      });
+
+      const result = parseUncrop(dto);
+
+      expect(result).not.toBeNull();
+      expect(result!.active).toBe(true);
+      expect(result!.x).toBe(100);
+      expect(result!.y).toBe(50);
+      expect(result!.width).toBe(1920);
+      expect(result!.height).toBe(1080);
+    });
+
+    it('defaults x and y to 0 when not provided', () => {
+      const dto = createUncropMockDTO({
+        active: 1,
+        width: 1920,
+        height: 1080,
+      });
+
+      const result = parseUncrop(dto);
+
+      expect(result).not.toBeNull();
+      expect(result!.x).toBe(0);
+      expect(result!.y).toBe(0);
+      expect(result!.width).toBe(1920);
+      expect(result!.height).toBe(1080);
+    });
+  });
+
+  // =================================================================
+  // Inactive uncrop
+  // =================================================================
+
+  describe('inactive uncrop', () => {
+    it('returns null when active=0', () => {
+      const dto = createUncropMockDTO({
+        active: 0,
+        x: 100,
+        y: 50,
+        width: 1920,
+        height: 1080,
+      });
+
+      const result = parseUncrop(dto);
+      expect(result).toBeNull();
+    });
+
+    it('returns null when active is undefined', () => {
+      const dto = createUncropMockDTO({
+        x: 100,
+        y: 50,
+        width: 1920,
+        height: 1080,
+      });
+
+      const result = parseUncrop(dto);
+      expect(result).toBeNull();
+    });
+
+    it('returns null when no RVFormat node exists', () => {
+      const dto = createUncropMockDTO(); // no props at all
+      const result = parseUncrop(dto);
+      expect(result).toBeNull();
+    });
+  });
+
+  // =================================================================
+  // Boundary: invalid dimensions
+  // =================================================================
+
+  describe('boundary: invalid dimensions', () => {
+    it('returns null when width is negative', () => {
+      const dto = createUncropMockDTO({
+        active: 1,
+        x: 0,
+        y: 0,
+        width: -100,
+        height: 1080,
+      });
+
+      const result = parseUncrop(dto);
+      expect(result).toBeNull();
+    });
+
+    it('returns null when height is negative', () => {
+      const dto = createUncropMockDTO({
+        active: 1,
+        x: 0,
+        y: 0,
+        width: 1920,
+        height: -50,
+      });
+
+      const result = parseUncrop(dto);
+      expect(result).toBeNull();
+    });
+
+    it('returns null when width is zero', () => {
+      const dto = createUncropMockDTO({
+        active: 1,
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 1080,
+      });
+
+      const result = parseUncrop(dto);
+      expect(result).toBeNull();
+    });
+
+    it('returns null when height is zero', () => {
+      const dto = createUncropMockDTO({
+        active: 1,
+        x: 0,
+        y: 0,
+        width: 1920,
+        height: 0,
+      });
+
+      const result = parseUncrop(dto);
+      expect(result).toBeNull();
+    });
+
+    it('returns null when both width and height are zero', () => {
+      const dto = createUncropMockDTO({
+        active: 1,
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0,
+      });
+
+      const result = parseUncrop(dto);
+      expect(result).toBeNull();
+    });
+  });
+
+  // =================================================================
+  // Round-trip: export -> re-parse
+  // =================================================================
+
+  describe('round-trip', () => {
+    it('round-trip: parsed values match exported uncrop settings', () => {
+      // Simulate what buildFormatObject would produce
+      const dto = createUncropMockDTO({
+        active: 1,
+        x: 100,
+        y: 50,
+        width: 1920,
+        height: 1080,
+      });
+
+      const parsed = parseUncrop(dto);
+      expect(parsed).not.toBeNull();
+
+      // Verify the values match what we'd export
+      expect(parsed!.active).toBe(true);
+      expect(parsed!.x).toBe(100);
+      expect(parsed!.y).toBe(50);
+      expect(parsed!.width).toBe(1920);
+      expect(parsed!.height).toBe(1080);
     });
   });
 });

@@ -638,7 +638,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### L-36: No double-click-to-reset on layout splitters
+### ~~L-36: No double-click-to-reset on layout splitters~~ FIXED
 
 **File:** `src/ui/layout/LayoutManager.ts:252-289`
 
@@ -652,7 +652,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### L-37: Bottom panel has no collapse toggle button
+### ~~L-37: Bottom panel has no collapse toggle button~~ FIXED
 
 **File:** `src/ui/layout/LayoutManager.ts:132`
 
@@ -667,7 +667,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### L-38: GamutMappingControl panel does not reposition on scroll/resize
+### ~~L-38: GamutMappingControl panel does not reposition on scroll/resize~~ FIXED
 
 **File:** `src/ui/components/GamutMappingControl.ts` (show method, lines 315-325)
 
@@ -683,7 +683,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### L-39: CurveEditor canvas not keyboard-accessible
+### ~~L-39: CurveEditor canvas not keyboard-accessible~~ FIXED
 
 **File:** `src/ui/components/CurveEditor.ts:129-136`
 
@@ -698,7 +698,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### L-40: ColorWheels canvas not keyboard-accessible
+### ~~L-40: ColorWheels canvas not keyboard-accessible~~ FIXED
 
 **File:** `src/ui/components/ColorWheels.ts:148-151`
 

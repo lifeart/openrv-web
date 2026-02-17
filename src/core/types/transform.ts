@@ -34,3 +34,24 @@ export const DEFAULT_CROP_STATE: CropState = {
   region: { ...DEFAULT_CROP_REGION },
   aspectRatio: null,
 };
+
+/**
+ * Uncrop state parsed from RVFormat nodes.
+ *
+ * Represents the display window dimensions and the offset at which the
+ * data window is placed inside the display window.  When `active` is true
+ * the decoder should expand the pixel buffer from the data window size to
+ * the display window size, filling padding pixels with transparent black.
+ */
+export interface UncropState {
+  /** Whether uncrop is enabled */
+  active: boolean;
+  /** X offset of data window inside display window (pixels) */
+  x: number;
+  /** Y offset of data window inside display window (pixels) */
+  y: number;
+  /** Display window width (pixels) */
+  width: number;
+  /** Display window height (pixels) */
+  height: number;
+}

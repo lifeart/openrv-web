@@ -10,7 +10,7 @@
  * and a content area with tabs.
  */
 
-import { LayoutStore, PanelId, COLLAPSED_RAIL_SIZE, LayoutPresetId } from './LayoutStore';
+import { LayoutStore, PanelId, COLLAPSED_RAIL_SIZE, LayoutPresetId, DEFAULT_PANEL_STATES } from './LayoutStore';
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from '../components/shared/Icons';
 
@@ -36,6 +36,7 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
   private viewerSlot!: HTMLElement;
   private bottomSlot!: HTMLElement;
   private bottomHandle!: HTMLElement;
+  private bottomCollapseBtn!: HTMLButtonElement;
   private panels: Record<'left' | 'right', PanelElements> = {} as any;
   private presetBar!: HTMLElement;
   private _presetButtons: Map<LayoutPresetId, HTMLButtonElement> = new Map();
@@ -137,8 +138,9 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
     this.middleSection.appendChild(this.viewerSlot);
     this.middleSection.appendChild(this.panels.right.wrapper);
 
-    // Bottom handle + bottom slot
+    // Bottom handle + collapse button + bottom slot
     this.bottomHandle = this.createDragHandle('bottom');
+    this.bottomCollapseBtn = this.createBottomCollapseButton();
     this.bottomSlot = document.createElement('div');
     this.bottomSlot.className = 'layout-bottom';
     this.bottomSlot.style.cssText = 'flex-shrink: 0; overflow: hidden;';
@@ -147,6 +149,7 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
     this.root.appendChild(this.presetBar);
     this.root.appendChild(this.middleSection);
     this.root.appendChild(this.bottomHandle);
+    this.root.appendChild(this.bottomCollapseBtn);
     this.root.appendChild(this.bottomSlot);
   }
 
@@ -297,7 +300,44 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
 
     handle.addEventListener('pointerdown', (e) => this.onDragStart(panelId, e));
 
+    // Double-click resets the panel to its default preset size
+    handle.addEventListener('dblclick', () => {
+      const defaultState = DEFAULT_PANEL_STATES[panelId];
+      this.store.setPanelSize(panelId, defaultState.size);
+    });
+
     return handle;
+  }
+
+  private createBottomCollapseButton(): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.dataset.testid = 'layout-collapse-bottom';
+    btn.title = 'Toggle bottom panel';
+    btn.innerHTML = getIconSvg('chevron-down', 'sm');
+    btn.style.cssText = `
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 4px;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    `;
+    btn.addEventListener('click', () => this.store.togglePanelCollapsed('bottom'));
+    btn.addEventListener('mouseenter', () => {
+      btn.style.background = 'var(--bg-hover)';
+      btn.style.color = 'var(--text-primary)';
+    });
+    btn.addEventListener('mouseleave', () => {
+      btn.style.background = 'transparent';
+      btn.style.color = 'var(--text-muted)';
+    });
+    return btn;
   }
 
   private createPresetBar(): HTMLElement {
@@ -502,10 +542,12 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
       this.bottomSlot.style.height = '0px';
       this.bottomSlot.style.display = 'none';
       this.bottomHandle.style.display = 'none';
+      this.bottomCollapseBtn.innerHTML = getIconSvg('chevron-up', 'sm');
     } else {
       this.bottomSlot.style.height = `${bottom.size}px`;
       this.bottomSlot.style.display = '';
       this.bottomHandle.style.display = '';
+      this.bottomCollapseBtn.innerHTML = getIconSvg('chevron-down', 'sm');
     }
 
     this.emit('viewerResized', undefined as unknown as void);

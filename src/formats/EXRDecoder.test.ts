@@ -10,10 +10,12 @@ import {
   getEXRInfo,
   extractLayerInfo,
   resolveChannelMapping,
+  applyUncrop,
   EXRCompression,
   EXRPixelType,
   EXRChannel,
   EXRHeader,
+  EXRBox2i,
 } from './EXRDecoder';
 
 // EXR magic number
@@ -2233,3 +2235,425 @@ describe('Multi-part EXR', () => {
     });
   });
 });
+
+// ===== Uncrop (data window -> display window) Tests =====
+
+describe('EXR Uncrop (applyUncrop)', () => {
+  describe('applyUncrop - identity', () => {
+    it('EXR-UC001: should return data unchanged when windows are identical', () => {
+      const dw: EXRBox2i = { xMin: 0, yMin: 0, xMax: 3, yMax: 2 };
+      const dispW: EXRBox2i = { xMin: 0, yMin: 0, xMax: 3, yMax: 2 };
+      const data = new Float32Array(4 * 3 * 4); // 4x3 RGBA
+      data[0] = 0.5; // mark first pixel red
+
+      const result = applyUncrop(data, dw, dispW);
+      expect(result.width).toBe(4);
+      expect(result.height).toBe(3);
+      expect(result.data).toBe(data); // same reference
+    });
+  });
+
+  describe('applyUncrop - expansion', () => {
+    it('EXR-UC010: should expand a small data window into a larger display window', () => {
+      // Data window: 2x2 at (1,1)-(2,2)
+      // Display window: 4x4 at (0,0)-(3,3)
+      const dw: EXRBox2i = { xMin: 1, yMin: 1, xMax: 2, yMax: 2 };
+      const dispW: EXRBox2i = { xMin: 0, yMin: 0, xMax: 3, yMax: 3 };
+
+      const dwWidth = 2, dwHeight = 2;
+      const data = new Float32Array(dwWidth * dwHeight * 4);
+
+      // Fill with known values: R=1, G=0.5, B=0.25, A=1
+      for (let i = 0; i < dwWidth * dwHeight; i++) {
+        data[i * 4 + 0] = 1.0;
+        data[i * 4 + 1] = 0.5;
+        data[i * 4 + 2] = 0.25;
+        data[i * 4 + 3] = 1.0;
+      }
+
+      const result = applyUncrop(data, dw, dispW);
+      expect(result.width).toBe(4);
+      expect(result.height).toBe(4);
+      expect(result.data.length).toBe(4 * 4 * 4);
+
+      // Check that pixels outside data window are transparent black (0,0,0,0)
+      // Top-left corner (0,0) should be transparent
+      expect(result.data[0]).toBe(0);
+      expect(result.data[1]).toBe(0);
+      expect(result.data[2]).toBe(0);
+      expect(result.data[3]).toBe(0);
+
+      // Pixel at (1,1) should have our data (offset = (1*4+1)*4 = 20)
+      const idx = (1 * 4 + 1) * 4;
+      expect(result.data[idx + 0]).toBe(1.0);
+      expect(result.data[idx + 1]).toBe(0.5);
+      expect(result.data[idx + 2]).toBe(0.25);
+      expect(result.data[idx + 3]).toBe(1.0);
+
+      // Pixel at (2,2) should also have data
+      const idx2 = (2 * 4 + 2) * 4;
+      expect(result.data[idx2 + 0]).toBe(1.0);
+      expect(result.data[idx2 + 1]).toBe(0.5);
+
+      // Bottom-right corner (3,3) should be transparent
+      const idx3 = (3 * 4 + 3) * 4;
+      expect(result.data[idx3 + 0]).toBe(0);
+      expect(result.data[idx3 + 1]).toBe(0);
+      expect(result.data[idx3 + 2]).toBe(0);
+      expect(result.data[idx3 + 3]).toBe(0);
+    });
+
+    it('EXR-UC011: should place data at correct offset for non-zero display window origin', () => {
+      // Data window: (100,50)-(500,400) => 401x351
+      // Display window: (0,0)-(1919,1079) => 1920x1080
+      const dw: EXRBox2i = { xMin: 100, yMin: 50, xMax: 500, yMax: 400 };
+      const dispW: EXRBox2i = { xMin: 0, yMin: 0, xMax: 1919, yMax: 1079 };
+
+      const dwWidth = 401, dwHeight = 351;
+      const data = new Float32Array(dwWidth * dwHeight * 4);
+
+      // Fill all data pixels with R=0.7, G=0.3, B=0.1, A=0.9
+      for (let i = 0; i < dwWidth * dwHeight; i++) {
+        data[i * 4 + 0] = 0.7;
+        data[i * 4 + 1] = 0.3;
+        data[i * 4 + 2] = 0.1;
+        data[i * 4 + 3] = 0.9;
+      }
+
+      const result = applyUncrop(data, dw, dispW);
+      expect(result.width).toBe(1920);
+      expect(result.height).toBe(1080);
+
+      // Pixel at (0,0) should be transparent black
+      expect(result.data[0]).toBe(0);
+      expect(result.data[3]).toBe(0);
+
+      // Pixel at (100,50) - the first data pixel
+      const idx = (50 * 1920 + 100) * 4;
+      expect(result.data[idx + 0]).toBe(0.7);
+      expect(result.data[idx + 1]).toBe(0.3);
+      expect(result.data[idx + 2]).toBe(0.1);
+      expect(result.data[idx + 3]).toBe(0.9);
+
+      // Pixel at (500,400) - the last data pixel
+      const idxLast = (400 * 1920 + 500) * 4;
+      expect(result.data[idxLast + 0]).toBe(0.7);
+      expect(result.data[idxLast + 3]).toBe(0.9);
+
+      // Pixel at (501,400) - just outside data window
+      const idxOutside = (400 * 1920 + 501) * 4;
+      expect(result.data[idxOutside + 0]).toBe(0);
+      expect(result.data[idxOutside + 3]).toBe(0);
+    });
+
+    it('EXR-UC012: fill pixels outside data window are transparent black (0,0,0,0)', () => {
+      const dw: EXRBox2i = { xMin: 1, yMin: 1, xMax: 1, yMax: 1 };
+      const dispW: EXRBox2i = { xMin: 0, yMin: 0, xMax: 2, yMax: 2 };
+
+      // 1x1 data window
+      const data = new Float32Array(4);
+      data[0] = 0.8;
+      data[1] = 0.6;
+      data[2] = 0.4;
+      data[3] = 1.0;
+
+      const result = applyUncrop(data, dw, dispW);
+      expect(result.width).toBe(3);
+      expect(result.height).toBe(3);
+
+      // Check all 9 pixels - only (1,1) should have data
+      for (let y = 0; y < 3; y++) {
+        for (let x = 0; x < 3; x++) {
+          const idx = (y * 3 + x) * 4;
+          if (x === 1 && y === 1) {
+            expect(result.data[idx + 0]).toBe(0.8);
+            expect(result.data[idx + 1]).toBe(0.6);
+            expect(result.data[idx + 2]).toBe(0.4);
+            expect(result.data[idx + 3]).toBe(1.0);
+          } else {
+            expect(result.data[idx + 0]).toBe(0);
+            expect(result.data[idx + 1]).toBe(0);
+            expect(result.data[idx + 2]).toBe(0);
+            expect(result.data[idx + 3]).toBe(0);
+          }
+        }
+      }
+    });
+  });
+
+  describe('applyUncrop - edge cases', () => {
+    it('EXR-UC020: should handle data window at display window origin', () => {
+      // Data window starts at (0,0) but is smaller than display window
+      const dw: EXRBox2i = { xMin: 0, yMin: 0, xMax: 1, yMax: 1 };
+      const dispW: EXRBox2i = { xMin: 0, yMin: 0, xMax: 3, yMax: 3 };
+
+      const data = new Float32Array(2 * 2 * 4);
+      for (let i = 0; i < 4; i++) {
+        data[i * 4 + 0] = 1.0;
+        data[i * 4 + 3] = 1.0;
+      }
+
+      const result = applyUncrop(data, dw, dispW);
+      expect(result.width).toBe(4);
+      expect(result.height).toBe(4);
+
+      // (0,0) should have data
+      expect(result.data[0]).toBe(1.0);
+      // (2,0) should be transparent
+      const idx = (0 * 4 + 2) * 4;
+      expect(result.data[idx]).toBe(0);
+    });
+
+    it('EXR-UC021: should handle data window at bottom-right corner of display window', () => {
+      const dw: EXRBox2i = { xMin: 2, yMin: 2, xMax: 3, yMax: 3 };
+      const dispW: EXRBox2i = { xMin: 0, yMin: 0, xMax: 3, yMax: 3 };
+
+      const data = new Float32Array(2 * 2 * 4);
+      data[0] = 0.9; // first data pixel R
+      data[3] = 1.0; // first data pixel A
+
+      const result = applyUncrop(data, dw, dispW);
+      expect(result.width).toBe(4);
+      expect(result.height).toBe(4);
+
+      // (0,0) should be transparent
+      expect(result.data[0]).toBe(0);
+      // (2,2) should have data
+      const idx = (2 * 4 + 2) * 4;
+      expect(result.data[idx]).toBe(0.9);
+    });
+  });
+
+  describe('decodeEXR with uncrop', () => {
+    it('EXR-UC030: should produce display window dimensions when data window differs', async () => {
+      // Create a test EXR with data window smaller than display window
+      const buffer = createTestEXRWithUncrop({
+        dataWindow: { xMin: 10, yMin: 5, xMax: 29, yMax: 14 },  // 20x10
+        displayWindow: { xMin: 0, yMin: 0, xMax: 39, yMax: 19 }, // 40x20
+      });
+
+      const result = await decodeEXR(buffer);
+
+      // Output should be display window size
+      expect(result.width).toBe(40);
+      expect(result.height).toBe(20);
+      expect(result.data.length).toBe(40 * 20 * 4);
+    });
+
+    it('EXR-UC031: should have transparent black padding around data', async () => {
+      const buffer = createTestEXRWithUncrop({
+        dataWindow: { xMin: 1, yMin: 1, xMax: 2, yMax: 2 },   // 2x2
+        displayWindow: { xMin: 0, yMin: 0, xMax: 3, yMax: 3 }, // 4x4
+      });
+
+      const result = await decodeEXR(buffer);
+
+      expect(result.width).toBe(4);
+      expect(result.height).toBe(4);
+
+      // Top-left corner (0,0) should be transparent
+      expect(result.data[0]).toBe(0);
+      expect(result.data[1]).toBe(0);
+      expect(result.data[2]).toBe(0);
+      expect(result.data[3]).toBe(0);
+
+      // Data pixels at (1,1) should be non-zero
+      const idx = (1 * 4 + 1) * 4;
+      // Alpha should be 1.0 for data pixels
+      expect(result.data[idx + 3]).toBeCloseTo(1.0, 2);
+    });
+
+    it('EXR-UC032: should not change output when windows are identical', async () => {
+      const buffer = createTestEXR({ width: 4, height: 4 });
+
+      const result = await decodeEXR(buffer);
+      expect(result.width).toBe(4);
+      expect(result.height).toBe(4);
+      expect(result.data.length).toBe(4 * 4 * 4);
+    });
+  });
+});
+
+/**
+ * Create a test EXR with separate data window and display window for uncrop testing.
+ * The data window pixels are filled with the standard test pattern (same as createTestEXR).
+ */
+function createTestEXRWithUncrop(options: {
+  dataWindow: EXRBox2i;
+  displayWindow: EXRBox2i;
+  channels?: string[];
+  pixelType?: EXRPixelType;
+}): ArrayBuffer {
+  const {
+    dataWindow,
+    displayWindow,
+    channels = ['R', 'G', 'B', 'A'],
+    pixelType = EXRPixelType.HALF,
+  } = options;
+
+  const dataWidth = dataWindow.xMax - dataWindow.xMin + 1;
+  const dataHeight = dataWindow.yMax - dataWindow.yMin + 1;
+
+  const parts: Uint8Array[] = [];
+  let offset = 0;
+
+  function writeUint32(value: number): void {
+    const buf = new Uint8Array(4);
+    const view = new DataView(buf.buffer);
+    view.setUint32(0, value, true);
+    parts.push(buf);
+    offset += 4;
+  }
+
+  function writeInt32(value: number): void {
+    const buf = new Uint8Array(4);
+    const view = new DataView(buf.buffer);
+    view.setInt32(0, value, true);
+    parts.push(buf);
+    offset += 4;
+  }
+
+  function writeUint8(value: number): void {
+    parts.push(new Uint8Array([value]));
+    offset += 1;
+  }
+
+  function writeString(str: string): void {
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(str);
+    parts.push(bytes);
+    parts.push(new Uint8Array([0]));
+    offset += bytes.length + 1;
+  }
+
+  function writeFloat32(value: number): void {
+    const buf = new Uint8Array(4);
+    const view = new DataView(buf.buffer);
+    view.setFloat32(0, value, true);
+    parts.push(buf);
+    offset += 4;
+  }
+
+  function writeHalf(value: number): void {
+    const buf = new Uint8Array(2);
+    const view = new DataView(buf.buffer);
+    const h = floatToHalf(value);
+    view.setUint16(0, h, true);
+    parts.push(buf);
+    offset += 2;
+  }
+
+  function writeUint64(value: bigint): void {
+    const buf = new Uint8Array(8);
+    const view = new DataView(buf.buffer);
+    view.setBigUint64(0, value, true);
+    parts.push(buf);
+    offset += 8;
+  }
+
+  // Magic number
+  writeUint32(EXR_MAGIC);
+  writeUint32(2);
+
+  // channels attribute
+  writeString('channels');
+  writeString('chlist');
+  let channelListSize = 1;
+  for (const ch of channels) {
+    channelListSize += ch.length + 1 + 4 + 1 + 3 + 4 + 4;
+  }
+  writeInt32(channelListSize);
+  const sortedChannels = [...channels].sort();
+  for (const ch of sortedChannels) {
+    writeString(ch);
+    writeInt32(pixelType);
+    writeUint8(0);
+    parts.push(new Uint8Array([0, 0, 0]));
+    offset += 3;
+    writeInt32(1);
+    writeInt32(1);
+  }
+  writeUint8(0);
+
+  // compression
+  writeString('compression');
+  writeString('compression');
+  writeInt32(1);
+  writeUint8(EXRCompression.NONE);
+
+  // dataWindow (the actual pixel region)
+  writeString('dataWindow');
+  writeString('box2i');
+  writeInt32(16);
+  writeInt32(dataWindow.xMin);
+  writeInt32(dataWindow.yMin);
+  writeInt32(dataWindow.xMax);
+  writeInt32(dataWindow.yMax);
+
+  // displayWindow (the full frame)
+  writeString('displayWindow');
+  writeString('box2i');
+  writeInt32(16);
+  writeInt32(displayWindow.xMin);
+  writeInt32(displayWindow.yMin);
+  writeInt32(displayWindow.xMax);
+  writeInt32(displayWindow.yMax);
+
+  // lineOrder
+  writeString('lineOrder');
+  writeString('lineOrder');
+  writeInt32(1);
+  writeUint8(0);
+
+  // pixelAspectRatio
+  writeString('pixelAspectRatio');
+  writeString('float');
+  writeInt32(4);
+  writeFloat32(1.0);
+
+  // End of header
+  writeUint8(0);
+
+  // Offset table
+  const bytesPerPixel = pixelType === EXRPixelType.HALF ? 2 : 4;
+  const scanlineSize = channels.length * dataWidth * bytesPerPixel;
+  const headerEnd = offset;
+  const offsetTableSize = dataHeight * 8;
+  const scanlineDataStart = headerEnd + offsetTableSize;
+
+  for (let y = 0; y < dataHeight; y++) {
+    const blockStart = BigInt(scanlineDataStart + y * (8 + scanlineSize));
+    writeUint64(blockStart);
+  }
+
+  // Scanline data - y coordinates are absolute (dataWindow.yMin + row)
+  for (let y = 0; y < dataHeight; y++) {
+    writeInt32(dataWindow.yMin + y); // Absolute Y coordinate
+    writeInt32(scanlineSize);
+
+    for (const ch of sortedChannels) {
+      for (let x = 0; x < dataWidth; x++) {
+        let value = 0;
+        if (ch === 'R') value = (x + y * dataWidth) / (dataWidth * dataHeight);
+        else if (ch === 'G') value = 0.5;
+        else if (ch === 'B') value = 1.0 - (x + y * dataWidth) / (dataWidth * dataHeight);
+        else if (ch === 'A') value = 1.0;
+
+        if (pixelType === EXRPixelType.HALF) {
+          writeHalf(value);
+        } else {
+          writeFloat32(value);
+        }
+      }
+    }
+  }
+
+  const totalLength = parts.reduce((sum, p) => sum + p.length, 0);
+  const result = new Uint8Array(totalLength);
+  let pos = 0;
+  for (const part of parts) {
+    result.set(part, pos);
+    pos += part.length;
+  }
+  return result.buffer;
+}

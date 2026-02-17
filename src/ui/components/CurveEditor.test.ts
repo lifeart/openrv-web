@@ -290,12 +290,13 @@ describe('CurveEditor', () => {
 
       editor.dispose();
 
-      // Should have removed all 5 event listeners (pointer events + dblclick + contextmenu)
+      // Should have removed all 6 event listeners (pointer events + dblclick + contextmenu + keydown)
       expect(removeSpy).toHaveBeenCalledWith('pointerdown', expect.any(Function));
       expect(removeSpy).toHaveBeenCalledWith('pointermove', expect.any(Function));
       expect(removeSpy).toHaveBeenCalledWith('pointerup', expect.any(Function));
       expect(removeSpy).toHaveBeenCalledWith('dblclick', expect.any(Function));
       expect(removeSpy).toHaveBeenCalledWith('contextmenu', expect.any(Function));
+      expect(removeSpy).toHaveBeenCalledWith('keydown', expect.any(Function));
 
       removeSpy.mockRestore();
     });
@@ -331,7 +332,7 @@ describe('CurveEditor', () => {
 
       // The removed handlers should match the added handlers (same function reference)
       // This ensures we're not creating new bound functions in dispose()
-      expect(removeSpy).toHaveBeenCalledTimes(5);
+      expect(removeSpy).toHaveBeenCalledTimes(6);
 
       addSpy.mockRestore();
       removeSpy.mockRestore();
@@ -718,5 +719,130 @@ describe('CurveEditor pointer events (H-03)', () => {
     expect(removedEventTypes).not.toContain('mouseleave');
 
     removeSpy.mockRestore();
+  });
+});
+
+describe('CurveEditor keyboard accessibility (L-39)', () => {
+  let editor: CurveEditor;
+
+  beforeEach(() => {
+    editor = new CurveEditor();
+  });
+
+  afterEach(() => {
+    editor.dispose();
+  });
+
+  it('CE-L39a: CurveEditor canvas should have tabindex="0"', () => {
+    const el = editor.render_element();
+    const canvas = el.querySelector('[data-testid="curve-canvas"]') as HTMLCanvasElement;
+
+    expect(canvas.tabIndex).toBe(0);
+    expect(canvas.getAttribute('tabindex')).toBe('0');
+  });
+
+  it('CE-L39b: Pressing arrow keys on focused canvas should move the selected control point', () => {
+    const el = editor.render_element();
+    const canvas = el.querySelector('[data-testid="curve-canvas"]') as HTMLCanvasElement;
+
+    // Mock getBoundingClientRect for pointer events
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+      left: 0, top: 0, right: 200, bottom: 200, width: 200, height: 200,
+      x: 0, y: 0, toJSON: () => {},
+    });
+    canvas.setPointerCapture = vi.fn();
+    canvas.releasePointerCapture = vi.fn();
+
+    // Get initial curve - point at (1,1) is at canvas position (190, 10)
+    const initialCurves = editor.getCurves();
+    const initialY = initialCurves.master.points[1]!.y; // Should be 1
+
+    // Click on the second control point (1,1) at canvas (190, 10) to select it
+    const pointerDownEvent = new PointerEvent('pointerdown', {
+      clientX: 190,
+      clientY: 10,
+      pointerId: 1,
+      bubbles: true,
+    });
+    canvas.dispatchEvent(pointerDownEvent);
+
+    // Release pointer to end drag but keep point selected
+    const pointerUpEvent = new PointerEvent('pointerup', {
+      clientX: 190,
+      clientY: 10,
+      pointerId: 1,
+      bubbles: true,
+    });
+    canvas.dispatchEvent(pointerUpEvent);
+
+    // Press ArrowDown to move the selected point down
+    const keyDownEvent = new KeyboardEvent('keydown', {
+      key: 'ArrowDown',
+      bubbles: true,
+    });
+    canvas.dispatchEvent(keyDownEvent);
+
+    const updatedCurves = editor.getCurves();
+    const updatedY = updatedCurves.master.points[1]!.y;
+
+    // Y should have decreased by 1/256
+    expect(updatedY).toBeLessThan(initialY);
+    expect(updatedY).toBeCloseTo(initialY - 1 / 256, 6);
+  });
+
+  it('CE-L39c: Pressing Delete on focused canvas should remove the selected control point', () => {
+    // Set up a curve with a middle point that can be removed
+    const curvesWithMidpoint: ColorCurvesData = {
+      master: { enabled: true, points: [{ x: 0, y: 0 }, { x: 0.5, y: 0.5 }, { x: 1, y: 1 }] },
+      red: createDefaultCurve(),
+      green: createDefaultCurve(),
+      blue: createDefaultCurve(),
+    };
+    editor.setCurves(curvesWithMidpoint);
+
+    const el = editor.render_element();
+    const canvas = el.querySelector('[data-testid="curve-canvas"]') as HTMLCanvasElement;
+
+    // Mock getBoundingClientRect
+    vi.spyOn(canvas, 'getBoundingClientRect').mockReturnValue({
+      left: 0, top: 0, right: 200, bottom: 200, width: 200, height: 200,
+      x: 0, y: 0, toJSON: () => {},
+    });
+    canvas.setPointerCapture = vi.fn();
+    canvas.releasePointerCapture = vi.fn();
+
+    // The middle point (0.5, 0.5) maps to canvas position:
+    // x = padding + 0.5 * innerSize = 10 + 0.5 * 180 = 100
+    // y = padding + (1 - 0.5) * innerSize = 10 + 0.5 * 180 = 100
+    const pointerDownEvent = new PointerEvent('pointerdown', {
+      clientX: 100,
+      clientY: 100,
+      pointerId: 1,
+      bubbles: true,
+    });
+    canvas.dispatchEvent(pointerDownEvent);
+
+    const pointerUpEvent = new PointerEvent('pointerup', {
+      clientX: 100,
+      clientY: 100,
+      pointerId: 1,
+      bubbles: true,
+    });
+    canvas.dispatchEvent(pointerUpEvent);
+
+    expect(editor.getCurves().master.points.length).toBe(3);
+
+    // Press Delete to remove the selected point
+    const deleteEvent = new KeyboardEvent('keydown', {
+      key: 'Delete',
+      bubbles: true,
+    });
+    canvas.dispatchEvent(deleteEvent);
+
+    const updatedCurves = editor.getCurves();
+    expect(updatedCurves.master.points.length).toBe(2);
+    // Only endpoints should remain
+    expect(updatedCurves.master.points[0]).toEqual({ x: 0, y: 0 });
+    expect(updatedCurves.master.points[1]).toEqual({ x: 1, y: 1 });
   });
 });

@@ -1165,6 +1165,69 @@ function validateCompression(compression: EXRCompression, partLabel?: string): v
 }
 
 /**
+ * Apply uncrop: expand pixel buffer from dataWindow to displayWindow dimensions.
+ *
+ * When the EXR data window is smaller than (or offset from) the display window,
+ * the decoded data covers only the data window region.  This function creates a
+ * new buffer with the display window dimensions, fills it with transparent black
+ * (0,0,0,0), and copies the data window pixels at the correct offset.
+ *
+ * @param data        Decoded pixel data (Float32Array, 4 channels RGBA)
+ * @param dataWindow  The EXR data window box
+ * @param displayWindow The EXR display window box
+ * @returns           { data, width, height } expanded to display window size,
+ *                    or the original data unchanged if no uncrop is needed.
+ */
+export function applyUncrop(
+  data: Float32Array,
+  dataWindow: EXRBox2i,
+  displayWindow: EXRBox2i,
+): { data: Float32Array; width: number; height: number } {
+  const dwWidth = dataWindow.xMax - dataWindow.xMin + 1;
+  const dwHeight = dataWindow.yMax - dataWindow.yMin + 1;
+  const dispWidth = displayWindow.xMax - displayWindow.xMin + 1;
+  const dispHeight = displayWindow.yMax - displayWindow.yMin + 1;
+
+  // No uncrop needed if windows are identical
+  if (
+    dataWindow.xMin === displayWindow.xMin &&
+    dataWindow.yMin === displayWindow.yMin &&
+    dataWindow.xMax === displayWindow.xMax &&
+    dataWindow.yMax === displayWindow.yMax
+  ) {
+    return { data, width: dwWidth, height: dwHeight };
+  }
+
+  const numChannels = 4;
+  // New buffer initialized to zero (transparent black)
+  const output = new Float32Array(dispWidth * dispHeight * numChannels);
+
+  // Compute the offset of the data window inside the display window
+  const offsetX = dataWindow.xMin - displayWindow.xMin;
+  const offsetY = dataWindow.yMin - displayWindow.yMin;
+
+  // Copy rows from the data window into the correct position
+  for (let row = 0; row < dwHeight; row++) {
+    const dstY = offsetY + row;
+    if (dstY < 0 || dstY >= dispHeight) continue;
+
+    // Compute horizontal clipping
+    const srcXStart = Math.max(0, -offsetX);
+    const dstXStart = Math.max(0, offsetX);
+    const copyWidth = Math.min(dwWidth - srcXStart, dispWidth - dstXStart);
+    if (copyWidth <= 0) continue;
+
+    const srcOffset = (row * dwWidth + srcXStart) * numChannels;
+    const dstOffset = (dstY * dispWidth + dstXStart) * numChannels;
+    const count = copyWidth * numChannels;
+
+    output.set(data.subarray(srcOffset, srcOffset + count), dstOffset);
+  }
+
+  return { data: output, width: dispWidth, height: dispHeight };
+}
+
+/**
  * Decode a single-part EXR file
  */
 async function decodeSinglePart(
@@ -1179,17 +1242,17 @@ async function decodeSinglePart(
   validateCompression(header.compression);
 
   const channelMapping = resolveChannelMapping(header, options);
-  const data = await decodeScanlineImage(reader, header, channelMapping);
+  const rawData = await decodeScanlineImage(reader, header, channelMapping);
 
-  const dataWindow = header.dataWindow;
-  const width = dataWindow.xMax - dataWindow.xMin + 1;
-  const height = dataWindow.yMax - dataWindow.yMin + 1;
+  // Apply uncrop: expand data window to display window if they differ
+  const uncropped = applyUncrop(rawData, header.dataWindow, header.displayWindow);
+
   const layers = extractLayerInfo(header.channels);
 
   return {
-    width,
-    height,
-    data,
+    width: uncropped.width,
+    height: uncropped.height,
+    data: uncropped.data,
     channels: 4,
     header,
     layers,
@@ -1284,17 +1347,17 @@ async function decodeMultiPart(
 
   // Decode scanlines for the selected part
   const channelMapping = resolveChannelMapping(selectedHeader, options);
-  const data = await decodeMultiPartScanlineImage(reader, selectedHeader, partIndex, channelMapping);
+  const rawData = await decodeMultiPartScanlineImage(reader, selectedHeader, partIndex, channelMapping);
 
-  const dataWindow = selectedHeader.dataWindow;
-  const width = dataWindow.xMax - dataWindow.xMin + 1;
-  const height = dataWindow.yMax - dataWindow.yMin + 1;
+  // Apply uncrop: expand data window to display window if they differ
+  const uncropped = applyUncrop(rawData, selectedHeader.dataWindow, selectedHeader.displayWindow);
+
   const layers = extractLayerInfo(selectedHeader.channels);
 
   return {
-    width,
-    height,
-    data,
+    width: uncropped.width,
+    height: uncropped.height,
+    data: uncropped.data,
     channels: 4,
     header: selectedHeader,
     layers,
