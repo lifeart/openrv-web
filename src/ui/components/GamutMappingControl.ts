@@ -55,6 +55,7 @@ export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents>
   private modeSelect: HTMLSelectElement | null = null;
   private sourceSelect: HTMLSelectElement | null = null;
   private targetSelect: HTMLSelectElement | null = null;
+  private highlightCheckbox: HTMLInputElement | null = null;
 
   private boundHandleDocumentClick: (e: MouseEvent) => void;
 
@@ -200,6 +201,33 @@ export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents>
     this.targetSelect.dataset.testid = 'gamut-mapping-target-select';
     this.panel.appendChild(targetRow.container);
 
+    // Highlight out-of-gamut checkbox
+    const highlightRow = document.createElement('div');
+    highlightRow.style.cssText = 'margin-bottom: 12px; display: flex; align-items: center; gap: 8px;';
+
+    this.highlightCheckbox = document.createElement('input');
+    this.highlightCheckbox.type = 'checkbox';
+    this.highlightCheckbox.checked = this.state.highlightOutOfGamut ?? false;
+    this.highlightCheckbox.dataset.testid = 'gamut-mapping-highlight-checkbox';
+    this.highlightCheckbox.style.cssText = 'cursor: pointer; margin: 0;';
+    this.highlightCheckbox.addEventListener('change', () => {
+      this.state.highlightOutOfGamut = this.highlightCheckbox!.checked;
+      this.emitChange();
+    });
+
+    const highlightLabel = document.createElement('label');
+    highlightLabel.textContent = 'Highlight out-of-gamut pixels';
+    highlightLabel.style.cssText = 'color: var(--text-secondary); font-size: 12px; cursor: pointer; user-select: none;';
+    highlightLabel.addEventListener('click', () => {
+      this.highlightCheckbox!.checked = !this.highlightCheckbox!.checked;
+      this.state.highlightOutOfGamut = this.highlightCheckbox!.checked;
+      this.emitChange();
+    });
+
+    highlightRow.appendChild(this.highlightCheckbox);
+    highlightRow.appendChild(highlightLabel);
+    this.panel.appendChild(highlightRow);
+
     this.updateGamutSelectsEnabled();
   }
 
@@ -250,6 +278,10 @@ export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents>
       const noTargets = validTargets.length === 0;
       this.targetSelect.disabled = disabled || noTargets;
       this.targetSelect.style.opacity = (disabled || noTargets) ? '0.5' : '1';
+    }
+    if (this.highlightCheckbox) {
+      this.highlightCheckbox.disabled = disabled;
+      this.highlightCheckbox.style.opacity = disabled ? '0.5' : '1';
     }
   }
 
@@ -334,6 +366,7 @@ export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents>
     this.state = { ...DEFAULT_GAMUT_MAPPING_STATE };
     if (this.modeSelect) this.modeSelect.value = 'off';
     if (this.sourceSelect) this.sourceSelect.value = 'srgb';
+    if (this.highlightCheckbox) this.highlightCheckbox.checked = false;
     this.updateTargetGamutOptions();
     this.updateGamutSelectsEnabled();
     this.emitChange();
@@ -347,6 +380,7 @@ export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents>
     this.state = { ...state };
     if (this.modeSelect) this.modeSelect.value = state.mode;
     if (this.sourceSelect) this.sourceSelect.value = state.sourceGamut;
+    if (this.highlightCheckbox) this.highlightCheckbox.checked = state.highlightOutOfGamut ?? false;
     this.updateTargetGamutOptions();
     this.updateGamutSelectsEnabled();
     this.updateButtonState();

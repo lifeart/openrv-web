@@ -32,14 +32,21 @@ export function handleSourceLoaded(
     // Per-source OCIO color space detection
     const processor = context.getOCIOControl().getProcessor();
     const sourceId = source.name || `source_${session.currentSourceIndex}`;
+
+    // Check if this source already has a persisted color space assignment
+    // (loaded from localStorage on startup). If so, use it instead of
+    // auto-detecting from file extension.
+    const persistedColorSpace = processor.getSourceInputColorSpace(sourceId);
     processor.setActiveSource(sourceId);
 
-    // Detect color space from file extension
-    const lastDot = source.name ? source.name.lastIndexOf('.') : -1;
-    const ext = lastDot >= 0 ? source.name!.substring(lastDot).toLowerCase() : '';
-    const detectedFromExt = processor.detectColorSpaceFromExtension(ext);
-    if (detectedFromExt) {
-      processor.setSourceInputColorSpace(sourceId, detectedFromExt);
+    if (!persistedColorSpace) {
+      // No persisted color space — detect from file extension
+      const lastDot = source.name ? source.name.lastIndexOf('.') : -1;
+      const ext = lastDot >= 0 ? source.name!.substring(lastDot).toLowerCase() : '';
+      const detectedFromExt = processor.detectColorSpaceFromExtension(ext);
+      if (detectedFromExt) {
+        processor.setSourceInputColorSpace(sourceId, detectedFromExt);
+      }
     }
   }
   // Auto-configure display pipeline for HDR content.

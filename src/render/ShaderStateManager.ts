@@ -280,6 +280,7 @@ export interface InternalShaderState {
   gamutMappingModeCode: number;
   gamutSourceCode: number;
   gamutTargetCode: number;
+  gamutHighlightEnabled: boolean;
 
   // Deinterlace
   deinterlaceEnabled: boolean;
@@ -373,6 +374,7 @@ function createDefaultInternalState(): InternalShaderState {
     gamutMappingModeCode: 0,
     gamutSourceCode: 0,
     gamutTargetCode: 0,
+    gamutHighlightEnabled: false,
     deinterlaceEnabled: false,
     deinterlaceMethod: 0,
     deinterlaceFieldOrder: 0,
@@ -791,6 +793,7 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     this.state.gamutMappingModeCode = enabled ? (GAMUT_MODE_CODES[gmState.mode] ?? 0) : 0;
     this.state.gamutSourceCode = GAMUT_CODES[gmState.sourceGamut] ?? 0;
     this.state.gamutTargetCode = GAMUT_CODES[gmState.targetGamut] ?? 0;
+    this.state.gamutHighlightEnabled = enabled && (gmState.highlightOutOfGamut === true);
     this.dirtyFlags.add(DIRTY_GAMUT_MAPPING);
   }
 
@@ -802,7 +805,7 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     const source = (sourceEntries.find(([, v]) => v === s.gamutSourceCode)?.[0] ?? 'srgb') as GamutIdentifier;
     const target = (targetEntries.find(([, v]) => v === s.gamutTargetCode)?.[0] ?? 'srgb') as GamutIdentifier;
     const mode = s.gamutMappingModeCode === 1 ? 'compress' : 'clip';
-    return { mode, sourceGamut: source, targetGamut: target };
+    return { mode, sourceGamut: source, targetGamut: target, highlightOutOfGamut: s.gamutHighlightEnabled };
   }
 
   setDeinterlace(diState: { enabled: boolean; method: number; fieldOrder: number }): void {
@@ -1010,17 +1013,19 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
       }
     }
 
-    // --- Gamut mapping (4 uniforms) ---
+    // --- Gamut mapping (5 uniforms) ---
     if (renderState.gamutMapping) {
       const gm = renderState.gamutMapping;
       const newEnabled = gm.mode !== 'off' && gm.sourceGamut !== gm.targetGamut;
       const newModeCode = newEnabled ? (GAMUT_MODE_CODES[gm.mode] ?? 0) : 0;
       const newSourceCode = GAMUT_CODES[gm.sourceGamut] ?? 0;
       const newTargetCode = GAMUT_CODES[gm.targetGamut] ?? 0;
+      const newHighlight = newEnabled && (gm.highlightOutOfGamut === true);
       if (newEnabled !== s.gamutMappingEnabled ||
           newModeCode !== s.gamutMappingModeCode ||
           newSourceCode !== s.gamutSourceCode ||
-          newTargetCode !== s.gamutTargetCode) {
+          newTargetCode !== s.gamutTargetCode ||
+          newHighlight !== s.gamutHighlightEnabled) {
         this.setGamutMapping(gm);
       }
     }
@@ -1281,6 +1286,9 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
         shader.setUniformInt('u_gamutMappingMode', s.gamutMappingModeCode);
         shader.setUniformInt('u_sourceGamut', s.gamutSourceCode);
         shader.setUniformInt('u_targetGamut', s.gamutTargetCode);
+        shader.setUniformInt('u_gamutHighlightEnabled', s.gamutHighlightEnabled ? 1 : 0);
+      } else {
+        shader.setUniformInt('u_gamutHighlightEnabled', 0);
       }
     }
 

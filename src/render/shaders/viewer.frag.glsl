@@ -140,6 +140,7 @@
       uniform int u_gamutMappingMode;  // 0=clip, 1=compress
       uniform int u_sourceGamut;       // 0=sRGB, 1=Rec.2020, 2=Display-P3
       uniform int u_targetGamut;       // 0=sRGB, 1=Rec.2020, 2=Display-P3
+      uniform bool u_gamutHighlightEnabled; // highlight out-of-gamut pixels
 
       // Deinterlace
       uniform int u_deinterlaceEnabled;    // 0=off, 1=on
@@ -416,6 +417,18 @@
           color = (u_targetGamut == 2) ? REC2020_TO_P3 * color : REC2020_TO_SRGB * color;
         } else if (u_sourceGamut == 2 && u_targetGamut == 0) { // P3 -> sRGB
           color = P3_TO_SRGB * color;
+        }
+        // Detect out-of-gamut pixels BEFORE clipping/compressing
+        if (u_gamutHighlightEnabled) {
+          bool outOfGamut = color.r < 0.0 || color.r > 1.0
+                         || color.g < 0.0 || color.g > 1.0
+                         || color.b < 0.0 || color.b > 1.0;
+          if (outOfGamut) {
+            // Blend with magenta at ~50% opacity
+            color = clamp(color, 0.0, 1.0);
+            color = mix(color, vec3(1.0, 0.0, 1.0), 0.5);
+            return color;
+          }
         }
         // Apply clipping or soft compression
         if (u_gamutMappingMode == 1) {

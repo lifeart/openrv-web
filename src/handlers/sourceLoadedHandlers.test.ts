@@ -25,6 +25,7 @@ function createMockContext(overrides: {
     setActiveSource: vi.fn(),
     detectColorSpaceFromExtension: vi.fn(() => null),
     setSourceInputColorSpace: vi.fn(),
+    getSourceInputColorSpace: vi.fn(() => null),
   };
   const ocioControl = { getProcessor: () => ocioProcessor };
   const toneMappingControl = { setState: vi.fn() };
@@ -136,6 +137,37 @@ describe('handleSourceLoaded', () => {
     handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
 
     expect(processor.setSourceInputColorSpace).not.toHaveBeenCalled();
+  });
+
+  it('SLH-U022: skips auto-detection when source has persisted color space', () => {
+    const context = createMockContext({
+      currentSource: { name: 'test.exr', width: 100, height: 100 },
+    });
+    const processor = context.getOCIOControl().getProcessor();
+    // Simulate a persisted color space mapping already loaded into the processor
+    (processor.getSourceInputColorSpace as ReturnType<typeof vi.fn>).mockReturnValue('ACEScg');
+
+    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+
+    // Should not call detectColorSpaceFromExtension or setSourceInputColorSpace
+    expect(processor.detectColorSpaceFromExtension).not.toHaveBeenCalled();
+    expect(processor.setSourceInputColorSpace).not.toHaveBeenCalled();
+    // But should still set active source
+    expect(processor.setActiveSource).toHaveBeenCalledWith('test.exr');
+  });
+
+  it('SLH-U023: falls back to extension detection when no persisted color space', () => {
+    const context = createMockContext({
+      currentSource: { name: 'test.dpx', width: 100, height: 100 },
+    });
+    const processor = context.getOCIOControl().getProcessor();
+    (processor.getSourceInputColorSpace as ReturnType<typeof vi.fn>).mockReturnValue(null);
+    (processor.detectColorSpaceFromExtension as ReturnType<typeof vi.fn>).mockReturnValue('ACEScct');
+
+    handleSourceLoaded(context, updateInfoPanel, updateStackCtrl, updateEXR, updateHistogram, updateWaveform, updateVectorscope);
+
+    expect(processor.detectColorSpaceFromExtension).toHaveBeenCalledWith('.dpx');
+    expect(processor.setSourceInputColorSpace).toHaveBeenCalledWith('test.dpx', 'ACEScct');
   });
 
   it('SLH-U007: auto-configures tone mapping and gamma for HDR content from fileSourceNode', () => {

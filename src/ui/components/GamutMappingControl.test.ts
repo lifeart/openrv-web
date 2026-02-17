@@ -378,4 +378,88 @@ describe('GamutMappingControl', () => {
       expect(panelAfter).toBeNull();
     });
   });
+
+  describe('highlight out-of-gamut checkbox', () => {
+    it('GM-090: panel has highlight out-of-gamut checkbox', () => {
+      control.show();
+      const checkbox = document.querySelector('[data-testid="gamut-mapping-highlight-checkbox"]');
+      expect(checkbox).not.toBeNull();
+      expect(checkbox!.tagName).toBe('INPUT');
+      expect((checkbox as HTMLInputElement).type).toBe('checkbox');
+    });
+
+    it('GM-091: highlight checkbox starts unchecked by default', () => {
+      control.show();
+      const checkbox = document.querySelector('[data-testid="gamut-mapping-highlight-checkbox"]') as HTMLInputElement;
+      expect(checkbox.checked).toBe(false);
+    });
+
+    it('GM-092: highlight checkbox is disabled when mode is off', () => {
+      control.show();
+      const checkbox = document.querySelector('[data-testid="gamut-mapping-highlight-checkbox"]') as HTMLInputElement;
+      expect(checkbox.disabled).toBe(true);
+    });
+
+    it('GM-093: highlight checkbox is enabled when mode is clip', () => {
+      control.setState({ mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb' });
+      control.show();
+      const checkbox = document.querySelector('[data-testid="gamut-mapping-highlight-checkbox"]') as HTMLInputElement;
+      expect(checkbox.disabled).toBe(false);
+    });
+
+    it('GM-094: checking highlight checkbox emits gamutMappingChanged with highlightOutOfGamut=true', () => {
+      control.setState({ mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb' });
+      const handler = vi.fn();
+      control.on('gamutMappingChanged', handler);
+      control.show();
+
+      const checkbox = document.querySelector('[data-testid="gamut-mapping-highlight-checkbox"]') as HTMLInputElement;
+      checkbox.checked = true;
+      checkbox.dispatchEvent(new Event('change'));
+
+      expect(handler).toHaveBeenCalledOnce();
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ highlightOutOfGamut: true }));
+    });
+
+    it('GM-095: unchecking highlight checkbox emits gamutMappingChanged with highlightOutOfGamut=false', () => {
+      control.setState({ mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb', highlightOutOfGamut: true });
+      const handler = vi.fn();
+      control.on('gamutMappingChanged', handler);
+      control.show();
+
+      const checkbox = document.querySelector('[data-testid="gamut-mapping-highlight-checkbox"]') as HTMLInputElement;
+      checkbox.checked = false;
+      checkbox.dispatchEvent(new Event('change'));
+
+      expect(handler).toHaveBeenCalledOnce();
+      expect(handler).toHaveBeenCalledWith(expect.objectContaining({ highlightOutOfGamut: false }));
+    });
+
+    it('GM-096: setState with highlightOutOfGamut=true checks the checkbox', () => {
+      control.setState({ mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb', highlightOutOfGamut: true });
+      control.show();
+      const checkbox = document.querySelector('[data-testid="gamut-mapping-highlight-checkbox"]') as HTMLInputElement;
+      expect(checkbox.checked).toBe(true);
+    });
+
+    it('GM-097: reset() unchecks the highlight checkbox', () => {
+      control.setState({ mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb', highlightOutOfGamut: true });
+      control.show();
+      control.reset();
+      const checkbox = document.querySelector('[data-testid="gamut-mapping-highlight-checkbox"]') as HTMLInputElement;
+      expect(checkbox.checked).toBe(false);
+    });
+
+    it('GM-098: getState includes highlightOutOfGamut after checking', () => {
+      control.setState({ mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb' });
+      control.show();
+
+      const checkbox = document.querySelector('[data-testid="gamut-mapping-highlight-checkbox"]') as HTMLInputElement;
+      checkbox.checked = true;
+      checkbox.dispatchEvent(new Event('change'));
+
+      const state = control.getState();
+      expect(state.highlightOutOfGamut).toBe(true);
+    });
+  });
 });

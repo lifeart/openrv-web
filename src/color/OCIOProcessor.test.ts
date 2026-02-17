@@ -748,6 +748,89 @@ describe('OCIOProcessor', () => {
       expect(processor.getSourceInputColorSpace('source1')).toBe(null);
       expect(processor.getActiveSourceId()).toBe(null);
     });
+
+    it('OCIO-V2-P020: getAllPerSourceColorSpaces returns empty object when no mappings', () => {
+      expect(processor.getAllPerSourceColorSpaces()).toEqual({});
+    });
+
+    it('OCIO-V2-P021: getAllPerSourceColorSpaces returns all stored mappings', () => {
+      processor.setSourceInputColorSpace('source1', 'ACEScg');
+      processor.setSourceInputColorSpace('source2', 'sRGB');
+      processor.setSourceInputColorSpace('source3', 'ARRI LogC3 (EI 800)');
+
+      const mappings = processor.getAllPerSourceColorSpaces();
+      expect(mappings).toEqual({
+        source1: 'ACEScg',
+        source2: 'sRGB',
+        source3: 'ARRI LogC3 (EI 800)',
+      });
+    });
+
+    it('OCIO-V2-P022: loadPerSourceColorSpaces loads mappings into processor', () => {
+      processor.loadPerSourceColorSpaces({
+        'file1.exr': 'Linear sRGB',
+        'file2.dpx': 'ACEScct',
+      });
+
+      expect(processor.getSourceInputColorSpace('file1.exr')).toBe('Linear sRGB');
+      expect(processor.getSourceInputColorSpace('file2.dpx')).toBe('ACEScct');
+    });
+
+    it('OCIO-V2-P023: loadPerSourceColorSpaces merges with existing mappings', () => {
+      processor.setSourceInputColorSpace('existing', 'sRGB');
+      processor.loadPerSourceColorSpaces({
+        'new-source': 'ACEScg',
+      });
+
+      expect(processor.getSourceInputColorSpace('existing')).toBe('sRGB');
+      expect(processor.getSourceInputColorSpace('new-source')).toBe('ACEScg');
+    });
+
+    it('OCIO-V2-P024: loadPerSourceColorSpaces overrides existing entries', () => {
+      processor.setSourceInputColorSpace('source1', 'sRGB');
+      processor.loadPerSourceColorSpaces({
+        source1: 'ACEScg',
+      });
+
+      expect(processor.getSourceInputColorSpace('source1')).toBe('ACEScg');
+    });
+
+    it('OCIO-V2-P025: loadPerSourceColorSpaces ignores non-string values', () => {
+      processor.loadPerSourceColorSpaces({
+        valid: 'ACEScg',
+        invalid: 123 as unknown as string,
+        alsoInvalid: null as unknown as string,
+      });
+
+      expect(processor.getSourceInputColorSpace('valid')).toBe('ACEScg');
+      expect(processor.getSourceInputColorSpace('invalid')).toBe(null);
+      expect(processor.getSourceInputColorSpace('alsoInvalid')).toBe(null);
+    });
+
+    it('OCIO-V2-P026: setSourceInputColorSpace emits perSourceColorSpaceChanged event', () => {
+      const callback = vi.fn();
+      processor.on('perSourceColorSpaceChanged', callback);
+
+      processor.setSourceInputColorSpace('source1', 'ACEScg');
+
+      expect(callback).toHaveBeenCalledWith({ sourceId: 'source1', colorSpace: 'ACEScg' });
+    });
+
+    it('OCIO-V2-P027: loadPerSourceColorSpaces does not emit perSourceColorSpaceChanged', () => {
+      const callback = vi.fn();
+      processor.on('perSourceColorSpaceChanged', callback);
+
+      processor.loadPerSourceColorSpaces({ source1: 'ACEScg' });
+
+      expect(callback).not.toHaveBeenCalled();
+    });
+
+    it('OCIO-V2-P028: getAllPerSourceColorSpaces returns a plain object (not a Map)', () => {
+      processor.setSourceInputColorSpace('source1', 'sRGB');
+      const result = processor.getAllPerSourceColorSpaces();
+      expect(result).not.toBeInstanceOf(Map);
+      expect(typeof result).toBe('object');
+    });
   });
 
   // ==========================================================================

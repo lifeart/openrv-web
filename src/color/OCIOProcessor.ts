@@ -26,6 +26,7 @@ import { LUT3D } from './LUTLoader';
 export interface OCIOProcessorEvents extends EventMap {
   stateChanged: OCIOState;
   transformChanged: void;
+  perSourceColorSpaceChanged: { sourceId: string; colorSpace: string };
 }
 
 /**
@@ -305,6 +306,8 @@ export class OCIOProcessor extends EventEmitter<OCIOProcessorEvents> {
     if (sourceId === this.activeSourceId) {
       this.setState({ detectedColorSpace: colorSpace });
     }
+
+    this.emit('perSourceColorSpaceChanged', { sourceId, colorSpace });
   }
 
   /**
@@ -341,6 +344,33 @@ export class OCIOProcessor extends EventEmitter<OCIOProcessorEvents> {
    */
   getActiveSourceId(): string | null {
     return this.activeSourceId;
+  }
+
+  /**
+   * Get all per-source color space mappings.
+   * Returns a plain object suitable for serialization.
+   */
+  getAllPerSourceColorSpaces(): Record<string, string> {
+    const result: Record<string, string> = {};
+    for (const [sourceId, colorSpace] of this.perSourceInputColorSpace) {
+      result[sourceId] = colorSpace;
+    }
+    return result;
+  }
+
+  /**
+   * Load per-source color space mappings from a plain object.
+   * Merges with any existing mappings (new entries override existing ones).
+   * Does not emit events for individual entries.
+   *
+   * @param mappings - Object mapping source IDs to color space names
+   */
+  loadPerSourceColorSpaces(mappings: Record<string, string>): void {
+    for (const [sourceId, colorSpace] of Object.entries(mappings)) {
+      if (typeof sourceId === 'string' && typeof colorSpace === 'string') {
+        this.perSourceInputColorSpace.set(sourceId, colorSpace);
+      }
+    }
   }
 
   // ==========================================================================

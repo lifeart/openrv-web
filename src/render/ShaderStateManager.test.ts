@@ -320,6 +320,57 @@ describe('ShaderStateManager', () => {
 
       expect(flags.has(DIRTY_GAMUT_MAPPING)).toBe(true);
     });
+
+    it('SSM-067: highlightOutOfGamut defaults to false when not specified', () => {
+      mgr.setGamutMapping({ mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb' });
+      const state = mgr.getGamutMapping();
+      expect(state.highlightOutOfGamut).toBe(false);
+    });
+
+    it('SSM-068: highlightOutOfGamut is true when enabled and gamut mapping active', () => {
+      mgr.setGamutMapping({ mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb', highlightOutOfGamut: true });
+      const state = mgr.getGamutMapping();
+      expect(state.highlightOutOfGamut).toBe(true);
+    });
+
+    it('SSM-069: highlightOutOfGamut is false when gamut mapping disabled (mode off)', () => {
+      mgr.setGamutMapping({ mode: 'off', sourceGamut: 'rec2020', targetGamut: 'srgb', highlightOutOfGamut: true });
+      const state = mgr.getGamutMapping();
+      // When mode is off, gamut mapping is disabled, so default state is returned
+      expect(state.highlightOutOfGamut).toBeUndefined();
+    });
+
+    it('SSM-069b: highlightOutOfGamut is false when source equals target', () => {
+      mgr.setGamutMapping({ mode: 'clip', sourceGamut: 'srgb', targetGamut: 'srgb', highlightOutOfGamut: true });
+      const state = mgr.getGamutMapping();
+      // When source == target, gamut mapping is disabled
+      expect(state.highlightOutOfGamut).toBeUndefined();
+    });
+
+    it('SSM-069c: applyRenderState marks dirty when highlightOutOfGamut changes', () => {
+      const rs = createDefaultRenderState();
+      rs.gamutMapping = { mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb', highlightOutOfGamut: false };
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Change only highlightOutOfGamut
+      rs.gamutMapping = { mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb', highlightOutOfGamut: true };
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_GAMUT_MAPPING)).toBe(true);
+    });
+
+    it('SSM-069d: applyRenderState does not mark dirty when highlightOutOfGamut is unchanged', () => {
+      const rs = createDefaultRenderState();
+      rs.gamutMapping = { mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb', highlightOutOfGamut: true };
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Apply same state again
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_GAMUT_MAPPING)).toBe(false);
+    });
   });
 
   // =================================================================

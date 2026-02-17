@@ -42,22 +42,37 @@ export interface OCIOStateManagerEvents extends EventMap {
 const STORAGE_KEY = 'openrv-ocio-state';
 
 /**
+ * localStorage key for per-source color space persistence
+ */
+const PER_SOURCE_STORAGE_KEY = 'openrv-ocio-per-source';
+
+/** How long to debounce before writing per-source state to localStorage (ms). */
+const PER_SOURCE_SAVE_DEBOUNCE_MS = 500;
+
+/**
  * OCIOStateManager - Pure state management for OCIO color pipeline
  */
 export class OCIOStateManager extends EventEmitter<OCIOStateManagerEvents> {
   private processor: OCIOProcessor;
+  private _perSourceSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(processor?: OCIOProcessor) {
     super();
     this.processor = processor ?? new OCIOProcessor();
 
-    // Load persisted state
+    // Load persisted state (both global and per-source)
     this.loadState();
+    this.loadPerSourceState();
 
     // Listen to processor state changes
     this.processor.on('stateChanged', (state) => {
       this.saveState();
       this.emit('stateChanged', state);
+    });
+
+    // Listen to per-source color space changes for persistence
+    this.processor.on('perSourceColorSpaceChanged', () => {
+      this.schedulePerSourceSave();
     });
   }
 
@@ -301,6 +316,75 @@ export class OCIOStateManager extends EventEmitter<OCIOStateManagerEvents> {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     } catch {
       // localStorage not available
+    }
+  }
+
+  // ==========================================================================
+  // Per-Source Color Space Persistence
+  // ==========================================================================
+
+  /**
+   * Load per-source color space mappings from localStorage.
+   * Validates each entry before loading into the processor.
+   */
+  private loadPerSourceState(): void {
+    try {
+      const stored = localStorage.getItem(PER_SOURCE_STORAGE_KEY);
+      if (!stored) return;
+
+      const raw = JSON.parse(stored);
+      if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return;
+
+      // Validate: only accept string-to-string mappings
+      const validated: Record<string, string> = {};
+      for (const [key, value] of Object.entries(raw)) {
+        if (typeof key === 'string' && typeof value === 'string') {
+          validated[key] = value;
+        }
+      }
+
+      if (Object.keys(validated).length > 0) {
+        this.processor.loadPerSourceColorSpaces(validated);
+      }
+    } catch {
+      // localStorage not available or invalid JSON
+    }
+  }
+
+  /**
+   * Save per-source color space mappings to localStorage.
+   */
+  private savePerSourceState(): void {
+    try {
+      const mappings = this.processor.getAllPerSourceColorSpaces();
+      localStorage.setItem(PER_SOURCE_STORAGE_KEY, JSON.stringify(mappings));
+    } catch {
+      // localStorage not available
+    }
+  }
+
+  /**
+   * Schedule a debounced save of per-source color space state.
+   */
+  private schedulePerSourceSave(): void {
+    if (this._perSourceSaveTimer !== null) {
+      clearTimeout(this._perSourceSaveTimer);
+    }
+    this._perSourceSaveTimer = setTimeout(() => {
+      this._perSourceSaveTimer = null;
+      this.savePerSourceState();
+    }, PER_SOURCE_SAVE_DEBOUNCE_MS);
+  }
+
+  /**
+   * Immediately flush any pending per-source save.
+   * Useful for tests or shutdown.
+   */
+  flushPerSourceSave(): void {
+    if (this._perSourceSaveTimer !== null) {
+      clearTimeout(this._perSourceSaveTimer);
+      this._perSourceSaveTimer = null;
+      this.savePerSourceState();
     }
   }
 }
