@@ -1130,6 +1130,160 @@ describe('ShaderStateManager', () => {
   });
 
   // =================================================================
+  // Per-channel scale and offset (Item 2.3)
+  // =================================================================
+
+  describe('per-channel scale and offset', () => {
+    function createMockShaderAndTexCb() {
+      const uniformCalls: Record<string, unknown> = {};
+      const intCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (name: string, value: unknown) => { uniformCalls[name] = value; },
+        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      return { uniformCalls, intCalls, mockShader, mockTexCb };
+    }
+
+    it('SCOF-SM-001: Per-channel scale sets u_scaleRGB uniform', () => {
+      const { uniformCalls, mockShader, mockTexCb } = createMockShaderAndTexCb();
+
+      mgr.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        scale: 1.0,
+        scaleRGB: [1.0, 0.5, 1.5],
+      });
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(uniformCalls['u_scaleRGB']).toEqual([1.0, 0.5, 1.5]);
+    });
+
+    it('SCOF-SM-002: Per-channel offset sets u_offsetRGB uniform', () => {
+      const { uniformCalls, mockShader, mockTexCb } = createMockShaderAndTexCb();
+
+      mgr.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        offset: 0.1,
+        offsetRGB: [0.1, 0, -0.1],
+      });
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(uniformCalls['u_offsetRGB']).toEqual([0.1, 0, -0.1]);
+    });
+
+    it('SCOF-SM-003: Default scale is [1,1,1], default offset is [0,0,0]', () => {
+      const { uniformCalls, mockShader, mockTexCb } = createMockShaderAndTexCb();
+
+      // Use default color adjustments (no scale/offset set)
+      mgr.setColorAdjustments({ ...DEFAULT_COLOR_ADJUSTMENTS });
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(uniformCalls['u_scaleRGB']).toEqual([1, 1, 1]);
+      expect(uniformCalls['u_offsetRGB']).toEqual([0, 0, 0]);
+    });
+
+    it('SCOF-SM-004: Scalar scale broadcasts to vec3', () => {
+      const { uniformCalls, mockShader, mockTexCb } = createMockShaderAndTexCb();
+
+      mgr.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        scale: 2.0,
+        // no scaleRGB -> broadcasts scalar
+      });
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(uniformCalls['u_scaleRGB']).toEqual([2.0, 2.0, 2.0]);
+    });
+
+    it('SCOF-SM-005: applyRenderState with scaleRGB/offsetRGB updates uniforms', () => {
+      const rs = createDefaultRenderState();
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Change scaleRGB and offsetRGB
+      rs.colorAdjustments = {
+        ...rs.colorAdjustments,
+        scale: 1.0,
+        scaleRGB: [2.0, 1.5, 0.5],
+        offset: 0.0,
+        offsetRGB: [0.1, -0.1, 0.0],
+      };
+      mgr.applyRenderState(rs);
+      expect(flags.has('color')).toBe(true);
+
+      // Verify the uniforms via applyUniforms
+      const { uniformCalls, mockShader, mockTexCb } = createMockShaderAndTexCb();
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(uniformCalls['u_scaleRGB']).toEqual([2.0, 1.5, 0.5]);
+      expect(uniformCalls['u_offsetRGB']).toEqual([0.1, -0.1, 0.0]);
+    });
+
+    it('SCOF-SM-006: Scalar offset broadcasts to vec3', () => {
+      const { uniformCalls, mockShader, mockTexCb } = createMockShaderAndTexCb();
+
+      mgr.setColorAdjustments({
+        ...DEFAULT_COLOR_ADJUSTMENTS,
+        offset: 0.5,
+        // no offsetRGB -> broadcasts scalar
+      });
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(uniformCalls['u_offsetRGB']).toEqual([0.5, 0.5, 0.5]);
+    });
+
+    it('SCOF-SM-007: applyRenderState detects scale change from undefined to defined', () => {
+      const rs = createDefaultRenderState();
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Add scale (which was previously undefined)
+      rs.colorAdjustments = {
+        ...rs.colorAdjustments,
+        scale: 2.0,
+      };
+      mgr.applyRenderState(rs);
+      expect(flags.has('color')).toBe(true);
+    });
+
+    it('SCOF-SM-008: applyRenderState detects offsetRGB change', () => {
+      const rs = createDefaultRenderState();
+      rs.colorAdjustments = {
+        ...rs.colorAdjustments,
+        offsetRGB: [0.1, 0.2, 0.3],
+      };
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Change offsetRGB
+      rs.colorAdjustments = {
+        ...rs.colorAdjustments,
+        offsetRGB: [0.1, 0.2, 0.4], // changed B channel
+      };
+      mgr.applyRenderState(rs);
+      expect(flags.has('color')).toBe(true);
+    });
+  });
+
+  // =================================================================
   // Out-of-range visualization
   // =================================================================
 

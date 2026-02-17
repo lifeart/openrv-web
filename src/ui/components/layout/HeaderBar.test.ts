@@ -320,14 +320,14 @@ describe('HeaderBar', () => {
       expect(session.loopMode).toBe('loop');
     });
 
-    it('HDR-U051: loop button shows current mode label', () => {
+    it('HDR-U051: loop button shows current mode via aria-label', () => {
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
       const loopBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('loop mode')
+        btn.title?.includes('loop mode') || btn.getAttribute('aria-label')?.includes('loop mode')
       ) as HTMLButtonElement;
 
-      expect(loopBtn.textContent).toContain('Loop');
+      expect(loopBtn.getAttribute('aria-label')).toContain('Loop');
     });
   });
 
@@ -463,50 +463,53 @@ describe('HeaderBar', () => {
   });
 
   describe('utility buttons', () => {
-    it('HDR-U090: has help button', () => {
+    it('HDR-U090: has help menu button', () => {
       const el = headerBar.render();
-      const buttons = el.querySelectorAll('button');
-      const helpBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('Keyboard shortcuts')
-      );
-      expect(helpBtn).not.toBeUndefined();
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]');
+      expect(helpBtn).not.toBeNull();
     });
 
-    it('HDR-U091: clicking help button emits showShortcuts event', () => {
+    it('HDR-U091: clicking help menu opens dropdown with shortcuts option', () => {
       const callback = vi.fn();
       headerBar.on('showShortcuts', callback);
 
       const el = headerBar.render();
-      const buttons = el.querySelectorAll('button');
-      const helpBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('Keyboard shortcuts')
-      ) as HTMLButtonElement;
-
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
       helpBtn.click();
+
+      // Dropdown should appear on document.body
+      const dropdown = document.querySelector('[data-testid="help-menu-dropdown"]');
+      expect(dropdown).not.toBeNull();
+
+      // Click the shortcuts menu item
+      const shortcutsItem = dropdown!.querySelector('[data-testid="help-menu-help"]') as HTMLButtonElement;
+      expect(shortcutsItem).not.toBeNull();
+      shortcutsItem.click();
 
       expect(callback).toHaveBeenCalled();
     });
 
-    it('HDR-U092: has key bindings button', () => {
+    it('HDR-U092: help dropdown has key bindings option', () => {
       const el = headerBar.render();
-      const buttons = el.querySelectorAll('button');
-      const keyBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('Custom key bindings')
-      );
-      expect(keyBtn).not.toBeUndefined();
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
+      helpBtn.click();
+
+      const dropdown = document.querySelector('[data-testid="help-menu-dropdown"]');
+      const keyBindingsItem = dropdown!.querySelector('[data-testid="help-menu-keyboard"]');
+      expect(keyBindingsItem).not.toBeNull();
     });
 
-    it('HDR-U093: clicking key bindings button emits showCustomKeyBindings event', () => {
+    it('HDR-U093: clicking key bindings option emits showCustomKeyBindings event', () => {
       const callback = vi.fn();
       headerBar.on('showCustomKeyBindings', callback);
 
       const el = headerBar.render();
-      const buttons = el.querySelectorAll('button');
-      const keyBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('Custom key bindings')
-      ) as HTMLButtonElement;
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
+      helpBtn.click();
 
-      keyBtn.click();
+      const dropdown = document.querySelector('[data-testid="help-menu-dropdown"]');
+      const keyBindingsItem = dropdown!.querySelector('[data-testid="help-menu-keyboard"]') as HTMLButtonElement;
+      keyBindingsItem.click();
 
       expect(callback).toHaveBeenCalled();
     });
@@ -619,13 +622,13 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       const buttons = el.querySelectorAll('button');
       const loopBtn = Array.from(buttons).find((btn) =>
-        btn.title?.includes('loop mode')
+        btn.title?.includes('loop mode') || btn.getAttribute('aria-label')?.includes('loop mode')
       ) as HTMLButtonElement;
 
       session.loopMode = 'pingpong';
       session.emit('loopModeChanged', 'pingpong');
 
-      expect(loopBtn.textContent).toContain('Ping');
+      expect(loopBtn.getAttribute('aria-label')).toContain('Ping');
     });
 
     it('HDR-U121: updates direction button when direction changes', () => {
@@ -1123,10 +1126,8 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       headerBar.setImageMode(true);
       vi.advanceTimersByTime(350);
-      const helpBtn = Array.from(el.querySelectorAll('button')).find(
-        (btn) => btn.title?.includes('Keyboard shortcuts')
-      );
-      expect(helpBtn).toBeDefined();
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]');
+      expect(helpBtn).not.toBeNull();
       expect((helpBtn as HTMLElement).closest('[style*="display: none"]')).toBeNull();
     });
 
@@ -1279,10 +1280,8 @@ describe('HeaderBar', () => {
   describe('keyboard focus ring (H-11)', () => {
     it('HB-H11a: createIconButton() should call applyA11yFocus on the created button', () => {
       const el = headerBar.render();
-      // Pick an icon button - the help button
-      const helpBtn = Array.from(el.querySelectorAll('button')).find(
-        (btn) => btn.title?.includes('Keyboard shortcuts')
-      ) as HTMLButtonElement;
+      // Pick an icon button - the help menu button
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
 
       // applyA11yFocus registers a focus listener that sets outline on keyboard focus.
       // Simulate keyboard focus (no preceding mousedown).
@@ -1458,10 +1457,8 @@ describe('HeaderBar', () => {
 
     it('HB-L60a: header buttons should respond to pointerenter/pointerleave for hover styling (touch support)', () => {
       const el = headerBar.render();
-      // Pick an icon button - the help button (created via createIconButton)
-      const helpBtn = Array.from(el.querySelectorAll('button')).find(
-        (btn) => btn.title?.includes('Keyboard shortcuts')
-      ) as HTMLButtonElement;
+      // Pick an icon button - the help menu button (created via createIconButton)
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
 
       // Initial state: transparent background
       expect(helpBtn.style.background).toBe('transparent');
@@ -1519,9 +1516,7 @@ describe('HeaderBar', () => {
 
     it('HB-L60d: icon buttons should respond to pointerdown/pointerup for active state (touch support)', () => {
       const el = headerBar.render();
-      const helpBtn = Array.from(el.querySelectorAll('button')).find(
-        (btn) => btn.title?.includes('Keyboard shortcuts')
-      ) as HTMLButtonElement;
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
 
       // Simulate pointerdown (active press)
       helpBtn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
@@ -1534,9 +1529,7 @@ describe('HeaderBar', () => {
 
     it('HB-L60e: header buttons should NOT respond to mouseenter for hover styling (replaced by pointer events)', () => {
       const el = headerBar.render();
-      const helpBtn = Array.from(el.querySelectorAll('button')).find(
-        (btn) => btn.title?.includes('Keyboard shortcuts')
-      ) as HTMLButtonElement;
+      const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
 
       // Initial state: transparent background
       expect(helpBtn.style.background).toBe('transparent');

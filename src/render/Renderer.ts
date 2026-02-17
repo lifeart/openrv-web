@@ -144,6 +144,11 @@ export class Renderer implements RendererBackend {
   // wastes ~0.5ms per frame in try/catch overhead.
   private _currentUnpackColorSpace: string = 'srgb';
 
+  // User-applied transform (rotation/flip from TransformControl)
+  private _userRotation: 0 | 90 | 180 | 270 = 0;
+  private _userFlipH = false;
+  private _userFlipV = false;
+
   initialize(canvas: HTMLCanvasElement | OffscreenCanvas, capabilities?: DisplayCapabilities): void {
     this.canvas = canvas;
 
@@ -425,10 +430,13 @@ export class Renderer implements RendererBackend {
       );
     }
 
-    // Set texture rotation for VideoFrame sources that don't have container rotation applied.
-    // 0=0°, 1=90°CW, 2=180°, 3=270°CW
-    const rotation = (image.metadata.attributes?.videoRotation as number) ?? 0;
-    this.displayShader.setUniformInt('u_texRotation', Math.round(rotation / 90) % 4);
+    // Combine video rotation metadata with user-applied rotation.
+    // Both are in degrees (0, 90, 180, 270). The shader uniform is 0-3.
+    const videoRotation = (image.metadata.attributes?.videoRotation as number) ?? 0;
+    const totalRotation = (Math.round(videoRotation / 90) + Math.round(this._userRotation / 90)) % 4;
+    this.displayShader.setUniformInt('u_texRotation', totalRotation);
+    this.displayShader.setUniformInt('u_texFlipH', this._userFlipH ? 1 : 0);
+    this.displayShader.setUniformInt('u_texFlipV', this._userFlipV ? 1 : 0);
 
     // Set texel size for clarity/sharpen (based on source image dimensions)
     if (image.width > 0 && image.height > 0) {
@@ -852,6 +860,16 @@ export class Renderer implements RendererBackend {
 
   getContext(): WebGL2RenderingContext | null {
     return this.gl;
+  }
+
+  /**
+   * Set user-applied rotation and flip (from TransformControl).
+   * Combined with video rotation metadata in the vertex shader.
+   */
+  setUserTransform(rotation: 0 | 90 | 180 | 270, flipH: boolean, flipV: boolean): void {
+    this._userRotation = rotation;
+    this._userFlipH = flipH;
+    this._userFlipV = flipV;
   }
 
   // --- Thin wrapper setters delegating to ShaderStateManager ---
@@ -1806,7 +1824,10 @@ export class Renderer implements RendererBackend {
     // SDR output: always clamp to [0,1], sRGB input (no special EOTF)
     this.displayShader.setUniformInt('u_outputMode', OUTPUT_MODE_SDR);
     this.displayShader.setUniformInt('u_inputTransfer', INPUT_TRANSFER_SRGB);
-    this.displayShader.setUniformInt('u_texRotation', 0); // SDR: no texture rotation
+    // Apply user rotation/flip (SDR has no video rotation metadata)
+    this.displayShader.setUniformInt('u_texRotation', Math.round(this._userRotation / 90) % 4);
+    this.displayShader.setUniformInt('u_texFlipH', this._userFlipH ? 1 : 0);
+    this.displayShader.setUniformInt('u_texFlipV', this._userFlipV ? 1 : 0);
 
     // SDR frames always use headroom=1.0 (no HDR expansion)
     this.displayShader.setUniform('u_hdrHeadroom', 1.0);

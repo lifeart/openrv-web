@@ -60,6 +60,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
   // Track the active speed menu cleanup callback for disposal
   private _activeSpeedMenuCleanup: (() => void) | null = null;
+  private _activeHelpMenuCleanup: (() => void) | null = null;
+  private helpButton!: HTMLButtonElement;
 
   // Overflow fade indicators
   private fadeLeft!: HTMLElement;
@@ -191,7 +193,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Hidden file input for media
     this.fileInput = document.createElement('input');
     this.fileInput.type = 'file';
-    this.fileInput.accept = 'image/*,video/*,.rv,.gto';
+    this.fileInput.accept = 'image/*,video/*,.rv,.gto,.rvedl';
     this.fileInput.multiple = true;
     this.fileInput.style.display = 'none';
     this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
@@ -205,14 +207,14 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.projectInput.addEventListener('change', (e) => this.handleProjectOpen(e));
     this.container.appendChild(this.projectInput);
 
-    // Open button (media)
-    fileGroup.appendChild(this.createIconButton('folder', 'Open', () => this.fileInput.click(), 'Open media file'));
+    // Open button (media) — icon-only for compactness
+    fileGroup.appendChild(this.createIconButton('folder', '', () => this.fileInput.click(), 'Open media file'));
 
-    // Save Project button
-    fileGroup.appendChild(this.createIconButton('save', 'Save', () => this.emit('saveProject', undefined), 'Save project (Ctrl+Shift+S)'));
+    // Save Project button — icon-only
+    fileGroup.appendChild(this.createIconButton('save', '', () => this.emit('saveProject', undefined), 'Save project (Ctrl+Shift+S)'));
 
-    // Open Project button
-    fileGroup.appendChild(this.createIconButton('folder-open', 'Project', () => this.projectInput.click(), 'Open project'));
+    // Open Project button — icon-only
+    fileGroup.appendChild(this.createIconButton('folder-open', '', () => this.projectInput.click(), 'Open project'));
 
     // Export dropdown
     fileGroup.appendChild(this.exportControl.render());
@@ -257,7 +259,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
     // Loop mode button
     this.loopButton = this.createCompactButton('', () => this.cycleLoopMode(), 'Cycle loop mode (L)');
-    this.loopButton.style.minWidth = '70px';
+    this.loopButton.style.minWidth = '28px';
     this.loopButton.style.marginLeft = '8px';
     playbackGroup.appendChild(this.loopButton);
 
@@ -320,15 +322,12 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     themeElement.style.marginLeft = '8px';
     utilityGroup.appendChild(themeElement);
 
-    // Help button
-    const helpButton = this.createIconButton('help', '', () => this.emit('showShortcuts', undefined), 'Keyboard shortcuts');
-    helpButton.style.marginLeft = '8px';
-    utilityGroup.appendChild(helpButton);
-
-    // Custom key binding button
-    const keyBindingButton = this.createIconButton('keyboard', '', () => this.emit('showCustomKeyBindings', undefined), 'Custom key bindings');
-    keyBindingButton.style.marginLeft = '4px';
-    utilityGroup.appendChild(keyBindingButton);
+    // Help dropdown button (combines Keyboard Shortcuts + Custom Key Bindings)
+    this.helpButton = this.createIconButton('help', '', () => this.showHelpMenu(this.helpButton), 'Help & Key Bindings');
+    this.helpButton.dataset.testid = 'help-menu-button';
+    this.helpButton.setAttribute('aria-haspopup', 'menu');
+    this.helpButton.style.marginLeft = '8px';
+    utilityGroup.appendChild(this.helpButton);
 
     this.container.appendChild(utilityGroup);
   }
@@ -827,6 +826,129 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this._activeSpeedMenuCleanup = removeMenu;
   }
 
+  private showHelpMenu(anchor: HTMLElement): void {
+    // Remove any existing help menu
+    if (this._activeHelpMenuCleanup) {
+      this._activeHelpMenuCleanup();
+    }
+
+    const menu = document.createElement('div');
+    menu.id = 'help-menu';
+    menu.dataset.testid = 'help-menu-dropdown';
+    menu.setAttribute('role', 'menu');
+    menu.style.cssText = `
+      position: fixed;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      padding: 4px 0;
+      z-index: 10000;
+      min-width: 180px;
+    `;
+
+    const items: { icon: string; label: string; action: () => void }[] = [
+      { icon: 'help', label: 'Keyboard Shortcuts', action: () => this.emit('showShortcuts', undefined) },
+      { icon: 'keyboard', label: 'Custom Key Bindings', action: () => this.emit('showCustomKeyBindings', undefined) },
+    ];
+
+    for (const { icon, label, action } of items) {
+      const item = document.createElement('button');
+      item.setAttribute('role', 'menuitem');
+      item.dataset.testid = `help-menu-${icon}`;
+      item.tabIndex = -1;
+      item.style.cssText = `
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        padding: 6px 12px;
+        background: transparent;
+        color: var(--text-primary);
+        border: none;
+        text-align: left;
+        cursor: pointer;
+        font-size: 12px;
+        outline: none;
+      `;
+
+      const iconEl = document.createElement('span');
+      iconEl.innerHTML = this.getIcon(icon);
+      iconEl.style.cssText = 'display: flex; align-items: center;';
+      item.appendChild(iconEl);
+
+      const labelEl = document.createElement('span');
+      labelEl.textContent = label;
+      item.appendChild(labelEl);
+
+      item.addEventListener('mouseenter', () => { item.style.background = 'var(--bg-hover)'; });
+      item.addEventListener('mouseleave', () => { item.style.background = 'transparent'; });
+      item.addEventListener('focus', () => { item.style.background = 'var(--bg-hover)'; });
+      item.addEventListener('blur', () => { item.style.background = 'transparent'; });
+      item.addEventListener('click', () => { action(); removeMenu(); });
+
+      menu.appendChild(item);
+    }
+
+    // Keyboard navigation
+    const getMenuItems = (): HTMLElement[] => Array.from(menu.querySelectorAll('[role="menuitem"]'));
+
+    menu.addEventListener('keydown', (e: KeyboardEvent) => {
+      const menuItems = getMenuItems();
+      const currentIndex = menuItems.indexOf(document.activeElement as HTMLElement);
+      switch (e.key) {
+        case 'ArrowDown': {
+          e.preventDefault();
+          const nextIndex = currentIndex < menuItems.length - 1 ? currentIndex + 1 : 0;
+          menuItems[nextIndex]?.focus();
+          break;
+        }
+        case 'ArrowUp': {
+          e.preventDefault();
+          const prevIndex = currentIndex > 0 ? currentIndex - 1 : menuItems.length - 1;
+          menuItems[prevIndex]?.focus();
+          break;
+        }
+        case 'Escape':
+        case 'Tab': {
+          e.preventDefault();
+          removeMenu();
+          anchor.focus();
+          break;
+        }
+      }
+    });
+
+    // Position below the button
+    const rect = anchor.getBoundingClientRect();
+    const menuWidth = 180;
+    let left = rect.right - menuWidth;
+    if (left < 8) left = 8;
+    menu.style.left = `${left}px`;
+    menu.style.top = `${rect.bottom + 4}px`;
+
+    document.body.appendChild(menu);
+
+    // Focus first item
+    const firstItem = getMenuItems()[0];
+    if (firstItem) firstItem.focus();
+
+    const removeMenu = () => {
+      menu.remove();
+      document.removeEventListener('click', closeMenu);
+      this._activeHelpMenuCleanup = null;
+    };
+
+    const closeMenu = (e: MouseEvent) => {
+      if (!menu.contains(e.target as Node)) {
+        removeMenu();
+      }
+    };
+    setTimeout(() => document.addEventListener('click', closeMenu), 0);
+
+    this._activeHelpMenuCleanup = removeMenu;
+  }
+
   private cycleSpeed(direction: number): void {
     const currentSpeed = this.session.playbackSpeed;
     const currentIndex = PLAYBACK_SPEED_PRESETS.indexOf(currentSpeed as typeof PLAYBACK_SPEED_PRESETS[number]);
@@ -896,7 +1018,8 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     };
     const iconName = icons[this.session.loopMode];
     const label = labels[this.session.loopMode];
-    this.loopButton.innerHTML = `${getIconSvg(iconName, 'sm')}<span style="margin-left:4px">${label}</span>`;
+    this.loopButton.innerHTML = getIconSvg(iconName, 'sm');
+    this.loopButton.setAttribute('aria-label', `${label} — Cycle loop mode`);
   }
 
   private updateDirectionButton(): void {
@@ -919,6 +1042,41 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     if (!files || files.length === 0) return;
 
     const fileArray = Array.from(files);
+
+    // Check for .rvedl files in the selection
+    const edlFile = fileArray.find(f => f.name.endsWith('.rvedl'));
+    if (edlFile) {
+      try {
+        const text = await edlFile.text();
+        const entries = this.session.loadEDL(text);
+        if (entries.length > 0) {
+          // Build a summary of the loaded EDL sources
+          const uniqueSources = new Set(entries.map(e => {
+            // Extract filename from full path for display
+            const parts = e.sourcePath.split('/');
+            return parts[parts.length - 1] || e.sourcePath;
+          }));
+          const sourceList = Array.from(uniqueSources).slice(0, 5).join(', ');
+          const moreCount = uniqueSources.size > 5 ? ` and ${uniqueSources.size - 5} more` : '';
+          showAlert(
+            `Loaded ${entries.length} EDL ${entries.length === 1 ? 'entry' : 'entries'} ` +
+            `from ${edlFile.name} referencing ${uniqueSources.size} ` +
+            `${uniqueSources.size === 1 ? 'source' : 'sources'}: ${sourceList}${moreCount}.\n\n` +
+            `Source paths are local filesystem references. ` +
+            `Load the corresponding media files to resolve them.`,
+            { type: 'info', title: 'EDL Loaded' }
+          );
+          this.emit('fileLoaded', undefined);
+        } else {
+          showAlert(`No valid entries found in ${edlFile.name}.`, { type: 'warning', title: 'EDL Empty' });
+        }
+      } catch (err) {
+        console.error('Failed to load RVEDL file:', err);
+        showAlert(`Failed to load ${edlFile.name}: ${err}`, { type: 'error', title: 'Load Error' });
+      }
+      input.value = '';
+      return;
+    }
 
     // Check for .rv or .gto files in the selection
     const sessionFile = fileArray.find(f => f.name.endsWith('.rv') || f.name.endsWith('.gto'));
@@ -1042,9 +1200,12 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   }
 
   dispose(): void {
-    // Remove any open speed menu from document.body
+    // Remove any open menus from document.body
     if (this._activeSpeedMenuCleanup) {
       this._activeSpeedMenuCleanup();
+    }
+    if (this._activeHelpMenuCleanup) {
+      this._activeHelpMenuCleanup();
     }
 
     // Remove overflow fade listeners

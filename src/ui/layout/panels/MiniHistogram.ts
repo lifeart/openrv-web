@@ -79,10 +79,10 @@ export class MiniHistogram {
       background: transparent;
       border: 1px solid var(--border-primary);
       color: var(--text-secondary);
-      padding: 1px 6px;
+      padding: 2px 8px;
       border-radius: 3px;
       cursor: pointer;
-      font-size: 9px;
+      font-size: 10px;
       align-self: flex-start;
     `;
     this.modeButton.addEventListener('click', () => this.cycleMode());

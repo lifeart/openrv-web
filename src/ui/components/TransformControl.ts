@@ -66,7 +66,7 @@ export class TransformControl extends EventEmitter<TransformControlEvents> {
     flipVBtn.dataset.testid = 'transform-flip-vertical';
 
     // Reset button
-    const resetBtn = this.createButton('reset', () => this.reset(), 'Reset transforms');
+    const resetBtn = this.createButton('refresh', () => this.reset(), 'Reset transforms');
     resetBtn.dataset.testid = 'transform-reset';
 
     // Append rotation indicator after buttons

@@ -500,6 +500,66 @@ describe('GTOSettingsParser.parseColorAdjustments', () => {
   });
 
   // =================================================================
+  // Per-channel scale and offset (Item 2.3)
+  // =================================================================
+
+  describe('per-channel scale and offset', () => {
+    it('SCOF-GTO-001: Parse color.scale = [1.0, 0.5, 1.5] -> scaleRGB: [1, 0.5, 1.5]', () => {
+      const dto = createMockDTO({ scale: [1.0, 0.5, 1.5] });
+      const result = parseColorAdjustments(dto);
+
+      expect(result).not.toBeNull();
+      expect(result!.scale).toBe(1.0);
+      expect(result!.scaleRGB).toEqual([1, 0.5, 1.5]);
+    });
+
+    it('SCOF-GTO-002: Parse color.offset = [0.1, 0, -0.1] -> offsetRGB: [0.1, 0, -0.1]', () => {
+      const dto = createMockDTO({ offset: [0.1, 0, -0.1] });
+      const result = parseColorAdjustments(dto);
+
+      expect(result).not.toBeNull();
+      expect(result!.offset).toBe(0.1);
+      expect(result!.offsetRGB).toEqual([0.1, 0, -0.1]);
+    });
+
+    it('SCOF-GTO-003: Scalar scale fallback -> scale: 2.0, scaleRGB undefined', () => {
+      const dto = createMockDTO({ scale: 2.0 });
+      const result = parseColorAdjustments(dto);
+
+      expect(result).not.toBeNull();
+      expect(result!.scale).toBe(2.0);
+      expect(result!.scaleRGB).toBeUndefined();
+    });
+
+    it('SCOF-GTO-004: Scalar offset fallback -> offset: 0.5, offsetRGB undefined', () => {
+      const dto = createMockDTO({ offset: 0.5 });
+      const result = parseColorAdjustments(dto);
+
+      expect(result).not.toBeNull();
+      expect(result!.offset).toBe(0.5);
+      expect(result!.offsetRGB).toBeUndefined();
+    });
+
+    it('scalar offset still maps to brightness fallback', () => {
+      const dto = createMockDTO({ offset: 0.1 });
+      const result = parseColorAdjustments(dto);
+
+      expect(result).not.toBeNull();
+      expect(result!.brightness).toBe(0.1);
+      expect(result!.offset).toBe(0.1);
+    });
+
+    it('per-channel offset does NOT map to brightness fallback', () => {
+      const dto = createMockDTO({ offset: [0.1, 0.2, 0.3] });
+      const result = parseColorAdjustments(dto);
+
+      expect(result).not.toBeNull();
+      expect(result!.offsetRGB).toEqual([0.1, 0.2, 0.3]);
+      expect(result!.brightness).toBeUndefined();
+    });
+  });
+
+  // =================================================================
   // Round-trip: export -> re-parse
   // =================================================================
 

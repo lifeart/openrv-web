@@ -10,6 +10,8 @@
       uniform vec3 u_gammaRGB;       // 0.1 to 4.0 per channel
       uniform float u_saturation;    // 0 to 2
       uniform vec3 u_contrastRGB;    // 0 to 2 per channel
+      uniform vec3 u_scaleRGB;       // per-channel multiplicative scale (default 1,1,1)
+      uniform vec3 u_offsetRGB;      // per-channel additive offset (default 0,0,0)
       uniform float u_brightness;    // -1 to +1
       uniform float u_temperature;   // -100 to +100
       uniform float u_tint;          // -100 to +100
@@ -863,6 +865,10 @@
 
         // 1. Exposure (in stops, applied in linear space, per-channel)
         color.rgb *= exp2(u_exposureRGB);
+
+        // 1a. Per-channel scale and offset (after exposure, before contrast)
+        // OpenRV pipeline: exposure -> scale -> offset -> contrast -> saturation
+        color.rgb = color.rgb * u_scaleRGB + u_offsetRGB;
 
         // 1b. Inline 1D LUT (from RVColor luminanceLUT, applied after exposure, before contrast)
         color.rgb = applyInlineLUT(color.rgb);

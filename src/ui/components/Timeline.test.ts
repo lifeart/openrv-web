@@ -422,7 +422,7 @@ describe('Timeline', () => {
       canvas.setPointerCapture = vi.fn();
       canvas.releasePointerCapture = vi.fn();
 
-      // Dispatch pointerdown on the track area (y > 35 to avoid timecode toggle)
+      // Dispatch pointerdown on the track area
       const pointerDownEvent = new PointerEvent('pointerdown', {
         clientX: 500,
         clientY: 50,

@@ -228,12 +228,23 @@ export function parseColorAdjustments(dto: GTODTO): Partial<ColorAdjustments> | 
         ];
       }
 
+      // Scale: default 1 (multiplicative, identity)
+      const scaleResult = extractScalarAndRGB(colorComp.property('scale').value(), 1);
+      if (typeof scaleResult.scalar === 'number') adjustments.scale = scaleResult.scalar;
+      if (scaleResult.rgb) adjustments.scaleRGB = scaleResult.rgb;
+
+      // Offset: default 0 (additive, identity)
+      // Per-channel float[3] → offsetRGB; scalar → offset (also used as brightness fallback)
+      const offsetResult = extractScalarAndRGB(colorComp.property('offset').value(), 0);
+      if (typeof offsetResult.scalar === 'number') adjustments.offset = offsetResult.scalar;
+      if (offsetResult.rgb) adjustments.offsetRGB = offsetResult.rgb;
+
       const saturation = getNumberValue(colorComp.property('saturation').value());
-      const offset = getNumberValue(colorComp.property('offset').value());
 
       if (typeof saturation === 'number') adjustments.saturation = saturation;
-      if (typeof offset === 'number' && adjustments.brightness === undefined) {
-        adjustments.brightness = offset;
+      // Scalar offset doubles as brightness fallback when no explicit brightness is set
+      if (typeof offsetResult.scalar === 'number' && !offsetResult.rgb && adjustments.brightness === undefined) {
+        adjustments.brightness = offsetResult.scalar;
       }
     }
 

@@ -127,7 +127,7 @@ export class LeftPanelContent {
       background: transparent;
       border: none;
       color: var(--text-muted);
-      padding: 0 4px;
+      padding: 2px 4px;
       cursor: pointer;
       font-size: 9px;
       margin-left: auto;
@@ -301,10 +301,10 @@ export class LeftPanelContent {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 3px 4px;
+        padding: 4px;
         cursor: pointer;
         font-size: 10px;
-        border-radius: 2px;
+        border-radius: 3px;
         ${i === currentIndex ? 'background: rgba(var(--accent-primary-rgb), 0.15); color: var(--text-primary);' : 'color: var(--text-secondary);'}
         ${i > currentIndex ? 'opacity: 0.4;' : ''}
       `;

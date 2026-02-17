@@ -602,14 +602,14 @@ export class ViewerGLRenderer {
       return true;
     }
 
+    // Apply user rotation/flip via shader uniforms (replaces CSS transform)
+    this.applyUserTransformToRenderer();
+
     // Render
     PerfTrace.begin('renderer.clear+render');
     renderer.clear(0, 0, 0, 1);
     renderer.renderImage(image, 0, 0, 1, 1);
     PerfTrace.end('renderer.clear+render');
-
-    // CSS transform for rotation/flip
-    this.applyTransformToCanvas(this._glCanvas);
 
     this._lastRenderedImage = new WeakRef(image);
     this._lastRenderedWidth = displayWidth;
@@ -665,6 +665,9 @@ export class ViewerGLRenderer {
     renderer.applyRenderState(state);
     PerfTrace.end('blit.buildRenderState');
 
+    // Apply user rotation/flip via shader uniforms (replaces CSS transform)
+    this.applyUserTransformToRenderer();
+
     // Skip re-render if same image, same dimensions, and no state changes.
     const sameImage = this._lastRenderedImage?.deref() === image;
     const sameDims = displayWidth === this._lastRenderedWidth && displayHeight === this._lastRenderedHeight;
@@ -713,9 +716,6 @@ export class ViewerGLRenderer {
     const cssH = this._logicalHeight || Math.round(displayHeight / dpr);
     blitCanvas.style.width = `${cssW}px`;
     blitCanvas.style.height = `${cssH}px`;
-
-    // CSS transform for rotation/flip
-    this.applyTransformToCanvas(blitCanvas);
 
     return true;
   }
@@ -769,6 +769,9 @@ export class ViewerGLRenderer {
     renderer.applyRenderState(state);
     PerfTrace.end('canvas2dBlit.buildRenderState');
 
+    // Apply user rotation/flip via shader uniforms (replaces CSS transform)
+    this.applyUserTransformToRenderer();
+
     // Skip re-render if same image, same dimensions, and no state changes.
     const sameImage = this._lastRenderedImage?.deref() === image;
     const sameDims = displayWidth === this._lastRenderedWidth && displayHeight === this._lastRenderedHeight;
@@ -817,22 +820,19 @@ export class ViewerGLRenderer {
     blitCanvas.style.width = `${cssW}px`;
     blitCanvas.style.height = `${cssH}px`;
 
-    // CSS transform for rotation/flip
-    this.applyTransformToCanvas(blitCanvas);
-
     return true;
   }
 
   /**
-   * Apply CSS rotation/flip transform to a canvas element.
+   * Apply user rotation/flip transform via shader uniforms on the renderer.
+   * This replaces the old CSS transform approach, ensuring the GL buffer
+   * contains the correctly rotated/flipped pixels (no CSS layout issues).
    */
-  private applyTransformToCanvas(canvas: HTMLCanvasElement): void {
+  private applyUserTransformToRenderer(): void {
+    const renderer = this._glRenderer;
+    if (!renderer || typeof (renderer as Renderer).setUserTransform !== 'function') return;
     const { rotation, flipH, flipV } = this.ctx.getTransformManager().transform;
-    const transforms: string[] = [];
-    if (rotation) transforms.push(`rotate(${rotation}deg)`);
-    if (flipH) transforms.push('scaleX(-1)');
-    if (flipV) transforms.push('scaleY(-1)');
-    canvas.style.transform = transforms.length ? transforms.join(' ') : '';
+    (renderer as Renderer).setUserTransform(rotation, flipH, flipV);
   }
 
   /**
@@ -933,6 +933,7 @@ export class ViewerGLRenderer {
   deactivateHDRMode(): void {
     if (!this._glCanvas) return;
     this._glCanvas.style.display = 'none';
+    this._glCanvas.style.transform = ''; // Clear any stale CSS transform
     this.hideWebGPUBlitCanvas();
     this.hideCanvas2DBlitCanvas();
     this.ctx.getImageCanvas().style.visibility = 'visible';
@@ -946,6 +947,7 @@ export class ViewerGLRenderer {
   deactivateSDRWebGLMode(): void {
     if (!this._glCanvas) return;
     this._glCanvas.style.display = 'none';
+    this._glCanvas.style.transform = ''; // Clear any stale CSS transform
     this.ctx.getImageCanvas().style.visibility = 'visible';
     this._sdrWebGLRenderActive = false;
     // Restore CSS filters for the 2D canvas path
@@ -1106,6 +1108,9 @@ export class ViewerGLRenderer {
     // Sync all render state (SDR: use as configured, no overrides)
     renderer.applyRenderState(this.buildRenderState());
 
+    // Apply user rotation/flip via shader uniforms (replaces CSS transform)
+    this.applyUserTransformToRenderer();
+
     // Render
     renderer.clear(0, 0, 0, 1);
     const result = renderer.renderSDRFrame(source);
@@ -1115,14 +1120,6 @@ export class ViewerGLRenderer {
       this.deactivateSDRWebGLMode();
       return false;
     }
-
-    // CSS transform for rotation/flip
-    const { rotation, flipH, flipV } = this.ctx.getTransformManager().transform;
-    const transforms: string[] = [];
-    if (rotation) transforms.push(`rotate(${rotation}deg)`);
-    if (flipH) transforms.push('scaleX(-1)');
-    if (flipV) transforms.push('scaleY(-1)');
-    this._glCanvas.style.transform = transforms.length ? transforms.join(' ') : '';
 
     return true;
   }

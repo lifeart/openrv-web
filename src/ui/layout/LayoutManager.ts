@@ -232,16 +232,16 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
       border: none;
       color: var(--text-muted);
       cursor: pointer;
-      padding: 2px;
+      padding: 4px;
       border-radius: 4px;
       width: 24px;
-      height: 20px;
+      height: 24px;
       display: flex;
       align-items: center;
       justify-content: center;
       align-self: ${isLeft ? 'flex-end' : 'flex-start'};
       flex-shrink: 0;
-      margin: 2px 4px;
+      margin: 4px;
     `;
     contentCollapseBtn.addEventListener('click', () => this.store.togglePanelCollapsed(id));
     contentCollapseBtn.addEventListener('mouseenter', () => {
@@ -403,7 +403,7 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
         background: transparent;
         border: 1px solid var(--border-primary);
         color: var(--text-secondary);
-        padding: 1px 8px;
+        padding: 2px 8px;
         border-radius: 3px;
         cursor: pointer;
         font-size: 10px;

@@ -86,3 +86,7 @@ export {
   type RAWExifMetadata,
   type RAWPreviewResult,
 } from './RAWPreviewDecoder';
+export {
+  parseRVEDL,
+  type RVEDLEntry,
+} from './RVEDLParser';

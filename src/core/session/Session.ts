@@ -1,6 +1,7 @@
 import { SimpleReader, GTODTO } from 'gto-js';
 import type { GTOData } from 'gto-js';
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
+import { parseRVEDL, type RVEDLEntry } from '../../formats/RVEDLParser';
 import {
   SequenceFrame,
   SequenceInfo,
@@ -168,10 +169,13 @@ export interface SessionEvents extends EventMap {
   // Sub-frame interpolation events
   interpolationEnabledChanged: boolean;
   subFramePositionChanged: SubFramePosition | null;
+  // EDL events
+  edlLoaded: RVEDLEntry[];
 }
 
 // Re-export from centralized types for backward compatibility
 export type { LoopMode, MediaType } from '../types/session';
+export type { RVEDLEntry } from '../../formats/RVEDLParser';
 
 export interface MediaSource {
   type: MediaType;
@@ -307,6 +311,9 @@ export class Session extends EventEmitter<SessionEvents> {
 
   // Uncrop state parsed from GTO (stored for export round-trip)
   private _uncropState: UncropState | null = null;
+
+  // EDL entries parsed from RVEDL file (pending source resolution)
+  private _edlEntries: RVEDLEntry[] = [];
 
 
   constructor() {
@@ -469,6 +476,17 @@ export class Session extends EventEmitter<SessionEvents> {
 
   set uncropState(state: UncropState | null) {
     this._uncropState = state;
+  }
+
+  /**
+   * EDL entries parsed from the last loaded RVEDL file.
+   * Each entry describes a source path with in/out frame range.
+   * Returns an empty array if no EDL has been loaded.
+   * Source paths are local filesystem references and may need to be
+   * resolved by matching against loaded files.
+   */
+  get edlEntries(): readonly RVEDLEntry[] {
+    return this._edlEntries;
   }
 
   /** Matte overlay settings */
@@ -1004,6 +1022,26 @@ export class Session extends EventEmitter<SessionEvents> {
     }
 
     this.emit('sessionLoaded', undefined);
+  }
+
+  /**
+   * Parse an RVEDL (Edit Decision List) text, store the entries on the
+   * session, and emit an `edlLoaded` event.
+   *
+   * Each entry describes a source path with in/out frame range.
+   * In a web context the source paths reference local filesystem locations
+   * that cannot be loaded directly; the caller should present the entries
+   * to the user so they can resolve them by loading matching files.
+   *
+   * The parsed entries are accessible afterwards via {@link edlEntries}.
+   */
+  loadEDL(text: string): RVEDLEntry[] {
+    const entries = parseRVEDL(text);
+    this._edlEntries = entries;
+    if (entries.length > 0) {
+      this.emit('edlLoaded', entries);
+    }
+    return entries;
   }
 
   /**

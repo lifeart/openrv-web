@@ -161,6 +161,10 @@ function assignColorAdjustments(dst: ColorAdjustments, src: Readonly<ColorAdjust
   dst.exposureRGB = src.exposureRGB;
   dst.gammaRGB = src.gammaRGB;
   dst.contrastRGB = src.contrastRGB;
+  dst.scale = src.scale;
+  dst.scaleRGB = src.scaleRGB;
+  dst.offset = src.offset;
+  dst.offsetRGB = src.offsetRGB;
   dst.inlineLUT = src.inlineLUT;
   dst.lutChannels = src.lutChannels;
 }
@@ -955,9 +959,12 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
           a.saturation !== c.saturation || a.contrast !== c.contrast ||
           a.brightness !== c.brightness || a.temperature !== c.temperature ||
           a.tint !== c.tint || a.hueRotation !== c.hueRotation ||
+          a.scale !== c.scale || a.offset !== c.offset ||
           rgbChanged(a.exposureRGB, c.exposureRGB) ||
           rgbChanged(a.gammaRGB, c.gammaRGB) ||
-          rgbChanged(a.contrastRGB, c.contrastRGB)) {
+          rgbChanged(a.contrastRGB, c.contrastRGB) ||
+          rgbChanged(a.scaleRGB, c.scaleRGB) ||
+          rgbChanged(a.offsetRGB, c.offsetRGB)) {
         this.setColorAdjustments(a);
       }
 
@@ -1240,9 +1247,18 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
         Number.isFinite(expRGB[2]) ? expRGB[2] : 0,
       ];
 
+      // Per-channel scale: broadcast scalar when per-channel is absent; identity = [1,1,1]
+      const scaleScalar = adj.scale ?? 1;
+      const sclRGB = adj.scaleRGB ?? [scaleScalar, scaleScalar, scaleScalar];
+      // Per-channel offset: broadcast scalar when per-channel is absent; identity = [0,0,0]
+      const offsetScalar = adj.offset ?? 0;
+      const offRGB = adj.offsetRGB ?? [offsetScalar, offsetScalar, offsetScalar];
+
       shader.setUniform('u_exposureRGB', safeExposureRGB);
       shader.setUniform('u_gammaRGB', safeGammaRGB);
       shader.setUniform('u_contrastRGB', conRGB);
+      shader.setUniform('u_scaleRGB', sclRGB);
+      shader.setUniform('u_offsetRGB', offRGB);
       shader.setUniform('u_saturation', adj.saturation);
       shader.setUniform('u_brightness', adj.brightness);
       shader.setUniform('u_temperature', adj.temperature);

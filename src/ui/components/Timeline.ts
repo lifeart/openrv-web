@@ -211,8 +211,8 @@ export class Timeline {
     if (!source || this.width === 0) return;
 
     const padding = 60;
-    const trackY = 35;
-    const trackHeight = 24;
+    const trackY = 0;
+    const trackHeight = 42;
     const trackWidth = this.width - padding * 2;
     const duration = source.duration ?? 1;
 
@@ -304,14 +304,13 @@ export class Timeline {
   }
 
   private onPointerDown = (e: PointerEvent): void => {
-    // Check if click is on the frame counter area (top region above the track)
     const rect = this.canvas.getBoundingClientRect();
     const y = e.clientY - rect.top;
     const x = e.clientX - rect.left;
-    const trackY = 35;
 
-    if (y < trackY && x > this.width * 0.25 && x < this.width * 0.75) {
-      // Click on frame counter area - toggle timecode display
+    // Check if click is on the frame counter area (bottom info region)
+    const bottomInfoY = this.height - 20;
+    if (y > bottomInfoY - 10 && y < bottomInfoY + 10 && x > this.width * 0.25 && x < this.width * 0.75) {
       this.toggleTimecodeDisplay();
       return;
     }
@@ -393,8 +392,8 @@ export class Timeline {
     ctx.fillRect(0, 0, width, height);
 
     const padding = 60;
-    const trackY = 35;
-    const trackHeight = 24;
+    const trackY = 0;
+    const trackHeight = 42;
     const trackWidth = width - padding * 2;
 
     // Get source info for full duration
@@ -532,7 +531,7 @@ export class Timeline {
         if (marker.note) {
           ctx.fillStyle = markerColor;
           ctx.beginPath();
-          ctx.arc(markX, trackY - 8, 3, 0, Math.PI * 2);
+          ctx.arc(markX, trackY + trackHeight + 4, 3, 0, Math.PI * 2);
           ctx.fill();
         }
       }
@@ -578,28 +577,28 @@ export class Timeline {
     const rightLabel = isTimecode ? formatTimecode(duration, fps) : String(duration);
     ctx.fillText(rightLabel, width - padding + 10, trackY + trackHeight / 2);
 
-    // Current frame and in/out info (top center)
+    // Current frame and in/out info (bottom center)
+    const bottomInfoY = height - 20;
     ctx.fillStyle = colors.text;
     ctx.textAlign = 'center';
-    ctx.font = 'bold 14px -apple-system, BlinkMacSystemFont, monospace';
+    ctx.font = 'bold 13px -apple-system, BlinkMacSystemFont, monospace';
     const frameLabel = formatFrameDisplay(currentFrame, fps, this._timecodeDisplayMode);
     const inOutInfo = inPoint !== 1 || outPoint !== duration
       ? isTimecode
         ? ` [${formatTimecode(inPoint, fps)}-${formatTimecode(outPoint, fps)}]`
         : ` [${inPoint}-${outPoint}]`
       : '';
-    ctx.fillText(`${frameLabel}${inOutInfo}`, width / 2, 18);
+    ctx.fillText(`${frameLabel}${inOutInfo}`, width / 2, bottomInfoY);
 
     // Draw timecode mode indicator (small label showing current mode)
     const modeLabel = isTimecode ? 'TC' : 'F#';
     ctx.font = '9px -apple-system, BlinkMacSystemFont, monospace';
     ctx.fillStyle = colors.textDim;
     ctx.textAlign = 'left';
-    // Position to the right of the frame display text
     const frameLabelWidth = ctx.measureText(`${frameLabel}${inOutInfo}`).width;
-    ctx.fillText(modeLabel, width / 2 + frameLabelWidth / 2 + 6, 18);
+    ctx.fillText(modeLabel, width / 2 + frameLabelWidth / 2 + 6, bottomInfoY);
 
-    // Info text (bottom)
+    // Info text (bottom line)
     ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = colors.textDim;
 
@@ -607,7 +606,7 @@ export class Timeline {
     if (source) {
       ctx.textAlign = 'left';
       const typeLabel = source.type === 'video' ? '[VID]' : '[IMG]';
-      ctx.fillText(`${typeLabel} ${source.name} (${source.width}×${source.height})`, padding, height - 12);
+      ctx.fillText(`${typeLabel} ${source.name} (${source.width}×${source.height})`, padding, height - 6);
     }
 
     // Playback info
@@ -617,7 +616,7 @@ export class Timeline {
     const fpsDisplay = this.session.isPlaying && effectiveFps > 0
       ? `${effectiveFps.toFixed(1)}/${this.session.fps} fps`
       : `${this.session.fps} fps`;
-    ctx.fillText(`${status} | ${fpsDisplay} | ${this.session.loopMode}`, width - padding, height - 12);
+    ctx.fillText(`${status} | ${fpsDisplay} | ${this.session.loopMode}`, width - padding, height - 6);
   }
 
   refresh(): void {

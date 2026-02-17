@@ -129,7 +129,8 @@ export class ThemeControl {
    */
   private updateButtonLabel(): void {
     const mode = getThemeManager().getMode();
-    this.button.innerHTML = `${this.getThemeIcon(mode)}<span>${this.getModeLabel(mode)}</span>`;
+    this.button.innerHTML = this.getThemeIcon(mode);
+    this.button.setAttribute('aria-label', `Theme: ${this.getModeLabel(mode)}`);
   }
 
   /**

@@ -94,6 +94,7 @@ import {
   buildContainerFilterString,
   drawPlaceholder as drawPlaceholderUtil,
   calculateDisplayDimensions,
+  getEffectiveDimensions,
 } from './ViewerRenderingUtils';
 import {
   createExportCanvas as createExportCanvasUtil,
@@ -1168,17 +1169,25 @@ export class Viewer {
     const parActive = isPARActive(this.parState);
     const virtualWidth = parActive ? calculatePARCorrectedWidth(baseWidth, this.parState.par) : baseWidth;
 
-    const { width: displayWidth, height: displayHeight } = calculateDisplayDimensions(
+    // Apply rotation to get effective dimensions for layout (90/270 swaps width/height)
+    const userRotation = this.transformManager.transform.rotation;
+    const { width: effectiveWidth, height: effectiveHeight } = getEffectiveDimensions(
       virtualWidth,
       virtualHeight,
+      userRotation
+    );
+
+    const { width: displayWidth, height: displayHeight } = calculateDisplayDimensions(
+      effectiveWidth,
+      effectiveHeight,
       containerWidth,
       containerHeight,
       this.transformManager.zoom
     );
 
-    // Scale factor from virtual source to display pixels
-    const uncropScaleX = uncropActive ? displayWidth / virtualWidth : 1;
-    const uncropScaleY = uncropActive ? displayHeight / virtualHeight : 1;
+    // Scale factor from effective source to display pixels
+    const uncropScaleX = uncropActive ? displayWidth / effectiveWidth : 1;
+    const uncropScaleY = uncropActive ? displayHeight / effectiveHeight : 1;
     // Pixel offsets for the image within the expanded canvas
     const uncropOffsetX = uncropActive ? Math.round(uncropPad.left * uncropScaleX) : 0;
     const uncropOffsetY = uncropActive ? Math.round(uncropPad.top * uncropScaleY) : 0;
