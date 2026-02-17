@@ -26,6 +26,7 @@ interface PanelElements {
   handle: HTMLElement;
   tabBar: HTMLElement;
   tabContent: HTMLElement;
+  contentCollapseBtn: HTMLButtonElement;
 }
 
 export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
@@ -167,7 +168,7 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
       border-${isLeft ? 'right' : 'left'}: 1px solid var(--border-primary);
     `;
 
-    // Collapse rail (always visible)
+    // Collapse rail (visible only when collapsed)
     const rail = document.createElement('div');
     rail.className = `layout-rail layout-rail-${id}`;
     rail.style.cssText = `
@@ -184,8 +185,8 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
 
     const collapseBtn = document.createElement('button');
     collapseBtn.dataset.testid = `layout-collapse-${id}`;
-    collapseBtn.title = `Toggle ${id} panel`;
-    collapseBtn.innerHTML = getIconSvg(isLeft ? 'chevron-left' : 'chevron-right', 'sm');
+    collapseBtn.title = `Expand ${id} panel`;
+    collapseBtn.innerHTML = getIconSvg(isLeft ? 'chevron-right' : 'chevron-left', 'sm');
     collapseBtn.style.cssText = `
       background: transparent;
       border: none;
@@ -221,6 +222,37 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
       flex-direction: column;
     `;
 
+    // Content collapse button (visible when panel is expanded, rail is hidden)
+    const contentCollapseBtn = document.createElement('button');
+    contentCollapseBtn.dataset.testid = `layout-content-collapse-${id}`;
+    contentCollapseBtn.title = `Collapse ${id} panel`;
+    contentCollapseBtn.innerHTML = getIconSvg(isLeft ? 'chevron-left' : 'chevron-right', 'sm');
+    contentCollapseBtn.style.cssText = `
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 2px;
+      border-radius: 4px;
+      width: 24px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      align-self: ${isLeft ? 'flex-end' : 'flex-start'};
+      flex-shrink: 0;
+      margin: 2px 4px;
+    `;
+    contentCollapseBtn.addEventListener('click', () => this.store.togglePanelCollapsed(id));
+    contentCollapseBtn.addEventListener('mouseenter', () => {
+      contentCollapseBtn.style.background = 'var(--bg-hover)';
+      contentCollapseBtn.style.color = 'var(--text-primary)';
+    });
+    contentCollapseBtn.addEventListener('mouseleave', () => {
+      contentCollapseBtn.style.background = 'transparent';
+      contentCollapseBtn.style.color = 'var(--text-muted)';
+    });
+
     // Tab bar inside panel
     const tabBar = document.createElement('div');
     tabBar.className = `layout-panel-tabs layout-panel-tabs-${id}`;
@@ -241,6 +273,7 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
       padding: 8px;
     `;
 
+    content.appendChild(contentCollapseBtn);
     content.appendChild(tabBar);
     content.appendChild(tabContent);
 
@@ -258,7 +291,7 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
       wrapper.appendChild(rail);
     }
 
-    return { wrapper, rail, content, handle, tabBar, tabContent };
+    return { wrapper, rail, content, handle, tabBar, tabContent, contentCollapseBtn };
   }
 
   private createDragHandle(panelId: PanelId): HTMLElement {
@@ -508,6 +541,7 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
 
       if (effectivelyCollapsed) {
         els.wrapper.style.width = `${COLLAPSED_RAIL_SIZE}px`;
+        els.rail.style.display = 'flex';
         els.content.style.display = 'none';
         els.handle.style.display = 'none';
         // If the store thinks it's expanded but there's no content, correct the store
@@ -516,20 +550,15 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
         }
       } else {
         els.wrapper.style.width = `${panel.size}px`;
+        els.rail.style.display = 'none';
         els.content.style.display = 'flex';
         els.handle.style.display = '';
       }
 
-      // Hide or show the collapse toggle button based on whether panel has content
+      // Hide or show the rail expand button based on whether panel has content
       const btn = els.rail.querySelector('button') as HTMLElement | null;
       if (btn) {
         btn.style.display = hasContent ? 'flex' : 'none';
-        const isLeft = id === 'left';
-        if (effectivelyCollapsed) {
-          btn.innerHTML = getIconSvg(isLeft ? 'chevron-right' : 'chevron-left', 'sm');
-        } else {
-          btn.innerHTML = getIconSvg(isLeft ? 'chevron-left' : 'chevron-right', 'sm');
-        }
       }
 
       // Update tab display

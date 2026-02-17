@@ -122,23 +122,24 @@ describe('LayoutManager', () => {
       expect(rightPanel.style.width).toBe('300px');
     });
 
-    it('LM-012: collapse button click toggles panel', () => {
+    it('LM-012: rail expand button and content collapse button toggle panel', () => {
       // Register content so the panel can expand
       const tab = document.createElement('div');
       manager.addPanelTab('right', 'Tab', tab);
 
       const root = manager.getElement();
-      const rightBtn = root.querySelector('[data-testid="layout-collapse-right"]') as HTMLButtonElement;
+      const railBtn = root.querySelector('[data-testid="layout-collapse-right"]') as HTMLButtonElement;
 
       // Initially collapsed
       expect(store.panels.right.collapsed).toBe(true);
 
-      // Click to expand
-      rightBtn.click();
+      // Click rail button to expand
+      railBtn.click();
       expect(store.panels.right.collapsed).toBe(false);
 
-      // Click to collapse
-      rightBtn.click();
+      // Click content collapse button to collapse
+      const contentBtn = root.querySelector('[data-testid="layout-content-collapse-right"]') as HTMLButtonElement;
+      contentBtn.click();
       expect(store.panels.right.collapsed).toBe(true);
     });
 
@@ -147,6 +148,59 @@ describe('LayoutManager', () => {
       // Left panel is collapsed by default
       const leftContent = root.querySelector('.layout-panel-content-left') as HTMLElement;
       expect(leftContent.style.display).toBe('none');
+    });
+
+    it('LM-014: rail hidden when panel is expanded', () => {
+      const tab = document.createElement('div');
+      manager.addPanelTab('right', 'Tab', tab);
+      store.setPanelCollapsed('right', false);
+
+      const root = manager.getElement();
+      const rail = root.querySelector('.layout-rail-right') as HTMLElement;
+      expect(rail.style.display).toBe('none');
+    });
+
+    it('LM-015: rail visible when panel is collapsed', () => {
+      const root = manager.getElement();
+      const rail = root.querySelector('.layout-rail-right') as HTMLElement;
+      expect(rail.style.display).toBe('flex');
+    });
+
+    it('LM-016: content collapse button exists inside expanded panel', () => {
+      const tab = document.createElement('div');
+      manager.addPanelTab('left', 'Tab', tab);
+      store.setPanelCollapsed('left', false);
+
+      const root = manager.getElement();
+      const btn = root.querySelector('[data-testid="layout-content-collapse-left"]');
+      expect(btn).not.toBeNull();
+    });
+
+    it('LM-017: content collapse button collapses expanded panel', () => {
+      const tab = document.createElement('div');
+      manager.addPanelTab('left', 'Tab', tab);
+      store.setPanelCollapsed('left', false);
+      expect(store.panels.left.collapsed).toBe(false);
+
+      const root = manager.getElement();
+      const btn = root.querySelector('[data-testid="layout-content-collapse-left"]') as HTMLButtonElement;
+      btn.click();
+      expect(store.panels.left.collapsed).toBe(true);
+    });
+
+    it('LM-018: expanded panel gains full width without rail', () => {
+      const tab = document.createElement('div');
+      manager.addPanelTab('right', 'Tab', tab);
+      store.setPanelCollapsed('right', false);
+      store.setPanelSize('right', 300);
+
+      const root = manager.getElement();
+      const rightPanel = root.querySelector('[data-testid="layout-panel-right"]') as HTMLElement;
+      const rail = root.querySelector('.layout-rail-right') as HTMLElement;
+
+      // Panel is 300px total, rail is hidden so content gets more space
+      expect(rightPanel.style.width).toBe('300px');
+      expect(rail.style.display).toBe('none');
     });
   });
 

@@ -332,7 +332,7 @@ test.describe('Tab Navigation', () => {
         annotate: 'button[title*="Pen"], button[title*="pen"]',
       };
 
-      const tabs = ['view', 'color', 'effects', 'transform', 'annotate'] as const;
+      const tabs = ['view', 'color', 'effects', 'transform', 'annotate', 'qc'] as const;
 
       for (const tabName of tabs) {
         await page.click(`button[data-tab-id="${tabName}"]`);

@@ -22,6 +22,14 @@ export interface ColorAdjustments {
   gammaRGB?: RGB3;
   /** Per-channel contrast (R, G, B). When set, overrides scalar `contrast`. */
   contrastRGB?: RGB3;
+  /** Multiplicative scale (R, G, B). Applied after exposure, before contrast.
+   *  Default identity is [1,1,1]. When set, overrides scalar `scale`. */
+  scale?: number;
+  scaleRGB?: RGB3;
+  /** Additive offset (R, G, B). Applied after scale, before contrast.
+   *  Default identity is [0,0,0]. When set, overrides scalar `offset`. */
+  offset?: number;
+  offsetRGB?: RGB3;
   /**
    * Inline 1D LUT from RVColor luminanceLUT component.
    * For 1-channel LUTs, contains N float values mapping luminance.
@@ -50,7 +58,7 @@ export const DEFAULT_COLOR_ADJUSTMENTS: ColorAdjustments = {
   blacks: 0,
 };
 
-export type NumericAdjustmentKey = Exclude<keyof ColorAdjustments, 'vibranceSkinProtection' | 'exposureRGB' | 'gammaRGB' | 'contrastRGB' | 'inlineLUT' | 'lutChannels'>;
+export type NumericAdjustmentKey = Exclude<keyof ColorAdjustments, 'vibranceSkinProtection' | 'exposureRGB' | 'gammaRGB' | 'contrastRGB' | 'scaleRGB' | 'offsetRGB' | 'scale' | 'offset' | 'inlineLUT' | 'lutChannels'>;
 
 export type ChannelMode = 'rgb' | 'red' | 'green' | 'blue' | 'alpha' | 'luminance';
 

@@ -97,6 +97,7 @@ The keyboard shortcuts feature is **fully implemented** with a comprehensive cen
 | tab.effects | 3 | Switch to Effects tab |
 | tab.transform | 4 | Switch to Transform tab |
 | tab.annotate | 5 | Switch to Annotate tab |
+| tab.qc | 6 | Switch to QC tab |
 
 #### View Controls
 | Action | Shortcut | Description |

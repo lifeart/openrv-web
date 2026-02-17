@@ -57,6 +57,7 @@ import { PlaybackEngine } from './PlaybackEngine';
 import { MarkerManager, MARKER_COLORS, type Marker, type MarkerColor } from './MarkerManager';
 import { VolumeManager } from './VolumeManager';
 import { ABCompareManager } from './ABCompareManager';
+import { AudioPlaybackManager } from '../../audio/AudioPlaybackManager';
 import { Logger } from '../../utils/Logger';
 
 const log = new Logger('Session');
@@ -204,6 +205,7 @@ export class Session extends EventEmitter<SessionEvents> {
   private _volumeManager = new VolumeManager();
   private _abCompareManager = new ABCompareManager();
   private _annotationStore = new AnnotationStore();
+  private _audioPlaybackManager = new AudioPlaybackManager();
 
   // Pre-detected HDR canvas resize tier from DisplayCapabilities.
   // Set via setHDRResizeTier() so VideoSourceNode can use it instead of re-probing.
@@ -322,7 +324,13 @@ export class Session extends EventEmitter<SessionEvents> {
     });
 
     // Forward PlaybackEngine events to Session events
-    this._playbackEngine.on('frameChanged', (frame) => this.emit('frameChanged', frame));
+    this._playbackEngine.on('frameChanged', (frame) => {
+      this.emit('frameChanged', frame);
+      // Audio scrub: play a short audio snippet when scrubbing (not during playback)
+      if (!this._playbackEngine.isPlaying) {
+        this._audioPlaybackManager.scrubToFrame(frame, this._playbackEngine.fps);
+      }
+    });
     this._playbackEngine.on('playbackChanged', (playing) => this.emit('playbackChanged', playing));
     this._playbackEngine.on('playDirectionChanged', (dir) => this.emit('playDirectionChanged', dir));
     this._playbackEngine.on('playbackSpeedChanged', (speed) => this.emit('playbackSpeedChanged', speed));
@@ -406,6 +414,11 @@ export class Session extends EventEmitter<SessionEvents> {
 
   get gtoData(): GTOData | null {
     return this._gtoData;
+  }
+
+  /** Audio playback manager for scrub audio and independent audio playback */
+  get audioPlaybackManager(): AudioPlaybackManager {
+    return this._audioPlaybackManager;
   }
 
   get currentFrame(): number {

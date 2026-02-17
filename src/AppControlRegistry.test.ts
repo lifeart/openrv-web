@@ -82,6 +82,10 @@ vi.mock('./ui/components/PlaylistPanel', () => ({ PlaylistPanel: createMockClass
 vi.mock('./ui/components/NetworkControl', () => ({ NetworkControl: createMockClass('NetworkControl') }));
 vi.mock('./ui/components/DeinterlaceControl', () => ({ DeinterlaceControl: createMockClass('DeinterlaceControl') }));
 vi.mock('./ui/components/FilmEmulationControl', () => ({ FilmEmulationControl: createMockClass('FilmEmulationControl') }));
+vi.mock('./ui/components/GamutMappingControl', () => ({ GamutMappingControl: createMockClass('GamutMappingControl') }));
+vi.mock('./ui/components/PerspectiveCorrectionControl', () => ({ PerspectiveCorrectionControl: createMockClass('PerspectiveCorrectionControl') }));
+vi.mock('./ui/components/StabilizationControl', () => ({ StabilizationControl: createMockClass('StabilizationControl') }));
+vi.mock('./ui/components/GamutDiagram', () => ({ GamutDiagram: createMockClass('GamutDiagram') }));
 
 // Manager / utility mocks
 vi.mock('./core/session/AutoSaveManager', () => ({ AutoSaveManager: createAsyncDisposeMockClass('AutoSaveManager') }));
@@ -103,10 +107,34 @@ vi.mock('./utils/HistoryManager', () => ({
 vi.mock('./ui/layout/panels/RightPanelContent', () => ({ RightPanelContent: createMockClass('RightPanelContent') }));
 vi.mock('./ui/layout/panels/LeftPanelContent', () => ({ LeftPanelContent: createMockClass('LeftPanelContent') }));
 
-// ContextToolbar is imported but not used by constructor/dispose - mock to avoid side effects
-vi.mock('./ui/components/layout/ContextToolbar', () => ({
-  ContextToolbar: createMockClass('ContextToolbar'),
-}));
+// ContextToolbar mock: class instance via createMockClass + static helpers that produce real DOM elements
+vi.mock('./ui/components/layout/ContextToolbar', () => {
+  const MockClass = createMockClass('ContextToolbar');
+  // Add instance method needed by setupTabContents
+  MockClass.prototype.setTabContent = vi.fn();
+  // Static helpers used by setupTabContents to build toolbar DOM
+  (MockClass as any).createDivider = () => {
+    const d = document.createElement('div');
+    d.className = 'mock-divider';
+    return d;
+  };
+  (MockClass as any).createIconButton = (icon: string, onClick: () => void, options?: any) => {
+    const btn = document.createElement('button');
+    btn.dataset.icon = icon;
+    btn.title = options?.title || '';
+    if (options?.title) btn.setAttribute('aria-label', options.title);
+    btn.addEventListener('click', onClick);
+    return btn;
+  };
+  (MockClass as any).createButton = (text: string, onClick: () => void, options?: any) => {
+    const btn = document.createElement('button');
+    btn.textContent = text;
+    btn.title = options?.title || '';
+    btn.addEventListener('click', onClick);
+    return btn;
+  };
+  return { ContextToolbar: MockClass };
+});
 
 import { AppControlRegistry } from './AppControlRegistry';
 
@@ -225,5 +253,103 @@ describe('AppControlRegistry', () => {
     // Verify it returned a promise (thenable)
     const result = autoSaveDispose.mock.results[0]!.value;
     expect(result).toBeInstanceOf(Promise);
+  });
+
+  describe('setupTabContents – panel toggle buttons in HeaderBar panels slot', () => {
+    function createMockOverlay() {
+      return { on: vi.fn(() => vi.fn()), toggle: vi.fn(), enable: vi.fn(), disable: vi.fn() };
+    }
+
+    function createSetupDeps() {
+      const contextToolbar = { setTabContent: vi.fn() } as any;
+      const viewer = {
+        getSafeAreasOverlay: vi.fn(() => ({})),
+        getFalseColor: vi.fn(() => createMockOverlay()),
+        getLuminanceVisualization: vi.fn(() => ({})),
+        getZebraStripes: vi.fn(() => ({})),
+        getHSLQualifier: vi.fn(() => ({ pickColor: vi.fn() })),
+        getSpotlightOverlay: vi.fn(() => createMockOverlay()),
+        getPixelProbe: vi.fn(() => createMockOverlay()),
+        getContainer: vi.fn(() => document.createElement('div')),
+        getImageData: vi.fn(() => null),
+        getClippingOverlay: vi.fn(() => ({ enable: vi.fn(), disable: vi.fn() })),
+        getCanvasContainer: vi.fn(() => document.createElement('div')),
+        getColorWheels: vi.fn(() => createMockOverlay()),
+        refresh: vi.fn(),
+      } as any;
+      const sessionBridge = { updateInfoPanel: vi.fn() } as any;
+
+      // Build a real panels-slot element so we can inspect its children
+      const panelsSlot = document.createElement('div');
+      panelsSlot.dataset.testid = 'panels-slot';
+      const headerBar = {
+        setPanelToggles: vi.fn((el: HTMLElement) => {
+          panelsSlot.innerHTML = '';
+          panelsSlot.appendChild(el);
+        }),
+        getPanelsSlot: vi.fn(() => panelsSlot),
+      } as any;
+
+      return { contextToolbar, viewer, sessionBridge, headerBar, panelsSlot };
+    }
+
+    it('ACR-004: panels slot receives panel toggle buttons after setupTabContents', () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+      const { contextToolbar, viewer, sessionBridge, headerBar, panelsSlot } = createSetupDeps();
+
+      registry.setupTabContents(contextToolbar, viewer, sessionBridge, headerBar);
+
+      // headerBar.setPanelToggles should have been called once with a container div
+      expect(headerBar.setPanelToggles).toHaveBeenCalledTimes(1);
+      const panelTogglesArg = headerBar.setPanelToggles.mock.calls[0][0] as HTMLElement;
+      expect(panelTogglesArg).toBeInstanceOf(HTMLElement);
+
+      // The container should now be inside the panels slot
+      expect(panelsSlot.contains(panelTogglesArg)).toBe(true);
+    });
+
+    it('ACR-005: panels slot contains exactly 3 toggle buttons (info, snapshots, playlist)', () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+      const { contextToolbar, viewer, sessionBridge, headerBar, panelsSlot } = createSetupDeps();
+
+      registry.setupTabContents(contextToolbar, viewer, sessionBridge, headerBar);
+
+      const buttons = panelsSlot.querySelectorAll('button');
+      expect(buttons.length).toBe(3);
+    });
+
+    it('ACR-006: each panel toggle button has the correct data-testid', () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+      const { contextToolbar, viewer, sessionBridge, headerBar, panelsSlot } = createSetupDeps();
+
+      registry.setupTabContents(contextToolbar, viewer, sessionBridge, headerBar);
+
+      const expectedTestIds = ['info-panel-toggle', 'snapshot-panel-toggle', 'playlist-panel-toggle'];
+      for (const testid of expectedTestIds) {
+        const btn = panelsSlot.querySelector(`[data-testid="${testid}"]`);
+        expect(btn, `button with data-testid="${testid}" should exist`).not.toBeNull();
+        expect(btn!.tagName).toBe('BUTTON');
+      }
+    });
+
+    it('ACR-007: panel toggle container uses flex layout', () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+      const { contextToolbar, viewer, sessionBridge, headerBar } = createSetupDeps();
+
+      registry.setupTabContents(contextToolbar, viewer, sessionBridge, headerBar);
+
+      // The container div passed to setPanelToggles should have flex layout
+      const panelTogglesContainer = headerBar.setPanelToggles.mock.calls[0][0] as HTMLElement;
+      expect(panelTogglesContainer.style.display).toBe('flex');
+      expect(panelTogglesContainer.style.alignItems).toBe('center');
+
+      // It should contain exactly the 3 buttons as direct children
+      const childButtons = panelTogglesContainer.querySelectorAll(':scope > button');
+      expect(childButtons.length).toBe(3);
+    });
   });
 });

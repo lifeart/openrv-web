@@ -248,6 +248,10 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'Digit5',
     description: 'Switch to Annotate tab'
   },
+  'tab.qc': {
+    code: 'Digit6',
+    description: 'Switch to QC tab'
+  },
 
   // Paint tools (handled by PaintToolbar component)
   'paint.pan': {

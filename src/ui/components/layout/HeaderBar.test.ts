@@ -512,6 +512,37 @@ describe('HeaderBar', () => {
     });
   });
 
+  describe('panels slot', () => {
+    it('HDR-U095: getPanelsSlot returns a container element', () => {
+      headerBar.render();
+      const slot = headerBar.getPanelsSlot();
+      expect(slot).toBeInstanceOf(HTMLElement);
+      expect(slot.dataset.testid).toBe('panels-slot');
+    });
+
+    it('HDR-U096: setPanelToggles replaces slot content', () => {
+      headerBar.render();
+      const el = document.createElement('div');
+      el.textContent = 'panel toggles';
+      headerBar.setPanelToggles(el);
+      expect(headerBar.getPanelsSlot().textContent).toContain('panel toggles');
+    });
+
+    it('HDR-U097: setPanelToggles clears previous content', () => {
+      headerBar.render();
+      const el1 = document.createElement('div');
+      el1.textContent = 'old';
+      headerBar.setPanelToggles(el1);
+
+      const el2 = document.createElement('div');
+      el2.textContent = 'new';
+      headerBar.setPanelToggles(el2);
+
+      expect(headerBar.getPanelsSlot().textContent).not.toContain('old');
+      expect(headerBar.getPanelsSlot().textContent).toContain('new');
+    });
+  });
+
   describe('child controls', () => {
     it('HDR-U100: getVolumeControl returns VolumeControl instance', () => {
       const volumeControl = headerBar.getVolumeControl();

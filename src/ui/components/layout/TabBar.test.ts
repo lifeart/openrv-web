@@ -81,6 +81,12 @@ describe('TabBar', () => {
       expect(btn).not.toBeNull();
     });
 
+    it('TAB-U026: has qc tab button', () => {
+      const el = tabBar.render();
+      const btn = el.querySelector('[data-tab-id="qc"]');
+      expect(btn).not.toBeNull();
+    });
+
     it('TAB-U025: all tabs have buttons', () => {
       const el = tabBar.render();
       for (const tab of TABS) {
@@ -240,6 +246,12 @@ describe('TabBar', () => {
       const handled = tabBar.handleKeyboard('5');
       expect(handled).toBe(true);
       expect(tabBar.activeTab).toBe('annotate');
+    });
+
+    it('TAB-U076: 6 key selects qc tab', () => {
+      const handled = tabBar.handleKeyboard('6');
+      expect(handled).toBe(true);
+      expect(tabBar.activeTab).toBe('qc');
     });
 
     it('TAB-U075: unhandled key returns false', () => {

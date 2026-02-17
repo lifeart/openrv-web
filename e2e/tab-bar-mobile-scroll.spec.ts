@@ -29,8 +29,8 @@ test.describe('TabBar Mobile Scroll', () => {
     expect(isScrollable).toBe(true);
   });
 
-  test('TABSCROLL-002: all 5 tabs should be present in the DOM on narrow viewport', async ({ page }) => {
-    const tabs = ['view', 'color', 'effects', 'transform', 'annotate'];
+  test('TABSCROLL-002: all 6 tabs should be present in the DOM on narrow viewport', async ({ page }) => {
+    const tabs = ['view', 'color', 'effects', 'transform', 'annotate', 'qc'];
     for (const tabId of tabs) {
       const tabButton = page.locator(`button[data-tab-id="${tabId}"]`);
       await expect(tabButton).toBeAttached();
@@ -71,7 +71,7 @@ test.describe('TabBar Mobile Scroll', () => {
   });
 
   test('TABSCROLL-005: cycling through all tabs should work on narrow viewport', async ({ page }) => {
-    const tabs = ['view', 'color', 'effects', 'transform', 'annotate'] as const;
+    const tabs = ['view', 'color', 'effects', 'transform', 'annotate', 'qc'] as const;
 
     for (const tabId of tabs) {
       const tabButton = page.locator(`button[data-tab-id="${tabId}"]`);

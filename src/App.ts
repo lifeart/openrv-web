@@ -282,7 +282,7 @@ export class App {
     const contextToolbarEl = this.contextToolbar.render();
 
     // Setup tab contents via control registry
-    this.controls.setupTabContents(this.contextToolbar, this.viewer, this.sessionBridge);
+    this.controls.setupTabContents(this.contextToolbar, this.viewer, this.sessionBridge, this.headerBar);
 
     const viewerEl = this.viewer.getElement();
     const timelineEl = this.timeline.render();
@@ -703,11 +703,12 @@ export class App {
       'edit.redo': () => this.paintEngine.redo(),
       'annotation.previous': () => this.goToPreviousAnnotation(),
       'annotation.next': () => this.goToNextAnnotation(),
-      'tab.view': () => this.tabBar.handleKeyboard('1'),
-      'tab.color': () => this.tabBar.handleKeyboard('2'),
-      'tab.effects': () => this.tabBar.handleKeyboard('3'),
-      'tab.transform': () => this.tabBar.handleKeyboard('4'),
-      'tab.annotate': () => this.tabBar.handleKeyboard('5'),
+      'tab.view': () => this.tabBar.setActiveTab('view'),
+      'tab.color': () => this.tabBar.setActiveTab('color'),
+      'tab.effects': () => this.tabBar.setActiveTab('effects'),
+      'tab.transform': () => this.tabBar.setActiveTab('transform'),
+      'tab.annotate': () => this.tabBar.setActiveTab('annotate'),
+      'tab.qc': () => this.tabBar.setActiveTab('qc'),
       'paint.pan': () => this.controls.paintToolbar.handleKeyboard('v'),
       'paint.pen': () => this.controls.paintToolbar.handleKeyboard('p'),
       'paint.eraser': () => this.controls.paintToolbar.handleKeyboard('e'),

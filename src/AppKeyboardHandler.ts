@@ -134,7 +134,7 @@ export class AppKeyboardHandler {
 
     // Group shortcuts by category
     const categories = {
-      'TABS': ['tab.view', 'tab.color', 'tab.effects', 'tab.transform', 'tab.annotate'],
+      'TABS': ['tab.view', 'tab.color', 'tab.effects', 'tab.transform', 'tab.annotate', 'tab.qc'],
       'PLAYBACK': ['playback.toggle', 'playback.stepBackward', 'playback.stepForward', 'playback.goToStart', 'playback.goToEnd', 'playback.toggleDirection', 'playback.slower', 'playback.stop', 'playback.faster'],
       'VIEW': ['view.fitToWindow', 'view.fitToWindowAlt', 'view.zoom50', 'view.toggleAB', 'view.toggleABAlt', 'view.toggleSpotlight', 'color.toggleHSLQualifier'],
       'MOUSE CONTROLS': [], // Special case - not in DEFAULT_KEY_BINDINGS

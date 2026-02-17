@@ -639,7 +639,7 @@ const rootNode = session.graphParseResult?.rootNode;
 # Type check
 pnpm typecheck
 
-# Run unit tests (10400+ tests)
+# Run unit tests (12200+ tests)
 pnpm test
 
 # Run e2e tests (requires dev server running)
@@ -655,7 +655,7 @@ pnpm preview
 
 ### Test Coverage
 
-The codebase includes comprehensive test coverage with **10400+ unit tests** across 251 test files and **103 e2e test suites**:
+The codebase includes comprehensive test coverage with **12200+ unit tests** across 294 test files and **103 e2e test suites**:
 
 - **Color Tools**: ColorWheels (46 tests), FalseColor (30 tests), HSLQualifier (57 tests), Curves, CDL, LogCurves (27 tests), DisplayTransfer, DisplayProfileControl
 - **OCIO**: OCIOConfig, OCIOTransform, OCIOProcessor (color space transforms, config parsing, reverse transforms)

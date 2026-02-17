@@ -66,6 +66,7 @@ describe('KeyBindings', () => {
       expect(DEFAULT_KEY_BINDINGS['tab.effects']!.code).toBe('Digit3');
       expect(DEFAULT_KEY_BINDINGS['tab.transform']!.code).toBe('Digit4');
       expect(DEFAULT_KEY_BINDINGS['tab.annotate']!.code).toBe('Digit5');
+      expect(DEFAULT_KEY_BINDINGS['tab.qc']!.code).toBe('Digit6');
     });
 
     it('KB-U011: defines paint tool bindings', () => {
@@ -299,7 +300,7 @@ describe('KeyBindings', () => {
       const tabBindings = Object.keys(DEFAULT_KEY_BINDINGS).filter((k) =>
         k.startsWith('tab.')
       );
-      expect(tabBindings.length).toBe(5); // 5 tabs
+      expect(tabBindings.length).toBe(6); // 6 tabs
     });
 
     it('KB-U070: has layout bindings', () => {

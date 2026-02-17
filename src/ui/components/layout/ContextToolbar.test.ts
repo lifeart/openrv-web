@@ -64,7 +64,7 @@ describe('ContextToolbar', () => {
     });
 
     it('CTX-U022: setActiveTab works for all tabs', () => {
-      const tabs: TabId[] = ['view', 'color', 'effects', 'transform', 'annotate'];
+      const tabs: TabId[] = ['view', 'color', 'effects', 'transform', 'annotate', 'qc'];
       for (const tab of tabs) {
         toolbar.setActiveTab(tab);
         expect(toolbar.activeTab).toBe(tab);
@@ -424,7 +424,7 @@ describe('ContextToolbar', () => {
   });
 
   describe('all tabs', () => {
-    const tabs: TabId[] = ['view', 'color', 'effects', 'transform', 'annotate'];
+    const tabs: TabId[] = ['view', 'color', 'effects', 'transform', 'annotate', 'qc'];
 
     tabs.forEach(tab => {
       it(`CTX-U090-${tab}: ${tab} tab has container`, () => {

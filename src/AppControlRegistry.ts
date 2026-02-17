@@ -268,10 +268,10 @@ export class AppControlRegistry {
     contextToolbar: ContextToolbar,
     viewer: Viewer,
     sessionBridge: AppSessionBridge,
+    headerBar: HeaderBar,
   ): void {
     // === VIEW TAB ===
-    // Organized into 5 logical groups with minimal dividers for compact layout
-    // Groups: Navigation | Comparison | Monitoring | Analysis | Overlays
+    // Organized into 3 logical groups: Navigation | Comparison | Display
     const viewContent = document.createElement('div');
     viewContent.style.cssText = 'display: flex; align-items: center; gap: 6px; flex-shrink: 0;';
 
@@ -288,22 +288,72 @@ export class AppControlRegistry {
     viewContent.appendChild(this.ghostFrameControl.render());
     viewContent.appendChild(ContextToolbar.createDivider());
 
-    // --- GROUP 3: Monitoring (Scopes + Stack) ---
-    viewContent.appendChild(this.scopesControl.render());
+    // --- GROUP 3: Display (Stack, PAR, Background Pattern, Spotlight) ---
     viewContent.appendChild(this.stackControl.render());
-    viewContent.appendChild(ContextToolbar.createDivider());
-
-    // --- GROUP 4: Analysis Tools (SafeAreas, FalseColor, ToneMapping, Zebra, HSL, PAR) ---
-    viewContent.appendChild(this.safeAreasControl.render());
-    viewContent.appendChild(this.falseColorControl.render());
-    viewContent.appendChild(this.luminanceVisControl.render());
-    viewContent.appendChild(this.toneMappingControl.render());
-    viewContent.appendChild(this.zebraControl.render());
-    viewContent.appendChild(this.hslQualifierControl.render());
     viewContent.appendChild(this.parControl.render());
     viewContent.appendChild(this.backgroundPatternControl.render());
-    viewContent.appendChild(this.displayProfileControl.render());
-    viewContent.appendChild(this.gamutMappingControl.render());
+
+    // Spotlight Tool toggle button
+    const spotlightButton = ContextToolbar.createIconButton('sun', () => {
+      viewer.getSpotlightOverlay().toggle();
+    }, { title: 'Spotlight (Shift+Q)' });
+    spotlightButton.dataset.testid = 'spotlight-toggle-btn';
+    viewContent.appendChild(spotlightButton);
+
+    // Update spotlight button state when visibility changes
+    this.registryUnsubscribers.push(viewer.getSpotlightOverlay().on('stateChanged', (state) => {
+      if (state.enabled) {
+        spotlightButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+        spotlightButton.style.borderColor = 'var(--accent-primary)';
+        spotlightButton.style.color = 'var(--accent-primary)';
+      } else {
+        spotlightButton.style.background = 'transparent';
+        spotlightButton.style.borderColor = 'transparent';
+        spotlightButton.style.color = 'var(--text-secondary)';
+      }
+    }));
+
+    contextToolbar.setTabContent('view', viewContent);
+
+    // Initially hide per-eye controls (shown when stereo mode is activated)
+    this.updateStereoEyeControlsVisibility();
+
+    // === QC TAB ===
+    // Quality Control: analysis/measurement tools
+    const qcContent = document.createElement('div');
+    qcContent.style.cssText = 'display: flex; align-items: center; gap: 6px; flex-shrink: 0;';
+
+    // --- GROUP 1: Monitoring (Scopes) ---
+    qcContent.appendChild(this.scopesControl.render());
+    qcContent.appendChild(ContextToolbar.createDivider());
+
+    // --- GROUP 2: Analysis (SafeAreas, FalseColor, Luminance, Zebra, HSL) ---
+    qcContent.appendChild(this.safeAreasControl.render());
+    qcContent.appendChild(this.falseColorControl.render());
+    qcContent.appendChild(this.luminanceVisControl.render());
+    qcContent.appendChild(this.zebraControl.render());
+    qcContent.appendChild(this.hslQualifierControl.render());
+    qcContent.appendChild(ContextToolbar.createDivider());
+
+    // --- GROUP 3: Tools (Pixel Probe) ---
+    const pixelProbeButton = ContextToolbar.createIconButton('eyedropper', () => {
+      viewer.getPixelProbe().toggle();
+    }, { title: 'Pixel Probe (Shift+I)' });
+    pixelProbeButton.dataset.testid = 'pixel-probe-toggle';
+    qcContent.appendChild(pixelProbeButton);
+
+    // Update pixel probe button state
+    this.registryUnsubscribers.push(viewer.getPixelProbe().on('stateChanged', (state) => {
+      if (state.enabled) {
+        pixelProbeButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+        pixelProbeButton.style.borderColor = 'var(--accent-primary)';
+        pixelProbeButton.style.color = 'var(--accent-primary)';
+      } else {
+        pixelProbeButton.style.background = 'transparent';
+        pixelProbeButton.style.borderColor = 'transparent';
+        pixelProbeButton.style.color = 'var(--text-secondary)';
+      }
+    }));
 
     // Trigger re-render when false color state changes
     this.registryUnsubscribers.push(viewer.getFalseColor().on('stateChanged', () => {
@@ -360,126 +410,6 @@ export class AppControlRegistry {
       }
     });
 
-    viewContent.appendChild(ContextToolbar.createDivider());
-
-    // --- GROUP 5: Overlay Toggles (Probe, Spotlight, Info) ---
-    // Icon-only buttons for compact display
-
-    // Pixel Probe / Color Sampler toggle
-    const pixelProbeButton = ContextToolbar.createIconButton('eyedropper', () => {
-      viewer.getPixelProbe().toggle();
-    }, { title: 'Pixel Probe (Shift+I)' });
-    pixelProbeButton.dataset.testid = 'pixel-probe-toggle';
-    viewContent.appendChild(pixelProbeButton);
-
-    // Update pixel probe button state
-    this.registryUnsubscribers.push(viewer.getPixelProbe().on('stateChanged', (state) => {
-      if (state.enabled) {
-        pixelProbeButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-        pixelProbeButton.style.borderColor = 'var(--accent-primary)';
-        pixelProbeButton.style.color = 'var(--accent-primary)';
-      } else {
-        pixelProbeButton.style.background = 'transparent';
-        pixelProbeButton.style.borderColor = 'transparent';
-        pixelProbeButton.style.color = 'var(--text-secondary)';
-      }
-    }));
-
-    // Spotlight Tool toggle button
-    const spotlightButton = ContextToolbar.createIconButton('sun', () => {
-      viewer.getSpotlightOverlay().toggle();
-    }, { title: 'Spotlight (Shift+Q)' });
-    spotlightButton.dataset.testid = 'spotlight-toggle-btn';
-    viewContent.appendChild(spotlightButton);
-
-    // Update spotlight button state when visibility changes
-    this.registryUnsubscribers.push(viewer.getSpotlightOverlay().on('stateChanged', (state) => {
-      if (state.enabled) {
-        spotlightButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-        spotlightButton.style.borderColor = 'var(--accent-primary)';
-        spotlightButton.style.color = 'var(--accent-primary)';
-      } else {
-        spotlightButton.style.background = 'transparent';
-        spotlightButton.style.borderColor = 'transparent';
-        spotlightButton.style.color = 'var(--text-secondary)';
-      }
-    }));
-
-    // Info Panel toggle button
-    const infoPanelButton = ContextToolbar.createIconButton('info', () => {
-      this.infoPanel.toggle();
-      if (this.infoPanel.isEnabled()) {
-        sessionBridge.updateInfoPanel();
-      }
-    }, { title: 'Info Panel (Shift+Alt+I)' });
-    infoPanelButton.dataset.testid = 'info-panel-toggle';
-    viewContent.appendChild(infoPanelButton);
-
-    // Update button state when visibility changes
-    this.registryUnsubscribers.push(this.infoPanel.on('visibilityChanged', (visible) => {
-      if (visible) {
-        infoPanelButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-        infoPanelButton.style.borderColor = 'var(--accent-primary)';
-        infoPanelButton.style.color = 'var(--accent-primary)';
-      } else {
-        infoPanelButton.style.background = 'transparent';
-        infoPanelButton.style.borderColor = 'transparent';
-        infoPanelButton.style.color = 'var(--text-secondary)';
-      }
-    }));
-
-    // Snapshot Panel toggle button
-    let snapshotPanelOpen = false;
-    const snapshotButton = ContextToolbar.createIconButton('camera', () => {
-      this.snapshotPanel.toggle();
-      snapshotPanelOpen = !snapshotPanelOpen;
-      updateSnapshotButtonStyle();
-    }, { title: 'Snapshots (Ctrl+Shift+S)' });
-    snapshotButton.dataset.testid = 'snapshot-panel-toggle';
-    viewContent.appendChild(snapshotButton);
-
-    const updateSnapshotButtonStyle = () => {
-      if (snapshotPanelOpen) {
-        snapshotButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-        snapshotButton.style.borderColor = 'var(--accent-primary)';
-        snapshotButton.style.color = 'var(--accent-primary)';
-      } else {
-        snapshotButton.style.background = 'transparent';
-        snapshotButton.style.borderColor = 'transparent';
-        snapshotButton.style.color = 'var(--text-secondary)';
-      }
-    };
-    this.registryUnsubscribers.push(this.snapshotPanel.on('closed', () => {
-      snapshotPanelOpen = false;
-      updateSnapshotButtonStyle();
-    }));
-
-    // Playlist Panel toggle button
-    let playlistPanelOpen = false;
-    const playlistButton = ContextToolbar.createIconButton('film', () => {
-      this.playlistPanel.toggle();
-      playlistPanelOpen = !playlistPanelOpen;
-      updatePlaylistButtonStyle();
-    }, { title: 'Playlist (Shift+Alt+P)' });
-    playlistButton.dataset.testid = 'playlist-panel-toggle';
-    viewContent.appendChild(playlistButton);
-
-    const updatePlaylistButtonStyle = () => {
-      if (playlistPanelOpen) {
-        playlistButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-        playlistButton.style.borderColor = 'var(--accent-primary)';
-        playlistButton.style.color = 'var(--accent-primary)';
-      } else {
-        playlistButton.style.background = 'transparent';
-        playlistButton.style.borderColor = 'transparent';
-        playlistButton.style.color = 'var(--text-secondary)';
-      }
-    };
-    this.registryUnsubscribers.push(this.playlistPanel.on('closed', () => {
-      playlistPanelOpen = false;
-      updatePlaylistButtonStyle();
-    }));
-
     // Sync scope visibility with ScopesControl
     this.registryUnsubscribers.push(this.histogram.on('visibilityChanged', (visible) => {
       this.scopesControl.setScopeVisible('histogram', visible);
@@ -503,15 +433,17 @@ export class AppControlRegistry {
       }
     }));
 
-    contextToolbar.setTabContent('view', viewContent);
-
-    // Initially hide per-eye controls (shown when stereo mode is activated)
-    this.updateStereoEyeControlsVisibility();
+    contextToolbar.setTabContent('qc', qcContent);
 
     // === COLOR TAB ===
     const colorContent = document.createElement('div');
     colorContent.style.cssText = 'display: flex; align-items: center; gap: 6px;';
     colorContent.appendChild(this.ocioControl.render());
+    colorContent.appendChild(ContextToolbar.createDivider());
+    // Display Pipeline: Display Profile, Gamut Mapping, Tone Mapping
+    colorContent.appendChild(this.displayProfileControl.render());
+    colorContent.appendChild(this.gamutMappingControl.render());
+    colorContent.appendChild(this.toneMappingControl.render());
     colorContent.appendChild(ContextToolbar.createDivider());
     colorContent.appendChild(this.colorControls.render());
     colorContent.appendChild(ContextToolbar.createDivider());
@@ -558,6 +490,87 @@ export class AppControlRegistry {
     }));
 
     contextToolbar.setTabContent('color', colorContent);
+
+    // === PANEL TOGGLES → HeaderBar utility area ===
+    // Info Panel, Snapshots, Playlist — accessible from any tab
+    const panelToggles = document.createElement('div');
+    panelToggles.style.cssText = 'display: flex; align-items: center; gap: 2px;';
+
+    // Info Panel toggle button
+    const infoPanelButton = ContextToolbar.createIconButton('info', () => {
+      this.infoPanel.toggle();
+      if (this.infoPanel.isEnabled()) {
+        sessionBridge.updateInfoPanel();
+      }
+    }, { title: 'Info Panel (Shift+Alt+I)' });
+    infoPanelButton.dataset.testid = 'info-panel-toggle';
+    panelToggles.appendChild(infoPanelButton);
+
+    this.registryUnsubscribers.push(this.infoPanel.on('visibilityChanged', (visible) => {
+      if (visible) {
+        infoPanelButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+        infoPanelButton.style.borderColor = 'var(--accent-primary)';
+        infoPanelButton.style.color = 'var(--accent-primary)';
+      } else {
+        infoPanelButton.style.background = 'transparent';
+        infoPanelButton.style.borderColor = 'transparent';
+        infoPanelButton.style.color = 'var(--text-secondary)';
+      }
+    }));
+
+    // Snapshot Panel toggle button
+    let snapshotPanelOpen = false;
+    const snapshotButton = ContextToolbar.createIconButton('camera', () => {
+      this.snapshotPanel.toggle();
+      snapshotPanelOpen = !snapshotPanelOpen;
+      updateSnapshotButtonStyle();
+    }, { title: 'Snapshots (Ctrl+Shift+S)' });
+    snapshotButton.dataset.testid = 'snapshot-panel-toggle';
+    panelToggles.appendChild(snapshotButton);
+
+    const updateSnapshotButtonStyle = () => {
+      if (snapshotPanelOpen) {
+        snapshotButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+        snapshotButton.style.borderColor = 'var(--accent-primary)';
+        snapshotButton.style.color = 'var(--accent-primary)';
+      } else {
+        snapshotButton.style.background = 'transparent';
+        snapshotButton.style.borderColor = 'transparent';
+        snapshotButton.style.color = 'var(--text-secondary)';
+      }
+    };
+    this.registryUnsubscribers.push(this.snapshotPanel.on('closed', () => {
+      snapshotPanelOpen = false;
+      updateSnapshotButtonStyle();
+    }));
+
+    // Playlist Panel toggle button
+    let playlistPanelOpen = false;
+    const playlistButton = ContextToolbar.createIconButton('film', () => {
+      this.playlistPanel.toggle();
+      playlistPanelOpen = !playlistPanelOpen;
+      updatePlaylistButtonStyle();
+    }, { title: 'Playlist (Shift+Alt+P)' });
+    playlistButton.dataset.testid = 'playlist-panel-toggle';
+    panelToggles.appendChild(playlistButton);
+
+    const updatePlaylistButtonStyle = () => {
+      if (playlistPanelOpen) {
+        playlistButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
+        playlistButton.style.borderColor = 'var(--accent-primary)';
+        playlistButton.style.color = 'var(--accent-primary)';
+      } else {
+        playlistButton.style.background = 'transparent';
+        playlistButton.style.borderColor = 'transparent';
+        playlistButton.style.color = 'var(--text-secondary)';
+      }
+    };
+    this.registryUnsubscribers.push(this.playlistPanel.on('closed', () => {
+      playlistPanelOpen = false;
+      updatePlaylistButtonStyle();
+    }));
+
+    headerBar.setPanelToggles(panelToggles);
 
     // === EFFECTS TAB ===
     const effectsContent = document.createElement('div');
