@@ -191,6 +191,23 @@ describe('ViewerRenderingUtils', () => {
       expect(ctx.restore).toHaveBeenCalled();
     });
 
+    it('preserves portrait video proportions when rotated 90°', () => {
+      const video = createMockVideo(1080, 1920);
+      const transform: Transform2D = { ...defaultTransform(), rotation: 90 };
+
+      // The display box has already been computed for rotated layout.
+      // drawWithTransform should swap draw width/height before rotation.
+      drawWithTransform(ctx, video, 1000, 560, transform);
+
+      const drawCalls = (ctx.drawImage as ReturnType<typeof vi.fn>).mock.calls;
+      expect(drawCalls.length).toBeGreaterThan(0);
+      const drawCall = drawCalls[0]!;
+      expect(drawCall[1]).toBe(-280); // -drawWidth/2 where drawWidth=displayHeight
+      expect(drawCall[2]).toBe(-500); // -drawHeight/2 where drawHeight=displayWidth
+      expect(drawCall[3]).toBe(560);
+      expect(drawCall[4]).toBe(1000);
+    });
+
     it('should handle zero video dimensions gracefully', () => {
       const video = createMockVideo(0, 0);
       const transform: Transform2D = { ...defaultTransform(), rotation: 90 };

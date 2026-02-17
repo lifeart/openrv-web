@@ -94,6 +94,12 @@ export function wireViewControls(ctx: AppWiringContext): void {
   controls.compareControl.on('differenceMatteChanged', (state) => {
     viewer.setDifferenceMatteState(state);
   });
+  controls.compareControl.on('blendModeChanged', (state) => {
+    viewer.setBlendModeState({
+      ...state,
+      flickerFrame: controls.compareControl.getFlickerFrame(),
+    });
+  });
 
   // Tone mapping control -> viewer
   controls.toneMappingControl.on('stateChanged', (state) => {

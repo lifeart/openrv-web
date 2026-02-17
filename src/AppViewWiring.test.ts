@@ -13,6 +13,7 @@ function createMockContext() {
     smoothSetZoom: vi.fn(),
     setWipeState: vi.fn(),
     setDifferenceMatteState: vi.fn(),
+    setBlendModeState: vi.fn(),
     setToneMappingState: vi.fn(),
     setHDROutputMode: vi.fn(),
     setGhostFrameState: vi.fn(),
@@ -60,6 +61,7 @@ function createMockContext() {
   const compareControl = Object.assign(new EventEmitter(), {
     getWipePosition: vi.fn().mockReturnValue(0.5),
     getWipeMode: vi.fn().mockReturnValue('horizontal'),
+    getFlickerFrame: vi.fn().mockReturnValue(1),
   });
 
   const toneMappingControl = new EventEmitter();
@@ -208,6 +210,17 @@ describe('wireViewControls', () => {
     const state = { enabled: true, threshold: 0.01 };
     (controls.compareControl as EventEmitter).emit('differenceMatteChanged', state);
     expect(viewer.setDifferenceMatteState).toHaveBeenCalledWith(state);
+  });
+
+  // VW-009b
+  it('VW-009b: blendModeChanged calls viewer.setBlendModeState() with flicker frame', () => {
+    const state = { mode: 'flicker', onionOpacity: 0.5, flickerRate: 8, blendRatio: 0.5 };
+    controls.compareControl.getFlickerFrame.mockReturnValue(1);
+    (controls.compareControl as EventEmitter).emit('blendModeChanged', state);
+    expect(viewer.setBlendModeState).toHaveBeenCalledWith({
+      ...state,
+      flickerFrame: 1,
+    });
   });
 
   // VW-010

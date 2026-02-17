@@ -139,6 +139,10 @@ export class ViewerGLRenderer {
   private _lastRenderedWidth = 0;
   private _lastRenderedHeight = 0;
 
+  // Last float frame used by HDR blit paths (WebGPU/Canvas2D).
+  // Stored in WebGL readback row order (bottom-to-top).
+  private _lastHDRBlitFrame: { data: Float32Array; width: number; height: number } | null = null;
+
   // Last known logical (CSS) dimensions — set by resizeIfActive() to avoid
   // rounding drift when computing CSS size from physical / DPR.
   private _logicalWidth = 0;
@@ -167,6 +171,8 @@ export class ViewerGLRenderer {
   get webgpuBlitFailed(): boolean { return this._webgpuBlitFailed; }
   /** Get the last rendered IPImage (for scope readback). Returns null if GC'd or not yet rendered. */
   get lastRenderedImage(): IPImage | null { return this._lastRenderedImage?.deref() ?? null; }
+  /** Last HDR blit float frame in WebGL row order (bottom-to-top). */
+  get lastHDRBlitFrame(): { data: Float32Array; width: number; height: number } | null { return this._lastHDRBlitFrame; }
 
   constructor(ctx: GLRendererContext, capabilities?: DisplayCapabilities) {
     this._capabilities = capabilities;
@@ -491,6 +497,8 @@ export class ViewerGLRenderer {
     }
 
     // Standard WebGL2 HDR path (HLG/PQ/extended) or SDR fallback
+    this._lastHDRBlitFrame = null;
+
     // Activate WebGL canvas
     if (!this._hdrRenderActive) {
       this._glCanvas.style.display = 'block';
@@ -690,6 +698,8 @@ export class ViewerGLRenderer {
     PerfTrace.end('blit.FBO+readPixels');
     if (!pixels) return false;
 
+    this._lastHDRBlitFrame = { data: pixels, width: displayWidth, height: displayHeight };
+
     // Upload to WebGPU HDR canvas
     PerfTrace.begin('blit.webgpuUpload');
     this._webgpuBlit!.uploadAndDisplay(pixels, displayWidth, displayHeight);
@@ -793,6 +803,8 @@ export class ViewerGLRenderer {
       : renderer.renderImageToFloat!(image, displayWidth, displayHeight);
     PerfTrace.end('canvas2dBlit.FBO+readPixels');
     if (!pixels) return false;
+
+    this._lastHDRBlitFrame = { data: pixels, width: displayWidth, height: displayHeight };
 
     // Upload to Canvas2D HDR canvas
     PerfTrace.begin('canvas2dBlit.putImageData');
@@ -939,6 +951,7 @@ export class ViewerGLRenderer {
     this.ctx.getImageCanvas().style.visibility = 'visible';
     this._hdrRenderActive = false;
     this._lastRenderedImage = null; // Invalidate render cache
+    this._lastHDRBlitFrame = null;
   }
 
   /**
@@ -950,6 +963,7 @@ export class ViewerGLRenderer {
     this._glCanvas.style.transform = ''; // Clear any stale CSS transform
     this.ctx.getImageCanvas().style.visibility = 'visible';
     this._sdrWebGLRenderActive = false;
+    this._lastHDRBlitFrame = null;
     // Restore CSS filters for the 2D canvas path
     this.ctx.applyColorFilters();
   }
@@ -1232,5 +1246,6 @@ export class ViewerGLRenderer {
     this._autoExposureController.reset();
     this._glCanvas = null;
     this._lastRenderedImage = null;
+    this._lastHDRBlitFrame = null;
   }
 }

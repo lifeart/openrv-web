@@ -316,6 +316,89 @@ describe('Timeline', () => {
     });
   });
 
+  describe('text rendering alignment', () => {
+    it('TML-033: renders bottom left/right info text with alphabetic baseline', () => {
+      const ctx = (timeline as any).ctx as CanvasRenderingContext2D & {
+        fillText: ReturnType<typeof vi.fn>;
+      };
+      const baselineByCall: string[] = [];
+
+      ctx.fillText.mockImplementation(function (this: CanvasRenderingContext2D): void {
+        baselineByCall.push(this.textBaseline);
+      });
+
+      timeline.refresh();
+
+      expect(baselineByCall.length).toBeGreaterThanOrEqual(6);
+      expect(baselineByCall.slice(-2)).toEqual(['alphabetic', 'alphabetic']);
+    });
+
+    it('TML-034: measures center label width using the same font used to draw it', () => {
+      const ctx = (timeline as any).ctx as CanvasRenderingContext2D & {
+        measureText: ReturnType<typeof vi.fn>;
+      };
+      const measureFonts: string[] = [];
+
+      ctx.measureText.mockImplementation(function (this: CanvasRenderingContext2D): TextMetrics {
+        measureFonts.push(this.font);
+        return { width: 100 } as TextMetrics;
+      });
+
+      timeline.refresh();
+
+      expect(measureFonts.length).toBeGreaterThan(0);
+      expect(measureFonts).toContain('bold 13px -apple-system, BlinkMacSystemFont, monospace');
+    });
+
+    it('TML-035: aligns metadata text on the same row as the center frame label', () => {
+      const ctx = (timeline as any).ctx as CanvasRenderingContext2D & {
+        fillText: ReturnType<typeof vi.fn>;
+        measureText: ReturnType<typeof vi.fn>;
+      };
+      const metadataY: number[] = [];
+      let frameLabelY: number | null = null;
+
+      ctx.measureText.mockImplementation((): TextMetrics => (
+        { width: 100, actualBoundingBoxAscent: 8, actualBoundingBoxDescent: 3 } as TextMetrics
+      ));
+      ctx.fillText.mockImplementation((text: string, _x: number, y: number): void => {
+        if (text.startsWith('Frame')) {
+          frameLabelY = y;
+        }
+        if (text.includes('[VID]') || text.includes('fps')) {
+          metadataY.push(y);
+        }
+      });
+
+      timeline.refresh();
+
+      expect(frameLabelY).not.toBeNull();
+      expect(metadataY).toHaveLength(2);
+      expect(metadataY[0]).toBe(frameLabelY);
+      expect(metadataY[1]).toBe(frameLabelY);
+    });
+
+    it('TML-036: falls back to finite baseline when text metrics are invalid', () => {
+      const ctx = (timeline as any).ctx as CanvasRenderingContext2D & {
+        fillText: ReturnType<typeof vi.fn>;
+        measureText: ReturnType<typeof vi.fn>;
+      };
+      const yByCall: number[] = [];
+
+      ctx.measureText.mockImplementation((): TextMetrics => (
+        { width: 100, actualBoundingBoxAscent: Number.NaN, actualBoundingBoxDescent: Number.NaN } as TextMetrics
+      ));
+      ctx.fillText.mockImplementation((_text: string, _x: number, y: number): void => {
+        yByCall.push(y);
+      });
+
+      timeline.refresh();
+
+      expect(yByCall.length).toBeGreaterThan(0);
+      expect(yByCall.every(Number.isFinite)).toBe(true);
+    });
+  });
+
   describe('pointer events (touch support)', () => {
     /**
      * Helper to get the canvas element from a timeline's rendered container.

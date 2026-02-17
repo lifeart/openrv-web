@@ -311,7 +311,31 @@ export function renderSourceToImageData(
   height: number
 ): ImageData | null {
   const source = session.getSourceByIndex(sourceIndex);
-  if (!source?.element) return null;
+  if (!source) return null;
+
+  const frame = session.currentFrame;
+  let element: CanvasImageSource | null = source.element ?? null;
+
+  // Use sequence frame image for the current frame when available.
+  if (source.type === 'sequence' && source.sequenceFrames) {
+    const seqFrame = source.sequenceFrames[frame - 1]?.image;
+    if (seqFrame) {
+      element = seqFrame;
+    }
+  }
+
+  // Prefer mediabunny cached frame for frame-accurate A/B playback compare.
+  if (source.type === 'video' && source.videoSourceNode?.isUsingMediabunny()) {
+    const frameCanvas = source.videoSourceNode.getCachedFrameCanvas(frame);
+    if (frameCanvas) {
+      element = frameCanvas;
+    } else {
+      // Queue async fetch for next render while falling back to current element.
+      source.videoSourceNode.getFrameAsync?.(frame).catch(() => {});
+    }
+  }
+
+  if (!element) return null;
 
   // Create temp canvas with willReadFrequently for getImageData performance
   const tempCanvas = document.createElement('canvas');
@@ -324,9 +348,7 @@ export function renderSourceToImageData(
   tempCtx.imageSmoothingQuality = 'high';
 
   // Draw source element
-  if (source.element instanceof HTMLImageElement || source.element instanceof HTMLVideoElement) {
-    tempCtx.drawImage(source.element, 0, 0, width, height);
-  }
+  tempCtx.drawImage(element, 0, 0, width, height);
 
   return tempCtx.getImageData(0, 0, width, height);
 }

@@ -42,6 +42,7 @@ import { StackLayer } from './StackControl';
 import { compositeImageData, BlendMode } from '../../composite/BlendModes';
 import { getIconSvg } from './shared/Icons';
 import { ChannelMode, applyChannelIsolation } from './ChannelSelect';
+import { DEFAULT_BLEND_MODE_STATE, type BlendModeState } from './ComparisonManager';
 import type { StereoState, StereoEyeTransformState, StereoAlignMode } from '../../stereo/StereoRenderer';
 import { DifferenceMatteState, DEFAULT_DIFFERENCE_MATTE_STATE, applyDifferenceMatte } from './DifferenceMatteControl';
 import { WebGLSharpenProcessor } from '../../filters/WebGLSharpen';
@@ -247,6 +248,10 @@ export class Viewer {
 
   // Difference matte state
   private differenceMatteState: DifferenceMatteState = { ...DEFAULT_DIFFERENCE_MATTE_STATE };
+  private blendModeState: BlendModeState & { flickerFrame: 0 | 1 } = {
+    ...DEFAULT_BLEND_MODE_STATE,
+    flickerFrame: 0,
+  };
 
   // Ghost frame manager (owns onion skin state + canvas pool)
   private ghostFrameManager: GhostFrameManager;
@@ -498,6 +503,7 @@ export class Viewer {
       isViewerContentElement: (element: HTMLElement) => this.isViewerContentElement(element),
       drawWithTransform: (ctx, element, w, h) => this.drawWithTransform(ctx, element, w, h),
       getLastRenderedImage: () => this.glRendererManager.lastRenderedImage,
+      getLastHDRBlitFrame: () => this.glRendererManager.lastHDRBlitFrame,
       isPlaying: () => this.session.isPlaying,
     });
 
@@ -570,6 +576,9 @@ export class Viewer {
     // Listen for A/B changes
     this.session.on('abSourceChanged', ({ current }) => {
       this.updateABIndicator(current);
+      // Source switching during playback reuses stale frame-fetch state unless reset.
+      this.frameFetchTracker.reset();
+      this.scheduleRender();
     });
 
     // Create drop overlay
@@ -1299,6 +1308,7 @@ export class Viewer {
       !uncropActive &&
       this.wipeManager.isOff &&
       !this.isStackEnabled() &&
+      !this.isBlendModeEnabled() &&
       !this.differenceMatteState.enabled &&
       !this.ghostFrameManager.enabled &&
       this.stereoManager.isDefaultStereo() &&
@@ -1456,7 +1466,15 @@ export class Viewer {
 
     // Check if difference matte mode is enabled
     let rendered = false;
-    if (this.differenceMatteState.enabled && this.session.abCompareAvailable) {
+    if (this.isBlendModeEnabled() && this.session.abCompareAvailable) {
+      const blendData = this.renderBlendMode(displayWidth, displayHeight);
+      if (blendData) {
+        this.compositeImageDataOverBackground(blendData, displayWidth, displayHeight);
+        rendered = true;
+      }
+    }
+
+    if (!rendered && this.differenceMatteState.enabled && this.session.abCompareAvailable) {
       // Render difference between A and B sources
       const diffData = this.renderDifferenceMatte(displayWidth, displayHeight);
       if (diffData) {
@@ -1484,13 +1502,13 @@ export class Viewer {
       element instanceof HTMLImageElement ||
       element instanceof HTMLVideoElement ||
       element instanceof HTMLCanvasElement ||
+      element instanceof ImageBitmap ||
       (typeof OffscreenCanvas !== 'undefined' && element instanceof OffscreenCanvas)
     )) {
       // Single source rendering (supports images, videos, and canvas elements from mediabunny)
       // Handle wipe rendering (but not split screen modes which are handled above)
-      if (!this.wipeManager.isOff && !this.wipeManager.isSplitScreen && !(element instanceof HTMLCanvasElement) && !(typeof OffscreenCanvas !== 'undefined' && element instanceof OffscreenCanvas)) {
-        // Wipe only works with HTMLImageElement/HTMLVideoElement
-        this.renderWithWipe(element as HTMLImageElement | HTMLVideoElement, displayWidth, displayHeight);
+      if (!this.wipeManager.isOff && !this.wipeManager.isSplitScreen) {
+        this.renderWithWipe(element as CanvasImageSource, displayWidth, displayHeight);
       } else if (uncropActive) {
         // Uncrop: draw image at offset within expanded canvas
         this.imageCtx.save();
@@ -1632,7 +1650,7 @@ export class Viewer {
   }
 
   private renderWithWipe(
-    element: HTMLImageElement | HTMLVideoElement,
+    element: CanvasImageSource,
     displayWidth: number,
     displayHeight: number
   ): void {
@@ -1720,10 +1738,12 @@ export class Viewer {
     const currentFrame = this.session.currentFrame;
 
     // Determine the element to use for source A
-    // For mediabunny videos, use the cached frame canvas
+    // For mediabunny videos, use source A's own cached frame canvas.
+    // Do not read via session.getVideoFrameCanvas(), which follows currentSource
+    // and can incorrectly return source B when AB is toggled during playback.
     let elementA: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | ImageBitmap = sourceA.element;
-    if (sourceA.type === 'video' && this.session.isUsingMediabunny()) {
-      const frameCanvas = this.session.getVideoFrameCanvas(currentFrame);
+    if (sourceA.type === 'video' && sourceA.videoSourceNode?.isUsingMediabunny()) {
+      const frameCanvas = sourceA.videoSourceNode.getCachedFrameCanvas(currentFrame);
       if (frameCanvas) {
         elementA = frameCanvas;
       }
@@ -2763,6 +2783,26 @@ export class Viewer {
     return this.differenceMatteState.enabled;
   }
 
+  // A/B blend mode methods
+  setBlendModeState(state: BlendModeState & { flickerFrame?: 0 | 1 }): void {
+    this.blendModeState = {
+      mode: state.mode,
+      onionOpacity: Math.max(0, Math.min(1, state.onionOpacity)),
+      flickerRate: Math.max(1, Math.min(30, Math.round(state.flickerRate))),
+      blendRatio: Math.max(0, Math.min(1, state.blendRatio)),
+      flickerFrame: state.flickerFrame ?? this.blendModeState.flickerFrame,
+    };
+    this.scheduleRender();
+  }
+
+  getBlendModeState(): BlendModeState & { flickerFrame: 0 | 1 } {
+    return { ...this.blendModeState };
+  }
+
+  private isBlendModeEnabled(): boolean {
+    return this.blendModeState.mode !== 'off';
+  }
+
   // Ghost frame (onion skin) methods (delegated to GhostFrameManager)
   setGhostFrameState(state: GhostFrameState): void {
     this.ghostFrameManager.setState(state);
@@ -3121,6 +3161,32 @@ export class Viewer {
     height: number
   ): ImageData | null {
     return renderSourceToImageDataUtil(this.session, sourceIndex, width, height);
+  }
+
+  /**
+   * Render A/B blend modes (onion skin, flicker, blend ratio).
+   */
+  private renderBlendMode(width: number, height: number): ImageData | null {
+    const sourceA = this.session.sourceA;
+    const sourceB = this.session.sourceB;
+    if (!sourceA?.element || !sourceB?.element) return null;
+
+    const dataA = this.renderSourceToImageData(this.session.sourceAIndex, width, height);
+    const dataB = this.renderSourceToImageData(this.session.sourceBIndex, width, height);
+    if (!dataA || !dataB) return null;
+
+    switch (this.blendModeState.mode) {
+      case 'onionskin':
+        return compositeImageData(dataA, dataB, 'normal', this.blendModeState.onionOpacity);
+      case 'blend':
+        return compositeImageData(dataA, dataB, 'normal', this.blendModeState.blendRatio);
+      case 'flicker': {
+        const src = this.blendModeState.flickerFrame === 0 ? dataA : dataB;
+        return new ImageData(new Uint8ClampedArray(src.data), width, height);
+      }
+      default:
+        return null;
+    }
   }
 
   /**

@@ -450,6 +450,152 @@ describe('Viewer', () => {
     });
   });
 
+  describe('A/B compare playback regressions', () => {
+    it('ABR-001: split screen resolves source A frame from source A when current source is B', () => {
+      const frameA = document.createElement('canvas');
+      const frameB = document.createElement('canvas');
+
+      const sourceA = {
+        type: 'video',
+        element: document.createElement('video'),
+        videoSourceNode: {
+          isUsingMediabunny: vi.fn().mockReturnValue(true),
+          isHDR: vi.fn().mockReturnValue(false),
+          setTargetSize: vi.fn(),
+          setHDRTargetSize: vi.fn(),
+          getCachedFrameCanvas: vi.fn().mockReturnValue(frameA),
+        },
+      };
+      const sourceB = {
+        type: 'video',
+        element: document.createElement('video'),
+        videoSourceNode: {
+          isUsingMediabunny: vi.fn().mockReturnValue(true),
+          isHDR: vi.fn().mockReturnValue(false),
+          setTargetSize: vi.fn(),
+          setHDRTargetSize: vi.fn(),
+        },
+      };
+
+      const t = testable(viewer);
+      t.session = {
+        ...t.session,
+        sourceA,
+        sourceB,
+        currentSource: sourceB,
+        currentFrame: 10,
+        isUsingMediabunny: vi.fn().mockReturnValue(true),
+        isSourceBUsingMediabunny: vi.fn().mockReturnValue(true),
+        getVideoFrameCanvas: vi.fn().mockReturnValue(frameB),
+        getSourceBFrameCanvas: vi.fn().mockReturnValue(frameB),
+        fetchSourceBVideoFrame: vi.fn().mockResolvedValue(undefined),
+      } as any;
+
+      viewer.setWipeState({ mode: 'splitscreen-h', position: 0.5, showOriginal: 'left' });
+      const drawClippedSource = vi.spyOn(viewer as any, 'drawClippedSource').mockImplementation(() => {});
+
+      (viewer as any).renderSplitScreen(640, 360);
+
+      expect(drawClippedSource).toHaveBeenCalledTimes(2);
+      expect(sourceA.videoSourceNode.getCachedFrameCanvas).toHaveBeenCalledWith(10);
+      expect(drawClippedSource.mock.calls[0]?.[1]).toBe(frameA);
+    });
+
+    it('ABR-002: abSourceChanged resets frame fetch tracker to avoid stale frames', () => {
+      const t = testable(viewer);
+      t.frameFetchTracker.pendingVideoFrameNumber = 42;
+      t.frameFetchTracker.pendingSourceBFrameNumber = 99;
+      t.frameFetchTracker.hasDisplayedMediabunnyFrame = true;
+      t.frameFetchTracker.hasDisplayedSourceBMediabunnyFrame = true;
+
+      (session as any).emit('abSourceChanged', { current: 'B', sourceIndex: 1 });
+
+      expect(t.frameFetchTracker.pendingVideoFrameNumber).toBe(0);
+      expect(t.frameFetchTracker.pendingSourceBFrameNumber).toBe(0);
+      expect(t.frameFetchTracker.hasDisplayedMediabunnyFrame).toBe(false);
+      expect(t.frameFetchTracker.hasDisplayedSourceBMediabunnyFrame).toBe(false);
+    });
+
+    it('ABR-003: wipe rendering supports canvas frame sources during mediabunny playback', () => {
+      const frameCanvas = document.createElement('canvas');
+      frameCanvas.width = 128;
+      frameCanvas.height = 72;
+
+      const source = {
+        type: 'video',
+        name: 'videoA',
+        url: 'blob:a',
+        width: 128,
+        height: 72,
+        duration: 100,
+        fps: 24,
+        element: document.createElement('video'),
+        videoSourceNode: {
+          isUsingMediabunny: vi.fn().mockReturnValue(true),
+          isHDR: vi.fn().mockReturnValue(false),
+          setTargetSize: vi.fn(),
+          setHDRTargetSize: vi.fn(),
+        },
+      };
+
+      const t = testable(viewer);
+      t.session = {
+        ...t.session,
+        currentSource: source,
+        currentFrame: 5,
+        isPlaying: false,
+        playDirection: 1,
+        fps: 24,
+        subFramePosition: null,
+        isUsingMediabunny: vi.fn().mockReturnValue(true),
+        getVideoFrameCanvas: vi.fn().mockReturnValue(frameCanvas),
+        fetchCurrentVideoFrame: vi.fn().mockResolvedValue(undefined),
+        sourceB: null,
+        abCompareAvailable: false,
+      } as any;
+
+      viewer.setWipeState({ mode: 'horizontal', position: 0.5, showOriginal: 'left' });
+      const renderWithWipe = vi.spyOn(viewer as any, 'renderWithWipe').mockImplementation(() => {});
+
+      viewer.render();
+
+      expect(renderWithWipe).toHaveBeenCalled();
+      expect(renderWithWipe.mock.calls[0]?.[0]).toBe(frameCanvas);
+    });
+
+    it('ABR-004: flicker blend mode renders source B when flicker frame is 1', () => {
+      const t = testable(viewer);
+      t.session = {
+        ...t.session,
+        sourceA: { element: document.createElement('img') },
+        sourceB: { element: document.createElement('img') },
+        sourceAIndex: 0,
+        sourceBIndex: 1,
+      } as any;
+
+      const dataA = new ImageData(new Uint8ClampedArray([255, 0, 0, 255]), 1, 1);
+      const dataB = new ImageData(new Uint8ClampedArray([0, 255, 0, 255]), 1, 1);
+      const renderSourceToImageData = vi.spyOn(viewer as any, 'renderSourceToImageData')
+        .mockReturnValueOnce(dataA)
+        .mockReturnValueOnce(dataB);
+
+      viewer.setBlendModeState({
+        mode: 'flicker',
+        onionOpacity: 0.5,
+        flickerRate: 4,
+        blendRatio: 0.5,
+        flickerFrame: 1,
+      });
+
+      const out = (viewer as any).renderBlendMode(1, 1) as ImageData;
+
+      expect(renderSourceToImageData).toHaveBeenCalledTimes(2);
+      expect(out.data[0]).toBe(0);
+      expect(out.data[1]).toBe(255);
+      expect(out.data[2]).toBe(0);
+    });
+  });
+
   describe('transform', () => {
     it('VWR-029: setTransform updates transform', () => {
       viewer.setTransform({ ...DEFAULT_TRANSFORM, rotation: 90, flipH: true, flipV: false });

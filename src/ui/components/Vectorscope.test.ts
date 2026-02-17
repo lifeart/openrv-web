@@ -442,6 +442,38 @@ describe('Vectorscope updateFloat', () => {
     const floatData = new Float32Array(10 * 10 * 4);
     expect(() => vectorscope.updateFloat(floatData, 10, 10)).not.toThrow();
   });
+
+  it('VS-077: cycleZoom redraws from cached HDR float frame', async () => {
+    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
+    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
+
+    const floatData = new Float32Array(10 * 10 * 4);
+    vectorscope.updateFloat(floatData, 10, 10);
+    expect(mockProcessor.renderVectorscope).toHaveBeenCalledTimes(1);
+
+    vectorscope.cycleZoom(); // auto -> 1x
+
+    expect(vectorscope.getZoom()).toBe(1);
+    expect(mockProcessor.setFloatImage).toHaveBeenCalledTimes(2);
+    expect(mockProcessor.renderVectorscope).toHaveBeenCalledTimes(2);
+    expect(mockProcessor.renderVectorscope.mock.calls[1]![1]).toBe(1);
+  });
+
+  it('VS-078: setZoom redraws from cached HDR float frame', async () => {
+    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
+    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
+
+    const floatData = new Float32Array(10 * 10 * 4);
+    vectorscope.updateFloat(floatData, 10, 10);
+    expect(mockProcessor.renderVectorscope).toHaveBeenCalledTimes(1);
+
+    vectorscope.setZoom(2);
+
+    expect(vectorscope.getZoom()).toBe(2);
+    expect(mockProcessor.setFloatImage).toHaveBeenCalledTimes(2);
+    expect(mockProcessor.renderVectorscope).toHaveBeenCalledTimes(2);
+    expect(mockProcessor.renderVectorscope.mock.calls[1]![1]).toBe(2);
+  });
 });
 
 describe('Vectorscope hi-DPI support', () => {

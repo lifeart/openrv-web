@@ -351,6 +351,86 @@ describe('PixelSamplingManager', () => {
 
       vi.restoreAllMocks();
     });
+
+    it('PSM-033: HDR blit path samples from cached float frame (not readPixelFloat)', () => {
+      mockPixelProbe.isEnabled.mockReturnValue(true);
+      mockPixelProbe.getSampleSize.mockReturnValue(1);
+
+      const readPixelFloat = vi.fn(() => new Float32Array([0.1, 0.1, 0.1, 1.0]));
+      const blitData = new Float32Array(4 * 4 * 4);
+      // Display-space pixel (1,1) maps to WebGL row-order source row 2.
+      const idx = (2 * 4 + 1) * 4;
+      blitData[idx] = 0.5;
+      blitData[idx + 1] = 0.25;
+      blitData[idx + 2] = 0.75;
+      blitData[idx + 3] = 1.0;
+
+      const webglContext = {
+        ...mockContext,
+        isHDRRenderActive: vi.fn(() => true),
+        isSDRWebGLRenderActive: vi.fn(() => false),
+        getGLRenderer: vi.fn(() => ({ readPixelFloat })) as any,
+        getLastHDRBlitFrame: vi.fn(() => ({ data: blitData, width: 4, height: 4 })),
+      };
+
+      const webglManager = new PixelSamplingManager(webglContext as any);
+      const callback = vi.fn();
+      webglManager.onCursorColorChange(callback);
+      (webglManager as any).lastMouseMoveUpdate = 0;
+
+      const event = new MouseEvent('mousemove', {
+        clientX: 200,
+        clientY: 150,
+      });
+      webglManager.onMouseMoveForPixelSampling(event);
+
+      expect(readPixelFloat).not.toHaveBeenCalled();
+      expect(mockPixelProbe.updateFromHDRValues).toHaveBeenCalledWith(
+        200,
+        150,
+        0.5,
+        0.25,
+        0.75,
+        1.0,
+        800,
+        600,
+      );
+      expect(callback).toHaveBeenCalledWith(
+        { r: Math.round(0.5 * 255), g: Math.round(0.25 * 255), b: Math.round(0.75 * 255) },
+        { x: 200, y: 150 },
+      );
+    });
+
+    it('PSM-034: WebGL HDR path falls back to readPixelFloat when no blit frame exists', () => {
+      mockPixelProbe.isEnabled.mockReturnValue(true);
+      mockPixelProbe.getSampleSize.mockReturnValue(1);
+
+      const readPixelFloat = vi.fn(() => new Float32Array([0.25, 0.5, 0.75, 1.0]));
+      const webglContext = {
+        ...mockContext,
+        isHDRRenderActive: vi.fn(() => true),
+        isSDRWebGLRenderActive: vi.fn(() => false),
+        getGLRenderer: vi.fn(() => ({ readPixelFloat })) as any,
+        getLastHDRBlitFrame: vi.fn(() => null),
+      };
+
+      const webglManager = new PixelSamplingManager(webglContext as any);
+      const callback = vi.fn();
+      webglManager.onCursorColorChange(callback);
+      (webglManager as any).lastMouseMoveUpdate = 0;
+
+      const event = new MouseEvent('mousemove', {
+        clientX: 100,
+        clientY: 100,
+      });
+      webglManager.onMouseMoveForPixelSampling(event);
+
+      expect(readPixelFloat).toHaveBeenCalledTimes(1);
+      expect(callback).toHaveBeenCalledWith(
+        { r: Math.round(0.25 * 255), g: Math.round(0.5 * 255), b: Math.round(0.75 * 255) },
+        { x: 100, y: 100 },
+      );
+    });
   });
 
   // ===========================================================================

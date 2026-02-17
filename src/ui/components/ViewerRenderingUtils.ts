@@ -48,33 +48,13 @@ export function drawWithTransform(
     ctx.scale(scaleX, scaleY);
   }
 
-  // For 90/270 rotation, we need to swap the draw dimensions
+  // For 90/270 rotation, draw in swapped dimensions before rotation so the
+  // rotated bounds match the already-rotated layout box.
   let drawWidth = displayWidth;
   let drawHeight = displayHeight;
   if (rotation === 90 || rotation === 270) {
-    // When rotated 90/270, the source needs to fill the rotated space
-    // We need to scale to fit the rotated dimensions
-    let sourceAspect: number;
-    if (element instanceof HTMLVideoElement) {
-      sourceAspect = element.videoHeight > 0 ? element.videoWidth / element.videoHeight : 1;
-    } else if (element instanceof HTMLImageElement) {
-      sourceAspect = element.naturalHeight > 0 ? element.naturalWidth / element.naturalHeight : 1;
-    } else if (element instanceof HTMLCanvasElement || (typeof OffscreenCanvas !== 'undefined' && element instanceof OffscreenCanvas)) {
-      sourceAspect = element.height > 0 ? element.width / element.height : 1;
-    } else {
-      sourceAspect = displayHeight > 0 ? displayWidth / displayHeight : 1; // Fallback
-    }
-    const targetAspect = displayWidth > 0 ? displayHeight / displayWidth : 1; // Swapped for rotation
-
-    if (sourceAspect > targetAspect) {
-      drawHeight = displayWidth;
-      drawWidth = displayWidth * sourceAspect;
-    } else {
-      drawWidth = displayHeight;
-      drawHeight = sourceAspect > 0 ? displayHeight / sourceAspect : displayHeight;
-    }
-    // Swap for rotated coordinate system
-    [drawWidth, drawHeight] = [drawHeight, drawWidth];
+    drawWidth = displayHeight;
+    drawHeight = displayWidth;
   }
 
   // Draw centered

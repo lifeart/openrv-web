@@ -2555,3 +2555,91 @@ describe('Renderer texture rotation (u_texRotation)', () => {
     expect(rotationCalls[rotationCalls.length - 1]!.value).toBe(0);
   });
 });
+
+describe('Renderer scope tone mapping neutralization', () => {
+  function prepareScopeReadbackGL(renderer: Renderer) {
+    const gl = initRendererWithMockGL(renderer);
+    const glAny = gl as unknown as {
+      FRAMEBUFFER?: number;
+      VIEWPORT?: number;
+      RGBA?: number;
+      FLOAT?: number;
+      NO_ERROR?: number;
+      bindFramebuffer?: ReturnType<typeof vi.fn>;
+      getParameter?: ReturnType<typeof vi.fn>;
+      readPixels?: ReturnType<typeof vi.fn>;
+      getError?: ReturnType<typeof vi.fn>;
+    };
+
+    glAny.FRAMEBUFFER ??= 0x8d40;
+    glAny.VIEWPORT ??= 0x0ba2;
+    glAny.RGBA ??= 0x1908;
+    glAny.FLOAT ??= 0x1406;
+    glAny.NO_ERROR ??= 0;
+    glAny.bindFramebuffer = vi.fn();
+    glAny.getParameter = vi.fn((p: number) => (p === glAny.VIEWPORT ? new Int32Array([0, 0, 4, 4]) : 0));
+    glAny.readPixels = vi.fn(
+      (
+        _x: number,
+        _y: number,
+        _w: number,
+        _h: number,
+        _format: number,
+        _type: number,
+        pixels: Float32Array
+      ) => {
+        if (pixels instanceof Float32Array) {
+          pixels.fill(0.5);
+        }
+      }
+    );
+    glAny.getError = vi.fn(() => glAny.NO_ERROR);
+  }
+
+  it('REN-SCOPE-TM-001: scope readback disables and restores tone mapping in HDR mode', () => {
+    const renderer = new Renderer();
+    prepareScopeReadbackGL(renderer);
+
+    const stateManager = (renderer as any).stateManager;
+    stateManager.setToneMappingState({ enabled: true, operator: 'aces' });
+
+    const toneSpy = vi.spyOn(stateManager, 'setToneMappingState');
+    (renderer as any).hdrOutputMode = 'hlg';
+    (renderer as any).renderImage = vi.fn();
+
+    const result = (renderer as any).renderImageToFloatSync(
+      {} as IPImage,
+      2,
+      2,
+      {} as WebGLFramebuffer
+    ) as Float32Array | null;
+
+    expect(result).not.toBeNull();
+    expect(toneSpy).toHaveBeenCalledWith({ enabled: false, operator: 'off' });
+    expect(toneSpy).toHaveBeenLastCalledWith(expect.objectContaining({ enabled: true, operator: 'aces' }));
+    expect(stateManager.getToneMappingState()).toEqual(expect.objectContaining({ enabled: true, operator: 'aces' }));
+  });
+
+  it('REN-SCOPE-TM-002: scope readback keeps tone mapping unchanged in SDR mode', () => {
+    const renderer = new Renderer();
+    prepareScopeReadbackGL(renderer);
+
+    const stateManager = (renderer as any).stateManager;
+    stateManager.setToneMappingState({ enabled: true, operator: 'aces' });
+
+    const toneSpy = vi.spyOn(stateManager, 'setToneMappingState');
+    (renderer as any).hdrOutputMode = 'sdr';
+    (renderer as any).renderImage = vi.fn();
+
+    const result = (renderer as any).renderImageToFloatSync(
+      {} as IPImage,
+      2,
+      2,
+      {} as WebGLFramebuffer
+    ) as Float32Array | null;
+
+    expect(result).not.toBeNull();
+    expect(toneSpy).not.toHaveBeenCalled();
+    expect(stateManager.getToneMappingState()).toEqual(expect.objectContaining({ enabled: true, operator: 'aces' }));
+  });
+});

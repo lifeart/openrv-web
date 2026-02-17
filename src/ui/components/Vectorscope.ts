@@ -54,6 +54,7 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
   private effectiveZoom = 1; // Actual zoom used for rendering (calculated in auto mode)
   private zoomButton: HTMLButtonElement | null = null;
   private lastImageData: ImageData | null = null;
+  private lastFloatFrame: { data: Float32Array; width: number; height: number } | null = null;
   private isPlaybackMode = false;
   private dpr = 1;
   private boundOnThemeChange: (() => void) | null = null;
@@ -97,8 +98,8 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
 
     // Listen for theme changes to redraw with new colors
     this.boundOnThemeChange = () => {
-      if (this.lastImageData) {
-        this.update(this.lastImageData);
+      if (this.lastFloatFrame || this.lastImageData) {
+        this.redrawLastFrame();
       } else {
         this.drawGraticule();
       }
@@ -252,6 +253,7 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
    */
   update(imageData: ImageData): void {
     this.lastImageData = imageData;
+    this.lastFloatFrame = null;
 
     // Calculate effective zoom for auto mode
     if (this.zoomMode === 'auto') {
@@ -287,6 +289,9 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
    * @param height Image height
    */
   updateFloat(floatData: Float32Array, width: number, height: number): void {
+    this.lastFloatFrame = { data: floatData, width, height };
+    this.lastImageData = null;
+
     // Calculate effective zoom for auto mode (sample float data)
     if (this.zoomMode === 'auto') {
       // Quick auto-zoom from float data: sample to estimate max chrominance
@@ -323,6 +328,19 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
 
     // Fallback: convert float to ImageData for CPU rendering
     this.drawCPU(floatRGBAToImageData(floatData, width, height));
+  }
+
+  /**
+   * Redraw the most recent frame, preserving HDR float data when available.
+   */
+  private redrawLastFrame(): void {
+    if (this.lastFloatFrame) {
+      this.updateFloat(this.lastFloatFrame.data, this.lastFloatFrame.width, this.lastFloatFrame.height);
+      return;
+    }
+    if (this.lastImageData) {
+      this.update(this.lastImageData);
+    }
   }
 
   /**
@@ -458,9 +476,7 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
     this.updateZoomButtonText();
 
     // Redraw with new zoom if we have image data
-    if (this.lastImageData) {
-      this.update(this.lastImageData);
-    }
+    this.redrawLastFrame();
 
     this.emit('zoomChanged', this.zoomMode);
   }
@@ -479,9 +495,7 @@ export class Vectorscope extends EventEmitter<VectorscopeEvents> {
     this.updateZoomButtonText();
 
     // Redraw with new zoom if we have image data
-    if (this.lastImageData) {
-      this.update(this.lastImageData);
-    }
+    this.redrawLastFrame();
 
     this.emit('zoomChanged', this.zoomMode);
   }

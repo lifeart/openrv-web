@@ -694,5 +694,43 @@ describe('ViewerExport', () => {
 
       expect(mockSession.getSourceByIndex).toHaveBeenCalledWith(1);
     });
+
+    it('uses current sequence frame when source element is missing', () => {
+      const seqFrame = createMockImage(320, 180);
+      const source = createMockMediaSource('sequence', 320, 180);
+      source.element = undefined as any;
+      source.sequenceFrames = [
+        { index: 0, frameNumber: 1, file: new File([''], 'f0001.png') },
+        { index: 1, frameNumber: 2, file: new File([''], 'f0002.png'), image: seqFrame },
+      ];
+      mockSession.currentFrame = 2;
+      (mockSession.getSourceByIndex as any).mockReturnValue(source);
+
+      const result = renderSourceToImageData(mockSession, 0, 320, 180);
+
+      expect(result).not.toBeNull();
+    });
+
+    it('prefers mediabunny cached frame canvas for video sources', () => {
+      const frameCanvas = document.createElement('canvas');
+      frameCanvas.width = 64;
+      frameCanvas.height = 64;
+
+      const source = createMockMediaSource('video', 1280, 720);
+      source.videoSourceNode = {
+        isUsingMediabunny: vi.fn().mockReturnValue(true),
+        getCachedFrameCanvas: vi.fn().mockReturnValue(frameCanvas),
+        getFrameAsync: vi.fn().mockResolvedValue(undefined),
+      } as any;
+      const videoNode = source.videoSourceNode!;
+      mockSession.currentFrame = 12;
+      (mockSession.getSourceByIndex as any).mockReturnValue(source);
+
+      const result = renderSourceToImageData(mockSession, 1, 640, 360);
+
+      expect(result).not.toBeNull();
+      expect(videoNode.getCachedFrameCanvas).toHaveBeenCalledWith(12);
+      expect(videoNode.getFrameAsync).not.toHaveBeenCalled();
+    });
   });
 });

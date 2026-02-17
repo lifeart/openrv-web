@@ -1093,59 +1093,66 @@ export class Renderer implements RendererBackend {
       this.scopePBOCachedPixels = new Float32Array(pixelCount);
     }
 
-    // Neutralize display settings so scopes show scene-referred data
+    // Neutralize display/tone-mapping output so scopes show scene-referred data
     const prevDisplayState = this.stateManager.getDisplayColorState();
     this.stateManager.setDisplayColorState(SCOPE_DISPLAY_CONFIG);
+    const prevToneMappingState = this.stateManager.getToneMappingState();
 
     // Step 1: Render current frame to scope FBO
     const prevViewport = gl.getParameter(gl.VIEWPORT) as Int32Array;
     const prevHdrMode = this.hdrOutputMode;
+    const disableToneMappingForScopes = prevHdrMode !== 'sdr' && prevToneMappingState.enabled;
+    if (disableToneMappingForScopes) {
+      this.stateManager.setToneMappingState({ enabled: false, operator: 'off' });
+    }
     this.hdrOutputMode = 'hlg';
 
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.scopeFBO);
-    gl.viewport(0, 0, width, height);
-    gl.clearColor(0, 0, 0, 1);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    this.renderImage(image, 0, 0, 1, 1);
-    this.hdrOutputMode = prevHdrMode;
+    try {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.scopeFBO);
+      gl.viewport(0, 0, width, height);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      this.renderImage(image, 0, 0, 1, 1);
 
-    // Step 2: Consume any PBO whose GPU fence has signaled
-    for (let i = 0; i < 2; i++) {
-      const fence = this.scopePBOFences[i];
-      if (fence && gl.getSyncParameter(fence, gl.SYNC_STATUS) === gl.SIGNALED) {
-        gl.deleteSync(fence);
-        this.scopePBOFences[i] = null;
-        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.scopePBOs[i]!);
-        gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, this.scopePBOCachedPixels!);
-        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+      // Step 2: Consume any PBO whose GPU fence has signaled
+      for (let i = 0; i < 2; i++) {
+        const fence = this.scopePBOFences[i];
+        if (fence && gl.getSyncParameter(fence, gl.SYNC_STATUS) === gl.SIGNALED) {
+          gl.deleteSync(fence);
+          this.scopePBOFences[i] = null;
+          gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.scopePBOs[i]!);
+          gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, this.scopePBOCachedPixels!);
+          gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+          this.scopePBOReady = true;
+        }
+      }
+
+      // Step 3: Start async readPixels into an idle PBO
+      for (let i = 0; i < 2; i++) {
+        if (!this.scopePBOFences[i]) {
+          gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.scopePBOs[i]!);
+          gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, 0);
+          gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+          this.scopePBOFences[i] = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+          gl.flush();
+          break;
+        }
+      }
+
+      // Step 4: First-frame fallback — sync readPixels (one-time stall)
+      if (!this.scopePBOReady) {
+        gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, this.scopePBOCachedPixels!);
         this.scopePBOReady = true;
       }
-    }
-
-    // Step 3: Start async readPixels into an idle PBO
-    for (let i = 0; i < 2; i++) {
-      if (!this.scopePBOFences[i]) {
-        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.scopePBOs[i]!);
-        gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, 0);
-        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
-        this.scopePBOFences[i] = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
-        gl.flush();
-        break;
+    } finally {
+      this.hdrOutputMode = prevHdrMode;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(prevViewport[0]!, prevViewport[1]!, prevViewport[2]!, prevViewport[3]!);
+      this.stateManager.setDisplayColorState(prevDisplayState);
+      if (disableToneMappingForScopes) {
+        this.stateManager.setToneMappingState(prevToneMappingState);
       }
     }
-
-    // Step 4: First-frame fallback — sync readPixels (one-time stall)
-    if (!this.scopePBOReady) {
-      gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, this.scopePBOCachedPixels!);
-      this.scopePBOReady = true;
-    }
-
-    // Unbind FBO and restore viewport
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(prevViewport[0]!, prevViewport[1]!, prevViewport[2]!, prevViewport[3]!);
-
-    // Restore display state
-    this.stateManager.setDisplayColorState(prevDisplayState);
 
     return this.scopePBOCachedPixels;
   }
@@ -1157,29 +1164,36 @@ export class Renderer implements RendererBackend {
     const gl = this.gl;
     if (!gl || !this.displayShader) return null;
 
-    // Neutralize display settings so scopes show scene-referred data
+    // Neutralize display/tone-mapping output so scopes show scene-referred data
     const prevDisplayState = this.stateManager.getDisplayColorState();
     this.stateManager.setDisplayColorState(SCOPE_DISPLAY_CONFIG);
+    const prevToneMappingState = this.stateManager.getToneMappingState();
 
     const prevViewport = gl.getParameter(gl.VIEWPORT) as Int32Array;
     const prevHdrMode = this.hdrOutputMode;
+    const disableToneMappingForScopes = prevHdrMode !== 'sdr' && prevToneMappingState.enabled;
+    if (disableToneMappingForScopes) {
+      this.stateManager.setToneMappingState({ enabled: false, operator: 'off' });
+    }
     this.hdrOutputMode = 'hlg';
 
-    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
-    gl.viewport(0, 0, width, height);
-    gl.clearColor(0, 0, 0, 1);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    this.renderImage(image, 0, 0, 1, 1);
-    this.hdrOutputMode = prevHdrMode;
-
     const pixels = new Float32Array(width * height * RGBA_CHANNELS);
-    gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, pixels);
-
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(prevViewport[0]!, prevViewport[1]!, prevViewport[2]!, prevViewport[3]!);
-
-    // Restore display state
-    this.stateManager.setDisplayColorState(prevDisplayState);
+    try {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+      gl.viewport(0, 0, width, height);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      this.renderImage(image, 0, 0, 1, 1);
+      gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, pixels);
+    } finally {
+      this.hdrOutputMode = prevHdrMode;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.viewport(prevViewport[0]!, prevViewport[1]!, prevViewport[2]!, prevViewport[3]!);
+      this.stateManager.setDisplayColorState(prevDisplayState);
+      if (disableToneMappingForScopes) {
+        this.stateManager.setToneMappingState(prevToneMappingState);
+      }
+    }
 
     return gl.getError() === gl.NO_ERROR ? pixels : null;
   }

@@ -563,22 +563,39 @@ export class Timeline {
     // Frame numbers / timecode
     const fps = this.session.fps;
     const isTimecode = this._timecodeDisplayMode === 'timecode';
+    const trackCenterY = trackY + trackHeight / 2;
+    const bottomInfoY = height - 20;
+    const safeMetric = (value: number | undefined, fallback: number): number => (
+      typeof value === 'number' && Number.isFinite(value) ? value : fallback
+    );
+    const drawMiddleAlignedText = (text: string, x: number, yCenter: number): TextMetrics => {
+      const metrics = ctx.measureText(text);
+      const ascent = safeMetric(metrics.actualBoundingBoxAscent, 8);
+      const descent = safeMetric(metrics.actualBoundingBoxDescent, 3);
+      const baselineY = yCenter + (ascent - descent) / 2;
+      if (!Number.isFinite(baselineY)) {
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, x, yCenter);
+        return metrics;
+      }
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText(text, x, baselineY);
+      return metrics;
+    };
     ctx.font = '12px -apple-system, BlinkMacSystemFont, monospace';
 
     // Left frame number (always 1)
     ctx.fillStyle = colors.textDim;
     ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
     const leftLabel = isTimecode ? formatTimecode(1, fps) : '1';
-    ctx.fillText(leftLabel, padding - 10, trackY + trackHeight / 2);
+    drawMiddleAlignedText(leftLabel, padding - 10, trackCenterY);
 
     // Right frame number (full duration)
     ctx.textAlign = 'left';
     const rightLabel = isTimecode ? formatTimecode(duration, fps) : String(duration);
-    ctx.fillText(rightLabel, width - padding + 10, trackY + trackHeight / 2);
+    drawMiddleAlignedText(rightLabel, width - padding + 10, trackCenterY);
 
     // Current frame and in/out info (bottom center)
-    const bottomInfoY = height - 20;
     ctx.fillStyle = colors.text;
     ctx.textAlign = 'center';
     ctx.font = 'bold 13px -apple-system, BlinkMacSystemFont, monospace';
@@ -588,25 +605,27 @@ export class Timeline {
         ? ` [${formatTimecode(inPoint, fps)}-${formatTimecode(outPoint, fps)}]`
         : ` [${inPoint}-${outPoint}]`
       : '';
-    ctx.fillText(`${frameLabel}${inOutInfo}`, width / 2, bottomInfoY);
+    const frameAndRangeLabel = `${frameLabel}${inOutInfo}`;
+    const frameLabelMetrics = drawMiddleAlignedText(frameAndRangeLabel, width / 2, bottomInfoY);
+    const frameLabelWidth = frameLabelMetrics.width;
 
     // Draw timecode mode indicator (small label showing current mode)
     const modeLabel = isTimecode ? 'TC' : 'F#';
     ctx.font = '9px -apple-system, BlinkMacSystemFont, monospace';
     ctx.fillStyle = colors.textDim;
     ctx.textAlign = 'left';
-    const frameLabelWidth = ctx.measureText(`${frameLabel}${inOutInfo}`).width;
-    ctx.fillText(modeLabel, width / 2 + frameLabelWidth / 2 + 6, bottomInfoY);
+    drawMiddleAlignedText(modeLabel, width / 2 + frameLabelWidth / 2 + 6, bottomInfoY);
 
     // Info text (bottom line)
     ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
     ctx.fillStyle = colors.textDim;
+    const infoRowY = bottomInfoY;
 
     // Source info
     if (source) {
       ctx.textAlign = 'left';
       const typeLabel = source.type === 'video' ? '[VID]' : '[IMG]';
-      ctx.fillText(`${typeLabel} ${source.name} (${source.width}×${source.height})`, padding, height - 6);
+      drawMiddleAlignedText(`${typeLabel} ${source.name} (${source.width}×${source.height})`, padding, infoRowY);
     }
 
     // Playback info
@@ -616,7 +635,7 @@ export class Timeline {
     const fpsDisplay = this.session.isPlaying && effectiveFps > 0
       ? `${effectiveFps.toFixed(1)}/${this.session.fps} fps`
       : `${this.session.fps} fps`;
-    ctx.fillText(`${status} | ${fpsDisplay} | ${this.session.loopMode}`, width - padding, height - 6);
+    drawMiddleAlignedText(`${status} | ${fpsDisplay} | ${this.session.loopMode}`, width - padding, infoRowY);
   }
 
   refresh(): void {
