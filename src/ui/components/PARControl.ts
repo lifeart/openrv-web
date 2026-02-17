@@ -231,10 +231,13 @@ export class PARControl extends EventEmitter<PARControlEvents> {
     return row;
   }
 
-  private createPresetItem(label: string, value: string, par: number): HTMLElement {
-    const item = document.createElement('div');
+  private createPresetItem(label: string, value: string, par: number): HTMLButtonElement {
+    const item = document.createElement('button');
+    item.type = 'button';
     item.dataset.testid = `par-preset-${value}`;
     item.dataset.parPreset = value;
+    item.setAttribute('role', 'option');
+    item.setAttribute('aria-selected', String(this.state.preset === value));
     item.style.cssText = `
       display: flex;
       align-items: center;
@@ -244,6 +247,11 @@ export class PARControl extends EventEmitter<PARControlEvents> {
       color: var(--text-secondary);
       cursor: pointer;
       transition: background 0.1s ease;
+      width: 100%;
+      border: none;
+      background: transparent;
+      font-family: inherit;
+      outline: none;
     `;
 
     const labelSpan = document.createElement('span');
@@ -288,6 +296,13 @@ export class PARControl extends EventEmitter<PARControlEvents> {
       this.emit('stateChanged', { ...this.state });
     });
 
+    item.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        item.click();
+      }
+    });
+
     return item;
   }
 
@@ -306,7 +321,9 @@ export class PARControl extends EventEmitter<PARControlEvents> {
     items.forEach((el) => {
       const item = el as HTMLElement;
       const presetValue = item.dataset.parPreset;
-      if (presetValue === this.state.preset) {
+      const isSelected = presetValue === this.state.preset;
+      item.setAttribute('aria-selected', String(isSelected));
+      if (isSelected) {
         item.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
         item.style.color = 'var(--accent-primary)';
       } else {

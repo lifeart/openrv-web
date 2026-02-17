@@ -52,6 +52,7 @@ import { wireStackControls } from './AppStackWiring';
 // Layout
 import { LayoutStore } from './ui/layout/LayoutStore';
 import { LayoutManager } from './ui/layout/LayoutManager';
+import { formatTimecode, formatDuration } from './handlers/infoPanelHandlers';
 
 export class App {
   private container: HTMLElement | null = null;
@@ -316,6 +317,10 @@ export class App {
     // Mount layout root into app container
     this.container.appendChild(this.layoutManager.getElement());
 
+    // Register panel content
+    this.layoutManager.addPanelTab('right', 'Inspector', this.controls.rightPanelContent.getElement());
+    this.layoutManager.addPanelTab('left', 'Color Tools', this.controls.leftPanelContent.getElement());
+
     // Wire layout resize to viewer resize
     this.layoutManager.on('viewerResized', () => {
       this.viewer.resize();
@@ -487,6 +492,37 @@ export class App {
           cursorPosition: position,
         });
       }
+    });
+
+    // Wire histogram data from scope scheduler to mini histogram in right panel
+    this.sessionBridge.setHistogramDataCallback((data) => {
+      this.controls.rightPanelContent.updateHistogram(data);
+    });
+
+    // Wire info updates to right panel alongside existing InfoPanel
+    const updateRightPanelInfo = () => {
+      const source = this.session.currentSource;
+      const fps = this.session.fps;
+      const currentFrame = this.session.currentFrame;
+      const totalFrames = source?.duration ?? 0;
+      const durationSeconds = totalFrames / (fps || 1);
+      this.controls.rightPanelContent.updateInfo({
+        filename: source?.name,
+        width: source?.width,
+        height: source?.height,
+        currentFrame,
+        totalFrames,
+        timecode: formatTimecode(currentFrame, fps),
+        duration: formatDuration(durationSeconds),
+        fps,
+      });
+    };
+    this.session.on('frameChanged', updateRightPanelInfo);
+    this.session.on('sourceLoaded', updateRightPanelInfo);
+
+    // Wire preset mode to panel sections
+    this.layoutStore.on('presetApplied', (presetId) => {
+      this.controls.rightPanelContent.setPresetMode(presetId);
     });
 
     // Bind all session event handlers (scopes, info panel, HDR auto-config, etc.)

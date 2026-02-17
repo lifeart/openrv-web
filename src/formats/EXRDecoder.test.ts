@@ -2330,15 +2330,15 @@ describe('EXR Uncrop (applyUncrop)', () => {
 
       // Pixel at (100,50) - the first data pixel
       const idx = (50 * 1920 + 100) * 4;
-      expect(result.data[idx + 0]).toBe(0.7);
-      expect(result.data[idx + 1]).toBe(0.3);
-      expect(result.data[idx + 2]).toBe(0.1);
-      expect(result.data[idx + 3]).toBe(0.9);
+      expect(result.data[idx + 0]).toBeCloseTo(0.7, 5);
+      expect(result.data[idx + 1]).toBeCloseTo(0.3, 5);
+      expect(result.data[idx + 2]).toBeCloseTo(0.1, 5);
+      expect(result.data[idx + 3]).toBeCloseTo(0.9, 5);
 
       // Pixel at (500,400) - the last data pixel
       const idxLast = (400 * 1920 + 500) * 4;
-      expect(result.data[idxLast + 0]).toBe(0.7);
-      expect(result.data[idxLast + 3]).toBe(0.9);
+      expect(result.data[idxLast + 0]).toBeCloseTo(0.7, 5);
+      expect(result.data[idxLast + 3]).toBeCloseTo(0.9, 5);
 
       // Pixel at (501,400) - just outside data window
       const idxOutside = (400 * 1920 + 501) * 4;
@@ -2366,9 +2366,9 @@ describe('EXR Uncrop (applyUncrop)', () => {
         for (let x = 0; x < 3; x++) {
           const idx = (y * 3 + x) * 4;
           if (x === 1 && y === 1) {
-            expect(result.data[idx + 0]).toBe(0.8);
-            expect(result.data[idx + 1]).toBe(0.6);
-            expect(result.data[idx + 2]).toBe(0.4);
+            expect(result.data[idx + 0]).toBeCloseTo(0.8, 5);
+            expect(result.data[idx + 1]).toBeCloseTo(0.6, 5);
+            expect(result.data[idx + 2]).toBeCloseTo(0.4, 5);
             expect(result.data[idx + 3]).toBe(1.0);
           } else {
             expect(result.data[idx + 0]).toBe(0);
@@ -2420,7 +2420,109 @@ describe('EXR Uncrop (applyUncrop)', () => {
       expect(result.data[0]).toBe(0);
       // (2,2) should have data
       const idx = (2 * 4 + 2) * 4;
-      expect(result.data[idx]).toBe(0.9);
+      expect(result.data[idx]).toBeCloseTo(0.9, 5);
+    });
+  });
+
+  describe('applyUncrop - boundary clipping', () => {
+    it('EXR-UC040: data window larger than display window on all sides is clipped', () => {
+      // Data window extends beyond display window on every side
+      const dw: EXRBox2i = { xMin: -2, yMin: -1, xMax: 5, yMax: 4 };   // 8x6
+      const dispW: EXRBox2i = { xMin: 0, yMin: 0, xMax: 3, yMax: 3 };  // 4x4
+
+      const dwWidth = 8, dwHeight = 6;
+      const data = new Float32Array(dwWidth * dwHeight * 4);
+
+      // Fill each pixel with a recognizable pattern: R = normalized x, G = normalized y
+      for (let y = 0; y < dwHeight; y++) {
+        for (let x = 0; x < dwWidth; x++) {
+          const i = (y * dwWidth + x) * 4;
+          data[i + 0] = (x + 1) * 0.125;  // R: 0.125..1.0
+          data[i + 1] = (y + 1) * 0.125;  // G: 0.125..0.75
+          data[i + 2] = 0.5;
+          data[i + 3] = 1.0;
+        }
+      }
+
+      const result = applyUncrop(data, dw, dispW);
+      expect(result.width).toBe(4);
+      expect(result.height).toBe(4);
+
+      // The visible region in data coords: x=2..5 (clipped to 2..5), y=1..4 (clipped to 1..4)
+      // Data pixel at data coords (2,1) maps to display (0,0)
+      // Its R value = (2+1)*0.125 = 0.375, G value = (1+1)*0.125 = 0.25
+      const idx00 = 0;
+      expect(result.data[idx00 + 0]).toBeCloseTo(0.375, 5);
+      expect(result.data[idx00 + 1]).toBe(0.25);
+      expect(result.data[idx00 + 3]).toBe(1.0);
+
+      // Data pixel at data coords (5,4) maps to display (3,3)
+      // Its R value = (5+1)*0.125 = 0.75, G value = (4+1)*0.125 = 0.625
+      const idx33 = (3 * 4 + 3) * 4;
+      expect(result.data[idx33 + 0]).toBe(0.75);
+      expect(result.data[idx33 + 1]).toBeCloseTo(0.625, 5);
+      expect(result.data[idx33 + 3]).toBe(1.0);
+
+      // All 16 pixels should be filled (no transparent black)
+      for (let i = 0; i < 4 * 4; i++) {
+        expect(result.data[i * 4 + 3]).toBe(1.0);
+      }
+    });
+
+    it('EXR-UC041: data window partially outside display window with negative offsets', () => {
+      // Data window starts before display window but overlaps partially
+      const dw: EXRBox2i = { xMin: -3, yMin: -2, xMax: 1, yMax: 1 };    // 5x4
+      const dispW: EXRBox2i = { xMin: 0, yMin: 0, xMax: 3, yMax: 3 };   // 4x4
+
+      const dwWidth = 5, dwHeight = 4;
+      const data = new Float32Array(dwWidth * dwHeight * 4);
+
+      // Fill all with recognizable value
+      for (let i = 0; i < dwWidth * dwHeight; i++) {
+        data[i * 4 + 0] = 0.25;
+        data[i * 4 + 1] = 0.5;
+        data[i * 4 + 2] = 0.75;
+        data[i * 4 + 3] = 1.0;
+      }
+
+      const result = applyUncrop(data, dw, dispW);
+      expect(result.width).toBe(4);
+      expect(result.height).toBe(4);
+
+      // The visible portion: data x=3..4 (display x=0..1), data y=2..3 (display y=0..1)
+      // (0,0) in display should have data
+      expect(result.data[0]).toBe(0.25);
+      expect(result.data[3]).toBe(1.0);
+
+      // (1,1) in display should have data
+      const idx11 = (1 * 4 + 1) * 4;
+      expect(result.data[idx11 + 0]).toBe(0.25);
+      expect(result.data[idx11 + 3]).toBe(1.0);
+
+      // (2,0) in display should be transparent (no data there)
+      const idx20 = (0 * 4 + 2) * 4;
+      expect(result.data[idx20 + 0]).toBe(0);
+      expect(result.data[idx20 + 3]).toBe(0);
+
+      // (0,2) in display should be transparent (no data there)
+      const idx02 = (2 * 4 + 0) * 4;
+      expect(result.data[idx02 + 0]).toBe(0);
+      expect(result.data[idx02 + 3]).toBe(0);
+
+      // (3,3) in display should be transparent
+      const idx33 = (3 * 4 + 3) * 4;
+      expect(result.data[idx33 + 0]).toBe(0);
+      expect(result.data[idx33 + 3]).toBe(0);
+    });
+
+    it('EXR-UC042: applyUncrop throws on data length mismatch', () => {
+      const dw: EXRBox2i = { xMin: 0, yMin: 0, xMax: 1, yMax: 1 };   // 2x2 → expects 16 floats
+      const dispW: EXRBox2i = { xMin: 0, yMin: 0, xMax: 3, yMax: 3 };
+
+      // Wrong length: 3x2x4 = 24 instead of 2x2x4 = 16
+      const data = new Float32Array(24);
+
+      expect(() => applyUncrop(data, dw, dispW)).toThrow(/data length 24 does not match expected 16/);
     });
   });
 

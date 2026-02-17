@@ -21,6 +21,12 @@ export interface SnapshotPanelEvents extends EventMap {
   closed: void;
 }
 
+/** Interface for panels that support mutual exclusion */
+export interface ExclusivePanel {
+  isOpen(): boolean;
+  hide(): void;
+}
+
 export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
   private container: HTMLElement;
   private listContainer: HTMLElement;
@@ -29,6 +35,7 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
   private snapshots: Snapshot[] = [];
   private snapshotManager: SnapshotManager;
   private isVisible = false;
+  private exclusivePanel: ExclusivePanel | null = null;
 
   constructor(snapshotManager: SnapshotManager) {
     super();
@@ -445,7 +452,11 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
         border-radius: 3px;
         color: var(--text-secondary);
       `;
-      span.innerHTML = `<span style="color: var(--text-muted)">${label}:</span> ${value}`;
+      const labelSpan = document.createElement('span');
+      labelSpan.style.color = 'var(--text-muted)';
+      labelSpan.textContent = `${label}: `;
+      span.appendChild(labelSpan);
+      span.appendChild(document.createTextNode(value));
       container.appendChild(span);
     }
 
@@ -586,7 +597,17 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
   }
 
   // Public methods
+
+  /** Register another panel for mutual exclusion - opening this panel will close the other */
+  setExclusiveWith(panel: ExclusivePanel): void {
+    this.exclusivePanel = panel;
+  }
+
   show(): void {
+    // Close the exclusive panel if it is open
+    if (this.exclusivePanel?.isOpen()) {
+      this.exclusivePanel.hide();
+    }
     if (!document.body.contains(this.container)) {
       document.body.appendChild(this.container);
     }

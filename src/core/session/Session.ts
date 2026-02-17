@@ -100,6 +100,7 @@ export interface GTOViewSettings {
   scopes?: ScopesState;
   linearize?: LinearizeState;
   uncrop?: UncropState;
+  outOfRange?: number;  // 0=off, 1=clamp-to-black, 2=highlight
 }
 
 /**
@@ -302,6 +303,9 @@ export class Session extends EventEmitter<SessionEvents> {
   private _graphParseResult: GTOParseResult | null = null;
   private _gtoData: GTOData | null = null;
 
+  // Uncrop state parsed from GTO (stored for export round-trip)
+  private _uncropState: UncropState | null = null;
+
 
   constructor() {
     super();
@@ -443,6 +447,15 @@ export class Session extends EventEmitter<SessionEvents> {
    */
   setHDRResizeTier(tier: HDRResizeTier): void {
     this._hdrResizeTier = tier;
+  }
+
+  /** Uncrop state from GTO RVFormat (for export round-trip) */
+  get uncropState(): UncropState | null {
+    return this._uncropState;
+  }
+
+  set uncropState(state: UncropState | null) {
+    this._uncropState = state;
   }
 
   /** Matte overlay settings */
@@ -1225,6 +1238,9 @@ export class Session extends EventEmitter<SessionEvents> {
 
     const settings = this.parseInitialSettings(dto, { width: sourceWidth, height: sourceHeight });
     if (settings) {
+      if (settings.uncrop) {
+        this._uncropState = settings.uncrop;
+      }
       this.emit('settingsLoaded', settings);
     }
   }

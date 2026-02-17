@@ -104,6 +104,26 @@ function handleSettingsLoaded(
   if (settings.crop) {
     context.getCropControl().setState(settings.crop);
   }
+  if (settings.uncrop && settings.uncrop.active) {
+    const source = context.getSession().currentSource;
+    const sourceWidth = source?.width ?? 0;
+    const sourceHeight = source?.height ?? 0;
+    if (sourceWidth > 0 && sourceHeight > 0) {
+      const paddingLeft = settings.uncrop.x;
+      const paddingTop = settings.uncrop.y;
+      const paddingRight = Math.max(0, settings.uncrop.width - sourceWidth - settings.uncrop.x);
+      const paddingBottom = Math.max(0, settings.uncrop.height - sourceHeight - settings.uncrop.y);
+      context.getCropControl().setUncropState({
+        enabled: true,
+        paddingMode: 'per-side',
+        padding: 0,
+        paddingTop,
+        paddingRight,
+        paddingBottom,
+        paddingLeft,
+      });
+    }
+  }
   if (settings.channelMode) {
     context.getChannelSelect().setChannel(settings.channelMode);
   }

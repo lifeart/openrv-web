@@ -22,6 +22,7 @@ const { disposeMocks, createMockClass, createAsyncDisposeMockClass } = vi.hoiste
       setEyedropperCallback = vi.fn();
       deactivateEyedropper = vi.fn();
       createBadge = vi.fn(() => document.createElement('div'));
+      setExclusiveWith = vi.fn();
     };
   }
 
@@ -90,8 +91,17 @@ vi.mock('./utils/ui/PresentationMode', () => ({ PresentationMode: createMockClas
 vi.mock('./network/NetworkSyncManager', () => ({ NetworkSyncManager: createMockClass('NetworkSyncManager') }));
 
 vi.mock('./utils/HistoryManager', () => ({
-  getGlobalHistoryManager: vi.fn(() => ({})),
+  getGlobalHistoryManager: vi.fn(() => ({
+    on: vi.fn(() => vi.fn()),
+    getState: vi.fn(() => ({ entries: [], currentIndex: -1, canUndo: false, canRedo: false })),
+    getEntries: vi.fn(() => []),
+    getCurrentIndex: vi.fn(() => -1),
+    clear: vi.fn(),
+  })),
 }));
+
+vi.mock('./ui/layout/panels/RightPanelContent', () => ({ RightPanelContent: createMockClass('RightPanelContent') }));
+vi.mock('./ui/layout/panels/LeftPanelContent', () => ({ LeftPanelContent: createMockClass('LeftPanelContent') }));
 
 // ContextToolbar is imported but not used by constructor/dispose - mock to avoid side effects
 vi.mock('./ui/components/layout/ContextToolbar', () => ({
@@ -147,6 +157,8 @@ describe('AppControlRegistry', () => {
       'HistoryPanel',
       'InfoPanel',
       'MarkerListPanel',
+      'RightPanelContent',
+      'LeftPanelContent',
       'CacheIndicator',
       'PaintToolbar',
       'ColorControls',

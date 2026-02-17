@@ -379,6 +379,13 @@ export class BackgroundPatternControl extends EventEmitter<BackgroundPatternCont
       }
     });
 
+    item.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        item.click();
+      }
+    });
+
     return item;
   }
 

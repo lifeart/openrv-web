@@ -63,6 +63,8 @@ import { NetworkSyncManager } from './network/NetworkSyncManager';
 import { NetworkControl } from './ui/components/NetworkControl';
 import { ContextToolbar } from './ui/components/layout/ContextToolbar';
 import { getGlobalHistoryManager } from './utils/HistoryManager';
+import { RightPanelContent } from './ui/layout/panels/RightPanelContent';
+import { LeftPanelContent } from './ui/layout/panels/LeftPanelContent';
 import type { Session } from './core/session/Session';
 import type { Viewer } from './ui/components/Viewer';
 import type { PaintEngine } from './paint/PaintEngine';
@@ -140,6 +142,10 @@ export class AppControlRegistry {
   readonly historyPanel: HistoryPanel;
   readonly infoPanel: InfoPanel;
   readonly markerListPanel: MarkerListPanel;
+
+  // Layout panel content
+  readonly rightPanelContent: RightPanelContent;
+  readonly leftPanelContent: LeftPanelContent;
 
   // Cache
   readonly cacheIndicator: CacheIndicator;
@@ -227,6 +233,10 @@ export class AppControlRegistry {
     this.infoPanel = new InfoPanel();
     this.markerListPanel = new MarkerListPanel(session);
 
+    // --- Layout panel content ---
+    this.rightPanelContent = new RightPanelContent(this.scopesControl);
+    this.leftPanelContent = new LeftPanelContent(this.colorControls, getGlobalHistoryManager());
+
     // --- Cache ---
     this.cacheIndicator = new CacheIndicator(session, viewer);
 
@@ -237,6 +247,10 @@ export class AppControlRegistry {
     this.snapshotPanel = new SnapshotPanel(this.snapshotManager);
     this.playlistManager = new PlaylistManager();
     this.playlistPanel = new PlaylistPanel(this.playlistManager);
+
+    // Mutual exclusion: only one panel can be open at a time
+    this.snapshotPanel.setExclusiveWith(this.playlistPanel);
+    this.playlistPanel.setExclusiveWith(this.snapshotPanel);
 
     // --- Presentation / Network ---
     this.presentationMode = new PresentationMode();
@@ -651,6 +665,8 @@ export class AppControlRegistry {
     this.historyPanel.dispose();
     this.infoPanel.dispose();
     this.markerListPanel.dispose();
+    this.rightPanelContent.dispose();
+    this.leftPanelContent.dispose();
     this.cacheIndicator.dispose();
     this.paintToolbar.dispose();
     this.colorControls.dispose();

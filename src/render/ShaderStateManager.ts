@@ -54,6 +54,7 @@ export const DIRTY_FILM_EMULATION = 'filmEmulation';
 export const DIRTY_PERSPECTIVE = 'perspective';
 export const DIRTY_LINEARIZE = 'linearize';
 export const DIRTY_INLINE_LUT = 'inlineLUT';
+export const DIRTY_OUT_OF_RANGE = 'outOfRange';
 
 /** All dirty flag names -- used to initialize on first render so all uniforms are set. */
 export const ALL_DIRTY_FLAGS = [
@@ -65,6 +66,7 @@ export const ALL_DIRTY_FLAGS = [
   DIRTY_PERSPECTIVE,
   DIRTY_LINEARIZE,
   DIRTY_INLINE_LUT,
+  DIRTY_OUT_OF_RANGE,
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -324,6 +326,9 @@ export interface InternalShaderState {
   inlineLUTSize: number;       // number of entries per channel
   inlineLUTData: Float32Array | null;
   inlineLUTDirty: boolean;
+
+  // Out-of-range visualization mode
+  outOfRange: number;  // 0=off, 1=clamp-to-black, 2=highlight
 }
 
 function createDefaultInternalState(): InternalShaderState {
@@ -423,6 +428,7 @@ function createDefaultInternalState(): InternalShaderState {
     inlineLUTSize: 0,
     inlineLUTData: null,
     inlineLUTDirty: false,
+    outOfRange: 0,
   };
 }
 
@@ -907,6 +913,15 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     this.state.inlineLUTDirty = true;
   }
 
+  setOutOfRange(mode: number): void {
+    this.state.outOfRange = mode;
+    this.dirtyFlags.add(DIRTY_OUT_OF_RANGE);
+  }
+
+  getOutOfRange(): number {
+    return this.state.outOfRange;
+  }
+
   /** Set texel size (called by Renderer before applyUniforms, based on image dimensions). */
   setTexelSize(w: number, h: number): void {
     this.state.texelSize[0] = w;
@@ -1172,6 +1187,14 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
       }
     } else if (s.linearizeLogType !== 0 || s.linearizeSRGB2linear || s.linearizeRec709ToLinear || s.linearizeFileGamma !== 1.0 || s.linearizeAlphaType !== 0) {
       this.setLinearize({ logType: 0, sRGB2linear: false, rec709ToLinear: false, fileGamma: 1.0, alphaType: 0 });
+    }
+
+    // --- Out-of-range visualization (1 uniform) ---
+    {
+      const newOutOfRange = renderState.outOfRange ?? 0;
+      if (newOutOfRange !== s.outOfRange) {
+        this.setOutOfRange(newOutOfRange);
+      }
     }
   }
 
@@ -1456,6 +1479,11 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
       shader.setUniform('u_linearizeFileGamma', s.linearizeFileGamma);
       shader.setUniformInt('u_linearizeSRGB2linear', s.linearizeSRGB2linear ? 1 : 0);
       shader.setUniformInt('u_linearizeRec709ToLinear', s.linearizeRec709ToLinear ? 1 : 0);
+    }
+
+    // Out-of-range visualization
+    if (dirty.has(DIRTY_OUT_OF_RANGE)) {
+      shader.setUniformInt('u_outOfRange', s.outOfRange);
     }
 
     // Perspective Correction

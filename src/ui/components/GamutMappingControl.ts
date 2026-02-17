@@ -107,6 +107,8 @@ export class GamutMappingControl extends EventEmitter<GamutMappingControlEvents>
           this.button.style.background = 'transparent';
           this.button.style.borderColor = 'transparent';
           this.button.style.color = 'var(--text-muted)';
+        } else {
+          this.updateButtonState();
         }
       }
     });

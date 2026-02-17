@@ -16,6 +16,7 @@ import {
   DIRTY_LINEARIZE,
   DIRTY_INLINE_LUT,
   DIRTY_CDL,
+  DIRTY_OUT_OF_RANGE,
   ALL_DIRTY_FLAGS,
 } from './ShaderStateManager';
 import type { RenderState } from './RenderState';
@@ -1125,6 +1126,114 @@ describe('ShaderStateManager', () => {
       mgr.applyUniforms(mockShader, mockTexCb);
 
       expect(intCalls['u_cdlColorspace']).toBe(1);
+    });
+  });
+
+  // =================================================================
+  // Out-of-range visualization
+  // =================================================================
+
+  describe('outOfRange', () => {
+    it('OOR-SM-001: Setting outOfRange=2 sets u_outOfRange uniform to 2', () => {
+      const intCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (_name: string, _value: unknown) => {},
+        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setOutOfRange(2);
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(intCalls['u_outOfRange']).toBe(2);
+    });
+
+    it('OOR-SM-002: Setting outOfRange=0 sets u_outOfRange uniform to 0', () => {
+      const intCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (_name: string, _value: unknown) => {},
+        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setOutOfRange(0);
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(intCalls['u_outOfRange']).toBe(0);
+    });
+
+    it('OOR-SM-003: Default outOfRange is 0', () => {
+      expect(mgr.getOutOfRange()).toBe(0);
+    });
+
+    it('OOR-SM-004: applyRenderState with outOfRange updates uniform', () => {
+      const rs = createDefaultRenderState();
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Set outOfRange on render state
+      rs.outOfRange = 2;
+      mgr.applyRenderState(rs);
+
+      expect(flags.has(DIRTY_OUT_OF_RANGE)).toBe(true);
+      expect(mgr.getOutOfRange()).toBe(2);
+    });
+
+    it('OOR-SM-005: setOutOfRange marks DIRTY_OUT_OF_RANGE flag', () => {
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      mgr.setOutOfRange(1);
+      expect(flags.has(DIRTY_OUT_OF_RANGE)).toBe(true);
+    });
+
+    it('OOR-SM-006: DIRTY_OUT_OF_RANGE is included in ALL_DIRTY_FLAGS', () => {
+      expect(ALL_DIRTY_FLAGS).toContain(DIRTY_OUT_OF_RANGE);
+    });
+
+    it('OOR-SM-007: applyRenderState does not mark dirty when outOfRange is unchanged', () => {
+      const rs = createDefaultRenderState();
+      rs.outOfRange = 2;
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Apply again with same value
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_OUT_OF_RANGE)).toBe(false);
+    });
+
+    it('OOR-SM-008: applyRenderState defaults outOfRange to 0 when not specified', () => {
+      // First set to 2
+      mgr.setOutOfRange(2);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Apply state without outOfRange (undefined)
+      const rs = createDefaultRenderState();
+      // rs.outOfRange is undefined -> defaults to 0
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_OUT_OF_RANGE)).toBe(true);
+      expect(mgr.getOutOfRange()).toBe(0);
     });
   });
 });

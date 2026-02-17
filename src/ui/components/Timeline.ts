@@ -6,6 +6,11 @@ import { formatTimecode, formatFrameDisplay, TimecodeDisplayMode } from '../../u
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 
 export class Timeline {
+  /** Radius of the playhead drag handle circle in pixels */
+  static readonly PLAYHEAD_CIRCLE_RADIUS = 9;
+  /** Width of the invisible hit area around the playhead in pixels */
+  static readonly PLAYHEAD_HIT_AREA_WIDTH = 20;
+
   private container: HTMLElement;
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -536,19 +541,24 @@ export class Timeline {
     // Draw playhead
     const playheadX = duration > 1 ? frameToX(currentFrame) : padding + trackWidth / 2;
 
+    // Playhead hit area (invisible, for pointer interaction affordance)
+    // A transparent zone of at least 20px wide around the playhead
+    ctx.fillStyle = 'rgba(0, 0, 0, 0)';
+    ctx.fillRect(playheadX - Timeline.PLAYHEAD_HIT_AREA_WIDTH / 2, trackY - 10, Timeline.PLAYHEAD_HIT_AREA_WIDTH, trackHeight + 20);
+
     // Playhead glow
     ctx.fillStyle = colors.playheadShadow;
     ctx.beginPath();
-    ctx.arc(playheadX, trackY + trackHeight / 2, 12, 0, Math.PI * 2);
+    ctx.arc(playheadX, trackY + trackHeight / 2, 14, 0, Math.PI * 2);
     ctx.fill();
 
     // Playhead line
     ctx.fillStyle = colors.playhead;
-    ctx.fillRect(playheadX - 1.5, trackY - 6, 3, trackHeight + 12);
+    ctx.fillRect(playheadX - 1.5, trackY - 10, 3, trackHeight + 20);
 
-    // Playhead circle
+    // Playhead circle (drag handle)
     ctx.beginPath();
-    ctx.arc(playheadX, trackY - 6, 5, 0, Math.PI * 2);
+    ctx.arc(playheadX, trackY - 10, Timeline.PLAYHEAD_CIRCLE_RADIUS, 0, Math.PI * 2);
     ctx.fill();
 
     // Frame numbers / timecode

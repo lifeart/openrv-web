@@ -23,6 +23,12 @@ export interface PlaylistPanelEvents extends EventMap {
   closed: void;
 }
 
+/** Interface for panels that support mutual exclusion */
+export interface ExclusivePanel {
+  isOpen(): boolean;
+  hide(): void;
+}
+
 export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
   private container: HTMLElement;
   private listContainer: HTMLElement;
@@ -30,6 +36,7 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
   private playlistManager: PlaylistManager;
   private isVisible = false;
   private draggedClipId: string | null = null;
+  private exclusivePanel: ExclusivePanel | null = null;
 
   constructor(playlistManager: PlaylistManager) {
     super();
@@ -497,7 +504,17 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
   }
 
   // Public methods
+
+  /** Register another panel for mutual exclusion - opening this panel will close the other */
+  setExclusiveWith(panel: ExclusivePanel): void {
+    this.exclusivePanel = panel;
+  }
+
   show(): void {
+    // Close the exclusive panel if it is open
+    if (this.exclusivePanel?.isOpen()) {
+      this.exclusivePanel.hide();
+    }
     if (!document.body.contains(this.container)) {
       document.body.appendChild(this.container);
     }

@@ -637,6 +637,26 @@ describe('HeaderBar', () => {
         headerBar.dispose();
       }).not.toThrow();
     });
+
+    it('HB-L50a: dispose() should remove any open speed menu from document.body', () => {
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      // Open the speed menu via contextmenu
+      const speedBtn = el.querySelector('[data-testid="playback-speed-button"]') as HTMLButtonElement;
+      speedBtn.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+
+      // Verify the menu is in the DOM
+      expect(document.getElementById('speed-preset-menu')).not.toBeNull();
+
+      // Dispose the HeaderBar while the menu is open
+      headerBar.dispose();
+
+      // The speed menu should have been removed from document.body
+      expect(document.getElementById('speed-preset-menu')).toBeNull();
+
+      document.body.removeChild(el);
+    });
   });
 
   describe('speed button edge cases', () => {

@@ -1188,6 +1188,15 @@ export function applyUncrop(
   const dispWidth = displayWindow.xMax - displayWindow.xMin + 1;
   const dispHeight = displayWindow.yMax - displayWindow.yMin + 1;
 
+  const numChannels = 4;
+  const expectedLength = dwWidth * dwHeight * numChannels;
+  if (data.length !== expectedLength) {
+    throw new DecoderError(
+      'EXR',
+      `applyUncrop: data length ${data.length} does not match expected ${expectedLength} (${dwWidth}x${dwHeight}x${numChannels})`
+    );
+  }
+
   // No uncrop needed if windows are identical
   if (
     dataWindow.xMin === displayWindow.xMin &&
@@ -1198,7 +1207,6 @@ export function applyUncrop(
     return { data, width: dwWidth, height: dwHeight };
   }
 
-  const numChannels = 4;
   // New buffer initialized to zero (transparent black)
   const output = new Float32Array(dispWidth * dispHeight * numChannels);
 

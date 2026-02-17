@@ -42,4 +42,5 @@ export interface RenderState {
   filmEmulation?: { enabled: boolean; intensity: number; saturation: number; grainIntensity: number; grainSeed: number; lutData: Uint8Array | null };
   perspective?: { enabled: boolean; invH: Float32Array; quality: number };
   linearize?: LinearizeState;
+  outOfRange?: number;  // 0=off, 1=clamp-to-black, 2=highlight
 }

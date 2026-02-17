@@ -443,6 +443,21 @@ export class SessionGTOExporter {
       }
     }
 
+    // 2b. Build RVFormat object for uncrop if session has uncrop state
+    if (session.uncropState && session.uncropState.active && sourceGroupNames.length > 0) {
+      const formatName = `${sourceGroupNames[0]}_format`;
+      const formatObject = this.buildFormatObject(formatName, {
+        uncrop: {
+          active: session.uncropState.active,
+          x: session.uncropState.x,
+          y: session.uncropState.y,
+          width: session.uncropState.width,
+          height: session.uncropState.height,
+        },
+      });
+      objects.push(formatObject);
+    }
+
     // 3. Build default sequence group
     const sequenceObjects = this.buildSequenceGroupObjects('defaultSequence', session);
     objects.push(...sequenceObjects);

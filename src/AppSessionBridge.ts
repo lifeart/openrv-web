@@ -101,10 +101,18 @@ export class AppSessionBridge {
   private context: SessionBridgeContext;
   private scopeScheduler: ReturnType<typeof createScopeScheduler>;
   private unsubscribers: Array<() => void> = [];
+  private _onHistogramData: ((data: import('./ui/components/Histogram').HistogramData) => void) | null = null;
 
   constructor(context: SessionBridgeContext) {
     this.context = context;
-    this.scopeScheduler = createScopeScheduler(context);
+    this.scopeScheduler = createScopeScheduler(context, {
+      onHistogramData: (data) => this._onHistogramData?.(data),
+    });
+  }
+
+  /** Set callback to receive histogram data after scope updates (for mini histogram in panels). */
+  setHistogramDataCallback(cb: ((data: import('./ui/components/Histogram').HistogramData) => void) | null): void {
+    this._onHistogramData = cb;
   }
 
   /**

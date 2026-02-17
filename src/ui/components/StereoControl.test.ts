@@ -370,6 +370,20 @@ describe('StereoControl', () => {
       swapBtn.dispatchEvent(new Event('focus'));
       expect(swapBtn.style.outline).not.toBe('2px solid var(--accent-primary)');
     });
+
+    it('ST-L46a: eyeSwap button should show a focus ring when focused via keyboard', () => {
+      const el = control.render();
+      const swapBtn = el.querySelector('[data-testid="stereo-eye-swap"]') as HTMLButtonElement;
+
+      // Keyboard focus: no preceding mousedown, just a focus event (Tab key)
+      swapBtn.dispatchEvent(new Event('focus'));
+      expect(swapBtn.style.outline).toBe('2px solid var(--accent-primary)');
+      expect(swapBtn.style.outlineOffset).toBe('2px');
+
+      // Blur should remove the focus ring
+      swapBtn.dispatchEvent(new Event('blur'));
+      expect(swapBtn.style.outline).toBe('none');
+    });
   });
 
   describe('dispose', () => {

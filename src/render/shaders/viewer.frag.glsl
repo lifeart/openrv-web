@@ -173,6 +173,9 @@
       uniform float u_inlineLUTSize;      // entries per channel (e.g., 256)
       uniform sampler2D u_inlineLUT;      // 1D LUT stored as texture
 
+      // Out-of-range visualization: 0=off, 1=clamp-to-black, 2=highlight (red>1, blue<0)
+      uniform int u_outOfRange;
+
       // Luminance coefficients (Rec. 709)
       const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 
@@ -1089,6 +1092,22 @@
           }
           // Blend with original based on intensity
           color.rgb = mix(origFilm, filmColor, u_filmIntensity);
+        }
+
+        // 6g. Out-of-range visualization (before tone mapping, on scene-referred linear values)
+        if (u_outOfRange == 2) {
+          // Highlight mode: red where any channel > 1.0, blue where any channel < 0.0
+          if (color.r > 1.0 || color.g > 1.0 || color.b > 1.0) {
+            color.rgb = vec3(1.0, 0.0, 0.0);
+          } else if (color.r < 0.0 || color.g < 0.0 || color.b < 0.0) {
+            color.rgb = vec3(0.0, 0.0, 1.0);
+          }
+        } else if (u_outOfRange == 1) {
+          // Clamp-to-black mode: out-of-range pixels become black
+          if (color.r > 1.0 || color.g > 1.0 || color.b > 1.0 ||
+              color.r < 0.0 || color.g < 0.0 || color.b < 0.0) {
+            color.rgb = vec3(0.0, 0.0, 0.0);
+          }
         }
 
         // 7. Tone mapping (applied before display transfer for proper HDR handling)

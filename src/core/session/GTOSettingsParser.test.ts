@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { parseColorAdjustments, parseLinearize, parseUncrop } from './GTOSettingsParser';
+import { parseColorAdjustments, parseLinearize, parseUncrop, parseOutOfRange } from './GTOSettingsParser';
 import type { GTODTO } from 'gto-js';
 
 /**
@@ -1020,5 +1020,85 @@ describe('GTOSettingsParser.parseUncrop', () => {
       expect(parsed!.width).toBe(1920);
       expect(parsed!.height).toBe(1080);
     });
+  });
+});
+
+// =================================================================
+// GTOSettingsParser.parseOutOfRange
+// =================================================================
+
+/**
+ * Helper to create a mock GTODTO with an RVDisplayColor node for outOfRange tests.
+ */
+function createOutOfRangeMockDTO(
+  displayColorProps?: Record<string, unknown>,
+): GTODTO {
+  const mockComponent = (props: Record<string, unknown> | undefined) => ({
+    exists: () => props !== undefined,
+    property: (name: string) => ({
+      value: () => props?.[name],
+      exists: () => props !== undefined && name in props,
+    }),
+  });
+
+  const mockNode = (data: Record<string, unknown> | undefined) => ({
+    component: (name: string) => {
+      if (name === 'color') return mockComponent(data);
+      return mockComponent(undefined);
+    },
+    name: 'mock-displaycolor',
+  });
+
+  return {
+    byProtocol: (proto: string) => {
+      if (proto === 'RVDisplayColor' && displayColorProps) {
+        const results = [mockNode(displayColorProps)] as any;
+        results.first = () => results[0];
+        results.length = 1;
+        return results;
+      }
+      const empty = [] as any;
+      empty.first = () => mockNode(undefined);
+      empty.length = 0;
+      return empty;
+    },
+  } as unknown as GTODTO;
+}
+
+describe('GTOSettingsParser.parseOutOfRange', () => {
+  it('OOR-GTO-001: Parse color.outOfRange=1 from RVDisplayColor -> maps to mode 2', () => {
+    const dto = createOutOfRangeMockDTO({ outOfRange: 1 });
+    const result = parseOutOfRange(dto);
+
+    expect(result).toBe(2);
+  });
+
+  it('OOR-GTO-002: Parse color.outOfRange=0 from RVDisplayColor -> mode 0', () => {
+    const dto = createOutOfRangeMockDTO({ outOfRange: 0 });
+    const result = parseOutOfRange(dto);
+
+    expect(result).toBe(0);
+  });
+
+  it('OOR-GTO-003: Missing outOfRange property -> default undefined', () => {
+    const dto = createOutOfRangeMockDTO({ brightness: 0.5 });
+    const result = parseOutOfRange(dto);
+
+    expect(result).toBeUndefined();
+  });
+
+  it('OOR-GTO-004: No RVDisplayColor node -> undefined', () => {
+    const dto = createOutOfRangeMockDTO(); // no props
+    const result = parseOutOfRange(dto);
+
+    expect(result).toBeUndefined();
+  });
+
+  it('OOR-GTO-005: color.outOfRange=2 maps to mode 0 (non-boolean values treated as 0)', () => {
+    // Only GTO value 1 is treated as "highlight mode", anything else is "off"
+    const dto = createOutOfRangeMockDTO({ outOfRange: 2 });
+    const result = parseOutOfRange(dto);
+
+    expect(result).toBe(0);
   });
 });

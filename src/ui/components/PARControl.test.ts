@@ -170,4 +170,54 @@ describe('PARControl', () => {
       expect(handled).toBe(false);
     });
   });
+
+  describe('Preset item keyboard accessibility', () => {
+    it('PAR-L43a: PAR preset items should be focusable via keyboard', () => {
+      const el = control.render();
+      document.body.appendChild(el);
+
+      // Open dropdown by clicking button
+      const button = el.querySelector('[data-testid="par-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      // All preset items should be <button> elements (inherently focusable)
+      const presetItems = document.querySelectorAll('[data-par-preset]');
+      expect(presetItems.length).toBeGreaterThan(0);
+      for (const item of presetItems) {
+        expect(item.tagName).toBe('BUTTON');
+        expect(item.getAttribute('role')).toBe('option');
+      }
+
+      control.dispose();
+    });
+
+    it('PAR-L43b: pressing Enter on a focused preset item should select it', () => {
+      const handler = vi.fn();
+      control.on('stateChanged', handler);
+
+      const el = control.render();
+      document.body.appendChild(el);
+
+      // Open dropdown by clicking button
+      const button = el.querySelector('[data-testid="par-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      // Find the anamorphic-2x preset item
+      const item = document.querySelector('[data-testid="par-preset-anamorphic-2x"]') as HTMLElement;
+      expect(item).not.toBeNull();
+
+      // Dispatch Enter keydown
+      const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
+      item.dispatchEvent(event);
+
+      // Verify the preset was selected
+      const state = control.getState();
+      expect(state.preset).toBe('anamorphic-2x');
+      expect(state.par).toBe(2.0);
+      expect(state.enabled).toBe(true);
+      expect(handler).toHaveBeenCalled();
+
+      control.dispose();
+    });
+  });
 });

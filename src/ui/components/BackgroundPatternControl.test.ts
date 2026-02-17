@@ -183,6 +183,50 @@ describe('BackgroundPatternControl', () => {
       expect(handled).toBe(true);
       expect(control.getState().pattern).toBe('grey18');
     });
+
+    it('BP-L45a: pressing Enter on a focused pattern item should select it', () => {
+      const el = control.render();
+      document.body.appendChild(el);
+
+      // Open dropdown by clicking button
+      const button = el.querySelector('[data-testid="background-pattern-button"]') as HTMLButtonElement;
+      button.click();
+
+      // Find the grey18 pattern item in the dropdown
+      const item = document.querySelector('[data-testid="bg-pattern-grey18"]') as HTMLElement;
+      expect(item).not.toBeNull();
+
+      // Dispatch Enter keydown
+      const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
+      item.dispatchEvent(event);
+
+      expect(control.getState().pattern).toBe('grey18');
+
+      control.dispose();
+      el.remove();
+    });
+
+    it('BP-L45b: pressing Space on a focused pattern item should select it', () => {
+      const el = control.render();
+      document.body.appendChild(el);
+
+      // Open dropdown by clicking button
+      const button = el.querySelector('[data-testid="background-pattern-button"]') as HTMLButtonElement;
+      button.click();
+
+      // Find the grey50 pattern item in the dropdown
+      const item = document.querySelector('[data-testid="bg-pattern-grey50"]') as HTMLElement;
+      expect(item).not.toBeNull();
+
+      // Dispatch Space keydown
+      const event = new KeyboardEvent('keydown', { key: ' ', bubbles: true });
+      item.dispatchEvent(event);
+
+      expect(control.getState().pattern).toBe('grey50');
+
+      control.dispose();
+      el.remove();
+    });
   });
 
   describe('isActive', () => {

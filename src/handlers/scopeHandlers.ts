@@ -96,7 +96,8 @@ export function updateGamutDiagram(context: SessionBridgeContext, scopeData?: Sc
  * handlers, avoiding triple render+readback calls.
  */
 export function createScopeScheduler(
-  context: SessionBridgeContext
+  context: SessionBridgeContext,
+  options?: { onHistogramData?: (data: import('../ui/components/Histogram').HistogramData) => void }
 ): { schedule: () => void; isPending: () => boolean } {
   let pendingScopeUpdate = false;
 
@@ -116,6 +117,15 @@ export function createScopeScheduler(
           updateWaveform(context, scopeData);
           updateVectorscope(context, scopeData);
           updateGamutDiagram(context, scopeData);
+
+          // Feed mini histogram in panel if callback provided
+          if (options?.onHistogramData) {
+            const histogram = context.getHistogram();
+            const histData = histogram.getData();
+            if (histData) {
+              options.onHistogramData(histData);
+            }
+          }
         });
       });
     },

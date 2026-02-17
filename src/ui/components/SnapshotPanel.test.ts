@@ -8,6 +8,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SnapshotPanel } from './SnapshotPanel';
+import type { ExclusivePanel } from './SnapshotPanel';
 import type { Snapshot, SnapshotManager } from '../../core/session/SnapshotManager';
 
 vi.mock('./shared/Modal', () => ({
@@ -448,6 +449,87 @@ describe('SnapshotPanel', () => {
       document.body.removeChild(panel.render());
     });
 
+    it('SP-L49a: Snapshot preview info should use textContent (not innerHTML) for user-derived values', async () => {
+      const snapshots = [
+        createMockSnapshot({
+          id: 'snap-safe',
+          name: 'Safe Snapshot',
+          preview: {
+            frameCount: 100,
+            currentFrame: 1,
+            annotationCount: 0,
+            hasColorGrade: false,
+            sourceName: 'test-file.exr',
+          },
+        }),
+      ];
+      (manager.listSnapshots as ReturnType<typeof vi.fn>).mockResolvedValue(
+        snapshots
+      );
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      await vi.waitFor(() => {
+        const text = panel.render().textContent || '';
+        expect(text).toContain('test-file.exr');
+      });
+
+      // Find the span containing the source name value and verify it was set
+      // via textContent (DOM construction), not innerHTML
+      const allSpans = panel.render().querySelectorAll('span');
+      let sourceValueSpan: HTMLSpanElement | null = null;
+      for (const s of allSpans) {
+        // The outer span that contains both the label child span and the value text node
+        if (s.textContent?.includes('Source:') && s.textContent?.includes('test-file.exr')) {
+          sourceValueSpan = s as HTMLSpanElement;
+          break;
+        }
+      }
+      expect(sourceValueSpan).not.toBeNull();
+      // The value should be a text node, not part of innerHTML markup.
+      // The outer span should have child nodes: a <span> for label + a text node for value
+      const childNodes = Array.from(sourceValueSpan!.childNodes);
+      const textNodes = childNodes.filter((n) => n.nodeType === Node.TEXT_NODE);
+      expect(textNodes.length).toBeGreaterThanOrEqual(1);
+      expect(textNodes.some((n) => n.textContent?.includes('test-file.exr'))).toBe(true);
+
+      document.body.removeChild(panel.render());
+    });
+
+    it('SP-L49b: Filenames containing HTML tags should be displayed as plain text, not rendered', async () => {
+      const maliciousName = '<img src=x onerror=alert(1)>';
+      const snapshots = [
+        createMockSnapshot({
+          id: 'snap-xss',
+          name: 'XSS Snapshot',
+          preview: {
+            frameCount: 50,
+            currentFrame: 1,
+            annotationCount: 0,
+            hasColorGrade: false,
+            sourceName: maliciousName,
+          },
+        }),
+      ];
+      (manager.listSnapshots as ReturnType<typeof vi.fn>).mockResolvedValue(
+        snapshots
+      );
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      await vi.waitFor(() => {
+        const text = panel.render().textContent || '';
+        // The raw HTML tag text should appear as literal text content
+        expect(text).toContain(maliciousName);
+      });
+
+      // Ensure no <img> element was created in the DOM (would happen with innerHTML XSS)
+      const imgs = panel.render().querySelectorAll('img');
+      expect(imgs.length).toBe(0);
+
+      document.body.removeChild(panel.render());
+    });
+
     it('SNAP-051: does not render annotation count when zero', async () => {
       const snapshots = [
         createMockSnapshot({
@@ -572,6 +654,43 @@ describe('SnapshotPanel', () => {
       panel.dispose();
 
       expect(handler).toHaveBeenCalled();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Mutual exclusion (L-48)
+  // ---------------------------------------------------------------------------
+  describe('mutual exclusion', () => {
+    it('PL-L48b: opening the snapshot panel should close the playlist panel if open', () => {
+      const mockPlaylistPanel: ExclusivePanel = {
+        isOpen: vi.fn().mockReturnValue(true),
+        hide: vi.fn(),
+      };
+
+      panel.setExclusiveWith(mockPlaylistPanel);
+
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      expect(mockPlaylistPanel.hide).toHaveBeenCalledTimes(1);
+
+      document.body.removeChild(panel.render());
+    });
+
+    it('PL-L48b-2: opening the snapshot panel does not close playlist panel if it is already closed', () => {
+      const mockPlaylistPanel: ExclusivePanel = {
+        isOpen: vi.fn().mockReturnValue(false),
+        hide: vi.fn(),
+      };
+
+      panel.setExclusiveWith(mockPlaylistPanel);
+
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      expect(mockPlaylistPanel.hide).not.toHaveBeenCalled();
+
+      document.body.removeChild(panel.render());
     });
   });
 });

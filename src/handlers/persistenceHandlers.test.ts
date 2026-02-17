@@ -15,6 +15,7 @@ type EventHandlers = Partial<Record<keyof SessionEvents, (data: any) => void>>;
 function createMockSession(): Session {
   return {
     gtoData: null,
+    currentSource: { width: 1920, height: 1080 },
   } as unknown as Session;
 }
 
@@ -54,7 +55,7 @@ function createMockContext(): SessionBridgeContext {
   const cdlControl = { setCDL: vi.fn() };
   const transformControl = { setTransform: vi.fn() };
   const lensControl = { setParams: vi.fn() };
-  const cropControl = { setState: vi.fn() };
+  const cropControl = { setState: vi.fn(), setUncropState: vi.fn() };
   const channelSelect = { setChannel: vi.fn() };
   const stereoControl = { setState: vi.fn() };
   const stereoEyeTransformControl = { setState: vi.fn() };
@@ -254,6 +255,30 @@ describe('bindPersistenceHandlers', () => {
     handlers.settingsLoaded!({ crop } as any);
 
     expect(context.getCropControl().setState).toHaveBeenCalledWith(crop);
+  });
+
+  it('PERH-U035: settingsLoaded restores uncrop state by converting to padding format', () => {
+    handlers.settingsLoaded!({
+      uncrop: { active: true, x: 100, y: 50, width: 2120, height: 1180 },
+    } as any);
+
+    expect(context.getCropControl().setUncropState).toHaveBeenCalledWith({
+      enabled: true,
+      paddingMode: 'per-side',
+      padding: 0,
+      paddingTop: 50,
+      paddingRight: 100,   // 2120 - 1920 - 100
+      paddingBottom: 50,   // 1180 - 1080 - 50
+      paddingLeft: 100,
+    });
+  });
+
+  it('PERH-U036: settingsLoaded does not apply uncrop when active is false', () => {
+    handlers.settingsLoaded!({
+      uncrop: { active: false, x: 100, y: 50, width: 2120, height: 1180 },
+    } as any);
+
+    expect(context.getCropControl().setUncropState).not.toHaveBeenCalled();
   });
 
   it('PERH-U022: settingsLoaded restores channel mode', () => {

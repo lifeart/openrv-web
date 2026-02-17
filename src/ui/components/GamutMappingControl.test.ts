@@ -450,6 +450,26 @@ describe('GamutMappingControl', () => {
     });
   });
 
+  describe('hover state with active mode (L-42)', () => {
+    it('GM-L42a: after mouseleave with mode active and panel closed, button should show active (non-hover) styling', () => {
+      // Set mode to clip with different source/target so isActive is true
+      control.setState({ mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb' });
+
+      const btn = control.render().querySelector('[data-testid="gamut-mapping-control-button"]') as HTMLButtonElement;
+
+      // Simulate mouseenter (applies hover styling)
+      btn.dispatchEvent(new Event('mouseenter'));
+      expect(btn.style.background).toBe('var(--bg-hover)');
+      expect(btn.style.color).toBe('var(--text-primary)');
+
+      // Simulate mouseleave (should restore active styling, not stay on hover)
+      btn.dispatchEvent(new Event('mouseleave'));
+      expect(btn.style.background).toBe('rgba(var(--accent-primary-rgb), 0.15)');
+      expect(btn.style.borderColor).toBe('var(--accent-primary)');
+      expect(btn.style.color).toBe('var(--accent-primary)');
+    });
+  });
+
   describe('disposal', () => {
     it('GM-050: dispose removes panel from DOM', () => {
       control.show();
@@ -615,6 +635,22 @@ describe('GamutMappingControl', () => {
     it('GM-M15e: panel container should have aria-label attribute', () => {
       control.show();
       const panel = document.querySelector('[data-testid="gamut-mapping-panel"]') as HTMLElement;
+      expect(panel.getAttribute('aria-label')).toBe('Gamut Mapping Settings');
+    });
+  });
+
+  describe('panel ARIA attributes (L-41)', () => {
+    it('GM-L41a: panel should have role="dialog" attribute', () => {
+      control.show();
+      const panel = document.querySelector('[data-testid="gamut-mapping-panel"]') as HTMLElement;
+      expect(panel).not.toBeNull();
+      expect(panel.getAttribute('role')).toBe('dialog');
+    });
+
+    it('GM-L41b: panel should have aria-label attribute', () => {
+      control.show();
+      const panel = document.querySelector('[data-testid="gamut-mapping-panel"]') as HTMLElement;
+      expect(panel).not.toBeNull();
       expect(panel.getAttribute('aria-label')).toBe('Gamut Mapping Settings');
     });
   });

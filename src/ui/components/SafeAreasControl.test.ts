@@ -361,6 +361,57 @@ describe('SafeAreasControl', () => {
     });
   });
 
+  describe('checkbox item accessibility (L-44)', () => {
+    it('SA-L44a: safe area checkbox items should be focusable via keyboard', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const items = document.querySelectorAll('[data-testid^="safe-areas-item-"]');
+      items.forEach((item) => {
+        expect(item.getAttribute('tabindex')).toBe('0');
+      });
+    });
+
+    it('SA-L44b: pressing Enter/Space on a focused item should toggle it', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const crosshairItem = document.querySelector('[data-testid="safe-areas-item-centerCrosshair"]') as HTMLElement;
+
+      expect(overlay.getState().centerCrosshair).toBe(false);
+
+      // Toggle via Enter
+      crosshairItem.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      expect(overlay.getState().centerCrosshair).toBe(true);
+
+      // Toggle via Space
+      crosshairItem.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+      expect(overlay.getState().centerCrosshair).toBe(false);
+    });
+
+    it('SA-L44c: items should have role="checkbox" and aria-checked', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="safe-areas-control-button"]') as HTMLButtonElement;
+      button.click();
+
+      const items = document.querySelectorAll('[data-testid^="safe-areas-item-"]');
+      items.forEach((item) => {
+        expect(item.getAttribute('role')).toBe('checkbox');
+        expect(item.getAttribute('aria-checked')).toBeDefined();
+        expect(['true', 'false']).toContain(item.getAttribute('aria-checked'));
+      });
+
+      // Verify aria-checked updates when toggled
+      const enableItem = document.querySelector('[data-testid="safe-areas-item-enabled"]') as HTMLElement;
+      expect(enableItem.getAttribute('aria-checked')).toBe('false');
+
+      enableItem.click(); // Toggle overlay on
+      expect(enableItem.getAttribute('aria-checked')).toBe('true');
+    });
+  });
+
   describe('event emission', () => {
     it('SAFE-U080: control emits stateChanged when overlay state changes', () => {
       const callback = vi.fn();

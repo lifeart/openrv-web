@@ -79,6 +79,11 @@ export function parseInitialSettings(
     settings.uncrop = uncrop;
   }
 
+  const outOfRange = parseOutOfRange(dto);
+  if (outOfRange !== undefined) {
+    settings.outOfRange = outOfRange;
+  }
+
   return Object.keys(settings).length > 0 ? settings : null;
 }
 
@@ -615,4 +620,29 @@ export function parseUncrop(dto: GTODTO): UncropState | null {
   if (width <= 0 || height <= 0) return null;
 
   return { active: true, x, y, width, height };
+}
+
+/**
+ * Parse out-of-range visualization mode from RVDisplayColor protocol nodes.
+ *
+ * OpenRV stores `color.outOfRange` as a boolean integer (0 or 1).
+ * We map:
+ *   - GTO value 0 -> mode 0 (off)
+ *   - GTO value 1 -> mode 2 (highlight, the OpenRV default behavior)
+ *
+ * Returns the mode number, or undefined if no RVDisplayColor node exists
+ * or the property is absent (meaning default mode 0).
+ */
+export function parseOutOfRange(dto: GTODTO): number | undefined {
+  const nodes = dto.byProtocol('RVDisplayColor');
+  if (nodes.length === 0) return undefined;
+
+  const displayComp = nodes.first().component('color');
+  if (!displayComp?.exists()) return undefined;
+
+  const rawValue = getNumberValue(displayComp.property('outOfRange').value());
+  if (rawValue === undefined) return undefined;
+
+  // GTO boolean: 1 = highlight mode (mode 2), 0 = off (mode 0)
+  return rawValue === 1 ? 2 : 0;
 }

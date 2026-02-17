@@ -480,6 +480,16 @@ describe('Timeline', () => {
     });
   });
 
+  describe('playhead hit area', () => {
+    it('TL-L47a: The playhead hit area should be at least 16px wide', () => {
+      // The playhead hit area width constant must be at least 16px
+      expect(Timeline.PLAYHEAD_HIT_AREA_WIDTH).toBeGreaterThanOrEqual(16);
+      // The playhead circle radius should be in the 8-10px range for a visible drag handle
+      expect(Timeline.PLAYHEAD_CIRCLE_RADIUS).toBeGreaterThanOrEqual(8);
+      expect(Timeline.PLAYHEAD_CIRCLE_RADIUS).toBeLessThanOrEqual(10);
+    });
+  });
+
   describe('regression tests for pause-during-playback fix', () => {
     describe('TML-REG-001: Rapid play/pause toggling', () => {
       it('should call pauseLoading/resumeLoading on ThumbnailManager for each toggle', () => {

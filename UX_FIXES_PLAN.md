@@ -712,7 +712,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### L-41: GamutMappingControl panel lacks ARIA attributes
+### ~~L-41: GamutMappingControl panel lacks ARIA attributes~~ FIXED
 
 **File:** `src/ui/components/GamutMappingControl.ts:108-121`
 
@@ -726,7 +726,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### L-42: GamutMappingControl hover state stuck when mode is active
+### ~~L-42: GamutMappingControl hover state stuck when mode is active~~ FIXED
 
 **File:** `src/ui/components/GamutMappingControl.ts:98-106`
 
@@ -739,7 +739,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### L-43: PARControl preset items use `<div>` not `<button>`
+### ~~L-43: PARControl preset items use `<div>` not `<button>`~~ FIXED
 
 **File:** `src/ui/components/PARControl.ts:234`
 
@@ -753,7 +753,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### L-44: SafeAreasControl checkbox items use `<div>` not `<button>`
+### ~~L-44: SafeAreasControl checkbox items use `<div>` not `<button>`~~ FIXED
 
 **File:** `src/ui/components/SafeAreasControl.ts:200`
 
@@ -768,7 +768,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### L-45: BackgroundPatternControl keyboard handler missing on pattern items
+### ~~L-45: BackgroundPatternControl keyboard handler missing on pattern items~~ FIXED
 
 **File:** `src/ui/components/BackgroundPatternControl.ts:288-289`
 
@@ -782,7 +782,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### L-46: StereoControl eyeSwap button lacks keyboard focus ring
+### ~~L-46: StereoControl eyeSwap button lacks keyboard focus ring~~ FIXED
 
 **File:** `src/ui/components/StereoControl.ts:167`
 
@@ -795,7 +795,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### L-47: Playhead drag handle too small
+### ~~L-47: Playhead drag handle too small~~ FIXED
 
 **File:** `src/ui/components/Timeline.ts:531-546`
 
@@ -808,7 +808,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### L-48: PlaylistPanel and SnapshotPanel z-index collision
+### ~~L-48: PlaylistPanel and SnapshotPanel z-index collision~~ FIXED
 
 **File:** `src/ui/components/PlaylistPanel.ts:52`, `src/ui/components/SnapshotPanel.ts:51`
 
@@ -822,7 +822,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### L-49: SnapshotPanel preview uses innerHTML with user data
+### ~~L-49: SnapshotPanel preview uses innerHTML with user data~~ FIXED
 
 **File:** `src/ui/components/SnapshotPanel.ts:448`
 
@@ -836,7 +836,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### L-50: Speed menu not cleaned up on HeaderBar dispose
+### ~~L-50: Speed menu not cleaned up on HeaderBar dispose~~ FIXED
 
 **File:** `src/ui/components/layout/HeaderBar.ts:524-643, 858-869`
 

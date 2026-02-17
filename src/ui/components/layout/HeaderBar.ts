@@ -56,6 +56,9 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private _isImageMode = false;
   private _imageTransitionTimers: ReturnType<typeof setTimeout>[] = [];
 
+  // Track the active speed menu cleanup callback for disposal
+  private _activeSpeedMenuCleanup: (() => void) | null = null;
+
   constructor(session: Session) {
     super();
     this.session = session;
@@ -532,7 +535,10 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   }
 
   private showSpeedMenu(anchor: HTMLElement): void {
-    // Remove any existing speed menu
+    // Remove any existing speed menu via tracked cleanup
+    if (this._activeSpeedMenuCleanup) {
+      this._activeSpeedMenuCleanup();
+    }
     const existingMenu = document.getElementById('speed-preset-menu');
     if (existingMenu) {
       existingMenu.remove();
@@ -721,6 +727,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     const removeMenu = () => {
       menu.remove();
       document.removeEventListener('click', closeMenu);
+      this._activeSpeedMenuCleanup = null;
     };
 
     // Close menu when clicking outside
@@ -730,6 +737,9 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       }
     };
     setTimeout(() => document.addEventListener('click', closeMenu), 0);
+
+    // Track the active menu cleanup for disposal
+    this._activeSpeedMenuCleanup = removeMenu;
   }
 
   private cycleSpeed(direction: number): void {
@@ -946,6 +956,11 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   }
 
   dispose(): void {
+    // Remove any open speed menu from document.body
+    if (this._activeSpeedMenuCleanup) {
+      this._activeSpeedMenuCleanup();
+    }
+
     // Clear image mode transition timers
     for (const timer of this._imageTransitionTimers) {
       clearTimeout(timer);
