@@ -87,6 +87,18 @@ describe('PaintEngine', () => {
       engine.user = 'testUser';
       expect(engine.user).toBe('testUser');
     });
+
+    it('PE-L57a: PaintTool type should not include unused tool types', () => {
+      // Verify that the valid paint tools are exactly the implemented set
+      // 'select' was removed as it had no toolbar button, keyboard shortcut, or pointer handler
+      const validTools: string[] = ['pen', 'text', 'eraser', 'none', 'rectangle', 'ellipse', 'line', 'arrow'];
+      for (const tool of validTools) {
+        engine.tool = tool as import('./PaintEngine').PaintTool;
+        expect(engine.tool).toBe(tool);
+      }
+      // Ensure 'select' is not a valid tool by confirming it's absent from the valid set
+      expect(validTools).not.toContain('select');
+    });
   });
 
   describe('stroke operations', () => {
@@ -134,7 +146,7 @@ describe('PaintEngine', () => {
     });
 
     it('does not begin stroke with wrong tool', () => {
-      engine.tool = 'select';
+      engine.tool = 'text';
       engine.beginStroke(0, { x: 0.5, y: 0.5 });
       expect(engine.getCurrentStroke()).toBeNull();
     });

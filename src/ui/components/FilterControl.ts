@@ -192,7 +192,7 @@ export class FilterControl extends EventEmitter<FilterControlEvents> {
     labelEl.style.cssText = 'color: var(--text-secondary); font-size: 12px;';
 
     const valueEl = document.createElement('span');
-    valueEl.textContent = String(initialValue);
+    valueEl.textContent = label === 'Blur' ? `${initialValue}px` : String(initialValue);
     valueEl.style.cssText = 'color: var(--text-secondary); font-size: 11px;';
 
     labelRow.appendChild(labelEl);

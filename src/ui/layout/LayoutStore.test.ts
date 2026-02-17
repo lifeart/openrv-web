@@ -304,9 +304,10 @@ describe('LayoutStore', () => {
       expect(spy).not.toHaveBeenCalled();
     });
 
-    it('LAYOUT-004f: paint preset collapses both side panels', () => {
+    it('LAYOUT-004f: paint preset opens left panel for tool options, collapses right', () => {
       store.applyPreset('paint');
-      expect(store.panels.left.collapsed).toBe(true);
+      expect(store.panels.left.collapsed).toBe(false);
+      expect(store.panels.left.size).toBe(240);
       expect(store.panels.right.collapsed).toBe(true);
     });
 
@@ -314,6 +315,27 @@ describe('LayoutStore', () => {
       store.applyPreset('review');
       expect(store.panels.right.collapsed).toBe(false);
       expect(store.panels.right.size).toBe(300);
+      expect(store.panels.left.collapsed).toBe(true);
+    });
+
+    it('LAYOUT-004h: default preset collapses all side panels', () => {
+      // Start with color preset (both panels open)
+      store.applyPreset('color');
+      expect(store.panels.left.collapsed).toBe(false);
+      expect(store.panels.right.collapsed).toBe(false);
+
+      // Switch to default
+      store.applyPreset('default');
+      expect(store.panels.left.collapsed).toBe(true);
+      expect(store.panels.right.collapsed).toBe(true);
+      expect(store.panels.right.size).toBe(0);
+    });
+
+    it('LAYOUT-004i: all four presets have unique panel configurations', () => {
+      const presets = store.getPresets();
+      const configs = presets.map(p => JSON.stringify(p.data.panels));
+      const unique = new Set(configs);
+      expect(unique.size).toBe(presets.length);
     });
   });
 

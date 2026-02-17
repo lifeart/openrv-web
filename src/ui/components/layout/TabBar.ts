@@ -8,7 +8,7 @@
 import { EventEmitter, EventMap } from '../../../utils/EventEmitter';
 import { getIconSvg, IconName } from '../shared/Icons';
 
-export type TabId = 'view' | 'color' | 'effects' | 'transform' | 'annotate';
+export type TabId = 'view' | 'color' | 'effects' | 'transform' | 'annotate' | 'qc';
 
 export interface Tab {
   id: TabId;
@@ -23,6 +23,7 @@ export const TABS: Tab[] = [
   { id: 'effects', label: 'Effects', icon: 'sparkles', shortcut: '3' },
   { id: 'transform', label: 'Transform', icon: 'move', shortcut: '4' },
   { id: 'annotate', label: 'Annotate', icon: 'pencil', shortcut: '5' },
+  { id: 'qc', label: 'QC', icon: 'crosshair', shortcut: '6' },
 ];
 
 export interface TabBarEvents extends EventMap {

@@ -29,6 +29,7 @@ export interface HeaderBarEvents extends EventMap {
 
 export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private container: HTMLElement;
+  private wrapper: HTMLElement;
   private session: Session;
   private volumeControl: VolumeControl;
   private exportControl: ExportControl;
@@ -44,6 +45,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private sessionNameDisplay!: HTMLElement;
   private autoSaveSlot!: HTMLElement;
   private networkSlot!: HTMLElement;
+  private panelsSlot!: HTMLElement;
   private fullscreenButton!: HTMLButtonElement;
   private presentationButton!: HTMLButtonElement;
 
@@ -59,6 +61,12 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   // Track the active speed menu cleanup callback for disposal
   private _activeSpeedMenuCleanup: (() => void) | null = null;
 
+  // Overflow fade indicators
+  private fadeLeft!: HTMLElement;
+  private fadeRight!: HTMLElement;
+  private _scrollHandler: (() => void) | null = null;
+  private _resizeHandler: (() => void) | null = null;
+
   constructor(session: Session) {
     super();
     this.session = session;
@@ -67,9 +75,17 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.timecodeDisplay = new TimecodeDisplay(session);
     this.themeControl = new ThemeControl();
 
-    // Create container
+    // Create wrapper (position: relative to anchor fade overlays)
+    this.wrapper = document.createElement('div');
+    this.wrapper.className = 'header-bar';
+    this.wrapper.style.cssText = `
+      position: relative;
+      flex-shrink: 0;
+    `;
+
+    // Create scrollable container
     this.container = document.createElement('div');
-    this.container.className = 'header-bar';
+    this.container.className = 'header-bar-scroll';
     this.container.setAttribute('role', 'banner');
     this.container.style.cssText = `
       height: 40px;
@@ -88,11 +104,82 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     `;
     // Hide scrollbar for WebKit browsers
     const scrollStyle = document.createElement('style');
-    scrollStyle.textContent = `.header-bar::-webkit-scrollbar { display: none; }`;
+    scrollStyle.textContent = `.header-bar-scroll::-webkit-scrollbar { display: none; }`;
     this.container.appendChild(scrollStyle);
+
+    this.wrapper.appendChild(this.container);
+
+    // Create overflow fade indicators
+    this.createOverflowFades();
 
     this.createControls();
     this.bindEvents();
+  }
+
+  /**
+   * Create left/right gradient fade overlays that indicate hidden
+   * scrollable content. They are absolutely positioned over the
+   * scrollable container edges and toggled via a scroll listener.
+   */
+  private createOverflowFades(): void {
+    const fadeBase = `
+      position: absolute;
+      top: 0;
+      width: 24px;
+      height: 40px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+      z-index: 1;
+    `;
+
+    // Left fade
+    this.fadeLeft = document.createElement('div');
+    this.fadeLeft.className = 'header-fade-left';
+    this.fadeLeft.dataset.testid = 'header-fade-left';
+    this.fadeLeft.setAttribute('aria-hidden', 'true');
+    this.fadeLeft.style.cssText = `
+      ${fadeBase}
+      left: 0;
+      background: linear-gradient(to right, var(--bg-primary), transparent);
+    `;
+    this.wrapper.appendChild(this.fadeLeft);
+
+    // Right fade
+    this.fadeRight = document.createElement('div');
+    this.fadeRight.className = 'header-fade-right';
+    this.fadeRight.dataset.testid = 'header-fade-right';
+    this.fadeRight.setAttribute('aria-hidden', 'true');
+    this.fadeRight.style.cssText = `
+      ${fadeBase}
+      right: 0;
+      background: linear-gradient(to left, var(--bg-primary), transparent);
+    `;
+    this.wrapper.appendChild(this.fadeRight);
+
+    // Scroll handler to show/hide fades based on scroll position
+    this._scrollHandler = () => this.updateOverflowFades();
+    this._resizeHandler = () => this.updateOverflowFades();
+
+    this.container.addEventListener('scroll', this._scrollHandler);
+    window.addEventListener('resize', this._resizeHandler);
+  }
+
+  /**
+   * Update visibility of left/right overflow fade indicators
+   * based on the current scroll position of the container.
+   */
+  updateOverflowFades(): void {
+    const { scrollLeft, scrollWidth, clientWidth } = this.container;
+    const threshold = 2; // small tolerance for sub-pixel rounding
+
+    // Show left fade when scrolled away from the start
+    const showLeft = scrollLeft > threshold;
+    this.fadeLeft.style.opacity = showLeft ? '1' : '0';
+
+    // Show right fade when there is more content to the right
+    const showRight = scrollLeft + clientWidth < scrollWidth - threshold;
+    this.fadeRight.style.opacity = showRight ? '1' : '0';
   }
 
   private createControls(): void {
@@ -161,6 +248,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     playbackGroup.appendChild(this.createIconButton('step-back', '', () => this.session.stepBackward(), 'Step back (\u2190)'));
 
     this.playButton = this.createIconButton('play', '', () => this.session.togglePlayback(), 'Play/Pause (Space)');
+    this.playButton.setAttribute('aria-pressed', 'false');
     this.playButton.style.width = '36px';
     playbackGroup.appendChild(this.playButton);
 
@@ -206,6 +294,12 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.networkSlot.dataset.testid = 'network-slot';
     this.networkSlot.style.cssText = 'display: flex; align-items: center;';
     utilityGroup.appendChild(this.networkSlot);
+
+    // Panel toggles slot (populated by AppControlRegistry)
+    this.panelsSlot = document.createElement('div');
+    this.panelsSlot.dataset.testid = 'panels-slot';
+    this.panelsSlot.style.cssText = 'display: flex; align-items: center; gap: 2px;';
+    utilityGroup.appendChild(this.panelsSlot);
 
     // Presentation mode button
     this.presentationButton = this.createIconButton('monitor', '', () => this.emit('presentationToggle', undefined), 'Presentation Mode (Ctrl+Shift+P)');
@@ -304,23 +398,23 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       button.textContent = label;
     }
 
-    button.addEventListener('mouseenter', () => {
+    button.addEventListener('pointerenter', () => {
       button.style.background = 'var(--bg-hover)';
       button.style.borderColor = 'var(--border-secondary)';
       button.style.color = 'var(--text-primary)';
     });
 
-    button.addEventListener('mouseleave', () => {
+    button.addEventListener('pointerleave', () => {
       button.style.background = 'transparent';
       button.style.borderColor = 'transparent';
       button.style.color = 'var(--text-secondary)';
     });
 
-    button.addEventListener('mousedown', () => {
+    button.addEventListener('pointerdown', () => {
       button.style.background = 'var(--bg-active)';
     });
 
-    button.addEventListener('mouseup', () => {
+    button.addEventListener('pointerup', () => {
       button.style.background = 'var(--bg-hover)';
     });
 
@@ -348,13 +442,13 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       height: 28px;
     `;
 
-    button.addEventListener('mouseenter', () => {
+    button.addEventListener('pointerenter', () => {
       button.style.background = 'var(--bg-hover)';
       button.style.borderColor = 'var(--border-secondary)';
       button.style.color = 'var(--text-primary)';
     });
 
-    button.addEventListener('mouseleave', () => {
+    button.addEventListener('pointerleave', () => {
       button.style.background = 'transparent';
       button.style.borderColor = 'transparent';
       button.style.color = 'var(--text-secondary)';
@@ -398,7 +492,6 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       padding: 4px 8px;
       border-radius: 4px;
       cursor: default;
-      transition: background 0.12s ease;
       flex-shrink: 0;
     `;
 
@@ -425,14 +518,6 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     `;
     nameText.textContent = 'Untitled';
     container.appendChild(nameText);
-
-    // Hover effect
-    container.addEventListener('mouseenter', () => {
-      container.style.background = 'var(--bg-hover)';
-    });
-    container.addEventListener('mouseleave', () => {
-      container.style.background = 'transparent';
-    });
 
     return container;
   }
@@ -494,13 +579,13 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       margin-left: 4px;
     `;
 
-    button.addEventListener('mouseenter', () => {
+    button.addEventListener('pointerenter', () => {
       button.style.background = 'var(--bg-hover)';
       button.style.borderColor = 'var(--border-secondary)';
       button.style.color = 'var(--text-primary)';
     });
 
-    button.addEventListener('mouseleave', () => {
+    button.addEventListener('pointerleave', () => {
       const speed = this.session.playbackSpeed;
       if (speed !== 1) {
         button.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
@@ -825,6 +910,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private updatePlayButton(): void {
     const icon = this.session.isPlaying ? 'pause' : 'play';
     this.playButton.innerHTML = this.getIcon(icon);
+    this.playButton.setAttribute('aria-pressed', this.session.isPlaying ? 'true' : 'false');
   }
 
   private async handleFileSelect(e: Event): Promise<void> {
@@ -836,7 +922,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
 
     // Check for .rv or .gto files in the selection
     const sessionFile = fileArray.find(f => f.name.endsWith('.rv') || f.name.endsWith('.gto'));
-    
+
     if (sessionFile) {
       // If we have a session file, treat other files as potential media sources
       const availableFiles = new Map<string, File>();
@@ -854,7 +940,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
         console.error('Failed to load session file:', err);
         showAlert(`Failed to load ${sessionFile.name}: ${err}`, { type: 'error', title: 'Load Error' });
       }
-      
+
       // Clear input
       input.value = '';
       return;
@@ -952,13 +1038,23 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.updateDirectionButton();
     this.updateSpeedButton();
     this.updateSessionNameDisplay();
-    return this.container;
+    return this.wrapper;
   }
 
   dispose(): void {
     // Remove any open speed menu from document.body
     if (this._activeSpeedMenuCleanup) {
       this._activeSpeedMenuCleanup();
+    }
+
+    // Remove overflow fade listeners
+    if (this._scrollHandler) {
+      this.container.removeEventListener('scroll', this._scrollHandler);
+      this._scrollHandler = null;
+    }
+    if (this._resizeHandler) {
+      window.removeEventListener('resize', this._resizeHandler);
+      this._resizeHandler = null;
     }
 
     // Clear image mode transition timers
@@ -999,6 +1095,21 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
    */
   getAutoSaveSlot(): HTMLElement {
     return this.autoSaveSlot;
+  }
+
+  /**
+   * Set panel toggle elements (Info Panel, Snapshots, Playlist) to display in the header utility group
+   */
+  setPanelToggles(element: HTMLElement): void {
+    this.panelsSlot.innerHTML = '';
+    this.panelsSlot.appendChild(element);
+  }
+
+  /**
+   * Get the panels slot element
+   */
+  getPanelsSlot(): HTMLElement {
+    return this.panelsSlot;
   }
 
   /**

@@ -42,6 +42,7 @@ import {
   updateWaveform as _updateWaveform,
   updateVectorscope as _updateVectorscope,
   updateGamutDiagram as _updateGamutDiagram,
+  computeHistogramData as _computeHistogramData,
   createScopeScheduler,
 } from './handlers/scopeHandlers';
 import {
@@ -197,10 +198,23 @@ export class AppSessionBridge {
   }
 
   /**
-   * Update histogram with current frame data
+   * Update histogram with current frame data.
+   * Also feeds the mini histogram callback if registered.
    */
   updateHistogram(): void {
     _updateHistogram(this.context);
+
+    // Feed mini histogram in right panel (even when full Histogram overlay isn't visible)
+    if (this._onHistogramData) {
+      const histogram = this.context.getHistogram();
+      // If full histogram was visible, it already computed fresh data
+      const histData = histogram.isVisible()
+        ? histogram.getData()
+        : _computeHistogramData(this.context);
+      if (histData) {
+        this._onHistogramData(histData);
+      }
+    }
   }
 
   /**

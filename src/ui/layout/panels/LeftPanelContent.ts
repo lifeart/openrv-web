@@ -99,7 +99,10 @@ export class LeftPanelContent {
       margin-top: 6px;
       align-self: flex-start;
     `;
-    allControlsBtn.addEventListener('click', () => colorControls.toggle());
+    allControlsBtn.addEventListener('click', (e) => {
+      e.stopPropagation(); // Prevent document click from immediately closing the panel
+      colorControls.toggle();
+    });
 
     slidersContainer.appendChild(allControlsBtn);
     this.colorSection.getContent().appendChild(slidersContainer);

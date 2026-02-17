@@ -64,18 +64,21 @@ describe('HeaderBar', () => {
 
   describe('mobile scroll support', () => {
     it('HDR-U013: container has overflow-x auto for horizontal scrolling', () => {
-      const el = headerBar.render();
-      expect(el.style.overflowX).toBe('auto');
+      headerBar.render();
+      const scrollContainer = headerBar.getContainer();
+      expect(scrollContainer.style.overflowX).toBe('auto');
     });
 
     it('HDR-U014: container has overflow-y hidden', () => {
-      const el = headerBar.render();
-      expect(el.style.overflowY).toBe('hidden');
+      headerBar.render();
+      const scrollContainer = headerBar.getContainer();
+      expect(scrollContainer.style.overflowY).toBe('hidden');
     });
 
     it('HDR-U015: container hides scrollbar via scrollbar-width none', () => {
-      const el = headerBar.render();
-      expect(el.style.scrollbarWidth).toBe('none');
+      headerBar.render();
+      const scrollContainer = headerBar.getContainer();
+      expect(scrollContainer.style.scrollbarWidth).toBe('none');
     });
 
     it('HDR-U016: webkit scrollbar style element is present', () => {
@@ -96,9 +99,10 @@ describe('HeaderBar', () => {
     });
 
     it('HDR-U018: dividers have flex-shrink 0', () => {
-      const el = headerBar.render();
+      headerBar.render();
+      const scrollContainer = headerBar.getContainer();
       // Dividers are 1px-wide elements with border-primary background
-      const children = Array.from(el.children) as HTMLElement[];
+      const children = Array.from(scrollContainer.children) as HTMLElement[];
       const dividers = children.filter(
         (c) => c.style.width === '1px' && c.style.height === '24px'
       );
@@ -259,6 +263,40 @@ describe('HeaderBar', () => {
 
       // Pause icon uses rect shapes
       expect(playBtn.innerHTML).toContain('rect');
+    });
+
+    it('HB-L55a: play button should have aria-pressed="true" when playing', () => {
+      const el = headerBar.render();
+      const buttons = el.querySelectorAll('button');
+      const playBtn = Array.from(buttons).find(
+        (btn) => btn.title?.includes('Play') || btn.title?.includes('Pause')
+      ) as HTMLButtonElement;
+
+      // Simulate playback started
+      (session as any)._isPlaying = true;
+      session.emit('playbackChanged', true);
+
+      expect(playBtn.getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('HB-L55b: play button should have aria-pressed="false" when paused', () => {
+      const el = headerBar.render();
+      const buttons = el.querySelectorAll('button');
+      const playBtn = Array.from(buttons).find(
+        (btn) => btn.title?.includes('Play') || btn.title?.includes('Pause')
+      ) as HTMLButtonElement;
+
+      // Initial state is paused
+      expect(playBtn.getAttribute('aria-pressed')).toBe('false');
+
+      // Also verify it goes back to false after stopping
+      (session as any)._isPlaying = true;
+      session.emit('playbackChanged', true);
+      expect(playBtn.getAttribute('aria-pressed')).toBe('true');
+
+      (session as any)._isPlaying = false;
+      session.emit('playbackChanged', false);
+      expect(playBtn.getAttribute('aria-pressed')).toBe('false');
     });
   });
 
@@ -902,20 +940,36 @@ describe('HeaderBar', () => {
       expect(nameText?.textContent).toBe('Untitled');
     });
 
-    it('HDR-U168: session name display has hover effect', () => {
+    it('HDR-U168: session name display does not have misleading hover effect', () => {
       const el = headerBar.render();
       const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]') as HTMLElement;
 
-      // Initial state
+      // Initial state - no background
       expect(sessionNameDisplay.style.background).toBeFalsy();
 
-      // Simulate mouseenter
+      // Simulate mouseenter - background should NOT change since there is no interactivity
       sessionNameDisplay.dispatchEvent(new MouseEvent('mouseenter'));
-      expect(sessionNameDisplay.style.background).toContain('var(--bg-hover)');
+      expect(sessionNameDisplay.style.background).not.toContain('var(--bg-hover)');
+    });
 
-      // Simulate mouseleave
+    it('HB-L51a: session name should not have mouseenter/mouseleave hover styling that suggests interactivity', () => {
+      const el = headerBar.render();
+      const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]') as HTMLElement;
+
+      // Verify cursor is default (not pointer), indicating non-interactive element
+      expect(sessionNameDisplay.style.cursor).toBe('default');
+
+      // Verify no background transition (which would suggest interactivity)
+      expect(sessionNameDisplay.style.transition).not.toContain('background');
+
+      // Simulate mouseenter and verify background does not change
+      const bgBefore = sessionNameDisplay.style.background;
+      sessionNameDisplay.dispatchEvent(new MouseEvent('mouseenter'));
+      expect(sessionNameDisplay.style.background).toBe(bgBefore);
+
+      // Simulate mouseleave and verify background still does not change
       sessionNameDisplay.dispatchEvent(new MouseEvent('mouseleave'));
-      expect(sessionNameDisplay.style.background).toBe('transparent');
+      expect(sessionNameDisplay.style.background).toBe(bgBefore);
     });
   });
 
@@ -1164,9 +1218,10 @@ describe('HeaderBar', () => {
     });
 
     it('HDR-U221: dividers are hidden in image mode (regression: untested elements)', () => {
-      const el = headerBar.render();
-      // Count all 1px-wide dividers in the header
-      const allDividers = Array.from(el.children).filter(
+      headerBar.render();
+      const scrollContainer = headerBar.getContainer();
+      // Count all 1px-wide dividers in the header scroll container
+      const allDividers = Array.from(scrollContainer.children).filter(
         (child) => (child as HTMLElement).style.width === '1px'
       ) as HTMLElement[];
       // There should be at least the two playback dividers
@@ -1295,6 +1350,169 @@ describe('HeaderBar', () => {
       const svg = sessionDisplay.querySelector('svg');
       expect(svg).not.toBeNull();
       expect(svg!.getAttribute('aria-hidden')).toBe('true');
+    });
+  });
+
+  describe('overflow fade indicators (L-52)', () => {
+    it('HB-L52a: header creates fade indicator elements and has scroll event handling', () => {
+      const el = headerBar.render();
+
+      // Verify left and right fade elements exist via data-testid
+      const fadeLeft = el.querySelector('[data-testid="header-fade-left"]') as HTMLElement;
+      const fadeRight = el.querySelector('[data-testid="header-fade-right"]') as HTMLElement;
+      expect(fadeLeft).not.toBeNull();
+      expect(fadeRight).not.toBeNull();
+
+      // Both fades should have pointer-events: none to not block interactions
+      expect(fadeLeft.style.pointerEvents).toBe('none');
+      expect(fadeRight.style.pointerEvents).toBe('none');
+
+      // Both fades should be aria-hidden
+      expect(fadeLeft.getAttribute('aria-hidden')).toBe('true');
+      expect(fadeRight.getAttribute('aria-hidden')).toBe('true');
+
+      // Both fades should be positioned absolutely
+      expect(fadeLeft.style.position).toBe('absolute');
+      expect(fadeRight.style.position).toBe('absolute');
+
+      // Both fades should start hidden (opacity 0) since jsdom scrollWidth === clientWidth
+      expect(fadeLeft.style.opacity).toBe('0');
+      expect(fadeRight.style.opacity).toBe('0');
+
+      // The updateOverflowFades method should exist and be callable
+      expect(typeof headerBar.updateOverflowFades).toBe('function');
+      expect(() => headerBar.updateOverflowFades()).not.toThrow();
+    });
+
+    it('HB-L52b: dispose removes scroll and resize listeners without error', () => {
+      headerBar.render();
+
+      // Should not throw when disposing (which removes scroll/resize listeners)
+      expect(() => headerBar.dispose()).not.toThrow();
+
+      // Calling dispose again should also be safe
+      expect(() => headerBar.dispose()).not.toThrow();
+    });
+
+    it('HB-L52c: fade indicators have gradient backgrounds', () => {
+      const el = headerBar.render();
+      const fadeLeft = el.querySelector('[data-testid="header-fade-left"]') as HTMLElement;
+      const fadeRight = el.querySelector('[data-testid="header-fade-right"]') as HTMLElement;
+
+      // Left fade should gradient from bg-primary to transparent (left to right)
+      expect(fadeLeft.style.background).toContain('linear-gradient');
+      expect(fadeLeft.style.background).toContain('to right');
+
+      // Right fade should gradient from bg-primary to transparent (right to left)
+      expect(fadeRight.style.background).toContain('linear-gradient');
+      expect(fadeRight.style.background).toContain('to left');
+    });
+
+    it('HB-L52d: wrapper has position relative for absolute fade positioning', () => {
+      const el = headerBar.render();
+      expect(el.style.position).toBe('relative');
+    });
+  });
+
+  describe('touch/pointer event support (L-60)', () => {
+    // jsdom does not provide PointerEvent, so we polyfill it for these tests
+    const PointerEventPolyfill = class extends MouseEvent {
+      constructor(type: string, params?: MouseEventInit) {
+        super(type, params);
+      }
+    };
+    if (typeof globalThis.PointerEvent === 'undefined') {
+      (globalThis as any).PointerEvent = PointerEventPolyfill;
+    }
+
+    it('HB-L60a: header buttons should respond to pointerenter/pointerleave for hover styling (touch support)', () => {
+      const el = headerBar.render();
+      // Pick an icon button - the help button (created via createIconButton)
+      const helpBtn = Array.from(el.querySelectorAll('button')).find(
+        (btn) => btn.title?.includes('Keyboard shortcuts')
+      ) as HTMLButtonElement;
+
+      // Initial state: transparent background
+      expect(helpBtn.style.background).toBe('transparent');
+
+      // Simulate pointerenter (fires for both mouse and touch)
+      helpBtn.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }));
+      expect(helpBtn.style.background).toBe('var(--bg-hover)');
+      expect(helpBtn.style.borderColor).toBe('var(--border-secondary)');
+      expect(helpBtn.style.color).toBe('var(--text-primary)');
+
+      // Simulate pointerleave
+      helpBtn.dispatchEvent(new PointerEvent('pointerleave', { bubbles: true }));
+      expect(helpBtn.style.background).toBe('transparent');
+      expect(helpBtn.style.borderColor).toBe('transparent');
+      expect(helpBtn.style.color).toBe('var(--text-secondary)');
+    });
+
+    it('HB-L60b: compact buttons should respond to pointerenter/pointerleave (touch support)', () => {
+      const el = headerBar.render();
+      // The loop button is created via createCompactButton
+      const loopBtn = Array.from(el.querySelectorAll('button')).find(
+        (btn) => btn.title?.includes('loop mode')
+      ) as HTMLButtonElement;
+
+      // Initial state: transparent background
+      expect(loopBtn.style.background).toBe('transparent');
+
+      // Simulate pointerenter
+      loopBtn.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }));
+      expect(loopBtn.style.background).toBe('var(--bg-hover)');
+      expect(loopBtn.style.color).toBe('var(--text-primary)');
+
+      // Simulate pointerleave
+      loopBtn.dispatchEvent(new PointerEvent('pointerleave', { bubbles: true }));
+      expect(loopBtn.style.background).toBe('transparent');
+      expect(loopBtn.style.color).toBe('var(--text-secondary)');
+    });
+
+    it('HB-L60c: speed button should respond to pointerenter/pointerleave (touch support)', () => {
+      const el = headerBar.render();
+      const speedBtn = el.querySelector(
+        '[data-testid="playback-speed-button"]'
+      ) as HTMLButtonElement;
+
+      // Simulate pointerenter
+      speedBtn.dispatchEvent(new PointerEvent('pointerenter', { bubbles: true }));
+      expect(speedBtn.style.background).toBe('var(--bg-hover)');
+      expect(speedBtn.style.color).toBe('var(--text-primary)');
+
+      // Simulate pointerleave (speed is 1x, so should go transparent)
+      speedBtn.dispatchEvent(new PointerEvent('pointerleave', { bubbles: true }));
+      expect(speedBtn.style.background).toBe('transparent');
+      expect(speedBtn.style.color).toBe('var(--text-secondary)');
+    });
+
+    it('HB-L60d: icon buttons should respond to pointerdown/pointerup for active state (touch support)', () => {
+      const el = headerBar.render();
+      const helpBtn = Array.from(el.querySelectorAll('button')).find(
+        (btn) => btn.title?.includes('Keyboard shortcuts')
+      ) as HTMLButtonElement;
+
+      // Simulate pointerdown (active press)
+      helpBtn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+      expect(helpBtn.style.background).toBe('var(--bg-active)');
+
+      // Simulate pointerup
+      helpBtn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+      expect(helpBtn.style.background).toBe('var(--bg-hover)');
+    });
+
+    it('HB-L60e: header buttons should NOT respond to mouseenter for hover styling (replaced by pointer events)', () => {
+      const el = headerBar.render();
+      const helpBtn = Array.from(el.querySelectorAll('button')).find(
+        (btn) => btn.title?.includes('Keyboard shortcuts')
+      ) as HTMLButtonElement;
+
+      // Initial state: transparent background
+      expect(helpBtn.style.background).toBe('transparent');
+
+      // Dispatch mouseenter - should NOT change styling (listeners use pointerenter now)
+      helpBtn.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+      expect(helpBtn.style.background).toBe('transparent');
     });
   });
 

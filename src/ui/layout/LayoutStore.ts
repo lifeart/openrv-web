@@ -87,17 +87,19 @@ function defaultLayout(): LayoutData {
 
 export const LAYOUT_PRESETS: LayoutPreset[] = [
   {
+    // Clean viewer with only timeline. No side panels.
     id: 'default',
     label: 'Default',
     data: {
       panels: {
         left: { size: 0, collapsed: true, activeTab: 0 },
-        right: { size: 280, collapsed: true, activeTab: 0 },
+        right: { size: 0, collapsed: true, activeTab: 0 },
         bottom: { size: 120, collapsed: false, activeTab: 0 },
       },
     },
   },
   {
+    // Right panel open for metadata/QC inspection. No left panel.
     id: 'review',
     label: 'Review',
     data: {
@@ -109,6 +111,7 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
     },
   },
   {
+    // Both panels for color grading: left has color tools, right has scopes.
     id: 'color',
     label: 'Color',
     data: {
@@ -120,11 +123,12 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
     },
   },
   {
+    // Left panel for paint/tool options. Maximized viewer area.
     id: 'paint',
     label: 'Paint',
     data: {
       panels: {
-        left: { size: 0, collapsed: true, activeTab: 0 },
+        left: { size: 240, collapsed: false, activeTab: 0 },
         right: { size: 0, collapsed: true, activeTab: 0 },
         bottom: { size: 100, collapsed: false, activeTab: 0 },
       },

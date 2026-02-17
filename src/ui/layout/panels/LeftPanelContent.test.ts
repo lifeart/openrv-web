@@ -207,6 +207,43 @@ describe('LeftPanelContent', () => {
       btn.click();
       expect(mockColorControls.toggle).toHaveBeenCalled();
     });
+
+    it('LP-032: button click stops propagation to prevent document handler closing panel', () => {
+      const btn = panel.getElement().querySelector('[data-testid="open-all-controls"]') as HTMLButtonElement;
+      let propagated = false;
+      // Listener on a parent that would only fire if event propagates
+      panel.getElement().addEventListener('click', () => { propagated = true; });
+      btn.click();
+      expect(propagated).toBe(false);
+    });
+
+    it('LP-033: button click with document-level handler does not immediately close', () => {
+      // Simulate the real scenario: ColorControls has a document click handler
+      // that closes the panel when clicking outside its container
+      let isExpanded = false;
+      mockColorControls.toggle = vi.fn(() => { isExpanded = true; });
+
+      const documentHandler = (e: Event) => {
+        // Mimics ColorControls.handleDocumentClick:
+        // closes if click target is outside the color controls container
+        if (isExpanded && !panel.getElement().querySelector('[data-testid="open-all-controls"]')!.contains(e.target as Node)) {
+          isExpanded = false;
+        }
+      };
+      document.addEventListener('click', documentHandler);
+
+      try {
+        const btn = panel.getElement().querySelector('[data-testid="open-all-controls"]') as HTMLButtonElement;
+        btn.click();
+        // toggle should have been called
+        expect(mockColorControls.toggle).toHaveBeenCalled();
+        // Panel should still be "expanded" because stopPropagation prevented
+        // the document handler from seeing this click
+        expect(isExpanded).toBe(true);
+      } finally {
+        document.removeEventListener('click', documentHandler);
+      }
+    });
   });
 
   describe('history', () => {

@@ -107,7 +107,7 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
   }
 
   private initTabContents(): void {
-    const tabs: TabId[] = ['view', 'color', 'effects', 'transform', 'annotate'];
+    const tabs: TabId[] = ['view', 'color', 'effects', 'transform', 'annotate', 'qc'];
 
     for (const tabId of tabs) {
       const content = document.createElement('div');
@@ -193,6 +193,7 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
       effects: 'Effects controls',
       transform: 'Transform controls',
       annotate: 'Annotate controls',
+      qc: 'QC controls',
     };
     this.container.setAttribute('aria-label', tabLabels[tabId]);
 

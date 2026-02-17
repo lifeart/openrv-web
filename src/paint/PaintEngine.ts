@@ -31,7 +31,7 @@ export interface PaintEngineEvents extends EventMap {
   brushChanged: BrushType;
 }
 
-export type PaintTool = 'pen' | 'text' | 'eraser' | 'select' | 'none' | 'rectangle' | 'ellipse' | 'line' | 'arrow';
+export type PaintTool = 'pen' | 'text' | 'eraser' | 'none' | 'rectangle' | 'ellipse' | 'line' | 'arrow';
 
 export class PaintEngine extends EventEmitter<PaintEngineEvents> {
   private state: PaintState;

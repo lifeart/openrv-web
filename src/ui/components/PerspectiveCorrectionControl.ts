@@ -282,7 +282,7 @@ export class PerspectiveCorrectionControl extends EventEmitter<PerspectiveCorrec
       font-size: 11px;
     `;
 
-    input.addEventListener('change', () => {
+    input.addEventListener('input', () => {
       const val = parseFloat(input.value);
       if (!isNaN(val)) {
         onChange(Math.max(-0.5, Math.min(1.5, val)));

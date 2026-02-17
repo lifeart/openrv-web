@@ -209,6 +209,21 @@ describe('FilterControl', () => {
     });
   });
 
+  describe('Blur initial value label (L-53)', () => {
+    it('FC-L53a: Blur slider initial value label should show "0px" not "0"', () => {
+      control.show();
+      const panel = document.querySelector('.filter-panel') as HTMLElement;
+      // The blur slider is the first input[type="range"] in the panel
+      const blurSlider = panel.querySelector('input[type="range"]') as HTMLInputElement;
+      // The value label is the last span sibling before the slider, inside the parent row's label div
+      const row = blurSlider.parentElement as HTMLElement;
+      const spans = row.querySelectorAll('span');
+      // First span is "Blur" label, second span is the value label
+      const valueLabel = spans[1] as HTMLSpanElement;
+      expect(valueLabel.textContent).toBe('0px');
+    });
+  });
+
   describe('ARIA attributes (M-15)', () => {
     it('FLT-M15a: toggle button should have aria-haspopup attribute', () => {
       const el = control.render();

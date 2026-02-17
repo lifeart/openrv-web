@@ -368,7 +368,7 @@ export class App {
     this.tabBar.on('tabChanged', (tabId: TabId) => {
       const tabLabels: Record<TabId, string> = {
         view: 'View', color: 'Color', effects: 'Effects',
-        transform: 'Transform', annotate: 'Annotate',
+        transform: 'Transform', annotate: 'Annotate', qc: 'QC',
       };
       this.ariaAnnouncer.announce(`${tabLabels[tabId]} tab`);
     });
@@ -379,6 +379,16 @@ export class App {
       if (name) {
         this.ariaAnnouncer.announce(`File loaded: ${name}`);
       }
+    });
+
+    // Announce play/pause state changes
+    this.session.on('playbackChanged', (playing: boolean) => {
+      this.ariaAnnouncer.announce(playing ? 'Playback started' : 'Playback paused');
+    });
+
+    // Announce playback speed changes
+    this.session.on('playbackSpeedChanged', (speed: number) => {
+      this.ariaAnnouncer.announce(`Playback speed: ${speed}x`);
     });
 
     // Initialize FullscreenManager with the app container

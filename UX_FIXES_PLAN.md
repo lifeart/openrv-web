@@ -849,7 +849,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### L-51: Session name display has misleading hover effect
+### ~~L-51: Session name display has misleading hover effect~~ FIXED
 
 **File:** `src/ui/components/layout/HeaderBar.ts:382-432`
 
@@ -862,7 +862,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### L-52: Header hidden scrollbar with no overflow indicator
+### ~~L-52: Header hidden scrollbar with no overflow indicator~~ FIXED
 
 **File:** `src/ui/components/layout/HeaderBar.ts:70-88`
 
@@ -875,7 +875,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### L-53: FilterControl blur initial value label inconsistency
+### ~~L-53: FilterControl blur initial value label inconsistency~~ FIXED
 
 **File:** `src/ui/components/FilterControl.ts:183`
 
@@ -888,7 +888,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### L-54: Perspective corner inputs use `change` instead of `input` event
+### ~~L-54: Perspective corner inputs use `change` instead of `input` event~~ FIXED
 
 **File:** `src/ui/components/PerspectiveCorrectionControl.ts:272`
 
@@ -901,7 +901,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### L-55: Play button missing `aria-pressed`
+### ~~L-55: Play button missing `aria-pressed`~~ FIXED
 
 **File:** `src/ui/components/layout/HeaderBar.ts:159`
 

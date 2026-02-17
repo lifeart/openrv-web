@@ -672,11 +672,35 @@ export class ColorControls extends EventEmitter<ColorControlsEvents> {
 
     this.adjustments = { ...this.adjustments, ...sanitized };
 
-    // Update sliders (only for numeric adjustments)
+    // Update sliders and value labels (only for numeric adjustments)
+    const formats: Record<NumericAdjustmentKey, (v: number) => string> = {
+      exposure: (v) => `${v > 0 ? '+' : ''}${v.toFixed(1)}`,
+      brightness: (v) => `${v > 0 ? '+' : ''}${(v * 100).toFixed(0)}%`,
+      contrast: (v) => `${(v * 100).toFixed(0)}%`,
+      clarity: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
+      hueRotation: (v) => `${v.toFixed(0)}\u00B0`,
+      gamma: (v) => v.toFixed(2),
+      saturation: (v) => `${(v * 100).toFixed(0)}%`,
+      vibrance: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
+      temperature: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
+      tint: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
+      highlights: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
+      shadows: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
+      whites: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
+      blacks: (v) => `${v > 0 ? '+' : ''}${v.toFixed(0)}`,
+    };
+
     for (const [key, value] of Object.entries(sanitized)) {
-      const slider = this.sliders.get(key as NumericAdjustmentKey);
-      if (slider && typeof value === 'number') {
-        slider.value = String(value);
+      const numKey = key as NumericAdjustmentKey;
+      if (typeof value === 'number') {
+        const slider = this.sliders.get(numKey);
+        if (slider) {
+          slider.value = String(value);
+        }
+        const label = this.valueLabels.get(numKey);
+        if (label && formats[numKey]) {
+          label.textContent = formats[numKey](this.adjustments[numKey]);
+        }
       }
     }
 

@@ -132,16 +132,37 @@ describe('PerspectiveCorrectionControl', () => {
       expect(topLeftX).not.toBeNull();
       expect(topLeftY).not.toBeNull();
 
-      // Change the input value and dispatch change event
+      // Change the input value and dispatch input event (live update)
       topLeftX.value = '0.15';
-      topLeftX.dispatchEvent(new Event('change'));
+      topLeftX.dispatchEvent(new Event('input'));
 
       topLeftY.value = '0.25';
-      topLeftY.dispatchEvent(new Event('change'));
+      topLeftY.dispatchEvent(new Event('input'));
 
       const params = control.getParams();
       expect(params.topLeft.x).toBeCloseTo(0.15);
       expect(params.topLeft.y).toBeCloseTo(0.25);
+    });
+
+    it('PC-L54a: corner input should emit change on every keystroke via input event', () => {
+      control.show();
+      const topLeftX = document.querySelector('[data-testid="perspective-topLeft-x"]') as HTMLInputElement;
+      expect(topLeftX).not.toBeNull();
+
+      const callback = vi.fn();
+      control.on('perspectiveChanged', callback);
+
+      // Simulate typing each keystroke: '0', '0.', '0.3'
+      topLeftX.value = '0';
+      topLeftX.dispatchEvent(new Event('input'));
+      expect(callback).toHaveBeenCalledTimes(1);
+
+      topLeftX.value = '0.3';
+      topLeftX.dispatchEvent(new Event('input'));
+      expect(callback).toHaveBeenCalledTimes(2);
+
+      // Verify the params reflect the latest value
+      expect(control.getParams().topLeft.x).toBeCloseTo(0.3);
     });
 
     it('PC-008: quality dropdown updates params correctly', () => {

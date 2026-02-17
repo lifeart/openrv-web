@@ -2,9 +2,7 @@
  * RetimeGroupNode - Time remapping for sources
  *
  * Allows speed changes, reverse playback, and frame remapping.
- *
- * Note: Currently a pass-through node. Full implementation would
- * modify the EvalContext frame before passing to child nodes.
+ * Supports explicit frame mapping via explicitActive/explicitFirstOutputFrame/explicitInputFrames.
  */
 
 import { BaseGroupNode } from './BaseGroupNode';
@@ -20,6 +18,11 @@ export class RetimeGroupNode extends BaseGroupNode {
     this.properties.add({ name: 'offset', defaultValue: 0 });
     this.properties.add({ name: 'reverse', defaultValue: false });
     this.properties.add({ name: 'duration', defaultValue: 0 });
+
+    // Explicit frame mapping properties (populated from GTO explicit component)
+    this.properties.add({ name: 'explicitActive', defaultValue: false });
+    this.properties.add({ name: 'explicitFirstOutputFrame', defaultValue: 1 });
+    this.properties.add({ name: 'explicitInputFrames', defaultValue: [] });
   }
 
   getActiveInputIndex(_context: EvalContext): number {
@@ -27,13 +30,47 @@ export class RetimeGroupNode extends BaseGroupNode {
   }
 
   /**
-   * Calculate the retimed frame number
+   * Calculate the retimed frame number.
    *
-   * @param frame - Original frame number
+   * When explicit mapping is active, the requested output frame is looked up
+   * in the explicitInputFrames table:
+   *   inputFrame = explicitInputFrames[outputFrame - firstOutputFrame]
+   *
+   * Out-of-range output frames are clamped to the first or last entry.
+   * An empty inputFrames array falls back to the standard retime logic.
+   *
+   * @param frame - Original (output) frame number
    * @param duration - Optional total duration for reverse calculation
-   * @returns Retimed frame number
+   * @returns Retimed (input) frame number
    */
   getRetimedFrame(frame: number, duration?: number): number {
+    const explicitActive = this.properties.getValue('explicitActive') as boolean;
+    const inputFrames = this.properties.getValue('explicitInputFrames') as number[];
+
+    if (explicitActive && inputFrames.length > 0) {
+      return this.getExplicitFrame(frame);
+    }
+
+    return this.getStandardRetimedFrame(frame, duration);
+  }
+
+  /**
+   * Look up the input frame from the explicit mapping table.
+   * Clamps out-of-range output frames to the first/last entry.
+   */
+  private getExplicitFrame(outputFrame: number): number {
+    const firstOutputFrame = this.properties.getValue('explicitFirstOutputFrame') as number;
+    const inputFrames = this.properties.getValue('explicitInputFrames') as number[];
+
+    const index = outputFrame - firstOutputFrame;
+    const clampedIndex = Math.max(0, Math.min(inputFrames.length - 1, index));
+    return inputFrames[clampedIndex] as number;
+  }
+
+  /**
+   * Standard retime: scale + offset, optional reverse.
+   */
+  private getStandardRetimedFrame(frame: number, duration?: number): number {
     const scale = this.properties.getValue('scale') as number;
     const offset = this.properties.getValue('offset') as number;
     const reverse = this.properties.getValue('reverse') as boolean;

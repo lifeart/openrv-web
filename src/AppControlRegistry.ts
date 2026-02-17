@@ -70,6 +70,7 @@ import type { Viewer } from './ui/components/Viewer';
 import type { PaintEngine } from './paint/PaintEngine';
 import type { DisplayCapabilities } from './color/DisplayCapabilities';
 import type { AppSessionBridge } from './AppSessionBridge';
+import type { HeaderBar } from './ui/components/layout/HeaderBar';
 
 /**
  * Dependencies required by AppControlRegistry to create all controls.

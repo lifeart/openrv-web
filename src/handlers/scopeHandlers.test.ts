@@ -11,6 +11,7 @@ import {
   updateWaveform,
   updateVectorscope,
   updateGamutDiagram,
+  computeHistogramData,
   createScopeScheduler,
 } from './scopeHandlers';
 import type { SessionBridgeContext } from '../AppSessionBridge';
@@ -37,11 +38,24 @@ function createMockContext(overrides: {
       }
     : null;
 
+  const mockHistogramData = {
+    red: new Uint32Array(256),
+    green: new Uint32Array(256),
+    blue: new Uint32Array(256),
+    luminance: new Uint32Array(256),
+    maxValue: 100,
+    pixelCount: 4,
+    clipping: { shadows: 0, highlights: 0, shadowsPercent: 0, highlightsPercent: 0 },
+  };
+
   const histogram = {
     isVisible: vi.fn(() => overrides.histogramVisible ?? false),
     isHDRActive: vi.fn(() => overrides.hdrActive ?? false),
     update: vi.fn(),
     updateHDR: vi.fn(),
+    calculate: vi.fn(() => mockHistogramData),
+    calculateHDR: vi.fn(() => mockHistogramData),
+    getData: vi.fn(() => (overrides.histogramVisible ?? false) ? mockHistogramData : null),
   };
   const waveform = {
     isVisible: vi.fn(() => overrides.waveformVisible ?? false),
@@ -261,6 +275,87 @@ describe('updateGamutDiagram', () => {
   });
 });
 
+describe('computeHistogramData', () => {
+  it('SCH-C001: computes histogram data from scope image data (SDR)', () => {
+    const imgData = new ImageData(2, 2);
+    const context = createMockContext({ imageData: imgData });
+
+    const result = computeHistogramData(context);
+
+    expect(context.getHistogram().calculate).toHaveBeenCalledWith(imgData);
+    expect(result).not.toBeNull();
+  });
+
+  it('SCH-C002: computes histogram data via HDR path when float data and HDR active', () => {
+    const imgData = new ImageData(2, 2);
+    const floatData = new Float32Array(2 * 2 * 4);
+    const context = createMockContext({
+      imageData: imgData,
+      floatData,
+      hdrActive: true,
+    });
+
+    const result = computeHistogramData(context);
+
+    expect(context.getHistogram().calculateHDR).toHaveBeenCalled();
+    expect(context.getHistogram().calculate).not.toHaveBeenCalled();
+    expect(result).not.toBeNull();
+  });
+
+  it('SCH-C003: uses SDR path when float data present but HDR not active', () => {
+    const imgData = new ImageData(2, 2);
+    const floatData = new Float32Array(2 * 2 * 4);
+    const context = createMockContext({
+      imageData: imgData,
+      floatData,
+      hdrActive: false,
+    });
+
+    const result = computeHistogramData(context);
+
+    expect(context.getHistogram().calculate).toHaveBeenCalledWith(imgData);
+    expect(context.getHistogram().calculateHDR).not.toHaveBeenCalled();
+    expect(result).not.toBeNull();
+  });
+
+  it('SCH-C004: returns null when no scope data available', () => {
+    const context = createMockContext({ imageData: null });
+
+    const result = computeHistogramData(context);
+
+    expect(result).toBeNull();
+    expect(context.getHistogram().calculate).not.toHaveBeenCalled();
+  });
+
+  it('SCH-C005: works regardless of full histogram visibility', () => {
+    const imgData = new ImageData(2, 2);
+    const context = createMockContext({ histogramVisible: false, imageData: imgData });
+
+    const result = computeHistogramData(context);
+
+    // Should compute data even though full histogram is not visible
+    expect(context.getHistogram().calculate).toHaveBeenCalled();
+    expect(result).not.toBeNull();
+  });
+
+  it('SCH-C006: uses provided scopeData instead of fetching', () => {
+    const imgData = new ImageData(4, 4);
+    const context = createMockContext({ imageData: new ImageData(2, 2) });
+    const providedScopeData = {
+      imageData: imgData,
+      floatData: null,
+      width: 4,
+      height: 4,
+    };
+
+    computeHistogramData(context, providedScopeData);
+
+    // Should use provided data, not fetch from viewer
+    expect(context.getViewer().getScopeImageData).not.toHaveBeenCalled();
+    expect(context.getHistogram().calculate).toHaveBeenCalledWith(imgData);
+  });
+});
+
 describe('createScopeScheduler', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -420,5 +515,70 @@ describe('createScopeScheduler', () => {
 
     // getScopeImageData should be called exactly once (not three times)
     expect(context.getViewer().getScopeImageData).toHaveBeenCalledTimes(1);
+  });
+
+  it('SCH-U038: onHistogramData callback fires when full histogram IS visible', () => {
+    const imgData = new ImageData(2, 2);
+    const context = createMockContext({
+      histogramVisible: true,
+      imageData: imgData,
+    });
+    const onHistogramData = vi.fn();
+    const scheduler = createScopeScheduler(context, { onHistogramData });
+
+    scheduler.schedule();
+    vi.advanceTimersByTime(32);
+
+    expect(onHistogramData).toHaveBeenCalledTimes(1);
+    expect(onHistogramData).toHaveBeenCalledWith(expect.objectContaining({
+      red: expect.any(Uint32Array),
+      maxValue: expect.any(Number),
+    }));
+  });
+
+  it('SCH-U039: onHistogramData callback fires even when full histogram is NOT visible', () => {
+    const imgData = new ImageData(2, 2);
+    const context = createMockContext({
+      histogramVisible: false,
+      imageData: imgData,
+    });
+    const onHistogramData = vi.fn();
+    const scheduler = createScopeScheduler(context, { onHistogramData });
+
+    scheduler.schedule();
+    vi.advanceTimersByTime(32);
+
+    // Mini histogram should still get data even though full histogram overlay is closed
+    expect(onHistogramData).toHaveBeenCalledTimes(1);
+  });
+
+  it('SCH-U040b: onHistogramData not called when no scope data available', () => {
+    const context = createMockContext({
+      histogramVisible: false,
+      imageData: null,
+    });
+    const onHistogramData = vi.fn();
+    const scheduler = createScopeScheduler(context, { onHistogramData });
+
+    scheduler.schedule();
+    vi.advanceTimersByTime(32);
+
+    expect(onHistogramData).not.toHaveBeenCalled();
+  });
+
+  it('SCH-U041b: onHistogramData not called when no callback provided', () => {
+    const imgData = new ImageData(2, 2);
+    const context = createMockContext({
+      histogramVisible: true,
+      imageData: imgData,
+    });
+    // No callback
+    const scheduler = createScopeScheduler(context);
+
+    scheduler.schedule();
+    vi.advanceTimersByTime(32);
+
+    // Should not throw or error
+    expect(context.getHistogram().update).toHaveBeenCalled();
   });
 });

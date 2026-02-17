@@ -285,6 +285,7 @@ export function createMockWebGL2Context() {
     uniform1f: vi.fn(),
     uniform2f: vi.fn(),
     uniform3fv: vi.fn(),
+    uniformMatrix4fv: vi.fn(),
 
     viewport: vi.fn(),
     drawArrays: vi.fn(),

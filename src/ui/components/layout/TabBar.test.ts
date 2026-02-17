@@ -271,8 +271,8 @@ describe('TabBar', () => {
   });
 
   describe('TABS constant', () => {
-    it('TAB-U100: TABS has 5 tabs', () => {
-      expect(TABS.length).toBe(5);
+    it('TAB-U100: TABS has 6 tabs', () => {
+      expect(TABS.length).toBe(6);
     });
 
     it('TAB-U101: all tabs have id, label, icon, shortcut', () => {
@@ -284,9 +284,9 @@ describe('TabBar', () => {
       }
     });
 
-    it('TAB-U102: tab shortcuts are 1 through 5', () => {
+    it('TAB-U102: tab shortcuts are 1 through 6', () => {
       const shortcuts = TABS.map(t => t.shortcut);
-      expect(shortcuts).toEqual(['1', '2', '3', '4', '5']);
+      expect(shortcuts).toEqual(['1', '2', '3', '4', '5', '6']);
     });
   });
 });

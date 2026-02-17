@@ -135,6 +135,8 @@ describe('LUTStage', () => {
     stage.setIntensity(0.5);
     stage.setEnabled(false);
     stage.setSource('ocio');
+    stage.setInMatrix(new Float32Array([2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1]));
+    stage.setOutMatrix(new Float32Array([0.5, 0, 0, 0, 0, 0.5, 0, 0, 0, 0, 0.5, 0, 0, 0, 0, 1]));
 
     stage.reset();
 
@@ -142,5 +144,71 @@ describe('LUTStage', () => {
     expect(stage.isEnabled()).toBe(true);
     expect(stage.getIntensity()).toBe(1.0);
     expect(stage.getSource()).toBe('manual');
+    expect(stage.getInMatrix()).toBeNull();
+    expect(stage.getOutMatrix()).toBeNull();
+  });
+
+  it('LSTG-U012: setInMatrix stores non-identity matrix', () => {
+    const stage = new LUTStage();
+    const matrix = new Float32Array([2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1]);
+    stage.setInMatrix(matrix);
+
+    expect(stage.getInMatrix()).not.toBeNull();
+    expect(stage.getInMatrix()![0]).toBe(2);
+  });
+
+  it('LSTG-U013: setOutMatrix stores non-identity matrix', () => {
+    const stage = new LUTStage();
+    const matrix = new Float32Array([0.5, 0, 0, 0, 0, 0.5, 0, 0, 0, 0, 0.5, 0, 0, 0, 0, 1]);
+    stage.setOutMatrix(matrix);
+
+    expect(stage.getOutMatrix()).not.toBeNull();
+    expect(stage.getOutMatrix()![0]).toBe(0.5);
+  });
+
+  it('LSTG-U014: identity matrix is optimized to null', () => {
+    const stage = new LUTStage();
+    stage.setInMatrix(new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]));
+    expect(stage.getInMatrix()).toBeNull();
+  });
+
+  it('LSTG-U015: NaN matrix entries sanitized to identity', () => {
+    const stage = new LUTStage();
+    stage.setInMatrix(new Float32Array([NaN, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]));
+
+    // NaN causes sanitization to identity, which is then stored as non-null identity copy
+    const m = stage.getInMatrix();
+    expect(m).not.toBeNull();
+    // The sanitized matrix should be identity
+    expect(m![0]).toBe(1);
+    expect(m![5]).toBe(1);
+    expect(m![10]).toBe(1);
+    expect(m![15]).toBe(1);
+  });
+
+  it('LSTG-U016: setInMatrix accepts plain number array', () => {
+    const stage = new LUTStage();
+    stage.setInMatrix([2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1]);
+
+    expect(stage.getInMatrix()).not.toBeNull();
+    expect(stage.getInMatrix()![0]).toBe(2);
+  });
+
+  it('LSTG-U017: clearing matrix with null', () => {
+    const stage = new LUTStage();
+    stage.setInMatrix([2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1]);
+    stage.setInMatrix(null);
+    expect(stage.getInMatrix()).toBeNull();
+  });
+
+  it('LSTG-U018: getState includes matrix fields', () => {
+    const stage = new LUTStage();
+    stage.setLUT(createTestLUT3D(), 'test.cube');
+    stage.setInMatrix([2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1]);
+
+    const state = stage.getState();
+    expect(state.inMatrix).not.toBeNull();
+    expect(state.inMatrix![0]).toBe(2);
+    expect(state.outMatrix).toBeNull();
   });
 });

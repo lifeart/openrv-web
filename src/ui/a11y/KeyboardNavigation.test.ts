@@ -144,7 +144,7 @@ describe('Keyboard Navigation Integration', () => {
 
     it('KEY-002b: Tab bar buttons are <button> elements with click handlers', () => {
       const buttons = tabBar.getButtons();
-      expect(buttons.length).toBe(5);
+      expect(buttons.length).toBe(6);
       for (const btn of buttons) {
         expect(btn.tagName).toBe('BUTTON');
       }

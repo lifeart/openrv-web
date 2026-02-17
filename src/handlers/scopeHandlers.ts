@@ -89,6 +89,29 @@ export function updateGamutDiagram(context: SessionBridgeContext, scopeData?: Sc
 }
 
 /**
+ * Compute histogram data from scope image data, regardless of full Histogram visibility.
+ * Used to feed the mini histogram in the right panel.
+ */
+export function computeHistogramData(
+  context: SessionBridgeContext,
+  scopeData?: ScopeImageData | null
+): import('../ui/components/Histogram').HistogramData | null {
+  const data = scopeData !== undefined ? scopeData : getScopeData(context);
+  if (!data) return null;
+
+  const histogram = context.getHistogram();
+  if (data.floatData && histogram.isHDRActive()) {
+    return histogram.calculateHDR({
+      data: data.floatData,
+      width: data.width,
+      height: data.height,
+      colorSpace: 'srgb',
+    } as unknown as ImageData);
+  }
+  return histogram.calculate(data.imageData);
+}
+
+/**
  * Creates a scope update scheduler that coalesces multiple update requests
  * into a single post-render update using double requestAnimationFrame.
  *
@@ -121,7 +144,11 @@ export function createScopeScheduler(
           // Feed mini histogram in panel if callback provided
           if (options?.onHistogramData) {
             const histogram = context.getHistogram();
-            const histData = histogram.getData();
+            // Use fresh data if full histogram was visible (already computed above),
+            // otherwise compute independently for the mini histogram
+            const histData = histogram.isVisible()
+              ? histogram.getData()
+              : computeHistogramData(context, scopeData);
             if (histData) {
               options.onHistogramData(histData);
             }

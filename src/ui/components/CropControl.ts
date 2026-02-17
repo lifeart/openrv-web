@@ -77,6 +77,7 @@ export class CropControl extends EventEmitter<CropControlEvents> {
   private toggleSwitch: HTMLButtonElement | null = null;
   private dimensionsLabel: HTMLElement | null = null;
   private readonly boundHandleKeyDown: (e: KeyboardEvent) => void;
+  private boundHandleDocumentClick: (e: MouseEvent) => void;
 
   // Uncrop UI elements
   private uncropToggleSwitch: HTMLButtonElement | null = null;
@@ -160,6 +161,10 @@ export class CropControl extends EventEmitter<CropControlEvents> {
     this.container.appendChild(this.cropButton);
     // Panel will be appended to body when shown
 
+    // Close on outside click
+    this.boundHandleDocumentClick = this.handleDocumentClick.bind(this);
+    document.addEventListener('click', this.boundHandleDocumentClick);
+
     // Close panel on Escape key
     this.boundHandleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && this.isPanelOpen) {
@@ -167,6 +172,12 @@ export class CropControl extends EventEmitter<CropControlEvents> {
       }
     };
     document.addEventListener('keydown', this.boundHandleKeyDown);
+  }
+
+  private handleDocumentClick(e: MouseEvent): void {
+    if (this.isPanelOpen && !this.container.contains(e.target as Node) && !this.panel.contains(e.target as Node)) {
+      this.hidePanel();
+    }
   }
 
   private createPanelContent(): void {
@@ -942,6 +953,7 @@ export class CropControl extends EventEmitter<CropControlEvents> {
 
   dispose(): void {
     document.removeEventListener('keydown', this.boundHandleKeyDown);
+    document.removeEventListener('click', this.boundHandleDocumentClick);
     // Remove panel from body if present
     if (document.body.contains(this.panel)) {
       document.body.removeChild(this.panel);

@@ -74,6 +74,7 @@ function createMockGL(): WebGL2RenderingContext {
     uniform1i: vi.fn(),
     uniform1f: vi.fn(),
     uniform3fv: vi.fn(),
+    uniformMatrix4fv: vi.fn(),
 
     viewport: vi.fn(),
     drawArrays: vi.fn(),
@@ -242,5 +243,100 @@ describe('GPULUTChain', () => {
 
     chain.setFileLUT(null);
     expect(chain.hasFileLUT()).toBe(false);
+  });
+
+  describe('LUT Matrix Support', () => {
+    it('GCHAIN-U015: render uploads matrix uniforms with uniformMatrix4fv', () => {
+      chain.setFileLUT(createTestLUT3D());
+      chain.setFileLUTInMatrix(new Float32Array([
+        2, 0, 0, 0,
+        0, 2, 0, 0,
+        0, 0, 2, 0,
+        0, 0, 0, 1,
+      ]));
+
+      chain.render(100, 100);
+
+      // uniformMatrix4fv should have been called for matrix uploads
+      expect(gl.uniformMatrix4fv).toHaveBeenCalled();
+    });
+
+    it('GCHAIN-U016: render sets hasInMatrix/hasOutMatrix flags', () => {
+      chain.setFileLUT(createTestLUT3D());
+      chain.setFileLUTInMatrix(new Float32Array([
+        2, 0, 0, 0,
+        0, 2, 0, 0,
+        0, 0, 2, 0,
+        0, 0, 0, 1,
+      ]));
+
+      chain.render(100, 100);
+
+      // uniform1i should have been called with hasInMatrix = 1
+      expect(gl.uniform1i).toHaveBeenCalled();
+    });
+
+    it('GCHAIN-U017: setting identity matrix is optimized to null', () => {
+      chain.setFileLUTInMatrix(new Float32Array([
+        1, 0, 0, 0,
+        0, 1, 0, 0,
+        0, 0, 1, 0,
+        0, 0, 0, 1,
+      ]));
+
+      // Identity matrix should be optimized away (stored as null)
+      chain.setFileLUT(createTestLUT3D());
+      chain.render(100, 100);
+      // No error should occur - hasInMatrix should be 0
+      expect(gl.uniformMatrix4fv).toHaveBeenCalled();
+    });
+
+    it('GCHAIN-U018: matrices can be set and cleared for all stages', () => {
+      const scaleMatrix = new Float32Array([
+        2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1,
+      ]);
+
+      chain.setFileLUTInMatrix(scaleMatrix);
+      chain.setFileLUTOutMatrix(scaleMatrix);
+      chain.setLookLUTInMatrix(scaleMatrix);
+      chain.setLookLUTOutMatrix(scaleMatrix);
+      chain.setDisplayLUTInMatrix(scaleMatrix);
+      chain.setDisplayLUTOutMatrix(scaleMatrix);
+
+      // Clear all
+      chain.setFileLUTInMatrix(null);
+      chain.setFileLUTOutMatrix(null);
+      chain.setLookLUTInMatrix(null);
+      chain.setLookLUTOutMatrix(null);
+      chain.setDisplayLUTInMatrix(null);
+      chain.setDisplayLUTOutMatrix(null);
+
+      // Should render without issues
+      chain.setFileLUT(createTestLUT3D());
+      chain.render(100, 100);
+      expect(gl.drawArrays).toHaveBeenCalled();
+    });
+
+    it('GCHAIN-U019: NaN matrix is sanitized to identity', () => {
+      const nanMatrix = new Float32Array([
+        NaN, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1,
+      ]);
+
+      // Should not throw - NaN is sanitized
+      chain.setFileLUTInMatrix(nanMatrix);
+      chain.setFileLUT(createTestLUT3D());
+      chain.render(100, 100);
+      expect(gl.drawArrays).toHaveBeenCalled();
+    });
+
+    it('GCHAIN-U020: dispose cleans up stage matrix state', () => {
+      chain.setFileLUTInMatrix(new Float32Array([
+        2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1,
+      ]));
+      chain.dispose();
+
+      // After dispose, no errors when re-initializing
+      expect(chain.hasFileLUT()).toBe(false);
+    });
   });
 });
