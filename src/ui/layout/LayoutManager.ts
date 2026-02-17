@@ -267,7 +267,8 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
       ? `
         height: 5px;
         cursor: row-resize;
-        background: transparent;
+        background: var(--border-primary);
+        opacity: 0.2;
         flex-shrink: 0;
         position: relative;
         z-index: 10;
@@ -275,7 +276,8 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
       : `
         width: 5px;
         cursor: col-resize;
-        background: transparent;
+        background: var(--border-primary);
+        opacity: 0.2;
         flex-shrink: 0;
         position: relative;
         z-index: 10;
@@ -284,12 +286,12 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
     // Visual indicator on hover
     handle.addEventListener('mouseenter', () => {
       handle.style.background = 'var(--accent-primary)';
-      handle.style.opacity = '0.4';
+      handle.style.opacity = '0.5';
     });
     handle.addEventListener('mouseleave', () => {
       if (!this._dragging) {
-        handle.style.background = 'transparent';
-        handle.style.opacity = '1';
+        handle.style.background = 'var(--border-primary)';
+        handle.style.opacity = '0.2';
       }
     });
 
@@ -391,6 +393,7 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
     document.addEventListener('pointermove', this._boundPointerMove);
     document.addEventListener('pointerup', this._boundPointerUp);
     document.body.style.userSelect = 'none';
+    document.body.style.cursor = panelId === 'bottom' ? 'row-resize' : 'col-resize';
   }
 
   private onDragMove(e: PointerEvent): void {
@@ -436,14 +439,15 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
     this._boundPointerMove = null;
     this._boundPointerUp = null;
     document.body.style.userSelect = '';
+    document.body.style.cursor = '';
 
-    // Clear handle highlight
+    // Restore handle to subtle rest state
     for (const id of ['left', 'right'] as const) {
-      this.panels[id].handle.style.background = 'transparent';
-      this.panels[id].handle.style.opacity = '1';
+      this.panels[id].handle.style.background = 'var(--border-primary)';
+      this.panels[id].handle.style.opacity = '0.2';
     }
-    this.bottomHandle.style.background = 'transparent';
-    this.bottomHandle.style.opacity = '1';
+    this.bottomHandle.style.background = 'var(--border-primary)';
+    this.bottomHandle.style.opacity = '0.2';
   }
 
   // ---------------------------------------------------------------------------

@@ -51,14 +51,25 @@ describe('ThemeControl', () => {
 
     it('THEME-U003: should have dropdown with testid', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="theme-dropdown"]');
+      document.body.appendChild(el);
+      // Click button to open dropdown (appends to document.body)
+      const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="theme-dropdown"]');
       expect(dropdown).not.toBeNull();
     });
 
     it('THEME-U004: dropdown should be hidden initially', () => {
-      const el = control.render();
-      const dropdown = el.querySelector('[data-testid="theme-dropdown"]') as HTMLElement;
-      expect(dropdown.style.display).toBe('none');
+      control.render();
+      // Dropdown is not yet in the DOM before first open; verify it's not visible
+      const dropdown = document.querySelector('[data-testid="theme-dropdown"]');
+      // Before opening, dropdown is either not in DOM or display:none
+      if (dropdown) {
+        expect((dropdown as HTMLElement).style.display).toBe('none');
+      } else {
+        // Not in DOM at all is valid - it hasn't been opened yet
+        expect(dropdown).toBeNull();
+      }
     });
 
     it('THEME-U005: should subscribe to theme manager events', () => {
@@ -83,28 +94,40 @@ describe('ThemeControl', () => {
   describe('dropdown options', () => {
     it('THEME-U020: dropdown has auto option', () => {
       const el = control.render();
-      const autoOption = el.querySelector('[data-testid="theme-option-auto"]');
+      document.body.appendChild(el);
+      const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
+      button.click();
+      const autoOption = document.querySelector('[data-testid="theme-option-auto"]');
       expect(autoOption).not.toBeNull();
     });
 
     it('THEME-U021: dropdown has dark option', () => {
       const el = control.render();
-      const darkOption = el.querySelector('[data-testid="theme-option-dark"]');
+      document.body.appendChild(el);
+      const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
+      button.click();
+      const darkOption = document.querySelector('[data-testid="theme-option-dark"]');
       expect(darkOption).not.toBeNull();
     });
 
     it('THEME-U022: dropdown has light option', () => {
       const el = control.render();
-      const lightOption = el.querySelector('[data-testid="theme-option-light"]');
+      document.body.appendChild(el);
+      const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
+      button.click();
+      const lightOption = document.querySelector('[data-testid="theme-option-light"]');
       expect(lightOption).not.toBeNull();
     });
 
     it('THEME-U023: all options have correct data-theme-mode', () => {
       const el = control.render();
+      document.body.appendChild(el);
+      const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
+      button.click();
 
-      const autoOption = el.querySelector('[data-testid="theme-option-auto"]') as HTMLElement;
-      const darkOption = el.querySelector('[data-testid="theme-option-dark"]') as HTMLElement;
-      const lightOption = el.querySelector('[data-testid="theme-option-light"]') as HTMLElement;
+      const autoOption = document.querySelector('[data-testid="theme-option-auto"]') as HTMLElement;
+      const darkOption = document.querySelector('[data-testid="theme-option-dark"]') as HTMLElement;
+      const lightOption = document.querySelector('[data-testid="theme-option-light"]') as HTMLElement;
 
       expect(autoOption.dataset.themeMode).toBe('auto');
       expect(darkOption.dataset.themeMode).toBe('dark');
@@ -115,7 +138,10 @@ describe('ThemeControl', () => {
   describe('mode selection', () => {
     it('THEME-U030: clicking dark option calls setMode with dark', () => {
       const el = control.render();
-      const darkOption = el.querySelector('[data-testid="theme-option-dark"]') as HTMLButtonElement;
+      document.body.appendChild(el);
+      const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
+      button.click();
+      const darkOption = document.querySelector('[data-testid="theme-option-dark"]') as HTMLButtonElement;
 
       darkOption.click();
 
@@ -124,7 +150,10 @@ describe('ThemeControl', () => {
 
     it('THEME-U031: clicking light option calls setMode with light', () => {
       const el = control.render();
-      const lightOption = el.querySelector('[data-testid="theme-option-light"]') as HTMLButtonElement;
+      document.body.appendChild(el);
+      const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
+      button.click();
+      const lightOption = document.querySelector('[data-testid="theme-option-light"]') as HTMLButtonElement;
 
       lightOption.click();
 
@@ -133,7 +162,10 @@ describe('ThemeControl', () => {
 
     it('THEME-U032: clicking auto option calls setMode with auto', () => {
       const el = control.render();
-      const autoOption = el.querySelector('[data-testid="theme-option-auto"]') as HTMLButtonElement;
+      document.body.appendChild(el);
+      const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
+      button.click();
+      const autoOption = document.querySelector('[data-testid="theme-option-auto"]') as HTMLButtonElement;
 
       autoOption.click();
 
@@ -177,7 +209,10 @@ describe('ThemeControl', () => {
     it('THEME-U050: dropdown shows current resolved theme info', () => {
       mockThemeManager.getResolvedTheme.mockReturnValue('dark');
       const el = control.render();
-      const info = el.querySelector('.theme-info') as HTMLElement;
+      document.body.appendChild(el);
+      const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
+      button.click();
+      const info = document.querySelector('.theme-info') as HTMLElement;
 
       expect(info.textContent).toContain('Dark');
     });
@@ -186,7 +221,10 @@ describe('ThemeControl', () => {
       mockThemeManager.getResolvedTheme.mockReturnValue('light');
       const newControl = new ThemeControl();
       const el = newControl.render();
-      const info = el.querySelector('.theme-info') as HTMLElement;
+      document.body.appendChild(el);
+      const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
+      button.click();
+      const info = document.querySelector('.theme-info') as HTMLElement;
 
       expect(info.textContent).toContain('Light');
       newControl.dispose();
@@ -196,7 +234,10 @@ describe('ThemeControl', () => {
   describe('dropdown divider', () => {
     it('THEME-U060: dropdown has divider between options and info', () => {
       const el = control.render();
-      const dropdown = el.querySelector('[data-testid="theme-dropdown"]') as HTMLElement;
+      document.body.appendChild(el);
+      const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="theme-dropdown"]') as HTMLElement;
 
       // Should have divider element (a div with specific styling)
       const dividers = dropdown.querySelectorAll('div');

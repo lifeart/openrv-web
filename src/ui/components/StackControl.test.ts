@@ -694,6 +694,40 @@ describe('StackControl layer button hover states', () => {
     expect(moveUpBtn.style.borderColor).toBe(borderBefore);
     expect(moveUpBtn.style.color).toBe(colorBefore);
   });
+
+  it('SC-L35a: Disabled move buttons should have cursor set to not-allowed', () => {
+    addTwoLayersAndShowPanel();
+
+    const layers = control.getLayers();
+    // Layer at index 1 (top, last in array) has move-up disabled
+    const moveUpBtn = document.querySelector(`[data-testid="stack-layer-move-up-${layers[1]!.id}"]`) as HTMLButtonElement;
+    expect(moveUpBtn).toBeTruthy();
+    expect(moveUpBtn.disabled).toBe(true);
+    expect(moveUpBtn.style.cursor).toBe('not-allowed');
+
+    // Layer at index 0 (bottom, first in array) has move-down disabled
+    const moveDownBtn = document.querySelector(`[data-testid="stack-layer-move-down-${layers[0]!.id}"]`) as HTMLButtonElement;
+    expect(moveDownBtn).toBeTruthy();
+    expect(moveDownBtn.disabled).toBe(true);
+    expect(moveDownBtn.style.cursor).toBe('not-allowed');
+  });
+
+  it('SC-L35b: Enabled move buttons should have cursor set to pointer', () => {
+    addTwoLayersAndShowPanel();
+
+    const layers = control.getLayers();
+    // Layer at index 0 (bottom) has move-up enabled
+    const moveUpBtn = document.querySelector(`[data-testid="stack-layer-move-up-${layers[0]!.id}"]`) as HTMLButtonElement;
+    expect(moveUpBtn).toBeTruthy();
+    expect(moveUpBtn.disabled).toBe(false);
+    expect(moveUpBtn.style.cursor).toBe('pointer');
+
+    // Layer at index 1 (top) has move-down enabled
+    const moveDownBtn = document.querySelector(`[data-testid="stack-layer-move-down-${layers[1]!.id}"]`) as HTMLButtonElement;
+    expect(moveDownBtn).toBeTruthy();
+    expect(moveDownBtn.disabled).toBe(false);
+    expect(moveDownBtn.style.cursor).toBe('pointer');
+  });
 });
 
 describe('StackControl source selection', () => {

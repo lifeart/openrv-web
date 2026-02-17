@@ -303,4 +303,49 @@ describe('HSLQualifierControl', () => {
       expect(dropdown.getAttribute('aria-label')).toBe('HSL Qualifier Settings');
     });
   });
+
+  describe('hardcoded color fix (M-33)', () => {
+    it('HSL-M33a: reset button mouseleave should set background to a CSS variable (not hardcoded hex)', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="hsl-qualifier-control-toggle"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="hsl-qualifier-dropdown"]') as HTMLElement;
+      const resetBtn = dropdown.querySelector('[data-testid="hsl-reset-button"]') as HTMLButtonElement;
+
+      resetBtn.dispatchEvent(new Event('mouseleave'));
+      expect(resetBtn.style.background).toBe('var(--bg-secondary)');
+      expect(resetBtn.style.background).not.toContain('#');
+    });
+
+    it('HSL-M33b: eyedropper button mouseleave should set background to a CSS variable (not hardcoded hex)', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="hsl-qualifier-control-toggle"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="hsl-qualifier-dropdown"]') as HTMLElement;
+      const eyedropperBtn = dropdown.querySelector('[data-testid="hsl-eyedropper-button"]') as HTMLButtonElement;
+
+      // Activate then deactivate via click to test the inactive branch
+      eyedropperBtn.click(); // activate
+      eyedropperBtn.click(); // deactivate
+      expect(eyedropperBtn.style.background).toBe('var(--bg-secondary)');
+      expect(eyedropperBtn.style.background).not.toContain('#');
+    });
+
+    it('HSL-M33c: deactivateEyedropper() should set background to a CSS variable (not hardcoded hex)', () => {
+      const el = control.render();
+      const button = el.querySelector('[data-testid="hsl-qualifier-control-toggle"]') as HTMLButtonElement;
+      button.click();
+      const dropdown = document.querySelector('[data-testid="hsl-qualifier-dropdown"]') as HTMLElement;
+      const eyedropperBtn = dropdown.querySelector('[data-testid="hsl-eyedropper-button"]') as HTMLButtonElement;
+
+      // Activate eyedropper first
+      eyedropperBtn.click();
+      expect(eyedropperBtn.style.background).toBe('var(--accent-primary)');
+
+      // Deactivate via the public method
+      control.deactivateEyedropper();
+      expect(eyedropperBtn.style.background).toBe('var(--bg-secondary)');
+      expect(eyedropperBtn.style.background).not.toContain('#');
+    });
+  });
 });

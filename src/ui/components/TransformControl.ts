@@ -241,30 +241,6 @@ export class TransformControl extends EventEmitter<TransformControlEvents> {
     );
   }
 
-  /**
-   * Handle keyboard shortcuts
-   * Returns true if the key was handled
-   */
-  handleKeyboard(key: string, shiftKey: boolean): boolean {
-    switch (key.toLowerCase()) {
-      case 'r':
-        if (shiftKey) {
-          this.rotateLeft();
-        } else {
-          this.rotateRight();
-        }
-        return true;
-      case 'h':
-        this.toggleFlipH();
-        return true;
-      case 'v':
-        // Note: 'v' might conflict with pan tool, so only handle if not in paint mode
-        // For now, don't handle 'v' here - let App decide
-        return false;
-    }
-    return false;
-  }
-
   render(): HTMLElement {
     return this.container;
   }

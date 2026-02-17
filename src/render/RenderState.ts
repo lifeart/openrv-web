@@ -24,6 +24,7 @@ export interface RenderState {
   toneMappingState: ToneMappingState;
   backgroundPattern: BackgroundPatternState;
   cdl: CDLValues;
+  cdlColorspace?: number;  // 0=rec709/direct (default), 1=ACEScct
   curvesLUT: CurveLUTs | null;
   colorWheels: ColorWheelsState;
   falseColor: FalseColorState;

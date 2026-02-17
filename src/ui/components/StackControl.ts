@@ -326,6 +326,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     `;
     moveUp.disabled = index === this.layers.length - 1;
     moveUp.style.opacity = moveUp.disabled ? '0.3' : '1';
+    moveUp.style.cursor = moveUp.disabled ? 'not-allowed' : 'pointer';
     moveUp.addEventListener('mouseenter', () => {
       if (!moveUp.disabled) {
         moveUp.style.background = 'var(--bg-hover)';
@@ -361,6 +362,7 @@ export class StackControl extends EventEmitter<StackControlEvents> {
     `;
     moveDown.disabled = index === 0;
     moveDown.style.opacity = moveDown.disabled ? '0.3' : '1';
+    moveDown.style.cursor = moveDown.disabled ? 'not-allowed' : 'pointer';
     moveDown.addEventListener('mouseenter', () => {
       if (!moveDown.disabled) {
         moveDown.style.background = 'var(--bg-hover)';

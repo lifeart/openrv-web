@@ -470,6 +470,131 @@ describe('LayoutManager', () => {
     });
   });
 
+  describe('M-32: Body cursor enforced during layout resize drag', () => {
+    it('LM-M32a: during a horizontal drag, document.body.style.cursor should be col-resize', () => {
+      const root = manager.getElement();
+      const leftHandle = root.querySelector('[data-testid="layout-handle-left"]') as HTMLElement;
+
+      store.setPanelCollapsed('left', false);
+
+      leftHandle.setPointerCapture = vi.fn();
+
+      const pointerDown = new PointerEvent('pointerdown', {
+        pointerId: 1,
+        clientX: 100,
+        clientY: 200,
+        bubbles: true,
+      });
+      leftHandle.dispatchEvent(pointerDown);
+
+      expect(document.body.style.cursor).toBe('col-resize');
+
+      // Clean up: end drag
+      leftHandle.releasePointerCapture = vi.fn();
+      document.dispatchEvent(new PointerEvent('pointerup', { pointerId: 1, bubbles: true }));
+    });
+
+    it('LM-M32b: during a vertical drag, document.body.style.cursor should be row-resize', () => {
+      const root = manager.getElement();
+      const bottomHandle = root.querySelector('[data-testid="layout-handle-bottom"]') as HTMLElement;
+
+      bottomHandle.setPointerCapture = vi.fn();
+
+      const pointerDown = new PointerEvent('pointerdown', {
+        pointerId: 2,
+        clientX: 300,
+        clientY: 400,
+        bubbles: true,
+      });
+      bottomHandle.dispatchEvent(pointerDown);
+
+      expect(document.body.style.cursor).toBe('row-resize');
+
+      // Clean up: end drag
+      bottomHandle.releasePointerCapture = vi.fn();
+      document.dispatchEvent(new PointerEvent('pointerup', { pointerId: 2, bubbles: true }));
+    });
+
+    it('LM-M32c: after drag ends, document.body.style.cursor should be reset to empty string', () => {
+      const root = manager.getElement();
+      const leftHandle = root.querySelector('[data-testid="layout-handle-left"]') as HTMLElement;
+
+      store.setPanelCollapsed('left', false);
+
+      leftHandle.setPointerCapture = vi.fn();
+      leftHandle.releasePointerCapture = vi.fn();
+
+      // Start drag
+      const pointerDown = new PointerEvent('pointerdown', {
+        pointerId: 3,
+        clientX: 100,
+        clientY: 200,
+        bubbles: true,
+      });
+      leftHandle.dispatchEvent(pointerDown);
+
+      // Verify cursor is set during drag
+      expect(document.body.style.cursor).toBe('col-resize');
+
+      // End drag
+      document.dispatchEvent(new PointerEvent('pointerup', { pointerId: 3, bubbles: true }));
+
+      expect(document.body.style.cursor).toBe('');
+    });
+  });
+
+  describe('M-31: Layout splitter visible at rest', () => {
+    it('LM-M31a: drag handle should have a non-transparent background at rest (visible indicator)', () => {
+      const root = manager.getElement();
+      const leftHandle = root.querySelector('[data-testid="layout-handle-left"]') as HTMLElement;
+      const rightHandle = root.querySelector('[data-testid="layout-handle-right"]') as HTMLElement;
+      const bottomHandle = root.querySelector('[data-testid="layout-handle-bottom"]') as HTMLElement;
+
+      // All handles should have a visible background at rest (not transparent)
+      expect(leftHandle.style.background).toBe('var(--border-primary)');
+      expect(rightHandle.style.background).toBe('var(--border-primary)');
+      expect(bottomHandle.style.background).toBe('var(--border-primary)');
+
+      // They should have low opacity to be subtle
+      expect(leftHandle.style.opacity).toBe('0.2');
+      expect(rightHandle.style.opacity).toBe('0.2');
+      expect(bottomHandle.style.opacity).toBe('0.2');
+    });
+
+    it('LM-M31b: drag handle should increase visibility on hover (stronger background)', () => {
+      const root = manager.getElement();
+      const leftHandle = root.querySelector('[data-testid="layout-handle-left"]') as HTMLElement;
+
+      // Simulate mouseenter
+      leftHandle.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+
+      // Should show accent color with higher opacity on hover
+      expect(leftHandle.style.background).toBe('var(--accent-primary)');
+      expect(leftHandle.style.opacity).toBe('0.5');
+
+      // Simulate mouseleave
+      leftHandle.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
+
+      // Should restore to subtle rest state
+      expect(leftHandle.style.background).toBe('var(--border-primary)');
+      expect(leftHandle.style.opacity).toBe('0.2');
+    });
+
+    it('LM-M31c: drag handle should show resize cursor on hover', () => {
+      const root = manager.getElement();
+      const leftHandle = root.querySelector('[data-testid="layout-handle-left"]') as HTMLElement;
+      const rightHandle = root.querySelector('[data-testid="layout-handle-right"]') as HTMLElement;
+      const bottomHandle = root.querySelector('[data-testid="layout-handle-bottom"]') as HTMLElement;
+
+      // Side handles should have col-resize cursor
+      expect(leftHandle.style.cursor).toBe('col-resize');
+      expect(rightHandle.style.cursor).toBe('col-resize');
+
+      // Bottom handle should have row-resize cursor
+      expect(bottomHandle.style.cursor).toBe('row-resize');
+    });
+  });
+
   describe('Bottom panel collapse/expand', () => {
     it('LM-070: bottom panel is visible when not collapsed', () => {
       const root = manager.getElement();

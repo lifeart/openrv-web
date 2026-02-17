@@ -192,7 +192,7 @@ export class HSLQualifierControl {
     `;
     resetBtn.addEventListener('click', () => this.hslQualifier.reset());
     resetBtn.addEventListener('mouseenter', () => { resetBtn.style.background = 'var(--border-primary)'; });
-    resetBtn.addEventListener('mouseleave', () => { resetBtn.style.background = '#333'; });
+    resetBtn.addEventListener('mouseleave', () => { resetBtn.style.background = 'var(--bg-secondary)'; });
 
     header.appendChild(leftSide);
     header.appendChild(resetBtn);
@@ -241,7 +241,7 @@ export class HSLQualifierControl {
     `;
     eyedropperBtn.addEventListener('click', () => {
       this.eyedropperActive = !this.eyedropperActive;
-      eyedropperBtn.style.background = this.eyedropperActive ? 'var(--accent-primary)' : '#333';
+      eyedropperBtn.style.background = this.eyedropperActive ? 'var(--accent-primary)' : 'var(--bg-secondary)';
       eyedropperBtn.style.color = this.eyedropperActive ? 'var(--text-on-accent)' : 'var(--text-secondary)';
       if (this.onEyedropperCallback) {
         this.onEyedropperCallback(this.eyedropperActive);
@@ -729,7 +729,7 @@ export class HSLQualifierControl {
     this.eyedropperActive = false;
     const eyedropperBtn = this.dropdown.querySelector('[data-testid="hsl-eyedropper-button"]') as HTMLButtonElement;
     if (eyedropperBtn) {
-      eyedropperBtn.style.background = '#333';
+      eyedropperBtn.style.background = 'var(--bg-secondary)';
       eyedropperBtn.style.color = 'var(--text-secondary)';
     }
   }

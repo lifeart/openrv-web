@@ -740,14 +740,15 @@
       }
 
       // --- ACEScct conversion functions (for CDL colorspace wrapping) ---
+      // NOTE: ACEScct is formally defined in AP1. We apply the log encoding
+      // directly in the working colorspace (Rec.709) to match OpenRV behavior.
 
       // Linear (ACES) to ACEScct
       // Reference: ACES Technical Bulletin TB-2014-004.2
       float linearToACEScctChannel(float x) {
         const float CUT = 0.0078125;  // 2^(-7)
-        const float A = 10.5402377416545;  // (log2(65504) + 9.72) / 17.52
         if (x <= CUT) {
-          return (x * 10.5402377416545 + 0.0729055341958355) / 17.52;
+          return x * 10.5402377416545 + 0.0729055341958355;
         } else {
           return (log2(x) + 9.72) / 17.52;
         }
@@ -765,7 +766,7 @@
       float ACEScctToLinearChannel(float x) {
         const float CUT_OUT = 0.155251141552511;  // (log2(0.0078125) + 9.72) / 17.52
         if (x <= CUT_OUT) {
-          return (x * 17.52 - 0.0729055341958355) / 10.5402377416545;
+          return (x - 0.0729055341958355) / 10.5402377416545;
         } else {
           return pow(2.0, x * 17.52 - 9.72);
         }

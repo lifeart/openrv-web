@@ -13,6 +13,8 @@ import {
   applyCDLToImageData,
   parseCDLXML,
   exportCDLXML,
+  parseCC,
+  parseCCC,
 } from './CDL';
 import { createTestImageData, createSampleCDL } from '../../test/utils';
 
@@ -300,6 +302,162 @@ describe('CDL', () => {
       expect(parsed!.power.g).toBeCloseTo(original.power.g, 5);
       expect(parsed!.power.b).toBeCloseTo(original.power.b, 5);
       expect(parsed!.saturation).toBeCloseTo(original.saturation, 5);
+    });
+  });
+
+  describe('parseCC', () => {
+    it('CDL-020: parses a valid <ColorCorrection> with correct slope/offset/power/saturation', () => {
+      const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<ColorCorrection id="shot_001">
+  <SOPNode>
+    <Slope>1.2 0.9 1.1</Slope>
+    <Offset>0.01 -0.02 0.03</Offset>
+    <Power>1.0 1.1 0.95</Power>
+  </SOPNode>
+  <SatNode>
+    <Saturation>0.85</Saturation>
+  </SatNode>
+</ColorCorrection>`;
+
+      const result = parseCC(xml);
+
+      expect(result.slope).toEqual({ r: 1.2, g: 0.9, b: 1.1 });
+      expect(result.offset).toEqual({ r: 0.01, g: -0.02, b: 0.03 });
+      expect(result.power).toEqual({ r: 1.0, g: 1.1, b: 0.95 });
+      expect(result.saturation).toBe(0.85);
+      expect(result.id).toBe('shot_001');
+    });
+
+    it('CDL-021: missing <Slope> element uses default slope [1,1,1]', () => {
+      const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<ColorCorrection>
+  <SOPNode>
+    <Offset>0.1 0.2 0.3</Offset>
+    <Power>1.0 1.0 1.0</Power>
+  </SOPNode>
+</ColorCorrection>`;
+
+      const result = parseCC(xml);
+
+      expect(result.slope).toEqual({ r: 1.0, g: 1.0, b: 1.0 });
+      expect(result.offset).toEqual({ r: 0.1, g: 0.2, b: 0.3 });
+    });
+
+    it('CDL-022: non-numeric slope text throws with message containing "slope"', () => {
+      const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<ColorCorrection>
+  <SOPNode>
+    <Slope>abc def ghi</Slope>
+  </SOPNode>
+</ColorCorrection>`;
+
+      expect(() => parseCC(xml)).toThrow(/slope/i);
+    });
+
+    it('CDL-023: wrong root element throws with descriptive message', () => {
+      const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<SomeOtherElement>
+  <SOPNode>
+    <Slope>1.0 1.0 1.0</Slope>
+  </SOPNode>
+</SomeOtherElement>`;
+
+      expect(() => parseCC(xml)).toThrow(/ColorCorrection/);
+    });
+
+    it('CDL-024: invalid XML throws descriptive error', () => {
+      const xml = `<<< not valid xml at all >>>`;
+
+      expect(() => parseCC(xml)).toThrow();
+    });
+  });
+
+  describe('parseCCC', () => {
+    it('CDL-030: parses a collection with 3 entries', () => {
+      const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<ColorCorrectionCollection>
+  <ColorCorrection id="cc1">
+    <SOPNode>
+      <Slope>1.1 1.0 0.9</Slope>
+      <Offset>0.01 0.0 -0.01</Offset>
+      <Power>1.0 1.0 1.0</Power>
+    </SOPNode>
+    <SatNode><Saturation>1.0</Saturation></SatNode>
+  </ColorCorrection>
+  <ColorCorrection id="cc2">
+    <SOPNode>
+      <Slope>0.8 1.2 1.0</Slope>
+      <Offset>0.0 0.05 0.0</Offset>
+      <Power>1.1 0.9 1.0</Power>
+    </SOPNode>
+    <SatNode><Saturation>0.9</Saturation></SatNode>
+  </ColorCorrection>
+  <ColorCorrection id="cc3">
+    <SOPNode>
+      <Slope>1.0 1.0 1.0</Slope>
+      <Offset>0.0 0.0 0.0</Offset>
+      <Power>1.0 1.0 1.0</Power>
+    </SOPNode>
+    <SatNode><Saturation>1.2</Saturation></SatNode>
+  </ColorCorrection>
+</ColorCorrectionCollection>`;
+
+      const entries = parseCCC(xml);
+
+      expect(entries).toHaveLength(3);
+      expect(entries[0]!.slope).toEqual({ r: 1.1, g: 1.0, b: 0.9 });
+      expect(entries[1]!.slope).toEqual({ r: 0.8, g: 1.2, b: 1.0 });
+      expect(entries[2]!.saturation).toBe(1.2);
+    });
+
+    it('CDL-031: entries have correct IDs from id attributes', () => {
+      const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<ColorCorrectionCollection>
+  <ColorCorrection id="shot_010">
+    <SOPNode>
+      <Slope>1.0 1.0 1.0</Slope>
+    </SOPNode>
+  </ColorCorrection>
+  <ColorCorrection id="shot_020">
+    <SOPNode>
+      <Slope>1.5 1.5 1.5</Slope>
+    </SOPNode>
+  </ColorCorrection>
+</ColorCorrectionCollection>`;
+
+      const entries = parseCCC(xml);
+
+      expect(entries).toHaveLength(2);
+      expect(entries[0]!.id).toBe('shot_010');
+      expect(entries[1]!.id).toBe('shot_020');
+    });
+
+    it('CDL-032: invalid XML throws descriptive error', () => {
+      const xml = `<<< not valid xml >>>`;
+
+      expect(() => parseCCC(xml)).toThrow();
+    });
+
+    it('CDL-033: wrong root element throws with descriptive message', () => {
+      const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<ColorCorrection>
+  <SOPNode>
+    <Slope>1.0 1.0 1.0</Slope>
+  </SOPNode>
+</ColorCorrection>`;
+
+      expect(() => parseCCC(xml)).toThrow(/ColorCorrectionCollection/);
+    });
+
+    it('CDL-034: empty collection (0 entries) returns empty array', () => {
+      const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<ColorCorrectionCollection>
+</ColorCorrectionCollection>`;
+
+      const entries = parseCCC(xml);
+
+      expect(entries).toHaveLength(0);
+      expect(entries).toEqual([]);
     });
   });
 });

@@ -1758,6 +1758,16 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
         if (Array.isArray(power)) nodeInfo.properties.cdlPower = power;
         if (typeof saturation === 'number') nodeInfo.properties.cdlSaturation = saturation;
         if (typeof noClamp === 'number') nodeInfo.properties.cdlNoClamp = noClamp !== 0;
+
+        // Resolve CDL file from availableFiles if specified
+        if (typeof file === 'string' && file && availableFiles && availableFiles.size > 0) {
+          const basename = file.split(/[/\\]/).pop();
+          if (basename && availableFiles.has(basename)) {
+            nodeInfo.properties.cdlFileResolved = availableFiles.get(basename)!;
+          } else {
+            console.warn(`CDL file "${file}" not found in available files, using inline CDL values`);
+          }
+        }
       }
     }
 

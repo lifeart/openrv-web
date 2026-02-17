@@ -238,43 +238,9 @@ describe('TransformControl', () => {
     });
   });
 
-  describe('handleKeyboard', () => {
-    it('TRN-029: R key rotates right', () => {
-      const result = control.handleKeyboard('r', false);
-      expect(result).toBe(true);
-      expect(control.getTransform().rotation).toBe(90);
-    });
-
-    it('TRN-030: Shift+R key rotates left', () => {
-      const result = control.handleKeyboard('r', true);
-      expect(result).toBe(true);
-      expect(control.getTransform().rotation).toBe(270);
-    });
-
-    it('TRN-031: H key toggles flipH', () => {
-      const result = control.handleKeyboard('h', false);
-      expect(result).toBe(true);
-      expect(control.getTransform().flipH).toBe(true);
-    });
-
-    it('TRN-032: V key returns false (not handled)', () => {
-      const result = control.handleKeyboard('v', false);
-      expect(result).toBe(false);
-    });
-
-    it('TRN-033: unknown key returns false', () => {
-      const result = control.handleKeyboard('x', false);
-      expect(result).toBe(false);
-    });
-
-    it('TRN-034: uppercase R key works', () => {
-      const result = control.handleKeyboard('R', false);
-      expect(result).toBe(true);
-    });
-
-    it('TRN-035: uppercase H key works', () => {
-      const result = control.handleKeyboard('H', false);
-      expect(result).toBe(true);
+  describe('handleKeyboard removed (dead code)', () => {
+    it('TC-L34a: TransformControl should NOT have a handleKeyboard method', () => {
+      expect('handleKeyboard' in control).toBe(false);
     });
   });
 

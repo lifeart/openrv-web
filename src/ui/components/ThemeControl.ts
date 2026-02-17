@@ -66,27 +66,23 @@ export class ThemeControl {
     // Apply A11Y focus handling
     applyA11yFocus(this.button);
 
-    // Create dropdown
+    // Create dropdown (appended to document.body to escape stacking context)
     this.dropdown = document.createElement('div');
     this.dropdown.dataset.testid = 'theme-dropdown';
     this.dropdown.style.cssText = `
-      position: absolute;
-      top: 100%;
-      right: 0;
-      margin-top: 4px;
+      position: fixed;
       background: var(--bg-secondary, #252525);
       border: 1px solid var(--border-primary, #444);
       border-radius: 6px;
       padding: 4px;
       min-width: 120px;
-      z-index: 1000;
+      z-index: 9999;
       display: none;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     `;
     this.populateDropdown();
 
     this.container.appendChild(this.button);
-    this.container.appendChild(this.dropdown);
 
     // Subscribe to theme changes
     themeManager.on('modeChanged', this.boundOnModeChanged);
@@ -249,12 +245,42 @@ export class ThemeControl {
    * Open dropdown
    */
   private openDropdown(): void {
+    if (!document.body.contains(this.dropdown)) {
+      document.body.appendChild(this.dropdown);
+    }
+
     this.isOpen = true;
     this.dropdown.style.display = 'block';
     this.button.style.background = 'var(--bg-hover, #333)';
     this.button.style.borderColor = 'var(--border-primary, #555)';
+    this.positionDropdown();
     this.updateDropdownStates();
     document.addEventListener('mousedown', this.boundHandleOutsideClick);
+  }
+
+  /**
+   * Position dropdown below the button using fixed positioning
+   */
+  private positionDropdown(): void {
+    const rect = this.button.getBoundingClientRect();
+    const dropdownRect = this.dropdown.getBoundingClientRect();
+
+    let top = rect.bottom + 4;
+    let left = rect.right - dropdownRect.width;
+
+    // Ensure dropdown stays within viewport
+    if (top + dropdownRect.height > window.innerHeight) {
+      top = rect.top - dropdownRect.height - 4;
+    }
+    if (left < 8) {
+      left = 8;
+    }
+    if (left + dropdownRect.width > window.innerWidth) {
+      left = window.innerWidth - dropdownRect.width - 8;
+    }
+
+    this.dropdown.style.top = `${top}px`;
+    this.dropdown.style.left = `${left}px`;
   }
 
   /**
@@ -272,7 +298,7 @@ export class ThemeControl {
    * Handle outside click
    */
   private handleOutsideClick(e: MouseEvent): void {
-    if (!this.container.contains(e.target as Node)) {
+    if (!this.container.contains(e.target as Node) && !this.dropdown.contains(e.target as Node)) {
       this.closeDropdown();
     }
   }
@@ -287,6 +313,11 @@ export class ThemeControl {
     const themeManager = getThemeManager();
     themeManager.off('modeChanged', this.boundOnModeChanged);
     themeManager.off('themeChanged', this.boundOnThemeChanged);
+
+    // Remove body-mounted dropdown if present
+    if (this.dropdown.parentNode) {
+      this.dropdown.parentNode.removeChild(this.dropdown);
+    }
 
     this.container.remove();
   }

@@ -312,7 +312,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### M-16: Missing `applyA11yFocus()` on ~10 controls
+### ~~M-16: Missing `applyA11yFocus()` on ~10 controls~~ FIXED
 
 **Controls affected:** FalseColorControl, ZebraControl, HSLQualifierControl, LuminanceVisualizationControl, GamutMappingControl, StereoControl (eyeSwap button only), HeaderBar `createIconButton`, HeaderBar `createCompactButton`
 
@@ -345,7 +345,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### M-18: No focus management on panel open/close (7 controls)
+### ~~M-18: No focus management on panel open/close (7 controls)~~ FIXED
 
 **Controls affected:** FilterControl, LensControl, DeinterlaceControl, FilmEmulationControl, PerspectiveCorrectionControl, StabilizationControl, GamutMappingControl
 
@@ -467,7 +467,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### M-25: Shortcuts dialog not searchable/filterable
+### ~~M-25: Shortcuts dialog not searchable/filterable~~ FIXED
 
 **File:** `src/AppKeyboardHandler.ts:103-281`
 
@@ -514,7 +514,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### M-28: No hover states on stack layer item buttons
+### ~~M-28: No hover states on stack layer item buttons~~ FIXED
 
 **File:** `src/ui/components/StackControl.ts:199-327`
 
@@ -531,7 +531,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### M-29: No drag-and-drop layer reordering in StackControl
+### ~~M-29: No drag-and-drop layer reordering in StackControl~~ FIXED
 
 **File:** `src/ui/components/StackControl.ts`
 
@@ -564,7 +564,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### M-31: Layout splitter invisible at rest
+### ~~M-31: Layout splitter invisible at rest~~ FIXED
 
 **File:** `src/ui/layout/LayoutManager.ts:257-268`
 
@@ -579,7 +579,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### M-32: Cursor not enforced on `document.body` during layout resize drag
+### ~~M-32: Cursor not enforced on `document.body` during layout resize drag~~ FIXED
 
 **File:** `src/ui/layout/LayoutManager.ts:347-358`
 
@@ -594,7 +594,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### M-33: HSLQualifierControl hardcoded `#333` color
+### ~~M-33: HSLQualifierControl hardcoded `#333` color~~ FIXED
 
 **File:** `src/ui/components/HSLQualifierControl.ts:192,241,721`
 
@@ -611,7 +611,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ## LOW SEVERITY
 
-### L-34: `handleKeyboard` method in TransformControl is dead code
+### ~~L-34: `handleKeyboard` method in TransformControl is dead code~~ FIXED
 
 **File:** `src/ui/components/TransformControl.ts:220-238`
 
@@ -624,7 +624,7 @@ Reference: DisplayProfileControl (lines 59-61) and OCIOControl (lines 132-134).
 
 ---
 
-### L-35: Disabled stack layer buttons still show `cursor: pointer`
+### ~~L-35: Disabled stack layer buttons still show `cursor: pointer`~~ FIXED
 
 **File:** `src/ui/components/StackControl.ts:278,301`
 

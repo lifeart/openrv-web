@@ -15,6 +15,7 @@ import {
   DIRTY_GAMUT_MAPPING,
   DIRTY_LINEARIZE,
   DIRTY_INLINE_LUT,
+  DIRTY_CDL,
   ALL_DIRTY_FLAGS,
 } from './ShaderStateManager';
 import type { RenderState } from './RenderState';
@@ -1036,6 +1037,94 @@ describe('ShaderStateManager', () => {
       };
       mgr.applyRenderState(rs);
       expect(flags.has(DIRTY_INLINE_LUT)).toBe(true);
+    });
+  });
+
+  // =================================================================
+  // cdlColorspace
+  // =================================================================
+
+  describe('cdlColorspace', () => {
+    it('SSM-150: setting cdlColorspace via applyRenderState marks DIRTY_CDL flag', () => {
+      const rs = createDefaultRenderState();
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Change cdlColorspace from default 0 to 1 (ACEScct)
+      rs.cdlColorspace = 1;
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_CDL)).toBe(true);
+    });
+
+    it('SSM-151: cdlColorspace=0 sets uniform u_cdlColorspace to 0', () => {
+      const intCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (_name: string, _value: unknown) => {},
+        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      // Set a non-default CDL to ensure cdlEnabled=true so uniforms are uploaded
+      mgr.setCDL({
+        slope: { r: 1.2, g: 1.0, b: 1.0 },
+        offset: { r: 0, g: 0, b: 0 },
+        power: { r: 1, g: 1, b: 1 },
+        saturation: 1,
+      });
+      // cdlColorspace defaults to 0
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(intCalls['u_cdlColorspace']).toBe(0);
+    });
+
+    it('SSM-152: cdlColorspace=1 sets uniform u_cdlColorspace to 1', () => {
+      const intCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (_name: string, _value: unknown) => {},
+        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      // Set a non-default CDL to ensure cdlEnabled=true
+      mgr.setCDL({
+        slope: { r: 1.2, g: 1.0, b: 1.0 },
+        offset: { r: 0, g: 0, b: 0 },
+        power: { r: 1, g: 1, b: 1 },
+        saturation: 1,
+      });
+      // Set colorspace to ACEScct via applyRenderState
+      const rs = createDefaultRenderState();
+      rs.cdl = {
+        slope: { r: 1.2, g: 1.0, b: 1.0 },
+        offset: { r: 0, g: 0, b: 0 },
+        power: { r: 1, g: 1, b: 1 },
+        saturation: 1,
+      };
+      rs.cdlColorspace = 1;
+      mgr.applyRenderState(rs);
+
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(intCalls['u_cdlColorspace']).toBe(1);
     });
   });
 });

@@ -203,6 +203,7 @@ export interface InternalShaderState {
   cdlOffset: [number, number, number];
   cdlPower: [number, number, number];
   cdlSaturation: number;
+  cdlColorspace: number;  // 0=rec709/direct, 1=ACEScct
 
   // Curves
   curvesEnabled: boolean;
@@ -339,6 +340,7 @@ function createDefaultInternalState(): InternalShaderState {
     cdlOffset: [0, 0, 0],
     cdlPower: [1, 1, 1],
     cdlSaturation: 1,
+    cdlColorspace: 0,
     curvesEnabled: false,
     curvesLUTData: null,
     curvesLUTDirty: true,
@@ -989,14 +991,16 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
       }
     }
 
-    // --- CDL (5 uniforms) ---
+    // --- CDL (6 uniforms) ---
     {
       const c = renderState.cdl;
+      const newColorspace = renderState.cdlColorspace ?? 0;
       if (c.slope.r !== s.cdlSlope[0] || c.slope.g !== s.cdlSlope[1] || c.slope.b !== s.cdlSlope[2] ||
           c.offset.r !== s.cdlOffset[0] || c.offset.g !== s.cdlOffset[1] || c.offset.b !== s.cdlOffset[2] ||
           c.power.r !== s.cdlPower[0] || c.power.g !== s.cdlPower[1] || c.power.b !== s.cdlPower[2] ||
-          c.saturation !== s.cdlSaturation) {
+          c.saturation !== s.cdlSaturation || newColorspace !== s.cdlColorspace) {
         this.setCDL(c);
+        this.state.cdlColorspace = newColorspace;
       }
     }
 
@@ -1260,6 +1264,7 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
         shader.setUniform('u_cdlOffset', s.cdlOffset);
         shader.setUniform('u_cdlPower', s.cdlPower);
         shader.setUniform('u_cdlSaturation', s.cdlSaturation);
+        shader.setUniformInt('u_cdlColorspace', s.cdlColorspace);
       }
     }
 
