@@ -1,5 +1,5 @@
 import { PaintEngine, PaintTool } from '../../paint/PaintEngine';
-import { BrushType } from '../../paint/types';
+import { BrushType, type AnnotationVersion } from '../../paint/types';
 import { showConfirm } from './shared/Modal';
 import { getIconSvg, IconName } from './shared/Icons';
 
@@ -13,6 +13,7 @@ export class PaintToolbar {
   private brushButton!: HTMLButtonElement;
   private ghostButton!: HTMLButtonElement;
   private holdButton!: HTMLButtonElement;
+  private versionSelect!: HTMLSelectElement;
 
   constructor(paintEngine: PaintEngine) {
     this.paintEngine = paintEngine;
@@ -138,6 +139,31 @@ export class PaintToolbar {
       this.paintEngine.setHoldMode(!effects.hold);
     });
 
+    // Version filter for A/B compare annotations
+    this.versionSelect = document.createElement('select');
+    this.versionSelect.dataset.testid = 'paint-version-select';
+    this.versionSelect.title = 'Annotation version (A/B compare)';
+    this.versionSelect.style.cssText = `
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-primary);
+      color: var(--text-primary);
+      padding: 2px 4px;
+      border-radius: 3px;
+      font-size: 11px;
+      cursor: pointer;
+      height: 24px;
+    `;
+    for (const [value, label] of [['all', 'All'], ['A', 'A'], ['B', 'B']] as const) {
+      const opt = document.createElement('option');
+      opt.value = value;
+      opt.textContent = label;
+      this.versionSelect.appendChild(opt);
+    }
+    this.versionSelect.addEventListener('change', () => {
+      this.paintEngine.annotationVersion = this.versionSelect.value as AnnotationVersion;
+    });
+    this.container.appendChild(this.versionSelect);
+
     this.createIconButton('undo', 'Undo (Ctrl+Z)', () => this.paintEngine.undo());
     this.createIconButton('redo', 'Redo (Ctrl+Y)', () => this.paintEngine.redo());
 
@@ -261,6 +287,19 @@ export class PaintToolbar {
     this.holdButton.title = effects.hold
       ? 'Hold mode ON (X)'
       : 'Hold mode OFF (X)';
+  }
+
+  /**
+   * Set the annotation version from external A/B switching.
+   * Updates both the select UI and the paint engine.
+   */
+  setAnnotationVersion(version: AnnotationVersion): void {
+    this.versionSelect.value = version;
+    this.paintEngine.annotationVersion = version;
+  }
+
+  getAnnotationVersion(): AnnotationVersion {
+    return this.paintEngine.annotationVersion;
   }
 
   private rgbaToHex(rgba: [number, number, number, number]): string {

@@ -71,6 +71,7 @@ export interface GLRendererContext {
   getDeinterlaceParams(): DeinterlaceParams;
   getFilmEmulationParams(): FilmEmulationParams;
   getPerspectiveParams(): PerspectiveCorrectionParams;
+  getGamutMappingState(): GamutMappingState;
 }
 
 // Deinterlace method → shader integer code
@@ -385,6 +386,7 @@ export class ViewerGLRenderer {
       deinterlace: this.buildDeinterlaceState(),
       filmEmulation: this.buildFilmEmulationState(),
       perspective: this.buildPerspectiveState(),
+      gamutMapping: this.ctx.getGamutMappingState(),
     };
   }
 
@@ -566,8 +568,10 @@ export class ViewerGLRenderer {
       }
     }
 
-    // Gamut mapping: auto-detect based on image metadata and display capabilities
-    state.gamutMapping = this.detectGamutMapping(image);
+    // Gamut mapping: only auto-detect when user hasn't explicitly configured it
+    if (!state.gamutMapping || state.gamutMapping.mode === 'off') {
+      state.gamutMapping = this.detectGamutMapping(image);
+    }
 
     PerfTrace.end('buildRenderState');
 
@@ -641,8 +645,10 @@ export class ViewerGLRenderer {
       state.toneMappingState = { enabled: false, operator: 'off' };
     }
 
-    // Gamut mapping: auto-detect based on image metadata and display capabilities
-    state.gamutMapping = this.detectGamutMapping(image);
+    // Gamut mapping: only auto-detect when user hasn't explicitly configured it
+    if (!state.gamutMapping || state.gamutMapping.mode === 'off') {
+      state.gamutMapping = this.detectGamutMapping(image);
+    }
 
     // Debug: log blit render state (once per image change)
     if (this._lastRenderedImage?.deref() !== image) {
@@ -743,8 +749,10 @@ export class ViewerGLRenderer {
       state.toneMappingState = { enabled: false, operator: 'off' };
     }
 
-    // Gamut mapping: auto-detect based on image metadata and display capabilities
-    state.gamutMapping = this.detectGamutMapping(image);
+    // Gamut mapping: only auto-detect when user hasn't explicitly configured it
+    if (!state.gamutMapping || state.gamutMapping.mode === 'off') {
+      state.gamutMapping = this.detectGamutMapping(image);
+    }
 
     // Debug: log canvas2d blit render state (once per image change)
     if (this._lastRenderedImage?.deref() !== image) {
@@ -1021,6 +1029,10 @@ export class ViewerGLRenderer {
 
     // Perspective correction
     if (isPerspectiveActive(this.ctx.getPerspectiveParams())) return true;
+
+    // Gamut mapping
+    const gm = this.ctx.getGamutMappingState();
+    if (gm.mode !== 'off' && gm.sourceGamut !== gm.targetGamut) return true;
 
     return false;
   }

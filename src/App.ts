@@ -49,6 +49,10 @@ import { wireTransformControls } from './AppTransformWiring';
 import { wirePlaybackControls } from './AppPlaybackWiring';
 import { wireStackControls } from './AppStackWiring';
 
+// Layout
+import { LayoutStore } from './ui/layout/LayoutStore';
+import { LayoutManager } from './ui/layout/LayoutManager';
+
 export class App {
   private container: HTMLElement | null = null;
   private session: Session;
@@ -72,6 +76,10 @@ export class App {
   private sessionBridge!: AppSessionBridge;
   private focusManager!: FocusManager;
   private ariaAnnouncer!: AriaAnnouncer;
+
+  // Customizable layout
+  private layoutStore: LayoutStore;
+  private layoutManager: LayoutManager;
 
   // Image mode: timer for timeline fade transition
   private _imageTransitionTimer: ReturnType<typeof setTimeout> | null = null;
@@ -111,6 +119,10 @@ export class App {
     // Create TabBar and ContextToolbar
     this.tabBar = new TabBar();
     this.contextToolbar = new ContextToolbar();
+
+    // Create layout system (persists panel sizes/presets to localStorage)
+    this.layoutStore = new LayoutStore();
+    this.layoutManager = new LayoutManager(this.layoutStore);
     this.tabBar.on('tabChanged', (tabId: TabId) => {
       this.contextToolbar.setActiveTab(tabId);
       this.onTabChanged(tabId);
@@ -286,12 +298,28 @@ export class App {
     const skipLink = this.focusManager.createSkipLink('main-content');
     this.container.appendChild(skipLink);
 
-    this.container.appendChild(headerBarEl);
-    this.container.appendChild(tabBarEl);
-    this.container.appendChild(contextToolbarEl);
-    this.container.appendChild(viewerEl);
-    this.container.appendChild(cacheIndicatorEl);
-    this.container.appendChild(timelineEl);
+    // === LAYOUT MANAGER ===
+    // Place top-bar elements into the layout manager's top section
+    const topSection = this.layoutManager.getTopSection();
+    topSection.appendChild(headerBarEl);
+    topSection.appendChild(tabBarEl);
+    topSection.appendChild(contextToolbarEl);
+
+    // Viewer goes in the center slot
+    this.layoutManager.getViewerSlot().appendChild(viewerEl);
+
+    // Cache indicator + timeline go in the bottom slot
+    const bottomSlot = this.layoutManager.getBottomSlot();
+    bottomSlot.appendChild(cacheIndicatorEl);
+    bottomSlot.appendChild(timelineEl);
+
+    // Mount layout root into app container
+    this.container.appendChild(this.layoutManager.getElement());
+
+    // Wire layout resize to viewer resize
+    this.layoutManager.on('viewerResized', () => {
+      this.viewer.resize();
+    });
 
     // Register focus zones (order defines F6 cycling order)
     this.focusManager.addZone({
@@ -468,6 +496,11 @@ export class App {
     const paintToolbarEl = this.controls.paintToolbar.render();
     paintToolbarEl.addEventListener('clearFrame', () => {
       this.paintEngine.clearFrame(this.session.currentFrame);
+    });
+
+    // Sync annotation version filter when A/B source changes
+    this.session.on('abSourceChanged', () => {
+      this.controls.paintToolbar.setAnnotationVersion(this.session.currentAB);
     });
   }
 
@@ -761,6 +794,10 @@ export class App {
       'focus.previousZone': () => {
         this.focusManager.focusPreviousZone();
       },
+      'layout.default': () => this.layoutStore.applyPreset('default'),
+      'layout.review': () => this.layoutStore.applyPreset('review'),
+      'layout.color': () => this.layoutStore.applyPreset('color'),
+      'layout.paint': () => this.layoutStore.applyPreset('paint'),
     };
   }
 
@@ -892,6 +929,9 @@ export class App {
     this.keyboardManager.detach();
     this.focusManager?.dispose();
     this.ariaAnnouncer?.dispose();
+
+    // Dispose layout
+    this.layoutManager.dispose();
 
     // Dispose all controls via the registry
     this.controls.dispose();

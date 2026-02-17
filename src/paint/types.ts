@@ -55,11 +55,15 @@ export interface StrokePoint extends Point {
   pressure?: number; // 0-1, for variable width
 }
 
+/** Which A/B compare version an annotation belongs to. */
+export type AnnotationVersion = 'A' | 'B' | 'all';
+
 export interface PenStroke {
   type: 'pen';
   id: string;
   frame: number;
   user: string;
+  version?: AnnotationVersion;
   color: [number, number, number, number]; // RGBA 0-1
   width: number | number[]; // Single or per-point widths
   brush: BrushType;
@@ -77,6 +81,7 @@ export interface TextAnnotation {
   id: string;
   frame: number;
   user: string;
+  version?: AnnotationVersion;
   position: Point;
   color: [number, number, number, number];
   text: string;
@@ -102,6 +107,7 @@ export interface ShapeAnnotation {
   id: string;
   frame: number;
   user: string;
+  version?: AnnotationVersion;
   shapeType: ShapeType;
   // Bounding points (normalized 0-1)
   startPoint: Point; // First corner or start of line

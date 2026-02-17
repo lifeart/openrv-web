@@ -19,6 +19,7 @@ import { CDLControl } from './ui/components/CDLControl';
 import { CurvesControl } from './ui/components/CurvesControl';
 import { LensControl } from './ui/components/LensControl';
 import { DeinterlaceControl } from './ui/components/DeinterlaceControl';
+import { GamutMappingControl } from './ui/components/GamutMappingControl';
 import { PerspectiveCorrectionControl } from './ui/components/PerspectiveCorrectionControl';
 import { FilmEmulationControl } from './ui/components/FilmEmulationControl';
 import { StabilizationControl } from './ui/components/StabilizationControl';
@@ -115,6 +116,7 @@ export class AppControlRegistry {
   readonly parControl: PARControl;
   readonly backgroundPatternControl: BackgroundPatternControl;
   readonly displayProfileControl: DisplayProfileControl;
+  readonly gamutMappingControl: GamutMappingControl;
 
   // Effects tab
   readonly filterControl: FilterControl;
@@ -200,6 +202,7 @@ export class AppControlRegistry {
     this.parControl = new PARControl();
     this.backgroundPatternControl = new BackgroundPatternControl();
     this.displayProfileControl = new DisplayProfileControl();
+    this.gamutMappingControl = new GamutMappingControl();
 
     // --- Effects tab ---
     this.filterControl = new FilterControl();
@@ -285,6 +288,7 @@ export class AppControlRegistry {
     viewContent.appendChild(this.parControl.render());
     viewContent.appendChild(this.backgroundPatternControl.render());
     viewContent.appendChild(this.displayProfileControl.render());
+    viewContent.appendChild(this.gamutMappingControl.render());
 
     // Trigger re-render when false color state changes
     this.registryUnsubscribers.push(viewer.getFalseColor().on('stateChanged', () => {
@@ -659,6 +663,7 @@ export class AppControlRegistry {
     this.cdlControl.dispose();
     this.colorInversionToggle.dispose();
     this.displayProfileControl.dispose();
+    this.gamutMappingControl.dispose();
     this.curvesControl.dispose();
     this.lensControl.dispose();
     this.deinterlaceControl.dispose();

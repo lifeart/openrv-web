@@ -26,6 +26,7 @@ class MockOCIOControl extends EventEmitter {
   getProcessor = vi.fn(() => this._processor);
 }
 class MockDisplayProfileControl extends EventEmitter {}
+class MockGamutMappingControl extends EventEmitter {}
 
 function createMockViewer() {
   return {
@@ -37,6 +38,7 @@ function createMockViewer() {
     setCurves: vi.fn(),
     setOCIOBakedLUT: vi.fn(),
     setDisplayColorState: vi.fn(),
+    setGamutMappingState: vi.fn(),
   };
 }
 
@@ -59,6 +61,7 @@ function createContext() {
   const curvesControl = new MockCurvesControl();
   const ocioControl = new MockOCIOControl();
   const displayProfileControl = new MockDisplayProfileControl();
+  const gamutMappingControl = new MockGamutMappingControl();
   const viewer = createMockViewer();
   const sessionBridge = createMockSessionBridge();
   const persistenceManager = createMockPersistenceManager();
@@ -74,6 +77,7 @@ function createContext() {
     curvesControl,
     ocioControl,
     displayProfileControl,
+    gamutMappingControl,
     gamutDiagram,
   };
 
@@ -297,6 +301,17 @@ describe('wireColorControls', () => {
       'ACEScg',
       'sRGB',
     );
+  });
+
+  it('CW-011: gamutMappingChanged calls viewer.setGamutMappingState + scheduleUpdateScopes + syncGTOStore', () => {
+    wireColorControls(ctx as any);
+
+    const gmState = { mode: 'clip' as const, sourceGamut: 'rec2020' as const, targetGamut: 'srgb' as const };
+    ctx._controls.gamutMappingControl.emit('gamutMappingChanged', gmState);
+
+    expect(ctx._viewer.setGamutMappingState).toHaveBeenCalledWith(gmState);
+    expect(ctx._sessionBridge.scheduleUpdateScopes).toHaveBeenCalled();
+    expect(ctx._persistenceManager.syncGTOStore).toHaveBeenCalled();
   });
 
   it('CW-010: returns ColorWiringState with null timer initially', () => {

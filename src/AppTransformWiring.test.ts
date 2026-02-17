@@ -123,4 +123,52 @@ describe('wireTransformControls', () => {
     expect(transformControl.setTransform).toHaveBeenCalledWith(expect.objectContaining({ rotation: 90 }));
     expect(viewer.setTransform).toHaveBeenCalledWith(expect.objectContaining({ rotation: 90 }));
   });
+
+  it('TW-006: scale change records history action', () => {
+    const { ctx, transformControl } = createMockContext();
+    wireTransformControls(ctx);
+
+    const transform = { ...DEFAULT_TRANSFORM, scale: { x: 2, y: 2 }, translate: { ...DEFAULT_TRANSFORM.translate } };
+    transformControl.emit('transformChanged', transform);
+
+    expect(mockRecordAction).toHaveBeenCalledTimes(1);
+    expect(mockRecordAction).toHaveBeenCalledWith(
+      'Scale to 2.00x2.00',
+      'transform',
+      expect.any(Function),
+      expect.any(Function),
+    );
+  });
+
+  it('TW-007: translate change records history action', () => {
+    const { ctx, transformControl } = createMockContext();
+    wireTransformControls(ctx);
+
+    const transform = { ...DEFAULT_TRANSFORM, scale: { ...DEFAULT_TRANSFORM.scale }, translate: { x: 10, y: -5 } };
+    transformControl.emit('transformChanged', transform);
+
+    expect(mockRecordAction).toHaveBeenCalledTimes(1);
+    expect(mockRecordAction).toHaveBeenCalledWith(
+      'Translate to (10.0, -5.0)',
+      'transform',
+      expect.any(Function),
+      expect.any(Function),
+    );
+  });
+
+  it('TW-008: combined scale+translate records generic description', () => {
+    const { ctx, transformControl } = createMockContext();
+    wireTransformControls(ctx);
+
+    const transform = { ...DEFAULT_TRANSFORM, scale: { x: 1.5, y: 1.5 }, translate: { x: 5, y: 5 } };
+    transformControl.emit('transformChanged', transform);
+
+    expect(mockRecordAction).toHaveBeenCalledTimes(1);
+    expect(mockRecordAction).toHaveBeenCalledWith(
+      'Transform image',
+      'transform',
+      expect.any(Function),
+      expect.any(Function),
+    );
+  });
 });

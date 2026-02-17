@@ -59,6 +59,7 @@ function createMockContext(): GLRendererContext {
     getDeinterlaceParams: vi.fn(() => ({ enabled: false, method: 'bob', fieldOrder: 'tff' })),
     getFilmEmulationParams: vi.fn(() => ({ enabled: false, stock: 'kodak-portra-400', intensity: 100, grainIntensity: 30, grainSeed: 0 })),
     getPerspectiveParams: vi.fn(() => ({ enabled: false, topLeft: { x: 0, y: 0 }, topRight: { x: 1, y: 0 }, bottomRight: { x: 1, y: 1 }, bottomLeft: { x: 0, y: 1 }, quality: 'bilinear' })),
+    getGamutMappingState: vi.fn(() => ({ mode: 'off' as const, sourceGamut: 'srgb' as const, targetGamut: 'srgb' as const })),
   };
 }
 
@@ -1001,6 +1002,137 @@ describe('ViewerGLRenderer', () => {
       glRenderer.renderHDRWithWebGL(image, 100, 100);
 
       expect(canvas2dBlitCanvas.style.display).toBe('none');
+    });
+  });
+
+  // =========================================================================
+  // Gamut mapping state roundtrip
+  // =========================================================================
+  describe('Gamut mapping state', () => {
+    it('VGLR-090: default gamut mapping state is returned initially', () => {
+      const state = renderer.getGamutMapping();
+      expect(state).toEqual({
+        mode: 'off',
+        sourceGamut: 'srgb',
+        targetGamut: 'srgb',
+      });
+    });
+
+    it('VGLR-091: setGamutMapping / getGamutMapping roundtrip', () => {
+      const newState = { mode: 'clip' as const, sourceGamut: 'rec2020' as const, targetGamut: 'display-p3' as const };
+      renderer.setGamutMapping(newState);
+      expect(renderer.getGamutMapping()).toEqual(newState);
+    });
+
+    it('VGLR-092: getGamutMapping returns a copy (not a reference)', () => {
+      renderer.setGamutMapping({ mode: 'compress', sourceGamut: 'display-p3', targetGamut: 'srgb' });
+      const state1 = renderer.getGamutMapping();
+      const state2 = renderer.getGamutMapping();
+      expect(state1).toEqual(state2);
+      expect(state1).not.toBe(state2);
+    });
+
+    it('VGLR-093: setGamutMapping stores a copy (mutation of input does not affect stored state)', () => {
+      const input = { mode: 'clip' as const, sourceGamut: 'rec2020' as const, targetGamut: 'srgb' as const };
+      renderer.setGamutMapping(input);
+      (input as any).mode = 'off';
+      expect(renderer.getGamutMapping().mode).toBe('clip');
+    });
+  });
+
+  // =========================================================================
+  // hasGPUShaderEffectsActive — gamut mapping detection
+  // =========================================================================
+  describe('hasGPUShaderEffectsActive gamut mapping', () => {
+    function setupEffectsRenderer() {
+      const effectsCtx = createMockContext();
+      // Provide all default return values
+      (effectsCtx.getColorPipeline as ReturnType<typeof vi.fn>).mockReturnValue({
+        colorAdjustments: { ...DEFAULT_COLOR_ADJUSTMENTS },
+        colorInversionEnabled: false,
+        toneMappingState: { ...DEFAULT_TONE_MAPPING_STATE },
+        cdlValues: JSON.parse(JSON.stringify(DEFAULT_CDL)),
+        curvesData: { master: [], red: [], green: [], blue: [] },
+        currentLUT: null,
+        lutIntensity: 0,
+        displayColorState: { transferFunction: 'srgb', displayGamma: 1.0, displayBrightness: 1.0, customGamma: 2.2 },
+      });
+      (effectsCtx.getChannelMode as ReturnType<typeof vi.fn>).mockReturnValue('rgb');
+      (effectsCtx.getColorWheels as ReturnType<typeof vi.fn>).mockReturnValue({ hasAdjustments: () => false, getState: () => DEFAULT_COLOR_WHEELS_STATE });
+      (effectsCtx.getFalseColor as ReturnType<typeof vi.fn>).mockReturnValue({ isEnabled: () => false, getColorLUT: () => null });
+      (effectsCtx.getZebraStripes as ReturnType<typeof vi.fn>).mockReturnValue({ isEnabled: () => false, getState: () => DEFAULT_ZEBRA_STATE });
+      (effectsCtx.isToneMappingEnabled as ReturnType<typeof vi.fn>).mockReturnValue(false);
+      (effectsCtx.getFilterSettings as ReturnType<typeof vi.fn>).mockReturnValue({ sharpen: 0, blur: 0 });
+      (effectsCtx.getHSLQualifier as ReturnType<typeof vi.fn>).mockReturnValue({ isEnabled: () => false, getState: () => DEFAULT_HSL_QUALIFIER_STATE });
+      (effectsCtx.getDeinterlaceParams as ReturnType<typeof vi.fn>).mockReturnValue({ enabled: false, method: 'bob', fieldOrder: 'tff' });
+      (effectsCtx.getFilmEmulationParams as ReturnType<typeof vi.fn>).mockReturnValue({ enabled: false, stock: 'kodak-portra-400', intensity: 100, grainIntensity: 30, grainSeed: 0 });
+      (effectsCtx.getPerspectiveParams as ReturnType<typeof vi.fn>).mockReturnValue({ enabled: false, topLeft: { x: 0, y: 0 }, topRight: { x: 1, y: 0 }, bottomRight: { x: 1, y: 1 }, bottomLeft: { x: 0, y: 1 }, quality: 'bilinear' });
+      (effectsCtx.getGamutMappingState as ReturnType<typeof vi.fn>).mockReturnValue({ mode: 'off', sourceGamut: 'srgb', targetGamut: 'srgb' });
+
+      return new ViewerGLRenderer(effectsCtx);
+    }
+
+    it('VGLR-100: returns false when all effects are at default (including gamut mapping off)', () => {
+      const r = setupEffectsRenderer();
+      expect(r.hasGPUShaderEffectsActive()).toBe(false);
+    });
+
+    it('VGLR-101: returns true when gamut mapping is clip with different source/target', () => {
+      const effectsCtx = createMockContext();
+      (effectsCtx.getColorPipeline as ReturnType<typeof vi.fn>).mockReturnValue({
+        colorAdjustments: { ...DEFAULT_COLOR_ADJUSTMENTS },
+        colorInversionEnabled: false,
+        toneMappingState: { ...DEFAULT_TONE_MAPPING_STATE },
+        cdlValues: JSON.parse(JSON.stringify(DEFAULT_CDL)),
+        curvesData: { master: [], red: [], green: [], blue: [] },
+        currentLUT: null,
+        lutIntensity: 0,
+        displayColorState: { transferFunction: 'srgb', displayGamma: 1.0, displayBrightness: 1.0, customGamma: 2.2 },
+      });
+      (effectsCtx.getChannelMode as ReturnType<typeof vi.fn>).mockReturnValue('rgb');
+      (effectsCtx.getColorWheels as ReturnType<typeof vi.fn>).mockReturnValue({ hasAdjustments: () => false, getState: () => DEFAULT_COLOR_WHEELS_STATE });
+      (effectsCtx.getFalseColor as ReturnType<typeof vi.fn>).mockReturnValue({ isEnabled: () => false, getColorLUT: () => null });
+      (effectsCtx.getZebraStripes as ReturnType<typeof vi.fn>).mockReturnValue({ isEnabled: () => false, getState: () => DEFAULT_ZEBRA_STATE });
+      (effectsCtx.isToneMappingEnabled as ReturnType<typeof vi.fn>).mockReturnValue(false);
+      (effectsCtx.getFilterSettings as ReturnType<typeof vi.fn>).mockReturnValue({ sharpen: 0, blur: 0 });
+      (effectsCtx.getHSLQualifier as ReturnType<typeof vi.fn>).mockReturnValue({ isEnabled: () => false, getState: () => DEFAULT_HSL_QUALIFIER_STATE });
+      (effectsCtx.getDeinterlaceParams as ReturnType<typeof vi.fn>).mockReturnValue({ enabled: false, method: 'bob', fieldOrder: 'tff' });
+      (effectsCtx.getFilmEmulationParams as ReturnType<typeof vi.fn>).mockReturnValue({ enabled: false, stock: 'kodak-portra-400', intensity: 100, grainIntensity: 30, grainSeed: 0 });
+      (effectsCtx.getPerspectiveParams as ReturnType<typeof vi.fn>).mockReturnValue({ enabled: false, topLeft: { x: 0, y: 0 }, topRight: { x: 1, y: 0 }, bottomRight: { x: 1, y: 1 }, bottomLeft: { x: 0, y: 1 }, quality: 'bilinear' });
+      // Active gamut mapping
+      (effectsCtx.getGamutMappingState as ReturnType<typeof vi.fn>).mockReturnValue({ mode: 'clip', sourceGamut: 'rec2020', targetGamut: 'srgb' });
+
+      const r = new ViewerGLRenderer(effectsCtx);
+      expect(r.hasGPUShaderEffectsActive()).toBe(true);
+    });
+
+    it('VGLR-102: returns false when gamut mapping mode is active but source equals target', () => {
+      const effectsCtx = createMockContext();
+      (effectsCtx.getColorPipeline as ReturnType<typeof vi.fn>).mockReturnValue({
+        colorAdjustments: { ...DEFAULT_COLOR_ADJUSTMENTS },
+        colorInversionEnabled: false,
+        toneMappingState: { ...DEFAULT_TONE_MAPPING_STATE },
+        cdlValues: JSON.parse(JSON.stringify(DEFAULT_CDL)),
+        curvesData: { master: [], red: [], green: [], blue: [] },
+        currentLUT: null,
+        lutIntensity: 0,
+        displayColorState: { transferFunction: 'srgb', displayGamma: 1.0, displayBrightness: 1.0, customGamma: 2.2 },
+      });
+      (effectsCtx.getChannelMode as ReturnType<typeof vi.fn>).mockReturnValue('rgb');
+      (effectsCtx.getColorWheels as ReturnType<typeof vi.fn>).mockReturnValue({ hasAdjustments: () => false, getState: () => DEFAULT_COLOR_WHEELS_STATE });
+      (effectsCtx.getFalseColor as ReturnType<typeof vi.fn>).mockReturnValue({ isEnabled: () => false, getColorLUT: () => null });
+      (effectsCtx.getZebraStripes as ReturnType<typeof vi.fn>).mockReturnValue({ isEnabled: () => false, getState: () => DEFAULT_ZEBRA_STATE });
+      (effectsCtx.isToneMappingEnabled as ReturnType<typeof vi.fn>).mockReturnValue(false);
+      (effectsCtx.getFilterSettings as ReturnType<typeof vi.fn>).mockReturnValue({ sharpen: 0, blur: 0 });
+      (effectsCtx.getHSLQualifier as ReturnType<typeof vi.fn>).mockReturnValue({ isEnabled: () => false, getState: () => DEFAULT_HSL_QUALIFIER_STATE });
+      (effectsCtx.getDeinterlaceParams as ReturnType<typeof vi.fn>).mockReturnValue({ enabled: false, method: 'bob', fieldOrder: 'tff' });
+      (effectsCtx.getFilmEmulationParams as ReturnType<typeof vi.fn>).mockReturnValue({ enabled: false, stock: 'kodak-portra-400', intensity: 100, grainIntensity: 30, grainSeed: 0 });
+      (effectsCtx.getPerspectiveParams as ReturnType<typeof vi.fn>).mockReturnValue({ enabled: false, topLeft: { x: 0, y: 0 }, topRight: { x: 1, y: 0 }, bottomRight: { x: 1, y: 1 }, bottomLeft: { x: 0, y: 1 }, quality: 'bilinear' });
+      // Gamut mapping with same source and target — no-op
+      (effectsCtx.getGamutMappingState as ReturnType<typeof vi.fn>).mockReturnValue({ mode: 'clip', sourceGamut: 'srgb', targetGamut: 'srgb' });
+
+      const r = new ViewerGLRenderer(effectsCtx);
+      expect(r.hasGPUShaderEffectsActive()).toBe(false);
     });
   });
 });

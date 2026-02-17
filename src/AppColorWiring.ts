@@ -136,6 +136,13 @@ export function wireColorControls(ctx: AppWiringContext): ColorWiringState {
     sessionBridge.scheduleUpdateScopes();
   });
 
+  // Gamut mapping control -> viewer
+  controls.gamutMappingControl.on('gamutMappingChanged', (state) => {
+    viewer.setGamutMappingState(state);
+    sessionBridge.scheduleUpdateScopes();
+    persistenceManager.syncGTOStore();
+  });
+
   return state;
 }
 

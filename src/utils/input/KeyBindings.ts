@@ -546,6 +546,28 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     description: 'Quick disconnect from sync room'
   },
 
+  // Layout presets
+  'layout.default': {
+    code: 'Digit1',
+    alt: true,
+    description: 'Switch to Default layout'
+  },
+  'layout.review': {
+    code: 'Digit2',
+    alt: true,
+    description: 'Switch to Review layout'
+  },
+  'layout.color': {
+    code: 'Digit3',
+    alt: true,
+    description: 'Switch to Color layout'
+  },
+  'layout.paint': {
+    code: 'Digit4',
+    alt: true,
+    description: 'Switch to Paint layout'
+  },
+
   // Focus zone navigation
   'focus.nextZone': {
     code: 'F6',

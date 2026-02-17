@@ -8,6 +8,8 @@ import { Transform2D } from './TransformControl';
 import { FilterSettings, DEFAULT_FILTER_SETTINGS } from './FilterControl';
 import type { DeinterlaceParams } from '../../filters/Deinterlace';
 import { DEFAULT_DEINTERLACE_PARAMS, isDeinterlaceActive, applyDeinterlace } from '../../filters/Deinterlace';
+import type { GamutMappingState } from '../../core/types/effects';
+import { DEFAULT_GAMUT_MAPPING_STATE } from '../../core/types/effects';
 import type { FilmEmulationParams } from '../../filters/FilmEmulation';
 import { DEFAULT_FILM_EMULATION_PARAMS, isFilmEmulationActive, applyFilmEmulation } from '../../filters/FilmEmulation';
 import type { StabilizationParams } from '../../filters/StabilizeMotion';
@@ -197,6 +199,9 @@ export class Viewer {
   private filterSettings: FilterSettings = { ...DEFAULT_FILTER_SETTINGS };
   private sharpenProcessor: WebGLSharpenProcessor | null = null;
 
+  // Gamut mapping
+  private gamutMappingState: GamutMappingState = { ...DEFAULT_GAMUT_MAPPING_STATE };
+
   // Deinterlace preview
   private deinterlaceParams: DeinterlaceParams = { ...DEFAULT_DEINTERLACE_PARAMS };
 
@@ -309,6 +314,7 @@ export class Viewer {
       getDeinterlaceParams: () => this.getDeinterlaceParams(),
       getFilmEmulationParams: () => this.getFilmEmulationParams(),
       getPerspectiveParams: () => this.getPerspectiveParams(),
+      getGamutMappingState: () => this.getGamutMappingState(),
     };
   }
 
@@ -1832,8 +1838,10 @@ export class Viewer {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.paintCanvas.width, this.paintCanvas.height);
 
-    // Get annotations with ghost effect
-    const annotations = this.paintEngine.getAnnotationsWithGhost(this.session.currentFrame);
+    // Get annotations with ghost effect, filtering by current A/B version
+    const version = this.paintEngine.annotationVersion;
+    const versionFilter = (version === 'all') ? undefined : version;
+    const annotations = this.paintEngine.getAnnotationsWithGhost(this.session.currentFrame, versionFilter);
 
     if (annotations.length === 0) return;
 
@@ -2072,6 +2080,17 @@ export class Viewer {
     this.applyColorFilters();
     this.notifyEffectsChanged();
     this.scheduleRender();
+  }
+
+  // Gamut mapping methods
+  setGamutMappingState(state: GamutMappingState): void {
+    this.gamutMappingState = { ...state };
+    this.notifyEffectsChanged();
+    this.scheduleRender();
+  }
+
+  getGamutMappingState(): GamutMappingState {
+    return { ...this.gamutMappingState };
   }
 
   // Deinterlace methods
