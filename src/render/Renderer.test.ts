@@ -121,7 +121,7 @@ describe('Renderer HDR Output Mode', () => {
       configurable: true,
     });
 
-    canvas.getContext = vi.fn((contextId: string) => {
+    canvas.getContext = ((contextId: string) => {
       if (contextId === 'webgl2') return throwingGL;
       return null;
     }) as typeof canvas.getContext;
@@ -1653,18 +1653,19 @@ describe('Renderer renderImageToFloat', () => {
     extendedGL.TEXTURE2 = 0x84c2;
     extendedGL.TEXTURE3 = 0x84c3;
 
-    // FBO methods
+    // FBO methods (asserted on in tests)
     extendedGL.createFramebuffer = vi.fn(() => ({}));
     extendedGL.bindFramebuffer = vi.fn();
     extendedGL.framebufferTexture2D = vi.fn();
     extendedGL.checkFramebufferStatus = vi.fn(() => 0x8cd5); // FRAMEBUFFER_COMPLETE
     extendedGL.deleteFramebuffer = vi.fn();
-    extendedGL.texImage3D = vi.fn();
-    extendedGL.uniform2fv = vi.fn();
-    extendedGL.uniform3fv = vi.fn();
-    extendedGL.uniformMatrix3fv = vi.fn();
+    // Stubs (not asserted on)
+    extendedGL.texImage3D = () => {};
+    extendedGL.uniform2fv = () => {};
+    extendedGL.uniform3fv = () => {};
+    extendedGL.uniformMatrix3fv = () => {};
 
-    // readPixels for float data (fills with a pattern)
+    // readPixels for float data (fills with a pattern) - asserted on
     extendedGL.readPixels = vi.fn(
       (_x: number, _y: number, _w: number, _h: number, _fmt: number, _type: number, pixels: Float32Array | Uint8Array) => {
         if (pixels instanceof Float32Array) {
@@ -1678,21 +1679,20 @@ describe('Renderer renderImageToFloat', () => {
       },
     );
 
-    // getParameter returns viewport for VIEWPORT queries
-    extendedGL.getParameter = vi.fn((param: number) => {
+    // getParameter returns viewport for VIEWPORT queries (not asserted as mock)
+    extendedGL.getParameter = (param: number) => {
       if (param === 0x0ba2) return new Int32Array([0, 0, 100, 100]); // VIEWPORT
       return null;
-    });
+    };
 
-    // getError returns NO_ERROR
-    extendedGL.getError = vi.fn(() => 0);
+    // getError returns NO_ERROR (not asserted as mock)
+    extendedGL.getError = () => 0;
 
-    // EXT_color_buffer_float support
-    const originalGetExtension = mockGL.getExtension as ReturnType<typeof vi.fn>;
+    // EXT_color_buffer_float support (asserted via .mock.calls)
     extendedGL.getExtension = vi.fn((name: string) => {
       if (name === 'EXT_color_buffer_float') return {};
       if (name === 'OES_texture_float_linear') return {};
-      return originalGetExtension(name);
+      return null;
     });
 
     return mockGL;
@@ -1702,7 +1702,7 @@ describe('Renderer renderImageToFloat', () => {
     const mockGL = createFBOCapableGL();
     const canvas = document.createElement('canvas');
     const originalGetContext = canvas.getContext.bind(canvas);
-    canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+    canvas.getContext = ((contextId: string, _options?: unknown) => {
       if (contextId === 'webgl2') return mockGL;
       return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
     }) as typeof canvas.getContext;
@@ -1719,10 +1719,10 @@ describe('Renderer renderImageToFloat', () => {
   it('REN-FBO-002: returns null when EXT_color_buffer_float is unavailable', () => {
     const mockGL = createFBOCapableGL();
     // Override getExtension to not return EXT_color_buffer_float
-    (mockGL as unknown as Record<string, unknown>).getExtension = vi.fn(() => null);
+    (mockGL as unknown as Record<string, unknown>).getExtension = () => null;
 
     const canvas = document.createElement('canvas');
-    canvas.getContext = vi.fn((contextId: string) => {
+    canvas.getContext = ((contextId: string) => {
       if (contextId === 'webgl2') return mockGL;
       return null;
     }) as typeof canvas.getContext;
@@ -1814,7 +1814,7 @@ describe('Renderer renderImageToFloat', () => {
   it('REN-FBO-009: returns null when readPixels fails (GL error)', () => {
     const mockGL = initWithFBOCapableGL();
     // Make getError return a non-zero error code after readPixels
-    (mockGL as unknown as { getError: ReturnType<typeof vi.fn> }).getError = vi.fn(() => 0x0500 as unknown); // GL_INVALID_ENUM
+    (mockGL as unknown as Record<string, unknown>).getError = () => 0x0500; // GL_INVALID_ENUM
 
     const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
     const result = renderer.renderImageToFloat(image, 4, 4);
@@ -1897,8 +1897,8 @@ describe('Renderer renderImageToFloat', () => {
   it('REN-FBO-015: returns null when FBO creation fails', () => {
     const mockGL = initWithFBOCapableGL();
     // Make checkFramebufferStatus return incomplete
-    (mockGL as unknown as { checkFramebufferStatus: ReturnType<typeof vi.fn> }).checkFramebufferStatus =
-      vi.fn(() => 0 as unknown); // not FRAMEBUFFER_COMPLETE
+    (mockGL as unknown as Record<string, unknown>).checkFramebufferStatus =
+      () => 0; // not FRAMEBUFFER_COMPLETE
 
     const image = new IPImage({ width: 4, height: 4, channels: 4, dataType: 'uint8' });
     const result = renderer.renderImageToFloat(image, 4, 4);
@@ -1969,16 +1969,18 @@ describe('Renderer renderImageToFloatAsync', () => {
     extendedGL.TEXTURE2 = 0x84c2;
     extendedGL.TEXTURE3 = 0x84c3;
 
+    // FBO methods (bindFramebuffer/viewport asserted on in tests)
     extendedGL.createFramebuffer = vi.fn(() => ({}));
     extendedGL.bindFramebuffer = vi.fn();
     extendedGL.framebufferTexture2D = vi.fn();
     extendedGL.checkFramebufferStatus = vi.fn(() => 0x8cd5);
     extendedGL.deleteFramebuffer = vi.fn();
-    extendedGL.texImage3D = vi.fn();
-    extendedGL.uniform2fv = vi.fn();
-    extendedGL.uniform3fv = vi.fn();
-    extendedGL.uniformMatrix3fv = vi.fn();
-    extendedGL.getError = vi.fn(() => 0);
+    // Stubs (not asserted on)
+    extendedGL.texImage3D = () => {};
+    extendedGL.uniform2fv = () => {};
+    extendedGL.uniform3fv = () => {};
+    extendedGL.uniformMatrix3fv = () => {};
+    extendedGL.getError = () => 0;
 
     // PBO constants
     extendedGL.PIXEL_PACK_BUFFER = 0x88eb;
@@ -1991,7 +1993,7 @@ describe('Renderer renderImageToFloatAsync', () => {
     extendedGL.ALREADY_SIGNALED = 0x911a;
     extendedGL.TIMEOUT_EXPIRED = 0x911b;
 
-    // PBO / fence methods
+    // PBO / fence methods (asserted on in tests)
     let fenceCounter = 0;
     const fenceSignaled = new Map<number, boolean>();
 
@@ -2020,7 +2022,7 @@ describe('Renderer renderImageToFloatAsync', () => {
       },
     );
 
-    // readPixels fills Float32Array with FBO pattern (different from PBO pattern)
+    // readPixels fills Float32Array with FBO pattern (different from PBO pattern) - asserted on
     extendedGL.readPixels = vi.fn(
       (_x: number, _y: number, _w: number, _h: number, _fmt: number, _type: number, pixels: Float32Array | number) => {
         if (pixels instanceof Float32Array) {
@@ -2035,18 +2037,18 @@ describe('Renderer renderImageToFloatAsync', () => {
       },
     );
 
-    extendedGL.getParameter = vi.fn((param: number) => {
+    // Not asserted as mock
+    extendedGL.getParameter = (param: number) => {
       if (param === 0x0ba2) return new Int32Array([0, 0, 100, 100]);
       return null;
-    });
+    };
 
-    // EXT_color_buffer_float support
-    const originalGetExtension = mockGL.getExtension as ReturnType<typeof vi.fn>;
-    extendedGL.getExtension = vi.fn((name: string) => {
+    // EXT_color_buffer_float support (not asserted in PBO tests)
+    extendedGL.getExtension = (name: string) => {
       if (name === 'EXT_color_buffer_float') return {};
       if (name === 'OES_texture_float_linear') return {};
-      return originalGetExtension(name);
-    });
+      return null;
+    };
 
     // Helper to signal specific fences
     (mockGL as unknown as { _signalFence: (id: number) => void })._signalFence = (id: number) => {
@@ -2066,7 +2068,7 @@ describe('Renderer renderImageToFloatAsync', () => {
     const mockGL = createPBOCapableGL();
     const canvas = document.createElement('canvas');
     const originalGetContext = canvas.getContext.bind(canvas);
-    canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+    canvas.getContext = ((contextId: string, _options?: unknown) => {
       if (contextId === 'webgl2') return mockGL;
       return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
     }) as typeof canvas.getContext;
@@ -2082,10 +2084,10 @@ describe('Renderer renderImageToFloatAsync', () => {
 
   it('REN-PBO-002: returns null when EXT_color_buffer_float is unavailable', () => {
     const mockGL = createPBOCapableGL();
-    (mockGL as unknown as Record<string, unknown>).getExtension = vi.fn(() => null);
+    (mockGL as unknown as Record<string, unknown>).getExtension = () => null;
 
     const canvas = document.createElement('canvas');
-    canvas.getContext = vi.fn((contextId: string) => {
+    canvas.getContext = ((contextId: string) => {
       if (contextId === 'webgl2') return mockGL;
       return null;
     }) as typeof canvas.getContext;
@@ -2302,14 +2304,14 @@ describe('Renderer renderImageToFloatAsync', () => {
   it('REN-PBO-016: falls back to sync renderImageToFloat when PBO creation fails', () => {
     const mockGL = initWithPBOCapableGL();
     // Make createBuffer fail
-    (mockGL as unknown as Record<string, unknown>).createBuffer = vi.fn(() => null);
+    (mockGL as unknown as Record<string, unknown>).createBuffer = () => null;
 
     // Reset the renderer to force PBO re-creation
     renderer.dispose();
     renderer = new Renderer();
     const canvas = document.createElement('canvas');
     const originalGetContext = canvas.getContext.bind(canvas);
-    canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+    canvas.getContext = ((contextId: string, _options?: unknown) => {
       if (contextId === 'webgl2') return mockGL;
       return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
     }) as typeof canvas.getContext;
@@ -2348,13 +2350,13 @@ describe('Renderer renderImageToFloatAsync', () => {
   it('REN-PBO-018: returns null when FBO creation fails', () => {
     const mockGL = initWithPBOCapableGL();
     (mockGL as unknown as Record<string, unknown>).checkFramebufferStatus =
-      vi.fn(() => 0); // not FRAMEBUFFER_COMPLETE
+      () => 0; // not FRAMEBUFFER_COMPLETE
 
     // Force FBO re-creation
     renderer.dispose();
     renderer = new Renderer();
     const canvas = document.createElement('canvas');
-    canvas.getContext = vi.fn((contextId: string) => {
+    canvas.getContext = ((contextId: string) => {
       if (contextId === 'webgl2') return mockGL;
       return null;
     }) as typeof canvas.getContext;
@@ -2386,7 +2388,7 @@ describe('Renderer detached ImageBitmap guard', () => {
     const detachedBitmap = {
       width: 0,
       height: 100,
-      close: vi.fn(),
+      close() {},
     };
 
     // Make it pass the instanceof check
@@ -2404,7 +2406,7 @@ describe('Renderer detached ImageBitmap guard', () => {
     const detachedBitmap = {
       width: 100,
       height: 0,
-      close: vi.fn(),
+      close() {},
     };
 
     if (typeof ImageBitmap !== 'undefined') {
@@ -2421,7 +2423,7 @@ describe('Renderer detached ImageBitmap guard', () => {
     const detachedBitmap = {
       width: 0,
       height: 0,
-      close: vi.fn(),
+      close() {},
     };
 
     if (typeof ImageBitmap !== 'undefined') {
@@ -2480,7 +2482,7 @@ describe('Renderer texture rotation (u_texRotation)', () => {
     const tracking = createRotationTrackingGL();
     const canvas = document.createElement('canvas');
     const originalGetContext = canvas.getContext.bind(canvas);
-    canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+    canvas.getContext = ((contextId: string, _options?: unknown) => {
       if (contextId === 'webgl2') return tracking.gl;
       return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
     }) as typeof canvas.getContext;
@@ -2585,34 +2587,30 @@ describe('Renderer scope tone mapping neutralization', () => {
     const gl = initRendererWithMockGL(renderer);
     const FRAMEBUFFER = 0x8d40;
     const VIEWPORT = 0x0ba2;
-    const RGBA = 0x1908;
-    const FLOAT = 0x1406;
     const NO_ERROR = 0;
 
     const glExt = gl as unknown as Record<string, unknown>;
     glExt.FRAMEBUFFER ??= FRAMEBUFFER;
     glExt.VIEWPORT ??= VIEWPORT;
-    glExt.RGBA ??= RGBA;
-    glExt.FLOAT ??= FLOAT;
+    glExt.RGBA ??= 0x1908;
+    glExt.FLOAT ??= 0x1406;
     glExt.NO_ERROR ??= NO_ERROR;
-    glExt.bindFramebuffer = vi.fn();
-    glExt.getParameter = vi.fn((p: number) => (p === VIEWPORT ? new Int32Array([0, 0, 4, 4]) : 0));
-    glExt.readPixels = vi.fn(
-      (
-        _x: number,
-        _y: number,
-        _w: number,
-        _h: number,
-        _format: number,
-        _type: number,
-        pixels: Float32Array
-      ) => {
-        if (pixels instanceof Float32Array) {
-          pixels.fill(0.5);
-        }
+    glExt.bindFramebuffer = () => {};
+    glExt.getParameter = (p: number) => (p === VIEWPORT ? new Int32Array([0, 0, 4, 4]) : 0);
+    glExt.readPixels = (
+      _x: number,
+      _y: number,
+      _w: number,
+      _h: number,
+      _format: number,
+      _type: number,
+      pixels: Float32Array
+    ) => {
+      if (pixels instanceof Float32Array) {
+        pixels.fill(0.5);
       }
-    );
-    glExt.getError = vi.fn(() => NO_ERROR);
+    };
+    glExt.getError = () => NO_ERROR;
   }
 
   it('REN-SCOPE-TM-001: scope readback disables and restores tone mapping in HDR mode', () => {
@@ -2624,7 +2622,7 @@ describe('Renderer scope tone mapping neutralization', () => {
 
     const toneSpy = vi.spyOn(stateManager, 'setToneMappingState');
     (renderer as any).hdrOutputMode = 'hlg';
-    (renderer as any).renderImage = vi.fn();
+    (renderer as any).renderImage = () => {};
 
     const result = (renderer as any).renderImageToFloatSync(
       {} as IPImage,
@@ -2648,7 +2646,7 @@ describe('Renderer scope tone mapping neutralization', () => {
 
     const toneSpy = vi.spyOn(stateManager, 'setToneMappingState');
     (renderer as any).hdrOutputMode = 'sdr';
-    (renderer as any).renderImage = vi.fn();
+    (renderer as any).renderImage = () => {};
 
     const result = (renderer as any).renderImageToFloatSync(
       {} as IPImage,
