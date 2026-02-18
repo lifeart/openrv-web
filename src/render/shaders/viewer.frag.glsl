@@ -581,6 +581,19 @@
         return (gain * pow(10.0, (x - refWhite) * 0.002 / 0.6)) - offset;
       }
 
+      // Thomson Viper log-to-linear: refBlack=16, refWhite=1000 (out of 1023)
+      // Proprietary log encoding with different reference levels and gamma from Cineon
+      float viperLogToLinear(float x) {
+        float refBlack = 16.0 / 1023.0;
+        float refWhite = 1000.0 / 1023.0;
+        float displayGamma = 0.6;
+        if (x <= refBlack) return 0.0;
+        if (x >= refWhite) return 1.0;
+        float normalized = (x - refBlack) / (refWhite - refBlack);
+        float blackOffset = pow(10.0, -displayGamma);
+        return max(0.0, (pow(10.0, (normalized - 1.0) * displayGamma) - blackOffset) / (1.0 - blackOffset));
+      }
+
       // ARRI LogC3-to-linear (EI 800)
       float logC3ToLinear(float x) {
         float cut = 0.010591;
@@ -620,13 +633,21 @@
       vec3 applyLinearize(vec3 color, out bool linearizeActive) {
         linearizeActive = false;
 
-        // Log type conversion (Cineon or LogC3)
-        if (u_linearizeLogType == 1 || u_linearizeLogType == 2) {
-          // Cineon (type 1) and Viper (type 2, treated as Cineon)
+        // Log type conversion (Cineon, Viper, or LogC3)
+        if (u_linearizeLogType == 1) {
+          // Cineon (type 1)
           color = vec3(
             cineonLogToLinear(color.r),
             cineonLogToLinear(color.g),
             cineonLogToLinear(color.b)
+          );
+          linearizeActive = true;
+        } else if (u_linearizeLogType == 2) {
+          // Thomson Viper (type 2) — proprietary log, NOT Cineon
+          color = vec3(
+            viperLogToLinear(color.r),
+            viperLogToLinear(color.g),
+            viperLogToLinear(color.b)
           );
           linearizeActive = true;
         } else if (u_linearizeLogType == 3) {

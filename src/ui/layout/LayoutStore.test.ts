@@ -337,6 +337,16 @@ describe('LayoutStore', () => {
       const unique = new Set(configs);
       expect(unique.size).toBe(presets.length);
     });
+
+    it('LAYOUT-004j: all presets use the same bottom panel size', () => {
+      const presets = store.getPresets();
+      const expectedBottomSize = DEFAULT_PANEL_STATES.bottom.size;
+
+      for (const preset of presets) {
+        expect(preset.data.panels.bottom.size).toBe(expectedBottomSize);
+        expect(preset.data.panels.bottom.collapsed).toBe(false);
+      }
+    });
   });
 
   describe('LAYOUT-005: Window resize adjusts panels', () => {

@@ -326,16 +326,15 @@ test.describe('Multi-Clip Playlist', () => {
       await page.waitForTimeout(100);
       await dismissBlockingModal(page);
 
-      // Find and click enable button
-      const enableButton = page.locator('button:has-text("Off")').first();
-      if (await enableButton.isVisible()) {
-        await enableButton.click();
-        await page.waitForTimeout(100);
+      const panel = page.locator('[data-testid="playlist-panel"]');
+      const enableButton = panel.locator('button[title="Enable Playlist Mode"]');
+      await expect(enableButton).toBeVisible();
+      await enableButton.click();
+      await page.waitForTimeout(100);
 
-        // Button text should change to indicate enabled
-        const enabledButton = page.locator('button:has-text("On")').first();
-        await expect(enabledButton).toBeVisible();
-      }
+      // Button should switch both text and title
+      await expect(panel.locator('button:has-text("On")')).toBeVisible();
+      await expect(panel.locator('button[title="Disable Playlist Mode"]')).toBeVisible();
     });
   });
 

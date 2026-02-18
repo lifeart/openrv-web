@@ -16,6 +16,7 @@ describe('LogCurves', () => {
     it('LOG-U001: provides all expected log curves', () => {
       expect(LOG_CURVES.none).toBeNull();
       expect(LOG_CURVES.cineon).toBeDefined();
+      expect(LOG_CURVES.viper).toBeDefined();
       expect(LOG_CURVES.arri_logc3).toBeDefined();
       expect(LOG_CURVES.arri_logc4).toBeDefined();
       expect(LOG_CURVES.sony_slog3).toBeDefined();
@@ -25,6 +26,7 @@ describe('LogCurves', () => {
     it('LOG-U002: each curve has required properties', () => {
       const curves = [
         LOG_CURVES.cineon,
+        LOG_CURVES.viper,
         LOG_CURVES.arri_logc3,
         LOG_CURVES.arri_logc4,
         LOG_CURVES.sony_slog3,
@@ -189,11 +191,52 @@ describe('LogCurves', () => {
     });
   });
 
+  describe('Thomson Viper', () => {
+    const viper = LOG_CURVES.viper!;
+    const cineon = LOG_CURVES.cineon!;
+
+    it('VIP-001: viperLogToLinear(0.5) matches known reference value', () => {
+      const linear = viper.toLinear(0.5);
+      // Computed reference: ~0.3372
+      expect(linear).toBeCloseTo(0.3372, 2);
+    });
+
+    it('VIP-002: viperLogToLinear differs from cineonLogToLinear', () => {
+      // Verify these are NOT identical curves
+      const viperResult = viper.toLinear(0.5);
+      const cineonResult = cineon.toLinear(0.5);
+      expect(viperResult).not.toBeCloseTo(cineonResult, 1);
+    });
+
+    it('VIP-003: viperLogToLinear(refBlack) is approximately 0.0', () => {
+      const refBlack = 16 / 1023;
+      const linear = viper.toLinear(refBlack);
+      expect(linear).toBeCloseTo(0, 3);
+    });
+
+    it('VIP-004: viperLogToLinear(refWhite) is approximately 1.0', () => {
+      const refWhite = 1000 / 1023;
+      const linear = viper.toLinear(refWhite);
+      expect(linear).toBeCloseTo(1.0, 3);
+    });
+
+    it('VIP-005: monotonic — increasing input gives increasing output', () => {
+      let lastLinear = -Infinity;
+      // Sample across the valid range (refBlack=16/1023 to refWhite=1000/1023)
+      for (let i = 16; i <= 1000; i += 50) {
+        const logValue = i / 1023;
+        const linear = viper.toLinear(logValue);
+        expect(linear).toBeGreaterThanOrEqual(lastLinear);
+        lastLinear = linear;
+      }
+    });
+  });
+
   describe('getLogCurveOptions', () => {
     it('LOG-U017: returns all curve options', () => {
       const options = getLogCurveOptions();
 
-      expect(options.length).toBe(6);
+      expect(options.length).toBe(7);
       expect(options[0]!.id).toBe('none');
       expect(options[0]!.name).toBe('None (Linear)');
     });
@@ -249,6 +292,7 @@ describe('LogCurves', () => {
       const curveIds: Array<keyof typeof LOG_CURVES> = [
         'none',
         'cineon',
+        'viper',
         'arri_logc3',
         'arri_logc4',
         'sony_slog3',

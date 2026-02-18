@@ -70,6 +70,8 @@ export const DEFAULT_PANEL_STATES: Record<PanelId, PanelState> = {
   bottom: { size: 120, collapsed: false, activeTab: 0 },
 };
 
+const PRESET_BOTTOM_PANEL_SIZE = DEFAULT_PANEL_STATES.bottom.size;
+
 function defaultLayout(): LayoutData {
   return {
     version: LAYOUT_SCHEMA_VERSION,
@@ -89,49 +91,53 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
   {
     // Playback-first layout: clean viewer, side panels tucked away,
     // but keep practical stored widths for quick expand.
+    // Bottom layout is intentionally uniform across presets.
     id: 'default',
     label: 'Default',
     data: {
       panels: {
         left: { size: 300, collapsed: true, activeTab: 0 },
         right: { size: 340, collapsed: true, activeTab: 0 },
-        bottom: { size: 132, collapsed: false, activeTab: 0 },
+        bottom: { size: PRESET_BOTTOM_PANEL_SIZE, collapsed: false, activeTab: 0 },
       },
     },
   },
   {
     // QC/review-first: prioritize inspector + timeline for scrubbing.
+    // Bottom layout is intentionally uniform across presets.
     id: 'review',
     label: 'Review',
     data: {
       panels: {
         left: { size: 280, collapsed: true, activeTab: 0 },
         right: { size: 360, collapsed: false, activeTab: 0 },
-        bottom: { size: 132, collapsed: false, activeTab: 0 },
+        bottom: { size: PRESET_BOTTOM_PANEL_SIZE, collapsed: false, activeTab: 0 },
       },
     },
   },
   {
     // Color-grading-first: wide controls + scopes, compact timeline.
+    // Bottom layout is intentionally uniform across presets.
     id: 'color',
     label: 'Color',
     data: {
       panels: {
         left: { size: 340, collapsed: false, activeTab: 0 },
         right: { size: 380, collapsed: false, activeTab: 0 },
-        bottom: { size: 96, collapsed: false, activeTab: 0 },
+        bottom: { size: PRESET_BOTTOM_PANEL_SIZE, collapsed: false, activeTab: 0 },
       },
     },
   },
   {
     // Annotation-first: keep tools visible on left, suppress right inspector.
+    // Bottom layout is intentionally uniform across presets.
     id: 'paint',
     label: 'Paint',
     data: {
       panels: {
         left: { size: 300, collapsed: false, activeTab: 0 },
         right: { size: 320, collapsed: true, activeTab: 0 },
-        bottom: { size: 180, collapsed: false, activeTab: 0 },
+        bottom: { size: PRESET_BOTTOM_PANEL_SIZE, collapsed: false, activeTab: 0 },
       },
     },
   },
