@@ -9,11 +9,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { CDLControl } from './CDLControl';
 import { DEFAULT_CDL, type CDLValues } from '../../color/ColorProcessingFacade';
 
-// Mock showAlert
-vi.mock('./shared/Modal', () => ({
-  showAlert: vi.fn(),
-}));
-
 describe('CDLControl', () => {
   let control: CDLControl;
 

@@ -5,19 +5,11 @@
  * and getGraphSummary tests.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { loadGTOGraph, getGraphSummary } from './GTOGraphLoader';
 import type { GTOParseResult } from './GTOGraphLoader';
 import type { GTODTO } from 'gto-js';
 import { NodeFactory } from '../../nodes/base/NodeFactory';
-
-// Mock the NodeFactory
-vi.mock('../../nodes/base/NodeFactory', () => ({
-  NodeFactory: {
-    isRegistered: vi.fn(),
-    create: vi.fn(),
-  },
-}));
 
 // Create a mock GTODTO object
 function createMockDTO(config: {
@@ -181,10 +173,6 @@ function createMockDTO(config: {
 }
 
 describe('GTOGraphLoader', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -202,8 +190,8 @@ describe('GTOGraphLoader', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'TestSession', frame: 1, fps: 24 }],
@@ -227,8 +215,6 @@ describe('GTOGraphLoader', () => {
     });
 
     it('GTO-002: extracts session info correctly', () => {
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
-
       const dto = createMockDTO({
         sessions: [
           {
@@ -257,8 +243,6 @@ describe('GTOGraphLoader', () => {
     });
 
     it('GTO-MRK-U001: extracts marker notes and colors correctly', () => {
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
-
       const dto = createMockDTO({
         sessions: [
           {
@@ -279,8 +263,6 @@ describe('GTOGraphLoader', () => {
     });
 
     it('GTO-MRK-U002: handles missing marker notes and colors gracefully', () => {
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
-
       const dto = createMockDTO({
         sessions: [
           {
@@ -311,8 +293,8 @@ describe('GTOGraphLoader', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -359,8 +341,8 @@ describe('GTOGraphLoader', () => {
         disconnectInput: vi.fn(),
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockImplementation((type: string) => {
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockImplementation((type: string) => {
         if (type === 'RVFileSource') return sourceNode as never;
         if (type === 'RVSequenceGroup') return sequenceNode as never;
         return null;
@@ -413,8 +395,8 @@ describe('GTOGraphLoader', () => {
         disconnectInput: vi.fn(),
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockImplementation((type: string) => {
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockImplementation((type: string) => {
         if (type === 'RVFileSource') return node1 as never;
         if (type === 'RVStackGroup') return node2 as never;
         return null;
@@ -442,8 +424,6 @@ describe('GTOGraphLoader', () => {
     });
 
     it('GTO-006: skips unknown protocols silently', () => {
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
-
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
         objects: [
@@ -465,8 +445,8 @@ describe('GTOGraphLoader', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test', viewNode: 'viewNode' }],
@@ -490,8 +470,6 @@ describe('GTOGraphLoader', () => {
     });
 
     it('uses default session name when none provided', () => {
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
-
       const dto = createMockDTO({
         sessions: [],
         objects: [],
@@ -503,8 +481,6 @@ describe('GTOGraphLoader', () => {
     });
 
     it('prefers realtime fps over fps', () => {
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
-
       const dto = createMockDTO({
         sessions: [{ name: 'Test', fps: 30, realtime: 24 }],
         objects: [],
@@ -516,8 +492,6 @@ describe('GTOGraphLoader', () => {
     });
 
     it('falls back to fps when realtime not available', () => {
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
-
       const dto = createMockDTO({
         sessions: [{ name: 'Test', fps: 30 }],
         objects: [],
@@ -540,8 +514,8 @@ describe('GTOGraphLoader', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       // Mock URL.createObjectURL
       const originalCreateObjectURL = URL.createObjectURL;
@@ -575,8 +549,6 @@ describe('GTOGraphLoader', () => {
     });
 
     it('parses range as flat array [start, end]', () => {
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
-
       const dto = createMockDTO({
         sessions: [
           {
@@ -594,8 +566,6 @@ describe('GTOGraphLoader', () => {
     });
 
     it('parses range as nested array [[start, end]]', () => {
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
-
       const dto = createMockDTO({
         sessions: [
           {
@@ -613,8 +583,6 @@ describe('GTOGraphLoader', () => {
     });
 
     it('uses frame property when currentFrame is not available', () => {
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
-
       const dto = createMockDTO({
         sessions: [
           {
@@ -631,8 +599,6 @@ describe('GTOGraphLoader', () => {
     });
 
     it('prefers frame over currentFrame property', () => {
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
-
       const dto = createMockDTO({
         sessions: [
           {
@@ -651,8 +617,6 @@ describe('GTOGraphLoader', () => {
     });
 
     it('parses session inc and version properties', () => {
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
-
       const dto = createMockDTO({
         sessions: [{ name: 'Test', inc: 2, version: 3 }],
         objects: [],
@@ -665,8 +629,6 @@ describe('GTOGraphLoader', () => {
     });
 
     it('parses session root component (displayName and comment)', () => {
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
-
       const dto = createMockDTO({
         sessions: [{
           name: 'Test',
@@ -685,8 +647,6 @@ describe('GTOGraphLoader', () => {
     });
 
     it('parses session matte settings', () => {
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
-
       const dto = createMockDTO({
         sessions: [{
           name: 'Test',
@@ -712,8 +672,6 @@ describe('GTOGraphLoader', () => {
     });
 
     it('parses session paintEffects settings', () => {
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
-
       const dto = createMockDTO({
         sessions: [{
           name: 'Test',
@@ -737,8 +695,6 @@ describe('GTOGraphLoader', () => {
     });
 
     it('parses session clipboard property', () => {
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
-
       const dto = createMockDTO({
         sessions: [{
           name: 'Test',
@@ -753,8 +709,6 @@ describe('GTOGraphLoader', () => {
     });
 
     it('parses session internal creationContext', () => {
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
-
       const dto = createMockDTO({
         sessions: [{
           name: 'Test',
@@ -771,8 +725,6 @@ describe('GTOGraphLoader', () => {
     });
 
     it('parses session node origin', () => {
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
-
       const dto = createMockDTO({
         sessions: [{
           name: 'Test',
@@ -789,8 +741,6 @@ describe('GTOGraphLoader', () => {
     });
 
     it('parses session membership contains', () => {
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
-
       const dto = createMockDTO({
         sessions: [{
           name: 'Test',
@@ -819,8 +769,8 @@ describe('GTOGraphLoader', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -853,8 +803,8 @@ describe('GTOGraphLoader', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -891,8 +841,8 @@ describe('GTOGraphLoader', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -954,8 +904,8 @@ describe('GTOGraphLoader', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -1009,8 +959,8 @@ describe('GTOGraphLoader', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
@@ -1071,8 +1021,8 @@ describe('GTOGraphLoader', () => {
         outputs: [],
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockReturnValue(mockNode as never);
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
 
       const dto = createMockDTO({
         sessions: [{ name: 'Test', viewNode: 'movieSource' }],
@@ -1135,8 +1085,8 @@ describe('GTOGraphLoader', () => {
         outputs: [], // No outputs, is a leaf
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockImplementation((type: string) => {
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockImplementation((type: string) => {
         if (type === 'RVFileSource') return { ...sourceNode, id: `source-${Date.now()}` } as never;
         if (type === 'RVSequenceGroup') return { ...leafNode, id: `sequence-${Date.now()}` } as never;
         return null;
@@ -1158,8 +1108,6 @@ describe('GTOGraphLoader', () => {
     });
 
     it('skips RVSession protocol in objects iteration', () => {
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(false);
-
       const dto = createMockDTO({
         sessions: [{ name: 'Test' }],
         objects: [
@@ -1174,8 +1122,8 @@ describe('GTOGraphLoader', () => {
     });
 
     it('handles connection failures gracefully', () => {
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockImplementation((type: string) => {
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockImplementation((type: string) => {
         const id = `${type}-${Date.now()}-${Math.random()}`;
         if (type === 'RVFileSource') {
           return {
@@ -1246,8 +1194,8 @@ describe('GTOGraphLoader', () => {
         disconnectInput: vi.fn(),
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockImplementation((type: string) => {
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockImplementation((type: string) => {
         if (type === 'RVFileSource') return sourceNode as never;
         if (type === 'RVSequenceGroup') return sequenceNode as never;
         return null;
@@ -1324,8 +1272,8 @@ describe('GTOGraphLoader', () => {
       };
 
       let fileSourceCallCount = 0;
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockImplementation((type: string) => {
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockImplementation((type: string) => {
         if (type === 'RVFileSource') {
           fileSourceCallCount++;
           // Return different instances based on call order
@@ -1413,8 +1361,8 @@ describe('GTOGraphLoader', () => {
       };
 
       let createCount = 0;
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockImplementation((type: string) => {
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockImplementation((type: string) => {
         if (type === 'RVFileSource') {
           createCount++;
           if (createCount === 1) return source1 as never;
@@ -1469,8 +1417,8 @@ describe('GTOGraphLoader', () => {
     it('GTO-CONN-004: malformed connections (missing lhs/rhs) gracefully skips with warning', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockImplementation((type: string) => {
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockImplementation((type: string) => {
         return {
           id: `${type}-${Date.now()}-${Math.random()}`,
           type,
@@ -1525,8 +1473,8 @@ describe('GTOGraphLoader', () => {
         disconnectInput: vi.fn(),
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockImplementation((type: string) => {
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockImplementation((type: string) => {
         if (type === 'RVSequenceGroup') return sequenceNode as never;
         return {
           id: `other-${Date.now()}-${Math.random()}`,
@@ -1580,8 +1528,8 @@ describe('GTOGraphLoader', () => {
       };
 
       let sourceCount = 0;
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockImplementation((type: string) => {
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockImplementation((type: string) => {
         if (type === 'RVFileSource') {
           sourceCount++;
           const src = {
@@ -1639,8 +1587,8 @@ describe('GTOGraphLoader', () => {
     });
 
     it('GTO-CONN-007: connection object with no evaluation component is handled gracefully', () => {
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockImplementation((type: string) => {
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockImplementation((type: string) => {
         return {
           id: `${type}-${Date.now()}-${Math.random()}`,
           type,
@@ -1698,8 +1646,8 @@ describe('GTOGraphLoader', () => {
         disconnectInput: vi.fn(),
       };
 
-      vi.mocked(NodeFactory.isRegistered).mockReturnValue(true);
-      vi.mocked(NodeFactory.create).mockImplementation((type: string) => {
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockImplementation((type: string) => {
         if (type === 'RVFileSource') return source1 as never;
         if (type === 'RVSequenceGroup') return sequenceNode as never;
         return null;

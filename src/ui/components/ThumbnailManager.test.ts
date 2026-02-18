@@ -1,28 +1,32 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ThumbnailManager } from './ThumbnailManager';
-import { Session } from '../../core/session/Session';
+import type { Session } from '../../core/session/Session';
+import type { MediaSource } from '../../core/session/Session';
 
-// Mock Session
-vi.mock('../../core/session/Session', () => ({
-  Session: vi.fn().mockImplementation(() => ({
-    currentSource: null,
-    getSequenceFrameImage: vi.fn(),
-    getVideoFrameCanvas: vi.fn(),
-  })),
-}));
+/**
+ * Minimal stub that satisfies the subset of Session used by ThumbnailManager.
+ * ThumbnailManager only accesses: currentSource, getSequenceFrameImage, getVideoFrameCanvas.
+ * Using a plain object avoids the heavy Session constructor (PlaybackEngine, managers, events).
+ */
+function createSessionStub() {
+  return {
+    currentSource: null as MediaSource | null,
+    getSequenceFrameImage: vi.fn().mockResolvedValue(null),
+    getVideoFrameCanvas: vi.fn().mockReturnValue(null),
+  };
+}
 
 describe('ThumbnailManager', () => {
   let manager: ThumbnailManager;
-  let mockSession: Session;
+  let stub: ReturnType<typeof createSessionStub>;
 
   beforeEach(() => {
-    mockSession = new Session() as unknown as Session;
-    manager = new ThumbnailManager(mockSession);
+    stub = createSessionStub();
+    manager = new ThumbnailManager(stub as unknown as Session);
   });
 
   afterEach(() => {
     manager.dispose();
-    vi.clearAllMocks();
   });
 
   describe('calculateSlots', () => {
@@ -153,13 +157,13 @@ describe('ThumbnailManager', () => {
     });
 
     it('should prevent loadThumbnails from running while paused', async () => {
-      (mockSession as any).currentSource = {
+      stub.currentSource = {
         name: 'test.mp4',
         width: 1920,
         height: 1080,
         type: 'video',
         duration: 100,
-      };
+      } as MediaSource;
 
       manager.calculateSlots(60, 35, 500, 24, 100, 1920, 1080);
       manager.pauseLoading();
@@ -214,18 +218,18 @@ describe('ThumbnailManager', () => {
     });
 
     it('TM-D003: dispose aborts pending loads via AbortController', async () => {
-      (mockSession as any).currentSource = {
+      stub.currentSource = {
         name: 'test.mp4',
         width: 1920,
         height: 1080,
         type: 'video',
         duration: 100,
-      };
+      } as MediaSource;
 
       manager.calculateSlots(60, 35, 500, 24, 100, 1920, 1080);
 
       // Start loading (non-awaited to simulate in-flight loads)
-      vi.mocked(mockSession.getVideoFrameCanvas).mockReturnValue(null);
+      stub.getVideoFrameCanvas.mockReturnValue(null);
       const loadPromise = manager.loadThumbnails();
 
       // Dispose while loading is in flight
@@ -242,18 +246,18 @@ describe('ThumbnailManager', () => {
     it('TM-D004: dispose clears retry timer', () => {
       vi.useFakeTimers();
 
-      (mockSession as any).currentSource = {
+      stub.currentSource = {
         name: 'test.mp4',
         width: 1920,
         height: 1080,
         type: 'video',
         duration: 100,
-      };
+      } as MediaSource;
 
       manager.calculateSlots(60, 35, 500, 24, 100, 1920, 1080);
 
       // Mock to return null to trigger retry queueing
-      vi.mocked(mockSession.getVideoFrameCanvas).mockReturnValue(null);
+      stub.getVideoFrameCanvas.mockReturnValue(null);
       manager.loadThumbnails();
 
       // Advance past initial load to let retry timer be scheduled
@@ -268,18 +272,18 @@ describe('ThumbnailManager', () => {
     });
 
     it('TM-D005: dispose clears pending retries queue', async () => {
-      (mockSession as any).currentSource = {
+      stub.currentSource = {
         name: 'test.mp4',
         width: 1920,
         height: 1080,
         type: 'video',
         duration: 100,
-      };
+      } as MediaSource;
 
       manager.calculateSlots(60, 35, 500, 24, 100, 1920, 1080);
 
       // Return null to trigger retry queueing
-      vi.mocked(mockSession.getVideoFrameCanvas).mockReturnValue(null);
+      stub.getVideoFrameCanvas.mockReturnValue(null);
       await manager.loadThumbnails();
 
       // Dispose should clear retries
@@ -310,13 +314,13 @@ describe('ThumbnailManager', () => {
     });
 
     it('TM-D008: loadThumbnails after dispose is effectively a no-op', async () => {
-      (mockSession as any).currentSource = {
+      stub.currentSource = {
         name: 'test.mp4',
         width: 1920,
         height: 1080,
         type: 'video',
         duration: 100,
-      };
+      } as MediaSource;
 
       manager.dispose();
 
@@ -343,7 +347,7 @@ describe('ThumbnailManager', () => {
   });
 
   describe('regression tests for pause-during-playback fix', () => {
-    let testSource: any;
+    let testSource: MediaSource;
 
     beforeEach(() => {
       // Set up a video source for these tests
@@ -356,8 +360,8 @@ describe('ThumbnailManager', () => {
         width: 1920,
         height: 1080,
         element: document.createElement('video'),
-      };
-      (mockSession as any).currentSource = testSource;
+      } as unknown as MediaSource;
+      stub.currentSource = testSource;
 
       // Calculate slots for the timeline
       manager.calculateSlots(60, 35, 500, 24, 100, 1920, 1080);
@@ -378,9 +382,8 @@ describe('ThumbnailManager', () => {
           mockCtx.fillRect(0, 0, 48, 27);
         }
 
-        // Recreate the mock function with implementation
-        const getVideoFrameCanvasMock = vi.fn().mockReturnValue(mockCanvas);
-        mockSession.getVideoFrameCanvas = getVideoFrameCanvasMock;
+        // Set the stub to return a canvas
+        stub.getVideoFrameCanvas.mockReturnValue(mockCanvas);
 
         // IMPORTANT: First call to loadThumbnails() will set the sourceId and clear slots.
         // We need to call it once, then recalculate slots, then call again for the actual test.
@@ -390,10 +393,11 @@ describe('ThumbnailManager', () => {
         manager.calculateSlots(60, 35, 500, 24, 100, 1920, 1080);
 
         // Reset the mock to track only the next calls
-        getVideoFrameCanvasMock.mockClear();
+        stub.getVideoFrameCanvas.mockClear();
+        stub.getVideoFrameCanvas.mockReturnValue(mockCanvas);
 
         // Spy on the video element to ensure it's never accessed
-        const videoElement = testSource.element;
+        const videoElement = (testSource as any).element;
         const accessSpy = vi.fn();
 
         // Create a proxy to detect any property access on the video element
@@ -409,7 +413,7 @@ describe('ThumbnailManager', () => {
         await manager.loadThumbnails();
 
         // Verify getVideoFrameCanvas was called
-        expect(getVideoFrameCanvasMock).toHaveBeenCalled();
+        expect(stub.getVideoFrameCanvas).toHaveBeenCalled();
 
         // Verify video element was never accessed
         expect(accessSpy).not.toHaveBeenCalled();
@@ -417,16 +421,16 @@ describe('ThumbnailManager', () => {
 
       it('should handle missing cached frame by queueing retry without accessing video element', async () => {
         // Return null from getVideoFrameCanvas (no cached frame)
-        const getVideoFrameCanvasMock = vi.fn().mockReturnValue(null);
-        mockSession.getVideoFrameCanvas = getVideoFrameCanvasMock;
+        stub.getVideoFrameCanvas.mockReturnValue(null);
 
         // Initialize sourceId first
         await manager.loadThumbnails();
         manager.calculateSlots(60, 35, 500, 24, 100, 1920, 1080);
-        getVideoFrameCanvasMock.mockClear();
+        stub.getVideoFrameCanvas.mockClear();
+        stub.getVideoFrameCanvas.mockReturnValue(null);
 
         // Spy on the video element
-        const videoElement = testSource.element;
+        const videoElement = (testSource as any).element;
         const accessSpy = vi.fn();
 
         Object.defineProperty(testSource, 'element', {
@@ -441,7 +445,7 @@ describe('ThumbnailManager', () => {
         await manager.loadThumbnails();
 
         // Verify getVideoFrameCanvas was called but element was never accessed
-        expect(getVideoFrameCanvasMock).toHaveBeenCalled();
+        expect(stub.getVideoFrameCanvas).toHaveBeenCalled();
         expect(accessSpy).not.toHaveBeenCalled();
 
         // Verify no thumbnails were loaded (since frames weren't available)
@@ -457,7 +461,7 @@ describe('ThumbnailManager', () => {
         manager.pauseLoading();
 
         // Mock getVideoFrameCanvas to return null (triggering retry logic)
-        vi.mocked(mockSession.getVideoFrameCanvas).mockReturnValue(null);
+        stub.getVideoFrameCanvas.mockReturnValue(null);
 
         // Load thumbnails (should queue retries but not schedule them)
         manager.loadThumbnails();
@@ -472,7 +476,7 @@ describe('ThumbnailManager', () => {
         vi.useFakeTimers();
 
         // Return null to trigger retry queueing
-        vi.mocked(mockSession.getVideoFrameCanvas).mockReturnValue(null);
+        stub.getVideoFrameCanvas.mockReturnValue(null);
 
         // Start loading (will queue retries)
         await manager.loadThumbnails();
@@ -497,10 +501,9 @@ describe('ThumbnailManager', () => {
       it('should not process retry queue when paused', async () => {
         // Mock to track if loadThumbnail is called for retries
         const loadCallCount = { count: 0 };
-        const originalGetCanvas = mockSession.getVideoFrameCanvas;
 
         // First call returns null (queues retry), subsequent calls should not happen when paused
-        vi.mocked(mockSession.getVideoFrameCanvas).mockImplementation(() => {
+        stub.getVideoFrameCanvas.mockImplementation(() => {
           loadCallCount.count++;
           return null;
         });
@@ -527,9 +530,6 @@ describe('ThumbnailManager', () => {
 
         // No additional calls should have been made
         expect(loadCallCount.count).toBe(0);
-
-        // Restore
-        vi.mocked(mockSession.getVideoFrameCanvas).mockImplementation(originalGetCanvas);
       });
     });
 
@@ -542,11 +542,10 @@ describe('ThumbnailManager', () => {
 
         // Track how many times getVideoFrameCanvas is called
         let callCount = 0;
-        const getVideoFrameCanvasMock = vi.fn().mockImplementation(() => {
+        stub.getVideoFrameCanvas.mockImplementation(() => {
           callCount++;
           return mockCanvas;
         });
-        mockSession.getVideoFrameCanvas = getVideoFrameCanvasMock;
 
         // Initialize sourceId first
         await manager.loadThumbnails();
@@ -592,7 +591,7 @@ describe('ThumbnailManager', () => {
         mockCanvas.height = 27;
 
         let callCount = 0;
-        const getVideoFrameCanvasMock = vi.fn().mockImplementation(() => {
+        stub.getVideoFrameCanvas.mockImplementation(() => {
           callCount++;
           // Return canvas on first few calls, then null
           if (callCount <= 2) {
@@ -600,7 +599,6 @@ describe('ThumbnailManager', () => {
           }
           return null;
         });
-        mockSession.getVideoFrameCanvas = getVideoFrameCanvasMock;
 
         // Initialize sourceId first
         await manager.loadThumbnails();
@@ -625,8 +623,7 @@ describe('ThumbnailManager', () => {
         vi.useFakeTimers();
 
         // Return null to queue retries
-        const getVideoFrameCanvasMock = vi.fn().mockReturnValue(null);
-        mockSession.getVideoFrameCanvas = getVideoFrameCanvasMock;
+        stub.getVideoFrameCanvas.mockReturnValue(null);
 
         // Load thumbnails (queues retries)
         await manager.loadThumbnails();
@@ -649,13 +646,13 @@ describe('ThumbnailManager', () => {
         const mockCanvas = document.createElement('canvas');
         mockCanvas.width = 48;
         mockCanvas.height = 27;
-        const getVideoFrameCanvasMock = vi.fn().mockReturnValue(mockCanvas);
-        mockSession.getVideoFrameCanvas = getVideoFrameCanvasMock;
+        stub.getVideoFrameCanvas.mockReturnValue(mockCanvas);
 
         // Initialize sourceId first
         await manager.loadThumbnails();
         manager.calculateSlots(60, 35, 500, 24, 100, 1920, 1080);
-        getVideoFrameCanvasMock.mockClear();
+        stub.getVideoFrameCanvas.mockClear();
+        stub.getVideoFrameCanvas.mockReturnValue(mockCanvas);
 
         // Rapid toggle
         manager.pauseLoading();
@@ -674,7 +671,7 @@ describe('ThumbnailManager', () => {
         await new Promise(resolve => setTimeout(resolve, 100));
 
         // Should have attempted to load frames after resume
-        expect(getVideoFrameCanvasMock).toHaveBeenCalled();
+        expect(stub.getVideoFrameCanvas).toHaveBeenCalled();
       });
     });
   });
@@ -686,7 +683,7 @@ describe('ThumbnailManager', () => {
   describe('detached ImageBitmap guard', () => {
     it('THUMB-GUARD-001: queues retry for detached ImageBitmap (width=0)', async () => {
       // Set up a video source with an ImageBitmap-returning getVideoFrameCanvas
-      (mockSession as any).currentSource = {
+      stub.currentSource = {
         type: 'video',
         name: 'test.mp4',
         url: 'test.mp4',
@@ -694,7 +691,7 @@ describe('ThumbnailManager', () => {
         height: 1080,
         duration: 100,
         fps: 24,
-      };
+      } as MediaSource;
 
       // Only test when ImageBitmap is available in the environment
       if (typeof ImageBitmap === 'undefined') {
@@ -706,7 +703,7 @@ describe('ThumbnailManager', () => {
       Object.defineProperty(detachedBitmap, 'width', { value: 0 });
       Object.defineProperty(detachedBitmap, 'height', { value: 0 });
 
-      (mockSession as any).getVideoFrameCanvas = vi.fn().mockReturnValue(detachedBitmap);
+      stub.getVideoFrameCanvas.mockReturnValue(detachedBitmap);
 
       await manager.loadThumbnails();
       manager.calculateSlots(60, 35, 500, 24, 100, 1920, 1080);

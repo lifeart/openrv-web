@@ -1,24 +1,25 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { parseRVEDL } from './RVEDLParser';
+import { Logger, LogLevel } from '../utils/Logger';
 
-// Use vi.hoisted so the mock is available before vi.mock is hoisted
-const { warnMock } = vi.hoisted(() => ({
-  warnMock: vi.fn(),
-}));
+// Use the real Logger with a custom sink to capture warnings instead of mocking
+const warnCalls: unknown[][] = [];
 
-// Mock Logger to capture warnings
-vi.mock('../utils/Logger', () => ({
-  Logger: vi.fn().mockImplementation(() => ({
-    warn: warnMock,
-    debug: vi.fn(),
-    info: vi.fn(),
-    error: vi.fn(),
-  })),
-}));
+// Install a custom sink that captures warn-level messages
+Logger.setSink((level, ...args) => {
+  if (level === LogLevel.WARN) {
+    warnCalls.push(args);
+  }
+});
+
+afterAll(() => {
+  // Restore default sink after all tests
+  Logger.setSink(null);
+});
 
 describe('RVEDLParser', () => {
   beforeEach(() => {
-    warnMock.mockClear();
+    warnCalls.length = 0;
   });
 
   // EDL-001: Parse 3-line RVEDL -> 3 source entries with correct paths/ranges
@@ -60,7 +61,7 @@ describe('RVEDLParser', () => {
     expect(entries).toHaveLength(2);
     expect(entries[0]).toEqual({ sourcePath: '/path/to/valid.exr', inFrame: 1, outFrame: 100 });
     expect(entries[1]).toEqual({ sourcePath: '/path/to/also_valid.dpx', inFrame: 1, outFrame: 48 });
-    expect(warnMock).toHaveBeenCalled();
+    expect(warnCalls.length).toBeGreaterThan(0);
   });
 
   // EDL-005: Mixed valid and invalid lines -> only valid entries returned
@@ -119,7 +120,7 @@ malformed_line_no_frames
 
     expect(entries).toHaveLength(1);
     expect(entries[0]).toEqual({ sourcePath: '/path/to/valid.dpx', inFrame: 1, outFrame: 48 });
-    expect(warnMock).toHaveBeenCalledTimes(2);
+    expect(warnCalls.length).toBe(2);
   });
 
   // EDL-009: Negative frame numbers -> accepted (valid in some workflows)
@@ -164,7 +165,7 @@ malformed_line_no_frames
 
     expect(entries).toHaveLength(1);
     expect(entries[0]!.sourcePath).toBe('/valid/path.exr');
-    expect(warnMock).toHaveBeenCalled();
+    expect(warnCalls.length).toBeGreaterThan(0);
   });
 
   it('handles line with only a path and no frame numbers', () => {
@@ -173,7 +174,7 @@ malformed_line_no_frames
     const entries = parseRVEDL(text);
 
     expect(entries).toHaveLength(0);
-    expect(warnMock).toHaveBeenCalled();
+    expect(warnCalls.length).toBeGreaterThan(0);
   });
 
   it('handles whitespace-only lines', () => {

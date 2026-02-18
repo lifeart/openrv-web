@@ -7,68 +7,62 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import type { DraggableContainer } from './shared/DraggableContainer';
+import * as DraggableContainerModule from './shared/DraggableContainer';
+import * as ThemeManagerModule from '../../utils/ui/ThemeManager';
 import { GamutDiagram } from './GamutDiagram';
-
-// Capture mock functions for draggable container
-const mockDraggableShow = vi.fn();
-const mockDraggableHide = vi.fn();
-const mockDraggableDispose = vi.fn();
-
-vi.mock('./shared/DraggableContainer', () => {
-  return {
-    createDraggableContainer: vi.fn((_opts: any) => {
-      const content = document.createElement('div');
-      const element = document.createElement('div');
-      element.appendChild(content);
-      return {
-        element,
-        content,
-        show: mockDraggableShow,
-        hide: mockDraggableHide,
-        dispose: mockDraggableDispose,
-      };
-    }),
-  };
-});
-
-// Mock HiDPICanvas
-vi.mock('../../utils/ui/HiDPICanvas', () => ({
-  setupHiDPICanvas: vi.fn(({ canvas, width, height }: any) => {
-    canvas.width = width;
-    canvas.height = height;
-    return { dpr: 1 };
-  }),
-}));
-
-// Mock ThemeManager
-const mockThemeOn = vi.fn();
-const mockThemeOff = vi.fn();
-vi.mock('../../utils/ui/ThemeManager', () => ({
-  getThemeManager: vi.fn(() => ({
-    on: mockThemeOn,
-    off: mockThemeOff,
-  })),
-}));
-
-// Mock getCSSColor
-vi.mock('../../utils/ui/getCSSColor', () => ({
-  getCSSColor: vi.fn((_prop: string, fallback: string) => fallback),
-}));
 
 describe('GamutDiagram', () => {
   let diagram: GamutDiagram;
+  let lastContainer: DraggableContainer;
+  let createSpy: ReturnType<typeof vi.spyOn>;
+  let themeManager: ThemeManagerModule.ThemeManager;
+  let themeOnSpy: ReturnType<typeof vi.spyOn>;
+  let themeOffSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
-    mockThemeOn.mockClear();
-    mockThemeOff.mockClear();
-    mockDraggableShow.mockClear();
-    mockDraggableHide.mockClear();
-    mockDraggableDispose.mockClear();
+    // Spy on createDraggableContainer to capture the returned container for assertions.
+    // The real implementation depends on pointer events not fully available in jsdom,
+    // so we provide a lightweight stub that creates real DOM elements.
+    createSpy = vi.spyOn(DraggableContainerModule, 'createDraggableContainer').mockImplementation(() => {
+      const content = document.createElement('div');
+      const element = document.createElement('div');
+      const header = document.createElement('div');
+      const controls = document.createElement('div');
+      element.appendChild(header);
+      element.appendChild(content);
+      const container: DraggableContainer = {
+        element,
+        header,
+        controls,
+        content,
+        footer: null,
+        show: vi.fn(),
+        hide: vi.fn(),
+        isVisible: vi.fn(() => false),
+        setFooter: vi.fn(),
+        getPosition: vi.fn(() => ({ x: 0, y: 0 })),
+        setPosition: vi.fn(),
+        resetPosition: vi.fn(),
+        dispose: vi.fn(),
+      };
+      lastContainer = container;
+      return container;
+    });
+
+    // Use real ThemeManager singleton, spy on its on/off methods
+    themeManager = ThemeManagerModule.getThemeManager();
+    themeOnSpy = vi.spyOn(themeManager, 'on');
+    themeOffSpy = vi.spyOn(themeManager, 'off');
+
     diagram = new GamutDiagram();
   });
 
   afterEach(() => {
     diagram.dispose();
+    createSpy.mockRestore();
+    themeOnSpy.mockRestore();
+    themeOffSpy.mockRestore();
   });
 
   describe('construction', () => {
@@ -81,13 +75,13 @@ describe('GamutDiagram', () => {
     });
 
     it('GD-U003: subscribes to theme changes', () => {
-      expect(mockThemeOn).toHaveBeenCalledWith('themeChanged', expect.any(Function));
+      expect(themeOnSpy).toHaveBeenCalledWith('themeChanged', expect.any(Function));
     });
 
     it('GD-U004: does not call drawFull in constructor (deferred)', () => {
       // The draggable container's show should NOT have been called during construction
       // because diagram starts hidden and drawing is deferred to first show()
-      expect(mockDraggableShow).not.toHaveBeenCalled();
+      expect(lastContainer.show).not.toHaveBeenCalled();
     });
   });
 
@@ -142,13 +136,13 @@ describe('GamutDiagram', () => {
 
     it('GD-U017: show calls draggable container show', () => {
       diagram.show();
-      expect(mockDraggableShow).toHaveBeenCalled();
+      expect(lastContainer.show).toHaveBeenCalled();
     });
 
     it('GD-U018: hide calls draggable container hide', () => {
       diagram.show();
       diagram.hide();
-      expect(mockDraggableHide).toHaveBeenCalled();
+      expect(lastContainer.hide).toHaveBeenCalled();
     });
   });
 
@@ -378,21 +372,23 @@ describe('GamutDiagram', () => {
     it('GD-U080: theme change redraws when visible', () => {
       diagram.show();
 
-      // Get the theme callback
-      const themeCallback = mockThemeOn.mock.calls[0]?.[1];
+      // Get the theme callback registered via on('themeChanged', ...)
+      const themeCall = themeOnSpy.mock.calls.find(c => c[0] === 'themeChanged');
+      const themeCallback = themeCall?.[1] as (() => void) | undefined;
       expect(themeCallback).toBeDefined();
 
       // Invoking theme callback should not throw (redraws graticule + triangles)
-      expect(() => themeCallback()).not.toThrow();
+      expect(() => themeCallback!()).not.toThrow();
     });
 
     it('GD-U081: theme change does not redraw when hidden', () => {
       // Diagram starts hidden, get the callback
-      const themeCallback = mockThemeOn.mock.calls[0]?.[1];
+      const themeCall = themeOnSpy.mock.calls.find(c => c[0] === 'themeChanged');
+      const themeCallback = themeCall?.[1] as (() => void) | undefined;
       expect(themeCallback).toBeDefined();
 
       // Should not throw but should be a no-op (check no error with hidden diagram)
-      expect(() => themeCallback()).not.toThrow();
+      expect(() => themeCallback!()).not.toThrow();
     });
   });
 
@@ -403,7 +399,7 @@ describe('GamutDiagram', () => {
 
     it('GD-U061: unsubscribes from theme changes', () => {
       diagram.dispose();
-      expect(mockThemeOff).toHaveBeenCalledWith('themeChanged', expect.any(Function));
+      expect(themeOffSpy).toHaveBeenCalledWith('themeChanged', expect.any(Function));
     });
 
     it('GD-U062: can be called multiple times', () => {
@@ -415,7 +411,7 @@ describe('GamutDiagram', () => {
 
     it('GD-U063: disposes draggable container', () => {
       diagram.dispose();
-      expect(mockDraggableDispose).toHaveBeenCalled();
+      expect(lastContainer.dispose).toHaveBeenCalled();
     });
 
     it('GD-U064: update after dispose does not throw', () => {

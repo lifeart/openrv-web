@@ -36,17 +36,6 @@ if (typeof globalThis.PointerEvent === 'undefined') {
   };
 }
 
-// Mock WaveformRenderer
-vi.mock('../../audio/WaveformRenderer', () => ({
-  WaveformRenderer: vi.fn().mockImplementation(() => ({
-    loadFromVideo: vi.fn().mockResolvedValue(false),
-    clear: vi.fn(),
-    hasData: vi.fn().mockReturnValue(false),
-    getData: vi.fn().mockReturnValue(null),
-    render: vi.fn(),
-  })),
-}));
-
 describe('Timeline', () => {
   let session: Session;
   let paintEngine: PaintEngine;

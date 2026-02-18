@@ -3,30 +3,30 @@ import { wireColorControls } from './AppColorWiring';
 import { EventEmitter } from './utils/EventEmitter';
 
 // ---------------------------------------------------------------------------
-// Mocks
+// Lightweight test doubles
 // ---------------------------------------------------------------------------
 
-vi.mock('./utils/HistoryManager', () => ({
-  getGlobalHistoryManager: vi.fn(() => ({
-    recordAction: vi.fn(),
-  })),
-}));
+// Controls only need EventEmitter capabilities plus the methods that
+// wireColorControls actually calls. DOM-heavy real controls cannot be
+// instantiated in a test environment, so thin EventEmitter subclasses
+// are the appropriate approach here.
 
-class MockColorInversionToggle extends EventEmitter {}
-class MockColorControls extends EventEmitter {
-  getAdjustments = vi.fn(() => ({ exposure: 0, contrast: 0, saturation: 1 }));
-  setAdjustments = vi.fn();
+class StubColorInversionToggle extends EventEmitter {}
+class StubColorControls extends EventEmitter {
+  private adjustments = { exposure: 0, contrast: 0, saturation: 1 };
+  getAdjustments() { return { ...this.adjustments }; }
+  setAdjustments(adj: Record<string, number>) { this.adjustments = { ...adj } as any; }
 }
-class MockCDLControl extends EventEmitter {}
-class MockCurvesControl extends EventEmitter {}
-class MockOCIOControl extends EventEmitter {
+class StubCDLControl extends EventEmitter {}
+class StubCurvesControl extends EventEmitter {}
+class StubOCIOControl extends EventEmitter {
   private _processor = {
     bakeTo3DLUT: vi.fn(() => new Float32Array(33 * 33 * 33 * 3)),
   };
-  getProcessor = vi.fn(() => this._processor);
+  getProcessor() { return this._processor; }
 }
-class MockDisplayProfileControl extends EventEmitter {}
-class MockGamutMappingControl extends EventEmitter {}
+class StubDisplayProfileControl extends EventEmitter {}
+class StubGamutMappingControl extends EventEmitter {}
 
 function createMockViewer() {
   return {
@@ -55,13 +55,13 @@ function createMockPersistenceManager() {
 }
 
 function createContext() {
-  const colorInversionToggle = new MockColorInversionToggle();
-  const colorControls = new MockColorControls();
-  const cdlControl = new MockCDLControl();
-  const curvesControl = new MockCurvesControl();
-  const ocioControl = new MockOCIOControl();
-  const displayProfileControl = new MockDisplayProfileControl();
-  const gamutMappingControl = new MockGamutMappingControl();
+  const colorInversionToggle = new StubColorInversionToggle();
+  const colorControls = new StubColorControls();
+  const cdlControl = new StubCDLControl();
+  const curvesControl = new StubCurvesControl();
+  const ocioControl = new StubOCIOControl();
+  const displayProfileControl = new StubDisplayProfileControl();
+  const gamutMappingControl = new StubGamutMappingControl();
   const viewer = createMockViewer();
   const sessionBridge = createMockSessionBridge();
   const persistenceManager = createMockPersistenceManager();
@@ -335,7 +335,9 @@ describe('wireColorControls', () => {
       const state = wireColorControls(ctx as any);
 
       const adjustments = { exposure: 2, contrast: 0.5, saturation: 1 };
-      ctx._controls.colorControls.getAdjustments.mockReturnValue(adjustments);
+      // Set the adjustments so that getAdjustments() returns the new values
+      // when the debounce callback fires and reads current state.
+      ctx._controls.colorControls.setAdjustments(adjustments);
       ctx._controls.colorControls.emit('adjustmentsChanged', adjustments);
 
       expect(state.colorHistoryTimer).not.toBeNull();

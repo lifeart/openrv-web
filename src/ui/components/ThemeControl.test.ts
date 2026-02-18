@@ -6,34 +6,37 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ThemeControl } from './ThemeControl';
-import type { ThemeMode, ResolvedTheme } from '../../utils/ui/ThemeManager';
+import { ThemeManager } from '../../utils/ui/ThemeManager';
+import { PREFERENCE_STORAGE_KEYS } from '../../utils/preferences/PreferencesManager';
 
-// Mock ThemeManager
-const mockThemeManager = {
-  getMode: vi.fn((): ThemeMode => 'auto'),
-  getResolvedTheme: vi.fn((): ResolvedTheme => 'dark'),
-  setMode: vi.fn(),
-  on: vi.fn(),
-  off: vi.fn(),
-};
+// Use a real ThemeManager instance per test, injected via getThemeManager mock.
+// This avoids a hand-rolled mock object and tests real on/off/setMode behavior.
+let themeManager: ThemeManager;
 
-vi.mock('../../utils/ui/ThemeManager', () => ({
-  getThemeManager: () => mockThemeManager,
-  ThemeMode: {},
-}));
+vi.mock('../../utils/ui/ThemeManager', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../utils/ui/ThemeManager')>();
+  return {
+    ...actual,
+    getThemeManager: () => themeManager,
+  };
+});
 
 describe('ThemeControl', () => {
   let control: ThemeControl;
 
   beforeEach(() => {
-    vi.clearAllMocks();
-    mockThemeManager.getMode.mockReturnValue('auto');
-    mockThemeManager.getResolvedTheme.mockReturnValue('dark');
+    localStorage.removeItem(PREFERENCE_STORAGE_KEYS.themeMode);
+    themeManager = new ThemeManager();
+    vi.spyOn(themeManager, 'on');
+    vi.spyOn(themeManager, 'off');
+    vi.spyOn(themeManager, 'setMode');
     control = new ThemeControl();
   });
 
   afterEach(() => {
     control.dispose();
+    themeManager.dispose();
+    localStorage.removeItem(PREFERENCE_STORAGE_KEYS.themeMode);
   });
 
   describe('initialization', () => {
@@ -73,8 +76,8 @@ describe('ThemeControl', () => {
     });
 
     it('THEME-U005: should subscribe to theme manager events', () => {
-      expect(mockThemeManager.on).toHaveBeenCalledWith('modeChanged', expect.any(Function));
-      expect(mockThemeManager.on).toHaveBeenCalledWith('themeChanged', expect.any(Function));
+      expect(themeManager.on).toHaveBeenCalledWith('modeChanged', expect.any(Function));
+      expect(themeManager.on).toHaveBeenCalledWith('themeChanged', expect.any(Function));
     });
   });
 
@@ -145,7 +148,7 @@ describe('ThemeControl', () => {
 
       darkOption.click();
 
-      expect(mockThemeManager.setMode).toHaveBeenCalledWith('dark');
+      expect(themeManager.setMode).toHaveBeenCalledWith('dark');
     });
 
     it('THEME-U031: clicking light option calls setMode with light', () => {
@@ -157,7 +160,7 @@ describe('ThemeControl', () => {
 
       lightOption.click();
 
-      expect(mockThemeManager.setMode).toHaveBeenCalledWith('light');
+      expect(themeManager.setMode).toHaveBeenCalledWith('light');
     });
 
     it('THEME-U032: clicking auto option calls setMode with auto', () => {
@@ -169,13 +172,13 @@ describe('ThemeControl', () => {
 
       autoOption.click();
 
-      expect(mockThemeManager.setMode).toHaveBeenCalledWith('auto');
+      expect(themeManager.setMode).toHaveBeenCalledWith('auto');
     });
   });
 
   describe('button states', () => {
     it('THEME-U040: button shows current mode label', () => {
-      mockThemeManager.getMode.mockReturnValue('dark');
+      themeManager.setMode('dark');
       const newControl = new ThemeControl();
       const el = newControl.render();
       const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
@@ -185,7 +188,7 @@ describe('ThemeControl', () => {
     });
 
     it('THEME-U041: button shows Auto for auto mode', () => {
-      mockThemeManager.getMode.mockReturnValue('auto');
+      // Default mode is already 'auto', no need to set it
       const newControl = new ThemeControl();
       const el = newControl.render();
       const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
@@ -195,7 +198,7 @@ describe('ThemeControl', () => {
     });
 
     it('THEME-U042: button shows Light for light mode', () => {
-      mockThemeManager.getMode.mockReturnValue('light');
+      themeManager.setMode('light');
       const newControl = new ThemeControl();
       const el = newControl.render();
       const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
@@ -207,7 +210,7 @@ describe('ThemeControl', () => {
 
   describe('dropdown info', () => {
     it('THEME-U050: dropdown shows current resolved theme info', () => {
-      mockThemeManager.getResolvedTheme.mockReturnValue('dark');
+      // Default: mode='auto', resolved='dark' (jsdom has no matchMedia, falls back to dark)
       const el = control.render();
       document.body.appendChild(el);
       const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
@@ -218,7 +221,7 @@ describe('ThemeControl', () => {
     });
 
     it('THEME-U051: dropdown shows Light when resolved theme is light', () => {
-      mockThemeManager.getResolvedTheme.mockReturnValue('light');
+      themeManager.setMode('light');
       const newControl = new ThemeControl();
       const el = newControl.render();
       document.body.appendChild(el);
@@ -273,22 +276,24 @@ describe('ThemeControl', () => {
     it('THEME-U073: dispose unsubscribes from modeChanged event', () => {
       control.dispose();
 
-      expect(mockThemeManager.off).toHaveBeenCalledWith('modeChanged', expect.any(Function));
+      expect(themeManager.off).toHaveBeenCalledWith('modeChanged', expect.any(Function));
     });
 
     it('THEME-U074: dispose unsubscribes from themeChanged event', () => {
       control.dispose();
 
-      expect(mockThemeManager.off).toHaveBeenCalledWith('themeChanged', expect.any(Function));
+      expect(themeManager.off).toHaveBeenCalledWith('themeChanged', expect.any(Function));
     });
 
     it('THEME-U075: dispose calls off with the same handler that was passed to on', () => {
       // Get the handlers that were passed to 'on'
-      const onModeChangedCall = mockThemeManager.on.mock.calls.find(
-        (call: [string, Function]) => call[0] === 'modeChanged'
+      const onSpy = themeManager.on as ReturnType<typeof vi.spyOn>;
+      const offSpy = themeManager.off as ReturnType<typeof vi.spyOn>;
+      const onModeChangedCall = onSpy.mock.calls.find(
+        (call: unknown[]) => call[0] === 'modeChanged'
       );
-      const onThemeChangedCall = mockThemeManager.on.mock.calls.find(
-        (call: [string, Function]) => call[0] === 'themeChanged'
+      const onThemeChangedCall = onSpy.mock.calls.find(
+        (call: unknown[]) => call[0] === 'themeChanged'
       );
 
       expect(onModeChangedCall).toBeDefined();
@@ -300,19 +305,25 @@ describe('ThemeControl', () => {
       control.dispose();
 
       // Verify off was called with the same handlers
-      expect(mockThemeManager.off).toHaveBeenCalledWith('modeChanged', modeChangedHandler);
-      expect(mockThemeManager.off).toHaveBeenCalledWith('themeChanged', themeChangedHandler);
+      expect(offSpy).toHaveBeenCalledWith('modeChanged', modeChangedHandler);
+      expect(offSpy).toHaveBeenCalledWith('themeChanged', themeChangedHandler);
     });
   });
 });
 
 describe('ThemeControl mode icons', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    localStorage.removeItem(PREFERENCE_STORAGE_KEYS.themeMode);
+    themeManager = new ThemeManager();
+  });
+
+  afterEach(() => {
+    themeManager.dispose();
+    localStorage.removeItem(PREFERENCE_STORAGE_KEYS.themeMode);
   });
 
   it('THEME-U080: auto mode shows settings icon', () => {
-    mockThemeManager.getMode.mockReturnValue('auto');
+    // Default mode is 'auto'
     const control = new ThemeControl();
     const el = control.render();
     const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
@@ -323,7 +334,7 @@ describe('ThemeControl mode icons', () => {
   });
 
   it('THEME-U081: dark mode shows moon icon', () => {
-    mockThemeManager.getMode.mockReturnValue('dark');
+    themeManager.setMode('dark');
     const control = new ThemeControl();
     const el = control.render();
     const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
@@ -333,7 +344,7 @@ describe('ThemeControl mode icons', () => {
   });
 
   it('THEME-U082: light mode shows sun icon', () => {
-    mockThemeManager.getMode.mockReturnValue('light');
+    themeManager.setMode('light');
     const control = new ThemeControl();
     const el = control.render();
     const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;

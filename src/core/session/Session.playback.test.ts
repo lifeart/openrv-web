@@ -1,15 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Session, MediaSource } from './Session';
 
-// Mock SequenceLoader
-vi.mock('../../utils/media/SequenceLoader', () => ({
-  createSequenceInfo: vi.fn(),
-  preloadFrames: vi.fn(),
-  loadFrameImage: vi.fn(),
-  releaseDistantFrames: vi.fn(),
-  disposeSequence: vi.fn(),
-}));
-
 const createMockVideo = (durationSec: number = 100, currentTimeSec: number = 0) => {
     const video = document.createElement('video') as any;
     video._currentTime = currentTimeSec;

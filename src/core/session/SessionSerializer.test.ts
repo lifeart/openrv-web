@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SessionSerializer, SessionComponents } from './SessionSerializer';
 import type { SessionState } from './SessionState';
 import { SESSION_STATE_VERSION } from './SessionState';
+import { PaintEngine } from '../../paint/PaintEngine';
 
 // Mock the showFileReloadPrompt dialog
 vi.mock('../../ui/components/shared/Modal', () => ({
@@ -543,13 +544,18 @@ describe('SessionSerializer', () => {
 /**
  * Creates mock SessionComponents for testing.
  *
- * This mock provides the minimal Session, PaintEngine, and Viewer interfaces
- * needed by SessionSerializer. Methods are vi.fn() mocks that can be spied on.
+ * Uses real PaintEngine (no-arg constructor, pure data operations).
+ * Session and Viewer remain mocked due to complex dependencies
+ * (network/filesystem access, WebGL/DOM canvas).
  *
  * Available session mocks: allSources, getPlaybackState, setPlaybackState,
  * loadImage, loadVideo, loadFile
  */
 function createMockComponents(): SessionComponents {
+  const paintEngine = new PaintEngine();
+  // Spy on loadFromAnnotations so tests can assert it was called
+  vi.spyOn(paintEngine, 'loadFromAnnotations');
+
   return {
     session: {
       allSources: [
@@ -561,15 +567,7 @@ function createMockComponents(): SessionComponents {
       loadVideo: vi.fn<[string, string], Promise<void>>().mockResolvedValue(undefined),
       loadFile: vi.fn<[File], Promise<void>>().mockResolvedValue(undefined),
     },
-    paintEngine: {
-      toJSON: vi.fn().mockReturnValue({
-        nextId: 1,
-        show: true,
-        frames: {},
-        effects: {}
-      }),
-      loadFromAnnotations: vi.fn()
-    },
+    paintEngine,
     viewer: {
       getPan: vi.fn().mockReturnValue({ x: 0, y: 0 }),
       getZoom: vi.fn().mockReturnValue(1.5),

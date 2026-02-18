@@ -7,20 +7,18 @@ import { LUTStageControl } from './LUTStageControl';
 import type { LUTStageControlConfig, LUTStageControlCallbacks } from './LUTStageControl';
 import type { LUT3D, LUT1D } from '../../color/ColorProcessingFacade';
 
-// Mock parseLUT and isLUT3D
+// Mock parseLUT - needed because tests assert exact LUT object references from callbacks
 vi.mock('../../color/LUTFormatDetect', () => ({
   parseLUT: vi.fn(),
 }));
 
-vi.mock('../../color/LUTLoader', () => ({
-  isLUT3D: vi.fn(),
-}));
-
+// Mock showAlert - real impl creates persistent DOM modal state that leaks between tests
 vi.mock('./shared/Modal', () => ({
   showAlert: vi.fn(),
 }));
 
-import { parseLUT, isLUT3D } from '../../color/ColorProcessingFacade';
+// isLUT3D is NOT mocked - the real impl is a pure function that works with test LUT data
+import { parseLUT } from '../../color/ColorProcessingFacade';
 import { showAlert } from './shared/Modal';
 
 function createTestLUT3D(title: string = 'Test'): LUT3D {
@@ -364,7 +362,6 @@ describe('LUTStageControl', () => {
     it('LSC-040: file load with valid 3D LUT calls onLUTLoaded for file stage', async () => {
       const lut3D = createTestLUT3D();
       vi.mocked(parseLUT).mockReturnValue(lut3D);
-      vi.mocked(isLUT3D).mockReturnValue(true);
 
       const el = control.render();
       const fileInput = el.querySelector('[data-testid="lut-file-file-input"]') as HTMLInputElement;
@@ -382,7 +379,6 @@ describe('LUTStageControl', () => {
     it('LSC-041: file load with 1D LUT on GPU stage shows error alert', async () => {
       const lut1D = createTestLUT1D();
       vi.mocked(parseLUT).mockReturnValue(lut1D);
-      vi.mocked(isLUT3D).mockReturnValue(false);
 
       const el = control.render();
       const fileInput = el.querySelector('[data-testid="lut-file-file-input"]') as HTMLInputElement;
@@ -403,7 +399,6 @@ describe('LUTStageControl', () => {
     it('LSC-042: file load with 1D LUT on precache stage does NOT show error', async () => {
       const lut1D = createTestLUT1D();
       vi.mocked(parseLUT).mockReturnValue(lut1D);
-      vi.mocked(isLUT3D).mockReturnValue(false);
 
       const precacheCallbacks = createDefaultCallbacks();
       const precacheControl = new LUTStageControl(
@@ -446,7 +441,6 @@ describe('LUTStageControl', () => {
     it('LSC-044: file input is cleared after successful load', async () => {
       const lut3D = createTestLUT3D();
       vi.mocked(parseLUT).mockReturnValue(lut3D);
-      vi.mocked(isLUT3D).mockReturnValue(true);
 
       const el = control.render();
       const fileInput = el.querySelector('[data-testid="lut-file-file-input"]') as HTMLInputElement;
@@ -589,7 +583,6 @@ describe('LUTStageControl', () => {
     it('LSC-059: 1D LUT on look stage shows error (GPU stage)', async () => {
       const lut1D = createTestLUT1D();
       vi.mocked(parseLUT).mockReturnValue(lut1D);
-      vi.mocked(isLUT3D).mockReturnValue(false);
 
       const lookCallbacks = createDefaultCallbacks();
       const lookControl = new LUTStageControl(
@@ -612,7 +605,6 @@ describe('LUTStageControl', () => {
     it('LSC-060: 1D LUT on display stage shows error (GPU stage)', async () => {
       const lut1D = createTestLUT1D();
       vi.mocked(parseLUT).mockReturnValue(lut1D);
-      vi.mocked(isLUT3D).mockReturnValue(false);
 
       const displayCallbacks = createDefaultCallbacks();
       const displayControl = new LUTStageControl(
@@ -637,7 +629,6 @@ describe('LUTStageControl', () => {
     it('LSC-061: successful file load updates LUT name display', async () => {
       const lut3D = createTestLUT3D();
       vi.mocked(parseLUT).mockReturnValue(lut3D);
-      vi.mocked(isLUT3D).mockReturnValue(true);
 
       const el = control.render();
       const fileInput = el.querySelector('[data-testid="lut-file-file-input"]') as HTMLInputElement;
@@ -655,7 +646,6 @@ describe('LUTStageControl', () => {
     it('LSC-062: successful file load makes clear button visible', async () => {
       const lut3D = createTestLUT3D();
       vi.mocked(parseLUT).mockReturnValue(lut3D);
-      vi.mocked(isLUT3D).mockReturnValue(true);
 
       const el = control.render();
       const fileInput = el.querySelector('[data-testid="lut-file-file-input"]') as HTMLInputElement;

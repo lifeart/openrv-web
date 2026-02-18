@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // vi.hoisted runs before vi.mock hoisting, so these are available in mock factories
-const { disposeMocks, createMockClass, createAsyncDisposeMockClass } = vi.hoisted(() => {
+const { disposeMocks, createMockClass } = vi.hoisted(() => {
   const disposeMocks: Record<string, ReturnType<typeof import('vitest')['vi']['fn']>> = {};
 
   function createMockClass(name: string) {
@@ -27,115 +27,101 @@ const { disposeMocks, createMockClass, createAsyncDisposeMockClass } = vi.hoiste
     };
   }
 
-  function createAsyncDisposeMockClass(name: string) {
-    const disposeFn = vi.fn((): Promise<void> => Promise.resolve()) as any;
-    disposeMocks[name] = disposeFn;
-    return class {
-      dispose = disposeFn;
-      render = vi.fn(() => document.createElement('div'));
-      on = vi.fn(() => vi.fn());
-    };
-  }
-
-  return { disposeMocks, createMockClass, createAsyncDisposeMockClass };
+  return { disposeMocks, createMockClass };
 });
 
-// Mock all UI control imports
-vi.mock('./ui/components/PaintToolbar', () => ({ PaintToolbar: createMockClass('PaintToolbar') }));
-vi.mock('./ui/components/ColorControls', () => ({ ColorControls: createMockClass('ColorControls') }));
-vi.mock('./ui/components/TransformControl', () => ({ TransformControl: createMockClass('TransformControl') }));
-vi.mock('./ui/components/FilterControl', () => ({ FilterControl: createMockClass('FilterControl') }));
-vi.mock('./ui/components/CropControl', () => ({ CropControl: createMockClass('CropControl') }));
-vi.mock('./ui/components/CDLControl', () => ({ CDLControl: createMockClass('CDLControl') }));
-vi.mock('./ui/components/CurvesControl', () => ({ CurvesControl: createMockClass('CurvesControl') }));
-vi.mock('./ui/components/LensControl', () => ({ LensControl: createMockClass('LensControl') }));
-vi.mock('./ui/components/StackControl', () => ({ StackControl: createMockClass('StackControl') }));
-vi.mock('./ui/components/ChannelSelect', () => ({ ChannelSelect: createMockClass('ChannelSelect') }));
-vi.mock('./ui/components/StereoControl', () => ({ StereoControl: createMockClass('StereoControl') }));
-vi.mock('./ui/components/StereoEyeTransformControl', () => ({ StereoEyeTransformControl: createMockClass('StereoEyeTransformControl') }));
-vi.mock('./ui/components/StereoAlignControl', () => ({ StereoAlignControl: createMockClass('StereoAlignControl') }));
+// --- Mocks only for controls that cannot run in jsdom ---
+// Canvas 2D / WebGL dependencies in constructor:
 vi.mock('./ui/components/Histogram', () => ({ Histogram: createMockClass('Histogram') }));
 vi.mock('./ui/components/Waveform', () => ({ Waveform: createMockClass('Waveform') }));
 vi.mock('./ui/components/Vectorscope', () => ({ Vectorscope: createMockClass('Vectorscope') }));
-vi.mock('./ui/components/ZoomControl', () => ({ ZoomControl: createMockClass('ZoomControl') }));
-vi.mock('./ui/components/ScopesControl', () => ({ ScopesControl: createMockClass('ScopesControl') }));
-vi.mock('./ui/components/CompareControl', () => ({ CompareControl: createMockClass('CompareControl') }));
+vi.mock('./ui/components/GamutDiagram', () => ({ GamutDiagram: createMockClass('GamutDiagram') }));
+vi.mock('./ui/components/CurvesControl', () => ({ CurvesControl: createMockClass('CurvesControl') }));
+vi.mock('./ui/components/CacheIndicator', () => ({ CacheIndicator: createMockClass('CacheIndicator') }));
+// RightPanelContent transitively uses canvas via MiniHistogram:
+vi.mock('./ui/layout/panels/RightPanelContent', () => ({ RightPanelContent: createMockClass('RightPanelContent') }));
+// PaintToolbar / TextFormattingToolbar need a real PaintEngine with .on(), .brush, .color, etc.:
+vi.mock('./ui/components/PaintToolbar', () => ({ PaintToolbar: createMockClass('PaintToolbar') }));
+vi.mock('./ui/components/TextFormattingToolbar', () => ({ TextFormattingToolbar: createMockClass('TextFormattingToolbar') }));
+// These controls call .on() / .isVisible() / .isEnabled() on their overlay arg during construction:
 vi.mock('./ui/components/SafeAreasControl', () => ({ SafeAreasControl: createMockClass('SafeAreasControl') }));
 vi.mock('./ui/components/FalseColorControl', () => ({ FalseColorControl: createMockClass('FalseColorControl') }));
 vi.mock('./ui/components/LuminanceVisualizationControl', () => ({ LuminanceVisualizationControl: createMockClass('LuminanceVisualizationControl') }));
-vi.mock('./ui/components/ToneMappingControl', () => ({ ToneMappingControl: createMockClass('ToneMappingControl') }));
 vi.mock('./ui/components/ZebraControl', () => ({ ZebraControl: createMockClass('ZebraControl') }));
 vi.mock('./ui/components/HSLQualifierControl', () => ({ HSLQualifierControl: createMockClass('HSLQualifierControl') }));
-vi.mock('./ui/components/GhostFrameControl', () => ({ GhostFrameControl: createMockClass('GhostFrameControl') }));
-vi.mock('./ui/components/PARControl', () => ({ PARControl: createMockClass('PARControl') }));
-vi.mock('./ui/components/BackgroundPatternControl', () => ({ BackgroundPatternControl: createMockClass('BackgroundPatternControl') }));
-vi.mock('./ui/components/OCIOControl', () => ({ OCIOControl: createMockClass('OCIOControl') }));
-vi.mock('./ui/components/DisplayProfileControl', () => ({ DisplayProfileControl: createMockClass('DisplayProfileControl') }));
-vi.mock('./ui/components/ColorInversionToggle', () => ({ ColorInversionToggle: createMockClass('ColorInversionToggle') }));
-vi.mock('./ui/components/HistoryPanel', () => ({ HistoryPanel: createMockClass('HistoryPanel') }));
-vi.mock('./ui/components/InfoPanel', () => ({ InfoPanel: createMockClass('InfoPanel') }));
+// MarkerListPanel calls session.on() and session.marks in constructor:
 vi.mock('./ui/components/MarkerListPanel', () => ({ MarkerListPanel: createMockClass('MarkerListPanel') }));
-vi.mock('./ui/components/CacheIndicator', () => ({ CacheIndicator: createMockClass('CacheIndicator') }));
-vi.mock('./ui/components/TextFormattingToolbar', () => ({ TextFormattingToolbar: createMockClass('TextFormattingToolbar') }));
-vi.mock('./ui/components/AutoSaveIndicator', () => ({ AutoSaveIndicator: createMockClass('AutoSaveIndicator') }));
-vi.mock('./ui/components/SnapshotPanel', () => ({ SnapshotPanel: createMockClass('SnapshotPanel') }));
-vi.mock('./ui/components/PlaylistPanel', () => ({ PlaylistPanel: createMockClass('PlaylistPanel') }));
-vi.mock('./ui/components/NetworkControl', () => ({ NetworkControl: createMockClass('NetworkControl') }));
-vi.mock('./ui/components/DeinterlaceControl', () => ({ DeinterlaceControl: createMockClass('DeinterlaceControl') }));
-vi.mock('./ui/components/FilmEmulationControl', () => ({ FilmEmulationControl: createMockClass('FilmEmulationControl') }));
-vi.mock('./ui/components/GamutMappingControl', () => ({ GamutMappingControl: createMockClass('GamutMappingControl') }));
-vi.mock('./ui/components/PerspectiveCorrectionControl', () => ({ PerspectiveCorrectionControl: createMockClass('PerspectiveCorrectionControl') }));
-vi.mock('./ui/components/StabilizationControl', () => ({ StabilizationControl: createMockClass('StabilizationControl') }));
-vi.mock('./ui/components/GamutDiagram', () => ({ GamutDiagram: createMockClass('GamutDiagram') }));
-
-// Manager / utility mocks
-vi.mock('./core/session/AutoSaveManager', () => ({ AutoSaveManager: createAsyncDisposeMockClass('AutoSaveManager') }));
-vi.mock('./core/session/SnapshotManager', () => ({ SnapshotManager: createMockClass('SnapshotManager') }));
-vi.mock('./core/session/PlaylistManager', () => ({ PlaylistManager: createMockClass('PlaylistManager') }));
-vi.mock('./utils/ui/PresentationMode', () => ({ PresentationMode: createMockClass('PresentationMode') }));
-vi.mock('./network/NetworkSyncManager', () => ({ NetworkSyncManager: createMockClass('NetworkSyncManager') }));
-
-vi.mock('./utils/HistoryManager', () => ({
-  getGlobalHistoryManager: vi.fn(() => ({
-    on: vi.fn(() => vi.fn()),
-    getState: vi.fn(() => ({ entries: [], currentIndex: -1, canUndo: false, canRedo: false })),
-    getEntries: vi.fn(() => []),
-    getCurrentIndex: vi.fn(() => -1),
-    clear: vi.fn(),
-  })),
-}));
-
-vi.mock('./ui/layout/panels/RightPanelContent', () => ({ RightPanelContent: createMockClass('RightPanelContent') }));
-vi.mock('./ui/layout/panels/LeftPanelContent', () => ({ LeftPanelContent: createMockClass('LeftPanelContent') }));
-
-// ContextToolbar mock: class instance via createMockClass + static helpers that produce real DOM elements
-vi.mock('./ui/components/layout/ContextToolbar', () => {
-  const MockClass = createMockClass('ContextToolbar');
-  // Static helpers used by setupTabContents to build toolbar DOM
-  (MockClass as any).createDivider = () => {
-    const d = document.createElement('div');
-    d.className = 'mock-divider';
-    return d;
-  };
-  (MockClass as any).createIconButton = (icon: string, onClick: () => void, options?: any) => {
-    const btn = document.createElement('button');
-    btn.dataset.icon = icon;
-    btn.title = options?.title || '';
-    if (options?.title) btn.setAttribute('aria-label', options.title);
-    btn.addEventListener('click', onClick);
-    return btn;
-  };
-  (MockClass as any).createButton = (text: string, onClick: () => void, options?: any) => {
-    const btn = document.createElement('button');
-    btn.textContent = text;
-    btn.title = options?.title || '';
-    btn.addEventListener('click', onClick);
-    return btn;
-  };
-  return { ContextToolbar: MockClass };
-});
 
 import { AppControlRegistry } from './AppControlRegistry';
+
+/**
+ * Spy on a real control's dispose method and register it in disposeMocks
+ * so the existing assertions continue to work identically.
+ */
+function spyOnDispose(registry: AppControlRegistry, field: string, name: string) {
+  const control = (registry as any)[field];
+  const originalDispose = control.dispose.bind(control);
+  const spy = vi.fn(originalDispose);
+  control.dispose = spy;
+  disposeMocks[name] = spy;
+}
+
+/**
+ * Names of controls that use real implementations (not mocked).
+ * Map: disposeMocks name -> registry field name.
+ */
+const REAL_CONTROL_FIELDS: Record<string, string> = {
+  // No-arg pure DOM controls
+  ColorControls: 'colorControls',
+  TransformControl: 'transformControl',
+  FilterControl: 'filterControl',
+  CropControl: 'cropControl',
+  CDLControl: 'cdlControl',
+  LensControl: 'lensControl',
+  StackControl: 'stackControl',
+  ChannelSelect: 'channelSelect',
+  StereoControl: 'stereoControl',
+  StereoEyeTransformControl: 'stereoEyeTransformControl',
+  StereoAlignControl: 'stereoAlignControl',
+  ZoomControl: 'zoomControl',
+  ScopesControl: 'scopesControl',
+  CompareControl: 'compareControl',
+  GhostFrameControl: 'ghostFrameControl',
+  PARControl: 'parControl',
+  BackgroundPatternControl: 'backgroundPatternControl',
+  OCIOControl: 'ocioControl',
+  DisplayProfileControl: 'displayProfileControl',
+  ColorInversionToggle: 'colorInversionToggle',
+  ToneMappingControl: 'toneMappingControl',
+  InfoPanel: 'infoPanel',
+  NetworkControl: 'networkControl',
+  DeinterlaceControl: 'deinterlaceControl',
+  FilmEmulationControl: 'filmEmulationControl',
+  GamutMappingControl: 'gamutMappingControl',
+  AutoSaveIndicator: 'autoSaveIndicator',
+  // Controls with trivially-satisfiable args
+  HistoryPanel: 'historyPanel',
+  SnapshotPanel: 'snapshotPanel',
+  PlaylistPanel: 'playlistPanel',
+  // Layout panel using real ColorControls + real HistoryManager
+  LeftPanelContent: 'leftPanelContent',
+  // Managers with trivial constructors
+  SnapshotManager: 'snapshotManager',
+  PlaylistManager: 'playlistManager',
+  PresentationMode: 'presentationMode',
+  NetworkSyncManager: 'networkSyncManager',
+  AutoSaveManager: 'autoSaveManager',
+};
+
+/**
+ * After constructing an AppControlRegistry with real implementations,
+ * install dispose spies on all real controls so disposeMocks tracks them.
+ */
+function installDisposeSpies(registry: AppControlRegistry) {
+  for (const [name, field] of Object.entries(REAL_CONTROL_FIELDS)) {
+    spyOnDispose(registry, field, name);
+  }
+}
 
 function createMockDeps() {
   return {
@@ -168,6 +154,7 @@ describe('AppControlRegistry', () => {
   it('ACR-002: dispose() calls dispose on every control and manager', () => {
     const deps = createMockDeps();
     const registry = new AppControlRegistry(deps);
+    installDisposeSpies(registry);
 
     registry.dispose();
 
@@ -243,6 +230,7 @@ describe('AppControlRegistry', () => {
   it('ACR-003: dispose() handles AutoSaveManager async dispose (returns promise)', () => {
     const deps = createMockDeps();
     const registry = new AppControlRegistry(deps);
+    installDisposeSpies(registry);
 
     // AutoSaveManager.dispose returns a Promise - the code calls .catch() on it
     registry.dispose();

@@ -61,16 +61,6 @@ vi.mock('../../nodes/sources/FileSourceNode', () => ({
   FileSourceNode: vi.fn().mockImplementation((name?: string) => createMockFileSourceNode(name)),
 }));
 
-// Mock Logger
-vi.mock('../../utils/Logger', () => ({
-  Logger: vi.fn().mockImplementation(() => ({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  })),
-}));
-
 // Import mocked modules so we can access them
 import {
   createSequenceInfo,
@@ -163,11 +153,11 @@ describe('MediaManager', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Re-establish default mock implementations after clearAllMocks
-    (FileSourceNode as unknown as ReturnType<typeof vi.fn>).mockImplementation(
-      (name?: string) => createMockFileSourceNode(name)
+    vi.mocked(FileSourceNode).mockImplementation(
+      (name?: string) => createMockFileSourceNode(name) as unknown as FileSourceNode
     );
-    (VideoSourceNode as unknown as ReturnType<typeof vi.fn>).mockImplementation(
-      (name?: string) => createMockVideoSourceNode(name)
+    vi.mocked(VideoSourceNode).mockImplementation(
+      (name?: string) => createMockVideoSourceNode(name) as unknown as VideoSourceNode
     );
     manager = new MediaManager();
     host = createMockHost();
@@ -229,13 +219,13 @@ describe('MediaManager', () => {
     });
 
     it('MM-008: pauses playback before adding source', () => {
-      (host.getIsPlaying as ReturnType<typeof vi.fn>).mockReturnValue(true);
+      vi.mocked(host.getIsPlaying).mockReturnValue(true);
       manager.addSource(createImageSource());
       expect(host.pause).toHaveBeenCalled();
     });
 
     it('MM-009: does not pause when not playing', () => {
-      (host.getIsPlaying as ReturnType<typeof vi.fn>).mockReturnValue(false);
+      vi.mocked(host.getIsPlaying).mockReturnValue(false);
       manager.addSource(createImageSource());
       expect(host.pause).not.toHaveBeenCalled();
     });
@@ -246,7 +236,7 @@ describe('MediaManager', () => {
     });
 
     it('MM-011: emits AB changed when host reports emitEvent=true', () => {
-      (host.onSourceAdded as ReturnType<typeof vi.fn>).mockReturnValue({
+      vi.mocked(host.onSourceAdded).mockReturnValue({
         currentSourceIndex: 0,
         emitEvent: true,
       });
@@ -267,7 +257,7 @@ describe('MediaManager', () => {
     });
 
     it('MM-014: updates currentSourceIndex from AB result when emitEvent is true', () => {
-      (host.onSourceAdded as ReturnType<typeof vi.fn>).mockReturnValue({
+      vi.mocked(host.onSourceAdded).mockReturnValue({
         currentSourceIndex: 0,
         emitEvent: true,
       });
@@ -469,7 +459,7 @@ describe('MediaManager', () => {
     });
 
     it('MM-034: uses host FPS for image source', async () => {
-      (host.getFps as ReturnType<typeof vi.fn>).mockReturnValue(30);
+      vi.mocked(host.getFps).mockReturnValue(30);
       await manager.loadImageFile(new File([], 'test.png'));
 
       expect(manager.currentSource?.fps).toBe(30);
@@ -477,14 +467,14 @@ describe('MediaManager', () => {
 
     it('MM-035: falls back to loadImage on FileSourceNode failure', async () => {
       // Make FileSourceNode.loadFile throw
-      (FileSourceNode as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      vi.mocked(FileSourceNode).mockImplementationOnce(() => ({
         loadFile: vi.fn().mockRejectedValue(new Error('unsupported format')),
         isHDR: vi.fn().mockReturnValue(false),
         formatName: null,
         width: 0,
         height: 0,
         properties: { getValue: vi.fn().mockReturnValue('') },
-      }));
+      }) as unknown as FileSourceNode);
 
       vi.stubGlobal('URL', {
         createObjectURL: vi.fn(() => 'blob:fallback-url'),
@@ -498,14 +488,14 @@ describe('MediaManager', () => {
     });
 
     it('MM-036: revokes URL on fallback failure', async () => {
-      (FileSourceNode as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      vi.mocked(FileSourceNode).mockImplementationOnce(() => ({
         loadFile: vi.fn().mockRejectedValue(new Error('unsupported format')),
         isHDR: vi.fn().mockReturnValue(false),
         formatName: null,
         width: 0,
         height: 0,
         properties: { getValue: vi.fn().mockReturnValue('') },
-      }));
+      }) as unknown as FileSourceNode);
 
       const revokeObjectURL = vi.fn();
       vi.stubGlobal('URL', {
@@ -637,12 +627,12 @@ describe('MediaManager', () => {
         revokeObjectURL,
       });
 
-      (FileSourceNode as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      vi.mocked(FileSourceNode).mockImplementationOnce(() => ({
         loadFromEXR: vi.fn().mockRejectedValue(new Error('EXR decode error')),
         width: 0,
         height: 0,
         properties: { getValue: vi.fn().mockReturnValue('') },
-      }));
+      }) as unknown as FileSourceNode);
 
       await expect(
         manager.loadEXRFile(new File([new ArrayBuffer(10)], 'bad.exr'))
@@ -714,8 +704,8 @@ describe('MediaManager', () => {
     });
 
     it('MM-045: initializes video element properties correctly', async () => {
-      (host.getMuted as ReturnType<typeof vi.fn>).mockReturnValue(true);
-      (host.getEffectiveVolume as ReturnType<typeof vi.fn>).mockReturnValue(0.5);
+      vi.mocked(host.getMuted).mockReturnValue(true);
+      vi.mocked(host.getEffectiveVolume).mockReturnValue(0.5);
 
       const mockVideo = {
         crossOrigin: '',
@@ -768,7 +758,7 @@ describe('MediaManager', () => {
         fps: 24,
         missingFrames: [],
       };
-      (createSequenceInfo as ReturnType<typeof vi.fn>).mockResolvedValue(sequenceInfo);
+      vi.mocked(createSequenceInfo).mockResolvedValue(sequenceInfo);
 
       await manager.loadSequence([new File([], 'frame_001.png'), new File([], 'frame_002.png')]);
 
@@ -786,7 +776,7 @@ describe('MediaManager', () => {
     });
 
     it('MM-047: throws when no valid sequence found', async () => {
-      (createSequenceInfo as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+      vi.mocked(createSequenceInfo).mockResolvedValue(null);
 
       await expect(
         manager.loadSequence([new File([], 'random.txt')])
@@ -805,7 +795,7 @@ describe('MediaManager', () => {
         fps: 30,
         missingFrames: [],
       };
-      (createSequenceInfo as ReturnType<typeof vi.fn>).mockResolvedValue(sequenceInfo);
+      vi.mocked(createSequenceInfo).mockResolvedValue(sequenceInfo);
 
       await manager.loadSequence([new File([], 'frame_001.png')], 30);
 
@@ -831,11 +821,11 @@ describe('MediaManager', () => {
 
     it('MM-051: loads frame image for sequence source', async () => {
       const mockImage = document.createElement('img');
-      (loadFrameImage as ReturnType<typeof vi.fn>).mockResolvedValue(mockImage);
+      vi.mocked(loadFrameImage).mockResolvedValue(mockImage);
       const seqSource = createSequenceSource();
       manager.addSource(seqSource);
 
-      (host.getCurrentFrame as ReturnType<typeof vi.fn>).mockReturnValue(1);
+      vi.mocked(host.getCurrentFrame).mockReturnValue(1);
       const result = await manager.getSequenceFrameImage();
 
       expect(loadFrameImage).toHaveBeenCalledWith(seqSource.sequenceFrames![0]);
@@ -852,7 +842,7 @@ describe('MediaManager', () => {
 
     it('MM-053: uses explicit frameIndex parameter', async () => {
       const mockImage = document.createElement('img');
-      (loadFrameImage as ReturnType<typeof vi.fn>).mockResolvedValue(mockImage);
+      vi.mocked(loadFrameImage).mockResolvedValue(mockImage);
       const seqSource = createSequenceSource();
       manager.addSource(seqSource);
 
@@ -870,7 +860,7 @@ describe('MediaManager', () => {
     it('MM-055: returns cached image synchronously', () => {
       const seqSource = createSequenceSource();
       manager.addSource(seqSource);
-      (host.getCurrentFrame as ReturnType<typeof vi.fn>).mockReturnValue(1);
+      vi.mocked(host.getCurrentFrame).mockReturnValue(1);
 
       const result = manager.getSequenceFrameSync();
       expect(result).toBe(seqSource.sequenceFrames![0]!.image);
@@ -880,7 +870,7 @@ describe('MediaManager', () => {
       const seqSource = createSequenceSource();
       seqSource.sequenceFrames![0]!.image = undefined;
       manager.addSource(seqSource);
-      (host.getCurrentFrame as ReturnType<typeof vi.fn>).mockReturnValue(1);
+      vi.mocked(host.getCurrentFrame).mockReturnValue(1);
 
       expect(manager.getSequenceFrameSync()).toBeNull();
     });
@@ -919,7 +909,7 @@ describe('MediaManager', () => {
       videoSource.videoSourceNode!.getCachedFrameCanvas = vi.fn().mockReturnValue(mockCanvas);
       manager.addSource(videoSource);
 
-      (host.getCurrentFrame as ReturnType<typeof vi.fn>).mockReturnValue(5);
+      vi.mocked(host.getCurrentFrame).mockReturnValue(5);
       const result = manager.getVideoFrameCanvas();
 
       // Verify observable output: the correct canvas is returned
@@ -957,7 +947,7 @@ describe('MediaManager', () => {
       videoSource.videoSourceNode!.hasFrameCached = vi.fn().mockReturnValue(true);
       manager.addSource(videoSource);
 
-      (host.getCurrentFrame as ReturnType<typeof vi.fn>).mockReturnValue(10);
+      vi.mocked(host.getCurrentFrame).mockReturnValue(10);
       // Verify observable output: the cached state is correctly reported
       expect(manager.hasVideoFrameCached()).toBe(true);
     });
@@ -1033,7 +1023,7 @@ describe('MediaManager', () => {
       videoSource.videoSourceNode!.isUsingMediabunny = vi.fn().mockReturnValue(true);
       videoSource.videoSourceNode!.getCachedFrameCanvas = vi.fn().mockReturnValue(mockCanvas);
 
-      (host.getCurrentFrame as ReturnType<typeof vi.fn>).mockReturnValue(3);
+      vi.mocked(host.getCurrentFrame).mockReturnValue(3);
       const result = manager.getFrameCanvasForSource(videoSource, 7);
 
       // Verify observable output: correct canvas returned for explicit frame
@@ -1045,7 +1035,7 @@ describe('MediaManager', () => {
       videoSource.videoSourceNode!.isUsingMediabunny = vi.fn().mockReturnValue(true);
       videoSource.videoSourceNode!.getCachedFrameCanvas = vi.fn().mockReturnValue(null);
 
-      (host.getCurrentFrame as ReturnType<typeof vi.fn>).mockReturnValue(15);
+      vi.mocked(host.getCurrentFrame).mockReturnValue(15);
       const result = manager.getFrameCanvasForSource(videoSource);
 
       // Verify observable output: null returned when no canvas cached
@@ -1094,7 +1084,7 @@ describe('MediaManager', () => {
       videoSource.videoSourceNode!.preloadFrames = vi.fn().mockResolvedValue(undefined);
       manager.addSource(videoSource);
 
-      (host.getCurrentFrame as ReturnType<typeof vi.fn>).mockReturnValue(5);
+      vi.mocked(host.getCurrentFrame).mockReturnValue(5);
       manager.preloadVideoFrames();
 
       expect(videoSource.videoSourceNode!.preloadFrames).toHaveBeenCalledWith(5);
@@ -1128,7 +1118,7 @@ describe('MediaManager', () => {
       videoSource.videoSourceNode!.getFrameAsync = vi.fn();
       manager.addSource(videoSource);
 
-      (host.getCurrentFrame as ReturnType<typeof vi.fn>).mockReturnValue(5);
+      vi.mocked(host.getCurrentFrame).mockReturnValue(5);
       await manager.fetchCurrentVideoFrame();
 
       expect(videoSource.videoSourceNode!.getFrameAsync).not.toHaveBeenCalled();
@@ -1141,7 +1131,7 @@ describe('MediaManager', () => {
       videoSource.videoSourceNode!.getFrameAsync = vi.fn().mockResolvedValue(null);
       manager.addSource(videoSource);
 
-      (host.getCurrentFrame as ReturnType<typeof vi.fn>).mockReturnValue(7);
+      vi.mocked(host.getCurrentFrame).mockReturnValue(7);
       await manager.fetchCurrentVideoFrame();
 
       expect(videoSource.videoSourceNode!.getFrameAsync).toHaveBeenCalledWith(7);
@@ -1373,14 +1363,14 @@ describe('MediaManager', () => {
       // loadImageFile will use _host?.getFps() ?? 24
       // Without host, it should default to 24
       const loadFileSpy = vi.fn().mockResolvedValue(undefined);
-      (FileSourceNode as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      vi.mocked(FileSourceNode).mockImplementationOnce(() => ({
         loadFile: loadFileSpy,
         isHDR: vi.fn().mockReturnValue(false),
         formatName: null,
         width: 100,
         height: 100,
         properties: { getValue: vi.fn().mockReturnValue('url') },
-      }));
+      }) as unknown as FileSourceNode);
 
       // We can't easily verify the fps without checking the source
       // But the method should not throw

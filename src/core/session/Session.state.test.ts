@@ -2,15 +2,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Session, MediaSource } from './Session';
 import { Graph } from '../graph/Graph';
 
-// Mock SequenceLoader
-vi.mock('../../utils/media/SequenceLoader', () => ({
-  createSequenceInfo: vi.fn(),
-  preloadFrames: vi.fn(),
-  loadFrameImage: vi.fn(),
-  releaseDistantFrames: vi.fn(),
-  disposeSequence: vi.fn(),
-}));
-
 const createMockDTO = (protocols: any) => {
   const mockObj = (data: any): any => ({
     exists: () => data !== undefined,
@@ -772,7 +763,7 @@ describe('Session', () => {
 
   describe('disposal', () => {
     it('dispose cleans up all sources', () => {
-        const seqSource: MediaSource = { type: 'sequence', name: 's', url: '', width: 1, height: 1, duration: 1, fps: 1, sequenceFrames: [] as any };
+        const seqSource: MediaSource = { type: 'sequence', name: 's', url: '', width: 1, height: 1, duration: 1, fps: 1, sequenceFrames: [] };
         session.setSources([seqSource]);
         const disposeSpy = vi.spyOn(session as any, 'disposeSequenceSource');
 
@@ -790,7 +781,7 @@ describe('Session', () => {
 
         session.setSources([
             { type: 'video', name: 'v1', url: 'v1.mp4', width: 100, height: 100, duration: 100, fps: 24, element: video },
-            { type: 'image', name: 'v2', url: 'v2.png', width: 100, height: 100, duration: 1, fps: 24, element: {} as any }
+            { type: 'image', name: 'v2', url: 'v2.png', width: 100, height: 100, duration: 1, fps: 24 }
         ]);
 
         session.setCurrentSource(1);
@@ -799,8 +790,8 @@ describe('Session', () => {
 
     it('toggleAB syncs frame with clamping', () => {
         session.setSources([
-            { type: 'image', name: 'a', url: 'a.png', width: 100, height: 100, duration: 100, fps: 24, element: {} as any },
-            { type: 'image', name: 'b', url: 'b.png', width: 100, height: 100, duration: 50, fps: 24, element: {} as any }
+            { type: 'image', name: 'a', url: 'a.png', width: 100, height: 100, duration: 100, fps: 24 },
+            { type: 'image', name: 'b', url: 'b.png', width: 100, height: 100, duration: 50, fps: 24 }
         ]);
         session.setSourceB(1);
         session.currentFrame = 80;
@@ -904,9 +895,9 @@ describe('Session', () => {
 
     it('A/B switching and clearing coverage', () => {
         session.setSources([
-            { type: 'image', name: 'a', url: 'a.png', width: 1, height: 1, duration: 1, fps: 24, element: {} as any },
-            { type: 'image', name: 'b', url: 'b.png', width: 1, height: 1, duration: 1, fps: 24, element: {} as any },
-            { type: 'image', name: 'c', url: 'c.png', width: 1, height: 1, duration: 1, fps: 24, element: {} as any }
+            { type: 'image', name: 'a', url: 'a.png', width: 1, height: 1, duration: 1, fps: 24 },
+            { type: 'image', name: 'b', url: 'b.png', width: 1, height: 1, duration: 1, fps: 24 },
+            { type: 'image', name: 'c', url: 'c.png', width: 1, height: 1, duration: 1, fps: 24 }
         ]);
         session.setSourceB(1);
 
@@ -945,7 +936,7 @@ describe('Session', () => {
         expect(await session.getSequenceFrameImage(1)).toBeNull();
         expect(session.getSequenceFrameSync(1)).toBeNull();
 
-        session.setSources([{ type: 'sequence', name: 's', url: '', width: 1, height: 1, duration: 1, fps: 1, sequenceFrames: [] as any }]);
+        session.setSources([{ type: 'sequence', name: 's', url: '', width: 1, height: 1, duration: 1, fps: 1, sequenceFrames: [] }]);
         expect(await session.getSequenceFrameImage(10)).toBeNull();
     });
 

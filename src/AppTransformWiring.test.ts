@@ -1,20 +1,10 @@
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock, type MockInstance } from 'vitest';
 import { EventEmitter } from './utils/EventEmitter';
 import type { TransformControlEvents } from './ui/components/TransformControl';
 import type { AppWiringContext } from './AppWiringContext';
-import type { Transform2D } from './core/types/transform';
-
-const DEFAULT_TRANSFORM: Transform2D = { rotation: 0, flipH: false, flipV: false, scale: { x: 1, y: 1 }, translate: { x: 0, y: 0 } };
-
-const mockRecordAction = vi.fn();
-
-vi.mock('./utils/HistoryManager', () => ({
-  getGlobalHistoryManager: () => ({
-    recordAction: mockRecordAction,
-  }),
-}));
-
+import { DEFAULT_TRANSFORM, type Transform2D } from './core/types/transform';
 import { wireTransformControls } from './AppTransformWiring';
+import { getGlobalHistoryManager, type HistoryEntry } from './utils/HistoryManager';
 
 function createMockContext() {
   const transformControl = new EventEmitter<TransformControlEvents>() as EventEmitter<TransformControlEvents> & {
@@ -46,8 +36,13 @@ function createMockContext() {
 }
 
 describe('wireTransformControls', () => {
+  const historyManager = getGlobalHistoryManager();
+  let recordActionSpy: MockInstance<[string, HistoryEntry['category'], () => void, (() => void)?], HistoryEntry>;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    historyManager.clear();
+    recordActionSpy = vi.spyOn(historyManager, 'recordAction');
   });
 
   it('TW-001: transformChanged calls viewer.setTransform and syncGTOStore', () => {
@@ -75,8 +70,8 @@ describe('wireTransformControls', () => {
     const transform = { ...DEFAULT_TRANSFORM, rotation: 90 as const };
     transformControl.emit('transformChanged', transform);
 
-    expect(mockRecordAction).toHaveBeenCalledTimes(1);
-    expect(mockRecordAction).toHaveBeenCalledWith(
+    expect(recordActionSpy).toHaveBeenCalledTimes(1);
+    expect(recordActionSpy).toHaveBeenCalledWith(
       'Rotation to 90°',
       'transform',
       expect.any(Function),
@@ -92,7 +87,7 @@ describe('wireTransformControls', () => {
     transformControl.emit('transformChanged', transform);
 
     // The undo callback is the 3rd argument (index 2)
-    const undoFn = mockRecordAction.mock.calls[0]![2] as () => void;
+    const undoFn = recordActionSpy.mock.calls[0]![2] as () => void;
 
     viewer.setTransform.mockClear();
     transformControl.setTransform.mockClear();
@@ -112,7 +107,7 @@ describe('wireTransformControls', () => {
     transformControl.emit('transformChanged', transform);
 
     // The redo callback is the 4th argument (index 3)
-    const redoFn = mockRecordAction.mock.calls[0]![3] as () => void;
+    const redoFn = recordActionSpy.mock.calls[0]![3] as () => void;
 
     viewer.setTransform.mockClear();
     transformControl.setTransform.mockClear();
@@ -131,8 +126,8 @@ describe('wireTransformControls', () => {
     const transform = { ...DEFAULT_TRANSFORM, scale: { x: 2, y: 2 }, translate: { ...DEFAULT_TRANSFORM.translate } };
     transformControl.emit('transformChanged', transform);
 
-    expect(mockRecordAction).toHaveBeenCalledTimes(1);
-    expect(mockRecordAction).toHaveBeenCalledWith(
+    expect(recordActionSpy).toHaveBeenCalledTimes(1);
+    expect(recordActionSpy).toHaveBeenCalledWith(
       'Scale to 2.00x2.00',
       'transform',
       expect.any(Function),
@@ -147,8 +142,8 @@ describe('wireTransformControls', () => {
     const transform = { ...DEFAULT_TRANSFORM, scale: { ...DEFAULT_TRANSFORM.scale }, translate: { x: 10, y: -5 } };
     transformControl.emit('transformChanged', transform);
 
-    expect(mockRecordAction).toHaveBeenCalledTimes(1);
-    expect(mockRecordAction).toHaveBeenCalledWith(
+    expect(recordActionSpy).toHaveBeenCalledTimes(1);
+    expect(recordActionSpy).toHaveBeenCalledWith(
       'Translate to (10.0, -5.0)',
       'transform',
       expect.any(Function),
@@ -163,8 +158,8 @@ describe('wireTransformControls', () => {
     const transform = { ...DEFAULT_TRANSFORM, scale: { x: 1.5, y: 1.5 }, translate: { x: 5, y: 5 } };
     transformControl.emit('transformChanged', transform);
 
-    expect(mockRecordAction).toHaveBeenCalledTimes(1);
-    expect(mockRecordAction).toHaveBeenCalledWith(
+    expect(recordActionSpy).toHaveBeenCalledTimes(1);
+    expect(recordActionSpy).toHaveBeenCalledWith(
       'Transform image',
       'transform',
       expect.any(Function),

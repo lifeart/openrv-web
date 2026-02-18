@@ -2,14 +2,15 @@
  * Tests for MediabunnyFrameExtractor
  *
  * These tests verify the actual MediabunnyFrameExtractor class behavior.
+ *
+ * The mediabunny module mock is necessary because mediabunny requires
+ * WebCodecs APIs (VideoDecoder, VideoEncoder) which are unavailable in
+ * the jsdom/node test environment.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Track CanvasSink constructor calls to verify options
-let canvasSinkCalls: Array<{ track: unknown; options: unknown }> = [];
-
-// Mock the mediabunny module
+// Mock the mediabunny module (required: WebCodecs APIs unavailable in test env)
 vi.mock('mediabunny', () => {
   return {
     Input: vi.fn().mockImplementation(() => ({
@@ -23,8 +24,7 @@ vi.mock('mediabunny', () => {
       dispose: vi.fn(),
     })),
     BlobSource: vi.fn(),
-    CanvasSink: vi.fn().mockImplementation((track, options) => {
-      canvasSinkCalls.push({ track, options });
+    CanvasSink: vi.fn().mockImplementation(() => {
       return {
         canvases: vi.fn().mockReturnValue({
           [Symbol.asyncIterator]: async function* () {
@@ -40,17 +40,22 @@ vi.mock('mediabunny', () => {
   };
 });
 
+// Static imports work because vi.mock is hoisted before all imports
+import {
+  MediabunnyFrameExtractor,
+  createFrameExtractor,
+  UnsupportedCodecException,
+  type FrameResult,
+} from './MediabunnyFrameExtractor';
+import { Input, CanvasSink, VideoSampleSink } from 'mediabunny';
+
 describe('MediabunnyFrameExtractor', () => {
   beforeEach(() => {
-    canvasSinkCalls = [];
     vi.clearAllMocks();
   });
 
   describe('CanvasSink Options', () => {
     it('should create CanvasSink with fit option when width and height are provided', async () => {
-      // Import after mocking
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       // Skip if WebCodecs not supported (test environment)
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
@@ -65,10 +70,11 @@ describe('MediabunnyFrameExtractor', () => {
         // May fail in test env, but we want to verify CanvasSink was called correctly
       }
 
-      // Verify CanvasSink was called with fit option
-      if (canvasSinkCalls.length > 0) {
-        const lastCall = canvasSinkCalls[canvasSinkCalls.length - 1];
-        const options = lastCall?.options as { width?: number; height?: number; fit?: string };
+      // Verify CanvasSink was called with fit option via the mock
+      const calls = vi.mocked(CanvasSink).mock.calls;
+      if (calls.length > 0) {
+        const lastCall = calls[calls.length - 1];
+        const options = lastCall?.[1] as { width?: number; height?: number; fit?: string } | undefined;
         expect(options).toBeDefined();
         if (options?.width && options?.height) {
           expect(options.fit).toBe('contain');
@@ -78,8 +84,7 @@ describe('MediabunnyFrameExtractor', () => {
   });
 
   describe('frame/timestamp conversion', () => {
-    it('should convert frame number to timestamp correctly at 24fps', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
+    it('should convert frame number to timestamp correctly at 24fps', () => {
       const extractor = new MediabunnyFrameExtractor();
 
       // Default fps is 24, frame numbers are 1-based
@@ -90,8 +95,7 @@ describe('MediabunnyFrameExtractor', () => {
       expect(extractor.frameToTimestamp(49)).toBeCloseTo(2, 6); // 2 seconds
     });
 
-    it('should convert timestamp to frame number correctly at 24fps', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
+    it('should convert timestamp to frame number correctly at 24fps', () => {
       const extractor = new MediabunnyFrameExtractor();
 
       // Frame numbers are 1-based
@@ -100,8 +104,7 @@ describe('MediabunnyFrameExtractor', () => {
       expect(extractor.timestampToFrame(0.5)).toBe(13); // 0.5 seconds
     });
 
-    it('should round-trip frame to timestamp to frame correctly', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
+    it('should round-trip frame to timestamp to frame correctly', () => {
       const extractor = new MediabunnyFrameExtractor();
 
       // Round trip should get back to same frame
@@ -114,16 +117,14 @@ describe('MediabunnyFrameExtractor', () => {
   });
 
   describe('isSupported', () => {
-    it('should return boolean indicating WebCodecs support', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
+    it('should return boolean indicating WebCodecs support', () => {
       const supported = MediabunnyFrameExtractor.isSupported();
       expect(typeof supported).toBe('boolean');
     });
   });
 
   describe('initialization state', () => {
-    it('should not be ready before load is called', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
+    it('should not be ready before load is called', () => {
       const extractor = new MediabunnyFrameExtractor();
 
       expect(extractor.isReady()).toBe(false);
@@ -132,28 +133,24 @@ describe('MediabunnyFrameExtractor', () => {
     });
 
     it('should throw when getFrame is called before load', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
       const extractor = new MediabunnyFrameExtractor();
 
       await expect(extractor.getFrame(1)).rejects.toThrow('Extractor not initialized');
     });
 
     it('should throw when getFrameImageData is called before load', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
       const extractor = new MediabunnyFrameExtractor();
 
       await expect(extractor.getFrameImageData(1)).rejects.toThrow('Extractor not initialized');
     });
 
     it('should throw when getFrameBlob is called before load', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
       const extractor = new MediabunnyFrameExtractor();
 
       await expect(extractor.getFrameBlob(1)).rejects.toThrow('Extractor not initialized');
     });
 
     it('should throw when getThumbnail is called before load', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
       const extractor = new MediabunnyFrameExtractor();
 
       await expect(extractor.getThumbnail(1)).rejects.toThrow('Extractor not initialized');
@@ -161,8 +158,7 @@ describe('MediabunnyFrameExtractor', () => {
   });
 
   describe('dispose', () => {
-    it('should reset state when dispose is called', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
+    it('should reset state when dispose is called', () => {
       const extractor = new MediabunnyFrameExtractor();
 
       // Even without loading, dispose should work
@@ -176,8 +172,6 @@ describe('MediabunnyFrameExtractor', () => {
 
   describe('load', () => {
     it('should return metadata after successful load', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       // Skip if WebCodecs not supported
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
@@ -199,8 +193,6 @@ describe('MediabunnyFrameExtractor', () => {
     });
 
     it('should mark extractor as ready after load', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
       }
@@ -215,8 +207,6 @@ describe('MediabunnyFrameExtractor', () => {
     });
 
     it('should use provided fps value', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
       }
@@ -232,8 +222,6 @@ describe('MediabunnyFrameExtractor', () => {
     });
 
     it('should clean up previous resources when loading again', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
       }
@@ -255,8 +243,6 @@ describe('MediabunnyFrameExtractor', () => {
 
   describe('createFrameExtractor helper', () => {
     it('should create and load extractor in one call', async () => {
-      const { createFrameExtractor, MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
       }
@@ -271,13 +257,11 @@ describe('MediabunnyFrameExtractor', () => {
 
   describe('loadUrl', () => {
     it('should fetch URL and load video', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
       }
 
-      // Mock fetch
+      // Mock fetch (required: no real network in tests)
       const mockBlob = new Blob(['test'], { type: 'video/mp4' });
       const mockResponse = {
         ok: true,
@@ -294,13 +278,11 @@ describe('MediabunnyFrameExtractor', () => {
     });
 
     it('should throw error when fetch fails', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
       }
 
-      // Mock fetch failure
+      // Mock fetch failure (required: no real network in tests)
       const mockResponse = {
         ok: false,
         statusText: 'Not Found',
@@ -314,7 +296,6 @@ describe('MediabunnyFrameExtractor', () => {
 
   describe('getFrameRange', () => {
     it('should throw when called before load', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
       const extractor = new MediabunnyFrameExtractor();
 
       const generator = extractor.getFrameRange(1, 5);
@@ -324,7 +305,6 @@ describe('MediabunnyFrameExtractor', () => {
 
   describe('getFrames', () => {
     it('should throw when called before load', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
       const extractor = new MediabunnyFrameExtractor();
 
       const generator = extractor.getFrames([1, 2, 3]);
@@ -334,7 +314,6 @@ describe('MediabunnyFrameExtractor', () => {
 
   describe('generateThumbnails', () => {
     it('should throw when called before load', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
       const extractor = new MediabunnyFrameExtractor();
 
       const generator = extractor.generateThumbnails(5);
@@ -344,8 +323,6 @@ describe('MediabunnyFrameExtractor', () => {
 
   describe('getActualFrameCount', () => {
     it('should return frame count after building index', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
       }
@@ -363,8 +340,6 @@ describe('MediabunnyFrameExtractor', () => {
 
   describe('getDetectedFps', () => {
     it('should return null for single frame video', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
       }
@@ -384,8 +359,7 @@ describe('MediabunnyFrameExtractor', () => {
   });
 
   describe('AbortController support', () => {
-    it('should have abortPendingOperations method', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
+    it('should have abortPendingOperations method', () => {
       const extractor = new MediabunnyFrameExtractor();
 
       // Method should exist and not throw
@@ -393,8 +367,7 @@ describe('MediabunnyFrameExtractor', () => {
       extractor.abortPendingOperations();
     });
 
-    it('should have getAbortSignal method that returns AbortSignal', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
+    it('should have getAbortSignal method that returns AbortSignal', () => {
       const extractor = new MediabunnyFrameExtractor();
 
       const signal = extractor.getAbortSignal();
@@ -402,8 +375,7 @@ describe('MediabunnyFrameExtractor', () => {
       expect(signal.aborted).toBe(false);
     });
 
-    it('should create new abort signal after abortPendingOperations', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
+    it('should create new abort signal after abortPendingOperations', () => {
       const extractor = new MediabunnyFrameExtractor();
 
       const signal1 = extractor.getAbortSignal();
@@ -420,8 +392,7 @@ describe('MediabunnyFrameExtractor', () => {
       expect(signal2).not.toBe(signal1);
     });
 
-    it('should abort pending operations on dispose', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
+    it('should abort pending operations on dispose', () => {
       const extractor = new MediabunnyFrameExtractor();
 
       const signal = extractor.getAbortSignal();
@@ -434,8 +405,6 @@ describe('MediabunnyFrameExtractor', () => {
     });
 
     it('getFrame should return null when aborted before start', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
       }
@@ -453,8 +422,6 @@ describe('MediabunnyFrameExtractor', () => {
     });
 
     it('getFrame should accept external AbortSignal', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
       }
@@ -474,14 +441,11 @@ describe('MediabunnyFrameExtractor', () => {
   });
 
   describe('UnsupportedCodecException', () => {
-    it('MFE-U090: UnsupportedCodecException should be exported', async () => {
-      const { UnsupportedCodecException } = await import('./MediabunnyFrameExtractor');
+    it('MFE-U090: UnsupportedCodecException should be exported', () => {
       expect(UnsupportedCodecException).toBeDefined();
     });
 
-    it('MFE-U091: UnsupportedCodecException should contain codec info', async () => {
-      const { UnsupportedCodecException } = await import('./MediabunnyFrameExtractor');
-
+    it('MFE-U091: UnsupportedCodecException should contain codec info', () => {
       const error = new UnsupportedCodecException('apch', 'test.mov');
       expect(error.codec).toBe('apch');
       expect(error.codecFamily).toBe('prores');
@@ -489,17 +453,13 @@ describe('MediabunnyFrameExtractor', () => {
       expect(error.codecError.title).toContain('ProRes');
     });
 
-    it('MFE-U092: UnsupportedCodecException message should be descriptive', async () => {
-      const { UnsupportedCodecException } = await import('./MediabunnyFrameExtractor');
-
+    it('MFE-U092: UnsupportedCodecException message should be descriptive', () => {
       const error = new UnsupportedCodecException('dnxhd', 'test.mxf');
       expect(error.message).toContain('DNxHD');
       expect(error.message.length).toBeGreaterThan(10);
     });
 
-    it('MFE-U093: UnsupportedCodecException should handle null codec', async () => {
-      const { UnsupportedCodecException } = await import('./MediabunnyFrameExtractor');
-
+    it('MFE-U093: UnsupportedCodecException should handle null codec', () => {
       const error = new UnsupportedCodecException(null);
       expect(error.codec).toBe(null);
       expect(error.codecFamily).toBe('unknown');
@@ -508,8 +468,6 @@ describe('MediabunnyFrameExtractor', () => {
 
   describe('HDR detection', () => {
     it('should include isHDR in metadata after load', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
       }
@@ -524,8 +482,6 @@ describe('MediabunnyFrameExtractor', () => {
     });
 
     it('should include colorSpace in metadata after load', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
       }
@@ -541,8 +497,6 @@ describe('MediabunnyFrameExtractor', () => {
     });
 
     it('isHDR should return false for non-HDR videos', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
       }
@@ -556,8 +510,6 @@ describe('MediabunnyFrameExtractor', () => {
     });
 
     it('getColorSpace should return null for non-HDR videos', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
       }
@@ -570,8 +522,6 @@ describe('MediabunnyFrameExtractor', () => {
     });
 
     it('getFrameHDR should return null when not HDR', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
       }
@@ -586,13 +536,9 @@ describe('MediabunnyFrameExtractor', () => {
     });
 
     it('MFE-HDR-001: probes decoded frame color metadata when container HDR lacks transfer info', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
       }
-
-      const { Input, VideoSampleSink } = await import('mediabunny');
 
       const mockTrack = {
         displayWidth: 1920,
@@ -647,8 +593,6 @@ describe('MediabunnyFrameExtractor', () => {
 
   describe('Metadata codec info', () => {
     it('MFE-U100: metadata should include codecFamily after load', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
       }
@@ -663,8 +607,6 @@ describe('MediabunnyFrameExtractor', () => {
     });
 
     it('MFE-U101: metadata should include isProfessionalCodec flag', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
       }
@@ -685,8 +627,6 @@ describe('MediabunnyFrameExtractor', () => {
 
   describe('edge cases (IMP-039)', () => {
     it('IMP-039-MFE-001: single-frame video has frameCount of 1 after index build', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
       }
@@ -702,8 +642,6 @@ describe('MediabunnyFrameExtractor', () => {
     });
 
     it('IMP-039-MFE-002: getFrame clamps frame 0 to frame 1', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
       }
@@ -720,8 +658,6 @@ describe('MediabunnyFrameExtractor', () => {
     });
 
     it('IMP-039-MFE-003: getFrame clamps negative frame to frame 1', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
       }
@@ -738,8 +674,6 @@ describe('MediabunnyFrameExtractor', () => {
     });
 
     it('IMP-039-MFE-004: getFrame clamps frame beyond total to last frame', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
       }
@@ -757,8 +691,6 @@ describe('MediabunnyFrameExtractor', () => {
     });
 
     it('IMP-039-MFE-005: abort during frame extraction returns null', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
       }
@@ -776,8 +708,6 @@ describe('MediabunnyFrameExtractor', () => {
     });
 
     it('IMP-039-MFE-006: requesting same frame twice uses snapshot cache', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
       }
@@ -799,9 +729,7 @@ describe('MediabunnyFrameExtractor', () => {
       }
     });
 
-    it('IMP-039-MFE-007: abortPendingOperations resets signal for future operations', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
+    it('IMP-039-MFE-007: abortPendingOperations resets signal for future operations', () => {
       const extractor = new MediabunnyFrameExtractor();
 
       // First abort
@@ -821,8 +749,6 @@ describe('MediabunnyFrameExtractor', () => {
     });
 
     it('IMP-039-MFE-008: getFrameHDR returns null when aborted', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
       }
@@ -839,16 +765,14 @@ describe('MediabunnyFrameExtractor', () => {
       expect(result).toBeNull();
     });
 
-    it('IMP-039-MFE-009: frame timestamp at exact boundary (frame 1 = 0.0s)', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
+    it('IMP-039-MFE-009: frame timestamp at exact boundary (frame 1 = 0.0s)', () => {
       const extractor = new MediabunnyFrameExtractor();
 
       // Frame 1 should map to exactly 0.0 seconds (boundary)
       expect(extractor.frameToTimestamp(1)).toBe(0);
     });
 
-    it('IMP-039-MFE-010: isReady returns false before load and after abort', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
+    it('IMP-039-MFE-010: isReady returns false before load and after abort', () => {
       const extractor = new MediabunnyFrameExtractor();
 
       // Not ready before load
@@ -866,8 +790,6 @@ describe('MediabunnyFrameExtractor', () => {
   // REGRESSION TESTS for frame count accuracy and timestamp clamping fixes
   describe('frame count accuracy regression tests', () => {
     it('MFE-FC-001: frame count uses Math.round instead of Math.ceil', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
       }
@@ -884,7 +806,6 @@ describe('MediabunnyFrameExtractor', () => {
         dispose: vi.fn(),
       };
 
-      const { Input } = await import('mediabunny');
       vi.mocked(Input).mockReturnValue(mockInput as never);
 
       const extractor = new MediabunnyFrameExtractor();
@@ -896,8 +817,6 @@ describe('MediabunnyFrameExtractor', () => {
     });
 
     it('MFE-FC-002: frame count with fractional result rounds correctly', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
       }
@@ -914,7 +833,6 @@ describe('MediabunnyFrameExtractor', () => {
         dispose: vi.fn(),
       };
 
-      const { Input } = await import('mediabunny');
       vi.mocked(Input).mockReturnValue(mockInput as never);
 
       const extractor = new MediabunnyFrameExtractor();
@@ -926,8 +844,6 @@ describe('MediabunnyFrameExtractor', () => {
     });
 
     it('MFE-FC-003: frame count rounds up when fractional part >= 0.5', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
       }
@@ -944,7 +860,6 @@ describe('MediabunnyFrameExtractor', () => {
         dispose: vi.fn(),
       };
 
-      const { Input } = await import('mediabunny');
       vi.mocked(Input).mockReturnValue(mockInput as never);
 
       const extractor = new MediabunnyFrameExtractor();
@@ -958,8 +873,6 @@ describe('MediabunnyFrameExtractor', () => {
 
   describe('timestamp clamping regression test', () => {
     it('MFE-TS-001: getFrame clamps endTimestamp to video duration', async () => {
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
-
       if (!MediabunnyFrameExtractor.isSupported()) {
         return;
       }
@@ -989,7 +902,6 @@ describe('MediabunnyFrameExtractor', () => {
         dispose: vi.fn(),
       };
 
-      const { Input, CanvasSink } = await import('mediabunny');
       vi.mocked(Input).mockReturnValue(mockInput as never);
       vi.mocked(CanvasSink).mockReturnValue(mockCanvasSink as never);
 
@@ -1019,11 +931,10 @@ describe('MediabunnyFrameExtractor', () => {
   // =================================================================
 
   describe('FrameResult type and snapshotCanvas (FPS regression)', () => {
-    it('MFE-FPS-001: FrameResult type allows ImageBitmap canvas', async () => {
+    it('MFE-FPS-001: FrameResult type allows ImageBitmap canvas', () => {
       // The FrameResult interface must accept ImageBitmap as a canvas type.
       // If someone changes the interface back to only HTMLCanvasElement | OffscreenCanvas,
       // this test will fail at compile time (and the cast below will be type-unsafe).
-      type FrameResultType = import('./MediabunnyFrameExtractor').FrameResult;
 
       // Verify the interface accepts ImageBitmap at the type level
       // by constructing a compliant object.
@@ -1034,7 +945,7 @@ describe('MediabunnyFrameExtractor', () => {
         close: () => {},
       } as unknown as ImageBitmap;
 
-      const result: FrameResultType = {
+      const result: FrameResult = {
         canvas: mockBitmap,
         timestamp: 0,
         duration: 0.04167,
@@ -1047,25 +958,23 @@ describe('MediabunnyFrameExtractor', () => {
       expect(result.frameNumber).toBe(1);
     });
 
-    it('MFE-FPS-002: getFrameImageData handles ImageBitmap canvas', async () => {
+    it('MFE-FPS-002: getFrameImageData handles ImageBitmap canvas', () => {
       // getFrameImageData must support ImageBitmap input (from snapshotCanvas).
       // It creates a temp OffscreenCanvas, draws the bitmap, and extracts pixels.
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
 
       // Verify the method exists on the prototype
       expect(typeof MediabunnyFrameExtractor.prototype.getFrameImageData).toBe('function');
     });
 
-    it('MFE-FPS-003: getFrameBlob handles ImageBitmap canvas', async () => {
+    it('MFE-FPS-003: getFrameBlob handles ImageBitmap canvas', () => {
       // getFrameBlob must support ImageBitmap input (from snapshotCanvas).
       // It creates a temp OffscreenCanvas for blob conversion.
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
 
       // Verify the method exists on the prototype
       expect(typeof MediabunnyFrameExtractor.prototype.getFrameBlob).toBe('function');
     });
 
-    it('MFE-FPS-004: snapshotCanvas uses createImageBitmap (not synchronous copy)', async () => {
+    it('MFE-FPS-004: snapshotCanvas uses createImageBitmap (not synchronous copy)', () => {
       // This test verifies that the module uses createImageBitmap
       // (async, GPU-accelerated) rather than synchronous copyCanvas.
       // We check by reading the module source as text would be fragile,
@@ -1075,7 +984,6 @@ describe('MediabunnyFrameExtractor', () => {
 
       // In test environments without real createImageBitmap, we verify
       // the function signature and async nature.
-      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
 
       // Verify the extractor is defined and has the expected methods
       const extractor = new MediabunnyFrameExtractor();

@@ -2,14 +2,17 @@
  * SnapshotPanel Unit Tests
  *
  * Tests for the session snapshot management panel.
- * Uses a mocked SnapshotManager since the real one requires IndexedDB.
+ * Uses a stub SnapshotManager backed by a real EventEmitter since the
+ * real SnapshotManager requires IndexedDB (unavailable in jsdom).
  * Based on test ID naming convention: SNAP-NNN
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SnapshotPanel } from './SnapshotPanel';
 import type { ExclusivePanel } from './SnapshotPanel';
-import type { Snapshot, SnapshotManager } from '../../core/session/SnapshotManager';
+import type { Snapshot } from '../../core/session/SnapshotManager';
+import { EventEmitter } from '../../utils/EventEmitter';
+import type { SnapshotManagerEvents } from '../../core/session/SnapshotManager';
 
 vi.mock('./shared/Modal', () => ({
   showPrompt: vi.fn(),
@@ -19,29 +22,16 @@ vi.mock('./shared/Modal', () => ({
 
 import { showPrompt, showConfirm } from './shared/Modal';
 
-function createMockSnapshotManager(): SnapshotManager {
-  const listeners: Record<string, Array<(data: unknown) => void>> = {};
-  return {
-    on: vi.fn((event: string, callback: (data: unknown) => void) => {
-      if (!listeners[event]) listeners[event] = [];
-      listeners[event].push(callback);
-      return () => {
-        const idx = listeners[event]?.indexOf(callback) ?? -1;
-        if (idx >= 0) listeners[event]!.splice(idx, 1);
-      };
-    }),
-    off: vi.fn(),
-    emit: vi.fn((event: string, data: unknown) => {
-      listeners[event]?.forEach((cb) => cb(data));
-    }),
-    listSnapshots: vi.fn().mockResolvedValue([]),
-    deleteSnapshot: vi.fn().mockResolvedValue(undefined),
-    renameSnapshot: vi.fn().mockResolvedValue(undefined),
-    exportSnapshot: vi.fn().mockResolvedValue('{"metadata":{},"state":{}}'),
-    clearAll: vi.fn().mockResolvedValue(undefined),
-    // Expose listeners for test assertions
-    _listeners: listeners,
-  } as unknown as SnapshotManager;
+/**
+ * Stub SnapshotManager that uses a real EventEmitter for event wiring
+ * but stubs async database methods (IndexedDB is unavailable in jsdom).
+ */
+class StubSnapshotManager extends EventEmitter<SnapshotManagerEvents> {
+  listSnapshots = vi.fn().mockResolvedValue([]);
+  deleteSnapshot = vi.fn().mockResolvedValue(undefined);
+  renameSnapshot = vi.fn().mockResolvedValue(undefined);
+  exportSnapshot = vi.fn().mockResolvedValue('{"metadata":{},"state":{}}');
+  clearAll = vi.fn().mockResolvedValue(undefined);
 }
 
 function createMockSnapshot(overrides: Partial<Snapshot> = {}): Snapshot {
@@ -58,12 +48,14 @@ function createMockSnapshot(overrides: Partial<Snapshot> = {}): Snapshot {
 
 describe('SnapshotPanel', () => {
   let panel: SnapshotPanel;
-  let manager: SnapshotManager;
+  let manager: StubSnapshotManager;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    manager = createMockSnapshotManager();
-    panel = new SnapshotPanel(manager);
+    manager = new StubSnapshotManager();
+    // SnapshotPanel accepts SnapshotManager which extends EventEmitter with
+    // the same event interface; our stub satisfies the structural contract.
+    panel = new SnapshotPanel(manager as never);
   });
 
   afterEach(() => {
@@ -95,10 +87,16 @@ describe('SnapshotPanel', () => {
     });
 
     it('SNAP-005: subscribes to snapshotManager snapshotsChanged event', () => {
-      expect(manager.on).toHaveBeenCalledWith(
+      const spyManager = new StubSnapshotManager();
+      const onSpy = vi.spyOn(spyManager, 'on');
+      const spyPanel = new SnapshotPanel(spyManager as never);
+
+      expect(onSpy).toHaveBeenCalledWith(
         'snapshotsChanged',
         expect.any(Function)
       );
+
+      spyPanel.dispose();
     });
   });
 
@@ -231,7 +229,7 @@ describe('SnapshotPanel', () => {
   // ---------------------------------------------------------------------------
   describe('snapshot list', () => {
     it('SNAP-030: shows empty state when no snapshots', async () => {
-      (manager.listSnapshots as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+      manager.listSnapshots.mockResolvedValue([]);
       document.body.appendChild(panel.render());
       panel.show();
 
@@ -248,7 +246,7 @@ describe('SnapshotPanel', () => {
         createMockSnapshot({ id: 'snap-1', name: 'Snapshot A' }),
         createMockSnapshot({ id: 'snap-2', name: 'Snapshot B' }),
       ];
-      (manager.listSnapshots as ReturnType<typeof vi.fn>).mockResolvedValue(
+      manager.listSnapshots.mockResolvedValue(
         snapshots
       );
       document.body.appendChild(panel.render());
@@ -266,7 +264,7 @@ describe('SnapshotPanel', () => {
       const snapshots = [
         createMockSnapshot({ isAutoCheckpoint: false }),
       ];
-      (manager.listSnapshots as ReturnType<typeof vi.fn>).mockResolvedValue(
+      manager.listSnapshots.mockResolvedValue(
         snapshots
       );
       document.body.appendChild(panel.render());
@@ -283,7 +281,7 @@ describe('SnapshotPanel', () => {
       const snapshots = [
         createMockSnapshot({ isAutoCheckpoint: true, name: 'Auto: source loaded' }),
       ];
-      (manager.listSnapshots as ReturnType<typeof vi.fn>).mockResolvedValue(
+      manager.listSnapshots.mockResolvedValue(
         snapshots
       );
       document.body.appendChild(panel.render());
@@ -304,10 +302,8 @@ describe('SnapshotPanel', () => {
         createMockSnapshot({ id: 'snap-new', name: 'New Snapshot' }),
       ];
 
-      // Simulate snapshotsChanged event from manager
-      (manager as unknown as { _listeners: Record<string, Array<(data: unknown) => void>> })
-        ._listeners['snapshotsChanged']
-        ?.forEach((cb) => cb({ snapshots: newSnapshots }));
+      // Simulate snapshotsChanged event from manager using the real EventEmitter
+      manager.emit('snapshotsChanged', { snapshots: newSnapshots });
 
       expect(panel.render().textContent).toContain('New Snapshot');
 
@@ -323,7 +319,7 @@ describe('SnapshotPanel', () => {
       const snapshots = [
         createMockSnapshot({ id: 'snap-restore', name: 'Restore Me' }),
       ];
-      (manager.listSnapshots as ReturnType<typeof vi.fn>).mockResolvedValue(
+      manager.listSnapshots.mockResolvedValue(
         snapshots
       );
       document.body.appendChild(panel.render());
@@ -347,10 +343,10 @@ describe('SnapshotPanel', () => {
       const snapshots = [
         createMockSnapshot({ id: 'snap-rename', name: 'Old Name' }),
       ];
-      (manager.listSnapshots as ReturnType<typeof vi.fn>).mockResolvedValue(
+      manager.listSnapshots.mockResolvedValue(
         snapshots
       );
-      (showPrompt as ReturnType<typeof vi.fn>).mockResolvedValue('New Name');
+      vi.mocked(showPrompt).mockResolvedValue('New Name');
 
       document.body.appendChild(panel.render());
       panel.show();
@@ -376,10 +372,10 @@ describe('SnapshotPanel', () => {
       const snapshots = [
         createMockSnapshot({ id: 'snap-delete', name: 'Delete Me' }),
       ];
-      (manager.listSnapshots as ReturnType<typeof vi.fn>).mockResolvedValue(
+      manager.listSnapshots.mockResolvedValue(
         snapshots
       );
-      (showConfirm as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+      vi.mocked(showConfirm).mockResolvedValue(true);
 
       document.body.appendChild(panel.render());
       panel.show();
@@ -402,10 +398,10 @@ describe('SnapshotPanel', () => {
       const snapshots = [
         createMockSnapshot({ id: 'snap-cancel', name: 'Keep Me' }),
       ];
-      (manager.listSnapshots as ReturnType<typeof vi.fn>).mockResolvedValue(
+      manager.listSnapshots.mockResolvedValue(
         snapshots
       );
-      (showConfirm as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+      vi.mocked(showConfirm).mockResolvedValue(false);
 
       document.body.appendChild(panel.render());
       panel.show();
@@ -443,7 +439,7 @@ describe('SnapshotPanel', () => {
           },
         }),
       ];
-      (manager.listSnapshots as ReturnType<typeof vi.fn>).mockResolvedValue(
+      manager.listSnapshots.mockResolvedValue(
         snapshots
       );
       document.body.appendChild(panel.render());
@@ -477,7 +473,7 @@ describe('SnapshotPanel', () => {
           },
         }),
       ];
-      (manager.listSnapshots as ReturnType<typeof vi.fn>).mockResolvedValue(
+      manager.listSnapshots.mockResolvedValue(
         snapshots
       );
       document.body.appendChild(panel.render());
@@ -525,7 +521,7 @@ describe('SnapshotPanel', () => {
           },
         }),
       ];
-      (manager.listSnapshots as ReturnType<typeof vi.fn>).mockResolvedValue(
+      manager.listSnapshots.mockResolvedValue(
         snapshots
       );
       document.body.appendChild(panel.render());
@@ -557,7 +553,7 @@ describe('SnapshotPanel', () => {
           },
         }),
       ];
-      (manager.listSnapshots as ReturnType<typeof vi.fn>).mockResolvedValue(
+      manager.listSnapshots.mockResolvedValue(
         snapshots
       );
       document.body.appendChild(panel.render());
@@ -582,7 +578,7 @@ describe('SnapshotPanel', () => {
       const snapshots = [
         createMockSnapshot({ size: 512 }),
       ];
-      (manager.listSnapshots as ReturnType<typeof vi.fn>).mockResolvedValue(
+      manager.listSnapshots.mockResolvedValue(
         snapshots
       );
       document.body.appendChild(panel.render());
@@ -599,7 +595,7 @@ describe('SnapshotPanel', () => {
       const snapshots = [
         createMockSnapshot({ size: 2048 }),
       ];
-      (manager.listSnapshots as ReturnType<typeof vi.fn>).mockResolvedValue(
+      manager.listSnapshots.mockResolvedValue(
         snapshots
       );
       document.body.appendChild(panel.render());
@@ -616,7 +612,7 @@ describe('SnapshotPanel', () => {
       const snapshots = [
         createMockSnapshot({ size: 2 * 1024 * 1024 }),
       ];
-      (manager.listSnapshots as ReturnType<typeof vi.fn>).mockResolvedValue(
+      manager.listSnapshots.mockResolvedValue(
         snapshots
       );
       document.body.appendChild(panel.render());

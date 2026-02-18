@@ -14,6 +14,7 @@ import {
   isFullCropRegion,
   getEffectiveDimensions,
 } from './ViewerRenderingUtils';
+import { compositeTimecodeFrameburn, type FrameburnTimecodeOptions } from './FrameburnCompositor';
 import { safeCanvasContext2D } from '../../color/ColorProcessingFacade';
 
 /**
@@ -155,7 +156,8 @@ export function createExportCanvas(
   includeAnnotations: boolean,
   transform?: Transform2D,
   cropRegion?: CropRegion,
-  colorSpace?: 'srgb' | 'display-p3'
+  colorSpace?: 'srgb' | 'display-p3',
+  frameburnOptions?: FrameburnTimecodeOptions | null
 ): HTMLCanvasElement | null {
   const source = session.currentSource;
   if (!source?.element) return null;
@@ -206,6 +208,9 @@ export function createExportCanvas(
     }
   }
 
+  // Composite frameburn last so it stays readable over annotations.
+  compositeTimecodeFrameburn(ctx, outputWidth, outputHeight, frameburnOptions);
+
   return canvas;
 }
 
@@ -250,7 +255,8 @@ export async function renderFrameToCanvas(
   filterString: string,
   includeAnnotations: boolean,
   cropRegion?: CropRegion,
-  colorSpace?: 'srgb' | 'display-p3'
+  colorSpace?: 'srgb' | 'display-p3',
+  frameburnOptions?: FrameburnTimecodeOptions | null
 ): Promise<HTMLCanvasElement | null> {
   const source = session.currentSource;
   if (!source) return null;
@@ -338,6 +344,9 @@ export async function renderFrameToCanvas(
         );
       }
     }
+
+    // Composite frameburn last so it stays readable over annotations.
+    compositeTimecodeFrameburn(ctx, outputWidth, outputHeight, frameburnOptions);
 
     return canvas;
   } finally {

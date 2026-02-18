@@ -103,6 +103,7 @@ import {
   renderFrameToCanvas as renderFrameToCanvasUtil,
   renderSourceToImageData as renderSourceToImageDataUtil,
 } from './ViewerExport';
+import type { FrameburnTimecodeOptions } from './FrameburnCompositor';
 import {
   createFrameLoader,
   buildEffectsState,
@@ -3397,8 +3398,23 @@ export class Viewer {
     return copyCanvasToClipboard(canvas);
   }
 
+  private getExportFrameburnOptions(frame: number): FrameburnTimecodeOptions | null {
+    const timecodeOverlay = this.overlayManager.getTimecodeOverlay();
+    const state = timecodeOverlay.getState();
+    if (!state.enabled) return null;
+
+    return {
+      ...state,
+      frame,
+      totalFrames: this.session.frameCount,
+      fps: this.session.fps,
+      startFrame: timecodeOverlay.getStartFrame(),
+    };
+  }
+
   createExportCanvas(includeAnnotations: boolean, colorSpace?: 'srgb' | 'display-p3'): HTMLCanvasElement | null {
     const cropRegion = this.cropManager.getExportCropRegion();
+    const frameburnOptions = this.getExportFrameburnOptions(this.session.currentFrame);
     return createExportCanvasUtil(
       this.session,
       this.paintEngine,
@@ -3407,7 +3423,8 @@ export class Viewer {
       includeAnnotations,
       this.transformManager.transform,
       cropRegion,
-      colorSpace
+      colorSpace,
+      frameburnOptions
     );
   }
 
@@ -3417,6 +3434,7 @@ export class Viewer {
    */
   async renderFrameToCanvas(frame: number, includeAnnotations: boolean): Promise<HTMLCanvasElement | null> {
     const cropRegion = this.cropManager.getExportCropRegion();
+    const frameburnOptions = this.getExportFrameburnOptions(frame);
     return renderFrameToCanvasUtil(
       this.session,
       this.paintEngine,
@@ -3425,7 +3443,9 @@ export class Viewer {
       this.transformManager.transform,
       this.getCanvasFilterString(),
       includeAnnotations,
-      cropRegion
+      cropRegion,
+      undefined,
+      frameburnOptions
     );
   }
 

@@ -2,10 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EventEmitter } from './utils/EventEmitter';
 import { wirePlaybackControls, type PlaybackWiringDeps } from './AppPlaybackWiring';
 import type { AppWiringContext } from './AppWiringContext';
-import { showAlert } from './ui/components/shared/Modal';
+import * as Modal from './ui/components/shared/Modal';
 
-vi.mock('./utils/export/SequenceExporter', () => ({ exportSequence: vi.fn() }));
-vi.mock('./ui/components/shared/Modal', () => ({ showAlert: vi.fn() }));
+const showAlertSpy = vi.spyOn(Modal, 'showAlert').mockReturnValue(Promise.resolve());
 
 function createMockVolumeControl() {
   const emitter = new EventEmitter();
@@ -245,7 +244,7 @@ describe('wirePlaybackControls', () => {
     controls.playlistManager.emit('enabledChanged', { enabled: true });
 
     expect(controls.playlistManager.setEnabled).toHaveBeenCalledWith(false);
-    expect(showAlert).toHaveBeenCalledWith(
+    expect(showAlertSpy).toHaveBeenCalledWith(
       expect.stringContaining('Add at least one clip'),
       expect.objectContaining({ type: 'warning' }),
     );

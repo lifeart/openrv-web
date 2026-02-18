@@ -235,6 +235,13 @@ export class TimecodeOverlay extends EventEmitter<TimecodeOverlayEvents> {
   }
 
   /**
+   * Get start timecode offset
+   */
+  getStartFrame(): number {
+    return this.startFrame;
+  }
+
+  /**
    * Set the complete state
    */
   setState(state: Partial<TimecodeOverlayState>): void {

@@ -62,10 +62,8 @@ describe('Session', () => {
 
   describe('file handling', () => {
     it('loadFile handles image and video', async () => {
-      vi.stubGlobal('URL', { createObjectURL: vi.fn(() => 'blob:123'), revokeObjectURL: vi.fn() });
-      // loadFile now uses loadImageFile for HDR format detection
+      // loadFile delegates to loadImageFile/loadVideoFile - mock those to avoid real I/O
       const imgLoadSpy = vi.spyOn(session, 'loadImageFile').mockResolvedValue();
-      // loadFile now uses loadVideoFile for mediabunny support
       const vidLoadSpy = vi.spyOn(session, 'loadVideoFile').mockResolvedValue();
 
       await session.loadFile(new File([], 'test.png', { type: 'image/png' }));
@@ -76,7 +74,6 @@ describe('Session', () => {
     });
 
     it('loadFile rethrows error and revokes URL', async () => {
-      vi.stubGlobal('URL', { createObjectURL: vi.fn(() => 'blob:123'), revokeObjectURL: vi.fn() });
       vi.spyOn(session, 'loadImageFile').mockRejectedValue(new Error('fail'));
       await expect(session.loadFile(new File([], 't.png', { type: 'image/png' }))).rejects.toThrow('fail');
     });
@@ -188,29 +185,17 @@ describe('Session', () => {
   });
 
   describe('loadVideoSourcesFromGraph', () => {
-    // Helper to create mock canvas
-    const createMockCanvas = () => ({
-      width: 0,
-      height: 0,
-      getContext: vi.fn(() => ({
-        drawImage: vi.fn(),
-        getImageData: vi.fn(() => ({ data: new Uint8ClampedArray(4), width: 1, height: 1 })),
-        putImageData: vi.fn(),
-        clearRect: vi.fn(),
-      })),
-    });
+    // Capture the real createElement before any spies are installed
+    const realCreateElement = document.createElement.bind(document);
 
-    // Helper to mock document.createElement for both video and canvas
+    // Helper to mock document.createElement for video elements only.
+    // Canvas elements use real jsdom elements (getContext is already mocked in test/setup.ts).
     const setupElementMocks = (mockVideo: ReturnType<typeof createMockVideo>) => {
-      const originalCreateElement = document.createElement.bind(document);
       vi.spyOn(document, 'createElement').mockImplementation((tagName: string) => {
         if (tagName === 'video') {
           return mockVideo as any;
         }
-        if (tagName === 'canvas') {
-          return createMockCanvas() as any;
-        }
-        return originalCreateElement(tagName);
+        return realCreateElement(tagName);
       });
     };
 
@@ -221,12 +206,6 @@ describe('Session', () => {
       const mockVideo = createMockVideo(1920, 1080);
       Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
       setupElementMocks(mockVideo);
-
-      // Mock URL.createObjectURL
-      vi.stubGlobal('URL', {
-        createObjectURL: vi.fn(() => 'blob:loaded'),
-        revokeObjectURL: vi.fn()
-      });
 
       // Create a mock VideoSourceNode
       const { VideoSourceNode } = await import('../../nodes/sources/VideoSourceNode');
@@ -348,11 +327,6 @@ describe('Session', () => {
       Object.setPrototypeOf(mockVideo, HTMLVideoElement.prototype);
       setupElementMocks(mockVideo);
 
-      vi.stubGlobal('URL', {
-        createObjectURL: vi.fn(() => 'blob:loaded'),
-        revokeObjectURL: vi.fn()
-      });
-
       const { VideoSourceNode } = await import('../../nodes/sources/VideoSourceNode');
       const videoNode = new VideoSourceNode('Test Video');
       videoNode.properties.setValue('file', mockFile);
@@ -431,7 +405,7 @@ describe('Session', () => {
     });
 
     it('SES-HDR-005: isVideoHDR returns true for HDR video', () => {
-      const mockVideoNode = { isHDR: vi.fn().mockReturnValue(true) };
+      const mockVideoNode = { isHDR: () => true };
       const source: MediaSource = {
         name: 'test.mp4', type: 'video', url: 'test.mp4',
         width: 100, height: 100, duration: 100, fps: 24,
@@ -463,7 +437,7 @@ describe('Session', () => {
     it('SES-HDR-008: getVideoHDRIPImage delegates to videoSourceNode', () => {
       const mockIPImage = { width: 1920, height: 1080 };
       const mockVideoNode = {
-        isHDR: vi.fn().mockReturnValue(true),
+        isHDR: () => true,
         getCachedHDRIPImage: vi.fn().mockReturnValue(mockIPImage),
       };
       const source: MediaSource = {
@@ -480,7 +454,7 @@ describe('Session', () => {
 
     it('SES-HDR-009: getVideoHDRIPImage uses currentFrame when no frameIndex', () => {
       const mockVideoNode = {
-        isHDR: vi.fn().mockReturnValue(true),
+        isHDR: () => true,
         getCachedHDRIPImage: vi.fn().mockReturnValue(null),
       };
       const source: MediaSource = {
@@ -512,7 +486,7 @@ describe('Session', () => {
 
     it('SES-HDR-011: fetchVideoHDRFrame delegates to videoSourceNode', async () => {
       const mockVideoNode = {
-        isHDR: vi.fn().mockReturnValue(true),
+        isHDR: () => true,
         fetchHDRFrame: vi.fn().mockResolvedValue(null),
       };
       const source: MediaSource = {

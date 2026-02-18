@@ -204,6 +204,38 @@ describe('ViewerExport', () => {
       expect(result!.width).toBe(1280);
       expect(result!.height).toBe(720);
     });
+
+    it('should composite frameburn timecode when enabled', () => {
+      const source = createMockMediaSource('image', 800, 600);
+      mockSession = createMockSession(source);
+
+      createExportCanvas(
+        mockSession,
+        mockPaintEngine,
+        mockPaintRenderer,
+        'none',
+        false,
+        undefined,
+        undefined,
+        undefined,
+        {
+          enabled: true,
+          position: 'top-left',
+          fontSize: 'medium',
+          showFrameCounter: true,
+          backgroundOpacity: 0.6,
+          frame: 1,
+          totalFrames: 100,
+          fps: 24,
+        }
+      );
+
+      const getContextMock = HTMLCanvasElement.prototype.getContext as unknown as ReturnType<typeof vi.fn>;
+      const ctx = getContextMock.mock.results.at(-1)?.value as { fillText: ReturnType<typeof vi.fn> };
+      const renderedTexts = ctx.fillText.mock.calls.map((call) => call[0]);
+      expect(renderedTexts).toContain('00:00:00:00');
+      expect(renderedTexts).toContain('Frame 1 / 100');
+    });
   });
 
   describe('createSourceExportCanvas', () => {
@@ -452,6 +484,39 @@ describe('ViewerExport', () => {
       expect(result!.width).toBe(960);
       expect(result!.height).toBe(540);
       expect(mockPaintRenderer.renderAnnotations).toHaveBeenCalled();
+    });
+
+    it('should composite frameburn on rendered sequence frame when enabled', async () => {
+      const source = createMockMediaSource('image', 800, 600);
+      mockSession = createMockSession(source);
+
+      await renderFrameToCanvas(
+        mockSession,
+        mockPaintEngine,
+        mockPaintRenderer,
+        24,
+        defaultTransform(),
+        'none',
+        false,
+        undefined,
+        undefined,
+        {
+          enabled: true,
+          position: 'bottom-right',
+          fontSize: 'small',
+          showFrameCounter: false,
+          backgroundOpacity: 0.5,
+          frame: 24,
+          totalFrames: 100,
+          fps: 24,
+        }
+      );
+
+      const getContextMock = HTMLCanvasElement.prototype.getContext as unknown as ReturnType<typeof vi.fn>;
+      const ctx = getContextMock.mock.results.at(-1)?.value as { fillText: ReturnType<typeof vi.fn> };
+      const renderedTexts = ctx.fillText.mock.calls.map((call) => call[0]);
+      expect(renderedTexts).toContain('00:00:00:23');
+      expect(renderedTexts).not.toContain('Frame 24 / 100');
     });
   });
 
