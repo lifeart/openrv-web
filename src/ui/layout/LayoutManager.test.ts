@@ -87,18 +87,16 @@ describe('LayoutManager', () => {
       expect(bottomHandle).not.toBeNull();
     });
 
-    it('LM-008: has preset bar', () => {
+    it('LM-008: does not render legacy preset bar', () => {
       const root = manager.getElement();
       const presetBar = root.querySelector('[data-testid="layout-preset-bar"]');
-      expect(presetBar).not.toBeNull();
+      expect(presetBar).toBeNull();
     });
 
-    it('LM-009: has preset buttons for all presets', () => {
+    it('LM-009: does not render preset buttons inside layout manager', () => {
       const root = manager.getElement();
-      for (const preset of store.getPresets()) {
-        const btn = root.querySelector(`[data-testid="layout-preset-${preset.id}"]`);
-        expect(btn).not.toBeNull();
-      }
+      const presetButtons = root.querySelectorAll('[data-testid^="layout-preset-"]');
+      expect(presetButtons.length).toBe(0);
     });
   });
 
@@ -280,97 +278,21 @@ describe('LayoutManager', () => {
   });
 
   describe('Preset switching', () => {
-    it('LM-030: clicking preset button applies preset', () => {
+    it('LM-030: applying preset through store updates panel collapse state', () => {
       // Register content on both panels so they can expand
       manager.addPanelTab('left', 'Tab', document.createElement('div'));
       manager.addPanelTab('right', 'Tab', document.createElement('div'));
 
-      const root = manager.getElement();
-      const colorBtn = root.querySelector('[data-testid="layout-preset-color"]') as HTMLButtonElement;
-      colorBtn.click();
+      store.applyPreset('color');
 
       expect(store.panels.left.collapsed).toBe(false);
       expect(store.panels.right.collapsed).toBe(false);
     });
 
-    it('LM-031: preset bar has label', () => {
+    it('LM-031: layout manager root has no layout preset UI nodes', () => {
       const root = manager.getElement();
-      const bar = root.querySelector('[data-testid="layout-preset-bar"]');
-      expect(bar!.textContent).toContain('Layout:');
-    });
-  });
-
-  describe('Active preset indicator (M-30)', () => {
-    it('LM-M30a: after applying "Color" preset, the Color button should have active styling', () => {
-      const root = manager.getElement();
-      store.applyPreset('color');
-
-      const colorBtn = root.querySelector('[data-testid="layout-preset-color"]') as HTMLElement;
-      expect(colorBtn.style.background).toBe('var(--accent-primary)');
-      expect(colorBtn.style.borderColor).toBe('var(--accent-primary)');
-    });
-
-    it('LM-M30b: after applying "Color" preset, other preset buttons should NOT have active styling', () => {
-      const root = manager.getElement();
-      store.applyPreset('color');
-
-      const defaultBtn = root.querySelector('[data-testid="layout-preset-default"]') as HTMLElement;
-      const reviewBtn = root.querySelector('[data-testid="layout-preset-review"]') as HTMLElement;
-      const paintBtn = root.querySelector('[data-testid="layout-preset-paint"]') as HTMLElement;
-
-      expect(defaultBtn.style.background).toBe('transparent');
-      expect(reviewBtn.style.background).toBe('transparent');
-      expect(paintBtn.style.background).toBe('transparent');
-    });
-
-    it('LM-M30c: active button should have aria-pressed="true"', () => {
-      const root = manager.getElement();
-      store.applyPreset('color');
-
-      const colorBtn = root.querySelector('[data-testid="layout-preset-color"]') as HTMLElement;
-      expect(colorBtn.getAttribute('aria-pressed')).toBe('true');
-    });
-
-    it('LM-M30d: inactive buttons should have aria-pressed="false"', () => {
-      const root = manager.getElement();
-      store.applyPreset('color');
-
-      const defaultBtn = root.querySelector('[data-testid="layout-preset-default"]') as HTMLElement;
-      const reviewBtn = root.querySelector('[data-testid="layout-preset-review"]') as HTMLElement;
-      const paintBtn = root.querySelector('[data-testid="layout-preset-paint"]') as HTMLElement;
-
-      expect(defaultBtn.getAttribute('aria-pressed')).toBe('false');
-      expect(reviewBtn.getAttribute('aria-pressed')).toBe('false');
-      expect(paintBtn.getAttribute('aria-pressed')).toBe('false');
-    });
-
-    it('LM-M30e: switching preset updates active state from one button to another', () => {
-      const root = manager.getElement();
-
-      // Apply color first
-      store.applyPreset('color');
-      const colorBtn = root.querySelector('[data-testid="layout-preset-color"]') as HTMLElement;
-      const reviewBtn = root.querySelector('[data-testid="layout-preset-review"]') as HTMLElement;
-
-      expect(colorBtn.getAttribute('aria-pressed')).toBe('true');
-      expect(reviewBtn.getAttribute('aria-pressed')).toBe('false');
-
-      // Switch to review
-      store.applyPreset('review');
-
-      expect(colorBtn.getAttribute('aria-pressed')).toBe('false');
-      expect(colorBtn.style.background).toBe('transparent');
-      expect(reviewBtn.getAttribute('aria-pressed')).toBe('true');
-      expect(reviewBtn.style.background).toBe('var(--accent-primary)');
-    });
-
-    it('LM-M30f: all preset buttons have aria-pressed="false" initially (no preset applied)', () => {
-      const root = manager.getElement();
-
-      for (const preset of store.getPresets()) {
-        const btn = root.querySelector(`[data-testid="layout-preset-${preset.id}"]`) as HTMLElement;
-        expect(btn.getAttribute('aria-pressed')).toBe('false');
-      }
+      expect(root.querySelector('[data-testid="layout-preset-bar"]')).toBeNull();
+      expect(root.querySelector('[data-testid^="layout-preset-"]')).toBeNull();
     });
   });
 

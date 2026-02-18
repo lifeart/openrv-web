@@ -124,6 +124,10 @@ export class App {
     // Create layout system (persists panel sizes/presets to localStorage)
     this.layoutStore = new LayoutStore();
     this.layoutManager = new LayoutManager(this.layoutStore);
+    this.headerBar.setLayoutPresets(
+      this.layoutStore.getPresets().map(({ id, label }) => ({ id, label })),
+      (presetId) => this.layoutStore.applyPreset(presetId),
+    );
     this.tabBar.on('tabChanged', (tabId: TabId) => {
       this.contextToolbar.setActiveTab(tabId);
       this.onTabChanged(tabId);
@@ -533,6 +537,7 @@ export class App {
 
     // Wire preset mode to panel sections
     this.layoutStore.on('presetApplied', (presetId) => {
+      this.headerBar.setActiveLayoutPreset(presetId);
       this.controls.rightPanelContent.setPresetMode(presetId);
       this.controls.leftPanelContent.setPresetMode(presetId);
     });

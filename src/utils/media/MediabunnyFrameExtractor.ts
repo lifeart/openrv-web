@@ -264,10 +264,12 @@ export class MediabunnyFrameExtractor {
       });
 
       // If container-level detection found no color info, probe the first decoded
-      // VideoFrame.  Many HDR videos (especially HEVC/AV1) store color metadata only
+      // VideoFrame. Many HDR videos (especially HEVC/AV1) store color metadata only
       // in the codec bitstream, which becomes available after decoding.
+      // Probe even when hasHighDynamicRange() already returned true so we can
+      // propagate transfer/primaries metadata to the render pipeline.
       const hasContainerColorInfo = videoColorSpace && (videoColorSpace.transfer || videoColorSpace.primaries);
-      if (!isHDR && !hasContainerColorInfo) {
+      if (!hasContainerColorInfo) {
         try {
           const probeSink = new VideoSampleSink(this.videoTrack);
           const probeSample = await probeSink.getSample(0);
@@ -275,17 +277,21 @@ export class MediabunnyFrameExtractor {
             const probeFrame = probeSample.toVideoFrame();
             const cs = probeFrame.colorSpace;
             if (cs) {
-              const transfer = cs.transfer as string | undefined;
-              const primaries = cs.primaries as string | undefined;
-              if (transfer === 'pq' || transfer === 'hlg' || transfer === 'smpte2084' || transfer === 'arib-std-b67' ||
-                  primaries === 'bt2020' || primaries === 'smpte432') {
-                isHDR = true;
+              const transfer = cs.transfer ?? undefined;
+              const primaries = cs.primaries ?? undefined;
+              const transferName = transfer as string | undefined;
+              const primariesName = primaries as string | undefined;
+              if (transfer || primaries || cs.matrix || (cs.fullRange !== null && cs.fullRange !== undefined)) {
                 videoColorSpace = {
-                  transfer: cs.transfer ?? undefined,
-                  primaries: cs.primaries ?? undefined,
+                  transfer,
+                  primaries,
                   matrix: cs.matrix ?? undefined,
                   fullRange: cs.fullRange ?? undefined,
                 };
+              }
+              if (transferName === 'pq' || transferName === 'hlg' || transferName === 'smpte2084' || transferName === 'arib-std-b67' ||
+                  primariesName === 'bt2020' || primariesName === 'smpte432') {
+                isHDR = true;
                 log.info(`HDR detected from decoded VideoFrame: transfer=${cs.transfer}, primaries=${cs.primaries}`);
               }
             }

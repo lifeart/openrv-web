@@ -40,12 +40,9 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
   private bottomHandle!: HTMLElement;
   private bottomCollapseBtn!: HTMLButtonElement;
   private panels: Record<'left' | 'right', PanelElements> = {} as any;
-  private presetBar!: HTMLElement;
-  private _presetButtons: Map<LayoutPresetId, HTMLButtonElement> = new Map();
 
   // Store event unsubscribe functions
   private _unsubLayoutChanged: (() => void) | null = null;
-  private _unsubPresetApplied: (() => void) | null = null;
 
   // Drag state
   private _dragging: { panel: PanelId; startPos: number; startSize: number } | null = null;
@@ -70,9 +67,6 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
     // Listen only to layoutChanged (applyPreset already emits layoutChanged via notifyAndSave,
     // so a separate presetApplied listener would cause a redundant double applyLayout call).
     this._unsubLayoutChanged = this.store.on('layoutChanged', () => this.applyLayout());
-
-    // Listen to presetApplied to update the active preset button styling
-    this._unsubPresetApplied = this.store.on('presetApplied', (presetId) => this.updatePresetBarActiveState(presetId));
 
     // Window resize
     window.addEventListener('resize', this.handleWindowResize);
@@ -106,9 +100,6 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
     this.topSection = document.createElement('div');
     this.topSection.className = 'layout-top';
     this.topSection.style.cssText = 'flex-shrink: 0;';
-
-    // Preset bar
-    this.presetBar = this.createPresetBar();
 
     // Middle section: left | viewer | right
     this.middleSection = document.createElement('div');
@@ -148,7 +139,6 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
     this.bottomSlot.style.cssText = 'flex-shrink: 0; overflow: hidden;';
 
     this.root.appendChild(this.topSection);
-    this.root.appendChild(this.presetBar);
     this.root.appendChild(this.middleSection);
     this.root.appendChild(this.bottomHandle);
     this.root.appendChild(this.bottomCollapseBtn);
@@ -312,79 +302,6 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
     btn.dataset.testid = 'layout-collapse-bottom';
     btn.style.flexShrink = '0';
     return btn;
-  }
-
-  private createPresetBar(): HTMLElement {
-    const bar = document.createElement('div');
-    bar.className = 'layout-preset-bar';
-    bar.dataset.testid = 'layout-preset-bar';
-    bar.style.cssText = `
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      padding: 2px 8px;
-      background: var(--bg-primary);
-      border-bottom: 1px solid var(--border-secondary);
-      flex-shrink: 0;
-      height: 24px;
-    `;
-
-    const label = document.createElement('span');
-    label.textContent = 'Layout:';
-    label.style.cssText = 'font-size: 10px; color: var(--text-muted); margin-right: 4px;';
-    bar.appendChild(label);
-
-    for (const preset of this.store.getPresets()) {
-      const btn = document.createElement('button');
-      btn.textContent = preset.label;
-      btn.dataset.testid = `layout-preset-${preset.id}`;
-      btn.title = `Switch to ${preset.label} layout`;
-      btn.setAttribute('aria-pressed', 'false');
-      btn.style.cssText = `
-        background: transparent;
-        border: 1px solid var(--border-primary);
-        color: var(--text-secondary);
-        padding: 2px 8px;
-        border-radius: 3px;
-        cursor: pointer;
-        font-size: 10px;
-        height: 18px;
-        transition: all 0.12s ease;
-      `;
-      btn.addEventListener('click', () => this.store.applyPreset(preset.id));
-      btn.addEventListener('mouseenter', () => {
-        if (btn.getAttribute('aria-pressed') !== 'true') {
-          btn.style.background = 'var(--bg-hover)';
-          btn.style.color = 'var(--text-primary)';
-        }
-      });
-      btn.addEventListener('mouseleave', () => {
-        if (btn.getAttribute('aria-pressed') !== 'true') {
-          btn.style.background = 'transparent';
-          btn.style.color = 'var(--text-secondary)';
-        }
-      });
-      this._presetButtons.set(preset.id, btn);
-      bar.appendChild(btn);
-    }
-
-    return bar;
-  }
-
-  private updatePresetBarActiveState(activePresetId: LayoutPresetId): void {
-    for (const [presetId, btn] of this._presetButtons) {
-      if (presetId === activePresetId) {
-        btn.setAttribute('aria-pressed', 'true');
-        btn.style.background = 'var(--accent-primary)';
-        btn.style.borderColor = 'var(--accent-primary)';
-        btn.style.color = 'var(--text-on-accent, #fff)';
-      } else {
-        btn.setAttribute('aria-pressed', 'false');
-        btn.style.background = 'transparent';
-        btn.style.borderColor = 'var(--border-primary)';
-        btn.style.color = 'var(--text-secondary)';
-      }
-    }
   }
 
   // ---------------------------------------------------------------------------
@@ -624,8 +541,6 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
     // Unsubscribe from store events
     this._unsubLayoutChanged?.();
     this._unsubLayoutChanged = null;
-    this._unsubPresetApplied?.();
-    this._unsubPresetApplied = null;
 
     window.removeEventListener('resize', this.handleWindowResize);
     if (this._resizeRaf !== null) {

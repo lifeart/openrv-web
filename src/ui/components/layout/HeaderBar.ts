@@ -1,7 +1,7 @@
 /**
  * HeaderBar - Top bar with file operations, playback controls, and utilities
  *
- * Layout: [File Ops] | [Playback Controls] | [Timecode Display] | [Volume] [Help]
+ * Layout: [File Ops] | [Playback Controls] | [Timecode Display] | [Layout] [Volume] [Help]
  * Height: 40px
  */
 
@@ -17,6 +17,7 @@ import { showAlert, showPrompt } from '../shared/Modal';
 import { getIconSvg, IconName } from '../shared/Icons';
 import { createButton as sharedCreateButton, createIconButton as sharedCreateIconButton, setButtonActive, applyA11yFocus } from '../shared/Button';
 import { SUPPORTED_MEDIA_ACCEPT } from '../../../utils/media/SupportedMediaFormats';
+import type { LayoutPreset, LayoutPresetId } from '../../layout/LayoutStore';
 
 export interface HeaderBarEvents extends EventMap {
   showShortcuts: void;
@@ -62,7 +63,12 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   // Track the active speed menu cleanup callback for disposal
   private _activeSpeedMenuCleanup: (() => void) | null = null;
   private _activeHelpMenuCleanup: (() => void) | null = null;
+  private _activeLayoutMenuCleanup: (() => void) | null = null;
+  private _layoutPresets: Pick<LayoutPreset, 'id' | 'label'>[] = [];
+  private _activeLayoutPresetId: LayoutPresetId | null = null;
+  private _layoutPresetApply: ((presetId: LayoutPresetId) => void) | null = null;
   private helpButton!: HTMLButtonElement;
+  private layoutButton!: HTMLButtonElement;
 
   // Overflow fade indicators
   private fadeLeft!: HTMLElement;
@@ -304,6 +310,18 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.panelsSlot.style.cssText = 'display: flex; align-items: center; gap: 2px;';
     utilityGroup.appendChild(this.panelsSlot);
 
+    // Layout presets dropdown (populated by App.ts)
+    this.layoutButton = this.createCompactButton(
+      '',
+      () => this.showLayoutMenu(this.layoutButton),
+      'Layout presets (Alt+1..Alt+4)',
+      'grid',
+    );
+    this.layoutButton.dataset.testid = 'layout-menu-button';
+    this.layoutButton.setAttribute('aria-haspopup', 'menu');
+    this.layoutButton.setAttribute('aria-expanded', 'false');
+    utilityGroup.appendChild(this.layoutButton);
+
     // Presentation mode button
     this.presentationButton = this.createIconButton('monitor', '', () => this.emit('presentationToggle', undefined), 'Presentation Mode (Ctrl+Shift+P)');
     this.presentationButton.dataset.testid = 'presentation-mode-button';
@@ -331,6 +349,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     utilityGroup.appendChild(this.helpButton);
 
     this.container.appendChild(utilityGroup);
+    this.updateLayoutButtonState();
   }
 
   private createGroup(): HTMLElement {
@@ -377,11 +396,12 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     });
   }
 
-  private createCompactButton(text: string, onClick: () => void, title?: string): HTMLButtonElement {
+  private createCompactButton(text: string, onClick: () => void, title?: string, icon?: IconName): HTMLButtonElement {
     return sharedCreateButton(text, onClick, {
       variant: 'ghost',
       size: 'md',
       title,
+      icon: icon ? getIconSvg(icon, 'sm') : undefined,
     });
   }
 
@@ -922,6 +942,147 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this._activeHelpMenuCleanup = removeMenu;
   }
 
+  private showLayoutMenu(anchor: HTMLElement): void {
+    if (!this._layoutPresetApply || this._layoutPresets.length === 0) {
+      return;
+    }
+
+    if (this._activeLayoutMenuCleanup) {
+      this._activeLayoutMenuCleanup();
+    }
+
+    const existingMenu = document.getElementById('layout-preset-menu');
+    if (existingMenu) {
+      existingMenu.remove();
+    }
+
+    const menu = document.createElement('div');
+    menu.id = 'layout-preset-menu';
+    menu.dataset.testid = 'layout-menu-dropdown';
+    menu.setAttribute('role', 'menu');
+    menu.style.cssText = `
+      position: fixed;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      padding: 4px 0;
+      z-index: 10000;
+      min-width: 140px;
+    `;
+
+    let activeItem: HTMLButtonElement | null = null;
+
+    for (const preset of this._layoutPresets) {
+      const item = document.createElement('button');
+      item.dataset.testid = `layout-menu-${preset.id}`;
+      item.setAttribute('role', 'menuitemradio');
+      item.tabIndex = -1;
+      const isActive = preset.id === this._activeLayoutPresetId;
+      item.setAttribute('aria-checked', String(isActive));
+      item.textContent = `${isActive ? '\u2713 ' : '  '}${preset.label}`;
+      item.style.cssText = `
+        display: block;
+        width: 100%;
+        padding: 6px 12px;
+        background: ${isActive ? 'var(--accent-primary)' : 'transparent'};
+        color: ${isActive ? 'white' : 'var(--text-primary)'};
+        border: none;
+        text-align: left;
+        cursor: pointer;
+        font-size: 12px;
+        outline: none;
+      `;
+
+      if (isActive) {
+        activeItem = item;
+      }
+
+      item.addEventListener('mouseenter', () => {
+        if (!isActive) {
+          item.style.background = 'var(--bg-hover)';
+        }
+      });
+      item.addEventListener('mouseleave', () => {
+        if (!isActive) {
+          item.style.background = 'transparent';
+        }
+      });
+      item.addEventListener('focus', () => {
+        if (!isActive) {
+          item.style.background = 'var(--bg-hover)';
+        }
+      });
+      item.addEventListener('blur', () => {
+        if (!isActive) {
+          item.style.background = 'transparent';
+        }
+      });
+
+      item.addEventListener('click', () => {
+        this._layoutPresetApply?.(preset.id);
+        removeMenu();
+      });
+
+      menu.appendChild(item);
+    }
+
+    const getMenuItems = (): HTMLElement[] => Array.from(menu.querySelectorAll('[role="menuitemradio"]'));
+
+    menu.addEventListener('keydown', (e: KeyboardEvent) => {
+      const items = getMenuItems();
+      const currentIndex = items.indexOf(document.activeElement as HTMLElement);
+      switch (e.key) {
+        case 'ArrowDown': {
+          e.preventDefault();
+          const nextIndex = currentIndex < items.length - 1 ? currentIndex + 1 : 0;
+          items[nextIndex]?.focus();
+          break;
+        }
+        case 'ArrowUp': {
+          e.preventDefault();
+          const prevIndex = currentIndex > 0 ? currentIndex - 1 : items.length - 1;
+          items[prevIndex]?.focus();
+          break;
+        }
+        case 'Escape':
+        case 'Tab': {
+          e.preventDefault();
+          removeMenu();
+          anchor.focus();
+          break;
+        }
+      }
+    });
+
+    const rect = anchor.getBoundingClientRect();
+    let left = rect.left;
+    if (left < 8) left = 8;
+    menu.style.left = `${left}px`;
+    menu.style.top = `${rect.bottom + 4}px`;
+    document.body.appendChild(menu);
+
+    const focusTarget = activeItem || getMenuItems()[0];
+    focusTarget?.focus();
+    this.layoutButton.setAttribute('aria-expanded', 'true');
+
+    const removeMenu = () => {
+      menu.remove();
+      document.removeEventListener('click', closeMenu);
+      this.layoutButton.setAttribute('aria-expanded', 'false');
+      this._activeLayoutMenuCleanup = null;
+    };
+
+    const closeMenu = (e: MouseEvent) => {
+      if (!menu.contains(e.target as Node)) {
+        removeMenu();
+      }
+    };
+    setTimeout(() => document.addEventListener('click', closeMenu), 0);
+
+    this._activeLayoutMenuCleanup = removeMenu;
+  }
+
   private cycleSpeed(direction: number): void {
     const currentSpeed = this.session.playbackSpeed;
     const currentIndex = PLAYBACK_SPEED_PRESETS.indexOf(currentSpeed as typeof PLAYBACK_SPEED_PRESETS[number]);
@@ -1161,6 +1322,18 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     this.session.on('metadataChanged', () => this.updateSessionNameDisplay());
   }
 
+  private updateLayoutButtonState(): void {
+    const hasPresets = this._layoutPresets.length > 0 && this._layoutPresetApply !== null;
+    this.layoutButton.disabled = !hasPresets;
+    this.layoutButton.setAttribute('aria-disabled', String(!hasPresets));
+
+    const baseTitle = 'Layout presets (Alt+1..Alt+4)';
+    const activePreset = this._layoutPresets.find(p => p.id === this._activeLayoutPresetId);
+    this.layoutButton.title = activePreset
+      ? `${baseTitle) } — Current: ${activePreset.label}`
+      : baseTitle;
+  }
+
   // Public accessors for child controls
   getVolumeControl(): VolumeControl {
     return this.volumeControl;
@@ -1190,6 +1363,9 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     }
     if (this._activeHelpMenuCleanup) {
       this._activeHelpMenuCleanup();
+    }
+    if (this._activeLayoutMenuCleanup) {
+      this._activeLayoutMenuCleanup();
     }
 
     // Remove overflow fade listeners
@@ -1248,6 +1424,26 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   setPanelToggles(element: HTMLElement): void {
     this.panelsSlot.innerHTML = '';
     this.panelsSlot.appendChild(element);
+  }
+
+  /**
+   * Configure layout presets for the header layout menu.
+   */
+  setLayoutPresets(
+    presets: Pick<LayoutPreset, 'id' | 'label'>[],
+    onApply: (presetId: LayoutPresetId) => void,
+  ): void {
+    this._layoutPresets = [...presets];
+    this._layoutPresetApply = onApply;
+    this.updateLayoutButtonState();
+  }
+
+  /**
+   * Update currently active layout preset in the layout menu.
+   */
+  setActiveLayoutPreset(presetId: LayoutPresetId | null): void {
+    this._activeLayoutPresetId = presetId;
+    this.updateLayoutButtonState();
   }
 
   /**

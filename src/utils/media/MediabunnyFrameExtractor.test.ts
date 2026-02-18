@@ -584,6 +584,65 @@ describe('MediabunnyFrameExtractor', () => {
       const result = await extractor.getFrameHDR(1);
       expect(result).toBeNull();
     });
+
+    it('MFE-HDR-001: probes decoded frame color metadata when container HDR lacks transfer info', async () => {
+      const { MediabunnyFrameExtractor } = await import('./MediabunnyFrameExtractor');
+
+      if (!MediabunnyFrameExtractor.isSupported()) {
+        return;
+      }
+
+      const { Input, VideoSampleSink } = await import('mediabunny');
+
+      const mockTrack = {
+        displayWidth: 1920,
+        displayHeight: 1080,
+        codedWidth: 1920,
+        codedHeight: 1080,
+        codec: 'hvc1',
+        canDecode: vi.fn().mockResolvedValue(true),
+        hasHighDynamicRange: vi.fn().mockResolvedValue(true),
+        getColorSpace: vi.fn().mockResolvedValue(null),
+      };
+      const mockInput = {
+        getPrimaryVideoTrack: vi.fn().mockResolvedValue(mockTrack),
+        computeDuration: vi.fn().mockResolvedValue(10),
+        dispose: vi.fn(),
+      };
+      vi.mocked(Input).mockReturnValueOnce(mockInput as never);
+
+      const probeFrameClose = vi.fn();
+      const probeSampleClose = vi.fn();
+      const probeGetSample = vi.fn().mockResolvedValue({
+        toVideoFrame: vi.fn().mockReturnValue({
+          colorSpace: {
+            transfer: 'smpte2084',
+            primaries: 'bt2020',
+            matrix: 'bt2020-ncl',
+            fullRange: false,
+          },
+          close: probeFrameClose,
+        }),
+        close: probeSampleClose,
+      });
+
+      // 1st sink: probe first decoded frame for transfer/primaries
+      // 2nd sink: persistent HDR extraction sink
+      vi.mocked(VideoSampleSink)
+        .mockImplementationOnce(() => ({ getSample: probeGetSample }) as never)
+        .mockImplementationOnce(() => ({ getSample: vi.fn().mockResolvedValue(null) }) as never);
+
+      const extractor = new MediabunnyFrameExtractor();
+      const mockFile = new File(['test'], 'test.mp4', { type: 'video/mp4' });
+      const metadata = await extractor.load(mockFile, 24);
+
+      expect(metadata.isHDR).toBe(true);
+      expect(metadata.colorSpace?.transfer).toBe('smpte2084');
+      expect(metadata.colorSpace?.primaries).toBe('bt2020');
+      expect(probeGetSample).toHaveBeenCalledWith(0);
+      expect(probeSampleClose).toHaveBeenCalledOnce();
+      expect(probeFrameClose).toHaveBeenCalledOnce();
+    });
   });
 
   describe('Metadata codec info', () => {

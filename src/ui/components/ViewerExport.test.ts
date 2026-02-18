@@ -14,11 +14,7 @@ import {
   createMockMediaSource,
 } from '../../../test/mocks';
 
-// Mock dependencies
-vi.mock('../../paint/PaintEngine');
-vi.mock('../../paint/PaintRenderer');
-
-// Create mock Session
+// Session requires too many subsystems to construct for real; a partial mock is appropriate.
 function createMockSession(source: MediaSource | null = null): Session {
   const session = {
     currentSource: source,
@@ -32,22 +28,22 @@ function createMockSession(source: MediaSource | null = null): Session {
   return session;
 }
 
-// Create mock PaintEngine
-function createMockPaintEngine(): PaintEngine {
-  return {
-    getAnnotationsWithGhost: vi.fn().mockReturnValue([]),
-  } as unknown as PaintEngine;
+// Use real PaintEngine with a spy on getAnnotationsWithGhost so tests can
+// verify calls and override the return value when annotations are needed.
+function createRealPaintEngine(): PaintEngine {
+  const engine = new PaintEngine();
+  vi.spyOn(engine, 'getAnnotationsWithGhost');
+  return engine;
 }
 
-// Create mock PaintRenderer with canvas
-function createMockPaintRenderer(): PaintRenderer {
-  const mockCanvas = document.createElement('canvas');
-  mockCanvas.width = 100;
-  mockCanvas.height = 100;
-  return {
-    renderAnnotations: vi.fn(),
-    getCanvas: vi.fn().mockReturnValue(mockCanvas),
-  } as unknown as PaintRenderer;
+// Use real PaintRenderer with a no-op spy on renderAnnotations so tests can
+// verify it was (or wasn't) called.  The spy prevents actual rendering
+// because the mock annotation data from getAnnotationsWithGhost doesn't
+// contain real Annotation objects.  getCanvas() works as-is (real method).
+function createRealPaintRenderer(): PaintRenderer {
+  const renderer = new PaintRenderer();
+  vi.spyOn(renderer, 'renderAnnotations').mockImplementation(() => {});
+  return renderer;
 }
 
 // Default transform
@@ -74,8 +70,8 @@ describe('ViewerExport', () => {
     beforeEach(() => {
       const source = createMockMediaSource('image', 1920, 1080);
       mockSession = createMockSession(source);
-      mockPaintEngine = createMockPaintEngine();
-      mockPaintRenderer = createMockPaintRenderer();
+      mockPaintEngine = createRealPaintEngine();
+      mockPaintRenderer = createRealPaintRenderer();
     });
 
     it('should return null when no source', () => {
@@ -242,8 +238,8 @@ describe('ViewerExport', () => {
     beforeEach(() => {
       const source = createMockMediaSource('image', 1920, 1080);
       mockSession = createMockSession(source);
-      mockPaintEngine = createMockPaintEngine();
-      mockPaintRenderer = createMockPaintRenderer();
+      mockPaintEngine = createRealPaintEngine();
+      mockPaintRenderer = createRealPaintRenderer();
     });
 
     it('should return null when no source', async () => {
@@ -461,8 +457,8 @@ describe('ViewerExport', () => {
 
   describe('rotation clamping (computeExportParams)', () => {
     beforeEach(() => {
-      mockPaintEngine = createMockPaintEngine();
-      mockPaintRenderer = createMockPaintRenderer();
+      mockPaintEngine = createRealPaintEngine();
+      mockPaintRenderer = createRealPaintRenderer();
     });
 
     it('should handle 90° rotation by swapping dimensions', () => {
@@ -553,8 +549,8 @@ describe('ViewerExport', () => {
 
   describe('crop region in export', () => {
     beforeEach(() => {
-      mockPaintEngine = createMockPaintEngine();
-      mockPaintRenderer = createMockPaintRenderer();
+      mockPaintEngine = createRealPaintEngine();
+      mockPaintRenderer = createRealPaintRenderer();
     });
 
     it('should create canvas at cropped dimensions', () => {

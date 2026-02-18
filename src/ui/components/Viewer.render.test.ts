@@ -161,16 +161,6 @@ function testable(viewer: Viewer): TestableViewer {
   return viewer as unknown as TestableViewer;
 }
 
-// Mock WebGLLUTProcessor
-vi.mock('../../color/WebGLLUT', () => ({
-  WebGLLUTProcessor: vi.fn().mockImplementation(() => ({
-    setLUT: vi.fn(),
-    hasLUT: vi.fn().mockReturnValue(false),
-    applyToCanvas: vi.fn(),
-    dispose: vi.fn(),
-  })),
-}));
-
 describe('Viewer', () => {
   let session: Session;
   let paintEngine: PaintEngine;

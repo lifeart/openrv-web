@@ -869,8 +869,25 @@ export class VideoSourceNode extends BaseSourceNode {
   ): IPImage {
     let videoFrame = sample.toVideoFrame();
 
-    let transferFunction = this.mapTransferFunction(this.videoColorSpace?.transfer ?? undefined);
-    let colorPrimaries = this.mapColorPrimaries(this.videoColorSpace?.primaries ?? undefined);
+    const frameColorSpace = videoFrame.colorSpace ? {
+      transfer: videoFrame.colorSpace.transfer ?? undefined,
+      primaries: videoFrame.colorSpace.primaries ?? undefined,
+      matrix: videoFrame.colorSpace.matrix ?? undefined,
+      fullRange: videoFrame.colorSpace.fullRange ?? undefined,
+    } : null;
+
+    let effectiveColorSpace = this.videoColorSpace;
+    const hasTrackColorInfo = !!(effectiveColorSpace?.transfer || effectiveColorSpace?.primaries);
+    const hasFrameColorInfo = !!(frameColorSpace?.transfer || frameColorSpace?.primaries);
+    if (!hasTrackColorInfo && hasFrameColorInfo) {
+      // Some HDR streams expose transfer/primaries only after decode.
+      // Persist the decoded frame metadata so subsequent frames use it.
+      this.videoColorSpace = frameColorSpace;
+      effectiveColorSpace = frameColorSpace;
+    }
+
+    let transferFunction = this.mapTransferFunction(effectiveColorSpace?.transfer ?? undefined);
+    let colorPrimaries = this.mapColorPrimaries(effectiveColorSpace?.primaries ?? undefined);
 
     // Use the track's display dimensions (which account for rotation) instead of
     // the VideoFrame's raw dimensions (which are pre-rotation coded dimensions).
@@ -883,7 +900,7 @@ export class VideoSourceNode extends BaseSourceNode {
       const result = this.hdrResizer.resize(
         videoFrame,
         targetSize,
-        this.videoColorSpace ?? undefined,
+        effectiveColorSpace ?? undefined,
       );
       videoFrame = result.videoFrame;
       if (result.resized) {
@@ -913,7 +930,7 @@ export class VideoSourceNode extends BaseSourceNode {
         colorSpace: colorPrimaries === 'bt2020' ? 'rec2020' : 'rec709',
         attributes: {
           hdr: true,
-          videoColorSpace: this.videoColorSpace,
+          videoColorSpace: effectiveColorSpace,
           // VideoFrame pixels are unrotated; store rotation so Renderer can apply it via shader
           videoRotation: rotation,
         },

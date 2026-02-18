@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HeaderBar } from './HeaderBar';
 import { Session, PLAYBACK_SPEED_PRESETS } from '../../../core/session/Session';
 import * as Modal from '../shared/Modal';
+import type { LayoutPreset } from '../../layout/LayoutStore';
 
 describe('HeaderBar', () => {
   let headerBar: HeaderBar;
@@ -510,6 +511,55 @@ describe('HeaderBar', () => {
 
       expect(callback).toHaveBeenCalled();
     });
+
+    it('HDR-U094: layout menu button exists and is disabled without preset config', () => {
+      const el = headerBar.render();
+      const layoutBtn = el.querySelector('[data-testid="layout-menu-button"]') as HTMLButtonElement;
+      expect(layoutBtn).not.toBeNull();
+      expect(layoutBtn.disabled).toBe(true);
+      expect(layoutBtn.title).toBe('Layout presets (Alt+1..Alt+4)');
+      expect(layoutBtn.textContent).toBe('');
+    });
+
+    it('HDR-U094a: layout menu button uses grid icon', () => {
+      const el = headerBar.render();
+      const layoutBtn = el.querySelector('[data-testid="layout-menu-button"]') as HTMLButtonElement;
+      expect(layoutBtn).not.toBeNull();
+      expect(layoutBtn.querySelector('svg')).not.toBeNull();
+      expect(layoutBtn.innerHTML).toContain('line x1="9"');
+    });
+
+    it('HDR-U094b: configured layout menu opens and applies selected preset', () => {
+      const onApply = vi.fn();
+      const presets: Pick<LayoutPreset, 'id' | 'label'>[] = [
+        { id: 'default', label: 'Default' },
+        { id: 'color', label: 'Color' },
+      ];
+
+      headerBar.setLayoutPresets(presets, onApply);
+      headerBar.setActiveLayoutPreset('default');
+
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const layoutBtn = el.querySelector('[data-testid="layout-menu-button"]') as HTMLButtonElement;
+      expect(layoutBtn.disabled).toBe(false);
+      layoutBtn.click();
+
+      const dropdown = document.querySelector('[data-testid="layout-menu-dropdown"]');
+      expect(dropdown).not.toBeNull();
+
+      const defaultItem = dropdown!.querySelector('[data-testid="layout-menu-default"]') as HTMLButtonElement;
+      const colorItem = dropdown!.querySelector('[data-testid="layout-menu-color"]') as HTMLButtonElement;
+      expect(defaultItem.getAttribute('aria-checked')).toBe('true');
+      expect(defaultItem.textContent).toContain('\u2713');
+
+      colorItem.click();
+      expect(onApply).toHaveBeenCalledWith('color');
+      expect(document.querySelector('[data-testid="layout-menu-dropdown"]')).toBeNull();
+
+      document.body.removeChild(el);
+    });
   });
 
   describe('panels slot', () => {
@@ -724,6 +774,27 @@ describe('HeaderBar', () => {
       // The speed menu should have been removed from document.body
       expect(document.getElementById('speed-preset-menu')).toBeNull();
 
+      document.body.removeChild(el);
+    });
+
+    it('HB-L50b: dispose() should remove any open layout menu from document.body', () => {
+      const presets: Pick<LayoutPreset, 'id' | 'label'>[] = [
+        { id: 'default', label: 'Default' },
+        { id: 'color', label: 'Color' },
+      ];
+      headerBar.setLayoutPresets(presets, vi.fn());
+
+      const el = headerBar.render();
+      document.body.appendChild(el);
+
+      const layoutBtn = el.querySelector('[data-testid="layout-menu-button"]') as HTMLButtonElement;
+      layoutBtn.click();
+
+      expect(document.getElementById('layout-preset-menu')).not.toBeNull();
+
+      headerBar.dispose();
+
+      expect(document.getElementById('layout-preset-menu')).toBeNull();
       document.body.removeChild(el);
     });
   });
