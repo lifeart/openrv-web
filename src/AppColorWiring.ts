@@ -16,6 +16,27 @@ import type { ColorControls } from './ui/components/ColorControls';
 import type { OCIOState } from './color/OCIOConfig';
 import { getGlobalHistoryManager } from './utils/HistoryManager';
 
+export const DEFAULT_OCIO_BAKE_SIZE = 33;
+export const ACES_OCIO_BAKE_SIZE = 65;
+
+/**
+ * Choose baked OCIO LUT resolution.
+ * ACES workflows benefit from 65^3 precision to reduce interpolation artifacts.
+ */
+export function resolveOCIOBakeSize(state: OCIOState): number {
+  const acesPattern = /\baces\b/i;
+  const candidates = [
+    state.configName,
+    state.inputColorSpace,
+    state.detectedColorSpace,
+    state.workingColorSpace,
+    state.view,
+    state.look,
+  ];
+  const isACESWorkflow = candidates.some((value) => typeof value === 'string' && acesPattern.test(value));
+  return isACESWorkflow ? ACES_OCIO_BAKE_SIZE : DEFAULT_OCIO_BAKE_SIZE;
+}
+
 /**
  * Mutable state for debounced color history recording.
  * Returned so that App can clean up the timer on dispose.
@@ -157,8 +178,9 @@ export function updateOCIOPipeline(ctx: AppWiringContext, state: OCIOState): voi
 
   if (state.enabled) {
     // Bake the OCIO transform chain into a 3D LUT for GPU acceleration
-    // Size 33 provides a good balance of accuracy vs. memory/performance
-    const bakedLUT = processor.bakeTo3DLUT(33);
+    // ACES transforms use 65^3 for better precision; others use 33^3.
+    const bakeSize = resolveOCIOBakeSize(state);
+    const bakedLUT = processor.bakeTo3DLUT(bakeSize);
     ctx.viewer.setOCIOBakedLUT(bakedLUT, true);
   } else {
     // Disable OCIO - clear the baked LUT

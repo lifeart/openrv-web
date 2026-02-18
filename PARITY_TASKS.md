@@ -1,13 +1,60 @@
 # OpenRV-Web Feature Parity — Implementation Tasks
 
-> **Generated**: 2026-02-18 | **Source**: `PARITY_PLAN.md` Revision 3
-> **Method**: Code-level analysis of existing interfaces, types, patterns, and test conventions
+> **Generated**: 2026-02-18 | **Revised**: 2026-02-18 (added .rv format compatibility)
+> **Source**: `PARITY_PLAN.md` Revision 3
+> **Method**: Code-level analysis of existing interfaces, types, patterns, and test conventions + OpenRV .rv/GTO format analysis
+
+---
+
+## RV Format Compatibility Requirements
+
+All new features MUST serialize to/from the `.rv` (GTO) file format for interoperability with desktop OpenRV. The `.rv` file is a GTO text file with this hierarchy:
+
+```
+GTOa (3)
+Object : Protocol (version) {
+  component {
+    type propertyName = value
+  }
+}
+```
+
+### Key GTO Conventions
+- **Node naming**: `sourceGroup000000` (6-digit zero-padded), `sourceGroup000000_source`, `sourceGroup000000_RVColor`
+- **Custom components**: New data (notes, versions, status) stored as custom components on `RVSession` or `RVSourceGroup` — OpenRV ignores unknown components gracefully
+- **Property types**: `int`, `float`, `string`, `int[]`, `string[]`, `float[3]`, `float[2][]`
+- **Round-trip preservation**: `SessionGTOExporter.updateGTOData()` deep-clones original GTO and updates known nodes in-place — unknown nodes survive automatically
+
+### Critical Files for GTO Integration
+| File | Role |
+|------|------|
+| `src/core/session/SessionGTOExporter.ts` | Main GTO writer — `buildSessionObject()` (line 1420), `buildSourceGroupObjects()` (line 505) |
+| `src/core/session/SessionGTOStore.ts` | Updates existing GTO data in-place — `updateFromState()` (line 28) |
+| `src/core/session/GTOGraphLoader.ts` | GTO reader — `loadGTOGraph()`, parses all node types (1599+ lines) |
+| `src/core/session/GTOSettingsParser.ts` | Extracts typed settings from GTO properties (782 lines) |
+| `src/core/session/serializers/PaintSerializer.ts` | Annotation read/write — `buildPaintObject()` (line 327) |
+| `src/core/session/serializers/ColorSerializer.ts` | Color/CDL node serialization |
+
+### Current Round-Trip Gaps (Properties Read But NOT Written Back)
+| Property | Read Location | Impact | Fix Priority |
+|----------|---------------|--------|-------------|
+| `RVColor.color.hue` | GTOSettingsParser:283 | Hue rotation lost on re-save | P1 |
+| `RVColor.color.invert` | GTOSettingsParser:274 | Color inversion lost | P1 |
+| `RVLinearize.*` (logtype, sRGB2linear, fileGamma, cineon) | GTOSettingsParser:105-161 | Linearization settings lost | P1 |
+| `RVDisplayColor.chromaticities.*` | GTOGraphLoader:1205-1254 | Display color space lost | P2 |
+| `RVTransform2D.visibleBox`, `stencil` | GTOGraphLoader:729-776 | Crop box and masking lost | P2 |
+| `RVSourceStereo.*` | GTOGraphLoader:1273-1298 | Per-source stereo lost | P2 |
+| `RVOverlay.*` (rect, text, window) | GTOGraphLoader:1301-1442 | Overlay markers lost | P2 |
+| `RVRetime.*` (warp, explicit) | GTOGraphLoader:1013-1067 | Time remapping lost | P2 |
+| `RVSequence.edl.*` | GTOGraphLoader:1156-1190 | EDL cut data lost | P2 |
+| Stack wipe/layer settings | GTOGraphLoader:1094-1152 | Compositing state lost | P2 |
 
 ---
 
 ## Table of Contents
 
 - [Phase 1: Review Workflow Essentials (4-6 weeks)](#phase-1-review-workflow-essentials)
+  - [T1.0 GTO Round-Trip Fixes](#t10-gto-round-trip-fixes-critical-for-rv-compatibility)
   - [T1.1 Note/Comment System](#t11-notecomment-system)
   - [T1.2 Version Management](#t12-version-management)
   - [T1.3 CDL CPU Clamp Bug Fix](#t13-cdl-cpu-clamp-bug-fix)
@@ -38,6 +85,84 @@
 ---
 
 ## Phase 1: Review Workflow Essentials
+
+### T1.0 GTO Round-Trip Fixes (Critical for .rv Compatibility)
+
+| Field | Value |
+|-------|-------|
+| **Priority** | P1 |
+| **Effort** | 2-3 days |
+| **Dependencies** | None |
+| **Blocks** | All other tasks (ensures .rv files don't lose data) |
+
+#### Description
+
+Fix properties that are **read from .rv files but NOT written back**, causing data loss on re-save. These are existing regressions in the GTO exporter that must be fixed before adding new features.
+
+#### Files to Modify
+
+| File | Changes |
+|------|---------|
+| `src/core/session/SessionGTOStore.ts` | Add missing property writes to `updateColorAdjustments()` and add `updateLinearize()` method |
+| `src/core/session/SessionGTOExporter.ts` | Add missing node builders for linearize, display color |
+| `src/core/session/serializers/ColorSerializer.ts` | Write hue, invert, unpremult properties |
+
+#### Properties to Fix
+
+**Priority 1 — Color properties (SessionGTOStore.updateColorAdjustments):**
+```typescript
+// Currently written (lines 88-104):
+//   exposure, gamma, contrast, saturation, offset, scale, CDL
+
+// MISSING — add these writes:
+colorComp.float('hue', adjustments.hue);
+colorComp.int('invert', adjustments.invert ? 1 : 0);
+colorComp.int('unpremult', adjustments.unpremult ? 1 : 0);
+```
+
+**Priority 1 — Linearize settings (new method `updateLinearize()`):**
+```typescript
+updateLinearize(linearize: LinearizeState): void {
+  const node = this.findNode('RVLinearize');
+  if (!node) return;
+  const colorComp = node.component('color');
+  colorComp.int('logtype', linearize.logType);
+  colorComp.int('sRGB2linear', linearize.sRGB2linear ? 1 : 0);
+  colorComp.int('Rec709ToLinear', linearize.rec709ToLinear ? 1 : 0);
+  colorComp.float('fileGamma', linearize.fileGamma);
+  colorComp.int('alphaType', linearize.alphaType);
+}
+```
+
+**Priority 2 — Additional missing writes (can be done incrementally):**
+- `RVTransform2D.visibleBox` — crop/visible region
+- `RVTransform2D.stencil` — masking parameters
+- `RVDisplayColor.chromaticities` — display color primaries
+- `RVSequence.edl` — cut list data (frame, source, in, out arrays)
+- Stack composite/wipe settings
+
+#### Tests
+
+```
+GTO-RT-001: hue value survives .rv round-trip (write → read → compare)
+GTO-RT-002: invert flag survives .rv round-trip
+GTO-RT-003: linearize.logtype survives .rv round-trip
+GTO-RT-004: linearize.sRGB2linear survives .rv round-trip
+GTO-RT-005: linearize.fileGamma survives .rv round-trip
+GTO-RT-006: CDL.noClamp property written in GTO export
+GTO-RT-007: unknown nodes still survive round-trip (regression test)
+GTO-RT-008: existing tests still pass (no regression)
+```
+
+#### Acceptance Criteria
+
+- [ ] All color adjustments (including hue, invert) survive .rv save/load
+- [ ] Linearize settings survive .rv save/load
+- [ ] CDL noClamp flag written to GTO
+- [ ] No regression in existing GTO round-trip behavior
+- [ ] Unknown/custom GTO nodes still preserved
+
+---
 
 ### T1.1 Note/Comment System
 
@@ -98,10 +223,102 @@ interface NoteManagerEvents extends EventMap {
 |------|---------|
 | `src/core/session/SessionState.ts` | Add `notes?: NoteState[]` to `SessionState` interface (line ~122). Bump `SESSION_STATE_VERSION` to 2. Add migration function `migrateV1toV2()`. |
 | `src/core/session/Session.ts` | Add `private _noteManager = new NoteManager()` (near line 210). Add `get noteManager()` accessor. Add `noteAdded`/`noteRemoved` to `SessionEvents`. |
+| `src/core/session/SessionGTOExporter.ts` | In `buildSessionObject()` (line ~1420): add `notes` component with per-note properties. See GTO format below. |
+| `src/core/session/GTOGraphLoader.ts` | In session parsing (line ~305): parse `notes` component from RVSession, extract note properties into `GTOParseResult.sessionInfo.notes`. |
 | `src/AppControlRegistry.ts` | Add `notePanel: NotePanel` creation (near line 262). Add to right panel tab content. |
 | `src/AppPlaybackWiring.ts` | Wire NotePanel `noteSelected` → `session.goToFrame()`. |
 | `src/utils/input/KeyBindings.ts` | Add `notes.addNote` → `KeyN`, `notes.togglePanel` → `Shift+KeyN`. |
 | `src/core/session/AutoSaveManager.ts` | `markDirty()` call chain must include notes in serialized `SessionState`. No code change needed if `SessionState` already flows through — just verify. |
+
+#### GTO (.rv) Format — Notes Storage
+
+Notes are stored as a custom `notes` component on the `RVSession` object. OpenRV will ignore this component gracefully (unknown components survive round-trip).
+
+```gto
+RVSession : rv (1)
+{
+    session { ... }
+    root { ... }
+
+    notes
+    {
+        int totalNotes = 2
+
+        string note_001_id = "550e8400-e29b-41d4-a716-446655440000"
+        int note_001_sourceIndex = 0
+        int note_001_frameStart = 100
+        int note_001_frameEnd = 150
+        string note_001_text = "Fix the edge artifact on the left side"
+        string note_001_author = "Alice"
+        string note_001_createdAt = "2026-02-18T10:30:00Z"
+        string note_001_modifiedAt = "2026-02-18T10:30:00Z"
+        string note_001_status = "open"
+        string note_001_parentId = ""
+        string note_001_color = "#fbbf24"
+
+        string note_002_id = "550e8400-e29b-41d4-a716-446655440001"
+        int note_002_sourceIndex = 0
+        int note_002_frameStart = 100
+        int note_002_frameEnd = 100
+        string note_002_text = "Agree, will fix in v3"
+        string note_002_author = "Bob"
+        string note_002_createdAt = "2026-02-18T11:00:00Z"
+        string note_002_modifiedAt = "2026-02-18T11:00:00Z"
+        string note_002_status = "open"
+        string note_002_parentId = "550e8400-e29b-41d4-a716-446655440000"
+        string note_002_color = "#fbbf24"
+    }
+}
+```
+
+**Serialization** (add to `SessionGTOExporter.buildSessionObject()`):
+```typescript
+const notes = session.noteManager.getNotes();
+if (notes.length > 0) {
+  const notesComp = sessionObject.component('notes');
+  notesComp.int('totalNotes', notes.length);
+  notes.forEach((note, idx) => {
+    const p = `note_${String(idx + 1).padStart(3, '0')}`;
+    notesComp.string(`${p}_id`, note.id);
+    notesComp.int(`${p}_sourceIndex`, note.sourceIndex);
+    notesComp.int(`${p}_frameStart`, note.frameStart);
+    notesComp.int(`${p}_frameEnd`, note.frameEnd);
+    notesComp.string(`${p}_text`, note.text);
+    notesComp.string(`${p}_author`, note.author);
+    notesComp.string(`${p}_createdAt`, note.createdAt);
+    notesComp.string(`${p}_modifiedAt`, note.modifiedAt);
+    notesComp.string(`${p}_status`, note.status);
+    notesComp.string(`${p}_parentId`, note.parentId || '');
+    notesComp.string(`${p}_color`, note.color);
+  });
+}
+```
+
+**Deserialization** (add to `GTOGraphLoader` session parsing):
+```typescript
+const notesComp = sessionObj.component('notes');
+if (notesComp?.exists()) {
+  const total = getNumberValue(notesComp.property('totalNotes').value()) ?? 0;
+  const notes: NoteState[] = [];
+  for (let i = 1; i <= total; i++) {
+    const p = `note_${String(i).padStart(3, '0')}`;
+    notes.push({
+      id: getStringValue(notesComp.property(`${p}_id`).value()) ?? '',
+      sourceIndex: getNumberValue(notesComp.property(`${p}_sourceIndex`).value()) ?? 0,
+      frameStart: getNumberValue(notesComp.property(`${p}_frameStart`).value()) ?? 0,
+      frameEnd: getNumberValue(notesComp.property(`${p}_frameEnd`).value()) ?? 0,
+      text: getStringValue(notesComp.property(`${p}_text`).value()) ?? '',
+      author: getStringValue(notesComp.property(`${p}_author`).value()) ?? '',
+      createdAt: getStringValue(notesComp.property(`${p}_createdAt`).value()) ?? '',
+      modifiedAt: getStringValue(notesComp.property(`${p}_modifiedAt`).value()) ?? '',
+      status: getStringValue(notesComp.property(`${p}_status`).value()) as NoteStatus ?? 'open',
+      parentId: getStringValue(notesComp.property(`${p}_parentId`).value()) || null,
+      color: getStringValue(notesComp.property(`${p}_color`).value()) ?? '#fbbf24',
+    });
+  }
+  sessionInfo.notes = notes;
+}
+```
 
 #### Algorithm Details
 
@@ -165,6 +382,10 @@ NoteManager.test.ts:
   NOTE-013: fromSerializable() restores notes from array
   NOTE-014: fromSerializable() emits 'notesChanged'
   NOTE-015: notes survive SessionState round-trip (serialize → deserialize)
+  NOTE-016: notes survive GTO round-trip (export .rv → load .rv)
+  NOTE-017: GTO notes component uses correct property naming (note_001_*)
+  NOTE-018: notes loaded from .rv file populate NoteManager
+  NOTE-019: reply threading preserved through GTO round-trip (parentId)
 
 NotePanel.test.ts:
   NOTE-U001: renders empty state message when no notes
@@ -252,6 +473,46 @@ interface VersionManagerEvents extends EventMap {
 | `src/core/session/PlaylistManager.ts` | Add `getClipForSource(sourceIndex): PlaylistClip | null` helper for version → clip lookup. |
 | `src/AppControlRegistry.ts` | Add `versionNavigator: VersionNavigator`. Place in header bar or right panel. |
 | `src/utils/input/KeyBindings.ts` | Add `version.next` → `BracketRight` (]) , `version.previous` → `BracketLeft` ([). |
+| `src/core/session/SessionGTOExporter.ts` | In `buildSessionObject()`: add `versions` component with group/version properties. |
+| `src/core/session/GTOGraphLoader.ts` | Parse `versions` component from RVSession into `GTOParseResult.sessionInfo.versionGroups`. |
+
+#### GTO (.rv) Format — Version Storage
+
+Version groups stored as custom `versions` component on RVSession. Maps to OpenRV's `RVSwitchGroup` concept (multiple sources as versions of same shot).
+
+```gto
+RVSession : rv (1)
+{
+    session { ... }
+
+    versions
+    {
+        int groupCount = 1
+
+        string group_000_id = "uuid-for-group"
+        string group_000_shotName = "ABC_0010"
+        int group_000_activeVersionIndex = 2
+        int group_000_versionCount = 3
+
+        int group_000_v001_versionNumber = 1
+        int group_000_v001_sourceIndex = 0
+        string group_000_v001_label = "v1 - Initial comp"
+        string group_000_v001_addedAt = "2026-02-10T09:00:00Z"
+
+        int group_000_v002_versionNumber = 2
+        int group_000_v002_sourceIndex = 1
+        string group_000_v002_label = "v2 - Revised colors"
+        string group_000_v002_addedAt = "2026-02-12T14:30:00Z"
+
+        int group_000_v003_versionNumber = 3
+        int group_000_v003_sourceIndex = 2
+        string group_000_v003_label = "v3 - Final"
+        string group_000_v003_addedAt = "2026-02-15T10:00:00Z"
+    }
+}
+```
+
+**Note**: In native OpenRV, versions use `RVSwitchGroup` nodes in the graph topology. openrv-web's approach stores version metadata declaratively rather than as graph topology — simpler and forward-compatible. When loading native OpenRV files with `RVSwitchGroup`, detect the pattern and create VersionGroups accordingly.
 
 #### Algorithm Details
 
@@ -308,6 +569,9 @@ VersionManager.test.ts:
   VER-011: getGroupForSource() returns correct group
   VER-012: toSerializable()/fromSerializable() round-trips correctly
   VER-013: carryAnnotationsForward() clones notes to new sourceIndex
+  VER-014: version groups survive GTO round-trip (export .rv → load .rv)
+  VER-015: GTO versions component uses correct property naming (group_NNN_vMMM_*)
+  VER-016: loading .rv with RVSwitchGroup creates VersionGroups
 
 VersionNavigator.test.ts:
   VER-U001: renders version badges for active group
@@ -348,6 +612,29 @@ Fix the CPU-side CDL implementation that incorrectly clamps to [0,1] before the 
 | `src/color/CDL.ts` | 64 | Already fixed to `Math.max(v, 0)` — **verify this is the current state** |
 | `src/color/CDL.ts` | 72 | Already uses `Math.max(v, 0)` — **verify** |
 | `src/color/CDL.ts` | 97-99 | `applySaturation()`: Change per-channel clamping from hard clamp to `Math.max(0, val)` to preserve HDR headroom |
+| `src/core/session/serializers/ColorSerializer.ts` | CDL section | Ensure `CDL.noClamp` property is written (maps to OpenRV's `RVColor.CDL.noClamp`) |
+
+#### GTO (.rv) Format — CDL Properties
+
+OpenRV stores CDL in `RVColor` nodes. The `noClamp` property controls whether clamping is applied:
+
+```gto
+RVColor : sourceGroup000000_RVColor (1)
+{
+    CDL
+    {
+        int active = 1
+        string colorspace = "rec709"
+        float[3] slope = [1.0, 1.0, 1.0]
+        float[3] offset = [0.0, 0.0, 0.0]
+        float[3] power = [1.0, 1.0, 1.0]
+        float saturation = 1.0
+        int noClamp = 1                    // 1 = HDR-safe (no [0,1] clamp)
+    }
+}
+```
+
+**Verify**: `SessionGTOStore.updateCDL()` (line ~106-115) writes slope/offset/power/saturation but must also write `noClamp = 1` to preserve HDR behavior when the file is reopened in OpenRV.
 
 #### Algorithm Details
 
@@ -477,6 +764,30 @@ const STATUS_SHORTCUTS: Record<string, ShotStatus> = {
 | `src/ui/components/PlaylistPanel.ts` | Add `StatusBadge` to each clip row (after clip name, before duration). Update on `statusChanged`. |
 | `src/utils/input/KeyBindings.ts` | Add `status.approved` → `Numpad1` or `Alt+Digit1`, `status.needsWork` → `Alt+Digit2`, `status.cbb` → `Alt+Digit3`, `status.omit` → `Alt+Digit4`, `status.pending` → `Alt+Digit0`. |
 | `src/AppControlRegistry.ts` | Create `StatusManager` instance, pass to `PlaylistPanel`. |
+| `src/core/session/SessionGTOExporter.ts` | In `buildSourceGroupObjects()` (line ~505): add `review` component per source group with status properties. |
+| `src/core/session/GTOGraphLoader.ts` | Parse `review` component from each `RVSourceGroup` into status data. |
+
+#### GTO (.rv) Format — Status Storage
+
+Status stored per-source as a custom `review` component on `RVSourceGroup` (maps to ShotGrid review workflow):
+
+```gto
+RVSourceGroup : sourceGroup000000 (1)
+{
+    ui
+    {
+        string name = "ABC_0010"
+    }
+
+    review
+    {
+        string status = "approved"
+        string statusColor = "#22c55e"
+        string setBy = "Supervisor Name"
+        string setAt = "2026-02-18T16:45:00Z"
+    }
+}
+```
 
 #### Algorithm Details
 
@@ -509,6 +820,8 @@ StatusManager.test.ts:
   STATUS-006: setStatus() overwrites previous status
   STATUS-007: clearStatus() resets to 'pending'
   STATUS-008: multiple sources can have independent statuses
+  STATUS-009: statuses survive GTO round-trip (export .rv → load .rv)
+  STATUS-010: GTO review component uses correct property naming per source group
 
 PlaylistPanel integration:
   STATUS-U001: clip rows show colored status badge
@@ -547,6 +860,51 @@ Add functional display/view dropdown menus populated from OCIO config, using the
 | `src/color/OCIOTransform.ts` | Add `getAvailableDisplays()` and `getViewsForDisplay()` static methods that return the display/view pairs from the hardcoded transform chain (lines 864-1257). |
 | `src/ui/components/OCIOControl.ts` | Wire display/view dropdowns to actually call `setDisplay()`/`setView()` and trigger LUT rebake. Currently dropdowns exist but may not rebake correctly. Verify end-to-end flow. |
 | `src/render/Renderer.ts` | Verify `setLUT()` method (line ~1642) accepts 65^3 LUT data. Current `ensureLUT3DTexture()` should handle variable sizes — verify `TEXTURE_3D` upload works for 65^3. |
+| `src/core/session/SessionGTOExporter.ts` | Write `RVOCIO` node with `ocio_display.display`, `ocio_display.view`, `ocio_color.inColorSpace` properties. |
+| `src/core/session/GTOGraphLoader.ts` | Already parses RVOCIO (line ~1541-1598). Ensure parsed display/view values flow to OCIOProcessor. |
+
+#### GTO (.rv) Format — OCIO Storage
+
+OpenRV stores OCIO state in an `RVOCIO` node. openrv-web currently parses this but does NOT write it back — this task must fix that.
+
+```gto
+RVOCIO : display_ocio (1)
+{
+    ocio
+    {
+        int active = 1
+        string function = "displayTransform"
+        string inColorSpace = "ACES - ACEScg"
+        int lut3DSize = 65
+    }
+
+    ocio_display
+    {
+        string display = "sRGB"
+        string view = "ACES 1.0 - SDR Video"
+    }
+
+    ocio_color
+    {
+        string outColorSpace = "Output - sRGB"
+    }
+
+    ocio_look
+    {
+        string look = "None"
+        string direction = "forward"
+    }
+}
+```
+
+**Property Paths**:
+- `display_ocio.ocio.active` → OCIO enabled
+- `display_ocio.ocio.function` → 'displayTransform' | 'colorTransform' | 'look'
+- `display_ocio.ocio_display.display` → selected display device
+- `display_ocio.ocio_display.view` → selected view transform
+- `display_ocio.ocio_color.inColorSpace` → input working space
+- `display_ocio.ocio_look.look` → selected look name
+- `display_ocio.ocio_look.direction` → 'forward' | 'inverse'
 
 #### Algorithm Details
 
@@ -1895,6 +2253,8 @@ src/
 ## Appendix C: Dependency Graph
 
 ```
+T1.0 GTO Round-Trip Fixes ─────────▶ ALL TASKS (ensures .rv files don't lose data)
+
 T1.1 Note/Comment System ──────────┐
                                     ├──▶ T1.4 Shot Status ──┐
 T1.2 Version Management ───────────┤                        ├──▶ T1.9 Dailies Report
@@ -1921,4 +2281,65 @@ T1.5 OCIO Menus ───────────────────▶ T2.
 
 ---
 
-*This document provides implementation-ready task specifications derived from PARITY_PLAN.md Revision 3 and code-level analysis of the openrv-web codebase. Each task includes precise file locations, data models, algorithms, and test requirements.*
+## Appendix D: GTO Property Path Reference
+
+Quick reference for all custom GTO properties introduced by new features:
+
+```
+RVSession : rv
+├── notes.totalNotes                         (T1.1)
+├── notes.note_NNN_id                        (T1.1)
+├── notes.note_NNN_sourceIndex               (T1.1)
+├── notes.note_NNN_frameStart                (T1.1)
+├── notes.note_NNN_frameEnd                  (T1.1)
+├── notes.note_NNN_text                      (T1.1)
+├── notes.note_NNN_author                    (T1.1)
+├── notes.note_NNN_createdAt                 (T1.1)
+├── notes.note_NNN_modifiedAt                (T1.1)
+├── notes.note_NNN_status                    (T1.1)
+├── notes.note_NNN_parentId                  (T1.1)
+├── notes.note_NNN_color                     (T1.1)
+├── versions.groupCount                      (T1.2)
+├── versions.group_NNN_id                    (T1.2)
+├── versions.group_NNN_shotName              (T1.2)
+├── versions.group_NNN_activeVersionIndex    (T1.2)
+├── versions.group_NNN_versionCount          (T1.2)
+├── versions.group_NNN_vMMM_versionNumber    (T1.2)
+├── versions.group_NNN_vMMM_sourceIndex      (T1.2)
+├── versions.group_NNN_vMMM_label            (T1.2)
+└── versions.group_NNN_vMMM_addedAt          (T1.2)
+
+RVSourceGroup : sourceGroupNNNNNN
+└── review.status                            (T1.4)
+└── review.statusColor                       (T1.4)
+└── review.setBy                             (T1.4)
+└── review.setAt                             (T1.4)
+
+RVColor : sourceGroupNNNNNN_RVColor
+└── CDL.noClamp                              (T1.3)
+
+RVOCIO : display_ocio
+├── ocio.active                              (T1.5)
+├── ocio.function                            (T1.5)
+├── ocio.lut3DSize                           (T1.5)
+├── ocio_display.display                     (T1.5)
+├── ocio_display.view                        (T1.5)
+├── ocio_color.inColorSpace                  (T1.5)
+├── ocio_color.outColorSpace                 (T1.5)
+├── ocio_look.look                           (T1.5)
+└── ocio_look.direction                      (T1.5)
+
+Properties fixed in T1.0 (already defined by OpenRV, now written back):
+├── RVColor.color.hue                        (T1.0)
+├── RVColor.color.invert                     (T1.0)
+├── RVColor.color.unpremult                  (T1.0)
+├── RVLinearize.color.logtype                (T1.0)
+├── RVLinearize.color.sRGB2linear            (T1.0)
+├── RVLinearize.color.Rec709ToLinear         (T1.0)
+├── RVLinearize.color.fileGamma              (T1.0)
+└── RVLinearize.color.alphaType              (T1.0)
+```
+
+---
+
+*This document provides implementation-ready task specifications derived from PARITY_PLAN.md Revision 3, code-level analysis of the openrv-web codebase, and OpenRV .rv/GTO format analysis. Each task includes precise file locations, data models, algorithms, GTO serialization requirements, and test specifications.*

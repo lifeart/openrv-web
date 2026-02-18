@@ -538,69 +538,70 @@ describe('Renderer SDR Display Transfer Override (regression)', () => {
   } {
     const locationToName = new Map<object, string>();
     const displayTransferCalls: Array<number> = [];
+    const noop = () => {};
 
     const gl = {
       canvas: document.createElement('canvas'),
       drawingBufferColorSpace: 'srgb',
-      getExtension: vi.fn(() => null),
-      createProgram: vi.fn(() => ({})),
-      attachShader: vi.fn(),
-      linkProgram: vi.fn(),
-      getProgramParameter: vi.fn(() => true),
-      getProgramInfoLog: vi.fn(() => ''),
-      deleteShader: vi.fn(),
-      createShader: vi.fn(() => ({})),
-      shaderSource: vi.fn(),
-      compileShader: vi.fn(),
-      getShaderParameter: vi.fn(() => true),
-      getShaderInfoLog: vi.fn(() => ''),
-      createVertexArray: vi.fn(() => ({})),
-      bindVertexArray: vi.fn(),
-      createBuffer: vi.fn(() => ({})),
-      bindBuffer: vi.fn(),
-      bufferData: vi.fn(),
-      enableVertexAttribArray: vi.fn(),
-      vertexAttribPointer: vi.fn(),
-      getUniformLocation: vi.fn((_program: WebGLProgram, name: string) => {
+      getExtension: () => null,
+      createProgram: () => ({}),
+      attachShader: noop,
+      linkProgram: noop,
+      getProgramParameter: () => true,
+      getProgramInfoLog: () => '',
+      deleteShader: noop,
+      createShader: () => ({}),
+      shaderSource: noop,
+      compileShader: noop,
+      getShaderParameter: () => true,
+      getShaderInfoLog: () => '',
+      createVertexArray: () => ({}),
+      bindVertexArray: noop,
+      createBuffer: () => ({}),
+      bindBuffer: noop,
+      bufferData: noop,
+      enableVertexAttribArray: noop,
+      vertexAttribPointer: noop,
+      getUniformLocation(_program: WebGLProgram, name: string) {
         const sentinel = { __uniformName: name };
         locationToName.set(sentinel, name);
         return sentinel;
-      }),
-      getAttribLocation: vi.fn(() => 0),
-      useProgram: vi.fn(),
-      uniform1f: vi.fn(),
-      uniform1i: vi.fn((location: object, value: number) => {
+      },
+      getAttribLocation: () => 0,
+      useProgram: noop,
+      uniform1f: noop,
+      uniform1i(location: object, value: number) {
         const name = locationToName.get(location);
         if (name === 'u_displayTransfer') {
           displayTransferCalls.push(value);
         }
-      }),
-      uniform1fv: vi.fn(),
-      uniform2fv: vi.fn(),
-      uniform3fv: vi.fn(),
-      uniform4fv: vi.fn(),
-      uniform1iv: vi.fn(),
-      uniform2iv: vi.fn(),
-      uniform3iv: vi.fn(),
-      uniform4iv: vi.fn(),
-      uniformMatrix3fv: vi.fn(),
-      uniformMatrix4fv: vi.fn(),
-      activeTexture: vi.fn(),
-      bindTexture: vi.fn(),
-      drawArrays: vi.fn(),
-      viewport: vi.fn(),
-      clearColor: vi.fn(),
-      clear: vi.fn(),
-      createTexture: vi.fn(() => ({})),
-      deleteTexture: vi.fn(),
-      deleteVertexArray: vi.fn(),
-      deleteBuffer: vi.fn(),
-      deleteProgram: vi.fn(),
-      texParameteri: vi.fn(),
-      texImage2D: vi.fn(),
-      texImage3D: vi.fn(),
-      texStorage3D: vi.fn(),
-      isContextLost: vi.fn(() => false),
+      },
+      uniform1fv: noop,
+      uniform2fv: noop,
+      uniform3fv: noop,
+      uniform4fv: noop,
+      uniform1iv: noop,
+      uniform2iv: noop,
+      uniform3iv: noop,
+      uniform4iv: noop,
+      uniformMatrix3fv: noop,
+      uniformMatrix4fv: noop,
+      activeTexture: noop,
+      bindTexture: noop,
+      drawArrays: noop,
+      viewport: noop,
+      clearColor: noop,
+      clear: noop,
+      createTexture: () => ({}),
+      deleteTexture: noop,
+      deleteVertexArray: noop,
+      deleteBuffer: noop,
+      deleteProgram: noop,
+      texParameteri: noop,
+      texImage2D: noop,
+      texImage3D: noop,
+      texStorage3D: noop,
+      isContextLost: () => false,
       // Constants
       VERTEX_SHADER: 0x8b31,
       FRAGMENT_SHADER: 0x8b30,
@@ -640,7 +641,7 @@ describe('Renderer SDR Display Transfer Override (regression)', () => {
     const canvas = document.createElement('canvas');
 
     const originalGetContext = canvas.getContext.bind(canvas);
-    canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+    canvas.getContext = ((contextId: string, _options?: unknown) => {
       if (contextId === 'webgl2') return tracking.gl;
       return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
     }) as typeof canvas.getContext;
@@ -730,37 +731,38 @@ describe('Renderer SDR Display Transfer Override (regression)', () => {
     } {
       const locationToName = new Map<object, string>();
       const uniform1fCalls = new Map<string, number[]>();
+      const noop = () => {};
 
       const gl = {
         canvas: document.createElement('canvas'),
         drawingBufferColorSpace: 'srgb',
-        getExtension: vi.fn(() => null),
-        createProgram: vi.fn(() => ({})),
-        attachShader: vi.fn(),
-        linkProgram: vi.fn(),
-        getProgramParameter: vi.fn(() => true),
-        getProgramInfoLog: vi.fn(() => ''),
-        deleteShader: vi.fn(),
-        createShader: vi.fn(() => ({})),
-        shaderSource: vi.fn(),
-        compileShader: vi.fn(),
-        getShaderParameter: vi.fn(() => true),
-        getShaderInfoLog: vi.fn(() => ''),
-        createVertexArray: vi.fn(() => ({})),
-        bindVertexArray: vi.fn(),
-        createBuffer: vi.fn(() => ({})),
-        bindBuffer: vi.fn(),
-        bufferData: vi.fn(),
-        enableVertexAttribArray: vi.fn(),
-        vertexAttribPointer: vi.fn(),
-        getUniformLocation: vi.fn((_program: WebGLProgram, name: string) => {
+        getExtension: () => null,
+        createProgram: () => ({}),
+        attachShader: noop,
+        linkProgram: noop,
+        getProgramParameter: () => true,
+        getProgramInfoLog: () => '',
+        deleteShader: noop,
+        createShader: () => ({}),
+        shaderSource: noop,
+        compileShader: noop,
+        getShaderParameter: () => true,
+        getShaderInfoLog: () => '',
+        createVertexArray: () => ({}),
+        bindVertexArray: noop,
+        createBuffer: () => ({}),
+        bindBuffer: noop,
+        bufferData: noop,
+        enableVertexAttribArray: noop,
+        vertexAttribPointer: noop,
+        getUniformLocation(_program: WebGLProgram, name: string) {
           const sentinel = { __uniformName: name };
           locationToName.set(sentinel, name);
           return sentinel;
-        }),
-        getAttribLocation: vi.fn(() => 0),
-        useProgram: vi.fn(),
-        uniform1f: vi.fn((location: object, value: number) => {
+        },
+        getAttribLocation: () => 0,
+        useProgram: noop,
+        uniform1f(location: object, value: number) {
           const name = locationToName.get(location);
           if (name === 'u_displayGamma' || name === 'u_displayBrightness') {
             if (!uniform1fCalls.has(name)) {
@@ -768,34 +770,34 @@ describe('Renderer SDR Display Transfer Override (regression)', () => {
             }
             uniform1fCalls.get(name)!.push(value);
           }
-        }),
-        uniform1i: vi.fn(),
-        uniform2fv: vi.fn(),
-        uniform3fv: vi.fn(),
-        uniform4fv: vi.fn(),
-        uniform1iv: vi.fn(),
-        uniform2iv: vi.fn(),
-        uniform3iv: vi.fn(),
-        uniform4iv: vi.fn(),
-        uniformMatrix3fv: vi.fn(),
-        uniformMatrix4fv: vi.fn(),
-        activeTexture: vi.fn(),
-        bindTexture: vi.fn(),
-        pixelStorei: vi.fn(),
-        createTexture: vi.fn(() => ({})),
-        deleteTexture: vi.fn(),
-        clear: vi.fn(),
-        clearColor: vi.fn(),
-        viewport: vi.fn(),
-        drawArrays: vi.fn(),
-        deleteBuffer: vi.fn(),
-        deleteVertexArray: vi.fn(),
-        deleteProgram: vi.fn(),
-        texParameteri: vi.fn(),
-        texImage2D: vi.fn(),
-        texImage3D: vi.fn(),
-        texStorage3D: vi.fn(),
-        isContextLost: vi.fn(() => false),
+        },
+        uniform1i: noop,
+        uniform2fv: noop,
+        uniform3fv: noop,
+        uniform4fv: noop,
+        uniform1iv: noop,
+        uniform2iv: noop,
+        uniform3iv: noop,
+        uniform4iv: noop,
+        uniformMatrix3fv: noop,
+        uniformMatrix4fv: noop,
+        activeTexture: noop,
+        bindTexture: noop,
+        pixelStorei: noop,
+        createTexture: () => ({}),
+        deleteTexture: noop,
+        clear: noop,
+        clearColor: noop,
+        viewport: noop,
+        drawArrays: noop,
+        deleteBuffer: noop,
+        deleteVertexArray: noop,
+        deleteProgram: noop,
+        texParameteri: noop,
+        texImage2D: noop,
+        texImage3D: noop,
+        texStorage3D: noop,
+        isContextLost: () => false,
         // Constants
         VERTEX_SHADER: 0x8b31,
         FRAGMENT_SHADER: 0x8b30,
@@ -834,7 +836,7 @@ describe('Renderer SDR Display Transfer Override (regression)', () => {
     const canvas = document.createElement('canvas');
 
     const originalGetContext = canvas.getContext.bind(canvas);
-    canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+    canvas.getContext = ((contextId: string, _options?: unknown) => {
       if (contextId === 'webgl2') return gl;
       return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
     }) as typeof canvas.getContext;
@@ -932,69 +934,70 @@ describe('Renderer Sampler Unit Assignment (regression)', () => {
     const locationToName = new Map<object, string>();
     // All uniform1i calls recorded as [name, value]
     const uniform1iCalls: Array<[string, number]> = [];
+    const noop = () => {};
 
     const gl = {
       canvas: document.createElement('canvas'),
       drawingBufferColorSpace: 'srgb',
-      getExtension: vi.fn(() => null),
-      createProgram: vi.fn(() => ({})),
-      attachShader: vi.fn(),
-      linkProgram: vi.fn(),
-      getProgramParameter: vi.fn(() => true),
-      getProgramInfoLog: vi.fn(() => ''),
-      deleteShader: vi.fn(),
-      createShader: vi.fn(() => ({})),
-      shaderSource: vi.fn(),
-      compileShader: vi.fn(),
-      getShaderParameter: vi.fn(() => true),
-      getShaderInfoLog: vi.fn(() => ''),
-      createVertexArray: vi.fn(() => ({})),
-      bindVertexArray: vi.fn(),
-      createBuffer: vi.fn(() => ({})),
-      bindBuffer: vi.fn(),
-      bufferData: vi.fn(),
-      enableVertexAttribArray: vi.fn(),
-      vertexAttribPointer: vi.fn(),
-      getUniformLocation: vi.fn((_program: WebGLProgram, name: string) => {
+      getExtension: () => null,
+      createProgram: () => ({}),
+      attachShader: noop,
+      linkProgram: noop,
+      getProgramParameter: () => true,
+      getProgramInfoLog: () => '',
+      deleteShader: noop,
+      createShader: () => ({}),
+      shaderSource: noop,
+      compileShader: noop,
+      getShaderParameter: () => true,
+      getShaderInfoLog: () => '',
+      createVertexArray: () => ({}),
+      bindVertexArray: noop,
+      createBuffer: () => ({}),
+      bindBuffer: noop,
+      bufferData: noop,
+      enableVertexAttribArray: noop,
+      vertexAttribPointer: noop,
+      getUniformLocation(_program: WebGLProgram, name: string) {
         const sentinel = { __uniformName: name };
         locationToName.set(sentinel, name);
         return sentinel;
-      }),
-      getAttribLocation: vi.fn(() => 0),
-      useProgram: vi.fn(),
-      uniform1f: vi.fn(),
-      uniform1i: vi.fn((location: object, value: number) => {
+      },
+      getAttribLocation: () => 0,
+      useProgram: noop,
+      uniform1f: noop,
+      uniform1i(location: object, value: number) {
         const name = locationToName.get(location);
         if (name) {
           uniform1iCalls.push([name, value]);
         }
-      }),
-      uniform1fv: vi.fn(),
-      uniform2fv: vi.fn(),
-      uniform3fv: vi.fn(),
-      uniform4fv: vi.fn(),
-      uniform1iv: vi.fn(),
-      uniform2iv: vi.fn(),
-      uniform3iv: vi.fn(),
-      uniform4iv: vi.fn(),
-      uniformMatrix3fv: vi.fn(),
-      uniformMatrix4fv: vi.fn(),
-      activeTexture: vi.fn(),
-      bindTexture: vi.fn(),
-      drawArrays: vi.fn(),
-      viewport: vi.fn(),
-      clearColor: vi.fn(),
-      clear: vi.fn(),
-      createTexture: vi.fn(() => ({})),
-      deleteTexture: vi.fn(),
-      deleteVertexArray: vi.fn(),
-      deleteBuffer: vi.fn(),
-      deleteProgram: vi.fn(),
-      texParameteri: vi.fn(),
-      texImage2D: vi.fn(),
-      texImage3D: vi.fn(),
-      texStorage3D: vi.fn(),
-      isContextLost: vi.fn(() => false),
+      },
+      uniform1fv: noop,
+      uniform2fv: noop,
+      uniform3fv: noop,
+      uniform4fv: noop,
+      uniform1iv: noop,
+      uniform2iv: noop,
+      uniform3iv: noop,
+      uniform4iv: noop,
+      uniformMatrix3fv: noop,
+      uniformMatrix4fv: noop,
+      activeTexture: noop,
+      bindTexture: noop,
+      drawArrays: noop,
+      viewport: noop,
+      clearColor: noop,
+      clear: noop,
+      createTexture: () => ({}),
+      deleteTexture: noop,
+      deleteVertexArray: noop,
+      deleteBuffer: noop,
+      deleteProgram: noop,
+      texParameteri: noop,
+      texImage2D: noop,
+      texImage3D: noop,
+      texStorage3D: noop,
+      isContextLost: () => false,
       // Constants
       VERTEX_SHADER: 0x8b31,
       FRAGMENT_SHADER: 0x8b30,
@@ -1049,7 +1052,7 @@ describe('Renderer Sampler Unit Assignment (regression)', () => {
     const canvas = document.createElement('canvas');
 
     const originalGetContext = canvas.getContext.bind(canvas);
-    canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+    canvas.getContext = ((contextId: string, _options?: unknown) => {
       if (contextId === 'webgl2') return tracking.gl;
       return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
     }) as typeof canvas.getContext;
@@ -1255,13 +1258,13 @@ describe('Renderer Extended HDR Mode', () => {
     const mockGL = createMockGL({ supportP3: true, supportDrawingBufferStorage: true });
     const canvas = document.createElement('canvas');
 
-    canvas.getContext = vi.fn((contextId: string) => {
+    canvas.getContext = ((contextId: string) => {
       if (contextId === 'webgl2') return mockGL;
       return null;
     }) as typeof canvas.getContext;
 
     // Attach configureHighDynamicRange to canvas
-    (canvas as unknown as { configureHighDynamicRange: (opts: unknown) => void }).configureHighDynamicRange = vi.fn();
+    (canvas as unknown as { configureHighDynamicRange: (opts: unknown) => void }).configureHighDynamicRange = () => {};
 
     const caps = makeCaps({
       displayHDR: true,
@@ -1281,7 +1284,7 @@ describe('Renderer Extended HDR Mode', () => {
     const mockGL = createMockGL({ supportP3: true });
     const canvas = document.createElement('canvas');
 
-    canvas.getContext = vi.fn((contextId: string) => {
+    canvas.getContext = ((contextId: string) => {
       if (contextId === 'webgl2') return mockGL;
       return null;
     }) as typeof canvas.getContext;
@@ -1304,11 +1307,11 @@ describe('Renderer Extended HDR Mode', () => {
     const mockGL = createMockGL({ supportP3: true, supportDrawingBufferStorage: true });
     const canvas = document.createElement('canvas');
 
-    canvas.getContext = vi.fn((contextId: string) => {
+    canvas.getContext = ((contextId: string) => {
       if (contextId === 'webgl2') return mockGL;
       return null;
     }) as typeof canvas.getContext;
-    (canvas as unknown as { configureHighDynamicRange: (opts: unknown) => void }).configureHighDynamicRange = vi.fn();
+    (canvas as unknown as { configureHighDynamicRange: (opts: unknown) => void }).configureHighDynamicRange = () => {};
 
     const caps = makeCaps({
       displayHDR: true,
@@ -1340,7 +1343,7 @@ describe('Renderer Extended HDR Mode', () => {
     const mockGL = createMockGL({ supportP3: true, supportDrawingBufferStorage: true });
     const canvas = document.createElement('canvas');
 
-    canvas.getContext = vi.fn((contextId: string) => {
+    canvas.getContext = ((contextId: string) => {
       if (contextId === 'webgl2') return mockGL;
       return null;
     }) as typeof canvas.getContext;
@@ -1366,11 +1369,11 @@ describe('Renderer Extended HDR Mode', () => {
     const mockGL = createMockGL({ supportP3: true, supportDrawingBufferStorage: true });
     const canvas = document.createElement('canvas');
 
-    canvas.getContext = vi.fn((contextId: string) => {
+    canvas.getContext = ((contextId: string) => {
       if (contextId === 'webgl2') return mockGL;
       return null;
     }) as typeof canvas.getContext;
-    (canvas as unknown as { configureHighDynamicRange: (opts: unknown) => void }).configureHighDynamicRange = vi.fn();
+    (canvas as unknown as { configureHighDynamicRange: (opts: unknown) => void }).configureHighDynamicRange = () => {};
 
     const caps = makeCaps({
       displayHDR: true,
@@ -1427,67 +1430,68 @@ describe('Renderer HDR Headroom Uniform', () => {
   } {
     const locationToName = new Map<object, string>();
     const headroomCalls: number[] = [];
+    const noop = () => {};
 
     const gl = {
       canvas: document.createElement('canvas'),
       drawingBufferColorSpace: 'srgb',
-      getExtension: vi.fn(() => null),
-      createProgram: vi.fn(() => ({})),
-      attachShader: vi.fn(),
-      linkProgram: vi.fn(),
-      getProgramParameter: vi.fn(() => true),
-      getProgramInfoLog: vi.fn(() => ''),
-      deleteShader: vi.fn(),
-      createShader: vi.fn(() => ({})),
-      shaderSource: vi.fn(),
-      compileShader: vi.fn(),
-      getShaderParameter: vi.fn(() => true),
-      getShaderInfoLog: vi.fn(() => ''),
-      createVertexArray: vi.fn(() => ({})),
-      bindVertexArray: vi.fn(),
-      createBuffer: vi.fn(() => ({})),
-      bindBuffer: vi.fn(),
-      bufferData: vi.fn(),
-      enableVertexAttribArray: vi.fn(),
-      vertexAttribPointer: vi.fn(),
-      getUniformLocation: vi.fn((_program: WebGLProgram, name: string) => {
+      getExtension: () => null,
+      createProgram: () => ({}),
+      attachShader: noop,
+      linkProgram: noop,
+      getProgramParameter: () => true,
+      getProgramInfoLog: () => '',
+      deleteShader: noop,
+      createShader: () => ({}),
+      shaderSource: noop,
+      compileShader: noop,
+      getShaderParameter: () => true,
+      getShaderInfoLog: () => '',
+      createVertexArray: () => ({}),
+      bindVertexArray: noop,
+      createBuffer: () => ({}),
+      bindBuffer: noop,
+      bufferData: noop,
+      enableVertexAttribArray: noop,
+      vertexAttribPointer: noop,
+      getUniformLocation(_program: WebGLProgram, name: string) {
         const sentinel = { __uniformName: name };
         locationToName.set(sentinel, name);
         return sentinel;
-      }),
-      getAttribLocation: vi.fn(() => 0),
-      useProgram: vi.fn(),
-      uniform1f: vi.fn((location: object, value: number) => {
+      },
+      getAttribLocation: () => 0,
+      useProgram: noop,
+      uniform1f(location: object, value: number) {
         const name = locationToName.get(location);
         if (name === 'u_hdrHeadroom') {
           headroomCalls.push(value);
         }
-      }),
-      uniform1i: vi.fn(),
-      uniform2fv: vi.fn(),
-      uniform3fv: vi.fn(),
-      uniform4fv: vi.fn(),
-      uniform1iv: vi.fn(),
-      uniform2iv: vi.fn(),
-      uniform3iv: vi.fn(),
-      uniform4iv: vi.fn(),
-      uniformMatrix3fv: vi.fn(),
-      uniformMatrix4fv: vi.fn(),
-      activeTexture: vi.fn(),
-      bindTexture: vi.fn(),
-      drawArrays: vi.fn(),
-      viewport: vi.fn(),
-      clearColor: vi.fn(),
-      clear: vi.fn(),
-      createTexture: vi.fn(() => ({})),
-      deleteTexture: vi.fn(),
-      deleteVertexArray: vi.fn(),
-      deleteBuffer: vi.fn(),
-      deleteProgram: vi.fn(),
-      texParameteri: vi.fn(),
-      texImage2D: vi.fn(),
-      texImage3D: vi.fn(),
-      isContextLost: vi.fn(() => false),
+      },
+      uniform1i: noop,
+      uniform2fv: noop,
+      uniform3fv: noop,
+      uniform4fv: noop,
+      uniform1iv: noop,
+      uniform2iv: noop,
+      uniform3iv: noop,
+      uniform4iv: noop,
+      uniformMatrix3fv: noop,
+      uniformMatrix4fv: noop,
+      activeTexture: noop,
+      bindTexture: noop,
+      drawArrays: noop,
+      viewport: noop,
+      clearColor: noop,
+      clear: noop,
+      createTexture: () => ({}),
+      deleteTexture: noop,
+      deleteVertexArray: noop,
+      deleteBuffer: noop,
+      deleteProgram: noop,
+      texParameteri: noop,
+      texImage2D: noop,
+      texImage3D: noop,
+      isContextLost: () => false,
       // Constants
       VERTEX_SHADER: 0x8b31,
       FRAGMENT_SHADER: 0x8b30,
@@ -1532,7 +1536,7 @@ describe('Renderer HDR Headroom Uniform', () => {
     const canvas = document.createElement('canvas');
 
     const originalGetContext = canvas.getContext.bind(canvas);
-    canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+    canvas.getContext = ((contextId: string, _options?: unknown) => {
       if (contextId === 'webgl2') return gl;
       return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
     }) as typeof canvas.getContext;
@@ -1563,7 +1567,7 @@ describe('Renderer HDR Headroom Uniform', () => {
     });
 
     const originalGetContext = canvas.getContext.bind(canvas);
-    canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+    canvas.getContext = ((contextId: string, _options?: unknown) => {
       if (contextId === 'webgl2') return gl;
       return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
     }) as typeof canvas.getContext;
@@ -1590,7 +1594,7 @@ describe('Renderer HDR Headroom Uniform', () => {
     const canvas = document.createElement('canvas');
 
     const originalGetContext = canvas.getContext.bind(canvas);
-    canvas.getContext = vi.fn((contextId: string, _options?: unknown) => {
+    canvas.getContext = ((contextId: string, _options?: unknown) => {
       if (contextId === 'webgl2') return gl;
       return originalGetContext(contextId, _options as CanvasRenderingContext2DSettings);
     }) as typeof canvas.getContext;

@@ -549,11 +549,22 @@ describe('Stale cache fallback during playback', () => {
     manager.setPlaybackState(true, 1);
     manager.preloadAround(50);
 
-    // Wait for prerendering
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Wait for prerendering (poll until at least one frame is cached)
+    let cachedFrameNumber = -1;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+      for (let f = 1; f <= 100; f++) {
+        if (manager.hasFrame(f)) {
+          cachedFrameNumber = f;
+          break;
+        }
+      }
+      if (cachedFrameNumber > 0) break;
+    }
 
     const statsBeforeChange = manager.getStats();
     expect(statsBeforeChange.cacheSize).toBeGreaterThan(0);
+    expect(cachedFrameNumber).toBeGreaterThan(0);
 
     // Change effects during playback
     const state2 = createDefaultEffectsState();
@@ -566,17 +577,8 @@ describe('Stale cache fallback during playback', () => {
     expect(statsAfterChange.previousCacheSize).toBeGreaterThan(0);
 
     // getFrame should return stale frames from previousCache
-    // Try a frame that was prerendered earlier
-    // (frames around 50 should have been cached)
-    let foundStaleFrame = false;
-    for (let f = 48; f <= 55; f++) {
-      const frame = manager.getFrame(f);
-      if (frame !== null) {
-        foundStaleFrame = true;
-        break;
-      }
-    }
-    expect(foundStaleFrame).toBe(true);
+    const staleFrame = manager.getFrame(cachedFrameNumber);
+    expect(staleFrame).not.toBeNull();
   });
 
   it('PBM-051: getFrame returns stale frames from previousCache when paused (Phase 2C)', async () => {
