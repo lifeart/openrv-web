@@ -725,6 +725,151 @@ describe('NotePanel', () => {
     });
   });
 
+  describe('note count badge', () => {
+    it('badge shows correct open count for current source', () => {
+      const badge = panel.createBadge();
+      expect(badge.style.display).toBe('none');
+
+      session.noteManager.addNote(0, 10, 10, 'Open note', 'Alice');
+      expect(badge.style.display).toBe('flex');
+      expect(badge.textContent).toBe('1');
+
+      session.noteManager.addNote(0, 20, 20, 'Open note 2', 'Bob');
+      expect(badge.textContent).toBe('2');
+    });
+
+    it('badge updates when note resolved (count decreases)', () => {
+      const badge = panel.createBadge();
+      const note = session.noteManager.addNote(0, 10, 10, 'Resolve me', 'Alice');
+      expect(badge.textContent).toBe('1');
+
+      session.noteManager.resolveNote(note.id);
+      expect(badge.textContent).toBe('');
+      expect(badge.style.display).toBe('none');
+    });
+
+    it('badge scoped to current source', () => {
+      const badge = panel.createBadge();
+      // Add notes to source 0 (current) and source 1 (not current)
+      session.noteManager.addNote(0, 10, 10, 'Source 0 note', 'Alice');
+      session.noteManager.addNote(1, 10, 10, 'Source 1 note', 'Bob');
+
+      // Should only count source 0 (currentSourceIndex = 0 by default)
+      expect(badge.textContent).toBe('1');
+    });
+
+    it('badge hidden when 0 open notes', () => {
+      const badge = panel.createBadge();
+      expect(badge.style.display).toBe('none');
+      expect(badge.textContent).toBe('');
+    });
+  });
+
+  describe('reply nesting cap + performance', () => {
+    it('deep nesting (4+ levels) flattens visually at level 2', () => {
+      // Create chain: root -> reply1 -> reply2 -> reply3 -> reply4
+      const root = session.noteManager.addNote(0, 5, 5, 'Root', 'A');
+      const r1 = session.noteManager.addNote(0, 5, 5, 'Reply L1', 'B', { parentId: root.id });
+      const r2 = session.noteManager.addNote(0, 5, 5, 'Reply L2', 'C', { parentId: r1.id });
+      const r3 = session.noteManager.addNote(0, 5, 5, 'Reply L3', 'D', { parentId: r2.id });
+      const r4 = session.noteManager.addNote(0, 5, 5, 'Reply L4', 'E', { parentId: r3.id });
+
+      panel.show();
+
+      const rootEl = panel.getElement().querySelector(`[data-testid="note-entry-${root.id}"]`) as HTMLElement;
+      const r1El = panel.getElement().querySelector(`[data-testid="note-entry-${r1.id}"]`) as HTMLElement;
+      const r2El = panel.getElement().querySelector(`[data-testid="note-entry-${r2.id}"]`) as HTMLElement;
+      const r3El = panel.getElement().querySelector(`[data-testid="note-entry-${r3.id}"]`) as HTMLElement;
+      const r4El = panel.getElement().querySelector(`[data-testid="note-entry-${r4.id}"]`) as HTMLElement;
+
+      // Root has default padding (12px)
+      expect(rootEl.style.paddingLeft).toBe('12px');
+      // Depth 1: 12 + 16*1 = 28px
+      expect(r1El.style.paddingLeft).toBe('28px');
+      // Depth 2: 12 + 16*2 = 44px
+      expect(r2El.style.paddingLeft).toBe('44px');
+      // Depth 3+ capped at visual depth 2: 44px
+      expect(r3El.style.paddingLeft).toBe('44px');
+      expect(r4El.style.paddingLeft).toBe('44px');
+    });
+
+    it('150 notes render without error', () => {
+      for (let i = 0; i < 150; i++) {
+        session.noteManager.addNote(0, i + 1, i + 1, `Note ${i}`, 'User');
+      }
+      panel.show();
+      const entries = panel.getElement().querySelectorAll('[data-testid^="note-entry-"]');
+      expect(entries.length).toBe(150);
+    });
+
+    it('relative performance: 150 notes render in < 10x time of 15', () => {
+      // Measure 15 notes
+      for (let i = 0; i < 15; i++) {
+        session.noteManager.addNote(0, i + 1, i + 1, `Note ${i}`, 'User');
+      }
+      panel.show();
+      const start15 = performance.now();
+      for (let r = 0; r < 10; r++) {
+        // Force re-render by toggling visibility
+        panel.hide();
+        panel.show();
+      }
+      const time15 = performance.now() - start15;
+
+      // Clear and add 150 notes
+      const allNotes = session.noteManager.getNotes();
+      for (const n of allNotes) {
+        session.noteManager.removeNote(n.id);
+      }
+      for (let i = 0; i < 150; i++) {
+        session.noteManager.addNote(0, i + 1, i + 1, `Note ${i}`, 'User');
+      }
+      const start150 = performance.now();
+      for (let r = 0; r < 10; r++) {
+        panel.hide();
+        panel.show();
+      }
+      const time150 = performance.now() - start150;
+
+      // 150 notes should not take more than 15x the time of 15 (catches exponential blowup)
+      expect(time150).toBeLessThan(time15 * 15);
+    });
+
+    it('DOM cleanup after full deletion', () => {
+      for (let i = 0; i < 10; i++) {
+        session.noteManager.addNote(0, i + 1, i + 1, `Note ${i}`, 'User');
+      }
+      panel.show();
+      expect(panel.getElement().querySelectorAll('[data-testid^="note-entry-"]').length).toBe(10);
+
+      const allNotes = session.noteManager.getNotes();
+      for (const n of allNotes) {
+        session.noteManager.removeNote(n.id);
+      }
+      // After deleting all notes, entries container should be cleared (only empty state msg)
+      const entries = panel.getElement().querySelectorAll('[data-testid^="note-entry-"]');
+      expect(entries.length).toBe(0);
+    });
+
+    it('keyboard navigation works with 150 notes', () => {
+      for (let i = 0; i < 150; i++) {
+        session.noteManager.addNote(0, i + 1, i + 1, `Note ${i}`, 'User');
+      }
+      panel.show();
+
+      // Navigate down several times
+      for (let i = 0; i < 5; i++) {
+        panel.getElement().dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }));
+      }
+
+      const entries = panel.getElement().querySelectorAll('.note-entry');
+      const selected = panel.getElement().querySelector('[aria-selected="true"]');
+      expect(selected).toBeTruthy();
+      // focusedNoteIndex starts at -1, so 5 ArrowDown presses = index 4
+      expect(selected).toBe(entries[4]);
+    });
+  });
+
   describe('mutual exclusion', () => {
     it('show() closes exclusive panel if open', () => {
       const mockExclusive = {

@@ -207,6 +207,29 @@ describe('SessionGTOStore', () => {
     viewer.dispose();
   });
 
+  it('writes RVNoiseReduction settings from viewer state', () => {
+    const { session, paintEngine, viewer } = createViewer();
+    viewer.setNoiseReductionParams({
+      strength: 70,
+      luminanceStrength: 40,
+      chromaStrength: 60,
+      radius: 4,
+    });
+
+    const store = new SessionGTOStore(BASE_GTO);
+    store.updateFromState({ session, viewer, paintEngine });
+
+    const dto = new GTODTO(store.toGTOData());
+    const noise = dto.byProtocol('RVNoiseReduction').first();
+    expect(noise.exists()).toBe(true);
+    expect(noise.prop('node', 'active')).toBe(1);
+    expect(noise.prop('node', 'amount')).toBeCloseTo(0.7, 6);
+    expect(noise.prop('node', 'radius')).toBe(4);
+    expect(noise.prop('node', 'threshold')).toBeCloseTo(6, 6);
+
+    viewer.dispose();
+  });
+
   describe('GTO Round-Trip — Color Properties', () => {
     it('GTO-RT-001: hue value survives round-trip', () => {
       const { session, paintEngine, viewer } = createViewer();

@@ -31,6 +31,7 @@ import {
 import type { ColorAdjustments, ChannelMode, LinearizeState, ChannelSwizzle } from '../../core/types/color';
 import type { FilterSettings } from '../../core/types/filter';
 import type { Transform2D, CropState, UncropState } from '../../core/types/transform';
+import type { NoiseReductionParams } from '../../filters/NoiseReduction';
 import type { ScopesState } from '../../core/types/scopes';
 import type { CDLValues } from '../../color/CDL';
 import type { LensDistortionParams } from '../../transform/LensDistortion';
@@ -50,6 +51,7 @@ import {
   parseStereo as _parseStereo,
   parseScopes as _parseScopes,
   parseLinearize as _parseLinearize,
+  parseNoiseReduction as _parseNoiseReduction,
 } from './GTOSettingsParser';
 import type { GTOParseResult } from './GTOGraphLoader';
 import type { SubFramePosition } from '../../utils/media/FrameInterpolator';
@@ -105,6 +107,7 @@ export interface GTOViewSettings {
   stereoAlignMode?: StereoAlignMode;
   scopes?: ScopesState;
   linearize?: LinearizeState;
+  noiseReduction?: NoiseReductionParams;
   uncrop?: UncropState;
   outOfRange?: number;  // 0=off, 1=clamp-to-black, 2=highlight
   channelSwizzle?: ChannelSwizzle;
@@ -1458,6 +1461,11 @@ export class Session extends EventEmitter<SessionEvents> {
   // @ts-ignore TS6133 - accessed by tests via (session as any).parseLinearize()
   private parseLinearize(dto: GTODTO): LinearizeState | null {
     return _parseLinearize(dto);
+  }
+
+  // @ts-ignore TS6133 - accessed by tests via (session as any).parseNoiseReduction()
+  private parseNoiseReduction(dto: GTODTO): NoiseReductionParams | null {
+    return _parseNoiseReduction(dto);
   }
 
   // Annotation parsing methods - delegate to AnnotationStore.

@@ -10,6 +10,7 @@ import { DEFAULT_TRANSFORM, DEFAULT_CROP_STATE } from '../../core/types/transfor
 import { isDefaultLensParams } from '../../transform/LensDistortion';
 import type { LensDistortionParams } from '../../transform/LensDistortion';
 import type { StereoState } from '../types/stereo';
+import type { NoiseReductionParams } from '../../filters/NoiseReduction';
 
 interface UpdateContext {
   session: Session;
@@ -37,6 +38,7 @@ export class SessionGTOStore {
     this.updateCrop(session, viewer.getCropState());
     this.updateChannelMode(viewer.getChannelMode());
     this.updateStereo(viewer.getStereoState());
+    this.updateNoiseReduction(viewer.getNoiseReductionParams());
     if (scopesState) {
       this.updateScopes(scopesState);
     }
@@ -269,6 +271,20 @@ export class SessionGTOStore {
     this.setProperty(component, 'type', 'string', 1, typeMap[stereo.mode] ?? 'off');
     this.setProperty(component, 'swap', 'int', 1, stereo.eyeSwap ? 1 : 0);
     this.setProperty(component, 'relativeOffset', 'float', 1, stereo.offset / 100);
+  }
+
+  private updateNoiseReduction(params: NoiseReductionParams): void {
+    const target = this.ensureObject('RVNoiseReduction', 'rvNoiseReduction');
+    const component = this.ensureComponent(target, 'node');
+
+    const strength = Math.max(0, Math.min(100, params.strength));
+    const radius = Math.max(1, Math.min(5, params.radius));
+    const threshold = Math.max(0, (100 - Math.max(0, Math.min(100, params.luminanceStrength))) / 10);
+
+    this.setProperty(component, 'active', 'int', 1, strength > 0 ? 1 : 0);
+    this.setProperty(component, 'amount', 'float', 1, strength / 100);
+    this.setProperty(component, 'radius', 'float', 1, radius);
+    this.setProperty(component, 'threshold', 'float', 1, threshold);
   }
 
   private updateScopes(scopes: ScopesState): void {

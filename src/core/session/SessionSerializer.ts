@@ -23,6 +23,8 @@ import { DEFAULT_CDL } from '../../color/CDL';
 import { DEFAULT_LENS_PARAMS } from '../../transform/LensDistortion';
 import { DEFAULT_WIPE_STATE } from '../types/wipe';
 import { DEFAULT_PAR_STATE } from '../../utils/media/PixelAspectRatio';
+import { DEFAULT_NOISE_REDUCTION_PARAMS } from '../../filters/NoiseReduction';
+import { DEFAULT_WATERMARK_STATE } from '../../ui/components/WatermarkOverlay';
 import type { Annotation, PaintEffects } from '../../paint/types';
 import { DEFAULT_PAINT_EFFECTS } from '../../paint/types';
 import { showFileReloadPrompt } from '../../ui/components/shared/Modal';
@@ -92,6 +94,8 @@ export class SessionSerializer {
       lens: viewer.getLensParams(),
       wipe: viewer.getWipeState(),
       stack: viewer.getStackLayers(),
+      noiseReduction: viewer.getNoiseReductionParams(),
+      watermark: viewer.getWatermarkState(),
       lutPath: viewer.getLUT()?.title,
       lutIntensity: viewer.getLUTIntensity(),
       par: viewer.getPARState(),
@@ -234,6 +238,8 @@ export class SessionSerializer {
     viewer.setLensParams(migrated.lens);
     viewer.setWipeState(migrated.wipe);
     viewer.setStackLayers(migrated.stack);
+    viewer.setNoiseReductionParams(migrated.noiseReduction ?? DEFAULT_NOISE_REDUCTION_PARAMS);
+    viewer.setWatermarkState(migrated.watermark ?? DEFAULT_WATERMARK_STATE);
     viewer.setLUTIntensity(migrated.lutIntensity);
     if (migrated.par) {
       viewer.setPARState(migrated.par);
@@ -295,6 +301,8 @@ export class SessionSerializer {
     migrated.lens = { ...DEFAULT_LENS_PARAMS, ...migrated.lens };
     migrated.wipe = { ...DEFAULT_WIPE_STATE, ...migrated.wipe };
     migrated.stack = migrated.stack ?? [];
+    migrated.noiseReduction = { ...DEFAULT_NOISE_REDUCTION_PARAMS, ...migrated.noiseReduction };
+    migrated.watermark = { ...DEFAULT_WATERMARK_STATE, ...migrated.watermark };
     migrated.lutIntensity = migrated.lutIntensity ?? 1.0;
     migrated.par = migrated.par ? { ...DEFAULT_PAR_STATE, ...migrated.par } : undefined;
     migrated.backgroundPattern = migrated.backgroundPattern
@@ -387,6 +395,8 @@ export class SessionSerializer {
       lens: { ...DEFAULT_LENS_PARAMS },
       wipe: { ...DEFAULT_WIPE_STATE },
       stack: [],
+      noiseReduction: { ...DEFAULT_NOISE_REDUCTION_PARAMS },
+      watermark: { ...DEFAULT_WATERMARK_STATE },
       lutIntensity: 1.0,
     };
   }

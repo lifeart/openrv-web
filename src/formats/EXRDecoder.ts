@@ -5,20 +5,21 @@
  * - Half-float (16-bit) and float (32-bit) pixel data
  * - RGBA, RGB, and Y (grayscale) channels
  * - Scanline images (tiled images not yet supported)
- * - Uncompressed (NONE), RLE, ZIP, ZIPS, and PIZ compression
+ * - Uncompressed (NONE), RLE, ZIP, ZIPS, PIZ, DWAA, and DWAB compression
  * - Data window / display window handling
  * - Multi-part EXR files (scanline parts; part selection via partIndex)
  *
  * Not yet supported:
  * - Tiled images
  * - Deep data (deepscanline / deeptile)
- * - PXR24, B44, B44A, DWAA, DWAB compression
+ * - PXR24, B44, B44A compression
  *
  * Based on the OpenEXR file format specification.
  */
 
 import { IPImage, ImageMetadata } from '../core/image/Image';
 import { decompressPIZ } from './EXRPIZCodec';
+import { decompressDWA } from './EXRDWACodec';
 import { validateImageDimensions } from './shared';
 import { DecoderError } from '../core/errors';
 
@@ -653,6 +654,23 @@ function parseBox2i(reader: EXRDataReader): EXRBox2i {
 }
 
 /**
+ * Lines per scanline block for each compression type.
+ */
+function getLinesPerBlock(compression: EXRCompression): number {
+  switch (compression) {
+    case EXRCompression.PIZ:
+    case EXRCompression.DWAA:
+      return 32;
+    case EXRCompression.ZIP:
+      return 16;
+    case EXRCompression.DWAB:
+      return 256;
+    default:
+      return 1;
+  }
+}
+
+/**
  * Decompress data based on compression type
  */
 async function decompressData(
@@ -685,6 +703,20 @@ async function decompressData(
 
     case EXRCompression.RLE:
       return decompressRLE(compressedData, uncompressedSize);
+
+    case EXRCompression.DWAA:
+    case EXRCompression.DWAB: {
+      if (!pizContext) {
+        throw new DecoderError('EXR', 'DWA decompression requires channel context information');
+      }
+      return decompressDWA(
+        compressedData,
+        uncompressedSize,
+        pizContext.width,
+        pizContext.numLines,
+        pizContext.channelSizes,
+      );
+    }
 
     default:
       throw new DecoderError('EXR', `Unsupported EXR compression: ${compression}`);
@@ -885,14 +917,7 @@ async function decodeScanlineImage(
   }, 0);
 
   // Lines per block depends on compression
-  // TODO: PIZ codec needs a full rewrite — missing Huffman decompression,
-  // wrong pipeline order, and 1D-only wavelet (should be 2D).
-  const linesPerBlock =
-    header.compression === EXRCompression.PIZ
-      ? 32
-      : header.compression === EXRCompression.ZIP
-        ? 16
-        : 1;
+  const linesPerBlock = getLinesPerBlock(header.compression);
 
   // Read offset table (for scanline images)
   const numBlocks = Math.ceil(height / linesPerBlock);
@@ -916,7 +941,11 @@ async function decodeScanlineImage(
     if (header.compression === EXRCompression.NONE) {
       unpackedData = packedData;
     } else {
-      const pizContext = header.compression === EXRCompression.PIZ
+      const needsChannelCtx =
+        header.compression === EXRCompression.PIZ ||
+        header.compression === EXRCompression.DWAA ||
+        header.compression === EXRCompression.DWAB;
+      const channelCtx = needsChannelCtx
         ? {
             width,
             numChannels: header.channels.length,
@@ -926,7 +955,7 @@ async function decodeScanlineImage(
             ),
           }
         : undefined;
-      unpackedData = await decompressData(packedData, header.compression, uncompressedSize, pizContext);
+      unpackedData = await decompressData(packedData, header.compression, uncompressedSize, channelCtx);
     }
 
     // Parse channel data from unpacked scanlines
@@ -1041,12 +1070,7 @@ async function decodeMultiPartScanlineImage(
     return sum + bytes * width;
   }, 0);
 
-  const linesPerBlock =
-    header.compression === EXRCompression.PIZ
-      ? 32
-      : header.compression === EXRCompression.ZIP
-        ? 16
-        : 1;
+  const linesPerBlock = getLinesPerBlock(header.compression);
 
   const numBlocks = Math.ceil(height / linesPerBlock);
 
@@ -1081,7 +1105,11 @@ async function decodeMultiPartScanlineImage(
     if (header.compression === EXRCompression.NONE) {
       unpackedData = packedData;
     } else {
-      const pizContext = header.compression === EXRCompression.PIZ
+      const needsChannelCtx =
+        header.compression === EXRCompression.PIZ ||
+        header.compression === EXRCompression.DWAA ||
+        header.compression === EXRCompression.DWAB;
+      const channelCtx = needsChannelCtx
         ? {
             width,
             numChannels: header.channels.length,
@@ -1091,7 +1119,7 @@ async function decodeMultiPartScanlineImage(
             ),
           }
         : undefined;
-      unpackedData = await decompressData(packedData, header.compression, uncompressedSize, pizContext);
+      unpackedData = await decompressData(packedData, header.compression, uncompressedSize, channelCtx);
     }
 
     const dataView = new DataView(unpackedData.buffer, unpackedData.byteOffset, unpackedData.byteLength);
@@ -1144,6 +1172,8 @@ const SUPPORTED_COMPRESSION = [
   EXRCompression.ZIPS,
   EXRCompression.ZIP,
   EXRCompression.PIZ,
+  EXRCompression.DWAA,
+  EXRCompression.DWAB,
 ];
 
 /**
@@ -1159,7 +1189,7 @@ function validateCompression(compression: EXRCompression, partLabel?: string): v
     const compressionName = EXRCompression[compression] || `unknown(${compression})`;
     const prefix = partLabel ? `Part '${partLabel}': ` : '';
     throw new DecoderError('EXR',
-      `${prefix}Unsupported EXR compression type: ${compressionName}. Supported types: NONE, RLE, ZIP, ZIPS, PIZ`
+      `${prefix}Unsupported EXR compression type: ${compressionName}. Supported types: NONE, RLE, ZIP, ZIPS, PIZ, DWAA, DWAB`
     );
   }
 }
@@ -1331,12 +1361,7 @@ async function decodeMultiPart(
     const dw = ph.dataWindow;
     const partHeight = dw.yMax - dw.yMin + 1;
 
-    const linesPerBlock =
-      ph.compression === EXRCompression.PIZ
-        ? 32
-        : ph.compression === EXRCompression.ZIP
-          ? 16
-          : 1;
+    const linesPerBlock = getLinesPerBlock(ph.compression);
     const numBlocks = Math.ceil(partHeight / linesPerBlock);
 
     const offsets: bigint[] = [];

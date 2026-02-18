@@ -26,6 +26,7 @@ import type { ToneMappingControl } from './ui/components/ToneMappingControl';
 import type { ColorControls } from './ui/components/ColorControls';
 import type { CompareControl } from './ui/components/CompareControl';
 import type { FilterControl } from './ui/components/FilterControl';
+import type { NoiseReductionControl } from './ui/components/NoiseReductionControl';
 import type { CDLControl } from './ui/components/CDLControl';
 import type { TransformControl } from './ui/components/TransformControl';
 import type { LensControl } from './ui/components/LensControl';
@@ -90,6 +91,7 @@ export interface SessionBridgeContext {
   getChannelSelect(): ChannelSelect;
   getStackControl(): StackControl;
   getFilterControl(): FilterControl;
+  getNoiseReductionControl?(): NoiseReductionControl;
   getCDLControl(): CDLControl;
   getTransformControl(): TransformControl;
   getLensControl(): LensControl;

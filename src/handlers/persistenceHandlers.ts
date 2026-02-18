@@ -91,6 +91,10 @@ function handleSettingsLoaded(
   if (settings.filterSettings) {
     context.getFilterControl().setSettings(settings.filterSettings);
   }
+  if (settings.noiseReduction) {
+    context.getViewer().setNoiseReductionParams(settings.noiseReduction);
+    context.getNoiseReductionControl?.()?.setParams(settings.noiseReduction);
+  }
   if (settings.cdl) {
     context.getCDLControl().setCDL(settings.cdl);
   }

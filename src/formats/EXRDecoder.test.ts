@@ -622,9 +622,11 @@ describe('EXRDecoder', () => {
       await expect(decodeEXR(buffer)).rejects.toThrow(/Unsupported EXR compression.*B44/);
     });
 
-    it('EXR-U093: should reject DWAA compression', async () => {
-      const buffer = createTestEXR({ compression: EXRCompression.DWAA });
-      await expect(decodeEXR(buffer)).rejects.toThrow(/Unsupported EXR compression.*DWAA/);
+    it('EXR-U093: should accept DWAA as supported compression type', () => {
+      // DWAA is now a supported compression type
+      const info = getEXRInfo(createTestEXR({ compression: EXRCompression.DWAA }));
+      expect(info).not.toBeNull();
+      expect(info!.compression).toBe('DWAA');
     });
   });
 
@@ -724,9 +726,11 @@ describe('EXRDecoder', () => {
   });
 
   describe('corner cases - DWAB compression', () => {
-    it('EXR-U132: should reject DWAB compression', async () => {
-      const buffer = createTestEXR({ compression: EXRCompression.DWAB });
-      await expect(decodeEXR(buffer)).rejects.toThrow(/Unsupported EXR compression.*DWAB/);
+    it('EXR-U132: should accept DWAB as supported compression type', () => {
+      // DWAB is now a supported compression type
+      const info = getEXRInfo(createTestEXR({ compression: EXRCompression.DWAB }));
+      expect(info).not.toBeNull();
+      expect(info!.compression).toBe('DWAB');
     });
   });
 

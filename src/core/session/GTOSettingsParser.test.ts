@@ -6,7 +6,16 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { parseColorAdjustments, parseLinearize, parseUncrop, parseOutOfRange, parseLens, parseChannelSwizzle, channelNameToSwizzleIndex } from './GTOSettingsParser';
+import {
+  parseColorAdjustments,
+  parseLinearize,
+  parseNoiseReduction,
+  parseUncrop,
+  parseOutOfRange,
+  parseLens,
+  parseChannelSwizzle,
+  channelNameToSwizzleIndex,
+} from './GTOSettingsParser';
 import { SWIZZLE_ZERO, SWIZZLE_ONE } from '../../core/types/color';
 import type { GTODTO } from 'gto-js';
 
@@ -600,6 +609,66 @@ describe('GTOSettingsParser.parseColorAdjustments', () => {
       expect(result!.exposure).toBe(1.5);
       expect(result!.exposureRGB).toEqual([1.5, 1.5, 1.5]);
     });
+  });
+});
+
+describe('GTOSettingsParser.parseNoiseReduction', () => {
+  function createNoiseReductionDTO(nodeProps: Record<string, unknown> | undefined): GTODTO {
+    const mockComponent = (props: Record<string, unknown> | undefined) => ({
+      exists: () => props !== undefined,
+      property: (name: string) => ({
+        value: () => props?.[name],
+      }),
+    });
+
+    const mockNode = {
+      component: (name: string) => (name === 'node' ? mockComponent(nodeProps) : mockComponent(undefined)),
+    };
+
+    return {
+      byProtocol: (proto: string) => {
+        if (proto === 'RVNoiseReduction' && nodeProps) {
+          const results = [mockNode] as any;
+          results.first = () => results[0];
+          results.length = 1;
+          return results;
+        }
+        const empty = [] as any;
+        empty.first = () => mockNode;
+        empty.length = 0;
+        return empty;
+      },
+    } as unknown as GTODTO;
+  }
+
+  it('parses RVNoiseReduction scalar fields into viewer params', () => {
+    const dto = createNoiseReductionDTO({
+      active: 1,
+      amount: 0.65,
+      radius: 4,
+      threshold: 3,
+    });
+
+    const parsed = parseNoiseReduction(dto);
+    expect(parsed).toEqual({
+      strength: 65,
+      luminanceStrength: 70,
+      chromaStrength: 100,
+      radius: 4,
+    });
+  });
+
+  it('returns strength 0 when RVNoiseReduction node is inactive', () => {
+    const dto = createNoiseReductionDTO({
+      active: 0,
+      amount: 0.9,
+      radius: 3,
+      threshold: 5,
+    });
+
+    const parsed = parseNoiseReduction(dto);
+    expect(parsed?.strength).toBe(0);
+    expect(parsed?.radius).toBe(3);
   });
 });
 

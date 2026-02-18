@@ -49,9 +49,14 @@ function createMockContext(): SessionBridgeContext {
     setGTOStore: vi.fn(),
   };
   const matteOverlay = { setSettings: vi.fn() };
-  const viewer = { getMatteOverlay: () => matteOverlay, setTransform: vi.fn() };
+  const viewer = {
+    getMatteOverlay: () => matteOverlay,
+    setTransform: vi.fn(),
+    setNoiseReductionParams: vi.fn(),
+  };
   const colorControls = { setAdjustments: vi.fn() };
   const filterControl = { setSettings: vi.fn() };
+  const noiseReductionControl = { setParams: vi.fn() };
   const cdlControl = { setCDL: vi.fn() };
   const transformControl = { setTransform: vi.fn() };
   const lensControl = { setParams: vi.fn() };
@@ -73,6 +78,7 @@ function createMockContext(): SessionBridgeContext {
     getViewer: () => viewer,
     getColorControls: () => colorControls,
     getFilterControl: () => filterControl,
+    getNoiseReductionControl: () => noiseReductionControl,
     getCDLControl: () => cdlControl,
     getTransformControl: () => transformControl,
     getLensControl: () => lensControl,
@@ -233,6 +239,14 @@ describe('bindPersistenceHandlers', () => {
     handlers.settingsLoaded!({ cdl } as any);
 
     expect(context.getCDLControl().setCDL).toHaveBeenCalledWith(cdl);
+  });
+
+  it('PERH-U018b: settingsLoaded restores noise reduction on viewer and control', () => {
+    const noiseReduction = { strength: 40, luminanceStrength: 55, chromaStrength: 70, radius: 3 };
+    handlers.settingsLoaded!({ noiseReduction } as any);
+
+    expect(context.getViewer().setNoiseReductionParams).toHaveBeenCalledWith(noiseReduction);
+    expect(context.getNoiseReductionControl!().setParams).toHaveBeenCalledWith(noiseReduction);
   });
 
   it('PERH-U019: settingsLoaded restores transform on both control and viewer', () => {

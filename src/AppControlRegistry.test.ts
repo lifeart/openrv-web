@@ -365,5 +365,45 @@ describe('AppControlRegistry', () => {
       const childButtons = panelTogglesContainer.querySelectorAll(':scope > button');
       expect(childButtons.length).toBe(3);
     });
+
+    it('ACR-008: missing-frame mode selector reflects viewer state and updates mode on change', () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+      const { contextToolbar, viewer, sessionBridge, headerBar } = createSetupDeps();
+
+      viewer.getMissingFrameMode.mockReturnValue('hold');
+      registry.setupTabContents(contextToolbar, viewer, sessionBridge, headerBar);
+
+      const viewCall = contextToolbar.setTabContent.mock.calls.find(([tabId]: [string]) => tabId === 'view');
+      expect(viewCall).toBeDefined();
+      const viewContent = viewCall![1] as HTMLElement;
+      const select = viewContent.querySelector('[data-testid="missing-frame-mode-select"]') as HTMLSelectElement | null;
+      expect(select).not.toBeNull();
+      expect(select!.value).toBe('hold');
+
+      select!.value = 'black';
+      select!.dispatchEvent(new Event('change'));
+      expect(viewer.setMissingFrameMode).toHaveBeenCalledWith('black');
+    });
+
+    it('ACR-009: effects/view toolbars include denoise, watermark, and timeline editor toggles', () => {
+      const deps = createMockDeps();
+      const registry = new AppControlRegistry(deps);
+      const { contextToolbar, viewer, sessionBridge, headerBar } = createSetupDeps();
+
+      registry.setupTabContents(contextToolbar, viewer, sessionBridge, headerBar);
+
+      const viewCall = contextToolbar.setTabContent.mock.calls.find(([tabId]: [string]) => tabId === 'view');
+      const effectsCall = contextToolbar.setTabContent.mock.calls.find(([tabId]: [string]) => tabId === 'effects');
+      expect(viewCall).toBeDefined();
+      expect(effectsCall).toBeDefined();
+
+      const viewContent = viewCall![1] as HTMLElement;
+      const effectsContent = effectsCall![1] as HTMLElement;
+
+      expect(viewContent.querySelector('[data-testid="timeline-editor-toggle-button"]')).not.toBeNull();
+      expect(effectsContent.querySelector('[data-testid="noise-reduction-toggle-button"]')).not.toBeNull();
+      expect(effectsContent.querySelector('[data-testid="watermark-toggle-button"]')).not.toBeNull();
+    });
   });
 });

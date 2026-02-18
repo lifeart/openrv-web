@@ -2401,7 +2401,39 @@ export class Viewer {
   }
 
   setWatermarkState(state: Partial<WatermarkState>): void {
-    this.watermarkOverlay.setState(state);
+    const hasImageUrl = Object.prototype.hasOwnProperty.call(state, 'imageUrl');
+    const { imageUrl, ...nonImageState } = state;
+
+    if (Object.keys(nonImageState).length > 0) {
+      this.watermarkOverlay.setState(nonImageState);
+    }
+
+    if (hasImageUrl) {
+      if (!imageUrl) {
+        this.watermarkOverlay.removeImage();
+      } else {
+        const currentState = this.watermarkOverlay.getState();
+        const needsLoad = !this.watermarkOverlay.hasImage() || currentState.imageUrl !== imageUrl;
+
+        if (needsLoad) {
+          if (imageUrl.startsWith('blob:')) {
+            console.warn('[Viewer] Cannot restore watermark from blob URL. Please reload the watermark file.');
+            this.watermarkOverlay.setState({ imageUrl: null, enabled: false });
+          } else {
+            const desiredEnabled = state.enabled ?? true;
+            void this.watermarkOverlay.loadFromUrl(imageUrl)
+              .then(() => {
+                this.watermarkOverlay.setState({ ...nonImageState, enabled: desiredEnabled });
+              })
+              .catch((err) => {
+                console.warn('[Viewer] Failed to restore watermark image:', err);
+                this.watermarkOverlay.setState({ enabled: false });
+              });
+          }
+        }
+      }
+    }
+
     this.scheduleRender();
   }
 

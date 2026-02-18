@@ -276,6 +276,27 @@ describe('SessionSerializer', () => {
         expect(state.lutPath).toBe('test.cube');
     });
 
+    it('SER-012b: serializes noise reduction and watermark state', () => {
+      const components = createMockComponents();
+      const noise = { strength: 33, luminanceStrength: 60, chromaStrength: 80, radius: 3 };
+      const watermark = {
+        enabled: true,
+        imageUrl: 'https://example.com/wm.png',
+        position: 'top-right' as const,
+        customX: 0.9,
+        customY: 0.1,
+        scale: 0.5,
+        opacity: 0.4,
+        margin: 12,
+      };
+      (components.viewer.getNoiseReductionParams as ReturnType<typeof vi.fn>).mockReturnValue(noise);
+      (components.viewer.getWatermarkState as ReturnType<typeof vi.fn>).mockReturnValue(watermark);
+
+      const state = SessionSerializer.toJSON(components);
+      expect(state.noiseReduction).toEqual(noise);
+      expect(state.watermark).toEqual(watermark);
+    });
+
     it('SER-013: marks blob URLs with requiresReload and clears path', () => {
       const components = createMockComponents();
       (components.session as any).allSources = [{
@@ -490,6 +511,26 @@ describe('SessionSerializer', () => {
         expect(result.warnings).toContain('LUT "my.cube" requires manual loading');
     });
 
+    it('SER-011a: restores noise reduction and watermark state', async () => {
+      const components = createMockComponents();
+      const state = SessionSerializer.createEmpty();
+      state.noiseReduction = { strength: 45, luminanceStrength: 55, chromaStrength: 82, radius: 4 };
+      state.watermark = {
+        enabled: true,
+        imageUrl: 'https://example.com/watermark.png',
+        position: 'bottom-right',
+        customX: 0.9,
+        customY: 0.9,
+        scale: 1,
+        opacity: 0.8,
+        margin: 16,
+      };
+
+      await SessionSerializer.fromJSON(state, components);
+      expect(components.viewer.setNoiseReductionParams).toHaveBeenCalledWith(state.noiseReduction);
+      expect(components.viewer.setWatermarkState).toHaveBeenCalledWith(state.watermark);
+    });
+
     it('SER-011b: restores playlist state when playlist manager is available', async () => {
       const components = createMockComponents();
       const setState = vi.fn();
@@ -594,6 +635,17 @@ function createMockComponents(): SessionComponents {
       getLensParams: vi.fn().mockReturnValue({}),
       getWipeState: vi.fn().mockReturnValue({}),
       getStackLayers: vi.fn().mockReturnValue([]),
+      getNoiseReductionParams: vi.fn().mockReturnValue({ strength: 0, luminanceStrength: 50, chromaStrength: 75, radius: 2 }),
+      getWatermarkState: vi.fn().mockReturnValue({
+        enabled: false,
+        imageUrl: null,
+        position: 'bottom-right',
+        customX: 0.9,
+        customY: 0.9,
+        scale: 1,
+        opacity: 0.7,
+        margin: 20,
+      }),
       getLUT: vi.fn().mockReturnValue(undefined),
       getLUTIntensity: vi.fn().mockReturnValue(1.0),
       getPARState: vi.fn().mockReturnValue({ enabled: false, par: 1.0, preset: 'square' }),
@@ -606,6 +658,8 @@ function createMockComponents(): SessionComponents {
       setLensParams: vi.fn(),
       setWipeState: vi.fn(),
       setStackLayers: vi.fn(),
+      setNoiseReductionParams: vi.fn(),
+      setWatermarkState: vi.fn(),
       setLUTIntensity: vi.fn(),
       setPARState: vi.fn(),
       setBackgroundPatternState: vi.fn(),

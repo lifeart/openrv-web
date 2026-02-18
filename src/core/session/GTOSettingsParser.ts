@@ -13,6 +13,8 @@ import {
 } from './AnnotationStore';
 import type { ColorAdjustments, ChannelMode, LinearizeState, ChannelSwizzle } from '../../core/types/color';
 import { DEFAULT_LINEARIZE_STATE, SWIZZLE_ZERO, SWIZZLE_ONE } from '../../core/types/color';
+import type { NoiseReductionParams } from '../../filters/NoiseReduction';
+import { DEFAULT_NOISE_REDUCTION_PARAMS } from '../../filters/NoiseReduction';
 import type { Transform2D, CropState, UncropState } from '../../core/types/transform';
 import type { ScopesState } from '../../core/types/scopes';
 import type { CDLValues } from '../../color/CDL';
@@ -75,6 +77,11 @@ export function parseInitialSettings(
     settings.linearize = linearize;
   }
 
+  const noiseReduction = parseNoiseReduction(dto);
+  if (noiseReduction) {
+    settings.noiseReduction = noiseReduction;
+  }
+
   const uncrop = parseUncrop(dto);
   if (uncrop) {
     settings.uncrop = uncrop;
@@ -91,6 +98,55 @@ export function parseInitialSettings(
   }
 
   return Object.keys(settings).length > 0 ? settings : null;
+}
+
+/**
+ * Parse RVNoiseReduction settings and convert OpenRV scalar fields
+ * to the viewer's noise reduction parameter model.
+ */
+export function parseNoiseReduction(dto: GTODTO): NoiseReductionParams | null {
+  const nodes = dto.byProtocol('RVNoiseReduction');
+  if (nodes.length === 0) return null;
+
+  const nodeComp = nodes.first().component('node');
+  if (!nodeComp?.exists()) return null;
+
+  const active = getNumberValue(nodeComp.property('active').value());
+  const amount = getNumberValue(nodeComp.property('amount').value());
+  const radius = getNumberValue(nodeComp.property('radius').value());
+  const threshold = getNumberValue(nodeComp.property('threshold').value());
+
+  if (
+    active === undefined &&
+    amount === undefined &&
+    radius === undefined &&
+    threshold === undefined
+  ) {
+    return null;
+  }
+
+  const strength = active === 0
+    ? 0
+    : Math.max(0, Math.min(100, Math.round((amount ?? 0) * 100)));
+  const radiusPx = Math.max(
+    1,
+    Math.min(5, Math.round(radius ?? DEFAULT_NOISE_REDUCTION_PARAMS.radius))
+  );
+  const luminanceStrength = Math.max(
+    0,
+    Math.min(100, Math.round(100 - ((threshold ?? 5) * 10)))
+  );
+  const chromaStrength = Math.max(
+    0,
+    Math.min(100, Math.round(Math.min(100, luminanceStrength * 1.5)))
+  );
+
+  return {
+    strength,
+    luminanceStrength,
+    chromaStrength,
+    radius: radiusPx,
+  };
 }
 
 /**

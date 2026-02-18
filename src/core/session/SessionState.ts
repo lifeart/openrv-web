@@ -14,6 +14,8 @@ import type { LensDistortionParams } from '../../transform/LensDistortion';
 import type { WipeState } from '../types/wipe';
 import type { StackLayer } from '../../ui/components/StackControl';
 import type { PARState } from '../../utils/media/PixelAspectRatio';
+import type { NoiseReductionParams } from '../../filters/NoiseReduction';
+import type { WatermarkState } from '../../ui/components/WatermarkOverlay';
 import type { Annotation, PaintEffects } from '../../paint/types';
 import type { LoopMode, MediaType } from '../types/session';
 import type { Marker } from './Session';
@@ -112,6 +114,10 @@ export interface SessionState {
   wipe: WipeState;
   /** Layer stack */
   stack: StackLayer[];
+  /** Noise reduction settings */
+  noiseReduction?: NoiseReductionParams;
+  /** Watermark overlay state */
+  watermark?: WatermarkState;
   /** LUT file path (not embedded) */
   lutPath?: string;
   /** LUT intensity blend */

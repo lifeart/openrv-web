@@ -190,6 +190,8 @@ export class App {
       transformControl: this.controls.transformControl,
       cropControl: this.controls.cropControl,
       lensControl: this.controls.lensControl,
+      noiseReductionControl: this.controls.noiseReductionControl,
+      watermarkControl: this.controls.watermarkControl,
       playlistManager: this.controls.playlistManager,
     });
 
@@ -213,6 +215,7 @@ export class App {
       getChannelSelect: () => this.controls.channelSelect,
       getStackControl: () => this.controls.stackControl,
       getFilterControl: () => this.controls.filterControl,
+      getNoiseReductionControl: () => this.controls.noiseReductionControl,
       getCDLControl: () => this.controls.cdlControl,
       getTransformControl: () => this.controls.transformControl,
       getLensControl: () => this.controls.lensControl,

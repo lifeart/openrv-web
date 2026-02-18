@@ -48,6 +48,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
   private exclusivePanel: ExclusivePanelRef | null = null;
   private announcer: AriaAnnouncer;
   private noteCountEl!: HTMLElement;
+  private badgeElement: HTMLElement | null = null;
 
   // Bound event handlers for cleanup
   private boundOnNotesChanged: () => void;
@@ -62,7 +63,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     this.announcer = new AriaAnnouncer();
 
     // Bind handlers
-    this.boundOnNotesChanged = () => this.render();
+    this.boundOnNotesChanged = () => { this.render(); this.updateBadge(); };
     this.boundOnFrameChanged = () => this.updateHighlight();
     this.boundOnKeyDown = (e: KeyboardEvent) => this.handleKeyDown(e);
 
@@ -220,7 +221,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     this.session.on('frameChanged', this.boundOnFrameChanged);
 
     // Update source dropdown when sources change
-    this.boundOnSourceLoaded = () => this.buildFilterBar();
+    this.boundOnSourceLoaded = () => { this.buildFilterBar(); this.updateBadge(); };
     this.session.on('sourceLoaded', this.boundOnSourceLoaded);
 
     // Keyboard navigation
@@ -272,6 +273,50 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
 
   isVisible(): boolean {
     return this.visible;
+  }
+
+  /**
+   * Create a badge element that shows the count of open notes for the current source.
+   * The badge is hidden when the count is 0.
+   */
+  createBadge(): HTMLElement {
+    if (this.badgeElement) return this.badgeElement;
+
+    this.badgeElement = document.createElement('span');
+    this.badgeElement.dataset.testid = 'note-count-badge';
+    this.badgeElement.style.cssText = `
+      display: none;
+      align-items: center;
+      justify-content: center;
+      min-width: 16px;
+      height: 16px;
+      padding: 0 4px;
+      border-radius: 8px;
+      background: var(--accent-primary);
+      color: var(--text-on-accent, #fff);
+      font-size: 10px;
+      font-weight: 600;
+      line-height: 1;
+    `;
+
+    this.updateBadge();
+    return this.badgeElement;
+  }
+
+  private updateBadge(): void {
+    if (!this.badgeElement) return;
+
+    const sourceIndex = this.session.currentSourceIndex;
+    const notes = this.session.noteManager.getNotesForSource(sourceIndex);
+    const openCount = notes.filter(n => n.parentId === null && n.status === 'open').length;
+
+    if (openCount > 0) {
+      this.badgeElement.textContent = String(openCount);
+      this.badgeElement.style.display = 'flex';
+    } else {
+      this.badgeElement.textContent = '';
+      this.badgeElement.style.display = 'none';
+    }
   }
 
   /**
@@ -416,8 +461,8 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
       const entryEl = this.createNoteEntry(note, false);
       this.entriesContainer.appendChild(entryEl);
 
-      // Render replies recursively
-      this.renderReplies(note.id);
+      // Render replies recursively (depth starts at 1 for direct replies)
+      this.renderReplies(note.id, 1);
 
       // Reply input
       if (this.replyingToNoteId === note.id) {
@@ -432,19 +477,22 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
 
   /**
    * Recursively render replies to a note (supports nested threads).
+   * Visual nesting is capped at depth 2 — deeper replies render at the same indentation.
    */
-  private renderReplies(parentId: string): void {
+  private renderReplies(parentId: string, depth: number): void {
     const replies = this.session.noteManager.getReplies(parentId);
     replies.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     for (const reply of replies) {
-      const replyEl = this.createNoteEntry(reply, true);
+      // Cap visual depth at 2 levels
+      const visualDepth = Math.min(depth, 2);
+      const replyEl = this.createNoteEntry(reply, true, visualDepth);
       this.entriesContainer.appendChild(replyEl);
       // Recurse into sub-replies
-      this.renderReplies(reply.id);
+      this.renderReplies(reply.id, depth + 1);
     }
   }
 
-  private createNoteEntry(note: Note, isReply: boolean): HTMLElement {
+  private createNoteEntry(note: Note, isReply: boolean, replyDepth = 1): HTMLElement {
     const currentFrame = this.session.currentFrame;
     const isInRange = currentFrame >= note.frameStart && currentFrame <= note.frameEnd;
 
@@ -454,12 +502,14 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     el.dataset.testid = `note-entry-${note.id}`;
     el.dataset.noteId = note.id;
     el.dataset.frame = String(note.frameStart);
+    // Indentation increases with depth: 28px for depth 1, 44px for depth 2+
+    const paddingLeft = isReply ? 12 + 16 * replyDepth : 12;
     el.style.cssText = `
       padding: 8px 12px;
+      padding-left: ${paddingLeft}px;
       border-bottom: 1px solid var(--overlay-border);
       cursor: pointer;
       transition: background 0.1s;
-      ${isReply ? 'padding-left: 28px;' : ''}
       ${isInRange ? 'background: rgba(var(--accent-primary-rgb), 0.15);' : ''}
     `;
 
