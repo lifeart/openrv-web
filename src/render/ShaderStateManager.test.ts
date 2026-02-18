@@ -19,6 +19,7 @@ import {
   DIRTY_OUT_OF_RANGE,
   DIRTY_CHANNEL_SWIZZLE,
   DIRTY_PREMULT,
+  DIRTY_DITHER,
   ALL_DIRTY_FLAGS,
 } from './ShaderStateManager';
 import type { RenderState } from './RenderState';
@@ -1636,6 +1637,133 @@ describe('ShaderStateManager', () => {
 
       mgr.setPremultMode(1);
       expect(flags.has(DIRTY_PREMULT)).toBe(false);
+    });
+  });
+
+  // =================================================================
+  // Dither + Quantize visualization
+  // =================================================================
+
+  describe('ditherMode and quantizeBits', () => {
+    it('DITHER-SM-001: setDitherMode sets u_ditherMode uniform', () => {
+      const intCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (_name: string, _value: unknown) => {},
+        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setDitherMode(1);
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(intCalls['u_ditherMode']).toBe(1);
+    });
+
+    it('DITHER-SM-002: getDitherMode returns current mode', () => {
+      expect(mgr.getDitherMode()).toBe(0);
+      mgr.setDitherMode(1);
+      expect(mgr.getDitherMode()).toBe(1);
+      mgr.setDitherMode(2);
+      expect(mgr.getDitherMode()).toBe(2);
+    });
+
+    it('DITHER-SM-003: setDitherMode validates input (clamp 0-2)', () => {
+      mgr.setDitherMode(-1);
+      expect(mgr.getDitherMode()).toBe(0);
+
+      mgr.setDitherMode(3);
+      expect(mgr.getDitherMode()).toBe(2);
+
+      mgr.setDitherMode(99);
+      expect(mgr.getDitherMode()).toBe(2);
+    });
+
+    it('DITHER-SM-004: setQuantizeBits sets u_quantizeBits uniform', () => {
+      const intCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (_name: string, _value: unknown) => {},
+        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setQuantizeBits(8);
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(intCalls['u_quantizeBits']).toBe(8);
+    });
+
+    it('DITHER-SM-005: getQuantizeBits returns bits', () => {
+      expect(mgr.getQuantizeBits()).toBe(0);
+      mgr.setQuantizeBits(4);
+      expect(mgr.getQuantizeBits()).toBe(4);
+      mgr.setQuantizeBits(16);
+      expect(mgr.getQuantizeBits()).toBe(16);
+    });
+
+    it('DITHER-SM-006: setQuantizeBits validates (0 or 2-16)', () => {
+      // 0 means off
+      mgr.setQuantizeBits(0);
+      expect(mgr.getQuantizeBits()).toBe(0);
+
+      // 1 should clamp to 2
+      mgr.setQuantizeBits(1);
+      expect(mgr.getQuantizeBits()).toBe(2);
+
+      // 17 should clamp to 16
+      mgr.setQuantizeBits(17);
+      expect(mgr.getQuantizeBits()).toBe(16);
+
+      // negative should clamp to 0
+      mgr.setQuantizeBits(-5);
+      expect(mgr.getQuantizeBits()).toBe(0);
+
+      // valid values pass through
+      mgr.setQuantizeBits(8);
+      expect(mgr.getQuantizeBits()).toBe(8);
+    });
+
+    it('DITHER-SM-007: dirty flag set on change', () => {
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      mgr.setDitherMode(1);
+      expect(flags.has(DIRTY_DITHER)).toBe(true);
+
+      flags.clear();
+
+      mgr.setQuantizeBits(8);
+      expect(flags.has(DIRTY_DITHER)).toBe(true);
+    });
+
+    it('DITHER-SM-008: no dirty flag when value unchanged', () => {
+      mgr.setDitherMode(1);
+      mgr.setQuantizeBits(8);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      mgr.setDitherMode(1);
+      expect(flags.has(DIRTY_DITHER)).toBe(false);
+
+      mgr.setQuantizeBits(8);
+      expect(flags.has(DIRTY_DITHER)).toBe(false);
     });
   });
 });

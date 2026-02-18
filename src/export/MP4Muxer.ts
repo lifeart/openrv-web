@@ -499,9 +499,10 @@ export function muxToMP4(chunks: EncodedChunk[], config: MuxerConfig): Uint8Arra
  */
 export function muxToMP4Blob(chunks: EncodedChunk[], config: MuxerConfig): Blob {
   const data = muxToMP4(chunks, config);
-  const buffer: ArrayBuffer = data.buffer instanceof SharedArrayBuffer
-    ? data.slice().buffer as ArrayBuffer
-    : data.buffer as ArrayBuffer;
+  const buffer: ArrayBuffer =
+    typeof SharedArrayBuffer !== 'undefined' && data.buffer instanceof SharedArrayBuffer
+      ? data.slice().buffer as ArrayBuffer
+      : data.buffer as ArrayBuffer;
   return new Blob([buffer], { type: 'video/mp4' });
 }
 

@@ -2780,3 +2780,65 @@ describe('Renderer Premult/Unpremult Control', () => {
     expect(renderer.getPremultMode()).toBe(0);
   });
 });
+
+describe('Renderer Dither + Quantize Visualization', () => {
+  let renderer: Renderer;
+
+  beforeEach(() => {
+    renderer = new Renderer();
+  });
+
+  it('DITHER-REN-001: setDitherMode/getDitherMode round-trip', () => {
+    initRendererWithMockGL(renderer);
+    renderer.setDitherMode(1);
+    expect(renderer.getDitherMode()).toBe(1);
+
+    renderer.setDitherMode(2);
+    expect(renderer.getDitherMode()).toBe(2);
+
+    renderer.setDitherMode(0);
+    expect(renderer.getDitherMode()).toBe(0);
+  });
+
+  it('DITHER-REN-002: setQuantizeBits/getQuantizeBits round-trip', () => {
+    initRendererWithMockGL(renderer);
+    renderer.setQuantizeBits(8);
+    expect(renderer.getQuantizeBits()).toBe(8);
+
+    renderer.setQuantizeBits(4);
+    expect(renderer.getQuantizeBits()).toBe(4);
+
+    renderer.setQuantizeBits(16);
+    expect(renderer.getQuantizeBits()).toBe(16);
+
+    renderer.setQuantizeBits(0);
+    expect(renderer.getQuantizeBits()).toBe(0);
+  });
+
+  it('DITHER-REN-003: default values are 0', () => {
+    initRendererWithMockGL(renderer);
+    expect(renderer.getDitherMode()).toBe(0);
+    expect(renderer.getQuantizeBits()).toBe(0);
+  });
+
+  it('DITHER-REN-004: invalid values are clamped', () => {
+    initRendererWithMockGL(renderer);
+
+    // ditherMode clamps to 0-2
+    renderer.setDitherMode(-1);
+    expect(renderer.getDitherMode()).toBe(0);
+
+    renderer.setDitherMode(3);
+    expect(renderer.getDitherMode()).toBe(2);
+
+    // quantizeBits clamps: 0=off, 1->2, >16->16, negative->0
+    renderer.setQuantizeBits(1);
+    expect(renderer.getQuantizeBits()).toBe(2);
+
+    renderer.setQuantizeBits(17);
+    expect(renderer.getQuantizeBits()).toBe(16);
+
+    renderer.setQuantizeBits(-5);
+    expect(renderer.getQuantizeBits()).toBe(0);
+  });
+});

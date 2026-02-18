@@ -661,6 +661,22 @@ export class RenderWorkerProxy implements RendererBackend {
     return 0;
   }
 
+  setDitherMode(_mode: number): void {
+    // TODO: forward dither mode to worker when supported
+  }
+
+  getDitherMode(): number {
+    return 0;
+  }
+
+  setQuantizeBits(_bits: number): void {
+    // TODO: forward quantize bits to worker when supported
+  }
+
+  getQuantizeBits(): number {
+    return 0;
+  }
+
   applyRenderState(state: RenderState): void {
     this.setColorAdjustments(state.colorAdjustments);
     this.setColorInversion(state.colorInversion);

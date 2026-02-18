@@ -57,6 +57,7 @@ export const DIRTY_INLINE_LUT = 'inlineLUT';
 export const DIRTY_OUT_OF_RANGE = 'outOfRange';
 export const DIRTY_CHANNEL_SWIZZLE = 'channelSwizzle';
 export const DIRTY_PREMULT = 'premult';
+export const DIRTY_DITHER = 'dither';
 
 /** All dirty flag names -- used to initialize on first render so all uniforms are set. */
 export const ALL_DIRTY_FLAGS = [
@@ -71,6 +72,7 @@ export const ALL_DIRTY_FLAGS = [
   DIRTY_OUT_OF_RANGE,
   DIRTY_CHANNEL_SWIZZLE,
   DIRTY_PREMULT,
+  DIRTY_DITHER,
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -343,6 +345,10 @@ export interface InternalShaderState {
 
   // Premultiply/unpremultiply alpha mode
   premultMode: number;  // 0=off, 1=premultiply, 2=unpremultiply
+
+  // Dither + Quantize visualization
+  ditherMode: number;    // 0=off, 1=ordered Bayer 8x8, 2=blue noise (future)
+  quantizeBits: number;  // 0=off, 2-16 = target bit depth for quantize/posterize
 }
 
 function createDefaultInternalState(): InternalShaderState {
@@ -445,6 +451,8 @@ function createDefaultInternalState(): InternalShaderState {
     outOfRange: 0,
     channelSwizzle: [0, 1, 2, 3],
     premultMode: 0,
+    ditherMode: 0,
+    quantizeBits: 0,
   };
 }
 
@@ -949,6 +957,30 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     return this.state.premultMode;
   }
 
+  setDitherMode(mode: number): void {
+    const clamped = Math.max(0, Math.min(2, Math.floor(mode)));
+    if (clamped === this.state.ditherMode) return;
+    this.state.ditherMode = clamped;
+    this.dirtyFlags.add(DIRTY_DITHER);
+  }
+
+  getDitherMode(): number {
+    return this.state.ditherMode;
+  }
+
+  setQuantizeBits(bits: number): void {
+    const b = Math.floor(bits);
+    // Valid values: 0 (off), or 2-16
+    const clamped = b <= 0 ? 0 : b < 2 ? 2 : b > 16 ? 16 : b;
+    if (clamped === this.state.quantizeBits) return;
+    this.state.quantizeBits = clamped;
+    this.dirtyFlags.add(DIRTY_DITHER);
+  }
+
+  getQuantizeBits(): number {
+    return this.state.quantizeBits;
+  }
+
   setChannelSwizzle(swizzle: ChannelSwizzle): void {
     const s = this.state.channelSwizzle;
     s[0] = swizzle[0]; s[1] = swizzle[1]; s[2] = swizzle[2]; s[3] = swizzle[3];
@@ -1256,6 +1288,18 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
                s.channelSwizzle[2] !== 2 || s.channelSwizzle[3] !== 3) {
       this.setChannelSwizzle([0, 1, 2, 3]);
     }
+
+    // --- Dither + Quantize visualization (2 uniforms) ---
+    {
+      const newDither = renderState.ditherMode ?? 0;
+      const newQuantize = renderState.quantizeBits ?? 0;
+      if (newDither !== s.ditherMode) {
+        this.setDitherMode(newDither);
+      }
+      if (newQuantize !== s.quantizeBits) {
+        this.setQuantizeBits(newQuantize);
+      }
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -1558,6 +1602,12 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     // Premultiply/unpremultiply alpha
     if (dirty.has(DIRTY_PREMULT)) {
       shader.setUniformInt('u_premult', s.premultMode);
+    }
+
+    // Dither + Quantize visualization
+    if (dirty.has(DIRTY_DITHER)) {
+      shader.setUniformInt('u_ditherMode', s.ditherMode);
+      shader.setUniformInt('u_quantizeBits', s.quantizeBits);
     }
 
     // Channel swizzle (RVChannelMap remapping)

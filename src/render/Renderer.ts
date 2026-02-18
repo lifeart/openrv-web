@@ -902,6 +902,22 @@ export class Renderer implements RendererBackend {
     return this.stateManager.getPremultMode();
   }
 
+  setDitherMode(mode: number): void {
+    this.stateManager.setDitherMode(mode);
+  }
+
+  getDitherMode(): number {
+    return this.stateManager.getDitherMode();
+  }
+
+  setQuantizeBits(bits: number): void {
+    this.stateManager.setQuantizeBits(bits);
+  }
+
+  getQuantizeBits(): number {
+    return this.stateManager.getQuantizeBits();
+  }
+
   setToneMappingState(state: ToneMappingState): void {
     this.stateManager.setToneMappingState(state);
   }

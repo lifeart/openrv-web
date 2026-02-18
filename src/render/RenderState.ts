@@ -45,4 +45,6 @@ export interface RenderState {
   outOfRange?: number;  // 0=off, 1=clamp-to-black, 2=highlight
   channelSwizzle?: ChannelSwizzle;
   premultMode?: number;  // 0=off, 1=premultiply, 2=unpremultiply
+  ditherMode?: number;   // 0=off, 1=ordered Bayer 8x8, 2=blue noise (future)
+  quantizeBits?: number; // 0=off, 2-16 = target bit depth for quantize/posterize
 }

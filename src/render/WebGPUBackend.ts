@@ -331,6 +331,10 @@ export class WebGPUBackend implements RendererBackend {
   setGamutMapping(_state: GamutMappingState): void { /* STUB */ }
   setPremultMode(_mode: number): void { /* STUB */ }
   getPremultMode(): number { return 0; }
+  setDitherMode(_mode: number): void { /* STUB */ }
+  getDitherMode(): number { return 0; }
+  setQuantizeBits(_bits: number): void { /* STUB */ }
+  getQuantizeBits(): number { return 0; }
 
   applyRenderState(state: RenderState): void {
     this.setColorAdjustments(state.colorAdjustments);

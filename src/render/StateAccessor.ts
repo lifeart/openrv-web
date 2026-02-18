@@ -151,6 +151,18 @@ export interface StateAccessor {
   /** Get the current premult mode. */
   getPremultMode(): number;
 
+  /** Set dither mode (0=off, 1=ordered Bayer 8x8, 2=blue noise future). */
+  setDitherMode(mode: number): void;
+
+  /** Get the current dither mode. */
+  getDitherMode(): number;
+
+  /** Set quantize bits (0=off, 2-16 = target bit depth). */
+  setQuantizeBits(bits: number): void;
+
+  /** Get the current quantize bits. */
+  getQuantizeBits(): number;
+
   /** Set texel size (called before applyUniforms based on image dimensions). */
   setTexelSize(w: number, h: number): void;
 

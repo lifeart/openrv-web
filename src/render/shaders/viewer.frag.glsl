@@ -187,6 +187,10 @@
       // Premultiply/unpremultiply alpha: 0=off, 1=premultiply, 2=unpremultiply
       uniform int u_premult;
 
+      // Dither + Quantize visualization
+      uniform int u_ditherMode;      // 0=off, 1=ordered Bayer 8x8, 2=blue noise (future)
+      uniform int u_quantizeBits;    // 0=off, 2-16 = target bit depth for quantize/posterize
+
       // Luminance coefficients (Rec. 709)
       const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 
@@ -823,6 +827,25 @@
         return 0.0;
       }
 
+      // Bayer 8x8 dither matrix (normalized to [0,1] range)
+      // The 8x8 Bayer matrix values divided by 64
+      float bayerDither8x8(ivec2 pos) {
+        int x = pos.x & 7;
+        int y = pos.y & 7;
+        // Standard 8x8 Bayer matrix
+        int bayer[64] = int[64](
+           0, 32,  8, 40,  2, 34, 10, 42,
+          48, 16, 56, 24, 50, 18, 58, 26,
+          12, 44,  4, 36, 14, 46,  6, 38,
+          60, 28, 52, 20, 62, 30, 54, 22,
+           3, 35, 11, 43,  1, 33,  9, 41,
+          51, 19, 59, 27, 49, 17, 57, 25,
+          15, 47,  7, 39, 13, 45,  5, 37,
+          63, 31, 55, 23, 61, 29, 53, 21
+        );
+        return float(bayer[y * 8 + x]) / 64.0;
+      }
+
       void main() {
         vec4 color = texture(u_texture, v_texCoord);
 
@@ -1215,6 +1238,22 @@
 
         // 8c. Display brightness
         color.rgb *= u_displayBrightness;
+
+        // 8d. Quantize visualization (after tone mapping + display transfer, before output mode)
+        if (u_quantizeBits > 0) {
+          float levels = pow(2.0, float(u_quantizeBits)) - 1.0;
+
+          if (u_ditherMode == 1) {
+            // Ordered dither: add Bayer pattern before quantization
+            ivec2 pixelPos = ivec2(gl_FragCoord.xy);
+            float threshold = bayerDither8x8(pixelPos) - 0.5; // Center around 0
+            float ditherAmount = 1.0 / levels;
+            color.rgb += vec3(threshold * ditherAmount);
+          }
+
+          // Quantize (posterize)
+          color.rgb = floor(color.rgb * levels + 0.5) / levels;
+        }
 
         // 9. Color inversion (after all corrections, before channel isolation)
         if (u_invert) {
