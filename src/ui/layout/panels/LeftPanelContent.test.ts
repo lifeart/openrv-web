@@ -64,6 +64,48 @@ describe('LeftPanelContent', () => {
     });
   });
 
+  describe('setPresetMode', () => {
+    it('LP-003b: default preset expands both sections', () => {
+      panel.setPresetMode('default');
+      const color = panel.getElement().querySelector('[data-testid="section-color"]');
+      const history = panel.getElement().querySelector('[data-testid="section-history"]');
+      const colorWrapper = color?.querySelector('.collapsible-section-content-wrapper') as HTMLElement;
+      const historyWrapper = history?.querySelector('.collapsible-section-content-wrapper') as HTMLElement;
+      expect(colorWrapper.style.display).not.toBe('none');
+      expect(historyWrapper.style.display).not.toBe('none');
+    });
+
+    it('LP-003c: review preset collapses both sections', () => {
+      panel.setPresetMode('review');
+      const color = panel.getElement().querySelector('[data-testid="section-color"]');
+      const history = panel.getElement().querySelector('[data-testid="section-history"]');
+      const colorWrapper = color?.querySelector('.collapsible-section-content-wrapper') as HTMLElement;
+      const historyWrapper = history?.querySelector('.collapsible-section-content-wrapper') as HTMLElement;
+      expect(colorWrapper.style.display).toBe('none');
+      expect(historyWrapper.style.display).toBe('none');
+    });
+
+    it('LP-003d: color preset expands color and collapses history', () => {
+      panel.setPresetMode('color');
+      const color = panel.getElement().querySelector('[data-testid="section-color"]');
+      const history = panel.getElement().querySelector('[data-testid="section-history"]');
+      const colorWrapper = color?.querySelector('.collapsible-section-content-wrapper') as HTMLElement;
+      const historyWrapper = history?.querySelector('.collapsible-section-content-wrapper') as HTMLElement;
+      expect(colorWrapper.style.display).not.toBe('none');
+      expect(historyWrapper.style.display).toBe('none');
+    });
+
+    it('LP-003e: paint preset collapses color and expands history', () => {
+      panel.setPresetMode('paint');
+      const color = panel.getElement().querySelector('[data-testid="section-color"]');
+      const history = panel.getElement().querySelector('[data-testid="section-history"]');
+      const colorWrapper = color?.querySelector('.collapsible-section-content-wrapper') as HTMLElement;
+      const historyWrapper = history?.querySelector('.collapsible-section-content-wrapper') as HTMLElement;
+      expect(colorWrapper.style.display).toBe('none');
+      expect(historyWrapper.style.display).not.toBe('none');
+    });
+  });
+
   describe('color sliders', () => {
     it('LP-004: has exposure slider', () => {
       const slider = panel.getElement().querySelector('[data-testid="panel-slider-exposure"]');

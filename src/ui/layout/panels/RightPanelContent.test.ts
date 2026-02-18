@@ -204,15 +204,15 @@ describe('RightPanelContent', () => {
       expect(infoWrapper?.style.display).not.toBe('none');
     });
 
-    it('RP-012c: paint preset expands both sections', () => {
+    it('RP-012c: paint preset collapses both sections', () => {
       panel.setPresetMode('color');
       panel.setPresetMode('paint');
       const scopes = panel.getElement().querySelector('[data-testid="section-scopes"]');
       const info = panel.getElement().querySelector('[data-testid="section-media-info"]');
       const scopesWrapper = scopes?.querySelector('.collapsible-section-content-wrapper') as HTMLElement;
-      expect(scopesWrapper?.style.display).not.toBe('none');
+      expect(scopesWrapper?.style.display).toBe('none');
       const infoWrapper = info?.querySelector('.collapsible-section-content-wrapper') as HTMLElement;
-      expect(infoWrapper?.style.display).not.toBe('none');
+      expect(infoWrapper?.style.display).toBe('none');
     });
 
     it('RP-012d: rapid preset switching settles correctly', () => {

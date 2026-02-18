@@ -9,6 +9,7 @@ import {
   isDefaultLensParams,
   applyLensDistortion,
   generateDistortionGrid,
+  apply3DE4AnamorphicDeg6,
 } from './LensDistortion';
 import { createTestImageData } from '../../test/utils';
 
@@ -410,6 +411,162 @@ describe('LensDistortion', () => {
       // This is a smoke test - actual distortion verification would be complex
       expect(result.width).toBe(size);
       expect(result.height).toBe(size);
+    });
+  });
+
+  describe('3DE4 Anamorphic Degree 6 model', () => {
+    const base3DE4Params: LensDistortionParams = {
+      ...DEFAULT_LENS_PARAMS,
+      model: '3de4_anamorphic_degree_6',
+    };
+
+    it('3DE4-001: Zero coefficients produce identity (no distortion)', () => {
+      // All 3DE4 coefficients default to 0, so apply3DE4AnamorphicDeg6 should be identity
+      const point = apply3DE4AnamorphicDeg6(0.5, 0.3, base3DE4Params);
+      expect(point.x).toBeCloseTo(0.5, 10);
+      expect(point.y).toBeCloseTo(0.3, 10);
+    });
+
+    it('3DE4-002: Single coefficient cx02=0.1, apply to point (0.5, 0.0)', () => {
+      const params: LensDistortionParams = {
+        ...base3DE4Params,
+        cx02: 0.1,
+      };
+
+      const x = 0.5;
+      const y = 0.0;
+      const result = apply3DE4AnamorphicDeg6(x, y, params);
+
+      // r² = x² + y² = 0.25
+      // dx = x * (cx02 * r²) = 0.5 * (0.1 * 0.25) = 0.5 * 0.025 = 0.0125
+      // dy = y * (...) = 0 (because y = 0)
+      // distorted_x = 0.5 + 0.0125 = 0.5125
+      // distorted_y = 0.0
+      expect(result.x).toBeCloseTo(0.5125, 10);
+      expect(result.y).toBeCloseTo(0.0, 10);
+    });
+
+    it('3DE4-003: Symmetric distortion for symmetric input', () => {
+      const params: LensDistortionParams = {
+        ...base3DE4Params,
+        cx02: 0.05,
+        cy02: 0.05,
+      };
+
+      // Apply to symmetric points
+      const p1 = apply3DE4AnamorphicDeg6(0.3, 0.3, params);
+      const p2 = apply3DE4AnamorphicDeg6(-0.3, -0.3, params);
+
+      // Due to the anamorphic model (cx uses x terms, cy uses y terms),
+      // negating both x and y should negate the output
+      expect(p1.x).toBeCloseTo(-p2.x, 10);
+      expect(p1.y).toBeCloseTo(-p2.y, 10);
+
+      // Also check that distortion magnitude is equal for mirrored points
+      const p3 = apply3DE4AnamorphicDeg6(0.3, -0.3, params);
+      const p4 = apply3DE4AnamorphicDeg6(-0.3, 0.3, params);
+
+      expect(Math.abs(p3.x)).toBeCloseTo(Math.abs(p4.x), 10);
+      expect(Math.abs(p3.y)).toBeCloseTo(Math.abs(p4.y), 10);
+    });
+
+    it('3DE4-004: Center point (0,0) stays at (0,0) regardless of coefficients', () => {
+      const params: LensDistortionParams = {
+        ...base3DE4Params,
+        cx02: 0.5, cx22: 0.3, cx04: 0.1, cx24: 0.2, cx44: 0.15,
+        cx06: 0.05, cx26: 0.02, cx46: 0.01, cx66: 0.03,
+        cy02: 0.4, cy22: 0.2, cy04: 0.15, cy24: 0.25, cy44: 0.1,
+        cy06: 0.08, cy26: 0.03, cy46: 0.02, cy66: 0.04,
+      };
+
+      const result = apply3DE4AnamorphicDeg6(0, 0, params);
+
+      // At origin, r²=0, x²=0, y²=0, so all polynomial terms are 0
+      // dx = 0 * (...) = 0, dy = 0 * (...) = 0
+      expect(result.x).toBe(0);
+      expect(result.y).toBe(0);
+    });
+
+    it('3DE4: Higher-order coefficients produce larger distortion at edges', () => {
+      // Test with only cx06 (degree 6 term)
+      const params: LensDistortionParams = {
+        ...base3DE4Params,
+        cx06: 0.5,
+      };
+
+      // Near center - distortion should be small (r is small, r^6 is very small)
+      const nearCenter = apply3DE4AnamorphicDeg6(0.1, 0.0, params);
+      const nearCenterDistortion = Math.abs(nearCenter.x - 0.1);
+
+      // Near edge - distortion should be much larger (r^6 grows fast)
+      const nearEdge = apply3DE4AnamorphicDeg6(0.8, 0.0, params);
+      const nearEdgeDistortion = Math.abs(nearEdge.x - 0.8);
+
+      expect(nearEdgeDistortion).toBeGreaterThan(nearCenterDistortion * 10);
+    });
+
+    it('3DE4: applyLensDistortion uses 3DE4 model when specified', () => {
+      const imageData = createTestImageData(20, 20, { r: 128, g: 128, b: 128, a: 255 });
+      const params: LensDistortionParams = {
+        ...base3DE4Params,
+        cx02: 0.2,
+        cy02: 0.2,
+      };
+
+      const result = applyLensDistortion(imageData, params);
+
+      // Should produce a new image (not identity)
+      expect(result).not.toBe(imageData);
+      expect(result.width).toBe(20);
+      expect(result.height).toBe(20);
+    });
+
+    it('3DE4: generateDistortionGrid uses 3DE4 model', () => {
+      const params: LensDistortionParams = {
+        ...base3DE4Params,
+        cx02: 0.3,
+        cy02: 0.3,
+      };
+
+      const grid = generateDistortionGrid(100, 100, params, 20);
+      expect(grid.lines.length).toBeGreaterThan(0);
+
+      // Verify all coordinates are finite
+      for (const line of grid.lines) {
+        expect(Number.isFinite(line.x1)).toBe(true);
+        expect(Number.isFinite(line.y1)).toBe(true);
+        expect(Number.isFinite(line.x2)).toBe(true);
+        expect(Number.isFinite(line.y2)).toBe(true);
+      }
+    });
+
+    it('3DE4: isDefaultLensParams detects non-zero 3DE4 coefficients', () => {
+      const paramsWithCoeff: LensDistortionParams = {
+        ...DEFAULT_LENS_PARAMS,
+        model: '3de4_anamorphic_degree_6',
+        cx02: 0.1,
+      };
+
+      expect(isDefaultLensParams(paramsWithCoeff)).toBe(false);
+    });
+
+    it('3DE4: isDefaultLensParams returns true when all 3DE4 coefficients are zero', () => {
+      expect(isDefaultLensParams(base3DE4Params)).toBe(true);
+    });
+
+    it('3DE4: anamorphic coefficients produce different x/y distortion', () => {
+      // Use different cx and cy coefficients to verify anamorphic behavior
+      const params: LensDistortionParams = {
+        ...base3DE4Params,
+        cx02: 0.2,  // x distortion only
+        cy02: 0.0,  // no y distortion
+      };
+
+      const result = apply3DE4AnamorphicDeg6(0.5, 0.5, params);
+
+      // x should be displaced, y should not
+      expect(result.x).not.toBeCloseTo(0.5, 5);
+      expect(result.y).toBeCloseTo(0.5, 10);
     });
   });
 });

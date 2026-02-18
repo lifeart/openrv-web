@@ -207,16 +207,28 @@ export class RightPanelContent {
   }
 
   setPresetMode(preset: LayoutPresetId): void {
-    if (preset === 'review') {
-      this.scopesSection.setExpanded(false);
-      this.infoSection.setExpanded(true);
-    } else if (preset === 'color') {
-      this.scopesSection.setExpanded(true);
-      this.infoSection.setExpanded(false);
-    } else {
-      // default/paint - both expanded
-      this.scopesSection.setExpanded(true);
-      this.infoSection.setExpanded(true);
+    switch (preset) {
+      case 'review':
+        // QC-focused: metadata/context first, scopes on demand.
+        this.scopesSection.setExpanded(false);
+        this.infoSection.setExpanded(true);
+        break;
+      case 'color':
+        // Grading-focused: keep scopes open, hide metadata noise.
+        this.scopesSection.setExpanded(true);
+        this.infoSection.setExpanded(false);
+        break;
+      case 'paint':
+        // Annotation-focused: right panel is secondary; keep both collapsed.
+        this.scopesSection.setExpanded(false);
+        this.infoSection.setExpanded(false);
+        break;
+      case 'default':
+      default:
+        // Balanced default for general browsing.
+        this.scopesSection.setExpanded(true);
+        this.infoSection.setExpanded(true);
+        break;
     }
   }
 

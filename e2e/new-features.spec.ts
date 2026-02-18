@@ -1726,11 +1726,11 @@ test.describe('Playback Speed Control', () => {
     state = await getSessionState(page);
     expect(state.playbackSpeed).toBe(8);
 
-    // Click to cycle back to 1x
+    // Click to wrap to slow-motion presets
     await speedButton.click();
     await page.waitForTimeout(100);
     state = await getSessionState(page);
-    expect(state.playbackSpeed).toBe(1);
+    expect(state.playbackSpeed).toBe(0.1);
   });
 
   test('SPEED-004: J key should decrease playback speed', async ({ page }) => {

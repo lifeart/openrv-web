@@ -311,6 +311,23 @@ describe('SessionSerializer', () => {
       expect(state.media[0]?.path).toBe('https://example.com/video.mp4');
       expect(state.media[0]?.requiresReload).toBeUndefined(); // Not set at all
     });
+
+    it('SER-015: serializes playlist state when playlist manager is available', () => {
+      const components = createMockComponents();
+      const playlistState = {
+        clips: [{ id: 'clip-1', sourceIndex: 0, sourceName: 'shot', inPoint: 1, outPoint: 24, globalStartFrame: 1, duration: 24 }],
+        enabled: true,
+        currentFrame: 12,
+        loopMode: 'all',
+      } as const;
+
+      components.playlistManager = {
+        getState: vi.fn().mockReturnValue(playlistState),
+      } as any;
+
+      const state = SessionSerializer.toJSON(components);
+      expect(state.playlist).toEqual(playlistState);
+    });
   });
 
   describe('fromJSON', () => {
@@ -470,6 +487,55 @@ describe('SessionSerializer', () => {
 
         const result = await SessionSerializer.fromJSON(state, components);
         expect(result.warnings).toContain('LUT "my.cube" requires manual loading');
+    });
+
+    it('SER-011b: restores playlist state when playlist manager is available', async () => {
+      const components = createMockComponents();
+      const setState = vi.fn();
+
+      components.playlistManager = {
+        setState,
+        clear: vi.fn(),
+        setEnabled: vi.fn(),
+        setLoopMode: vi.fn(),
+        setCurrentFrame: vi.fn(),
+      } as any;
+
+      const state = SessionSerializer.createEmpty();
+      state.playlist = {
+        clips: [{ id: 'clip-1', sourceIndex: 0, sourceName: 'shot', inPoint: 5, outPoint: 15, globalStartFrame: 1, duration: 11 }],
+        enabled: true,
+        currentFrame: 7,
+        loopMode: 'single',
+      };
+
+      await SessionSerializer.fromJSON(state, components);
+      expect(setState).toHaveBeenCalledWith(state.playlist);
+    });
+
+    it('SER-011c: clears playlist manager when project has no playlist state', async () => {
+      const components = createMockComponents();
+      const clear = vi.fn();
+      const setEnabled = vi.fn();
+      const setLoopMode = vi.fn();
+      const setCurrentFrame = vi.fn();
+
+      components.playlistManager = {
+        setState: vi.fn(),
+        clear,
+        setEnabled,
+        setLoopMode,
+        setCurrentFrame,
+      } as any;
+
+      const state = SessionSerializer.createEmpty();
+      delete state.playlist;
+
+      await SessionSerializer.fromJSON(state, components);
+      expect(clear).toHaveBeenCalledTimes(1);
+      expect(setEnabled).toHaveBeenCalledWith(false);
+      expect(setLoopMode).toHaveBeenCalledWith('none');
+      expect(setCurrentFrame).toHaveBeenCalledWith(1);
     });
   });
 });

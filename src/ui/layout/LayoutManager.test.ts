@@ -763,7 +763,7 @@ describe('LayoutManager', () => {
       const rightPanel = root.querySelector('[data-testid="layout-panel-right"]') as HTMLElement;
 
       // Right panel should be expanded since it has content
-      expect(rightPanel.style.width).toBe('300px');
+      expect(rightPanel.style.width).toBe('360px');
 
       // Left panel should stay collapsed (no content)
       const leftPanel = root.querySelector('[data-testid="layout-panel-left"]') as HTMLElement;
@@ -792,7 +792,7 @@ describe('LayoutManager', () => {
     });
 
     it('LP-H09c: applying a preset with side panels when no tabs registered should keep panels collapsed', () => {
-      // Apply "color" preset (expands left: 260px, right: 300px)
+      // Apply "color" preset (expands left: 340px, right: 380px)
       store.applyPreset('color');
 
       // Store should have been corrected to collapsed
@@ -813,14 +813,14 @@ describe('LayoutManager', () => {
       const tab = document.createElement('div');
       manager.addPanelTab('left', 'Browser', tab);
 
-      // Apply "color" preset (expands left: 260px, right: 300px)
+      // Apply "color" preset (expands left: 340px, right: 380px)
       store.applyPreset('color');
 
       // Left should be expanded (has content)
       expect(store.panels.left.collapsed).toBe(false);
       const root = manager.getElement();
       const leftPanel = root.querySelector('[data-testid="layout-panel-left"]') as HTMLElement;
-      expect(leftPanel.style.width).toBe('260px');
+      expect(leftPanel.style.width).toBe('340px');
 
       // Right should be collapsed (no content)
       expect(store.panels.right.collapsed).toBe(true);

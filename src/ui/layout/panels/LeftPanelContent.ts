@@ -11,6 +11,7 @@ import type { ColorControls } from '../../components/ColorControls';
 import { DEFAULT_COLOR_ADJUSTMENTS } from '../../../core/types/color';
 import type { NumericAdjustmentKey, ColorAdjustments } from '../../../core/types/color';
 import type { HistoryManager, HistoryEntry } from '../../../utils/HistoryManager';
+import type { LayoutPresetId } from '../LayoutStore';
 
 interface SliderConfig {
   key: NumericAdjustmentKey;
@@ -353,6 +354,32 @@ export class LeftPanelContent {
     if (seconds < 60) return `${seconds}s`;
     if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
     return `${Math.floor(seconds / 3600)}h`;
+  }
+
+  setPresetMode(preset: LayoutPresetId): void {
+    switch (preset) {
+      case 'review':
+        // Review mode avoids accidental edits from this panel.
+        this.colorSection.setExpanded(false);
+        this.historySection.setExpanded(false);
+        break;
+      case 'color':
+        // Color mode prioritizes active grading controls.
+        this.colorSection.setExpanded(true);
+        this.historySection.setExpanded(false);
+        break;
+      case 'paint':
+        // Paint mode benefits from edit history over color sliders.
+        this.colorSection.setExpanded(false);
+        this.historySection.setExpanded(true);
+        break;
+      case 'default':
+      default:
+        // Balanced default.
+        this.colorSection.setExpanded(true);
+        this.historySection.setExpanded(true);
+        break;
+    }
   }
 
   getElement(): HTMLElement {

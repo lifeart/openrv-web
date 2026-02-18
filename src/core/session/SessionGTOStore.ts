@@ -8,6 +8,7 @@ import { SessionGTOExporter } from './SessionGTOExporter';
 import type { ColorAdjustments, ChannelMode } from '../../core/types/color';
 import { DEFAULT_TRANSFORM, DEFAULT_CROP_STATE } from '../../core/types/transform';
 import { isDefaultLensParams } from '../../transform/LensDistortion';
+import type { LensDistortionParams } from '../../transform/LensDistortion';
 import type { StereoState } from '../types/stereo';
 
 interface UpdateContext {
@@ -141,22 +142,7 @@ export class SessionGTOStore {
     this.setProperty(component, 'translate', 'float', 2, [[transform.translate.x, transform.translate.y]]);
   }
 
-  private updateLens(params: {
-    k1: number;
-    k2: number;
-    k3?: number;
-    p1?: number;
-    p2?: number;
-    centerX: number;
-    centerY: number;
-    scale: number;
-    model?: 'brown' | 'opencv' | 'pfbarrel' | '3de4_radial_standard' | '3de4_anamorphic';
-    pixelAspectRatio?: number;
-    fx?: number;
-    fy?: number;
-    cropRatioX?: number;
-    cropRatioY?: number;
-  }): void {
+  private updateLens(params: LensDistortionParams): void {
     const target = this.ensureObject('RVLensWarp', 'rvLensWarp');
     const nodeComponent = this.ensureComponent(target, 'node');
     const warpComponent = this.ensureComponent(target, 'warp');
@@ -199,6 +185,26 @@ export class SessionGTOStore {
     }
     if (params.cropRatioY !== undefined) {
       this.setProperty(warpComponent, 'cropRatioY', 'float', 1, params.cropRatioY);
+    }
+
+    // 3DE4 Anamorphic Degree 6 coefficients
+    const coeffNames = [
+      'cx02', 'cx22', 'cx04', 'cx24', 'cx44', 'cx06', 'cx26', 'cx46', 'cx66',
+      'cy02', 'cy22', 'cy04', 'cy24', 'cy44', 'cy06', 'cy26', 'cy46', 'cy66',
+    ] as const;
+    for (const name of coeffNames) {
+      if (params[name] !== undefined) {
+        this.setProperty(warpComponent, name, 'float', 1, params[name]!);
+      }
+    }
+    if (params.lensRotation !== undefined) {
+      this.setProperty(warpComponent, 'lensRotation', 'float', 1, params.lensRotation);
+    }
+    if (params.squeeze_x !== undefined) {
+      this.setProperty(warpComponent, 'squeeze_x', 'float', 1, params.squeeze_x);
+    }
+    if (params.squeeze_y !== undefined) {
+      this.setProperty(warpComponent, 'squeeze_y', 'float', 1, params.squeeze_y);
     }
   }
 

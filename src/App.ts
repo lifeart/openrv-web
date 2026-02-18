@@ -170,6 +170,7 @@ export class App {
       transformControl: this.controls.transformControl,
       cropControl: this.controls.cropControl,
       lensControl: this.controls.lensControl,
+      playlistManager: this.controls.playlistManager,
     });
 
     // Initialize session bridge (session event handlers, scope updates, info panel)
@@ -533,6 +534,7 @@ export class App {
     // Wire preset mode to panel sections
     this.layoutStore.on('presetApplied', (presetId) => {
       this.controls.rightPanelContent.setPresetMode(presetId);
+      this.controls.leftPanelContent.setPresetMode(presetId);
     });
 
     // Bind all session event handlers (scopes, info panel, HDR auto-config, etc.)
@@ -629,8 +631,20 @@ export class App {
       'playback.stepForward': () => this.session.stepForward(),
       'playback.stepBackward': () => this.session.stepBackward(),
       'playback.toggleDirection': () => this.session.togglePlayDirection(),
-      'playback.goToStart': () => this.session.goToStart(),
-      'playback.goToEnd': () => this.session.goToEnd(),
+      'playback.goToStart': () => {
+        if (this.controls.playlistManager.isEnabled()) {
+          this.goToPlaylistStart();
+          return;
+        }
+        this.session.goToStart();
+      },
+      'playback.goToEnd': () => {
+        if (this.controls.playlistManager.isEnabled()) {
+          this.goToPlaylistEnd();
+          return;
+        }
+        this.session.goToEnd();
+      },
       'playback.slower': () => this.session.decreaseSpeed(),
       'playback.stop': () => this.session.pause(),
       'playback.faster': () => {
@@ -653,6 +667,8 @@ export class App {
       },
       'timeline.setOutPointAlt': () => this.session.setOutPoint(),
       'timeline.toggleMark': () => this.session.toggleMark(),
+      'timeline.nextMarkOrBoundary': () => this.goToNextMarkOrBoundary(),
+      'timeline.previousMarkOrBoundary': () => this.goToPreviousMarkOrBoundary(),
       'timeline.resetInOut': () => {
         // R key - reset in/out points, but on Annotate tab, rectangle tool takes precedence
         if (this.tabBar.activeTab === 'annotate') {
@@ -867,6 +883,63 @@ export class App {
     if (sortedFrames[0] !== undefined) {
       this.session.goToFrame(sortedFrames[0]);
     }
+  }
+
+  private goToPlaylistStart(): void {
+    const firstClip = this.controls.playlistManager.getClipByIndex(0);
+    if (!firstClip) return;
+    this.jumpToPlaylistGlobalFrame(firstClip.globalStartFrame);
+  }
+
+  private goToPlaylistEnd(): void {
+    const count = this.controls.playlistManager.getClipCount();
+    const lastClip = this.controls.playlistManager.getClipByIndex(count - 1);
+    if (!lastClip) return;
+    this.jumpToPlaylistGlobalFrame(lastClip.globalStartFrame + lastClip.duration - 1);
+  }
+
+  private goToNextMarkOrBoundary(): void {
+    if (this.session.goToNextMarker() !== null) return;
+    if (!this.controls.playlistManager.isEnabled()) return;
+
+    const mapping = this.controls.playlistManager.getClipAtFrame(this.controls.playlistManager.getCurrentFrame());
+    if (!mapping) return;
+
+    const nextClip = this.controls.playlistManager.getClipByIndex(mapping.clipIndex + 1);
+    if (!nextClip) return;
+    this.jumpToPlaylistGlobalFrame(nextClip.globalStartFrame);
+  }
+
+  private goToPreviousMarkOrBoundary(): void {
+    if (this.session.goToPreviousMarker() !== null) return;
+    if (!this.controls.playlistManager.isEnabled()) return;
+
+    const globalFrame = this.controls.playlistManager.getCurrentFrame();
+    const mapping = this.controls.playlistManager.getClipAtFrame(globalFrame);
+    if (!mapping) return;
+
+    const currentClipStart = mapping.clip.globalStartFrame;
+    const targetIndex = globalFrame > currentClipStart
+      ? mapping.clipIndex
+      : mapping.clipIndex - 1;
+    if (targetIndex < 0) return;
+
+    const clip = this.controls.playlistManager.getClipByIndex(targetIndex);
+    if (!clip) return;
+    this.jumpToPlaylistGlobalFrame(clip.globalStartFrame);
+  }
+
+  private jumpToPlaylistGlobalFrame(globalFrame: number): void {
+    const mapping = this.controls.playlistManager.getClipAtFrame(globalFrame);
+    if (!mapping) return;
+
+    if (this.session.currentSourceIndex !== mapping.sourceIndex) {
+      this.session.setCurrentSource(mapping.sourceIndex);
+    }
+    this.session.setInPoint(mapping.clip.inPoint);
+    this.session.setOutPoint(mapping.clip.outPoint);
+    this.controls.playlistManager.setCurrentFrame(globalFrame);
+    this.session.goToFrame(mapping.localFrame);
   }
 
   private goToPreviousAnnotation(): void {

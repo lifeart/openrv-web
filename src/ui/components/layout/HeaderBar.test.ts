@@ -378,18 +378,11 @@ describe('HeaderBar', () => {
 
       expect(session.playbackSpeed).toBe(1);
 
-      speedBtn.click();
-      expect(session.playbackSpeed).toBe(2);
-
-      speedBtn.click();
-      expect(session.playbackSpeed).toBe(4);
-
-      speedBtn.click();
-      expect(session.playbackSpeed).toBe(8);
-
-      speedBtn.click();
-      // Should wrap to 1x
-      expect(session.playbackSpeed).toBe(1);
+      const expectedSequence = [2, 4, 8, 0.1, 0.25, 0.5, 1];
+      for (const expectedSpeed of expectedSequence) {
+        speedBtn.click();
+        expect(session.playbackSpeed).toBe(expectedSpeed);
+      }
     });
 
     it('HDR-U072: speed button has blue styling when not at 1x', () => {
@@ -732,17 +725,31 @@ describe('HeaderBar', () => {
   });
 
   describe('speed button edge cases', () => {
-    it('HDR-U150: speed resets to 1x after reaching max preset', () => {
+    it('HDR-U150: speed wraps to minimum preset after reaching max preset', () => {
       const el = headerBar.render();
       const speedBtn = el.querySelector(
         '[data-testid="playback-speed-button"]'
       ) as HTMLButtonElement;
 
-      // Click through all presets (1 -> 2 -> 4 -> 8 -> back to 1)
+      // Click through to max speed (1 -> 2 -> 4 -> 8), then wrap to min.
       speedBtn.click(); // 2
       speedBtn.click(); // 4
       speedBtn.click(); // 8
-      speedBtn.click(); // back to 1
+      speedBtn.click(); // wrap to 0.1
+
+      expect(session.playbackSpeed).toBe(0.1);
+      expect(speedBtn.textContent).toBe('0.1x');
+    });
+
+    it('HDR-U150b: speed returns to 1x after a full forward cycle', () => {
+      const el = headerBar.render();
+      const speedBtn = el.querySelector(
+        '[data-testid="playback-speed-button"]'
+      ) as HTMLButtonElement;
+
+      for (let i = 0; i < PLAYBACK_SPEED_PRESETS.length; i++) {
+        speedBtn.click();
+      }
 
       expect(session.playbackSpeed).toBe(1);
       expect(speedBtn.textContent).toBe('1x');

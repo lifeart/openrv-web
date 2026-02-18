@@ -558,7 +558,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   private createSpeedButton(): HTMLButtonElement {
     const button = document.createElement('button');
     button.dataset.testid = 'playback-speed-button';
-    button.title = 'Playback speed: Click to increase, Shift+Click to decrease, Right-click or Shift+Enter for menu (J/K/L keys)';
+    button.title = 'Playback speed: Click to cycle forward, Shift+Click to cycle backward, Right-click or Shift+Enter for menu (J/K/L keys)';
     button.setAttribute('aria-haspopup', 'menu');
     button.style.cssText = `
       background: transparent;
@@ -954,16 +954,27 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     const currentIndex = PLAYBACK_SPEED_PRESETS.indexOf(currentSpeed as typeof PLAYBACK_SPEED_PRESETS[number]);
 
     if (direction > 0) {
-      // Cycle forward (increase speed)
-      if (currentIndex >= 0 && currentIndex < PLAYBACK_SPEED_PRESETS.length - 1) {
-        const nextSpeed = PLAYBACK_SPEED_PRESETS[currentIndex + 1];
+      // Cycle forward through all presets, wrapping from max to min.
+      if (currentIndex >= 0) {
+        const nextIndex = (currentIndex + 1) % PLAYBACK_SPEED_PRESETS.length;
+        const nextSpeed = PLAYBACK_SPEED_PRESETS[nextIndex];
         if (nextSpeed !== undefined) {
           this.session.playbackSpeed = nextSpeed;
           return;
         }
       }
-      // Reset to 1x when at max or not a preset
-      this.session.playbackSpeed = 1;
+
+      // Not a preset: jump to nearest higher preset, or wrap to min.
+      const higherPreset = PLAYBACK_SPEED_PRESETS.find(p => p > currentSpeed);
+      if (higherPreset !== undefined) {
+        this.session.playbackSpeed = higherPreset;
+        return;
+      }
+
+      const minPreset = PLAYBACK_SPEED_PRESETS[0];
+      if (minPreset !== undefined) {
+        this.session.playbackSpeed = minPreset;
+      }
     } else {
       // Cycle backward (decrease speed)
       if (currentIndex > 0) {

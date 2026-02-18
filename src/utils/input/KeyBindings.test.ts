@@ -139,6 +139,15 @@ describe('KeyBindings', () => {
       expect(display.shift).toBe(true);
       expect(display.alt).toBe(true);
     });
+
+    it('KB-U022: defines next/previous mark-or-boundary shortcuts with Alt+Arrow', () => {
+      const next = DEFAULT_KEY_BINDINGS['timeline.nextMarkOrBoundary']!;
+      const prev = DEFAULT_KEY_BINDINGS['timeline.previousMarkOrBoundary']!;
+      expect(next.code).toBe('ArrowRight');
+      expect(next.alt).toBe(true);
+      expect(prev.code).toBe('ArrowLeft');
+      expect(prev.alt).toBe(true);
+    });
   });
 
   describe('describeKeyCombo', () => {

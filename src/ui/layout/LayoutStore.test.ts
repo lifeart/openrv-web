@@ -271,9 +271,9 @@ describe('LayoutStore', () => {
       store.applyPreset('color');
 
       expect(store.panels.left.collapsed).toBe(false);
-      expect(store.panels.left.size).toBe(260);
+      expect(store.panels.left.size).toBe(340);
       expect(store.panels.right.collapsed).toBe(false);
-      expect(store.panels.right.size).toBe(300);
+      expect(store.panels.right.size).toBe(380);
     });
 
     it('LAYOUT-004c: applyPreset emits presetApplied event', () => {
@@ -307,14 +307,14 @@ describe('LayoutStore', () => {
     it('LAYOUT-004f: paint preset opens left panel for tool options, collapses right', () => {
       store.applyPreset('paint');
       expect(store.panels.left.collapsed).toBe(false);
-      expect(store.panels.left.size).toBe(240);
+      expect(store.panels.left.size).toBe(300);
       expect(store.panels.right.collapsed).toBe(true);
     });
 
     it('LAYOUT-004g: review preset opens right panel', () => {
       store.applyPreset('review');
       expect(store.panels.right.collapsed).toBe(false);
-      expect(store.panels.right.size).toBe(300);
+      expect(store.panels.right.size).toBe(360);
       expect(store.panels.left.collapsed).toBe(true);
     });
 
@@ -328,7 +328,7 @@ describe('LayoutStore', () => {
       store.applyPreset('default');
       expect(store.panels.left.collapsed).toBe(true);
       expect(store.panels.right.collapsed).toBe(true);
-      expect(store.panels.right.size).toBe(0);
+      expect(store.panels.right.size).toBe(340);
     });
 
     it('LAYOUT-004i: all four presets have unique panel configurations', () => {

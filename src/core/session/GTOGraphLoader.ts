@@ -85,6 +85,7 @@ const PROTOCOL_TO_NODE_TYPE: Record<string, string> = {
   RVImageSource: 'RVFileSource',
   RVMovieSource: 'RVVideoSource',
   RVSequenceSource: 'RVSequenceSource',
+  RVMovieProc: 'RVMovieProc',
 
   // Group nodes (containers)
   RVSequenceGroup: 'RVSequenceGroup',

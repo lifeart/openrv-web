@@ -87,50 +87,51 @@ function defaultLayout(): LayoutData {
 
 export const LAYOUT_PRESETS: LayoutPreset[] = [
   {
-    // Clean viewer with only timeline. No side panels.
+    // Playback-first layout: clean viewer, side panels tucked away,
+    // but keep practical stored widths for quick expand.
     id: 'default',
     label: 'Default',
     data: {
       panels: {
-        left: { size: 0, collapsed: true, activeTab: 0 },
-        right: { size: 0, collapsed: true, activeTab: 0 },
-        bottom: { size: 120, collapsed: false, activeTab: 0 },
+        left: { size: 300, collapsed: true, activeTab: 0 },
+        right: { size: 340, collapsed: true, activeTab: 0 },
+        bottom: { size: 132, collapsed: false, activeTab: 0 },
       },
     },
   },
   {
-    // Right panel open for metadata/QC inspection. No left panel.
+    // QC/review-first: prioritize inspector + timeline for scrubbing.
     id: 'review',
     label: 'Review',
     data: {
       panels: {
-        left: { size: 0, collapsed: true, activeTab: 0 },
-        right: { size: 300, collapsed: false, activeTab: 0 },
-        bottom: { size: 140, collapsed: false, activeTab: 0 },
+        left: { size: 280, collapsed: true, activeTab: 0 },
+        right: { size: 360, collapsed: false, activeTab: 0 },
+        bottom: { size: 132, collapsed: false, activeTab: 0 },
       },
     },
   },
   {
-    // Both panels for color grading: left has color tools, right has scopes.
+    // Color-grading-first: wide controls + scopes, compact timeline.
     id: 'color',
     label: 'Color',
     data: {
       panels: {
-        left: { size: 260, collapsed: false, activeTab: 0 },
-        right: { size: 300, collapsed: false, activeTab: 0 },
-        bottom: { size: 100, collapsed: false, activeTab: 0 },
+        left: { size: 340, collapsed: false, activeTab: 0 },
+        right: { size: 380, collapsed: false, activeTab: 0 },
+        bottom: { size: 96, collapsed: false, activeTab: 0 },
       },
     },
   },
   {
-    // Left panel for paint/tool options. Maximized viewer area.
+    // Annotation-first: keep tools visible on left, suppress right inspector.
     id: 'paint',
     label: 'Paint',
     data: {
       panels: {
-        left: { size: 240, collapsed: false, activeTab: 0 },
-        right: { size: 0, collapsed: true, activeTab: 0 },
-        bottom: { size: 100, collapsed: false, activeTab: 0 },
+        left: { size: 300, collapsed: false, activeTab: 0 },
+        right: { size: 320, collapsed: true, activeTab: 0 },
+        bottom: { size: 180, collapsed: false, activeTab: 0 },
       },
     },
   },

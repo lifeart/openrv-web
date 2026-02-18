@@ -11,6 +11,8 @@ import type {
   ViewState,
 } from './SessionState';
 import { SESSION_STATE_VERSION, DEFAULT_VIEW_STATE, DEFAULT_PLAYBACK_STATE } from './SessionState';
+import { DEFAULT_PLAYLIST_STATE } from './PlaylistManager';
+import type { PlaylistManager } from './PlaylistManager';
 import type { PaintEngine } from '../../paint/PaintEngine';
 import type { Viewer } from '../../ui/components/Viewer';
 import { DEFAULT_COLOR_ADJUSTMENTS } from '../../core/types/color';
@@ -30,6 +32,7 @@ export interface SessionComponents {
   session: Session;
   paintEngine: PaintEngine;
   viewer: Viewer;
+  playlistManager?: PlaylistManager;
 }
 
 /**
@@ -93,6 +96,7 @@ export class SessionSerializer {
       lutIntensity: viewer.getLUTIntensity(),
       par: viewer.getPARState(),
       backgroundPattern: viewer.getBackgroundPatternState(),
+      ...(components.playlistManager ? { playlist: components.playlistManager.getState() } : {}),
     };
   }
 
@@ -201,6 +205,19 @@ export class SessionSerializer {
       session.setPlaybackState(migrated.playback);
     }
 
+    // Restore playlist state when available (used by project save/load, snapshots,
+    // and auto-save recovery in AppPersistenceManager).
+    if (components.playlistManager) {
+      if (migrated.playlist) {
+        components.playlistManager.setState(migrated.playlist);
+      } else {
+        components.playlistManager.clear();
+        components.playlistManager.setEnabled(false);
+        components.playlistManager.setLoopMode('none');
+        components.playlistManager.setCurrentFrame(1);
+      }
+    }
+
     // Restore paint/annotations
     const annotations: Annotation[] = Object.values(migrated.paint.frames).flat();
     paintEngine.loadFromAnnotations(annotations, migrated.paint.effects);
@@ -265,6 +282,13 @@ export class SessionSerializer {
     migrated.backgroundPattern = migrated.backgroundPattern
       ? { ...DEFAULT_BACKGROUND_PATTERN_STATE, ...migrated.backgroundPattern }
       : undefined;
+    if (migrated.playlist) {
+      migrated.playlist = {
+        ...DEFAULT_PLAYLIST_STATE,
+        ...migrated.playlist,
+        clips: Array.isArray(migrated.playlist.clips) ? migrated.playlist.clips : [],
+      };
+    }
     migrated.paint = migrated.paint ?? {
       nextId: 0,
       show: true,

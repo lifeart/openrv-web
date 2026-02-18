@@ -75,6 +75,16 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     code: 'KeyM',
     description: 'Toggle mark at current frame'
   },
+  'timeline.nextMarkOrBoundary': {
+    code: 'ArrowRight',
+    alt: true,
+    description: 'Go to next mark or source boundary'
+  },
+  'timeline.previousMarkOrBoundary': {
+    code: 'ArrowLeft',
+    alt: true,
+    description: 'Go to previous mark or source boundary'
+  },
   'timeline.resetInOut': {
     code: 'KeyR',
     description: 'Reset in/out points to full range'

@@ -23,6 +23,7 @@ import type { FilterControl } from './ui/components/FilterControl';
 import type { TransformControl } from './ui/components/TransformControl';
 import type { CropControl } from './ui/components/CropControl';
 import type { LensControl } from './ui/components/LensControl';
+import type { PlaylistManager } from './core/session/PlaylistManager';
 import { showAlert, showConfirm } from './ui/components/shared/Modal';
 
 /**
@@ -43,6 +44,7 @@ export interface PersistenceManagerContext {
   transformControl: TransformControl;
   cropControl: CropControl;
   lensControl: LensControl;
+  playlistManager?: PlaylistManager;
 }
 
 export class AppPersistenceManager {
@@ -105,6 +107,7 @@ export class AppPersistenceManager {
           session,
           paintEngine,
           viewer,
+          playlistManager: this.ctx.playlistManager,
         },
         session.currentSource?.name || 'Untitled'
       )
@@ -123,6 +126,7 @@ export class AppPersistenceManager {
           session,
           paintEngine,
           viewer,
+          playlistManager: this.ctx.playlistManager,
         },
         session.currentSource?.name || 'Untitled'
       );
@@ -143,6 +147,7 @@ export class AppPersistenceManager {
           session,
           paintEngine,
           viewer,
+          playlistManager: this.ctx.playlistManager,
         },
         session.currentSource?.name || 'Untitled'
       );
@@ -167,6 +172,7 @@ export class AppPersistenceManager {
           session,
           paintEngine,
           viewer,
+          playlistManager: this.ctx.playlistManager,
         },
         session.currentSource?.name || 'Untitled'
       );
@@ -199,6 +205,7 @@ export class AppPersistenceManager {
           session,
           paintEngine,
           viewer,
+          playlistManager: this.ctx.playlistManager,
         }
       );
 
@@ -232,6 +239,7 @@ export class AppPersistenceManager {
           session,
           paintEngine,
           viewer,
+          playlistManager: this.ctx.playlistManager,
         },
         'project'
       );
@@ -277,6 +285,7 @@ export class AppPersistenceManager {
           session,
           paintEngine,
           viewer,
+          playlistManager: this.ctx.playlistManager,
         }
       );
 
@@ -370,6 +379,7 @@ export class AppPersistenceManager {
           session,
           paintEngine,
           viewer,
+          playlistManager: this.ctx.playlistManager,
         });
 
         // Update UI controls with restored state

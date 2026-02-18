@@ -468,6 +468,79 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
 
     item.appendChild(infoRow);
 
+    // Trim controls
+    const trimRow = document.createElement('div');
+    trimRow.style.cssText = `
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 8px;
+      font-size: 10px;
+      color: var(--text-muted);
+    `;
+
+    const inLabel = document.createElement('span');
+    inLabel.textContent = 'In';
+    trimRow.appendChild(inLabel);
+
+    const inInput = document.createElement('input');
+    inInput.type = 'number';
+    inInput.min = '1';
+    inInput.value = String(clip.inPoint);
+    inInput.title = 'Clip in point';
+    inInput.style.cssText = `
+      width: 58px;
+      padding: 2px 4px;
+      border: 1px solid var(--border-primary);
+      border-radius: 4px;
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      font-size: 11px;
+    `;
+    trimRow.appendChild(inInput);
+
+    const outLabel = document.createElement('span');
+    outLabel.textContent = 'Out';
+    trimRow.appendChild(outLabel);
+
+    const outInput = document.createElement('input');
+    outInput.type = 'number';
+    outInput.min = inInput.value;
+    outInput.value = String(clip.outPoint);
+    outInput.title = 'Clip out point';
+    outInput.style.cssText = inInput.style.cssText;
+    trimRow.appendChild(outInput);
+
+    const commitTrim = (): void => {
+      const nextIn = Number.parseInt(inInput.value, 10);
+      const nextOut = Number.parseInt(outInput.value, 10);
+      const valid = Number.isFinite(nextIn) && Number.isFinite(nextOut) && nextIn >= 1 && nextOut >= nextIn;
+      if (!valid) {
+        inInput.value = String(clip.inPoint);
+        outInput.value = String(clip.outPoint);
+        return;
+      }
+      if (nextIn !== clip.inPoint || nextOut !== clip.outPoint) {
+        this.playlistManager.updateClipPoints(clip.id, nextIn, nextOut);
+      }
+    };
+
+    const bindTrimInput = (input: HTMLInputElement): void => {
+      input.addEventListener('click', (e) => e.stopPropagation());
+      input.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') {
+          commitTrim();
+        }
+      });
+      input.addEventListener('change', commitTrim);
+      input.addEventListener('blur', commitTrim);
+    };
+
+    bindTrimInput(inInput);
+    bindTrimInput(outInput);
+    item.appendChild(trimRow);
+
     // Click to select/jump
     item.addEventListener('click', () => {
       this.emit('clipSelected', {

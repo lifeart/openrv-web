@@ -34,6 +34,7 @@ function createMockPlaylistManager(): PlaylistManager {
     setEnabled: vi.fn(),
     moveClip: vi.fn(),
     removeClip: vi.fn(),
+    updateClipPoints: vi.fn(),
     addClip: vi.fn(),
     toEDL: vi.fn().mockReturnValue(''),
     _listeners: listeners,
@@ -257,6 +258,40 @@ describe('PlaylistPanel', () => {
       if (document.body.contains(panel.render())) {
         document.body.removeChild(panel.render());
       }
+    });
+  });
+
+  describe('clip trimming', () => {
+    it('PL-040: changing in/out inputs updates clip points in manager', () => {
+      const clip = {
+        id: 'clip-1',
+        sourceIndex: 0,
+        sourceName: 'ShotA',
+        inPoint: 1,
+        outPoint: 50,
+        globalStartFrame: 1,
+        duration: 50,
+      };
+      (manager.getClips as unknown as ReturnType<typeof vi.fn>).mockReturnValue([clip]);
+
+      document.body.appendChild(panel.render());
+      panel.show();
+
+      const inputs = panel.render().querySelectorAll<HTMLInputElement>('input[type="number"]');
+      const inInput = inputs[0];
+      const outInput = inputs[1];
+      expect(inInput).toBeDefined();
+      expect(outInput).toBeDefined();
+      if (!inInput || !outInput) return;
+
+      inInput.value = '10';
+      inInput.dispatchEvent(new Event('change', { bubbles: true }));
+      outInput.value = '20';
+      outInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+      expect((manager.updateClipPoints as unknown as ReturnType<typeof vi.fn>).mock.calls.at(-1)).toEqual(['clip-1', 10, 20]);
+
+      document.body.removeChild(panel.render());
     });
   });
 });

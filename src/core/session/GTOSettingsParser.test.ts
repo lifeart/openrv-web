@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { parseColorAdjustments, parseLinearize, parseUncrop, parseOutOfRange } from './GTOSettingsParser';
+import { parseColorAdjustments, parseLinearize, parseUncrop, parseOutOfRange, parseLens } from './GTOSettingsParser';
 import type { GTODTO } from 'gto-js';
 
 /**
@@ -1160,5 +1160,165 @@ describe('GTOSettingsParser.parseOutOfRange', () => {
     const result = parseOutOfRange(dto);
 
     expect(result).toBe(0);
+  });
+});
+
+// =================================================================
+// GTOSettingsParser.parseLens — 3DE4 Anamorphic Degree 6
+// =================================================================
+
+/**
+ * Helper to create a mock GTODTO with an RVLensWarp node.
+ * Supports both 'warp' and 'node' components.
+ */
+function createLensWarpMockDTO(
+  warpProps?: Record<string, unknown>,
+  nodeProps?: Record<string, unknown>,
+): GTODTO {
+  const mockComponent = (props: Record<string, unknown> | undefined) => ({
+    exists: () => props !== undefined,
+    property: (name: string) => ({
+      value: () => props?.[name],
+      exists: () => props !== undefined && name in props,
+    }),
+  });
+
+  const mockNode = (
+    warpData: Record<string, unknown> | undefined,
+    nodeData: Record<string, unknown> | undefined,
+  ) => ({
+    component: (name: string) => {
+      if (name === 'warp') return mockComponent(warpData);
+      if (name === 'node') return mockComponent(nodeData);
+      return mockComponent(undefined);
+    },
+    name: 'mock-lenswarp',
+  });
+
+  return {
+    byProtocol: (proto: string) => {
+      if (proto === 'RVLensWarp' && warpProps) {
+        const results = [mockNode(warpProps, nodeProps)] as any;
+        results.first = () => results[0];
+        results.length = 1;
+        return results;
+      }
+      const empty = [] as any;
+      empty.first = () => mockNode(undefined, undefined);
+      empty.length = 0;
+      return empty;
+    },
+  } as unknown as GTODTO;
+}
+
+describe('GTOSettingsParser.parseLens — 3DE4 Anamorphic Degree 6', () => {
+  it('3DE4-005: Parse 3DE4 anamorphic degree 6 coefficients from GTO mock', () => {
+    const dto = createLensWarpMockDTO({
+      k1: 0,
+      k2: 0,
+      model: '3de4_anamorphic_degree_6',
+      cx02: 0.05,
+      cx22: 0.03,
+      cx04: 0.01,
+      cy02: 0.04,
+      cy22: 0.02,
+      cy04: 0.015,
+      lensRotation: 1.5,
+      squeeze_x: 1.0,
+      squeeze_y: 0.95,
+    });
+
+    const result = parseLens(dto);
+
+    expect(result).not.toBeNull();
+    expect(result!.model).toBe('3de4_anamorphic_degree_6');
+    expect(result!.cx02).toBe(0.05);
+    expect(result!.cx22).toBe(0.03);
+    expect(result!.cx04).toBe(0.01);
+    expect(result!.cy02).toBe(0.04);
+    expect(result!.cy22).toBe(0.02);
+    expect(result!.cy04).toBe(0.015);
+    expect(result!.lensRotation).toBe(1.5);
+    expect(result!.squeeze_x).toBe(1.0);
+    expect(result!.squeeze_y).toBe(0.95);
+  });
+
+  it('parses all 18 3DE4 coefficients when present', () => {
+    const dto = createLensWarpMockDTO({
+      k1: 0,
+      model: '3de4_anamorphic_degree_6',
+      cx02: 0.01, cx22: 0.02, cx04: 0.03, cx24: 0.04, cx44: 0.05,
+      cx06: 0.06, cx26: 0.07, cx46: 0.08, cx66: 0.09,
+      cy02: 0.11, cy22: 0.12, cy04: 0.13, cy24: 0.14, cy44: 0.15,
+      cy06: 0.16, cy26: 0.17, cy46: 0.18, cy66: 0.19,
+    });
+
+    const result = parseLens(dto);
+
+    expect(result).not.toBeNull();
+    expect(result!.cx02).toBe(0.01);
+    expect(result!.cx22).toBe(0.02);
+    expect(result!.cx04).toBe(0.03);
+    expect(result!.cx24).toBe(0.04);
+    expect(result!.cx44).toBe(0.05);
+    expect(result!.cx06).toBe(0.06);
+    expect(result!.cx26).toBe(0.07);
+    expect(result!.cx46).toBe(0.08);
+    expect(result!.cx66).toBe(0.09);
+    expect(result!.cy02).toBe(0.11);
+    expect(result!.cy22).toBe(0.12);
+    expect(result!.cy04).toBe(0.13);
+    expect(result!.cy24).toBe(0.14);
+    expect(result!.cy44).toBe(0.15);
+    expect(result!.cy06).toBe(0.16);
+    expect(result!.cy26).toBe(0.17);
+    expect(result!.cy46).toBe(0.18);
+    expect(result!.cy66).toBe(0.19);
+  });
+
+  it('does not parse 3DE4 coefficients for brown model', () => {
+    const dto = createLensWarpMockDTO({
+      k1: 0.1,
+      model: 'brown',
+      cx02: 0.05,  // This should NOT be parsed for brown model
+    });
+
+    const result = parseLens(dto);
+
+    expect(result).not.toBeNull();
+    expect(result!.model).toBe('brown');
+    expect(result!.cx02).toBeUndefined();
+  });
+
+  it('returns null when node is inactive', () => {
+    const dto = createLensWarpMockDTO(
+      { k1: 0, model: '3de4_anamorphic_degree_6', cx02: 0.1 },
+      { active: 0 },
+    );
+
+    const result = parseLens(dto);
+    expect(result).toBeNull();
+  });
+
+  it('returns null when no RVLensWarp node exists', () => {
+    const dto = createLensWarpMockDTO();
+    const result = parseLens(dto);
+    expect(result).toBeNull();
+  });
+
+  it('omits undefined 3DE4 coefficients from result', () => {
+    const dto = createLensWarpMockDTO({
+      k1: 0,
+      model: '3de4_anamorphic_degree_6',
+      cx02: 0.05,
+      // cy02 not provided
+    });
+
+    const result = parseLens(dto);
+
+    expect(result).not.toBeNull();
+    expect(result!.cx02).toBe(0.05);
+    expect(result!.cy02).toBeUndefined();
+    expect(result!.cx66).toBeUndefined();
   });
 });

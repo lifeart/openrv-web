@@ -412,7 +412,7 @@ export function parseLens(dto: GTODTO): LensDistortionParams | null {
   const cropRatioX = getNumberValue(warpComp.property('cropRatioX').value());
   const cropRatioY = getNumberValue(warpComp.property('cropRatioY').value());
 
-  const validModels = ['brown', 'opencv', 'pfbarrel', '3de4_radial_standard', '3de4_anamorphic'] as const;
+  const validModels = ['brown', 'opencv', 'pfbarrel', '3de4_radial_standard', '3de4_anamorphic', '3de4_anamorphic_degree_6'] as const;
   const parsedModel = validModels.includes(model as typeof validModels[number])
     ? (model as typeof validModels[number])
     : 'brown';
@@ -437,6 +437,60 @@ export function parseLens(dto: GTODTO): LensDistortionParams | null {
   if (center && center.length >= 2) {
     params.centerX = center[0]! - 0.5;
     params.centerY = center[1]! - 0.5;
+  }
+
+  // Parse 3DE4 anamorphic degree 6 coefficients
+  if (parsedModel === '3de4_anamorphic_degree_6') {
+    // X-direction coefficients
+    const cx02 = getNumberValue(warpComp.property('cx02').value());
+    const cx22 = getNumberValue(warpComp.property('cx22').value());
+    const cx04 = getNumberValue(warpComp.property('cx04').value());
+    const cx24 = getNumberValue(warpComp.property('cx24').value());
+    const cx44 = getNumberValue(warpComp.property('cx44').value());
+    const cx06 = getNumberValue(warpComp.property('cx06').value());
+    const cx26 = getNumberValue(warpComp.property('cx26').value());
+    const cx46 = getNumberValue(warpComp.property('cx46').value());
+    const cx66 = getNumberValue(warpComp.property('cx66').value());
+
+    // Y-direction coefficients
+    const cy02 = getNumberValue(warpComp.property('cy02').value());
+    const cy22 = getNumberValue(warpComp.property('cy22').value());
+    const cy04 = getNumberValue(warpComp.property('cy04').value());
+    const cy24 = getNumberValue(warpComp.property('cy24').value());
+    const cy44 = getNumberValue(warpComp.property('cy44').value());
+    const cy06 = getNumberValue(warpComp.property('cy06').value());
+    const cy26 = getNumberValue(warpComp.property('cy26').value());
+    const cy46 = getNumberValue(warpComp.property('cy46').value());
+    const cy66 = getNumberValue(warpComp.property('cy66').value());
+
+    // Optional parameters
+    const lensRotation = getNumberValue(warpComp.property('lensRotation').value());
+    const squeeze_x = getNumberValue(warpComp.property('squeeze_x').value());
+    const squeeze_y = getNumberValue(warpComp.property('squeeze_y').value());
+
+    if (cx02 !== undefined) params.cx02 = cx02;
+    if (cx22 !== undefined) params.cx22 = cx22;
+    if (cx04 !== undefined) params.cx04 = cx04;
+    if (cx24 !== undefined) params.cx24 = cx24;
+    if (cx44 !== undefined) params.cx44 = cx44;
+    if (cx06 !== undefined) params.cx06 = cx06;
+    if (cx26 !== undefined) params.cx26 = cx26;
+    if (cx46 !== undefined) params.cx46 = cx46;
+    if (cx66 !== undefined) params.cx66 = cx66;
+
+    if (cy02 !== undefined) params.cy02 = cy02;
+    if (cy22 !== undefined) params.cy22 = cy22;
+    if (cy04 !== undefined) params.cy04 = cy04;
+    if (cy24 !== undefined) params.cy24 = cy24;
+    if (cy44 !== undefined) params.cy44 = cy44;
+    if (cy06 !== undefined) params.cy06 = cy06;
+    if (cy26 !== undefined) params.cy26 = cy26;
+    if (cy46 !== undefined) params.cy46 = cy46;
+    if (cy66 !== undefined) params.cy66 = cy66;
+
+    if (lensRotation !== undefined) params.lensRotation = lensRotation;
+    if (squeeze_x !== undefined) params.squeeze_x = squeeze_x;
+    if (squeeze_y !== undefined) params.squeeze_y = squeeze_y;
   }
 
   return params;
