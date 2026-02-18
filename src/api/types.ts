@@ -10,6 +10,7 @@
 import type { ColorAdjustments } from '../core/types/color';
 import type { ChannelMode } from '../core/types/color';
 import type { CDLValues } from '../color/CDL';
+import type { ColorCurvesData } from '../color/ColorCurves';
 
 /**
  * Minimal viewer interface required by the API layer.
@@ -45,4 +46,14 @@ export interface ColorAdjustmentProvider {
 export interface CDLProvider {
   getCDL(): CDLValues;
   setCDL(cdl: CDLValues): void;
+}
+
+/**
+ * Minimal curves interface required by the API layer.
+ *
+ * Provides get/set for RGB + per-channel color curves.
+ */
+export interface CurvesProvider {
+  getCurves(): ColorCurvesData;
+  setCurves(curves: ColorCurvesData): void;
 }

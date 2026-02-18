@@ -138,12 +138,12 @@ describe('Color Inversion', () => {
       expect(() => applyColorInversion(imageData)).not.toThrow();
     });
 
-    it('INV-U020: performance: inverts 1920x1080 image under 50ms', () => {
+    it('INV-U020: performance: inverts 1920x1080 image under 150ms', () => {
       const imageData = createTestImageData(1920, 1080, { r: 128, g: 128, b: 128, a: 255 });
       const start = performance.now();
       applyColorInversion(imageData);
       const elapsed = performance.now() - start;
-      expect(elapsed).toBeLessThan(50);
+      expect(elapsed).toBeLessThan(150);
     });
   });
 

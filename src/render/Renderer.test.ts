@@ -579,6 +579,10 @@ describe('Renderer SDR Display Transfer Override (regression)', () => {
       uniform2fv: vi.fn(),
       uniform3fv: vi.fn(),
       uniform4fv: vi.fn(),
+      uniform1iv: vi.fn(),
+      uniform2iv: vi.fn(),
+      uniform3iv: vi.fn(),
+      uniform4iv: vi.fn(),
       uniformMatrix3fv: vi.fn(),
       uniformMatrix4fv: vi.fn(),
       activeTexture: vi.fn(),
@@ -768,7 +772,13 @@ describe('Renderer SDR Display Transfer Override (regression)', () => {
         uniform1i: vi.fn(),
         uniform2fv: vi.fn(),
         uniform3fv: vi.fn(),
+        uniform4fv: vi.fn(),
+        uniform1iv: vi.fn(),
+        uniform2iv: vi.fn(),
+        uniform3iv: vi.fn(),
+        uniform4iv: vi.fn(),
         uniformMatrix3fv: vi.fn(),
+        uniformMatrix4fv: vi.fn(),
         activeTexture: vi.fn(),
         bindTexture: vi.fn(),
         pixelStorei: vi.fn(),
@@ -963,6 +973,10 @@ describe('Renderer Sampler Unit Assignment (regression)', () => {
       uniform2fv: vi.fn(),
       uniform3fv: vi.fn(),
       uniform4fv: vi.fn(),
+      uniform1iv: vi.fn(),
+      uniform2iv: vi.fn(),
+      uniform3iv: vi.fn(),
+      uniform4iv: vi.fn(),
       uniformMatrix3fv: vi.fn(),
       uniformMatrix4fv: vi.fn(),
       activeTexture: vi.fn(),
@@ -1452,7 +1466,13 @@ describe('Renderer HDR Headroom Uniform', () => {
       uniform1i: vi.fn(),
       uniform2fv: vi.fn(),
       uniform3fv: vi.fn(),
+      uniform4fv: vi.fn(),
+      uniform1iv: vi.fn(),
+      uniform2iv: vi.fn(),
+      uniform3iv: vi.fn(),
+      uniform4iv: vi.fn(),
       uniformMatrix3fv: vi.fn(),
+      uniformMatrix4fv: vi.fn(),
       activeTexture: vi.fn(),
       bindTexture: vi.fn(),
       drawArrays: vi.fn(),
@@ -2559,26 +2579,21 @@ describe('Renderer texture rotation (u_texRotation)', () => {
 describe('Renderer scope tone mapping neutralization', () => {
   function prepareScopeReadbackGL(renderer: Renderer) {
     const gl = initRendererWithMockGL(renderer);
-    const glAny = gl as unknown as {
-      FRAMEBUFFER?: number;
-      VIEWPORT?: number;
-      RGBA?: number;
-      FLOAT?: number;
-      NO_ERROR?: number;
-      bindFramebuffer?: ReturnType<typeof vi.fn>;
-      getParameter?: ReturnType<typeof vi.fn>;
-      readPixels?: ReturnType<typeof vi.fn>;
-      getError?: ReturnType<typeof vi.fn>;
-    };
+    const FRAMEBUFFER = 0x8d40;
+    const VIEWPORT = 0x0ba2;
+    const RGBA = 0x1908;
+    const FLOAT = 0x1406;
+    const NO_ERROR = 0;
 
-    glAny.FRAMEBUFFER ??= 0x8d40;
-    glAny.VIEWPORT ??= 0x0ba2;
-    glAny.RGBA ??= 0x1908;
-    glAny.FLOAT ??= 0x1406;
-    glAny.NO_ERROR ??= 0;
-    glAny.bindFramebuffer = vi.fn();
-    glAny.getParameter = vi.fn((p: number) => (p === glAny.VIEWPORT ? new Int32Array([0, 0, 4, 4]) : 0));
-    glAny.readPixels = vi.fn(
+    const glExt = gl as unknown as Record<string, unknown>;
+    glExt.FRAMEBUFFER ??= FRAMEBUFFER;
+    glExt.VIEWPORT ??= VIEWPORT;
+    glExt.RGBA ??= RGBA;
+    glExt.FLOAT ??= FLOAT;
+    glExt.NO_ERROR ??= NO_ERROR;
+    glExt.bindFramebuffer = vi.fn();
+    glExt.getParameter = vi.fn((p: number) => (p === VIEWPORT ? new Int32Array([0, 0, 4, 4]) : 0));
+    glExt.readPixels = vi.fn(
       (
         _x: number,
         _y: number,
@@ -2593,7 +2608,7 @@ describe('Renderer scope tone mapping neutralization', () => {
         }
       }
     );
-    glAny.getError = vi.fn(() => glAny.NO_ERROR);
+    glExt.getError = vi.fn(() => NO_ERROR);
   }
 
   it('REN-SCOPE-TM-001: scope readback disables and restores tone mapping in HDR mode', () => {

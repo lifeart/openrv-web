@@ -23,6 +23,7 @@ const { disposeMocks, createMockClass, createAsyncDisposeMockClass } = vi.hoiste
       deactivateEyedropper = vi.fn();
       createBadge = vi.fn(() => document.createElement('div'));
       setExclusiveWith = vi.fn();
+      setTabContent = vi.fn();
     };
   }
 
@@ -110,8 +111,6 @@ vi.mock('./ui/layout/panels/LeftPanelContent', () => ({ LeftPanelContent: create
 // ContextToolbar mock: class instance via createMockClass + static helpers that produce real DOM elements
 vi.mock('./ui/components/layout/ContextToolbar', () => {
   const MockClass = createMockClass('ContextToolbar');
-  // Add instance method needed by setupTabContents
-  MockClass.prototype.setTabContent = vi.fn();
   // Static helpers used by setupTabContents to build toolbar DOM
   (MockClass as any).createDivider = () => {
     const d = document.createElement('div');

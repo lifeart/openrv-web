@@ -1014,6 +1014,7 @@ export class App {
       viewer: this.viewer,
       colorControls: this.controls.colorControls,
       cdlControl: this.controls.cdlControl,
+      curvesControl: this.controls.curvesControl,
     };
   }
 

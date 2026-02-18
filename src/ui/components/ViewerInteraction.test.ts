@@ -65,24 +65,24 @@ describe('ViewerInteraction', () => {
       expect(point!.y).toBeCloseTo(0.5);
     });
 
-    it('clamps coordinates to 0-1 range', () => {
+    it('allows coordinates outside 0-1 range', () => {
       const rect = createRect(0, 0, 100, 100);
 
       // Beyond right edge
       const pointRight = getCanvasPoint(150, 50, rect, 100, 100);
-      expect(pointRight!.x).toBe(1);
+      expect(pointRight!.x).toBe(1.5);
 
       // Beyond left edge
       const pointLeft = getCanvasPoint(-50, 50, rect, 100, 100);
-      expect(pointLeft!.x).toBe(0);
+      expect(pointLeft!.x).toBe(-0.5);
 
       // Beyond bottom edge
       const pointBottom = getCanvasPoint(50, 150, rect, 100, 100);
-      expect(pointBottom!.y).toBe(0);
+      expect(pointBottom!.y).toBe(-0.5);
 
       // Beyond top edge
       const pointTop = getCanvasPoint(50, -50, rect, 100, 100);
-      expect(pointTop!.y).toBe(1);
+      expect(pointTop!.y).toBe(1.5);
     });
 
     it('uses default pressure of 0.5', () => {

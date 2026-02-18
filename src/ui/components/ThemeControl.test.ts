@@ -180,7 +180,7 @@ describe('ThemeControl', () => {
       const el = newControl.render();
       const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
 
-      expect(button.textContent).toContain('Dark');
+      expect(button.getAttribute('aria-label')).toContain('Dark');
       newControl.dispose();
     });
 
@@ -190,7 +190,7 @@ describe('ThemeControl', () => {
       const el = newControl.render();
       const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
 
-      expect(button.textContent).toContain('Auto');
+      expect(button.getAttribute('aria-label')).toContain('Auto');
       newControl.dispose();
     });
 
@@ -200,7 +200,7 @@ describe('ThemeControl', () => {
       const el = newControl.render();
       const button = el.querySelector('[data-testid="theme-control-button"]') as HTMLButtonElement;
 
-      expect(button.textContent).toContain('Light');
+      expect(button.getAttribute('aria-label')).toContain('Light');
       newControl.dispose();
     });
   });

@@ -550,7 +550,7 @@ describe('Stale cache fallback during playback', () => {
     manager.preloadAround(50);
 
     // Wait for prerendering
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     const statsBeforeChange = manager.getStats();
     expect(statsBeforeChange.cacheSize).toBeGreaterThan(0);

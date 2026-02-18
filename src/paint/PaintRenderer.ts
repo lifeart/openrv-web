@@ -14,8 +14,12 @@ import {
 import { safeCanvasContext2D } from '../color/SafeCanvasContext';
 
 export interface RenderOptions {
-  width: number;  // Canvas width in logical pixels
-  height: number; // Canvas height in logical pixels
+  width: number;  // Image width in logical pixels
+  height: number; // Image height in logical pixels
+  canvasWidth?: number;  // Output canvas width in logical pixels (defaults to width)
+  canvasHeight?: number; // Output canvas height in logical pixels (defaults to height)
+  offsetX?: number; // Image-space X offset in output canvas pixels
+  offsetY?: number; // Image-space Y offset in output canvas pixels
   opacity?: number;
   ghostTintBefore?: string; // Tint for ghost annotations from before
   ghostTintAfter?: string;  // Tint for ghost annotations from after
@@ -71,7 +75,7 @@ export class PaintRenderer {
     annotations: Array<{ annotation: Annotation; opacity: number }>,
     options: RenderOptions
   ): void {
-    this.resize(options.width, options.height, options.dpr);
+    this.resize(options.canvasWidth ?? options.width, options.canvasHeight ?? options.height, options.dpr);
     this.clear();
 
     for (const { annotation, opacity } of annotations) {
@@ -91,6 +95,8 @@ export class PaintRenderer {
   renderStroke(stroke: PenStroke, options: RenderOptions, opacity = 1): void {
     const ctx = this.ctx;
     const { width, height } = options;
+    const offsetX = options.offsetX ?? 0;
+    const offsetY = options.offsetY ?? 0;
     const points = stroke.points;
 
     if (points.length === 0) return;
@@ -100,8 +106,8 @@ export class PaintRenderer {
 
     // Convert normalized coordinates to canvas pixels
     // Note: OpenRV uses (0,0) at bottom-left, canvas uses top-left
-    const toCanvasX = (x: number) => x * width;
-    const toCanvasY = (y: number) => (1 - y) * height; // Flip Y
+    const toCanvasX = (x: number) => offsetX + x * width;
+    const toCanvasY = (y: number) => offsetY + (1 - y) * height; // Flip Y
 
     // Set stroke style
     const [r, g, b, a] = stroke.color;
@@ -209,13 +215,15 @@ export class PaintRenderer {
   renderText(text: TextAnnotation, options: RenderOptions, opacity = 1): void {
     const ctx = this.ctx;
     const { width, height } = options;
+    const offsetX = options.offsetX ?? 0;
+    const offsetY = options.offsetY ?? 0;
 
     ctx.save();
     ctx.globalAlpha = opacity;
 
     // Convert position
-    const x = text.position.x * width;
-    const y = (1 - text.position.y) * height; // Flip Y
+    const x = offsetX + text.position.x * width;
+    const y = offsetY + (1 - text.position.y) * height; // Flip Y
 
     // Set text style
     const [r, g, b, a] = text.color;
@@ -346,6 +354,8 @@ export class PaintRenderer {
 
     const ctx = this.ctx;
     const { width, height } = options;
+    const offsetX = options.offsetX ?? 0;
+    const offsetY = options.offsetY ?? 0;
 
     // Save current state and reset transform for callout line (preserve DPR scale)
     ctx.save();
@@ -354,10 +364,10 @@ export class PaintRenderer {
     ctx.globalAlpha = opacity;
 
     // Convert positions to canvas coordinates
-    const startX = text.position.x * width;
-    const startY = (1 - text.position.y) * height;
-    const endX = text.calloutPoint.x * width;
-    const endY = (1 - text.calloutPoint.y) * height;
+    const startX = offsetX + text.position.x * width;
+    const startY = offsetY + (1 - text.position.y) * height;
+    const endX = offsetX + text.calloutPoint.x * width;
+    const endY = offsetY + (1 - text.calloutPoint.y) * height;
 
     // Set line style
     const [r, g, b, a] = text.color;
@@ -395,15 +405,17 @@ export class PaintRenderer {
   renderShape(shape: ShapeAnnotation, options: RenderOptions, opacity = 1): void {
     const ctx = this.ctx;
     const { width, height } = options;
+    const offsetX = options.offsetX ?? 0;
+    const offsetY = options.offsetY ?? 0;
 
     ctx.save();
     ctx.globalAlpha = opacity;
 
     // Convert normalized coordinates to canvas pixels
-    const x1 = shape.startPoint.x * width;
-    const y1 = (1 - shape.startPoint.y) * height; // Flip Y
-    const x2 = shape.endPoint.x * width;
-    const y2 = (1 - shape.endPoint.y) * height; // Flip Y
+    const x1 = offsetX + shape.startPoint.x * width;
+    const y1 = offsetY + (1 - shape.startPoint.y) * height; // Flip Y
+    const x2 = offsetX + shape.endPoint.x * width;
+    const y2 = offsetY + (1 - shape.endPoint.y) * height; // Flip Y
 
     // Set stroke style
     const [sr, sg, sb, sa] = shape.strokeColor;
@@ -555,10 +567,12 @@ export class PaintRenderer {
     if (!points || points.length < 2) return;
 
     const { width, height } = options;
+    const offsetX = options.offsetX ?? 0;
+    const offsetY = options.offsetY ?? 0;
 
     // Convert normalized coordinates to canvas pixels
-    const toCanvasX = (x: number) => x * width;
-    const toCanvasY = (y: number) => (1 - y) * height; // Flip Y
+    const toCanvasX = (x: number) => offsetX + x * width;
+    const toCanvasY = (y: number) => offsetY + (1 - y) * height; // Flip Y
 
     ctx.beginPath();
     ctx.moveTo(toCanvasX(points[0]!.x), toCanvasY(points[0]!.y));
@@ -590,10 +604,10 @@ export class PaintRenderer {
 
     // Ensure canvas is properly sized (don't clear - may have existing annotations)
     const dpr = options.dpr ?? 1;
-    const expectedW = Math.round(options.width * dpr);
-    const expectedH = Math.round(options.height * dpr);
+    const expectedW = Math.round((options.canvasWidth ?? options.width) * dpr);
+    const expectedH = Math.round((options.canvasHeight ?? options.height) * dpr);
     if (this.canvas.width !== expectedW || this.canvas.height !== expectedH) {
-      this.resize(options.width, options.height, dpr);
+      this.resize(options.canvasWidth ?? options.width, options.canvasHeight ?? options.height, dpr);
     }
 
     const tempStroke: PenStroke = {
@@ -628,10 +642,10 @@ export class PaintRenderer {
   ): void {
     // Ensure canvas is properly sized (don't clear - may have existing annotations)
     const dpr = options.dpr ?? 1;
-    const expectedW = Math.round(options.width * dpr);
-    const expectedH = Math.round(options.height * dpr);
+    const expectedW = Math.round((options.canvasWidth ?? options.width) * dpr);
+    const expectedH = Math.round((options.canvasHeight ?? options.height) * dpr);
     if (this.canvas.width !== expectedW || this.canvas.height !== expectedH) {
-      this.resize(options.width, options.height, dpr);
+      this.resize(options.canvasWidth ?? options.width, options.canvasHeight ?? options.height, dpr);
     }
 
     const tempShape: ShapeAnnotation = {

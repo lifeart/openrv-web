@@ -128,6 +128,8 @@ export interface ViewerConfig {
 }
 
 const log = new Logger('Viewer');
+const MIN_PAINT_OVERDRAW_PX = 128;
+const PAINT_OVERDRAW_STEP_PX = 64;
 
 export class Viewer {
   private container: HTMLElement;
@@ -162,6 +164,12 @@ export class Viewer {
   // Physical (DPR-scaled) dimensions for the GL canvas
   private physicalWidth = 0;
   private physicalHeight = 0;
+
+  // Paint overlay dimensions/offsets in logical pixels.
+  private paintLogicalWidth = 0;
+  private paintLogicalHeight = 0;
+  private paintOffsetX = 0;
+  private paintOffsetY = 0;
 
   // Drop zone
   private dropOverlay: HTMLElement;
@@ -652,7 +660,8 @@ export class Viewer {
     const dpr = window.devicePixelRatio || 1;
     this.physicalWidth = Math.max(1, Math.round(this.displayWidth * dpr));
     this.physicalHeight = Math.max(1, Math.round(this.displayHeight * dpr));
-    this.updatePaintCanvasSize(this.displayWidth, this.displayHeight);
+    const containerRect = this.getContainerRect();
+    this.updatePaintCanvasSize(this.displayWidth, this.displayHeight, containerRect.width, containerRect.height);
 
     // Draw placeholder with hi-DPI support
     this.drawPlaceholder();
@@ -687,7 +696,8 @@ export class Viewer {
     resetCanvasFromHiDPI(this.imageCanvas, this.imageCtx, width, height);
 
     // Paint canvas at PHYSICAL resolution with CSS logical sizing for retina annotations
-    this.updatePaintCanvasSize(width, height);
+    const containerRect = this.getContainerRect();
+    this.updatePaintCanvasSize(width, height, containerRect.width, containerRect.height);
 
     this.cropManager.resetOverlayCanvas(width, height);
 
@@ -701,14 +711,63 @@ export class Viewer {
   }
 
   /**
-   * Configure paint canvas at physical (DPR-scaled) resolution with CSS logical sizing.
-   * This ensures annotations render at retina quality matching the GL canvas.
+   * Configure the paint canvas with extra padding around the image so
+   * annotations can be drawn outside image bounds (OpenRV-compatible).
    */
-  private updatePaintCanvasSize(logicalWidth: number, logicalHeight: number): void {
-    this.paintCanvas.width = this.physicalWidth;
-    this.paintCanvas.height = this.physicalHeight;
-    this.paintCanvas.style.width = `${logicalWidth}px`;
-    this.paintCanvas.style.height = `${logicalHeight}px`;
+  private updatePaintCanvasSize(
+    logicalWidth: number,
+    logicalHeight: number,
+    containerWidth?: number,
+    containerHeight?: number,
+  ): void {
+    const viewW = (containerWidth && containerWidth > 0) ? containerWidth : logicalWidth;
+    const viewH = (containerHeight && containerHeight > 0) ? containerHeight : logicalHeight;
+
+    const centerX = (viewW - logicalWidth) / 2 + this.transformManager.panX;
+    const centerY = (viewH - logicalHeight) / 2 + this.transformManager.panY;
+
+    const visibleLeft = Math.max(0, centerX);
+    const visibleTop = Math.max(0, centerY);
+    const visibleRight = Math.max(0, viewW - (centerX + logicalWidth));
+    const visibleBottom = Math.max(0, viewH - (centerY + logicalHeight));
+
+    const maxPadX = viewW + MIN_PAINT_OVERDRAW_PX;
+    const maxPadY = viewH + MIN_PAINT_OVERDRAW_PX;
+    const snap = (v: number, step: number) => Math.ceil(v / step) * step;
+
+    const leftPad = Math.min(maxPadX, snap(Math.max(MIN_PAINT_OVERDRAW_PX, visibleLeft), PAINT_OVERDRAW_STEP_PX));
+    const rightPad = Math.min(maxPadX, snap(Math.max(MIN_PAINT_OVERDRAW_PX, visibleRight), PAINT_OVERDRAW_STEP_PX));
+    const topPad = Math.min(maxPadY, snap(Math.max(MIN_PAINT_OVERDRAW_PX, visibleTop), PAINT_OVERDRAW_STEP_PX));
+    const bottomPad = Math.min(maxPadY, snap(Math.max(MIN_PAINT_OVERDRAW_PX, visibleBottom), PAINT_OVERDRAW_STEP_PX));
+
+    const nextLogicalW = Math.max(1, Math.round(logicalWidth + leftPad + rightPad));
+    const nextLogicalH = Math.max(1, Math.round(logicalHeight + topPad + bottomPad));
+    const dpr = window.devicePixelRatio || 1;
+    const nextPhysicalW = Math.max(1, Math.round(nextLogicalW * dpr));
+    const nextPhysicalH = Math.max(1, Math.round(nextLogicalH * dpr));
+
+    if (
+      this.paintLogicalWidth === nextLogicalW &&
+      this.paintLogicalHeight === nextLogicalH &&
+      this.paintOffsetX === leftPad &&
+      this.paintOffsetY === topPad &&
+      this.paintCanvas.width === nextPhysicalW &&
+      this.paintCanvas.height === nextPhysicalH
+    ) {
+      return;
+    }
+
+    this.paintLogicalWidth = nextLogicalW;
+    this.paintLogicalHeight = nextLogicalH;
+    this.paintOffsetX = leftPad;
+    this.paintOffsetY = topPad;
+
+    this.paintCanvas.width = nextPhysicalW;
+    this.paintCanvas.height = nextPhysicalH;
+    this.paintCanvas.style.width = `${nextLogicalW}px`;
+    this.paintCanvas.style.height = `${nextLogicalH}px`;
+    this.paintCanvas.style.left = `${-leftPad}px`;
+    this.paintCanvas.style.top = `${-topPad}px`;
     this.paintCtx.setTransform(1, 0, 0, 1, 0, 0);
   }
 
@@ -800,7 +859,8 @@ export class Viewer {
         this.physicalWidth = Math.max(1, Math.round(this.displayWidth * dpr));
         this.physicalHeight = Math.max(1, Math.round(this.displayHeight * dpr));
         this.glRendererManager.resizeIfActive(this.physicalWidth, this.physicalHeight);
-        this.updatePaintCanvasSize(this.displayWidth, this.displayHeight);
+        const containerRect = this.getContainerRect();
+        this.updatePaintCanvasSize(this.displayWidth, this.displayHeight, containerRect.width, containerRect.height);
         this.scheduleRender();
       }
       // Re-register for the new DPR value
@@ -1872,6 +1932,11 @@ export class Viewer {
   private renderPaint(): void {
     if (this.displayWidth === 0 || this.displayHeight === 0) return;
 
+    // Keep paint surface in sync with current viewport and pan offset so
+    // off-image annotations remain visible around the image area.
+    const containerRect = this.getContainerRect();
+    this.updatePaintCanvasSize(this.displayWidth, this.displayHeight, containerRect.width, containerRect.height);
+
     const ctx = this.paintCtx;
     // Clear at physical resolution (no DPR scale on paint canvas context)
     ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -1890,6 +1955,10 @@ export class Viewer {
     this.paintRenderer.renderAnnotations(annotations, {
       width: this.displayWidth,
       height: this.displayHeight,
+      canvasWidth: this.paintLogicalWidth,
+      canvasHeight: this.paintLogicalHeight,
+      offsetX: this.paintOffsetX,
+      offsetY: this.paintOffsetY,
       dpr,
     });
 

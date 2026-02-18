@@ -1257,17 +1257,16 @@ describe('Viewer', () => {
   describe('paint canvas retina support', () => {
     it('VWR-060: paint canvas uses physical dimensions at DPR=1', () => {
       const t = testable(viewer);
-      // At DPR=1, physical = logical
-      expect(t.paintCanvas.width).toBe(t.physicalWidth);
-      expect(t.paintCanvas.height).toBe(t.physicalHeight);
-      expect(t.paintCanvas.width).toBe(t.displayWidth);
-      expect(t.paintCanvas.height).toBe(t.displayHeight);
+      expect(t.paintCanvas.width).toBeGreaterThan(t.physicalWidth);
+      expect(t.paintCanvas.height).toBeGreaterThan(t.physicalHeight);
+      expect(parseFloat(t.paintCanvas.style.left)).toBeLessThan(0);
+      expect(parseFloat(t.paintCanvas.style.top)).toBeLessThan(0);
     });
 
     it('VWR-061: paint canvas has CSS logical sizing set', () => {
       const t = testable(viewer);
-      expect(t.paintCanvas.style.width).toBe(`${t.displayWidth}px`);
-      expect(t.paintCanvas.style.height).toBe(`${t.displayHeight}px`);
+      expect(parseFloat(t.paintCanvas.style.width)).toBeGreaterThan(t.displayWidth);
+      expect(parseFloat(t.paintCanvas.style.height)).toBeGreaterThan(t.displayHeight);
     });
 
     it('VWR-062: paint canvas uses DPR-scaled dimensions at DPR=2', () => {
@@ -1283,12 +1282,12 @@ describe('Viewer', () => {
         // Paint canvas physical dimensions should be 2x logical
         expect(t.physicalWidth).toBe(Math.round(t.displayWidth * 2));
         expect(t.physicalHeight).toBe(Math.round(t.displayHeight * 2));
-        expect(t.paintCanvas.width).toBe(t.physicalWidth);
-        expect(t.paintCanvas.height).toBe(t.physicalHeight);
+        expect(t.paintCanvas.width).toBeGreaterThan(t.physicalWidth);
+        expect(t.paintCanvas.height).toBeGreaterThan(t.physicalHeight);
 
-        // CSS dimensions should be logical
-        expect(t.paintCanvas.style.width).toBe(`${t.displayWidth}px`);
-        expect(t.paintCanvas.style.height).toBe(`${t.displayHeight}px`);
+        // CSS dimensions should include annotation overdraw padding
+        expect(parseFloat(t.paintCanvas.style.width)).toBeGreaterThan(t.displayWidth);
+        expect(parseFloat(t.paintCanvas.style.height)).toBeGreaterThan(t.displayHeight);
 
         viewer2.dispose();
       } finally {
@@ -1313,10 +1312,10 @@ describe('Viewer', () => {
         expect(t.displayHeight).toBe(600);
         expect(t.physicalWidth).toBe(1600);
         expect(t.physicalHeight).toBe(1200);
-        expect(t.paintCanvas.width).toBe(1600);
-        expect(t.paintCanvas.height).toBe(1200);
-        expect(t.paintCanvas.style.width).toBe('800px');
-        expect(t.paintCanvas.style.height).toBe('600px');
+        expect(t.paintCanvas.width).toBeGreaterThan(1600);
+        expect(t.paintCanvas.height).toBeGreaterThan(1200);
+        expect(parseFloat(t.paintCanvas.style.width)).toBeGreaterThan(800);
+        expect(parseFloat(t.paintCanvas.style.height)).toBeGreaterThan(600);
 
         viewer2.dispose();
       } finally {
@@ -1340,8 +1339,9 @@ describe('Viewer', () => {
         const paintArea = t.paintCanvas.width * t.paintCanvas.height;
         const dprSquared = 4; // 2^2
 
-        // Paint canvas should have DPR^2 times the pixels of the logical image canvas
-        expect(paintArea).toBe(imageArea * dprSquared);
+        // Paint canvas should have at least DPR^2 times the pixels of the logical image canvas.
+        // It can be larger because we keep an annotation overdraw margin.
+        expect(paintArea).toBeGreaterThanOrEqual(imageArea * dprSquared);
 
         viewer2.dispose();
       } finally {
@@ -1353,10 +1353,9 @@ describe('Viewer', () => {
       const t = testable(viewer);
       t.setCanvasSize(1024, 768);
 
-      // Image canvas has no CSS styles (intrinsic = canvas.width/height)
-      // Paint canvas CSS should match image canvas intrinsic size
-      expect(t.paintCanvas.style.width).toBe(`${t.imageCanvas.width}px`);
-      expect(t.paintCanvas.style.height).toBe(`${t.imageCanvas.height}px`);
+      // Paint canvas includes overdraw around the image.
+      expect(parseFloat(t.paintCanvas.style.width)).toBeGreaterThanOrEqual(t.imageCanvas.width);
+      expect(parseFloat(t.paintCanvas.style.height)).toBeGreaterThanOrEqual(t.imageCanvas.height);
     });
   });
 

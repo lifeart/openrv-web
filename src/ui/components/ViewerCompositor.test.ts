@@ -23,8 +23,8 @@ function createMockContext2D(): CanvasRenderingContext2D {
 describe('ViewerCompositor', () => {
   it('VCOM-001: renderWithWipe applies transform for rotated sources', () => {
     const imageCtx = createMockContext2D();
-    const compositor = Object.create(ViewerCompositor.prototype) as ViewerCompositor & { ctx: unknown };
-    compositor.ctx = {
+    const compositor = Object.create(ViewerCompositor.prototype) as ViewerCompositor;
+    (compositor as unknown as Record<string, unknown>)['ctx'] = {
       getWipeManager: () => ({ mode: 'horizontal', position: 0.5 }),
       getImageCtx: () => imageCtx,
       getTransform: () => ({
@@ -36,9 +36,9 @@ describe('ViewerCompositor', () => {
       }),
     };
 
-    const source = document.createElement('canvas');
-    source.width = 640;
-    source.height = 360;
+    const source = document.createElement('img');
+    Object.defineProperty(source, 'width', { value: 640, writable: true });
+    Object.defineProperty(source, 'height', { value: 360, writable: true });
     const filterCache: FilterStringCache = {
       filterString: null,
       cachedAdjustments: null,
@@ -57,8 +57,8 @@ describe('ViewerCompositor', () => {
 
   it('VCOM-002: renderGhostFrames applies transform for rotated sources', () => {
     const imageCtx = createMockContext2D();
-    const compositor = Object.create(ViewerCompositor.prototype) as ViewerCompositor & { ctx: unknown };
-    compositor.ctx = {
+    const compositor = Object.create(ViewerCompositor.prototype) as ViewerCompositor;
+    (compositor as unknown as Record<string, unknown>)['ctx'] = {
       getImageCtx: () => imageCtx,
       getSession: () => ({
         currentFrame: 2,

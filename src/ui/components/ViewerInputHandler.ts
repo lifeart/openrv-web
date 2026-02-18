@@ -701,7 +701,19 @@ export class ViewerInputHandler {
     const paintRenderer = this.ctx.getPaintRenderer();
     const session = this.ctx.getSession();
     const dpr = window.devicePixelRatio || 1;
-    const renderOptions = { width: dw, height: dh, dpr };
+    const parsePx = (value: string): number => {
+      const n = Number.parseFloat(value);
+      return Number.isFinite(n) ? n : 0;
+    };
+    const renderOptions = {
+      width: dw,
+      height: dh,
+      canvasWidth: paintCanvas.width / dpr,
+      canvasHeight: paintCanvas.height / dpr,
+      offsetX: -Math.min(0, parsePx(paintCanvas.style.left)),
+      offsetY: -Math.min(0, parsePx(paintCanvas.style.top)),
+      dpr,
+    };
 
     const annotations = paintEngine.getAnnotationsWithGhost(session.currentFrame);
     paintRenderer.renderAnnotations(annotations, renderOptions);
@@ -737,7 +749,19 @@ export class ViewerInputHandler {
     const paintRenderer = this.ctx.getPaintRenderer();
     const session = this.ctx.getSession();
     const dpr = window.devicePixelRatio || 1;
-    const renderOptions = { width: dw, height: dh, dpr };
+    const parsePx = (value: string): number => {
+      const n = Number.parseFloat(value);
+      return Number.isFinite(n) ? n : 0;
+    };
+    const renderOptions = {
+      width: dw,
+      height: dh,
+      canvasWidth: paintCanvas.width / dpr,
+      canvasHeight: paintCanvas.height / dpr,
+      offsetX: -Math.min(0, parsePx(paintCanvas.style.left)),
+      offsetY: -Math.min(0, parsePx(paintCanvas.style.top)),
+      dpr,
+    };
 
     const annotations = paintEngine.getAnnotationsWithGhost(session.currentFrame);
     paintRenderer.renderAnnotations(annotations, renderOptions);

@@ -35,9 +35,11 @@ export function getCanvasPoint(
   const scaleX = displayWidth / canvasRect.width;
   const scaleY = displayHeight / canvasRect.height;
 
-  // Calculate normalized position and clamp to valid range
-  const x = Math.max(0, Math.min(1, (canvasX * scaleX) / displayWidth));
-  const y = Math.max(0, Math.min(1, 1 - (canvasY * scaleY) / displayHeight));
+  // Calculate normalized position in image space.
+  // Coordinates are intentionally not clamped so annotations can exist
+  // outside the image bounds (OpenRV-compatible behavior).
+  const x = (canvasX * scaleX) / displayWidth;
+  const y = 1 - (canvasY * scaleY) / displayHeight;
 
   return { x, y, pressure };
 }
