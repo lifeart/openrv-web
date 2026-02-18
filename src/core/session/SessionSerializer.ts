@@ -98,6 +98,8 @@ export class SessionSerializer {
       backgroundPattern: viewer.getBackgroundPatternState(),
       ...(components.playlistManager ? { playlist: components.playlistManager.getState() } : {}),
       notes: session.noteManager.toSerializable(),
+      versionGroups: session.versionManager.toSerializable(),
+      statuses: session.statusManager.toSerializable(),
     };
   }
 
@@ -245,6 +247,16 @@ export class SessionSerializer {
     // Restore notes
     if (migrated.notes && migrated.notes.length > 0) {
       session.noteManager.fromSerializable(migrated.notes);
+    }
+
+    // Restore version groups
+    if (migrated.versionGroups && migrated.versionGroups.length > 0) {
+      session.versionManager.fromSerializable(migrated.versionGroups);
+    }
+
+    // Restore statuses
+    if (migrated.statuses && migrated.statuses.length > 0) {
+      session.statusManager.fromSerializable(migrated.statuses);
     }
 
     // LUT must be loaded separately (file reference)

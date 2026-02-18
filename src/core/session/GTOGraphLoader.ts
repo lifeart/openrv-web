@@ -9,6 +9,9 @@ import type { GTODTO } from 'gto-js';
 import { Graph } from '../graph/Graph';
 import { NodeFactory } from '../../nodes/base/NodeFactory';
 import type { Note } from './NoteManager';
+import type { VersionGroup, VersionEntry } from './VersionManager';
+import { VALID_STATUSES } from './StatusManager';
+import type { StatusEntry, ShotStatus } from './StatusManager';
 import type { IPNode } from '../../nodes/base/IPNode';
 
 /**
@@ -73,6 +76,10 @@ export interface GTOParseResult {
     membershipContains?: string[];
     /** Notes/comments */
     notes?: Note[];
+    /** Version groups */
+    versionGroups?: VersionGroup[];
+    /** Shot statuses */
+    statuses?: StatusEntry[];
   };
 }
 
@@ -421,6 +428,53 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
         }
       }
     }
+
+    // Versions component
+    const versionsComp = session.component('versions');
+    if (versionsComp?.exists()) {
+      const groupCount = versionsComp.property('groupCount').value() as number;
+      if (typeof groupCount === 'number' && groupCount > 0) {
+        const versionGroups: VersionGroup[] = [];
+        for (let g = 0; g < groupCount; g++) {
+          const gp = `group_${String(g).padStart(3, '0')}`;
+          const id = versionsComp.property(`${gp}_id`).value() as string;
+          const shotName = versionsComp.property(`${gp}_shotName`).value() as string;
+          const activeVersionIndex = versionsComp.property(`${gp}_activeVersionIndex`).value() as number;
+          const versionCount = versionsComp.property(`${gp}_versionCount`).value() as number;
+
+          if (typeof id === 'string' && id.length > 0 && typeof versionCount === 'number') {
+            const versions: VersionEntry[] = [];
+            for (let v = 1; v <= versionCount; v++) {
+              const vp = `${gp}_v${String(v).padStart(3, '0')}`;
+              const versionNumber = versionsComp.property(`${vp}_versionNumber`).value() as number;
+              const sourceIndex = versionsComp.property(`${vp}_sourceIndex`).value() as number;
+              const label = versionsComp.property(`${vp}_label`).value() as string;
+              const addedAt = versionsComp.property(`${vp}_addedAt`).value() as string;
+
+              if (typeof versionNumber === 'number') {
+                versions.push({
+                  versionNumber,
+                  sourceIndex: typeof sourceIndex === 'number' ? sourceIndex : 0,
+                  label: typeof label === 'string' ? label : `v${versionNumber}`,
+                  addedAt: typeof addedAt === 'string' ? addedAt : '',
+                });
+              }
+            }
+            if (versions.length > 0) {
+              versionGroups.push({
+                id,
+                shotName: typeof shotName === 'string' ? shotName : '',
+                versions,
+                activeVersionIndex: (typeof activeVersionIndex === 'number' && activeVersionIndex >= 0 && activeVersionIndex < versions.length) ? activeVersionIndex : versions.length - 1,
+              });
+            }
+          }
+        }
+        if (versionGroups.length > 0) {
+          sessionInfo.versionGroups = versionGroups;
+        }
+      }
+    }
   }
 
   // Collect all objects and their connections
@@ -475,6 +529,7 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
   // source nodes (e.g., 'sourceGroup000000_source'). The connections object
   // references the group name, not the source node directly.
   const sourceGroupChildren = new Map<string, string[]>();
+  const parsedStatuses: StatusEntry[] = [];
   for (const obj of allObjects) {
     if (obj.protocol === 'RVSourceGroup') {
       // Find child source nodes by naming convention: <groupName>_source
@@ -489,7 +544,31 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
       if (children.length > 0) {
         sourceGroupChildren.set(groupName, children);
       }
+
+      // Parse review component for shot status
+      const reviewComp = obj.component('review');
+      if (reviewComp?.exists()) {
+        const statusMatch = groupName.match(/sourceGroup(\d+)/);
+        if (statusMatch) {
+          const sourceIndex = parseInt(statusMatch[1]!, 10);
+          const status = reviewComp.property('status').value() as string;
+          const setBy = reviewComp.property('setBy').value() as string;
+          const setAt = reviewComp.property('setAt').value() as string;
+
+          if (typeof status === 'string' && (VALID_STATUSES as readonly string[]).includes(status)) {
+            parsedStatuses.push({
+              sourceIndex,
+              status: status as ShotStatus,
+              setBy: typeof setBy === 'string' ? setBy : '',
+              setAt: typeof setAt === 'string' ? setAt : '',
+            });
+          }
+        }
+      }
     }
+  }
+  if (parsedStatuses.length > 0) {
+    sessionInfo.statuses = parsedStatuses;
   }
 
   // Build a map from rhs -> lhs[] for connection-based inputs (fallback)

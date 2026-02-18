@@ -9,6 +9,7 @@ import { ColorSerializer } from './serializers/ColorSerializer';
 import { TransformSerializer } from './serializers/TransformSerializer';
 import { PaintSerializer } from './serializers/PaintSerializer';
 import { FilterSerializer } from './serializers/FilterSerializer';
+import { STATUS_COLORS } from './StatusManager';
 
 // Re-export all settings interfaces for backward compatibility
 export type {
@@ -97,6 +98,8 @@ export interface SessionExportOptions {
   comment?: string;
   /** Whether to include source groups (default: true) */
   includeSources?: boolean;
+  /** OCIO settings to write as RVOCIO node (if provided) */
+  ocioSettings?: OCIOSettings;
 }
 
 /**
@@ -419,7 +422,7 @@ export class SessionGTOExporter {
     paintEngine: PaintEngine,
     options: SessionExportOptions = {}
   ): GTOData {
-    const { name = 'rv', comment = '', includeSources = true } = options;
+    const { name = 'rv', comment = '', includeSources = true, ocioSettings } = options;
     const viewNode = 'defaultSequence';
 
     const objects: ObjectData[] = [];
@@ -439,6 +442,27 @@ export class SessionGTOExporter {
         sourceGroupNames.push(groupName);
 
         const sourceObjects = this.buildSourceGroupObjects(source, groupName);
+
+        // Add review status component to source group if status is set
+        const statusEntry = session.statusManager.getStatusEntry(i);
+        if (statusEntry) {
+          const groupObj = sourceObjects[0]!;
+          const reviewBuilder = new GTOBuilder();
+          reviewBuilder
+            .object('_temp', 'RVSourceGroup', 1)
+            .component('review')
+            .string('status', statusEntry.status)
+            .string('statusColor', STATUS_COLORS[statusEntry.status] ?? '#94a3b8')
+            .string('setBy', statusEntry.setBy)
+            .string('setAt', statusEntry.setAt)
+            .end()
+            .end();
+          const reviewComp = reviewBuilder.build().objects[0]!.components['review'];
+          if (reviewComp) {
+            (groupObj.components as Record<string, unknown>)['review'] = reviewComp;
+          }
+        }
+
         objects.push(...sourceObjects);
       }
     }
@@ -469,6 +493,12 @@ export class SessionGTOExporter {
     // 5. Build paint/annotations object
     const paintObject = this.buildPaintObject(session, paintEngine, 'annotations');
     objects.push(paintObject);
+
+    // 6. Build RVOCIO object if OCIO settings provided
+    if (ocioSettings) {
+      const ocioObject = this.buildOCIOObject('display_ocio', ocioSettings);
+      objects.push(ocioObject);
+    }
 
     return {
       version: 4,
@@ -1513,6 +1543,29 @@ export class SessionGTOExporter {
       notesComp.end();
     }
 
+    // Versions component
+    const versionGroups = session.versionManager.getGroups();
+    if (versionGroups.length > 0) {
+      const versionsComp = obj
+        .component('versions')
+        .int('groupCount', versionGroups.length);
+      versionGroups.forEach((group, gIdx) => {
+        const gp = `group_${String(gIdx).padStart(3, '0')}`;
+        versionsComp.string(`${gp}_id`, group.id);
+        versionsComp.string(`${gp}_shotName`, group.shotName);
+        versionsComp.int(`${gp}_activeVersionIndex`, group.activeVersionIndex);
+        versionsComp.int(`${gp}_versionCount`, group.versions.length);
+        group.versions.forEach((ver, vIdx) => {
+          const vp = `${gp}_v${String(vIdx + 1).padStart(3, '0')}`;
+          versionsComp.int(`${vp}_versionNumber`, ver.versionNumber);
+          versionsComp.int(`${vp}_sourceIndex`, ver.sourceIndex);
+          versionsComp.string(`${vp}_label`, ver.label);
+          versionsComp.string(`${vp}_addedAt`, ver.addedAt);
+        });
+      });
+      versionsComp.end();
+    }
+
     obj.end();
 
     return builder.build().objects[0]!;
@@ -1637,9 +1690,54 @@ export class SessionGTOExporter {
           // Remove stale notes component when all notes deleted
           delete components['notes'];
         }
+
+        // Update versions component — rebuild from scratch to avoid stale slots
+        const versionGroups = session.versionManager.getGroups();
+        if (versionGroups.length > 0) {
+          delete components['versions'];
+          const versionsComp = this.findOrAddComponent(obj, 'versions');
+          this.updateProperty(versionsComp, 'groupCount', versionGroups.length);
+          versionGroups.forEach((group, gIdx) => {
+            const gp = `group_${String(gIdx).padStart(3, '0')}`;
+            this.updateProperty(versionsComp, `${gp}_id`, group.id);
+            this.updateProperty(versionsComp, `${gp}_shotName`, group.shotName);
+            this.updateProperty(versionsComp, `${gp}_activeVersionIndex`, group.activeVersionIndex);
+            this.updateProperty(versionsComp, `${gp}_versionCount`, group.versions.length);
+            group.versions.forEach((ver, vIdx) => {
+              const vp = `${gp}_v${String(vIdx + 1).padStart(3, '0')}`;
+              this.updateProperty(versionsComp, `${vp}_versionNumber`, ver.versionNumber);
+              this.updateProperty(versionsComp, `${vp}_sourceIndex`, ver.sourceIndex);
+              this.updateProperty(versionsComp, `${vp}_label`, ver.label);
+              this.updateProperty(versionsComp, `${vp}_addedAt`, ver.addedAt);
+            });
+          });
+        } else if (components && 'versions' in components) {
+          delete components['versions'];
+        }
       }
 
-      // 2. Update RVFileSource paths
+      // 2. Update RVSourceGroup review status
+      if (obj.protocol === 'RVSourceGroup') {
+        // Extract source index from group name (e.g., 'sourceGroup000000' → 0)
+        const match = obj.name.match(/sourceGroup(\d+)/);
+        if (match) {
+          const sourceIndex = parseInt(match[1]!, 10);
+          const statusEntry = session.statusManager.getStatusEntry(sourceIndex);
+          const components = obj.components as Record<string, unknown>;
+          if (statusEntry) {
+            delete components['review'];
+            const reviewComp = this.findOrAddComponent(obj, 'review');
+            this.updateProperty(reviewComp, 'status', statusEntry.status);
+            this.updateProperty(reviewComp, 'statusColor', STATUS_COLORS[statusEntry.status] ?? '#94a3b8');
+            this.updateProperty(reviewComp, 'setBy', statusEntry.setBy);
+            this.updateProperty(reviewComp, 'setAt', statusEntry.setAt);
+          } else if (components && 'review' in components) {
+            delete components['review'];
+          }
+        }
+      }
+
+      // 3. Update RVFileSource paths
       if (obj.protocol === 'RVFileSource') {
         const node = session.graph?.getNode(obj.name);
         if (node && node.type === 'RVFileSource') {

@@ -39,6 +39,7 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
   private isVisible = false;
   private draggedClipId: string | null = null;
   private exclusivePanel: ExclusivePanel | null = null;
+  private activeClipId: string | null = null;
 
   constructor(playlistManager: PlaylistManager) {
     super();
@@ -338,6 +339,7 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
   }
 
   private createClipItem(clip: PlaylistClip, index: number): HTMLElement {
+    const isActive = clip.id === this.activeClipId;
     const item = document.createElement('div');
     item.className = 'playlist-clip-item';
     item.dataset.clipId = clip.id;
@@ -345,9 +347,10 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
     item.style.cssText = `
       padding: 10px 12px;
       margin-bottom: 6px;
-      border: 1px solid var(--border-primary);
+      border: 1px solid ${isActive ? 'var(--accent-primary)' : 'var(--border-primary)'};
+      border-left: 3px solid ${isActive ? 'var(--accent-primary)' : 'transparent'};
       border-radius: 6px;
-      background: var(--bg-primary);
+      background: ${isActive ? 'rgba(var(--accent-primary-rgb), 0.08)' : 'var(--bg-primary)'};
       cursor: grab;
       transition: all 0.12s ease;
     `;
@@ -554,12 +557,16 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
 
     // Hover effects
     item.addEventListener('mouseenter', () => {
-      item.style.borderColor = 'var(--border-hover)';
-      item.style.background = 'var(--bg-hover)';
+      if (!isActive) {
+        item.style.borderColor = 'var(--border-hover)';
+        item.style.background = 'var(--bg-hover)';
+      }
     });
     item.addEventListener('mouseleave', () => {
-      item.style.borderColor = 'var(--border-primary)';
-      item.style.background = 'var(--bg-primary)';
+      if (!isActive) {
+        item.style.borderColor = 'var(--border-primary)';
+        item.style.background = 'var(--bg-primary)';
+      }
     });
 
     return item;
@@ -616,6 +623,20 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
 
   isOpen(): boolean {
     return this.isVisible;
+  }
+
+  /** Update the currently active/playing clip and re-render to highlight it */
+  setActiveClip(clipId: string | null): void {
+    if (this.activeClipId === clipId) return;
+    this.activeClipId = clipId;
+    if (this.isVisible) {
+      this.renderList();
+      // Auto-scroll to the active clip
+      if (clipId) {
+        const activeEl = this.listContainer.querySelector(`[data-clip-id="${clipId}"]`) as HTMLElement | null;
+        activeEl?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
   }
 
   render(): HTMLElement {

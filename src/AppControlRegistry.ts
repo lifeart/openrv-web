@@ -50,6 +50,7 @@ import { ColorInversionToggle } from './ui/components/ColorInversionToggle';
 import { HistoryPanel } from './ui/components/HistoryPanel';
 import { InfoPanel } from './ui/components/InfoPanel';
 import { MarkerListPanel } from './ui/components/MarkerListPanel';
+import { NotePanel } from './ui/components/NotePanel';
 import { CacheIndicator } from './ui/components/CacheIndicator';
 import { TextFormattingToolbar } from './ui/components/TextFormattingToolbar';
 import { AutoSaveManager } from './core/session/AutoSaveManager';
@@ -144,6 +145,7 @@ export class AppControlRegistry {
   readonly historyPanel: HistoryPanel;
   readonly infoPanel: InfoPanel;
   readonly markerListPanel: MarkerListPanel;
+  readonly notePanel: NotePanel;
 
   // Layout panel content
   readonly rightPanelContent: RightPanelContent;
@@ -234,6 +236,7 @@ export class AppControlRegistry {
     this.historyPanel = new HistoryPanel(getGlobalHistoryManager());
     this.infoPanel = new InfoPanel();
     this.markerListPanel = new MarkerListPanel(session);
+    this.notePanel = new NotePanel(session);
 
     // --- Layout panel content ---
     this.rightPanelContent = new RightPanelContent(this.scopesControl);
@@ -575,6 +578,18 @@ export class AppControlRegistry {
       setButtonActive(markersButton, visible, 'ghost');
     }));
 
+    // Notes panel toggle button
+    const notesButton = ContextToolbar.createButton('Notes', () => {
+      this.notePanel.toggle();
+    }, { title: 'Toggle notes panel (Shift+Alt+N)', icon: 'note' });
+    notesButton.dataset.testid = 'notes-toggle-button';
+    annotateContent.appendChild(notesButton);
+
+    // Update button state when visibility changes
+    this.registryUnsubscribers.push(this.notePanel.on('visibilityChanged', (visible) => {
+      setButtonActive(notesButton, visible, 'ghost');
+    }));
+
     contextToolbar.setTabContent('annotate', annotateContent);
   }
 
@@ -610,6 +625,7 @@ export class AppControlRegistry {
     this.historyPanel.dispose();
     this.infoPanel.dispose();
     this.markerListPanel.dispose();
+    this.notePanel.dispose();
     this.rightPanelContent.dispose();
     this.leftPanelContent.dispose();
     this.cacheIndicator.dispose();

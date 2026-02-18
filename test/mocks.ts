@@ -99,6 +99,7 @@ export function createMockRendererGL(
     deleteProgram: vi.fn(),
     texParameteri: vi.fn(),
     texImage2D: vi.fn(),
+    texImage3D: vi.fn(),
     isContextLost: vi.fn(() => false),
     // Constants
     VERTEX_SHADER: 0x8b31,
@@ -122,6 +123,10 @@ export function createMockRendererGL(
     RGBA: 0x1908,
     UNSIGNED_BYTE: 0x1401,
     RGBA16F: 0x881a,
+    RGBA32F: 0x8814,
+    TEXTURE_3D: 0x806f,
+    TEXTURE_WRAP_R: 0x8072,
+    TEXTURE3: 0x84c3,
   } as unknown as WebGL2RenderingContext;
 
   return gl;

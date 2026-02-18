@@ -305,6 +305,140 @@ describe('CDL', () => {
     });
   });
 
+  describe('HDR behavior', () => {
+    it('CDL-HDR-001: applyCDL() preserves values > 255 (HDR super-whites)', () => {
+      const cdl: CDLValues = {
+        slope: { r: 2, g: 2, b: 2 },
+        offset: { r: 0, g: 0, b: 0 },
+        power: { r: 1, g: 1, b: 1 },
+        saturation: 1,
+      };
+      // Input 204 ≈ 0.8 normalized; slope=2 → 1.6 normalized → 408
+      const result = applyCDL(204, 204, 204, cdl);
+      expect(result.r).toBeGreaterThan(255);
+      expect(result.g).toBeGreaterThan(255);
+      expect(result.b).toBeGreaterThan(255);
+    });
+
+    it('CDL-HDR-002: applyCDL() with slope=2.0 on input 0.8 produces ~1.6 (not clamped)', () => {
+      // 0.8 normalized = 204 in 0-255 range
+      const result = applyCDLToValue(204, 2, 0, 1);
+      // Expected: (204/255) * 2 * 255 = 408
+      expect(result).toBeCloseTo(408, 0);
+      expect(result).toBeGreaterThan(255);
+    });
+
+    it('CDL-HDR-003: applyCDL() with negative after SOP is clamped to 0 (not NaN)', () => {
+      // Large negative offset forces value below 0 before power
+      const result = applyCDLToValue(10, 1, -0.5, 2);
+      expect(result).toBe(0);
+      expect(Number.isNaN(result)).toBe(false);
+    });
+
+    it('CDL-HDR-004: applySaturation() preserves values > 255', () => {
+      // High-value input simulating HDR post-SOP data
+      const result = applySaturation(400, 200, 100, 1.2);
+      // Red should exceed 255 (pushed further from luma by saturation > 1)
+      expect(result.r).toBeGreaterThan(255);
+    });
+
+    it('CDL-HDR-005: applySaturation() does NOT clamp to 255', () => {
+      // With saturation=1.0, values should pass through unchanged
+      const result = applySaturation(500, 300, 100, 1);
+      expect(result.r).toBe(500);
+      expect(result.g).toBe(300);
+      expect(result.b).toBe(100);
+    });
+
+    it('CDL-HDR-006: applySaturation() clamps negatives to 0', () => {
+      // High saturation on near-zero channel can push it negative
+      const result = applySaturation(255, 0, 0, 3);
+      // Green and blue are pushed below 0 by high saturation
+      expect(result.g).toBe(0);
+      expect(result.b).toBe(0);
+      expect(result.r).toBeGreaterThan(0);
+    });
+
+    it('CDL-HDR-007: CPU CDL matches GPU formula for standard [0,1] inputs', () => {
+      // GPU formula: out = pow(max(in * slope + offset, 0), power)
+      const testCases = [
+        { input: 128, slope: 1.2, offset: 0.05, power: 0.9 },
+        { input: 64, slope: 0.8, offset: -0.02, power: 1.1 },
+        { input: 200, slope: 1.5, offset: 0.1, power: 0.8 },
+      ];
+
+      for (const { input, slope, offset, power } of testCases) {
+        const cpuResult = applyCDLToValue(input, slope, offset, power);
+        // Manually compute GPU formula
+        const normalized = input / 255;
+        const sopResult = Math.max(normalized * slope + offset, 0);
+        const gpuResult = Math.pow(sopResult, power) * 255;
+        expect(cpuResult).toBeCloseTo(gpuResult, 4);
+      }
+    });
+
+    it('CDL-HDR-008: CPU CDL matches GPU formula for HDR inputs [0, 4.0]', () => {
+      // Test with values that produce HDR output (>1.0 normalized, >255 in 0-255 range)
+      const testCases = [
+        { input: 255, slope: 2.0, offset: 0.5, power: 1.0 },   // → ~2.5 normalized
+        { input: 200, slope: 3.0, offset: 0.0, power: 0.8 },   // → high HDR
+        { input: 255, slope: 4.0, offset: 0.0, power: 1.2 },   // → ~4.0^1.2
+      ];
+
+      for (const { input, slope, offset, power } of testCases) {
+        const cpuResult = applyCDLToValue(input, slope, offset, power);
+        // GPU formula
+        const normalized = input / 255;
+        const sopResult = Math.max(normalized * slope + offset, 0);
+        const gpuResult = Math.pow(sopResult, power) * 255;
+        expect(cpuResult).toBeCloseTo(gpuResult, 4);
+      }
+    });
+
+    it('CDL-HDR-009: CPU saturation matches GPU mix() formula', () => {
+      const cdl: CDLValues = {
+        slope: { r: 1.5, g: 1.0, b: 0.8 },
+        offset: { r: 0, g: 0, b: 0 },
+        power: { r: 1, g: 1, b: 1 },
+        saturation: 0.7,
+      };
+      const result = applyCDL(200, 150, 100, cdl);
+      // Manually compute GPU path: SOP then saturation via mix()
+      const r = (200 / 255) * 1.5, g = (150 / 255) * 1.0, b = (100 / 255) * 0.8;
+      const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      const expectedR = (luma + (r - luma) * 0.7) * 255;
+      const expectedG = (luma + (g - luma) * 0.7) * 255;
+      const expectedB = (luma + (b - luma) * 0.7) * 255;
+      expect(result.r).toBeCloseTo(expectedR, 2);
+      expect(result.g).toBeCloseTo(expectedG, 2);
+      expect(result.b).toBeCloseTo(expectedB, 2);
+    });
+
+    it('CDL-ROUND-001: exportCDLXML() → parseCDLXML() round-trip preserves values', () => {
+      const original: CDLValues = {
+        slope: { r: 2.5, g: 0.75, b: 1.333333 },
+        offset: { r: 0.1, g: -0.05, b: 0.025 },
+        power: { r: 0.8, g: 1.2, b: 1.0 },
+        saturation: 0.85,
+      };
+
+      const xml = exportCDLXML(original);
+      const parsed = parseCDLXML(xml);
+
+      expect(parsed).not.toBeNull();
+      expect(parsed!.slope.r).toBeCloseTo(original.slope.r, 5);
+      expect(parsed!.slope.g).toBeCloseTo(original.slope.g, 5);
+      expect(parsed!.slope.b).toBeCloseTo(original.slope.b, 5);
+      expect(parsed!.offset.r).toBeCloseTo(original.offset.r, 5);
+      expect(parsed!.offset.g).toBeCloseTo(original.offset.g, 5);
+      expect(parsed!.offset.b).toBeCloseTo(original.offset.b, 5);
+      expect(parsed!.power.r).toBeCloseTo(original.power.r, 5);
+      expect(parsed!.power.g).toBeCloseTo(original.power.g, 5);
+      expect(parsed!.power.b).toBeCloseTo(original.power.b, 5);
+      expect(parsed!.saturation).toBeCloseTo(original.saturation, 5);
+    });
+  });
+
   describe('parseCC', () => {
     it('CDL-020: parses a valid <ColorCorrection> with correct slope/offset/power/saturation', () => {
       const xml = `<?xml version="1.0" encoding="UTF-8"?>

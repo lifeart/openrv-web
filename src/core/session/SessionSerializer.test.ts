@@ -571,6 +571,16 @@ function createMockComponents(): SessionComponents {
         fromSerializable: vi.fn(),
         dispose: vi.fn(),
       },
+      versionManager: {
+        toSerializable: vi.fn().mockReturnValue([]),
+        fromSerializable: vi.fn(),
+        dispose: vi.fn(),
+      },
+      statusManager: {
+        toSerializable: vi.fn().mockReturnValue([]),
+        fromSerializable: vi.fn(),
+        dispose: vi.fn(),
+      },
     },
     paintEngine,
     viewer: {

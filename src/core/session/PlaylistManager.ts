@@ -261,6 +261,81 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
   }
 
   /**
+   * Jump to the start of the next clip in the playlist.
+   * Wraps to first clip when loopMode='all'.
+   * Returns null if at end with no loop, or if playlist is empty.
+   */
+  goToNextClip(currentGlobalFrame: number): { frame: number; clip: PlaylistClip } | null {
+    if (this.clips.length === 0) return null;
+
+    const currentMapping = this.getClipAtFrame(currentGlobalFrame);
+    if (!currentMapping) {
+      // Not on any clip — go to first clip
+      const firstClip = this.clips[0]!;
+      return { frame: firstClip.globalStartFrame, clip: firstClip };
+    }
+
+    const nextIndex = currentMapping.clipIndex + 1;
+    if (nextIndex < this.clips.length) {
+      const nextClip = this.clips[nextIndex]!;
+      return { frame: nextClip.globalStartFrame, clip: nextClip };
+    }
+
+    // At last clip
+    if (this.loopMode === 'all') {
+      const firstClip = this.clips[0]!;
+      return { frame: firstClip.globalStartFrame, clip: firstClip };
+    }
+
+    return null;
+  }
+
+  /**
+   * Jump to the start of the previous clip, or start of current clip if mid-clip.
+   * If already at the start of a clip (within 1 frame), goes to previous clip.
+   * Wraps to last clip when loopMode='all'.
+   * Returns null if at beginning with no loop, or if playlist is empty.
+   */
+  goToPreviousClip(currentGlobalFrame: number): { frame: number; clip: PlaylistClip } | null {
+    if (this.clips.length === 0) return null;
+
+    const currentMapping = this.getClipAtFrame(currentGlobalFrame);
+    if (!currentMapping) {
+      // Not on any clip — go to last clip
+      const lastClip = this.clips[this.clips.length - 1]!;
+      return { frame: lastClip.globalStartFrame, clip: lastClip };
+    }
+
+    // If we're past the start of the clip (more than 1 frame in), go to start of current clip
+    if (currentGlobalFrame > currentMapping.clip.globalStartFrame + 1) {
+      return { frame: currentMapping.clip.globalStartFrame, clip: currentMapping.clip };
+    }
+
+    // At or near start of clip — go to previous clip
+    const prevIndex = currentMapping.clipIndex - 1;
+    if (prevIndex >= 0) {
+      const prevClip = this.clips[prevIndex]!;
+      return { frame: prevClip.globalStartFrame, clip: prevClip };
+    }
+
+    // At first clip
+    if (this.loopMode === 'all') {
+      const lastClip = this.clips[this.clips.length - 1]!;
+      return { frame: lastClip.globalStartFrame, clip: lastClip };
+    }
+
+    return null;
+  }
+
+  /**
+   * Get the clip that contains a given source index.
+   * Returns the first matching clip, or null if not found.
+   */
+  getClipForSource(sourceIndex: number): PlaylistClip | null {
+    return this.clips.find(c => c.sourceIndex === sourceIndex) ?? null;
+  }
+
+  /**
    * Recalculate global start frames after clip changes
    */
   private recalculateGlobalFrames(): void {

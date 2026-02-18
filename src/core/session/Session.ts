@@ -57,6 +57,8 @@ import { MAX_CONSECUTIVE_STARVATION_SKIPS } from './PlaybackTimingController';
 import { PlaybackEngine } from './PlaybackEngine';
 import { MarkerManager, MARKER_COLORS, type Marker, type MarkerColor } from './MarkerManager';
 import { NoteManager } from './NoteManager';
+import { VersionManager } from './VersionManager';
+import { StatusManager } from './StatusManager';
 import { VolumeManager } from './VolumeManager';
 import { ABCompareManager } from './ABCompareManager';
 import { AudioPlaybackManager } from '../../audio/AudioPlaybackManager';
@@ -176,6 +178,9 @@ export interface SessionEvents extends EventMap {
   edlLoaded: RVEDLEntry[];
   // Note/comment events
   notesChanged: void;
+  versionsChanged: void;
+  statusChanged: { sourceIndex: number; status: string; previous: string };
+  statusesChanged: void;
 }
 
 // Re-export from centralized types for backward compatibility
@@ -212,6 +217,8 @@ export class Session extends EventEmitter<SessionEvents> {
   // Extracted managers
   private _markerManager = new MarkerManager();
   private _noteManager = new NoteManager();
+  private _versionManager = new VersionManager();
+  private _statusManager = new StatusManager();
   private _volumeManager = new VolumeManager();
   private _abCompareManager = new ABCompareManager();
   private _annotationStore = new AnnotationStore();
@@ -361,6 +368,16 @@ export class Session extends EventEmitter<SessionEvents> {
     });
     this._noteManager.setCallbacks({
       onNotesChanged: () => this.emit('notesChanged', undefined),
+    });
+    this._versionManager.setCallbacks({
+      onVersionsChanged: () => this.emit('versionsChanged', undefined),
+      onActiveVersionChanged: (_groupId, _entry) => {
+        // Session can handle source switching here if needed
+      },
+    });
+    this._statusManager.setCallbacks({
+      onStatusChanged: (sourceIndex, status, previous) => this.emit('statusChanged', { sourceIndex, status, previous }),
+      onStatusesChanged: () => this.emit('statusesChanged', undefined),
     });
     this._volumeManager.setCallbacks({
       onVolumeChanged: (v) => {
@@ -516,6 +533,16 @@ export class Session extends EventEmitter<SessionEvents> {
   /** Note/comment manager */
   get noteManager(): NoteManager {
     return this._noteManager;
+  }
+
+  /** Version management (shot versioning) */
+  get versionManager(): VersionManager {
+    return this._versionManager;
+  }
+
+  /** Shot status tracking (review workflow) */
+  get statusManager(): StatusManager {
+    return this._statusManager;
   }
 
   /** Session metadata (name, comment, version, origin) */
@@ -1046,6 +1073,16 @@ export class Session extends EventEmitter<SessionEvents> {
       // Apply notes
       if (result.sessionInfo.notes && result.sessionInfo.notes.length > 0) {
         this._noteManager.fromSerializable(result.sessionInfo.notes);
+      }
+
+      // Apply version groups
+      if (result.sessionInfo.versionGroups && result.sessionInfo.versionGroups.length > 0) {
+        this._versionManager.fromSerializable(result.sessionInfo.versionGroups);
+      }
+
+      // Apply statuses
+      if (result.sessionInfo.statuses && result.sessionInfo.statuses.length > 0) {
+        this._statusManager.fromSerializable(result.sessionInfo.statuses);
       }
 
       // Apply session metadata
@@ -2292,5 +2329,7 @@ export class Session extends EventEmitter<SessionEvents> {
     }
     this.sources = [];
     this._noteManager.dispose();
+    this._versionManager.dispose();
+    this._statusManager.dispose();
   }
 }

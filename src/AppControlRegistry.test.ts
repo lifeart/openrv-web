@@ -51,6 +51,8 @@ vi.mock('./ui/components/ZebraControl', () => ({ ZebraControl: createMockClass('
 vi.mock('./ui/components/HSLQualifierControl', () => ({ HSLQualifierControl: createMockClass('HSLQualifierControl') }));
 // MarkerListPanel calls session.on() and session.marks in constructor:
 vi.mock('./ui/components/MarkerListPanel', () => ({ MarkerListPanel: createMockClass('MarkerListPanel') }));
+// NotePanel calls session.on() and session.noteManager in constructor:
+vi.mock('./ui/components/NotePanel', () => ({ NotePanel: createMockClass('NotePanel') }));
 
 import { AppControlRegistry } from './AppControlRegistry';
 
@@ -171,6 +173,7 @@ describe('AppControlRegistry', () => {
       'HistoryPanel',
       'InfoPanel',
       'MarkerListPanel',
+      'NotePanel',
       'RightPanelContent',
       'LeftPanelContent',
       'CacheIndicator',

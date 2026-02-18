@@ -104,6 +104,7 @@ function createMockControls() {
       toggle: vi.fn(),
     }),
     snapshotPanel: new EventEmitter(),
+    notePanel: new EventEmitter(),
     playlistPanel: new EventEmitter(),
     autoSaveManager: {},
     playlistManager,

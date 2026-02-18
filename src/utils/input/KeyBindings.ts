@@ -515,6 +515,14 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     description: 'Toggle playlist panel'
   },
 
+  // Notes panel
+  'panel.notes': {
+    code: 'KeyN',
+    shift: true,
+    alt: true,
+    description: 'Toggle notes panel'
+  },
+
   // Info panel
   'view.toggleInfoPanel': {
     code: 'KeyI',

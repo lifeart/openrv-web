@@ -375,10 +375,10 @@ describe('OCIOProcessor', () => {
       expect(lut.data.length).toBe(17 * 17 * 17 * 3);
     });
 
-    it('OCIO-P044: default size is 33', () => {
+    it('OCIO-P044: default size is 65', () => {
       processor.setEnabled(true);
       const lut = processor.bakeTo3DLUT();
-      expect(lut.size).toBe(33);
+      expect(lut.size).toBe(65);
     });
 
     it('OCIO-P045: LUT has valid domain', () => {
@@ -945,6 +945,83 @@ describe('OCIOProcessor', () => {
         },
       });
       expect(result).toBe('ARRI LogC4');
+    });
+  });
+
+  // ==========================================================================
+  // T1.5 OCIO Display/View Menus Tests
+  // ==========================================================================
+
+  describe('T1.5: LUT size and display/view pairs', () => {
+    it('OCIO-LUT-001: bakeTo3DLUT(65) returns LUT3D with size=65 and correct data length', () => {
+      const lut = processor.bakeTo3DLUT(65);
+      expect(lut.size).toBe(65);
+      expect(lut.data.length).toBe(65 * 65 * 65 * 3);
+    });
+
+    it('OCIO-LUT-002: bakeTo3DLUT with ACES transform produces different values than identity', () => {
+      // Identity (no transform)
+      const identityLUT = processor.bakeTo3DLUT(17);
+
+      // Now set to ACEScg input → sRGB display (non-trivial transform)
+      processor.setInputColorSpace('ACEScg');
+      const acesLUT = processor.bakeTo3DLUT(17);
+
+      // Mid-gray sample should differ
+      const midIdx = (8 * 17 * 17 + 8 * 17 + 8) * 3; // (8,8,8) in 17^3
+      expect(acesLUT.data[midIdx]).not.toBeCloseTo(identityLUT.data[midIdx]!, 2);
+    });
+
+    it('OCIO-LUT-003: changing display/view marks LUT dirty and rebakes', () => {
+      const lut1 = processor.bakeTo3DLUT(17);
+      processor.setDisplay('Rec.709');
+      const lut2 = processor.bakeTo3DLUT(17);
+      // Should be different objects (rebaked)
+      expect(lut1).not.toBe(lut2);
+    });
+
+    it('OCIO-LUT-004: getDisplayViewPairs returns non-empty list for each config', () => {
+      const pairs = processor.getDisplayViewPairs();
+      expect(pairs.length).toBeGreaterThan(0);
+      // Each pair should have display and view strings
+      for (const pair of pairs) {
+        expect(typeof pair.display).toBe('string');
+        expect(typeof pair.view).toBe('string');
+        expect(pair.display.length).toBeGreaterThan(0);
+        expect(pair.view.length).toBeGreaterThan(0);
+      }
+    });
+
+    it('OCIO-LUT-004b: getDisplayViewPairs includes all displays from config', () => {
+      const displays = processor.getAvailableDisplays();
+      const pairs = processor.getDisplayViewPairs();
+      const pairDisplays = new Set(pairs.map(p => p.display));
+      for (const display of displays) {
+        expect(pairDisplays.has(display)).toBe(true);
+      }
+    });
+
+    it('OCIO-LUT-005: setDisplay updates available views list', () => {
+      processor.setDisplay('sRGB');
+      const srgbViews = processor.getAvailableViews();
+
+      processor.setDisplay('DCI-P3');
+      const p3Views = processor.getAvailableViews();
+
+      // sRGB has 3 views (ACES 1.0 SDR-video, Raw, Log)
+      // DCI-P3 has 2 views (ACES 1.0 SDR-video, Raw)
+      expect(srgbViews.length).toBe(3);
+      expect(p3Views.length).toBe(2);
+      expect(srgbViews).toContain('Log');
+      expect(p3Views).not.toContain('Log');
+    });
+
+    it('OCIO-LUT-005b: getDisplayViewPairs changes after loadConfig', () => {
+      const acesPairs = processor.getDisplayViewPairs();
+      processor.loadConfig('srgb');
+      const srgbPairs = processor.getDisplayViewPairs();
+      // ACES has more display/view combinations than srgb config
+      expect(acesPairs.length).toBeGreaterThan(srgbPairs.length);
     });
   });
 

@@ -19,6 +19,8 @@ import type { LoopMode, MediaType } from '../types/session';
 import type { Marker } from './Session';
 import type { PlaylistState } from './PlaylistManager';
 import type { Note } from './NoteManager';
+import type { VersionGroup } from './VersionManager';
+import type { StatusEntry } from './StatusManager';
 
 /** Schema version for migration support */
 export const SESSION_STATE_VERSION = 1;
@@ -122,6 +124,10 @@ export interface SessionState {
   playlist?: PlaylistState;
   /** Notes/comments (optional) */
   notes?: Note[];
+  /** Version groups (optional) */
+  versionGroups?: VersionGroup[];
+  /** Shot statuses (optional) */
+  statuses?: StatusEntry[];
 }
 
 /** Default values for empty state */

@@ -2660,3 +2660,58 @@ describe('Renderer scope tone mapping neutralization', () => {
     expect(stateManager.getToneMappingState()).toEqual(expect.objectContaining({ enabled: true, operator: 'aces' }));
   });
 });
+
+// ==========================================================================
+// T1.5: LUT 3D Texture Tests
+// ==========================================================================
+
+describe('Renderer LUT 3D Texture (T1.5)', () => {
+  let renderer: Renderer;
+
+  beforeEach(() => {
+    renderer = new Renderer();
+  });
+
+  it('RENDER-LUT-001: setLUT with 65^3 data is accepted without error', () => {
+    initRendererWithMockGL(renderer);
+    const size = 65;
+    const lutData = new Float32Array(size * size * size * 3);
+    // Fill with identity ramp
+    for (let b = 0; b < size; b++) {
+      for (let g = 0; g < size; g++) {
+        for (let r = 0; r < size; r++) {
+          const idx = (b * size * size + g * size + r) * 3;
+          lutData[idx] = r / (size - 1);
+          lutData[idx + 1] = g / (size - 1);
+          lutData[idx + 2] = b / (size - 1);
+        }
+      }
+    }
+
+    expect(() => renderer.setLUT(lutData, size, 1.0)).not.toThrow();
+  });
+
+  it('RENDER-LUT-002: setLUT triggers 3D texture upload on next render', () => {
+    const mockGL = initRendererWithMockGL(renderer);
+    const size = 17;
+    const lutData = new Float32Array(size * size * size * 3);
+
+    renderer.setLUT(lutData, size, 1.0);
+    renderer.resize(100, 100);
+
+    const sourceCanvas = document.createElement('canvas');
+    renderer.renderSDRFrame(sourceCanvas);
+
+    // texImage3D should have been called for the 3D LUT texture upload
+    expect(mockGL.texImage3D).toHaveBeenCalled();
+  });
+
+  it('RENDER-LUT-003: setLUT with null clears LUT state', () => {
+    initRendererWithMockGL(renderer);
+    const size = 17;
+    const lutData = new Float32Array(size * size * size * 3);
+
+    renderer.setLUT(lutData, size, 1.0);
+    expect(() => renderer.setLUT(null, 0, 0)).not.toThrow();
+  });
+});

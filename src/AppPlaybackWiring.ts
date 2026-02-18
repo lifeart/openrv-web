@@ -90,6 +90,11 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   // Snapshot panel restore
   controls.snapshotPanel.on('restoreRequested', ({ id }) => persistenceManager.restoreSnapshot(id));
 
+  // Note panel events
+  controls.notePanel.on('noteSelected', ({ frame }) => {
+    session.goToFrame(frame);
+  });
+
   // Playlist panel events
   controls.playlistPanel.on('addCurrentSource', () => addCurrentSourceToPlaylist(session, controls));
   controls.playlistPanel.on('clipSelected', ({ sourceIndex, frame }) => {

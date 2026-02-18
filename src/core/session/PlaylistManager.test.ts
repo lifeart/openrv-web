@@ -370,4 +370,196 @@ FCM: NON-DROP FRAME
       expect(manager.getTotalDuration()).toBe(0);
     });
   });
+
+  describe('goToNextClip', () => {
+    it('NAV-001: returns next clip start frame', () => {
+      manager.addClip(0, 'Source 1', 1, 50);  // Global 1-50
+      manager.addClip(1, 'Source 2', 1, 30);  // Global 51-80
+      manager.addClip(2, 'Source 3', 1, 20);  // Global 81-100
+
+      // From middle of first clip -> second clip
+      const result = manager.goToNextClip(25);
+      expect(result).not.toBeNull();
+      expect(result!.frame).toBe(51);
+      expect(result!.clip.sourceIndex).toBe(1);
+
+      // From middle of second clip -> third clip
+      const result2 = manager.goToNextClip(60);
+      expect(result2).not.toBeNull();
+      expect(result2!.frame).toBe(81);
+      expect(result2!.clip.sourceIndex).toBe(2);
+    });
+
+    it('NAV-002: wraps to first clip when loopMode=all', () => {
+      manager.addClip(0, 'Source 1', 1, 50);  // Global 1-50
+      manager.addClip(1, 'Source 2', 1, 30);  // Global 51-80
+      manager.setLoopMode('all');
+
+      // From last clip -> should wrap to first
+      const result = manager.goToNextClip(60);
+      expect(result).not.toBeNull();
+      expect(result!.frame).toBe(1);
+      expect(result!.clip.sourceIndex).toBe(0);
+    });
+
+    it('NAV-003: returns null at end when loopMode=none', () => {
+      manager.addClip(0, 'Source 1', 1, 50);  // Global 1-50
+      manager.addClip(1, 'Source 2', 1, 30);  // Global 51-80
+      manager.setLoopMode('none');
+
+      // From last clip -> null
+      const result = manager.goToNextClip(60);
+      expect(result).toBeNull();
+    });
+
+    it('NAV-007: single clip with loopMode=all wraps to itself', () => {
+      manager.addClip(0, 'Source 1', 1, 50);  // Global 1-50
+      manager.setLoopMode('all');
+
+      const result = manager.goToNextClip(25);
+      expect(result).not.toBeNull();
+      expect(result!.frame).toBe(1);
+      expect(result!.clip.sourceIndex).toBe(0);
+    });
+
+    it('NAV-007b: single clip with loopMode=none returns null', () => {
+      manager.addClip(0, 'Source 1', 1, 50);
+      manager.setLoopMode('none');
+
+      const result = manager.goToNextClip(25);
+      expect(result).toBeNull();
+    });
+
+    it('NAV-007c: single clip with loopMode=single returns null (single loops clip playback, not navigation)', () => {
+      manager.addClip(0, 'Source 1', 1, 50);
+      manager.setLoopMode('single');
+
+      const nextResult = manager.goToNextClip(25);
+      expect(nextResult).toBeNull();
+    });
+
+    it('NAV-008: empty playlist returns null', () => {
+      const result = manager.goToNextClip(1);
+      expect(result).toBeNull();
+    });
+
+    it('returns first clip when frame is outside any clip', () => {
+      manager.addClip(0, 'Source 1', 1, 50);  // Global 1-50
+
+      const result = manager.goToNextClip(999);
+      expect(result).not.toBeNull();
+      expect(result!.frame).toBe(1);
+    });
+  });
+
+  describe('goToPreviousClip', () => {
+    it('NAV-004: returns current clip start when mid-clip', () => {
+      manager.addClip(0, 'Source 1', 1, 50);  // Global 1-50
+      manager.addClip(1, 'Source 2', 1, 30);  // Global 51-80
+
+      // Mid-way through second clip -> start of second clip
+      const result = manager.goToPreviousClip(65);
+      expect(result).not.toBeNull();
+      expect(result!.frame).toBe(51);
+      expect(result!.clip.sourceIndex).toBe(1);
+    });
+
+    it('NAV-005: returns previous clip when at start of clip', () => {
+      manager.addClip(0, 'Source 1', 1, 50);  // Global 1-50
+      manager.addClip(1, 'Source 2', 1, 30);  // Global 51-80
+
+      // At start of second clip (within 1 frame) -> previous clip
+      const result = manager.goToPreviousClip(51);
+      expect(result).not.toBeNull();
+      expect(result!.frame).toBe(1);
+      expect(result!.clip.sourceIndex).toBe(0);
+
+      // Also at globalStartFrame + 1 -> still goes to previous
+      const result2 = manager.goToPreviousClip(52);
+      expect(result2).not.toBeNull();
+      expect(result2!.frame).toBe(1);
+      expect(result2!.clip.sourceIndex).toBe(0);
+    });
+
+    it('NAV-006: wraps to last clip when loopMode=all', () => {
+      manager.addClip(0, 'Source 1', 1, 50);  // Global 1-50
+      manager.addClip(1, 'Source 2', 1, 30);  // Global 51-80
+      manager.setLoopMode('all');
+
+      // At start of first clip -> wrap to last clip
+      const result = manager.goToPreviousClip(1);
+      expect(result).not.toBeNull();
+      expect(result!.frame).toBe(51);
+      expect(result!.clip.sourceIndex).toBe(1);
+    });
+
+    it('returns null at beginning when loopMode=none', () => {
+      manager.addClip(0, 'Source 1', 1, 50);
+      manager.addClip(1, 'Source 2', 1, 30);
+      manager.setLoopMode('none');
+
+      // At start of first clip -> null
+      const result = manager.goToPreviousClip(1);
+      expect(result).toBeNull();
+    });
+
+    it('NAV-006b: single clip with loopMode=single at start returns null', () => {
+      manager.addClip(0, 'Source 1', 1, 50);
+      manager.setLoopMode('single');
+
+      // At start of only clip -> null (single loops playback, not navigation)
+      const result = manager.goToPreviousClip(1);
+      expect(result).toBeNull();
+    });
+
+    it('single clip with loopMode=single mid-clip returns clip start', () => {
+      manager.addClip(0, 'Source 1', 1, 50);
+      manager.setLoopMode('single');
+
+      // Mid-clip -> returns start of current clip
+      const result = manager.goToPreviousClip(25);
+      expect(result).not.toBeNull();
+      expect(result!.frame).toBe(1);
+    });
+
+    it('returns last clip when frame is outside any clip', () => {
+      manager.addClip(0, 'Source 1', 1, 50);  // Global 1-50
+
+      const result = manager.goToPreviousClip(999);
+      expect(result).not.toBeNull();
+      expect(result!.frame).toBe(1);
+    });
+  });
+
+  describe('getClipForSource', () => {
+    it('returns the clip matching the source index', () => {
+      manager.addClip(0, 'Source 1', 1, 50);
+      manager.addClip(1, 'Source 2', 1, 30);
+      manager.addClip(2, 'Source 3', 1, 20);
+
+      const clip = manager.getClipForSource(1);
+      expect(clip).not.toBeNull();
+      expect(clip!.sourceIndex).toBe(1);
+      expect(clip!.sourceName).toBe('Source 2');
+    });
+
+    it('returns first matching clip when source appears multiple times', () => {
+      manager.addClip(0, 'Source 1', 1, 50);
+      manager.addClip(0, 'Source 1 (copy)', 10, 30);
+
+      const clip = manager.getClipForSource(0);
+      expect(clip).not.toBeNull();
+      expect(clip!.sourceName).toBe('Source 1');
+    });
+
+    it('returns null for non-existent source index', () => {
+      manager.addClip(0, 'Source 1', 1, 50);
+
+      expect(manager.getClipForSource(99)).toBeNull();
+    });
+
+    it('returns null on empty playlist', () => {
+      expect(manager.getClipForSource(0)).toBeNull();
+    });
+  });
 });

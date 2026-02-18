@@ -224,6 +224,22 @@ export class OCIOProcessor extends EventEmitter<OCIOProcessorEvents> {
   }
 
   /**
+   * Get all display/view pairs for the current config.
+   * Returns a flat list of every valid (display, view) combination.
+   */
+  getDisplayViewPairs(): Array<{ display: string; view: string }> {
+    const displays = getDisplays(this.state.configName);
+    const pairs: Array<{ display: string; view: string }> = [];
+    for (const display of displays) {
+      const views = getViewsForDisplay(this.state.configName, display);
+      for (const view of views) {
+        pairs.push({ display, view });
+      }
+    }
+    return pairs;
+  }
+
+  /**
    * Get available looks
    */
   getAvailableLooks(): string[] {
@@ -594,7 +610,7 @@ export class OCIOProcessor extends EventEmitter<OCIOProcessorEvents> {
    * @returns 3D LUT suitable for WebGL processing
    * @throws Error if size is invalid
    */
-  bakeTo3DLUT(size: number = 33): LUT3D {
+  bakeTo3DLUT(size: number = 65): LUT3D {
     // Validate size
     if (!Number.isInteger(size) || size < 1) {
       throw new Error(`Invalid LUT size: ${size}. Must be a positive integer.`);

@@ -508,6 +508,9 @@ export class App {
     // Add marker list panel to viewer container
     this.viewer.getContainer().appendChild(this.controls.markerListPanel.getElement());
 
+    // Add note panel to viewer container
+    this.viewer.getContainer().appendChild(this.controls.notePanel.getElement());
+
     // Wire up cursor color updates from viewer to info panel
     this.viewer.onCursorColorChange((color, position) => {
       if (this.controls.infoPanel.isEnabled()) {
@@ -843,6 +846,9 @@ export class App {
         if (this.controls.displayProfileControl.isDropdownVisible()) {
           this.controls.displayProfileControl.closeDropdown();
         }
+        if (this.controls.notePanel.isVisible()) {
+          this.controls.notePanel.hide();
+        }
       },
       'snapshot.create': () => {
         this.persistenceManager.createQuickSnapshot();
@@ -852,6 +858,9 @@ export class App {
       },
       'panel.playlist': () => {
         this.controls.playlistPanel.toggle();
+      },
+      'panel.notes': () => {
+        this.controls.notePanel.toggle();
       },
       'view.toggleFullscreen': () => {
         this.fullscreenManager?.toggle();
@@ -948,30 +957,19 @@ export class App {
   private goToNextShot(): void {
     if (!this.controls.playlistManager.isEnabled()) return;
 
-    const mapping = this.controls.playlistManager.getClipAtFrame(this.controls.playlistManager.getCurrentFrame());
-    if (!mapping) return;
-
-    const nextClip = this.controls.playlistManager.getClipByIndex(mapping.clipIndex + 1);
-    if (!nextClip) return;
-    this.jumpToPlaylistGlobalFrame(nextClip.globalStartFrame);
+    const result = this.controls.playlistManager.goToNextClip(
+      this.controls.playlistManager.getCurrentFrame()
+    );
+    if (result) this.jumpToPlaylistGlobalFrame(result.frame);
   }
 
   private goToPreviousShot(): void {
     if (!this.controls.playlistManager.isEnabled()) return;
 
-    const globalFrame = this.controls.playlistManager.getCurrentFrame();
-    const mapping = this.controls.playlistManager.getClipAtFrame(globalFrame);
-    if (!mapping) return;
-
-    const currentClipStart = mapping.clip.globalStartFrame;
-    const targetIndex = globalFrame > currentClipStart
-      ? mapping.clipIndex
-      : mapping.clipIndex - 1;
-    if (targetIndex < 0) return;
-
-    const clip = this.controls.playlistManager.getClipByIndex(targetIndex);
-    if (!clip) return;
-    this.jumpToPlaylistGlobalFrame(clip.globalStartFrame);
+    const result = this.controls.playlistManager.goToPreviousClip(
+      this.controls.playlistManager.getCurrentFrame()
+    );
+    if (result) this.jumpToPlaylistGlobalFrame(result.frame);
   }
 
   private jumpToPlaylistGlobalFrame(globalFrame: number): void {
