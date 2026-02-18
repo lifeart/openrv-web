@@ -7,6 +7,7 @@
 
 import { EventEmitter, EventMap } from '../EventEmitter';
 import { Logger } from '../Logger';
+import { getPreferencesManager, PREFERENCE_STORAGE_KEYS } from '../preferences/PreferencesManager';
 
 const log = new Logger('PresentationMode');
 
@@ -278,13 +279,9 @@ export class PresentationMode extends EventEmitter<PresentationEvents> {
    * Load cursor auto-hide preference from localStorage
    */
   loadPreference(): void {
-    try {
-      const saved = localStorage.getItem('openrv-cursor-autohide');
-      if (saved !== null) {
-        this.state.cursorAutoHide = saved === 'true';
-      }
-    } catch (e) {
-      log.warn('Failed to load preference from localStorage:', e);
+    const saved = getPreferencesManager().getBoolean(PREFERENCE_STORAGE_KEYS.cursorAutoHide);
+    if (saved !== null) {
+      this.state.cursorAutoHide = saved;
     }
   }
 
@@ -292,10 +289,8 @@ export class PresentationMode extends EventEmitter<PresentationEvents> {
    * Save cursor auto-hide preference to localStorage
    */
   savePreference(): void {
-    try {
-      localStorage.setItem('openrv-cursor-autohide', String(this.state.cursorAutoHide));
-    } catch (e) {
-      log.warn('Failed to save preference to localStorage:', e);
+    if (!getPreferencesManager().setBoolean(PREFERENCE_STORAGE_KEYS.cursorAutoHide, this.state.cursorAutoHide)) {
+      log.warn('Failed to save preference to localStorage');
     }
   }
 

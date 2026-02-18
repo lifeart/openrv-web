@@ -9,6 +9,7 @@
  * This module provides both CPU-side math functions and type definitions
  * used by the rendering pipeline.
  */
+import { getPreferencesManager, PREFERENCE_STORAGE_KEYS } from '../utils/preferences/PreferencesManager';
 
 // =============================================================================
 // Types
@@ -222,17 +223,13 @@ export function isDisplayStateActive(state: DisplayColorState): boolean {
 // Persistence
 // =============================================================================
 
-const STORAGE_KEY = 'openrv-display-profile';
+const STORAGE_KEY = PREFERENCE_STORAGE_KEYS.displayProfile;
 
 /**
  * Save display profile to localStorage
  */
 export function saveDisplayProfile(state: DisplayColorState): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch {
-    // localStorage may be unavailable (private browsing, quota exceeded)
-  }
+  getPreferencesManager().setJSON(STORAGE_KEY, state);
 }
 
 /**
@@ -243,30 +240,25 @@ const VALID_TRANSFER_FUNCTIONS: ReadonlySet<string> = new Set([
 ]);
 
 export function loadDisplayProfile(): DisplayColorState | null {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      // Validate deserialized data
-      if (
-        typeof parsed !== 'object' || parsed === null ||
-        !VALID_TRANSFER_FUNCTIONS.has(parsed.transferFunction) ||
-        typeof parsed.displayGamma !== 'number' || !Number.isFinite(parsed.displayGamma) ||
-        typeof parsed.displayBrightness !== 'number' || !Number.isFinite(parsed.displayBrightness) ||
-        typeof parsed.customGamma !== 'number' || !Number.isFinite(parsed.customGamma)
-      ) {
-        return null;
-      }
-      return {
-        transferFunction: parsed.transferFunction as DisplayTransferFunction,
-        displayGamma: Math.max(0.1, Math.min(4.0, parsed.displayGamma)),
-        displayBrightness: Math.max(0.0, Math.min(2.0, parsed.displayBrightness)),
-        customGamma: Math.max(0.1, Math.min(10.0, parsed.customGamma)),
-        outputGamut: ['auto', 'srgb', 'display-p3'].includes(parsed.outputGamut) ? parsed.outputGamut : undefined,
-      };
+  const parsed = getPreferencesManager().getJSON<any>(STORAGE_KEY);
+  if (parsed) {
+    // Validate deserialized data
+    if (
+      typeof parsed !== 'object' || parsed === null ||
+      !VALID_TRANSFER_FUNCTIONS.has(parsed.transferFunction) ||
+      typeof parsed.displayGamma !== 'number' || !Number.isFinite(parsed.displayGamma) ||
+      typeof parsed.displayBrightness !== 'number' || !Number.isFinite(parsed.displayBrightness) ||
+      typeof parsed.customGamma !== 'number' || !Number.isFinite(parsed.customGamma)
+    ) {
+      return null;
     }
-  } catch {
-    // Ignore parse errors
+    return {
+      transferFunction: parsed.transferFunction as DisplayTransferFunction,
+      displayGamma: Math.max(0.1, Math.min(4.0, parsed.displayGamma)),
+      displayBrightness: Math.max(0.0, Math.min(2.0, parsed.displayBrightness)),
+      customGamma: Math.max(0.1, Math.min(10.0, parsed.customGamma)),
+      outputGamut: ['auto', 'srgb', 'display-p3'].includes(parsed.outputGamut) ? parsed.outputGamut : undefined,
+    };
   }
   return null;
 }
