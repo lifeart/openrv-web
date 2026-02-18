@@ -13,6 +13,7 @@ import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { Session, Marker, MARKER_COLORS } from '../../core/session/Session';
 import { getIconSvg } from './shared/Icons';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
+import type { ExclusivePanelRef } from './NotePanel';
 
 /**
  * Marker export JSON structure
@@ -40,9 +41,11 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
   private visible = false;
   private entriesContainer: HTMLElement;
   private headerElement: HTMLElement;
+  private actionsBar: HTMLElement;
   private editingFrame: number | null = null;
   private lastHighlightedFrame: number | null = null;
   private focusedMarkerIndex = -1;
+  private exclusivePanel: ExclusivePanelRef | null = null;
 
   // Bound event handlers for cleanup
   private boundOnMarksChanged: () => void;
@@ -116,53 +119,8 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
     `;
     addBtn.addEventListener('click', () => this.addMarkerAtCurrentFrame());
 
-    const clearBtn = document.createElement('button');
-    clearBtn.textContent = 'Clear All';
-    clearBtn.title = 'Clear all markers';
-    clearBtn.dataset.testid = 'marker-clear-btn';
-    clearBtn.style.cssText = `
-      background: rgba(var(--accent-primary-rgb), 0.15);
-      border: 1px solid var(--error);
-      color: var(--error);
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 11px;
-      cursor: pointer;
-    `;
-    clearBtn.addEventListener('click', () => this.clearAllMarkers());
-
-    const exportBtn = document.createElement('button');
-    exportBtn.textContent = 'Export';
-    exportBtn.title = 'Export markers to JSON file';
-    exportBtn.dataset.testid = 'marker-export-btn';
-    exportBtn.style.cssText = `
-      background: rgba(var(--accent-primary-rgb), 0.15);
-      border: 1px solid var(--accent-primary);
-      color: var(--accent-primary);
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 11px;
-      cursor: pointer;
-    `;
-    exportBtn.addEventListener('click', () => this.exportMarkers());
-
-    const importBtn = document.createElement('button');
-    importBtn.textContent = 'Import';
-    importBtn.title = 'Import markers from JSON file (merge)';
-    importBtn.dataset.testid = 'marker-import-btn';
-    importBtn.style.cssText = `
-      background: rgba(var(--accent-primary-rgb), 0.15);
-      border: 1px solid var(--accent-primary);
-      color: var(--accent-primary);
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 11px;
-      cursor: pointer;
-    `;
-    importBtn.addEventListener('click', () => this.importMarkers('merge'));
-
     const closeBtn = document.createElement('button');
-    closeBtn.textContent = '×';
+    closeBtn.textContent = '\u00d7';
     closeBtn.title = 'Close';
     closeBtn.dataset.testid = 'marker-close-btn';
     closeBtn.style.cssText = `
@@ -177,12 +135,56 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
     closeBtn.addEventListener('click', () => this.hide());
 
     headerButtons.appendChild(addBtn);
-    headerButtons.appendChild(clearBtn);
-    headerButtons.appendChild(exportBtn);
-    headerButtons.appendChild(importBtn);
     headerButtons.appendChild(closeBtn);
     this.headerElement.appendChild(title);
     this.headerElement.appendChild(headerButtons);
+
+    // Actions bar (Export, Import, Clear All)
+    this.actionsBar = document.createElement('div');
+    this.actionsBar.className = 'marker-actions-bar';
+    this.actionsBar.dataset.testid = 'marker-actions-bar';
+    this.actionsBar.style.cssText = `
+      display: flex;
+      gap: 4px;
+      padding: 6px 12px;
+      border-bottom: 1px solid var(--overlay-border);
+      background: var(--bg-secondary);
+    `;
+
+    const actionBtnStyle = `
+      background: transparent;
+      border: 1px solid var(--overlay-border);
+      color: var(--text-muted);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      cursor: pointer;
+    `;
+
+    const exportBtn = document.createElement('button');
+    exportBtn.textContent = 'Export';
+    exportBtn.title = 'Export markers to JSON file';
+    exportBtn.dataset.testid = 'marker-export-btn';
+    exportBtn.style.cssText = actionBtnStyle;
+    exportBtn.addEventListener('click', () => this.exportMarkers());
+
+    const importBtn = document.createElement('button');
+    importBtn.textContent = 'Import';
+    importBtn.title = 'Import markers from JSON file (merge)';
+    importBtn.dataset.testid = 'marker-import-btn';
+    importBtn.style.cssText = actionBtnStyle;
+    importBtn.addEventListener('click', () => this.importMarkers('merge'));
+
+    const clearBtn = document.createElement('button');
+    clearBtn.textContent = 'Clear All';
+    clearBtn.title = 'Clear all markers';
+    clearBtn.dataset.testid = 'marker-clear-btn';
+    clearBtn.style.cssText = actionBtnStyle;
+    clearBtn.addEventListener('click', () => this.clearAllMarkers());
+
+    this.actionsBar.appendChild(exportBtn);
+    this.actionsBar.appendChild(importBtn);
+    this.actionsBar.appendChild(clearBtn);
 
     // Entries container
     this.entriesContainer = document.createElement('div');
@@ -195,6 +197,7 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
     `;
 
     this.container.appendChild(this.headerElement);
+    this.container.appendChild(this.actionsBar);
     this.container.appendChild(this.entriesContainer);
 
     // Listen to marker and frame changes
@@ -220,10 +223,19 @@ export class MarkerListPanel extends EventEmitter<MarkerListPanelEvents> {
     return this.container;
   }
 
+  /** Register another panel for mutual exclusion - opening this panel will close the other */
+  setExclusiveWith(panel: ExclusivePanelRef): void {
+    this.exclusivePanel = panel;
+  }
+
   /**
    * Show the panel
    */
   show(): void {
+    // Close exclusive panel if it is open
+    if (this.exclusivePanel?.isVisible()) {
+      this.exclusivePanel.hide();
+    }
     this.visible = true;
     this.container.style.display = 'flex';
     this.render();

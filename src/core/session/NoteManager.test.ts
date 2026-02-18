@@ -336,4 +336,49 @@ describe('NoteManager', () => {
       expect(manager.getNote(l4.id)).toBeUndefined();
     });
   });
+
+  describe('note navigation', () => {
+    it('getNextNoteFrame returns the closest next note frame', () => {
+      manager.addNote(0, 10, 10, 'A', 'Alice');
+      manager.addNote(0, 30, 30, 'B', 'Alice');
+      manager.addNote(0, 50, 50, 'C', 'Alice');
+      expect(manager.getNextNoteFrame(0, 5)).toBe(10);
+      expect(manager.getNextNoteFrame(0, 10)).toBe(30);
+      expect(manager.getNextNoteFrame(0, 25)).toBe(30);
+    });
+
+    it('getNextNoteFrame returns currentFrame when no more notes', () => {
+      manager.addNote(0, 10, 10, 'A', 'Alice');
+      expect(manager.getNextNoteFrame(0, 50)).toBe(50);
+    });
+
+    it('getPreviousNoteFrame returns the closest previous note frame', () => {
+      manager.addNote(0, 10, 10, 'A', 'Alice');
+      manager.addNote(0, 30, 30, 'B', 'Alice');
+      manager.addNote(0, 50, 50, 'C', 'Alice');
+      expect(manager.getPreviousNoteFrame(0, 55)).toBe(50);
+      expect(manager.getPreviousNoteFrame(0, 50)).toBe(30);
+      expect(manager.getPreviousNoteFrame(0, 35)).toBe(30);
+    });
+
+    it('getPreviousNoteFrame returns currentFrame when no earlier notes', () => {
+      manager.addNote(0, 10, 10, 'A', 'Alice');
+      expect(manager.getPreviousNoteFrame(0, 5)).toBe(5);
+    });
+
+    it('navigation ignores replies (parentId !== null)', () => {
+      const parent = manager.addNote(0, 10, 10, 'P', 'Alice');
+      manager.addNote(0, 20, 20, 'Reply', 'Bob', { parentId: parent.id });
+      manager.addNote(0, 30, 30, 'Next', 'Alice');
+      expect(manager.getNextNoteFrame(0, 10)).toBe(30);
+    });
+
+    it('navigation filters by sourceIndex', () => {
+      manager.addNote(0, 10, 10, 'S0', 'Alice');
+      manager.addNote(1, 20, 20, 'S1', 'Alice');
+      manager.addNote(0, 30, 30, 'S0 next', 'Alice');
+      expect(manager.getNextNoteFrame(0, 10)).toBe(30);
+      expect(manager.getNextNoteFrame(1, 10)).toBe(20);
+    });
+  });
 });

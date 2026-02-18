@@ -972,12 +972,18 @@ describe('OCIOProcessor', () => {
       expect(acesLUT.data[midIdx]).not.toBeCloseTo(identityLUT.data[midIdx]!, 2);
     });
 
-    it('OCIO-LUT-003: changing display/view marks LUT dirty and rebakes', () => {
+    it('OCIO-LUT-003: changing display/view marks LUT dirty and rebakes with different data', () => {
       const lut1 = processor.bakeTo3DLUT(17);
       processor.setDisplay('Rec.709');
       const lut2 = processor.bakeTo3DLUT(17);
       // Should be different objects (rebaked)
       expect(lut1).not.toBe(lut2);
+      // Data should differ at a sampled point
+      const midIdx = (8 * 17 * 17 + 8 * 17 + 8) * 3;
+      const same = lut1.data[midIdx] === lut2.data[midIdx] &&
+                   lut1.data[midIdx + 1] === lut2.data[midIdx + 1] &&
+                   lut1.data[midIdx + 2] === lut2.data[midIdx + 2];
+      expect(same).toBe(false);
     });
 
     it('OCIO-LUT-004: getDisplayViewPairs returns non-empty list for each config', () => {

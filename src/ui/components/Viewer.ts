@@ -10,6 +10,8 @@ import type { DeinterlaceParams } from '../../filters/Deinterlace';
 import { DEFAULT_DEINTERLACE_PARAMS, isDeinterlaceActive, applyDeinterlace } from '../../filters/Deinterlace';
 import type { GamutMappingState } from '../../core/types/effects';
 import { DEFAULT_GAMUT_MAPPING_STATE } from '../../core/types/effects';
+import type { NoiseReductionParams } from '../../filters/NoiseReduction';
+import { DEFAULT_NOISE_REDUCTION_PARAMS, isNoiseReductionActive, applyNoiseReduction } from '../../filters/NoiseReduction';
 import type { FilmEmulationParams } from '../../filters/FilmEmulation';
 import { DEFAULT_FILM_EMULATION_PARAMS, isFilmEmulationActive, applyFilmEmulation } from '../../filters/FilmEmulation';
 import type { StabilizationParams } from '../../filters/StabilizeMotion';
@@ -20,6 +22,7 @@ import {
   type LUT3D,
   LUTPipeline,
   GPULUTChain,
+  isLUT3D,
   type CDLValues,
   isDefaultCDL,
   applyCDLToImageData,
@@ -58,6 +61,8 @@ import type { SpotlightOverlay } from './SpotlightOverlay';
 import type { ClippingOverlay } from './ClippingOverlay';
 import { HSLQualifier } from './HSLQualifier';
 import { OverlayManager } from './OverlayManager';
+import { WatermarkOverlay, type WatermarkState } from './WatermarkOverlay';
+import { MissingFrameOverlay } from './MissingFrameOverlay';
 import { PrerenderBufferManager } from '../../utils/effects/PrerenderBufferManager';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import { setupHiDPICanvas, resetCanvasFromHiDPI } from '../../utils/ui/HiDPICanvas';
@@ -131,6 +136,9 @@ export interface ViewerConfig {
 const log = new Logger('Viewer');
 const MIN_PAINT_OVERDRAW_PX = 128;
 const PAINT_OVERDRAW_STEP_PX = 64;
+const MISSING_FRAME_MODE_STORAGE_KEY = 'openrv.missingFrameMode';
+
+export type MissingFrameMode = 'off' | 'show-frame' | 'hold' | 'black';
 
 export class Viewer {
   private container: HTMLElement;
@@ -201,6 +209,7 @@ export class Viewer {
 
   // LUT indicator badge (UI element, remains in Viewer)
   private lutIndicator: HTMLElement | null = null;
+  private pipelinePrecacheLUTActive = false;
 
   // A/B Compare indicator
   private abIndicator: HTMLElement | null = null;
@@ -209,6 +218,7 @@ export class Viewer {
 
   // Filter effects
   private filterSettings: FilterSettings = { ...DEFAULT_FILTER_SETTINGS };
+  private noiseReductionParams: NoiseReductionParams = { ...DEFAULT_NOISE_REDUCTION_PARAMS };
   private sharpenProcessor: WebGLSharpenProcessor | null = null;
 
   // Gamut mapping
@@ -229,6 +239,9 @@ export class Viewer {
   // Overlay manager (owns safe areas, matte, timecode, pixel probe,
   // false color, luminance visualization, zebra stripes, clipping, spotlight)
   private overlayManager!: OverlayManager;
+  private watermarkOverlay: WatermarkOverlay;
+  private missingFrameOverlay: MissingFrameOverlay;
+  private missingFrameMode: MissingFrameMode = 'show-frame';
 
   // Lift/Gamma/Gain color wheels
   private colorWheels: ColorWheels;
@@ -331,6 +344,7 @@ export class Viewer {
       getFilmEmulationParams: () => this.getFilmEmulationParams(),
       getPerspectiveParams: () => this.getPerspectiveParams(),
       getGamutMappingState: () => this.getGamutMappingState(),
+      getNoiseReductionParams: () => this.getNoiseReductionParams(),
     };
   }
 
@@ -382,6 +396,9 @@ export class Viewer {
     this.lensDistortionManager = config.lensDistortionManager ?? new LensDistortionManager();
     this.perspectiveCorrectionManager = config.perspectiveCorrectionManager ?? new PerspectiveCorrectionManager();
     this.stereoManager = config.stereoManager ?? new StereoManager();
+    this.watermarkOverlay = new WatermarkOverlay();
+    this.missingFrameOverlay = new MissingFrameOverlay();
+    this.missingFrameMode = this.loadMissingFrameModePreference();
 
     // Wire up transform manager's render callback
     this.transformManager.setScheduleRender(() => this.scheduleRender());
@@ -494,6 +511,14 @@ export class Viewer {
     this.overlayManager = new OverlayManager(this.canvasContainer, this.session, {
       refresh: () => this.refresh(),
       onProbeStateChanged: (enabled) => this.updateCursorForProbe(enabled),
+    });
+
+    // Missing-frame overlay (rendered above image canvas when sequence gaps are encountered)
+    this.canvasContainer.appendChild(this.missingFrameOverlay.render());
+
+    // Re-render when watermark settings change
+    this.watermarkOverlay.on('stateChanged', () => {
+      this.scheduleRender();
     });
 
     // Create pixel sampling manager (cursor color, probe mouse handlers, source image cache)
@@ -634,6 +659,7 @@ export class Viewer {
     this.colorPipeline.initGPULUTChain();
     this.colorPipeline.initLUTPipelineDefaults();
     this.colorPipeline.initOCIOProcessor();
+    this.syncLUTPipeline();
 
     // Initialize WebGL sharpen processor
     try {
@@ -931,6 +957,65 @@ export class Viewer {
     this.scheduleRender();
   }
 
+  private loadMissingFrameModePreference(): MissingFrameMode {
+    try {
+      const stored = localStorage.getItem(MISSING_FRAME_MODE_STORAGE_KEY);
+      if (stored === 'off' || stored === 'show-frame' || stored === 'hold' || stored === 'black') {
+        return stored;
+      }
+    } catch {
+      // Ignore storage errors (private mode, disabled storage, etc.)
+    }
+    return 'show-frame';
+  }
+
+  private persistMissingFrameModePreference(): void {
+    try {
+      localStorage.setItem(MISSING_FRAME_MODE_STORAGE_KEY, this.missingFrameMode);
+    } catch {
+      // Ignore storage errors
+    }
+  }
+
+  private updateMissingFrameOverlay(frameNumber: number | null): void {
+    if (frameNumber === null || this.missingFrameMode === 'off') {
+      this.missingFrameOverlay.hide();
+      return;
+    }
+    this.missingFrameOverlay.show(frameNumber);
+  }
+
+  private getMissingSequenceFrameNumber(frameIndex: number): number | null {
+    const source = this.session.currentSource;
+    if (source?.type !== 'sequence' || !source.sequenceFrames || source.sequenceFrames.length < 2) {
+      return null;
+    }
+
+    const idx = frameIndex - 1;
+    if (idx <= 0 || idx >= source.sequenceFrames.length) {
+      return null;
+    }
+
+    const previousFrameNumber = source.sequenceFrames[idx - 1]?.frameNumber;
+    const currentFrameNumber = source.sequenceFrames[idx]?.frameNumber;
+    if (previousFrameNumber === undefined || currentFrameNumber === undefined) {
+      return null;
+    }
+
+    if (currentFrameNumber - previousFrameNumber <= 1) {
+      return null;
+    }
+
+    const candidate = previousFrameNumber + 1;
+    const missingFrames = source.sequenceInfo?.missingFrames ?? [];
+    if (missingFrames.length === 0 || missingFrames.includes(candidate)) {
+      return candidate;
+    }
+
+    const between = missingFrames.find((frame) => frame > previousFrameNumber && frame < currentFrameNumber);
+    return between ?? candidate;
+  }
+
   /**
    * Render immediately without scheduling via requestAnimationFrame.
    * Used by the playback loop (App.tick) which already runs inside rAF,
@@ -1111,17 +1196,35 @@ export class Viewer {
 
     // For sequences and videos with mediabunny, get the current frame
     let element: HTMLImageElement | HTMLVideoElement | HTMLCanvasElement | OffscreenCanvas | ImageBitmap | undefined;
+    let forceBlackFrame = false;
+    this.updateMissingFrameOverlay(null);
     if (source?.type === 'sequence') {
-      const frameImage = this.session.getSequenceFrameSync();
-      if (frameImage) {
-        element = frameImage;
+      const currentFrame = this.session.currentFrame;
+      const missingFrameNumber = this.getMissingSequenceFrameNumber(currentFrame);
+      const hasMissingFrame = missingFrameNumber !== null && this.missingFrameMode !== 'off';
+      this.updateMissingFrameOverlay(missingFrameNumber);
+
+      if (hasMissingFrame && this.missingFrameMode === 'black') {
+        forceBlackFrame = true;
+      } else if (hasMissingFrame && this.missingFrameMode === 'hold') {
+        const holdFrame = this.session.getSequenceFrameSync(Math.max(1, currentFrame - 1));
+        element = holdFrame ?? source.element;
       } else {
-        // Frame not loaded yet - trigger async load
-        this.session.getSequenceFrameImage()
-          .then(() => this.refresh())
-          .catch((err) => console.warn('Failed to load sequence frame:', err));
-        // Use first frame as fallback if available
-        element = source.element;
+        const frameImage = this.session.getSequenceFrameSync();
+        if (frameImage) {
+          element = frameImage;
+        } else {
+          // Frame not loaded yet - trigger async load
+          this.session.getSequenceFrameImage()
+            .then((image) => {
+              if (image) {
+                this.refresh();
+              }
+            })
+            .catch((err) => console.warn('Failed to load sequence frame:', err));
+          // Use first frame as fallback if available
+          element = source.element;
+        }
       }
     } else if (source?.type === 'video' && this.session.isUsingMediabunny()) {
       // Try to use mediabunny cached frame canvas for accurate playback
@@ -1432,7 +1535,7 @@ export class Viewer {
     }
 
     // Try prerendered cache first during playback for smooth performance with effects
-    if (this.session.isPlaying && this.prerenderBuffer) {
+    if (this.session.isPlaying && this.prerenderBuffer && !isNoiseReductionActive(this.noiseReductionParams)) {
       const currentFrame = this.session.currentFrame;
       // Note: preloadAround() is already called from the frameChanged handler,
       // so we don't duplicate it here. Only queuePriorityFrame() is called on cache miss.
@@ -1537,7 +1640,13 @@ export class Viewer {
 
     // Check if difference matte mode is enabled
     let rendered = false;
-    if (this.isBlendModeEnabled() && this.session.abCompareAvailable) {
+    if (forceBlackFrame) {
+      this.imageCtx.fillStyle = '#000';
+      this.imageCtx.fillRect(0, 0, displayWidth, displayHeight);
+      rendered = true;
+    }
+
+    if (!rendered && this.isBlendModeEnabled() && this.session.abCompareAvailable) {
       const blendData = this.renderBlendMode(displayWidth, displayHeight);
       if (blendData) {
         this.compositeImageDataOverBackground(blendData, displayWidth, displayHeight);
@@ -1650,6 +1759,15 @@ export class Viewer {
       }
     }
 
+    // Apply multi-stage LUT chain (File / Look / Display)
+    if (this.colorPipeline.gpuLUTChain?.hasAnyLUT()) {
+      try {
+        this.colorPipeline.gpuLUTChain.applyToCanvas(this.imageCtx, displayWidth, displayHeight);
+      } catch (err) {
+        console.error('Multi-stage LUT application failed:', err);
+      }
+    }
+
     // Apply 3D LUT (GPU-accelerated color grading)
     if (this.colorPipeline.currentLUT && this.colorPipeline.lutIntensity > 0) {
       try {
@@ -1679,7 +1797,11 @@ export class Viewer {
     // Phase 4A: Use async version when heavy inter-pixel effects (clarity/sharpen)
     // are active, to yield between passes and keep each blocking period <16ms.
     // For lightweight per-pixel-only effects, use the sync version for simplicity.
-    if (this.colorPipeline.colorAdjustments.clarity !== 0 || this.filterSettings.sharpen > 0) {
+    if (
+      this.colorPipeline.colorAdjustments.clarity !== 0 ||
+      this.filterSettings.sharpen > 0 ||
+      isNoiseReductionActive(this.noiseReductionParams)
+    ) {
       // Fire-and-forget: the async method checks _asyncEffectsGeneration at each
       // yield point and bails out if a newer render() has started, preventing
       // stale pixel data from overwriting a newer frame. Crop clipping is handled
@@ -1703,6 +1825,9 @@ export class Viewer {
     if (cropClipActive) {
       this.cropManager.clearOutsideCropRegion(this.imageCtx, displayWidth, displayHeight);
     }
+
+    // Composite watermark last so it stays visible above image effects.
+    this.watermarkOverlay.render(this.imageCtx, displayWidth, displayHeight);
 
     this.updateCanvasPosition();
     this.updateWipeLine();
@@ -2054,6 +2179,66 @@ export class Viewer {
   }
 
   /**
+   * Synchronize UI-managed LUT pipeline state into the runtime renderer.
+   *
+   * Mapping:
+   * - Pre-cache stage uses the existing single-LUT path for compatibility.
+   * - File / Look / Display stages are driven by GPULUTChain.
+   */
+  syncLUTPipeline(): void {
+    const pipeline = this.colorPipeline.lutPipeline;
+    const sourceId = pipeline.getActiveSourceId() ?? 'default';
+    const sourceConfig = pipeline.getSourceConfig(sourceId);
+    const state = pipeline.getState();
+
+    const gpuChain = this.colorPipeline.gpuLUTChain;
+    if (gpuChain) {
+      const fileLUT = sourceConfig?.fileLUT.lutData;
+      const lookLUT = sourceConfig?.lookLUT.lutData;
+      const displayLUT = state.displayLUT.lutData;
+
+      gpuChain.setFileLUT(fileLUT && isLUT3D(fileLUT) ? fileLUT : null);
+      gpuChain.setFileLUTEnabled(sourceConfig?.fileLUT.enabled ?? true);
+      gpuChain.setFileLUTIntensity(sourceConfig?.fileLUT.intensity ?? 1);
+
+      gpuChain.setLookLUT(lookLUT && isLUT3D(lookLUT) ? lookLUT : null);
+      gpuChain.setLookLUTEnabled(sourceConfig?.lookLUT.enabled ?? true);
+      gpuChain.setLookLUTIntensity(sourceConfig?.lookLUT.intensity ?? 1);
+
+      gpuChain.setDisplayLUT(displayLUT && isLUT3D(displayLUT) ? displayLUT : null);
+      gpuChain.setDisplayLUTEnabled(state.displayLUT.enabled);
+      gpuChain.setDisplayLUTIntensity(state.displayLUT.intensity);
+    }
+
+    const preCache = sourceConfig?.preCacheLUT;
+    const hasPreCache3D =
+      !!preCache?.lutData &&
+      isLUT3D(preCache.lutData) &&
+      preCache.enabled &&
+      preCache.intensity > 0;
+
+    if (hasPreCache3D) {
+      this.pipelinePrecacheLUTActive = true;
+      this.colorPipeline.setLUT(preCache!.lutData);
+      this.colorPipeline.setLUTIntensity(preCache!.intensity);
+      if (this.lutIndicator) {
+        this.lutIndicator.style.display = 'block';
+        this.lutIndicator.textContent = preCache?.lutName ? `LUT: ${preCache.lutName}` : 'LUT';
+      }
+    } else if (this.pipelinePrecacheLUTActive) {
+      this.pipelinePrecacheLUTActive = false;
+      this.colorPipeline.setLUT(null);
+      this.colorPipeline.setLUTIntensity(1);
+      if (this.lutIndicator) {
+        this.lutIndicator.style.display = 'none';
+      }
+    }
+
+    this.notifyEffectsChanged();
+    this.scheduleRender();
+  }
+
+  /**
    * Update A/B indicator visibility and text
    */
   updateABIndicator(current?: 'A' | 'B'): void {
@@ -2189,6 +2374,45 @@ export class Viewer {
     this.applyColorFilters();
     this.notifyEffectsChanged();
     this.scheduleRender();
+  }
+
+  setNoiseReductionParams(params: NoiseReductionParams): void {
+    this.noiseReductionParams = { ...params };
+    this.notifyEffectsChanged();
+    this.scheduleRender();
+  }
+
+  getNoiseReductionParams(): NoiseReductionParams {
+    return { ...this.noiseReductionParams };
+  }
+
+  resetNoiseReductionParams(): void {
+    this.noiseReductionParams = { ...DEFAULT_NOISE_REDUCTION_PARAMS };
+    this.notifyEffectsChanged();
+    this.scheduleRender();
+  }
+
+  getWatermarkOverlay(): WatermarkOverlay {
+    return this.watermarkOverlay;
+  }
+
+  getWatermarkState(): WatermarkState {
+    return this.watermarkOverlay.getState();
+  }
+
+  setWatermarkState(state: Partial<WatermarkState>): void {
+    this.watermarkOverlay.setState(state);
+    this.scheduleRender();
+  }
+
+  setMissingFrameMode(mode: MissingFrameMode): void {
+    this.missingFrameMode = mode;
+    this.persistMissingFrameModePreference();
+    this.scheduleRender();
+  }
+
+  getMissingFrameMode(): MissingFrameMode {
+    return this.missingFrameMode;
   }
 
   // Gamut mapping methods
@@ -2333,6 +2557,7 @@ export class Viewer {
     const hasCDL = !isDefaultCDL(this.colorPipeline.cdlValues);
     const hasCurves = !isDefaultCurves(this.colorPipeline.curvesData);
     const hasSharpen = this.filterSettings.sharpen > 0;
+    const hasNoiseReduction = isNoiseReductionActive(this.noiseReductionParams);
     const hasChannel = this.channelMode !== 'rgb';
     const hasHighlightsShadows = this.colorPipeline.colorAdjustments.highlights !== 0 || this.colorPipeline.colorAdjustments.shadows !== 0 ||
                                  this.colorPipeline.colorAdjustments.whites !== 0 || this.colorPipeline.colorAdjustments.blacks !== 0;
@@ -2354,7 +2579,7 @@ export class Viewer {
 
     // Early return if no pixel effects are active
     // Note: OCIO is handled via GPU-accelerated 3D LUT in the main render pipeline (applyOCIOToCanvas)
-    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasHueRotation && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasLuminanceVis && !hasZebras && !hasClippingOverlay && !hasToneMapping && !hasInversion && !hasDisplayColorMgmt && !hasDeinterlace && !hasFilmEmulation && !hasStabilization) {
+    if (!hasCDL && !hasCurves && !hasSharpen && !hasNoiseReduction && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasHueRotation && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasLuminanceVis && !hasZebras && !hasClippingOverlay && !hasToneMapping && !hasInversion && !hasDisplayColorMgmt && !hasDeinterlace && !hasFilmEmulation && !hasStabilization) {
       return;
     }
 
@@ -2444,6 +2669,11 @@ export class Viewer {
       applyFilmEmulation(imageData, this.filmEmulationParams);
     }
 
+    // Apply noise reduction (edge-preserving denoise before sharpen).
+    if (hasNoiseReduction) {
+      applyNoiseReduction(imageData, this.noiseReductionParams);
+    }
+
     // Apply sharpen filter
     if (hasSharpen) {
       this.applySharpenToImageData(imageData);
@@ -2501,6 +2731,7 @@ export class Viewer {
     const hasCDL = !isDefaultCDL(this.colorPipeline.cdlValues);
     const hasCurves = !isDefaultCurves(this.colorPipeline.curvesData);
     const hasSharpen = this.filterSettings.sharpen > 0;
+    const hasNoiseReduction = isNoiseReductionActive(this.noiseReductionParams);
     const hasChannel = this.channelMode !== 'rgb';
     const hasHighlightsShadows = this.colorPipeline.colorAdjustments.highlights !== 0 || this.colorPipeline.colorAdjustments.shadows !== 0 ||
                                  this.colorPipeline.colorAdjustments.whites !== 0 || this.colorPipeline.colorAdjustments.blacks !== 0;
@@ -2521,7 +2752,7 @@ export class Viewer {
     const hasStabilization = isStabilizationActive(this.stabilizationParams) && this.stabilizationParams.cropAmount > 0;
 
     // Early return if no pixel effects are active
-    if (!hasCDL && !hasCurves && !hasSharpen && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasHueRotation && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasLuminanceVis && !hasZebras && !hasClippingOverlay && !hasToneMapping && !hasInversion && !hasDisplayColorMgmt && !hasDeinterlace && !hasFilmEmulation && !hasStabilization) {
+    if (!hasCDL && !hasCurves && !hasSharpen && !hasNoiseReduction && !hasChannel && !hasHighlightsShadows && !hasVibrance && !hasClarity && !hasHueRotation && !hasColorWheels && !hasHSLQualifier && !hasFalseColor && !hasLuminanceVis && !hasZebras && !hasClippingOverlay && !hasToneMapping && !hasInversion && !hasDisplayColorMgmt && !hasDeinterlace && !hasFilmEmulation && !hasStabilization) {
       return;
     }
 
@@ -2626,14 +2857,21 @@ export class Viewer {
       if (this._asyncEffectsGeneration !== generation) return; // superseded by newer render
     }
 
-    // --- Pass 4: Sharpen (inter-pixel dependency - 3x3 kernel) ---
+    // --- Pass 4: Noise reduction (inter-pixel bilateral filter) ---
+    if (hasNoiseReduction) {
+      applyNoiseReduction(imageData, this.noiseReductionParams);
+      await yieldToMain();
+      if (this._asyncEffectsGeneration !== generation) return; // superseded by newer render
+    }
+
+    // --- Pass 5: Sharpen (inter-pixel dependency - 3x3 kernel) ---
     if (hasSharpen) {
       this.applySharpenToImageData(imageData);
       await yieldToMain();
       if (this._asyncEffectsGeneration !== generation) return; // superseded by newer render
     }
 
-    // --- Pass 5: Channel isolation + display color management ---
+    // --- Pass 6: Channel isolation + display color management ---
     if (hasChannel) {
       applyChannelIsolation(imageData, this.channelMode);
     }
@@ -2642,7 +2880,7 @@ export class Viewer {
       applyDisplayColorManagementToImageData(imageData, this.colorPipeline.displayColorState);
     }
 
-    // --- Pass 6: Diagnostic overlays ---
+    // --- Pass 7: Diagnostic overlays ---
     if (hasLuminanceVis) {
       this.overlayManager.getLuminanceVisualization().apply(imageData);
     } else if (hasFalseColor) {
@@ -3412,10 +3650,21 @@ export class Viewer {
     };
   }
 
+  private applyWatermarkToCanvas(canvas: HTMLCanvasElement): void {
+    if (!this.watermarkOverlay.isEnabled() || !this.watermarkOverlay.hasImage()) {
+      return;
+    }
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      return;
+    }
+    this.watermarkOverlay.render(ctx, canvas.width, canvas.height);
+  }
+
   createExportCanvas(includeAnnotations: boolean, colorSpace?: 'srgb' | 'display-p3'): HTMLCanvasElement | null {
     const cropRegion = this.cropManager.getExportCropRegion();
     const frameburnOptions = this.getExportFrameburnOptions(this.session.currentFrame);
-    return createExportCanvasUtil(
+    const canvas = createExportCanvasUtil(
       this.session,
       this.paintEngine,
       this.paintRenderer,
@@ -3426,6 +3675,10 @@ export class Viewer {
       colorSpace,
       frameburnOptions
     );
+    if (canvas) {
+      this.applyWatermarkToCanvas(canvas);
+    }
+    return canvas;
   }
 
   /**
@@ -3435,7 +3688,7 @@ export class Viewer {
   async renderFrameToCanvas(frame: number, includeAnnotations: boolean): Promise<HTMLCanvasElement | null> {
     const cropRegion = this.cropManager.getExportCropRegion();
     const frameburnOptions = this.getExportFrameburnOptions(frame);
-    return renderFrameToCanvasUtil(
+    const canvas = await renderFrameToCanvasUtil(
       this.session,
       this.paintEngine,
       this.paintRenderer,
@@ -3447,6 +3700,10 @@ export class Viewer {
       undefined,
       frameburnOptions
     );
+    if (canvas) {
+      this.applyWatermarkToCanvas(canvas);
+    }
+    return canvas;
   }
 
   /**
@@ -3631,6 +3888,8 @@ export class Viewer {
     this.ghostFrameManager.dispose();
 
     // Cleanup overlays (via overlay manager)
+    this.missingFrameOverlay.dispose();
+    this.watermarkOverlay.dispose();
     this.overlayManager.dispose();
     this.hslQualifier.dispose();
 
@@ -3761,6 +4020,10 @@ export class Viewer {
    */
   getClippingOverlay(): ClippingOverlay {
     return this.overlayManager.getClippingOverlay();
+  }
+
+  getMissingFrameOverlay(): MissingFrameOverlay {
+    return this.missingFrameOverlay;
   }
 
   /**

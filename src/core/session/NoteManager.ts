@@ -192,6 +192,36 @@ export class NoteManager {
     return result;
   }
 
+  // ---- Navigation ----
+
+  /**
+   * Get the frame of the next note after currentFrame for a given source.
+   * Returns the frame number, or currentFrame if no next note exists.
+   */
+  getNextNoteFrame(sourceIndex: number, currentFrame: number): number {
+    let best = Infinity;
+    for (const note of this._notes.values()) {
+      if (note.sourceIndex === sourceIndex && note.parentId === null && note.frameStart > currentFrame) {
+        if (note.frameStart < best) best = note.frameStart;
+      }
+    }
+    return best === Infinity ? currentFrame : best;
+  }
+
+  /**
+   * Get the frame of the previous note before currentFrame for a given source.
+   * Returns the frame number, or currentFrame if no previous note exists.
+   */
+  getPreviousNoteFrame(sourceIndex: number, currentFrame: number): number {
+    let best = -Infinity;
+    for (const note of this._notes.values()) {
+      if (note.sourceIndex === sourceIndex && note.parentId === null && note.frameStart < currentFrame) {
+        if (note.frameStart > best) best = note.frameStart;
+      }
+    }
+    return best === -Infinity ? currentFrame : best;
+  }
+
   // ---- Serialization ----
 
   /**

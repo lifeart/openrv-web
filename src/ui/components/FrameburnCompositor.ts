@@ -8,6 +8,40 @@ export interface FrameburnTimecodeOptions extends TimecodeOverlayState {
   startFrame?: number;
 }
 
+/** Extended field-based frameburn config */
+export type FrameburnPosition =
+  | 'top-left' | 'top-center' | 'top-right'
+  | 'bottom-left' | 'bottom-center' | 'bottom-right';
+
+export interface FrameburnField {
+  type: 'timecode' | 'frame' | 'shotName' | 'date' | 'custom' | 'resolution' | 'fps' | 'colorspace' | 'codec';
+  label?: string;
+  value?: string;
+}
+
+export interface FrameburnConfig {
+  enabled: boolean;
+  fields: FrameburnField[];
+  font?: string;
+  fontSize?: number;
+  fontColor?: string;
+  backgroundColor?: string;
+  backgroundPadding?: number;
+  position?: FrameburnPosition;
+}
+
+export interface FrameburnContext {
+  currentFrame: number;
+  totalFrames: number;
+  fps: number;
+  shotName: string;
+  width: number;
+  height: number;
+  colorSpace?: string;
+  codec?: string;
+  date?: string;
+}
+
 const FONT_SIZES: Record<TimecodeOverlayState['fontSize'], number> = {
   small: 14,
   medium: 18,
@@ -17,7 +51,7 @@ const FONT_SIZES: Record<TimecodeOverlayState['fontSize'], number> = {
 const FONT_FAMILY = "'SF Mono', 'Fira Code', 'Consolas', monospace";
 
 function getAnchorPosition(
-  position: OverlayPosition,
+  position: OverlayPosition | FrameburnPosition,
   canvasWidth: number,
   canvasHeight: number,
   boxWidth: number,
@@ -25,10 +59,14 @@ function getAnchorPosition(
 ): { x: number; y: number } {
   const margin = 16;
   switch (position) {
+    case 'top-center':
+      return { x: Math.round((canvasWidth - boxWidth) / 2), y: margin };
     case 'top-right':
       return { x: canvasWidth - boxWidth - margin, y: margin };
     case 'bottom-left':
       return { x: margin, y: canvasHeight - boxHeight - margin };
+    case 'bottom-center':
+      return { x: Math.round((canvasWidth - boxWidth) / 2), y: canvasHeight - boxHeight - margin };
     case 'bottom-right':
       return { x: canvasWidth - boxWidth - margin, y: canvasHeight - boxHeight - margin };
     case 'top-left':
@@ -124,6 +162,106 @@ export function compositeTimecodeFrameburn(
     ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
     ctx.font = `${counterFontSize}px ${FONT_FAMILY}`;
     ctx.fillText(frameCounter, x + horizontalPadding, y + verticalPadding + fontSize + lineGap);
+  }
+
+  ctx.restore();
+}
+
+/**
+ * Build display text lines from frameburn config fields and context.
+ */
+export function buildTextLines(fields: FrameburnField[], context: FrameburnContext): string[] {
+  const lines: string[] = [];
+  for (const field of fields) {
+    let text: string;
+    switch (field.type) {
+      case 'timecode': {
+        const tc = frameToTimecode(context.currentFrame, context.fps, 0);
+        text = formatTimecode(tc);
+        break;
+      }
+      case 'frame':
+        text = `${context.currentFrame} / ${context.totalFrames}`;
+        break;
+      case 'shotName':
+        text = context.shotName;
+        break;
+      case 'date':
+        text = context.date ?? new Date().toISOString().split('T')[0]!;
+        break;
+      case 'resolution':
+        text = `${context.width}x${context.height}`;
+        break;
+      case 'fps':
+        text = `${context.fps} fps`;
+        break;
+      case 'colorspace':
+        text = context.colorSpace ?? '';
+        break;
+      case 'codec':
+        text = context.codec ?? '';
+        break;
+      case 'custom':
+        text = field.value ?? '';
+        break;
+      default:
+        continue;
+    }
+    if (!text) continue;
+    const prefix = field.label ? `${field.label}: ` : '';
+    lines.push(prefix + text);
+  }
+  return lines;
+}
+
+/**
+ * Composite multi-field frameburn overlay onto an export canvas.
+ */
+export function compositeFrameburn(
+  ctx: CanvasRenderingContext2D,
+  canvasWidth: number,
+  canvasHeight: number,
+  config: FrameburnConfig,
+  context: FrameburnContext
+): void {
+  if (!config.enabled || config.fields.length === 0) return;
+
+  const lines = buildTextLines(config.fields, context);
+  if (lines.length === 0) return;
+
+  const fontSize = config.fontSize ?? 16;
+  const fontFamily = config.font ?? 'monospace';
+  const fontColor = config.fontColor ?? '#ffffff';
+  const bgColor = config.backgroundColor ?? 'rgba(0, 0, 0, 0.6)';
+  const padding = config.backgroundPadding ?? 8;
+  const position = config.position ?? 'bottom-left';
+  const lineHeight = Math.round(fontSize * 1.4);
+
+  ctx.save();
+  ctx.textBaseline = 'top';
+  ctx.font = `${fontSize}px ${fontFamily}`;
+
+  // Measure all lines to find max width
+  let maxWidth = 0;
+  for (const line of lines) {
+    const w = ctx.measureText(line).width;
+    if (w > maxWidth) maxWidth = w;
+  }
+
+  const boxWidth = Math.ceil(maxWidth + padding * 2);
+  const boxHeight = Math.ceil(padding * 2 + lines.length * lineHeight);
+
+  const { x, y } = getAnchorPosition(position, canvasWidth, canvasHeight, boxWidth, boxHeight);
+
+  // Background
+  ctx.fillStyle = bgColor;
+  drawRoundedRect(ctx, x, y, boxWidth, boxHeight, 4);
+
+  // Text lines
+  ctx.fillStyle = fontColor;
+  ctx.font = `${fontSize}px ${fontFamily}`;
+  for (let i = 0; i < lines.length; i++) {
+    ctx.fillText(lines[i]!, x + padding, y + padding + i * lineHeight);
   }
 
   ctx.restore();

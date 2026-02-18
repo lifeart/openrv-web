@@ -38,6 +38,8 @@ import type { HSLQualifier } from './HSLQualifier';
 import type { ColorAdjustments } from './ColorControls';
 import type { ToneMappingState } from './ToneMappingControl';
 import type { DeinterlaceParams } from '../../filters/Deinterlace';
+import type { NoiseReductionParams } from '../../filters/NoiseReduction';
+import { isNoiseReductionActive } from '../../filters/NoiseReduction';
 import { type FilmEmulationParams, getFilmStock } from '../../filters/FilmEmulation';
 import type { PerspectiveCorrectionParams } from '../../transform/PerspectiveCorrection';
 import { isPerspectiveActive, computeInverseHomographyFloat32 } from '../../transform/PerspectiveCorrection';
@@ -69,6 +71,7 @@ export interface GLRendererContext {
   scheduleRender(): void;
   isToneMappingEnabled(): boolean;
   getDeinterlaceParams(): DeinterlaceParams;
+  getNoiseReductionParams(): NoiseReductionParams;
   getFilmEmulationParams(): FilmEmulationParams;
   getPerspectiveParams(): PerspectiveCorrectionParams;
   getGamutMappingState(): GamutMappingState;
@@ -1064,6 +1067,8 @@ export class ViewerGLRenderer {
   hasCPUOnlyEffectsActive(): boolean {
     // Blur (applied via CSS filter which doesn't work with the GL canvas)
     if (this.ctx.getFilterSettings().blur > 0) return true;
+    // Noise reduction currently runs in the CPU 2D pipeline.
+    if (isNoiseReductionActive(this.ctx.getNoiseReductionParams())) return true;
     return false;
   }
 

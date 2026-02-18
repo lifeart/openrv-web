@@ -26,12 +26,13 @@ class StubCDLControl extends EventEmitter {}
 class StubCurvesControl extends EventEmitter {}
 class StubOCIOControl extends EventEmitter {
   private _processor = {
-    bakeTo3DLUT: vi.fn(() => new Float32Array(33 * 33 * 33 * 3)),
+    bakeTo3DLUT: vi.fn(() => new Float32Array(65 * 65 * 65 * 3)),
   };
   getProcessor() { return this._processor; }
 }
 class StubDisplayProfileControl extends EventEmitter {}
 class StubGamutMappingControl extends EventEmitter {}
+class StubLUTPipelinePanel extends EventEmitter {}
 
 function createMockViewer() {
   return {
@@ -44,6 +45,7 @@ function createMockViewer() {
     setOCIOBakedLUT: vi.fn(),
     setDisplayColorState: vi.fn(),
     setGamutMappingState: vi.fn(),
+    syncLUTPipeline: vi.fn(),
   };
 }
 
@@ -67,6 +69,7 @@ function createContext() {
   const ocioControl = new StubOCIOControl();
   const displayProfileControl = new StubDisplayProfileControl();
   const gamutMappingControl = new StubGamutMappingControl();
+  const lutPipelinePanel = new StubLUTPipelinePanel();
   const viewer = createMockViewer();
   const sessionBridge = createMockSessionBridge();
   const persistenceManager = createMockPersistenceManager();
@@ -83,6 +86,7 @@ function createContext() {
     ocioControl,
     displayProfileControl,
     gamutMappingControl,
+    lutPipelinePanel,
     gamutDiagram,
   };
 
@@ -335,6 +339,16 @@ describe('wireColorControls', () => {
     ctx._controls.gamutMappingControl.emit('gamutMappingChanged', gmState);
 
     expect(ctx._viewer.setGamutMappingState).toHaveBeenCalledWith(gmState);
+    expect(ctx._sessionBridge.scheduleUpdateScopes).toHaveBeenCalled();
+    expect(ctx._persistenceManager.syncGTOStore).toHaveBeenCalled();
+  });
+
+  it('CW-012: lutPipelinePanel pipelineChanged syncs LUT pipeline + scopes + persistence', () => {
+    wireColorControls(ctx as any);
+
+    ctx._controls.lutPipelinePanel.emit('pipelineChanged', undefined);
+
+    expect(ctx._viewer.syncLUTPipeline).toHaveBeenCalled();
     expect(ctx._sessionBridge.scheduleUpdateScopes).toHaveBeenCalled();
     expect(ctx._persistenceManager.syncGTOStore).toHaveBeenCalled();
   });

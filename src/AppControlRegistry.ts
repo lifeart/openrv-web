@@ -23,6 +23,8 @@ import { GamutMappingControl } from './ui/components/GamutMappingControl';
 import { PerspectiveCorrectionControl } from './ui/components/PerspectiveCorrectionControl';
 import { FilmEmulationControl } from './ui/components/FilmEmulationControl';
 import { StabilizationControl } from './ui/components/StabilizationControl';
+import { NoiseReductionControl } from './ui/components/NoiseReductionControl';
+import { WatermarkControl } from './ui/components/WatermarkControl';
 import { StackControl } from './ui/components/StackControl';
 import { ChannelSelect } from './ui/components/ChannelSelect';
 import { StereoControl } from './ui/components/StereoControl';
@@ -47,6 +49,7 @@ import { BackgroundPatternControl } from './ui/components/BackgroundPatternContr
 import { OCIOControl } from './ui/components/OCIOControl';
 import { DisplayProfileControl } from './ui/components/DisplayProfileControl';
 import { ColorInversionToggle } from './ui/components/ColorInversionToggle';
+import { LUTPipelinePanel } from './ui/components/LUTPipelinePanel';
 import { HistoryPanel } from './ui/components/HistoryPanel';
 import { InfoPanel } from './ui/components/InfoPanel';
 import { MarkerListPanel } from './ui/components/MarkerListPanel';
@@ -67,6 +70,8 @@ import { setButtonActive } from './ui/components/shared/Button';
 import { getGlobalHistoryManager } from './utils/HistoryManager';
 import { RightPanelContent } from './ui/layout/panels/RightPanelContent';
 import { LeftPanelContent } from './ui/layout/panels/LeftPanelContent';
+import { TimelineEditor } from './ui/components/TimelineEditor';
+import { createPanel, createPanelHeader, type Panel } from './ui/components/shared/Panel';
 import type { Session } from './core/session/Session';
 import type { Viewer } from './ui/components/Viewer';
 import type { PaintEngine } from './paint/PaintEngine';
@@ -95,6 +100,7 @@ export class AppControlRegistry {
   readonly cdlControl: CDLControl;
   readonly curvesControl: CurvesControl;
   readonly ocioControl: OCIOControl;
+  readonly lutPipelinePanel: LUTPipelinePanel;
 
   // View tab - Navigation
   readonly zoomControl: ZoomControl;
@@ -130,6 +136,9 @@ export class AppControlRegistry {
   readonly filmEmulationControl: FilmEmulationControl;
   readonly perspectiveCorrectionControl: PerspectiveCorrectionControl;
   readonly stabilizationControl: StabilizationControl;
+  readonly noiseReductionControl: NoiseReductionControl;
+  readonly watermarkControl: WatermarkControl;
+  readonly timelineEditor: TimelineEditor;
 
   // Transform tab
   readonly transformControl: TransformControl;
@@ -169,6 +178,9 @@ export class AppControlRegistry {
 
   /** Unsubscribe callbacks for registry-level .on() listeners created in setupTabContents */
   private registryUnsubscribers: (() => void)[] = [];
+  private readonly noiseReductionPanel: Panel;
+  private readonly watermarkPanel: Panel;
+  private readonly timelineEditorPanel: Panel;
 
   constructor(deps: ControlRegistryDeps) {
     const { session, viewer, paintEngine, displayCapabilities } = deps;
@@ -186,6 +198,7 @@ export class AppControlRegistry {
     this.cdlControl = new CDLControl();
     this.curvesControl = new CurvesControl();
     this.ocioControl = new OCIOControl();
+    this.lutPipelinePanel = new LUTPipelinePanel(viewer.getLUTPipeline());
 
     // --- View tab - Navigation ---
     this.zoomControl = new ZoomControl();
@@ -221,6 +234,24 @@ export class AppControlRegistry {
     this.filmEmulationControl = new FilmEmulationControl();
     this.perspectiveCorrectionControl = new PerspectiveCorrectionControl();
     this.stabilizationControl = new StabilizationControl();
+    this.noiseReductionControl = new NoiseReductionControl();
+    this.watermarkControl = new WatermarkControl(viewer.getWatermarkOverlay());
+
+    this.noiseReductionPanel = createPanel({ width: '320px', maxHeight: '70vh', align: 'right' });
+    this.noiseReductionPanel.element.appendChild(createPanelHeader('Noise Reduction'));
+    this.noiseReductionPanel.element.appendChild(this.noiseReductionControl.render());
+
+    this.watermarkPanel = createPanel({ width: '360px', maxHeight: '70vh', align: 'right' });
+    this.watermarkPanel.element.appendChild(createPanelHeader('Watermark'));
+    this.watermarkPanel.element.appendChild(this.watermarkControl.render());
+
+    this.timelineEditorPanel = createPanel({ width: '720px', maxHeight: '70vh', align: 'right' });
+    this.timelineEditorPanel.element.appendChild(createPanelHeader('Timeline Editor'));
+    const timelineEditorHost = document.createElement('div');
+    timelineEditorHost.style.cssText = 'min-height: 220px;';
+    this.timelineEditorPanel.element.appendChild(timelineEditorHost);
+    this.timelineEditor = new TimelineEditor(timelineEditorHost, session);
+    this.timelineEditor.setTotalFrames(session.frameCount);
 
     // --- Transform tab ---
     this.transformControl = new TransformControl();
@@ -237,6 +268,10 @@ export class AppControlRegistry {
     this.infoPanel = new InfoPanel();
     this.markerListPanel = new MarkerListPanel(session);
     this.notePanel = new NotePanel(session);
+
+    // Mutual exclusion: NotePanel and MarkerListPanel overlap in the same position (bidirectional)
+    this.notePanel.setExclusiveWith(this.markerListPanel);
+    this.markerListPanel.setExclusiveWith(this.notePanel);
 
     // --- Layout panel content ---
     this.rightPanelContent = new RightPanelContent(this.scopesControl);
@@ -296,6 +331,44 @@ export class AppControlRegistry {
     viewContent.appendChild(this.stackControl.render());
     viewContent.appendChild(this.parControl.render());
     viewContent.appendChild(this.backgroundPatternControl.render());
+
+    // Missing-frame mode selector
+    const missingFrameModeSelect = document.createElement('select');
+    missingFrameModeSelect.dataset.testid = 'missing-frame-mode-select';
+    missingFrameModeSelect.title = 'Missing frame mode';
+    missingFrameModeSelect.style.cssText = `
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-primary);
+      color: var(--text-secondary);
+      border-radius: 4px;
+      font-size: 11px;
+      padding: 4px 6px;
+    `;
+    const missingFrameOptions: Array<{ label: string; value: 'off' | 'show-frame' | 'hold' | 'black' }> = [
+      { label: 'Missing: Off', value: 'off' },
+      { label: 'Missing: Frame', value: 'show-frame' },
+      { label: 'Missing: Hold', value: 'hold' },
+      { label: 'Missing: Black', value: 'black' },
+    ];
+    for (const option of missingFrameOptions) {
+      const el = document.createElement('option');
+      el.value = option.value;
+      el.textContent = option.label;
+      missingFrameModeSelect.appendChild(el);
+    }
+    missingFrameModeSelect.value = viewer.getMissingFrameMode();
+    missingFrameModeSelect.addEventListener('change', () => {
+      viewer.setMissingFrameMode(missingFrameModeSelect.value as 'off' | 'show-frame' | 'hold' | 'black');
+    });
+    viewContent.appendChild(missingFrameModeSelect);
+
+    // Timeline editor toggle button
+    const timelineEditorButton = ContextToolbar.createButton('Timeline Edit', () => {
+      this.timelineEditorPanel.toggle(timelineEditorButton);
+      setButtonActive(timelineEditorButton, this.timelineEditorPanel.isVisible(), 'ghost');
+    }, { title: 'Toggle visual timeline editor', icon: 'edit' });
+    timelineEditorButton.dataset.testid = 'timeline-editor-toggle-button';
+    viewContent.appendChild(timelineEditorButton);
 
     // Spotlight Tool toggle button
     const spotlightButton = ContextToolbar.createIconButton('sun', () => {
@@ -465,6 +538,16 @@ export class AppControlRegistry {
       setButtonActive(colorWheelsButton, visible, 'ghost');
     }));
 
+    // LUT Pipeline toggle button
+    const lutPipelineButton = ContextToolbar.createButton('LUT Graph', () => {
+      this.lutPipelinePanel.toggle();
+    }, { title: 'Toggle LUT pipeline panel (Shift+L on Color tab)', icon: 'monitor' });
+    lutPipelineButton.dataset.testid = 'lut-pipeline-toggle-button';
+    colorContent.appendChild(lutPipelineButton);
+    this.registryUnsubscribers.push(this.lutPipelinePanel.on('visibilityChanged', (visible) => {
+      setButtonActive(lutPipelineButton, visible, 'ghost');
+    }));
+
     contextToolbar.setTabContent('color', colorContent);
 
     // === PANEL TOGGLES → HeaderBar utility area ===
@@ -532,6 +615,21 @@ export class AppControlRegistry {
     effectsContent.appendChild(this.perspectiveCorrectionControl.render());
     effectsContent.appendChild(ContextToolbar.createDivider());
     effectsContent.appendChild(this.stabilizationControl.render());
+    effectsContent.appendChild(ContextToolbar.createDivider());
+
+    const noiseReductionButton = ContextToolbar.createButton('Denoise', () => {
+      this.noiseReductionPanel.toggle(noiseReductionButton);
+      setButtonActive(noiseReductionButton, this.noiseReductionPanel.isVisible(), 'ghost');
+    }, { title: 'Toggle noise reduction panel', icon: 'filter' });
+    noiseReductionButton.dataset.testid = 'noise-reduction-toggle-button';
+    effectsContent.appendChild(noiseReductionButton);
+
+    const watermarkButton = ContextToolbar.createButton('Watermark', () => {
+      this.watermarkPanel.toggle(watermarkButton);
+      setButtonActive(watermarkButton, this.watermarkPanel.isVisible(), 'ghost');
+    }, { title: 'Toggle watermark panel', icon: 'image' });
+    watermarkButton.dataset.testid = 'watermark-toggle-button';
+    effectsContent.appendChild(watermarkButton);
     contextToolbar.setTabContent('effects', effectsContent);
 
     // === TRANSFORM TAB ===
@@ -604,6 +702,30 @@ export class AppControlRegistry {
     alignEl.style.display = isStereoActive ? 'inline-flex' : 'none';
   }
 
+  isNoiseReductionPanelVisible(): boolean {
+    return this.noiseReductionPanel.isVisible();
+  }
+
+  hideNoiseReductionPanel(): void {
+    this.noiseReductionPanel.hide();
+  }
+
+  isWatermarkPanelVisible(): boolean {
+    return this.watermarkPanel.isVisible();
+  }
+
+  hideWatermarkPanel(): void {
+    this.watermarkPanel.hide();
+  }
+
+  isTimelineEditorPanelVisible(): boolean {
+    return this.timelineEditorPanel.isVisible();
+  }
+
+  hideTimelineEditorPanel(): void {
+    this.timelineEditorPanel.hide();
+  }
+
   /**
    * Dispose all controls and managers.
    */
@@ -615,6 +737,13 @@ export class AppControlRegistry {
     this.registryUnsubscribers = [];
 
     this.ocioControl.dispose();
+    this.lutPipelinePanel.dispose();
+    this.timelineEditor.dispose();
+    this.timelineEditorPanel.dispose();
+    this.noiseReductionControl.dispose();
+    this.noiseReductionPanel.dispose();
+    this.watermarkControl.dispose();
+    this.watermarkPanel.dispose();
     this.ghostFrameControl.dispose();
     this.safeAreasControl.dispose();
     this.falseColorControl.dispose();

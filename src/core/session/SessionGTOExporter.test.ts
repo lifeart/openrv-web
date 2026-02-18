@@ -837,6 +837,36 @@ describe('SessionGTOExporter.toGTOData (complete export)', () => {
         const formatObj = gto.objects.find(o => o.protocol === 'RVFormat');
         expect(formatObj).toBeUndefined();
     });
+
+    it('OCIO-GTO-001: includes RVOCIO node when ocioSettings provided', () => {
+        const gto = SessionGTOExporter.toGTOData(session, paintEngine, {
+            ocioSettings: {
+                active: true,
+                display: 'sRGB',
+                view: 'ACES 1.0 SDR-video',
+                inColorSpace: 'ACEScg',
+                lut3DSize: 65,
+            },
+        });
+
+        const ocioObj = gto.objects.find(o => o.protocol === 'RVOCIO');
+        expect(ocioObj).toBeDefined();
+        expect(ocioObj?.name).toBe('display_ocio');
+
+        const components = ocioObj?.components as Record<string, any>;
+        expect(components['ocio'].properties.active.data).toEqual([1]);
+        expect(components['ocio'].properties.inColorSpace.data).toEqual(['ACEScg']);
+        expect(components['ocio'].properties.lut3DSize.data).toEqual([65]);
+        expect(components['ocio_display'].properties.display.data).toEqual(['sRGB']);
+        expect(components['ocio_display'].properties.view.data).toEqual(['ACES 1.0 SDR-video']);
+    });
+
+    it('OCIO-GTO-002: omits RVOCIO node when ocioSettings not provided', () => {
+        const gto = SessionGTOExporter.toGTOData(session, paintEngine, {});
+
+        const ocioObj = gto.objects.find(o => o.protocol === 'RVOCIO');
+        expect(ocioObj).toBeUndefined();
+    });
 });
 
 describe('SessionGTOExporter.buildLinearizeObject', () => {

@@ -164,6 +164,16 @@ export function wireColorControls(ctx: AppWiringContext): ColorWiringState {
     persistenceManager.syncGTOStore();
   });
 
+  // LUT pipeline panel -> viewer
+  controls.lutPipelinePanel.on('pipelineChanged', () => {
+    viewer.syncLUTPipeline();
+    sessionBridge.scheduleUpdateScopes();
+    persistenceManager.syncGTOStore();
+  });
+
+  // Ensure GPU LUT chain state matches panel defaults at startup
+  viewer.syncLUTPipeline();
+
   return state;
 }
 

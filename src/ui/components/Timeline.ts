@@ -4,6 +4,7 @@ import { WaveformRenderer } from '../../audio/WaveformRenderer';
 import { ThumbnailManager } from './ThumbnailManager';
 import { formatTimecode, formatFrameDisplay, TimecodeDisplayMode } from '../../utils/media/Timecode';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
+import type { NoteOverlay } from './NoteOverlay';
 
 export class Timeline {
   /** Radius of the playhead drag handle circle in pixels */
@@ -33,6 +34,7 @@ export class Timeline {
   private resizeDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private initialRenderFrameId: number | null = null;
   private disposed = false;
+  private noteOverlay: NoteOverlay | null = null;
 
   // Colors are resolved at render time from CSS variables
   private getColors() {
@@ -160,6 +162,14 @@ export class Timeline {
     this.paintEngine = paintEngine;
     this.subscribeToPaintEngine();
     this.draw();
+  }
+
+  /**
+   * Set note overlay for rendering note bars on timeline.
+   */
+  setNoteOverlay(overlay: NoteOverlay): void {
+    this.noteOverlay = overlay;
+    overlay.setRedrawCallback(() => this.draw());
   }
 
   /**
@@ -535,6 +545,14 @@ export class Timeline {
           ctx.fill();
         }
       }
+    }
+
+    // Draw note overlay bars (between marks and playhead)
+    if (this.noteOverlay) {
+      this.noteOverlay.update(
+        ctx, trackWidth, duration, padding,
+        this.session.currentSourceIndex, trackY, trackHeight,
+      );
     }
 
     // Draw playhead

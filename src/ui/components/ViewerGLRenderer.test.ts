@@ -61,6 +61,7 @@ function createMockContext(): GLRendererContext {
     getFilmEmulationParams: vi.fn(() => ({ enabled: false, stock: 'kodak-portra-400', intensity: 100, grainIntensity: 30, grainSeed: 0 })),
     getPerspectiveParams: vi.fn(() => ({ enabled: false, topLeft: { x: 0, y: 0 }, topRight: { x: 1, y: 0 }, bottomRight: { x: 1, y: 1 }, bottomLeft: { x: 0, y: 1 }, quality: 'bilinear' })),
     getGamutMappingState: vi.fn(() => ({ mode: 'off' as const, sourceGamut: 'srgb' as const, targetGamut: 'srgb' as const })),
+    getNoiseReductionParams: vi.fn(() => ({ strength: 0, luminanceStrength: 50, chromaStrength: 75, radius: 2 })),
   };
 }
 

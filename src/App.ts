@@ -49,11 +49,13 @@ import { wireEffectsControls } from './AppEffectsWiring';
 import { wireTransformControls } from './AppTransformWiring';
 import { wirePlaybackControls } from './AppPlaybackWiring';
 import { wireStackControls } from './AppStackWiring';
+import { NoteOverlay } from './ui/components/NoteOverlay';
 
 // Layout
 import { LayoutStore } from './ui/layout/LayoutStore';
 import { LayoutManager } from './ui/layout/LayoutManager';
 import { formatTimecode, formatDuration } from './handlers/infoPanelHandlers';
+import { SequenceGroupNode } from './nodes/groups/SequenceGroupNode';
 
 export class App {
   private container: HTMLElement | null = null;
@@ -65,6 +67,7 @@ export class App {
   private contextToolbar: ContextToolbar;
   private paintEngine: PaintEngine;
   private controls: AppControlRegistry;
+  private noteOverlay: NoteOverlay;
   private animationId: number | null = null;
   private boundHandleResize: () => void;
   private boundHandleVisibilityChange: () => void;
@@ -114,6 +117,10 @@ export class App {
       paintEngine: this.paintEngine,
       displayCapabilities: this.displayCapabilities,
     });
+
+    // Wire NoteOverlay into timeline for note visualization
+    this.noteOverlay = new NoteOverlay(this.session);
+    this.timeline.setNoteOverlay(this.noteOverlay);
 
     // Create HeaderBar (contains file ops, playback, volume, export, help)
     this.headerBar = new HeaderBar(this.session);
@@ -246,6 +253,26 @@ export class App {
       getFullscreenManager: () => this.fullscreenManager,
     });
     wireStackControls(wiringCtx);
+
+    // Timeline editor wiring (EDL/SequenceGroup integration)
+    this.controls.timelineEditor.on('cutSelected', ({ cutIndex }) => {
+      const entry = this.controls.timelineEditor.getEDL()[cutIndex];
+      if (entry) {
+        this.session.goToFrame(entry.frame);
+      }
+    });
+    this.controls.timelineEditor.on('cutTrimmed', () => this.applyTimelineEditorEdits());
+    this.controls.timelineEditor.on('cutMoved', () => this.applyTimelineEditorEdits());
+    this.controls.timelineEditor.on('cutDeleted', () => this.applyTimelineEditorEdits());
+    this.controls.timelineEditor.on('cutInserted', () => this.applyTimelineEditorEdits());
+
+    this.session.on('graphLoaded', () => this.syncTimelineEditorFromGraph());
+    this.session.on('durationChanged', () => {
+      this.controls.timelineEditor.setTotalFrames(this.session.frameCount);
+    });
+    this.session.on('sourceLoaded', () => {
+      this.controls.timelineEditor.setTotalFrames(this.session.frameCount);
+    });
   }
 
   async mount(selector: string): Promise<void> {
@@ -759,7 +786,13 @@ export class App {
       'channel.green': () => this.controls.channelSelect.handleKeyboard('G', true),
       'channel.blue': () => this.controls.channelSelect.handleKeyboard('B', true),
       'channel.alpha': () => this.controls.channelSelect.handleKeyboard('A', true),
-      'channel.luminance': () => this.controls.channelSelect.handleKeyboard('L', true),
+      'channel.luminance': () => {
+        if (this.tabBar.activeTab === 'color') {
+          this.controls.lutPipelinePanel.toggle();
+          return;
+        }
+        this.controls.channelSelect.handleKeyboard('L', true);
+      },
       'channel.grayscale': () => this.controls.channelSelect.handleKeyboard('Y', true),
       'channel.none': () => this.controls.channelSelect.handleKeyboard('N', true),
       'stereo.toggle': () => this.controls.stereoControl.handleKeyboard('3', true),
@@ -833,6 +866,9 @@ export class App {
         if (this.controls.ocioControl) {
           this.controls.ocioControl.hide();
         }
+        if (this.controls.lutPipelinePanel?.getIsVisible()) {
+          this.controls.lutPipelinePanel.hide();
+        }
         if (this.controls.compareControl?.isDropdownVisible()) {
           this.controls.compareControl.close();
         }
@@ -849,6 +885,15 @@ export class App {
         if (this.controls.notePanel.isVisible()) {
           this.controls.notePanel.hide();
         }
+        if (this.controls.isNoiseReductionPanelVisible()) {
+          this.controls.hideNoiseReductionPanel();
+        }
+        if (this.controls.isWatermarkPanelVisible()) {
+          this.controls.hideWatermarkPanel();
+        }
+        if (this.controls.isTimelineEditorPanelVisible()) {
+          this.controls.hideTimelineEditorPanel();
+        }
       },
       'snapshot.create': () => {
         this.persistenceManager.createQuickSnapshot();
@@ -861,6 +906,25 @@ export class App {
       },
       'panel.notes': () => {
         this.controls.notePanel.toggle();
+      },
+      'notes.addNote': () => {
+        this.controls.notePanel.addNoteAtCurrentFrame();
+      },
+      'notes.next': () => {
+        const frame = this.session.noteManager.getNextNoteFrame(
+          this.session.currentSourceIndex, this.session.currentFrame,
+        );
+        if (frame !== this.session.currentFrame) {
+          this.session.goToFrame(frame);
+        }
+      },
+      'notes.previous': () => {
+        const frame = this.session.noteManager.getPreviousNoteFrame(
+          this.session.currentSourceIndex, this.session.currentFrame,
+        );
+        if (frame !== this.session.currentFrame) {
+          this.session.goToFrame(frame);
+        }
       },
       'view.toggleFullscreen': () => {
         this.fullscreenManager?.toggle();
@@ -887,6 +951,43 @@ export class App {
       'layout.color': () => this.layoutStore.applyPreset('color'),
       'layout.paint': () => this.layoutStore.applyPreset('paint'),
     };
+  }
+
+  private getSequenceGroupNodeFromGraph(): SequenceGroupNode | null {
+    const graph = this.session.graph;
+    if (!graph) {
+      return null;
+    }
+    const node = graph.getAllNodes().find((candidate) => candidate instanceof SequenceGroupNode);
+    return node instanceof SequenceGroupNode ? node : null;
+  }
+
+  private syncTimelineEditorFromGraph(): void {
+    const sequenceNode = this.getSequenceGroupNodeFromGraph();
+    if (sequenceNode) {
+      this.controls.timelineEditor.loadFromSequenceNode(sequenceNode);
+      return;
+    }
+    this.controls.timelineEditor.setTotalFrames(this.session.frameCount);
+  }
+
+  private applyTimelineEditorEdits(): void {
+    const sequenceNode = this.getSequenceGroupNodeFromGraph();
+    if (!sequenceNode) {
+      return;
+    }
+
+    const edl = this.controls.timelineEditor.getEDL();
+    sequenceNode.setEDL(edl);
+
+    const totalDuration = Math.max(1, sequenceNode.getTotalDurationFromEDL());
+    this.session.setInPoint(1);
+    this.session.setOutPoint(totalDuration);
+    if (this.session.currentFrame > totalDuration) {
+      this.session.goToFrame(totalDuration);
+    }
+
+    this.persistenceManager.syncGTOStore();
   }
 
   private goToNextAnnotation(): void {
@@ -982,6 +1083,7 @@ export class App {
     this.session.setInPoint(mapping.clip.inPoint);
     this.session.setOutPoint(mapping.clip.outPoint);
     this.controls.playlistManager.setCurrentFrame(globalFrame);
+    this.controls.playlistPanel.setActiveClip(mapping.clip.id);
     this.session.goToFrame(mapping.localFrame);
   }
 
@@ -1081,6 +1183,7 @@ export class App {
     document.removeEventListener('visibilitychange', this.boundHandleVisibilityChange);
 
     this.viewer.dispose();
+    this.noteOverlay.dispose();
     this.timeline.dispose();
     this.headerBar.dispose();
     this.tabBar.dispose();

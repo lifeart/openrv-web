@@ -523,6 +523,24 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     description: 'Toggle notes panel'
   },
 
+  // Notes quick-add + navigation
+  'notes.addNote': {
+    code: 'KeyN',
+    description: 'Add note at current frame'
+  },
+  'notes.next': {
+    code: 'BracketRight',
+    alt: true,
+    shift: true,
+    description: 'Go to next note'
+  },
+  'notes.previous': {
+    code: 'BracketLeft',
+    alt: true,
+    shift: true,
+    description: 'Go to previous note'
+  },
+
   // Info panel
   'view.toggleInfoPanel': {
     code: 'KeyI',

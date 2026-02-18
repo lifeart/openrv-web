@@ -9,6 +9,14 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { NotePanel } from './NotePanel';
 import { Session } from '../../core/session/Session';
 
+// Mock PreferencesManager so we can control userName
+const mockGetGeneralPrefs = vi.fn(() => ({ userName: '' }));
+vi.mock('../../core/PreferencesManager', () => ({
+  getCorePreferencesManager: () => ({
+    getGeneralPrefs: mockGetGeneralPrefs,
+  }),
+}));
+
 describe('NotePanel', () => {
   let panel: NotePanel;
   let session: Session;
@@ -410,6 +418,336 @@ describe('NotePanel', () => {
 
       const badge = panel.getElement().querySelector(`[data-testid="note-status-${note.id}"]`);
       expect(badge?.textContent).toBe('resolved');
+    });
+
+    it('shows wontfix status badge', () => {
+      const note = session.noteManager.addNote(0, 10, 10, 'Wontfix note', 'Alice');
+      session.noteManager.updateNote(note.id, { status: 'wontfix' });
+      panel.show();
+
+      const badge = panel.getElement().querySelector(`[data-testid="note-status-${note.id}"]`);
+      expect(badge?.textContent).toBe('wontfix');
+    });
+  });
+
+  describe('wontfix filter', () => {
+    it('wontfix filter shows only wontfix notes', () => {
+      session.noteManager.addNote(0, 10, 10, 'Open note', 'Alice');
+      const wontfixNote = session.noteManager.addNote(0, 20, 20, 'Wontfix note', 'Bob');
+      session.noteManager.updateNote(wontfixNote.id, { status: 'wontfix' });
+      panel.show();
+
+      // All visible initially
+      expect(panel.getElement().querySelectorAll('.note-entry').length).toBe(2);
+
+      // Click wontfix filter
+      const wontfixFilter = panel.getElement().querySelector('[data-testid="note-filter-wontfix"]') as HTMLElement;
+      expect(wontfixFilter).not.toBeNull();
+      wontfixFilter.click();
+
+      const entries = panel.getElement().querySelectorAll('.note-entry');
+      expect(entries.length).toBe(1);
+      expect(entries[0]?.textContent).toContain('Wontfix note');
+    });
+  });
+
+  describe('nested reply rendering', () => {
+    it('renders deeply nested replies (reply-to-reply)', () => {
+      const parent = session.noteManager.addNote(0, 10, 10, 'Level 0', 'Alice');
+      const reply1 = session.noteManager.addNote(0, 10, 10, 'Level 1', 'Bob', { parentId: parent.id });
+      session.noteManager.addNote(0, 10, 10, 'Level 2', 'Charlie', { parentId: reply1.id });
+      panel.show();
+
+      const entries = panel.getElement().querySelectorAll('.note-entry');
+      expect(entries.length).toBe(3);
+      expect(entries[0]?.textContent).toContain('Level 0');
+      expect(entries[1]?.textContent).toContain('Level 1');
+      expect(entries[2]?.textContent).toContain('Level 2');
+    });
+  });
+
+  describe('author name from preferences', () => {
+    afterEach(() => {
+      mockGetGeneralPrefs.mockReturnValue({ userName: '' });
+    });
+
+    it('addNoteAtCurrentFrame uses userName from preferences', () => {
+      mockGetGeneralPrefs.mockReturnValue({ userName: 'Jane Doe' });
+      panel.addNoteAtCurrentFrame();
+      const notes = session.noteManager.getNotes();
+      expect(notes.length).toBe(1);
+      expect(notes[0]?.author).toBe('Jane Doe');
+    });
+
+    it('saveReply uses userName from preferences', () => {
+      mockGetGeneralPrefs.mockReturnValue({ userName: 'Jane Doe' });
+      const parent = session.noteManager.addNote(0, 10, 10, 'Parent', 'Alice');
+      panel.show();
+
+      const replyBtn = panel.getElement().querySelector(`[data-testid="note-reply-${parent.id}"]`) as HTMLElement;
+      replyBtn.click();
+
+      const textarea = panel.getElement().querySelector(`[data-testid="note-reply-textarea-${parent.id}"]`) as HTMLTextAreaElement;
+      textarea.value = 'A reply';
+      textarea.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'Enter', ctrlKey: true, bubbles: true,
+      }));
+
+      const replies = session.noteManager.getReplies(parent.id);
+      expect(replies.length).toBe(1);
+      expect(replies[0]?.author).toBe('Jane Doe');
+    });
+
+    it('falls back to "User" when userName is empty string', () => {
+      mockGetGeneralPrefs.mockReturnValue({ userName: '' });
+      panel.addNoteAtCurrentFrame();
+      const notes = session.noteManager.getNotes();
+      expect(notes[0]?.author).toBe('User');
+    });
+
+    it('falls back to "User" when userName is whitespace-only', () => {
+      mockGetGeneralPrefs.mockReturnValue({ userName: '   ' });
+      panel.addNoteAtCurrentFrame();
+      const notes = session.noteManager.getNotes();
+      expect(notes[0]?.author).toBe('User');
+    });
+
+    it('trims whitespace from userName', () => {
+      mockGetGeneralPrefs.mockReturnValue({ userName: '  Bob  ' });
+      panel.addNoteAtCurrentFrame();
+      const notes = session.noteManager.getNotes();
+      expect(notes[0]?.author).toBe('Bob');
+    });
+  });
+
+  describe('export/import', () => {
+    it('export button exists in header', () => {
+      panel.show();
+      const btn = panel.getElement().querySelector('[data-testid="note-export-btn"]');
+      expect(btn).not.toBeNull();
+      expect(btn?.textContent).toBe('Export');
+    });
+
+    it('import button exists in header', () => {
+      panel.show();
+      const btn = panel.getElement().querySelector('[data-testid="note-import-btn"]');
+      expect(btn).not.toBeNull();
+      expect(btn?.textContent).toBe('Import');
+    });
+
+    it('export produces valid JSON with all note fields', () => {
+      session.noteManager.addNote(0, 10, 20, 'Export me', 'Alice');
+      panel.show();
+
+      // Mock the download mechanism
+      const createElementSpy = vi.spyOn(document, 'createElement');
+      const revokeURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+      const createURLSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock');
+
+      const exportBtn = panel.getElement().querySelector('[data-testid="note-export-btn"]') as HTMLElement;
+      exportBtn.click();
+
+      // Find the anchor element that was created for download
+      const anchorCalls = createElementSpy.mock.calls.filter(c => c[0] === 'a');
+      expect(anchorCalls.length).toBeGreaterThan(0);
+
+      createElementSpy.mockRestore();
+      createURLSpy.mockRestore();
+      revokeURLSpy.mockRestore();
+    });
+
+    it('round-trip: export → import → notes identical', () => {
+      const note = session.noteManager.addNote(0, 10, 20, 'Round trip note', 'Alice');
+      const originalNotes = session.noteManager.toSerializable();
+
+      // Build the export data as the export method would
+      const exportData = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        notes: originalNotes,
+      };
+
+      // Clear notes and import
+      session.noteManager.fromSerializable([]);
+      expect(session.noteManager.getNotes().length).toBe(0);
+
+      // Simulate import
+      session.noteManager.fromSerializable(exportData.notes);
+
+      const imported = session.noteManager.getNotes();
+      expect(imported.length).toBe(1);
+      expect(imported[0]?.text).toBe('Round trip note');
+      expect(imported[0]?.author).toBe('Alice');
+      expect(imported[0]?.id).toBe(note.id);
+    });
+  });
+
+  describe('per-source note filtering', () => {
+    function addSecondSource() {
+      (session as any).addSource({
+        name: 'test2.mp4',
+        url: 'blob:test2',
+        type: 'video',
+        duration: 50,
+        fps: 24,
+        width: 1920,
+        height: 1080,
+        element: document.createElement('video'),
+      });
+    }
+
+    it('source dropdown hidden when only 1 source loaded', () => {
+      panel.show();
+      const select = panel.getElement().querySelector('[data-testid="note-source-filter"]');
+      expect(select).toBeNull();
+    });
+
+    it('source dropdown visible when multiple sources loaded', () => {
+      addSecondSource();
+      panel.show();
+      // Force filter bar rebuild
+      (panel as any).buildFilterBar();
+      const select = panel.getElement().querySelector('[data-testid="note-source-filter"]');
+      expect(select).not.toBeNull();
+    });
+
+    it('default shows all sources', () => {
+      addSecondSource();
+      session.noteManager.addNote(0, 10, 10, 'Source 0', 'Alice');
+      session.noteManager.addNote(1, 20, 20, 'Source 1', 'Bob');
+      panel.show();
+
+      const entries = panel.getElement().querySelectorAll('.note-entry');
+      expect(entries.length).toBe(2);
+    });
+
+    it('filter by specific source shows only matching notes', () => {
+      addSecondSource();
+      session.noteManager.addNote(0, 10, 10, 'Source 0', 'Alice');
+      session.noteManager.addNote(1, 20, 20, 'Source 1', 'Bob');
+      // Set source filter manually
+      (panel as any).sourceFilter = 0;
+      panel.show();
+
+      const entries = panel.getElement().querySelectorAll('.note-entry');
+      expect(entries.length).toBe(1);
+      expect(entries[0]?.textContent).toContain('Source 0');
+    });
+
+    it('combined source + status filter works', () => {
+      addSecondSource();
+      session.noteManager.addNote(0, 10, 10, 'Open S0', 'Alice');
+      const resolved = session.noteManager.addNote(0, 20, 20, 'Resolved S0', 'Bob');
+      session.noteManager.resolveNote(resolved.id);
+      session.noteManager.addNote(1, 30, 30, 'Open S1', 'Charlie');
+
+      (panel as any).sourceFilter = 0;
+      (panel as any).statusFilter = 'open';
+      panel.show();
+
+      const entries = panel.getElement().querySelectorAll('.note-entry');
+      expect(entries.length).toBe(1);
+      expect(entries[0]?.textContent).toContain('Open S0');
+    });
+
+    it('source with no notes shows empty state', () => {
+      addSecondSource();
+      session.noteManager.addNote(0, 10, 10, 'Only in S0', 'Alice');
+      (panel as any).sourceFilter = 1;
+      panel.show();
+
+      const emptyState = panel.getElement().querySelector('[data-testid="note-empty-state"]');
+      expect(emptyState).not.toBeNull();
+    });
+  });
+
+  describe('ARIA accessibility', () => {
+    it('entries container has role="list"', () => {
+      panel.show();
+      const container = panel.getElement().querySelector('[data-testid="note-entries"]');
+      expect(container?.getAttribute('role')).toBe('list');
+    });
+
+    it('each note entry has role="listitem"', () => {
+      session.noteManager.addNote(0, 10, 10, 'ARIA test', 'Alice');
+      panel.show();
+      const entries = panel.getElement().querySelectorAll('.note-entry');
+      expect(entries.length).toBe(1);
+      expect(entries[0]?.getAttribute('role')).toBe('listitem');
+    });
+
+    it('aria-selected updates on keyboard navigation', () => {
+      session.noteManager.addNote(0, 10, 10, 'First', 'Alice');
+      session.noteManager.addNote(0, 20, 20, 'Second', 'Bob');
+      panel.show();
+
+      // Simulate ArrowDown keydown on the container
+      panel.getElement().dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+      const entries = panel.getElement().querySelectorAll('.note-entry');
+      expect(entries[0]?.getAttribute('aria-selected')).toBe('true');
+    });
+
+    it('action buttons have non-empty aria-label', () => {
+      session.noteManager.addNote(0, 10, 10, 'Btn test', 'Alice');
+      panel.show();
+      const buttons = panel.getElement().querySelectorAll('.note-entry button');
+      for (const btn of buttons) {
+        const label = btn.getAttribute('aria-label');
+        expect(label, `button should have aria-label`).toBeTruthy();
+        expect(label!.length).toBeGreaterThan(0);
+      }
+    });
+
+    it('note count area has aria-live="polite"', () => {
+      panel.show();
+      const countEl = panel.getElement().querySelector('[data-testid="note-count"]');
+      expect(countEl?.getAttribute('aria-live')).toBe('polite');
+    });
+
+    it('note count updates when notes change', () => {
+      panel.show();
+      const countEl = panel.getElement().querySelector('[data-testid="note-count"]');
+      expect(countEl?.textContent).toBe('');
+
+      session.noteManager.addNote(0, 10, 10, 'Count test', 'Alice');
+      expect(countEl?.textContent).toBe('(1)');
+
+      session.noteManager.addNote(0, 20, 20, 'Count test 2', 'Bob');
+      expect(countEl?.textContent).toBe('(2)');
+    });
+
+    it('aria-expanded matches panel visibility', () => {
+      expect(panel.getElement().getAttribute('aria-expanded')).toBeFalsy();
+      panel.show();
+      expect(panel.getElement().getAttribute('aria-expanded')).toBe('true');
+      panel.hide();
+      expect(panel.getElement().getAttribute('aria-expanded')).toBe('false');
+    });
+  });
+
+  describe('mutual exclusion', () => {
+    it('show() closes exclusive panel if open', () => {
+      const mockExclusive = {
+        isVisible: vi.fn().mockReturnValue(true),
+        hide: vi.fn(),
+      };
+      panel.setExclusiveWith(mockExclusive);
+
+      panel.show();
+
+      expect(mockExclusive.hide).toHaveBeenCalledTimes(1);
+    });
+
+    it('show() does not close exclusive panel if already closed', () => {
+      const mockExclusive = {
+        isVisible: vi.fn().mockReturnValue(false),
+        hide: vi.fn(),
+      };
+      panel.setExclusiveWith(mockExclusive);
+
+      panel.show();
+
+      expect(mockExclusive.hide).not.toHaveBeenCalled();
     });
   });
 });

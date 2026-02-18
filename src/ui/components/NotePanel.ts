@@ -16,6 +16,8 @@ import { Session } from '../../core/session/Session';
 import { type Note, type NoteStatus } from '../../core/session/NoteManager';
 import { getIconSvg } from './shared/Icons';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
+import { getCorePreferencesManager } from '../../core/PreferencesManager';
+import { AriaAnnouncer } from '../a11y/AriaAnnouncer';
 
 export interface NotePanelEvents extends EventMap {
   visibilityChanged: boolean;
@@ -24,6 +26,12 @@ export interface NotePanelEvents extends EventMap {
 
 type StatusFilter = 'all' | NoteStatus;
 
+/** Interface for panels that support mutual exclusion */
+export interface ExclusivePanelRef {
+  isVisible(): boolean;
+  hide(): void;
+}
+
 export class NotePanel extends EventEmitter<NotePanelEvents> {
   private container: HTMLElement;
   private session: Session;
@@ -31,21 +39,27 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
   private entriesContainer: HTMLElement;
   private headerElement: HTMLElement;
   private statusFilter: StatusFilter = 'all';
+  private sourceFilter: number | 'all' = 'all';
   private editingNoteId: string | null = null;
   private replyingToNoteId: string | null = null;
   private lastHighlightedFrame: number | null = null;
   private focusedNoteIndex = -1;
   private filterContainer: HTMLElement;
+  private exclusivePanel: ExclusivePanelRef | null = null;
+  private announcer: AriaAnnouncer;
+  private noteCountEl!: HTMLElement;
 
   // Bound event handlers for cleanup
   private boundOnNotesChanged: () => void;
   private boundOnFrameChanged: () => void;
   private boundOnKeyDown: (e: KeyboardEvent) => void;
   private boundOnThemeChange: (() => void) | null = null;
+  private boundOnSourceLoaded: (() => void) | null = null;
 
   constructor(session: Session) {
     super();
     this.session = session;
+    this.announcer = new AriaAnnouncer();
 
     // Bind handlers
     this.boundOnNotesChanged = () => this.render();
@@ -87,9 +101,19 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
       background: var(--bg-secondary);
     `;
 
+    const titleArea = document.createElement('div');
+    titleArea.style.cssText = 'display: flex; align-items: center; gap: 6px;';
+
     const title = document.createElement('span');
     title.textContent = 'Notes';
     title.style.cssText = 'font-weight: 600; font-size: 13px;';
+    titleArea.appendChild(title);
+
+    this.noteCountEl = document.createElement('span');
+    this.noteCountEl.dataset.testid = 'note-count';
+    this.noteCountEl.setAttribute('aria-live', 'polite');
+    this.noteCountEl.style.cssText = 'font-size: 11px; color: var(--text-muted);';
+    titleArea.appendChild(this.noteCountEl);
 
     const headerButtons = document.createElement('div');
     headerButtons.style.cssText = 'display: flex; gap: 8px;';
@@ -97,6 +121,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     const addBtn = document.createElement('button');
     addBtn.textContent = '+ Add';
     addBtn.title = 'Add note at current frame';
+    addBtn.setAttribute('aria-label', 'Add note at current frame');
     addBtn.dataset.testid = 'note-add-btn';
     addBtn.style.cssText = `
       background: rgba(var(--accent-primary-rgb), 0.15);
@@ -112,6 +137,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     const closeBtn = document.createElement('button');
     closeBtn.textContent = '\u00d7';
     closeBtn.title = 'Close';
+    closeBtn.setAttribute('aria-label', 'Close notes panel');
     closeBtn.dataset.testid = 'note-close-btn';
     closeBtn.style.cssText = `
       background: none;
@@ -124,9 +150,41 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     `;
     closeBtn.addEventListener('click', () => this.hide());
 
+    const exportBtn = document.createElement('button');
+    exportBtn.textContent = 'Export';
+    exportBtn.title = 'Export notes to JSON file';
+    exportBtn.dataset.testid = 'note-export-btn';
+    exportBtn.style.cssText = `
+      background: rgba(var(--accent-primary-rgb), 0.15);
+      border: 1px solid var(--accent-primary);
+      color: var(--accent-primary);
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      cursor: pointer;
+    `;
+    exportBtn.addEventListener('click', () => this.exportNotes());
+
+    const importBtn = document.createElement('button');
+    importBtn.textContent = 'Import';
+    importBtn.title = 'Import notes from JSON file';
+    importBtn.dataset.testid = 'note-import-btn';
+    importBtn.style.cssText = `
+      background: rgba(var(--accent-primary-rgb), 0.15);
+      border: 1px solid var(--accent-primary);
+      color: var(--accent-primary);
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      cursor: pointer;
+    `;
+    importBtn.addEventListener('click', () => this.importNotes());
+
     headerButtons.appendChild(addBtn);
+    headerButtons.appendChild(exportBtn);
+    headerButtons.appendChild(importBtn);
     headerButtons.appendChild(closeBtn);
-    this.headerElement.appendChild(title);
+    this.headerElement.appendChild(titleArea);
     this.headerElement.appendChild(headerButtons);
 
     // Filter bar
@@ -146,6 +204,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     this.entriesContainer = document.createElement('div');
     this.entriesContainer.className = 'note-entries';
     this.entriesContainer.dataset.testid = 'note-entries';
+    this.entriesContainer.setAttribute('role', 'list');
     this.entriesContainer.style.cssText = `
       flex: 1;
       overflow-y: auto;
@@ -159,6 +218,10 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     // Subscribe to session events
     this.session.on('notesChanged', this.boundOnNotesChanged);
     this.session.on('frameChanged', this.boundOnFrameChanged);
+
+    // Update source dropdown when sources change
+    this.boundOnSourceLoaded = () => this.buildFilterBar();
+    this.session.on('sourceLoaded', this.boundOnSourceLoaded);
 
     // Keyboard navigation
     this.container.setAttribute('tabindex', '0');
@@ -176,9 +239,19 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     return this.container;
   }
 
+  /** Register another panel for mutual exclusion - opening this panel will close the other */
+  setExclusiveWith(panel: ExclusivePanelRef): void {
+    this.exclusivePanel = panel;
+  }
+
   show(): void {
+    // Close exclusive panel if it is open
+    if (this.exclusivePanel?.isVisible()) {
+      this.exclusivePanel.hide();
+    }
     this.visible = true;
     this.container.style.display = 'flex';
+    this.container.setAttribute('aria-expanded', 'true');
     this.render();
     this.emit('visibilityChanged', true);
   }
@@ -186,6 +259,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
   hide(): void {
     this.visible = false;
     this.container.style.display = 'none';
+    this.container.setAttribute('aria-expanded', 'false');
     this.editingNoteId = null;
     this.replyingToNoteId = null;
     this.emit('visibilityChanged', false);
@@ -206,10 +280,13 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
    */
   addNoteAtCurrentFrame(): void {
     const frame = this.session.currentFrame;
-    const sourceIndex = this.session.currentSourceIndex ?? 0;
+    const sourceIndex = this.session.currentSourceIndex;
     const note = this.session.noteManager.addNote(
-      sourceIndex, frame, frame, '', 'User',
+      sourceIndex, frame, frame, '', this.getAuthorName(),
     );
+    this.announcer.announce(`Note added at frame ${frame}`);
+    // Set editing state – the addNote above already triggered notesChanged → render(),
+    // but that render ran with editingNoteId=null. We must re-render with editing mode.
     this.editingNoteId = note.id;
     if (!this.visible) {
       this.show();
@@ -226,6 +303,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
       { label: 'All', value: 'all' },
       { label: 'Open', value: 'open' },
       { label: 'Resolved', value: 'resolved' },
+      { label: "Won't Fix", value: 'wontfix' },
     ];
     for (const f of filters) {
       const btn = document.createElement('button');
@@ -249,6 +327,46 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
       });
       this.filterContainer.appendChild(btn);
     }
+
+    // Source dropdown (only show if multiple sources are loaded)
+    const allSources = this.session.allSources;
+    if (allSources.length > 1) {
+      const spacer = document.createElement('div');
+      spacer.style.cssText = 'flex: 1;';
+      this.filterContainer.appendChild(spacer);
+
+      const select = document.createElement('select');
+      select.dataset.testid = 'note-source-filter';
+      select.style.cssText = `
+        background: var(--bg-secondary);
+        border: 1px solid var(--overlay-border);
+        color: var(--text-primary);
+        padding: 2px 4px;
+        border-radius: 4px;
+        font-size: 11px;
+        cursor: pointer;
+        max-width: 120px;
+      `;
+
+      const allOption = document.createElement('option');
+      allOption.value = 'all';
+      allOption.textContent = 'All Sources';
+      select.appendChild(allOption);
+
+      for (let i = 0; i < allSources.length; i++) {
+        const opt = document.createElement('option');
+        opt.value = String(i);
+        opt.textContent = allSources[i]?.name ?? `Source ${i + 1}`;
+        select.appendChild(opt);
+      }
+
+      select.value = this.sourceFilter === 'all' ? 'all' : String(this.sourceFilter);
+      select.addEventListener('change', () => {
+        this.sourceFilter = select.value === 'all' ? 'all' : Number(select.value);
+        this.render();
+      });
+      this.filterContainer.appendChild(select);
+    }
   }
 
   // ---- Rendering ----
@@ -260,6 +378,11 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     // Get only top-level notes (no parentId)
     let topLevel = allNotes.filter(n => n.parentId === null);
 
+    // Apply source filter
+    if (this.sourceFilter !== 'all') {
+      topLevel = topLevel.filter(n => n.sourceIndex === this.sourceFilter);
+    }
+
     // Apply status filter
     if (this.statusFilter !== 'all') {
       topLevel = topLevel.filter(n => n.status === this.statusFilter);
@@ -268,7 +391,12 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     // Sort by frameStart ascending, then by createdAt
     topLevel.sort((a, b) => a.frameStart - b.frameStart || a.createdAt.localeCompare(b.createdAt));
 
+    // Update note count display
+    const totalTopLevel = allNotes.filter(n => n.parentId === null).length;
+    this.noteCountEl.textContent = totalTopLevel > 0 ? `(${totalTopLevel})` : '';
+
     this.entriesContainer.innerHTML = '';
+    this.focusedNoteIndex = -1;
 
     if (topLevel.length === 0) {
       const emptyMsg = document.createElement('div');
@@ -288,13 +416,8 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
       const entryEl = this.createNoteEntry(note, false);
       this.entriesContainer.appendChild(entryEl);
 
-      // Render replies
-      const replies = this.session.noteManager.getReplies(note.id);
-      replies.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-      for (const reply of replies) {
-        const replyEl = this.createNoteEntry(reply, true);
-        this.entriesContainer.appendChild(replyEl);
-      }
+      // Render replies recursively
+      this.renderReplies(note.id);
 
       // Reply input
       if (this.replyingToNoteId === note.id) {
@@ -303,7 +426,22 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
       }
     }
 
-    this.updateHighlight();
+    // Sync highlight cache with the just-rendered state
+    this.lastHighlightedFrame = this.session.currentFrame;
+  }
+
+  /**
+   * Recursively render replies to a note (supports nested threads).
+   */
+  private renderReplies(parentId: string): void {
+    const replies = this.session.noteManager.getReplies(parentId);
+    replies.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    for (const reply of replies) {
+      const replyEl = this.createNoteEntry(reply, true);
+      this.entriesContainer.appendChild(replyEl);
+      // Recurse into sub-replies
+      this.renderReplies(reply.id);
+    }
   }
 
   private createNoteEntry(note: Note, isReply: boolean): HTMLElement {
@@ -312,6 +450,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
 
     const el = document.createElement('div');
     el.className = 'note-entry';
+    el.setAttribute('role', 'listitem');
     el.dataset.testid = `note-entry-${note.id}`;
     el.dataset.noteId = note.id;
     el.dataset.frame = String(note.frameStart);
@@ -386,6 +525,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
       resolveBtn.dataset.testid = `note-resolve-${note.id}`;
       resolveBtn.innerHTML = getIconSvg('check', 'sm');
       resolveBtn.title = 'Resolve';
+      resolveBtn.setAttribute('aria-label', 'Resolve note');
       resolveBtn.style.cssText = `
         background: none; border: none; color: var(--success, #22c55e);
         cursor: pointer; padding: 2px; line-height: 1;
@@ -393,6 +533,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
       resolveBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         this.session.noteManager.resolveNote(note.id);
+        this.announcer.announce('Note resolved');
       });
       actions.appendChild(resolveBtn);
     }
@@ -402,6 +543,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     editBtn.dataset.testid = `note-edit-${note.id}`;
     editBtn.innerHTML = getIconSvg('pencil', 'sm');
     editBtn.title = 'Edit';
+    editBtn.setAttribute('aria-label', 'Edit note');
     editBtn.style.cssText = `
       background: none; border: none; color: var(--text-muted);
       cursor: pointer; padding: 2px; line-height: 1;
@@ -418,6 +560,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
       const replyBtn = document.createElement('button');
       replyBtn.dataset.testid = `note-reply-${note.id}`;
       replyBtn.title = 'Reply';
+      replyBtn.setAttribute('aria-label', 'Reply to note');
       replyBtn.textContent = '\u21a9';
       replyBtn.style.cssText = `
         background: none; border: none; color: var(--text-muted);
@@ -436,6 +579,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     deleteBtn.dataset.testid = `note-delete-${note.id}`;
     deleteBtn.innerHTML = getIconSvg('trash', 'sm');
     deleteBtn.title = 'Delete';
+    deleteBtn.setAttribute('aria-label', 'Delete note');
     deleteBtn.style.cssText = `
       background: none; border: none; color: var(--error, #f44);
       cursor: pointer; padding: 2px; line-height: 1;
@@ -443,6 +587,7 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
     deleteBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       this.session.noteManager.removeNote(note.id);
+      this.announcer.announce('Note deleted');
     });
     actions.appendChild(deleteBtn);
 
@@ -614,11 +759,63 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
           parentNote.frameStart,
           parentNote.frameEnd,
           trimmed,
-          'User',
+          this.getAuthorName(),
           { parentId, color: parentNote.color },
         );
       }
     }
+  }
+
+  // ---- Export / Import ----
+
+  /** Export all notes to a JSON file download */
+  private exportNotes(): void {
+    const notes = this.session.noteManager.toSerializable();
+    const exportData = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      notes,
+    };
+    const json = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const date = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = `notes-export-${date}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  /** Import notes from a JSON file */
+  private importNotes(): void {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.style.display = 'none';
+    input.addEventListener('change', () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const data = JSON.parse(reader.result as string);
+          if (!data || !Array.isArray(data.notes)) {
+            window.alert('Invalid notes file. Expected { version, notes: [...] } format.');
+            return;
+          }
+          this.session.noteManager.fromSerializable(data.notes);
+        } catch {
+          window.alert('Invalid JSON file. Could not parse note data.');
+        }
+      };
+      reader.readAsText(file);
+    });
+    document.body.appendChild(input);
+    input.click();
+    document.body.removeChild(input);
   }
 
   // ---- Highlight (optimized, no full re-render) ----
@@ -678,18 +875,31 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
   }
 
   private scrollToFocused(entries: NodeListOf<Element>): void {
-    // Clear old focus
+    // Clear old focus and aria-selected
     for (const entry of entries) {
       (entry as HTMLElement).style.outline = '';
+      entry.setAttribute('aria-selected', 'false');
     }
     const focused = entries[this.focusedNoteIndex] as HTMLElement | undefined;
     if (focused) {
+      focused.setAttribute('aria-selected', 'true');
       focused.style.outline = '1px solid var(--accent-primary)';
-      focused.scrollIntoView({ block: 'nearest' });
+      focused.scrollIntoView?.({ block: 'nearest' });
     }
   }
 
   // ---- Utils ----
+
+  /** Get the current author name from preferences, falling back to 'User'. */
+  private getAuthorName(): string {
+    try {
+      const name = getCorePreferencesManager().getGeneralPrefs().userName;
+      if (name && name.trim()) return name.trim();
+    } catch {
+      // PreferencesManager not wired — fall back
+    }
+    return 'User';
+  }
 
   private formatTimestamp(iso: string): string {
     try {
@@ -708,10 +918,14 @@ export class NotePanel extends EventEmitter<NotePanelEvents> {
   dispose(): void {
     this.session.off('notesChanged', this.boundOnNotesChanged);
     this.session.off('frameChanged', this.boundOnFrameChanged);
+    if (this.boundOnSourceLoaded) {
+      this.session.off('sourceLoaded', this.boundOnSourceLoaded);
+    }
     this.container.removeEventListener('keydown', this.boundOnKeyDown);
     if (this.boundOnThemeChange) {
       getThemeManager().off('themeChanged', this.boundOnThemeChange);
     }
+    this.announcer.dispose();
     this.removeAllListeners();
   }
 }
