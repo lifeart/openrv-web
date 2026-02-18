@@ -119,7 +119,7 @@ function makeFakeApp(overrides: Record<string, unknown> = {}): App {
         roomInfo: null,
         users: [],
         isHost: false,
-        syncSettings: { playback: true, view: true, color: false, annotations: false },
+        syncSettings: { playback: true, view: true, color: false, annotations: false, cursor: true },
         rtt: 0,
       },
     },

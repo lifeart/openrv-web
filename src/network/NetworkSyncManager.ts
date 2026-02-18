@@ -165,6 +165,36 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   }
 
   /**
+   * Get the permission role for a participant.
+   * Returns 'reviewer' by default for unknown users.
+   */
+  getParticipantPermission(userId: string): ParticipantRole {
+    return this._permissions.get(userId) ?? 'reviewer';
+  }
+
+  /**
+   * Get all participant permissions as an array.
+   */
+  get participantPermissions(): ParticipantPermission[] {
+    return Array.from(this._permissions.entries()).map(([userId, role]) => ({ userId, role }));
+  }
+
+  /**
+   * Get all remote cursor positions.
+   */
+  get remoteCursors(): CursorSyncPayload[] {
+    return Array.from(this._remoteCursors.values());
+  }
+
+  /**
+   * Check whether a user can send sync updates (not a viewer).
+   */
+  canUserSync(userId: string): boolean {
+    const role = this._permissions.get(userId);
+    return role !== 'viewer';
+  }
+
+  /**
    * Get the SyncStateManager for testing/external use.
    */
   getSyncStateManager(): SyncStateManager {
@@ -298,6 +328,62 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     this.stateManager.updateLocalView(payload);
     const message = createViewSyncMessage(this._roomInfo.roomId, this._userId, payload);
     this.wsClient.send(message);
+  }
+
+  /**
+   * Send a cursor position sync message.
+   * Called by the app when the local cursor moves over the viewport.
+   */
+  sendCursorPosition(x: number, y: number): void {
+    if (!this.isConnected || !this._roomInfo) return;
+    if (!this._syncSettings.cursor) return;
+    if (this.stateManager.isApplyingRemoteState) return;
+
+    const payload: CursorSyncPayload = {
+      userId: this._userId,
+      x,
+      y,
+      timestamp: Date.now(),
+    };
+    const message = createCursorSyncMessage(this._roomInfo.roomId, this._userId, payload);
+    this.wsClient.send(message);
+  }
+
+  /**
+   * Send an annotation sync message.
+   * Called when a local annotation is added, removed, or updated.
+   */
+  sendAnnotationSync(payload: AnnotationSyncPayload): void {
+    if (!this.isConnected || !this._roomInfo) return;
+    if (!this._syncSettings.annotations) return;
+    if (this.stateManager.isApplyingRemoteState) return;
+    // Viewers cannot send annotations
+    if (this.getParticipantPermission(this._userId) === 'viewer') return;
+
+    const message = createAnnotationSyncMessage(this._roomInfo.roomId, this._userId, {
+      ...payload,
+      timestamp: Date.now(),
+    });
+    this.wsClient.send(message);
+  }
+
+  /**
+   * Set the permission role for a participant.
+   * Only the host can change permissions.
+   */
+  setParticipantPermission(targetUserId: string, role: ParticipantRole): void {
+    if (!this.isConnected || !this._roomInfo) return;
+    if (!this.isHost) return;
+
+    this._permissions.set(targetUserId, role);
+
+    const message = createPermissionMessage(this._roomInfo.roomId, this._userId, {
+      targetUserId,
+      role,
+    });
+    this.wsClient.send(message);
+
+    this.emit('participantPermissionChanged', { userId: targetUserId, role });
   }
 
   /**
@@ -504,6 +590,15 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       case 'sync.color':
         this.handleSyncColor(message.payload as ColorSyncPayload);
         break;
+      case 'sync.annotation':
+        this.handleSyncAnnotation(message.payload);
+        break;
+      case 'sync.cursor':
+        this.handleSyncCursor(message.payload, message.userId);
+        break;
+      case 'user.permission':
+        this.handlePermissionChange(message.payload, message.userId);
+        break;
       case 'sync.state-request':
         this.handleStateRequest(message.payload, message.userId);
         break;
@@ -554,6 +649,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
 
     this.wsClient.setIdentity(this._userId, payload.roomId);
     this.stateManager.setHost(true);
+    this._permissions.set(this._userId, 'host');
     this.setConnectionState('connected');
 
     this.emit('roomCreated', { ...this._roomInfo });
@@ -596,6 +692,8 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     const leavingUser = this._roomInfo.users.find(u => u.id === payload.userId);
     if (leavingUser) {
       this._roomInfo.users = this._roomInfo.users.filter(u => u.id !== payload.userId);
+      this._permissions.delete(payload.userId);
+      this._remoteCursors.delete(payload.userId);
       this.emit('usersChanged', [...this._roomInfo.users]);
       this.emit('userLeft', leavingUser);
       this.emit('toastMessage', {
@@ -656,6 +754,35 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
 
     this.stateManager.updateRemoteColor(payload);
     this.emit('syncColor', payload);
+  }
+
+  private handleSyncAnnotation(payload: unknown): void {
+    if (!this.stateManager.shouldSyncAnnotations()) return;
+    if (!validateAnnotationPayload(payload)) return;
+
+    this.emit('syncAnnotation', payload);
+  }
+
+  private handleSyncCursor(payload: unknown, senderUserId: string): void {
+    if (!this._syncSettings.cursor) return;
+    if (!validateCursorPayload(payload)) return;
+
+    this._remoteCursors.set(senderUserId, payload);
+    this.emit('syncCursor', payload);
+  }
+
+  private handlePermissionChange(payload: unknown, senderUserId: string): void {
+    if (!validatePermissionPayload(payload)) return;
+
+    const perm = payload as PermissionChangePayload;
+    // Only accept permission changes from the host
+    if (this._roomInfo && senderUserId !== this._roomInfo.hostId) return;
+
+    this._permissions.set(perm.targetUserId, perm.role);
+    this.emit('participantPermissionChanged', {
+      userId: perm.targetUserId,
+      role: perm.role,
+    });
   }
 
   private handleStateRequest(payload: unknown, senderUserId: string): void {
@@ -995,6 +1122,8 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   private resetRoomState(): void {
     this.disposeAllWebRTCPeers();
     this._roomInfo = null;
+    this._permissions.clear();
+    this._remoteCursors.clear();
     this.stateManager.reset();
   }
 
@@ -1024,6 +1153,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     };
 
     this.stateManager.setHost(true);
+    this._permissions.set(this._userId, 'host');
     this.setConnectionState('connected');
     this.emit('roomCreated', { ...this._roomInfo });
     this.emit('usersChanged', [...this._roomInfo.users]);
@@ -1065,6 +1195,8 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     const user = this._roomInfo.users.find(u => u.id === userId);
     if (user) {
       this._roomInfo.users = this._roomInfo.users.filter(u => u.id !== userId);
+      this._permissions.delete(userId);
+      this._remoteCursors.delete(userId);
       this.emit('usersChanged', [...this._roomInfo.users]);
       this.emit('userLeft', user);
       this.emit('toastMessage', {

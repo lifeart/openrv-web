@@ -211,6 +211,7 @@ describe('SyncStateManager', () => {
         view: false,
         color: true,
         annotations: false,
+        cursor: true,
       });
 
       expect(manager.shouldSyncPlayback()).toBe(true);
@@ -253,6 +254,7 @@ describe('SyncStateManager', () => {
         view: false,
         color: true,
         annotations: true,
+        cursor: false,
       });
 
       manager.reset();

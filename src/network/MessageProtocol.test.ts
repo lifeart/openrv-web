@@ -601,6 +601,7 @@ describe('MessageProtocol', () => {
         frame: 10,
         strokes: [],
         action: 'add',
+        timestamp: Date.now(),
       });
       expect(msg.type).toBe('sync.annotation');
     });

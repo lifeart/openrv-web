@@ -423,7 +423,7 @@ export class AppNetworkBridge {
     let totalBytes = 0;
 
     for (let index = 0; index < session.sourceCount; index++) {
-      const source = session.getSource(index);
+      const source = session.getSourceByIndex(index);
       if (!source) continue;
 
       const sourceFiles = await this.captureSourceFiles(source);
@@ -552,7 +552,9 @@ export class AppNetworkBridge {
       }
 
       const bytes = this.base64ToBytes(encodedChunks.join(''));
-      const file = new File([bytes], state.descriptor.name, {
+      const buffer = new ArrayBuffer(bytes.byteLength);
+      new Uint8Array(buffer).set(bytes);
+      const file = new File([buffer], state.descriptor.name, {
         type: state.descriptor.type,
         lastModified: state.descriptor.lastModified,
       });

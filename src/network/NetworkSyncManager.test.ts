@@ -202,6 +202,7 @@ describe('NetworkSyncManager', () => {
         view: false,
         color: false,
         annotations: false,
+        cursor: true,
       });
 
       const settings = manager.syncSettings;
@@ -353,6 +354,7 @@ describe('NetworkSyncManager', () => {
         view: true,
         color: false,
         annotations: false,
+        cursor: true,
       });
 
       // Should not throw, but should be suppressed
@@ -366,6 +368,7 @@ describe('NetworkSyncManager', () => {
         view: false,
         color: false,
         annotations: false,
+        cursor: true,
       });
 
       // Should not throw, but should be suppressed
