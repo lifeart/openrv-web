@@ -64,6 +64,9 @@ export type SyncMessageType =
   | 'sync.annotation'
   | 'sync.state-request'
   | 'sync.state-response'
+  | 'sync.webrtc-offer'
+  | 'sync.webrtc-answer'
+  | 'sync.webrtc-ice'
   | 'user.presence'
   | 'ping'
   | 'pong'
@@ -165,12 +168,42 @@ export interface AnnotationSyncPayload {
 
 export interface StateRequestPayload {
   requestId: string;
+  targetUserId?: string;
+}
+
+export interface EncryptedSessionStatePayload {
+  version: 1;
+  algorithm: 'AES-GCM';
+  salt: string;
+  iv: string;
+  ciphertext: string;
 }
 
 export interface StateResponsePayload {
   requestId: string;
-  playback: PlaybackSyncPayload;
-  view: ViewSyncPayload;
+  targetUserId?: string;
+  playback?: PlaybackSyncPayload;
+  view?: ViewSyncPayload;
+  sessionState?: string;
+  encryptedSessionState?: EncryptedSessionStatePayload;
+}
+
+export interface WebRTCOfferPayload {
+  requestId: string;
+  targetUserId: string;
+  sdp: string;
+}
+
+export interface WebRTCAnswerPayload {
+  requestId: string;
+  targetUserId: string;
+  sdp: string;
+}
+
+export interface WebRTCIcePayload {
+  requestId: string;
+  targetUserId: string;
+  candidate: RTCIceCandidateInit;
 }
 
 export interface PingPayload {
@@ -202,6 +235,14 @@ export interface NetworkSyncEvents extends EventMap {
   syncView: ViewSyncPayload;
   syncColor: ColorSyncPayload;
   syncAnnotation: AnnotationSyncPayload;
+  sessionStateRequested: { requestId: string; requesterUserId: string };
+  sessionStateReceived: {
+    requestId: string;
+    senderUserId: string;
+    sessionState?: string;
+    encryptedSessionState?: EncryptedSessionStatePayload;
+    transport: 'webrtc' | 'websocket';
+  };
   error: ErrorPayload;
   rttUpdated: number;
   toastMessage: { message: string; type: 'info' | 'success' | 'warning' | 'error' };
@@ -224,6 +265,7 @@ export interface WebSocketClientEvents extends EventMap {
 
 export interface NetworkSyncConfig {
   serverUrl: string;
+  iceServers: RTCIceServer[];
   reconnectMaxAttempts: number;
   reconnectBaseDelay: number;
   reconnectMaxDelay: number;
@@ -235,6 +277,10 @@ export interface NetworkSyncConfig {
 
 export const DEFAULT_NETWORK_SYNC_CONFIG: NetworkSyncConfig = {
   serverUrl: 'wss://sync.openrv.local',
+  iceServers: [
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+    { urls: 'stun:stun.cloudflare.com:3478' },
+  ],
   reconnectMaxAttempts: 10,
   reconnectBaseDelay: 1000,
   reconnectMaxDelay: 30000,

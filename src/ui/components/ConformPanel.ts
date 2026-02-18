@@ -60,8 +60,6 @@ export interface ConformEntry {
   filename: string;
   /** Suggested matches from available sources, best first */
   suggestions: ConformSource[];
-  /** Whether this clip has been resolved */
-  isResolved: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -71,7 +69,7 @@ export interface ConformEntry {
 export function extractFilename(urlOrPath: string): string {
   // Handle both URL paths and OS file paths
   const cleaned = urlOrPath.replace(/\\/g, '/');
-  const parts = cleaned.split('/');
+  const parts = cleaned.split('/').filter(Boolean);
   return parts[parts.length - 1] || urlOrPath;
 }
 
@@ -142,7 +140,6 @@ export function buildConformEntries(manager: ConformPanelManager): ConformEntry[
     clip,
     filename: extractFilename(clip.originalUrl),
     suggestions: findSuggestions(clip, sources),
-    isResolved: false,
   }));
 }
 
@@ -246,6 +243,7 @@ export class ConformPanel {
     // Status bar
     const statusBar = document.createElement('div');
     statusBar.className = 'conform-status';
+    statusBar.setAttribute('role', 'status');
     statusBar.textContent = `${status.resolved} of ${status.total} clips resolved`;
     this.listContainer.appendChild(statusBar);
 
@@ -290,6 +288,7 @@ export class ConformPanel {
       if (entry.suggestions.length > 0) {
         const select = document.createElement('select');
         select.className = 'conform-suggestions';
+        select.setAttribute('aria-label', `Re-link source for ${entry.clip.name}`);
 
         const placeholder = document.createElement('option');
         placeholder.value = '';

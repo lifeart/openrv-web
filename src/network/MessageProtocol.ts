@@ -20,6 +20,9 @@ import type {
   PongPayload,
   StateRequestPayload,
   StateResponsePayload,
+  WebRTCOfferPayload,
+  WebRTCAnswerPayload,
+  WebRTCIcePayload,
 } from './types';
 
 // ---- Valid Message Types ----
@@ -40,6 +43,9 @@ const VALID_MESSAGE_TYPES: Set<SyncMessageType> = new Set([
   'sync.annotation',
   'sync.state-request',
   'sync.state-response',
+  'sync.webrtc-offer',
+  'sync.webrtc-answer',
+  'sync.webrtc-ice',
   'user.presence',
   'ping',
   'pong',
@@ -203,6 +209,39 @@ export function createStateResponseMessage(
 }
 
 /**
+ * Create a sync.webrtc-offer message.
+ */
+export function createWebRTCOfferMessage(
+  roomId: string,
+  userId: string,
+  payload: WebRTCOfferPayload
+): SyncMessage {
+  return createMessage('sync.webrtc-offer', roomId, userId, payload);
+}
+
+/**
+ * Create a sync.webrtc-answer message.
+ */
+export function createWebRTCAnswerMessage(
+  roomId: string,
+  userId: string,
+  payload: WebRTCAnswerPayload
+): SyncMessage {
+  return createMessage('sync.webrtc-answer', roomId, userId, payload);
+}
+
+/**
+ * Create a sync.webrtc-ice message.
+ */
+export function createWebRTCIceMessage(
+  roomId: string,
+  userId: string,
+  payload: WebRTCIcePayload
+): SyncMessage {
+  return createMessage('sync.webrtc-ice', roomId, userId, payload);
+}
+
+/**
  * Create a ping message.
  */
 export function createPingMessage(roomId: string, userId: string): SyncMessage {
@@ -329,5 +368,55 @@ export function validateColorPayload(payload: unknown): payload is ColorSyncPayl
     typeof p.exposure === 'number' &&
     typeof p.gamma === 'number' &&
     typeof p.saturation === 'number'
+  );
+}
+
+/**
+ * Validate a state-request payload.
+ */
+export function validateStateRequestPayload(payload: unknown): payload is StateRequestPayload {
+  if (payload === null || typeof payload !== 'object') return false;
+  const p = payload as Record<string, unknown>;
+  if (typeof p.requestId !== 'string' || p.requestId.length === 0) return false;
+  if (p.targetUserId !== undefined && typeof p.targetUserId !== 'string') return false;
+  return true;
+}
+
+/**
+ * Validate a WebRTC offer payload.
+ */
+export function validateWebRTCOfferPayload(payload: unknown): payload is WebRTCOfferPayload {
+  if (payload === null || typeof payload !== 'object') return false;
+  const p = payload as Record<string, unknown>;
+  return (
+    typeof p.requestId === 'string' &&
+    p.requestId.length > 0 &&
+    typeof p.targetUserId === 'string' &&
+    p.targetUserId.length > 0 &&
+    typeof p.sdp === 'string' &&
+    p.sdp.length > 0
+  );
+}
+
+/**
+ * Validate a WebRTC answer payload.
+ */
+export function validateWebRTCAnswerPayload(payload: unknown): payload is WebRTCAnswerPayload {
+  return validateWebRTCOfferPayload(payload);
+}
+
+/**
+ * Validate a WebRTC ICE payload.
+ */
+export function validateWebRTCIcePayload(payload: unknown): payload is WebRTCIcePayload {
+  if (payload === null || typeof payload !== 'object') return false;
+  const p = payload as Record<string, unknown>;
+  return (
+    typeof p.requestId === 'string' &&
+    p.requestId.length > 0 &&
+    typeof p.targetUserId === 'string' &&
+    p.targetUserId.length > 0 &&
+    p.candidate !== null &&
+    typeof p.candidate === 'object'
   );
 }

@@ -40,6 +40,7 @@ export interface NetworkControlState {
   roomInfo: RoomInfo | null;
   users: SyncUser[];
   syncSettings: SyncSettings;
+  pinCode: string;
   isPanelOpen: boolean;
   rtt: number;
 }
@@ -59,6 +60,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   private userListContainer!: HTMLElement;
   private roomCodeDisplay!: HTMLElement;
   private roomCodeInput!: HTMLInputElement;
+  private pinCodeInput!: HTMLInputElement;
   private errorDisplay!: HTMLElement;
 
   private boundHandleOutsideClick: (e: MouseEvent) => void;
@@ -73,6 +75,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       roomInfo: null,
       users: [],
       syncSettings: { ...DEFAULT_SYNC_SETTINGS },
+      pinCode: this.generateDefaultPinCode(),
       isPanelOpen: false,
       rtt: 0,
     };
@@ -253,6 +256,54 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     panel.dataset.testid = 'network-disconnected-panel';
     panel.style.cssText = 'padding: 12px;';
 
+    // PIN section
+    const pinSection = document.createElement('div');
+    pinSection.style.cssText = 'margin-bottom: 12px;';
+
+    const pinLabel = document.createElement('div');
+    pinLabel.textContent = 'PIN Code';
+    pinLabel.style.cssText = `
+      color: var(--text-muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    `;
+    pinSection.appendChild(pinLabel);
+
+    this.pinCodeInput = document.createElement('input');
+    this.pinCodeInput.dataset.testid = 'network-pin-code-input';
+    this.pinCodeInput.type = 'text';
+    this.pinCodeInput.placeholder = '4-10 digit PIN';
+    this.pinCodeInput.maxLength = 10;
+    this.pinCodeInput.value = this.state.pinCode;
+    this.pinCodeInput.style.cssText = `
+      width: 100%;
+      padding: 8px 12px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-primary);
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: var(--font-mono);
+      box-sizing: border-box;
+      outline: none;
+      letter-spacing: 1px;
+    `;
+    this.pinCodeInput.addEventListener('focus', () => {
+      this.pinCodeInput.style.borderColor = 'var(--accent-primary)';
+    });
+    this.pinCodeInput.addEventListener('blur', () => {
+      this.pinCodeInput.style.borderColor = 'var(--border-primary)';
+    });
+    this.pinCodeInput.addEventListener('input', () => {
+      const digits = this.pinCodeInput.value.replace(/\D/g, '').slice(0, 10);
+      this.pinCodeInput.value = digits;
+      this.state.pinCode = digits;
+    });
+    pinSection.appendChild(this.pinCodeInput);
+    panel.appendChild(pinSection);
+
     // Create Room section
     const createSection = document.createElement('div');
     createSection.style.cssText = 'margin-bottom: 12px;';
@@ -279,6 +330,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       createBtn.style.background = 'var(--accent-primary)';
     });
     createBtn.addEventListener('click', () => {
+      this.state.pinCode = this.pinCodeInput.value.replace(/\D/g, '').slice(0, 10);
       this.emit('createRoom', { userName: this.state.syncSettings ? 'Host' : 'User' });
     });
     createSection.appendChild(createBtn);
@@ -493,7 +545,8 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     `;
     copyBtn.addEventListener('click', () => {
       const code = this.state.roomInfo?.roomCode ?? '';
-      const link = `${window.location.origin}${window.location.pathname}?room=${code}`;
+      const pinParam = this.state.pinCode ? `&pin=${encodeURIComponent(this.state.pinCode)}` : '';
+      const link = `${window.location.origin}${window.location.pathname}?room=${code}${pinParam}`;
       this.emit('copyLink', link);
 
       // Visual feedback
@@ -605,6 +658,9 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
 
   private handleJoinRoom(): void {
     const code = this.roomCodeInput.value.trim().toUpperCase();
+    if (this.pinCodeInput) {
+      this.state.pinCode = this.pinCodeInput.value.replace(/\D/g, '').slice(0, 10);
+    }
     if (!code || code.length < 9) {
       this.showError('Please enter a valid room code (XXXX-XXXX)');
       return;
@@ -619,6 +675,18 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     this.state.connectionState = state;
     this.updateButtonStyle();
     this.updatePanelVisibility();
+  }
+
+  setPinCode(pinCode: string): void {
+    const normalized = pinCode.replace(/\D/g, '').slice(0, 10);
+    this.state.pinCode = normalized;
+    if (this.pinCodeInput) {
+      this.pinCodeInput.value = normalized;
+    }
+  }
+
+  getPinCode(): string {
+    return this.state.pinCode;
   }
 
   setRoomInfo(info: RoomInfo | null): void {
@@ -776,6 +844,10 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
 
   getState(): NetworkControlState {
     return { ...this.state };
+  }
+
+  private generateDefaultPinCode(): string {
+    return String(Math.floor(100000 + Math.random() * 900000));
   }
 
   render(): HTMLElement {

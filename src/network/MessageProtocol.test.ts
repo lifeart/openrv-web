@@ -16,6 +16,9 @@ import {
   createViewSyncMessage,
   createAnnotationSyncMessage,
   createStateResponseMessage,
+  createWebRTCOfferMessage,
+  createWebRTCAnswerMessage,
+  createWebRTCIceMessage,
   createPingMessage,
   createPongMessage,
   serializeMessage,
@@ -25,6 +28,10 @@ import {
   validateFramePayload,
   validateViewPayload,
   validateColorPayload,
+  validateStateRequestPayload,
+  validateWebRTCOfferPayload,
+  validateWebRTCAnswerPayload,
+  validateWebRTCIcePayload,
 } from './MessageProtocol';
 import type { PlaybackSyncPayload, ViewSyncPayload } from './types';
 
@@ -171,6 +178,39 @@ describe('MessageProtocol', () => {
     });
   });
 
+  describe('WebRTC signaling messages', () => {
+    it('MPR-043: creates WebRTC offer message', () => {
+      const msg = createWebRTCOfferMessage('room-1', 'user-1', {
+        requestId: 'req-1',
+        targetUserId: 'user-2',
+        sdp: 'offer-sdp',
+      });
+      expect(msg.type).toBe('sync.webrtc-offer');
+    });
+
+    it('MPR-044: creates WebRTC answer message', () => {
+      const msg = createWebRTCAnswerMessage('room-1', 'user-2', {
+        requestId: 'req-1',
+        targetUserId: 'user-1',
+        sdp: 'answer-sdp',
+      });
+      expect(msg.type).toBe('sync.webrtc-answer');
+    });
+
+    it('MPR-045: creates WebRTC ICE message', () => {
+      const msg = createWebRTCIceMessage('room-1', 'user-1', {
+        requestId: 'req-1',
+        targetUserId: 'user-2',
+        candidate: {
+          candidate: 'candidate:1 1 udp 2113937151 192.168.1.2 5000 typ host',
+          sdpMid: '0',
+          sdpMLineIndex: 0,
+        },
+      });
+      expect(msg.type).toBe('sync.webrtc-ice');
+    });
+  });
+
   describe('serializeMessage / deserializeMessage', () => {
     it('MPR-001/002: round-trips a playback sync message', () => {
       const original = createPlaybackSyncMessage('room-1', 'user-1', {
@@ -307,6 +347,50 @@ describe('MessageProtocol', () => {
     it('MPR-028: rejects invalid color payload', () => {
       expect(validateColorPayload(null)).toBe(false);
       expect(validateColorPayload({ exposure: 'zero' })).toBe(false);
+    });
+  });
+
+  describe('state + WebRTC payload validation', () => {
+    it('MPR-046: validateStateRequestPayload accepts requestId with optional target', () => {
+      expect(validateStateRequestPayload({ requestId: 'req-1' })).toBe(true);
+      expect(validateStateRequestPayload({ requestId: 'req-1', targetUserId: 'user-2' })).toBe(true);
+    });
+
+    it('MPR-047: validateStateRequestPayload rejects invalid values', () => {
+      expect(validateStateRequestPayload({})).toBe(false);
+      expect(validateStateRequestPayload({ requestId: 123 })).toBe(false);
+      expect(validateStateRequestPayload({ requestId: 'req', targetUserId: 123 })).toBe(false);
+    });
+
+    it('MPR-048: validateWebRTCOfferPayload checks required fields', () => {
+      expect(validateWebRTCOfferPayload({
+        requestId: 'req-1',
+        targetUserId: 'user-2',
+        sdp: 'offer',
+      })).toBe(true);
+      expect(validateWebRTCOfferPayload({ requestId: 'req-1' })).toBe(false);
+    });
+
+    it('MPR-049: validateWebRTCAnswerPayload checks required fields', () => {
+      expect(validateWebRTCAnswerPayload({
+        requestId: 'req-1',
+        targetUserId: 'user-1',
+        sdp: 'answer',
+      })).toBe(true);
+      expect(validateWebRTCAnswerPayload({ requestId: 'req-1' })).toBe(false);
+    });
+
+    it('MPR-050: validateWebRTCIcePayload checks required fields', () => {
+      expect(validateWebRTCIcePayload({
+        requestId: 'req-1',
+        targetUserId: 'user-2',
+        candidate: { candidate: 'x' },
+      })).toBe(true);
+      expect(validateWebRTCIcePayload({
+        requestId: 'req-1',
+        targetUserId: 'user-2',
+        candidate: null,
+      })).toBe(false);
     });
   });
 

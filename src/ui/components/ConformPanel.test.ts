@@ -91,6 +91,10 @@ describe('ConformPanel', () => {
     it('returns input if no separator', () => {
       expect(extractFilename('shot.exr')).toBe('shot.exr');
     });
+
+    it('handles trailing slash in URL', () => {
+      expect(extractFilename('https://cdn.example.com/media/')).toBe('media');
+    });
   });
 
   describe('matchScore', () => {
@@ -391,6 +395,39 @@ describe('ConformPanel', () => {
       panel.dispose();
       expect(container.innerHTML).toBe('');
       expect(panel.getResolvedIds().size).toBe(0);
+    });
+
+    it('CONFORM-014: relinkClip failure does not mark clip as resolved', () => {
+      const clip = makeClip({ id: 'clip-fail' });
+      const source = makeSource({ index: 5, name: 'shot_010_comp_v02.exr' });
+      setup([clip], [source]);
+
+      // Override relinkClip to return false for this clip
+      (manager.relinkClip as ReturnType<typeof vi.fn>).mockReturnValueOnce(false);
+
+      const select = container.querySelector('.conform-suggestions') as HTMLSelectElement;
+      select.value = '5';
+      select.dispatchEvent(new Event('change'));
+
+      expect(manager.relinkClip).toHaveBeenCalledWith('clip-fail', 5);
+      expect(panel.getResolvedIds().has('clip-fail')).toBe(false);
+    });
+
+    it('status bar has role="status" for screen readers', () => {
+      setup([makeClip()], []);
+
+      const statusBar = container.querySelector('.conform-status')!;
+      expect(statusBar.getAttribute('role')).toBe('status');
+    });
+
+    it('suggestions select has aria-label', () => {
+      setup(
+        [makeClip({ id: 'clip-1', name: 'Shot 010' })],
+        [makeSource({ index: 0, name: 'shot_010_comp_v02.exr' })],
+      );
+
+      const select = container.querySelector('.conform-suggestions') as HTMLSelectElement;
+      expect(select.getAttribute('aria-label')).toBe('Re-link source for Shot 010');
     });
   });
 });

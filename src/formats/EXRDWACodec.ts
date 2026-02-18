@@ -86,14 +86,31 @@ class BitReader {
 
   constructor(private data: Uint8Array) {}
 
-  readBits(n: number): number {
+  private fillBuffer(n: number): void {
     while (this.bitsInBuffer < n && this.pos < this.data.length) {
-      this.buffer = ((this.buffer & 0xffffff) << 8) | this.data[this.pos++]!;
+      if (this.bitsInBuffer > 24) break; // can't safely add 8 more bits to 32-bit buffer
+      this.buffer = ((this.buffer << 8) | this.data[this.pos++]!) >>> 0;
       this.bitsInBuffer += 8;
     }
+  }
+
+  readBits(n: number): number {
+    this.fillBuffer(n);
     if (this.bitsInBuffer < n) return 0;
     this.bitsInBuffer -= n;
     return (this.buffer >>> this.bitsInBuffer) & ((1 << n) - 1);
+  }
+
+  /** Look at the top n bits without consuming them. */
+  peekBits(n: number): number {
+    this.fillBuffer(n);
+    if (this.bitsInBuffer < n) return 0;
+    return (this.buffer >>> (this.bitsInBuffer - n)) & ((1 << n) - 1);
+  }
+
+  /** Discard the top n bits (must be preceded by a successful peekBits). */
+  consumeBits(n: number): void {
+    this.bitsInBuffer -= n;
   }
 
   get bitsRemaining(): number {
@@ -136,8 +153,10 @@ export function floatToHalf(value: number): number {
 
   if (exponent <= 0) {
     if (exponent < -10) return sign;
-    mantissa = ((f & 0x7fffff) | 0x800000) >> (1 - exponent);
-    return sign | mantissa;
+    // Shift 23-bit mantissa (with implicit 1) down to 10-bit half mantissa
+    // (1 - exponent) for subnormal shift + 13 for float32→half precision = (14 - exponent)
+    mantissa = ((f & 0x7fffff) | 0x800000) >> (14 - exponent);
+    return sign | (mantissa & 0x3ff);
   }
   if (exponent >= 31) return sign | 0x7c00;
   return sign | (exponent << 10) | mantissa;
@@ -287,6 +306,9 @@ export function hufDecode(
   if (tableSize < 0 || pos + tableSize > compressedSize) {
     throw new DecoderError('EXR', 'Invalid DWA Huffman table size');
   }
+  if (nBits < 0) {
+    throw new DecoderError('EXR', 'Invalid DWA Huffman nBits');
+  }
 
   // Unpack encoding table
   const tableData = new Uint8Array(data.buffer, data.byteOffset + offset + pos, tableSize);
@@ -309,26 +331,25 @@ export function hufDecode(
   let bitsConsumed = 0;
 
   while (outIdx < nRaw && bitsConsumed < nBits) {
-    // Try fast table lookup
+    // Try fast table lookup using peek (don't consume yet)
     if (reader.bitsRemaining < HUF_DECBITS) break;
 
-    const peek = reader.readBits(HUF_DECBITS);
-    bitsConsumed += HUF_DECBITS;
-    const entry = fast[peek & HUF_DECMASK]!;
+    const peeked = reader.peekBits(HUF_DECBITS);
+    const entry = fast[peeked & HUF_DECMASK]!;
 
     let sym: number;
     if (entry.len > 0) {
-      // Found in fast table — put back unused bits
-      const unused = HUF_DECBITS - entry.len;
-      // We can't "put back" bits easily, so we account for consumed
-      bitsConsumed -= unused;
+      // Found in fast table — consume only the actual code length
+      reader.consumeBits(entry.len);
+      bitsConsumed += entry.len;
       sym = entry.sym;
     } else {
-      // Long code: try overflow tree
+      // Long code: consume the peeked bits and try overflow tree
+      reader.consumeBits(HUF_DECBITS);
+      bitsConsumed += HUF_DECBITS;
       let found = false;
       sym = 0;
-      // We already consumed HUF_DECBITS bits; try longer codes
-      let code = peek;
+      let code = peeked;
       for (let tryLen = HUF_DECBITS + 1; tryLen <= 58; tryLen++) {
         const nextBit = reader.readBits(1);
         bitsConsumed++;
@@ -494,7 +515,7 @@ export function parseDWABlockHeader(data: Uint8Array): {
     acCompression,
   };
 
-  if (header.version < 2) {
+  if (header.version > 2) {
     throw new DecoderError('EXR', `Unsupported DWA version: ${header.version}`);
   }
 
@@ -592,7 +613,10 @@ export async function decompressDWA(
 
   let pos = dataOffset;
 
-  // 2. Extract sub-blocks
+  // 2. Extract sub-blocks (order: unknown, AC, DC, RLE per OpenEXR spec)
+  // Skip unknown/classification data
+  pos += header.unknownCompressedSize;
+
   const acData = compressedData.subarray(pos, pos + header.acCompressedSize);
   pos += header.acCompressedSize;
 
@@ -601,9 +625,6 @@ export async function decompressDWA(
 
   const rleData = compressedData.subarray(pos, pos + header.rleCompressedSize);
   pos += header.rleCompressedSize;
-
-  // Classification/unknown data (remaining bytes)
-  // const unknownData = compressedData.subarray(pos, pos + header.unknownCompressedSize);
 
   // 3. Decompress sub-blocks
   let acValues: Uint16Array;
