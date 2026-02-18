@@ -30,6 +30,14 @@ export interface PlaylistClip {
   duration: number;
 }
 
+/** Input shape for replacing playlist clips in one operation */
+export interface PlaylistClipInput {
+  sourceIndex: number;
+  sourceName: string;
+  inPoint: number;
+  outPoint: number;
+}
+
 /** Playlist state for serialization */
 export interface PlaylistState {
   /** List of clips */
@@ -111,6 +119,40 @@ export class PlaylistManager extends EventEmitter<PlaylistManagerEvents> impleme
     this.clips.push(clip);
     this.emit('clipsChanged', { clips: [...this.clips] });
     return clip;
+  }
+
+  /**
+   * Replace all clips in one atomic update.
+   * Emits a single clipsChanged event.
+   */
+  replaceClips(clips: PlaylistClipInput[]): void {
+    const nextClips: PlaylistClip[] = [];
+    let globalStartFrame = 1;
+
+    for (const clip of clips) {
+      const inPoint = Math.max(1, Math.floor(clip.inPoint));
+      const outPoint = Math.max(inPoint, Math.floor(clip.outPoint));
+      const duration = outPoint - inPoint + 1;
+
+      nextClips.push({
+        id: `clip-${this.nextClipId++}`,
+        sourceIndex: clip.sourceIndex,
+        sourceName: clip.sourceName,
+        inPoint,
+        outPoint,
+        globalStartFrame,
+        duration,
+      });
+
+      globalStartFrame += duration;
+    }
+
+    this.clips = nextClips;
+
+    const totalDuration = this.getTotalDuration();
+    this.currentFrame = Math.max(1, Math.min(this.currentFrame, totalDuration || 1));
+
+    this.emit('clipsChanged', { clips: [...this.clips] });
   }
 
   /**

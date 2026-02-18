@@ -351,14 +351,18 @@ export function drawPlaceholder(
   // Draw text (scale font with zoom)
   const baseFontSize = 24;
   const fontSize = Math.max(10, Math.floor(baseFontSize * zoom));
+  const horizontalPadding = Math.max(16, Math.floor(24 * zoom));
+  const maxBalancedTextWidth = Math.max(180, Math.min(Math.floor(w * 0.72), 780));
+  const textMaxWidth = Math.max(180, Math.min(w - horizontalPadding * 2, maxBalancedTextWidth));
+  const textX = Math.max(horizontalPadding, Math.floor((w - textMaxWidth) / 2));
   ctx.fillStyle = getCSSColor('--text-secondary', '#666');
   ctx.font = `${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
-  ctx.textAlign = 'center';
+  ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   const titleLines = wrapTextToWidth(
     ctx,
     'Drop media or session files here',
-    Math.max(180, w - 48),
+    textMaxWidth,
   );
 
   const smallFontSize = Math.max(8, Math.floor(13 * zoom));
@@ -368,12 +372,12 @@ export function drawPlaceholder(
 
   ctx.font = `${smallFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
   const supportLines = VIEWER_PLACEHOLDER_SUPPORT_LINES.flatMap((line) =>
-    wrapTextToWidth(ctx, line, Math.max(180, w - 56))
+    wrapTextToWidth(ctx, line, textMaxWidth)
   );
 
   const showTip = h >= 240;
   const tipLines = showTip
-    ? wrapTextToWidth(ctx, 'Tip: drop numbered frames to auto-detect a sequence', Math.max(180, w - 56))
+    ? wrapTextToWidth(ctx, 'Tip: drop numbered frames to auto-detect a sequence', textMaxWidth)
     : [];
 
   const totalHeight =
@@ -386,7 +390,7 @@ export function drawPlaceholder(
   ctx.font = `${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
   ctx.fillStyle = getCSSColor('--text-secondary', '#666');
   for (const line of titleLines) {
-    ctx.fillText(line, w / 2, y);
+    ctx.fillText(line, textX, y);
     y += titleLineHeight;
   }
 
@@ -394,7 +398,7 @@ export function drawPlaceholder(
   ctx.font = `${smallFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
   ctx.fillStyle = getCSSColor('--text-muted', '#555');
   for (const line of supportLines) {
-    ctx.fillText(line, w / 2, y);
+    ctx.fillText(line, textX, y);
     y += smallLineHeight;
   }
 
@@ -402,7 +406,7 @@ export function drawPlaceholder(
     y += sectionGap;
     ctx.fillStyle = getCSSColor('--text-secondary', '#666');
     for (const line of tipLines) {
-      ctx.fillText(line, w / 2, y);
+      ctx.fillText(line, textX, y);
       y += smallLineHeight;
     }
   }

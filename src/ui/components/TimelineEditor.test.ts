@@ -72,6 +72,45 @@ describe('TimelineEditor', () => {
     });
   });
 
+  describe('loadFromEDL', () => {
+    it('TL-EDIT-U004b: loads custom labels and preserves frame positions', () => {
+      editor = new TimelineEditor(container, session);
+
+      editor.loadFromEDL(
+        [
+          { frame: 1, source: 0, inPoint: 1, outPoint: 24 },
+          { frame: 25, source: 2, inPoint: 10, outPoint: 40 },
+        ],
+        ['Plate A', 'Plate B'],
+      );
+
+      const cuts = container.querySelectorAll('.timeline-cut');
+      expect(cuts.length).toBe(2);
+      expect(cuts[0]?.textContent).toContain('Plate A');
+      expect(cuts[1]?.textContent).toContain('Plate B');
+
+      const edl = editor.getEDL();
+      expect(edl[0]?.frame).toBe(1);
+      expect(edl[1]?.frame).toBe(25);
+    });
+
+    it('TL-EDIT-U004c: clears stale selection when loading fewer cuts', () => {
+      editor = new TimelineEditor(container, session);
+      editor.insertCut(1, 0, 1, 20);
+
+      const cutEl = container.querySelector('.timeline-cut');
+      cutEl?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+      const handler = vi.fn();
+      editor.on('selectionCleared', handler);
+
+      editor.loadFromEDL([]);
+
+      expect(handler).toHaveBeenCalled();
+      expect(editor.getEDL()).toHaveLength(0);
+    });
+  });
+
   describe('insertCut', () => {
     it('TL-EDIT-U005: inserts cut at specified position', () => {
       editor = new TimelineEditor(container, session);

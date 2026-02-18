@@ -112,9 +112,11 @@ export class AppNetworkBridge {
       try {
         const state = this.ctx.getSessionURLState?.() ?? this.captureSessionURLState();
         const shareLink = buildShareURL(baseLink, state);
+        const controlWithShare = networkControl as unknown as { setShareLink?: (url: string) => void };
+        controlWithShare.setShareLink?.(shareLink);
         await navigator.clipboard.writeText(shareLink);
       } catch {
-        // Clipboard API may not be available
+        networkControl.showError('Clipboard unavailable. Copy Share URL from the Network Sync panel.');
       }
     }));
 

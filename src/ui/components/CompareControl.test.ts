@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { CompareControl, DEFAULT_BLEND_MODE_STATE } from './CompareControl';
+import { CompareControl, DEFAULT_BLEND_MODE_STATE, DEFAULT_QUAD_VIEW_STATE } from './CompareControl';
 import { DEFAULT_DIFFERENCE_MATTE_STATE } from './DifferenceMatteControl';
 
 describe('CompareControl', () => {
@@ -826,31 +826,31 @@ describe('CompareControl', () => {
       document.querySelectorAll('.compare-control, .compare-dropdown').forEach(el => el.remove());
     });
 
-    it('CMP-U130: A button has aria-pressed=true when source is A', () => {
+    it('CMP-U180: A button has aria-pressed=true when source is A', () => {
       const dropdown = openDropdown();
       const aButton = dropdown.querySelector('[data-testid="compare-ab-a"]') as HTMLButtonElement;
       expect(aButton.getAttribute('aria-pressed')).toBe('true');
     });
 
-    it('CMP-U131: B button has aria-pressed=false when source is A', () => {
+    it('CMP-U181: B button has aria-pressed=false when source is A', () => {
       const dropdown = openDropdown();
       const bButton = dropdown.querySelector('[data-testid="compare-ab-b"]') as HTMLButtonElement;
       expect(bButton.getAttribute('aria-pressed')).toBe('false');
     });
 
-    it('CMP-U132: B button has aria-disabled=true when A/B unavailable', () => {
+    it('CMP-U182: B button has aria-disabled=true when A/B unavailable', () => {
       const dropdown = openDropdown();
       const bButton = dropdown.querySelector('[data-testid="compare-ab-b"]') as HTMLButtonElement;
       expect(bButton.getAttribute('aria-disabled')).toBe('true');
     });
 
-    it('CMP-U133: toggle button has aria-disabled=true when A/B unavailable', () => {
+    it('CMP-U183: toggle button has aria-disabled=true when A/B unavailable', () => {
       const dropdown = openDropdown();
       const toggle = dropdown.querySelector('[data-testid="compare-ab-toggle"]') as HTMLButtonElement;
       expect(toggle.getAttribute('aria-disabled')).toBe('true');
     });
 
-    it('CMP-U134: B button aria-pressed=true after switching to B source', () => {
+    it('CMP-U184: B button aria-pressed=true after switching to B source', () => {
       control.setABAvailable(true);
       control.setABSource('B');
       const dropdown = openDropdown();
@@ -860,14 +860,14 @@ describe('CompareControl', () => {
       expect(aButton.getAttribute('aria-pressed')).toBe('false');
     });
 
-    it('CMP-U135: B button aria-disabled=false when A/B available', () => {
+    it('CMP-U185: B button aria-disabled=false when A/B available', () => {
       control.setABAvailable(true);
       const dropdown = openDropdown();
       const bButton = dropdown.querySelector('[data-testid="compare-ab-b"]') as HTMLButtonElement;
       expect(bButton.getAttribute('aria-disabled')).toBe('false');
     });
 
-    it('CMP-U136: wipe option aria-pressed matches active mode', () => {
+    it('CMP-U186: wipe option aria-pressed matches active mode', () => {
       control.setWipeMode('horizontal');
       const dropdown = openDropdown();
       const hOption = dropdown.querySelector('[data-wipe-mode="horizontal"]') as HTMLButtonElement;
@@ -876,7 +876,7 @@ describe('CompareControl', () => {
       expect(offOption.getAttribute('aria-pressed')).toBe('false');
     });
 
-    it('CMP-U137: diff matte toggle aria-pressed reflects enabled state', () => {
+    it('CMP-U187: diff matte toggle aria-pressed reflects enabled state', () => {
       control.setABAvailable(true);
       control.setDifferenceMatteEnabled(true);
       const dropdown = openDropdown();
@@ -884,7 +884,7 @@ describe('CompareControl', () => {
       expect(diffToggle.getAttribute('aria-pressed')).toBe('true');
     });
 
-    it('CMP-U138: heatmap toggle aria-pressed reflects heatmap state', () => {
+    it('CMP-U188: heatmap toggle aria-pressed reflects heatmap state', () => {
       control.setABAvailable(true);
       control.setDifferenceMatteEnabled(true);
       control.setDifferenceMatteHeatmap(true);
@@ -893,7 +893,7 @@ describe('CompareControl', () => {
       expect(heatmap.getAttribute('aria-pressed')).toBe('true');
     });
 
-    it('CMP-U139: blend mode button aria-pressed matches active mode', () => {
+    it('CMP-U189: blend mode button aria-pressed matches active mode', () => {
       control.setABAvailable(true);
       control.setBlendMode('onionskin');
       const dropdown = openDropdown();
@@ -901,6 +901,12 @@ describe('CompareControl', () => {
       const flickerBtn = dropdown.querySelector('[data-blend-mode="flicker"]') as HTMLButtonElement;
       expect(onionBtn.getAttribute('aria-pressed')).toBe('true');
       expect(flickerBtn.getAttribute('aria-pressed')).toBe('false');
+    });
+
+    it('CMP-U190: dropdown constrains height and enables vertical scrolling', () => {
+      const dropdown = openDropdown();
+      expect(dropdown.style.maxHeight).toBe('min(75vh, 560px)');
+      expect(dropdown.style.overflowY).toBe('auto');
     });
   });
 
@@ -954,6 +960,324 @@ describe('CompareControl', () => {
       button.click();
       const dropdown = document.querySelector('[data-testid="compare-dropdown"]') as HTMLElement;
       expect(dropdown.getAttribute('aria-label')).toBe('Compare Settings');
+    });
+  });
+
+  describe('quad view', () => {
+    it('QUAD-001: setQuadViewEnabled(true) activates quad mode', () => {
+      control.setQuadViewEnabled(true);
+      expect(control.isQuadViewEnabled()).toBe(true);
+      expect(control.getState().quadView.enabled).toBe(true);
+    });
+
+    it('QUAD-002: setQuadViewEnabled(false) deactivates quad mode', () => {
+      control.setQuadViewEnabled(true);
+      control.setQuadViewEnabled(false);
+      expect(control.isQuadViewEnabled()).toBe(false);
+    });
+
+    it('QUAD-003: toggleQuadView toggles on and off', () => {
+      expect(control.isQuadViewEnabled()).toBe(false);
+      control.toggleQuadView();
+      expect(control.isQuadViewEnabled()).toBe(true);
+      control.toggleQuadView();
+      expect(control.isQuadViewEnabled()).toBe(false);
+    });
+
+    it('QUAD-004: source C and D can be assigned', () => {
+      control.setQuadViewSource(2, 'C');
+      control.setQuadViewSource(3, 'D');
+      const sources = control.getQuadSources();
+      expect(sources[2]).toBe('C');
+      expect(sources[3]).toBe('D');
+    });
+
+    it('QUAD-005: default quad sources are A, B, C, D', () => {
+      const state = control.getQuadViewState();
+      expect(state.sources).toEqual(['A', 'B', 'C', 'D']);
+    });
+
+    it('QUAD-006: setQuadViewSource changes a specific quadrant', () => {
+      control.setQuadViewSource(0, 'D');
+      control.setQuadViewSource(1, 'C');
+      const sources = control.getQuadSources();
+      expect(sources[0]).toBe('D');
+      expect(sources[1]).toBe('C');
+      expect(sources[2]).toBe('C'); // unchanged default
+      expect(sources[3]).toBe('D'); // unchanged default
+    });
+
+    it('QUAD-007: setQuadViewSource does not emit if source unchanged', () => {
+      const callback = vi.fn();
+      control.on('quadViewChanged', callback);
+      control.setQuadViewSource(0, 'A'); // Already 'A'
+      expect(callback).not.toHaveBeenCalled();
+    });
+
+    it('QUAD-008: setQuadViewSource emits quadViewChanged when source changes', () => {
+      const callback = vi.fn();
+      control.on('quadViewChanged', callback);
+      control.setQuadViewSource(0, 'B');
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({ sources: ['B', 'B', 'C', 'D'] })
+      );
+    });
+
+    it('QUAD-009: getQuadViewState returns a copy', () => {
+      const state1 = control.getQuadViewState();
+      const state2 = control.getQuadViewState();
+      expect(state1).toEqual(state2);
+      expect(state1).not.toBe(state2);
+      expect(state1.sources).not.toBe(state2.sources);
+    });
+
+    it('QUAD-010: quad view state included in getState()', () => {
+      control.setQuadViewEnabled(true);
+      const state = control.getState();
+      expect(state.quadView.enabled).toBe(true);
+      expect(state.quadView.sources).toEqual(['A', 'B', 'C', 'D']);
+    });
+
+    it('QUAD-011: default quad view state matches DEFAULT_QUAD_VIEW_STATE', () => {
+      const state = control.getQuadViewState();
+      expect(state.enabled).toBe(DEFAULT_QUAD_VIEW_STATE.enabled);
+      expect(state.sources).toEqual(DEFAULT_QUAD_VIEW_STATE.sources);
+    });
+  });
+
+  describe('quad view events', () => {
+    it('QUAD-020: setQuadViewEnabled emits quadViewChanged event', () => {
+      const callback = vi.fn();
+      control.on('quadViewChanged', callback);
+
+      control.setQuadViewEnabled(true);
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({ enabled: true, sources: ['A', 'B', 'C', 'D'] })
+      );
+    });
+
+    it('QUAD-021: setQuadViewEnabled emits stateChanged event', () => {
+      const callback = vi.fn();
+      control.on('stateChanged', callback);
+
+      control.setQuadViewEnabled(true);
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({ quadView: expect.objectContaining({ enabled: true }) })
+      );
+    });
+
+    it('QUAD-022: setQuadViewEnabled does not emit if unchanged', () => {
+      const callback = vi.fn();
+      control.on('quadViewChanged', callback);
+
+      control.setQuadViewEnabled(false); // Already false
+      expect(callback).not.toHaveBeenCalled();
+    });
+
+    it('QUAD-023: toggleQuadView emits quadViewChanged', () => {
+      const callback = vi.fn();
+      control.on('quadViewChanged', callback);
+
+      control.toggleQuadView();
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({ enabled: true })
+      );
+
+      control.toggleQuadView();
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({ enabled: false })
+      );
+    });
+  });
+
+  describe('quad view interdependencies', () => {
+    it('QUAD-030: enabling quad view disables wipe mode', () => {
+      control.setWipeMode('horizontal');
+      expect(control.getWipeMode()).toBe('horizontal');
+
+      control.setQuadViewEnabled(true);
+      expect(control.getWipeMode()).toBe('off');
+      expect(control.isQuadViewEnabled()).toBe(true);
+    });
+
+    it('QUAD-031: enabling quad view disables difference matte', () => {
+      control.setDifferenceMatteEnabled(true);
+      expect(control.isDifferenceMatteEnabled()).toBe(true);
+
+      control.setQuadViewEnabled(true);
+      expect(control.isDifferenceMatteEnabled()).toBe(false);
+      expect(control.isQuadViewEnabled()).toBe(true);
+    });
+
+    it('QUAD-032: enabling quad view disables blend mode', () => {
+      control.setBlendMode('onionskin');
+      expect(control.getBlendMode()).toBe('onionskin');
+
+      control.setQuadViewEnabled(true);
+      expect(control.getBlendMode()).toBe('off');
+      expect(control.isQuadViewEnabled()).toBe(true);
+    });
+
+    it('QUAD-033: enabling wipe mode disables quad view', () => {
+      control.setQuadViewEnabled(true);
+      expect(control.isQuadViewEnabled()).toBe(true);
+
+      control.setWipeMode('horizontal');
+      expect(control.isQuadViewEnabled()).toBe(false);
+      expect(control.getWipeMode()).toBe('horizontal');
+    });
+
+    it('QUAD-034: enabling difference matte disables quad view', () => {
+      control.setQuadViewEnabled(true);
+      expect(control.isQuadViewEnabled()).toBe(true);
+
+      control.setDifferenceMatteEnabled(true);
+      expect(control.isQuadViewEnabled()).toBe(false);
+      expect(control.isDifferenceMatteEnabled()).toBe(true);
+    });
+
+    it('QUAD-035: enabling blend mode disables quad view', () => {
+      control.setQuadViewEnabled(true);
+      expect(control.isQuadViewEnabled()).toBe(true);
+
+      control.setBlendMode('flicker');
+      expect(control.isQuadViewEnabled()).toBe(false);
+      expect(control.getBlendMode()).toBe('flicker');
+    });
+
+    it('QUAD-036: enabling quad view emits wipeModeChanged when wipe is active', () => {
+      control.setWipeMode('vertical');
+      const callback = vi.fn();
+      control.on('wipeModeChanged', callback);
+
+      control.setQuadViewEnabled(true);
+      expect(callback).toHaveBeenCalledWith('off');
+    });
+
+    it('QUAD-037: enabling quad view emits blendModeChanged when blend is active', () => {
+      control.setBlendMode('onionskin');
+      const callback = vi.fn();
+      control.on('blendModeChanged', callback);
+
+      control.setQuadViewEnabled(true);
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ mode: 'off' }));
+    });
+
+    it('QUAD-038: enabling quad view emits differenceMatteChanged when diff matte is active', () => {
+      control.setDifferenceMatteEnabled(true);
+      const callback = vi.fn();
+      control.on('differenceMatteChanged', callback);
+
+      control.setQuadViewEnabled(true);
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({ enabled: false }));
+    });
+
+    it('QUAD-039: disabling quad view does not re-enable wipe/blend/diff', () => {
+      control.setWipeMode('horizontal');
+      control.setQuadViewEnabled(true);
+      expect(control.getWipeMode()).toBe('off');
+
+      control.setQuadViewEnabled(false);
+      expect(control.getWipeMode()).toBe('off'); // Stays off
+    });
+
+    it('QUAD-040: quad view makes isActive() return true', () => {
+      control.setQuadViewEnabled(true);
+      const state = control.getState();
+      expect(state.quadView.enabled).toBe(true);
+    });
+
+    it('QUAD-041: quad view does not emit quad event when wipe is already off', () => {
+      // When enabling quad view with wipe already off, should not emit wipeModeChanged
+      const callback = vi.fn();
+      control.on('wipeModeChanged', callback);
+
+      control.setQuadViewEnabled(true);
+      expect(callback).not.toHaveBeenCalled();
+    });
+
+    it('QUAD-042: sources are preserved when toggling quad view off and on', () => {
+      control.setQuadViewSource(0, 'D');
+      control.setQuadViewSource(1, 'C');
+      control.setQuadViewEnabled(true);
+      control.setQuadViewEnabled(false);
+
+      const sources = control.getQuadSources();
+      expect(sources).toEqual(['D', 'C', 'C', 'D']);
+    });
+
+    it('QUAD-043: enabling quad view stops flicker interval', () => {
+      control.setBlendMode('flicker');
+      expect(control.getBlendMode()).toBe('flicker');
+
+      control.setQuadViewEnabled(true);
+      expect(control.getBlendMode()).toBe('off');
+      // Flicker frame should be reset to 0 after stopping
+      expect(control.getFlickerFrame()).toBe(0);
+    });
+  });
+
+  describe('quad view UI', () => {
+    function openDropdown(): HTMLElement {
+      const el = control.render();
+      document.body.appendChild(el);
+      const button = el.querySelector('[data-testid="compare-control-button"]') as HTMLButtonElement;
+      button.click();
+      return document.querySelector('[data-testid="compare-dropdown"]')!;
+    }
+
+    afterEach(() => {
+      document.querySelectorAll('.compare-control, .compare-dropdown').forEach(el => el.remove());
+    });
+
+    it('QUAD-050: dropdown has quad view toggle button', () => {
+      const dropdown = openDropdown();
+      const toggle = dropdown.querySelector('[data-testid="quad-view-toggle"]') as HTMLButtonElement;
+      expect(toggle).not.toBeNull();
+    });
+
+    it('QUAD-051: dropdown has quad source selects', () => {
+      const dropdown = openDropdown();
+      for (let i = 0; i < 4; i++) {
+        const select = dropdown.querySelector(`[data-testid="quad-source-${i}"]`) as HTMLSelectElement;
+        expect(select).not.toBeNull();
+      }
+    });
+
+    it('QUAD-052: quad source selects default to A, B, C, D', () => {
+      const dropdown = openDropdown();
+      const expected = ['A', 'B', 'C', 'D'];
+      for (let i = 0; i < 4; i++) {
+        const select = dropdown.querySelector(`[data-testid="quad-source-${i}"]`) as HTMLSelectElement;
+        expect(select.value).toBe(expected[i]);
+      }
+    });
+
+    it('QUAD-053: quad sources container hidden when quad view disabled', () => {
+      const dropdown = openDropdown();
+      const container = dropdown.querySelector('.quad-sources-container') as HTMLElement;
+      expect(container.style.display).toBe('none');
+    });
+
+    it('QUAD-054: quad sources container visible when quad view enabled', () => {
+      control.setQuadViewEnabled(true);
+      const dropdown = openDropdown();
+      const container = dropdown.querySelector('.quad-sources-container') as HTMLElement;
+      expect(container.style.display).toBe('flex');
+    });
+
+    it('QUAD-055: quad toggle aria-pressed reflects enabled state', () => {
+      control.setQuadViewEnabled(true);
+      const dropdown = openDropdown();
+      const toggle = dropdown.querySelector('[data-testid="quad-view-toggle"]') as HTMLButtonElement;
+      expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('QUAD-056: button label shows Quad when quad view is enabled', () => {
+      control.setQuadViewEnabled(true);
+      const el = control.render();
+      const button = el.querySelector('[data-testid="compare-control-button"]') as HTMLButtonElement;
+      expect(button.textContent).toContain('Quad');
     });
   });
 });

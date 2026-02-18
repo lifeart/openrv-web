@@ -88,7 +88,9 @@ export function decodeSessionState(hash: string): SessionURLState | null {
  */
 export function buildShareURL(baseUrl: string, state: SessionURLState): string {
   const encoded = encodeSessionState(state);
-  const url = new URL(baseUrl);
+  const fallbackBase = typeof window !== 'undefined' ? window.location.href : 'http://localhost/';
+  const normalizedBase = baseUrl.trim().length > 0 ? baseUrl : fallbackBase;
+  const url = new URL(normalizedBase, fallbackBase);
   url.hash = `s=${encoded}`;
   return url.toString();
 }

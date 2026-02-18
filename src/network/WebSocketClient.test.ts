@@ -316,6 +316,35 @@ describe('WebSocketClient', () => {
 
       expect(failHandler).toHaveBeenCalled();
     });
+
+    it('WSC-023: rotates across signaling servers on reconnect attempts', async () => {
+      client.dispose();
+      mockWSInstances = [];
+      mockAutoConnect = true;
+      client = new WebSocketClient({
+        serverUrl: 'wss://primary.example.com',
+        serverUrls: ['wss://primary.example.com', 'wss://backup.example.com'],
+        reconnectMaxAttempts: 3,
+        reconnectBaseDelay: 100,
+        reconnectMaxDelay: 1000,
+        heartbeatInterval: 5000,
+        heartbeatTimeout: 10000,
+        frameSyncThreshold: 2,
+        userName: 'Test',
+      });
+
+      client.connect();
+      await vi.advanceTimersByTimeAsync(20);
+      expect(mockWSInstances[0]!.url).toBe('wss://primary.example.com');
+
+      // Force reconnect and keep follow-up sockets from auto-opening.
+      mockAutoConnect = false;
+      mockWSInstances[0]!.simulateClose(1006);
+      await vi.advanceTimersByTimeAsync(500);
+
+      expect(mockWSInstances.length).toBeGreaterThan(1);
+      expect(mockWSInstances[1]!.url).toBe('wss://backup.example.com');
+    });
   });
 
   describe('error handling', () => {

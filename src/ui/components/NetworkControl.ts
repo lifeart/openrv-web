@@ -41,6 +41,9 @@ export interface NetworkControlState {
   users: SyncUser[];
   syncSettings: SyncSettings;
   pinCode: string;
+  shareLink: string;
+  linkedRoomCode: string | null;
+  linkedRoomAutoJoinArmed: boolean;
   isPanelOpen: boolean;
   rtt: number;
 }
@@ -64,6 +67,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   private connectingPanel!: HTMLElement;
   private userListContainer!: HTMLElement;
   private roomCodeDisplay!: HTMLElement;
+  private shareLinkInput!: HTMLInputElement;
   private roomCodeInput!: HTMLInputElement;
   private pinCodeInput!: HTMLInputElement;
   private errorDisplay!: HTMLElement;
@@ -84,6 +88,9 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       users: [],
       syncSettings: { ...DEFAULT_SYNC_SETTINGS },
       pinCode: this.generateDefaultPinCode(),
+      shareLink: '',
+      linkedRoomCode: null,
+      linkedRoomAutoJoinArmed: false,
       isPanelOpen: false,
       rtt: 0,
     };
@@ -377,6 +384,16 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       const digits = this.pinCodeInput.value.replace(/\D/g, '').slice(0, 10);
       this.pinCodeInput.value = digits;
       this.state.pinCode = digits;
+
+      if (
+        this.state.linkedRoomCode &&
+        this.state.linkedRoomAutoJoinArmed &&
+        (this.state.connectionState === 'disconnected' || this.state.connectionState === 'error') &&
+        digits.length >= 4
+      ) {
+        this.state.linkedRoomAutoJoinArmed = false;
+        this.emit('joinRoom', { roomCode: this.state.linkedRoomCode, userName: 'User' });
+      }
     });
     pinSection.appendChild(this.pinCodeInput);
     panel.appendChild(pinSection);
@@ -533,6 +550,42 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     `;
     panel.appendChild(this.roomCodeDisplay);
 
+    // Share URL display
+    const shareSection = document.createElement('div');
+    shareSection.style.cssText = `
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border-secondary);
+    `;
+
+    const shareLabel = document.createElement('div');
+    shareLabel.style.cssText = 'color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;';
+    shareLabel.textContent = 'Share URL';
+    shareSection.appendChild(shareLabel);
+
+    this.shareLinkInput = document.createElement('input');
+    this.shareLinkInput.dataset.testid = 'network-share-link-input';
+    this.shareLinkInput.type = 'text';
+    this.shareLinkInput.readOnly = true;
+    this.shareLinkInput.placeholder = 'Create or join a room to get a share URL';
+    this.shareLinkInput.value = this.state.shareLink;
+    this.shareLinkInput.style.cssText = `
+      width: 100%;
+      padding: 6px 8px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-primary);
+      border-radius: 4px;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      box-sizing: border-box;
+      outline: none;
+    `;
+    this.shareLinkInput.addEventListener('focus', () => {
+      this.shareLinkInput.select();
+    });
+    shareSection.appendChild(this.shareLinkInput);
+    panel.appendChild(shareSection);
+
     // User list
     const usersSection = document.createElement('div');
     usersSection.style.cssText = `
@@ -621,9 +674,14 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       transition: all 0.12s ease;
     `;
     copyBtn.addEventListener('click', () => {
-      const code = this.state.roomInfo?.roomCode ?? '';
-      const pinParam = this.state.pinCode ? `&pin=${encodeURIComponent(this.state.pinCode)}` : '';
-      const link = `${window.location.origin}${window.location.pathname}?room=${code}${pinParam}`;
+      const link = this.state.shareLink || this.buildRoomLink();
+      if (!link) {
+        this.showError('Create or join a room before copying a share link.');
+        return;
+      }
+
+      this.hideError();
+      this.setShareLink(link);
       this.emit('copyLink', link);
 
       // Visual feedback
@@ -735,7 +793,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   }
 
   private handleJoinRoom(): void {
-    const code = this.roomCodeInput.value.trim().toUpperCase();
+    const code = this.roomCodeInput.value.trim().toUpperCase() || this.state.linkedRoomCode || '';
     if (this.pinCodeInput) {
       this.state.pinCode = this.pinCodeInput.value.replace(/\D/g, '').slice(0, 10);
     }
@@ -751,6 +809,9 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
 
   setConnectionState(state: ConnectionState): void {
     this.state.connectionState = state;
+    if ((state === 'disconnected' || state === 'error') && this.state.linkedRoomCode) {
+      this.state.linkedRoomAutoJoinArmed = true;
+    }
     this.updateButtonStyle();
     this.updatePanelVisibility();
   }
@@ -761,10 +822,25 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     if (this.pinCodeInput) {
       this.pinCodeInput.value = normalized;
     }
+    this.refreshShareLinkFromState();
   }
 
   getPinCode(): string {
     return this.state.pinCode;
+  }
+
+  setShareLink(link: string): void {
+    this.state.shareLink = link;
+    if (this.shareLinkInput) {
+      this.shareLinkInput.value = link;
+    }
+  }
+
+  setJoinRoomCodeFromLink(roomCode: string | null): void {
+    const normalized = this.normalizeRoomCode(roomCode);
+    this.state.linkedRoomCode = normalized;
+    this.state.linkedRoomAutoJoinArmed = Boolean(normalized);
+    this.updateJoinRoomInputState();
   }
 
   promptMediaSyncConfirmation(options: MediaSyncConfirmationOptions): Promise<boolean> {
@@ -789,6 +865,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   setRoomInfo(info: RoomInfo | null): void {
     this.state.roomInfo = info;
     this.updateRoomCodeDisplay();
+    this.refreshShareLinkFromState();
   }
 
   setUsers(users: SyncUser[]): void {
@@ -866,6 +943,48 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     this.disconnectedPanel.style.display = connectionState === 'disconnected' || connectionState === 'error' ? 'block' : 'none';
     this.connectingPanel.style.display = connectionState === 'connecting' || connectionState === 'reconnecting' ? 'block' : 'none';
     this.connectedPanel.style.display = connectionState === 'connected' ? 'flex' : 'none';
+  }
+
+  private updateJoinRoomInputState(): void {
+    if (!this.roomCodeInput) return;
+
+    if (this.state.linkedRoomCode) {
+      this.roomCodeInput.value = this.state.linkedRoomCode;
+      this.roomCodeInput.readOnly = true;
+      this.roomCodeInput.title = 'Room code is provided by the shared link';
+      this.roomCodeInput.style.opacity = '0.8';
+      this.roomCodeInput.style.cursor = 'not-allowed';
+    } else {
+      this.roomCodeInput.readOnly = false;
+      this.roomCodeInput.title = '';
+      this.roomCodeInput.style.opacity = '1';
+      this.roomCodeInput.style.cursor = 'text';
+    }
+  }
+
+  private buildRoomLink(): string {
+    const code = this.state.roomInfo?.roomCode ?? '';
+    if (!code) return '';
+
+    const url = new URL(window.location.href);
+    url.search = '';
+    url.hash = '';
+    url.searchParams.set('room', code);
+    if (this.state.pinCode) {
+      url.searchParams.set('pin', this.state.pinCode);
+    }
+    return url.toString();
+  }
+
+  private refreshShareLinkFromState(): void {
+    this.setShareLink(this.buildRoomLink());
+  }
+
+  private normalizeRoomCode(roomCode: string | null): string | null {
+    if (!roomCode) return null;
+    const raw = roomCode.replace(/[^A-Z0-9]/gi, '').toUpperCase().slice(0, 8);
+    if (raw.length !== 8) return null;
+    return `${raw.slice(0, 4)}-${raw.slice(4, 8)}`;
   }
 
   private updateRoomCodeDisplay(): void {

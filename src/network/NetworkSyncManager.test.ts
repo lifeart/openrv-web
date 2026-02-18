@@ -128,6 +128,81 @@ describe('NetworkSyncManager', () => {
     });
   });
 
+  describe('wss fallback', () => {
+    it('NSM-011b: createRoom falls back to local host room after reconnect failure on wss', () => {
+      manager.dispose();
+      manager = new NetworkSyncManager({ userName: 'TestUser', serverUrl: 'wss://sync.openrv.local' });
+
+      const errorHandler = vi.fn();
+      manager.on('error', errorHandler);
+
+      manager.createRoom('Host');
+      const wsClient = (manager as any).wsClient;
+      wsClient.emit('reconnectFailed', undefined);
+
+      expect(manager.connectionState).toBe('connected');
+      expect(manager.isHost).toBe(true);
+      expect(manager.roomInfo).not.toBeNull();
+      expect(errorHandler).not.toHaveBeenCalledWith(
+        expect.objectContaining({ code: 'RECONNECT_FAILED' }),
+      );
+    });
+
+    it('NSM-011c: joinRoom does not auto-fallback on reconnect failure (wss)', () => {
+      manager.dispose();
+      manager = new NetworkSyncManager({ userName: 'TestUser', serverUrl: 'wss://sync.openrv.local' });
+
+      const errorHandler = vi.fn();
+      manager.on('error', errorHandler);
+
+      manager.joinRoom('ABCD-1234', 'Guest');
+      const wsClient = (manager as any).wsClient;
+      wsClient.emit('reconnectFailed', undefined);
+
+      expect(manager.connectionState).toBe('error');
+      expect(manager.roomInfo).toBeNull();
+      expect(errorHandler).toHaveBeenCalledWith(
+        expect.objectContaining({ code: 'RECONNECT_FAILED' }),
+      );
+    });
+
+    it('NSM-011d: createRoom over ws:// does not auto-fallback', () => {
+      manager.dispose();
+      manager = new NetworkSyncManager({ userName: 'TestUser', serverUrl: 'ws://localhost:1234' });
+
+      const errorHandler = vi.fn();
+      manager.on('error', errorHandler);
+
+      manager.createRoom('Host');
+      const wsClient = (manager as any).wsClient;
+      wsClient.emit('reconnectFailed', undefined);
+
+      expect(manager.connectionState).toBe('error');
+      expect(manager.roomInfo).toBeNull();
+      expect(errorHandler).toHaveBeenCalledWith(
+        expect.objectContaining({ code: 'RECONNECT_FAILED' }),
+      );
+    });
+
+    it('NSM-011e: joinRoom over ws:// does not auto-fallback', () => {
+      manager.dispose();
+      manager = new NetworkSyncManager({ userName: 'TestUser', serverUrl: 'ws://localhost:1234' });
+
+      const errorHandler = vi.fn();
+      manager.on('error', errorHandler);
+
+      manager.joinRoom('ABCD-1234', 'Guest');
+      const wsClient = (manager as any).wsClient;
+      wsClient.emit('reconnectFailed', undefined);
+
+      expect(manager.connectionState).toBe('error');
+      expect(manager.roomInfo).toBeNull();
+      expect(errorHandler).toHaveBeenCalledWith(
+        expect.objectContaining({ code: 'RECONNECT_FAILED' }),
+      );
+    });
+  });
+
   describe('user presence', () => {
     it('NSM-012: emits usersChanged when user joins', () => {
       manager.simulateRoomCreated();

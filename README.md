@@ -324,6 +324,8 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
   - Configurable sync elements: playback, view (pan/zoom), color adjustments, annotations
   - Host/participant role distinction
   - Reconnection handling with exponential backoff
+  - Supports signaling server failover via `VITE_NETWORK_SIGNALING_SERVERS` (comma-separated `wss://` / `ws://` URLs)
+  - WebRTC peer connections include public STUN/TURN defaults (Google, Cloudflare, OpenRelay) for cross-network/NAT traversal
   - Keyboard shortcut: Shift+N to toggle network panel
 
 ## Installation

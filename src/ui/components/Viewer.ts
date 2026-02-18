@@ -144,8 +144,10 @@ export class Viewer {
   private container: HTMLElement;
   private canvasContainer: HTMLElement;
   private imageCanvas: HTMLCanvasElement;
+  private watermarkCanvas: HTMLCanvasElement;
   private paintCanvas: HTMLCanvasElement;
   private imageCtx: CanvasRenderingContext2D;
+  private watermarkCtx: CanvasRenderingContext2D;
   private paintCtx: CanvasRenderingContext2D;
   private session: Session;
 
@@ -481,6 +483,17 @@ export class Viewer {
       }
     }
 
+    // Create watermark overlay canvas (between image/GL and paint annotations)
+    this.watermarkCanvas = document.createElement('canvas');
+    this.watermarkCanvas.dataset.testid = 'viewer-watermark-canvas';
+    this.watermarkCanvas.style.cssText = `
+      position: absolute;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+    `;
+    this.canvasContainer.appendChild(this.watermarkCanvas);
+
     // Create paint canvas (top layer, overlaid)
     this.paintCanvas = document.createElement('canvas');
     this.paintCanvas.dataset.testid = 'viewer-paint-canvas';
@@ -560,6 +573,9 @@ export class Viewer {
     // Use P3 color space when available for wider gamut output
     const imageCtx = safeCanvasContext2D(this.imageCanvas, { alpha: false, willReadFrequently: true }, this.canvasColorSpace);
     this.imageCtx = imageCtx;
+
+    const watermarkCtx = safeCanvasContext2D(this.watermarkCanvas, {}, this.canvasColorSpace);
+    this.watermarkCtx = watermarkCtx;
 
     const paintCtx = safeCanvasContext2D(this.paintCanvas, {}, this.canvasColorSpace);
     this.paintCtx = paintCtx;
@@ -721,6 +737,8 @@ export class Viewer {
 
     // Reset image canvas at LOGICAL resolution (no DPR scaling for CPU effects)
     resetCanvasFromHiDPI(this.imageCanvas, this.imageCtx, width, height);
+    // Watermark overlay canvas matches image canvas logical dimensions.
+    resetCanvasFromHiDPI(this.watermarkCanvas, this.watermarkCtx, width, height);
 
     // Paint canvas at PHYSICAL resolution with CSS logical sizing for retina annotations
     const containerRect = this.getContainerRect();
@@ -1130,6 +1148,7 @@ export class Viewer {
 
     PerfTrace.count('render.calls');
     this.renderImage();
+    this.renderWatermarkOverlayCanvas();
 
     // If actively drawing, render with live stroke/shape; otherwise just paint
     PerfTrace.begin('paint+crop');
@@ -1207,8 +1226,22 @@ export class Viewer {
       if (hasMissingFrame && this.missingFrameMode === 'black') {
         forceBlackFrame = true;
       } else if (hasMissingFrame && this.missingFrameMode === 'hold') {
-        const holdFrame = this.session.getSequenceFrameSync(Math.max(1, currentFrame - 1));
-        element = holdFrame ?? source.element;
+        const holdFrameIndex = Math.max(1, currentFrame - 1);
+        const holdFrame = this.session.getSequenceFrameSync(holdFrameIndex);
+        if (holdFrame) {
+          element = holdFrame;
+        } else {
+          // Keep hold mode responsive on cache misses: fetch the hold frame in background,
+          // then redraw. In the meantime prefer current frame cache over frame-1 fallback.
+          this.session.getSequenceFrameImage(holdFrameIndex)
+            .then((image) => {
+              if (image) {
+                this.refresh();
+              }
+            })
+            .catch((err) => console.warn('Failed to load hold frame:', err));
+          element = this.session.getSequenceFrameSync(currentFrame) ?? source.element;
+        }
       } else {
         const frameImage = this.session.getSequenceFrameSync();
         if (frameImage) {
@@ -2092,6 +2125,21 @@ export class Viewer {
     ctx.drawImage(this.paintRenderer.getCanvas(), 0, 0);
   }
 
+  /**
+   * Composite watermark on a dedicated overlay canvas when WebGL output is active.
+   * In the 2D path, watermark is drawn directly into imageCanvas at the end of renderImage().
+   */
+  private renderWatermarkOverlayCanvas(): void {
+    this.watermarkCtx.setTransform(1, 0, 0, 1, 0, 0);
+    this.watermarkCtx.clearRect(0, 0, this.watermarkCanvas.width, this.watermarkCanvas.height);
+
+    const isWebGLActive = this.glRendererManager.hdrRenderActive || this.glRendererManager.sdrWebGLRenderActive;
+    if (!isWebGLActive) return;
+    if (!this.watermarkOverlay.isEnabled() || !this.watermarkOverlay.hasImage()) return;
+
+    this.watermarkOverlay.render(this.watermarkCtx, this.displayWidth, this.displayHeight);
+  }
+
   getPaintEngine(): PaintEngine {
     return this.paintEngine;
   }
@@ -2410,7 +2458,15 @@ export class Viewer {
 
     if (hasImageUrl) {
       if (!imageUrl) {
-        this.watermarkOverlay.removeImage();
+        const currentState = this.watermarkOverlay.getState();
+        const hasCurrentImage = this.watermarkOverlay.hasImage() || currentState.imageUrl !== null;
+        const currentlyEnabled = currentState.enabled;
+
+        // Avoid re-triggering removeImage() when already cleared; this prevents
+        // stateChanged -> setWatermarkState -> removeImage recursion in shared-overlay wiring.
+        if (hasCurrentImage || currentlyEnabled) {
+          this.watermarkOverlay.removeImage();
+        }
       } else {
         const currentState = this.watermarkOverlay.getState();
         const needsLoad = !this.watermarkOverlay.hasImage() || currentState.imageUrl !== imageUrl;

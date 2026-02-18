@@ -143,6 +143,35 @@ describe('NetworkControl', () => {
 
       expect(handler).toHaveBeenCalled();
     });
+
+    it('NCC-014: linked room code allows join using only PIN entry', () => {
+      const handler = vi.fn();
+      control.on('joinRoom', handler);
+      control.setJoinRoomCodeFromLink('ABCD1234');
+      control.openPanel();
+
+      const roomInput = document.querySelector('[data-testid="network-room-code-input"]') as HTMLInputElement;
+      expect(roomInput.value).toBe('ABCD-1234');
+      expect(roomInput.readOnly).toBe(true);
+
+      const pinInput = document.querySelector('[data-testid="network-pin-code-input"]') as HTMLInputElement;
+      pinInput.value = '1234';
+      pinInput.dispatchEvent(new Event('input'));
+
+      expect(handler).toHaveBeenCalledWith({ roomCode: 'ABCD-1234', userName: 'User' });
+    });
+
+    it('NCC-015: linked room code is used when Join button is clicked', () => {
+      const handler = vi.fn();
+      control.on('joinRoom', handler);
+      control.setJoinRoomCodeFromLink('WXYZ5678');
+      control.openPanel();
+
+      const joinBtn = document.querySelector('[data-testid="network-join-room-button"]') as HTMLButtonElement;
+      joinBtn.click();
+
+      expect(handler).toHaveBeenCalledWith({ roomCode: 'WXYZ-5678', userName: 'User' });
+    });
   });
 
   describe('user list', () => {
@@ -275,6 +304,43 @@ describe('NetworkControl', () => {
       expect(handler).toHaveBeenCalled();
       const link = handler.mock.calls[0]![0] as string;
       expect(link).toContain('room=TEST-CODE');
+    });
+
+    it('NCC-031b: does not emit copyLink when room info is missing', () => {
+      const handler = vi.fn();
+      control.on('copyLink', handler);
+
+      control.setConnectionState('connected');
+      control.setRoomInfo(null);
+      control.openPanel();
+
+      const copyBtn = document.querySelector('[data-testid="network-copy-link-button"]') as HTMLButtonElement;
+      expect(copyBtn).toBeTruthy();
+      copyBtn.click();
+
+      expect(handler).not.toHaveBeenCalled();
+      const errorDisplay = document.querySelector('[data-testid="network-error-display"]') as HTMLElement;
+      expect(errorDisplay.style.display).toBe('block');
+      expect(errorDisplay.textContent).toContain('Create or join a room');
+    });
+
+    it('NCC-032: shows share URL in connected panel', () => {
+      control.setConnectionState('connected');
+      control.setPinCode('1234');
+      control.setRoomInfo({
+        roomId: 'room-1',
+        roomCode: 'TEST-CODE',
+        hostId: 'u1',
+        users: [],
+        createdAt: Date.now(),
+        maxUsers: 10,
+      });
+      control.openPanel();
+
+      const shareInput = document.querySelector('[data-testid="network-share-link-input"]') as HTMLInputElement;
+      expect(shareInput).toBeTruthy();
+      expect(shareInput.value).toContain('room=TEST-CODE');
+      expect(shareInput.value).toContain('pin=1234');
     });
   });
 

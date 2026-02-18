@@ -102,6 +102,39 @@ describe('PlaylistManager', () => {
     });
   });
 
+  describe('replaceClips', () => {
+    it('should replace all clips and emit a single clipsChanged event', () => {
+      manager.addClip(0, 'Old', 1, 20);
+
+      const callback = vi.fn();
+      manager.on('clipsChanged', callback);
+
+      manager.replaceClips([
+        { sourceIndex: 1, sourceName: 'A', inPoint: 10, outPoint: 39 },
+        { sourceIndex: 2, sourceName: 'B', inPoint: 1, outPoint: 25 },
+      ]);
+
+      expect(manager.getClipCount()).toBe(2);
+      const clips = manager.getClips();
+      expect(clips[0]?.sourceName).toBe('A');
+      expect(clips[0]?.globalStartFrame).toBe(1);
+      expect(clips[1]?.sourceName).toBe('B');
+      expect(clips[1]?.globalStartFrame).toBe(31);
+      expect(callback).toHaveBeenCalledTimes(1);
+    });
+
+    it('should clamp current frame after replacement', () => {
+      manager.addClip(0, 'Source 1', 1, 100);
+      manager.setCurrentFrame(80);
+
+      manager.replaceClips([
+        { sourceIndex: 0, sourceName: 'Short', inPoint: 1, outPoint: 10 },
+      ]);
+
+      expect(manager.getCurrentFrame()).toBe(10);
+    });
+  });
+
   describe('getClipAtFrame', () => {
     it('should return correct clip and local frame', () => {
       manager.addClip(0, 'Source 1', 10, 59); // 50 frames, global 1-50

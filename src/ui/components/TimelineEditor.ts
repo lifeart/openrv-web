@@ -125,33 +125,57 @@ export class TimelineEditor extends EventEmitter<TimelineEditorEvents> {
   loadFromSequenceNode(node: SequenceGroupNode): void {
     this.sequenceNode = node;
     const edlEntries = node.getEDL();
-
-    this.cuts = [];
-    let currentFrame = 1;
-
     if (edlEntries.length > 0) {
-      for (let i = 0; i < edlEntries.length; i++) {
-        const entry = edlEntries[i]!;
-        const duration = entry.outPoint - entry.inPoint + 1;
-
-        this.cuts.push({
-          index: i,
-          startFrame: entry.frame,
-          endFrame: entry.frame + duration - 1,
-          sourceIndex: entry.source,
-          inPoint: entry.inPoint,
-          outPoint: entry.outPoint,
-          color: CUT_COLORS[entry.source % CUT_COLORS.length]!,
-          label: `Source ${entry.source + 1}`,
-        });
-
-        currentFrame = entry.frame + duration;
-      }
-      this.totalFrames = currentFrame;
-    } else {
-      // No EDL data - show empty timeline
-      this.totalFrames = node.getTotalDuration() || 100;
+      this.loadFromEDL(edlEntries);
+      return;
     }
+
+    // No EDL data - show empty timeline
+    this.cuts = [];
+    this.selectedCutIndex = -1;
+    this.totalFrames = Math.max(1, node.getTotalDuration() || 100);
+    this.render();
+  }
+
+  /**
+   * Load EDL data directly, with optional per-cut labels.
+   */
+  loadFromEDL(entries: EDLEntry[], labels?: string[]): void {
+    this.cuts = [];
+    let maxEndFrame = 1;
+
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
+      if (!entry) continue;
+
+      const inPoint = Math.max(1, Math.floor(entry.inPoint));
+      const outPoint = Math.max(inPoint, Math.floor(entry.outPoint));
+      const startFrame = Math.max(1, Math.floor(entry.frame));
+      const duration = outPoint - inPoint + 1;
+      const endFrame = startFrame + duration - 1;
+
+      this.cuts.push({
+        index: this.cuts.length,
+        startFrame,
+        endFrame,
+        sourceIndex: entry.source,
+        inPoint,
+        outPoint,
+        color: CUT_COLORS[entry.source % CUT_COLORS.length]!,
+        label: labels?.[i] ?? `Source ${entry.source + 1}`,
+      });
+
+      maxEndFrame = Math.max(maxEndFrame, endFrame);
+    }
+
+    if (this.selectedCutIndex >= this.cuts.length) {
+      this.selectedCutIndex = -1;
+      this.emit('selectionCleared', undefined);
+    }
+
+    this.totalFrames = this.cuts.length > 0
+      ? maxEndFrame
+      : Math.max(1, this.totalFrames);
 
     this.render();
   }

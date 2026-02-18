@@ -377,12 +377,23 @@ describe('AppControlRegistry', () => {
       const viewCall = contextToolbar.setTabContent.mock.calls.find(([tabId]: [string]) => tabId === 'view');
       expect(viewCall).toBeDefined();
       const viewContent = viewCall![1] as HTMLElement;
-      const select = viewContent.querySelector('[data-testid="missing-frame-mode-select"]') as HTMLSelectElement | null;
-      expect(select).not.toBeNull();
-      expect(select!.value).toBe('hold');
+      const container = viewContent.querySelector('[data-testid="missing-frame-mode-select"]') as HTMLElement | null;
+      expect(container).not.toBeNull();
 
-      select!.value = 'black';
-      select!.dispatchEvent(new Event('change'));
+      // Button label should reflect current mode
+      const button = container!.querySelector('button') as HTMLButtonElement;
+      expect(button).not.toBeNull();
+      expect(button!.textContent).toContain('Hold');
+
+      // Open dropdown by clicking the button (appends to body like stereo control)
+      button!.click();
+      const dropdown = document.body.querySelector('[data-testid="missing-frame-mode-dropdown"]') as HTMLElement;
+      expect(dropdown).not.toBeNull();
+
+      // Click an option in the dropdown to change mode
+      const blackOption = dropdown.querySelector('button[data-value="black"]') as HTMLButtonElement;
+      expect(blackOption).not.toBeNull();
+      blackOption.click();
       expect(viewer.setMissingFrameMode).toHaveBeenCalledWith('black');
     });
 

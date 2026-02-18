@@ -71,6 +71,11 @@ interface TestableViewer {
     getCanvas: () => HTMLCanvasElement;
   };
   renderPaint(): void;
+  watermarkOverlay: {
+    render(ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHeight: number): void;
+    isEnabled(): boolean;
+    hasImage(): boolean;
+  };
 
   // Canvas sizing
   setCanvasSize(width: number, height: number): void;
@@ -1380,6 +1385,23 @@ describe('Viewer', () => {
       expect(Number(options.canvasHeight)).toBeGreaterThan(t.displayHeight);
       expect(Number(options.offsetX)).toBeGreaterThan(0);
       expect(Number(options.offsetY)).toBeGreaterThan(0);
+    });
+
+    it('VWR-067: SDR WebGL mode composites watermark on dedicated overlay canvas', () => {
+      const t = testable(viewer);
+
+      t.glRendererManager._sdrWebGLRenderActive = true;
+      const enabledSpy = vi.spyOn(t.watermarkOverlay, 'isEnabled').mockReturnValue(true);
+      const hasImageSpy = vi.spyOn(t.watermarkOverlay, 'hasImage').mockReturnValue(true);
+      const renderSpy = vi.spyOn(t.watermarkOverlay, 'render');
+
+      viewer.render();
+
+      expect(renderSpy).toHaveBeenCalledWith(expect.anything(), t.displayWidth, t.displayHeight);
+
+      renderSpy.mockRestore();
+      hasImageSpy.mockRestore();
+      enabledSpy.mockRestore();
     });
   });
 

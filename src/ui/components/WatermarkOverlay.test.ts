@@ -337,6 +337,35 @@ describe('WatermarkOverlay', () => {
     });
   });
 
+  describe('removeImage', () => {
+    it('WM-U105: removeImage does not emit when already cleared and disabled', () => {
+      const stateChanged = vi.fn();
+      const imageRemoved = vi.fn();
+      overlay.on('stateChanged', stateChanged);
+      overlay.on('imageRemoved', imageRemoved);
+
+      overlay.removeImage();
+
+      expect(stateChanged).not.toHaveBeenCalled();
+      expect(imageRemoved).not.toHaveBeenCalled();
+    });
+
+    it('WM-U106: removeImage emits once when disabling without image, then becomes idempotent', () => {
+      overlay.setEnabled(true);
+      const stateChanged = vi.fn();
+      const imageRemoved = vi.fn();
+      overlay.on('stateChanged', stateChanged);
+      overlay.on('imageRemoved', imageRemoved);
+
+      overlay.removeImage();
+      overlay.removeImage();
+
+      expect(stateChanged).toHaveBeenCalledTimes(1);
+      expect(imageRemoved).not.toHaveBeenCalled();
+      expect(overlay.isEnabled()).toBe(false);
+    });
+  });
+
   describe('dispose', () => {
     it('WM-U110: dispose does not throw', () => {
       expect(() => overlay.dispose()).not.toThrow();

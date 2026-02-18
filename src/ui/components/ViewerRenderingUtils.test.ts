@@ -574,6 +574,14 @@ describe('ViewerRenderingUtils', () => {
       expect(calls.some((call: unknown[]) => (call[0] as string).includes('Drop'))).toBe(true);
     });
 
+    it('should left-align placeholder text with padding', () => {
+      drawPlaceholder(ctx, 800, 600, 1);
+
+      expect(ctx.textAlign).toBe('left');
+      const calls = (ctx.fillText as ReturnType<typeof vi.fn>).mock.calls;
+      expect(calls.every((call: unknown[]) => call[1] === 112)).toBe(true);
+    });
+
     it('should render support info in multiple lines for readability', () => {
       drawPlaceholder(ctx, 800, 600, 1);
 

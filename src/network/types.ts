@@ -376,6 +376,8 @@ export interface WebSocketClientEvents extends EventMap {
 
 export interface NetworkSyncConfig {
   serverUrl: string;
+  /** Optional prioritized signaling endpoints for failover. */
+  serverUrls?: string[];
   iceServers: RTCIceServer[];
   reconnectMaxAttempts: number;
   reconnectBaseDelay: number;
@@ -391,6 +393,16 @@ export const DEFAULT_NETWORK_SYNC_CONFIG: NetworkSyncConfig = {
   iceServers: [
     { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
     { urls: 'stun:stun.cloudflare.com:3478' },
+    { urls: 'stun:openrelay.metered.ca:80' },
+    {
+      urls: [
+        'turn:openrelay.metered.ca:80',
+        'turn:openrelay.metered.ca:443',
+        'turn:openrelay.metered.ca:443?transport=tcp',
+      ],
+      username: 'openrelayproject',
+      credential: 'openrelayproject',
+    },
   ],
   reconnectMaxAttempts: 10,
   reconnectBaseDelay: 1000,

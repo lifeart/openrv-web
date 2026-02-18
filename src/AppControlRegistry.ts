@@ -65,8 +65,10 @@ import { PlaylistPanel } from './ui/components/PlaylistPanel';
 import { PresentationMode } from './utils/ui/PresentationMode';
 import { NetworkSyncManager } from './network/NetworkSyncManager';
 import { NetworkControl } from './ui/components/NetworkControl';
+import type { NetworkSyncConfig } from './network/types';
 import { ContextToolbar } from './ui/components/layout/ContextToolbar';
-import { setButtonActive } from './ui/components/shared/Button';
+import { setButtonActive, applyA11yFocus } from './ui/components/shared/Button';
+import { getIconSvg } from './ui/components/shared/Icons';
 import { getGlobalHistoryManager } from './utils/HistoryManager';
 import { RightPanelContent } from './ui/layout/panels/RightPanelContent';
 import { LeftPanelContent } from './ui/layout/panels/LeftPanelContent';
@@ -78,6 +80,33 @@ import type { PaintEngine } from './paint/PaintEngine';
 import type { DisplayCapabilities } from './color/DisplayCapabilities';
 import type { AppSessionBridge } from './AppSessionBridge';
 import type { HeaderBar } from './ui/components/layout/HeaderBar';
+
+function parseSignalingServerList(raw: string | undefined): string[] {
+  if (!raw) return [];
+  const values = raw
+    .split(',')
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)
+    .filter((value) => /^wss?:\/\//i.test(value));
+
+  return Array.from(new Set(values));
+}
+
+function resolveNetworkSyncConfigFromEnv(): Partial<NetworkSyncConfig> {
+  const env = (import.meta as { env?: Record<string, string | undefined> }).env ?? {};
+  const raw =
+    env.VITE_NETWORK_SIGNALING_SERVERS ??
+    env.VITE_NETWORK_SIGNALING_URLS ??
+    env.VITE_NETWORK_SIGNALING_URL;
+
+  const signalingServers = parseSignalingServerList(raw);
+  if (signalingServers.length === 0) return {};
+
+  return {
+    serverUrl: signalingServers[0],
+    serverUrls: signalingServers,
+  };
+}
 
 /**
  * Dependencies required by AppControlRegistry to create all controls.
@@ -295,7 +324,7 @@ export class AppControlRegistry {
     // --- Presentation / Network ---
     this.presentationMode = new PresentationMode();
     this.presentationMode.loadPreference();
-    this.networkSyncManager = new NetworkSyncManager();
+    this.networkSyncManager = new NetworkSyncManager(resolveNetworkSyncConfigFromEnv());
     this.networkControl = new NetworkControl();
   }
 
@@ -332,41 +361,186 @@ export class AppControlRegistry {
     viewContent.appendChild(this.parControl.render());
     viewContent.appendChild(this.backgroundPatternControl.render());
 
-    // Missing-frame mode selector
-    const missingFrameModeSelect = document.createElement('select');
-    missingFrameModeSelect.dataset.testid = 'missing-frame-mode-select';
-    missingFrameModeSelect.title = 'Missing frame mode';
-    missingFrameModeSelect.style.cssText = `
+    // Missing-frame mode dropdown (matches stereo dropdown pattern)
+    const missingFrameContainer = document.createElement('div');
+    missingFrameContainer.dataset.testid = 'missing-frame-mode-select';
+    missingFrameContainer.style.cssText = `
+      display: flex; align-items: center; position: relative;
+    `;
+
+    type MissingFrameMode = 'off' | 'show-frame' | 'hold' | 'black';
+    const missingModes: Array<{ label: string; value: MissingFrameMode }> = [
+      { label: 'Off', value: 'off' },
+      { label: 'Frame', value: 'show-frame' },
+      { label: 'Hold', value: 'hold' },
+      { label: 'Black', value: 'black' },
+    ];
+    let currentMissingMode: MissingFrameMode = viewer.getMissingFrameMode() as MissingFrameMode;
+    let isMissingDropdownOpen = false;
+
+    const missingButton = document.createElement('button');
+    missingButton.type = 'button';
+    missingButton.title = 'Missing frame mode';
+    missingButton.setAttribute('aria-haspopup', 'true');
+    missingButton.setAttribute('aria-expanded', 'false');
+    missingButton.style.cssText = `
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      padding: 6px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.12s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 80px;
+      gap: 4px;
+      outline: none;
+    `;
+
+    const updateMissingLabel = () => {
+      const current = missingModes.find(m => m.value === currentMissingMode);
+      missingButton.innerHTML = `${getIconSvg('image', 'sm')}<span style="margin-left: 4px;">Missing: ${current?.label ?? 'Off'}</span><span style="margin-left: 4px; font-size: 8px;">&#9660;</span>`;
+    };
+    updateMissingLabel();
+
+    const missingDropdown = document.createElement('div');
+    missingDropdown.dataset.testid = 'missing-frame-mode-dropdown';
+    missingDropdown.style.cssText = `
+      position: fixed;
       background: var(--bg-secondary);
       border: 1px solid var(--border-primary);
-      color: var(--text-secondary);
       border-radius: 4px;
-      font-size: 11px;
-      padding: 4px 6px;
+      padding: 4px;
+      z-index: 9999;
+      display: none;
+      flex-direction: column;
+      min-width: 140px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
     `;
-    const missingFrameOptions: Array<{ label: string; value: 'off' | 'show-frame' | 'hold' | 'black' }> = [
-      { label: 'Missing: Off', value: 'off' },
-      { label: 'Missing: Frame', value: 'show-frame' },
-      { label: 'Missing: Hold', value: 'hold' },
-      { label: 'Missing: Black', value: 'black' },
-    ];
-    for (const option of missingFrameOptions) {
-      const el = document.createElement('option');
-      el.value = option.value;
-      el.textContent = option.label;
-      missingFrameModeSelect.appendChild(el);
+
+    const updateMissingOptionStyles = () => {
+      missingDropdown.querySelectorAll<HTMLButtonElement>('button').forEach(opt => {
+        if (opt.dataset.value === currentMissingMode) {
+          opt.style.background = 'rgba(var(--accent-primary-rgb), 0.2)';
+          opt.style.color = 'var(--accent-primary)';
+        } else {
+          opt.style.background = 'transparent';
+          opt.style.color = 'var(--text-primary)';
+        }
+      });
+    };
+
+    const positionMissingDropdown = () => {
+      if (!isMissingDropdownOpen) return;
+      const rect = missingButton.getBoundingClientRect();
+      missingDropdown.style.top = `${rect.bottom + 4}px`;
+      missingDropdown.style.left = `${rect.left}px`;
+    };
+
+    const closeMissingDropdown = () => {
+      isMissingDropdownOpen = false;
+      missingDropdown.style.display = 'none';
+      missingButton.setAttribute('aria-expanded', 'false');
+      missingButton.style.background = 'transparent';
+      missingButton.style.borderColor = 'transparent';
+      missingButton.style.color = 'var(--text-muted)';
+      document.removeEventListener('click', handleMissingOutsideClick);
+      window.removeEventListener('scroll', positionMissingDropdown, true);
+      window.removeEventListener('resize', positionMissingDropdown);
+    };
+
+    const openMissingDropdown = () => {
+      if (!document.body.contains(missingDropdown)) {
+        document.body.appendChild(missingDropdown);
+      }
+      isMissingDropdownOpen = true;
+      positionMissingDropdown();
+      missingDropdown.style.display = 'flex';
+      missingButton.setAttribute('aria-expanded', 'true');
+      missingButton.style.background = 'var(--bg-hover)';
+      missingButton.style.borderColor = 'var(--border-primary)';
+      document.addEventListener('click', handleMissingOutsideClick);
+      window.addEventListener('scroll', positionMissingDropdown, true);
+      window.addEventListener('resize', positionMissingDropdown);
+    };
+
+    const handleMissingOutsideClick = (e: MouseEvent) => {
+      if (!missingButton.contains(e.target as Node) && !missingDropdown.contains(e.target as Node)) {
+        closeMissingDropdown();
+      }
+    };
+
+    for (const mode of missingModes) {
+      const opt = document.createElement('button');
+      opt.type = 'button';
+      opt.dataset.value = mode.value;
+      opt.textContent = mode.label;
+      opt.style.cssText = `
+        background: transparent;
+        border: none;
+        color: var(--text-primary);
+        padding: 6px 10px;
+        text-align: left;
+        cursor: pointer;
+        font-size: 12px;
+        border-radius: 3px;
+        transition: background 0.12s ease;
+      `;
+      if (mode.value === currentMissingMode) {
+        opt.style.background = 'rgba(var(--accent-primary-rgb), 0.2)';
+        opt.style.color = 'var(--accent-primary)';
+      }
+      opt.addEventListener('mouseenter', () => {
+        opt.style.background = 'var(--bg-hover)';
+      });
+      opt.addEventListener('mouseleave', () => {
+        if (mode.value !== currentMissingMode) {
+          opt.style.background = 'transparent';
+        }
+      });
+      opt.addEventListener('click', (e) => {
+        e.stopPropagation();
+        currentMissingMode = mode.value;
+        viewer.setMissingFrameMode(mode.value);
+        updateMissingLabel();
+        updateMissingOptionStyles();
+        closeMissingDropdown();
+      });
+      missingDropdown.appendChild(opt);
     }
-    missingFrameModeSelect.value = viewer.getMissingFrameMode();
-    missingFrameModeSelect.addEventListener('change', () => {
-      viewer.setMissingFrameMode(missingFrameModeSelect.value as 'off' | 'show-frame' | 'hold' | 'black');
+
+    missingButton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (isMissingDropdownOpen) closeMissingDropdown();
+      else openMissingDropdown();
     });
-    viewContent.appendChild(missingFrameModeSelect);
+    missingButton.addEventListener('mouseenter', () => {
+      if (currentMissingMode === 'off' && !isMissingDropdownOpen) {
+        missingButton.style.background = 'var(--bg-hover)';
+        missingButton.style.borderColor = 'var(--border-primary)';
+        missingButton.style.color = 'var(--text-primary)';
+      }
+    });
+    missingButton.addEventListener('mouseleave', () => {
+      if (currentMissingMode === 'off' && !isMissingDropdownOpen) {
+        missingButton.style.background = 'transparent';
+        missingButton.style.borderColor = 'transparent';
+        missingButton.style.color = 'var(--text-muted)';
+      }
+    });
+    applyA11yFocus(missingButton);
+
+    missingFrameContainer.appendChild(missingButton);
+    viewContent.appendChild(missingFrameContainer);
 
     // Timeline editor toggle button
-    const timelineEditorButton = ContextToolbar.createButton('Timeline Edit', () => {
+    const timelineEditorButton = ContextToolbar.createIconButton('edit', () => {
       this.timelineEditorPanel.toggle(timelineEditorButton);
-      setButtonActive(timelineEditorButton, this.timelineEditorPanel.isVisible(), 'ghost');
-    }, { title: 'Toggle visual timeline editor', icon: 'edit' });
+      setButtonActive(timelineEditorButton, this.timelineEditorPanel.isVisible(), 'icon');
+    }, { title: 'Toggle visual timeline editor' });
     timelineEditorButton.dataset.testid = 'timeline-editor-toggle-button';
     viewContent.appendChild(timelineEditorButton);
 

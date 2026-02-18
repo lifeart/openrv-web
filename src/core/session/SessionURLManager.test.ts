@@ -169,6 +169,33 @@ describe('SessionURLManager', () => {
       expect(url).toContain('/viewer');
       expect(url).toContain('#s=');
     });
+
+    it('supports relative base URLs', () => {
+      const state = createMinimalState();
+      const url = buildShareURL('/?room=ABCD-1234&pin=1234', state);
+      const parsed = new URL(url);
+
+      expect(parsed.searchParams.get('room')).toBe('ABCD-1234');
+      expect(parsed.searchParams.get('pin')).toBe('1234');
+      expect(parsed.hash.startsWith('#s=')).toBe(true);
+    });
+
+    it('falls back to window location when base URL is empty', () => {
+      const originalHref = window.location.href;
+      history.replaceState({}, '', '/viewer?room=WXYZ-5678');
+
+      try {
+        const state = createMinimalState();
+        const url = buildShareURL('', state);
+        const parsed = new URL(url);
+        expect(parsed.pathname).toBe('/viewer');
+        expect(parsed.searchParams.get('room')).toBe('WXYZ-5678');
+        expect(parsed.hash.startsWith('#s=')).toBe(true);
+      } finally {
+        const original = new URL(originalHref);
+        history.replaceState({}, '', `${original.pathname}${original.search}${original.hash}`);
+      }
+    });
   });
 
   describe('compact encoding', () => {

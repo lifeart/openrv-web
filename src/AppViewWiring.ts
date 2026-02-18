@@ -82,7 +82,9 @@ export function wireViewControls(ctx: AppWiringContext): void {
     });
   });
   controls.compareControl.on('abSourceChanged', (source) => {
-    session.setCurrentAB(source);
+    if (source === 'A' || source === 'B') {
+      session.setCurrentAB(source);
+    }
   });
   // Note: abToggled is fired after setABSource already emitted abSourceChanged,
   // so the toggle has already happened via session.setCurrentAB(). This event

@@ -1,7 +1,7 @@
 /**
  * ComparisonManager - Pure logic manager for comparison state
  *
- * Manages comparison state (wipe mode, A/B source, difference matte, blend modes)
+ * Manages comparison state (wipe mode, A/B source, difference matte, blend modes, quad view)
  * with no DOM dependencies. Emits events on state changes so UI components
  * can react accordingly.
  */
@@ -11,8 +11,19 @@ import { clamp } from '../../utils/math';
 import { DifferenceMatteState, DEFAULT_DIFFERENCE_MATTE_STATE } from './DifferenceMatteControl';
 
 export type WipeMode = 'off' | 'horizontal' | 'vertical' | 'splitscreen-h' | 'splitscreen-v';
-export type ABSource = 'A' | 'B';
+export type ABSource = 'A' | 'B' | 'C' | 'D';
 export type BlendMode = 'off' | 'onionskin' | 'flicker' | 'blend';
+
+export interface QuadViewState {
+  enabled: boolean;
+  /** Source assigned to each quadrant (top-left, top-right, bottom-left, bottom-right) */
+  sources: [ABSource, ABSource, ABSource, ABSource];
+}
+
+export const DEFAULT_QUAD_VIEW_STATE: QuadViewState = {
+  enabled: false,
+  sources: ['A', 'B', 'C', 'D'],
+};
 
 export interface BlendModeState {
   mode: BlendMode;
@@ -35,6 +46,7 @@ export interface CompareState {
   abAvailable: boolean;
   differenceMatte: DifferenceMatteState;
   blendMode: BlendModeState;
+  quadView: QuadViewState;
 }
 
 export interface ComparisonManagerEvents extends EventMap {
@@ -44,6 +56,7 @@ export interface ComparisonManagerEvents extends EventMap {
   abToggled: void;
   differenceMatteChanged: DifferenceMatteState;
   blendModeChanged: BlendModeState;
+  quadViewChanged: QuadViewState;
   stateChanged: CompareState;
 }
 
@@ -55,6 +68,7 @@ export class ComparisonManager extends EventEmitter<ComparisonManagerEvents> {
     abAvailable: false,
     differenceMatte: { ...DEFAULT_DIFFERENCE_MATTE_STATE },
     blendMode: { ...DEFAULT_BLEND_MODE_STATE },
+    quadView: { enabled: false, sources: [...DEFAULT_QUAD_VIEW_STATE.sources] },
   };
   private flickerInterval: number | null = null;
   private flickerFrame: 0 | 1 = 0;
@@ -63,6 +77,11 @@ export class ComparisonManager extends EventEmitter<ComparisonManagerEvents> {
   setWipeMode(mode: WipeMode): void {
     if (this.state.wipeMode !== mode) {
       this.state.wipeMode = mode;
+      // Disable quad view when enabling a wipe mode
+      if (mode !== 'off' && this.state.quadView.enabled) {
+        this.state.quadView.enabled = false;
+        this.emit('quadViewChanged', { enabled: false, sources: [...this.state.quadView.sources] });
+      }
       this.emit('wipeModeChanged', mode);
       this.emit('stateChanged', { ...this.state });
     }
@@ -126,10 +145,16 @@ export class ComparisonManager extends EventEmitter<ComparisonManagerEvents> {
   // Difference Matte methods
   toggleDifferenceMatte(): void {
     this.state.differenceMatte.enabled = !this.state.differenceMatte.enabled;
-    // When enabling difference matte, disable wipe mode to avoid conflicts
-    if (this.state.differenceMatte.enabled && this.state.wipeMode !== 'off') {
-      this.state.wipeMode = 'off';
-      this.emit('wipeModeChanged', 'off');
+    // When enabling difference matte, disable wipe mode and quad view to avoid conflicts
+    if (this.state.differenceMatte.enabled) {
+      if (this.state.wipeMode !== 'off') {
+        this.state.wipeMode = 'off';
+        this.emit('wipeModeChanged', 'off');
+      }
+      if (this.state.quadView.enabled) {
+        this.state.quadView.enabled = false;
+        this.emit('quadViewChanged', { enabled: false, sources: [...this.state.quadView.sources] });
+      }
     }
     this.emit('differenceMatteChanged', { ...this.state.differenceMatte });
     this.emit('stateChanged', { ...this.state });
@@ -138,10 +163,16 @@ export class ComparisonManager extends EventEmitter<ComparisonManagerEvents> {
   setDifferenceMatteEnabled(enabled: boolean): void {
     if (this.state.differenceMatte.enabled !== enabled) {
       this.state.differenceMatte.enabled = enabled;
-      // When enabling difference matte, disable wipe mode to avoid conflicts
-      if (enabled && this.state.wipeMode !== 'off') {
-        this.state.wipeMode = 'off';
-        this.emit('wipeModeChanged', 'off');
+      // When enabling difference matte, disable wipe mode and quad view to avoid conflicts
+      if (enabled) {
+        if (this.state.wipeMode !== 'off') {
+          this.state.wipeMode = 'off';
+          this.emit('wipeModeChanged', 'off');
+        }
+        if (this.state.quadView.enabled) {
+          this.state.quadView.enabled = false;
+          this.emit('quadViewChanged', { enabled: false, sources: [...this.state.quadView.sources] });
+        }
       }
       this.emit('differenceMatteChanged', { ...this.state.differenceMatte });
       this.emit('stateChanged', { ...this.state });
@@ -213,7 +244,7 @@ export class ComparisonManager extends EventEmitter<ComparisonManagerEvents> {
         this.startFlicker();
       }
 
-      // When enabling a blend mode, disable wipe and difference matte to avoid conflicts
+      // When enabling a blend mode, disable wipe, difference matte, and quad view to avoid conflicts
       if (mode !== 'off') {
         if (this.state.wipeMode !== 'off') {
           this.state.wipeMode = 'off';
@@ -222,6 +253,10 @@ export class ComparisonManager extends EventEmitter<ComparisonManagerEvents> {
         if (this.state.differenceMatte.enabled) {
           this.state.differenceMatte.enabled = false;
           this.emit('differenceMatteChanged', { ...this.state.differenceMatte });
+        }
+        if (this.state.quadView.enabled) {
+          this.state.quadView.enabled = false;
+          this.emit('quadViewChanged', { enabled: false, sources: [...this.state.quadView.sources] });
         }
       }
 
@@ -316,6 +351,71 @@ export class ComparisonManager extends EventEmitter<ComparisonManagerEvents> {
     return this.state.blendMode.blendRatio;
   }
 
+  // Quad View methods
+
+  /**
+   * Enable or disable quad view mode.
+   * When enabled, disables wipe mode, blend modes, and difference matte.
+   */
+  setQuadViewEnabled(enabled: boolean): void {
+    if (this.state.quadView.enabled !== enabled) {
+      this.state.quadView.enabled = enabled;
+
+      if (enabled) {
+        // Disable conflicting modes
+        if (this.state.wipeMode !== 'off') {
+          this.state.wipeMode = 'off';
+          this.emit('wipeModeChanged', 'off');
+        }
+        if (this.state.blendMode.mode !== 'off') {
+          const previousMode = this.state.blendMode.mode;
+          this.state.blendMode.mode = 'off';
+          if (previousMode === 'flicker') {
+            this.stopFlicker();
+          }
+          this.emit('blendModeChanged', { ...this.state.blendMode });
+        }
+        if (this.state.differenceMatte.enabled) {
+          this.state.differenceMatte.enabled = false;
+          this.emit('differenceMatteChanged', { ...this.state.differenceMatte });
+        }
+      }
+
+      this.emit('quadViewChanged', { enabled: this.state.quadView.enabled, sources: [...this.state.quadView.sources] });
+      this.emit('stateChanged', { ...this.state });
+    }
+  }
+
+  /**
+   * Toggle quad view on/off.
+   */
+  toggleQuadView(): void {
+    this.setQuadViewEnabled(!this.state.quadView.enabled);
+  }
+
+  isQuadViewEnabled(): boolean {
+    return this.state.quadView.enabled;
+  }
+
+  /**
+   * Assign a source to a quadrant (0=top-left, 1=top-right, 2=bottom-left, 3=bottom-right).
+   */
+  setQuadSource(quadrant: 0 | 1 | 2 | 3, source: ABSource): void {
+    if (this.state.quadView.sources[quadrant] !== source) {
+      this.state.quadView.sources[quadrant] = source;
+      this.emit('quadViewChanged', { enabled: this.state.quadView.enabled, sources: [...this.state.quadView.sources] });
+      this.emit('stateChanged', { ...this.state });
+    }
+  }
+
+  getQuadSources(): [ABSource, ABSource, ABSource, ABSource] {
+    return [...this.state.quadView.sources];
+  }
+
+  getQuadViewState(): QuadViewState {
+    return { enabled: this.state.quadView.enabled, sources: [...this.state.quadView.sources] };
+  }
+
   getState(): CompareState {
     return { ...this.state };
   }
@@ -364,7 +464,8 @@ export class ComparisonManager extends EventEmitter<ComparisonManagerEvents> {
     return this.state.wipeMode !== 'off' ||
            (this.state.currentAB === 'B' && this.state.abAvailable) ||
            this.state.differenceMatte.enabled ||
-           this.state.blendMode.mode !== 'off';
+           this.state.blendMode.mode !== 'off' ||
+           this.state.quadView.enabled;
   }
 
   /**

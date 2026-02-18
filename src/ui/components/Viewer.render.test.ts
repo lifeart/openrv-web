@@ -1350,4 +1350,65 @@ describe('Viewer', () => {
     });
   });
 
+  describe('missing frame rendering', () => {
+    it('VWR-MF-001: hold mode falls back to current frame when previous frame is not cached', () => {
+      const tv = testable(viewer);
+      const drawWithTransform = vi.spyOn(tv as any, 'drawWithTransform');
+      const firstFrame = new Image(96, 96);
+      const currentFrameImage = new Image(128, 128);
+
+      viewer.setMissingFrameMode('hold');
+
+      tv.session = {
+        ...tv.session,
+        isPlaying: false,
+        currentFrame: 2,
+        frameCount: 2,
+        currentSource: {
+          type: 'sequence' as const,
+          name: 'seq',
+          url: '',
+          width: 100,
+          height: 100,
+          duration: 2,
+          fps: 24,
+          element: firstFrame,
+          sequenceFrames: [
+            { index: 0, frameNumber: 1, file: new File([''], 'frame_0001.png') },
+            { index: 1, frameNumber: 3, file: new File([''], 'frame_0003.png') },
+          ],
+          sequenceInfo: {
+            name: 'seq',
+            pattern: 'frame_####.png',
+            frames: [
+              { index: 0, frameNumber: 1, file: new File([''], 'frame_0001.png') },
+              { index: 1, frameNumber: 3, file: new File([''], 'frame_0003.png') },
+            ],
+            startFrame: 1,
+            endFrame: 3,
+            width: 100,
+            height: 100,
+            fps: 24,
+            missingFrames: [2],
+          },
+        },
+        getSequenceFrameSync: vi.fn((frame?: number) => {
+          if (frame === 1) return null;
+          if (frame === 2) return currentFrameImage;
+          return null;
+        }),
+        getSequenceFrameImage: vi.fn().mockResolvedValue(null),
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+
+      viewer.render();
+
+      const drawnElements = drawWithTransform.mock.calls.map(([, element]) => element);
+      expect(drawnElements.includes(currentFrameImage)).toBe(true);
+      expect(drawnElements.includes(firstFrame)).toBe(false);
+      drawWithTransform.mockRestore();
+      localStorage.removeItem('openrv.missingFrameMode');
+    });
+  });
+
 });

@@ -91,6 +91,8 @@ interface WebRTCPeerState {
   stateSent: boolean;
 }
 
+const CREATE_ROOM_WSS_FALLBACK_TIMEOUT_MS = 2000;
+
 export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implements ManagerBase {
   private wsClient: WebSocketClient;
   private stateManager: SyncStateManager;
@@ -106,6 +108,8 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   private _webrtcPeers = new Map<string, WebRTCPeerState>();
   private _permissions = new Map<string, ParticipantRole>();
   private _remoteCursors = new Map<string, CursorSyncPayload>();
+  private _pendingRoomAction: 'create' | 'join' | null = null;
+  private _createRoomFallbackTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Subscriptions to clean up
   private _unsubscribers: Array<() => void> = [];
@@ -214,10 +218,12 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
 
     if (userName) this._userName = userName;
     if (typeof pinCode === 'string') this.setPinCode(pinCode);
+    this._pendingRoomAction = 'create';
+    this.scheduleCreateRoomFallback();
 
     this.setConnectionState('connecting');
     this.wsClient.setIdentity(this._userId, '');
-    this.wsClient.connect(this.config.serverUrl, this._userId, '');
+    this.wsClient.connect(undefined, this._userId, '');
 
     // Once connected, send room.create (use `once` to avoid leak)
     const unsub = this.wsClient.once('connected', () => {
@@ -242,10 +248,12 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
 
     if (userName) this._userName = userName;
     if (typeof pinCode === 'string') this.setPinCode(pinCode);
+    this._pendingRoomAction = 'join';
+    this.clearCreateRoomFallbackTimer();
 
     this.setConnectionState('connecting');
     this.wsClient.setIdentity(this._userId, '');
-    this.wsClient.connect(this.config.serverUrl, this._userId, '');
+    this.wsClient.connect(undefined, this._userId, '');
 
     // Once connected, send room.join (use `once` to avoid leak)
     const unsub = this.wsClient.once('connected', () => {
@@ -264,6 +272,8 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   leaveRoom(): void {
     if (!this._roomInfo) return;
 
+    this._pendingRoomAction = null;
+    this.clearCreateRoomFallbackTimer();
     const message = createRoomLeaveMessage(this._roomInfo.roomId, this._userId);
     this.wsClient.send(message);
     this.disposeAllWebRTCPeers();
@@ -505,6 +515,11 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   // ---- Private: WebSocket Event Handling ----
 
   private setupWebSocketEvents(): void {
+    const unsub0 = this.wsClient.on('connected', () => {
+      // If signaling transport is reachable, do not trigger local create-room fallback.
+      this.clearCreateRoomFallbackTimer();
+    });
+
     const unsub1 = this.wsClient.on('message', (message) => this.handleMessage(message));
 
     const unsub2 = this.wsClient.on('disconnected', () => {
@@ -532,6 +547,9 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     });
 
     const unsub5 = this.wsClient.on('reconnectFailed', () => {
+      if (this.tryFallbackToLocalHostRoom()) {
+        return;
+      }
       this.setConnectionState('error');
       this.emit('toastMessage', {
         message: 'Failed to reconnect. Please try again.',
@@ -546,10 +564,13 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     });
 
     const unsub7 = this.wsClient.on('error', (err) => {
+      if (this.tryFallbackToLocalHostRoom()) {
+        return;
+      }
       this.emit('error', { code: 'WS_ERROR', message: err.message });
     });
 
-    this._unsubscribers.push(unsub1, unsub2, unsub3, unsub4, unsub5, unsub6, unsub7);
+    this._unsubscribers.push(unsub0, unsub1, unsub2, unsub3, unsub4, unsub5, unsub6, unsub7);
   }
 
   private handleMessage(message: SyncMessage): void {
@@ -641,6 +662,8 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   // ---- Room Event Handlers ----
 
   private handleRoomCreated(payload: RoomCreatedPayload): void {
+    this._pendingRoomAction = null;
+    this.clearCreateRoomFallbackTimer();
     this._roomInfo = {
       roomId: payload.roomId,
       roomCode: payload.roomCode,
@@ -660,6 +683,8 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   }
 
   private handleRoomJoined(payload: RoomJoinedPayload): void {
+    this._pendingRoomAction = null;
+    this.clearCreateRoomFallbackTimer();
     this._roomInfo = {
       roomId: payload.roomId,
       roomCode: payload.roomCode,
@@ -723,6 +748,8 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   }
 
   private handleRoomError(payload: RoomErrorPayload): void {
+    this._pendingRoomAction = null;
+    this.clearCreateRoomFallbackTimer();
     this.setConnectionState('error');
     this.emit('error', { code: payload.code, message: payload.message });
     this.emit('toastMessage', {
@@ -1138,9 +1165,57 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   private resetRoomState(): void {
     this.disposeAllWebRTCPeers();
     this._roomInfo = null;
+    this._pendingRoomAction = null;
+    this.clearCreateRoomFallbackTimer();
     this._permissions.clear();
     this._remoteCursors.clear();
     this.stateManager.reset();
+  }
+
+  private shouldFallbackToLocalHostRoom(): boolean {
+    return (
+      this._pendingRoomAction === 'create' &&
+      !this._roomInfo &&
+      this._connectionState !== 'connected' &&
+      this.hasSecureSignalingTarget()
+    );
+  }
+
+  private tryFallbackToLocalHostRoom(): boolean {
+    if (!this.shouldFallbackToLocalHostRoom()) return false;
+
+    this._pendingRoomAction = null;
+    this.clearCreateRoomFallbackTimer();
+    this.wsClient.disconnect();
+    this.emit('toastMessage', {
+      message: 'Signaling unavailable. Created local host room.',
+      type: 'warning',
+    });
+    this.simulateRoomCreated();
+    return true;
+  }
+
+  private scheduleCreateRoomFallback(): void {
+    this.clearCreateRoomFallbackTimer();
+    if (!this.hasSecureSignalingTarget()) return;
+
+    this._createRoomFallbackTimer = setTimeout(() => {
+      this.tryFallbackToLocalHostRoom();
+    }, CREATE_ROOM_WSS_FALLBACK_TIMEOUT_MS);
+  }
+
+  private clearCreateRoomFallbackTimer(): void {
+    if (!this._createRoomFallbackTimer) return;
+    clearTimeout(this._createRoomFallbackTimer);
+    this._createRoomFallbackTimer = null;
+  }
+
+  private hasSecureSignalingTarget(): boolean {
+    const candidates = [
+      this.config.serverUrl,
+      ...(Array.isArray(this.config.serverUrls) ? this.config.serverUrls : []),
+    ];
+    return candidates.some((url) => /^wss:\/\//i.test(url));
   }
 
   // ---- Simulate Server Responses (for testing without a real server) ----
@@ -1150,6 +1225,8 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
    * Used for testing and mock scenarios.
    */
   simulateRoomCreated(roomCode?: string): void {
+    this._pendingRoomAction = null;
+    this.clearCreateRoomFallbackTimer();
     const code = roomCode ?? generateRoomCode();
     const user: SyncUser = {
       id: this._userId,
@@ -1227,6 +1304,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   dispose(): void {
     if (this._disposed) return;
     this._disposed = true;
+    this.clearCreateRoomFallbackTimer();
 
     // Unsubscribe all listeners
     this._unsubscribers.forEach(unsub => unsub());

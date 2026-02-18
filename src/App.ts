@@ -55,7 +55,7 @@ import { NoteOverlay } from './ui/components/NoteOverlay';
 import { LayoutStore } from './ui/layout/LayoutStore';
 import { LayoutManager } from './ui/layout/LayoutManager';
 import { formatTimecode, formatDuration } from './handlers/infoPanelHandlers';
-import { SequenceGroupNode } from './nodes/groups/SequenceGroupNode';
+import { SequenceGroupNode, type EDLEntry } from './nodes/groups/SequenceGroupNode';
 import { decodeSessionState, type SessionURLState } from './core/session/SessionURLManager';
 
 export class App {
@@ -261,23 +261,19 @@ export class App {
     wireStackControls(wiringCtx);
 
     // Timeline editor wiring (EDL/SequenceGroup integration)
-    this.controls.timelineEditor.on('cutSelected', ({ cutIndex }) => {
-      const entry = this.controls.timelineEditor.getEDL()[cutIndex];
-      if (entry) {
-        this.session.goToFrame(entry.frame);
-      }
-    });
+    this.controls.timelineEditor.on('cutSelected', ({ cutIndex }) => this.handleTimelineEditorCutSelected(cutIndex));
     this.controls.timelineEditor.on('cutTrimmed', () => this.applyTimelineEditorEdits());
     this.controls.timelineEditor.on('cutMoved', () => this.applyTimelineEditorEdits());
     this.controls.timelineEditor.on('cutDeleted', () => this.applyTimelineEditorEdits());
     this.controls.timelineEditor.on('cutInserted', () => this.applyTimelineEditorEdits());
 
     this.session.on('graphLoaded', () => this.syncTimelineEditorFromGraph());
-    this.session.on('durationChanged', () => {
-      this.controls.timelineEditor.setTotalFrames(this.session.frameCount);
-    });
-    this.session.on('sourceLoaded', () => {
-      this.controls.timelineEditor.setTotalFrames(this.session.frameCount);
+    this.session.on('durationChanged', () => this.syncTimelineEditorFromGraph());
+    this.session.on('sourceLoaded', () => this.syncTimelineEditorFromGraph());
+    this.controls.playlistManager.on('clipsChanged', () => {
+      if (!this.getSequenceGroupNodeFromGraph()) {
+        this.syncTimelineEditorFromGraph();
+      }
     });
   }
 
@@ -410,12 +406,16 @@ export class App {
     const roomCode = params.get('room');
     const pinCode = params.get('pin');
 
+    if (roomCode) {
+      this.controls.networkControl.setJoinRoomCodeFromLink(roomCode.toUpperCase());
+    }
+
     if (pinCode) {
       this.controls.networkControl.setPinCode(pinCode);
       this.controls.networkSyncManager.setPinCode(pinCode);
     }
 
-    if (roomCode) {
+    if (roomCode && pinCode) {
       this.controls.networkSyncManager.joinRoom(roomCode.toUpperCase(), 'User', pinCode ?? undefined);
     }
 
@@ -1080,23 +1080,186 @@ export class App {
     return node instanceof SequenceGroupNode ? node : null;
   }
 
+  private handleTimelineEditorCutSelected(cutIndex: number): void {
+    const sequenceNode = this.getSequenceGroupNodeFromGraph();
+    if (sequenceNode) {
+      const entry = this.controls.timelineEditor.getEDL()[cutIndex];
+      if (entry) {
+        this.session.goToFrame(entry.frame);
+      }
+      return;
+    }
+
+    const playlistClip = this.controls.playlistManager.getClipByIndex(cutIndex);
+    if (playlistClip) {
+      this.jumpToPlaylistGlobalFrame(playlistClip.globalStartFrame);
+      return;
+    }
+
+    const entry = this.controls.timelineEditor.getEDL()[cutIndex];
+    if (!entry) {
+      return;
+    }
+
+    if (entry.source >= 0 && entry.source < this.session.sourceCount) {
+      if (this.session.currentSourceIndex !== entry.source) {
+        this.session.setCurrentSource(entry.source);
+      }
+      const targetFrame = Math.max(1, Math.min(entry.inPoint, this.session.frameCount));
+      this.session.goToFrame(targetFrame);
+    }
+  }
+
+  private buildFallbackTimelineEDLFromSources(): { edl: EDLEntry[]; labels: string[] } {
+    const edl: EDLEntry[] = [];
+    const labels: string[] = [];
+
+    let nextFrame = 1;
+    const sources = this.session.allSources;
+    for (let i = 0; i < sources.length; i++) {
+      const source = sources[i];
+      if (!source) continue;
+
+      const duration = Math.max(1, source.duration || 1);
+      edl.push({
+        frame: nextFrame,
+        source: i,
+        inPoint: 1,
+        outPoint: duration,
+      });
+      labels.push(source.name || `Source ${i + 1}`);
+      nextFrame += duration;
+    }
+
+    return { edl, labels };
+  }
+
+  private normalizeTimelineEditorEDL(edl: EDLEntry[]): EDLEntry[] {
+    const sanitized = edl
+      .filter((entry) => Number.isFinite(entry.source))
+      .map((entry) => ({
+        frame: Math.max(1, Math.floor(entry.frame)),
+        source: Math.max(0, Math.floor(entry.source)),
+        inPoint: Math.max(1, Math.floor(entry.inPoint)),
+        outPoint: Math.max(Math.max(1, Math.floor(entry.inPoint)), Math.floor(entry.outPoint)),
+      }))
+      .sort((a, b) => a.frame - b.frame);
+
+    const normalized: EDLEntry[] = [];
+    let nextFrame = 1;
+
+    for (const entry of sanitized) {
+      normalized.push({
+        frame: nextFrame,
+        source: entry.source,
+        inPoint: entry.inPoint,
+        outPoint: entry.outPoint,
+      });
+      nextFrame += entry.outPoint - entry.inPoint + 1;
+    }
+
+    return normalized;
+  }
+
   private syncTimelineEditorFromGraph(): void {
     const sequenceNode = this.getSequenceGroupNodeFromGraph();
     if (sequenceNode) {
       this.controls.timelineEditor.loadFromSequenceNode(sequenceNode);
       return;
     }
-    this.controls.timelineEditor.setTotalFrames(this.session.frameCount);
-  }
 
-  private applyTimelineEditorEdits(): void {
-    const sequenceNode = this.getSequenceGroupNodeFromGraph();
-    if (!sequenceNode) {
+    const clips = this.controls.playlistManager.getClips();
+    if (clips.length > 0) {
+      this.controls.timelineEditor.loadFromEDL(
+        clips.map((clip) => ({
+          frame: clip.globalStartFrame,
+          source: clip.sourceIndex,
+          inPoint: clip.inPoint,
+          outPoint: clip.outPoint,
+        })),
+        clips.map((clip) => clip.sourceName),
+      );
       return;
     }
 
-    const edl = this.controls.timelineEditor.getEDL();
-    sequenceNode.setEDL(edl);
+    const fallback = this.buildFallbackTimelineEDLFromSources();
+    if (fallback.edl.length > 0) {
+      this.controls.timelineEditor.loadFromEDL(fallback.edl, fallback.labels);
+      return;
+    }
+
+    this.controls.timelineEditor.setTotalFrames(this.session.frameCount);
+    this.controls.timelineEditor.loadFromEDL([]);
+  }
+
+  private applyTimelineEditorEditsToPlaylist(edl: EDLEntry[]): void {
+    const clips = edl
+      .filter((entry) => entry.source >= 0 && entry.source < this.session.sourceCount)
+      .map((entry) => {
+        const source = this.session.getSourceByIndex(entry.source);
+        return {
+          sourceIndex: entry.source,
+          sourceName: source?.name || `Source ${entry.source + 1}`,
+          inPoint: entry.inPoint,
+          outPoint: entry.outPoint,
+        };
+      });
+
+    this.controls.playlistManager.replaceClips(clips);
+
+    const playlistEnabled = this.controls.playlistManager.isEnabled();
+    if (clips.length === 0) {
+      if (playlistEnabled) {
+        this.controls.playlistManager.setEnabled(false);
+      }
+    } else if (clips.length === 1) {
+      // Single-cut edits should behave like native in/out trimming and use
+      // session loop mode directly (no playlist runtime takeover).
+      if (playlistEnabled) {
+        this.controls.playlistManager.setEnabled(false);
+      }
+
+      const clip = clips[0]!;
+      if (this.session.currentSourceIndex !== clip.sourceIndex) {
+        this.session.setCurrentSource(clip.sourceIndex);
+      }
+      this.session.setInPoint(clip.inPoint);
+      this.session.setOutPoint(clip.outPoint);
+      this.controls.playlistManager.setCurrentFrame(1);
+
+      if (this.session.currentFrame < clip.inPoint || this.session.currentFrame > clip.outPoint) {
+        this.session.goToFrame(clip.inPoint);
+      }
+    } else {
+      // Multi-cut timelines use playlist runtime for cross-cut playback.
+      if (!playlistEnabled) {
+        const mappedMode = this.session.loopMode === 'once' ? 'none' : 'all';
+        this.controls.playlistManager.setLoopMode(mappedMode);
+        this.controls.playlistManager.setEnabled(true);
+      } else if (
+        this.controls.playlistManager.getLoopMode() === 'none' &&
+        this.session.loopMode !== 'once'
+      ) {
+        // Preserve expected looping when user loop mode is not "once".
+        this.controls.playlistManager.setLoopMode('all');
+      }
+    }
+
+    // Force immediate timeline redraw after EDL edits so canvas reflects
+    // new in/out playback bounds without waiting for external resize.
+    this.timeline.refresh();
+    this.persistenceManager.syncGTOStore();
+  }
+
+  private applyTimelineEditorEdits(): void {
+    const normalizedEDL = this.normalizeTimelineEditorEDL(this.controls.timelineEditor.getEDL());
+    const sequenceNode = this.getSequenceGroupNodeFromGraph();
+    if (!sequenceNode) {
+      this.applyTimelineEditorEditsToPlaylist(normalizedEDL);
+      return;
+    }
+
+    sequenceNode.setEDL(normalizedEDL);
 
     const totalDuration = Math.max(1, sequenceNode.getTotalDurationFromEDL());
     this.session.setInPoint(1);
@@ -1105,6 +1268,8 @@ export class App {
       this.session.goToFrame(totalDuration);
     }
 
+    this.controls.timelineEditor.loadFromEDL(normalizedEDL);
+    this.timeline.refresh();
     this.persistenceManager.syncGTOStore();
   }
 
