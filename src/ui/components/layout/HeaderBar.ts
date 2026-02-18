@@ -1330,7 +1330,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     const baseTitle = 'Layout presets (Alt+1..Alt+4)';
     const activePreset = this._layoutPresets.find(p => p.id === this._activeLayoutPresetId);
     this.layoutButton.title = activePreset
-      ? `${baseTitle) } — Current: ${activePreset.label}`
+      ? `${baseTitle} (Current: ${activePreset.label})`
       : baseTitle;
   }
 

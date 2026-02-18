@@ -36,7 +36,7 @@
 |--------|----------------|----------------|----------|-------|
 | **Color Pipeline** | 25 node types, 45+ shaders | 34 shader stages, CDL, curves, wheels | **75%** | CDL parsing exists; Bradford CAT exists |
 | **Format Support** | 19+ image, FFmpeg video, 32-ch audio | 10+ image (inc. gainmap), WebCodecs video | **55%** | EXR DWAB critical gap |
-| **UI/Interaction** | Timeline, HUD, wipes, annotations, presets | Timeline, all scopes, paint, wipes, comparison | **55%** | ⚠️ Revised down: missing notes, versions, status tracking |
+| **UI/Interaction** | Timeline, HUD, wipes, annotations, presets | Timeline, all scopes, paint, wipes, comparison | **60%** | ⚠️ Revised: missing notes, versions, status; but richer comparison/layer/pressure than initially assessed |
 | **Node Graph** | 47 node types, DAG eval, caching | 20+ nodes, DAG eval, frame cache | **60%** | |
 | **Plugins/Packages** | 38 rv-packages (Mu/Python) | API + wiring modules | **30%** | |
 | **Session/Collaboration** | .rv files, RV Sync network | .orvproject, NetworkSync, GTO loader | **50%** | OTIO import partially exists |
@@ -44,7 +44,7 @@
 | **Stereo 3D** | Full stereo pipeline (6 modes) | Stereo control + eye transforms | **60%** | Missing convergence tools |
 | **Export/RVIO** | Full movie encode, leader/slate, frameburn | Frame export (PNG/JPEG/EXR/WebP), session save | **30%** | Frameburn for export critical |
 
-**Overall Weighted Parity: ~45%** (revised from 58% — the earlier estimate overcounted technical features and undercounted review workflow completeness)
+**Overall Weighted Parity: ~48%** (revised from 58% — the earlier estimate overcounted technical features and undercounted review workflow completeness. Revised upward from 45% after lap 2 discovered several existing implementations.)
 
 > **Key insight from expert review**: The plan previously conflated "viewer" with "review tool." A viewer displays images correctly. A review tool facilitates decision-making (notes, versions, status, reports). openrv-web is an excellent viewer but an incomplete review tool.
 
@@ -499,6 +499,18 @@ More efficient (no intermediate FBO copies) but FIXED processing order.
 4. **Keep property system lightweight** - OpenRV's property flags (Persistent, Animatable, etc.) add complexity. Only add animation when needed.
 
 5. **Grade stack visualization** - While keeping the monolithic shader, add a UI showing the current processing order and which phases are active. This helps colorists understand what's happening even if they can't reorder.
+
+6. **OCIOTransform scalability** - The current `OCIOTransform.ts` builds transform chains via a massive if/else cascade (lines 864-1257). Adding new color spaces requires hardcoded branches. OCIO WASM Phase B should address this combinatorial explosion.
+
+### 4.4 Architectural Decisions Needed Before Phase 1
+
+| Decision | Options | Impact |
+|----------|---------|--------|
+| Notes data model | Per-frame vs per-frame-range vs per-source | Affects NoteManager API, SessionState schema, serialization |
+| Notes persistence | Client-side (SessionState/IndexedDB) vs server-side API | Client = faster, server = shared across users |
+| Version data model | New `Version` entity vs extend PlaylistClip | Affects data model complexity, migration |
+| Undo/redo scope | Include note/status edits? | Affects undo stack size, action granularity |
+| DCI-P3 gamma decode | Add 2.6 gamma decode before DCI-P3→XYZ matrix? | Affects color accuracy for P3 content |
 
 ---
 

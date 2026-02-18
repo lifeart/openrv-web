@@ -2,31 +2,24 @@
  * Histogram Unit Tests
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   Histogram,
   calculateHistogram,
 } from './Histogram';
+import { getSharedScopesProcessor } from '../../scopes/WebGLScopes';
 
-// Type for mock processor
-interface MockScopesProcessor {
-  isReady: Mock;
-  setPlaybackMode: Mock;
-  setImage: Mock;
-  renderHistogram: Mock;
-}
-
-// Mock WebGLScopes module
+// Mock WebGLScopes module - WebGL2 is not available in jsdom,
+// so getSharedScopesProcessor() would throw during WebGLScopesProcessor construction.
+// The GPU rendering tests (HG-070+) need a mock processor to verify call arguments.
 vi.mock('../../scopes/WebGLScopes', () => {
-  const mockProcessor: MockScopesProcessor = {
+  const mockProcessor = {
     isReady: vi.fn(() => true),
     setPlaybackMode: vi.fn(),
-    setImage: vi.fn(),
     renderHistogram: vi.fn(),
   };
   return {
     getSharedScopesProcessor: vi.fn(() => mockProcessor),
-    __mockProcessor: mockProcessor,
   };
 });
 
@@ -510,24 +503,22 @@ describe('Histogram GPU rendering', () => {
     histogram.dispose();
   });
 
-  it('HG-070: update uses GPU rendering when available', async () => {
-    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
-    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
+  it('HG-070: update uses GPU rendering when available', () => {
+    const mockProcessor = vi.mocked(getSharedScopesProcessor)();
 
     const imageData = createTestImageData(10, 10, { r: 128, g: 128, b: 128, a: 255 });
     histogram.update(imageData);
 
-    expect(mockProcessor.renderHistogram).toHaveBeenCalled();
+    expect(mockProcessor!.renderHistogram).toHaveBeenCalled();
   });
 
-  it('HG-071: GPU rendering receives correct histogram data', async () => {
-    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
-    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
+  it('HG-071: GPU rendering receives correct histogram data', () => {
+    const mockProcessor = vi.mocked(getSharedScopesProcessor)();
 
     const imageData = createTestImageData(10, 10, { r: 128, g: 128, b: 128, a: 255 });
     histogram.update(imageData);
 
-    const call = mockProcessor.renderHistogram.mock.calls[0];
+    const call = vi.mocked(mockProcessor!.renderHistogram).mock.calls[0];
     expect(call).toBeDefined();
     // Second argument should be histogram data object
     const histData = call[1];
@@ -538,57 +529,52 @@ describe('Histogram GPU rendering', () => {
     expect(histData).toHaveProperty('maxValue');
   });
 
-  it('HG-072: GPU rendering uses current mode', async () => {
-    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
-    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
+  it('HG-072: GPU rendering uses current mode', () => {
+    const mockProcessor = vi.mocked(getSharedScopesProcessor)();
 
     histogram.setMode('luminance');
     const imageData = createTestImageData(10, 10, { r: 128, g: 128, b: 128, a: 255 });
     histogram.update(imageData);
 
-    const call = mockProcessor.renderHistogram.mock.calls[0];
+    const call = vi.mocked(mockProcessor!.renderHistogram).mock.calls[0];
     expect(call[2]).toBe('luminance'); // mode parameter
   });
 
-  it('HG-073: GPU rendering uses logScale setting', async () => {
-    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
-    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
+  it('HG-073: GPU rendering uses logScale setting', () => {
+    const mockProcessor = vi.mocked(getSharedScopesProcessor)();
 
     histogram.setLogScale(true);
     const imageData = createTestImageData(10, 10, { r: 128, g: 128, b: 128, a: 255 });
     histogram.update(imageData);
 
-    const call = mockProcessor.renderHistogram.mock.calls[0];
+    const call = vi.mocked(mockProcessor!.renderHistogram).mock.calls[0];
     expect(call[3]).toBe(true); // logScale parameter
   });
 
-  it('HG-074: falls back to CPU for separate mode', async () => {
-    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
-    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
+  it('HG-074: falls back to CPU for separate mode', () => {
+    const mockProcessor = vi.mocked(getSharedScopesProcessor)();
 
     histogram.setMode('separate');
     const imageData = createTestImageData(10, 10, { r: 128, g: 128, b: 128, a: 255 });
     histogram.update(imageData);
 
     // GPU rendering should NOT be called for separate mode
-    expect(mockProcessor.renderHistogram).not.toHaveBeenCalled();
+    expect(mockProcessor!.renderHistogram).not.toHaveBeenCalled();
   });
 
-  it('HG-075: setPlaybackMode calls GPU processor for consistency', async () => {
-    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
-    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
+  it('HG-075: setPlaybackMode calls GPU processor for consistency', () => {
+    const mockProcessor = vi.mocked(getSharedScopesProcessor)();
 
     histogram.setPlaybackMode(true);
 
-    expect(mockProcessor.setPlaybackMode).toHaveBeenCalledWith(true);
+    expect(mockProcessor!.setPlaybackMode).toHaveBeenCalledWith(true);
   });
 
-  it('HG-076: setPlaybackMode(false) calls GPU processor', async () => {
-    const { getSharedScopesProcessor } = await import('../../scopes/WebGLScopes');
-    const mockProcessor = (getSharedScopesProcessor as ReturnType<typeof vi.fn>)() as MockScopesProcessor;
+  it('HG-076: setPlaybackMode(false) calls GPU processor', () => {
+    const mockProcessor = vi.mocked(getSharedScopesProcessor)();
 
     histogram.setPlaybackMode(false);
 
-    expect(mockProcessor.setPlaybackMode).toHaveBeenCalledWith(false);
+    expect(mockProcessor!.setPlaybackMode).toHaveBeenCalledWith(false);
   });
 });
