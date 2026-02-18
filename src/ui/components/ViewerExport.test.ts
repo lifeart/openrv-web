@@ -732,5 +732,42 @@ describe('ViewerExport', () => {
       expect(videoNode.getCachedFrameCanvas).toHaveBeenCalledWith(12);
       expect(videoNode.getFrameAsync).not.toHaveBeenCalled();
     });
+
+    it('applies optional transform when rendering source to ImageData', () => {
+      const pattern = document.createElement('canvas');
+      pattern.width = 1;
+      pattern.height = 2;
+      const pctx = pattern.getContext('2d')!;
+      pctx.fillStyle = 'rgb(255,0,0)';
+      pctx.fillRect(0, 0, 1, 1);
+      pctx.fillStyle = 'rgb(0,0,255)';
+      pctx.fillRect(0, 1, 1, 1);
+
+      const source = createMockMediaSource('image', 1, 2);
+      source.element = pattern as any;
+      (mockSession.getSourceByIndex as any).mockReturnValue(source);
+
+      renderSourceToImageData(
+        mockSession,
+        0,
+        2,
+        1,
+        defaultTransform()
+      );
+
+      const getContextMock = HTMLCanvasElement.prototype.getContext as unknown as ReturnType<typeof vi.fn>;
+      const unrotatedCtx = getContextMock.mock.results.at(-1)?.value as { rotate: ReturnType<typeof vi.fn> };
+      expect(unrotatedCtx.rotate).not.toHaveBeenCalled();
+
+      renderSourceToImageData(
+        mockSession,
+        0,
+        2,
+        1,
+        { ...defaultTransform(), rotation: 90 }
+      );
+      const rotatedCtx = getContextMock.mock.results.at(-1)?.value as { rotate: ReturnType<typeof vi.fn> };
+      expect(rotatedCtx.rotate).toHaveBeenCalled();
+    });
   });
 });

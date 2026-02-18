@@ -966,6 +966,154 @@ describe('Viewer', () => {
       drawImageSpy.mockRestore();
     });
 
+    it('VWR-CP-004: prerender cache hit applies transform for rotated content', () => {
+      const tv = testable(viewer);
+      const drawWithTransform = vi.spyOn(tv as any, 'drawWithTransform');
+
+      (viewer as any).transformManager.setTransform({
+        rotation: 90,
+        flipH: false,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      });
+
+      const mockImg = new Image(100, 100);
+      const cachedCanvas = document.createElement('canvas');
+      cachedCanvas.width = 100;
+      cachedCanvas.height = 100;
+      tv.prerenderBuffer = {
+        getFrame: vi.fn().mockReturnValue({
+          canvas: cachedCanvas,
+          effectsHash: 'test',
+          width: 100,
+          height: 100,
+        }),
+        queuePriorityFrame: vi.fn(),
+        setTargetSize: vi.fn(),
+        onFrameProcessed: null,
+        dispose: vi.fn(),
+      } as unknown as typeof tv.prerenderBuffer;
+
+      tv.session = {
+        ...tv.session,
+        isPlaying: true,
+        currentFrame: 1,
+        frameCount: 10,
+        currentSource: {
+          type: 'image' as const,
+          name: 'test.jpg',
+          url: 'test.jpg',
+          width: 100,
+          height: 100,
+          duration: 1,
+          fps: 24,
+          element: mockImg,
+        },
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+
+      viewer.render();
+
+      expect(drawWithTransform).toHaveBeenCalledWith(tv.imageCtx, cachedCanvas, tv.displayWidth, tv.displayHeight);
+      drawWithTransform.mockRestore();
+    });
+
+    it('VWR-CP-005: prerender target size swaps for 90° rotation', () => {
+      const tv = testable(viewer);
+      const setTargetSize = vi.fn();
+      const mockImg = new Image(1000, 500);
+
+      (viewer as any).transformManager.setTransform({
+        rotation: 90,
+        flipH: false,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      });
+
+      tv.prerenderBuffer = {
+        getFrame: vi.fn().mockReturnValue(null),
+        queuePriorityFrame: vi.fn(),
+        setTargetSize,
+        onFrameProcessed: null,
+        dispose: vi.fn(),
+      } as unknown as typeof tv.prerenderBuffer;
+
+      tv.session = {
+        ...tv.session,
+        isPlaying: false,
+        currentFrame: 1,
+        frameCount: 10,
+        currentSource: {
+          type: 'image' as const,
+          name: 'test.jpg',
+          url: 'test.jpg',
+          width: 1000,
+          height: 500,
+          duration: 1,
+          fps: 24,
+          element: mockImg,
+        },
+        getSequenceFrameSync: () => null,
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+
+      viewer.render();
+
+      expect(setTargetSize).toHaveBeenCalled();
+      const [targetW, targetH] = setTargetSize.mock.calls[0]!;
+      expect(targetW).toBe(tv.displayHeight);
+      expect(targetH).toBe(tv.displayWidth);
+    });
+
+    it('VWR-GF-003: ghost frame overlay applies current transform when drawing cached frames', () => {
+      const tv = testable(viewer);
+      const drawWithTransform = vi.spyOn(tv as any, 'drawWithTransform');
+      const ghostFrameCanvas = document.createElement('canvas');
+      ghostFrameCanvas.width = 64;
+      ghostFrameCanvas.height = 64;
+
+      (viewer as any).transformManager.setTransform({
+        rotation: 90,
+        flipH: false,
+        flipV: false,
+        scale: { x: 1, y: 1 },
+        translate: { x: 0, y: 0 },
+      });
+      viewer.setGhostFrameState({
+        enabled: true,
+        framesBefore: 1,
+        framesAfter: 0,
+        opacityBase: 0.3,
+        opacityFalloff: 0.7,
+        colorTint: false,
+      });
+
+      tv.session = {
+        ...tv.session,
+        currentFrame: 2,
+        currentSource: {
+          type: 'video' as const,
+          name: 'test.mp4',
+          url: 'test.mp4',
+          width: 100,
+          height: 100,
+          duration: 10,
+          fps: 24,
+          element: document.createElement('video'),
+        },
+        getVideoFrameCanvas: vi.fn().mockReturnValue(ghostFrameCanvas),
+        isUsingMediabunny: () => false,
+      } as TestableViewer['session'];
+
+      (viewer as any).renderGhostFrames(400, 200);
+
+      expect(drawWithTransform).toHaveBeenCalledWith(tv.imageCtx, ghostFrameCanvas, 400, 200);
+      drawWithTransform.mockRestore();
+    });
+
     it('VWR-EFF-001: All effects applied in full path are also applied in cache hit path (consistency check)', () => {
       // This meta-test verifies that the cache hit path doesn't skip effects that
       // the full rendering path applies. We check for ghost frames, stereo, lens.

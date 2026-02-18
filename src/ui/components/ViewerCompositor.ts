@@ -327,7 +327,7 @@ export class ViewerCompositor {
       if (gfs.colorTint) {
         // Apply color tint using composite operations
         // First draw the frame
-        ctx.drawImage(frameCanvas, 0, 0, displayWidth, displayHeight);
+        drawWithTransformUtil(ctx, frameCanvas, displayWidth, displayHeight, this.ctx.getTransform());
 
         // Then overlay color tint
         ctx.globalCompositeOperation = 'multiply';
@@ -336,7 +336,7 @@ export class ViewerCompositor {
         ctx.globalCompositeOperation = 'source-over';
       } else {
         // Just draw with opacity
-        ctx.drawImage(frameCanvas, 0, 0, displayWidth, displayHeight);
+        drawWithTransformUtil(ctx, frameCanvas, displayWidth, displayHeight, this.ctx.getTransform());
       }
 
       ctx.restore();

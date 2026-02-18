@@ -594,6 +594,113 @@ describe('Viewer', () => {
       expect(out.data[1]).toBe(255);
       expect(out.data[2]).toBe(0);
     });
+
+    it('ABR-005: wipe rendering applies rotation/flip transform on both sides', () => {
+      const drawWithTransform = vi.spyOn(viewer as any, 'drawWithTransform').mockImplementation(() => {});
+      const sourceCanvas = document.createElement('canvas');
+      sourceCanvas.width = 640;
+      sourceCanvas.height = 360;
+
+      (viewer as any).transformManager.setTransform({ ...DEFAULT_TRANSFORM, rotation: 90 });
+      viewer.setWipeState({ mode: 'horizontal', position: 0.5, showOriginal: 'left' });
+      (viewer as any).renderWithWipe(sourceCanvas, 640, 360);
+
+      expect(drawWithTransform).toHaveBeenCalledTimes(2);
+      expect(drawWithTransform.mock.calls[0]?.[1]).toBe(sourceCanvas);
+      expect(drawWithTransform.mock.calls[1]?.[1]).toBe(sourceCanvas);
+      drawWithTransform.mockRestore();
+    });
+
+    it('ABR-006: renderSourceToImageData applies transform (rotate called for 90°)', () => {
+      const sourceCanvas = document.createElement('canvas');
+      sourceCanvas.width = 1;
+      sourceCanvas.height = 2;
+      const ctx = sourceCanvas.getContext('2d')!;
+      ctx.fillStyle = 'rgb(255,0,0)';
+      ctx.fillRect(0, 0, 1, 1);
+      ctx.fillStyle = 'rgb(0,0,255)';
+      ctx.fillRect(0, 1, 1, 1);
+
+      const source = {
+        type: 'image' as const,
+        name: 'pattern',
+        url: 'pattern',
+        width: 1,
+        height: 2,
+        duration: 1,
+        fps: 24,
+        element: sourceCanvas,
+      };
+
+      const t = testable(viewer);
+      t.session = {
+        ...t.session,
+        currentFrame: 1,
+        getSourceByIndex: vi.fn().mockReturnValue(source),
+        isUsingMediabunny: () => false,
+      } as any;
+
+      const getContextMock = HTMLCanvasElement.prototype.getContext as unknown as ReturnType<typeof vi.fn>;
+      const start = getContextMock.mock.calls.length;
+
+      (viewer as any).transformManager.setTransform({ ...DEFAULT_TRANSFORM, rotation: 0 });
+      (viewer as any).renderSourceToImageData(0, 2, 1);
+      const unrotatedCtx = getContextMock.mock.results[start]?.value as { rotate: ReturnType<typeof vi.fn> };
+      expect(unrotatedCtx.rotate).not.toHaveBeenCalled();
+
+      (viewer as any).transformManager.setTransform({ ...DEFAULT_TRANSFORM, rotation: 90 });
+      (viewer as any).renderSourceToImageData(0, 2, 1);
+      const rotatedCtx = getContextMock.mock.results[start + 1]?.value as { rotate: ReturnType<typeof vi.fn> };
+      expect(rotatedCtx.rotate).toHaveBeenCalled();
+    });
+
+    it('ABR-007: difference matte path uses renderSourceToImageData helper', () => {
+      const t = testable(viewer);
+      const sourceA = { element: document.createElement('canvas') };
+      const sourceB = { element: document.createElement('canvas') };
+      t.session = {
+        ...t.session,
+        sourceA,
+        sourceB,
+        sourceAIndex: 0,
+        sourceBIndex: 1,
+        isUsingMediabunny: () => false,
+      } as any;
+
+      viewer.setDifferenceMatteState({ enabled: true, gain: 1, heatmap: false });
+      const renderSourceSpy = vi.spyOn(viewer as any, 'renderSourceToImageData')
+        .mockReturnValue(new ImageData(2, 1));
+
+      const out = (viewer as any).renderDifferenceMatte(2, 1) as ImageData;
+      expect(out).not.toBeNull();
+      expect(renderSourceSpy).toHaveBeenCalledWith(0, 2, 1);
+      expect(renderSourceSpy).toHaveBeenCalledWith(1, 2, 1);
+      renderSourceSpy.mockRestore();
+    });
+
+    it('ABR-008: stack compositing path uses renderSourceToImageData helper', () => {
+      const sourceA = { element: document.createElement('canvas') };
+      const sourceB = { element: document.createElement('canvas') };
+      const t = testable(viewer);
+      t.session = {
+        ...t.session,
+        getSourceByIndex: vi.fn((idx: number) => (idx === 0 ? sourceA : sourceB)),
+        isUsingMediabunny: () => false,
+      } as any;
+
+      viewer.setStackLayers([
+        { id: 'A', name: 'A', sourceIndex: 0, blendMode: 'normal', opacity: 1, visible: true },
+        { id: 'B', name: 'B', sourceIndex: 1, blendMode: 'normal', opacity: 1, visible: true },
+      ]);
+      const renderSourceSpy = vi.spyOn(viewer as any, 'renderSourceToImageData')
+        .mockReturnValue(new ImageData(2, 1));
+
+      const out = (viewer as any).compositeStackLayers(2, 1) as ImageData;
+      expect(out).not.toBeNull();
+      expect(renderSourceSpy).toHaveBeenCalledWith(0, 2, 1);
+      expect(renderSourceSpy).toHaveBeenCalledWith(1, 2, 1);
+      renderSourceSpy.mockRestore();
+    });
   });
 
   describe('transform', () => {

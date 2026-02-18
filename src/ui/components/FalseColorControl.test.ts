@@ -239,6 +239,17 @@ describe('FalseColorControl', () => {
       expect(falseColor.getState().preset).toBe('arri');
     });
 
+    it('FALSE-U044b: clicking preset button enables false color if disabled', () => {
+      const dropdown = openDropdown();
+      const redBtn = dropdown.querySelector('button[data-preset="red"]') as HTMLButtonElement;
+
+      expect(falseColor.isEnabled()).toBe(false);
+      redBtn.click();
+
+      expect(falseColor.getState().preset).toBe('red');
+      expect(falseColor.isEnabled()).toBe(true);
+    });
+
     it('FALSE-U045: active preset button has blue styling', () => {
       const dropdown = openDropdown();
       const standardBtn = dropdown.querySelector('button[data-preset="standard"]') as HTMLButtonElement;

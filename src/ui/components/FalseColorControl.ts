@@ -194,6 +194,11 @@ export class FalseColorControl {
 
       btn.addEventListener('click', () => {
         this.falseColor.setPreset(preset.key);
+        // Preset selection should produce an immediate visible result.
+        // Auto-enable false color when choosing a preset.
+        if (!this.falseColor.isEnabled()) {
+          this.falseColor.enable();
+        }
       });
 
       btn.addEventListener('mouseenter', () => {
