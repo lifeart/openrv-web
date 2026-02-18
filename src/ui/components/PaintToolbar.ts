@@ -2,6 +2,7 @@ import { PaintEngine, PaintTool } from '../../paint/PaintEngine';
 import { BrushType, type AnnotationVersion } from '../../paint/types';
 import { showConfirm } from './shared/Modal';
 import { getIconSvg, IconName } from './shared/Icons';
+import { createIconButton as sharedCreateIconButton, setButtonActive } from './shared/Button';
 
 export class PaintToolbar {
   private container: HTMLElement;
@@ -224,41 +225,11 @@ export class PaintToolbar {
   }
 
   private createIconButton(icon: IconName, title: string, onClick: () => void): HTMLButtonElement {
-    const button = document.createElement('button');
-    button.innerHTML = getIconSvg(icon, 'sm');
-    button.title = title;
-    button.style.cssText = `
-      background: transparent;
-      border: 1px solid transparent;
-      color: var(--text-muted);
-      padding: 4px;
-      border-radius: 4px;
-      cursor: pointer;
-      width: 26px;
-      height: 26px;
-      transition: all 0.12s ease;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-    `;
-
-    button.addEventListener('mouseenter', () => {
-      if (!button.classList.contains('active')) {
-        button.style.background = 'var(--bg-hover)';
-        button.style.borderColor = 'var(--border-primary)';
-        button.style.color = 'var(--text-primary)';
-      }
+    const button = sharedCreateIconButton(getIconSvg(icon, 'sm'), onClick, {
+      variant: 'icon',
+      size: 'sm',
+      title,
     });
-
-    button.addEventListener('mouseleave', () => {
-      if (!button.classList.contains('active')) {
-        button.style.background = 'transparent';
-        button.style.borderColor = 'transparent';
-        button.style.color = 'var(--text-muted)';
-      }
-    });
-
-    button.addEventListener('click', onClick);
     this.container.appendChild(button);
     return button;
   }
@@ -272,17 +243,7 @@ export class PaintToolbar {
   private updateToolButtons(): void {
     const currentTool = this.paintEngine.tool;
     for (const [tool, btn] of this.buttons) {
-      if (tool === currentTool) {
-        btn.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-        btn.style.borderColor = 'var(--accent-primary)';
-        btn.style.color = 'var(--accent-primary)';
-        btn.classList.add('active');
-      } else {
-        btn.style.background = 'transparent';
-        btn.style.borderColor = 'transparent';
-        btn.style.color = 'var(--text-muted)';
-        btn.classList.remove('active');
-      }
+      setButtonActive(btn, tool === currentTool, 'icon');
     }
   }
 

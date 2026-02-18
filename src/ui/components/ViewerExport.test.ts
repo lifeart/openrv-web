@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   createExportCanvas,
+  createSourceExportCanvas,
   renderFrameToCanvas,
   renderSourceToImageData,
 } from './ViewerExport';
@@ -26,6 +27,7 @@ function createMockSession(source: MediaSource | null = null): Session {
     getSourceByIndex: vi.fn().mockReturnValue(source),
     getSequenceFrameImage: vi.fn().mockResolvedValue(createMockImage(1920, 1080)),
     getSequenceFrameSync: vi.fn().mockReturnValue(createMockImage(1920, 1080)),
+    getVideoFrameCanvas: vi.fn().mockReturnValue(null),
   } as unknown as Session;
   return session;
 }
@@ -205,6 +207,34 @@ describe('ViewerExport', () => {
       expect(result).not.toBeNull();
       expect(result!.width).toBe(1280);
       expect(result!.height).toBe(720);
+    });
+  });
+
+  describe('createSourceExportCanvas', () => {
+    it('should return null when no source', () => {
+      mockSession = createMockSession(null);
+      const result = createSourceExportCanvas(mockSession);
+      expect(result).toBeNull();
+    });
+
+    it('should create source-resolution canvas for image sources', () => {
+      const source = createMockMediaSource('image', 1920, 1080);
+      mockSession = createMockSession(source);
+
+      const result = createSourceExportCanvas(mockSession);
+
+      expect(result).not.toBeNull();
+      expect(result!.width).toBe(1920);
+      expect(result!.height).toBe(1080);
+    });
+
+    it('should prefer sequence frame image for sequence sources', () => {
+      const source = createMockMediaSource('sequence', 1280, 720);
+      mockSession = createMockSession(source);
+
+      createSourceExportCanvas(mockSession);
+
+      expect(mockSession.getSequenceFrameSync).toHaveBeenCalledWith(1);
     });
   });
 

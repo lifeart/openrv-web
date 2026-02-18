@@ -9,9 +9,10 @@ import {
   getNumberValue,
   getNumberArray,
   getStringValue,
+  getStringArray,
 } from './AnnotationStore';
-import type { ColorAdjustments, ChannelMode, LinearizeState } from '../../core/types/color';
-import { DEFAULT_LINEARIZE_STATE } from '../../core/types/color';
+import type { ColorAdjustments, ChannelMode, LinearizeState, ChannelSwizzle } from '../../core/types/color';
+import { DEFAULT_LINEARIZE_STATE, SWIZZLE_ZERO, SWIZZLE_ONE } from '../../core/types/color';
 import type { Transform2D, CropState, UncropState } from '../../core/types/transform';
 import type { ScopesState } from '../../core/types/scopes';
 import type { CDLValues } from '../../color/CDL';
@@ -84,6 +85,11 @@ export function parseInitialSettings(
     settings.outOfRange = outOfRange;
   }
 
+  const channelSwizzle = parseChannelSwizzle(dto);
+  if (channelSwizzle) {
+    settings.channelSwizzle = channelSwizzle;
+  }
+
   return Object.keys(settings).length > 0 ? settings : null;
 }
 
@@ -122,12 +128,11 @@ export function parseLinearize(dto: GTODTO): LinearizeState | null {
   const fileGamma = getNumberValue(colorComp.property('fileGamma').value());
   const alphaType = getNumberValue(colorComp.property('alphaType').value());
 
-  // Map logtype: 0=none, 1=cineon, 2=viper (fallback to cineon), 3=logc3
+  // Map logtype: 0=none, 1=cineon, 2=viper, 3=logc3
   let logType: 0 | 1 | 2 | 3 = 0;
   if (rawLogType === 1) {
     logType = 1;
   } else if (rawLogType === 2) {
-    console.warn('RVLinearize: Viper log type (2) is not natively supported; falling back to Cineon.');
     logType = 2;
   } else if (rawLogType === 3) {
     logType = 3;
@@ -710,4 +715,68 @@ export function parseOutOfRange(dto: GTODTO): number | undefined {
 
   // GTO boolean: 1 = highlight mode (mode 2), 0 = off (mode 0)
   return rawValue === 1 ? 2 : 0;
+}
+
+/**
+ * Map a channel name string to its swizzle index.
+ *
+ * "R" → 0, "G" → 1, "B" → 2, "A" → 3
+ * "0" / "zero" → SWIZZLE_ZERO (4, constant 0.0)
+ * "1" / "one"  → SWIZZLE_ONE  (5, constant 1.0)
+ * Unknown → returns the defaultIndex (original channel position)
+ */
+export function channelNameToSwizzleIndex(name: string, defaultIndex: number): number {
+  switch (name.toUpperCase()) {
+    case 'R': return 0;
+    case 'G': return 1;
+    case 'B': return 2;
+    case 'A': return 3;
+    case '0':
+    case 'ZERO': return SWIZZLE_ZERO;
+    case '1':
+    case 'ONE': return SWIZZLE_ONE;
+    default: return defaultIndex;
+  }
+}
+
+/**
+ * Parse channel swizzle from RVChannelMap protocol nodes.
+ *
+ * GTO format: `format.channels` is a string array like `["B", "G", "R", "A"]`
+ * defining how input channels map to output: output[0]=B, output[1]=G, etc.
+ *
+ * Returns null when no RVChannelMap node exists or when the mapping is identity.
+ */
+export function parseChannelSwizzle(dto: GTODTO): ChannelSwizzle | null {
+  const nodes = dto.byProtocol('RVChannelMap');
+  if (nodes.length === 0) return null;
+
+  const node = nodes.first();
+
+  // Check node-level active flag
+  const nodeComp = node.component('node');
+  if (nodeComp?.exists()) {
+    const active = getNumberValue(nodeComp.property('active').value());
+    if (active !== undefined && active === 0) return null;
+  }
+
+  const formatComp = node.component('format');
+  if (!formatComp?.exists()) return null;
+
+  const channelNames = getStringArray(formatComp.property('channels').value());
+  if (!channelNames || channelNames.length === 0) return null;
+
+  // Build the swizzle: for each output position, which source channel to read
+  const swizzle: ChannelSwizzle = [0, 1, 2, 3]; // identity default
+  const len = Math.min(channelNames.length, 4);
+  for (let i = 0; i < len; i++) {
+    swizzle[i] = channelNameToSwizzleIndex(channelNames[i]!, i);
+  }
+
+  // Return null if the result is identity (no-op)
+  if (swizzle[0] === 0 && swizzle[1] === 1 && swizzle[2] === 2 && swizzle[3] === 3) {
+    return null;
+  }
+
+  return swizzle;
 }

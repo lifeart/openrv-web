@@ -63,13 +63,35 @@ export type NumericAdjustmentKey = Exclude<keyof ColorAdjustments, 'vibranceSkin
 export type ChannelMode = 'rgb' | 'red' | 'green' | 'blue' | 'alpha' | 'luminance';
 
 /**
+ * Channel swizzle indices for RVChannelMap remapping.
+ *
+ * Each element specifies which source channel feeds the corresponding output channel:
+ *   [outputR, outputG, outputB, outputA]
+ *
+ * Values:
+ *   0 = source R, 1 = source G, 2 = source B, 3 = source A
+ *   4 = constant 0.0, 5 = constant 1.0
+ *
+ * Default identity: [0, 1, 2, 3] (R->R, G->G, B->B, A->A)
+ */
+export type ChannelSwizzle = [number, number, number, number];
+
+/** Sentinel value: output constant 0.0 */
+export const SWIZZLE_ZERO = 4;
+/** Sentinel value: output constant 1.0 */
+export const SWIZZLE_ONE = 5;
+
+/** Identity channel swizzle (no remapping). */
+export const DEFAULT_CHANNEL_SWIZZLE: ChannelSwizzle = [0, 1, 2, 3];
+
+/**
  * Linearization state parsed from RVLinearize GTO nodes.
  *
  * Controls how log-encoded or gamma-encoded source media is converted to
  * linear light before entering the grading pipeline.
  */
 export interface LinearizeState {
-  /** Log curve type: 0=none, 1=cineon, 2=viper (treated as cineon with warning), 3=ARRI LogC3 */
+  /** Log curve type: 0=none, 1=cineon, 2=viper, 3=ARRI LogC3 */
   logType: 0 | 1 | 2 | 3;
   /** Apply sRGB-to-linear EOTF */
   sRGB2linear: boolean;

@@ -19,6 +19,8 @@ export interface PlaylistPanelEvents extends EventMap {
   addCurrentSource: void;
   /** Emitted when user selects a clip */
   clipSelected: { clipId: string; sourceIndex: number; frame: number };
+  /** Emitted when panel visibility changes */
+  visibilityChanged: { open: boolean };
   /** Emitted when panel is closed */
   closed: void;
 }
@@ -593,12 +595,14 @@ export class PlaylistPanel extends EventEmitter<PlaylistPanelEvents> {
     }
     this.container.style.display = 'flex';
     this.isVisible = true;
+    this.emit('visibilityChanged', { open: true });
     this.renderList();
   }
 
   hide(): void {
     this.container.style.display = 'none';
     this.isVisible = false;
+    this.emit('visibilityChanged', { open: false });
     this.emit('closed', undefined);
   }
 

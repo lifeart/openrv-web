@@ -1,5 +1,6 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg, type IconName } from './shared/Icons';
+import { createIconButton as sharedCreateIconButton, setButtonActive } from './shared/Button';
 
 export type { Transform2D } from '../../core/types/transform';
 export { DEFAULT_TRANSFORM } from '../../core/types/transform';
@@ -74,35 +75,11 @@ export class TransformControl extends EventEmitter<TransformControlEvents> {
   }
 
   private createButton(icon: IconName, onClick: () => void, title: string): HTMLButtonElement {
-    const btn = document.createElement('button');
-    btn.innerHTML = getIconSvg(icon, 'sm');
-    btn.title = title;
-    btn.style.cssText = `
-      background: transparent;
-      border: 1px solid transparent;
-      color: var(--text-muted);
-      width: 28px;
-      height: 28px;
-      border-radius: 4px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.12s ease;
-    `;
-
-    btn.addEventListener('click', onClick);
-    btn.addEventListener('mouseenter', () => {
-      if (!btn.classList.contains('active')) {
-        btn.style.background = 'var(--bg-hover)';
-        btn.style.borderColor = 'var(--border-primary)';
-        btn.style.color = 'var(--text-primary)';
-      }
+    const btn = sharedCreateIconButton(getIconSvg(icon, 'sm'), onClick, {
+      variant: 'icon',
+      size: 'md',
+      title,
     });
-    btn.addEventListener('mouseleave', () => {
-      this.updateButtonState(btn);
-    });
-
     this.container.appendChild(btn);
     return btn;
   }
@@ -117,17 +94,7 @@ export class TransformControl extends EventEmitter<TransformControlEvents> {
       isActive = this.transform.flipV;
     }
 
-    if (isActive) {
-      btn.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-      btn.style.borderColor = 'var(--accent-primary)';
-      btn.style.color = 'var(--accent-primary)';
-      btn.classList.add('active');
-    } else {
-      btn.style.background = 'transparent';
-      btn.style.borderColor = 'transparent';
-      btn.style.color = 'var(--text-muted)';
-      btn.classList.remove('active');
-    }
+    setButtonActive(btn, isActive, 'icon');
   }
 
   private updateAllButtons(): void {

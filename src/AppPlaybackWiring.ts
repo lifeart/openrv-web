@@ -74,6 +74,9 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   exportControl.on('exportRequested', ({ format, includeAnnotations, quality }) => {
     viewer.exportFrame(format, includeAnnotations, quality);
   });
+  exportControl.on('sourceExportRequested', ({ format, quality }) => {
+    viewer.exportSourceFrame(format, quality);
+  });
   exportControl.on('copyRequested', () => {
     viewer.copyFrameToClipboard(true);
   });

@@ -8,7 +8,7 @@
 import { EventEmitter, EventMap } from '../../../utils/EventEmitter';
 import { TabId } from './TabBar';
 import { getIconSvg, IconName } from '../shared/Icons';
-import { applyA11yFocus } from '../shared/Button';
+import { createButton as sharedCreateButton, createIconButton as sharedCreateIconButton } from '../shared/Button';
 
 export interface ContextToolbarEvents extends EventMap {
   // Events will be added as tabs are implemented
@@ -241,51 +241,15 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
       icon?: IconName;
     } = {}
   ): HTMLButtonElement {
-    const button = document.createElement('button');
-    if (options.icon) {
-      button.innerHTML = `${getIconSvg(options.icon, 'sm')}<span style="margin-left: 6px;">${text}</span>`;
-    } else {
-      button.textContent = text;
-    }
-    button.title = options.title || '';
-    button.style.cssText = `
-      background: ${options.active ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent'};
-      border: 1px solid ${options.active ? 'var(--accent-primary)' : 'transparent'};
-      color: ${options.active ? 'var(--accent-primary)' : 'var(--text-secondary)'};
-      padding: 6px 12px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 12px;
-      transition: all 0.12s ease;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      height: 28px;
-      min-width: ${options.minWidth || 'auto'};
-    `;
-
-    button.addEventListener('mouseenter', () => {
-      if (!options.active) {
-        button.style.background = 'var(--bg-hover)';
-        button.style.borderColor = 'var(--border-secondary)';
-        button.style.color = 'var(--text-primary)';
-      }
+    const iconSvg = options.icon ? getIconSvg(options.icon, 'sm') : undefined;
+    return sharedCreateButton(text, onClick, {
+      variant: 'ghost',
+      size: 'md',
+      active: options.active,
+      title: options.title,
+      icon: iconSvg,
+      minWidth: options.minWidth,
     });
-
-    button.addEventListener('mouseleave', () => {
-      if (!options.active) {
-        button.style.background = 'transparent';
-        button.style.borderColor = 'transparent';
-        button.style.color = 'var(--text-secondary)';
-      }
-    });
-
-    button.addEventListener('click', onClick);
-
-    // Apply A11Y focus handling from shared utility
-    applyA11yFocus(button);
-
-    return button;
   }
 
   /**
@@ -301,52 +265,14 @@ export class ContextToolbar extends EventEmitter<ContextToolbarEvents> {
       size?: 'sm' | 'md';
     } = {}
   ): HTMLButtonElement {
-    const button = document.createElement('button');
     const iconSize = options.size === 'md' ? 'md' : 'sm';
-    button.innerHTML = getIconSvg(icon, iconSize);
-    button.title = options.title || '';
-    if (options.title) {
-      button.setAttribute('aria-label', options.title);
-    }
-
-    const btnSize = options.size === 'md' ? '32px' : '28px';
-    button.style.cssText = `
-      background: ${options.active ? 'rgba(var(--accent-primary-rgb), 0.15)' : 'transparent'};
-      border: 1px solid ${options.active ? 'var(--accent-primary)' : 'transparent'};
-      color: ${options.active ? 'var(--accent-primary)' : 'var(--text-secondary)'};
-      padding: 0;
-      border-radius: 4px;
-      cursor: pointer;
-      transition: all 0.12s ease;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: ${btnSize};
-      height: ${btnSize};
-    `;
-
-    button.addEventListener('mouseenter', () => {
-      if (!options.active) {
-        button.style.background = 'var(--bg-hover)';
-        button.style.borderColor = 'var(--border-secondary)';
-        button.style.color = 'var(--text-primary)';
-      }
+    const btnSize = options.size === 'md' ? 'lg' : 'md';
+    return sharedCreateIconButton(getIconSvg(icon, iconSize), onClick, {
+      variant: 'icon',
+      size: btnSize,
+      active: options.active,
+      title: options.title,
     });
-
-    button.addEventListener('mouseleave', () => {
-      if (!options.active) {
-        button.style.background = 'transparent';
-        button.style.borderColor = 'transparent';
-        button.style.color = 'var(--text-secondary)';
-      }
-    });
-
-    button.addEventListener('click', onClick);
-
-    // Apply A11Y focus handling from shared utility
-    applyA11yFocus(button);
-
-    return button;
   }
 
   /**

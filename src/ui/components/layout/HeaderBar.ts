@@ -13,9 +13,9 @@ import { VolumeControl } from '../VolumeControl';
 import { ExportControl } from '../ExportControl';
 import { TimecodeDisplay } from '../TimecodeDisplay';
 import { ThemeControl } from '../ThemeControl';
-import { showAlert } from '../shared/Modal';
+import { showAlert, showPrompt } from '../shared/Modal';
 import { getIconSvg, IconName } from '../shared/Icons';
-import { applyA11yFocus } from '../shared/Button';
+import { createButton as sharedCreateButton, createIconButton as sharedCreateIconButton, setButtonActive, applyA11yFocus } from '../shared/Button';
 
 export interface HeaderBarEvents extends EventMap {
   showShortcuts: void;
@@ -360,102 +360,28 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   }
 
   private createIconButton(icon: string, label: string, onClick: () => void, title?: string): HTMLButtonElement {
-    const button = document.createElement('button');
-    button.title = title || label;
-    // Set aria-label for icon-only buttons (no text label)
-    if (!label && title) {
-      button.setAttribute('aria-label', title);
-    }
-    button.style.cssText = `
-      background: transparent;
-      border: 1px solid transparent;
-      color: var(--text-secondary);
-      padding: 6px 12px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 12px;
-      transition: all 0.12s ease;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 4px;
-      height: 28px;
-      min-width: 28px;
-    `;
-
-    // SVG icons for cleaner look
     const iconSvg = this.getIcon(icon);
-    if (iconSvg) {
-      button.innerHTML = iconSvg;
-      if (label) {
-        const span = document.createElement('span');
-        span.textContent = label;
-        span.style.marginLeft = '4px';
-        button.appendChild(span);
-      }
-    } else {
-      button.textContent = label;
+    if (label) {
+      return sharedCreateButton(label, onClick, {
+        variant: 'icon',
+        size: 'md',
+        title: title || label,
+        icon: iconSvg || undefined,
+      });
     }
-
-    button.addEventListener('pointerenter', () => {
-      button.style.background = 'var(--bg-hover)';
-      button.style.borderColor = 'var(--border-secondary)';
-      button.style.color = 'var(--text-primary)';
+    return sharedCreateIconButton(iconSvg || '', onClick, {
+      variant: 'icon',
+      size: 'md',
+      title: title || label,
     });
-
-    button.addEventListener('pointerleave', () => {
-      button.style.background = 'transparent';
-      button.style.borderColor = 'transparent';
-      button.style.color = 'var(--text-secondary)';
-    });
-
-    button.addEventListener('pointerdown', () => {
-      button.style.background = 'var(--bg-active)';
-    });
-
-    button.addEventListener('pointerup', () => {
-      button.style.background = 'var(--bg-hover)';
-    });
-
-    button.addEventListener('click', onClick);
-    applyA11yFocus(button);
-    return button;
   }
 
   private createCompactButton(text: string, onClick: () => void, title?: string): HTMLButtonElement {
-    const button = document.createElement('button');
-    button.textContent = text;
-    button.title = title || '';
-    button.style.cssText = `
-      background: transparent;
-      border: 1px solid transparent;
-      color: var(--text-secondary);
-      padding: 6px 12px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 12px;
-      transition: all 0.12s ease;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      height: 28px;
-    `;
-
-    button.addEventListener('pointerenter', () => {
-      button.style.background = 'var(--bg-hover)';
-      button.style.borderColor = 'var(--border-secondary)';
-      button.style.color = 'var(--text-primary)';
+    return sharedCreateButton(text, onClick, {
+      variant: 'ghost',
+      size: 'md',
+      title,
     });
-
-    button.addEventListener('pointerleave', () => {
-      button.style.background = 'transparent';
-      button.style.borderColor = 'transparent';
-      button.style.color = 'var(--text-secondary)';
-    });
-
-    button.addEventListener('click', onClick);
-    applyA11yFocus(button);
-    return button;
   }
 
   private getIcon(name: string): string {
@@ -479,9 +405,12 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
   }
 
   private createSessionNameDisplay(): HTMLElement {
-    const container = document.createElement('div');
+    const container = document.createElement('button');
+    container.type = 'button';
     container.className = 'session-name-display';
     container.dataset.testid = 'session-name-display';
+    container.setAttribute('aria-label', 'Rename session');
+    container.title = 'Rename session';
     container.style.cssText = `
       display: flex;
       align-items: center;
@@ -490,15 +419,19 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       min-width: 80px;
       padding: 4px 8px;
       border-radius: 4px;
-      cursor: default;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-secondary);
+      cursor: pointer;
       flex-shrink: 0;
+      transition: all 0.12s ease;
     `;
 
     // Icon
     const icon = document.createElement('span');
     icon.innerHTML = '<svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>';
     icon.style.cssText = `
-      color: var(--text-muted);
+      color: currentColor;
       display: flex;
       align-items: center;
       flex-shrink: 0;
@@ -518,7 +451,44 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     nameText.textContent = 'Untitled';
     container.appendChild(nameText);
 
+    container.addEventListener('pointerenter', () => {
+      container.style.background = 'var(--bg-hover)';
+      container.style.borderColor = 'var(--border-secondary)';
+      container.style.color = 'var(--text-primary)';
+    });
+    container.addEventListener('pointerleave', () => {
+      container.style.background = 'transparent';
+      container.style.borderColor = 'transparent';
+      container.style.color = 'var(--text-secondary)';
+    });
+    container.addEventListener('click', () => {
+      void this.promptRenameSession();
+    });
+    container.addEventListener('keydown', (e) => {
+      if (e.key === 'F2') {
+        e.preventDefault();
+        void this.promptRenameSession();
+      }
+    });
+    applyA11yFocus(container);
+
     return container;
+  }
+
+  private async promptRenameSession(): Promise<void> {
+    const currentName = this.session.metadata.displayName || '';
+    const renamed = await showPrompt('Enter session name', {
+      title: 'Rename Session',
+      placeholder: 'Untitled',
+      defaultValue: currentName,
+      confirmText: 'Rename',
+    });
+
+    if (renamed === null) {
+      return;
+    }
+
+    this.session.setDisplayName(renamed);
   }
 
   private updateSessionNameDisplay(): void {
@@ -528,6 +498,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     if (nameText) {
       const displayName = metadata.displayName || 'Untitled';
       nameText.textContent = displayName;
+      this.sessionNameDisplay.setAttribute('aria-label', `Session name: ${displayName}. Click to rename.`);
 
       // Build tooltip with name and comment
       let tooltip = displayName;
@@ -540,6 +511,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
       if (metadata.version > 0) {
         tooltip += `\nSession version: ${metadata.version}`;
       }
+      tooltip += '\n\nClick to rename';
 
       this.sessionNameDisplay.title = tooltip;
     }
@@ -1298,15 +1270,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
    * Update the presentation mode button active state
    */
   setPresentationState(isEnabled: boolean): void {
-    if (isEnabled) {
-      this.presentationButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-      this.presentationButton.style.borderColor = 'var(--accent-primary)';
-      this.presentationButton.style.color = 'var(--accent-primary)';
-    } else {
-      this.presentationButton.style.background = 'transparent';
-      this.presentationButton.style.borderColor = 'transparent';
-      this.presentationButton.style.color = 'var(--text-secondary)';
-    }
+    setButtonActive(this.presentationButton, isEnabled, 'icon');
   }
 
   /**

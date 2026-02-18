@@ -99,6 +99,27 @@ export function getStringValue(value: unknown): string | undefined {
 }
 
 /**
+ * Extract a string array from a GTO property value.
+ *
+ * Handles raw string arrays (["R", "G", "B"]) or nested arrays ([["R", "G", "B"]]).
+ * Returns undefined for empty, missing, or non-string-array values.
+ */
+export function getStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value) || value.length === 0) {
+    return undefined;
+  }
+  const first = value[0];
+  if (typeof first === 'string') {
+    return value.filter((entry): entry is string => typeof entry === 'string');
+  }
+  if (Array.isArray(first)) {
+    const strings = first.filter((entry): entry is string => typeof entry === 'string');
+    return strings.length > 0 ? strings : undefined;
+  }
+  return undefined;
+}
+
+/**
  * Callback interface for AnnotationStore to notify Session of changes
  * without importing Session (avoids circular deps).
  */

@@ -71,6 +71,7 @@ function createMockSession() {
 function createMockViewer() {
   return {
     exportFrame: vi.fn(),
+    exportSourceFrame: vi.fn(),
     copyFrameToClipboard: vi.fn(),
     renderFrameToCanvas: vi.fn(),
   };
@@ -200,6 +201,15 @@ describe('wirePlaybackControls', () => {
     const exportControl = headerBar.getExportControl();
     exportControl.emit('copyRequested', undefined);
     expect(viewer.copyFrameToClipboard).toHaveBeenCalledWith(true);
+  });
+
+  it('PW-006b: sourceExportRequested calls viewer.exportSourceFrame()', () => {
+    const exportControl = headerBar.getExportControl();
+    exportControl.emit('sourceExportRequested', {
+      format: 'jpeg',
+      quality: 0.8,
+    });
+    expect(viewer.exportSourceFrame).toHaveBeenCalledWith('jpeg', 0.8);
   });
 
   it('PW-007: showShortcuts calls keyboardHandler.showShortcutsDialog()', () => {

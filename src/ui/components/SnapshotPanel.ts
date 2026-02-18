@@ -17,6 +17,8 @@ import { showPrompt, showConfirm, showAlert } from './shared/Modal';
 export interface SnapshotPanelEvents extends EventMap {
   /** Emitted when user wants to restore a snapshot */
   restoreRequested: { id: string };
+  /** Emitted when panel visibility changes */
+  visibilityChanged: { open: boolean };
   /** Emitted when panel is closed */
   closed: void;
 }
@@ -34,6 +36,7 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
   private filterMode: 'all' | 'manual' | 'auto' = 'all';
   private snapshots: Snapshot[] = [];
   private snapshotManager: SnapshotManager;
+  private snapshotSubscription: (() => void) | null = null;
   private isVisible = false;
   private exclusivePanel: ExclusivePanel | null = null;
 
@@ -213,7 +216,7 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
     this.container.appendChild(footer);
 
     // Listen for snapshot changes
-    this.snapshotManager.on('snapshotsChanged', ({ snapshots }) => {
+    this.snapshotSubscription = this.snapshotManager.on('snapshotsChanged', ({ snapshots }) => {
       this.snapshots = snapshots;
       this.renderList();
     });
@@ -613,12 +616,14 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
     }
     this.container.style.display = 'flex';
     this.isVisible = true;
+    this.emit('visibilityChanged', { open: true });
     this.loadSnapshots();
   }
 
   hide(): void {
     this.container.style.display = 'none';
     this.isVisible = false;
+    this.emit('visibilityChanged', { open: false });
     this.emit('closed', undefined);
   }
 
@@ -639,6 +644,8 @@ export class SnapshotPanel extends EventEmitter<SnapshotPanelEvents> {
   }
 
   dispose(): void {
+    this.snapshotSubscription?.();
+    this.snapshotSubscription = null;
     this.hide();
     if (document.body.contains(this.container)) {
       document.body.removeChild(this.container);

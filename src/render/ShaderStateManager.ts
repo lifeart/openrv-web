@@ -14,7 +14,7 @@
 
 import type { ManagerBase } from '../core/ManagerBase';
 import type { ShaderProgram } from './ShaderProgram';
-import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState, LinearizeState } from '../core/types/color';
+import type { ColorAdjustments, ColorWheelsState, ChannelMode, HSLQualifierState, LinearizeState, ChannelSwizzle } from '../core/types/color';
 import { DEFAULT_COLOR_ADJUSTMENTS } from '../core/types/color';
 import type { ToneMappingState, ToneMappingOperator, ZebraState, HighlightsShadowsState, VibranceState, ClarityState, SharpenState, FalseColorState, GamutMappingState, GamutIdentifier } from '../core/types/effects';
 import { DEFAULT_TONE_MAPPING_STATE, DEFAULT_GAMUT_MAPPING_STATE } from '../core/types/effects';
@@ -55,6 +55,7 @@ export const DIRTY_PERSPECTIVE = 'perspective';
 export const DIRTY_LINEARIZE = 'linearize';
 export const DIRTY_INLINE_LUT = 'inlineLUT';
 export const DIRTY_OUT_OF_RANGE = 'outOfRange';
+export const DIRTY_CHANNEL_SWIZZLE = 'channelSwizzle';
 
 /** All dirty flag names -- used to initialize on first render so all uniforms are set. */
 export const ALL_DIRTY_FLAGS = [
@@ -67,6 +68,7 @@ export const ALL_DIRTY_FLAGS = [
   DIRTY_LINEARIZE,
   DIRTY_INLINE_LUT,
   DIRTY_OUT_OF_RANGE,
+  DIRTY_CHANNEL_SWIZZLE,
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -318,7 +320,7 @@ export interface InternalShaderState {
   perspectiveQuality: number;
 
   // Linearize (RVLinearize log-to-linear conversion)
-  linearizeLogType: number;  // 0=none, 1=cineon, 2=viper(cineon), 3=logc3
+  linearizeLogType: number;  // 0=none, 1=cineon, 2=viper, 3=logc3
   linearizeSRGB2linear: boolean;
   linearizeRec709ToLinear: boolean;
   linearizeFileGamma: number;
@@ -333,6 +335,9 @@ export interface InternalShaderState {
 
   // Out-of-range visualization mode
   outOfRange: number;  // 0=off, 1=clamp-to-black, 2=highlight
+
+  // Channel swizzle (RVChannelMap remapping)
+  channelSwizzle: [number, number, number, number]; // default [0,1,2,3] = identity
 }
 
 function createDefaultInternalState(): InternalShaderState {
@@ -433,6 +438,7 @@ function createDefaultInternalState(): InternalShaderState {
     inlineLUTData: null,
     inlineLUTDirty: false,
     outOfRange: 0,
+    channelSwizzle: [0, 1, 2, 3],
   };
 }
 
@@ -926,6 +932,16 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     return this.state.outOfRange;
   }
 
+  setChannelSwizzle(swizzle: ChannelSwizzle): void {
+    const s = this.state.channelSwizzle;
+    s[0] = swizzle[0]; s[1] = swizzle[1]; s[2] = swizzle[2]; s[3] = swizzle[3];
+    this.dirtyFlags.add(DIRTY_CHANNEL_SWIZZLE);
+  }
+
+  getChannelSwizzle(): ChannelSwizzle {
+    return [...this.state.channelSwizzle] as ChannelSwizzle;
+  }
+
   /** Set texel size (called by Renderer before applyUniforms, based on image dimensions). */
   setTexelSize(w: number, h: number): void {
     this.state.texelSize[0] = w;
@@ -1202,6 +1218,18 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
       if (newOutOfRange !== s.outOfRange) {
         this.setOutOfRange(newOutOfRange);
       }
+    }
+
+    // --- Channel swizzle (1 uniform, ivec4) ---
+    if (renderState.channelSwizzle) {
+      const cs = renderState.channelSwizzle;
+      if (cs[0] !== s.channelSwizzle[0] || cs[1] !== s.channelSwizzle[1] ||
+          cs[2] !== s.channelSwizzle[2] || cs[3] !== s.channelSwizzle[3]) {
+        this.setChannelSwizzle(cs);
+      }
+    } else if (s.channelSwizzle[0] !== 0 || s.channelSwizzle[1] !== 1 ||
+               s.channelSwizzle[2] !== 2 || s.channelSwizzle[3] !== 3) {
+      this.setChannelSwizzle([0, 1, 2, 3]);
     }
   }
 
@@ -1500,6 +1528,11 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     // Out-of-range visualization
     if (dirty.has(DIRTY_OUT_OF_RANGE)) {
       shader.setUniformInt('u_outOfRange', s.outOfRange);
+    }
+
+    // Channel swizzle (RVChannelMap remapping)
+    if (dirty.has(DIRTY_CHANNEL_SWIZZLE)) {
+      shader.setUniform('u_channelSwizzle', new Int32Array(s.channelSwizzle));
     }
 
     // Perspective Correction

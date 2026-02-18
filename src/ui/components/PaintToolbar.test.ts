@@ -5,6 +5,16 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+
+// PointerEvent polyfill for jsdom
+if (typeof globalThis.PointerEvent === 'undefined') {
+  (globalThis as any).PointerEvent = class extends MouseEvent {
+    constructor(type: string, params?: MouseEventInit) {
+      super(type, params);
+    }
+  };
+}
+
 import { PaintToolbar } from './PaintToolbar';
 import { PaintEngine } from '../../paint/PaintEngine';
 
@@ -328,21 +338,21 @@ describe('PaintToolbar', () => {
   });
 
   describe('button hover effects', () => {
-    it('PAINT-U080: inactive button changes on mouseenter', () => {
+    it('PAINT-U080: inactive button changes on pointerenter', () => {
       const el = toolbar.render();
       const btn = el.querySelector('[data-testid="paint-tool-eraser"]') as HTMLButtonElement;
 
-      btn.dispatchEvent(new MouseEvent('mouseenter'));
+      btn.dispatchEvent(new PointerEvent('pointerenter'));
 
-      expect(btn.style.cssText).toContain('var(--bg-hover)'); // #3a3a3a
+      expect(btn.style.background).toBe('var(--bg-hover)');
     });
 
-    it('PAINT-U081: inactive button restores on mouseleave', () => {
+    it('PAINT-U081: inactive button restores on pointerleave', () => {
       const el = toolbar.render();
       const btn = el.querySelector('[data-testid="paint-tool-eraser"]') as HTMLButtonElement;
 
-      btn.dispatchEvent(new MouseEvent('mouseenter'));
-      btn.dispatchEvent(new MouseEvent('mouseleave'));
+      btn.dispatchEvent(new PointerEvent('pointerenter'));
+      btn.dispatchEvent(new PointerEvent('pointerleave'));
 
       expect(btn.style.background).toBe('transparent');
     });

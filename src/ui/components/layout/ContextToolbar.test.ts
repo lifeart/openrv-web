@@ -5,6 +5,16 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+// PointerEvent polyfill for jsdom
+if (typeof globalThis.PointerEvent === 'undefined') {
+  (globalThis as any).PointerEvent = class extends MouseEvent {
+    constructor(type: string, params?: MouseEventInit) {
+      super(type, params);
+    }
+  };
+}
+
 import { ContextToolbar } from './ContextToolbar';
 import { TabId } from './TabBar';
 
@@ -209,16 +219,16 @@ describe('ContextToolbar', () => {
     it('CTX-U067: inactive button changes on hover', () => {
       const btn = ContextToolbar.createButton('Test', () => {}, { active: false });
 
-      btn.dispatchEvent(new MouseEvent('mouseenter'));
+      btn.dispatchEvent(new PointerEvent('pointerenter'));
 
-      expect(btn.style.cssText).toContain('var(--bg-hover)');
+      expect(btn.style.background).toBe('var(--bg-hover)');
     });
 
     it('CTX-U068: inactive button restores on mouseleave', () => {
       const btn = ContextToolbar.createButton('Test', () => {}, { active: false });
 
-      btn.dispatchEvent(new MouseEvent('mouseenter'));
-      btn.dispatchEvent(new MouseEvent('mouseleave'));
+      btn.dispatchEvent(new PointerEvent('pointerenter'));
+      btn.dispatchEvent(new PointerEvent('pointerleave'));
 
       expect(btn.style.background).toBe('transparent');
     });

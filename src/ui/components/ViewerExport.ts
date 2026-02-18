@@ -83,6 +83,23 @@ interface ExportParams {
   crop: { x: number; y: number } | null;
 }
 
+function getSourceElementForFrame(session: Session): CanvasImageSource | null {
+  const source = session.currentSource;
+  if (!source) return null;
+
+  const frame = session.currentFrame;
+  if (source.type === 'sequence') {
+    return session.getSequenceFrameSync(frame) ?? source.element ?? null;
+  }
+
+  if (source.type === 'video' && source.videoSourceNode?.isUsingMediabunny()) {
+    const frameCanvas = session.getVideoFrameCanvas(frame);
+    if (frameCanvas) return frameCanvas;
+  }
+
+  return source.element ?? null;
+}
+
 /**
  * Compute export parameters from source dimensions, transform, and crop region.
  */
@@ -188,6 +205,33 @@ export function createExportCanvas(
       );
     }
   }
+
+  return canvas;
+}
+
+/**
+ * Create an export canvas for the underlying source frame (without display transforms,
+ * view filters, crop, or annotations). This matches OpenRV's
+ * `exportCurrentSourceFrame` behavior more closely than createExportCanvas().
+ */
+export function createSourceExportCanvas(
+  session: Session,
+  colorSpace?: 'srgb' | 'display-p3'
+): HTMLCanvasElement | null {
+  const source = session.currentSource;
+  if (!source) return null;
+
+  const element = getSourceElementForFrame(session);
+  if (!element) return null;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = source.width;
+  canvas.height = source.height;
+  const ctx = safeCanvasContext2D(canvas, {}, colorSpace === 'display-p3' ? 'display-p3' : undefined);
+
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(element, 0, 0, source.width, source.height);
 
   return canvas;
 }

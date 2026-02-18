@@ -213,6 +213,7 @@ describe('Session GTO settings round-trip', () => {
       contrast: 1.2,
       saturation: 0.8,
       brightness: 0.2,
+      offset: 0.1,
     });
     expect(viewer.getCDL()).toEqual({
       slope: { r: 1.1, g: 1.2, b: 1.3 },

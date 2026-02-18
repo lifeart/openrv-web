@@ -58,6 +58,8 @@ export interface DraggableContainer {
   dispose: () => void;
 }
 
+import { createButton } from './Button';
+
 export function createDraggableContainer(options: DraggableContainerOptions): DraggableContainer {
   const {
     id,
@@ -319,24 +321,10 @@ export function createDraggableContainer(options: DraggableContainerOptions): Dr
  * Create a control button for the header
  */
 export function createControlButton(text: string, title: string): HTMLButtonElement {
-  const button = document.createElement('button');
-  button.textContent = text;
-  button.title = title;
-  button.style.cssText = `
-    background: var(--overlay-border);
-    border: none;
-    border-radius: 2px;
-    color: var(--text-secondary);
-    padding: 2px 6px;
-    font-size: 9px;
-    cursor: pointer;
-    transition: background 0.1s;
-  `;
-  button.addEventListener('mouseenter', () => {
-    button.style.background = 'var(--bg-hover)';
+  return createButton(text, () => {}, {
+    variant: 'overlay',
+    size: 'xs',
+    title,
+    borderRadius: '2px',
   });
-  button.addEventListener('mouseleave', () => {
-    button.style.background = 'var(--overlay-border)';
-  });
-  return button;
 }

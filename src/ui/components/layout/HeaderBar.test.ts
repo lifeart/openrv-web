@@ -7,6 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HeaderBar } from './HeaderBar';
 import { Session, PLAYBACK_SPEED_PRESETS } from '../../../core/session/Session';
+import * as Modal from '../shared/Modal';
 
 describe('HeaderBar', () => {
   let headerBar: HeaderBar;
@@ -33,6 +34,7 @@ describe('HeaderBar', () => {
 
   afterEach(() => {
     headerBar.dispose();
+    vi.restoreAllMocks();
   });
 
   describe('initialization', () => {
@@ -855,6 +857,7 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]');
       expect(sessionNameDisplay).not.toBeNull();
+      expect(sessionNameDisplay?.tagName).toBe('BUTTON');
     });
 
     it('HDR-U161: session name display shows "Untitled" by default', () => {
@@ -869,17 +872,10 @@ describe('HeaderBar', () => {
       const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]');
       const nameText = sessionNameDisplay?.querySelector('.session-name-text');
 
-      // Simulate metadata change
-      (session as any)._metadata = {
+      session.updateMetadata({
         displayName: 'My Session',
         comment: 'Test comment',
-        version: 2,
-        origin: 'openrv-web',
-        creationContext: 0,
-        clipboard: 0,
-        membershipContains: [],
-      };
-      session.emit('metadataChanged', (session as any)._metadata);
+      });
 
       expect(nameText?.textContent).toBe('My Session');
     });
@@ -888,17 +884,10 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]') as HTMLElement;
 
-      // Simulate metadata change with comment
-      (session as any)._metadata = {
+      session.updateMetadata({
         displayName: 'Test Session',
         comment: 'This is a test comment',
-        version: 2,
-        origin: 'openrv-web',
-        creationContext: 0,
-        clipboard: 0,
-        membershipContains: [],
-      };
-      session.emit('metadataChanged', (session as any)._metadata);
+      });
 
       expect(sessionNameDisplay.title).toContain('Test Session');
       expect(sessionNameDisplay.title).toContain('This is a test comment');
@@ -908,17 +897,11 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]') as HTMLElement;
 
-      // Simulate metadata change with different origin
-      (session as any)._metadata = {
+      session.updateMetadata({
         displayName: 'External Session',
-        comment: '',
         version: 3,
         origin: 'rv-desktop',
-        creationContext: 0,
-        clipboard: 0,
-        membershipContains: [],
-      };
-      session.emit('metadataChanged', (session as any)._metadata);
+      });
 
       expect(sessionNameDisplay.title).toContain('Created in: rv-desktop');
     });
@@ -927,17 +910,10 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]') as HTMLElement;
 
-      // Simulate metadata change
-      (session as any)._metadata = {
+      session.updateMetadata({
         displayName: 'Versioned Session',
-        comment: '',
         version: 5,
-        origin: 'openrv-web',
-        creationContext: 0,
-        clipboard: 0,
-        membershipContains: [],
-      };
-      session.emit('metadataChanged', (session as any)._metadata);
+      });
 
       expect(sessionNameDisplay.title).toContain('Session version: 5');
     });
@@ -946,17 +922,10 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]') as HTMLElement;
 
-      // Simulate metadata change with default origin
-      (session as any)._metadata = {
+      session.updateMetadata({
         displayName: 'Local Session',
-        comment: '',
-        version: 2,
         origin: 'openrv-web',
-        creationContext: 0,
-        clipboard: 0,
-        membershipContains: [],
-      };
-      session.emit('metadataChanged', (session as any)._metadata);
+      });
 
       expect(sessionNameDisplay.title).not.toContain('Created in:');
     });
@@ -966,51 +935,82 @@ describe('HeaderBar', () => {
       const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]');
       const nameText = sessionNameDisplay?.querySelector('.session-name-text');
 
-      // Simulate metadata change with empty displayName
-      (session as any)._metadata = {
-        displayName: '',
-        comment: '',
-        version: 2,
-        origin: 'openrv-web',
-        creationContext: 0,
-        clipboard: 0,
-        membershipContains: [],
-      };
-      session.emit('metadataChanged', (session as any)._metadata);
+      session.updateMetadata({ displayName: '' });
 
       expect(nameText?.textContent).toBe('Untitled');
     });
 
-    it('HDR-U168: session name display does not have misleading hover effect', () => {
+    it('HDR-U168: session name display has interactive hover styling', () => {
       const el = headerBar.render();
       const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]') as HTMLElement;
 
-      // Initial state - no background
-      expect(sessionNameDisplay.style.background).toBeFalsy();
-
-      // Simulate mouseenter - background should NOT change since there is no interactivity
-      sessionNameDisplay.dispatchEvent(new MouseEvent('mouseenter'));
-      expect(sessionNameDisplay.style.background).not.toContain('var(--bg-hover)');
+      expect(sessionNameDisplay.style.background).toContain('transparent');
+      sessionNameDisplay.dispatchEvent(new Event('pointerenter'));
+      expect(sessionNameDisplay.style.background).toContain('var(--bg-hover)');
     });
 
-    it('HB-L51a: session name should not have mouseenter/mouseleave hover styling that suggests interactivity', () => {
+    it('HB-L51a: session name has button affordances consistent with header controls', () => {
       const el = headerBar.render();
       const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]') as HTMLElement;
 
-      // Verify cursor is default (not pointer), indicating non-interactive element
-      expect(sessionNameDisplay.style.cursor).toBe('default');
+      expect(sessionNameDisplay.style.cursor).toBe('pointer');
+      expect(sessionNameDisplay.style.transition).toContain('all 0.12s ease');
 
-      // Verify no background transition (which would suggest interactivity)
-      expect(sessionNameDisplay.style.transition).not.toContain('background');
+      sessionNameDisplay.dispatchEvent(new Event('pointerenter'));
+      expect(sessionNameDisplay.style.borderColor).toContain('var(--border-secondary)');
 
-      // Simulate mouseenter and verify background does not change
-      const bgBefore = sessionNameDisplay.style.background;
-      sessionNameDisplay.dispatchEvent(new MouseEvent('mouseenter'));
-      expect(sessionNameDisplay.style.background).toBe(bgBefore);
+      sessionNameDisplay.dispatchEvent(new Event('pointerleave'));
+      expect(sessionNameDisplay.style.borderColor).toContain('transparent');
+    });
 
-      // Simulate mouseleave and verify background still does not change
-      sessionNameDisplay.dispatchEvent(new MouseEvent('mouseleave'));
-      expect(sessionNameDisplay.style.background).toBe(bgBefore);
+    it('HDR-U169: clicking session name prompts for rename and updates metadata', async () => {
+      const promptSpy = vi.spyOn(Modal, 'showPrompt').mockResolvedValue('Renamed Session');
+      const setDisplayNameSpy = vi.spyOn(session, 'setDisplayName');
+      const el = headerBar.render();
+      const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]') as HTMLButtonElement;
+      const nameText = sessionNameDisplay.querySelector('.session-name-text');
+
+      sessionNameDisplay.click();
+
+      await vi.waitFor(() => {
+        expect(promptSpy).toHaveBeenCalledWith('Enter session name', expect.objectContaining({
+          title: 'Rename Session',
+          confirmText: 'Rename',
+          defaultValue: '',
+        }));
+      });
+      await vi.waitFor(() => {
+        expect(setDisplayNameSpy).toHaveBeenCalledWith('Renamed Session');
+      });
+      expect(nameText?.textContent).toBe('Renamed Session');
+    });
+
+    it('HDR-U170: canceling rename leaves session name unchanged', async () => {
+      vi.spyOn(Modal, 'showPrompt').mockResolvedValue(null);
+      const setDisplayNameSpy = vi.spyOn(session, 'setDisplayName');
+      const el = headerBar.render();
+      const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]') as HTMLButtonElement;
+      const nameText = sessionNameDisplay.querySelector('.session-name-text');
+
+      sessionNameDisplay.click();
+
+      await vi.waitFor(() => {
+        expect(Modal.showPrompt).toHaveBeenCalled();
+      });
+      expect(setDisplayNameSpy).not.toHaveBeenCalled();
+      expect(nameText?.textContent).toBe('Untitled');
+    });
+
+    it('HDR-U171: F2 key opens rename prompt from session name control', async () => {
+      vi.spyOn(Modal, 'showPrompt').mockResolvedValue(null);
+      const el = headerBar.render();
+      const sessionNameDisplay = el.querySelector('[data-testid="session-name-display"]') as HTMLButtonElement;
+
+      sessionNameDisplay.dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', bubbles: true }));
+
+      await vi.waitFor(() => {
+        expect(Modal.showPrompt).toHaveBeenCalled();
+      });
     });
   });
 
@@ -1326,8 +1326,8 @@ describe('HeaderBar', () => {
       // Pick the fullscreen button
       const fullscreenBtn = el.querySelector('[data-testid="fullscreen-toggle-button"]') as HTMLButtonElement;
 
-      // Simulate mouse click: mousedown fires before focus
-      fullscreenBtn.dispatchEvent(new Event('mousedown'));
+      // Simulate mouse click: pointerdown fires before focus
+      fullscreenBtn.dispatchEvent(new PointerEvent('pointerdown'));
       fullscreenBtn.dispatchEvent(new Event('focus'));
       expect(fullscreenBtn.style.outline).not.toBe('2px solid var(--accent-primary)');
     });
@@ -1525,9 +1525,9 @@ describe('HeaderBar', () => {
       const el = headerBar.render();
       const helpBtn = el.querySelector('[data-testid="help-menu-button"]') as HTMLButtonElement;
 
-      // Simulate pointerdown (active press)
+      // Simulate pointerdown (active press) - uses variant active state
       helpBtn.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-      expect(helpBtn.style.background).toBe('var(--bg-active)');
+      expect(helpBtn.style.background).toBe('rgba(var(--accent-primary-rgb), 0.15)');
 
       // Simulate pointerup
       helpBtn.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));

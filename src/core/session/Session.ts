@@ -28,7 +28,7 @@ import {
   getNumberArray as _getNumberArray,
   getStringValue as _getStringValue,
 } from './AnnotationStore';
-import type { ColorAdjustments, ChannelMode, LinearizeState } from '../../core/types/color';
+import type { ColorAdjustments, ChannelMode, LinearizeState, ChannelSwizzle } from '../../core/types/color';
 import type { FilterSettings } from '../../core/types/filter';
 import type { Transform2D, CropState, UncropState } from '../../core/types/transform';
 import type { ScopesState } from '../../core/types/scopes';
@@ -103,6 +103,7 @@ export interface GTOViewSettings {
   linearize?: LinearizeState;
   uncrop?: UncropState;
   outOfRange?: number;  // 0=off, 1=clamp-to-black, 2=highlight
+  channelSwizzle?: ChannelSwizzle;
 }
 
 /**
@@ -507,6 +508,50 @@ export class Session extends EventEmitter<SessionEvents> {
   /** Session metadata (name, comment, version, origin) */
   get metadata(): SessionMetadata {
     return this._metadata;
+  }
+
+  /**
+   * Update one or more metadata fields and emit `metadataChanged`
+   * when the resulting metadata differs from the current value.
+   */
+  updateMetadata(patch: Partial<SessionMetadata>): void {
+    const current = this._metadata;
+    const next: SessionMetadata = {
+      displayName: patch.displayName !== undefined ? patch.displayName.trim() : current.displayName,
+      comment: patch.comment !== undefined ? patch.comment : current.comment,
+      version: patch.version !== undefined ? patch.version : current.version,
+      origin: patch.origin !== undefined ? patch.origin : current.origin,
+      creationContext: patch.creationContext !== undefined ? patch.creationContext : current.creationContext,
+      clipboard: patch.clipboard !== undefined ? patch.clipboard : current.clipboard,
+      membershipContains: patch.membershipContains !== undefined
+        ? [...patch.membershipContains]
+        : current.membershipContains,
+    };
+
+    const membershipChanged = next.membershipContains.length !== current.membershipContains.length
+      || next.membershipContains.some((value, index) => value !== current.membershipContains[index]);
+
+    const hasChanged = next.displayName !== current.displayName
+      || next.comment !== current.comment
+      || next.version !== current.version
+      || next.origin !== current.origin
+      || next.creationContext !== current.creationContext
+      || next.clipboard !== current.clipboard
+      || membershipChanged;
+
+    if (!hasChanged) {
+      return;
+    }
+
+    this._metadata = next;
+    this.emit('metadataChanged', this._metadata);
+  }
+
+  /**
+   * Convenience helper to update the session display name.
+   */
+  setDisplayName(displayName: string): void {
+    this.updateMetadata({ displayName });
   }
 
   get playbackSpeed(): number {

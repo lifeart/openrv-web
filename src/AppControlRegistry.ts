@@ -62,6 +62,7 @@ import { PresentationMode } from './utils/ui/PresentationMode';
 import { NetworkSyncManager } from './network/NetworkSyncManager';
 import { NetworkControl } from './ui/components/NetworkControl';
 import { ContextToolbar } from './ui/components/layout/ContextToolbar';
+import { setButtonActive } from './ui/components/shared/Button';
 import { getGlobalHistoryManager } from './utils/HistoryManager';
 import { RightPanelContent } from './ui/layout/panels/RightPanelContent';
 import { LeftPanelContent } from './ui/layout/panels/LeftPanelContent';
@@ -302,15 +303,7 @@ export class AppControlRegistry {
 
     // Update spotlight button state when visibility changes
     this.registryUnsubscribers.push(viewer.getSpotlightOverlay().on('stateChanged', (state) => {
-      if (state.enabled) {
-        spotlightButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-        spotlightButton.style.borderColor = 'var(--accent-primary)';
-        spotlightButton.style.color = 'var(--accent-primary)';
-      } else {
-        spotlightButton.style.background = 'transparent';
-        spotlightButton.style.borderColor = 'transparent';
-        spotlightButton.style.color = 'var(--text-secondary)';
-      }
+      setButtonActive(spotlightButton, state.enabled, 'icon');
     }));
 
     contextToolbar.setTabContent('view', viewContent);
@@ -344,15 +337,7 @@ export class AppControlRegistry {
 
     // Update pixel probe button state
     this.registryUnsubscribers.push(viewer.getPixelProbe().on('stateChanged', (state) => {
-      if (state.enabled) {
-        pixelProbeButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-        pixelProbeButton.style.borderColor = 'var(--accent-primary)';
-        pixelProbeButton.style.color = 'var(--accent-primary)';
-      } else {
-        pixelProbeButton.style.background = 'transparent';
-        pixelProbeButton.style.borderColor = 'transparent';
-        pixelProbeButton.style.color = 'var(--text-secondary)';
-      }
+      setButtonActive(pixelProbeButton, state.enabled, 'icon');
     }));
 
     // Trigger re-render when false color state changes
@@ -461,13 +446,7 @@ export class AppControlRegistry {
 
     // Update button state when visibility changes
     this.registryUnsubscribers.push(this.curvesControl.on('visibilityChanged', (visible) => {
-      if (visible) {
-        curvesButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-        curvesButton.style.borderColor = 'var(--accent-primary)';
-      } else {
-        curvesButton.style.background = '';
-        curvesButton.style.borderColor = '';
-      }
+      setButtonActive(curvesButton, visible, 'ghost');
     }));
 
     // Color Wheels toggle button
@@ -480,13 +459,7 @@ export class AppControlRegistry {
 
     // Update button state when visibility changes
     this.registryUnsubscribers.push(colorWheels.on('visibilityChanged', (visible) => {
-      if (visible) {
-        colorWheelsButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-        colorWheelsButton.style.borderColor = 'var(--accent-primary)';
-      } else {
-        colorWheelsButton.style.background = '';
-        colorWheelsButton.style.borderColor = '';
-      }
+      setButtonActive(colorWheelsButton, visible, 'ghost');
     }));
 
     contextToolbar.setTabContent('color', colorContent);
@@ -507,66 +480,36 @@ export class AppControlRegistry {
     panelToggles.appendChild(infoPanelButton);
 
     this.registryUnsubscribers.push(this.infoPanel.on('visibilityChanged', (visible) => {
-      if (visible) {
-        infoPanelButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-        infoPanelButton.style.borderColor = 'var(--accent-primary)';
-        infoPanelButton.style.color = 'var(--accent-primary)';
-      } else {
-        infoPanelButton.style.background = 'transparent';
-        infoPanelButton.style.borderColor = 'transparent';
-        infoPanelButton.style.color = 'var(--text-secondary)';
-      }
+      setButtonActive(infoPanelButton, visible, 'icon');
     }));
 
     // Snapshot Panel toggle button
-    let snapshotPanelOpen = false;
     const snapshotButton = ContextToolbar.createIconButton('camera', () => {
       this.snapshotPanel.toggle();
-      snapshotPanelOpen = !snapshotPanelOpen;
       updateSnapshotButtonStyle();
-    }, { title: 'Snapshots (Ctrl+Shift+S)' });
+    }, { title: 'Snapshots (Ctrl+Shift+Alt+S)' });
     snapshotButton.dataset.testid = 'snapshot-panel-toggle';
     panelToggles.appendChild(snapshotButton);
 
     const updateSnapshotButtonStyle = () => {
-      if (snapshotPanelOpen) {
-        snapshotButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-        snapshotButton.style.borderColor = 'var(--accent-primary)';
-        snapshotButton.style.color = 'var(--accent-primary)';
-      } else {
-        snapshotButton.style.background = 'transparent';
-        snapshotButton.style.borderColor = 'transparent';
-        snapshotButton.style.color = 'var(--text-secondary)';
-      }
+      setButtonActive(snapshotButton, this.snapshotPanel.isOpen(), 'icon');
     };
-    this.registryUnsubscribers.push(this.snapshotPanel.on('closed', () => {
-      snapshotPanelOpen = false;
+    this.registryUnsubscribers.push(this.snapshotPanel.on('visibilityChanged', () => {
       updateSnapshotButtonStyle();
     }));
 
     // Playlist Panel toggle button
-    let playlistPanelOpen = false;
     const playlistButton = ContextToolbar.createIconButton('film', () => {
       this.playlistPanel.toggle();
-      playlistPanelOpen = !playlistPanelOpen;
       updatePlaylistButtonStyle();
     }, { title: 'Playlist (Shift+Alt+P)' });
     playlistButton.dataset.testid = 'playlist-panel-toggle';
     panelToggles.appendChild(playlistButton);
 
     const updatePlaylistButtonStyle = () => {
-      if (playlistPanelOpen) {
-        playlistButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-        playlistButton.style.borderColor = 'var(--accent-primary)';
-        playlistButton.style.color = 'var(--accent-primary)';
-      } else {
-        playlistButton.style.background = 'transparent';
-        playlistButton.style.borderColor = 'transparent';
-        playlistButton.style.color = 'var(--text-secondary)';
-      }
+      setButtonActive(playlistButton, this.playlistPanel.isOpen(), 'icon');
     };
-    this.registryUnsubscribers.push(this.playlistPanel.on('closed', () => {
-      playlistPanelOpen = false;
+    this.registryUnsubscribers.push(this.playlistPanel.on('visibilityChanged', () => {
       updatePlaylistButtonStyle();
     }));
 
@@ -617,13 +560,7 @@ export class AppControlRegistry {
 
     // Update button state when visibility changes
     this.registryUnsubscribers.push(this.historyPanel.on('visibilityChanged', (visible) => {
-      if (visible) {
-        historyButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-        historyButton.style.borderColor = 'var(--accent-primary)';
-      } else {
-        historyButton.style.background = '';
-        historyButton.style.borderColor = '';
-      }
+      setButtonActive(historyButton, visible, 'ghost');
     }));
 
     // Markers panel toggle button
@@ -635,13 +572,7 @@ export class AppControlRegistry {
 
     // Update button state when visibility changes
     this.registryUnsubscribers.push(this.markerListPanel.on('visibilityChanged', (visible) => {
-      if (visible) {
-        markersButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
-        markersButton.style.borderColor = 'var(--accent-primary)';
-      } else {
-        markersButton.style.background = '';
-        markersButton.style.borderColor = '';
-      }
+      setButtonActive(markersButton, visible, 'ghost');
     }));
 
     contextToolbar.setTabContent('annotate', annotateContent);

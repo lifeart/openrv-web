@@ -371,5 +371,51 @@ describe('PresentationMode', () => {
       expect(document.getElementById('openrv-sr-announcer')).toBeNull();
       vi.useRealTimers();
     });
+
+    it('PM-U032: exit should restore original inline display/transition styles', () => {
+      vi.useFakeTimers();
+      const element = document.createElement('div');
+      document.body.appendChild(element);
+      element.style.display = 'flex';
+      element.style.transition = 'transform 0.2s ease';
+      mode.setElementsToHide([element]);
+
+      mode.setState({ enabled: true });
+      vi.advanceTimersByTime(300);
+      expect(element.style.display).toBe('none');
+
+      mode.setState({ enabled: false });
+      expect(element.style.display).toBe('flex');
+      expect(element.style.transition).toBe('opacity 0.3s ease');
+
+      vi.advanceTimersByTime(300);
+      expect(element.style.display).toBe('flex');
+      expect(element.style.transition).toBe('transform 0.2s ease');
+
+      element.remove();
+    });
+
+    it('PM-U033: exit should preserve elements that were hidden before entering', () => {
+      vi.useFakeTimers();
+      const element = document.createElement('div');
+      document.body.appendChild(element);
+      element.style.display = 'none';
+      element.style.opacity = '0';
+      element.style.pointerEvents = 'none';
+      element.setAttribute('aria-hidden', 'true');
+      mode.setElementsToHide([element]);
+
+      mode.setState({ enabled: true });
+      mode.setState({ enabled: false });
+      vi.advanceTimersByTime(300);
+
+      expect(element.style.display).toBe('none');
+      expect(element.style.opacity).toBe('0');
+      expect(element.style.pointerEvents).toBe('none');
+      expect(element.style.transition).toBe('');
+      expect(element.getAttribute('aria-hidden')).toBe('true');
+
+      element.remove();
+    });
   });
 });

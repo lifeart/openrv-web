@@ -5,8 +5,9 @@
  * scalar fallback, edge cases (NaN, empty array, float[2], float[4]), and round-trip.
  */
 
-import { describe, it, expect, vi } from 'vitest';
-import { parseColorAdjustments, parseLinearize, parseUncrop, parseOutOfRange, parseLens } from './GTOSettingsParser';
+import { describe, it, expect } from 'vitest';
+import { parseColorAdjustments, parseLinearize, parseUncrop, parseOutOfRange, parseLens, parseChannelSwizzle, channelNameToSwizzleIndex } from './GTOSettingsParser';
+import { SWIZZLE_ZERO, SWIZZLE_ONE } from '../../core/types/color';
 import type { GTODTO } from 'gto-js';
 
 /**
@@ -666,15 +667,12 @@ describe('GTOSettingsParser.parseLinearize', () => {
       expect(result!.alphaType).toBe(0);
     });
 
-    it('parses logtype=2 (Viper/Cineon fallback)', () => {
-      // Suppress console.warn for this test
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    it('parses logtype=2 (Thomson Viper)', () => {
       const dto = createLinearizeMockDTO({ logtype: 2 });
       const result = parseLinearize(dto);
 
       expect(result).not.toBeNull();
       expect(result!.logType).toBe(2);
-      warnSpy.mockRestore();
     });
 
     it('parses logtype=3 (ARRI LogC3)', () => {
@@ -1320,5 +1318,181 @@ describe('GTOSettingsParser.parseLens — 3DE4 Anamorphic Degree 6', () => {
     expect(result!.cx02).toBe(0.05);
     expect(result!.cy02).toBeUndefined();
     expect(result!.cx66).toBeUndefined();
+  });
+});
+
+// =================================================================
+// GTOSettingsParser.parseChannelSwizzle (RVChannelMap)
+// =================================================================
+
+/**
+ * Helper to create a mock GTODTO with an RVChannelMap node.
+ */
+function createChannelMapMockDTO(
+  formatProps?: Record<string, unknown>,
+  nodeProps?: Record<string, unknown>,
+): GTODTO {
+  const mockComponent = (props: Record<string, unknown> | undefined) => ({
+    exists: () => props !== undefined,
+    property: (name: string) => ({
+      value: () => props?.[name],
+      exists: () => props !== undefined && name in props,
+    }),
+  });
+
+  const mockNode = (
+    formatData: Record<string, unknown> | undefined,
+    nodeData: Record<string, unknown> | undefined,
+  ) => ({
+    component: (name: string) => {
+      if (name === 'format') return mockComponent(formatData);
+      if (name === 'node') return mockComponent(nodeData);
+      return mockComponent(undefined);
+    },
+    name: 'mock-channelmap',
+  });
+
+  return {
+    byProtocol: (proto: string) => {
+      if (proto === 'RVChannelMap' && (formatProps || nodeProps)) {
+        const results = [mockNode(formatProps, nodeProps)] as any;
+        results.first = () => results[0];
+        results.length = 1;
+        return results;
+      }
+      const empty = [] as any;
+      empty.first = () => mockNode(undefined, undefined);
+      empty.length = 0;
+      return empty;
+    },
+  } as unknown as GTODTO;
+}
+
+describe('GTOSettingsParser.parseChannelSwizzle', () => {
+  // =================================================================
+  // Basic channel remapping
+  // =================================================================
+
+  it('CHMAP-001: Parse ["B", "G", "R", "A"] -> BGR swizzle [2, 1, 0, 3]', () => {
+    const dto = createChannelMapMockDTO({ channels: ['B', 'G', 'R', 'A'] });
+    const result = parseChannelSwizzle(dto);
+
+    expect(result).not.toBeNull();
+    expect(result).toEqual([2, 1, 0, 3]);
+  });
+
+  it('CHMAP-002: Parse ["R", "R", "R", "A"] -> luminance-like [0, 0, 0, 3]', () => {
+    const dto = createChannelMapMockDTO({ channels: ['R', 'R', 'R', 'A'] });
+    const result = parseChannelSwizzle(dto);
+
+    expect(result).not.toBeNull();
+    expect(result).toEqual([0, 0, 0, 3]);
+  });
+
+  it('CHMAP-003: Parse ["0", "G", "0", "1"] -> [SWIZZLE_ZERO, 1, SWIZZLE_ZERO, SWIZZLE_ONE]', () => {
+    const dto = createChannelMapMockDTO({ channels: ['0', 'G', '0', '1'] });
+    const result = parseChannelSwizzle(dto);
+
+    expect(result).not.toBeNull();
+    expect(result).toEqual([SWIZZLE_ZERO, 1, SWIZZLE_ZERO, SWIZZLE_ONE]);
+  });
+
+  it('CHMAP-004: Missing/empty channels -> identity (null)', () => {
+    // No format component
+    const dto1 = createChannelMapMockDTO();
+    expect(parseChannelSwizzle(dto1)).toBeNull();
+
+    // Empty channels array
+    const dto2 = createChannelMapMockDTO({ channels: [] });
+    expect(parseChannelSwizzle(dto2)).toBeNull();
+
+    // Identity mapping
+    const dto3 = createChannelMapMockDTO({ channels: ['R', 'G', 'B', 'A'] });
+    expect(parseChannelSwizzle(dto3)).toBeNull();
+  });
+
+  // =================================================================
+  // channelNameToSwizzleIndex unit tests
+  // =================================================================
+
+  describe('channelNameToSwizzleIndex', () => {
+    it('maps R, G, B, A to 0, 1, 2, 3', () => {
+      expect(channelNameToSwizzleIndex('R', 0)).toBe(0);
+      expect(channelNameToSwizzleIndex('G', 1)).toBe(1);
+      expect(channelNameToSwizzleIndex('B', 2)).toBe(2);
+      expect(channelNameToSwizzleIndex('A', 3)).toBe(3);
+    });
+
+    it('is case-insensitive', () => {
+      expect(channelNameToSwizzleIndex('r', 0)).toBe(0);
+      expect(channelNameToSwizzleIndex('g', 1)).toBe(1);
+      expect(channelNameToSwizzleIndex('b', 2)).toBe(2);
+      expect(channelNameToSwizzleIndex('a', 3)).toBe(3);
+    });
+
+    it('maps "0" and "zero" to SWIZZLE_ZERO', () => {
+      expect(channelNameToSwizzleIndex('0', 0)).toBe(SWIZZLE_ZERO);
+      expect(channelNameToSwizzleIndex('zero', 0)).toBe(SWIZZLE_ZERO);
+      expect(channelNameToSwizzleIndex('ZERO', 0)).toBe(SWIZZLE_ZERO);
+    });
+
+    it('maps "1" and "one" to SWIZZLE_ONE', () => {
+      expect(channelNameToSwizzleIndex('1', 0)).toBe(SWIZZLE_ONE);
+      expect(channelNameToSwizzleIndex('one', 0)).toBe(SWIZZLE_ONE);
+      expect(channelNameToSwizzleIndex('ONE', 0)).toBe(SWIZZLE_ONE);
+    });
+
+    it('returns defaultIndex for unknown channel names', () => {
+      expect(channelNameToSwizzleIndex('X', 2)).toBe(2);
+      expect(channelNameToSwizzleIndex('foo', 1)).toBe(1);
+      expect(channelNameToSwizzleIndex('', 3)).toBe(3);
+    });
+  });
+
+  // =================================================================
+  // Inactive node
+  // =================================================================
+
+  it('returns null when node active=0', () => {
+    const dto = createChannelMapMockDTO(
+      { channels: ['B', 'G', 'R', 'A'] },
+      { active: 0 },
+    );
+    const result = parseChannelSwizzle(dto);
+    expect(result).toBeNull();
+  });
+
+  // =================================================================
+  // Partial channels (less than 4)
+  // =================================================================
+
+  it('handles partial channels (3 elements) with defaults for missing', () => {
+    const dto = createChannelMapMockDTO({ channels: ['B', 'G', 'R'] });
+    const result = parseChannelSwizzle(dto);
+
+    expect(result).not.toBeNull();
+    // First 3 are remapped, 4th stays as identity (A=3)
+    expect(result).toEqual([2, 1, 0, 3]);
+  });
+
+  it('handles single channel element', () => {
+    const dto = createChannelMapMockDTO({ channels: ['G'] });
+    const result = parseChannelSwizzle(dto);
+
+    expect(result).not.toBeNull();
+    // Only first element remapped, rest are identity
+    expect(result).toEqual([1, 1, 2, 3]);
+  });
+
+  // =================================================================
+  // "zero"/"one" special string variants
+  // =================================================================
+
+  it('handles "zero" and "one" string variants', () => {
+    const dto = createChannelMapMockDTO({ channels: ['zero', 'one', 'R', 'A'] });
+    const result = parseChannelSwizzle(dto);
+
+    expect(result).not.toBeNull();
+    expect(result).toEqual([SWIZZLE_ZERO, SWIZZLE_ONE, 0, 3]);
   });
 });

@@ -99,6 +99,7 @@ import {
 } from './ViewerRenderingUtils';
 import {
   createExportCanvas as createExportCanvasUtil,
+  createSourceExportCanvas as createSourceExportCanvasUtil,
   renderFrameToCanvas as renderFrameToCanvasUtil,
   renderSourceToImageData as renderSourceToImageDataUtil,
 } from './ViewerExport';
@@ -3301,6 +3302,21 @@ export class Viewer {
     const frame = this.session.currentFrame;
     const name = source?.name?.replace(/\.[^.]+$/, '') || 'frame';
     const filename = `${name}_frame${frame}.${format}`;
+
+    doExportCanvas(canvas, { format, quality, filename });
+  }
+
+  exportSourceFrame(
+    format: ExportFormat = 'png',
+    quality = 0.92
+  ): void {
+    const canvas = createSourceExportCanvasUtil(this.session);
+    if (!canvas) return;
+
+    const source = this.session.currentSource;
+    const frame = this.session.currentFrame;
+    const name = source?.name?.replace(/\.[^.]+$/, '') || 'source';
+    const filename = `${name}_source${frame}.${format}`;
 
     doExportCanvas(canvas, { format, quality, filename });
   }

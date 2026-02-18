@@ -382,7 +382,7 @@ describe('StereoControl', () => {
 
       // Blur should remove the focus ring
       swapBtn.dispatchEvent(new Event('blur'));
-      expect(swapBtn.style.outline).toBe('none');
+      expect(swapBtn.style.outline).toBe('');
     });
   });
 

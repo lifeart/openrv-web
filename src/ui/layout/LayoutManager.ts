@@ -13,6 +13,7 @@
 import { LayoutStore, PanelId, COLLAPSED_RAIL_SIZE, LayoutPresetId, DEFAULT_PANEL_STATES } from './LayoutStore';
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg } from '../components/shared/Icons';
+import { createIconButton } from '../components/shared/Button';
 
 export interface LayoutManagerEvents extends EventMap {
   /** Emitted after layout DOM is updated so viewer can resize. */
@@ -183,32 +184,12 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
       cursor: pointer;
     `;
 
-    const collapseBtn = document.createElement('button');
+    const collapseBtn = createIconButton(
+      getIconSvg(isLeft ? 'chevron-right' : 'chevron-left', 'sm'),
+      () => this.store.togglePanelCollapsed(id),
+      { variant: 'icon', size: 'sm', title: `Expand ${id} panel` },
+    );
     collapseBtn.dataset.testid = `layout-collapse-${id}`;
-    collapseBtn.title = `Expand ${id} panel`;
-    collapseBtn.innerHTML = getIconSvg(isLeft ? 'chevron-right' : 'chevron-left', 'sm');
-    collapseBtn.style.cssText = `
-      background: transparent;
-      border: none;
-      color: var(--text-muted);
-      cursor: pointer;
-      padding: 4px;
-      border-radius: 4px;
-      width: 24px;
-      height: 24px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    `;
-    collapseBtn.addEventListener('click', () => this.store.togglePanelCollapsed(id));
-    collapseBtn.addEventListener('mouseenter', () => {
-      collapseBtn.style.background = 'var(--bg-hover)';
-      collapseBtn.style.color = 'var(--text-primary)';
-    });
-    collapseBtn.addEventListener('mouseleave', () => {
-      collapseBtn.style.background = 'transparent';
-      collapseBtn.style.color = 'var(--text-muted)';
-    });
     rail.appendChild(collapseBtn);
 
     // Content area (hidden when collapsed)
@@ -223,35 +204,15 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
     `;
 
     // Content collapse button (visible when panel is expanded, rail is hidden)
-    const contentCollapseBtn = document.createElement('button');
+    const contentCollapseBtn = createIconButton(
+      getIconSvg(isLeft ? 'chevron-left' : 'chevron-right', 'sm'),
+      () => this.store.togglePanelCollapsed(id),
+      { variant: 'icon', size: 'sm', title: `Collapse ${id} panel` },
+    );
     contentCollapseBtn.dataset.testid = `layout-content-collapse-${id}`;
-    contentCollapseBtn.title = `Collapse ${id} panel`;
-    contentCollapseBtn.innerHTML = getIconSvg(isLeft ? 'chevron-left' : 'chevron-right', 'sm');
-    contentCollapseBtn.style.cssText = `
-      background: transparent;
-      border: none;
-      color: var(--text-muted);
-      cursor: pointer;
-      padding: 4px;
-      border-radius: 4px;
-      width: 24px;
-      height: 24px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      align-self: ${isLeft ? 'flex-end' : 'flex-start'};
-      flex-shrink: 0;
-      margin: 4px;
-    `;
-    contentCollapseBtn.addEventListener('click', () => this.store.togglePanelCollapsed(id));
-    contentCollapseBtn.addEventListener('mouseenter', () => {
-      contentCollapseBtn.style.background = 'var(--bg-hover)';
-      contentCollapseBtn.style.color = 'var(--text-primary)';
-    });
-    contentCollapseBtn.addEventListener('mouseleave', () => {
-      contentCollapseBtn.style.background = 'transparent';
-      contentCollapseBtn.style.color = 'var(--text-muted)';
-    });
+    contentCollapseBtn.style.alignSelf = isLeft ? 'flex-end' : 'flex-start';
+    contentCollapseBtn.style.flexShrink = '0';
+    contentCollapseBtn.style.margin = '4px';
 
     // Tab bar inside panel
     const tabBar = document.createElement('div');
@@ -343,33 +304,13 @@ export class LayoutManager extends EventEmitter<LayoutManagerEvents> {
   }
 
   private createBottomCollapseButton(): HTMLButtonElement {
-    const btn = document.createElement('button');
+    const btn = createIconButton(
+      getIconSvg('chevron-down', 'sm'),
+      () => this.store.togglePanelCollapsed('bottom'),
+      { variant: 'icon', size: 'sm', title: 'Toggle bottom panel' },
+    );
     btn.dataset.testid = 'layout-collapse-bottom';
-    btn.title = 'Toggle bottom panel';
-    btn.innerHTML = getIconSvg('chevron-down', 'sm');
-    btn.style.cssText = `
-      background: transparent;
-      border: none;
-      color: var(--text-muted);
-      cursor: pointer;
-      padding: 4px;
-      border-radius: 4px;
-      width: 24px;
-      height: 24px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-    `;
-    btn.addEventListener('click', () => this.store.togglePanelCollapsed('bottom'));
-    btn.addEventListener('mouseenter', () => {
-      btn.style.background = 'var(--bg-hover)';
-      btn.style.color = 'var(--text-primary)';
-    });
-    btn.addEventListener('mouseleave', () => {
-      btn.style.background = 'transparent';
-      btn.style.color = 'var(--text-muted)';
-    });
+    btn.style.flexShrink = '0';
     return btn;
   }
 

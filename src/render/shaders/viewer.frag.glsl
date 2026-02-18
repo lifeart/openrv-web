@@ -146,7 +146,7 @@
       uniform bool u_gamutHighlightEnabled; // highlight out-of-gamut pixels
 
       // Linearize (RVLinearize log-to-linear conversion)
-      uniform int u_linearizeLogType;    // 0=none, 1=cineon, 2=viper(cineon), 3=logc3
+      uniform int u_linearizeLogType;    // 0=none, 1=cineon, 2=viper, 3=logc3
       uniform float u_linearizeFileGamma; // 1.0 = no-op
       uniform int u_linearizeSRGB2linear; // 0=no, 1=yes
       uniform int u_linearizeRec709ToLinear; // 0=no, 1=yes
@@ -177,6 +177,12 @@
 
       // Out-of-range visualization: 0=off, 1=clamp-to-black, 2=highlight (red>1, blue<0)
       uniform int u_outOfRange;
+
+      // Channel swizzle (RVChannelMap remapping)
+      // Each element specifies which source channel for the output position:
+      //   0=R, 1=G, 2=B, 3=A, 4=constant 0.0, 5=constant 1.0
+      // Default: ivec4(0, 1, 2, 3) = identity (no remapping)
+      uniform ivec4 u_channelSwizzle;
 
       // Luminance coefficients (Rec. 709)
       const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
@@ -869,12 +875,30 @@
           }
         }
 
-        // 0b. Linearize (RVLinearize log-to-linear conversion)
+        // 0b. Channel swizzle (RVChannelMap remapping, before any color processing)
+        if (u_channelSwizzle != ivec4(0, 1, 2, 3)) {
+          vec4 src = color;
+          float channels[6];
+          channels[0] = src.r;
+          channels[1] = src.g;
+          channels[2] = src.b;
+          channels[3] = src.a;
+          channels[4] = 0.0;
+          channels[5] = 1.0;
+          color = vec4(
+            channels[u_channelSwizzle.x],
+            channels[u_channelSwizzle.y],
+            channels[u_channelSwizzle.z],
+            channels[u_channelSwizzle.w]
+          );
+        }
+
+        // 0c. Linearize (RVLinearize log-to-linear conversion)
         // When active, overrides the auto-detected input transfer function.
         bool linearizeActive = false;
         color.rgb = applyLinearize(color.rgb, linearizeActive);
 
-        // 0c. Input EOTF: convert from transfer function to linear light
+        // 0d. Input EOTF: convert from transfer function to linear light
         // Skipped when linearize is active (linearize already handled the conversion)
         if (!linearizeActive) {
           if (u_inputTransfer == 1) {

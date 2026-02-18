@@ -163,6 +163,12 @@ describe('ExportControl', () => {
       expect(() => control.off('copyRequested', callback)).not.toThrow();
     });
 
+    it('EXPORT-U041b: sourceExportRequested listener can be registered', () => {
+      const callback = vi.fn();
+      control.on('sourceExportRequested', callback);
+      expect(() => control.off('sourceExportRequested', callback)).not.toThrow();
+    });
+
     it('EXPORT-U042: sequenceExportRequested listener can be registered', () => {
       const callback = vi.fn();
       control.on('sequenceExportRequested', callback);
@@ -469,6 +475,23 @@ describe('ExportControl keyboard accessibility', () => {
     firstItem.click();
 
     expect(callback).toHaveBeenCalledTimes(1);
+    expect(callback).toHaveBeenCalledWith(
+      expect.objectContaining({ format: 'png' })
+    );
+  });
+
+  it('EXP-H10c-2: selecting source export item should emit sourceExportRequested', () => {
+    const callback = vi.fn();
+    control.on('sourceExportRequested', callback);
+
+    openDropdown();
+    const dropdown = getDropdown();
+    const sourceItem = Array.from(dropdown.querySelectorAll('button'))
+      .find((btn) => btn.textContent?.includes('Save Source as PNG')) as HTMLButtonElement | undefined;
+
+    expect(sourceItem).toBeDefined();
+    sourceItem!.click();
+
     expect(callback).toHaveBeenCalledWith(
       expect.objectContaining({ format: 'png' })
     );

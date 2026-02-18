@@ -17,6 +17,7 @@ import {
   DIRTY_INLINE_LUT,
   DIRTY_CDL,
   DIRTY_OUT_OF_RANGE,
+  DIRTY_CHANNEL_SWIZZLE,
   ALL_DIRTY_FLAGS,
 } from './ShaderStateManager';
 import type { RenderState } from './RenderState';
@@ -1388,6 +1389,89 @@ describe('ShaderStateManager', () => {
       mgr.applyRenderState(rs);
       expect(flags.has(DIRTY_OUT_OF_RANGE)).toBe(true);
       expect(mgr.getOutOfRange()).toBe(0);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Channel Swizzle (RVChannelMap full remapping)
+  // -------------------------------------------------------------------------
+  describe('Channel Swizzle', () => {
+    it('CHMAP-005: setChannelSwizzle stores values and marks dirty', () => {
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Default should be identity [0, 1, 2, 3]
+      expect(mgr.getChannelSwizzle()).toEqual([0, 1, 2, 3]);
+
+      // Set BGR swizzle
+      mgr.setChannelSwizzle([2, 1, 0, 3]);
+      expect(flags.has(DIRTY_CHANNEL_SWIZZLE)).toBe(true);
+      expect(mgr.getChannelSwizzle()).toEqual([2, 1, 0, 3]);
+
+      // getChannelSwizzle should return a copy, not a reference
+      const result = mgr.getChannelSwizzle();
+      result[0] = 99;
+      expect(mgr.getChannelSwizzle()).toEqual([2, 1, 0, 3]);
+    });
+
+    it('CHMAP-005b: setChannelSwizzle with constant channels (zero/one)', () => {
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // 4=SWIZZLE_ZERO, 5=SWIZZLE_ONE
+      mgr.setChannelSwizzle([0, 0, 0, 5]);
+      expect(flags.has(DIRTY_CHANNEL_SWIZZLE)).toBe(true);
+      expect(mgr.getChannelSwizzle()).toEqual([0, 0, 0, 5]);
+    });
+
+    it('CHMAP-006: applyRenderState with channelSwizzle updates state and marks dirty', () => {
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Apply BGR swizzle via RenderState
+      const rs = createDefaultRenderState();
+      rs.channelSwizzle = [2, 1, 0, 3];
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_CHANNEL_SWIZZLE)).toBe(true);
+      expect(mgr.getChannelSwizzle()).toEqual([2, 1, 0, 3]);
+    });
+
+    it('CHMAP-006b: applyRenderState skips dirty flag when swizzle is unchanged', () => {
+      // Set a non-identity swizzle first
+      mgr.setChannelSwizzle([2, 1, 0, 3]);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Apply same swizzle again
+      const rs = createDefaultRenderState();
+      rs.channelSwizzle = [2, 1, 0, 3];
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_CHANNEL_SWIZZLE)).toBe(false);
+    });
+
+    it('CHMAP-006c: applyRenderState resets to identity when channelSwizzle is absent', () => {
+      // Set a non-identity swizzle
+      mgr.setChannelSwizzle([2, 1, 0, 3]);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Apply state without channelSwizzle (undefined -> resets to identity)
+      const rs = createDefaultRenderState();
+      // rs.channelSwizzle is undefined
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_CHANNEL_SWIZZLE)).toBe(true);
+      expect(mgr.getChannelSwizzle()).toEqual([0, 1, 2, 3]);
+    });
+
+    it('CHMAP-006d: applyRenderState does not dirty when already identity and no swizzle provided', () => {
+      // Manager starts at identity, no swizzle in RenderState
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      const rs = createDefaultRenderState();
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_CHANNEL_SWIZZLE)).toBe(false);
+      expect(mgr.getChannelSwizzle()).toEqual([0, 1, 2, 3]);
     });
   });
 });

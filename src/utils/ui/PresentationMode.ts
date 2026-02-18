@@ -26,12 +26,21 @@ export const DEFAULT_PRESENTATION_STATE: PresentationState = {
   cursorHideDelay: 3000,
 };
 
+interface ElementStyleSnapshot {
+  display: string;
+  opacity: string;
+  pointerEvents: string;
+  transition: string;
+  ariaHidden: string | null;
+}
+
 export class PresentationMode extends EventEmitter<PresentationEvents> {
   private state: PresentationState = { ...DEFAULT_PRESENTATION_STATE };
   private cursorTimer: ReturnType<typeof setTimeout> | null = null;
   private transitionTimers: ReturnType<typeof setTimeout>[] = [];
   private pendingRAF: number | null = null;
   private elementsToHide: HTMLElement[] = [];
+  private elementStyleSnapshots = new Map<HTMLElement, ElementStyleSnapshot>();
   private boundHandleMouseMove: (e: MouseEvent) => void;
 
   constructor() {
@@ -101,6 +110,7 @@ export class PresentationMode extends EventEmitter<PresentationEvents> {
   private enterPresentationMode(): void {
     // Clear any leftover transition timers from a previous cycle
     this.clearTransitionTimers();
+    this.captureElementSnapshots();
 
     // Announce to screen readers
     this.announceToScreenReader('Presentation mode enabled. UI elements hidden.');
@@ -138,18 +148,34 @@ export class PresentationMode extends EventEmitter<PresentationEvents> {
 
     // Show UI elements with transition
     for (const element of this.elementsToHide) {
-      element.style.display = '';
-      element.style.pointerEvents = '';
-      element.removeAttribute('aria-hidden');
+      const snapshot = this.elementStyleSnapshots.get(element);
+      const restoreDisplay = snapshot?.display ?? '';
+      const restorePointerEvents = snapshot?.pointerEvents ?? '';
+      const restoreOpacity = snapshot?.opacity ?? '';
+      const restoreTransition = snapshot?.transition ?? '';
+      const restoreAriaHidden = snapshot?.ariaHidden ?? null;
+
+      element.style.display = restoreDisplay;
+      element.style.pointerEvents = restorePointerEvents;
+      if (restoreAriaHidden === null) {
+        element.removeAttribute('aria-hidden');
+      } else {
+        element.setAttribute('aria-hidden', restoreAriaHidden);
+      }
       // Force reflow before changing opacity for animation
       void element.offsetHeight;
-      element.style.opacity = '1';
+      element.style.transition = 'opacity 0.3s ease';
+      element.style.opacity = restoreOpacity || '1';
       // Clean up transition after it completes
       const timer = setTimeout(() => {
-        element.style.transition = '';
+        element.style.transition = restoreTransition;
+        if (restoreOpacity === '') {
+          element.style.opacity = '';
+        }
       }, 300);
       this.transitionTimers.push(timer);
     }
+    this.elementStyleSnapshots.clear();
 
     // Restore cursor
     this.clearCursorTimer();
@@ -188,6 +214,41 @@ export class PresentationMode extends EventEmitter<PresentationEvents> {
       clearTimeout(timer);
     }
     this.transitionTimers = [];
+  }
+
+  private captureElementSnapshots(): void {
+    this.elementStyleSnapshots.clear();
+    for (const element of this.elementsToHide) {
+      this.elementStyleSnapshots.set(element, {
+        display: element.style.display,
+        opacity: element.style.opacity,
+        pointerEvents: element.style.pointerEvents,
+        transition: element.style.transition,
+        ariaHidden: element.getAttribute('aria-hidden'),
+      });
+    }
+  }
+
+  private restoreElementWithoutAnimation(element: HTMLElement): void {
+    const snapshot = this.elementStyleSnapshots.get(element);
+    if (!snapshot) {
+      element.style.display = '';
+      element.style.opacity = '';
+      element.style.pointerEvents = '';
+      element.style.transition = '';
+      element.removeAttribute('aria-hidden');
+      return;
+    }
+
+    element.style.display = snapshot.display;
+    element.style.opacity = snapshot.opacity;
+    element.style.pointerEvents = snapshot.pointerEvents;
+    element.style.transition = snapshot.transition;
+    if (snapshot.ariaHidden === null) {
+      element.removeAttribute('aria-hidden');
+    } else {
+      element.setAttribute('aria-hidden', snapshot.ariaHidden);
+    }
   }
 
   private announceToScreenReader(message: string): void {
@@ -242,11 +303,7 @@ export class PresentationMode extends EventEmitter<PresentationEvents> {
     // If currently in presentation mode, restore hidden elements
     if (this.state.enabled) {
       for (const element of this.elementsToHide) {
-        element.style.display = '';
-        element.style.opacity = '';
-        element.style.pointerEvents = '';
-        element.style.transition = '';
-        element.removeAttribute('aria-hidden');
+        this.restoreElementWithoutAnimation(element);
       }
     }
     this.clearCursorTimer();
@@ -257,6 +314,7 @@ export class PresentationMode extends EventEmitter<PresentationEvents> {
     }
     this.showCursor();
     document.removeEventListener('mousemove', this.boundHandleMouseMove);
+    this.elementStyleSnapshots.clear();
 
     // Remove screen reader announcer element to prevent DOM pollution
     const announcer = document.getElementById('openrv-sr-announcer');

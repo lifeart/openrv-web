@@ -94,6 +94,55 @@ describe('Session', () => {
     });
   });
 
+  describe('metadata', () => {
+    it('SES-META-001: initializes metadata with defaults', () => {
+      expect(session.metadata.displayName).toBe('');
+      expect(session.metadata.comment).toBe('');
+      expect(session.metadata.version).toBe(2);
+      expect(session.metadata.origin).toBe('openrv-web');
+    });
+
+    it('SES-META-002: setDisplayName trims value and emits metadataChanged', () => {
+      const listener = vi.fn();
+      session.on('metadataChanged', listener);
+
+      session.setDisplayName('  My Session  ');
+
+      expect(session.metadata.displayName).toBe('My Session');
+      expect(listener).toHaveBeenCalledWith(
+        expect.objectContaining({ displayName: 'My Session' })
+      );
+    });
+
+    it('SES-META-003: setDisplayName does not emit when normalized value is unchanged', () => {
+      session.setDisplayName('Existing Name');
+      const listener = vi.fn();
+      session.on('metadataChanged', listener);
+
+      session.setDisplayName('  Existing Name  ');
+
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it('SES-META-004: updateMetadata supports partial updates', () => {
+      session.setDisplayName('Session A');
+
+      session.updateMetadata({ comment: 'Review notes' });
+
+      expect(session.metadata.displayName).toBe('Session A');
+      expect(session.metadata.comment).toBe('Review notes');
+    });
+
+    it('SES-META-005: updateMetadata does not emit for empty no-op patch', () => {
+      const listener = vi.fn();
+      session.on('metadataChanged', listener);
+
+      session.updateMetadata({});
+
+      expect(listener).not.toHaveBeenCalled();
+    });
+  });
+
   describe('currentFrame', () => {
     it('SES-001: clamps values within valid range', () => {
       // Without a source, duration is 1

@@ -18,6 +18,7 @@ export interface SequenceExportRequest {
 
 export interface ExportControlEvents extends EventMap {
   exportRequested: ExportRequest;
+  sourceExportRequested: { format: ExportFormat; quality: number };
   copyRequested: void;
   sequenceExportRequested: SequenceExportRequest;
   rvSessionExportRequested: { format: 'rv' | 'gto' };
@@ -48,7 +49,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
 
     // Create export button
     this.exportButton = document.createElement('button');
-    this.exportButton.innerHTML = getIconSvg('download', 'sm');
+    this.exportButton.innerHTML = `${getIconSvg('download', 'sm')}<span style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;">Export</span>`;
     this.exportButton.setAttribute('aria-label', 'Export current frame (Ctrl+S)');
     this.exportButton.title = 'Export current frame (Ctrl+S)';
     this.exportButton.setAttribute('aria-haspopup', 'menu');
@@ -65,6 +66,7 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      position: relative;
       outline: none;
     `;
 
@@ -151,6 +153,9 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     this.addMenuItem('image', 'Save as PNG', () => this.exportAs('png'), 'Ctrl+S');
     this.addMenuItem('image', 'Save as JPEG', () => this.exportAs('jpeg'));
     this.addMenuItem('image', 'Save as WebP', () => this.exportAs('webp'));
+    this.addMenuItem('camera', 'Save Source as PNG', () => this.exportSourceAs('png'));
+    this.addMenuItem('camera', 'Save Source as JPEG', () => this.exportSourceAs('jpeg'));
+    this.addMenuItem('camera', 'Save Source as WebP', () => this.exportSourceAs('webp'));
     this.addMenuItem('clipboard', 'Copy to Clipboard', () => this.copyToClipboard(), 'Ctrl+C');
 
     this.addSeparator();
@@ -399,6 +404,13 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
 
   private copyToClipboard(): void {
     this.emit('copyRequested', undefined);
+  }
+
+  private exportSourceAs(format: ExportFormat): void {
+    this.emit('sourceExportRequested', {
+      format,
+      quality: 0.92,
+    });
   }
 
   private exportSequence(useInOutRange: boolean): void {

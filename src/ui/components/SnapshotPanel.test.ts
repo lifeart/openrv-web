@@ -194,6 +194,20 @@ describe('SnapshotPanel', () => {
       // Clean up
       document.body.removeChild(panel.render());
     });
+
+    it('SNAP-018: show()/hide() emit visibilityChanged events', () => {
+      const handler = vi.fn();
+      panel.on('visibilityChanged', handler);
+
+      document.body.appendChild(panel.render());
+      panel.show();
+      panel.hide();
+
+      expect(handler).toHaveBeenCalledWith({ open: true });
+      expect(handler).toHaveBeenCalledWith({ open: false });
+
+      document.body.removeChild(panel.render());
+    });
   });
 
   // ---------------------------------------------------------------------------
