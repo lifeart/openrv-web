@@ -600,6 +600,11 @@ export function validateAnnotationPayload(payload: unknown): payload is Annotati
   const validActions = ['add', 'remove', 'clear', 'update'];
   if (!validActions.includes(p.action)) return false;
   if (typeof p.timestamp !== 'number' || !Number.isFinite(p.timestamp)) return false;
+  // remove and update require annotationId
+  if ((p.action === 'remove' || p.action === 'update') &&
+      (typeof p.annotationId !== 'string' || p.annotationId.length === 0)) {
+    return false;
+  }
   return true;
 }
 

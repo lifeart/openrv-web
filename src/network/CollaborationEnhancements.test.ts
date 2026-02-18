@@ -121,13 +121,32 @@ describe('validateAnnotationPayload', () => {
     expect(validateAnnotationPayload(payload)).toBe(true);
   });
 
-  it('COLLAB-007: accepts update action', () => {
+  it('COLLAB-007: accepts update action with annotationId', () => {
+    expect(validateAnnotationPayload({
+      frame: 1,
+      strokes: [],
+      action: 'update',
+      annotationId: 'ann-1',
+      timestamp: 1,
+    })).toBe(true);
+  });
+
+  it('rejects update action without annotationId', () => {
     expect(validateAnnotationPayload({
       frame: 1,
       strokes: [],
       action: 'update',
       timestamp: 1,
-    })).toBe(true);
+    })).toBe(false);
+  });
+
+  it('rejects remove action without annotationId', () => {
+    expect(validateAnnotationPayload({
+      frame: 1,
+      strokes: [],
+      action: 'remove',
+      timestamp: 1,
+    })).toBe(false);
   });
 
   it('rejects invalid action', () => {
@@ -286,11 +305,47 @@ describe('NetworkSyncManager cursor sync', () => {
     (manager as unknown as { handleMessage(m: unknown): void }).handleMessage(msg);
     expect(manager.remoteCursors.length).toBe(1);
 
-    // Simulate user leaving
+    // simulateUserLeft cleans up both permissions and remote cursors
     manager.simulateUserLeft(alice.id);
-    // Note: simulateUserLeft doesn't go through handleRoomLeft, but the field is cleaned
-    // in handleRoomLeft which is triggered by server messages.
-    // For the test, we verify via handleMessage with a room.left:
+    expect(manager.remoteCursors.length).toBe(0);
+  });
+
+  it('COLLAB-046: cursor update from same user overwrites previous position', () => {
+    manager.simulateRoomCreated();
+    const alice = manager.simulateUserJoined('Alice');
+
+    const handle = (manager as unknown as { handleMessage(m: unknown): void }).handleMessage.bind(manager);
+
+    handle(createMessage('sync.cursor', manager.roomInfo!.roomId, alice.id, {
+      userId: alice.id, x: 0.1, y: 0.2, timestamp: 1000,
+    }));
+    expect(manager.remoteCursors.length).toBe(1);
+    expect(manager.remoteCursors[0]!.x).toBe(0.1);
+
+    // Second update from same user should overwrite
+    handle(createMessage('sync.cursor', manager.roomInfo!.roomId, alice.id, {
+      userId: alice.id, x: 0.8, y: 0.9, timestamp: 2000,
+    }));
+    expect(manager.remoteCursors.length).toBe(1);
+    expect(manager.remoteCursors[0]!.x).toBe(0.8);
+    expect(manager.remoteCursors[0]!.y).toBe(0.9);
+  });
+
+  it('COLLAB-047: cursor userId sanitized to sender', () => {
+    manager.simulateRoomCreated();
+    const alice = manager.simulateUserJoined('Alice');
+
+    const handle = (manager as unknown as { handleMessage(m: unknown): void }).handleMessage.bind(manager);
+
+    // Send cursor with spoofed userId
+    handle(createMessage('sync.cursor', manager.roomInfo!.roomId, alice.id, {
+      userId: 'spoofed-id', x: 0.5, y: 0.5, timestamp: 1000,
+    }));
+
+    // Should be stored under alice.id, not 'spoofed-id'
+    const cursors = manager.remoteCursors;
+    expect(cursors.length).toBe(1);
+    expect(cursors[0]!.userId).toBe(alice.id);
   });
 });
 
@@ -387,6 +442,34 @@ describe('NetworkSyncManager annotation sync', () => {
     expect(handler).toHaveBeenCalledTimes(1);
     expect(handler.mock.calls[0]![0].frame).toBe(5);
     expect(handler.mock.calls[0]![0].action).toBe('add');
+  });
+
+  it('incoming annotation from viewer is blocked', () => {
+    manager.simulateRoomCreated();
+    manager.setSyncSettings({
+      playback: true,
+      view: true,
+      color: false,
+      annotations: true,
+      cursor: true,
+    });
+
+    const alice = manager.simulateUserJoined('Alice');
+    manager.setParticipantPermission(alice.id, 'viewer');
+
+    const handler = vi.fn();
+    manager.on('syncAnnotation', handler);
+
+    const msg = createMessage('sync.annotation', manager.roomInfo!.roomId, alice.id, {
+      frame: 5,
+      strokes: [{ id: 'stroke1' }],
+      action: 'add',
+      timestamp: Date.now(),
+    });
+    (manager as unknown as { handleMessage(m: unknown): void }).handleMessage(msg);
+
+    // Should not emit — viewer annotations are rejected
+    expect(handler).not.toHaveBeenCalled();
   });
 
   it('annotation sync respects sync settings', () => {
@@ -636,11 +719,12 @@ describe('AnnotationSyncPayload update action', () => {
     })).toBe(true);
   });
 
-  it('remove action accepted', () => {
+  it('remove action accepted with annotationId', () => {
     expect(validateAnnotationPayload({
       frame: 1,
       strokes: [],
       action: 'remove',
+      annotationId: 'ann-456',
       timestamp: 1,
     })).toBe(true);
   });

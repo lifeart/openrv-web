@@ -337,6 +337,10 @@ export class SyncStateManager {
     return this._syncSettings.annotations;
   }
 
+  shouldSyncCursor(): boolean {
+    return this._syncSettings.cursor;
+  }
+
   // ---- Reset ----
 
   reset(): void {

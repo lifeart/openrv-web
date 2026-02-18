@@ -45,6 +45,11 @@ export interface NetworkControlState {
   rtt: number;
 }
 
+interface MediaSyncConfirmationOptions {
+  fileCount: number;
+  totalBytes: number;
+}
+
 export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   private container: HTMLElement;
   private button: HTMLButtonElement;
@@ -62,6 +67,9 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   private roomCodeInput!: HTMLInputElement;
   private pinCodeInput!: HTMLInputElement;
   private errorDisplay!: HTMLElement;
+  private mediaSyncPrompt!: HTMLElement;
+  private mediaSyncPromptText!: HTMLElement;
+  private pendingMediaPromptResolver: ((accepted: boolean) => void) | null = null;
 
   private boundHandleOutsideClick: (e: MouseEvent) => void;
   private boundHandleReposition: () => void;
@@ -235,6 +243,75 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       border-bottom: 1px solid var(--border-secondary);
     `;
     this.panel.appendChild(this.errorDisplay);
+
+    // Media sync confirmation prompt
+    this.mediaSyncPrompt = document.createElement('div');
+    this.mediaSyncPrompt.dataset.testid = 'network-media-sync-prompt';
+    this.mediaSyncPrompt.style.cssText = `
+      display: none;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border-secondary);
+      background: rgba(var(--accent-primary-rgb), 0.08);
+    `;
+
+    const mediaPromptLabel = document.createElement('div');
+    mediaPromptLabel.style.cssText = `
+      color: var(--text-muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    `;
+    mediaPromptLabel.textContent = 'Media Sync';
+    this.mediaSyncPrompt.appendChild(mediaPromptLabel);
+
+    this.mediaSyncPromptText = document.createElement('div');
+    this.mediaSyncPromptText.style.cssText = `
+      color: var(--text-primary);
+      font-size: 11px;
+      line-height: 1.35;
+      margin-bottom: 8px;
+    `;
+    this.mediaSyncPrompt.appendChild(this.mediaSyncPromptText);
+
+    const mediaPromptActions = document.createElement('div');
+    mediaPromptActions.style.cssText = 'display: flex; gap: 8px;';
+
+    const acceptBtn = document.createElement('button');
+    acceptBtn.dataset.testid = 'network-media-sync-accept';
+    acceptBtn.textContent = 'Accept';
+    acceptBtn.style.cssText = `
+      flex: 1;
+      padding: 6px 10px;
+      background: var(--accent-primary);
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 500;
+    `;
+    acceptBtn.addEventListener('click', () => this.resolveMediaPrompt(true));
+    mediaPromptActions.appendChild(acceptBtn);
+
+    const declineBtn = document.createElement('button');
+    declineBtn.dataset.testid = 'network-media-sync-decline';
+    declineBtn.textContent = 'Decline';
+    declineBtn.style.cssText = `
+      flex: 1;
+      padding: 6px 10px;
+      background: transparent;
+      color: var(--text-primary);
+      border: 1px solid var(--border-primary);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+    `;
+    declineBtn.addEventListener('click', () => this.resolveMediaPrompt(false));
+    mediaPromptActions.appendChild(declineBtn);
+
+    this.mediaSyncPrompt.appendChild(mediaPromptActions);
+    this.panel.appendChild(this.mediaSyncPrompt);
 
     // Disconnected state panel
     this.disconnectedPanel = this.buildDisconnectedPanel();
@@ -636,6 +713,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
 
     // Clear error
     this.hideError();
+    this.resolveMediaPrompt(false);
 
     this.emit('panelToggled', false);
   }
@@ -689,6 +767,25 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     return this.state.pinCode;
   }
 
+  promptMediaSyncConfirmation(options: MediaSyncConfirmationOptions): Promise<boolean> {
+    if (!this.isOpen) {
+      this.openPanel();
+    }
+
+    const fileLabel = options.fileCount === 1 ? 'file' : 'files';
+    this.mediaSyncPromptText.textContent = `Incoming transfer: ${options.fileCount} ${fileLabel} (${this.formatBytes(options.totalBytes)}).`;
+    this.mediaSyncPrompt.style.display = 'block';
+
+    if (this.pendingMediaPromptResolver) {
+      this.pendingMediaPromptResolver(false);
+      this.pendingMediaPromptResolver = null;
+    }
+
+    return new Promise<boolean>((resolve) => {
+      this.pendingMediaPromptResolver = resolve;
+    });
+  }
+
   setRoomInfo(info: RoomInfo | null): void {
     this.state.roomInfo = info;
     this.updateRoomCodeDisplay();
@@ -712,6 +809,25 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   hideError(): void {
     this.errorDisplay.style.display = 'none';
     this.errorDisplay.textContent = '';
+  }
+
+  private resolveMediaPrompt(accepted: boolean): void {
+    if (this.pendingMediaPromptResolver) {
+      const resolver = this.pendingMediaPromptResolver;
+      this.pendingMediaPromptResolver = null;
+      resolver(accepted);
+    }
+    if (this.mediaSyncPrompt) {
+      this.mediaSyncPrompt.style.display = 'none';
+    }
+  }
+
+  private formatBytes(bytes: number): string {
+    if (bytes <= 0) return '0 B';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
   }
 
   // ---- UI Updates ----
@@ -855,6 +971,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   }
 
   dispose(): void {
+    this.resolveMediaPrompt(false);
     this.closePanel();
     if (document.body.contains(this.panel)) {
       document.body.removeChild(this.panel);

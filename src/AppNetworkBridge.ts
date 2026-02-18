@@ -217,8 +217,8 @@ export class AppNetworkBridge {
       }
     }));
 
-    this.unsubscribers.push(networkSyncManager.on('mediaSyncOffered', ({ transferId, senderUserId, totalBytes, files, sources }) => {
-      const accepted = this.confirmMediaSync(totalBytes, files.length);
+    this.unsubscribers.push(networkSyncManager.on('mediaSyncOffered', async ({ transferId, senderUserId, totalBytes, files, sources }) => {
+      const accepted = await this.confirmMediaSync(totalBytes, files.length);
       networkSyncManager.sendMediaResponse(transferId, senderUserId, accepted);
 
       if (!accepted) {
@@ -407,8 +407,21 @@ export class AppNetworkBridge {
     return this.ctx.session.sourceCount === 0 && state.sourceIndex >= 0;
   }
 
-  private confirmMediaSync(totalBytes: number, fileCount: number): boolean {
+  private async confirmMediaSync(totalBytes: number, fileCount: number): Promise<boolean> {
     if (fileCount <= 0) return true;
+
+    const uiWithPrompt = this.ctx.networkControl as unknown as {
+      promptMediaSyncConfirmation?: (options: { fileCount: number; totalBytes: number }) => Promise<boolean>;
+    };
+
+    if (typeof uiWithPrompt.promptMediaSyncConfirmation === 'function') {
+      try {
+        return await uiWithPrompt.promptMediaSyncConfirmation({ fileCount, totalBytes });
+      } catch {
+        // fall through to browser confirm
+      }
+    }
+
     if (typeof window === 'undefined' || typeof window.confirm !== 'function') return true;
 
     const fileLabel = fileCount === 1 ? 'file' : 'files';

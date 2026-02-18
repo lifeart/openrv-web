@@ -308,6 +308,39 @@ describe('NetworkControl', () => {
     });
   });
 
+  describe('media sync confirmation', () => {
+    it('NCC-080: promptMediaSyncConfirmation resolves true when accepted', async () => {
+      control.openPanel();
+      const decisionPromise = control.promptMediaSyncConfirmation({
+        fileCount: 2,
+        totalBytes: 2048,
+      });
+
+      const prompt = document.querySelector('[data-testid="network-media-sync-prompt"]') as HTMLElement;
+      expect(prompt).toBeTruthy();
+      expect(prompt.style.display).toBe('block');
+
+      const acceptBtn = document.querySelector('[data-testid="network-media-sync-accept"]') as HTMLButtonElement;
+      acceptBtn.click();
+
+      await expect(decisionPromise).resolves.toBe(true);
+      expect(prompt.style.display).toBe('none');
+    });
+
+    it('NCC-081: promptMediaSyncConfirmation resolves false when declined', async () => {
+      control.openPanel();
+      const decisionPromise = control.promptMediaSyncConfirmation({
+        fileCount: 1,
+        totalBytes: 512,
+      });
+
+      const declineBtn = document.querySelector('[data-testid="network-media-sync-decline"]') as HTMLButtonElement;
+      declineBtn.click();
+
+      await expect(decisionPromise).resolves.toBe(false);
+    });
+  });
+
   describe('Escape key handling (M-14)', () => {
     it('NCC-M14a: pressing Escape while the panel is open should close it', async () => {
       vi.useFakeTimers();

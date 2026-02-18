@@ -137,7 +137,7 @@ export class PaintRenderer {
 
     if (stroke.brush === BrushType.Gaussian && stroke.splat) {
       // Soft brush using Gaussian splats
-      this.renderGaussianStroke(points, toCanvasX, toCanvasY, getWidth, stroke.color, opacity, this.pressureMapping);
+      this.renderGaussianStroke(points, toCanvasX, toCanvasY, getWidth, stroke.color, this.pressureMapping);
     } else {
       // Hard brush using regular line drawing
       if (points.length === 1) {
@@ -191,7 +191,6 @@ export class PaintRenderer {
     toCanvasY: (y: number) => number,
     getWidth: (index: number) => number,
     color: [number, number, number, number],
-    _opacity: number,
     pressureMapping: PressureMapping = DEFAULT_PRESSURE_MAPPING,
   ): void {
     const ctx = this.ctx;

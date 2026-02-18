@@ -190,8 +190,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
    * Check whether a user can send sync updates (not a viewer).
    */
   canUserSync(userId: string): boolean {
-    const role = this._permissions.get(userId);
-    return role !== 'viewer';
+    return this.getParticipantPermission(userId) !== 'viewer';
   }
 
   /**
@@ -333,6 +332,10 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   /**
    * Send a cursor position sync message.
    * Called by the app when the local cursor moves over the viewport.
+   *
+   * Note: All participants (including viewers) can send cursor positions.
+   * This is intentional — cursor sharing is a read-only collaboration
+   * feature that does not modify session state.
    */
   sendCursorPosition(x: number, y: number): void {
     if (!this.isConnected || !this._roomInfo) return;
@@ -591,7 +594,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
         this.handleSyncColor(message.payload as ColorSyncPayload);
         break;
       case 'sync.annotation':
-        this.handleSyncAnnotation(message.payload);
+        this.handleSyncAnnotation(message.payload, message.userId);
         break;
       case 'sync.cursor':
         this.handleSyncCursor(message.payload, message.userId);
@@ -706,6 +709,15 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   private handleRoomUsers(payload: RoomUsersPayload): void {
     if (!this._roomInfo) return;
 
+    // Prune permissions and cursors for users no longer in the room
+    const currentIds = new Set(payload.users.map(u => u.id));
+    for (const key of this._permissions.keys()) {
+      if (!currentIds.has(key)) this._permissions.delete(key);
+    }
+    for (const key of this._remoteCursors.keys()) {
+      if (!currentIds.has(key)) this._remoteCursors.delete(key);
+    }
+
     this._roomInfo.users = payload.users;
     this.emit('usersChanged', [...this._roomInfo.users]);
   }
@@ -756,19 +768,23 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     this.emit('syncColor', payload);
   }
 
-  private handleSyncAnnotation(payload: unknown): void {
+  private handleSyncAnnotation(payload: unknown, senderUserId: string): void {
     if (!this.stateManager.shouldSyncAnnotations()) return;
     if (!validateAnnotationPayload(payload)) return;
+    // Viewers cannot send annotation changes
+    if (!this.canUserSync(senderUserId)) return;
 
     this.emit('syncAnnotation', payload);
   }
 
   private handleSyncCursor(payload: unknown, senderUserId: string): void {
-    if (!this._syncSettings.cursor) return;
+    if (!this.stateManager.shouldSyncCursor()) return;
     if (!validateCursorPayload(payload)) return;
 
-    this._remoteCursors.set(senderUserId, payload);
-    this.emit('syncCursor', payload);
+    // Sanitize: override payload userId with the authenticated sender
+    const sanitized: CursorSyncPayload = { ...payload, userId: senderUserId };
+    this._remoteCursors.set(senderUserId, sanitized);
+    this.emit('syncCursor', sanitized);
   }
 
   private handlePermissionChange(payload: unknown, senderUserId: string): void {
@@ -1222,6 +1238,8 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     }
 
     this.disposeAllWebRTCPeers();
+    this._permissions.clear();
+    this._remoteCursors.clear();
     this.wsClient.dispose();
     this.stateManager.reset();
     this.removeAllListeners();
