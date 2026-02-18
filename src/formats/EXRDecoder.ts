@@ -1523,6 +1523,8 @@ export function getEXRInfo(buffer: ArrayBuffer): {
   width: number;
   height: number;
   channels: string[];
+  /** Aggregated channels from all parts (for multi-part files). Equals channels for single-part. */
+  allChannels?: string[];
   compression: string;
   layers: EXRLayerInfo[];
   /** Number of parts (1 for single-part, >1 for multi-part) */
@@ -1557,10 +1559,22 @@ export function getEXRInfo(buffer: ArrayBuffer): {
         compression: EXRCompression[ph.compression] || 'UNKNOWN',
       }));
 
+      // Aggregate channels from ALL parts for multi-part files.
+      // Each part may have its own set of channels; for multi-view files
+      // different parts may hold different views' channels.
+      const allChannelSet = new Set<string>();
+      for (const ph of partHeaders) {
+        for (const ch of ph.channels) {
+          allChannelSet.add(ch.name);
+        }
+      }
+      const allChannels = Array.from(allChannelSet);
+
       return {
         width: dataWindow.xMax - dataWindow.xMin + 1,
         height: dataWindow.yMax - dataWindow.yMin + 1,
         channels: firstHeader.channels.map((ch) => ch.name),
+        allChannels,
         compression: EXRCompression[firstHeader.compression] || 'UNKNOWN',
         layers,
         partCount: partHeaders.length,

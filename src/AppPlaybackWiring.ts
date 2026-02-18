@@ -17,6 +17,15 @@ import type { Session } from './core/session/Session';
 import type { LoopMode } from './core/types/session';
 import type { PlaylistClip } from './core/session/PlaylistManager';
 import { exportSequence } from './utils/export/SequenceExporter';
+import {
+  VideoExporter,
+  ExportCancelledError,
+  isVideoEncoderSupported,
+  isCodecSupported,
+  type VideoCodec,
+} from './export/VideoExporter';
+import { muxToMP4Blob } from './export/MP4Muxer';
+import { ExportProgressDialog } from './ui/components/ExportProgress';
 import { showAlert } from './ui/components/shared/Modal';
 
 /**
@@ -33,6 +42,7 @@ export interface PlaybackWiringDeps {
  */
 export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiringDeps): void {
   const { session, viewer, headerBar, controls, persistenceManager } = ctx;
+  let videoExportInProgress = false;
 
   // HeaderBar events
   headerBar.on('showShortcuts', () => deps.getKeyboardHandler().showShortcutsDialog());
@@ -82,6 +92,16 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   });
   exportControl.on('sequenceExportRequested', (request) => {
     handleSequenceExport(session, viewer, request);
+  });
+  exportControl.on('videoExportRequested', (request) => {
+    if (videoExportInProgress) {
+      showAlert('A video export is already in progress', { type: 'warning', title: 'Export Busy' });
+      return;
+    }
+    videoExportInProgress = true;
+    void handleVideoExport(session, viewer, request).finally(() => {
+      videoExportInProgress = false;
+    });
   });
   exportControl.on('rvSessionExportRequested', ({ format }) => {
     persistenceManager.saveRvSession(format);
@@ -264,6 +284,209 @@ async function handleSequenceExport(
     }
 
     showAlert(`Export error: ${err}`, { type: 'error', title: 'Export Error' });
+  }
+}
+
+function resolveFrameRange(
+  session: Session,
+  useInOutRange: boolean
+): { startFrame: number; endFrame: number; totalFrames: number } | null {
+  const frameCount = session.frameCount;
+  if (frameCount <= 0) {
+    return null;
+  }
+
+  const unclampedStart = useInOutRange ? session.inPoint : 1;
+  const unclampedEnd = useInOutRange ? session.outPoint : frameCount;
+
+  const startFrame = Math.max(1, Math.min(frameCount, unclampedStart));
+  const endFrame = Math.max(1, Math.min(frameCount, unclampedEnd));
+
+  if (endFrame < startFrame) {
+    return null;
+  }
+
+  return {
+    startFrame,
+    endFrame,
+    totalFrames: endFrame - startFrame + 1,
+  };
+}
+
+async function pickSupportedH264Codec(): Promise<VideoCodec | null> {
+  const codecCandidates: VideoCodec[] = ['avc1.640028', 'avc1.4d0028', 'avc1.42001f'];
+  for (const codec of codecCandidates) {
+    if (await isCodecSupported(codec)) {
+      return codec;
+    }
+  }
+  return null;
+}
+
+function estimateVideoBitrate(width: number, height: number, fps: number): number {
+  const bitsPerPixelPerFrame = 0.08;
+  const estimated = Math.round(width * height * fps * bitsPerPixelPerFrame);
+  return Math.max(1_000_000, Math.min(20_000_000, estimated));
+}
+
+function sanitizeFilenameBase(name: string): string {
+  const noExt = name.replace(/\.[^.]+$/, '');
+  const sanitized = noExt.replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^_+|_+$/g, '');
+  return sanitized.length > 0 ? sanitized : 'export';
+}
+
+function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function normalizeCanvasSize(
+  canvas: HTMLCanvasElement,
+  width: number,
+  height: number
+): HTMLCanvasElement | null {
+  if (canvas.width === width && canvas.height === height) {
+    return canvas;
+  }
+  const normalized = document.createElement('canvas');
+  normalized.width = width;
+  normalized.height = height;
+  const ctx = normalized.getContext('2d');
+  if (!ctx) {
+    return null;
+  }
+  ctx.drawImage(canvas, 0, 0, width, height);
+  return normalized;
+}
+
+async function handleVideoExport(
+  session: Session,
+  viewer: import('./ui/components/Viewer').Viewer,
+  request: {
+    includeAnnotations: boolean;
+    useInOutRange: boolean;
+  }
+): Promise<void> {
+  const source = session.currentSource;
+  if (!source) {
+    showAlert('No media loaded to export', { type: 'warning', title: 'Export' });
+    return;
+  }
+
+  if (!isVideoEncoderSupported()) {
+    showAlert('WebCodecs VideoEncoder is not available in this browser', {
+      type: 'error',
+      title: 'MP4 Export Unsupported',
+    });
+    return;
+  }
+
+  const frameRange = resolveFrameRange(session, request.useInOutRange);
+  if (!frameRange) {
+    showAlert('Invalid frame range', { type: 'warning', title: 'Export' });
+    return;
+  }
+
+  const codec = await pickSupportedH264Codec();
+  if (!codec) {
+    showAlert('No supported H.264 encoder was found for MP4 export', {
+      type: 'error',
+      title: 'MP4 Export Unsupported',
+    });
+    return;
+  }
+
+  const progressDialog = new ExportProgressDialog(document.body);
+  const exporter = new VideoExporter();
+  const originalFrame = session.currentFrame;
+  const disposeCancelListener = progressDialog.on('cancel', () => exporter.cancel());
+  const disposeProgressListener = exporter.on('progress', (progress) => {
+    progressDialog.updateProgress(progress);
+  });
+  progressDialog.show();
+
+  try {
+    let firstFrameCanvas = await viewer.renderFrameToCanvas(frameRange.startFrame, request.includeAnnotations);
+    if (!firstFrameCanvas) {
+      throw new Error(`Failed to render frame ${frameRange.startFrame}`);
+    }
+
+    const width = firstFrameCanvas.width;
+    const height = firstFrameCanvas.height;
+    if (width <= 0 || height <= 0) {
+      throw new Error('Invalid output dimensions');
+    }
+
+    const fps = Math.max(1, Math.round(session.fps || 24));
+    const bitrate = estimateVideoBitrate(width, height, fps);
+
+    const result = await exporter.encode(
+      {
+        codec,
+        width,
+        height,
+        fps,
+        bitrate,
+        frameRange: {
+          start: frameRange.startFrame,
+          end: frameRange.endFrame,
+        },
+        gopSize: Math.max(1, Math.round(fps * 2)),
+        latencyMode: 'quality',
+        hardwareAcceleration: 'prefer-hardware',
+      },
+      async (frame) => {
+        let canvas: HTMLCanvasElement | null;
+        if (firstFrameCanvas && frame === frameRange.startFrame) {
+          canvas = firstFrameCanvas;
+          firstFrameCanvas = null;
+        } else {
+          canvas = await viewer.renderFrameToCanvas(frame, request.includeAnnotations);
+        }
+
+        if (!canvas) {
+          return null;
+        }
+        return normalizeCanvasSize(canvas, width, height);
+      }
+    );
+
+    const mp4Blob = muxToMP4Blob(result.chunks, {
+      codec: result.codec,
+      width: result.width,
+      height: result.height,
+      fps: result.fps,
+    });
+
+    const name = sanitizeFilenameBase(source.name || 'video');
+    const filename = `${name}_${frameRange.startFrame}-${frameRange.endFrame}.mp4`;
+    downloadBlob(mp4Blob, filename);
+    showAlert(`Exported ${result.totalFrames} frames to ${filename}`, {
+      type: 'success',
+      title: 'Export Complete',
+    });
+  } catch (err) {
+    if (err instanceof ExportCancelledError) {
+      showAlert('Video export cancelled', { type: 'info', title: 'Export' });
+    } else {
+      const message = err instanceof Error ? err.message : String(err);
+      showAlert(`MP4 export failed: ${message}`, { type: 'error', title: 'Export Error' });
+    }
+  } finally {
+    disposeCancelListener();
+    disposeProgressListener();
+    progressDialog.hide();
+    progressDialog.dispose();
+    if (session.currentFrame !== originalFrame) {
+      session.goToFrame(originalFrame);
+    }
   }
 }
 

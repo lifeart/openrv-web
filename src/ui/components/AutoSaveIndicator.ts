@@ -39,6 +39,7 @@ export class AutoSaveIndicator {
   private popoverElement: HTMLElement | null = null;
   private boundOutsideClickHandler: ((e: MouseEvent) => void) | null = null;
   private boundEscapeHandler: ((e: KeyboardEvent) => void) | null = null;
+  private boundViewportChangeHandler: (() => void) | null = null;
 
   constructor() {
     this.container = document.createElement('div');
@@ -228,17 +229,17 @@ export class AutoSaveIndicator {
     const popover = document.createElement('div');
     popover.dataset.testid = 'autosave-settings-popover';
     popover.style.cssText = `
-      position: absolute;
-      top: 100%;
-      right: 0;
-      margin-top: 4px;
+      position: fixed;
+      top: 0;
+      left: 0;
       padding: 12px;
       background: var(--bg-secondary, #2a2a2a);
       border: 1px solid var(--border-color, #444);
       border-radius: 6px;
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-      z-index: 1000;
+      z-index: 10000;
       min-width: 220px;
+      max-width: calc(100vw - 16px);
       font-size: 12px;
       color: var(--text-primary, #eee);
     `;
@@ -305,14 +306,15 @@ export class AutoSaveIndicator {
     });
     popover.appendChild(versionsSlider);
 
-    // Position container as relative for absolute popover
-    this.container.style.position = 'relative';
-    this.container.appendChild(popover);
+    document.body.appendChild(popover);
     this.popoverElement = popover;
+    this.positionSettingsPopover();
 
     // Close on click outside
     this.boundOutsideClickHandler = (e: MouseEvent) => {
-      if (!this.container.contains(e.target as Node)) {
+      const target = e.target as Node | null;
+      if (!target) return;
+      if (!this.container.contains(target) && !this.popoverElement?.contains(target)) {
         this.hideSettingsPopover();
       }
     };
@@ -325,6 +327,40 @@ export class AutoSaveIndicator {
       }
     };
     document.addEventListener('keydown', this.boundEscapeHandler);
+
+    // Reposition when viewport or scroll containers change
+    this.boundViewportChangeHandler = () => this.positionSettingsPopover();
+    window.addEventListener('resize', this.boundViewportChangeHandler);
+    document.addEventListener('scroll', this.boundViewportChangeHandler, true);
+  }
+
+  /**
+   * Position the settings popover relative to the indicator in viewport space
+   */
+  private positionSettingsPopover(): void {
+    if (!this.popoverElement) return;
+
+    const anchorRect = this.container.getBoundingClientRect();
+    const margin = 4;
+    const viewportPadding = 8;
+    const popoverWidth = this.popoverElement.offsetWidth;
+    const popoverHeight = this.popoverElement.offsetHeight;
+
+    let left = anchorRect.right - popoverWidth;
+    const maxLeft = window.innerWidth - popoverWidth - viewportPadding;
+    left = Math.min(Math.max(left, viewportPadding), Math.max(viewportPadding, maxLeft));
+
+    const spaceBelow = window.innerHeight - anchorRect.bottom;
+    const canOpenAbove = anchorRect.top >= popoverHeight + margin + viewportPadding;
+    let top = anchorRect.bottom + margin;
+    if (spaceBelow < popoverHeight + margin && canOpenAbove) {
+      top = anchorRect.top - popoverHeight - margin;
+    }
+    const maxTop = window.innerHeight - popoverHeight - viewportPadding;
+    top = Math.min(Math.max(top, viewportPadding), Math.max(viewportPadding, maxTop));
+
+    this.popoverElement.style.left = `${Math.round(left)}px`;
+    this.popoverElement.style.top = `${Math.round(top)}px`;
   }
 
   /**
@@ -342,6 +378,11 @@ export class AutoSaveIndicator {
     if (this.boundEscapeHandler) {
       document.removeEventListener('keydown', this.boundEscapeHandler);
       this.boundEscapeHandler = null;
+    }
+    if (this.boundViewportChangeHandler) {
+      window.removeEventListener('resize', this.boundViewportChangeHandler);
+      document.removeEventListener('scroll', this.boundViewportChangeHandler, true);
+      this.boundViewportChangeHandler = null;
     }
   }
 

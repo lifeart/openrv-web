@@ -781,4 +781,116 @@ describe('MultiViewEXR', () => {
       expect(getEXRViews(exr)).toEqual(['left']);
     });
   });
+
+  describe('View names with dots (I-005)', () => {
+    it('should handle view names containing dots via startsWith matching', () => {
+      // View names like "my.camera" have dots; the prefix becomes "my.camera."
+      // The startsWith approach correctly matches "my.camera.R" to view "my.camera"
+      const channels = [
+        'R', 'G', 'B',
+        'my.camera.R', 'my.camera.G', 'my.camera.B',
+      ];
+      const views = ['main', 'my.camera'];
+      const mapping = mapChannelsToViews(channels, views);
+
+      // Default view (main) gets unprefixed channels
+      expect(mapping['main']).toEqual(expect.arrayContaining(['R', 'G', 'B']));
+      expect(mapping['main']!.length).toBe(3);
+
+      // "my.camera" view gets its prefixed channels, stripped
+      expect(mapping['my.camera']).toEqual(expect.arrayContaining(['R', 'G', 'B']));
+      expect(mapping['my.camera']!.length).toBe(3);
+    });
+
+    it('should prefer longer view prefixes over shorter ones', () => {
+      // "my.camera." should match before "my." when both are views
+      const channels = [
+        'R', 'G', 'B',
+        'my.R', 'my.G', 'my.B',
+        'my.camera.R', 'my.camera.G', 'my.camera.B',
+      ];
+      const views = ['default', 'my', 'my.camera'];
+      const mapping = mapChannelsToViews(channels, views);
+
+      // "my.camera.R" should go to "my.camera" view, not "my"
+      expect(mapping['my.camera']).toEqual(expect.arrayContaining(['R', 'G', 'B']));
+      expect(mapping['my.camera']!.length).toBe(3);
+
+      // "my.R" should go to "my" view
+      expect(mapping['my']).toEqual(expect.arrayContaining(['R', 'G', 'B']));
+      expect(mapping['my']!.length).toBe(3);
+
+      // Default view gets unprefixed channels
+      expect(mapping['default']).toEqual(expect.arrayContaining(['R', 'G', 'B']));
+      expect(mapping['default']!.length).toBe(3);
+    });
+  });
+
+  describe('Empty remapping guard (MV-010, I-010)', () => {
+    it('should return null when view has only AOV channels (no R/G/B/A)', async () => {
+      // Create an EXR where the "right" view has only non-standard AOV channels
+      // that cannot be mapped to R/G/B/A
+      const channels = [
+        'R', 'G', 'B', 'A',
+        'right.diffuse_direct', 'right.diffuse_indirect', 'right.specular',
+      ];
+      const b = new EXRBufferBuilder();
+      b.writeUint32(EXR_MAGIC);
+      b.writeUint32(2);
+
+      writeChannelsAttribute(b, channels);
+      writeMultiViewAttribute(b, ['left', 'right']);
+      writeStandardAttributes(b, 2, 1);
+      b.writeUint8(0); // end of header
+
+      const sortedChannels = [...channels].sort();
+      const scanlineSize = sortedChannels.length * 2 * 2;
+      const headerEnd = b.offset;
+      const offsetTableSize = 1 * 8;
+      const scanlineDataStart = headerEnd + offsetTableSize;
+      b.writeUint64(BigInt(scanlineDataStart));
+
+      b.writeInt32(0);
+      b.writeInt32(scanlineSize);
+      for (const _ch of sortedChannels) {
+        for (let x = 0; x < 2; x++) {
+          b.writeHalf(0.5);
+        }
+      }
+
+      const exr = b.toBuffer();
+
+      // The "right" view has only AOV channels, so decodeEXRView should return null
+      const result = await decodeEXRView(exr, 'right');
+      expect(result).toBeNull();
+
+      // But the "left" (default) view should still work
+      const leftResult = await decodeEXRView(exr, 'left');
+      expect(leftResult).not.toBeNull();
+    });
+  });
+
+  describe('Redundant isEXRFile removal (I-001)', () => {
+    it('should handle non-EXR buffers gracefully without isEXRFile guard', () => {
+      // These should all still work correctly after removing the isEXRFile guard,
+      // because getEXRInfo returns null for non-EXR buffers
+      const buf = new ArrayBuffer(16);
+      expect(isMultiViewEXR(buf)).toBe(false);
+      expect(getEXRViews(buf)).toEqual([]);
+      expect(getEXRViewInfo(buf)).toBeNull();
+    });
+
+    it('should handle empty buffers gracefully without isEXRFile guard', () => {
+      const buf = new ArrayBuffer(0);
+      expect(isMultiViewEXR(buf)).toBe(false);
+      expect(getEXRViews(buf)).toEqual([]);
+      expect(getEXRViewInfo(buf)).toBeNull();
+    });
+
+    it('should handle non-EXR buffers in decodeEXRView without isEXRFile guard', async () => {
+      const buf = new ArrayBuffer(16);
+      const result = await decodeEXRView(buf, 'left');
+      expect(result).toBeNull();
+    });
+  });
 });

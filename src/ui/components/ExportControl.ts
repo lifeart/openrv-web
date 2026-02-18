@@ -16,11 +16,17 @@ export interface SequenceExportRequest {
   useInOutRange: boolean;
 }
 
+export interface VideoExportRequest {
+  includeAnnotations: boolean;
+  useInOutRange: boolean;
+}
+
 export interface ExportControlEvents extends EventMap {
   exportRequested: ExportRequest;
   sourceExportRequested: { format: ExportFormat; quality: number };
   copyRequested: void;
   sequenceExportRequested: SequenceExportRequest;
+  videoExportRequested: VideoExportRequest;
   rvSessionExportRequested: { format: 'rv' | 'gto' };
   annotationsJSONExportRequested: void;
   annotationsPDFExportRequested: void;
@@ -164,6 +170,13 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
     this.addSectionHeader('Sequence Export');
     this.addMenuItem('film', 'Export In/Out Range', () => this.exportSequence(true));
     this.addMenuItem('film', 'Export All Frames', () => this.exportSequence(false));
+
+    this.addSeparator();
+
+    // Video export section
+    this.addSectionHeader('Video Export');
+    this.addMenuItem('film', 'Export MP4 In/Out Range', () => this.exportVideo(true));
+    this.addMenuItem('film', 'Export MP4 All Frames', () => this.exportVideo(false));
 
     this.addSeparator();
 
@@ -418,6 +431,13 @@ export class ExportControl extends EventEmitter<ExportControlEvents> {
       format: 'png',
       includeAnnotations: this.annotationsCheckbox?.checked ?? true,
       quality: 0.95,
+      useInOutRange,
+    });
+  }
+
+  private exportVideo(useInOutRange: boolean): void {
+    this.emit('videoExportRequested', {
+      includeAnnotations: this.annotationsCheckbox?.checked ?? true,
       useInOutRange,
     });
   }

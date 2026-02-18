@@ -175,6 +175,12 @@ describe('ExportControl', () => {
       expect(() => control.off('sequenceExportRequested', callback)).not.toThrow();
     });
 
+    it('EXPORT-U042b: videoExportRequested listener can be registered', () => {
+      const callback = vi.fn();
+      control.on('videoExportRequested', callback);
+      expect(() => control.off('videoExportRequested', callback)).not.toThrow();
+    });
+
     it('EXPORT-U043: rvSessionExportRequested listener can be registered', () => {
       const callback = vi.fn();
       control.on('rvSessionExportRequested', callback);
@@ -494,6 +500,23 @@ describe('ExportControl keyboard accessibility', () => {
 
     expect(callback).toHaveBeenCalledWith(
       expect.objectContaining({ format: 'png' })
+    );
+  });
+
+  it('EXP-H10c-3: selecting video export item should emit videoExportRequested', () => {
+    const callback = vi.fn();
+    control.on('videoExportRequested', callback);
+
+    openDropdown();
+    const dropdown = getDropdown();
+    const videoItem = Array.from(dropdown.querySelectorAll('button'))
+      .find((btn) => btn.textContent?.includes('Export MP4 In/Out Range')) as HTMLButtonElement | undefined;
+
+    expect(videoItem).toBeDefined();
+    videoItem!.click();
+
+    expect(callback).toHaveBeenCalledWith(
+      expect.objectContaining({ useInOutRange: true, includeAnnotations: true })
     );
   });
 

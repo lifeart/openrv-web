@@ -356,6 +356,7 @@ describe('NetworkControl', () => {
         createdAt: Date.now(),
         maxUsers: 2,
       });
+      control.setIsHost(true);
       control.openPanel();
 
       const responseInput = document.querySelector('[data-testid="network-response-link-input"]') as HTMLInputElement;
@@ -379,6 +380,7 @@ describe('NetworkControl', () => {
         createdAt: Date.now(),
         maxUsers: 2,
       });
+      control.setIsHost(true);
       control.openPanel();
 
       const applyBtn = document.querySelector('[data-testid="network-apply-response-button"]') as HTMLButtonElement;
@@ -388,6 +390,47 @@ describe('NetworkControl', () => {
       const errorDisplay = document.querySelector('[data-testid="network-error-display"]') as HTMLElement;
       expect(errorDisplay.style.display).toBe('block');
       expect(errorDisplay.textContent).toContain('Paste a WebRTC response URL');
+    });
+
+    it('NCC-035: guest response token mode shows token section and response copy label', () => {
+      control.setConnectionState('connected');
+      control.setRoomInfo({
+        roomId: 'room-1',
+        roomCode: 'TEST-CODE',
+        hostId: 'host-user',
+        users: [],
+        createdAt: Date.now(),
+        maxUsers: 2,
+      });
+      control.setIsHost(false);
+      control.setShareLinkKind('response');
+      control.setResponseToken('guest-token-123');
+      control.openPanel();
+
+      const tokenInput = document.querySelector('[data-testid="network-response-token-input"]') as HTMLInputElement;
+      expect(tokenInput.value).toBe('guest-token-123');
+      const copyLinkBtn = document.querySelector('[data-testid="network-copy-link-button"]') as HTMLButtonElement;
+      expect(copyLinkBtn.textContent).toBe('Copy Response URL');
+    });
+
+    it('NCC-036: host mode shows apply response section and hides token section', () => {
+      control.setConnectionState('connected');
+      control.setRoomInfo({
+        roomId: 'room-1',
+        roomCode: 'TEST-CODE',
+        hostId: 'u1',
+        users: [],
+        createdAt: Date.now(),
+        maxUsers: 2,
+      });
+      control.setIsHost(true);
+      control.setResponseToken('');
+      control.openPanel();
+
+      const applyBtn = document.querySelector('[data-testid="network-apply-response-button"]') as HTMLButtonElement;
+      expect(applyBtn).toBeTruthy();
+      const tokenSection = document.querySelector('[data-testid="network-response-token-input"]')?.parentElement?.parentElement as HTMLElement;
+      expect(tokenSection.style.display).toBe('none');
     });
   });
 

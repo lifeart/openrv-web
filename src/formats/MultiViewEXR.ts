@@ -14,7 +14,6 @@
  */
 
 import {
-  isEXRFile,
   getEXRInfo,
   decodeEXR,
   type EXRDecodeOptions,
@@ -44,9 +43,6 @@ export interface EXRViewInfo {
  * containing at least one view name.
  */
 export function isMultiViewEXR(buffer: ArrayBuffer): boolean {
-  if (!isEXRFile(buffer)) {
-    return false;
-  }
   const info = getEXRInfo(buffer);
   if (!info) {
     return false;
@@ -61,9 +57,6 @@ export function isMultiViewEXR(buffer: ArrayBuffer): boolean {
  * or if parsing fails.
  */
 export function getEXRViews(buffer: ArrayBuffer): string[] {
-  if (!isEXRFile(buffer)) {
-    return [];
-  }
   const info = getEXRInfo(buffer);
   if (!info || !info.multiView) {
     return [];
@@ -101,26 +94,29 @@ export function mapChannelsToViews(
     result[view] = [];
   }
 
-  // Build a set of all view prefixes for quick lookup
-  const viewPrefixes = new Map<string, string>();
+  // Build view prefixes sorted by length descending so longer prefixes match first.
+  // This prevents "my." from matching before "my.camera." for view names with dots.
+  const viewPrefixes: [string, string][] = [];
   for (const view of views) {
-    viewPrefixes.set(view + '.', view);
+    viewPrefixes.push([view + '.', view]);
   }
+  viewPrefixes.sort((a, b) => b[0].length - a[0].length);
 
   // Track which channels have been claimed by a non-default view prefix
   // so we know what's left for the default view
   const claimedByPrefix = new Set<string>();
 
-  // First pass: assign channels with explicit view prefixes
+  // First pass: assign channels with explicit view prefixes.
+  // View prefix is always the first segment before the first dot
+  // (e.g., "right.diffuse.R" -> view="right", stripped="diffuse.R")
+  // This differs from extractLayerInfo which uses lastIndexOf for layer hierarchy
   for (const ch of allChannels) {
-    const dotIndex = ch.indexOf('.');
-    if (dotIndex > 0) {
-      const prefix = ch.substring(0, dotIndex + 1);
-      const viewName = viewPrefixes.get(prefix);
-      if (viewName !== undefined) {
-        const strippedName = ch.substring(dotIndex + 1);
+    for (const [prefix, viewName] of viewPrefixes) {
+      if (ch.startsWith(prefix)) {
+        const strippedName = ch.substring(prefix.length);
         result[viewName]!.push(strippedName);
         claimedByPrefix.add(ch);
+        break;
       }
     }
   }
@@ -148,16 +144,14 @@ export function mapChannelsToViews(
  * Returns null if the file is not a valid multi-view EXR.
  */
 export function getEXRViewInfo(buffer: ArrayBuffer): EXRViewInfo | null {
-  if (!isEXRFile(buffer)) {
-    return null;
-  }
-
   const info = getEXRInfo(buffer);
   if (!info || !info.multiView || info.multiView.length === 0) {
     return null;
   }
 
-  const channelsByView = mapChannelsToViews(info.channels, info.multiView);
+  // Use allChannels (aggregated from all parts) when available for multi-part files
+  const channels = info.allChannels ?? info.channels;
+  const channelsByView = mapChannelsToViews(channels, info.multiView);
 
   return {
     views: info.multiView,
@@ -184,10 +178,6 @@ export async function decodeEXRView(
   buffer: ArrayBuffer,
   viewName: string,
 ): Promise<EXRDecodeResult | null> {
-  if (!isEXRFile(buffer)) {
-    return null;
-  }
-
   const info = getEXRInfo(buffer);
   if (!info) {
     return null;
@@ -205,7 +195,10 @@ export async function decodeEXRView(
     return null;
   }
 
-  const channelsByView = mapChannelsToViews(info.channels, views);
+  // Use allChannels (aggregated from all parts) when available for multi-part files
+  const allChannels = info.allChannels ?? info.channels;
+
+  const channelsByView = mapChannelsToViews(allChannels, views);
   const viewChannels = channelsByView[viewName];
   if (!viewChannels || viewChannels.length === 0) {
     return null;
@@ -214,6 +207,18 @@ export async function decodeEXRView(
   const defaultView = views[0]!;
   const isDefault = viewName === defaultView;
 
+  // For multi-part files with a matching part.view, use that part's channels
+  // for remapping instead of the global channel list
+  let partIndex: number | undefined;
+  let partChannels: string[] | undefined;
+  if (info.parts && info.parts.length > 1) {
+    const viewPart = info.parts.find(p => p.view === viewName);
+    if (viewPart) {
+      partIndex = viewPart.index;
+      partChannels = viewPart.channels;
+    }
+  }
+
   // Build a channel remapping for the decodeEXR function.
   // We need to map the actual EXR channel names (possibly prefixed) to RGBA output.
   //
@@ -221,14 +226,26 @@ export async function decodeEXRView(
   // For non-default view: use prefixed channels
   const remapping: { red?: string; green?: string; blue?: string; alpha?: string } = {};
 
+  // The channels list to verify against: use the part's channels for multi-part,
+  // or all channels for single-part
+  const verifyChannels = partChannels ?? allChannels;
+
   // Find the actual EXR channel name for each standard channel
   for (const stripped of viewChannels) {
     const upperStripped = stripped.toUpperCase();
     let actualChannelName: string;
 
-    if (isDefault) {
+    if (partChannels) {
+      // For multi-part with a matching part, use the channel name as-is from the part
+      // (part channels are not view-prefixed in multi-part per-view files)
+      if (partChannels.includes(stripped)) {
+        actualChannelName = stripped;
+      } else {
+        actualChannelName = viewName + '.' + stripped;
+      }
+    } else if (isDefault) {
       // For default view: prefer unprefixed if it exists in the actual channels list
-      if (info.channels.includes(stripped)) {
+      if (allChannels.includes(stripped)) {
         actualChannelName = stripped;
       } else {
         actualChannelName = viewName + '.' + stripped;
@@ -238,7 +255,7 @@ export async function decodeEXRView(
     }
 
     // Verify this channel actually exists in the file
-    if (!info.channels.includes(actualChannelName)) {
+    if (!verifyChannels.includes(actualChannelName)) {
       continue;
     }
 
@@ -258,16 +275,18 @@ export async function decodeEXRView(
     }
   }
 
+  // Guard: if no standard channels were mapped (e.g., only AOV channels),
+  // return null instead of passing empty remapping which would confuse decodeEXR
+  if (!remapping.red && !remapping.green && !remapping.blue && !remapping.alpha) {
+    return null;
+  }
+
   const options: EXRDecodeOptions = {
     channelRemapping: remapping,
   };
 
-  // If multi-part, try to find the right part for this view
-  if (info.parts && info.parts.length > 1) {
-    const viewPart = info.parts.find(p => p.view === viewName);
-    if (viewPart) {
-      options.partIndex = viewPart.index;
-    }
+  if (partIndex !== undefined) {
+    options.partIndex = partIndex;
   }
 
   const result = await decodeEXR(buffer, options);
