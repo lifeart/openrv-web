@@ -1082,6 +1082,13 @@ export class OCIOControl extends EventEmitter<OCIOControlEvents> {
   }
 
   /**
+   * Get the underlying OCIOStateManager instance.
+   */
+  getStateManager(): OCIOStateManager {
+    return this.manager;
+  }
+
+  /**
    * Get the OCIO processor
    */
   getProcessor(): OCIOProcessor {

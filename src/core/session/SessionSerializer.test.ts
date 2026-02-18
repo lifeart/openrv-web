@@ -566,6 +566,11 @@ function createMockComponents(): SessionComponents {
       loadImage: vi.fn<[string, string], Promise<void>>().mockResolvedValue(undefined),
       loadVideo: vi.fn<[string, string], Promise<void>>().mockResolvedValue(undefined),
       loadFile: vi.fn<[File], Promise<void>>().mockResolvedValue(undefined),
+      noteManager: {
+        toSerializable: vi.fn().mockReturnValue([]),
+        fromSerializable: vi.fn(),
+        dispose: vi.fn(),
+      },
     },
     paintEngine,
     viewer: {

@@ -25,6 +25,7 @@ import { KeyboardManager } from './utils/input/KeyboardManager';
 import { CustomKeyBindingsManager } from './utils/input/CustomKeyBindingsManager';
 import { getGlobalHistoryManager } from './utils/HistoryManager';
 import { getThemeManager } from './utils/ui/ThemeManager';
+import { getCorePreferencesManager } from './core/PreferencesManager';
 import { FullscreenManager } from './utils/ui/FullscreenManager';
 import type { OpenRVAPIConfig } from './api/OpenRVAPI';
 import { AppKeyboardHandler } from './AppKeyboardHandler';
@@ -157,6 +158,14 @@ export class App {
 
     // Apply any stored custom bindings to the keyboard shortcuts
     this.keyboardHandler.refresh();
+
+    // Wire unified preferences facade with live subsystem references
+    getCorePreferencesManager().setSubsystems({
+      theme: getThemeManager(),
+      layout: this.layoutStore,
+      keyBindings: this.customKeyBindingsManager,
+      ocio: this.controls.ocioControl.getStateManager(),
+    });
 
     // Initialize persistence manager
     this.persistenceManager = new AppPersistenceManager({

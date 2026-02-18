@@ -521,7 +521,7 @@ describe('Histogram GPU rendering', () => {
     const call = vi.mocked(mockProcessor!.renderHistogram).mock.calls[0];
     expect(call).toBeDefined();
     // Second argument should be histogram data object
-    const histData = call[1];
+    const histData = call![1];
     expect(histData).toHaveProperty('red');
     expect(histData).toHaveProperty('green');
     expect(histData).toHaveProperty('blue');
@@ -537,7 +537,7 @@ describe('Histogram GPU rendering', () => {
     histogram.update(imageData);
 
     const call = vi.mocked(mockProcessor!.renderHistogram).mock.calls[0];
-    expect(call[2]).toBe('luminance'); // mode parameter
+    expect(call![2]).toBe('luminance'); // mode parameter
   });
 
   it('HG-073: GPU rendering uses logScale setting', () => {
@@ -548,7 +548,7 @@ describe('Histogram GPU rendering', () => {
     histogram.update(imageData);
 
     const call = vi.mocked(mockProcessor!.renderHistogram).mock.calls[0];
-    expect(call[3]).toBe(true); // logScale parameter
+    expect(call![3]).toBe(true); // logScale parameter
   });
 
   it('HG-074: falls back to CPU for separate mode', () => {

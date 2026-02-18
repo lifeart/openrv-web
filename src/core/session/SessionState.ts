@@ -18,6 +18,7 @@ import type { Annotation, PaintEffects } from '../../paint/types';
 import type { LoopMode, MediaType } from '../types/session';
 import type { Marker } from './Session';
 import type { PlaylistState } from './PlaylistManager';
+import type { Note } from './NoteManager';
 
 /** Schema version for migration support */
 export const SESSION_STATE_VERSION = 1;
@@ -119,6 +120,8 @@ export interface SessionState {
   backgroundPattern?: BackgroundPatternState;
   /** Playlist state (optional) */
   playlist?: PlaylistState;
+  /** Notes/comments (optional) */
+  notes?: Note[];
 }
 
 /** Default values for empty state */

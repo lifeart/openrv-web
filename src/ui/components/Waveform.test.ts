@@ -9,7 +9,7 @@ const mockProcessor = vi.hoisted(() => ({
   renderWaveform: vi.fn(),
 }));
 
-const mockGetSharedScopesProcessor = vi.hoisted(() => vi.fn(() => mockProcessor));
+const mockGetSharedScopesProcessor = vi.hoisted(() => vi.fn((): typeof mockProcessor | null => mockProcessor));
 
 vi.mock('../../scopes/WebGLScopes', () => ({
   getSharedScopesProcessor: mockGetSharedScopesProcessor,

@@ -8,6 +8,7 @@
 import type { GTODTO } from 'gto-js';
 import { Graph } from '../graph/Graph';
 import { NodeFactory } from '../../nodes/base/NodeFactory';
+import type { Note } from './NoteManager';
 import type { IPNode } from '../../nodes/base/IPNode';
 
 /**
@@ -70,6 +71,8 @@ export interface GTOParseResult {
     origin?: string;
     /** Contained node names (membership) */
     membershipContains?: string[];
+    /** Notes/comments */
+    notes?: Note[];
   };
 }
 
@@ -375,6 +378,48 @@ function parseGTOToGraph(dto: GTODTO, availableFiles?: Map<string, File>): GTOPa
       if (typeof ghost === 'number') sessionInfo.paintEffects.ghost = ghost !== 0;
       if (typeof ghostBefore === 'number') sessionInfo.paintEffects.ghostBefore = ghostBefore;
       if (typeof ghostAfter === 'number') sessionInfo.paintEffects.ghostAfter = ghostAfter;
+    }
+
+    // Notes component
+    const notesComp = session.component('notes');
+    if (notesComp?.exists()) {
+      const totalNotes = notesComp.property('totalNotes').value() as number;
+      if (typeof totalNotes === 'number' && totalNotes > 0) {
+        const notes: Note[] = [];
+        for (let i = 1; i <= totalNotes; i++) {
+          const p = `note_${String(i).padStart(3, '0')}`;
+          const id = notesComp.property(`${p}_id`).value() as string;
+          const sourceIndex = notesComp.property(`${p}_sourceIndex`).value() as number;
+          const frameStart = notesComp.property(`${p}_frameStart`).value() as number;
+          const frameEnd = notesComp.property(`${p}_frameEnd`).value() as number;
+          const text = notesComp.property(`${p}_text`).value() as string;
+          const author = notesComp.property(`${p}_author`).value() as string;
+          const createdAt = notesComp.property(`${p}_createdAt`).value() as string;
+          const modifiedAt = notesComp.property(`${p}_modifiedAt`).value() as string;
+          const status = notesComp.property(`${p}_status`).value() as string;
+          const parentId = notesComp.property(`${p}_parentId`).value() as string;
+          const color = notesComp.property(`${p}_color`).value() as string;
+
+          if (typeof id === 'string' && id.length > 0) {
+            notes.push({
+              id,
+              sourceIndex: typeof sourceIndex === 'number' ? sourceIndex : 0,
+              frameStart: typeof frameStart === 'number' ? frameStart : 1,
+              frameEnd: typeof frameEnd === 'number' ? frameEnd : 1,
+              text: typeof text === 'string' ? text : '',
+              author: typeof author === 'string' ? author : '',
+              createdAt: typeof createdAt === 'string' ? createdAt : '',
+              modifiedAt: typeof modifiedAt === 'string' ? modifiedAt : '',
+              status: (status === 'open' || status === 'resolved' || status === 'wontfix') ? status : 'open',
+              parentId: (typeof parentId === 'string' && parentId.length > 0) ? parentId : null,
+              color: typeof color === 'string' ? color : '#fbbf24',
+            });
+          }
+        }
+        if (notes.length > 0) {
+          sessionInfo.notes = notes;
+        }
+      }
     }
   }
 

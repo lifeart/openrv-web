@@ -1,10 +1,12 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   PreferencesManager,
   DEFAULT_COLOR_DEFAULTS,
   DEFAULT_EXPORT_DEFAULTS,
   DEFAULT_GENERAL_PREFS,
   CORE_PREFERENCE_STORAGE_KEYS,
+  getCorePreferencesManager,
+  resetCorePreferencesManagerForTests,
   type ColorDefaults,
   type PreferencesExportPayload,
 } from './PreferencesManager';
@@ -560,5 +562,105 @@ describe('PreferencesManager storage keys', () => {
     for (const key of Object.values(CORE_PREFERENCE_STORAGE_KEYS)) {
       expect(existing.has(key as (typeof PREFERENCE_STORAGE_KEYS)[keyof typeof PREFERENCE_STORAGE_KEYS])).toBe(false);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Facade getters (subsystem delegation)
+// ---------------------------------------------------------------------------
+
+describe('PreferencesManager facade getters', () => {
+  it('CPRF-090: theme getter returns the wired ThemeManager', () => {
+    const { manager } = createManager();
+    const fakeTheme = { getMode: () => 'dark' } as any;
+    manager.setSubsystems({ theme: fakeTheme });
+    expect(manager.theme).toBe(fakeTheme);
+  });
+
+  it('CPRF-091: layout getter returns the wired LayoutStore', () => {
+    const { manager } = createManager();
+    const fakeLayout = { panels: {} } as any;
+    manager.setSubsystems({ layout: fakeLayout });
+    expect(manager.layout).toBe(fakeLayout);
+  });
+
+  it('CPRF-092: keyBindings getter returns the wired CustomKeyBindingsManager', () => {
+    const { manager } = createManager();
+    const fakeKB = { getCustomBindings: () => [] } as any;
+    manager.setSubsystems({ keyBindings: fakeKB });
+    expect(manager.keyBindings).toBe(fakeKB);
+  });
+
+  it('CPRF-093: ocio getter returns the wired OCIOStateManager', () => {
+    const { manager } = createManager();
+    const fakeOCIO = { getState: () => ({}) } as any;
+    manager.setSubsystems({ ocio: fakeOCIO });
+    expect(manager.ocio).toBe(fakeOCIO);
+  });
+
+  it('CPRF-094: theme getter throws when not wired', () => {
+    const { manager } = createManager();
+    expect(() => manager.theme).toThrow('theme subsystem not wired');
+  });
+
+  it('CPRF-095: layout getter throws when not wired', () => {
+    const { manager } = createManager();
+    expect(() => manager.layout).toThrow('layout subsystem not wired');
+  });
+
+  it('CPRF-096: keyBindings getter throws when not wired', () => {
+    const { manager } = createManager();
+    expect(() => manager.keyBindings).toThrow('keyBindings subsystem not wired');
+  });
+
+  it('CPRF-097: ocio getter throws when not wired', () => {
+    const { manager } = createManager();
+    expect(() => manager.ocio).toThrow('ocio subsystem not wired');
+  });
+
+  it('CPRF-098: setSubsystems allows partial wiring', () => {
+    const { manager } = createManager();
+    const fakeTheme = { getMode: () => 'auto' } as any;
+    manager.setSubsystems({ theme: fakeTheme });
+    expect(manager.theme).toBe(fakeTheme);
+    expect(() => manager.layout).toThrow('layout subsystem not wired');
+  });
+
+  it('CPRF-099: setSubsystems can be called multiple times', () => {
+    const { manager } = createManager();
+    const theme1 = { id: 1 } as any;
+    const theme2 = { id: 2 } as any;
+    manager.setSubsystems({ theme: theme1 });
+    expect(manager.theme).toBe(theme1);
+    manager.setSubsystems({ theme: theme2 });
+    expect(manager.theme).toBe(theme2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Singleton
+// ---------------------------------------------------------------------------
+
+describe('getCorePreferencesManager singleton', () => {
+  afterEach(() => {
+    resetCorePreferencesManagerForTests();
+  });
+
+  it('CPRF-100: returns a PreferencesManager instance', () => {
+    const instance = getCorePreferencesManager();
+    expect(instance).toBeInstanceOf(PreferencesManager);
+  });
+
+  it('CPRF-101: returns the same instance on repeated calls', () => {
+    const a = getCorePreferencesManager();
+    const b = getCorePreferencesManager();
+    expect(a).toBe(b);
+  });
+
+  it('CPRF-102: resetCorePreferencesManagerForTests creates a new instance', () => {
+    const a = getCorePreferencesManager();
+    resetCorePreferencesManagerForTests();
+    const b = getCorePreferencesManager();
+    expect(a).not.toBe(b);
   });
 });

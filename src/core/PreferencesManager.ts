@@ -12,6 +12,22 @@ import {
   getPreferencesManager,
   PREFERENCE_STORAGE_KEYS,
 } from '../utils/preferences/PreferencesManager';
+import type { ThemeManager } from '../utils/ui/ThemeManager';
+import type { LayoutStore } from '../ui/layout/LayoutStore';
+import type { CustomKeyBindingsManager } from '../utils/input/CustomKeyBindingsManager';
+import type { OCIOStateManager } from '../ui/components/OCIOStateManager';
+
+/**
+ * Subsystem references that the PreferencesManager can delegate to.
+ * All fields are optional — the facade getters throw if the subsystem
+ * was never provided (i.e. PreferencesManager was used stand-alone).
+ */
+export interface PreferencesSubsystems {
+  theme?: ThemeManager;
+  layout?: LayoutStore;
+  keyBindings?: CustomKeyBindingsManager;
+  ocio?: OCIOStateManager;
+}
 
 export type ThemeMode = 'dark' | 'light' | 'auto';
 
@@ -174,8 +190,50 @@ function hasOwnKey(obj: Record<string, unknown>, key: string): boolean {
 }
 
 export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
+  private _subsystems: PreferencesSubsystems = {};
+
   constructor(private readonly storage: StoragePreferencesManager = getPreferencesManager()) {
     super();
+  }
+
+  /**
+   * Provide subsystem references for facade access.
+   * Called by App after all subsystems are created.
+   */
+  setSubsystems(subsystems: PreferencesSubsystems): void {
+    this._subsystems = { ...subsystems };
+  }
+
+  /** Facade: ThemeManager (throws if not wired). */
+  get theme(): ThemeManager {
+    if (!this._subsystems.theme) {
+      throw new Error('PreferencesManager: theme subsystem not wired');
+    }
+    return this._subsystems.theme;
+  }
+
+  /** Facade: LayoutStore (throws if not wired). */
+  get layout(): LayoutStore {
+    if (!this._subsystems.layout) {
+      throw new Error('PreferencesManager: layout subsystem not wired');
+    }
+    return this._subsystems.layout;
+  }
+
+  /** Facade: CustomKeyBindingsManager (throws if not wired). */
+  get keyBindings(): CustomKeyBindingsManager {
+    if (!this._subsystems.keyBindings) {
+      throw new Error('PreferencesManager: keyBindings subsystem not wired');
+    }
+    return this._subsystems.keyBindings;
+  }
+
+  /** Facade: OCIOStateManager (throws if not wired). */
+  get ocio(): OCIOStateManager {
+    if (!this._subsystems.ocio) {
+      throw new Error('PreferencesManager: ocio subsystem not wired');
+    }
+    return this._subsystems.ocio;
   }
 
   getThemeMode(): ThemeMode | null {
@@ -342,5 +400,24 @@ export class PreferencesManager extends EventEmitter<CorePreferencesEvents> {
       generalPrefs: this.getGeneralPrefs(),
     };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Singleton
+// ---------------------------------------------------------------------------
+
+let sharedCorePreferencesManager: PreferencesManager | null = null;
+
+/** Get or create the global core PreferencesManager singleton. */
+export function getCorePreferencesManager(): PreferencesManager {
+  if (!sharedCorePreferencesManager) {
+    sharedCorePreferencesManager = new PreferencesManager();
+  }
+  return sharedCorePreferencesManager;
+}
+
+/** Test helper: reset the singleton between tests. */
+export function resetCorePreferencesManagerForTests(): void {
+  sharedCorePreferencesManager = null;
 }
 

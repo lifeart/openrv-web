@@ -287,8 +287,8 @@ describe('ThemeControl', () => {
 
     it('THEME-U075: dispose calls off with the same handler that was passed to on', () => {
       // Get the handlers that were passed to 'on'
-      const onSpy = themeManager.on as ReturnType<typeof vi.spyOn>;
-      const offSpy = themeManager.off as ReturnType<typeof vi.spyOn>;
+      const onSpy = vi.mocked(themeManager.on);
+      const offSpy = vi.mocked(themeManager.off);
       const onModeChangedCall = onSpy.mock.calls.find(
         (call: unknown[]) => call[0] === 'modeChanged'
       );

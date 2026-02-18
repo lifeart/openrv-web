@@ -56,6 +56,7 @@ import type { SubFramePosition } from '../../utils/media/FrameInterpolator';
 import { MAX_CONSECUTIVE_STARVATION_SKIPS } from './PlaybackTimingController';
 import { PlaybackEngine } from './PlaybackEngine';
 import { MarkerManager, MARKER_COLORS, type Marker, type MarkerColor } from './MarkerManager';
+import { NoteManager } from './NoteManager';
 import { VolumeManager } from './VolumeManager';
 import { ABCompareManager } from './ABCompareManager';
 import { AudioPlaybackManager } from '../../audio/AudioPlaybackManager';
@@ -173,6 +174,8 @@ export interface SessionEvents extends EventMap {
   subFramePositionChanged: SubFramePosition | null;
   // EDL events
   edlLoaded: RVEDLEntry[];
+  // Note/comment events
+  notesChanged: void;
 }
 
 // Re-export from centralized types for backward compatibility
@@ -208,6 +211,7 @@ export class Session extends EventEmitter<SessionEvents> {
 
   // Extracted managers
   private _markerManager = new MarkerManager();
+  private _noteManager = new NoteManager();
   private _volumeManager = new VolumeManager();
   private _abCompareManager = new ABCompareManager();
   private _annotationStore = new AnnotationStore();
@@ -354,6 +358,9 @@ export class Session extends EventEmitter<SessionEvents> {
     // Wire manager callbacks
     this._markerManager.setCallbacks({
       onMarksChanged: (marks) => this.emit('marksChanged', marks),
+    });
+    this._noteManager.setCallbacks({
+      onNotesChanged: () => this.emit('notesChanged', undefined),
     });
     this._volumeManager.setCallbacks({
       onVolumeChanged: (v) => {
@@ -504,6 +511,11 @@ export class Session extends EventEmitter<SessionEvents> {
   /** Annotation store (owns paint/annotation/matte state and parsing) */
   get annotationStore(): AnnotationStore {
     return this._annotationStore;
+  }
+
+  /** Note/comment manager */
+  get noteManager(): NoteManager {
+    return this._noteManager;
   }
 
   /** Session metadata (name, comment, version, origin) */
@@ -1029,6 +1041,11 @@ export class Session extends EventEmitter<SessionEvents> {
       // Apply matte settings
       if (result.sessionInfo.matte) {
         this._annotationStore.setMatteSettings(result.sessionInfo.matte);
+      }
+
+      // Apply notes
+      if (result.sessionInfo.notes && result.sessionInfo.notes.length > 0) {
+        this._noteManager.fromSerializable(result.sessionInfo.notes);
       }
 
       // Apply session metadata
@@ -2274,5 +2291,6 @@ export class Session extends EventEmitter<SessionEvents> {
       this.disposeVideoSource(source);
     }
     this.sources = [];
+    this._noteManager.dispose();
   }
 }

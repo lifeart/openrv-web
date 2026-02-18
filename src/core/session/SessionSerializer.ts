@@ -97,6 +97,7 @@ export class SessionSerializer {
       par: viewer.getPARState(),
       backgroundPattern: viewer.getBackgroundPatternState(),
       ...(components.playlistManager ? { playlist: components.playlistManager.getState() } : {}),
+      notes: session.noteManager.toSerializable(),
     };
   }
 
@@ -240,6 +241,11 @@ export class SessionSerializer {
     }
     viewer.setZoom(migrated.view.zoom);
     viewer.setPan(migrated.view.panX, migrated.view.panY);
+
+    // Restore notes
+    if (migrated.notes && migrated.notes.length > 0) {
+      session.noteManager.fromSerializable(migrated.notes);
+    }
 
     // LUT must be loaded separately (file reference)
     if (migrated.lutPath) {

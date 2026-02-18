@@ -1432,8 +1432,10 @@ export class SessionGTOExporter {
     const paintState = paintEngine.toJSON() as PaintSnapshot;
     const paintEffects = paintState.effects;
 
-    builder
-      .object(name, 'RVSession', 1)
+    const obj = builder
+      .object(name, 'RVSession', 1);
+
+    obj
       .component('session')
       .string('viewNode', viewNode)
       .int2('range', [[playback.inPoint, playback.outPoint]])
@@ -1448,34 +1450,70 @@ export class SessionGTOExporter {
       .string('markerColors', playback.marks.map(m => m.color || '#ff4444'))
       .int('version', metadata.version)
       .int('clipboard', metadata.clipboard)
-      .end()
+      .end();
+
+    obj
       .component('root')
       .string('name', metadata.displayName || name)
       .string('comment', metadata.comment || comment)
-      .end()
+      .end();
+
+    obj
       .component('matte')
       .int('show', matteSettings?.show ? 1 : 0)
       .float('aspect', matteSettings?.aspect ?? 1.78)
       .float('opacity', matteSettings?.opacity ?? 0.66)
       .float('heightVisible', matteSettings?.heightVisible ?? -1.0)
       .float2('centerPoint', [[matteSettings?.centerPoint?.[0] ?? 0, matteSettings?.centerPoint?.[1] ?? 0]])
-      .end()
+      .end();
+
+    obj
       .component('paintEffects')
       .int('hold', paintEffects.hold ? 1 : 0)
       .int('ghost', paintEffects.ghost ? 1 : 0)
       .int('ghostBefore', paintEffects.ghostBefore)
       .int('ghostAfter', paintEffects.ghostAfter)
-      .end()
+      .end();
+
+    obj
       .component('internal')
       .int('creationContext', metadata.creationContext)
-      .end()
+      .end();
+
+    obj
       .component('node')
       .string('origin', metadata.origin)
-      .end()
+      .end();
+
+    obj
       .component('membership')
       .string('contains', metadata.membershipContains)
-      .end()
       .end();
+
+    // Notes component
+    const notes = session.noteManager.getNotes();
+    if (notes.length > 0) {
+      const notesComp = obj
+        .component('notes')
+        .int('totalNotes', notes.length);
+      notes.forEach((note, idx) => {
+        const p = `note_${String(idx + 1).padStart(3, '0')}`;
+        notesComp.string(`${p}_id`, note.id);
+        notesComp.int(`${p}_sourceIndex`, note.sourceIndex);
+        notesComp.int(`${p}_frameStart`, note.frameStart);
+        notesComp.int(`${p}_frameEnd`, note.frameEnd);
+        notesComp.string(`${p}_text`, note.text);
+        notesComp.string(`${p}_author`, note.author);
+        notesComp.string(`${p}_createdAt`, note.createdAt);
+        notesComp.string(`${p}_modifiedAt`, note.modifiedAt);
+        notesComp.string(`${p}_status`, note.status);
+        notesComp.string(`${p}_parentId`, note.parentId || '');
+        notesComp.string(`${p}_color`, note.color);
+      });
+      notesComp.end();
+    }
+
+    obj.end();
 
     return builder.build().objects[0]!;
   }
@@ -1571,6 +1609,33 @@ export class SessionGTOExporter {
              this.updateProperty(sessionComp, 'marks', []);
              this.updateProperty(sessionComp, 'markerNotes', []);
              this.updateProperty(sessionComp, 'markerColors', []);
+        }
+
+        // Update notes component — rebuild from scratch to avoid stale slots
+        const notes = session.noteManager.getNotes();
+        const components = obj.components as Record<string, unknown>;
+        if (notes.length > 0) {
+          // Delete old component to avoid leftover note_XXX properties
+          delete components['notes'];
+          const notesComp = this.findOrAddComponent(obj, 'notes');
+          this.updateProperty(notesComp, 'totalNotes', notes.length);
+          notes.forEach((note, idx) => {
+            const p = `note_${String(idx + 1).padStart(3, '0')}`;
+            this.updateProperty(notesComp, `${p}_id`, note.id);
+            this.updateProperty(notesComp, `${p}_sourceIndex`, note.sourceIndex);
+            this.updateProperty(notesComp, `${p}_frameStart`, note.frameStart);
+            this.updateProperty(notesComp, `${p}_frameEnd`, note.frameEnd);
+            this.updateProperty(notesComp, `${p}_text`, note.text);
+            this.updateProperty(notesComp, `${p}_author`, note.author);
+            this.updateProperty(notesComp, `${p}_createdAt`, note.createdAt);
+            this.updateProperty(notesComp, `${p}_modifiedAt`, note.modifiedAt);
+            this.updateProperty(notesComp, `${p}_status`, note.status);
+            this.updateProperty(notesComp, `${p}_parentId`, note.parentId || '');
+            this.updateProperty(notesComp, `${p}_color`, note.color);
+          });
+        } else if (components && 'notes' in components) {
+          // Remove stale notes component when all notes deleted
+          delete components['notes'];
         }
       }
 

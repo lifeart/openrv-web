@@ -30,7 +30,7 @@ export class SessionGTOStore {
 
     this.updateSessionObject(session, paintEngine);
     this.updatePaintObject(session, paintEngine);
-    this.updateColorAdjustments(viewer.getColorAdjustments());
+    this.updateColorAdjustments(viewer.getColorAdjustments(), viewer.getColorInversion());
     this.updateCDL(viewer.getCDL());
     this.updateTransform(viewer.getTransform());
     this.updateLens(viewer.getLensParams());
@@ -85,7 +85,7 @@ export class SessionGTOStore {
     this.replaceObject(nextObject, 'RVPaint');
   }
 
-  private updateColorAdjustments(adjustments: ColorAdjustments): void {
+  private updateColorAdjustments(adjustments: ColorAdjustments, colorInversion: boolean): void {
     const colorObject = this.ensureObject('RVColor', 'rvColor');
     const colorComponent = this.ensureComponent(colorObject, 'color');
 
@@ -94,6 +94,9 @@ export class SessionGTOStore {
     this.setProperty(colorComponent, 'contrast', 'float', 1, adjustments.contrast);
     this.setProperty(colorComponent, 'saturation', 'float', 1, adjustments.saturation);
     this.setProperty(colorComponent, 'offset', 'float', 1, adjustments.brightness);
+    this.setProperty(colorComponent, 'hue', 'float', 1, adjustments.hueRotation);
+    this.setProperty(colorComponent, 'invert', 'int', 1, colorInversion ? 1 : 0);
+    // unpremult is preserved from the deep-cloned GTO data automatically
 
     const displayObject = this.findObject('RVDisplayColor')?.obj;
     if (displayObject) {
@@ -112,6 +115,7 @@ export class SessionGTOStore {
     this.setProperty(cdlComponent, 'offset', 'float', 3, [[values.offset.r, values.offset.g, values.offset.b]]);
     this.setProperty(cdlComponent, 'power', 'float', 3, [[values.power.r, values.power.g, values.power.b]]);
     this.setProperty(cdlComponent, 'saturation', 'float', 1, values.saturation);
+    // noClamp is preserved from the deep-cloned GTO data automatically
   }
 
   private updateTransform(transform: {

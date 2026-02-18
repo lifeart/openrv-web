@@ -15,16 +15,13 @@ import { GamutDiagram } from './GamutDiagram';
 describe('GamutDiagram', () => {
   let diagram: GamutDiagram;
   let lastContainer: DraggableContainer;
-  let createSpy: ReturnType<typeof vi.spyOn>;
   let themeManager: ThemeManagerModule.ThemeManager;
-  let themeOnSpy: ReturnType<typeof vi.spyOn>;
-  let themeOffSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     // Spy on createDraggableContainer to capture the returned container for assertions.
     // The real implementation depends on pointer events not fully available in jsdom,
     // so we provide a lightweight stub that creates real DOM elements.
-    createSpy = vi.spyOn(DraggableContainerModule, 'createDraggableContainer').mockImplementation(() => {
+    vi.spyOn(DraggableContainerModule, 'createDraggableContainer').mockImplementation(() => {
       const content = document.createElement('div');
       const element = document.createElement('div');
       const header = document.createElement('div');
@@ -52,17 +49,15 @@ describe('GamutDiagram', () => {
 
     // Use real ThemeManager singleton, spy on its on/off methods
     themeManager = ThemeManagerModule.getThemeManager();
-    themeOnSpy = vi.spyOn(themeManager, 'on');
-    themeOffSpy = vi.spyOn(themeManager, 'off');
+    vi.spyOn(themeManager, 'on');
+    vi.spyOn(themeManager, 'off');
 
     diagram = new GamutDiagram();
   });
 
   afterEach(() => {
     diagram.dispose();
-    createSpy.mockRestore();
-    themeOnSpy.mockRestore();
-    themeOffSpy.mockRestore();
+    vi.restoreAllMocks();
   });
 
   describe('construction', () => {
@@ -75,7 +70,7 @@ describe('GamutDiagram', () => {
     });
 
     it('GD-U003: subscribes to theme changes', () => {
-      expect(themeOnSpy).toHaveBeenCalledWith('themeChanged', expect.any(Function));
+      expect(vi.mocked(themeManager.on)).toHaveBeenCalledWith('themeChanged', expect.any(Function));
     });
 
     it('GD-U004: does not call drawFull in constructor (deferred)', () => {
@@ -373,7 +368,7 @@ describe('GamutDiagram', () => {
       diagram.show();
 
       // Get the theme callback registered via on('themeChanged', ...)
-      const themeCall = themeOnSpy.mock.calls.find(c => c[0] === 'themeChanged');
+      const themeCall = vi.mocked(themeManager.on).mock.calls.find(c => c[0] === 'themeChanged');
       const themeCallback = themeCall?.[1] as (() => void) | undefined;
       expect(themeCallback).toBeDefined();
 
@@ -383,7 +378,7 @@ describe('GamutDiagram', () => {
 
     it('GD-U081: theme change does not redraw when hidden', () => {
       // Diagram starts hidden, get the callback
-      const themeCall = themeOnSpy.mock.calls.find(c => c[0] === 'themeChanged');
+      const themeCall = vi.mocked(themeManager.on).mock.calls.find(c => c[0] === 'themeChanged');
       const themeCallback = themeCall?.[1] as (() => void) | undefined;
       expect(themeCallback).toBeDefined();
 
@@ -399,7 +394,7 @@ describe('GamutDiagram', () => {
 
     it('GD-U061: unsubscribes from theme changes', () => {
       diagram.dispose();
-      expect(themeOffSpy).toHaveBeenCalledWith('themeChanged', expect.any(Function));
+      expect(vi.mocked(themeManager.off)).toHaveBeenCalledWith('themeChanged', expect.any(Function));
     });
 
     it('GD-U062: can be called multiple times', () => {
