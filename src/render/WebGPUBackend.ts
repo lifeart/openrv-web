@@ -329,6 +329,8 @@ export class WebGPUBackend implements RendererBackend {
   setSharpen(_state: SharpenState): void { /* STUB */ }
   setHSLQualifier(_state: HSLQualifierState): void { /* STUB */ }
   setGamutMapping(_state: GamutMappingState): void { /* STUB */ }
+  setPremultMode(_mode: number): void { /* STUB */ }
+  getPremultMode(): number { return 0; }
 
   applyRenderState(state: RenderState): void {
     this.setColorAdjustments(state.colorAdjustments);
@@ -351,6 +353,7 @@ export class WebGPUBackend implements RendererBackend {
     if (state.gamutMapping) {
       this.setGamutMapping(state.gamutMapping);
     }
+    this.setPremultMode(state.premultMode ?? 0);
   }
 
   hasPendingStateChanges(): boolean {

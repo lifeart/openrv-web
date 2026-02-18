@@ -13,6 +13,8 @@ import { loadVideoFile, waitForTestHelper, getSessionState, getViewerState } fro
  */
 
 test.describe('Network Sync', () => {
+  test.describe.configure({ mode: 'serial' });
+
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await page.waitForSelector('#app');
@@ -110,11 +112,71 @@ test.describe('Network Sync', () => {
     await copyButton.click();
 
     await expect(shareInput).toHaveValue(/#s=/);
+    await expect(shareInput).toHaveValue(/rtc=/);
     const shareLinkWithState = await shareInput.inputValue();
     const sharedURL = new URL(shareLinkWithState);
     expect(sharedURL.searchParams.get('room')).toBe(roomCode);
     expect(sharedURL.searchParams.get('pin')).toBe(pinCode);
     expect(sharedURL.hash.startsWith('#s=')).toBe(true);
+    expect(sharedURL.searchParams.get('rtc')).toBeTruthy();
+  });
+
+  test('NET-006: serverless WebRTC URL flow connects host and guest via UI response link apply', async ({ page, context }) => {
+    const networkButton = page.locator('[data-testid="network-sync-button"]').first();
+    await networkButton.click();
+
+    const disconnectedPanel = page.locator('[data-testid="network-disconnected-panel"]');
+    await expect(disconnectedPanel).toBeVisible({ timeout: 3000 });
+
+    await disconnectedPanel.locator('[data-testid="network-pin-code-input"]').fill('1357');
+    await disconnectedPanel.locator('[data-testid="network-create-room-button"]').click();
+
+    await page.waitForFunction(() => {
+      const state = (window as { __OPENRV_TEST__?: { getNetworkSyncState?: () => { connectionState: string; isHost: boolean } } })
+        .__OPENRV_TEST__?.getNetworkSyncState?.();
+      return Boolean(state && state.connectionState === 'connected' && state.isHost);
+    }, null, { timeout: 5000 });
+
+    const connectedPanel = page.locator('[data-testid="network-connected-panel"]');
+    await expect(connectedPanel).toBeVisible({ timeout: 3000 });
+    await connectedPanel.locator('[data-testid="network-copy-link-button"]').click();
+    const hostShareInput = connectedPanel.locator('[data-testid="network-share-link-input"]');
+    await expect(hostShareInput).toHaveValue(/rtc=/);
+    const hostShareLink = await hostShareInput.inputValue();
+    const inviteURL = new URL(hostShareLink);
+    expect(inviteURL.searchParams.get('rtc')).toBeTruthy();
+
+    const guestPage = await context.newPage();
+    await guestPage.goto(inviteURL.toString());
+    await guestPage.waitForSelector('#app');
+    await waitForTestHelper(guestPage);
+
+    const guestNetworkButton = guestPage.locator('[data-testid="network-sync-button"]').first();
+    await guestNetworkButton.click();
+    const guestConnectedPanel = guestPage.locator('[data-testid="network-connected-panel"]');
+    await expect(guestConnectedPanel).toBeVisible({ timeout: 5000 });
+    const guestShareInput = guestConnectedPanel.locator('[data-testid="network-share-link-input"]');
+    await expect(guestShareInput).toHaveValue(/rtc=/);
+    const guestResponseLink = await guestShareInput.inputValue();
+    const responseURL = new URL(guestResponseLink);
+    expect(responseURL.searchParams.get('rtc')).toBeTruthy();
+
+    await connectedPanel.locator('[data-testid="network-response-link-input"]').fill(responseURL.toString());
+    await connectedPanel.locator('[data-testid="network-apply-response-button"]').click();
+
+    await page.waitForFunction(() => {
+      const state = (window as { __OPENRV_TEST__?: { getNetworkSyncState?: () => { userCount: number } } })
+        .__OPENRV_TEST__?.getNetworkSyncState?.();
+      return Boolean(state && state.userCount >= 2);
+    }, null, { timeout: 10000 });
+
+    await guestPage.waitForFunction(() => {
+      const state = (window as { __OPENRV_TEST__?: { getNetworkSyncState?: () => { userCount: number } } })
+        .__OPENRV_TEST__?.getNetworkSyncState?.();
+      return Boolean(state && state.userCount >= 2);
+    }, null, { timeout: 10000 });
+
+    await guestPage.close();
   });
 
   // --- Skipped tests requiring mock WebSocket server fixture ---

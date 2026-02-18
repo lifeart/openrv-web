@@ -184,6 +184,9 @@
       // Default: ivec4(0, 1, 2, 3) = identity (no remapping)
       uniform ivec4 u_channelSwizzle;
 
+      // Premultiply/unpremultiply alpha: 0=off, 1=premultiply, 2=unpremultiply
+      uniform int u_premult;
+
       // Luminance coefficients (Rec. 709)
       const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 
@@ -893,6 +896,15 @@
           );
         }
 
+        // 0b2. Unpremultiply alpha (early, before any color processing)
+        // Must happen before linearize so color math operates on straight alpha.
+        // Skipped when channel isolation is active (single-channel views).
+        if (u_premult == 2 && u_channelMode == 0) {
+          if (color.a > 1e-5) {
+            color.rgb /= color.a;
+          }
+        }
+
         // 0c. Linearize (RVLinearize log-to-linear conversion)
         // When active, overrides the auto-detected input transfer function.
         bool linearizeActive = false;
@@ -1244,6 +1256,12 @@
         }
         // else: HDR — let values >1.0 pass through to the HDR drawing buffer
 
+        // 12b. Premultiply alpha (late, after all color processing but before background blend)
+        // Skipped when channel isolation is active (single-channel views).
+        if (u_premult == 1 && u_channelMode == 0) {
+          color.rgb *= color.a;
+        }
+
         // 13. Background pattern blend (alpha compositing)
         if (u_backgroundPattern > 0 && color.a < 1.0) {
           vec3 bgColor = u_bgColor1;
@@ -1264,7 +1282,12 @@
             bgColor = onLine ? u_bgColor2 : u_bgColor1;
           }
           // u_backgroundPattern == 1 is solid, bgColor = u_bgColor1 already
-          color.rgb = mix(bgColor, color.rgb, color.a);
+          if (u_premult == 1) {
+            // Premultiplied over: rgb is already multiplied by alpha
+            color.rgb = bgColor * (1.0 - color.a) + color.rgb;
+          } else {
+            color.rgb = mix(bgColor, color.rgb, color.a);
+          }
           color.a = 1.0;
         }
 

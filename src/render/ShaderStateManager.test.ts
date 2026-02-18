@@ -18,6 +18,7 @@ import {
   DIRTY_CDL,
   DIRTY_OUT_OF_RANGE,
   DIRTY_CHANNEL_SWIZZLE,
+  DIRTY_PREMULT,
   ALL_DIRTY_FLAGS,
 } from './ShaderStateManager';
 import type { RenderState } from './RenderState';
@@ -1472,6 +1473,169 @@ describe('ShaderStateManager', () => {
       mgr.applyRenderState(rs);
       expect(flags.has(DIRTY_CHANNEL_SWIZZLE)).toBe(false);
       expect(mgr.getChannelSwizzle()).toEqual([0, 1, 2, 3]);
+    });
+  });
+
+  // =================================================================
+  // Premultiply/Unpremultiply Alpha
+  // =================================================================
+
+  describe('premultMode', () => {
+    it('PREMULT-SM-001: Setting premultMode=1 sets u_premult uniform to 1', () => {
+      const intCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (_name: string, _value: unknown) => {},
+        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setPremultMode(1);
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(intCalls['u_premult']).toBe(1);
+    });
+
+    it('PREMULT-SM-002: Setting premultMode=2 sets u_premult uniform to 2', () => {
+      const intCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (_name: string, _value: unknown) => {},
+        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setPremultMode(2);
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(intCalls['u_premult']).toBe(2);
+    });
+
+    it('PREMULT-SM-003: Setting premultMode=0 sets u_premult uniform to 0', () => {
+      const intCalls: Record<string, unknown> = {};
+      const mockShader = {
+        setUniform: (_name: string, _value: unknown) => {},
+        setUniformInt: (name: string, value: number) => { intCalls[name] = value; },
+        setUniformMatrix3: (_name: string, _value: unknown) => {},
+      } as any;
+
+      const mockTexCb = {
+        bindCurvesLUTTexture: () => {},
+        bindFalseColorLUTTexture: () => {},
+        bindLUT3DTexture: () => {},
+        bindFilmLUTTexture: () => {},
+        bindInlineLUTTexture: () => {},
+        getCanvasSize: () => ({ width: 100, height: 100 }),
+      };
+
+      mgr.setPremultMode(0);
+      mgr.applyUniforms(mockShader, mockTexCb);
+
+      expect(intCalls['u_premult']).toBe(0);
+    });
+
+    it('PREMULT-SM-004: Default premultMode is 0', () => {
+      expect(mgr.getPremultMode()).toBe(0);
+    });
+
+    it('PREMULT-SM-005: setPremultMode marks DIRTY_PREMULT flag', () => {
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      mgr.setPremultMode(1);
+      expect(flags.has(DIRTY_PREMULT)).toBe(true);
+    });
+
+    it('PREMULT-SM-006: DIRTY_PREMULT is included in ALL_DIRTY_FLAGS', () => {
+      expect(ALL_DIRTY_FLAGS).toContain(DIRTY_PREMULT);
+    });
+
+    it('PREMULT-SM-007: applyRenderState with premultMode updates uniform', () => {
+      const rs = createDefaultRenderState();
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      rs.premultMode = 2;
+      mgr.applyRenderState(rs);
+
+      expect(flags.has(DIRTY_PREMULT)).toBe(true);
+      expect(mgr.getPremultMode()).toBe(2);
+    });
+
+    it('PREMULT-SM-008: applyRenderState does not mark dirty when premultMode is unchanged', () => {
+      const rs = createDefaultRenderState();
+      rs.premultMode = 1;
+      mgr.applyRenderState(rs);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Apply again with same value
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_PREMULT)).toBe(false);
+    });
+
+    it('PREMULT-SM-009: applyRenderState defaults premultMode to 0 when not specified', () => {
+      // First set to 1
+      mgr.setPremultMode(1);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      // Apply state without premultMode (undefined)
+      const rs = createDefaultRenderState();
+      mgr.applyRenderState(rs);
+      expect(flags.has(DIRTY_PREMULT)).toBe(true);
+      expect(mgr.getPremultMode()).toBe(0);
+    });
+
+    it('PREMULT-SM-010: setPremultMode clamps invalid value -1 to 0', () => {
+      mgr.setPremultMode(-1);
+      expect(mgr.getPremultMode()).toBe(0);
+    });
+
+    it('PREMULT-SM-011: setPremultMode clamps invalid value 3 to 0', () => {
+      mgr.setPremultMode(3);
+      expect(mgr.getPremultMode()).toBe(0);
+    });
+
+    it('PREMULT-SM-012: setPremultMode clamps invalid value 99 to 0', () => {
+      mgr.setPremultMode(99);
+      expect(mgr.getPremultMode()).toBe(0);
+    });
+
+    it('PREMULT-SM-013: setPremultMode does not mark dirty when clamped value equals current', () => {
+      // Default is 0, setting invalid value clamps to 0 = no change
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      mgr.setPremultMode(5);
+      expect(flags.has(DIRTY_PREMULT)).toBe(false);
+      expect(mgr.getPremultMode()).toBe(0);
+    });
+
+    it('PREMULT-SM-014: setPremultMode does not mark dirty when setting same valid value', () => {
+      mgr.setPremultMode(1);
+      const flags = mgr.getDirtyFlags() as Set<string>;
+      flags.clear();
+
+      mgr.setPremultMode(1);
+      expect(flags.has(DIRTY_PREMULT)).toBe(false);
     });
   });
 });

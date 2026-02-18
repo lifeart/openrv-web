@@ -44,4 +44,5 @@ export interface RenderState {
   linearize?: LinearizeState;
   outOfRange?: number;  // 0=off, 1=clamp-to-black, 2=highlight
   channelSwizzle?: ChannelSwizzle;
+  premultMode?: number;  // 0=off, 1=premultiply, 2=unpremultiply
 }

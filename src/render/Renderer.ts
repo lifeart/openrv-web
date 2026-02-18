@@ -894,6 +894,14 @@ export class Renderer implements RendererBackend {
     return this.stateManager.getColorInversion();
   }
 
+  setPremultMode(mode: number): void {
+    this.stateManager.setPremultMode(mode);
+  }
+
+  getPremultMode(): number {
+    return this.stateManager.getPremultMode();
+  }
+
   setToneMappingState(state: ToneMappingState): void {
     this.stateManager.setToneMappingState(state);
   }

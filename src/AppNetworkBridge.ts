@@ -100,8 +100,12 @@ export class AppNetworkBridge {
     this.unsubscribers.push(networkControl.on('leaveRoom', () => {
       networkSyncManager.leaveRoom();
       networkControl.setConnectionState('disconnected');
+      networkControl.setIsHost(false);
+      networkControl.setShareLinkKind('generic');
+      networkControl.setResponseToken('');
       networkControl.setRoomInfo(null);
       networkControl.setUsers([]);
+      networkControl.hideInfo();
     }));
 
     this.unsubscribers.push(networkControl.on('syncSettingsChanged', (settings) => {
@@ -110,14 +114,50 @@ export class AppNetworkBridge {
 
     this.unsubscribers.push(networkControl.on('copyLink', async (baseLink) => {
       try {
-        const state = this.ctx.getSessionURLState?.() ?? this.captureSessionURLState();
-        const shareLink = buildShareURL(baseLink, state);
+        const pinCode = this.getActivePinCode();
+        const roomCode = networkSyncManager.roomInfo?.roomCode ?? '';
+        const fallbackBase = roomCode ? this.buildRoomLink(roomCode, pinCode) : baseLink;
+        let shareLink = baseLink.trim() || fallbackBase;
+
+        const hasSessionHash = this.hasSessionShareState(shareLink);
+        if (!hasSessionHash) {
+          const state = this.ctx.getSessionURLState?.() ?? this.captureSessionURLState();
+          shareLink = buildShareURL(shareLink, state);
+        }
+
+        const managerWithServerless = networkSyncManager as unknown as {
+          buildServerlessInviteShareURL?: (url: string) => Promise<string>;
+        };
+        if (networkSyncManager.isHost && typeof managerWithServerless.buildServerlessInviteShareURL === 'function') {
+          shareLink = await managerWithServerless.buildServerlessInviteShareURL(shareLink);
+        }
         const controlWithShare = networkControl as unknown as { setShareLink?: (url: string) => void };
         controlWithShare.setShareLink?.(shareLink);
         await navigator.clipboard.writeText(shareLink);
-      } catch {
-        networkControl.showError('Clipboard unavailable. Copy Share URL from the Network Sync panel.');
+      } catch (error) {
+        if (error instanceof Error && /clipboard/i.test(error.message)) {
+          networkControl.showError('Clipboard unavailable. Copy Share URL from the Network Sync panel.');
+          return;
+        }
+        networkControl.showError(
+          `Failed to generate share URL: ${error instanceof Error ? error.message : 'unknown error'}`
+        );
       }
+    }));
+
+    this.unsubscribers.push(networkControl.on('applyResponseLink', async (responseLink) => {
+      const managerWithServerless = networkSyncManager as unknown as {
+        applyServerlessResponseLink?: (value: string) => Promise<boolean>;
+      };
+      if (typeof managerWithServerless.applyServerlessResponseLink !== 'function') return;
+
+      const applied = await managerWithServerless.applyServerlessResponseLink(responseLink);
+      if (!applied) {
+        networkControl.showError('Invalid WebRTC response link or no pending invite.');
+        return;
+      }
+      networkControl.hideError();
+      networkControl.showInfo('Guest response applied. WebRTC peer is connecting.');
     }));
 
     // One-time state sync after join/reconnect
@@ -303,20 +343,34 @@ export class AppNetworkBridge {
     // Wire manager events to UI
     this.unsubscribers.push(networkSyncManager.on('connectionStateChanged', (state) => {
       networkControl.setConnectionState(state);
+      if (state !== 'connected') {
+        networkControl.setIsHost(false);
+      } else {
+        networkControl.setIsHost(networkSyncManager.isHost);
+      }
     }));
 
     this.unsubscribers.push(networkSyncManager.on('roomCreated', (info) => {
+      networkControl.setIsHost(true);
+      networkControl.setShareLinkKind('invite');
+      networkControl.setResponseToken('');
+      networkControl.hideInfo();
       networkControl.setRoomInfo(info);
       networkControl.setUsers(info.users);
+      void this.refreshShareLinkPreview();
     }));
 
     this.unsubscribers.push(networkSyncManager.on('roomJoined', (info) => {
+      networkControl.setIsHost(networkSyncManager.isHost);
+      networkControl.setShareLinkKind(networkSyncManager.isHost ? 'invite' : 'generic');
       networkControl.setRoomInfo(info);
       networkControl.setUsers(info.users);
+      void this.refreshShareLinkPreview();
     }));
 
     this.unsubscribers.push(networkSyncManager.on('usersChanged', (users) => {
       networkControl.setUsers(users);
+      void this.refreshShareLinkPreview();
     }));
 
     this.unsubscribers.push(networkSyncManager.on('error', (err) => {
@@ -395,6 +449,60 @@ export class AppNetworkBridge {
     const controlWithPin = this.ctx.networkControl as unknown as { getPinCode?: () => string };
     const value = controlWithPin.getPinCode?.();
     return typeof value === 'string' ? value.trim() : '';
+  }
+
+  private async refreshShareLinkPreview(): Promise<void> {
+    if (!this.ctx.networkSyncManager.isHost) return;
+
+    const roomCode = this.ctx.networkSyncManager.roomInfo?.roomCode;
+    if (!roomCode) return;
+
+    try {
+      const pinCode = this.getActivePinCode();
+      const state = this.ctx.getSessionURLState?.() ?? this.captureSessionURLState();
+      const base = this.buildRoomLink(roomCode, pinCode);
+      let shareLink = buildShareURL(base, state);
+
+      const managerWithServerless = this.ctx.networkSyncManager as unknown as {
+        buildServerlessInviteShareURL?: (url: string) => Promise<string>;
+      };
+      if (typeof managerWithServerless.buildServerlessInviteShareURL === 'function') {
+        shareLink = await managerWithServerless.buildServerlessInviteShareURL(shareLink);
+      }
+
+      const controlWithShare = this.ctx.networkControl as unknown as {
+        setShareLink?: (url: string) => void;
+        setShareLinkKind?: (kind: 'invite' | 'response' | 'generic') => void;
+        setResponseToken?: (token: string) => void;
+      };
+      controlWithShare.setShareLinkKind?.('invite');
+      controlWithShare.setResponseToken?.('');
+      controlWithShare.setShareLink?.(shareLink);
+    } catch {
+      // Keep existing share URL on preview update errors.
+    }
+  }
+
+  private buildRoomLink(roomCode: string, pinCode: string): string {
+    const fallbackBase = typeof window !== 'undefined' ? window.location.href : 'http://localhost/';
+    const url = new URL(fallbackBase);
+    url.search = '';
+    url.hash = '';
+    url.searchParams.set('room', roomCode);
+    if (pinCode) {
+      url.searchParams.set('pin', pinCode);
+    }
+    return url.toString();
+  }
+
+  private hasSessionShareState(urlLike: string): boolean {
+    const fallbackBase = typeof window !== 'undefined' ? window.location.href : 'http://localhost/';
+    try {
+      const url = new URL(urlLike, fallbackBase);
+      return url.hash.startsWith('#s=');
+    } catch {
+      return false;
+    }
   }
 
   private applySharedSessionState(state: SessionURLState): void {

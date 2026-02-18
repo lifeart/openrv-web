@@ -57,6 +57,7 @@ import { LayoutManager } from './ui/layout/LayoutManager';
 import { formatTimecode, formatDuration } from './handlers/infoPanelHandlers';
 import { SequenceGroupNode, type EDLEntry } from './nodes/groups/SequenceGroupNode';
 import { decodeSessionState, type SessionURLState } from './core/session/SessionURLManager';
+import { decodeWebRTCURLSignal, WEBRTC_URL_SIGNAL_PARAM } from './network/WebRTCURLSignaling';
 
 export class App {
   private container: HTMLElement | null = null;
@@ -266,6 +267,7 @@ export class App {
     this.controls.timelineEditor.on('cutMoved', () => this.applyTimelineEditorEdits());
     this.controls.timelineEditor.on('cutDeleted', () => this.applyTimelineEditorEdits());
     this.controls.timelineEditor.on('cutInserted', () => this.applyTimelineEditorEdits());
+    this.controls.timelineEditor.on('cutSplit', () => this.applyTimelineEditorEdits());
 
     this.session.on('graphLoaded', () => this.syncTimelineEditorFromGraph());
     this.session.on('durationChanged', () => this.syncTimelineEditorFromGraph());
@@ -311,7 +313,7 @@ export class App {
     // Optional URL bootstrap:
     // - auto-join room from ?room=...&pin=...
     // - apply initial shared session hash from #s=...
-    this.handleURLBootstrap();
+    await this.handleURLBootstrap();
   }
 
   private captureSessionURLState(): SessionURLState {
@@ -401,10 +403,11 @@ export class App {
     }
   }
 
-  private handleURLBootstrap(): void {
+  private async handleURLBootstrap(): Promise<void> {
     const params = new URLSearchParams(window.location.search);
     const roomCode = params.get('room');
     const pinCode = params.get('pin');
+    const webrtcSignalToken = params.get(WEBRTC_URL_SIGNAL_PARAM);
 
     if (roomCode) {
       this.controls.networkControl.setJoinRoomCodeFromLink(roomCode.toUpperCase());
@@ -415,7 +418,42 @@ export class App {
       this.controls.networkSyncManager.setPinCode(pinCode);
     }
 
-    if (roomCode && pinCode) {
+    let handledServerlessOffer = false;
+    if (webrtcSignalToken) {
+      const signal = decodeWebRTCURLSignal(webrtcSignalToken);
+      if (signal?.type === 'offer') {
+        handledServerlessOffer = true;
+        const answerToken = await this.controls.networkSyncManager.joinServerlessRoomFromOfferToken(
+          webrtcSignalToken,
+          'User',
+          pinCode ?? signal.pinCode
+        );
+        if (answerToken) {
+          const responseURL = new URL(window.location.href);
+          responseURL.search = '';
+          responseURL.hash = '';
+          responseURL.searchParams.set('room', signal.roomCode);
+          const activePin = pinCode ?? signal.pinCode;
+          if (activePin) {
+            responseURL.searchParams.set('pin', activePin);
+          }
+          responseURL.searchParams.set(WEBRTC_URL_SIGNAL_PARAM, answerToken);
+          this.controls.networkControl.setShareLink(responseURL.toString());
+          this.controls.networkControl.setShareLinkKind('response');
+          this.controls.networkControl.setResponseToken(answerToken);
+          this.controls.networkControl.showInfo(
+            'Connected as guest via WebRTC. Copy the response token (or response URL) and send it to the host.'
+          );
+        }
+      } else if (signal?.type === 'answer') {
+        handledServerlessOffer = true;
+        this.controls.networkControl.showInfo(
+          'This is a WebRTC response link. Paste it into the host Network Sync panel and click Apply.'
+        );
+      }
+    }
+
+    if (!handledServerlessOffer && roomCode && pinCode) {
       this.controls.networkSyncManager.joinRoom(roomCode.toUpperCase(), 'User', pinCode ?? undefined);
     }
 

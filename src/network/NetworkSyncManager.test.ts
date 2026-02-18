@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NetworkSyncManager } from './NetworkSyncManager';
 import type { ConnectionState, SyncUser } from './types';
+import { encodeWebRTCURLSignal } from './WebRTCURLSignaling';
 
 // Mock WebSocket (same as in WebSocketClient tests)
 vi.stubGlobal('WebSocket', class {
@@ -200,6 +201,23 @@ describe('NetworkSyncManager', () => {
       expect(errorHandler).toHaveBeenCalledWith(
         expect.objectContaining({ code: 'RECONNECT_FAILED' }),
       );
+    });
+
+    it('NSM-011f: applyServerlessResponseLink returns false when no pending invite exists', async () => {
+      const answerToken = encodeWebRTCURLSignal({
+        version: 1,
+        type: 'answer',
+        roomId: 'room-1',
+        roomCode: 'ABCD-1234',
+        hostUserId: 'host-1',
+        guestUserId: 'guest-1',
+        guestUserName: 'Guest',
+        guestColor: '#4ade80',
+        createdAt: Date.now(),
+        sdp: 'v=0\no=- 2 2 IN IP4 127.0.0.1',
+      });
+
+      await expect(manager.applyServerlessResponseLink(answerToken)).resolves.toBe(false);
     });
   });
 

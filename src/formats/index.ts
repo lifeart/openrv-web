@@ -3,6 +3,14 @@
  */
 
 export * from './EXRDecoder';
+export {
+  isMultiViewEXR,
+  getEXRViews,
+  getEXRViewInfo,
+  decodeEXRView,
+  mapChannelsToViews,
+  type EXRViewInfo,
+} from './MultiViewEXR';
 export { cineonLogToLinear, dpxLogToLinear, type LogLinearOptions } from './LogLinear';
 export {
   isDPXFile,
@@ -90,3 +98,29 @@ export {
   parseRVEDL,
   type RVEDLEntry,
 } from './RVEDLParser';
+export {
+  isJP2File,
+  parseJP2Header,
+  parseColrBox,
+  decodeJP2,
+  JP2WasmDecoder,
+  setJP2WasmDecoder,
+  getJP2WasmDecoder,
+  type JP2FileInfo,
+  type JP2DecodeOptions,
+  type JP2DecodeResult,
+  type JP2WasmDecoderEvents,
+} from './JP2Decoder';
+export {
+  isMXFFile,
+  parseMXFHeader,
+  demuxMXF,
+  parseKLV,
+  matchUL,
+  parsePartitionPack,
+  type MXFPartition,
+  type MXFEssenceDescriptor,
+  type MXFMetadata,
+  type MXFDemuxResult,
+  type KLVTriplet,
+} from './MXFDemuxer';

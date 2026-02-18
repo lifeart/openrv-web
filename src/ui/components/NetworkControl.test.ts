@@ -342,6 +342,53 @@ describe('NetworkControl', () => {
       expect(shareInput.value).toContain('room=TEST-CODE');
       expect(shareInput.value).toContain('pin=1234');
     });
+
+    it('NCC-033: emits applyResponseLink when response URL is provided', () => {
+      const handler = vi.fn();
+      control.on('applyResponseLink', handler);
+
+      control.setConnectionState('connected');
+      control.setRoomInfo({
+        roomId: 'room-1',
+        roomCode: 'TEST-CODE',
+        hostId: 'u1',
+        users: [],
+        createdAt: Date.now(),
+        maxUsers: 2,
+      });
+      control.openPanel();
+
+      const responseInput = document.querySelector('[data-testid="network-response-link-input"]') as HTMLInputElement;
+      const applyBtn = document.querySelector('[data-testid="network-apply-response-button"]') as HTMLButtonElement;
+      responseInput.value = 'https://example.test/?rtc=token';
+      applyBtn.click();
+
+      expect(handler).toHaveBeenCalledWith('https://example.test/?rtc=token');
+    });
+
+    it('NCC-034: shows error when applying empty WebRTC response URL', () => {
+      const handler = vi.fn();
+      control.on('applyResponseLink', handler);
+
+      control.setConnectionState('connected');
+      control.setRoomInfo({
+        roomId: 'room-1',
+        roomCode: 'TEST-CODE',
+        hostId: 'u1',
+        users: [],
+        createdAt: Date.now(),
+        maxUsers: 2,
+      });
+      control.openPanel();
+
+      const applyBtn = document.querySelector('[data-testid="network-apply-response-button"]') as HTMLButtonElement;
+      applyBtn.click();
+
+      expect(handler).not.toHaveBeenCalled();
+      const errorDisplay = document.querySelector('[data-testid="network-error-display"]') as HTMLElement;
+      expect(errorDisplay.style.display).toBe('block');
+      expect(errorDisplay.textContent).toContain('Paste a WebRTC response URL');
+    });
   });
 
   describe('keyboard handler', () => {

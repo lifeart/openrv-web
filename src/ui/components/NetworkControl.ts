@@ -30,6 +30,7 @@ export interface NetworkControlEvents extends EventMap {
   leaveRoom: void;
   syncSettingsChanged: SyncSettings;
   copyLink: string;
+  applyResponseLink: string;
   panelToggled: boolean;
 }
 
@@ -38,10 +39,13 @@ export interface NetworkControlEvents extends EventMap {
 export interface NetworkControlState {
   connectionState: ConnectionState;
   roomInfo: RoomInfo | null;
+  isHost: boolean;
   users: SyncUser[];
   syncSettings: SyncSettings;
   pinCode: string;
   shareLink: string;
+  shareLinkKind: 'invite' | 'response' | 'generic';
+  responseToken: string;
   linkedRoomCode: string | null;
   linkedRoomAutoJoinArmed: boolean;
   isPanelOpen: boolean;
@@ -67,10 +71,17 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   private connectingPanel!: HTMLElement;
   private userListContainer!: HTMLElement;
   private roomCodeDisplay!: HTMLElement;
+  private shareLinkLabel!: HTMLElement;
   private shareLinkInput!: HTMLInputElement;
+  private copyLinkButton!: HTMLButtonElement;
+  private responseLinkInput!: HTMLInputElement;
+  private applyResponseSection!: HTMLElement;
+  private responseTokenSection!: HTMLElement;
+  private responseTokenInput!: HTMLInputElement;
   private roomCodeInput!: HTMLInputElement;
   private pinCodeInput!: HTMLInputElement;
   private errorDisplay!: HTMLElement;
+  private infoDisplay!: HTMLElement;
   private mediaSyncPrompt!: HTMLElement;
   private mediaSyncPromptText!: HTMLElement;
   private pendingMediaPromptResolver: ((accepted: boolean) => void) | null = null;
@@ -85,10 +96,13 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     this.state = {
       connectionState: 'disconnected',
       roomInfo: null,
+      isHost: false,
       users: [],
       syncSettings: { ...DEFAULT_SYNC_SETTINGS },
       pinCode: this.generateDefaultPinCode(),
       shareLink: '',
+      shareLinkKind: 'generic',
+      responseToken: '',
       linkedRoomCode: null,
       linkedRoomAutoJoinArmed: false,
       isPanelOpen: false,
@@ -250,6 +264,18 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       border-bottom: 1px solid var(--border-secondary);
     `;
     this.panel.appendChild(this.errorDisplay);
+
+    this.infoDisplay = document.createElement('div');
+    this.infoDisplay.dataset.testid = 'network-info-display';
+    this.infoDisplay.style.cssText = `
+      display: none;
+      padding: 8px 12px;
+      background: rgba(var(--accent-primary-rgb), 0.12);
+      color: var(--text-primary);
+      font-size: 11px;
+      border-bottom: 1px solid var(--border-secondary);
+    `;
+    this.panel.appendChild(this.infoDisplay);
 
     // Media sync confirmation prompt
     this.mediaSyncPrompt = document.createElement('div');
@@ -557,10 +583,10 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       border-bottom: 1px solid var(--border-secondary);
     `;
 
-    const shareLabel = document.createElement('div');
-    shareLabel.style.cssText = 'color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;';
-    shareLabel.textContent = 'Share URL';
-    shareSection.appendChild(shareLabel);
+    this.shareLinkLabel = document.createElement('div');
+    this.shareLinkLabel.style.cssText = 'color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;';
+    this.shareLinkLabel.textContent = 'Share URL';
+    shareSection.appendChild(this.shareLinkLabel);
 
     this.shareLinkInput = document.createElement('input');
     this.shareLinkInput.dataset.testid = 'network-share-link-input';
@@ -585,6 +611,140 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     });
     shareSection.appendChild(this.shareLinkInput);
     panel.appendChild(shareSection);
+
+    // Host: apply guest WebRTC response URL/token
+    this.applyResponseSection = document.createElement('div');
+    this.applyResponseSection.style.cssText = `
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border-secondary);
+    `;
+
+    const responseLabel = document.createElement('div');
+    responseLabel.style.cssText = 'color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;';
+    responseLabel.textContent = 'Guest Response (Host)';
+    this.applyResponseSection.appendChild(responseLabel);
+
+    const responseRow = document.createElement('div');
+    responseRow.style.cssText = 'display: flex; gap: 6px;';
+
+    this.responseLinkInput = document.createElement('input');
+    this.responseLinkInput.dataset.testid = 'network-response-link-input';
+    this.responseLinkInput.type = 'text';
+    this.responseLinkInput.placeholder = 'Paste response URL/token';
+    this.responseLinkInput.style.cssText = `
+      flex: 1;
+      padding: 6px 8px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-primary);
+      border-radius: 4px;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      box-sizing: border-box;
+      outline: none;
+    `;
+    responseRow.appendChild(this.responseLinkInput);
+
+    const applyResponseBtn = document.createElement('button');
+    applyResponseBtn.dataset.testid = 'network-apply-response-button';
+    applyResponseBtn.textContent = 'Apply';
+    applyResponseBtn.style.cssText = `
+      padding: 6px 10px;
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-primary);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      transition: all 0.12s ease;
+      flex-shrink: 0;
+    `;
+    applyResponseBtn.addEventListener('click', () => {
+      const value = this.responseLinkInput.value.trim();
+      if (!value) {
+        this.showError('Paste a WebRTC response URL before applying.');
+        return;
+      }
+      this.hideError();
+      this.emit('applyResponseLink', value);
+    });
+    responseRow.appendChild(applyResponseBtn);
+
+    this.applyResponseSection.appendChild(responseRow);
+    panel.appendChild(this.applyResponseSection);
+
+    // Guest: generated response token to send back to host
+    this.responseTokenSection = document.createElement('div');
+    this.responseTokenSection.style.cssText = `
+      display: none;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border-secondary);
+    `;
+
+    const tokenLabel = document.createElement('div');
+    tokenLabel.style.cssText = 'color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px;';
+    tokenLabel.textContent = 'Response Token (Send To Host)';
+    this.responseTokenSection.appendChild(tokenLabel);
+
+    const tokenRow = document.createElement('div');
+    tokenRow.style.cssText = 'display: flex; gap: 6px;';
+
+    this.responseTokenInput = document.createElement('input');
+    this.responseTokenInput.dataset.testid = 'network-response-token-input';
+    this.responseTokenInput.type = 'text';
+    this.responseTokenInput.readOnly = true;
+    this.responseTokenInput.placeholder = 'Token is generated from invite URL';
+    this.responseTokenInput.style.cssText = `
+      flex: 1;
+      padding: 6px 8px;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-primary);
+      border-radius: 4px;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      box-sizing: border-box;
+      outline: none;
+    `;
+    tokenRow.appendChild(this.responseTokenInput);
+
+    const copyTokenBtn = document.createElement('button');
+    copyTokenBtn.dataset.testid = 'network-copy-response-token-button';
+    copyTokenBtn.textContent = 'Copy';
+    copyTokenBtn.style.cssText = `
+      padding: 6px 10px;
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-primary);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      transition: all 0.12s ease;
+      flex-shrink: 0;
+    `;
+    copyTokenBtn.addEventListener('click', async () => {
+      const token = this.state.responseToken.trim();
+      if (!token) {
+        this.showError('Response token is not available yet.');
+        return;
+      }
+      this.hideError();
+      try {
+        await navigator.clipboard.writeText(token);
+        copyTokenBtn.textContent = 'Copied!';
+        copyTokenBtn.style.color = 'var(--success)';
+        setTimeout(() => {
+          copyTokenBtn.textContent = 'Copy';
+          copyTokenBtn.style.color = 'var(--text-primary)';
+        }, 2000);
+      } catch {
+        this.showError('Clipboard unavailable. Copy token from the field manually.');
+      }
+    });
+    tokenRow.appendChild(copyTokenBtn);
+
+    this.responseTokenSection.appendChild(tokenRow);
+    panel.appendChild(this.responseTokenSection);
 
     // User list
     const usersSection = document.createElement('div');
@@ -659,10 +819,10 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     const actionsSection = document.createElement('div');
     actionsSection.style.cssText = 'padding: 8px 12px; display: flex; gap: 8px;';
 
-    const copyBtn = document.createElement('button');
-    copyBtn.dataset.testid = 'network-copy-link-button';
-    copyBtn.textContent = 'Copy Link';
-    copyBtn.style.cssText = `
+    this.copyLinkButton = document.createElement('button');
+    this.copyLinkButton.dataset.testid = 'network-copy-link-button';
+    this.copyLinkButton.textContent = 'Copy Link';
+    this.copyLinkButton.style.cssText = `
       flex: 1;
       padding: 6px 12px;
       background: var(--bg-tertiary);
@@ -673,8 +833,8 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       font-size: 11px;
       transition: all 0.12s ease;
     `;
-    copyBtn.addEventListener('click', () => {
-      const link = this.state.shareLink || this.buildRoomLink();
+    this.copyLinkButton.addEventListener('click', () => {
+      const link = this.state.shareLink.trim();
       if (!link) {
         this.showError('Create or join a room before copying a share link.');
         return;
@@ -685,14 +845,14 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
       this.emit('copyLink', link);
 
       // Visual feedback
-      copyBtn.textContent = 'Copied!';
-      copyBtn.style.color = 'var(--success)';
+      this.copyLinkButton.textContent = 'Copied!';
+      this.copyLinkButton.style.color = 'var(--success)';
       setTimeout(() => {
-        copyBtn.textContent = 'Copy Link';
-        copyBtn.style.color = 'var(--text-primary)';
+        this.copyLinkButton.style.color = 'var(--text-primary)';
+        this.updateShareLinkUI();
       }, 2000);
     });
-    actionsSection.appendChild(copyBtn);
+    actionsSection.appendChild(this.copyLinkButton);
 
     const leaveBtn = document.createElement('button');
     leaveBtn.dataset.testid = 'network-leave-button';
@@ -720,6 +880,7 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     actionsSection.appendChild(leaveBtn);
 
     panel.appendChild(actionsSection);
+    this.updateShareLinkUI();
     return panel;
   }
 
@@ -809,11 +970,27 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
 
   setConnectionState(state: ConnectionState): void {
     this.state.connectionState = state;
+    if (state === 'disconnected' || state === 'error') {
+      this.state.isHost = false;
+      this.state.responseToken = '';
+      this.state.shareLinkKind = 'generic';
+      this.hideInfo();
+    }
     if ((state === 'disconnected' || state === 'error') && this.state.linkedRoomCode) {
       this.state.linkedRoomAutoJoinArmed = true;
     }
     this.updateButtonStyle();
     this.updatePanelVisibility();
+    this.updateShareLinkUI();
+  }
+
+  setIsHost(isHost: boolean): void {
+    this.state.isHost = isHost;
+    if (isHost) {
+      this.state.shareLinkKind = 'invite';
+      this.state.responseToken = '';
+    }
+    this.updateShareLinkUI();
   }
 
   setPinCode(pinCode: string): void {
@@ -834,6 +1011,20 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     if (this.shareLinkInput) {
       this.shareLinkInput.value = link;
     }
+    this.updateShareLinkUI();
+  }
+
+  setShareLinkKind(kind: 'invite' | 'response' | 'generic'): void {
+    this.state.shareLinkKind = kind;
+    this.updateShareLinkUI();
+  }
+
+  setResponseToken(token: string): void {
+    this.state.responseToken = token.trim();
+    if (this.responseTokenInput) {
+      this.responseTokenInput.value = this.state.responseToken;
+    }
+    this.updateShareLinkUI();
   }
 
   setJoinRoomCodeFromLink(roomCode: string | null): void {
@@ -864,12 +1055,18 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
 
   setRoomInfo(info: RoomInfo | null): void {
     this.state.roomInfo = info;
+    if (!info) {
+      this.state.responseToken = '';
+      this.state.shareLinkKind = 'generic';
+    }
     this.updateRoomCodeDisplay();
     this.refreshShareLinkFromState();
+    this.updateShareLinkUI();
   }
 
   setUsers(users: SyncUser[]): void {
     this.state.users = users;
+    this.updateRoomCodeDisplay();
     this.updateUserList();
     this.updateBadge();
   }
@@ -886,6 +1083,16 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
   hideError(): void {
     this.errorDisplay.style.display = 'none';
     this.errorDisplay.textContent = '';
+  }
+
+  showInfo(message: string): void {
+    this.infoDisplay.textContent = message;
+    this.infoDisplay.style.display = 'block';
+  }
+
+  hideInfo(): void {
+    this.infoDisplay.style.display = 'none';
+    this.infoDisplay.textContent = '';
   }
 
   private resolveMediaPrompt(accepted: boolean): void {
@@ -962,6 +1169,32 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     }
   }
 
+  private updateShareLinkUI(): void {
+    if (!this.shareLinkLabel || !this.copyLinkButton || !this.applyResponseSection || !this.responseTokenSection) {
+      return;
+    }
+
+    const kind = this.state.shareLinkKind;
+    const hasResponseToken = this.state.responseToken.length > 0;
+
+    if (kind === 'response' || hasResponseToken) {
+      this.shareLinkLabel.textContent = 'Response URL (Send To Host)';
+      this.copyLinkButton.textContent = 'Copy Response URL';
+    } else if (this.state.isHost || kind === 'invite') {
+      this.shareLinkLabel.textContent = 'Invite URL (Send To Guest)';
+      this.copyLinkButton.textContent = 'Copy Invite URL';
+    } else {
+      this.shareLinkLabel.textContent = 'Share URL';
+      this.copyLinkButton.textContent = 'Copy Link';
+    }
+
+    this.applyResponseSection.style.display = this.state.isHost ? 'block' : 'none';
+    this.responseTokenSection.style.display = hasResponseToken ? 'block' : 'none';
+    if (this.responseTokenInput) {
+      this.responseTokenInput.value = this.state.responseToken;
+    }
+  }
+
   private buildRoomLink(): string {
     const code = this.state.roomInfo?.roomCode ?? '';
     if (!code) return '';
@@ -1005,8 +1238,16 @@ export class NetworkControl extends EventEmitter<NetworkControlEvents> {
     code.style.cssText = 'color: var(--text-primary); font-family: var(--font-mono); font-weight: 600; letter-spacing: 1px;';
     code.textContent = info.roomCode;
 
+    const participants = document.createElement('span');
+    participants.dataset.testid = 'network-room-user-count';
+    participants.style.cssText = 'color: var(--text-muted); font-size: 11px; margin-left: 6px;';
+    const currentUsers = Math.max(this.state.users.length, info.users.length, 1);
+    const maxUsers = Math.max(info.maxUsers || 0, currentUsers);
+    participants.textContent = `${currentUsers}/${maxUsers}`;
+
     this.roomCodeDisplay.appendChild(label);
     this.roomCodeDisplay.appendChild(code);
+    this.roomCodeDisplay.appendChild(participants);
   }
 
   private updateUserList(): void {

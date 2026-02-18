@@ -274,7 +274,7 @@ export class AppControlRegistry {
     this.watermarkPanel.element.appendChild(createPanelHeader('Watermark'));
     this.watermarkPanel.element.appendChild(this.watermarkControl.render());
 
-    this.timelineEditorPanel = createPanel({ width: '720px', maxHeight: '70vh', align: 'right' });
+    this.timelineEditorPanel = createPanel({ width: 'clamp(400px, 60vw, 900px)', maxHeight: '70vh', align: 'right' });
     this.timelineEditorPanel.element.appendChild(createPanelHeader('Timeline Editor'));
     const timelineEditorHost = document.createElement('div');
     timelineEditorHost.style.cssText = 'min-height: 220px;';

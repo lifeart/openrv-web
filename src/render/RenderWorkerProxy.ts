@@ -653,6 +653,14 @@ export class RenderWorkerProxy implements RendererBackend {
     // TODO: forward gamut mapping state to worker when supported
   }
 
+  setPremultMode(_mode: number): void {
+    // TODO: forward premult mode to worker when supported
+  }
+
+  getPremultMode(): number {
+    return 0;
+  }
+
   applyRenderState(state: RenderState): void {
     this.setColorAdjustments(state.colorAdjustments);
     this.setColorInversion(state.colorInversion);
@@ -674,6 +682,7 @@ export class RenderWorkerProxy implements RendererBackend {
     if (state.gamutMapping) {
       this.setGamutMapping(state.gamutMapping);
     }
+    this.setPremultMode(state.premultMode ?? 0);
   }
 
   // ==========================================================================

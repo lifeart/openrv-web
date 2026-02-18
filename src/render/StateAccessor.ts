@@ -145,6 +145,12 @@ export interface StateAccessor {
   /** Set inline 1D LUT data (from RVColor luminanceLUT). Null disables. */
   setInlineLUT(lutData: Float32Array | null, channels: 1 | 3): void;
 
+  /** Set premultiply/unpremultiply alpha mode (0=off, 1=premultiply, 2=unpremultiply). */
+  setPremultMode(mode: number): void;
+
+  /** Get the current premult mode. */
+  getPremultMode(): number;
+
   /** Set texel size (called before applyUniforms based on image dimensions). */
   setTexelSize(w: number, h: number): void;
 

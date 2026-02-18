@@ -241,6 +241,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   async buildServerlessInviteShareURL(baseUrl: string): Promise<string> {
     if (!this.shouldUseServerlessUrlSignaling()) return baseUrl;
     if (!this._roomInfo) return baseUrl;
+    if (this._roomInfo.users.length > 1) return baseUrl;
 
     const offerSignal = await this.ensureServerlessOfferSignal();
     const fallbackBase = typeof window !== 'undefined' ? window.location.href : 'http://localhost/';
@@ -267,6 +268,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     if (!token) return null;
     const decoded = decodeWebRTCURLSignal(token);
     if (!decoded || decoded.type !== 'offer') return null;
+    if (!isValidRoomCode(decoded.roomCode)) return null;
 
     if (this._connectionState !== 'disconnected' && this._connectionState !== 'error') {
       return null;
@@ -301,7 +303,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     this.emit('usersChanged', [...this._roomInfo.users]);
 
     try {
-      this.disposeServerlessPeer(false);
+      this.disposeServerlessPeer(true);
       const state = this.createServerlessPeer('guest');
       state.remoteUserId = decoded.hostUserId;
 
@@ -330,9 +332,10 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
         createdAt: Date.now(),
         sdp: state.pc.localDescription.sdp,
       };
+      this.setConnectionState('connected');
       return encodeWebRTCURLSignal(answerSignal);
     } catch (error) {
-      this.disposeServerlessPeer(false);
+      this.disposeServerlessPeer(true);
       this.setConnectionState('error');
       this.emit('error', {
         code: 'WEBRTC_SIGNALING_FAILED',
@@ -419,9 +422,11 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
 
     this._pendingRoomAction = null;
     this.clearCreateRoomFallbackTimer();
+    this.sendServerlessPresence('leave');
     const message = createRoomLeaveMessage(this._roomInfo.roomId, this._userId);
     this.wsClient.send(message);
     this.disposeAllWebRTCPeers();
+    this.disposeServerlessPeer(false);
     this.wsClient.disconnect();
     this.resetRoomState();
     this.setConnectionState('disconnected');
@@ -451,7 +456,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       ...payload,
       timestamp: Date.now(),
     });
-    this.wsClient.send(message);
+    this.dispatchRealtimeMessage(message);
   }
 
   /**
@@ -468,7 +473,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     };
     this.stateManager.updateLocalPlayback({ currentFrame });
     const message = createFrameSyncMessage(this._roomInfo.roomId, this._userId, payload);
-    this.wsClient.send(message);
+    this.dispatchRealtimeMessage(message);
   }
 
   /**
@@ -481,7 +486,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
 
     this.stateManager.updateLocalView(payload);
     const message = createViewSyncMessage(this._roomInfo.roomId, this._userId, payload);
-    this.wsClient.send(message);
+    this.dispatchRealtimeMessage(message);
   }
 
   /**
@@ -504,7 +509,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       timestamp: Date.now(),
     };
     const message = createCursorSyncMessage(this._roomInfo.roomId, this._userId, payload);
-    this.wsClient.send(message);
+    this.dispatchRealtimeMessage(message);
   }
 
   /**
@@ -522,7 +527,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       ...payload,
       timestamp: Date.now(),
     });
-    this.wsClient.send(message);
+    this.dispatchRealtimeMessage(message);
   }
 
   /**
@@ -539,7 +544,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       targetUserId,
       role,
     });
-    this.wsClient.send(message);
+    this.dispatchRealtimeMessage(message);
 
     this.emit('participantPermissionChanged', { userId: targetUserId, role });
   }
@@ -554,7 +559,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       requestId: generateMessageId(),
       targetUserId,
     });
-    this.wsClient.send(message);
+    this.dispatchRealtimeMessage(message);
   }
 
   /**
@@ -574,12 +579,17 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       targetUserId: requesterUserId,
     };
 
-    if (this.canUseWebRTC()) {
+    if (this.hasOpenServerlessChannel()) {
+      this.sendStateResponseOverRealtimeTransport(responsePayload);
+      return;
+    }
+
+    if (this.canUseWebRTC() && this.wsClient.isConnected) {
       this.sendStateViaWebRTC(responsePayload, requesterUserId);
       return;
     }
 
-    this.sendStateResponseOverWebSocket(responsePayload);
+    this.sendStateResponseOverRealtimeTransport(responsePayload);
   }
 
   /**
@@ -594,7 +604,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       transferId,
       targetUserId,
     });
-    this.wsClient.send(message);
+    this.dispatchRealtimeMessage(message);
     return transferId;
   }
 
@@ -612,7 +622,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       transferId,
       targetUserId: requesterUserId,
     });
-    this.wsClient.send(message);
+    this.dispatchRealtimeMessage(message);
   }
 
   /**
@@ -625,7 +635,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       targetUserId,
       accepted,
     });
-    this.wsClient.send(message);
+    this.dispatchRealtimeMessage(message);
   }
 
   /**
@@ -642,7 +652,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       transferId,
       targetUserId,
     });
-    this.wsClient.send(message);
+    this.dispatchRealtimeMessage(message);
   }
 
   /**
@@ -654,7 +664,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       transferId,
       targetUserId,
     });
-    this.wsClient.send(message);
+    this.dispatchRealtimeMessage(message);
   }
 
   // ---- Private: WebSocket Event Handling ----
@@ -665,7 +675,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       this.clearCreateRoomFallbackTimer();
     });
 
-    const unsub1 = this.wsClient.on('message', (message) => this.handleMessage(message));
+    const unsub1 = this.wsClient.on('message', (message) => this.handleMessage(message, 'websocket'));
 
     const unsub2 = this.wsClient.on('disconnected', () => {
       if (this._connectionState === 'connected') {
@@ -718,7 +728,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     this._unsubscribers.push(unsub0, unsub1, unsub2, unsub3, unsub4, unsub5, unsub6, unsub7);
   }
 
-  private handleMessage(message: SyncMessage): void {
+  private handleMessage(message: SyncMessage, transport: 'websocket' | 'webrtc' = 'websocket'): void {
     // Server-originating message types should not be filtered by userId
     const isServerMessage =
       message.type === 'room.created' ||
@@ -772,7 +782,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
         this.handleStateRequest(message.payload, message.userId);
         break;
       case 'sync.state-response':
-        this.handleStateResponse(message.payload, message.userId);
+        this.handleStateResponse(message.payload, message.userId, transport);
         break;
       case 'sync.media-request':
         this.handleMediaRequest(message.payload, message.userId);
@@ -797,6 +807,9 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
         break;
       case 'sync.webrtc-ice':
         this.handleWebRTCIce(message.payload, message.userId);
+        break;
+      case 'user.presence':
+        this.handleUserPresence(message.payload, message.userId);
         break;
       case 'error':
         this.handleError(message.payload as ErrorPayload);
@@ -987,7 +1000,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     });
   }
 
-  private handleStateResponse(payload: unknown, senderUserId: string): void {
+  private handleStateResponse(payload: unknown, senderUserId: string, transport: 'websocket' | 'webrtc'): void {
     if (!payload || typeof payload !== 'object') return;
     const responsePayload = payload as StateResponsePayload;
     if (typeof responsePayload.requestId !== 'string' || responsePayload.requestId.length === 0) return;
@@ -1003,7 +1016,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       senderUserId,
       sessionState: responsePayload.sessionState,
       encryptedSessionState: responsePayload.encryptedSessionState,
-      transport: 'websocket',
+      transport,
     });
   }
 
@@ -1072,6 +1085,331 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     this.emit('mediaSyncCompleted', {
       transferId: completePayload.transferId,
       senderUserId,
+    });
+  }
+
+  private dispatchRealtimeMessage(message: SyncMessage): void {
+    if (this.wsClient.send(message)) return;
+    this.sendMessageOverServerlessPeer(message);
+  }
+
+  private hasOpenServerlessChannel(): boolean {
+    return this._serverlessPeer?.channel?.readyState === 'open';
+  }
+
+  private sendMessageOverServerlessPeer(message: SyncMessage): boolean {
+    const channel = this._serverlessPeer?.channel;
+    if (!channel || channel.readyState !== 'open') return false;
+    try {
+      channel.send(serializeMessage(message));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private shouldUseServerlessUrlSignaling(): boolean {
+    return (
+      this.isConnected &&
+      this.isHost &&
+      !this.wsClient.isConnected &&
+      this.canUseWebRTC() &&
+      this._roomInfo !== null
+    );
+  }
+
+  private createServerlessPeer(role: 'host' | 'guest'): ServerlessPeerState {
+    const state: ServerlessPeerState = {
+      role,
+      pc: new RTCPeerConnection({ iceServers: this.config.iceServers }),
+      channel: null,
+      remoteUserId: null,
+    };
+
+    state.pc.onconnectionstatechange = () => {
+      if (
+        state.pc.connectionState === 'failed' ||
+        state.pc.connectionState === 'closed' ||
+        state.pc.connectionState === 'disconnected'
+      ) {
+        this.handleServerlessPeerDisconnected(state);
+      }
+    };
+
+    this._serverlessPeer = state;
+    return state;
+  }
+
+  private disposeServerlessPeer(clearPendingOffer: boolean): void {
+    const state = this._serverlessPeer;
+    if (clearPendingOffer) {
+      this._pendingServerlessOffer = null;
+    }
+    if (!state) return;
+
+    if (state.channel) {
+      state.channel.onopen = null;
+      state.channel.onclose = null;
+      state.channel.onerror = null;
+      state.channel.onmessage = null;
+      try {
+        state.channel.close();
+      } catch {
+        // ignore close errors
+      }
+      state.channel = null;
+    }
+
+    state.pc.onconnectionstatechange = null;
+    state.pc.ondatachannel = null;
+    try {
+      state.pc.close();
+    } catch {
+      // ignore close errors
+    }
+
+    this._serverlessPeer = null;
+  }
+
+  private attachServerlessChannelHandlers(state: ServerlessPeerState, channel: RTCDataChannel): void {
+    state.channel = channel;
+
+    channel.onopen = () => {
+      if (this._serverlessPeer !== state) return;
+      this.setConnectionState('connected');
+      if (state.role === 'host') {
+        this._pendingServerlessOffer = null;
+      }
+      this.sendServerlessPresence('join');
+
+      if (!this.isHost && this._roomInfo?.hostId) {
+        this.requestStateSync(this._roomInfo.hostId);
+      }
+    };
+
+    channel.onmessage = (event) => {
+      if (this._serverlessPeer !== state) return;
+      if (typeof event.data !== 'string') return;
+      const message = deserializeMessage(event.data);
+      if (!message) return;
+      if (message.userId === this._userId) return;
+      if (!state.remoteUserId) {
+        state.remoteUserId = message.userId;
+      }
+      this.handleMessage(message, 'webrtc');
+    };
+
+    channel.onclose = () => {
+      if (this._serverlessPeer !== state) return;
+      this.handleServerlessPeerDisconnected(state);
+    };
+
+    channel.onerror = () => {
+      // data channel errors are handled by close/connectionstate events
+    };
+  }
+
+  private handleServerlessPeerDisconnected(state: ServerlessPeerState): void {
+    if (this._serverlessPeer !== state) return;
+    const remoteUserId = state.remoteUserId;
+    this._serverlessPeer = null;
+    this._pendingServerlessOffer = null;
+
+    if (remoteUserId) {
+      this.removeUserFromRoom(remoteUserId);
+    }
+
+    if (state.role === 'guest' && this._roomInfo) {
+      this.emit('toastMessage', {
+        message: 'WebRTC peer disconnected.',
+        type: 'warning',
+      });
+      this.resetRoomState();
+      this.setConnectionState('disconnected');
+      this.emit('roomLeft', undefined);
+    }
+  }
+
+  private sendServerlessPresence(action: 'join' | 'leave'): void {
+    if (!this._roomInfo) return;
+    const localUser = this.getOrCreateLocalRoomUser();
+    const payload: ServerlessPresencePayload = { action, user: localUser };
+    const message = createMessage('user.presence', this._roomInfo.roomId, this._userId, payload);
+    this.sendMessageOverServerlessPeer(message);
+  }
+
+  private handleUserPresence(payload: unknown, senderUserId: string): void {
+    if (!this._roomInfo || !payload || typeof payload !== 'object') return;
+
+    const presence = payload as Partial<ServerlessPresencePayload>;
+    if (presence.action !== 'join' && presence.action !== 'leave') return;
+    if (!presence.user || typeof presence.user !== 'object') return;
+
+    const rawUser = presence.user as Partial<SyncUser>;
+    if (typeof rawUser.name !== 'string' || rawUser.name.length === 0) return;
+    if (typeof rawUser.color !== 'string' || rawUser.color.length === 0) return;
+
+    const remoteUser: SyncUser = {
+      id: senderUserId,
+      name: rawUser.name,
+      color: rawUser.color,
+      isHost: senderUserId === this._roomInfo.hostId,
+      joinedAt: typeof rawUser.joinedAt === 'number' ? rawUser.joinedAt : Date.now(),
+    };
+
+    if (this._serverlessPeer) {
+      this._serverlessPeer.remoteUserId = senderUserId;
+    }
+
+    if (presence.action === 'leave') {
+      this.removeUserFromRoom(senderUserId);
+      return;
+    }
+
+    this.upsertRoomUser(remoteUser);
+  }
+
+  private upsertRoomUser(user: SyncUser): void {
+    if (!this._roomInfo) return;
+
+    const existingIndex = this._roomInfo.users.findIndex((candidate) => candidate.id === user.id);
+    if (existingIndex >= 0) {
+      this._roomInfo.users[existingIndex] = user;
+      this.emit('usersChanged', [...this._roomInfo.users]);
+      return;
+    }
+
+    this._roomInfo.users.push(user);
+    this.emit('usersChanged', [...this._roomInfo.users]);
+    this.emit('userJoined', user);
+    this.emit('toastMessage', {
+      message: `${user.name} joined the room`,
+      type: 'info',
+    });
+  }
+
+  private removeUserFromRoom(userId: string): void {
+    if (!this._roomInfo) return;
+
+    const leavingUser = this._roomInfo.users.find((candidate) => candidate.id === userId);
+    if (!leavingUser) return;
+
+    this._roomInfo.users = this._roomInfo.users.filter((candidate) => candidate.id !== userId);
+    this._permissions.delete(userId);
+    this._remoteCursors.delete(userId);
+    this.emit('usersChanged', [...this._roomInfo.users]);
+    this.emit('userLeft', leavingUser);
+    this.emit('toastMessage', {
+      message: `${leavingUser.name} left the room`,
+      type: 'info',
+    });
+  }
+
+  private getOrCreateLocalRoomUser(): SyncUser {
+    const existing = this._roomInfo?.users.find((candidate) => candidate.id === this._userId);
+    if (existing) return existing;
+
+    const localUser: SyncUser = {
+      id: this._userId,
+      name: this._userName,
+      color: USER_COLORS[0],
+      isHost: this.isHost,
+      joinedAt: Date.now(),
+    };
+    if (this._roomInfo) {
+      this._roomInfo.users.push(localUser);
+      this.emit('usersChanged', [...this._roomInfo.users]);
+    }
+    return localUser;
+  }
+
+  private async ensureServerlessOfferSignal(): Promise<WebRTCURLOfferSignal> {
+    if (!this._roomInfo) {
+      throw new Error('No room available for serverless invite.');
+    }
+
+    if (
+      this._pendingServerlessOffer &&
+      this._pendingServerlessOffer.roomId === this._roomInfo.roomId &&
+      this._serverlessPeer?.role === 'host'
+    ) {
+      return this._pendingServerlessOffer;
+    }
+
+    this.disposeServerlessPeer(false);
+    const state = this.createServerlessPeer('host');
+    const channel = state.pc.createDataChannel('openrv-sync', { ordered: true });
+    this.attachServerlessChannelHandlers(state, channel);
+
+    const localUser = this.getOrCreateLocalRoomUser();
+
+    const offer = await state.pc.createOffer();
+    await state.pc.setLocalDescription(offer);
+    await this.waitForIceGatheringComplete(state.pc, SERVERLESS_ICE_GATHERING_TIMEOUT_MS);
+    if (!state.pc.localDescription?.sdp) {
+      throw new Error('Missing local SDP offer');
+    }
+
+    const signal: WebRTCURLOfferSignal = {
+      version: 1,
+      type: 'offer',
+      roomId: this._roomInfo.roomId,
+      roomCode: this._roomInfo.roomCode,
+      hostUserId: this._userId,
+      hostUserName: localUser.name,
+      hostColor: localUser.color,
+      pinCode: this._pinCode || undefined,
+      createdAt: Date.now(),
+      sdp: state.pc.localDescription.sdp,
+    };
+
+    this._pendingServerlessOffer = signal;
+    return signal;
+  }
+
+  private async applyServerlessAnswerSignal(signal: WebRTCURLAnswerSignal): Promise<boolean> {
+    if (!this._roomInfo || !this.isHost) return false;
+    if (!this._pendingServerlessOffer) return false;
+    if (!this._serverlessPeer || this._serverlessPeer.role !== 'host') return false;
+    if (signal.hostUserId !== this._userId) return false;
+    if (signal.roomId !== this._roomInfo.roomId) return false;
+
+    try {
+      await this._serverlessPeer.pc.setRemoteDescription({ type: 'answer', sdp: signal.sdp });
+      const remoteUser: SyncUser = {
+        id: signal.guestUserId,
+        name: signal.guestUserName,
+        color: signal.guestColor,
+        isHost: false,
+        joinedAt: Date.now(),
+      };
+      this._serverlessPeer.remoteUserId = signal.guestUserId;
+      this.upsertRoomUser(remoteUser);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private waitForIceGatheringComplete(pc: RTCPeerConnection, timeoutMs: number): Promise<void> {
+    if (pc.iceGatheringState === 'complete') {
+      return Promise.resolve();
+    }
+
+    return new Promise<void>((resolve) => {
+      const timeout = setTimeout(() => {
+        pc.removeEventListener('icegatheringstatechange', onStateChange);
+        resolve();
+      }, timeoutMs);
+
+      const onStateChange = () => {
+        if (pc.iceGatheringState !== 'complete') return;
+        clearTimeout(timeout);
+        pc.removeEventListener('icegatheringstatechange', onStateChange);
+        resolve();
+      };
+
+      pc.addEventListener('icegatheringstatechange', onStateChange);
     });
   }
 
@@ -1156,10 +1494,10 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     keys.forEach((key) => this.disposeWebRTCPeer(key));
   }
 
-  private sendStateResponseOverWebSocket(payload: StateResponsePayload): void {
+  private sendStateResponseOverRealtimeTransport(payload: StateResponsePayload): void {
     if (!this._roomInfo) return;
     const message = createStateResponseMessage(this._roomInfo.roomId, this._userId, payload);
-    this.wsClient.send(message);
+    this.dispatchRealtimeMessage(message);
   }
 
   private sendStateViaWebRTC(payload: StateResponsePayload, requesterUserId: string): void {
@@ -1184,14 +1522,14 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
 
     channel.onerror = () => {
       if (!state.stateSent) {
-        this.sendStateResponseOverWebSocket(payload);
+        this.sendStateResponseOverRealtimeTransport(payload);
       }
       this.disposeWebRTCPeer(key);
     };
 
     state.fallbackTimer = setTimeout(() => {
       if (!state.stateSent) {
-        this.sendStateResponseOverWebSocket(payload);
+        this.sendStateResponseOverRealtimeTransport(payload);
       }
       this.disposeWebRTCPeer(key);
     }, 7000);
@@ -1209,7 +1547,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
         });
         this.wsClient.send(message);
       } catch {
-        this.sendStateResponseOverWebSocket(payload);
+        this.sendStateResponseOverRealtimeTransport(payload);
         this.disposeWebRTCPeer(key);
       }
     })();
@@ -1309,6 +1647,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
 
   private resetRoomState(): void {
     this.disposeAllWebRTCPeers();
+    this.disposeServerlessPeer(true);
     this._roomInfo = null;
     this._pendingRoomAction = null;
     this.clearCreateRoomFallbackTimer();
@@ -1336,7 +1675,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       message: 'Signaling unavailable. Created local host room.',
       type: 'warning',
     });
-    this.simulateRoomCreated();
+    this.simulateRoomCreated(undefined, 2);
     return true;
   }
 
@@ -1369,7 +1708,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
    * Simulate a successful room creation response.
    * Used for testing and mock scenarios.
    */
-  simulateRoomCreated(roomCode?: string): void {
+  simulateRoomCreated(roomCode?: string, maxUsers = 10): void {
     this._pendingRoomAction = null;
     this.clearCreateRoomFallbackTimer();
     const code = roomCode ?? generateRoomCode();
@@ -1387,7 +1726,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       hostId: this._userId,
       users: [user],
       createdAt: Date.now(),
-      maxUsers: 10,
+      maxUsers,
     };
 
     this.stateManager.setHost(true);
@@ -1461,6 +1800,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     }
 
     this.disposeAllWebRTCPeers();
+    this.disposeServerlessPeer(true);
     this._permissions.clear();
     this._remoteCursors.clear();
     this.wsClient.dispose();

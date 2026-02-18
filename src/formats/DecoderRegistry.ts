@@ -17,8 +17,10 @@ import { isGainmapJPEG } from './JPEGGainmapDecoder';
 import { isHDRFile } from './HDRDecoder';
 import { isJXLFile } from './JXLDecoder';
 import { isGainmapHEIC } from './HEICGainmapDecoder';
+import { isJP2File } from './JP2Decoder';
+import { isMXFFile } from './MXFDemuxer';
 
-export type FormatName = 'exr' | 'dpx' | 'cineon' | 'tiff' | 'jpeg-gainmap' | 'heic-gainmap' | 'hdr' | 'jxl' | null;
+export type FormatName = 'exr' | 'dpx' | 'cineon' | 'tiff' | 'jpeg-gainmap' | 'heic-gainmap' | 'hdr' | 'jxl' | 'jp2' | 'mxf' | null;
 
 /** Result returned by FormatDecoder.decode() and detectAndDecode() */
 export interface DecodeResult {
@@ -231,6 +233,69 @@ const jxlDecoder: FormatDecoder = {
 };
 
 /**
+ * JPEG 2000 / HTJ2K format decoder adapter
+ * Detection is sync (magic byte check); decoding lazy-loads the full module.
+ * Uses the module-level WASM decoder set via setJP2WasmDecoder().
+ * Note: actual decoding requires a WASM module (openjph). Without it,
+ * decode() throws a descriptive error for graceful fallback.
+ */
+const jp2Decoder: FormatDecoder = {
+  formatName: 'jp2',
+  canDecode: isJP2File,
+  async decode(buffer: ArrayBuffer) {
+    const { decodeJP2, getJP2WasmDecoder } = await import('./JP2Decoder');
+    const wasmDecoder = getJP2WasmDecoder() ?? undefined;
+    const result = await decodeJP2(buffer, undefined, wasmDecoder);
+    return {
+      width: result.width,
+      height: result.height,
+      data: result.data,
+      channels: result.channels,
+      colorSpace: result.colorSpace,
+      metadata: {
+        format: 'jp2',
+        bitsPerComponent: result.bitsPerComponent,
+        isSigned: result.isSigned,
+      },
+    };
+  },
+};
+
+/**
+ * MXF container format adapter
+ * Detection is sync (SMPTE UL prefix check). MXF is a container, not a single
+ * image format, so "decoding" extracts the first video essence descriptor's
+ * metadata and returns a 1x1 diagnostic pixel. This allows the registry to
+ * identify MXF files and report their contents.
+ */
+const mxfDecoder: FormatDecoder = {
+  formatName: 'mxf',
+  canDecode: isMXFFile,
+  async decode(buffer: ArrayBuffer) {
+    const { parseMXFHeader } = await import('./MXFDemuxer');
+    const meta = parseMXFHeader(buffer);
+    const videoDesc = meta.essenceDescriptors.find(d => d.type === 'video');
+    return {
+      width: 1,
+      height: 1,
+      data: new Float32Array(4),
+      channels: 4,
+      colorSpace: videoDesc?.colorSpace ?? 'unknown',
+      metadata: {
+        format: 'mxf',
+        mxfWidth: videoDesc?.width,
+        mxfHeight: videoDesc?.height,
+        operationalPattern: meta.operationalPattern,
+        codec: videoDesc?.codec ?? 'unknown',
+        editRate: meta.editRate,
+        duration: meta.duration,
+        essenceDescriptors: meta.essenceDescriptors,
+      },
+    };
+  },
+};
+
+/**
  * Registry for image format decoders.
  * Detects format by magic number and dispatches to the appropriate decoder.
  */
@@ -248,6 +313,8 @@ export class DecoderRegistry {
     this.decoders.push(heicGainmapDecoder);
     this.decoders.push(hdrDecoder);
     this.decoders.push(jxlDecoder);
+    this.decoders.push(jp2Decoder);
+    this.decoders.push(mxfDecoder);
   }
 
   /**

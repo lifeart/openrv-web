@@ -56,6 +56,7 @@ export const DIRTY_LINEARIZE = 'linearize';
 export const DIRTY_INLINE_LUT = 'inlineLUT';
 export const DIRTY_OUT_OF_RANGE = 'outOfRange';
 export const DIRTY_CHANNEL_SWIZZLE = 'channelSwizzle';
+export const DIRTY_PREMULT = 'premult';
 
 /** All dirty flag names -- used to initialize on first render so all uniforms are set. */
 export const ALL_DIRTY_FLAGS = [
@@ -69,6 +70,7 @@ export const ALL_DIRTY_FLAGS = [
   DIRTY_INLINE_LUT,
   DIRTY_OUT_OF_RANGE,
   DIRTY_CHANNEL_SWIZZLE,
+  DIRTY_PREMULT,
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -338,6 +340,9 @@ export interface InternalShaderState {
 
   // Channel swizzle (RVChannelMap remapping)
   channelSwizzle: [number, number, number, number]; // default [0,1,2,3] = identity
+
+  // Premultiply/unpremultiply alpha mode
+  premultMode: number;  // 0=off, 1=premultiply, 2=unpremultiply
 }
 
 function createDefaultInternalState(): InternalShaderState {
@@ -439,6 +444,7 @@ function createDefaultInternalState(): InternalShaderState {
     inlineLUTDirty: false,
     outOfRange: 0,
     channelSwizzle: [0, 1, 2, 3],
+    premultMode: 0,
   };
 }
 
@@ -932,6 +938,17 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     return this.state.outOfRange;
   }
 
+  setPremultMode(mode: number): void {
+    const clamped = (mode === 1 || mode === 2) ? mode : 0;
+    if (clamped === this.state.premultMode) return;
+    this.state.premultMode = clamped;
+    this.dirtyFlags.add(DIRTY_PREMULT);
+  }
+
+  getPremultMode(): number {
+    return this.state.premultMode;
+  }
+
   setChannelSwizzle(swizzle: ChannelSwizzle): void {
     const s = this.state.channelSwizzle;
     s[0] = swizzle[0]; s[1] = swizzle[1]; s[2] = swizzle[2]; s[3] = swizzle[3];
@@ -1217,6 +1234,14 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
       const newOutOfRange = renderState.outOfRange ?? 0;
       if (newOutOfRange !== s.outOfRange) {
         this.setOutOfRange(newOutOfRange);
+      }
+    }
+
+    // --- Premultiply/unpremultiply alpha (1 uniform) ---
+    {
+      const newPremult = renderState.premultMode ?? 0;
+      if (newPremult !== s.premultMode) {
+        this.setPremultMode(newPremult);
       }
     }
 
@@ -1528,6 +1553,11 @@ export class ShaderStateManager implements ManagerBase, StateAccessor {
     // Out-of-range visualization
     if (dirty.has(DIRTY_OUT_OF_RANGE)) {
       shader.setUniformInt('u_outOfRange', s.outOfRange);
+    }
+
+    // Premultiply/unpremultiply alpha
+    if (dirty.has(DIRTY_PREMULT)) {
+      shader.setUniformInt('u_premult', s.premultMode);
     }
 
     // Channel swizzle (RVChannelMap remapping)

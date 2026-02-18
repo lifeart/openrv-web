@@ -2715,3 +2715,68 @@ describe('Renderer LUT 3D Texture (T1.5)', () => {
     expect(() => renderer.setLUT(null, 0, 0)).not.toThrow();
   });
 });
+
+describe('Renderer Premult/Unpremult Control', () => {
+  let renderer: Renderer;
+
+  beforeEach(() => {
+    renderer = new Renderer();
+  });
+
+  it('PREMULT-REN-001: setPremultMode(0) sets mode to off (default)', () => {
+    initRendererWithMockGL(renderer);
+    renderer.setPremultMode(0);
+    expect(renderer.getPremultMode()).toBe(0);
+  });
+
+  it('PREMULT-REN-002: setPremultMode(1) sets mode to premultiply', () => {
+    initRendererWithMockGL(renderer);
+    renderer.setPremultMode(1);
+    expect(renderer.getPremultMode()).toBe(1);
+  });
+
+  it('PREMULT-REN-003: setPremultMode(2) sets mode to unpremultiply', () => {
+    initRendererWithMockGL(renderer);
+    renderer.setPremultMode(2);
+    expect(renderer.getPremultMode()).toBe(2);
+  });
+
+  it('PREMULT-REN-004: default premult mode is 0 (off)', () => {
+    initRendererWithMockGL(renderer);
+    expect(renderer.getPremultMode()).toBe(0);
+  });
+
+  it('PREMULT-REN-005: setPremultMode applies during renderSDRFrame', () => {
+    initRendererWithMockGL(renderer);
+    const sourceCanvas = document.createElement('canvas');
+
+    renderer.setPremultMode(1);
+    renderer.resize(100, 100);
+    const result = renderer.renderSDRFrame(sourceCanvas);
+
+    expect(result).toBeInstanceOf(HTMLCanvasElement);
+  });
+
+  it('PREMULT-REN-006: setPremultMode(2) with unpremult applies during renderSDRFrame', () => {
+    initRendererWithMockGL(renderer);
+    const sourceCanvas = document.createElement('canvas');
+
+    renderer.setPremultMode(2);
+    renderer.resize(100, 100);
+    const result = renderer.renderSDRFrame(sourceCanvas);
+
+    expect(result).toBeInstanceOf(HTMLCanvasElement);
+  });
+
+  it('PREMULT-REN-007: setPremultMode clamps invalid value to 0', () => {
+    initRendererWithMockGL(renderer);
+    renderer.setPremultMode(99);
+    expect(renderer.getPremultMode()).toBe(0);
+  });
+
+  it('PREMULT-REN-008: setPremultMode clamps negative value to 0', () => {
+    initRendererWithMockGL(renderer);
+    renderer.setPremultMode(-1);
+    expect(renderer.getPremultMode()).toBe(0);
+  });
+});

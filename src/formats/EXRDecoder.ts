@@ -95,6 +95,8 @@ export interface EXRHeader {
   name?: string;
   // Multi-part: view attribute (for stereo: "left" / "right")
   view?: string;
+  // Multi-view: list of view names (e.g., ["left", "right"])
+  multiView?: string[];
 
   // All attributes for metadata
   attributes: Map<string, { type: string; value: unknown }>;
@@ -357,6 +359,32 @@ function readStringValue(reader: EXRDataReader, size: number): string {
 }
 
 /**
+ * Parse a stringVector attribute value.
+ * Format: total byte count (int32), then for each string: int32 length + chars (no null terminator).
+ * The total byte count is the sum of all (4 + len) for each string.
+ */
+export function parseStringVector(reader: EXRDataReader, attrSize: number): string[] {
+  const strings: string[] = [];
+  const endPos = reader.position + attrSize;
+  const decoder = new TextDecoder();
+
+  while (reader.position < endPos) {
+    if (reader.remaining < 4) break;
+    const strLen = reader.readInt32();
+    if (strLen < 0 || strLen > MAX_STRING_LENGTH) {
+      throw new DecoderError('EXR', `Invalid string length in stringVector: ${strLen}`);
+    }
+    if (reader.remaining < strLen) {
+      throw new DecoderError('EXR', `Truncated stringVector: need ${strLen} bytes but only ${reader.remaining} remaining`);
+    }
+    const bytes = reader.readBytes(strLen);
+    strings.push(decoder.decode(bytes));
+  }
+
+  return strings;
+}
+
+/**
  * Read the version/flags field from the EXR file and return parsed version info.
  */
 function parseVersionField(reader: EXRDataReader): {
@@ -472,6 +500,9 @@ function parseHeaderAttributes(reader: EXRDataReader): {
         break;
       case 'view':
         header.view = readStringValue(reader, attrSize);
+        break;
+      case 'multiView':
+        header.multiView = parseStringVector(reader, attrSize);
         break;
       default:
         header.attributes.set(attrName, {
@@ -1498,6 +1529,8 @@ export function getEXRInfo(buffer: ArrayBuffer): {
   partCount?: number;
   /** Part info for multi-part files */
   parts?: EXRPartInfo[];
+  /** Multi-view attribute (e.g., ["left", "right"]) */
+  multiView?: string[];
 } | null {
   try {
     const reader = new EXRDataReader(buffer);
@@ -1532,6 +1565,7 @@ export function getEXRInfo(buffer: ArrayBuffer): {
         layers,
         partCount: partHeaders.length,
         parts,
+        multiView: firstHeader.multiView,
       };
     } else {
       const header = parseHeader(reader);
@@ -1544,6 +1578,7 @@ export function getEXRInfo(buffer: ArrayBuffer): {
         compression: EXRCompression[header.compression] || 'UNKNOWN',
         layers,
         partCount: 1,
+        multiView: header.multiView,
       };
     }
   } catch {
