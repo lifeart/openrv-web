@@ -5,30 +5,8 @@
  * When HDR mode is active, histogram bins cover [0, maxValue] instead of [0, 1.0].
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Histogram } from './Histogram';
-
-// Type for mock processor
-interface MockScopesProcessor {
-  isReady: Mock;
-  setPlaybackMode: Mock;
-  setImage: Mock;
-  renderHistogram: Mock;
-}
-
-// Mock WebGLScopes module
-vi.mock('../../scopes/WebGLScopes', () => {
-  const mockProcessor: MockScopesProcessor = {
-    isReady: vi.fn(() => true),
-    setPlaybackMode: vi.fn(),
-    setImage: vi.fn(),
-    renderHistogram: vi.fn(),
-  };
-  return {
-    getSharedScopesProcessor: vi.fn(() => mockProcessor),
-    __mockProcessor: mockProcessor,
-  };
-});
 
 function createTestImageData(width: number, height: number, fill?: { r: number; g: number; b: number; a: number }): ImageData {
   const data = new Uint8ClampedArray(width * height * 4);

@@ -148,6 +148,13 @@ describe('KeyBindings', () => {
       expect(prev.code).toBe('ArrowLeft');
       expect(prev.alt).toBe(true);
     });
+
+    it('KB-U023: defines shot navigation shortcuts with PageUp/PageDown', () => {
+      const next = DEFAULT_KEY_BINDINGS['timeline.nextShot']!;
+      const prev = DEFAULT_KEY_BINDINGS['timeline.previousShot']!;
+      expect(next.code).toBe('PageDown');
+      expect(prev.code).toBe('PageUp');
+    });
   });
 
   describe('describeKeyCombo', () => {

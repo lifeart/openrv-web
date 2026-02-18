@@ -2,11 +2,10 @@
  * ASC CDL (Color Decision List) Types and Utilities
  *
  * CDL is an industry standard for color correction interchange.
- * The formula is: out = clamp((in * slope + offset) ^ power)
+ * The GPU-equivalent SOP formula is: out = pow(max(in * slope + offset, 0), power)
  * Then saturation is applied.
  */
 
-import { clamp } from '../utils/math';
 import { luminanceRec709 } from './PixelMath';
 
 export interface CDLValues {
@@ -62,15 +61,15 @@ export function applyCDLToValue(
   v = v * slope + offset;
 
   // Clamp before power to avoid NaN from negative values
-  v = clamp(v, 0, 1);
+  v = Math.max(v, 0);
 
   // Apply power (gamma)
   if (power !== 1.0 && v > 0) {
     v = Math.pow(v, power);
   }
 
-  // Clamp final result
-  v = clamp(v, 0, 1);
+  // Keep only a lower bound here to preserve HDR headroom in CPU paths.
+  v = Math.max(v, 0);
 
   // Return to 0-255 range
   return v * 255;
@@ -95,9 +94,9 @@ export function applySaturation(
 
   // Interpolate between grayscale and color
   return {
-    r: clamp(luma + (r - luma) * saturation, 0, 255),
-    g: clamp(luma + (g - luma) * saturation, 0, 255),
-    b: clamp(luma + (b - luma) * saturation, 0, 255),
+    r: Math.max(0, luma + (r - luma) * saturation),
+    g: Math.max(0, luma + (g - luma) * saturation),
+    b: Math.max(0, luma + (b - luma) * saturation),
   };
 }
 

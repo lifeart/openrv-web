@@ -85,6 +85,14 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
     alt: true,
     description: 'Go to previous mark or source boundary'
   },
+  'timeline.nextShot': {
+    code: 'PageDown',
+    description: 'Go to next shot in playlist'
+  },
+  'timeline.previousShot': {
+    code: 'PageUp',
+    description: 'Go to previous shot in playlist'
+  },
   'timeline.resetInOut': {
     code: 'KeyR',
     description: 'Reset in/out points to full range'

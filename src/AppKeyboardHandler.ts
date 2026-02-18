@@ -140,7 +140,19 @@ export class AppKeyboardHandler {
       'MOUSE CONTROLS': [], // Special case - not in DEFAULT_KEY_BINDINGS
       'CHANNEL ISOLATION': ['channel.red', 'channel.green', 'channel.blue', 'channel.alpha', 'channel.luminance', 'channel.grayscale', 'channel.none'],
       'SCOPES': ['panel.histogram', 'panel.waveform', 'panel.vectorscope', 'panel.gamutDiagram'],
-      'TIMELINE': ['timeline.setInPoint', 'timeline.setInPointAlt', 'timeline.setOutPoint', 'timeline.setOutPointAlt', 'timeline.resetInOut', 'timeline.toggleMark', 'timeline.cycleLoopMode'],
+      'TIMELINE': [
+        'timeline.setInPoint',
+        'timeline.setInPointAlt',
+        'timeline.setOutPoint',
+        'timeline.setOutPointAlt',
+        'timeline.resetInOut',
+        'timeline.toggleMark',
+        'timeline.nextMarkOrBoundary',
+        'timeline.previousMarkOrBoundary',
+        'timeline.nextShot',
+        'timeline.previousShot',
+        'timeline.cycleLoopMode'
+      ],
       'PAINT (Annotate tab)': ['paint.pan', 'paint.pen', 'paint.eraser', 'paint.text', 'paint.rectangle', 'paint.ellipse', 'paint.line', 'paint.arrow', 'paint.toggleBrush', 'paint.toggleGhost', 'paint.toggleHold', 'edit.undo', 'edit.redo'],
       'COLOR': ['panel.color', 'panel.curves', 'panel.ocio', 'display.cycleProfile'],
       'WIPE COMPARISON': ['view.cycleWipeMode', 'view.toggleSplitScreen'],

@@ -674,6 +674,8 @@ export class App {
       'timeline.toggleMark': () => this.session.toggleMark(),
       'timeline.nextMarkOrBoundary': () => this.goToNextMarkOrBoundary(),
       'timeline.previousMarkOrBoundary': () => this.goToPreviousMarkOrBoundary(),
+      'timeline.nextShot': () => this.goToNextShot(),
+      'timeline.previousShot': () => this.goToPreviousShot(),
       'timeline.resetInOut': () => {
         // R key - reset in/out points, but on Annotate tab, rectangle tool takes precedence
         if (this.tabBar.activeTab === 'annotate') {
@@ -917,6 +919,35 @@ export class App {
 
   private goToPreviousMarkOrBoundary(): void {
     if (this.session.goToPreviousMarker() !== null) return;
+    if (!this.controls.playlistManager.isEnabled()) return;
+
+    const globalFrame = this.controls.playlistManager.getCurrentFrame();
+    const mapping = this.controls.playlistManager.getClipAtFrame(globalFrame);
+    if (!mapping) return;
+
+    const currentClipStart = mapping.clip.globalStartFrame;
+    const targetIndex = globalFrame > currentClipStart
+      ? mapping.clipIndex
+      : mapping.clipIndex - 1;
+    if (targetIndex < 0) return;
+
+    const clip = this.controls.playlistManager.getClipByIndex(targetIndex);
+    if (!clip) return;
+    this.jumpToPlaylistGlobalFrame(clip.globalStartFrame);
+  }
+
+  private goToNextShot(): void {
+    if (!this.controls.playlistManager.isEnabled()) return;
+
+    const mapping = this.controls.playlistManager.getClipAtFrame(this.controls.playlistManager.getCurrentFrame());
+    if (!mapping) return;
+
+    const nextClip = this.controls.playlistManager.getClipByIndex(mapping.clipIndex + 1);
+    if (!nextClip) return;
+    this.jumpToPlaylistGlobalFrame(nextClip.globalStartFrame);
+  }
+
+  private goToPreviousShot(): void {
     if (!this.controls.playlistManager.isEnabled()) return;
 
     const globalFrame = this.controls.playlistManager.getCurrentFrame();

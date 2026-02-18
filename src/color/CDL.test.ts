@@ -56,9 +56,9 @@ describe('CDL', () => {
 
   describe('applyCDLToValue', () => {
     it('CDL-002: slope multiplies input value', () => {
-      // slope=2, input=128 -> (128/255) * 2 = 1.003... clamped to 1 -> 255
+      // slope=2, input=128 -> (128/255) * 2 = 1.003... -> 256.0 (no upper clamp)
       const result = applyCDLToValue(128, 2, 0, 1);
-      expect(result).toBe(255); // Clamped at max
+      expect(result).toBeCloseTo(256, 0);
     });
 
     it('slope=1 produces no change', () => {
@@ -92,10 +92,10 @@ describe('CDL', () => {
       expect(Number.isNaN(result)).toBe(false);
     });
 
-    it('CDL-012: output is clamped to 0-255 range', () => {
-      // Very high slope
+    it('CDL-012: preserves HDR headroom while clamping negative values', () => {
+      // Very high slope should preserve values above 255 in this math utility.
       const resultHigh = applyCDLToValue(200, 10, 0, 1);
-      expect(resultHigh).toBe(255);
+      expect(resultHigh).toBeCloseTo(2000, 0);
 
       // Negative offset
       const resultLow = applyCDLToValue(10, 1, -0.5, 1);
@@ -130,7 +130,7 @@ describe('CDL', () => {
     it('saturation > 1 increases color intensity', () => {
       const result = applySaturation(200, 100, 100, 2);
       // Should push colors further from gray
-      expect(result.r).toBeGreaterThan(200);
+      expect(result.r).toBeGreaterThan(255);
     });
   });
 
