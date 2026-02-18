@@ -65,6 +65,13 @@ interface TestableViewer {
   physicalWidth: number;
   physicalHeight: number;
 
+  // Paint internals
+  paintRenderer: {
+    renderAnnotations: (annotations: unknown[], options: Record<string, unknown>) => void;
+    getCanvas: () => HTMLCanvasElement;
+  };
+  renderPaint(): void;
+
   // Canvas sizing
   setCanvasSize(width: number, height: number): void;
   initializeCanvas(): void;
@@ -1356,6 +1363,32 @@ describe('Viewer', () => {
       // Paint canvas includes overdraw around the image.
       expect(parseFloat(t.paintCanvas.style.width)).toBeGreaterThanOrEqual(t.imageCanvas.width);
       expect(parseFloat(t.paintCanvas.style.height)).toBeGreaterThanOrEqual(t.imageCanvas.height);
+    });
+
+    it('VWR-066: HDR mode still renders annotations on expanded paint surface', () => {
+      const t = testable(viewer);
+
+      // Add a simple annotation so renderPaint() has work to do
+      paintEngine.tool = 'pen';
+      paintEngine.beginStroke(1, { x: 0.5, y: 0.5 });
+      paintEngine.endStroke();
+      session.currentFrame = 1;
+
+      // Simulate active HDR render mode
+      t.glRendererManager._hdrRenderActive = true;
+
+      const renderSpy = vi.spyOn(t.paintRenderer, 'renderAnnotations');
+      t.renderPaint();
+
+      expect(renderSpy).toHaveBeenCalled();
+
+      const [, options] = renderSpy.mock.calls.at(-1)!;
+      expect(options.width).toBe(t.displayWidth);
+      expect(options.height).toBe(t.displayHeight);
+      expect(Number(options.canvasWidth)).toBeGreaterThan(t.displayWidth);
+      expect(Number(options.canvasHeight)).toBeGreaterThan(t.displayHeight);
+      expect(Number(options.offsetX)).toBeGreaterThan(0);
+      expect(Number(options.offsetY)).toBeGreaterThan(0);
     });
   });
 
