@@ -646,6 +646,94 @@ describe('LUTPipelinePanel', () => {
     });
   });
 
+  describe('help popover', () => {
+    it('LPP-081: clicking help button shows help popover', () => {
+      panel.show();
+      const helpBtn = document.querySelector('[data-testid="lut-pipeline-help"]') as HTMLButtonElement;
+      helpBtn.click();
+      const popover = document.querySelector('[data-testid="lut-pipeline-help-popover"]');
+      expect(popover).toBeTruthy();
+    });
+
+    it('LPP-082: help popover contains pipeline stage descriptions', () => {
+      panel.show();
+      const helpBtn = document.querySelector('[data-testid="lut-pipeline-help"]') as HTMLButtonElement;
+      helpBtn.click();
+      const popover = document.querySelector('[data-testid="lut-pipeline-help-popover"]') as HTMLElement;
+      expect(popover.textContent).toContain('Pre-Cache');
+      expect(popover.textContent).toContain('File');
+      expect(popover.textContent).toContain('Corrections');
+      expect(popover.textContent).toContain('Look');
+      expect(popover.textContent).toContain('Display');
+    });
+
+    it('LPP-083: clicking help button again closes popover (toggle)', () => {
+      panel.show();
+      const helpBtn = document.querySelector('[data-testid="lut-pipeline-help"]') as HTMLButtonElement;
+      helpBtn.click();
+      expect(document.querySelector('[data-testid="lut-pipeline-help-popover"]')).toBeTruthy();
+      helpBtn.click();
+      expect(document.querySelector('[data-testid="lut-pipeline-help-popover"]')).toBeNull();
+    });
+
+    it('LPP-084: clicking outside popover closes it', () => {
+      panel.show();
+      const helpBtn = document.querySelector('[data-testid="lut-pipeline-help"]') as HTMLButtonElement;
+      helpBtn.click();
+      expect(document.querySelector('[data-testid="lut-pipeline-help-popover"]')).toBeTruthy();
+      document.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      expect(document.querySelector('[data-testid="lut-pipeline-help-popover"]')).toBeNull();
+    });
+
+    it('LPP-085: panel position remains fixed after opening help popover', () => {
+      panel.show();
+      const panelEl = document.querySelector('[data-testid="lut-pipeline-panel"]') as HTMLElement;
+      const helpBtn = document.querySelector('[data-testid="lut-pipeline-help"]') as HTMLButtonElement;
+      helpBtn.click();
+      expect(panelEl.style.position).toBe('fixed');
+    });
+
+    it('LPP-086: panel position remains fixed after closing help popover', () => {
+      panel.show();
+      const panelEl = document.querySelector('[data-testid="lut-pipeline-panel"]') as HTMLElement;
+      const helpBtn = document.querySelector('[data-testid="lut-pipeline-help"]') as HTMLButtonElement;
+      helpBtn.click();
+      helpBtn.click();
+      expect(panelEl.style.position).toBe('fixed');
+    });
+
+    it('LPP-087: panel can be reopened after help popover interaction', () => {
+      panel.show();
+      const helpBtn = document.querySelector('[data-testid="lut-pipeline-help"]') as HTMLButtonElement;
+      helpBtn.click();
+      helpBtn.click();
+      panel.hide();
+      panel.show();
+      expect(panel.getIsVisible()).toBe(true);
+      const panelEl = document.querySelector('[data-testid="lut-pipeline-panel"]') as HTMLElement;
+      expect(panelEl.style.display).toBe('block');
+    });
+
+    it('LPP-088: dispose cleans up help popover', () => {
+      panel.show();
+      const helpBtn = document.querySelector('[data-testid="lut-pipeline-help"]') as HTMLButtonElement;
+      helpBtn.click();
+      expect(document.querySelector('[data-testid="lut-pipeline-help-popover"]')).toBeTruthy();
+      panel.dispose();
+      expect(document.querySelector('[data-testid="lut-pipeline-help-popover"]')).toBeNull();
+    });
+
+    it('LPP-089: help popover can be re-opened after outside click closes it', () => {
+      panel.show();
+      const helpBtn = document.querySelector('[data-testid="lut-pipeline-help"]') as HTMLButtonElement;
+      helpBtn.click();
+      document.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      expect(document.querySelector('[data-testid="lut-pipeline-help-popover"]')).toBeNull();
+      helpBtn.click();
+      expect(document.querySelector('[data-testid="lut-pipeline-help-popover"]')).toBeTruthy();
+    });
+  });
+
   describe('event unsubscription', () => {
     it('LPP-079: unsubscribing from visibilityChanged stops notifications', () => {
       const handler = vi.fn();

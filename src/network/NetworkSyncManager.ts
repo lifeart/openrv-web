@@ -10,6 +10,7 @@ import type { ManagerBase } from '../core/ManagerBase';
 import { WebSocketClient } from './WebSocketClient';
 import { SyncStateManager } from './SyncStateManager';
 import {
+  createMessage,
   createRoomCreateMessage,
   createRoomJoinMessage,
   createRoomLeaveMessage,
@@ -48,6 +49,8 @@ import {
   validateWebRTCOfferPayload,
   validateWebRTCAnswerPayload,
   validateWebRTCIcePayload,
+  deserializeMessage,
+  serializeMessage,
 } from './MessageProtocol';
 import type {
   ConnectionState,
@@ -81,6 +84,14 @@ import type {
   WebRTCIcePayload,
 } from './types';
 import { DEFAULT_SYNC_SETTINGS, DEFAULT_NETWORK_SYNC_CONFIG, USER_COLORS } from './types';
+import {
+  decodeWebRTCURLSignal,
+  encodeWebRTCURLSignal,
+  extractWebRTCSignalToken,
+  type WebRTCURLOfferSignal,
+  type WebRTCURLAnswerSignal,
+  WEBRTC_URL_SIGNAL_PARAM,
+} from './WebRTCURLSignaling';
 
 interface WebRTCPeerState {
   requestId: string;
@@ -91,7 +102,20 @@ interface WebRTCPeerState {
   stateSent: boolean;
 }
 
+interface ServerlessPresencePayload {
+  action: 'join' | 'leave';
+  user: SyncUser;
+}
+
+interface ServerlessPeerState {
+  role: 'host' | 'guest';
+  pc: RTCPeerConnection;
+  channel: RTCDataChannel | null;
+  remoteUserId: string | null;
+}
+
 const CREATE_ROOM_WSS_FALLBACK_TIMEOUT_MS = 2000;
+const SERVERLESS_ICE_GATHERING_TIMEOUT_MS = 4000;
 
 export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implements ManagerBase {
   private wsClient: WebSocketClient;
@@ -110,6 +134,8 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   private _remoteCursors = new Map<string, CursorSyncPayload>();
   private _pendingRoomAction: 'create' | 'join' | null = null;
   private _createRoomFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+  private _serverlessPeer: ServerlessPeerState | null = null;
+  private _pendingServerlessOffer: WebRTCURLOfferSignal | null = null;
 
   // Subscriptions to clean up
   private _unsubscribers: Array<() => void> = [];
@@ -206,6 +232,125 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
 
   setPinCode(pinCode: string): void {
     this._pinCode = pinCode.trim();
+  }
+
+  /**
+   * Build a share URL with embedded WebRTC offer signaling when running in
+   * local-host fallback mode (no active WebSocket signaling transport).
+   */
+  async buildServerlessInviteShareURL(baseUrl: string): Promise<string> {
+    if (!this.shouldUseServerlessUrlSignaling()) return baseUrl;
+    if (!this._roomInfo) return baseUrl;
+
+    const offerSignal = await this.ensureServerlessOfferSignal();
+    const fallbackBase = typeof window !== 'undefined' ? window.location.href : 'http://localhost/';
+    const url = new URL(baseUrl, fallbackBase);
+    url.searchParams.set('room', this._roomInfo.roomCode);
+    if (this._pinCode) {
+      url.searchParams.set('pin', this._pinCode);
+    }
+    url.searchParams.set(WEBRTC_URL_SIGNAL_PARAM, encodeWebRTCURLSignal(offerSignal));
+    return url.toString();
+  }
+
+  /**
+   * Join a room from a serverless WebRTC URL offer token.
+   * Returns a response token that should be shared back to the host.
+   */
+  async joinServerlessRoomFromOfferToken(input: string, userName?: string, pinCode?: string): Promise<string | null> {
+    if (!this.canUseWebRTC()) {
+      this.emit('error', { code: 'WEBRTC_UNAVAILABLE', message: 'WebRTC is unavailable in this browser.' });
+      return null;
+    }
+
+    const token = extractWebRTCSignalToken(input);
+    if (!token) return null;
+    const decoded = decodeWebRTCURLSignal(token);
+    if (!decoded || decoded.type !== 'offer') return null;
+
+    if (this._connectionState !== 'disconnected' && this._connectionState !== 'error') {
+      return null;
+    }
+
+    if (userName) this._userName = userName;
+    const activePin = (pinCode ?? decoded.pinCode ?? '').trim();
+    this.setPinCode(activePin);
+
+    const localUser: SyncUser = {
+      id: this._userId,
+      name: this._userName,
+      color: USER_COLORS[1] ?? USER_COLORS[0],
+      isHost: false,
+      joinedAt: Date.now(),
+    };
+
+    this._permissions.clear();
+    this._permissions.set(decoded.hostUserId, 'host');
+    this._permissions.set(this._userId, 'reviewer');
+    this._roomInfo = {
+      roomId: decoded.roomId,
+      roomCode: decoded.roomCode,
+      hostId: decoded.hostUserId,
+      users: [localUser],
+      createdAt: decoded.createdAt,
+      maxUsers: 2,
+    };
+    this.stateManager.setHost(false);
+    this.setConnectionState('connecting');
+    this.emit('roomJoined', { ...this._roomInfo });
+    this.emit('usersChanged', [...this._roomInfo.users]);
+
+    try {
+      this.disposeServerlessPeer(false);
+      const state = this.createServerlessPeer('guest');
+      state.remoteUserId = decoded.hostUserId;
+
+      state.pc.ondatachannel = (event) => {
+        state.channel = event.channel;
+        this.attachServerlessChannelHandlers(state, event.channel);
+      };
+
+      await state.pc.setRemoteDescription({ type: 'offer', sdp: decoded.sdp });
+      const answer = await state.pc.createAnswer();
+      await state.pc.setLocalDescription(answer);
+      await this.waitForIceGatheringComplete(state.pc, SERVERLESS_ICE_GATHERING_TIMEOUT_MS);
+      if (!state.pc.localDescription?.sdp) {
+        throw new Error('Missing local SDP answer');
+      }
+
+      const answerSignal: WebRTCURLAnswerSignal = {
+        version: 1,
+        type: 'answer',
+        roomId: decoded.roomId,
+        roomCode: decoded.roomCode,
+        hostUserId: decoded.hostUserId,
+        guestUserId: this._userId,
+        guestUserName: this._userName,
+        guestColor: localUser.color,
+        createdAt: Date.now(),
+        sdp: state.pc.localDescription.sdp,
+      };
+      return encodeWebRTCURLSignal(answerSignal);
+    } catch (error) {
+      this.disposeServerlessPeer(false);
+      this.setConnectionState('error');
+      this.emit('error', {
+        code: 'WEBRTC_SIGNALING_FAILED',
+        message: error instanceof Error ? error.message : 'Failed to prepare WebRTC answer',
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Apply a serverless WebRTC answer URL/token on the host side.
+   */
+  async applyServerlessResponseLink(input: string): Promise<boolean> {
+    const token = extractWebRTCSignalToken(input);
+    if (!token) return false;
+    const decoded = decodeWebRTCURLSignal(token);
+    if (!decoded || decoded.type !== 'answer') return false;
+    return this.applyServerlessAnswerSignal(decoded);
   }
 
   // ---- Room Management ----
