@@ -191,7 +191,7 @@ export class PaintRenderer {
     toCanvasY: (y: number) => number,
     getWidth: (index: number) => number,
     color: [number, number, number, number],
-    opacity: number,
+    _opacity: number,
     pressureMapping: PressureMapping = DEFAULT_PRESSURE_MAPPING,
   ): void {
     const ctx = this.ctx;
