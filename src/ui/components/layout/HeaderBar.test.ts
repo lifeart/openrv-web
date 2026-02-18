@@ -127,6 +127,8 @@ describe('HeaderBar', () => {
       const input = el.querySelector('input[type="file"]') as HTMLInputElement;
       expect(input.accept).toContain('image/*');
       expect(input.accept).toContain('video/*');
+      expect(input.accept).toContain('.avif');
+      expect(input.accept).toContain('.mkv');
       expect(input.accept).toContain('.rv');
       expect(input.accept).toContain('.gto');
     });

@@ -13,6 +13,7 @@ import { FileSourceNode } from '../../nodes/sources/FileSourceNode';
 import type { GTOParseResult } from './GTOGraphLoader';
 import type { HDRResizeTier } from '../../utils/media/HDRFrameResizer';
 import { Logger } from '../../utils/Logger';
+import { detectMediaTypeFromFile } from '../../utils/media/SupportedMediaFormats';
 
 const log = new Logger('MediaManager');
 
@@ -209,11 +210,7 @@ export class MediaManager implements ManagerBase {
   // ---------------------------------------------------------------
 
   getMediaType(file: File): MediaType {
-    const videoTypes = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'];
-    if (videoTypes.includes(file.type) || /\.(mp4|webm|ogg|mov|avi|mkv)$/i.test(file.name)) {
-      return 'video';
-    }
-    return 'image';
+    return detectMediaTypeFromFile(file);
   }
 
   // ---------------------------------------------------------------

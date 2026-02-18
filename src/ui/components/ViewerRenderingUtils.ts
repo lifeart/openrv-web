@@ -7,6 +7,53 @@ import { ColorAdjustments } from './ColorControls';
 import { Transform2D } from './TransformControl';
 import { CropState, CropRegion } from './CropControl';
 import { getCSSColor } from '../../utils/ui/getCSSColor';
+import { VIEWER_PLACEHOLDER_SUPPORT_LINES } from '../../utils/media/SupportedMediaFormats';
+
+function getFontSizePx(font: string, fallback: number): number {
+  const match = font.match(/(\d+(?:\.\d+)?)px/);
+  if (!match) return fallback;
+  const parsed = Number.parseFloat(match[1] ?? '');
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function getTextWidth(ctx: CanvasRenderingContext2D, text: string): number {
+  const maybeMeasureText = (ctx as unknown as { measureText?: (input: string) => { width: number } }).measureText;
+  if (typeof maybeMeasureText === 'function') {
+    return maybeMeasureText.call(ctx, text).width;
+  }
+  // Fallback for mocked contexts in tests.
+  const fontSize = getFontSizePx(ctx.font, 14);
+  return text.length * fontSize * 0.56;
+}
+
+function wrapTextToWidth(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number
+): string[] {
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+
+  const words = trimmed.split(/\s+/);
+  const lines: string[] = [];
+  let currentLine = '';
+
+  for (const word of words) {
+    const candidate = currentLine ? `${currentLine} ${word}` : word;
+    if (getTextWidth(ctx, candidate) <= maxWidth || currentLine.length === 0) {
+      currentLine = candidate;
+      continue;
+    }
+    lines.push(currentLine);
+    currentLine = word;
+  }
+
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+
+  return lines;
+}
 
 /**
  * Draw image/video with rotation and flip transforms applied.
@@ -308,12 +355,57 @@ export function drawPlaceholder(
   ctx.font = `${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('Drop image or video here', w / 2, h / 2 - fontSize);
+  const titleLines = wrapTextToWidth(
+    ctx,
+    'Drop media or session files here',
+    Math.max(180, w - 48),
+  );
 
-  const smallFontSize = Math.max(8, Math.floor(14 * zoom));
+  const smallFontSize = Math.max(8, Math.floor(13 * zoom));
+  const smallLineHeight = Math.max(10, Math.floor(smallFontSize * 1.4));
+  const titleLineHeight = Math.max(14, Math.floor(fontSize * 1.22));
+  const sectionGap = Math.max(6, Math.floor(smallFontSize * 0.7));
+
+  ctx.font = `${smallFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
+  const supportLines = VIEWER_PLACEHOLDER_SUPPORT_LINES.flatMap((line) =>
+    wrapTextToWidth(ctx, line, Math.max(180, w - 56))
+  );
+
+  const showTip = h >= 240;
+  const tipLines = showTip
+    ? wrapTextToWidth(ctx, 'Tip: drop numbered frames to auto-detect a sequence', Math.max(180, w - 56))
+    : [];
+
+  const totalHeight =
+    titleLines.length * titleLineHeight +
+    sectionGap +
+    supportLines.length * smallLineHeight +
+    (tipLines.length > 0 ? sectionGap + tipLines.length * smallLineHeight : 0);
+
+  let y = h / 2 - totalHeight / 2 + titleLineHeight / 2;
+  ctx.font = `${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
+  ctx.fillStyle = getCSSColor('--text-secondary', '#666');
+  for (const line of titleLines) {
+    ctx.fillText(line, w / 2, y);
+    y += titleLineHeight;
+  }
+
+  y += sectionGap;
   ctx.font = `${smallFontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
   ctx.fillStyle = getCSSColor('--text-muted', '#555');
-  ctx.fillText('Supports: PNG, JPEG, WebP, GIF, MP4, WebM', w / 2, h / 2 + smallFontSize);
+  for (const line of supportLines) {
+    ctx.fillText(line, w / 2, y);
+    y += smallLineHeight;
+  }
+
+  if (tipLines.length > 0) {
+    y += sectionGap;
+    ctx.fillStyle = getCSSColor('--text-secondary', '#666');
+    for (const line of tipLines) {
+      ctx.fillText(line, w / 2, y);
+      y += smallLineHeight;
+    }
+  }
 }
 
 /**

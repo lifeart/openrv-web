@@ -84,7 +84,11 @@ describe('Session', () => {
     it('getMediaType detects various types', () => {
       const s = session as any;
       expect(s.getMediaType(new File([], 't.mp4', { type: 'video/mp4' }))).toBe('video');
+      expect(s.getMediaType(new File([], 't.m4v', { type: '' }))).toBe('video');
       expect(s.getMediaType(new File([], 't.mov', { type: '' }))).toBe('video');
+      expect(s.getMediaType(new File([], 't.qt', { type: '' }))).toBe('video');
+      expect(s.getMediaType(new File([], 't.ogv', { type: '' }))).toBe('video');
+      expect(s.getMediaType(new File([], 't.mkv', { type: 'video/x-matroska' }))).toBe('video');
       expect(s.getMediaType(new File([], 't.jpg', { type: 'image/jpeg' }))).toBe('image');
     });
 

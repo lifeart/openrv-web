@@ -379,14 +379,21 @@ describe('MediaManager', () => {
       expect(manager.getMediaType(new File([], 'test.webm', { type: 'video/webm' }))).toBe('video');
       expect(manager.getMediaType(new File([], 'test.ogg', { type: 'video/ogg' }))).toBe('video');
       expect(manager.getMediaType(new File([], 'test.mov', { type: 'video/quicktime' }))).toBe('video');
+      expect(manager.getMediaType(new File([], 'test.mkv', { type: 'video/x-matroska' }))).toBe('video');
+      expect(manager.getMediaType(new File([], 'test.ogv', { type: 'application/ogg' }))).toBe('video');
     });
 
     it('MM-024: detects video by extension even without MIME type', () => {
       expect(manager.getMediaType(new File([], 'test.mp4', { type: '' }))).toBe('video');
+      expect(manager.getMediaType(new File([], 'test.m4v', { type: '' }))).toBe('video');
       expect(manager.getMediaType(new File([], 'test.mov', { type: '' }))).toBe('video');
+      expect(manager.getMediaType(new File([], 'test.qt', { type: '' }))).toBe('video');
+      expect(manager.getMediaType(new File([], 'test.3gp', { type: '' }))).toBe('video');
       expect(manager.getMediaType(new File([], 'test.avi', { type: '' }))).toBe('video');
       expect(manager.getMediaType(new File([], 'test.mkv', { type: '' }))).toBe('video');
       expect(manager.getMediaType(new File([], 'test.webm', { type: '' }))).toBe('video');
+      expect(manager.getMediaType(new File([], 'test.ogv', { type: '' }))).toBe('video');
+      expect(manager.getMediaType(new File([], 'test.ogx', { type: '' }))).toBe('video');
     });
 
     it('MM-025: detects video extension case-insensitively', () => {

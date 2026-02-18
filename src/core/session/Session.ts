@@ -60,6 +60,7 @@ import { VolumeManager } from './VolumeManager';
 import { ABCompareManager } from './ABCompareManager';
 import { AudioPlaybackManager } from '../../audio/AudioPlaybackManager';
 import { Logger } from '../../utils/Logger';
+import { detectMediaTypeFromFile } from '../../utils/media/SupportedMediaFormats';
 
 const log = new Logger('Session');
 
@@ -1447,11 +1448,7 @@ export class Session extends EventEmitter<SessionEvents> {
   }
 
   private getMediaType(file: File): MediaType {
-    const videoTypes = ['video/mp4', 'video/webm', 'video/ogg', 'video/quicktime'];
-    if (videoTypes.includes(file.type) || /\.(mp4|webm|ogg|mov|avi|mkv)$/i.test(file.name)) {
-      return 'video';
-    }
-    return 'image';
+    return detectMediaTypeFromFile(file);
   }
 
   async loadImage(name: string, url: string): Promise<void> {

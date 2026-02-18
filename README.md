@@ -10,7 +10,7 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
 ## Features
 
 ### Media Support
-- Single images (PNG, JPEG, WebP, JPEG XL, HEIC/HEIF, EXR, Radiance HDR)
+- Single images (PNG, JPEG, WebP, GIF, BMP, TIFF, AVIF, JPEG XL, HEIC/HEIF, EXR/SXR, DPX/Cineon, Radiance HDR, RAW preview formats)
 - **EXR Format Support** - full HDR image loading via WebAssembly decoder
   - Float32 texture support for HDR precision
   - Multi-layer EXR with AOV (Arbitrary Output Variable) selection
@@ -33,7 +33,7 @@ A web-based VFX image and sequence viewer inspired by [OpenRV](https://github.co
   - ISOBMFF container parsing for gainmap extraction and `colr(nclx)` HDR transfer detection (HLG/PQ)
   - HDR reconstruction: sRGB-to-linear base + gain map with configurable headroom
   - Standalone HEIC builder for gainmap item decoding (wraps raw HEVC data with hvcC config)
-- Video files (MP4, WebM)
+- Video files (Mediabunny containers: MP4/M4V/3GP/3G2, MOV/QuickTime, MKV/WebM, OGG/OGV/OGX; plus AVI browser fallback)
   - **ProRes/DNxHD Codec Detection** - identifies unsupported professional codecs and provides FFmpeg transcoding guidance
 - Image sequences (numbered files like `frame_001.png`, `file.0001.exr`)
   - **Missing frame detection** - automatically detect and indicate gaps in sequences

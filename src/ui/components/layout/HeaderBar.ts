@@ -16,6 +16,7 @@ import { ThemeControl } from '../ThemeControl';
 import { showAlert, showPrompt } from '../shared/Modal';
 import { getIconSvg, IconName } from '../shared/Icons';
 import { createButton as sharedCreateButton, createIconButton as sharedCreateIconButton, setButtonActive, applyA11yFocus } from '../shared/Button';
+import { SUPPORTED_MEDIA_ACCEPT } from '../../../utils/media/SupportedMediaFormats';
 
 export interface HeaderBarEvents extends EventMap {
   showShortcuts: void;
@@ -193,7 +194,7 @@ export class HeaderBar extends EventEmitter<HeaderBarEvents> {
     // Hidden file input for media
     this.fileInput = document.createElement('input');
     this.fileInput.type = 'file';
-    this.fileInput.accept = 'image/*,video/*,.rv,.gto,.rvedl';
+    this.fileInput.accept = `${SUPPORTED_MEDIA_ACCEPT},.rv,.gto,.rvedl`;
     this.fileInput.multiple = true;
     this.fileInput.style.display = 'none';
     this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));

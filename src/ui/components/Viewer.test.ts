@@ -179,15 +179,6 @@ function testable(viewer: Viewer): TestableViewer {
   return viewer as unknown as TestableViewer;
 }
 
-// Mock WebGLLUTProcessor
-vi.mock('../../color/WebGLLUT', () => ({
-  WebGLLUTProcessor: vi.fn().mockImplementation(() => ({
-    setLUT: vi.fn(),
-    hasLUT: vi.fn().mockReturnValue(false),
-    applyToCanvas: vi.fn(),
-    dispose: vi.fn(),
-  })),
-}));
 
 describe('Viewer', () => {
   let session: Session;
@@ -515,7 +506,7 @@ describe('Viewer', () => {
       t.frameFetchTracker.hasDisplayedMediabunnyFrame = true;
       t.frameFetchTracker.hasDisplayedSourceBMediabunnyFrame = true;
 
-      (session as any).emit('abSourceChanged', { current: 'B', sourceIndex: 1 });
+      session.emit('abSourceChanged', { current: 'B', sourceIndex: 1 });
 
       expect(t.frameFetchTracker.pendingVideoFrameNumber).toBe(0);
       expect(t.frameFetchTracker.pendingSourceBFrameNumber).toBe(0);

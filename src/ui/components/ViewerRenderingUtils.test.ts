@@ -574,6 +574,15 @@ describe('ViewerRenderingUtils', () => {
       expect(calls.some((call: unknown[]) => (call[0] as string).includes('Drop'))).toBe(true);
     });
 
+    it('should render support info in multiple lines for readability', () => {
+      drawPlaceholder(ctx, 800, 600, 1);
+
+      const calls = (ctx.fillText as ReturnType<typeof vi.fn>).mock.calls;
+      const rendered = calls.map((call: unknown[]) => String(call[0]));
+      expect(rendered.some((line: string) => line.includes('Images:'))).toBe(true);
+      expect(rendered.some((line: string) => line.includes('Video:'))).toBe(true);
+    });
+
     it('should scale with zoom', () => {
       drawPlaceholder(ctx, 800, 600, 2);
 
