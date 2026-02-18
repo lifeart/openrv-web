@@ -16,6 +16,11 @@ import {
   createViewSyncMessage,
   createAnnotationSyncMessage,
   createStateResponseMessage,
+  createMediaRequestMessage,
+  createMediaOfferMessage,
+  createMediaResponseMessage,
+  createMediaChunkMessage,
+  createMediaCompleteMessage,
   createWebRTCOfferMessage,
   createWebRTCAnswerMessage,
   createWebRTCIceMessage,
@@ -29,6 +34,11 @@ import {
   validateViewPayload,
   validateColorPayload,
   validateStateRequestPayload,
+  validateMediaRequestPayload,
+  validateMediaOfferPayload,
+  validateMediaResponsePayload,
+  validateMediaChunkPayload,
+  validateMediaCompletePayload,
   validateWebRTCOfferPayload,
   validateWebRTCAnswerPayload,
   validateWebRTCIcePayload,
@@ -390,6 +400,114 @@ describe('MessageProtocol', () => {
         requestId: 'req-1',
         targetUserId: 'user-2',
         candidate: null,
+      })).toBe(false);
+    });
+  });
+
+  describe('media sync messages', () => {
+    it('MPR-051: creates media request message', () => {
+      const msg = createMediaRequestMessage('room-1', 'user-1', {
+        transferId: 'transfer-1',
+        targetUserId: 'user-2',
+      });
+      expect(msg.type).toBe('sync.media-request');
+    });
+
+    it('MPR-052: creates media offer message', () => {
+      const msg = createMediaOfferMessage('room-1', 'user-1', {
+        transferId: 'transfer-1',
+        targetUserId: 'user-2',
+        totalBytes: 1024,
+        files: [
+          { id: 'f1', name: 'shot.exr', type: 'image/x-exr', size: 1024, lastModified: 1 },
+        ],
+        sources: [
+          { kind: 'image', fileIds: ['f1'], fps: 24 },
+        ],
+      });
+      expect(msg.type).toBe('sync.media-offer');
+    });
+
+    it('MPR-053: creates media response message', () => {
+      const msg = createMediaResponseMessage('room-1', 'user-2', {
+        transferId: 'transfer-1',
+        targetUserId: 'user-1',
+        accepted: true,
+      });
+      expect(msg.type).toBe('sync.media-response');
+    });
+
+    it('MPR-054: creates media chunk and complete messages', () => {
+      const chunk = createMediaChunkMessage('room-1', 'user-1', {
+        transferId: 'transfer-1',
+        targetUserId: 'user-2',
+        fileId: 'f1',
+        chunkIndex: 0,
+        totalChunks: 2,
+        data: 'QUJD',
+      });
+      const complete = createMediaCompleteMessage('room-1', 'user-1', {
+        transferId: 'transfer-1',
+        targetUserId: 'user-2',
+      });
+      expect(chunk.type).toBe('sync.media-chunk');
+      expect(complete.type).toBe('sync.media-complete');
+    });
+
+    it('MPR-055: validates media payloads', () => {
+      expect(validateMediaRequestPayload({ transferId: 't1' })).toBe(true);
+      expect(validateMediaRequestPayload({ transferId: '' })).toBe(false);
+
+      expect(validateMediaOfferPayload({
+        transferId: 't1',
+        targetUserId: 'u2',
+        totalBytes: 1,
+        files: [],
+        sources: [],
+      })).toBe(true);
+      expect(validateMediaOfferPayload({
+        transferId: 't1',
+        targetUserId: 'u2',
+        totalBytes: -1,
+        files: [],
+        sources: [],
+      })).toBe(false);
+
+      expect(validateMediaResponsePayload({
+        transferId: 't1',
+        targetUserId: 'u2',
+        accepted: true,
+      })).toBe(true);
+      expect(validateMediaResponsePayload({
+        transferId: 't1',
+        targetUserId: 'u2',
+        accepted: 'yes',
+      })).toBe(false);
+
+      expect(validateMediaChunkPayload({
+        transferId: 't1',
+        targetUserId: 'u2',
+        fileId: 'f1',
+        chunkIndex: 0,
+        totalChunks: 1,
+        data: 'AA==',
+      })).toBe(true);
+      expect(validateMediaChunkPayload({
+        transferId: 't1',
+        targetUserId: 'u2',
+        fileId: 'f1',
+        chunkIndex: -1,
+        totalChunks: 1,
+        data: 'AA==',
+      })).toBe(false);
+
+      expect(validateMediaCompletePayload({
+        transferId: 't1',
+        targetUserId: 'u2',
+      })).toBe(true);
+      expect(validateMediaCompletePayload({
+        transferId: '',
+        targetUserId: 'u2',
       })).toBe(false);
     });
   });

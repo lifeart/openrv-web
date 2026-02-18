@@ -37,6 +37,7 @@ export interface SyncSettings {
   view: boolean;
   color: boolean;
   annotations: boolean;
+  cursor: boolean;
 }
 
 export const DEFAULT_SYNC_SETTINGS: SyncSettings = {
@@ -44,6 +45,7 @@ export const DEFAULT_SYNC_SETTINGS: SyncSettings = {
   view: true,
   color: false,
   annotations: false,
+  cursor: true,
 };
 
 // ---- Message Types ----
@@ -64,10 +66,17 @@ export type SyncMessageType =
   | 'sync.annotation'
   | 'sync.state-request'
   | 'sync.state-response'
+  | 'sync.media-request'
+  | 'sync.media-offer'
+  | 'sync.media-response'
+  | 'sync.media-chunk'
+  | 'sync.media-complete'
   | 'sync.webrtc-offer'
   | 'sync.webrtc-answer'
   | 'sync.webrtc-ice'
+  | 'sync.cursor'
   | 'user.presence'
+  | 'user.permission'
   | 'ping'
   | 'pong'
   | 'error';
@@ -163,7 +172,32 @@ export interface ColorSyncPayload {
 export interface AnnotationSyncPayload {
   frame: number;
   strokes: unknown[];
-  action: 'add' | 'remove' | 'clear';
+  action: 'add' | 'remove' | 'clear' | 'update';
+  annotationId?: string;
+  timestamp: number;
+}
+
+// ---- Cursor Sync ----
+
+export interface CursorSyncPayload {
+  userId: string;
+  x: number;
+  y: number;
+  timestamp: number;
+}
+
+// ---- Participant Permissions ----
+
+export type ParticipantRole = 'host' | 'reviewer' | 'viewer';
+
+export interface ParticipantPermission {
+  userId: string;
+  role: ParticipantRole;
+}
+
+export interface PermissionChangePayload {
+  targetUserId: string;
+  role: ParticipantRole;
 }
 
 export interface StateRequestPayload {
@@ -186,6 +220,53 @@ export interface StateResponsePayload {
   view?: ViewSyncPayload;
   sessionState?: string;
   encryptedSessionState?: EncryptedSessionStatePayload;
+}
+
+export interface MediaRequestPayload {
+  transferId: string;
+  targetUserId?: string;
+}
+
+export interface MediaTransferFileDescriptor {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  lastModified: number;
+}
+
+export interface MediaTransferSourceDescriptor {
+  kind: 'image' | 'video' | 'sequence';
+  fileIds: string[];
+  fps: number;
+}
+
+export interface MediaOfferPayload {
+  transferId: string;
+  targetUserId: string;
+  totalBytes: number;
+  files: MediaTransferFileDescriptor[];
+  sources: MediaTransferSourceDescriptor[];
+}
+
+export interface MediaResponsePayload {
+  transferId: string;
+  targetUserId: string;
+  accepted: boolean;
+}
+
+export interface MediaChunkPayload {
+  transferId: string;
+  targetUserId: string;
+  fileId: string;
+  chunkIndex: number;
+  totalChunks: number;
+  data: string;
+}
+
+export interface MediaCompletePayload {
+  transferId: string;
+  targetUserId: string;
 }
 
 export interface WebRTCOfferPayload {
@@ -235,6 +316,8 @@ export interface NetworkSyncEvents extends EventMap {
   syncView: ViewSyncPayload;
   syncColor: ColorSyncPayload;
   syncAnnotation: AnnotationSyncPayload;
+  syncCursor: CursorSyncPayload;
+  participantPermissionChanged: ParticipantPermission;
   sessionStateRequested: { requestId: string; requesterUserId: string };
   sessionStateReceived: {
     requestId: string;
@@ -242,6 +325,34 @@ export interface NetworkSyncEvents extends EventMap {
     sessionState?: string;
     encryptedSessionState?: EncryptedSessionStatePayload;
     transport: 'webrtc' | 'websocket';
+  };
+  mediaSyncRequested: {
+    transferId: string;
+    requesterUserId: string;
+  };
+  mediaSyncOffered: {
+    transferId: string;
+    senderUserId: string;
+    totalBytes: number;
+    files: MediaTransferFileDescriptor[];
+    sources: MediaTransferSourceDescriptor[];
+  };
+  mediaSyncResponded: {
+    transferId: string;
+    senderUserId: string;
+    accepted: boolean;
+  };
+  mediaSyncChunkReceived: {
+    transferId: string;
+    senderUserId: string;
+    fileId: string;
+    chunkIndex: number;
+    totalChunks: number;
+    data: string;
+  };
+  mediaSyncCompleted: {
+    transferId: string;
+    senderUserId: string;
   };
   error: ErrorPayload;
   rttUpdated: number;

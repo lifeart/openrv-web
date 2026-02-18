@@ -29,10 +29,6 @@ export const ZIGZAG_ORDER: readonly number[] = [
   53, 60, 61, 54, 47, 55, 62, 63,
 ];
 
-/** Inverse zigzag: maps linear index → zigzag position */
-const INV_ZIGZAG = new Uint8Array(64);
-for (let i = 0; i < 64; i++) INV_ZIGZAG[ZIGZAG_ORDER[i]!] = i;
-
 // Huffman constants (from OpenEXR ImfHuf.cpp)
 const HUF_ENCBITS = 16;
 const HUF_DECBITS = 14;
@@ -613,7 +609,14 @@ export async function decompressDWA(
 
   let pos = dataOffset;
 
-  // 2. Extract sub-blocks (order: unknown, AC, DC, RLE per OpenEXR spec)
+  // 2. Validate sub-block sizes fit within compressed data
+  const totalSubBlockSize = header.unknownCompressedSize + header.acCompressedSize +
+    header.dcCompressedSize + header.rleCompressedSize;
+  if (pos + totalSubBlockSize > compressedData.length) {
+    throw new DecoderError('EXR', 'DWA sub-block sizes exceed compressed data');
+  }
+
+  // Extract sub-blocks (order: unknown, AC, DC, RLE per OpenEXR spec)
   // Skip unknown/classification data
   pos += header.unknownCompressedSize;
 
@@ -733,7 +736,6 @@ export async function decompressDWA(
   for (let line = 0; line < numLines; line++) {
     let channelByteOffset = line * scanlineBytes;
     dctChIdx = 0;
-    let rleChIdx = 0;
 
     for (let ch = 0; ch < channelSizes.length; ch++) {
       const chBytes = channelSizes[ch]!;
@@ -765,7 +767,6 @@ export async function decompressDWA(
         }
         rleByteOffset += byteCount;
         channelByteOffset += byteCount;
-        rleChIdx++;
       }
     }
   }

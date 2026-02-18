@@ -10,6 +10,9 @@ import {
   StrokePoint,
   LineJoin,
   LineCap,
+  PressureMapping,
+  DEFAULT_PRESSURE_MAPPING,
+  adjustSaturation,
 } from './types';
 import { safeCanvasContext2D } from '../color/SafeCanvasContext';
 
@@ -30,6 +33,7 @@ export class PaintRenderer {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private _dpr = 1;
+  pressureMapping: PressureMapping = { ...DEFAULT_PRESSURE_MAPPING };
 
   /**
    * Create a PaintRenderer.
@@ -133,7 +137,7 @@ export class PaintRenderer {
 
     if (stroke.brush === BrushType.Gaussian && stroke.splat) {
       // Soft brush using Gaussian splats
-      this.renderGaussianStroke(points, toCanvasX, toCanvasY, getWidth, stroke.color, opacity);
+      this.renderGaussianStroke(points, toCanvasX, toCanvasY, getWidth, stroke.color, opacity, this.pressureMapping);
     } else {
       // Hard brush using regular line drawing
       if (points.length === 1) {
@@ -187,22 +191,33 @@ export class PaintRenderer {
     toCanvasY: (y: number) => number,
     getWidth: (index: number) => number,
     color: [number, number, number, number],
-    opacity: number
+    opacity: number,
+    pressureMapping: PressureMapping = DEFAULT_PRESSURE_MAPPING,
   ): void {
     const ctx = this.ctx;
-    const [r, g, b, a] = color;
 
     // Render each point as a radial gradient "splat"
     for (let i = 0; i < points.length; i++) {
       const p = points[i]!;
-      const w = getWidth(i) * (p.pressure ?? 1);
-      const radius = w;
+      const pressure = p.pressure ?? 1;
+
+      // Width modulation (minimum radius of 0.5px to avoid degenerate gradients)
+      const widthFactor = pressureMapping.width ? pressure : 1;
+      const w = getWidth(i) * widthFactor;
+      const radius = Math.max(0.5, w);
       const x = toCanvasX(p.x);
       const y = toCanvasY(p.y);
 
+      // Opacity modulation (base opacity already set via ctx.globalAlpha)
+      const opacityFactor = pressureMapping.opacity ? pressure : 1;
+
+      // Saturation modulation
+      const satFactor = pressureMapping.saturation ? pressure : 1;
+      const [r, g, b, a] = satFactor < 1 ? adjustSaturation(color, satFactor) : color;
+
       // Create radial gradient for soft edge
       const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
-      gradient.addColorStop(0, `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${a * opacity})`);
+      gradient.addColorStop(0, `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${a * opacityFactor})`);
       gradient.addColorStop(1, `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, 0)`);
 
       ctx.fillStyle = gradient;

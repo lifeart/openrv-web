@@ -149,6 +149,43 @@ export interface PaintSnapshot {
   effects: PaintEffects;
 }
 
+/** Controls which brush properties are modulated by pen pressure. */
+export interface PressureMapping {
+  /** Pressure modulates stroke width (default: true) */
+  width: boolean;
+  /** Pressure modulates opacity (default: false) */
+  opacity: boolean;
+  /** Pressure modulates color saturation (default: false) */
+  saturation: boolean;
+}
+
+export const DEFAULT_PRESSURE_MAPPING: PressureMapping = {
+  width: true,
+  opacity: false,
+  saturation: false,
+};
+
+/**
+ * Adjust the saturation of an RGBA color.
+ * @param color RGBA 0-1 array
+ * @param factor Saturation multiplier (0 = grayscale, 1 = unchanged)
+ * @returns New RGBA array with adjusted saturation
+ */
+export function adjustSaturation(
+  color: [number, number, number, number],
+  factor: number,
+): [number, number, number, number] {
+  const [r, g, b, a] = color;
+  // Luminance-weighted desaturation (Rec. 709)
+  const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return [
+    luma + (r - luma) * factor,
+    luma + (g - luma) * factor,
+    luma + (b - luma) * factor,
+    a,
+  ];
+}
+
 // Default values
 export const DEFAULT_STROKE_COLOR: [number, number, number, number] = [1, 0.3, 0.3, 1]; // Red
 export const DEFAULT_STROKE_WIDTH = 3;

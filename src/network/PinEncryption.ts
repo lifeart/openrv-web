@@ -62,7 +62,7 @@ async function deriveKey(pinCode: string, salt: Uint8Array): Promise<CryptoKey> 
   return subtle.deriveKey(
     {
       name: 'PBKDF2',
-      salt,
+      salt: salt as unknown as BufferSource,
       iterations: PBKDF2_ITERATIONS,
       hash: 'SHA-256',
     },
@@ -84,9 +84,9 @@ export async function encryptSessionStateWithPin(
   const encoder = new TextEncoder();
 
   const ciphertextBuffer = await subtle.encrypt(
-    { name: 'AES-GCM', iv },
+    { name: 'AES-GCM', iv: iv as unknown as BufferSource },
     key,
-    encoder.encode(plainState)
+    encoder.encode(plainState) as unknown as BufferSource
   );
 
   return {
@@ -115,9 +115,9 @@ export async function decryptSessionStateWithPin(
   let plainBuffer: ArrayBuffer;
   try {
     plainBuffer = await subtle.decrypt(
-      { name: 'AES-GCM', iv },
+      { name: 'AES-GCM', iv: iv as unknown as BufferSource },
       key,
-      ciphertext
+      ciphertext as unknown as BufferSource
     );
   } catch {
     throw new Error('Failed to decrypt state payload. PIN may be incorrect.');

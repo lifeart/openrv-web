@@ -56,6 +56,7 @@ import { LayoutStore } from './ui/layout/LayoutStore';
 import { LayoutManager } from './ui/layout/LayoutManager';
 import { formatTimecode, formatDuration } from './handlers/infoPanelHandlers';
 import { SequenceGroupNode } from './nodes/groups/SequenceGroupNode';
+import { decodeSessionState, type SessionURLState } from './core/session/SessionURLManager';
 
 export class App {
   private container: HTMLElement | null = null;
@@ -231,6 +232,8 @@ export class App {
       networkSyncManager: this.controls.networkSyncManager,
       networkControl: this.controls.networkControl,
       headerBar: this.headerBar,
+      getSessionURLState: () => this.captureSessionURLState(),
+      applySessionURLState: (state) => this.applySessionURLState(state),
     });
     this.networkBridge.setup();
 
@@ -308,6 +311,118 @@ export class App {
 
     // Initialize persistence (auto-save and snapshots)
     await this.persistenceManager.init();
+
+    // Optional URL bootstrap:
+    // - auto-join room from ?room=...&pin=...
+    // - apply initial shared session hash from #s=...
+    this.handleURLBootstrap();
+  }
+
+  private captureSessionURLState(): SessionURLState {
+    const ocioState = this.controls.ocioControl.getState();
+    const source = this.session.currentSource;
+
+    return {
+      frame: this.session.currentFrame,
+      fps: this.session.fps,
+      inPoint: this.session.inPoint,
+      outPoint: this.session.outPoint,
+      sourceIndex: this.session.currentSourceIndex,
+      sourceUrl: source?.url,
+      sourceAIndex: this.session.sourceAIndex,
+      sourceBIndex: this.session.sourceBIndex >= 0 ? this.session.sourceBIndex : undefined,
+      currentAB: this.session.currentAB,
+      transform: this.viewer.getTransform(),
+      wipeMode: this.controls.compareControl.getWipeMode(),
+      wipePosition: this.controls.compareControl.getWipePosition(),
+      ocio: ocioState.enabled ? {
+        enabled: ocioState.enabled,
+        configName: ocioState.configName,
+        inputColorSpace: ocioState.inputColorSpace,
+        display: ocioState.display,
+        view: ocioState.view,
+        look: ocioState.look,
+      } : undefined,
+    };
+  }
+
+  private applySessionURLState(state: SessionURLState): void {
+    const syncStateManager = this.controls.networkSyncManager.getSyncStateManager();
+    syncStateManager.beginApplyRemote();
+    try {
+      if (this.session.sourceCount > 0) {
+        const sourceIndex = Math.max(0, Math.min(this.session.sourceCount - 1, state.sourceIndex));
+        this.session.setCurrentSource(sourceIndex);
+      }
+
+      if (typeof state.fps === 'number' && state.fps > 0) {
+        this.session.fps = state.fps;
+      }
+      if (typeof state.inPoint === 'number') {
+        this.session.setInPoint(state.inPoint);
+      }
+      if (typeof state.outPoint === 'number') {
+        this.session.setOutPoint(state.outPoint);
+      }
+
+      if (typeof state.sourceAIndex === 'number') {
+        this.session.setSourceA(state.sourceAIndex);
+      }
+      if (typeof state.sourceBIndex === 'number') {
+        this.session.setSourceB(state.sourceBIndex);
+      }
+      if (state.currentAB === 'A' || state.currentAB === 'B') {
+        this.session.setCurrentAB(state.currentAB);
+      }
+
+      if (typeof state.frame === 'number') {
+        this.session.goToFrame(state.frame);
+      }
+
+      if (state.transform) {
+        this.viewer.setTransform(state.transform);
+      }
+
+      if (typeof state.wipeMode === 'string') {
+        this.controls.compareControl.setWipeMode(state.wipeMode as any);
+      }
+      if (typeof state.wipePosition === 'number') {
+        this.controls.compareControl.setWipePosition(state.wipePosition);
+      }
+
+      if (state.ocio) {
+        this.controls.ocioControl.setState({
+          enabled: state.ocio.enabled ?? true,
+          configName: state.ocio.configName ?? this.controls.ocioControl.getState().configName,
+          inputColorSpace: state.ocio.inputColorSpace ?? this.controls.ocioControl.getState().inputColorSpace,
+          display: state.ocio.display ?? this.controls.ocioControl.getState().display,
+          view: state.ocio.view ?? this.controls.ocioControl.getState().view,
+          look: state.ocio.look ?? this.controls.ocioControl.getState().look,
+        });
+      }
+    } finally {
+      syncStateManager.endApplyRemote();
+    }
+  }
+
+  private handleURLBootstrap(): void {
+    const params = new URLSearchParams(window.location.search);
+    const roomCode = params.get('room');
+    const pinCode = params.get('pin');
+
+    if (pinCode) {
+      this.controls.networkControl.setPinCode(pinCode);
+      this.controls.networkSyncManager.setPinCode(pinCode);
+    }
+
+    if (roomCode) {
+      this.controls.networkSyncManager.joinRoom(roomCode.toUpperCase(), 'User', pinCode ?? undefined);
+    }
+
+    const sharedState = decodeSessionState(window.location.hash);
+    if (sharedState) {
+      this.applySessionURLState(sharedState);
+    }
   }
 
   private createLayout(): void {

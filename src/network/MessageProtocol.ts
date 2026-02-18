@@ -13,6 +13,8 @@ import type {
   ViewSyncPayload,
   ColorSyncPayload,
   AnnotationSyncPayload,
+  CursorSyncPayload,
+  PermissionChangePayload,
   RoomCreatePayload,
   RoomJoinPayload,
   RoomLeavePayload,
@@ -20,6 +22,11 @@ import type {
   PongPayload,
   StateRequestPayload,
   StateResponsePayload,
+  MediaRequestPayload,
+  MediaOfferPayload,
+  MediaResponsePayload,
+  MediaChunkPayload,
+  MediaCompletePayload,
   WebRTCOfferPayload,
   WebRTCAnswerPayload,
   WebRTCIcePayload,
@@ -43,10 +50,17 @@ const VALID_MESSAGE_TYPES: Set<SyncMessageType> = new Set([
   'sync.annotation',
   'sync.state-request',
   'sync.state-response',
+  'sync.media-request',
+  'sync.media-offer',
+  'sync.media-response',
+  'sync.media-chunk',
+  'sync.media-complete',
   'sync.webrtc-offer',
   'sync.webrtc-answer',
   'sync.webrtc-ice',
+  'sync.cursor',
   'user.presence',
+  'user.permission',
   'ping',
   'pong',
   'error',
@@ -187,6 +201,28 @@ export function createAnnotationSyncMessage(
 }
 
 /**
+ * Create a sync.cursor message.
+ */
+export function createCursorSyncMessage(
+  roomId: string,
+  userId: string,
+  payload: CursorSyncPayload
+): SyncMessage {
+  return createMessage('sync.cursor', roomId, userId, payload);
+}
+
+/**
+ * Create a user.permission message.
+ */
+export function createPermissionMessage(
+  roomId: string,
+  userId: string,
+  payload: PermissionChangePayload
+): SyncMessage {
+  return createMessage('user.permission', roomId, userId, payload);
+}
+
+/**
  * Create a sync.state-request message.
  */
 export function createStateRequestMessage(
@@ -206,6 +242,61 @@ export function createStateResponseMessage(
   payload: StateResponsePayload
 ): SyncMessage {
   return createMessage('sync.state-response', roomId, userId, payload);
+}
+
+/**
+ * Create a sync.media-request message.
+ */
+export function createMediaRequestMessage(
+  roomId: string,
+  userId: string,
+  payload: MediaRequestPayload
+): SyncMessage {
+  return createMessage('sync.media-request', roomId, userId, payload);
+}
+
+/**
+ * Create a sync.media-offer message.
+ */
+export function createMediaOfferMessage(
+  roomId: string,
+  userId: string,
+  payload: MediaOfferPayload
+): SyncMessage {
+  return createMessage('sync.media-offer', roomId, userId, payload);
+}
+
+/**
+ * Create a sync.media-response message.
+ */
+export function createMediaResponseMessage(
+  roomId: string,
+  userId: string,
+  payload: MediaResponsePayload
+): SyncMessage {
+  return createMessage('sync.media-response', roomId, userId, payload);
+}
+
+/**
+ * Create a sync.media-chunk message.
+ */
+export function createMediaChunkMessage(
+  roomId: string,
+  userId: string,
+  payload: MediaChunkPayload
+): SyncMessage {
+  return createMessage('sync.media-chunk', roomId, userId, payload);
+}
+
+/**
+ * Create a sync.media-complete message.
+ */
+export function createMediaCompleteMessage(
+  roomId: string,
+  userId: string,
+  payload: MediaCompletePayload
+): SyncMessage {
+  return createMessage('sync.media-complete', roomId, userId, payload);
 }
 
 /**
@@ -383,6 +474,82 @@ export function validateStateRequestPayload(payload: unknown): payload is StateR
 }
 
 /**
+ * Validate a media-request payload.
+ */
+export function validateMediaRequestPayload(payload: unknown): payload is MediaRequestPayload {
+  if (payload === null || typeof payload !== 'object') return false;
+  const p = payload as Record<string, unknown>;
+  if (typeof p.transferId !== 'string' || p.transferId.length === 0) return false;
+  if (p.targetUserId !== undefined && typeof p.targetUserId !== 'string') return false;
+  return true;
+}
+
+/**
+ * Validate a media-offer payload.
+ */
+export function validateMediaOfferPayload(payload: unknown): payload is MediaOfferPayload {
+  if (payload === null || typeof payload !== 'object') return false;
+  const p = payload as Record<string, unknown>;
+  if (typeof p.transferId !== 'string' || p.transferId.length === 0) return false;
+  if (typeof p.targetUserId !== 'string' || p.targetUserId.length === 0) return false;
+  if (typeof p.totalBytes !== 'number' || !Number.isFinite(p.totalBytes) || p.totalBytes < 0) return false;
+  if (!Array.isArray(p.files) || !Array.isArray(p.sources)) return false;
+  return true;
+}
+
+/**
+ * Validate a media-response payload.
+ */
+export function validateMediaResponsePayload(payload: unknown): payload is MediaResponsePayload {
+  if (payload === null || typeof payload !== 'object') return false;
+  const p = payload as Record<string, unknown>;
+  return (
+    typeof p.transferId === 'string' &&
+    p.transferId.length > 0 &&
+    typeof p.targetUserId === 'string' &&
+    p.targetUserId.length > 0 &&
+    typeof p.accepted === 'boolean'
+  );
+}
+
+/**
+ * Validate a media-chunk payload.
+ */
+export function validateMediaChunkPayload(payload: unknown): payload is MediaChunkPayload {
+  if (payload === null || typeof payload !== 'object') return false;
+  const p = payload as Record<string, unknown>;
+  return (
+    typeof p.transferId === 'string' &&
+    p.transferId.length > 0 &&
+    typeof p.targetUserId === 'string' &&
+    p.targetUserId.length > 0 &&
+    typeof p.fileId === 'string' &&
+    p.fileId.length > 0 &&
+    typeof p.chunkIndex === 'number' &&
+    Number.isFinite(p.chunkIndex) &&
+    p.chunkIndex >= 0 &&
+    typeof p.totalChunks === 'number' &&
+    Number.isFinite(p.totalChunks) &&
+    p.totalChunks >= 1 &&
+    typeof p.data === 'string'
+  );
+}
+
+/**
+ * Validate a media-complete payload.
+ */
+export function validateMediaCompletePayload(payload: unknown): payload is MediaCompletePayload {
+  if (payload === null || typeof payload !== 'object') return false;
+  const p = payload as Record<string, unknown>;
+  return (
+    typeof p.transferId === 'string' &&
+    p.transferId.length > 0 &&
+    typeof p.targetUserId === 'string' &&
+    p.targetUserId.length > 0
+  );
+}
+
+/**
  * Validate a WebRTC offer payload.
  */
 export function validateWebRTCOfferPayload(payload: unknown): payload is WebRTCOfferPayload {
@@ -419,4 +586,50 @@ export function validateWebRTCIcePayload(payload: unknown): payload is WebRTCIce
     p.candidate !== null &&
     typeof p.candidate === 'object'
   );
+}
+
+/**
+ * Validate an annotation sync payload.
+ */
+export function validateAnnotationPayload(payload: unknown): payload is AnnotationSyncPayload {
+  if (payload === null || typeof payload !== 'object') return false;
+  const p = payload as Record<string, unknown>;
+  if (typeof p.frame !== 'number' || !Number.isFinite(p.frame)) return false;
+  if (!Array.isArray(p.strokes)) return false;
+  if (typeof p.action !== 'string') return false;
+  const validActions = ['add', 'remove', 'clear', 'update'];
+  if (!validActions.includes(p.action)) return false;
+  if (typeof p.timestamp !== 'number' || !Number.isFinite(p.timestamp)) return false;
+  return true;
+}
+
+/**
+ * Validate a cursor sync payload.
+ */
+export function validateCursorPayload(payload: unknown): payload is CursorSyncPayload {
+  if (payload === null || typeof payload !== 'object') return false;
+  const p = payload as Record<string, unknown>;
+  return (
+    typeof p.userId === 'string' &&
+    p.userId.length > 0 &&
+    typeof p.x === 'number' &&
+    Number.isFinite(p.x) &&
+    typeof p.y === 'number' &&
+    Number.isFinite(p.y) &&
+    typeof p.timestamp === 'number' &&
+    Number.isFinite(p.timestamp)
+  );
+}
+
+/**
+ * Validate a permission change payload.
+ */
+export function validatePermissionPayload(payload: unknown): payload is PermissionChangePayload {
+  if (payload === null || typeof payload !== 'object') return false;
+  const p = payload as Record<string, unknown>;
+  if (typeof p.targetUserId !== 'string' || p.targetUserId.length === 0) return false;
+  if (typeof p.role !== 'string') return false;
+  const validRoles = ['host', 'reviewer', 'viewer'];
+  if (!validRoles.includes(p.role)) return false;
+  return true;
 }

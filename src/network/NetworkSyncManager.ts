@@ -16,8 +16,16 @@ import {
   createPlaybackSyncMessage,
   createFrameSyncMessage,
   createViewSyncMessage,
+  createAnnotationSyncMessage,
+  createCursorSyncMessage,
+  createPermissionMessage,
   createStateRequestMessage,
   createStateResponseMessage,
+  createMediaRequestMessage,
+  createMediaOfferMessage,
+  createMediaResponseMessage,
+  createMediaChunkMessage,
+  createMediaCompleteMessage,
   createWebRTCOfferMessage,
   createWebRTCAnswerMessage,
   createWebRTCIceMessage,
@@ -28,7 +36,15 @@ import {
   validateFramePayload,
   validateViewPayload,
   validateColorPayload,
+  validateAnnotationPayload,
+  validateCursorPayload,
+  validatePermissionPayload,
   validateStateRequestPayload,
+  validateMediaRequestPayload,
+  validateMediaOfferPayload,
+  validateMediaResponsePayload,
+  validateMediaChunkPayload,
+  validateMediaCompletePayload,
   validateWebRTCOfferPayload,
   validateWebRTCAnswerPayload,
   validateWebRTCIcePayload,
@@ -45,6 +61,11 @@ import type {
   FrameSyncPayload,
   ViewSyncPayload,
   ColorSyncPayload,
+  AnnotationSyncPayload,
+  CursorSyncPayload,
+  ParticipantRole,
+  ParticipantPermission,
+  PermissionChangePayload,
   RoomCreatedPayload,
   RoomJoinedPayload,
   RoomLeftPayload,
@@ -53,6 +74,8 @@ import type {
   ErrorPayload,
   StateRequestPayload,
   StateResponsePayload,
+  MediaOfferPayload,
+  MediaChunkPayload,
   WebRTCOfferPayload,
   WebRTCAnswerPayload,
   WebRTCIcePayload,
@@ -81,6 +104,8 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   private _syncSettings: SyncSettings = { ...DEFAULT_SYNC_SETTINGS };
   private _disposed = false;
   private _webrtcPeers = new Map<string, WebRTCPeerState>();
+  private _permissions = new Map<string, ParticipantRole>();
+  private _remoteCursors = new Map<string, CursorSyncPayload>();
 
   // Subscriptions to clean up
   private _unsubscribers: Array<() => void> = [];
@@ -313,6 +338,81 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     this.sendStateResponseOverWebSocket(responsePayload);
   }
 
+  /**
+   * Request media bytes from another peer (typically host) for missing local files.
+   * Returns the generated transfer ID, or an empty string if request could not be sent.
+   */
+  requestMediaSync(targetUserId?: string): string {
+    if (!this.isConnected || !this._roomInfo) return '';
+
+    const transferId = generateMessageId();
+    const message = createMediaRequestMessage(this._roomInfo.roomId, this._userId, {
+      transferId,
+      targetUserId,
+    });
+    this.wsClient.send(message);
+    return transferId;
+  }
+
+  /**
+   * Send a media transfer offer to a specific requester.
+   */
+  sendMediaOffer(
+    transferId: string,
+    requesterUserId: string,
+    payload: Omit<MediaOfferPayload, 'transferId' | 'targetUserId'>
+  ): void {
+    if (!this.isConnected || !this._roomInfo) return;
+    const message = createMediaOfferMessage(this._roomInfo.roomId, this._userId, {
+      ...payload,
+      transferId,
+      targetUserId: requesterUserId,
+    });
+    this.wsClient.send(message);
+  }
+
+  /**
+   * Respond to an incoming media offer.
+   */
+  sendMediaResponse(transferId: string, targetUserId: string, accepted: boolean): void {
+    if (!this.isConnected || !this._roomInfo) return;
+    const message = createMediaResponseMessage(this._roomInfo.roomId, this._userId, {
+      transferId,
+      targetUserId,
+      accepted,
+    });
+    this.wsClient.send(message);
+  }
+
+  /**
+   * Send a media chunk to the target peer.
+   */
+  sendMediaChunk(
+    transferId: string,
+    targetUserId: string,
+    payload: Omit<MediaChunkPayload, 'transferId' | 'targetUserId'>
+  ): void {
+    if (!this.isConnected || !this._roomInfo) return;
+    const message = createMediaChunkMessage(this._roomInfo.roomId, this._userId, {
+      ...payload,
+      transferId,
+      targetUserId,
+    });
+    this.wsClient.send(message);
+  }
+
+  /**
+   * Notify the target peer that all media chunks were sent.
+   */
+  sendMediaComplete(transferId: string, targetUserId: string): void {
+    if (!this.isConnected || !this._roomInfo) return;
+    const message = createMediaCompleteMessage(this._roomInfo.roomId, this._userId, {
+      transferId,
+      targetUserId,
+    });
+    this.wsClient.send(message);
+  }
+
   // ---- Private: WebSocket Event Handling ----
 
   private setupWebSocketEvents(): void {
@@ -409,6 +509,21 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
         break;
       case 'sync.state-response':
         this.handleStateResponse(message.payload, message.userId);
+        break;
+      case 'sync.media-request':
+        this.handleMediaRequest(message.payload, message.userId);
+        break;
+      case 'sync.media-offer':
+        this.handleMediaOffer(message.payload, message.userId);
+        break;
+      case 'sync.media-response':
+        this.handleMediaResponse(message.payload, message.userId);
+        break;
+      case 'sync.media-chunk':
+        this.handleMediaChunk(message.payload, message.userId);
+        break;
+      case 'sync.media-complete':
+        this.handleMediaComplete(message.payload, message.userId);
         break;
       case 'sync.webrtc-offer':
         this.handleWebRTCOffer(message.payload, message.userId);
@@ -574,6 +689,74 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       sessionState: responsePayload.sessionState,
       encryptedSessionState: responsePayload.encryptedSessionState,
       transport: 'websocket',
+    });
+  }
+
+  private handleMediaRequest(payload: unknown, senderUserId: string): void {
+    if (!validateMediaRequestPayload(payload)) return;
+
+    const requestPayload = payload as { transferId: string; targetUserId?: string };
+    if (requestPayload.targetUserId && requestPayload.targetUserId !== this._userId) return;
+
+    this.emit('mediaSyncRequested', {
+      transferId: requestPayload.transferId,
+      requesterUserId: senderUserId,
+    });
+  }
+
+  private handleMediaOffer(payload: unknown, senderUserId: string): void {
+    if (!validateMediaOfferPayload(payload)) return;
+
+    const offerPayload = payload as MediaOfferPayload;
+    if (offerPayload.targetUserId !== this._userId) return;
+
+    this.emit('mediaSyncOffered', {
+      transferId: offerPayload.transferId,
+      senderUserId,
+      totalBytes: offerPayload.totalBytes,
+      files: offerPayload.files,
+      sources: offerPayload.sources,
+    });
+  }
+
+  private handleMediaResponse(payload: unknown, senderUserId: string): void {
+    if (!validateMediaResponsePayload(payload)) return;
+
+    const responsePayload = payload as { transferId: string; targetUserId: string; accepted: boolean };
+    if (responsePayload.targetUserId !== this._userId) return;
+
+    this.emit('mediaSyncResponded', {
+      transferId: responsePayload.transferId,
+      senderUserId,
+      accepted: responsePayload.accepted,
+    });
+  }
+
+  private handleMediaChunk(payload: unknown, senderUserId: string): void {
+    if (!validateMediaChunkPayload(payload)) return;
+
+    const chunkPayload = payload as MediaChunkPayload;
+    if (chunkPayload.targetUserId !== this._userId) return;
+
+    this.emit('mediaSyncChunkReceived', {
+      transferId: chunkPayload.transferId,
+      senderUserId,
+      fileId: chunkPayload.fileId,
+      chunkIndex: chunkPayload.chunkIndex,
+      totalChunks: chunkPayload.totalChunks,
+      data: chunkPayload.data,
+    });
+  }
+
+  private handleMediaComplete(payload: unknown, senderUserId: string): void {
+    if (!validateMediaCompletePayload(payload)) return;
+
+    const completePayload = payload as { transferId: string; targetUserId: string };
+    if (completePayload.targetUserId !== this._userId) return;
+
+    this.emit('mediaSyncCompleted', {
+      transferId: completePayload.transferId,
+      senderUserId,
     });
   }
 

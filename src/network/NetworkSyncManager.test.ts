@@ -267,6 +267,17 @@ describe('NetworkSyncManager', () => {
       manager.requestStateSync();
       // Should not throw
     });
+
+    it('NSM-042b: requestMediaSync returns transfer ID when connected', () => {
+      manager.simulateRoomCreated();
+      const transferId = manager.requestMediaSync();
+      expect(transferId).toBeTruthy();
+    });
+
+    it('NSM-042c: requestMediaSync returns empty string when disconnected', () => {
+      const transferId = manager.requestMediaSync();
+      expect(transferId).toBe('');
+    });
   });
 
   describe('dispose', () => {
