@@ -688,5 +688,107 @@ describe('PaintEngine', () => {
       const stroke = engine.endStroke();
       expect(Number(stroke!.id)).toBeGreaterThan(100);
     });
+
+    it('addRemoteAnnotation handles prefixed IDs for nextId', () => {
+      engine.addRemoteAnnotation({
+        type: 'pen', id: 'user1-50', frame: 0, user: 'alice',
+        color: [1, 0, 0, 1], width: 3, brush: 0,
+        points: [{ x: 0, y: 0 }], join: 3, cap: 2,
+        splat: false, mode: 0, startFrame: 0, duration: 0,
+      } as any);
+
+      // nextId should be updated based on the numeric suffix
+      engine.tool = 'pen';
+      engine.beginStroke(0, { x: 0.5, y: 0.5 });
+      const stroke = engine.endStroke();
+      const numericPart = stroke!.id.includes('-') ? Number(stroke!.id.split('-').pop()) : Number(stroke!.id);
+      expect(numericPart).toBeGreaterThanOrEqual(51);
+    });
+  });
+
+  describe('id prefix', () => {
+    it('PAINT-030: setIdPrefix sets prefix for generated IDs', () => {
+      engine.setIdPrefix('user1');
+      expect(engine.idPrefix).toBe('user1');
+
+      engine.tool = 'pen';
+      engine.beginStroke(0, { x: 0.1, y: 0.1 });
+      const stroke = engine.endStroke();
+
+      expect(stroke!.id).toMatch(/^user1-\d+$/);
+    });
+
+    it('PAINT-031: empty prefix generates plain numeric IDs', () => {
+      engine.setIdPrefix('');
+      expect(engine.idPrefix).toBe('');
+
+      engine.tool = 'pen';
+      engine.beginStroke(0, { x: 0.1, y: 0.1 });
+      const stroke = engine.endStroke();
+
+      expect(stroke!.id).toMatch(/^\d+$/);
+    });
+
+    it('PAINT-032: prefix applies to text annotations', () => {
+      engine.setIdPrefix('peer2');
+      const text = engine.addText(0, { x: 0.5, y: 0.5 }, 'Hello');
+      expect(text.id).toMatch(/^peer2-\d+$/);
+    });
+
+    it('PAINT-033: prefix applies to shape annotations', () => {
+      engine.setIdPrefix('peer3');
+      const shape = engine.addRectangle(0, { x: 0, y: 0 }, { x: 1, y: 1 });
+      expect(shape.id).toMatch(/^peer3-\d+$/);
+    });
+
+    it('PAINT-034: prefix applies to polygon annotations', () => {
+      engine.setIdPrefix('peer4');
+      const shape = engine.addPolygon(0, [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0.5, y: 1 }]);
+      expect(shape.id).toMatch(/^peer4-\d+$/);
+    });
+
+    it('PAINT-035: clearing prefix reverts to numeric IDs', () => {
+      engine.setIdPrefix('user1');
+      engine.tool = 'pen';
+      engine.beginStroke(0, { x: 0.1, y: 0.1 });
+      const stroke1 = engine.endStroke();
+      expect(stroke1!.id).toContain('user1-');
+
+      engine.setIdPrefix('');
+      engine.beginStroke(1, { x: 0.1, y: 0.1 });
+      const stroke2 = engine.endStroke();
+      expect(stroke2!.id).not.toContain('-');
+    });
+
+    it('PAINT-036: loadFromAnnotations handles prefixed IDs', () => {
+      const annotations = [
+        {
+          type: 'pen' as const,
+          id: 'user1-10',
+          frame: 0,
+          user: 'test',
+          color: [1, 0, 0, 1] as [number, number, number, number],
+          width: 5,
+          brush: BrushType.Circle,
+          points: [{ x: 0.1, y: 0.1 }],
+          join: 3,
+          cap: 2,
+          splat: false,
+          mode: StrokeMode.Draw,
+          startFrame: 0,
+          duration: 0,
+        },
+      ];
+
+      engine.loadFromAnnotations(annotations);
+      expect(engine.getAnnotationsForFrame(0)).toHaveLength(1);
+
+      // nextId should be >= 11 to avoid collisions
+      engine.tool = 'pen';
+      engine.beginStroke(1, { x: 0.5, y: 0.5 });
+      const stroke = engine.endStroke();
+      const numericPart = stroke!.id.includes('-') ? Number(stroke!.id.split('-').pop()) : Number(stroke!.id);
+      expect(numericPart).toBeGreaterThanOrEqual(11);
+    });
   });
 });

@@ -14,6 +14,15 @@ class MockSession extends EventEmitter {
   playDirection = 1;
   loopMode = 'loop';
   isPlaying = false;
+  fps = 24;
+  inPoint = 0;
+  outPoint = 100;
+  sourceCount = 0;
+  currentSourceIndex = 0;
+  currentSource = null;
+  sourceAIndex = 0;
+  sourceBIndex = -1;
+  currentAB = 'A';
   play = vi.fn();
   pause = vi.fn();
   goToFrame = vi.fn();
@@ -96,6 +105,10 @@ function createMockViewer() {
       highlights: 0, shadows: 0, whites: 0, blacks: 0,
     })),
     setColorAdjustments: vi.fn(),
+    getWipeState: vi.fn(() => ({ mode: 'none', position: 0.5 })),
+    getTransform: vi.fn(() => null),
+    setTransform: vi.fn(),
+    setWipeState: vi.fn(),
   };
 }
 

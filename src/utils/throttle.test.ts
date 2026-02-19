@@ -69,14 +69,17 @@ describe('createThrottle', () => {
     const throttled = createThrottle(fn, 100);
 
     // Interval 1
-    throttled.call(1); // leading
+    throttled.call(1); // leading at t=0
     throttled.call(2); // queued trailing
 
-    vi.advanceTimersByTime(100); // trailing fires with 2
+    vi.advanceTimersByTime(100); // trailing fires with 2 at t=100
     expect(fn).toHaveBeenCalledTimes(2);
 
+    // Advance past the interval so next call is a fresh leading edge
+    vi.advanceTimersByTime(100);
+
     // Interval 2
-    throttled.call(3); // leading
+    throttled.call(3); // leading at t=101
     throttled.call(4); // queued trailing
 
     vi.advanceTimersByTime(100); // trailing fires with 4

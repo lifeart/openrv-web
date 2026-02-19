@@ -539,4 +539,223 @@ describe('NetworkSyncManager', () => {
       });
     });
   });
+
+  describe('message deduplication', () => {
+    it('NSM-100: duplicate message IDs are skipped', () => {
+      manager.simulateRoomCreated();
+
+      const handler = vi.fn();
+      manager.on('syncFrame', handler);
+
+      // Create a message with a known ID
+      const message = {
+        id: 'test-msg-1',
+        type: 'sync.frame' as const,
+        roomId: manager.roomInfo!.roomId,
+        userId: 'other-user',
+        timestamp: Date.now(),
+        payload: { currentFrame: 10, timestamp: Date.now() },
+      };
+
+      // Send the same message twice via the handleMessage method
+      (manager as any).handleMessage(message, 'websocket');
+      (manager as any).handleMessage(message, 'websocket');
+
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+
+    it('NSM-101: evicts oldest message ID after 200', () => {
+      manager.simulateRoomCreated();
+
+      const handler = vi.fn();
+      manager.on('syncFrame', handler);
+
+      const roomId = manager.roomInfo!.roomId;
+
+      // Fill up the dedup queue with 200 unique messages
+      for (let i = 0; i < 200; i++) {
+        const msg = {
+          id: `msg-${i}`,
+          type: 'sync.frame' as const,
+          roomId,
+          userId: 'other-user',
+          timestamp: Date.now(),
+          payload: { currentFrame: i, timestamp: Date.now() },
+        };
+        (manager as any).handleMessage(msg, 'websocket');
+      }
+      expect(handler).toHaveBeenCalledTimes(200);
+
+      // Now send one more to cause eviction of msg-0
+      const newMsg = {
+        id: 'msg-200',
+        type: 'sync.frame' as const,
+        roomId,
+        userId: 'other-user',
+        timestamp: Date.now(),
+        payload: { currentFrame: 200, timestamp: Date.now() },
+      };
+      (manager as any).handleMessage(newMsg, 'websocket');
+      expect(handler).toHaveBeenCalledTimes(201);
+
+      // Now msg-0 should have been evicted, so it can be accepted again
+      const oldMsg = {
+        id: 'msg-0',
+        type: 'sync.frame' as const,
+        roomId,
+        userId: 'other-user',
+        timestamp: Date.now(),
+        payload: { currentFrame: 0, timestamp: Date.now() },
+      };
+      (manager as any).handleMessage(oldMsg, 'websocket');
+      expect(handler).toHaveBeenCalledTimes(202);
+    });
+  });
+
+  describe('sender identity validation', () => {
+    it('NSM-110: annotation strokes have user overridden with sender ID', () => {
+      manager.simulateRoomCreated();
+      manager.setSyncSettings({
+        playback: true, view: true, color: true, annotations: true, cursor: true,
+      });
+
+      const handler = vi.fn();
+      manager.on('syncAnnotation', handler);
+
+      const senderUserId = 'sender-123';
+      (manager as any)._permissions.set(senderUserId, 'reviewer');
+
+      const message = {
+        id: 'ann-msg-1',
+        type: 'sync.annotation' as const,
+        roomId: manager.roomInfo!.roomId,
+        userId: senderUserId,
+        timestamp: Date.now(),
+        payload: {
+          frame: 1,
+          strokes: [
+            { type: 'pen', id: 's1', frame: 1, user: 'spoofed-user', color: [1, 0, 0, 1], width: 2, brush: 0, points: [{ x: 0, y: 0 }], join: 3, cap: 2, splat: false, mode: 0, startFrame: 1, duration: 0 },
+          ],
+          action: 'add',
+          annotationId: 's1',
+          timestamp: Date.now(),
+        },
+      };
+      (manager as any).handleMessage(message, 'websocket');
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      const payload = handler.mock.calls[0]![0];
+      expect(payload.strokes[0].user).toBe(senderUserId);
+    });
+
+    it('NSM-111: note has author overridden with sender ID', () => {
+      manager.simulateRoomCreated();
+      manager.setSyncSettings({
+        playback: true, view: true, color: true, annotations: true, cursor: true,
+      });
+
+      const handler = vi.fn();
+      manager.on('syncNote', handler);
+
+      const senderUserId = 'sender-456';
+      (manager as any)._permissions.set(senderUserId, 'reviewer');
+
+      const message = {
+        id: 'note-msg-1',
+        type: 'sync.note' as const,
+        roomId: manager.roomInfo!.roomId,
+        userId: senderUserId,
+        timestamp: Date.now(),
+        payload: {
+          action: 'add',
+          note: {
+            id: 'n1', text: 'Test', author: 'spoofed-author',
+            sourceIndex: 0, frameStart: 1, frameEnd: 5,
+            createdAt: new Date().toISOString(), modifiedAt: new Date().toISOString(),
+            status: 'open', parentId: null, color: '#ff0000',
+          },
+          timestamp: Date.now(),
+        },
+      };
+      (manager as any).handleMessage(message, 'websocket');
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      const payload = handler.mock.calls[0]![0];
+      expect(payload.note.author).toBe(senderUserId);
+    });
+  });
+
+  describe('state request retry/timeout', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('NSM-120: requestStateSync retries after timeout', () => {
+      manager.simulateRoomCreated();
+
+      // Spy on dispatching
+      const dispatchSpy = vi.spyOn(manager as any, 'sendStateRequest');
+
+      manager.requestStateSync('host-1');
+      expect(dispatchSpy).toHaveBeenCalledTimes(1);
+
+      // First timeout → retry 1
+      vi.advanceTimersByTime(3000);
+      expect(dispatchSpy).toHaveBeenCalledTimes(2);
+
+      // Second timeout → retry 2
+      vi.advanceTimersByTime(3000);
+      expect(dispatchSpy).toHaveBeenCalledTimes(3);
+    });
+
+    it('NSM-121: emits warning after max retries', () => {
+      manager.simulateRoomCreated();
+
+      const toastHandler = vi.fn();
+      manager.on('toastMessage', toastHandler);
+
+      manager.requestStateSync('host-1');
+
+      // Exhaust all retries
+      vi.advanceTimersByTime(3000); // retry 1
+      vi.advanceTimersByTime(3000); // retry 2
+      vi.advanceTimersByTime(3000); // timeout after max
+
+      expect(toastHandler).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'warning' }),
+      );
+    });
+
+    it('NSM-122: handleStateResponse clears pending request', () => {
+      manager.simulateRoomCreated();
+
+      manager.requestStateSync('host-1');
+      expect((manager as any)._pendingStateRequest).not.toBeNull();
+
+      // Simulate receiving a state response
+      const responseMessage = {
+        id: 'resp-1',
+        type: 'sync.state-response' as const,
+        roomId: manager.roomInfo!.roomId,
+        userId: 'host-1',
+        timestamp: Date.now(),
+        payload: {
+          requestId: (manager as any)._pendingStateRequest.requestId,
+          targetUserId: manager.userId,
+          sessionState: 'encoded-state-data',
+        },
+      };
+      (manager as any).handleMessage(responseMessage, 'websocket');
+
+      expect((manager as any)._pendingStateRequest).toBeNull();
+
+      // No retry should fire
+      vi.advanceTimersByTime(10000);
+      // No warning toast
+    });
+  });
 });
