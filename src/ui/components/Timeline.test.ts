@@ -280,8 +280,15 @@ describe('Timeline', () => {
       expect(timeline.timecodeDisplayMode).toBe('timecode');
     });
 
-    it('TML-025: toggleTimecodeDisplay switches from timecode back to frames', () => {
-      timeline.timecodeDisplayMode = 'timecode';
+    it('TML-025: toggleTimecodeDisplay cycles through all modes', () => {
+      // frames -> timecode -> seconds -> footage -> frames
+      expect(timeline.timecodeDisplayMode).toBe('frames');
+      timeline.toggleTimecodeDisplay();
+      expect(timeline.timecodeDisplayMode).toBe('timecode');
+      timeline.toggleTimecodeDisplay();
+      expect(timeline.timecodeDisplayMode).toBe('seconds');
+      timeline.toggleTimecodeDisplay();
+      expect(timeline.timecodeDisplayMode).toBe('footage');
       timeline.toggleTimecodeDisplay();
       expect(timeline.timecodeDisplayMode).toBe('frames');
     });

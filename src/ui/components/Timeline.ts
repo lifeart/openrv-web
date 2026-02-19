@@ -2,7 +2,7 @@ import { Session } from '../../core/session/Session';
 import { PaintEngine } from '../../paint/PaintEngine';
 import { WaveformRenderer } from '../../audio/WaveformRenderer';
 import { ThumbnailManager } from './ThumbnailManager';
-import { formatTimecode, formatFrameDisplay, TimecodeDisplayMode } from '../../utils/media/Timecode';
+import { formatTimecode, formatFrameDisplay, TimecodeDisplayMode, getNextDisplayMode, getDisplayModeLabel } from '../../utils/media/Timecode';
 import { getThemeManager } from '../../utils/ui/ThemeManager';
 import type { NoteOverlay } from './NoteOverlay';
 
@@ -273,10 +273,10 @@ export class Timeline {
   }
 
   /**
-   * Toggle between frames and timecode display modes
+   * Cycle through all available display modes (frames -> timecode -> seconds -> footage -> frames ...)
    */
   toggleTimecodeDisplay(): void {
-    this.timecodeDisplayMode = this._timecodeDisplayMode === 'frames' ? 'timecode' : 'frames';
+    this.timecodeDisplayMode = getNextDisplayMode(this._timecodeDisplayMode);
   }
 
   /**
@@ -580,7 +580,8 @@ export class Timeline {
 
     // Frame numbers / timecode
     const fps = this.session.fps;
-    const isTimecode = this._timecodeDisplayMode === 'timecode';
+    const currentMode = this._timecodeDisplayMode;
+    const isTimecode = currentMode === 'timecode';
     const trackCenterY = trackY + trackHeight / 2;
     const bottomInfoY = height - 20;
     const safeMetric = (value: number | undefined, fallback: number): number => (
@@ -628,7 +629,7 @@ export class Timeline {
     const frameLabelWidth = frameLabelMetrics.width;
 
     // Draw timecode mode indicator (small label showing current mode)
-    const modeLabel = isTimecode ? 'TC' : 'F#';
+    const modeLabel = getDisplayModeLabel(currentMode);
     ctx.font = '9px -apple-system, BlinkMacSystemFont, monospace';
     ctx.fillStyle = colors.textDim;
     ctx.textAlign = 'left';

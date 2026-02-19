@@ -211,6 +211,10 @@ export class WebGPUBackend implements RendererBackend {
     // 4. Draw a fullscreen quad
   }
 
+  renderTiledImages(_tiles: { image: IPImage; viewport: import('../nodes/groups/LayoutGroupNode').TileViewport }[]): void {
+    // STUB: WebGPU tiled rendering not yet implemented.
+  }
+
   // --- Color adjustments (IMPLEMENTED - state management) ---
 
   setColorAdjustments(adjustments: ColorAdjustments): void {

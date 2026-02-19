@@ -3651,4 +3651,759 @@ describe('EXR Tiled Image Support', () => {
       expect(result1.data[1]).toBeCloseTo(0.25, 1);
     });
   });
+
+  // ==================== Deep Scanline EXR Tests ====================
+
+  describe('Deep scanline EXR', () => {
+    /**
+     * Create a deep scanline EXR file buffer for testing.
+     *
+     * Deep scanline format:
+     * - Header with type="deepscanline", nonImage flag set
+     * - Offset table (one uint64 per scanline block)
+     * - Per block: y (int32), packedSampleOffsetSize (uint64), packedDataSize (uint64),
+     *   unpackedDataSize (uint64), sample_count_table, sample_data
+     *
+     * Sample count table: cumulative counts per pixel (int32 each)
+     * Sample data: for each pixel's samples, channel data in alphabetical channel order
+     */
+    function createDeepScanlineEXR(options: {
+      width?: number;
+      height?: number;
+      channels?: string[];
+      pixelType?: EXRPixelType;
+      compression?: EXRCompression;
+      /** Per-pixel sample counts, row-major [y][x] */
+      sampleCounts: number[][];
+      /** Per-pixel sample data: [y][x] = array of samples, each sample = {R, G, B, A} (or subset) */
+      sampleData: number[][][][];
+    }): ArrayBuffer {
+      const {
+        width = 2,
+        height = 2,
+        channels = ['A', 'B', 'G', 'R'], // Alphabetical order (EXR spec)
+        pixelType = EXRPixelType.FLOAT,
+        compression = EXRCompression.NONE,
+        sampleCounts,
+        sampleData,
+      } = options;
+
+      const parts: Uint8Array[] = [];
+      let offset = 0;
+
+      function writeUint32(value: number): void {
+        const buf = new Uint8Array(4);
+        const view = new DataView(buf.buffer);
+        view.setUint32(0, value, true);
+        parts.push(buf);
+        offset += 4;
+      }
+
+      function writeInt32(value: number): void {
+        const buf = new Uint8Array(4);
+        const view = new DataView(buf.buffer);
+        view.setInt32(0, value, true);
+        parts.push(buf);
+        offset += 4;
+      }
+
+      function writeUint8(value: number): void {
+        parts.push(new Uint8Array([value]));
+        offset += 1;
+      }
+
+      function writeString(str: string): void {
+        const encoder = new TextEncoder();
+        const bytes = encoder.encode(str);
+        parts.push(bytes);
+        parts.push(new Uint8Array([0]));
+        offset += bytes.length + 1;
+      }
+
+      function writeFloat32(value: number): void {
+        const buf = new Uint8Array(4);
+        const view = new DataView(buf.buffer);
+        view.setFloat32(0, value, true);
+        parts.push(buf);
+        offset += 4;
+      }
+
+      function writeUint64(value: bigint): void {
+        const buf = new Uint8Array(8);
+        const view = new DataView(buf.buffer);
+        view.setBigUint64(0, value, true);
+        parts.push(buf);
+        offset += 8;
+      }
+
+      function writeBytes(data: Uint8Array): void {
+        parts.push(data);
+        offset += data.length;
+      }
+
+      // Magic number
+      writeUint32(EXR_MAGIC);
+
+      // Version field: version=2, nonImage=true (bit 11), no multipart
+      // nonImage flag = 0x800
+      writeUint32(2 | 0x800);
+
+      // === HEADER ATTRIBUTES ===
+
+      // type attribute (required for deep data)
+      writeString('type');
+      writeString('string');
+      const typeStr = 'deepscanline';
+      writeInt32(typeStr.length + 1); // include null terminator
+      const typeBytes = new TextEncoder().encode(typeStr);
+      parts.push(typeBytes);
+      parts.push(new Uint8Array([0]));
+      offset += typeBytes.length + 1;
+
+      // channels attribute
+      writeString('channels');
+      writeString('chlist');
+
+      let channelListSize = 1; // null terminator
+      for (const ch of channels) {
+        channelListSize += ch.length + 1 + 4 + 1 + 3 + 4 + 4;
+      }
+      writeInt32(channelListSize);
+
+      for (const ch of channels) {
+        writeString(ch);
+        writeInt32(pixelType);
+        writeUint8(0); // pLinear
+        parts.push(new Uint8Array([0, 0, 0])); offset += 3; // reserved
+        writeInt32(1); // xSampling
+        writeInt32(1); // ySampling
+      }
+      writeUint8(0); // End of channel list
+
+      // compression attribute
+      writeString('compression');
+      writeString('compression');
+      writeInt32(1);
+      writeUint8(compression);
+
+      // dataWindow attribute
+      writeString('dataWindow');
+      writeString('box2i');
+      writeInt32(16);
+      writeInt32(0);
+      writeInt32(0);
+      writeInt32(width - 1);
+      writeInt32(height - 1);
+
+      // displayWindow attribute
+      writeString('displayWindow');
+      writeString('box2i');
+      writeInt32(16);
+      writeInt32(0);
+      writeInt32(0);
+      writeInt32(width - 1);
+      writeInt32(height - 1);
+
+      // lineOrder attribute
+      writeString('lineOrder');
+      writeString('lineOrder');
+      writeInt32(1);
+      writeUint8(0); // INCREASING_Y
+
+      // pixelAspectRatio attribute
+      writeString('pixelAspectRatio');
+      writeString('float');
+      writeInt32(4);
+      writeFloat32(1.0);
+
+      // End of header
+      writeUint8(0);
+
+      // === OFFSET TABLE ===
+      // For deep scanline with NONE/RLE/ZIPS compression, one block per scanline
+      const linesPerBlock = 1; // NONE and ZIPS are 1 line per block
+      const numBlocks = Math.ceil(height / linesPerBlock);
+
+      const headerEnd = offset;
+      const offsetTableSize = numBlocks * 8;
+      const dataStart = headerEnd + offsetTableSize;
+
+      // Build block data first, then write offsets
+      const blockBuffers: Uint8Array[][] = [];
+      const bytesPerSample = pixelType === EXRPixelType.HALF ? 2 : 4;
+
+      for (let blockIdx = 0; blockIdx < numBlocks; blockIdx++) {
+        const y = blockIdx;
+        const blockLines = Math.min(linesPerBlock, height - blockIdx * linesPerBlock);
+        const pixelsInBlock = blockLines * width;
+
+        // Build cumulative sample count table
+        const countBuf = new ArrayBuffer(pixelsInBlock * 4);
+        const countView = new DataView(countBuf);
+        let cumulativeCount = 0;
+        for (let line = 0; line < blockLines; line++) {
+          for (let x = 0; x < width; x++) {
+            const iy = y + line;
+            cumulativeCount += sampleCounts[iy]![x]!;
+            countView.setUint32((line * width + x) * 4, cumulativeCount, true);
+          }
+        }
+        const totalSamplesInBlock = cumulativeCount;
+
+        // Build sample data
+        const sampleBufSize = totalSamplesInBlock * channels.length * bytesPerSample;
+        const sampleBuf = new ArrayBuffer(sampleBufSize);
+        const sampleView = new DataView(sampleBuf);
+        let sampleByteOffset = 0;
+
+        for (let line = 0; line < blockLines; line++) {
+          for (let x = 0; x < width; x++) {
+            const iy = y + line;
+            const numSamples = sampleCounts[iy]![x]!;
+            const pixelSamples = sampleData[iy]![x]!;
+
+            for (let s = 0; s < numSamples; s++) {
+              const sampleValues = pixelSamples[s]!;
+              // Write channel values in channel list order (alphabetical)
+              for (let ci = 0; ci < channels.length; ci++) {
+                if (pixelType === EXRPixelType.FLOAT) {
+                  sampleView.setFloat32(sampleByteOffset, sampleValues[ci] ?? 0, true);
+                  sampleByteOffset += 4;
+                } else {
+                  sampleView.setUint16(sampleByteOffset, floatToHalf(sampleValues[ci] ?? 0), true);
+                  sampleByteOffset += 2;
+                }
+              }
+            }
+          }
+        }
+
+        const countBytes = new Uint8Array(countBuf);
+        const sampleBytes = new Uint8Array(sampleBuf, 0, sampleByteOffset);
+
+        // Block: y (4) + packedSampleOffsetSize (8) + packedDataSize (8) + unpackedDataSize (8) + countData + sampleData
+        const blockParts: Uint8Array[] = [];
+        // y coordinate
+        const yBuf = new Uint8Array(4);
+        new DataView(yBuf.buffer).setInt32(0, y, true);
+        blockParts.push(yBuf);
+
+        // packedSampleOffsetSize (= raw size for NONE compression)
+        const psosBuf = new Uint8Array(8);
+        new DataView(psosBuf.buffer).setBigUint64(0, BigInt(countBytes.length), true);
+        blockParts.push(psosBuf);
+
+        // packedDataSize (= raw size for NONE compression)
+        const pdsBuf = new Uint8Array(8);
+        new DataView(pdsBuf.buffer).setBigUint64(0, BigInt(sampleBytes.length), true);
+        blockParts.push(pdsBuf);
+
+        // unpackedDataSize
+        const udsBuf = new Uint8Array(8);
+        new DataView(udsBuf.buffer).setBigUint64(0, BigInt(sampleBytes.length), true);
+        blockParts.push(udsBuf);
+
+        blockParts.push(countBytes);
+        blockParts.push(sampleBytes);
+
+        blockBuffers.push(blockParts);
+      }
+
+      // Calculate block offsets and write offset table
+      let currentOffset = dataStart;
+      for (let blockIdx = 0; blockIdx < numBlocks; blockIdx++) {
+        writeUint64(BigInt(currentOffset));
+        for (const part of blockBuffers[blockIdx]!) {
+          currentOffset += part.length;
+        }
+      }
+
+      // Write block data
+      for (const blockParts of blockBuffers) {
+        for (const part of blockParts) {
+          writeBytes(part);
+        }
+      }
+
+      // Combine all parts
+      const totalLength = parts.reduce((sum, p) => sum + p.length, 0);
+      const result = new Uint8Array(totalLength);
+      let pos = 0;
+      for (const part of parts) {
+        result.set(part, pos);
+        pos += part.length;
+      }
+
+      return result.buffer;
+    }
+
+    it('EXR-DEEP001: should decode deep scanline with single sample per pixel', async () => {
+      const width = 2, height = 2;
+      // Each pixel has 1 sample
+      const sampleCounts = [[1, 1], [1, 1]];
+      // Channel order is alphabetical: A, B, G, R
+      // Each sample = [A, B, G, R]
+      const sampleData = [
+        [
+          [[1.0, 0.0, 0.0, 1.0]],  // pixel (0,0): R=1, G=0, B=0, A=1
+          [[1.0, 0.0, 1.0, 0.0]],  // pixel (1,0): R=0, G=1, B=0, A=1
+        ],
+        [
+          [[1.0, 1.0, 0.0, 0.0]],  // pixel (0,1): R=0, G=0, B=1, A=1
+          [[0.5, 0.5, 0.5, 0.5]],  // pixel (1,1): R=0.5, G=0.5, B=0.5, A=0.5
+        ],
+      ];
+
+      const buffer = createDeepScanlineEXR({
+        width, height,
+        sampleCounts,
+        sampleData,
+      });
+
+      const result = await decodeEXR(buffer);
+
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+      expect(result.channels).toBe(4);
+      expect(result.data.length).toBe(width * height * 4);
+
+      // Pixel (0,0): R=1, G=0, B=0, A=1
+      expect(result.data[0]).toBeCloseTo(1.0, 4);  // R
+      expect(result.data[1]).toBeCloseTo(0.0, 4);  // G
+      expect(result.data[2]).toBeCloseTo(0.0, 4);  // B
+      expect(result.data[3]).toBeCloseTo(1.0, 4);  // A
+
+      // Pixel (1,0): R=0, G=1, B=0, A=1
+      expect(result.data[4]).toBeCloseTo(0.0, 4);  // R
+      expect(result.data[5]).toBeCloseTo(1.0, 4);  // G
+      expect(result.data[6]).toBeCloseTo(0.0, 4);  // B
+      expect(result.data[7]).toBeCloseTo(1.0, 4);  // A
+
+      // Pixel (1,1): R=0.5, G=0.5, B=0.5, A=0.5
+      expect(result.data[12]).toBeCloseTo(0.5, 4);
+      expect(result.data[13]).toBeCloseTo(0.5, 4);
+      expect(result.data[14]).toBeCloseTo(0.5, 4);
+      expect(result.data[15]).toBeCloseTo(0.5, 4);
+    });
+
+    it('EXR-DEEP002: should composite multiple deep samples front-to-back', async () => {
+      const width = 1, height = 1;
+      // 2 samples for the single pixel
+      const sampleCounts = [[2]];
+      // Channel order: A, B, G, R
+      // Front sample: R=1, G=0, B=0, A=0.5
+      // Back sample: R=0, G=0, B=1, A=1.0
+      // Over composite: C = Cf + (1-Af) * Cb
+      // R_out = 1.0 + (1-0.5) * 0.0 = 1.0
+      // G_out = 0.0 + (1-0.5) * 0.0 = 0.0
+      // B_out = 0.0 + (1-0.5) * 1.0 = 0.5
+      // A_out = 0.5 + (1-0.5) * 1.0 = 1.0
+      const sampleData = [
+        [
+          [
+            [0.5, 0.0, 0.0, 1.0],  // front: A=0.5, B=0.0, G=0.0, R=1.0
+            [1.0, 1.0, 0.0, 0.0],  // back:  A=1.0, B=1.0, G=0.0, R=0.0
+          ],
+        ],
+      ];
+
+      const buffer = createDeepScanlineEXR({
+        width, height,
+        sampleCounts,
+        sampleData,
+      });
+
+      const result = await decodeEXR(buffer);
+
+      expect(result.width).toBe(1);
+      expect(result.height).toBe(1);
+
+      // Composited result
+      expect(result.data[0]).toBeCloseTo(1.0, 4);  // R = 1.0 + 0.5 * 0.0 = 1.0
+      expect(result.data[1]).toBeCloseTo(0.0, 4);  // G = 0.0 + 0.5 * 0.0 = 0.0
+      expect(result.data[2]).toBeCloseTo(0.5, 4);  // B = 0.0 + 0.5 * 1.0 = 0.5
+      expect(result.data[3]).toBeCloseTo(1.0, 4);  // A = 0.5 + 0.5 * 1.0 = 1.0
+    });
+
+    it('EXR-DEEP003: should handle pixels with zero samples (transparent)', async () => {
+      const width = 2, height = 1;
+      const sampleCounts = [[0, 1]];
+      // Pixel (0,0): no samples - should remain transparent (0,0,0,0)
+      // Pixel (1,0): one sample
+      const sampleData = [
+        [
+          [], // No samples
+          [[1.0, 0.0, 1.0, 0.0]], // A=1.0, B=0.0, G=1.0, R=0.0 -> R=0, G=1, B=0, A=1
+        ],
+      ];
+
+      const buffer = createDeepScanlineEXR({
+        width, height,
+        sampleCounts,
+        sampleData,
+      });
+
+      const result = await decodeEXR(buffer);
+
+      // Pixel (0,0): transparent
+      expect(result.data[0]).toBeCloseTo(0.0, 4);
+      expect(result.data[1]).toBeCloseTo(0.0, 4);
+      expect(result.data[2]).toBeCloseTo(0.0, 4);
+      expect(result.data[3]).toBeCloseTo(0.0, 4);
+
+      // Pixel (1,0): opaque green
+      expect(result.data[4]).toBeCloseTo(0.0, 4);
+      expect(result.data[5]).toBeCloseTo(1.0, 4);
+      expect(result.data[6]).toBeCloseTo(0.0, 4);
+      expect(result.data[7]).toBeCloseTo(1.0, 4);
+    });
+
+    it('EXR-DEEP004: should early-exit compositing when fully opaque', async () => {
+      const width = 1, height = 1;
+      // 3 samples, but first is fully opaque - rest should be ignored
+      const sampleCounts = [[3]];
+      // Channel order: A, B, G, R
+      const sampleData = [
+        [
+          [
+            [1.0, 0.0, 0.0, 1.0], // front: R=1, G=0, B=0, A=1 (fully opaque)
+            [1.0, 1.0, 1.0, 0.0], // back: should be ignored
+            [1.0, 0.5, 0.5, 0.5], // even further back: should be ignored
+          ],
+        ],
+      ];
+
+      const buffer = createDeepScanlineEXR({
+        width, height,
+        sampleCounts,
+        sampleData,
+      });
+
+      const result = await decodeEXR(buffer);
+
+      // Only the first sample should matter
+      expect(result.data[0]).toBeCloseTo(1.0, 4);  // R
+      expect(result.data[1]).toBeCloseTo(0.0, 4);  // G
+      expect(result.data[2]).toBeCloseTo(0.0, 4);  // B
+      expect(result.data[3]).toBeCloseTo(1.0, 4);  // A
+    });
+
+    it('EXR-DEEP005: should composite three semi-transparent layers', async () => {
+      const width = 1, height = 1;
+      const sampleCounts = [[3]];
+      // Channel order: A, B, G, R
+      // Layer 1 (front): R=1, G=0, B=0, A=0.25
+      // Layer 2 (middle): R=0, G=1, B=0, A=0.25
+      // Layer 3 (back): R=0, G=0, B=1, A=0.5
+      //
+      // Step 1: C = (1,0,0)*1 + (1-0)*(0,0,0) for first sample (front-to-back)
+      //   Actually front-to-back Over:
+      //   After layer 1: R=1*0.25=... wait let me recalc.
+      //   front-to-back: C_out = (1-A_accum) * C_sample, A_out = A_accum + (1-A_accum)*A_sample
+      //   After L1: R=0.25, G=0, B=0, A=0.25
+      //   After L2: R=0.25+0.75*0=0.25, G=0+0.75*0.25=0.1875, B=0+0.75*0=0, A=0.25+0.75*0.25=0.4375
+      //   After L3: R=0.25+0.5625*0=0.25, G=0.1875+0.5625*0=0.1875, B=0+0.5625*0.5=0.28125, A=0.4375+0.5625*0.5=0.71875
+      //
+      // Wait, let me re-examine my compositing logic.
+      // compR starts at 0, compA starts at 0.
+      // Sample 1 (R=1, A=0.25): oneMinusA = 1-0 = 1, compR = 0 + 1*1 = 1, compA = 0 + 1*0.25 = 0.25
+      // No wait - that's not right either. Let me re-read the code:
+      //   oneMinusA = 1.0 - compA;
+      //   compR += oneMinusA * sR;
+      // So this is premultiplied alpha compositing? No, it's treating sR as the premultiplied color.
+      // Actually for deep compositing, samples store NON-premultiplied color, and the Over formula is:
+      //   C_out = C_front * A_front + (1 - A_front) * C_back * A_back  (for premultiplied)
+      // But the standard front-to-back accumulation is:
+      //   C_accum += (1 - A_accum) * C_sample
+      //   A_accum += (1 - A_accum) * A_sample
+      // which treats samples as premultiplied (C_sample already includes alpha).
+      //
+      // So with our samples (non-premultiplied stored as-is):
+      // Sample 1: sR=1, sA=0.25
+      //   compR = 0 + (1-0)*1 = 1
+      //   compA = 0 + (1-0)*0.25 = 0.25
+      // Sample 2: sR=0, sG=1, sA=0.25
+      //   compR = 1 + (1-0.25)*0 = 1
+      //   compG = 0 + (1-0.25)*1 = 0.75
+      //   compA = 0.25 + (1-0.25)*0.25 = 0.4375
+      // Sample 3: sB=1, sA=0.5
+      //   compR = 1 + (1-0.4375)*0 = 1
+      //   compG = 0.75 + (1-0.4375)*0 = 0.75
+      //   compB = 0 + (1-0.4375)*1 = 0.5625
+      //   compA = 0.4375 + (1-0.4375)*0.5 = 0.71875
+      const sampleData = [
+        [
+          [
+            [0.25, 0.0, 0.0, 1.0],  // A=0.25, B=0, G=0, R=1
+            [0.25, 0.0, 1.0, 0.0],  // A=0.25, B=0, G=1, R=0
+            [0.5,  1.0, 0.0, 0.0],  // A=0.5,  B=1, G=0, R=0
+          ],
+        ],
+      ];
+
+      const buffer = createDeepScanlineEXR({
+        width, height: 1,
+        sampleCounts,
+        sampleData,
+      });
+
+      const result = await decodeEXR(buffer);
+
+      expect(result.data[0]).toBeCloseTo(1.0, 4);      // R
+      expect(result.data[1]).toBeCloseTo(0.75, 4);      // G
+      expect(result.data[2]).toBeCloseTo(0.5625, 4);    // B
+      expect(result.data[3]).toBeCloseTo(0.71875, 4);   // A
+    });
+
+    it('EXR-DEEP006: should handle multi-row deep scanline image', async () => {
+      const width = 2, height = 3;
+      const sampleCounts = [
+        [1, 2],
+        [0, 1],
+        [1, 1],
+      ];
+
+      // Channel order: A, B, G, R
+      const sampleData = [
+        [
+          [[1.0, 0.0, 0.0, 1.0]],  // (0,0): R=1 G=0 B=0 A=1
+          [
+            [0.5, 0.0, 0.0, 0.5],  // (1,0) front: R=0.5 A=0.5
+            [1.0, 1.0, 0.0, 0.0],  // (1,0) back: B=1 A=1
+          ],
+        ],
+        [
+          [],                        // (0,1): no samples
+          [[1.0, 0.0, 1.0, 0.0]],  // (1,1): G=1 A=1
+        ],
+        [
+          [[0.5, 0.5, 0.5, 0.5]],  // (0,2): all 0.5
+          [[1.0, 0.3, 0.2, 0.1]],  // (1,2): R=0.1 G=0.2 B=0.3 A=1
+        ],
+      ];
+
+      const buffer = createDeepScanlineEXR({
+        width, height,
+        sampleCounts,
+        sampleData,
+      });
+
+      const result = await decodeEXR(buffer);
+
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+
+      // Pixel (0,0): single opaque red
+      expect(result.data[0]).toBeCloseTo(1.0, 4);
+      expect(result.data[1]).toBeCloseTo(0.0, 4);
+      expect(result.data[2]).toBeCloseTo(0.0, 4);
+      expect(result.data[3]).toBeCloseTo(1.0, 4);
+
+      // Pixel (1,0): 2 samples composited
+      // Sample 1: R=0.5, G=0, B=0, A=0.5. compR=0.5, compA=0.5
+      // Sample 2: R=0, G=0, B=1, A=1.  compR=0.5+(1-0.5)*0=0.5, compB=0+(1-0.5)*1=0.5, compA=0.5+(1-0.5)*1=1.0
+      expect(result.data[4]).toBeCloseTo(0.5, 4);   // R
+      expect(result.data[5]).toBeCloseTo(0.0, 4);   // G
+      expect(result.data[6]).toBeCloseTo(0.5, 4);   // B
+      expect(result.data[7]).toBeCloseTo(1.0, 4);   // A
+
+      // Pixel (0,1): no samples - transparent
+      const idx01 = (1 * width + 0) * 4;
+      expect(result.data[idx01]).toBeCloseTo(0.0, 4);
+      expect(result.data[idx01 + 3]).toBeCloseTo(0.0, 4);
+
+      // Pixel (1,2): single sample
+      const idx12 = (2 * width + 1) * 4;
+      expect(result.data[idx12]).toBeCloseTo(0.1, 4);
+      expect(result.data[idx12 + 1]).toBeCloseTo(0.2, 4);
+      expect(result.data[idx12 + 2]).toBeCloseTo(0.3, 4);
+      expect(result.data[idx12 + 3]).toBeCloseTo(1.0, 4);
+    });
+
+    it('EXR-DEEP007: should handle all-empty deep image', async () => {
+      const width = 2, height = 2;
+      const sampleCounts = [[0, 0], [0, 0]];
+      const sampleData = [
+        [[], []],
+        [[], []],
+      ];
+
+      const buffer = createDeepScanlineEXR({
+        width, height,
+        sampleCounts,
+        sampleData,
+      });
+
+      const result = await decodeEXR(buffer);
+
+      // All pixels should be transparent black
+      for (let i = 0; i < result.data.length; i++) {
+        expect(result.data[i]).toBeCloseTo(0.0, 4);
+      }
+    });
+
+    it('EXR-DEEP008: should report correct header info for deep image', async () => {
+      const width = 4, height = 4;
+      const sampleCounts = [[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]];
+      const sampleData: number[][][][] = [];
+      for (let y = 0; y < height; y++) {
+        const row: number[][][] = [];
+        for (let x = 0; x < width; x++) {
+          row.push([[1.0, 0.0, 0.0, 0.5]]);
+        }
+        sampleData.push(row);
+      }
+
+      const buffer = createDeepScanlineEXR({
+        width, height,
+        sampleCounts,
+        sampleData,
+      });
+
+      const result = await decodeEXR(buffer);
+
+      expect(result.header.type).toBe('deepscanline');
+      expect(result.header.nonImage).toBe(true);
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+    });
+
+    it('EXR-DEEP009: should composite deep pixel with many samples', async () => {
+      const width = 1, height = 1;
+      // 5 samples, each with A=0.25
+      const numSamples = 5;
+      const sampleCounts = [[numSamples]];
+      // Channel order: A, B, G, R
+      // All red, A=0.25 each
+      const samples: number[][] = [];
+      for (let i = 0; i < numSamples; i++) {
+        samples.push([0.25, 0.0, 0.0, 1.0]); // A=0.25, B=0, G=0, R=1
+      }
+      const sampleData = [[[...samples]]];
+
+      const buffer = createDeepScanlineEXR({
+        width, height: 1,
+        sampleCounts,
+        sampleData,
+      });
+
+      const result = await decodeEXR(buffer);
+
+      // Front-to-back compositing of 5 samples each R=1, A=0.25:
+      // After 1: compR=1.0, compA=0.25
+      // After 2: compR=1.0+0.75*1=1.75, compA=0.25+0.75*0.25=0.4375
+      // After 3: compR=1.75+0.5625*1=2.3125, compA=0.4375+0.5625*0.25=0.578125
+      // After 4: compR=2.3125+0.421875*1=2.734375, compA=0.578125+0.421875*0.25=0.68359375
+      // After 5: compR=2.734375+0.31640625*1=3.05078125, compA=0.68359375+0.31640625*0.25≈0.7627
+      //
+      // This is correct for the non-premultiplied accumulation the code uses.
+      // The result will be > 1.0 for R because we accumulate non-premultiplied values.
+      // (Deep compositing with non-premultiplied alpha can produce values > 1.)
+      expect(result.data[0]).toBeGreaterThan(1.0);   // R accumulated
+      expect(result.data[1]).toBeCloseTo(0.0, 4);     // G stays 0
+      expect(result.data[2]).toBeCloseTo(0.0, 4);     // B stays 0
+      // Alpha should be 1 - (1-0.25)^5 = 1 - 0.75^5 ≈ 0.7627
+      expect(result.data[3]).toBeCloseTo(1 - Math.pow(0.75, 5), 3);
+    });
+
+    it('EXR-DEEP010: should reject deeptile type', async () => {
+      // Create a buffer that looks like a deeptile EXR
+      const parts: Uint8Array[] = [];
+      let offset = 0;
+
+      function writeUint32(value: number): void {
+        const buf = new Uint8Array(4);
+        new DataView(buf.buffer).setUint32(0, value, true);
+        parts.push(buf); offset += 4;
+      }
+      function writeInt32(value: number): void {
+        const buf = new Uint8Array(4);
+        new DataView(buf.buffer).setInt32(0, value, true);
+        parts.push(buf); offset += 4;
+      }
+      function writeUint8(value: number): void {
+        parts.push(new Uint8Array([value])); offset += 1;
+      }
+      function writeString(str: string): void {
+        const bytes = new TextEncoder().encode(str);
+        parts.push(bytes); parts.push(new Uint8Array([0]));
+        offset += bytes.length + 1;
+      }
+      function writeFloat32(value: number): void {
+        const buf = new Uint8Array(4);
+        new DataView(buf.buffer).setFloat32(0, value, true);
+        parts.push(buf); offset += 4;
+      }
+
+      writeUint32(EXR_MAGIC);
+      writeUint32(2 | 0x200 | 0x800); // version=2, tiled=true, nonImage=true
+
+      // type attribute
+      writeString('type');
+      writeString('string');
+      const typeStr = 'deeptile';
+      writeInt32(typeStr.length + 1);
+      parts.push(new TextEncoder().encode(typeStr));
+      parts.push(new Uint8Array([0]));
+      offset += typeStr.length + 1;
+
+      // tiles attribute
+      writeString('tiles');
+      writeString('tiledesc');
+      writeInt32(9);
+      writeInt32(32); // xSize
+      writeInt32(32); // ySize
+      writeUint8(0);  // mode
+
+      // channels
+      writeString('channels');
+      writeString('chlist');
+      const chSize = 'R'.length + 1 + 4 + 1 + 3 + 4 + 4 + 1;
+      writeInt32(chSize);
+      writeString('R');
+      writeInt32(EXRPixelType.HALF);
+      writeUint8(0); parts.push(new Uint8Array([0, 0, 0])); offset += 3;
+      writeInt32(1); writeInt32(1);
+      writeUint8(0);
+
+      // compression
+      writeString('compression');
+      writeString('compression');
+      writeInt32(1);
+      writeUint8(0);
+
+      // dataWindow
+      writeString('dataWindow');
+      writeString('box2i');
+      writeInt32(16);
+      writeInt32(0); writeInt32(0); writeInt32(1); writeInt32(1);
+
+      // displayWindow
+      writeString('displayWindow');
+      writeString('box2i');
+      writeInt32(16);
+      writeInt32(0); writeInt32(0); writeInt32(1); writeInt32(1);
+
+      // lineOrder
+      writeString('lineOrder');
+      writeString('lineOrder');
+      writeInt32(1);
+      writeUint8(0);
+
+      // pixelAspectRatio
+      writeString('pixelAspectRatio');
+      writeString('float');
+      writeInt32(4);
+      writeFloat32(1.0);
+
+      writeUint8(0); // end header
+
+      const totalLength = parts.reduce((sum, p) => sum + p.length, 0);
+      const result = new Uint8Array(totalLength);
+      let pos = 0;
+      for (const part of parts) { result.set(part, pos); pos += part.length; }
+
+      await expect(decodeEXR(result.buffer)).rejects.toThrow(/[Dd]eep.*tiled|deeptile/);
+    });
+  });
 });

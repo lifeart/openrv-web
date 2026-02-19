@@ -546,6 +546,25 @@
         ) * pqNormFactor;
       }
 
+      // SMPTE 240M EOTF (inverse OETF, signal -> linear)
+      // Reference: SMPTE ST 240:1999
+      float smpte240mEOTF(float v) {
+        const float threshold = 4.0 * 0.0228; // = 0.0912
+        if (v < threshold) {
+          return v / 4.0;
+        } else {
+          return pow((v + 0.1115) / 1.1115, 1.0 / 0.45);
+        }
+      }
+
+      vec3 smpte240mToLinear(vec3 signal) {
+        return vec3(
+          smpte240mEOTF(signal.r),
+          smpte240mEOTF(signal.g),
+          smpte240mEOTF(signal.b)
+        );
+      }
+
       // Apply 3D LUT with trilinear interpolation
       vec3 applyLUT3D(vec3 color) {
         vec3 c = clamp(color, 0.0, 1.0);
@@ -940,6 +959,8 @@
             color.rgb = hlgToLinear(color.rgb);
           } else if (u_inputTransfer == 2) {
             color.rgb = pqToLinear(color.rgb);
+          } else if (u_inputTransfer == 7) {
+            color.rgb = smpte240mToLinear(color.rgb);
           }
         }
 

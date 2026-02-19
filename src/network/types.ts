@@ -64,6 +64,7 @@ export type SyncMessageType =
   | 'sync.view'
   | 'sync.color'
   | 'sync.annotation'
+  | 'sync.note'
   | 'sync.state-request'
   | 'sync.state-response'
   | 'sync.media-request'
@@ -174,6 +175,13 @@ export interface AnnotationSyncPayload {
   strokes: unknown[];
   action: 'add' | 'remove' | 'clear' | 'update';
   annotationId?: string;
+  timestamp: number;
+}
+
+export interface NoteSyncPayload {
+  action: 'add' | 'remove' | 'update' | 'clear';
+  note?: unknown;
+  noteId?: string;
   timestamp: number;
 }
 
@@ -316,6 +324,7 @@ export interface NetworkSyncEvents extends EventMap {
   syncView: ViewSyncPayload;
   syncColor: ColorSyncPayload;
   syncAnnotation: AnnotationSyncPayload;
+  syncNote: NoteSyncPayload;
   syncCursor: CursorSyncPayload;
   participantPermissionChanged: ParticipantPermission;
   sessionStateRequested: { requestId: string; requesterUserId: string };

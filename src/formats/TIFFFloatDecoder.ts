@@ -8,9 +8,9 @@
  * - Uncompressed (1), LZW (5), and Deflate/ZIP (8, 32946) compression
  * - Horizontal differencing predictor (2) and floating-point predictor (3)
  * - Strip-based image organization
+ * - Tiled image organization (TileWidth, TileLength, TileOffsets, TileByteCounts)
  *
  * Not yet supported:
- * - Tiled TIFF images
  * - Non-float sample formats
  *
  * Based on TIFF 6.0 specification.
@@ -34,6 +34,10 @@ const TAG_STRIP_OFFSETS = 273;
 const TAG_SAMPLES_PER_PIXEL = 277;
 const TAG_ROWS_PER_STRIP = 278;
 const TAG_STRIP_BYTE_COUNTS = 279;
+const TAG_TILE_WIDTH = 322;
+const TAG_TILE_LENGTH = 323;
+const TAG_TILE_OFFSETS = 324;
+const TAG_TILE_BYTE_COUNTS = 325;
 const TAG_SAMPLE_FORMAT = 339;
 
 // Sample format values
@@ -623,12 +627,28 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
     throw new DecoderError('TIFF', `Unsupported samples per pixel: ${samplesPerPixel}. Only 3 (RGB) or 4 (RGBA) are supported.`);
   }
 
+  // Detect tiled vs strip layout
+  const tileWidth = getTagSingleValue(view, tags, TAG_TILE_WIDTH, le, 0);
+  const tileLength = getTagSingleValue(view, tags, TAG_TILE_LENGTH, le, 0);
+  const tileOffsets = getTagMultipleValues(view, tags, TAG_TILE_OFFSETS, le);
+  const tileByteCounts = getTagMultipleValues(view, tags, TAG_TILE_BYTE_COUNTS, le);
+
+  const isTiled = tileWidth > 0 && tileLength > 0 && tileOffsets.length > 0;
+
+  if (isTiled) {
+    return decodeTiledTIFF(
+      buffer, view, le, width, height, tileWidth, tileLength,
+      tileOffsets, tileByteCounts, samplesPerPixel, compression, predictor,
+      bitsPerSample, bigEndian
+    );
+  }
+
   // Read strip offsets and byte counts
   const stripOffsets = getTagMultipleValues(view, tags, TAG_STRIP_OFFSETS, le);
   const stripByteCounts = getTagMultipleValues(view, tags, TAG_STRIP_BYTE_COUNTS, le);
 
   if (stripOffsets.length === 0) {
-    throw new DecoderError('TIFF', 'Invalid TIFF: no strip offsets found');
+    throw new DecoderError('TIFF', 'Invalid TIFF: no strip offsets and no tile offsets found');
   }
 
   // Read float data from strips
@@ -730,6 +750,154 @@ export async function decodeTIFFFloat(buffer: ArrayBuffer): Promise<TIFFDecodeRe
       compression,
       bigEndian,
       originalChannels: samplesPerPixel,
+    },
+  };
+}
+
+/**
+ * Decode a tiled float TIFF file.
+ *
+ * Tiles are stored left-to-right, top-to-bottom in the tile offset array.
+ * Partial tiles at the right and bottom edges are handled by clamping the
+ * number of pixels read from those tiles.
+ */
+async function decodeTiledTIFF(
+  buffer: ArrayBuffer,
+  view: DataView,
+  le: boolean,
+  width: number,
+  height: number,
+  tileWidth: number,
+  tileLength: number,
+  tileOffsets: number[],
+  tileByteCounts: number[],
+  samplesPerPixel: number,
+  compression: number,
+  predictor: number,
+  bitsPerSample: number,
+  bigEndian: boolean,
+): Promise<TIFFDecodeResult> {
+  const totalPixels = width * height;
+  const outputData = new Float32Array(totalPixels * 4); // Always RGBA
+  const bytesPerPixel = samplesPerPixel * 4; // float32
+
+  // Initialize alpha to 1.0 if RGB input
+  if (samplesPerPixel === 3) {
+    for (let i = 3; i < outputData.length; i += 4) {
+      outputData[i] = 1.0;
+    }
+  }
+
+  // Calculate tile grid dimensions
+  const tilesAcross = Math.ceil(width / tileWidth);
+  const tilesDown = Math.ceil(height / tileLength);
+
+  // Iterate over tiles (left-to-right, top-to-bottom)
+  for (let tileRow = 0; tileRow < tilesDown; tileRow++) {
+    for (let tileCol = 0; tileCol < tilesAcross; tileCol++) {
+      const tileIdx = tileRow * tilesAcross + tileCol;
+
+      if (tileIdx >= tileOffsets.length) break;
+
+      const tileOffset = tileOffsets[tileIdx]!;
+
+      // Actual pixel dimensions of this tile (handle partial tiles at edges)
+      const actualTileW = Math.min(tileWidth, width - tileCol * tileWidth);
+      const actualTileH = Math.min(tileLength, height - tileRow * tileLength);
+
+      if (actualTileW <= 0 || actualTileH <= 0) continue;
+
+      // The tile data size in bytes (full tile, even for partial edge tiles -
+      // TIFF spec requires all tiles to be full-sized in the file, but we
+      // only read pixels that map to the image)
+      const expectedTileBytes = tileWidth * tileLength * bytesPerPixel;
+      const tileByteCount = tileByteCounts[tileIdx] ?? expectedTileBytes;
+
+      if (compression === COMPRESSION_NONE) {
+        // Uncompressed tiles
+        // Note: data in file is stored as tileWidth * tileLength even for partial tiles
+        for (let ty = 0; ty < actualTileH; ty++) {
+          for (let tx = 0; tx < actualTileW; tx++) {
+            // Source position within the full tile
+            const srcByteOffset = tileOffset + (ty * tileWidth + tx) * bytesPerPixel;
+
+            // Destination position in the output image
+            const outX = tileCol * tileWidth + tx;
+            const outY = tileRow * tileLength + ty;
+            const outputIdx = (outY * width + outX) * 4;
+
+            if (srcByteOffset + bytesPerPixel > buffer.byteLength) continue;
+
+            for (let c = 0; c < samplesPerPixel && c < 4; c++) {
+              outputData[outputIdx + c] = view.getFloat32(srcByteOffset + c * 4, le);
+            }
+
+            if (samplesPerPixel === 3) {
+              outputData[outputIdx + 3] = 1.0;
+            }
+          }
+        }
+      } else {
+        // Compressed tiles
+        const compressedBytes = new Uint8Array(buffer, tileOffset, tileByteCount);
+
+        let decompressed: Uint8Array;
+        if (compression === COMPRESSION_LZW) {
+          decompressed = decompressLZW(compressedBytes);
+        } else {
+          // Deflate or Adobe Deflate
+          decompressed = await decompressDeflate(compressedBytes);
+        }
+
+        // Apply predictor if needed
+        // For predictors, we use tileWidth as the row width and tileLength as the row count,
+        // since the tile data is stored as a full-sized tile
+        if (predictor !== PREDICTOR_NONE) {
+          decompressed = applyPredictor(decompressed, predictor, tileWidth, samplesPerPixel, 4, tileLength);
+        }
+
+        const tileView = new DataView(decompressed.buffer, decompressed.byteOffset, decompressed.byteLength);
+
+        for (let ty = 0; ty < actualTileH; ty++) {
+          for (let tx = 0; tx < actualTileW; tx++) {
+            // Source position within the full (decompressed) tile
+            const srcByteOffset = (ty * tileWidth + tx) * bytesPerPixel;
+
+            const outX = tileCol * tileWidth + tx;
+            const outY = tileRow * tileLength + ty;
+            const outputIdx = (outY * width + outX) * 4;
+
+            if (srcByteOffset + bytesPerPixel > decompressed.length) continue;
+
+            for (let c = 0; c < samplesPerPixel && c < 4; c++) {
+              outputData[outputIdx + c] = tileView.getFloat32(srcByteOffset + c * 4, le);
+            }
+
+            if (samplesPerPixel === 3) {
+              outputData[outputIdx + 3] = 1.0;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return {
+    width,
+    height,
+    data: outputData,
+    channels: 4,
+    colorSpace: 'linear',
+    metadata: {
+      format: 'tiff',
+      bitsPerSample,
+      sampleFormat: 'float',
+      compression,
+      bigEndian,
+      originalChannels: samplesPerPixel,
+      tiled: true,
+      tileWidth,
+      tileLength,
     },
   };
 }

@@ -65,6 +65,7 @@ import type {
   ViewSyncPayload,
   ColorSyncPayload,
   AnnotationSyncPayload,
+  NoteSyncPayload,
   CursorSyncPayload,
   ParticipantRole,
   ParticipantPermission,
@@ -531,6 +532,23 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   }
 
   /**
+   * Send a note sync message.
+   * Called when a local note is added, removed, or updated.
+   */
+  sendNoteSync(payload: NoteSyncPayload): void {
+    if (!this.isConnected || !this._roomInfo) return;
+    if (!this._syncSettings.annotations) return;
+    if (this.stateManager.isApplyingRemoteState) return;
+    if (this.getParticipantPermission(this._userId) === 'viewer') return;
+
+    const message = createMessage('sync.note', this._roomInfo.roomId, this._userId, {
+      ...payload,
+      timestamp: Date.now(),
+    });
+    this.dispatchRealtimeMessage(message);
+  }
+
+  /**
    * Set the permission role for a participant.
    * Only the host can change permissions.
    */
@@ -772,6 +790,9 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       case 'sync.annotation':
         this.handleSyncAnnotation(message.payload, message.userId);
         break;
+      case 'sync.note':
+        this.handleSyncNote(message.payload, message.userId);
+        break;
       case 'sync.cursor':
         this.handleSyncCursor(message.payload, message.userId);
         break;
@@ -960,6 +981,17 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     if (!this.canUserSync(senderUserId)) return;
 
     this.emit('syncAnnotation', payload);
+  }
+
+  private handleSyncNote(payload: unknown, senderUserId: string): void {
+    if (!this.stateManager.shouldSyncAnnotations()) return;
+    if (!payload || typeof payload !== 'object') return;
+    const p = payload as NoteSyncPayload;
+    if (!['add', 'remove', 'update', 'clear'].includes(p.action)) return;
+    if (typeof p.timestamp !== 'number') return;
+    if (!this.canUserSync(senderUserId)) return;
+
+    this.emit('syncNote', p);
   }
 
   private handleSyncCursor(payload: unknown, senderUserId: string): void {

@@ -28,6 +28,7 @@ function createMockDTO(config: {
     inc?: number;
     version?: number;
     clipboard?: number;
+    bgColor?: number[];
     root?: { name?: string; comment?: string };
     matte?: { show?: number; aspect?: number; opacity?: number; heightVisible?: number; centerPoint?: number[] };
     paintEffects?: { hold?: number; ghost?: number; ghostBefore?: number; ghostAfter?: number };
@@ -80,6 +81,7 @@ function createMockDTO(config: {
               if (propName === 'inc') return s.inc;
               if (propName === 'version') return s.version;
               if (propName === 'clipboard') return s.clipboard;
+              if (propName === 'bgColor') return s.bgColor;
               return undefined;
             },
           }),
@@ -500,6 +502,30 @@ describe('GTOGraphLoader', () => {
       const result = loadGTOGraph(dto as never);
 
       expect(result.sessionInfo.fps).toBe(30);
+    });
+
+    it('stores realtime value in sessionInfo when realtime is set', () => {
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test', fps: 24, realtime: 30 }],
+        objects: [],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.sessionInfo.realtime).toBe(30);
+      expect(result.sessionInfo.fps).toBe(30);
+    });
+
+    it('does not set realtime in sessionInfo when realtime is not available', () => {
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test', fps: 24 }],
+        objects: [],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.sessionInfo.realtime).toBeUndefined();
+      expect(result.sessionInfo.fps).toBe(24);
     });
 
     it('uses matching local file for RVFileSource url if available', () => {
@@ -1121,6 +1147,126 @@ describe('GTOGraphLoader', () => {
       expect(result.nodes.size).toBe(0);
     });
 
+    it('creates RVDisplayGroup node from protocol', () => {
+      const mockNode = {
+        type: 'RVDisplayGroup',
+        name: 'displayGroup',
+        properties: {
+          has: vi.fn().mockReturnValue(false),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'displayGroup',
+            protocol: 'RVDisplayGroup',
+            components: {},
+          },
+        ],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.nodes.size).toBe(1);
+      expect(result.nodes.has('displayGroup')).toBe(true);
+      expect(NodeFactory.create).toHaveBeenCalledWith('RVDisplayGroup');
+    });
+
+    it('creates RVViewPipelineGroup node from protocol', () => {
+      const mockNode = {
+        type: 'RVViewPipelineGroup',
+        name: 'viewGroup_viewPipeline',
+        properties: {
+          has: vi.fn().mockReturnValue(false),
+          setValue: vi.fn(),
+        },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockReturnValue(mockNode as never);
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test' }],
+        objects: [
+          {
+            name: 'viewGroup_viewPipeline',
+            protocol: 'RVViewPipelineGroup',
+            components: {},
+          },
+        ],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.nodes.size).toBe(1);
+      expect(result.nodes.has('viewGroup_viewPipeline')).toBe(true);
+      expect(NodeFactory.create).toHaveBeenCalledWith('RVViewPipelineGroup');
+    });
+
+    it('existing protocols still map correctly alongside new ones', () => {
+      const sequenceNode = {
+        id: 'seq-id',
+        type: 'RVSequenceGroup',
+        name: 'defaultSequence',
+        properties: { has: vi.fn().mockReturnValue(false), setValue: vi.fn() },
+        inputs: [],
+        outputs: [],
+      };
+
+      const displayNode = {
+        id: 'disp-id',
+        type: 'RVDisplayGroup',
+        name: 'displayGroup',
+        properties: { has: vi.fn().mockReturnValue(false), setValue: vi.fn() },
+        inputs: [],
+        outputs: [],
+      };
+
+      const pipelineNode = {
+        id: 'pipe-id',
+        type: 'RVViewPipelineGroup',
+        name: 'viewGroup_viewPipeline',
+        properties: { has: vi.fn().mockReturnValue(false), setValue: vi.fn() },
+        inputs: [],
+        outputs: [],
+      };
+
+      vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
+      vi.spyOn(NodeFactory, 'create').mockImplementation((type: string) => {
+        if (type === 'RVSequenceGroup') return sequenceNode as never;
+        if (type === 'RVDisplayGroup') return displayNode as never;
+        if (type === 'RVViewPipelineGroup') return pipelineNode as never;
+        return null;
+      });
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'Test', viewNode: 'defaultSequence' }],
+        objects: [
+          { name: 'defaultSequence', protocol: 'RVSequenceGroup', components: {} },
+          { name: 'displayGroup', protocol: 'RVDisplayGroup', components: {} },
+          { name: 'viewGroup_viewPipeline', protocol: 'RVViewPipelineGroup', components: {} },
+        ],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.nodes.size).toBe(3);
+      expect(result.nodes.has('defaultSequence')).toBe(true);
+      expect(result.nodes.has('displayGroup')).toBe(true);
+      expect(result.nodes.has('viewGroup_viewPipeline')).toBe(true);
+      expect(result.rootNode).toBe(sequenceNode);
+    });
+
     it('handles connection failures gracefully', () => {
       vi.spyOn(NodeFactory, 'isRegistered').mockReturnValue(true);
       vi.spyOn(NodeFactory, 'create').mockImplementation((type: string) => {
@@ -1724,6 +1870,63 @@ describe('GTOGraphLoader', () => {
       const summary = getGraphSummary(mockResult);
 
       expect(summary).toContain('Root: none');
+    });
+  });
+
+  describe('bgColor parsing', () => {
+    it('parses bgColor from session component', () => {
+      const dto = createMockDTO({
+        sessions: [{
+          name: 'BgColorSession',
+          bgColor: [0.5, 0.5, 0.5, 1.0],
+        }],
+        objects: [],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.sessionInfo.bgColor).toEqual([0.5, 0.5, 0.5, 1.0]);
+    });
+
+    it('returns undefined bgColor when not present in session', () => {
+      const dto = createMockDTO({
+        sessions: [{
+          name: 'NoBgColorSession',
+        }],
+        objects: [],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.sessionInfo.bgColor).toBeUndefined();
+    });
+
+    it('ignores bgColor with fewer than 4 components', () => {
+      const dto = createMockDTO({
+        sessions: [{
+          name: 'ShortBgColorSession',
+          bgColor: [0.5, 0.5],
+        }],
+        objects: [],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.sessionInfo.bgColor).toBeUndefined();
+    });
+
+    it('parses bgColor with custom RGBA values', () => {
+      const dto = createMockDTO({
+        sessions: [{
+          name: 'CustomBgSession',
+          bgColor: [0.1, 0.2, 0.3, 0.8],
+        }],
+        objects: [],
+      });
+
+      const result = loadGTOGraph(dto as never);
+
+      expect(result.sessionInfo.bgColor).toEqual([0.1, 0.2, 0.3, 0.8]);
     });
   });
 });

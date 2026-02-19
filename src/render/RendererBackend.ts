@@ -23,6 +23,7 @@ import type { DisplayCapabilities } from '../color/DisplayCapabilities';
 import type { CDLValues } from '../color/CDL';
 import type { CurveLUTs } from '../color/ColorCurves';
 import type { RenderState, DisplayColorConfig } from './RenderState';
+import type { TileViewport } from '../nodes/groups/LayoutGroupNode';
 
 /**
  * Opaque texture handle.
@@ -199,6 +200,18 @@ export interface RendererBackend extends RendererLifecycle, RendererColorPipelin
     scaleX?: number,
     scaleY?: number,
   ): void;
+
+  /**
+   * Render multiple images in a tiled layout using viewport/scissor clipping.
+   *
+   * Each image is rendered into its own viewport region on the canvas. The
+   * canvas is NOT cleared first -- the caller should clear before calling.
+   *
+   * This is used for quad view and other multi-source layout modes.
+   *
+   * @param tiles - Array of { image, viewport } entries to render
+   */
+  renderTiledImages(tiles: { image: IPImage; viewport: TileViewport }[]): void;
 
   // --- Texture management ---
 

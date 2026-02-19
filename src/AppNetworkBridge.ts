@@ -8,10 +8,19 @@
 import type { Session } from './core/session/Session';
 import type { MediaSource } from './core/session/Session';
 import type { Viewer } from './ui/components/Viewer';
+import type { PaintEngine } from './paint/PaintEngine';
 import type { NetworkSyncManager } from './network/NetworkSyncManager';
 import type { NetworkControl } from './ui/components/NetworkControl';
 import type { HeaderBar } from './ui/components/layout/HeaderBar';
-import type { MediaTransferFileDescriptor, MediaTransferSourceDescriptor } from './network/types';
+import type { Annotation } from './paint/types';
+import type { Note } from './core/session/NoteManager';
+import type {
+  MediaTransferFileDescriptor,
+  MediaTransferSourceDescriptor,
+  AnnotationSyncPayload,
+  NoteSyncPayload,
+  ColorSyncPayload,
+} from './network/types';
 import {
   buildShareURL,
   decodeSessionState,
@@ -60,6 +69,7 @@ interface IncomingMediaTransfer {
 export interface NetworkBridgeContext {
   session: Session;
   viewer: Viewer;
+  paintEngine?: PaintEngine;
   networkSyncManager: NetworkSyncManager;
   networkControl: NetworkControl;
   headerBar: HeaderBar;
@@ -421,6 +431,161 @@ export class AppNetworkBridge {
         viewer.setZoom(payload.zoom);
       } finally {
         sm.endApplyRemote();
+      }
+    }));
+
+    // Wire incoming color sync
+    this.unsubscribers.push(networkSyncManager.on('syncColor', (payload: ColorSyncPayload) => {
+      const sm = networkSyncManager.getSyncStateManager();
+      sm.beginApplyRemote();
+      try {
+        const current = viewer.getColorAdjustments();
+        viewer.setColorAdjustments({
+          ...current,
+          exposure: payload.exposure,
+          gamma: payload.gamma,
+          saturation: payload.saturation,
+          contrast: payload.contrast,
+          temperature: payload.temperature,
+          tint: payload.tint,
+          brightness: payload.brightness,
+        });
+      } finally {
+        sm.endApplyRemote();
+      }
+    }));
+
+    // Wire incoming annotation sync
+    const paintEngine = this.ctx.paintEngine;
+    if (paintEngine) {
+      this.unsubscribers.push(networkSyncManager.on('syncAnnotation', (payload: AnnotationSyncPayload) => {
+        const sm = networkSyncManager.getSyncStateManager();
+        sm.beginApplyRemote();
+        try {
+          switch (payload.action) {
+            case 'add':
+              for (const stroke of payload.strokes) {
+                paintEngine.addRemoteAnnotation(stroke as Annotation);
+              }
+              break;
+            case 'remove':
+              if (payload.annotationId) {
+                paintEngine.removeRemoteAnnotation(payload.annotationId, payload.frame);
+              }
+              break;
+            case 'clear':
+              paintEngine.clearRemoteFrame(payload.frame);
+              break;
+            case 'update':
+              // For updates, remove then re-add
+              if (payload.annotationId) {
+                paintEngine.removeRemoteAnnotation(payload.annotationId, payload.frame);
+              }
+              for (const stroke of payload.strokes) {
+                paintEngine.addRemoteAnnotation(stroke as Annotation);
+              }
+              break;
+          }
+        } finally {
+          sm.endApplyRemote();
+        }
+      }));
+
+      // Send outgoing annotation sync when local annotations change
+      this.unsubscribers.push(paintEngine.on('strokeAdded', (annotation: Annotation) => {
+        if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
+          networkSyncManager.sendAnnotationSync({
+            frame: annotation.frame,
+            strokes: [annotation],
+            action: 'add',
+            annotationId: annotation.id,
+            timestamp: Date.now(),
+          });
+        }
+      }));
+
+      this.unsubscribers.push(paintEngine.on('strokeRemoved', (annotation: Annotation) => {
+        if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
+          networkSyncManager.sendAnnotationSync({
+            frame: annotation.frame,
+            strokes: [],
+            action: 'remove',
+            annotationId: annotation.id,
+            timestamp: Date.now(),
+          });
+        }
+      }));
+    }
+
+    // Wire incoming note sync
+    this.unsubscribers.push(networkSyncManager.on('syncNote', (payload: NoteSyncPayload) => {
+      const sm = networkSyncManager.getSyncStateManager();
+      sm.beginApplyRemote();
+      try {
+        const noteManager = session.noteManager;
+        switch (payload.action) {
+          case 'add': {
+            const note = payload.note as Note | undefined;
+            if (note && note.id) {
+              // Check if already exists (idempotency)
+              if (!noteManager.getNote(note.id)) {
+                const created = noteManager.addNote(
+                  note.sourceIndex,
+                  note.frameStart,
+                  note.frameEnd,
+                  note.text,
+                  note.author,
+                  { parentId: note.parentId ?? undefined, color: note.color },
+                );
+                // Overwrite generated id with remote id for consistency
+                const internal = (noteManager as any)._notes as Map<string, Note>;
+                internal.delete(created.id);
+                internal.set(note.id, { ...created, id: note.id, status: note.status ?? 'open' });
+              }
+            }
+            break;
+          }
+          case 'remove':
+            if (payload.noteId) {
+              noteManager.removeNote(payload.noteId);
+            }
+            break;
+          case 'update': {
+            const note = payload.note as Partial<Note> | undefined;
+            if (payload.noteId && note) {
+              noteManager.updateNote(payload.noteId, {
+                text: note.text,
+                status: note.status,
+                color: note.color,
+              });
+            }
+            break;
+          }
+          case 'clear':
+            noteManager.fromSerializable([]);
+            break;
+        }
+      } finally {
+        sm.endApplyRemote();
+      }
+    }));
+
+    // Send outgoing note sync when notes change
+    this.unsubscribers.push(session.on('notesChanged', () => {
+      if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
+        // Send full note state as a bulk update (simple and reliable)
+        const notes = session.noteManager.toSerializable();
+        networkSyncManager.sendNoteSync({
+          action: 'clear',
+          timestamp: Date.now(),
+        });
+        for (const note of notes) {
+          networkSyncManager.sendNoteSync({
+            action: 'add',
+            note,
+            timestamp: Date.now(),
+          });
+        }
       }
     }));
 

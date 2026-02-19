@@ -2,17 +2,21 @@
  * LayoutProcessor - NodeProcessor implementation for layout/tiling
  *
  * Encapsulates the processing logic of LayoutGroupNode: selecting
- * an input based on layout mode. Currently a pass-through returning
- * the first input, matching the existing LayoutGroupNode behavior.
+ * an input based on layout mode. In tiled mode, returns the first
+ * non-null input (the actual tiled rendering is handled by the GPU
+ * via Renderer.renderTiledImages). In pass-through mode, returns
+ * only the first input.
  *
- * This is a proof-of-concept processor demonstrating the NodeProcessor
- * strategy pattern. A future implementation could composite all inputs
- * into a tiled layout based on mode settings.
+ * Also provides computeTileViewports() for calculating tile viewport
+ * regions independently of the node graph.
  */
 
 import type { IPImage } from '../../core/image/Image';
 import type { EvalContext } from '../../core/graph/Graph';
 import type { NodeProcessor } from '../base/NodeProcessor';
+import { computeTileViewports, type TileViewport } from '../groups/LayoutGroupNode';
+
+export { type TileViewport } from '../groups/LayoutGroupNode';
 
 /**
  * Layout mode determining how inputs are arranged.
@@ -79,13 +83,30 @@ export class LayoutProcessor implements NodeProcessor {
     }
   }
 
+  /**
+   * Compute tile viewport regions for the given canvas dimensions.
+   *
+   * Delegates to the shared computeTileViewports() function so that
+   * viewport calculation is consistent between LayoutProcessor and
+   * LayoutGroupNode.
+   *
+   * @param canvasWidth - Total canvas width in pixels
+   * @param canvasHeight - Total canvas height in pixels
+   * @param inputCount - Number of inputs (used to compute grid dimensions)
+   * @returns Array of TileViewport regions in row-major order (top-left first)
+   */
+  computeTileViewports(canvasWidth: number, canvasHeight: number, inputCount: number): TileViewport[] {
+    const { columns, rows } = this.getGridDimensions(inputCount);
+    return computeTileViewports(canvasWidth, canvasHeight, columns, rows, this.config.spacing);
+  }
+
   process(_context: EvalContext, inputs: (IPImage | null)[]): IPImage | null {
     if (inputs.length === 0) {
       return null;
     }
 
-    // Current behavior: pass-through first input.
-    // A full implementation would composite all inputs into a tiled layout.
+    // Pass-through: return first non-null input.
+    // Actual tiled rendering is handled by the GPU via Renderer.renderTiledImages().
     return inputs[0] ?? null;
   }
 

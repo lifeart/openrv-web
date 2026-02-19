@@ -48,6 +48,7 @@ const VALID_MESSAGE_TYPES: Set<SyncMessageType> = new Set([
   'sync.view',
   'sync.color',
   'sync.annotation',
+  'sync.note',
   'sync.state-request',
   'sync.state-response',
   'sync.media-request',

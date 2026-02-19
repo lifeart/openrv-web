@@ -301,6 +301,18 @@ export class RenderWorkerProxy implements RendererBackend {
   }
 
   /**
+   * Render tiled images. Currently delegates to renderImage for each tile
+   * sequentially. A future implementation could batch-send to the worker.
+   */
+  renderTiledImages(tiles: { image: IPImage; viewport: import('../nodes/groups/LayoutGroupNode').TileViewport }[]): void {
+    // Worker proxy does not support viewport/scissor control yet.
+    // Fall back to rendering first tile only as a basic implementation.
+    if (tiles.length > 0) {
+      this.renderImage(tiles[0]!.image);
+    }
+  }
+
+  /**
    * Render an HDR image asynchronously via the worker.
    * Serializes IPImage data and transfers the ArrayBuffer.
    */

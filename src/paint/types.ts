@@ -58,12 +58,16 @@ export interface StrokePoint extends Point {
 /** Which A/B compare version an annotation belongs to. */
 export type AnnotationVersion = 'A' | 'B' | 'all';
 
+/** Which stereo eye an annotation applies to. */
+export type AnnotationEye = 'left' | 'right' | 'both';
+
 export interface PenStroke {
   type: 'pen';
   id: string;
   frame: number;
   user: string;
   version?: AnnotationVersion;
+  eye?: AnnotationEye;
   color: [number, number, number, number]; // RGBA 0-1
   width: number | number[]; // Single or per-point widths
   brush: BrushType;
@@ -82,6 +86,7 @@ export interface TextAnnotation {
   frame: number;
   user: string;
   version?: AnnotationVersion;
+  eye?: AnnotationEye;
   position: Point;
   color: [number, number, number, number];
   text: string;
@@ -108,6 +113,7 @@ export interface ShapeAnnotation {
   frame: number;
   user: string;
   version?: AnnotationVersion;
+  eye?: AnnotationEye;
   shapeType: ShapeType;
   // Bounding points (normalized 0-1)
   startPoint: Point; // First corner or start of line

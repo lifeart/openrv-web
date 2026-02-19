@@ -232,6 +232,7 @@ export class App {
     this.networkBridge = new AppNetworkBridge({
       session: this.session,
       viewer: this.viewer,
+      paintEngine: this.paintEngine,
       networkSyncManager: this.controls.networkSyncManager,
       networkControl: this.controls.networkControl,
       headerBar: this.headerBar,

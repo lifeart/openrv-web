@@ -17,6 +17,7 @@ import {
   gamma24Encode, gamma24Decode,
   gamma26Encode, gamma26Decode,
   acescctEncode, acescctDecode,
+  smpte240mEncode, smpte240mDecode,
 } from './TransferFunctions';
 
 /**
@@ -605,6 +606,7 @@ const ENCODE_FUNCTIONS: Record<string, (v: number) => number> = {
   gamma24: gamma24Encode,
   gamma26: gamma26Encode,
   acescct: acescctEncode,
+  smpte240m: smpte240mEncode,
 };
 
 /** Map of transfer function name to decode function */
@@ -619,6 +621,7 @@ const DECODE_FUNCTIONS: Record<string, (v: number) => number> = {
   gamma24: gamma24Decode,
   gamma26: gamma26Decode,
   acescct: acescctDecode,
+  smpte240m: smpte240mDecode,
 };
 
 /**
@@ -823,7 +826,8 @@ export type TransferFunctionName =
   | 'gamma22'
   | 'gamma24'
   | 'gamma26'
-  | 'acescct';
+  | 'acescct'
+  | 'smpte240m';
 
 /**
  * Transform step type
@@ -983,6 +987,8 @@ export class OCIOTransform {
 
     // DCI-P3 to sRGB
     if (input === 'DCI-P3' && output === 'sRGB') {
+      // DCI-P3 uses pure 2.6 power function gamma: decode to linear first
+      this.steps.push({ type: 'gamma_decode', func: 'gamma26' });
       // Already in same white point (D65)
       this.steps.push({ type: 'matrix', matrix: DCIP3_TO_XYZ });
       this.steps.push({ type: 'matrix', matrix: XYZ_TO_SRGB });

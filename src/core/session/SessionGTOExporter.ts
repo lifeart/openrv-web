@@ -75,7 +75,8 @@ import type {
   RotateCanvasSettings, ResizeSettings, FormatSettings,
 } from './serializers/TransformSerializer';
 import type {
-  PaintSettings, OverlaySettings, ChannelMapSettings,
+  PaintSettings, OverlaySettings, OverlayRect, OverlayText, OverlayWindow,
+  ChannelMapSettings,
 } from './serializers/PaintSerializer';
 import type {
   FilterGaussianSettings, UnsharpMaskSettings, NoiseReductionSettings, ClaritySettings,
@@ -1471,7 +1472,7 @@ export class SessionGTOExporter {
       .int2('range', [[playback.inPoint, playback.outPoint]])
       .int2('region', [[playback.inPoint, playback.outPoint]])
       .float('fps', playback.fps)
-      .int('realtime', 0)
+      .int('realtime', metadata.realtime || 0)
       .int('inc', session.frameIncrement)
       .int('frame', playback.currentFrame)
       .int('currentFrame', playback.currentFrame)
@@ -1480,6 +1481,7 @@ export class SessionGTOExporter {
       .string('markerColors', playback.marks.map(m => m.color || '#ff4444'))
       .int('version', metadata.version)
       .int('clipboard', metadata.clipboard)
+      .float4('bgColor', [metadata.bgColor ?? [0.18, 0.18, 0.18, 1.0]])
       .end();
 
     obj
@@ -1652,6 +1654,8 @@ export class SessionGTOExporter {
         this.updateProperty(sessionComp, 'range', [playback.inPoint, playback.outPoint]);
         this.updateProperty(sessionComp, 'region', [playback.inPoint, playback.outPoint]);
         this.updateProperty(sessionComp, 'fps', playback.fps);
+        this.updateProperty(sessionComp, 'realtime', session.metadata.realtime || 0);
+        this.updateProperty(sessionComp, 'bgColor', session.metadata.bgColor ?? [0.18, 0.18, 0.18, 1.0]);
 
         if (playback.marks.length > 0) {
            this.updateProperty(sessionComp, 'marks', playback.marks.map(m => m.frame));
@@ -1757,6 +1761,65 @@ export class SessionGTOExporter {
       data.objects[paintIndex] = currentPaintObject;
     } else {
       data.objects.push(currentPaintObject);
+    }
+
+    // 4. Replace RVOverlay objects
+    // Rebuild each overlay from graph node properties (same pattern as RVPaint)
+    for (let i = data.objects.length - 1; i >= 0; i--) {
+      const obj = data.objects[i]!;
+      if (obj.protocol !== 'RVOverlay') continue;
+
+      const node = session.graph?.getNode(obj.name);
+      if (!node) continue;
+
+      const settings: OverlaySettings = {};
+
+      const overlayShow = node.properties.getValue<boolean>('overlayShow');
+      if (typeof overlayShow === 'boolean') {
+        settings.show = overlayShow;
+      }
+
+      const rectangles = node.properties.getValue<OverlayRect[]>('overlayRectangles');
+      if (Array.isArray(rectangles) && rectangles.length > 0) {
+        settings.rectangles = rectangles;
+      }
+
+      const texts = node.properties.getValue<OverlayText[]>('overlayTexts');
+      if (Array.isArray(texts) && texts.length > 0) {
+        settings.texts = texts;
+      }
+
+      const windows = node.properties.getValue<OverlayWindow[]>('overlayWindows');
+      if (Array.isArray(windows) && windows.length > 0) {
+        settings.windows = windows;
+      }
+
+      const matteShow = node.properties.getValue<boolean>('matteShow');
+      const matteOpacity = node.properties.getValue<number>('matteOpacity');
+      const matteAspect = node.properties.getValue<number>('matteAspect');
+      const matteHeightVisible = node.properties.getValue<number>('matteHeightVisible');
+      const matteCenterPoint = node.properties.getValue<[number, number]>('matteCenterPoint');
+
+      if (typeof matteShow === 'boolean' || typeof matteOpacity === 'number' ||
+          typeof matteAspect === 'number' || typeof matteHeightVisible === 'number' ||
+          Array.isArray(matteCenterPoint)) {
+        settings.matte = {};
+        if (typeof matteShow === 'boolean') settings.matte.show = matteShow;
+        if (typeof matteOpacity === 'number') settings.matte.opacity = matteOpacity;
+        if (typeof matteAspect === 'number') settings.matte.aspect = matteAspect;
+        if (typeof matteHeightVisible === 'number') settings.matte.heightVisible = matteHeightVisible;
+        if (Array.isArray(matteCenterPoint)) settings.matte.centerPoint = matteCenterPoint;
+      }
+
+      // Only emit an overlay object if it has meaningful content
+      const hasContent = settings.rectangles || settings.texts || settings.windows ||
+                         settings.matte || typeof settings.show === 'boolean';
+      if (hasContent) {
+        data.objects[i] = this.buildOverlayObject(obj.name, settings);
+      } else {
+        // Remove empty overlay objects
+        data.objects.splice(i, 1);
+      }
     }
 
     return data;

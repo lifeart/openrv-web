@@ -41,6 +41,17 @@ import type { LoopMode, MediaType } from '../types/session';
 import { Graph } from '../graph/Graph';
 import { loadGTOGraph } from './GTOGraphLoader';
 import {
+  resolveProperty as _resolveProperty,
+  resolveGTOByHash,
+  resolveGTOByAt,
+} from './PropertyResolver';
+import type {
+  HashResolveResult,
+  AtResolveResult,
+  GTOHashResolveResult,
+  GTOAtResolveResult,
+} from './PropertyResolver';
+import {
   parseInitialSettings as _parseInitialSettings,
   parseColorAdjustments as _parseColorAdjustments,
   parseCDL as _parseCDL,
@@ -135,6 +146,10 @@ export interface SessionMetadata {
   creationContext: number;
   clipboard: number;
   membershipContains: string[];
+  /** Real-time playback rate (0 means use fps) */
+  realtime: number;
+  /** Background color as RGBA float array (0-1 range). Default: 18% gray */
+  bgColor: [number, number, number, number];
 }
 
 /**
@@ -240,6 +255,8 @@ export class Session extends EventEmitter<SessionEvents> {
     creationContext: 0,
     clipboard: 0,
     membershipContains: [],
+    realtime: 0,
+    bgColor: [0.18, 0.18, 0.18, 1.0],
   };
 
   // Static constant for starvation threshold - kept for backward compatibility
@@ -452,6 +469,40 @@ export class Session extends EventEmitter<SessionEvents> {
     return this._gtoData;
   }
 
+  /**
+   * Resolve an OpenRV property address against the session.
+   *
+   * Supports two addressing modes:
+   * - Hash: `#RVColor.color.exposure` — finds nodes by protocol, resolves component.property
+   * - At: `@RVDisplayColor` — finds all nodes with the given protocol
+   *
+   * Attempts resolution against the live Graph first; falls back to raw GTOData
+   * for full component.property fidelity when no graph is loaded.
+   *
+   * @param address - Property address string (e.g. `#RVColor.color.exposure` or `@RVDisplayColor`)
+   * @returns Matching results, or null if the address format is invalid
+   */
+  resolveProperty(
+    address: string,
+  ): HashResolveResult[] | AtResolveResult[] | GTOHashResolveResult[] | GTOAtResolveResult[] | null {
+    // Try live graph first
+    if (this._graph) {
+      return _resolveProperty(this._graph, address);
+    }
+
+    // Fall back to raw GTO data
+    if (this._gtoData) {
+      if (address.startsWith('#')) {
+        return resolveGTOByHash(this._gtoData, address);
+      }
+      if (address.startsWith('@')) {
+        return resolveGTOByAt(this._gtoData, address);
+      }
+    }
+
+    return null;
+  }
+
   /** Audio playback manager for scrub audio and independent audio playback */
   get audioPlaybackManager(): AudioPlaybackManager {
     return this._audioPlaybackManager;
@@ -569,10 +620,14 @@ export class Session extends EventEmitter<SessionEvents> {
       membershipContains: patch.membershipContains !== undefined
         ? [...patch.membershipContains]
         : current.membershipContains,
+      realtime: patch.realtime !== undefined ? patch.realtime : current.realtime,
+      bgColor: patch.bgColor !== undefined ? [...patch.bgColor] as [number, number, number, number] : current.bgColor,
     };
 
     const membershipChanged = next.membershipContains.length !== current.membershipContains.length
       || next.membershipContains.some((value, index) => value !== current.membershipContains[index]);
+
+    const bgColorChanged = next.bgColor.some((v, i) => v !== current.bgColor[i]);
 
     const hasChanged = next.displayName !== current.displayName
       || next.comment !== current.comment
@@ -580,7 +635,9 @@ export class Session extends EventEmitter<SessionEvents> {
       || next.origin !== current.origin
       || next.creationContext !== current.creationContext
       || next.clipboard !== current.clipboard
-      || membershipChanged;
+      || membershipChanged
+      || next.realtime !== current.realtime
+      || bgColorChanged;
 
     if (!hasChanged) {
       return;
@@ -1093,7 +1150,9 @@ export class Session extends EventEmitter<SessionEvents> {
           result.sessionInfo.version || result.sessionInfo.origin ||
           result.sessionInfo.creationContext !== undefined ||
           result.sessionInfo.clipboard !== undefined ||
-          result.sessionInfo.membershipContains) {
+          result.sessionInfo.membershipContains ||
+          result.sessionInfo.realtime !== undefined ||
+          result.sessionInfo.bgColor) {
         this._metadata = {
           displayName: result.sessionInfo.displayName ?? '',
           comment: result.sessionInfo.comment ?? '',
@@ -1102,6 +1161,8 @@ export class Session extends EventEmitter<SessionEvents> {
           creationContext: result.sessionInfo.creationContext ?? 0,
           clipboard: result.sessionInfo.clipboard ?? 0,
           membershipContains: result.sessionInfo.membershipContains ?? [],
+          realtime: result.sessionInfo.realtime ?? 0,
+          bgColor: result.sessionInfo.bgColor ?? [0.18, 0.18, 0.18, 1.0],
         };
         this.emit('metadataChanged', this._metadata);
       }

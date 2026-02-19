@@ -19,6 +19,10 @@ import {
 } from './OCIOConfig';
 import { OCIOTransform, RGB } from './OCIOTransform';
 import { LUT3D } from './LUTLoader';
+import type { OCIOWasmPipeline, OCIOPipelineResult } from './wasm/OCIOWasmPipeline';
+
+/** Processing mode: 'js' uses the built-in JS transforms, 'wasm' uses the WASM OCIO pipeline */
+export type OCIOProcessingMode = 'js' | 'wasm';
 
 /**
  * OCIO processor events
@@ -27,6 +31,10 @@ export interface OCIOProcessorEvents extends EventMap {
   stateChanged: OCIOState;
   transformChanged: void;
   perSourceColorSpaceChanged: { sourceId: string; colorSpace: string };
+  /** Fired when the processing mode changes (js <-> wasm) */
+  processingModeChanged: { mode: OCIOProcessingMode; reason: string };
+  /** Fired when a new WASM pipeline result is available */
+  wasmPipelineReady: OCIOPipelineResult;
 }
 
 /**
@@ -81,6 +89,11 @@ export class OCIOProcessor extends EventEmitter<OCIOProcessorEvents> {
   private perSourceInputColorSpace: Map<string, string> = new Map();
   /** Currently active source ID */
   private activeSourceId: string | null = null;
+
+  // --- WASM mode integration ---
+  private wasmPipeline: OCIOWasmPipeline | null = null;
+  private processingMode: OCIOProcessingMode = 'js';
+  private wasmResult: OCIOPipelineResult | null = null;
 
   constructor() {
     super();
@@ -672,6 +685,141 @@ export class OCIOProcessor extends EventEmitter<OCIOProcessorEvents> {
   }
 
   // ==========================================================================
+  // WASM Mode Integration
+  // ==========================================================================
+
+  /**
+   * Attach a WASM pipeline to this processor.
+   * When attached and the WASM pipeline is ready, the processor will use
+   * the WASM OCIO module for color transforms instead of the JS fallback.
+   *
+   * @param pipeline - The OCIOWasmPipeline instance, or null to detach
+   */
+  setWasmPipeline(pipeline: OCIOWasmPipeline | null): void {
+    this.wasmPipeline = pipeline;
+    this.wasmResult = null;
+
+    if (pipeline && pipeline.isReady()) {
+      this.setProcessingMode('wasm', 'WASM pipeline attached and ready');
+    } else {
+      this.setProcessingMode('js', pipeline ? 'WASM pipeline attached but not ready' : 'WASM pipeline detached');
+    }
+  }
+
+  /**
+   * Get the current processing mode.
+   */
+  getProcessingMode(): OCIOProcessingMode {
+    return this.processingMode;
+  }
+
+  /**
+   * Get the current WASM pipeline (if attached).
+   */
+  getWasmPipeline(): OCIOWasmPipeline | null {
+    return this.wasmPipeline;
+  }
+
+  /**
+   * Check if WASM mode is active and producing results.
+   */
+  isWasmActive(): boolean {
+    return this.processingMode === 'wasm' && this.wasmPipeline !== null && this.wasmPipeline.isReady();
+  }
+
+  /**
+   * Get the latest WASM pipeline result.
+   * Returns null if WASM is not active or no pipeline has been built.
+   */
+  getWasmResult(): OCIOPipelineResult | null {
+    return this.wasmResult;
+  }
+
+  /**
+   * Build the WASM pipeline for the current OCIO state.
+   * If WASM is available and ready, this returns the pipeline result.
+   * If WASM is not available, returns null (caller should use bakeTo3DLUT instead).
+   *
+   * @returns Pipeline result, or null if WASM is not available
+   */
+  buildWasmPipeline(): OCIOPipelineResult | null {
+    if (!this.wasmPipeline || !this.wasmPipeline.isReady()) {
+      return null;
+    }
+
+    // Determine effective input space
+    let inputSpace = this.state.inputColorSpace;
+    if (inputSpace === 'Auto') {
+      inputSpace = this.state.detectedColorSpace ?? 'sRGB';
+    }
+
+    const result = this.wasmPipeline.buildDisplayPipeline(
+      inputSpace,
+      this.state.display,
+      this.state.view,
+      this.state.look === 'None' ? '' : this.state.look,
+    );
+
+    if (result) {
+      this.wasmResult = result;
+      this.emit('wasmPipelineReady', result);
+    }
+
+    return result;
+  }
+
+  /**
+   * Bake to 3D LUT, using WASM if available, otherwise falling back to JS.
+   * This is the recommended method for obtaining a baked LUT, as it
+   * automatically uses the best available backend.
+   *
+   * @param size - LUT cube size (default: 65)
+   * @returns 3D LUT suitable for WebGL processing
+   */
+  bakeTo3DLUTAuto(size: number = 65): LUT3D {
+    // Try WASM path first
+    if (this.isWasmActive() && this.wasmPipeline) {
+      // Ensure the pipeline uses the requested LUT size
+      this.wasmPipeline.setLutSize(size);
+      const result = this.buildWasmPipeline();
+      if (result?.lut3D) {
+        return result.lut3D;
+      }
+    }
+
+    // Fall back to JS baking
+    return this.bakeTo3DLUT(size);
+  }
+
+  /**
+   * Apply OCIO transform to a single RGB color, using WASM if available.
+   *
+   * @param r Red (0-1)
+   * @param g Green (0-1)
+   * @param b Blue (0-1)
+   * @returns Transformed RGB values
+   */
+  transformColorAuto(r: number, g: number, b: number): RGB {
+    // Try WASM path for color probing
+    if (this.isWasmActive() && this.wasmPipeline) {
+      const result = this.wasmPipeline.transformColor(r, g, b);
+      if (result) {
+        return result;
+      }
+    }
+
+    // Fall back to JS transform
+    return this.transformColor(r, g, b);
+  }
+
+  private setProcessingMode(mode: OCIOProcessingMode, reason: string): void {
+    if (this.processingMode !== mode) {
+      this.processingMode = mode;
+      this.emit('processingModeChanged', { mode, reason });
+    }
+  }
+
+  // ==========================================================================
   // Cleanup
   // ==========================================================================
 
@@ -684,6 +832,9 @@ export class OCIOProcessor extends EventEmitter<OCIOProcessorEvents> {
     this.lutDirty = true;
     this.perSourceInputColorSpace.clear();
     this.activeSourceId = null;
+    this.wasmPipeline = null;
+    this.wasmResult = null;
+    this.processingMode = 'js';
     this.removeAllListeners();
   }
 }

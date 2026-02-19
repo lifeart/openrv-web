@@ -5,9 +5,11 @@ import type { ToneMappingState, ZebraState, HighlightsShadowsState, VibranceStat
 import type { BackgroundPatternState } from '../core/types/background';
 import type { DisplayCapabilities } from '../color/DisplayCapabilities';
 import type { RendererBackend, TextureHandle } from './RendererBackend';
+import type { TileViewport } from '../nodes/groups/LayoutGroupNode';
 import type { CDLValues } from '../color/CDL';
 import type { CurveLUTs } from '../color/ColorCurves';
 import type { RenderState, DisplayColorConfig } from './RenderState';
+import type { OCIOPipelineResult } from '../color/wasm/OCIOWasmPipeline';
 import { Logger } from '../utils/Logger';
 import { RenderError } from '../core/errors';
 import { ShaderStateManager } from './ShaderStateManager';
@@ -20,6 +22,7 @@ import {
   INPUT_TRANSFER_SRGB,
   INPUT_TRANSFER_HLG,
   INPUT_TRANSFER_PQ,
+  INPUT_TRANSFER_SMPTE240M,
   OUTPUT_MODE_SDR,
   OUTPUT_MODE_HDR,
   DISPLAY_TRANSFER_LINEAR,
@@ -92,6 +95,15 @@ export class Renderer implements RendererBackend {
   private lut3DRGBABufferSize = 0; // tracks the LUT size the buffer was allocated for
   private inlineLUTDeinterleavedBuffer: Float32Array | null = null;
   private inlineLUTDeinterleavedBufferSize = 0; // tracks (lutSize * channels) for cache invalidation
+
+  // --- OCIO WASM shader integration ---
+  // When OCIO WASM is active, the baked 3D LUT from the WASM processor is
+  // uploaded through the existing u_lut3D uniform path. The OCIO shader code
+  // and uniform metadata are stored here for future shader injection support.
+  private ocioWasmActive = false;
+  private ocioShaderCode: string | null = null;
+  private ocioFunctionName: string | null = null;
+  private ocioUniforms: Array<{ name: string; type: string; isSampler: boolean }> | null = null;
 
   // --- RGBA16F FBO for renderImageToFloat (WebGPU HDR blit path) ---
   private hdrFBO: WebGLFramebuffer | null = null;
@@ -414,6 +426,8 @@ export class Renderer implements RendererBackend {
       inputTransferCode = INPUT_TRANSFER_HLG;
     } else if (image.metadata.transferFunction === 'pq') {
       inputTransferCode = INPUT_TRANSFER_PQ;
+    } else if (image.metadata.transferFunction === 'smpte240m') {
+      inputTransferCode = INPUT_TRANSFER_SMPTE240M;
     }
     this.displayShader.setUniformInt('u_inputTransfer', inputTransferCode);
 
@@ -457,6 +471,47 @@ export class Renderer implements RendererBackend {
     gl.bindVertexArray(this.quadVAO);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     gl.bindVertexArray(null);
+  }
+
+  /**
+   * Render multiple images in a tiled layout using viewport/scissor clipping.
+   *
+   * Each image is rendered into its own viewport region on the canvas. The
+   * canvas is NOT cleared first -- the caller should clear before calling.
+   * Each tile uses gl.viewport() and gl.scissor() to clip rendering to
+   * its designated region.
+   *
+   * @param tiles - Array of { image, viewport } entries to render
+   */
+  renderTiledImages(tiles: { image: IPImage; viewport: TileViewport }[]): void {
+    if (!this.gl || !this.displayShader || tiles.length === 0) return;
+    if (!this.displayShader.isReady()) return;
+
+    const gl = this.gl;
+
+    // Save current viewport
+    const prevViewport = gl.getParameter(gl.VIEWPORT) as Int32Array;
+
+    // Enable scissor test to clip each tile to its viewport region
+    gl.enable(gl.SCISSOR_TEST);
+
+    try {
+      for (const tile of tiles) {
+        const { image, viewport } = tile;
+
+        // Set viewport and scissor to the tile region
+        gl.viewport(viewport.x, viewport.y, viewport.width, viewport.height);
+        gl.scissor(viewport.x, viewport.y, viewport.width, viewport.height);
+
+        // Render the image using the standard renderImage path
+        // (fills the current viewport with the image)
+        this.renderImage(image, 0, 0, 1, 1);
+      }
+    } finally {
+      // Restore previous state
+      gl.disable(gl.SCISSOR_TEST);
+      gl.viewport(prevViewport[0]!, prevViewport[1]!, prevViewport[2]!, prevViewport[3]!);
+    }
   }
 
   /**
@@ -1667,6 +1722,90 @@ export class Renderer implements RendererBackend {
     this.stateManager.setLUT(lutData, lutSize, intensity);
   }
 
+  // -----------------------------------------------------------------------
+  // OCIO WASM Integration
+  // -----------------------------------------------------------------------
+
+  /**
+   * Set the OCIO WASM shader and 3D LUT for GPU-accelerated OCIO processing.
+   *
+   * When OCIO WASM is active, the baked 3D LUT from the WASM processor is
+   * uploaded to a dedicated GPU texture and applied through the existing
+   * u_lut3D pipeline path at full intensity (1.0). The translated GLSL
+   * shader code and uniform metadata are stored for future dynamic shader
+   * injection support.
+   *
+   * This method uses the existing 3D LUT infrastructure in the shader
+   * (the `applyLUT3D()` function in viewer.frag.glsl), which performs
+   * hardware-accelerated trilinear interpolation on the 3D texture.
+   *
+   * @param result - Pipeline result from OCIOWasmPipeline.buildDisplayPipeline()
+   */
+  setOCIOShader(result: OCIOPipelineResult | null): void {
+    if (!result) {
+      this.clearOCIOShader();
+      return;
+    }
+
+    this.ocioWasmActive = true;
+    this.ocioShaderCode = result.shader.code;
+    this.ocioFunctionName = result.functionName;
+    this.ocioUniforms = result.uniforms;
+
+    // Upload the baked 3D LUT through the existing setLUT() path.
+    // The OCIO baked LUT replaces any user-applied LUT when active.
+    const lut = result.lut3D;
+    this.stateManager.setLUT(lut.data, lut.size, 1.0);
+
+    log.info(
+      `OCIO WASM shader set: function=${result.functionName}` +
+      ` uniforms=${result.uniforms.length}` +
+      ` lut3dSize=${lut.size}` +
+      ` fromWasm=${result.fromWasm}`,
+    );
+  }
+
+  /**
+   * Clear the OCIO WASM shader and restore the standard pipeline.
+   */
+  clearOCIOShader(): void {
+    if (!this.ocioWasmActive) return;
+
+    this.ocioWasmActive = false;
+    this.ocioShaderCode = null;
+    this.ocioFunctionName = null;
+    this.ocioUniforms = null;
+
+    // Disable the LUT (the caller should re-apply any user LUT if needed)
+    this.stateManager.setLUT(null, 0, 0);
+
+    log.info('OCIO WASM shader cleared');
+  }
+
+  /**
+   * Whether the OCIO WASM shader is currently active.
+   */
+  isOCIOWasmActive(): boolean {
+    return this.ocioWasmActive;
+  }
+
+  /**
+   * Get the current OCIO WASM shader metadata (for debugging/inspection).
+   */
+  getOCIOShaderInfo(): {
+    active: boolean;
+    functionName: string | null;
+    uniformCount: number;
+    shaderCodeLength: number;
+  } {
+    return {
+      active: this.ocioWasmActive,
+      functionName: this.ocioFunctionName,
+      uniformCount: this.ocioUniforms?.length ?? 0,
+      shaderCodeLength: this.ocioShaderCode?.length ?? 0,
+    };
+  }
+
   private ensureLUT3DTexture(): void {
     const gl = this.gl;
     if (!gl) return;
@@ -1967,6 +2106,12 @@ export class Renderer implements RendererBackend {
     this.scopeFBOWidth = 0;
     this.scopeFBOHeight = 0;
     this.scopeTempRow = null;
+
+    // Release OCIO WASM resources
+    this.ocioWasmActive = false;
+    this.ocioShaderCode = null;
+    this.ocioFunctionName = null;
+    this.ocioUniforms = null;
 
     this.parallelCompileExt = null;
     this.usingHalfFloatBackbuffer = false;

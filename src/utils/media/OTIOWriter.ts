@@ -11,10 +11,12 @@ import type {
   OTIOTimeRange,
   OTIOClip,
   OTIOGap,
+  OTIOTransition,
   OTIOTrack,
   OTIOStack,
   OTIOTimeline,
   OTIOMediaReference,
+  TransitionType,
 } from './OTIOParser';
 
 // ---------------------------------------------------------------------------
@@ -31,9 +33,40 @@ export interface OTIOExportClip {
   fps: number;           // clip-level FPS (may differ per source)
 }
 
+/** Transition to insert between two clips */
+export interface OTIOExportTransition {
+  /** Display name */
+  name?: string;
+  /** Transition type (e.g. SMPTE_Dissolve, Custom_Transition) */
+  transitionType: TransitionType;
+  /** Frames borrowed from the outgoing (preceding) clip */
+  inOffset: number;
+  /** Frames borrowed from the incoming (following) clip */
+  outOffset: number;
+  /** FPS for the transition's rational times */
+  fps: number;
+  /** Optional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/** A single track for multi-track export */
+export interface OTIOExportTrack {
+  /** Track name */
+  name?: string;
+  /** Clips on this track */
+  clips: OTIOExportClip[];
+  /** Transitions between clips (keyed by the index of the clip *before* the transition) */
+  transitions?: Map<number, OTIOExportTransition>;
+}
+
 export interface OTIOExportOptions {
   name?: string;
   fps?: number;
+}
+
+export interface OTIOMultiTrackExportOptions extends OTIOExportOptions {
+  /** Tracks to export. Each becomes a separate Video track in the Stack. */
+  tracks: OTIOExportTrack[];
 }
 
 // ---------------------------------------------------------------------------
@@ -72,6 +105,55 @@ function buildGapNode(duration: number, rate: number): OTIOGap {
     OTIO_SCHEMA: 'Gap.1',
     source_range: timeRange(0, duration, rate),
   };
+}
+
+function buildTransitionNode(transition: OTIOExportTransition): OTIOTransition {
+  const rate = transition.fps;
+  const node: OTIOTransition = {
+    OTIO_SCHEMA: 'Transition.1',
+    name: transition.name,
+    transition_type: transition.transitionType,
+    in_offset: rationalTime(transition.inOffset, rate),
+    out_offset: rationalTime(transition.outOffset, rate),
+  };
+  if (transition.metadata) {
+    node.metadata = transition.metadata;
+  }
+  return node;
+}
+
+/**
+ * Build track children (clips, gaps, transitions) from an export track definition.
+ */
+function buildTrackChildren(
+  clips: OTIOExportClip[],
+  transitions: Map<number, OTIOExportTransition> | undefined,
+  defaultFps: number,
+): (OTIOClip | OTIOGap | OTIOTransition)[] {
+  const children: (OTIOClip | OTIOGap | OTIOTransition)[] = [];
+  let timelinePosition = 1; // 1-based global frame tracker
+
+  for (let i = 0; i < clips.length; i++) {
+    const clip = clips[i]!;
+    const rate = clip.fps || defaultFps;
+
+    // Insert gap if there's space before this clip
+    const gapFrames = clip.globalStartFrame - timelinePosition;
+    if (gapFrames > 0) {
+      children.push(buildGapNode(gapFrames, rate));
+    }
+
+    children.push(buildClipNode(clip));
+    timelinePosition = clip.globalStartFrame + clip.duration;
+
+    // Insert transition after this clip if one is defined
+    if (transitions?.has(i)) {
+      const trans = transitions.get(i)!;
+      children.push(buildTransitionNode(trans));
+    }
+  }
+
+  return children;
 }
 
 // ---------------------------------------------------------------------------
@@ -114,6 +196,47 @@ export function exportOTIO(clips: OTIOExportClip[], options?: OTIOExportOptions)
   const stack: OTIOStack = {
     OTIO_SCHEMA: 'Stack.1',
     children: [track],
+  };
+
+  const timeline: OTIOTimeline = {
+    OTIO_SCHEMA: 'Timeline.1',
+    name,
+    global_start_time: rationalTime(0, defaultFps),
+    tracks: stack,
+  };
+
+  return JSON.stringify(timeline, null, 2);
+}
+
+/**
+ * Export a multi-track timeline with optional transitions as an OTIO JSON string.
+ *
+ * Each OTIOExportTrack becomes a separate Video track in the Stack.
+ * Transitions are placed between clips according to the transition map.
+ */
+export function exportOTIOMultiTrack(options: OTIOMultiTrackExportOptions): string {
+  const name = options.name ?? 'Untitled Timeline';
+  const defaultFps = options.fps ?? 24;
+
+  const otioTracks: OTIOTrack[] = [];
+
+  for (let trackIdx = 0; trackIdx < options.tracks.length; trackIdx++) {
+    const exportTrack = options.tracks[trackIdx]!;
+    const trackName = exportTrack.name ?? `Video Track ${trackIdx + 1}`;
+
+    const children = buildTrackChildren(exportTrack.clips, exportTrack.transitions, defaultFps);
+
+    otioTracks.push({
+      OTIO_SCHEMA: 'Track.1',
+      name: trackName,
+      kind: 'Video',
+      children,
+    });
+  }
+
+  const stack: OTIOStack = {
+    OTIO_SCHEMA: 'Stack.1',
+    children: otioTracks,
   };
 
   const timeline: OTIOTimeline = {

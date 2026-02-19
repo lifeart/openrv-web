@@ -629,6 +629,72 @@ export class ViewerGLRenderer {
   }
 
   /**
+   * Render multiple images in a tiled layout through the WebGL shader pipeline.
+   *
+   * Each tile is rendered into its own viewport region using gl.viewport()
+   * and gl.scissor(). This is used for quad view and other multi-source
+   * layout modes.
+   *
+   * @param tiles - Array of { image, viewport } entries to render
+   * @param displayWidth - Total canvas width in pixels
+   * @param displayHeight - Total canvas height in pixels
+   * @returns true if rendering succeeded
+   */
+  renderTiledHDR(
+    tiles: { image: import('../../core/image/Image').IPImage; viewport: import('../../nodes/groups/LayoutGroupNode').TileViewport }[],
+    displayWidth: number,
+    displayHeight: number,
+  ): boolean {
+    const renderer = this.ensureGLRenderer();
+    if (!renderer || !this._glCanvas || tiles.length === 0) return false;
+
+    // Activate WebGL canvas
+    if (!this._hdrRenderActive) {
+      this._glCanvas.style.display = 'block';
+      this.hideWebGPUBlitCanvas();
+      this.hideCanvas2DBlitCanvas();
+      this.ctx.getImageCanvas().style.visibility = 'hidden';
+      this._hdrRenderActive = true;
+    }
+
+    // Resize canvas buffer if needed
+    if (this._glCanvas.width !== displayWidth || this._glCanvas.height !== displayHeight) {
+      renderer.resize(displayWidth, displayHeight);
+      if (this._glCanvas instanceof HTMLCanvasElement) {
+        const dpr = window.devicePixelRatio || 1;
+        const cssW = this._logicalWidth || Math.round(displayWidth / dpr);
+        const cssH = this._logicalHeight || Math.round(displayHeight / dpr);
+        this._glCanvas.style.width = `${cssW}px`;
+        this._glCanvas.style.height = `${cssH}px`;
+      }
+    }
+
+    // Build render state
+    PerfTrace.begin('buildRenderState');
+    const state = this.buildRenderState();
+    PerfTrace.end('buildRenderState');
+
+    PerfTrace.begin('applyRenderState');
+    renderer.applyRenderState(state);
+    PerfTrace.end('applyRenderState');
+
+    // Apply user rotation/flip
+    this.applyUserTransformToRenderer();
+
+    // Render tiled
+    PerfTrace.begin('renderer.clear+renderTiled');
+    renderer.clear(0, 0, 0, 1);
+    renderer.renderTiledImages(tiles);
+    PerfTrace.end('renderer.clear+renderTiled');
+
+    this._lastRenderedImage = null; // Invalidate single-image cache
+    this._lastRenderedWidth = displayWidth;
+    this._lastRenderedHeight = displayHeight;
+    this._lastHDRBlitFrame = null;
+    return true;
+  }
+
+  /**
    * Hybrid WebGL2 → WebGPU HDR blit render path.
    * Renders via WebGL2 FBO, reads float pixels, uploads to WebGPU HDR canvas.
    */

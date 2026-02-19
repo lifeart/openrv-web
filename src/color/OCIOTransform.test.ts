@@ -996,6 +996,50 @@ describe('OCIOTransform', () => {
         expect(result[0]).toBeGreaterThan(0);
         expect(result[0]).toBeLessThan(1);
       });
+
+      it('DCI-P3 to sRGB applies gamma 2.6 decode before matrix transform', () => {
+        const transform = new OCIOTransform('DCI-P3', 'sRGB');
+        // A pure gamma 2.6 encoded 50% gray: pow(0.5, 2.6) ~ 0.1649
+        // The DCI-P3 -> sRGB path should first decode gamma 2.6, then apply matrix.
+        // Input is gamma-encoded DCI-P3 value; output is sRGB-encoded.
+        const result = transform.apply(0.5, 0.5, 0.5);
+        expect(result[0]).toBeGreaterThan(0);
+        expect(result[0]).toBeLessThan(1);
+        // Result should be roughly neutral (gray in = gray out for DCI-P3/sRGB near-match)
+        expect(result[0]).toBeCloseTo(result[1], 1);
+        expect(result[1]).toBeCloseTo(result[2], 1);
+      });
+
+      it('DCI-P3 to sRGB: white (1,1,1) maps near white', () => {
+        const transform = new OCIOTransform('DCI-P3', 'sRGB');
+        // pow(1, 2.6) = 1, so gamma decode preserves it
+        // DCI-P3 white in linear -> sRGB should be near (1,1,1) after gamut clip
+        const result = transform.apply(1, 1, 1);
+        expect(result[0]).toBeCloseTo(1, 1);
+        expect(result[1]).toBeCloseTo(1, 1);
+        expect(result[2]).toBeCloseTo(1, 1);
+      });
+
+      it('DCI-P3 to sRGB: black (0,0,0) maps to black', () => {
+        const transform = new OCIOTransform('DCI-P3', 'sRGB');
+        const result = transform.apply(0, 0, 0);
+        expect(result[0]).toBeCloseTo(0, 5);
+        expect(result[1]).toBeCloseTo(0, 5);
+        expect(result[2]).toBeCloseTo(0, 5);
+      });
+
+      it('DCI-P3 to sRGB: gamma 2.6 linearization is applied (midtone check)', () => {
+        const transform = new OCIOTransform('DCI-P3', 'sRGB');
+        // 0.5 gamma-encoded -> pow(0.5, 2.6) = ~0.1649 linear
+        // After DCI-P3 -> sRGB matrix (gamuts are close) and sRGB encode,
+        // the result should be darker than 0.5 since gamma 2.6 linearize is applied
+        const result = transform.apply(0.5, 0.5, 0.5);
+        // pow(0.1649, 1/2.4) * 1.055 - 0.055 ~ 0.45  (sRGB encode of ~0.165 linear)
+        // The result should be noticeably less than 0.5
+        expect(result[0]).toBeLessThan(0.5);
+        expect(result[1]).toBeLessThan(0.5);
+        expect(result[2]).toBeLessThan(0.5);
+      });
     });
   });
 

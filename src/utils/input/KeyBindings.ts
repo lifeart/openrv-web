@@ -6,9 +6,16 @@
  */
 
 import { KeyCombination } from './KeyboardManager';
+import type { BindingContext } from './ActiveContextManager';
+
+export interface KeyBindingEntry extends KeyCombination {
+  description: string;
+  /** The context in which this binding is active. Defaults to 'global'. */
+  context?: BindingContext;
+}
 
 export interface KeyBindingConfig {
-  [action: string]: KeyCombination & { description: string };
+  [action: string]: KeyBindingEntry;
 }
 
 export type KeyBindingKeys = keyof typeof DEFAULT_KEY_BINDINGS;
@@ -65,6 +72,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   },
   'timeline.setOutPoint': {
     code: 'KeyO',
+    context: 'timeline',
     description: 'Set out point'
   },
   'timeline.setOutPointAlt': {
@@ -95,6 +103,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   },
   'timeline.resetInOut': {
     code: 'KeyR',
+    context: 'timeline',
     description: 'Reset in/out points to full range'
   },
   'timeline.cycleLoopMode': {
@@ -177,6 +186,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   },
   'panel.gamutDiagram': {
     code: 'KeyG',
+    context: 'panel',
     description: 'Toggle CIE gamut diagram'
   },
   'panel.histogram': {
@@ -193,6 +203,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   'transform.rotateLeft': {
     code: 'KeyR',
     shift: true,
+    context: 'transform',
     description: 'Rotate left 90 degrees'
   },
   'transform.rotateRight': {
@@ -290,10 +301,12 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   },
   'paint.rectangle': {
     code: 'KeyR',
+    context: 'paint',
     description: 'Select rectangle tool'
   },
   'paint.ellipse': {
     code: 'KeyO',
+    context: 'paint',
     description: 'Select ellipse tool'
   },
   'paint.line': {
@@ -310,6 +323,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   },
   'paint.toggleGhost': {
     code: 'KeyG',
+    context: 'paint',
     description: 'Toggle ghost mode'
   },
   'view.toggleGhostFrames': {
@@ -331,6 +345,7 @@ export const DEFAULT_KEY_BINDINGS: KeyBindingConfig = {
   'channel.red': {
     code: 'KeyR',
     shift: true,
+    context: 'channel',
     description: 'Select red channel'
   },
   'channel.green': {

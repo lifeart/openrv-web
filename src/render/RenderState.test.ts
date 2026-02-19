@@ -47,6 +47,7 @@ function createMockRenderer(): RendererBackend {
     resize: vi.fn(),
     clear: vi.fn(),
     renderImage: vi.fn(),
+    renderTiledImages: vi.fn(),
     setColorAdjustments: vi.fn(),
     getColorAdjustments: vi.fn().mockReturnValue({ ...DEFAULT_COLOR_ADJUSTMENTS }),
     resetColorAdjustments: vi.fn(),
