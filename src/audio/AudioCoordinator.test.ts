@@ -6,13 +6,6 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AudioCoordinator, type AudioCoordinatorCallbacks } from './AudioCoordinator';
-import type { AudioPlaybackManager, AudioPlaybackState } from './AudioPlaybackManager';
-
-// ---- Helpers to inspect private state via the public `manager` accessor ----
-
-function mockManager(coordinator: AudioCoordinator): AudioPlaybackManager {
-  return coordinator.manager;
-}
 
 describe('AudioCoordinator', () => {
   let coordinator: AudioCoordinator;
@@ -130,9 +123,8 @@ describe('AudioCoordinator', () => {
     it('AC-010: loadFromVideo sets volume and muted on the manager', async () => {
       await loadWebAudio();
 
-      const mgr = mockManager(coordinator);
-      expect(mgr.volume).toBe(0.7);
-      expect(mgr.muted).toBe(false);
+      expect(coordinator.manager.volume).toBe(0.7);
+      expect(coordinator.manager.muted).toBe(false);
     });
 
     it('AC-011: loadFromVideo with muted=true mutes the manager', async () => {
@@ -294,16 +286,19 @@ describe('AudioCoordinator', () => {
 
     it('AC-041: onFrameChanged when not playing triggers scrub', async () => {
       vi.useFakeTimers();
-      await loadWebAudio();
+      try {
+        await loadWebAudio();
 
-      coordinator.onFrameChanged(25, 24, false);
+        coordinator.onFrameChanged(25, 24, false);
 
-      // Advance past debounce
-      vi.advanceTimersByTime(50);
+        // Advance past debounce
+        vi.advanceTimersByTime(50);
 
-      // Scrub should have created a buffer source for the snippet
-      expect(mockAudioContext.createBufferSource).toHaveBeenCalled();
-      vi.useRealTimers();
+        // Scrub should have created a buffer source for the snippet
+        expect(mockAudioContext.createBufferSource).toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('AC-042: onFrameChanged during playback at 2x with preservesPitch does NOT sync Web Audio', async () => {
@@ -431,23 +426,17 @@ describe('AudioCoordinator', () => {
       expect(video.muted).toBe(true);
     });
 
-    it('AC-064: Web Audio active overrides even reverse direction', async () => {
+    it('AC-064: video is always muted when direction is reverse, regardless of audio path', async () => {
       await loadWebAudio();
 
+      // Start playback in reverse — Web Audio is active at 1x
       coordinator.onPlaybackStarted(1, 24, 1, -1);
-      // Even though direction is reverse, if Web Audio is active, video is muted
-      // (though in practice, reverse + Web Audio may not both be true)
 
       const video = document.createElement('video');
       coordinator.applyToVideoElement(video, 0.8, false, -1);
 
-      // isWebAudioActive check comes first
-      if (coordinator.isWebAudioActive) {
-        expect(video.volume).toBe(0);
-        expect(video.muted).toBe(true);
-      } else {
-        expect(video.muted).toBe(true); // reverse direction mutes
-      }
+      // Whether Web Audio is active or not, video must be muted in reverse
+      expect(video.muted).toBe(true);
     });
   });
 

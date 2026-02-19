@@ -416,6 +416,10 @@ export class Session extends EventEmitter<SessionEvents> {
       onStatusChanged: (sourceIndex, status, previous) => this.emit('statusChanged', { sourceIndex, status, previous }),
       onStatusesChanged: () => this.emit('statusesChanged', undefined),
     });
+    // Volume/mute callbacks forward to both the coordinator (for Web Audio gain)
+    // AND applyVolumeToVideo (for the HTMLVideoElement volume/muted properties).
+    // The coordinator doesn't trigger onAudioPathChanged for volume/mute changes,
+    // so the explicit applyVolumeToVideo call is required here.
     this._volumeManager.setCallbacks({
       onVolumeChanged: (v) => {
         this._audioCoordinator.onVolumeChanged(v);

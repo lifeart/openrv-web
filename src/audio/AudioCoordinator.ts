@@ -72,6 +72,10 @@ export class AudioCoordinator implements ManagerBase {
     this._manager.loadFromVideo(video).then(() => {
       this._manager.setVolume(volume);
       this._manager.setMuted(muted);
+      // If playback started while audio was still loading, activate now
+      if (this._isPlaying) {
+        this.activateAppropriateAudioPath();
+      }
     }).catch(err => {
       log.warn('Audio extraction failed, using video element audio:', err);
     });
@@ -109,7 +113,9 @@ export class AudioCoordinator implements ManagerBase {
       this._manager.syncToTime(time);
     } else {
       // AudioBufferSourceNode ended (e.g. loop wrap) — restart
-      this._manager.play(time);
+      this._manager.play(time).catch(err => {
+        log.warn('Failed to restart audio after loop wrap:', err);
+      });
       this._callbacks?.onAudioPathChanged();
     }
   }
@@ -191,7 +197,9 @@ export class AudioCoordinator implements ManagerBase {
         const time = ((frame ?? 1) - 1) / this._fps;
         this._manager.setPlaybackRate(this._speed);
         this._manager.setReversePlayback(this._direction < 0);
-        this._manager.play(time);
+        this._manager.play(time).catch(err => {
+          log.warn('Failed to activate Web Audio path:', err);
+        });
       }
     } else {
       this._manager.pause();
