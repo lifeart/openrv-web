@@ -3,6 +3,7 @@ import { AppNetworkBridge } from './AppNetworkBridge';
 import { EventEmitter } from './utils/EventEmitter';
 import { PaintEngine } from './paint/PaintEngine';
 import { NoteManager } from './core/session/NoteManager';
+import { encodeSessionState } from './core/session/SessionURLManager';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -26,7 +27,21 @@ class MockSession extends EventEmitter {
   play = vi.fn();
   pause = vi.fn();
   goToFrame = vi.fn();
-  noteManager = new NoteManager();
+  setCurrentSource = vi.fn();
+  setInPoint = vi.fn();
+  setOutPoint = vi.fn();
+  setSourceA = vi.fn();
+  setSourceB = vi.fn();
+  setCurrentAB = vi.fn();
+  noteManager: NoteManager;
+
+  constructor() {
+    super();
+    this.noteManager = new NoteManager();
+    this.noteManager.setCallbacks({
+      onNotesChanged: () => this.emit('notesChanged', undefined),
+    });
+  }
 }
 
 // Helper to track unsubscribers
@@ -54,12 +69,23 @@ class MockNetworkSyncManager extends EventEmitter {
   isHost = false;
   userId = 'test-user-id';
 
-  private _sm = {
-    isApplyingRemoteState: false,
-    beginApplyRemote: vi.fn(),
-    endApplyRemote: vi.fn(),
-    shouldApplyFrameSync: vi.fn(() => true),
+  private _sm: {
+    isApplyingRemoteState: boolean;
+    beginApplyRemote: ReturnType<typeof vi.fn>;
+    endApplyRemote: ReturnType<typeof vi.fn>;
+    shouldApplyFrameSync: ReturnType<typeof vi.fn>;
   };
+
+  constructor() {
+    super();
+    const sm = {
+      isApplyingRemoteState: false,
+      beginApplyRemote: vi.fn(() => { sm.isApplyingRemoteState = true; }),
+      endApplyRemote: vi.fn(() => { sm.isApplyingRemoteState = false; }),
+      shouldApplyFrameSync: vi.fn(() => true),
+    };
+    this._sm = sm;
+  }
 
   getSyncStateManager = vi.fn(() => this._sm);
 
@@ -743,6 +769,7 @@ describe('AppNetworkBridge', () => {
 
       // Add a note directly (outside of bridge) to simulate local state
       ctx._session.noteManager.addNote(0, 1, 5, 'Local note', 'me');
+      ctx._networkSyncManager.sendNoteSync.mockClear();
 
       // Trigger session notesChanged event (simulates NoteManager callback)
       ctx._session.emit('notesChanged', undefined);
@@ -971,6 +998,169 @@ describe('AppNetworkBridge', () => {
       expect(payload.annotations.length).toBeGreaterThan(0);
       expect(payload.notes).toBeInstanceOf(Array);
       expect(payload.notes.length).toBeGreaterThan(0);
+    });
+
+    it('ANB-121: sessionStateReceived with notes does not echo sendNoteSync', async () => {
+      bridge.setup();
+      const sm = ctx._networkSyncManager.getSyncStateManager();
+
+      const encodedState = encodeSessionState({
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+      });
+
+      const notes = [
+        { id: 'n1', frame: 1, startFrame: 1, endFrame: 5, text: 'remote note', author: 'peer', resolved: false },
+      ];
+
+      ctx._networkSyncManager.emit('sessionStateReceived', {
+        sessionState: encodedState,
+        senderUserId: 'peer-1',
+        annotations: [],
+        notes,
+      });
+
+      // Wait for the async handler to complete
+      await vi.waitFor(() => {
+        expect(sm.beginApplyRemote).toHaveBeenCalled();
+      });
+
+      // The bridge should NOT have re-broadcast the notes back
+      expect(ctx._networkSyncManager.sendNoteSync).not.toHaveBeenCalled();
+    });
+
+    it('ANB-122: sessionStateReceived wraps annotations/notes in beginApplyRemote/endApplyRemote', async () => {
+      bridge.setup();
+      const sm = ctx._networkSyncManager.getSyncStateManager();
+
+      const encodedState = encodeSessionState({
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+      });
+
+      const annotations = [
+        { id: '1', frame: 1, points: [{ x: 0, y: 0 }], color: '#ff0000', lineWidth: 2, tool: 'pen', user: 'peer' },
+      ];
+      const notes = [
+        { id: 'n1', frame: 1, startFrame: 1, endFrame: 5, text: 'remote note', author: 'peer', resolved: false },
+      ];
+
+      ctx._networkSyncManager.emit('sessionStateReceived', {
+        sessionState: encodedState,
+        senderUserId: 'peer-1',
+        annotations,
+        notes,
+      });
+
+      await vi.waitFor(() => {
+        // beginApplyRemote is called once for applySharedSessionState and once for applyReceivedAnnotationsAndNotes
+        expect(sm.beginApplyRemote.mock.calls.length).toBeGreaterThanOrEqual(2);
+        expect(sm.endApplyRemote.mock.calls.length).toBeGreaterThanOrEqual(2);
+      });
+
+      // After everything completes, remote state should be released
+      expect(sm.isApplyingRemoteState).toBe(false);
+    });
+
+    it('ANB-123: sessionStateReceived without annotations/notes skips extra beginApplyRemote', async () => {
+      bridge.setup();
+      const sm = ctx._networkSyncManager.getSyncStateManager();
+
+      const encodedState = encodeSessionState({
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+      });
+
+      ctx._networkSyncManager.emit('sessionStateReceived', {
+        sessionState: encodedState,
+        senderUserId: 'peer-1',
+      });
+
+      await vi.waitFor(() => {
+        expect(sm.beginApplyRemote).toHaveBeenCalled();
+      });
+
+      // Only one pair from applySharedSessionState (not from applyReceivedAnnotationsAndNotes)
+      expect(sm.beginApplyRemote).toHaveBeenCalledTimes(1);
+      expect(sm.endApplyRemote).toHaveBeenCalledTimes(1);
+    });
+
+    it('ANB-124: sessionStateReceived with annotations applies them via loadFromAnnotations', async () => {
+      bridge.setup();
+
+      const encodedState = encodeSessionState({
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+      });
+
+      // Build a properly-formed PenStroke annotation
+      const annotations = [
+        {
+          type: 'pen' as const,
+          id: 'peer-1',
+          frame: 1,
+          user: 'peer',
+          color: [0, 1, 0, 1] as [number, number, number, number],
+          width: 3,
+          brush: 'round' as const,
+          points: [{ x: 0.1, y: 0.2, pressure: 1 }],
+          join: 'round' as const,
+          cap: 'round' as const,
+          splat: false,
+          mode: 'normal' as const,
+          startFrame: -1,
+          duration: -1,
+        },
+      ];
+
+      ctx._networkSyncManager.emit('sessionStateReceived', {
+        sessionState: encodedState,
+        senderUserId: 'peer-1',
+        annotations,
+        notes: [],
+      });
+
+      await vi.waitFor(() => {
+        const frameAnnotations = ctx._paintEngine.getAnnotationsForFrame(1);
+        expect(frameAnnotations.length).toBe(1);
+      });
+
+      const applied = ctx._paintEngine.getAnnotationsForFrame(1);
+      expect(applied[0]!.id).toBe('peer-1');
+      expect(applied[0]!.user).toBe('peer');
+    });
+
+    it('ANB-125: sessionStateReceived with notes applies them via noteManager', async () => {
+      bridge.setup();
+
+      const encodedState = encodeSessionState({
+        frame: 1,
+        fps: 24,
+        sourceIndex: 0,
+      });
+
+      const notes = [
+        { id: 'n1', frame: 1, startFrame: 1, endFrame: 5, text: 'synced note', author: 'peer', resolved: false },
+      ];
+
+      ctx._networkSyncManager.emit('sessionStateReceived', {
+        sessionState: encodedState,
+        senderUserId: 'peer-1',
+        annotations: [],
+        notes,
+      });
+
+      await vi.waitFor(() => {
+        const allNotes = ctx._session.noteManager.toSerializable();
+        expect(allNotes.length).toBe(1);
+      });
+
+      const allNotes = ctx._session.noteManager.toSerializable();
+      expect(allNotes[0]!.text).toBe('synced note');
     });
   });
 });

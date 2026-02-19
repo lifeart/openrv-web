@@ -713,11 +713,21 @@ export class AppNetworkBridge {
   }
 
   private applyReceivedAnnotationsAndNotes(annotations?: unknown[], notes?: unknown[]): void {
-    if (Array.isArray(annotations) && annotations.length > 0 && this.ctx.paintEngine) {
-      this.ctx.paintEngine.loadFromAnnotations(annotations as import('./paint/types').Annotation[]);
-    }
-    if (Array.isArray(notes) && notes.length > 0) {
-      this.ctx.session.noteManager.fromSerializable(notes as import('./core/session/NoteManager').Note[]);
+    const hasAnnotations = Array.isArray(annotations) && annotations.length > 0 && this.ctx.paintEngine;
+    const hasNotes = Array.isArray(notes) && notes.length > 0;
+    if (!hasAnnotations && !hasNotes) return;
+
+    const sm = this.ctx.networkSyncManager.getSyncStateManager();
+    sm.beginApplyRemote();
+    try {
+      if (hasAnnotations) {
+        this.ctx.paintEngine!.loadFromAnnotations(annotations as import('./paint/types').Annotation[]);
+      }
+      if (hasNotes) {
+        this.ctx.session.noteManager.fromSerializable(notes as import('./core/session/NoteManager').Note[]);
+      }
+    } finally {
+      sm.endApplyRemote();
     }
   }
 
