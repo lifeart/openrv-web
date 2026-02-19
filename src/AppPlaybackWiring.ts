@@ -29,6 +29,7 @@ import { muxToMP4Blob } from './export/MP4Muxer';
 import { ExportProgressDialog } from './ui/components/ExportProgress';
 import { showAlert } from './ui/components/shared/Modal';
 import { generateSlateFrame } from './export/SlateRenderer';
+import { generateReport } from './export/ReportExporter';
 
 /**
  * External references that the playback wiring needs but are not part of
@@ -112,6 +113,21 @@ export function wirePlaybackControls(ctx: AppWiringContext, deps: PlaybackWiring
   });
   exportControl.on('rvSessionExportRequested', ({ format }) => {
     persistenceManager.saveRvSession(format);
+  });
+  exportControl.on('reportExportRequested', ({ format }) => {
+    generateReport(
+      session,
+      session.noteManager,
+      session.statusManager,
+      session.versionManager,
+      {
+        format,
+        includeNotes: true,
+        includeTimecodes: true,
+        includeVersions: true,
+        title: session.metadata.displayName || 'Dailies Report',
+      }
+    );
   });
 
   // Snapshot panel restore

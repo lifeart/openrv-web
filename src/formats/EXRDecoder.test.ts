@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { deflateSync } from 'node:zlib';
 import {
   decodeEXR,
   exrToIPImage,
@@ -614,9 +615,18 @@ describe('EXRDecoder', () => {
       }
     });
 
-    it('EXR-U091: should reject PXR24 compression', async () => {
+    it('EXR-U091: should accept PXR24 compression', async () => {
+      // PXR24 compression is now supported. The test EXR has uncompressed data layout
+      // but PXR24 header, so decompression may fail on the data content rather than
+      // rejecting the compression type. The key is it does NOT throw "Unsupported EXR compression".
       const buffer = createTestEXR({ compression: EXRCompression.PXR24 });
-      await expect(decodeEXR(buffer)).rejects.toThrow(/Unsupported EXR compression.*PXR24/);
+      try {
+        await decodeEXR(buffer);
+      } catch (e: unknown) {
+        const msg = (e as Error).message;
+        // It should NOT reject PXR24 as unsupported compression
+        expect(msg).not.toMatch(/Unsupported EXR compression.*PXR24/);
+      }
     });
 
     it('EXR-U092: should reject B44 compression', async () => {
@@ -733,6 +743,428 @@ describe('EXRDecoder', () => {
       const info = getEXRInfo(createTestEXR({ compression: EXRCompression.DWAB }));
       expect(info).not.toBeNull();
       expect(info!.compression).toBe('DWAB');
+    });
+  });
+
+  describe('PXR24 compression', () => {
+    /**
+     * Create a valid PXR24-compressed EXR file for testing.
+     * PXR24 encoding:
+     * 1. For FLOAT: truncate to 24 bits, separate into 3 byte planes (MSB, mid, low)
+     *    For HALF: separate into 2 byte planes (MSB, LSB)
+     * 2. Delta-encode the byte stream
+     * 3. zlib deflate
+     */
+    function createPXR24EXR(options: {
+      width?: number;
+      height?: number;
+      channels?: string[];
+      pixelType?: EXRPixelType;
+      /** Raw pixel values per channel per scanline, indexed [y][channelIndex][x] as float values */
+      pixelValues?: number[][][];
+    } = {}): ArrayBuffer {
+      const {
+        width = 2,
+        height = 2,
+        channels = ['R', 'G', 'B', 'A'],
+        pixelType = EXRPixelType.HALF,
+      } = options;
+
+      const sortedChannels = [...channels].sort();
+      const bytesPerPixel = pixelType === EXRPixelType.HALF ? 2 : 4;
+
+      // Generate default pixel values if not provided
+      const pixelValues = options.pixelValues ?? Array.from({ length: height }, (_, y) =>
+        sortedChannels.map((ch, ci) =>
+          Array.from({ length: width }, (_, x) => {
+            if (ch === 'R') return 0.5;
+            if (ch === 'G') return 0.25;
+            if (ch === 'B') return 0.75;
+            if (ch === 'A') return 1.0;
+            return (ci + 1) * 0.1;
+          })
+        )
+      );
+
+      const parts: Uint8Array[] = [];
+      let offset = 0;
+
+      function writeUint32(value: number): void {
+        const buf = new Uint8Array(4);
+        new DataView(buf.buffer).setUint32(0, value, true);
+        parts.push(buf);
+        offset += 4;
+      }
+      function writeInt32(value: number): void {
+        const buf = new Uint8Array(4);
+        new DataView(buf.buffer).setInt32(0, value, true);
+        parts.push(buf);
+        offset += 4;
+      }
+      function writeUint8(value: number): void {
+        parts.push(new Uint8Array([value]));
+        offset += 1;
+      }
+      function writeString(str: string): void {
+        const bytes = new TextEncoder().encode(str);
+        parts.push(bytes);
+        parts.push(new Uint8Array([0]));
+        offset += bytes.length + 1;
+      }
+      function writeFloat32(value: number): void {
+        const buf = new Uint8Array(4);
+        new DataView(buf.buffer).setFloat32(0, value, true);
+        parts.push(buf);
+        offset += 4;
+      }
+      function writeUint64(value: bigint): void {
+        const buf = new Uint8Array(8);
+        new DataView(buf.buffer).setBigUint64(0, value, true);
+        parts.push(buf);
+        offset += 8;
+      }
+
+      // Magic
+      writeUint32(EXR_MAGIC);
+      // Version
+      writeUint32(2);
+
+      // channels attribute
+      writeString('channels');
+      writeString('chlist');
+      let channelListSize = 1;
+      for (const ch of sortedChannels) {
+        channelListSize += ch.length + 1 + 4 + 1 + 3 + 4 + 4;
+      }
+      writeInt32(channelListSize);
+      for (const ch of sortedChannels) {
+        writeString(ch);
+        writeInt32(pixelType);
+        writeUint8(0);
+        parts.push(new Uint8Array([0, 0, 0]));
+        offset += 3;
+        writeInt32(1);
+        writeInt32(1);
+      }
+      writeUint8(0);
+
+      // compression attribute
+      writeString('compression');
+      writeString('compression');
+      writeInt32(1);
+      writeUint8(EXRCompression.PXR24);
+
+      // dataWindow
+      writeString('dataWindow');
+      writeString('box2i');
+      writeInt32(16);
+      writeInt32(0);
+      writeInt32(0);
+      writeInt32(width - 1);
+      writeInt32(height - 1);
+
+      // displayWindow
+      writeString('displayWindow');
+      writeString('box2i');
+      writeInt32(16);
+      writeInt32(0);
+      writeInt32(0);
+      writeInt32(width - 1);
+      writeInt32(height - 1);
+
+      // lineOrder
+      writeString('lineOrder');
+      writeString('lineOrder');
+      writeInt32(1);
+      writeUint8(0);
+
+      // pixelAspectRatio
+      writeString('pixelAspectRatio');
+      writeString('float');
+      writeInt32(4);
+      writeFloat32(1.0);
+
+      // End of header
+      writeUint8(0);
+
+      // PXR24 uses 16 lines per block
+      const linesPerBlock = 16;
+      const numBlocks = Math.ceil(height / linesPerBlock);
+
+      // We need to build compressed blocks first to know their sizes
+      const compressedBlocks: Uint8Array[] = [];
+      const blockYs: number[] = [];
+
+      for (let block = 0; block < numBlocks; block++) {
+        const blockStartY = block * linesPerBlock;
+        const blockLines = Math.min(linesPerBlock, height - blockStartY);
+        blockYs.push(blockStartY);
+
+        // Build byte planes for this block
+        const bytePlaneChunks: number[] = [];
+
+        for (let line = 0; line < blockLines; line++) {
+          const y = blockStartY + line;
+          for (let ci = 0; ci < sortedChannels.length; ci++) {
+            const channelValues = pixelValues[y]![ci]!;
+            if (pixelType === EXRPixelType.FLOAT) {
+              // FLOAT: truncate to 24 bits, then create 3 byte planes
+              const floatBuf = new Float32Array(width);
+              for (let x = 0; x < width; x++) {
+                floatBuf[x] = channelValues[x]!;
+              }
+              const intView = new Uint32Array(floatBuf.buffer);
+
+              // Truncate lowest 8 bits (zero out LSB)
+              for (let x = 0; x < width; x++) {
+                intView[x] = intView[x]! & 0xffffff00;
+              }
+
+              const byteView = new Uint8Array(floatBuf.buffer);
+
+              // 3 byte planes: MSB (byte3), mid (byte2), low (byte1)
+              // byte0 (LSB) is discarded (always 0 after truncation)
+              const plane0: number[] = []; // MSB
+              const plane1: number[] = []; // mid
+              const plane2: number[] = []; // low
+              for (let x = 0; x < width; x++) {
+                plane0.push(byteView[x * 4 + 3]!); // MSB
+                plane1.push(byteView[x * 4 + 2]!); // mid
+                plane2.push(byteView[x * 4 + 1]!); // low
+              }
+              bytePlaneChunks.push(...plane0, ...plane1, ...plane2);
+            } else {
+              // HALF: 2 byte planes
+              const plane0: number[] = []; // MSB
+              const plane1: number[] = []; // LSB
+              for (let x = 0; x < width; x++) {
+                const h = floatToHalf(channelValues[x]!);
+                plane0.push((h >> 8) & 0xff); // MSB
+                plane1.push(h & 0xff);         // LSB
+              }
+              bytePlaneChunks.push(...plane0, ...plane1);
+            }
+          }
+        }
+
+        // Delta encode
+        const deltaEncoded = new Uint8Array(bytePlaneChunks.length);
+        deltaEncoded[0] = bytePlaneChunks[0]!;
+        for (let i = 1; i < bytePlaneChunks.length; i++) {
+          deltaEncoded[i] = (bytePlaneChunks[i]! - bytePlaneChunks[i - 1]!) & 0xff;
+        }
+
+        // zlib deflate
+        const compressed = deflateSync(Buffer.from(deltaEncoded));
+        compressedBlocks.push(new Uint8Array(compressed));
+      }
+
+      // Calculate offset table
+      const headerEnd = offset;
+      const offsetTableSize = numBlocks * 8;
+      let scanlineDataOffset = headerEnd + offsetTableSize;
+
+      // Write offset table
+      for (let block = 0; block < numBlocks; block++) {
+        writeUint64(BigInt(scanlineDataOffset));
+        // Each block: y(4) + packedSize(4) + compressedData
+        scanlineDataOffset += 4 + 4 + compressedBlocks[block]!.length;
+      }
+
+      // Write scanline blocks
+      for (let block = 0; block < numBlocks; block++) {
+        writeInt32(blockYs[block]!); // Y coordinate
+        writeInt32(compressedBlocks[block]!.length); // Packed (compressed) size
+        parts.push(compressedBlocks[block]!);
+        offset += compressedBlocks[block]!.length;
+      }
+
+      // Combine all parts
+      const totalLength = parts.reduce((sum, p) => sum + p.length, 0);
+      const result = new Uint8Array(totalLength);
+      let pos = 0;
+      for (const part of parts) {
+        result.set(part, pos);
+        pos += part.length;
+      }
+      return result.buffer;
+    }
+
+    it('EXR-U200: should decode PXR24-compressed HALF image correctly', async () => {
+      const width = 4;
+      const height = 2;
+      const channels = ['R', 'G', 'B', 'A'];
+      const sortedChannels = [...channels].sort(); // A, B, G, R
+
+      // Create known pixel values
+      const pixelValues: number[][][] = [];
+      for (let y = 0; y < height; y++) {
+        const row: number[][] = [];
+        for (const ch of sortedChannels) {
+          const vals: number[] = [];
+          for (let x = 0; x < width; x++) {
+            if (ch === 'R') vals.push(0.5);
+            else if (ch === 'G') vals.push(0.25);
+            else if (ch === 'B') vals.push(0.75);
+            else vals.push(1.0); // A
+          }
+          row.push(vals);
+        }
+        pixelValues.push(row);
+      }
+
+      const buffer = createPXR24EXR({ width, height, channels, pixelType: EXRPixelType.HALF, pixelValues });
+      const result = await decodeEXR(buffer);
+
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+      expect(result.channels).toBe(4);
+
+      // Check pixel values (HALF is lossless through PXR24)
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const idx = (y * width + x) * 4;
+          expect(result.data[idx + 0]).toBeCloseTo(0.5, 2);   // R
+          expect(result.data[idx + 1]).toBeCloseTo(0.25, 2);  // G
+          expect(result.data[idx + 2]).toBeCloseTo(0.75, 2);  // B
+          expect(result.data[idx + 3]).toBeCloseTo(1.0, 2);   // A
+        }
+      }
+    });
+
+    it('EXR-U201: should decode PXR24-compressed FLOAT image correctly', async () => {
+      const width = 3;
+      const height = 2;
+      const channels = ['R', 'G', 'B', 'A'];
+      const sortedChannels = [...channels].sort(); // A, B, G, R
+
+      const pixelValues: number[][][] = [];
+      for (let y = 0; y < height; y++) {
+        const row: number[][] = [];
+        for (const ch of sortedChannels) {
+          const vals: number[] = [];
+          for (let x = 0; x < width; x++) {
+            if (ch === 'R') vals.push(1.5);
+            else if (ch === 'G') vals.push(0.0);
+            else if (ch === 'B') vals.push(2.0);
+            else vals.push(1.0);
+          }
+          row.push(vals);
+        }
+        pixelValues.push(row);
+      }
+
+      const buffer = createPXR24EXR({ width, height, channels, pixelType: EXRPixelType.FLOAT, pixelValues });
+      const result = await decodeEXR(buffer);
+
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+      expect(result.channels).toBe(4);
+
+      // FLOAT through PXR24 is lossy (8 bits of mantissa lost)
+      // But for "round" values like 1.5, 0.0, 2.0, 1.0 the precision loss is zero
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const idx = (y * width + x) * 4;
+          expect(result.data[idx + 0]).toBeCloseTo(1.5, 2);  // R
+          expect(result.data[idx + 1]).toBeCloseTo(0.0, 2);  // G
+          expect(result.data[idx + 2]).toBeCloseTo(2.0, 2);  // B
+          expect(result.data[idx + 3]).toBeCloseTo(1.0, 2);  // A
+        }
+      }
+    });
+
+    it('EXR-U202: should handle PXR24 with varying pixel values', async () => {
+      const width = 4;
+      const height = 1;
+      const channels = ['R', 'G', 'B'];
+      const sortedChannels = [...channels].sort(); // B, G, R
+
+      // Gradient values
+      const pixelValues: number[][][] = [[
+        // B channel
+        [0.1, 0.2, 0.3, 0.4],
+        // G channel
+        [0.5, 0.6, 0.7, 0.8],
+        // R channel
+        [0.0, 0.25, 0.5, 1.0],
+      ]];
+
+      const buffer = createPXR24EXR({ width, height, channels, pixelType: EXRPixelType.HALF, pixelValues });
+      const result = await decodeEXR(buffer);
+
+      expect(result.width).toBe(width);
+      expect(result.height).toBe(height);
+      expect(result.channels).toBe(4); // Always outputs RGBA
+
+      // Check R channel (sorted as 3rd in B,G,R)
+      const idx0 = 0 * 4;
+      expect(result.data[idx0 + 0]).toBeCloseTo(0.0, 2);  // R at x=0
+      const idx1 = 1 * 4;
+      expect(result.data[idx1 + 0]).toBeCloseTo(0.25, 2); // R at x=1
+      const idx2 = 2 * 4;
+      expect(result.data[idx2 + 0]).toBeCloseTo(0.5, 2);  // R at x=2
+      const idx3 = 3 * 4;
+      expect(result.data[idx3 + 0]).toBeCloseTo(1.0, 2);  // R at x=3
+
+      // Check G channel (sorted as 2nd in B,G,R)
+      expect(result.data[idx0 + 1]).toBeCloseTo(0.5, 2);
+      expect(result.data[idx1 + 1]).toBeCloseTo(0.6, 1);
+      expect(result.data[idx2 + 1]).toBeCloseTo(0.7, 1);
+      expect(result.data[idx3 + 1]).toBeCloseTo(0.8, 1);
+
+      // Check B channel (sorted as 1st in B,G,R)
+      expect(result.data[idx0 + 2]).toBeCloseTo(0.1, 1);
+      expect(result.data[idx1 + 2]).toBeCloseTo(0.2, 1);
+    });
+
+    it('EXR-U203: should report PXR24 compression in getEXRInfo', () => {
+      const buffer = createPXR24EXR();
+      const info = getEXRInfo(buffer);
+      expect(info).not.toBeNull();
+      expect(info!.compression).toBe('PXR24');
+    });
+
+    it('EXR-U204: should decode PXR24 FLOAT with lossy precision', async () => {
+      const width = 2;
+      const height = 1;
+      const channels = ['R', 'G', 'B', 'A'];
+      const sortedChannels = [...channels].sort();
+
+      // Use a value that will show lossy compression: Math.PI
+      const piVal = Math.PI;
+      const pixelValues: number[][][] = [[
+        sortedChannels.map(() => [piVal, piVal])[0]!,
+        sortedChannels.map(() => [piVal, piVal])[1]!,
+        sortedChannels.map(() => [piVal, piVal])[2]!,
+        sortedChannels.map(() => [piVal, piVal])[3]!,
+      ]];
+
+      const buffer = createPXR24EXR({ width, height, channels, pixelType: EXRPixelType.FLOAT, pixelValues });
+      const result = await decodeEXR(buffer);
+
+      // PXR24 truncates 8 bits of mantissa for FLOAT
+      // Math.PI = 3.1415927... float32 = 0x40490fdb
+      // Truncated: 0x40490f00
+      // This should still be close to PI but not exact float32
+      const truncatedPi = new Float32Array(1);
+      const intView = new Uint32Array(truncatedPi.buffer);
+      const piF32 = new Float32Array([piVal]);
+      const piInt = new Uint32Array(piF32.buffer);
+      intView[0] = piInt[0]! & 0xffffff00;
+      const expectedTruncatedPi = truncatedPi[0]!;
+
+      for (let x = 0; x < width; x++) {
+        const idx = x * 4;
+        // All channels should have the truncated pi value
+        for (let c = 0; c < 4; c++) {
+          expect(result.data[idx + c]).toBeCloseTo(expectedTruncatedPi, 5);
+        }
+      }
+
+      // The truncated value should NOT be exactly float32 PI
+      // (unless all 8 low bits were already 0, which they aren't for PI)
+      expect(expectedTruncatedPi).not.toBe(Math.fround(piVal));
     });
   });
 

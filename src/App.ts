@@ -195,6 +195,9 @@ export class App {
     // Apply any stored custom bindings to the keyboard shortcuts
     this.keyboardHandler.refresh();
 
+    // Hook up contextual keyboard manager to the global keyboard manager
+    this.keyboardManager.setContextualManager(this.contextualKeyboardManager);
+
     // Register conflicting key bindings with the contextual keyboard manager
     // so that context-aware resolution can pick the right action based on
     // which tab/context is active (e.g., paint vs timeline).

@@ -13,6 +13,8 @@ export interface KeyCombination {
   meta?: boolean;
 }
 
+import type { ContextualKeyboardManager } from './ContextualKeyboardManager';
+
 export interface KeyBinding {
   combo: KeyCombination;
   handler: () => void;
@@ -24,9 +26,14 @@ export class KeyboardManager {
   private bindings: Map<string, KeyBinding> = new Map();
   private eventHandler: (e: KeyboardEvent) => void;
   private enabled = true;
+  private contextualResolver?: ContextualKeyboardManager;
 
   constructor() {
     this.eventHandler = this.handleKeydown.bind(this);
+  }
+
+  setContextualManager(manager: ContextualKeyboardManager): void {
+    this.contextualResolver = manager;
   }
 
   /**
@@ -128,6 +135,15 @@ export class KeyboardManager {
       alt: e.altKey,
       meta: e.metaKey && !e.ctrlKey // Only set meta if ctrl is not pressed
     };
+
+    if (this.contextualResolver) {
+      const resolved = this.contextualResolver.resolve(combo);
+      if (resolved) {
+        e.preventDefault();
+        resolved.handler();
+        return;
+      }
+    }
 
     const id = this.comboToId(combo);
     const binding = this.bindings.get(id);

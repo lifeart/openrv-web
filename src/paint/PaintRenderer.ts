@@ -248,6 +248,11 @@ export class PaintRenderer {
     const fontStyle = text.italic ? 'italic ' : '';
     const fontWeight = text.bold ? 'bold ' : '';
     ctx.font = `${fontStyle}${fontWeight}${fontSize}px ${text.font}`;
+    if (text.spacing) {
+      (ctx as any).letterSpacing = `${text.spacing}px`;
+    } else {
+      (ctx as any).letterSpacing = '0px';
+    }
 
     // Handle text alignment based on origin
     switch (text.origin) {

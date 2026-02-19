@@ -2,6 +2,7 @@ import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { getIconSvg, type IconName } from './shared/Icons';
 import { DEFAULT_WIPE_STATE } from '../../core/types/wipe';
 import type { WipeMode, WipeSide, WipeState } from '../../core/types/wipe';
+import { ComparisonManager } from './ComparisonManager';
 
 // Re-export types and defaults for backward compatibility
 export type { WipeMode, WipeSide, WipeState };
@@ -13,13 +14,22 @@ export interface WipeControlEvents extends EventMap {
   stateChanged: WipeState;
 }
 
+/**
+ * @deprecated Prefer using {@link ComparisonManager} directly for new code.
+ * WipeControl is a legacy UI widget that now delegates wipe state to ComparisonManager.
+ * It is kept for backward compatibility with existing consumers.
+ */
 export class WipeControl extends EventEmitter<WipeControlEvents> {
   private container: HTMLElement;
   private toggleButton: HTMLButtonElement;
-  private state: WipeState = { ...DEFAULT_WIPE_STATE };
+  private manager: ComparisonManager;
+  private showOriginal: WipeSide = 'left';
 
   constructor() {
     super();
+
+    this.manager = new ComparisonManager();
+    this.bindManagerEvents();
 
     // Create container
     this.container = document.createElement('div');
@@ -52,14 +62,14 @@ export class WipeControl extends EventEmitter<WipeControlEvents> {
 
     this.toggleButton.addEventListener('click', () => this.cycleMode());
     this.toggleButton.addEventListener('mouseenter', () => {
-      if (this.state.mode === 'off') {
+      if (this.manager.getWipeMode() === 'off') {
         this.toggleButton.style.background = 'var(--bg-hover)';
         this.toggleButton.style.borderColor = 'var(--border-primary)';
         this.toggleButton.style.color = 'var(--text-primary)';
       }
     });
     this.toggleButton.addEventListener('mouseleave', () => {
-      if (this.state.mode === 'off') {
+      if (this.manager.getWipeMode() === 'off') {
         this.toggleButton.style.background = 'transparent';
         this.toggleButton.style.borderColor = 'transparent';
         this.toggleButton.style.color = 'var(--text-muted)';
@@ -69,7 +79,24 @@ export class WipeControl extends EventEmitter<WipeControlEvents> {
     this.container.appendChild(this.toggleButton);
   }
 
+  /**
+   * Forward manager wipe events to WipeControl's own event emitter,
+   * keeping the existing public event API intact.
+   */
+  private bindManagerEvents(): void {
+    this.manager.on('wipeModeChanged', (mode) => {
+      this.updateButtonLabel();
+      this.emit('modeChanged', mode);
+      this.emit('stateChanged', this.getState());
+    });
+    this.manager.on('wipePositionChanged', (position) => {
+      this.emit('positionChanged', position);
+      this.emit('stateChanged', this.getState());
+    });
+  }
+
   private updateButtonLabel(): void {
+    const mode = this.manager.getWipeMode();
     const icons: Record<WipeMode, IconName> = {
       off: 'columns',
       horizontal: 'split-vertical',
@@ -86,10 +113,10 @@ export class WipeControl extends EventEmitter<WipeControlEvents> {
       'splitscreen-h': 'Split-H',
       'splitscreen-v': 'Split-V',
     };
-    this.toggleButton.innerHTML = `${getIconSvg(icons[this.state.mode], 'sm')}<span style="margin-left: 6px;">${labels[this.state.mode]}</span>`;
+    this.toggleButton.innerHTML = `${getIconSvg(icons[mode], 'sm')}<span style="margin-left: 6px;">${labels[mode]}</span>`;
 
     // Update button style based on active state
-    if (this.state.mode !== 'off') {
+    if (mode !== 'off') {
       this.toggleButton.style.background = 'rgba(var(--accent-primary-rgb), 0.15)';
       this.toggleButton.style.borderColor = 'var(--accent-primary)';
       this.toggleButton.style.color = 'var(--accent-primary)';
@@ -101,55 +128,45 @@ export class WipeControl extends EventEmitter<WipeControlEvents> {
   }
 
   cycleMode(): void {
-    const modes: WipeMode[] = ['off', 'horizontal', 'vertical'];
-    const currentIndex = modes.indexOf(this.state.mode);
-    this.state.mode = modes[(currentIndex + 1) % modes.length]!;
-    this.updateButtonLabel();
-    this.emit('modeChanged', this.state.mode);
-    this.emit('stateChanged', { ...this.state });
+    this.manager.cycleWipeMode();
   }
 
   setMode(mode: WipeMode): void {
-    if (mode !== this.state.mode) {
-      this.state.mode = mode;
-      this.updateButtonLabel();
-      this.emit('modeChanged', mode);
-      this.emit('stateChanged', { ...this.state });
-    }
+    this.manager.setWipeMode(mode);
   }
 
   getMode(): WipeMode {
-    return this.state.mode;
+    return this.manager.getWipeMode();
   }
 
   setPosition(position: number): void {
-    const clamped = Math.max(0, Math.min(1, position));
-    if (clamped !== this.state.position) {
-      this.state.position = clamped;
-      this.emit('positionChanged', clamped);
-      this.emit('stateChanged', { ...this.state });
-    }
+    this.manager.setWipePosition(position);
   }
 
   getPosition(): number {
-    return this.state.position;
+    return this.manager.getWipePosition();
   }
 
   getState(): WipeState {
-    return { ...this.state };
+    return {
+      mode: this.manager.getWipeMode(),
+      position: this.manager.getWipePosition(),
+      showOriginal: this.showOriginal,
+    };
   }
 
   toggleOriginalSide(): void {
-    if (this.state.mode === 'horizontal') {
-      this.state.showOriginal = this.state.showOriginal === 'left' ? 'right' : 'left';
-    } else if (this.state.mode === 'vertical') {
-      this.state.showOriginal = this.state.showOriginal === 'top' ? 'bottom' : 'top';
+    const mode = this.manager.getWipeMode();
+    if (mode === 'horizontal') {
+      this.showOriginal = this.showOriginal === 'left' ? 'right' : 'left';
+    } else if (mode === 'vertical') {
+      this.showOriginal = this.showOriginal === 'top' ? 'bottom' : 'top';
     }
-    this.emit('stateChanged', { ...this.state });
+    this.emit('stateChanged', this.getState());
   }
 
   isActive(): boolean {
-    return this.state.mode !== 'off';
+    return this.manager.getWipeMode() !== 'off';
   }
 
   render(): HTMLElement {
@@ -157,6 +174,6 @@ export class WipeControl extends EventEmitter<WipeControlEvents> {
   }
 
   dispose(): void {
-    // Cleanup if needed
+    this.manager.dispose();
   }
 }

@@ -262,6 +262,18 @@ export class InfoPanel extends EventEmitter<InfoPanelEvents> {
   }
 
   /**
+   * Escape HTML to prevent XSS
+   */
+  private escapeHtml(unsafe: string): string {
+    return unsafe
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  /**
    * Render panel content
    */
   private render(): void {
@@ -270,7 +282,7 @@ export class InfoPanel extends EventEmitter<InfoPanelEvents> {
     const lines: string[] = [];
 
     if (this.fields.filename && this.currentData.filename) {
-      const name = this.truncateFilename(this.currentData.filename, 25);
+      const name = this.escapeHtml(this.truncateFilename(this.currentData.filename, 25));
       lines.push(`<span style="color: var(--accent-primary);">${name}</span>`);
     }
 

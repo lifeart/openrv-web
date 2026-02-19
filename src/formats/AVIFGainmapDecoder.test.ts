@@ -10,6 +10,7 @@ import {
   parseHeadroomFromXMPText,
   parseISOBMFFOrientation,
   parseISOBMFFTransforms,
+  parseTmapBox,
   type AVIFGainmapInfo,
 } from './AVIFGainmapDecoder';
 
@@ -30,8 +31,24 @@ function createTestAVIFGainmapBuffer(options: {
   gainmapDataSize?: number;
   /** If true, also include a colr(nclx) box with PQ transfer */
   includeNclxHDR?: boolean;
-  /** If true, include a tmap box in ipco with the given float values */
-  tmapFloatValues?: number[];
+  /** If provided, include a spec-compliant ISO 21496-1 tmap box in ipco */
+  tmapData?: {
+    channelCount?: number;
+    gainMapMinN?: number[];
+    gainMapMinD?: number[];
+    gainMapMaxN?: number[];
+    gainMapMaxD?: number[];
+    gainMapGammaN?: number[];
+    gainMapGammaD?: number[];
+    baseOffsetN?: number[];
+    baseOffsetD?: number[];
+    alternateOffsetN?: number[];
+    alternateOffsetD?: number[];
+    baseHdrHeadroomN?: number;
+    baseHdrHeadroomD?: number;
+    alternateHdrHeadroomN?: number;
+    alternateHdrHeadroomD?: number;
+  };
   /** If true, skip pitm box */
   skipPitm?: boolean;
   /** If true, skip meta box entirely (only ftyp + mdat) */
@@ -45,7 +62,7 @@ function createTestAVIFGainmapBuffer(options: {
     primaryDataSize = 100,
     gainmapDataSize = 50,
     includeNclxHDR = false,
-    tmapFloatValues,
+    tmapData,
     skipPitm = false,
     skipMeta = false,
   } = options;
@@ -151,19 +168,60 @@ function createTestAVIFGainmapBuffer(options: {
     ipcoContent.push(1); // full range
   }
 
-  // Property (optional): tmap box with float values
-  if (tmapFloatValues && tmapFloatValues.length > 0) {
-    const tmapDataSize = tmapFloatValues.length * 4;
-    const tmapSize = 8 + tmapDataSize; // size + type + data
+  // Property (optional): tmap box with ISO 21496-1 structure
+  if (tmapData) {
+    const cc = tmapData.channelCount ?? 1;
+    const flagsByte = cc === 3 ? 1 : 0;
+
+    // Defaults: all zeros except what is explicitly provided
+    const defaults = (count: number, val: number) => {
+      const arr = [];
+      for (let i = 0; i < count; i++) arr.push(val);
+      return arr;
+    };
+
+    const gainMapMinN = tmapData.gainMapMinN ?? defaults(cc, 0);
+    const gainMapMinD = tmapData.gainMapMinD ?? defaults(cc, 1);
+    const gainMapMaxN = tmapData.gainMapMaxN ?? defaults(cc, 1);
+    const gainMapMaxD = tmapData.gainMapMaxD ?? defaults(cc, 1);
+    const gainMapGammaN = tmapData.gainMapGammaN ?? defaults(cc, 1);
+    const gainMapGammaD = tmapData.gainMapGammaD ?? defaults(cc, 1);
+    const baseOffsetN = tmapData.baseOffsetN ?? defaults(cc, 0);
+    const baseOffsetD = tmapData.baseOffsetD ?? defaults(cc, 1);
+    const alternateOffsetN = tmapData.alternateOffsetN ?? defaults(cc, 0);
+    const alternateOffsetD = tmapData.alternateOffsetD ?? defaults(cc, 1);
+    const baseHdrHeadroomN = tmapData.baseHdrHeadroomN ?? 0;
+    const baseHdrHeadroomD = tmapData.baseHdrHeadroomD ?? 1;
+    const alternateHdrHeadroomN = tmapData.alternateHdrHeadroomN ?? 0;
+    const alternateHdrHeadroomD = tmapData.alternateHdrHeadroomD ?? 1;
+
+    // Compute data size: version(1) + flags(3) + per-channel arrays(5 pairs * cc * 2 * 4) + scalars(4 * 4)
+    const tmapPayloadSize = 4 + (cc * 2 * 4 * 5) + (4 * 4);
+    const tmapSize = 8 + tmapPayloadSize; // box header + payload
     ipcoContent.push(...uint32BE(tmapSize));
     ipcoContent.push(...strBytes('tmap'));
-    for (const fval of tmapFloatValues) {
-      // Write float32 big-endian
-      const fbuf = new ArrayBuffer(4);
-      new DataView(fbuf).setFloat32(0, fval);
-      const fBytes = new Uint8Array(fbuf);
-      ipcoContent.push(fBytes[0]!, fBytes[1]!, fBytes[2]!, fBytes[3]!);
-    }
+
+    // version (1 byte) + flags (3 bytes)
+    ipcoContent.push(0); // version = 0
+    ipcoContent.push(0, 0, flagsByte); // flags
+
+    // Per-channel arrays: N then D for each parameter
+    for (const n of gainMapMinN) ipcoContent.push(...uint32BE(n));
+    for (const d of gainMapMinD) ipcoContent.push(...uint32BE(d));
+    for (const n of gainMapMaxN) ipcoContent.push(...uint32BE(n));
+    for (const d of gainMapMaxD) ipcoContent.push(...uint32BE(d));
+    for (const n of gainMapGammaN) ipcoContent.push(...uint32BE(n));
+    for (const d of gainMapGammaD) ipcoContent.push(...uint32BE(d));
+    for (const n of baseOffsetN) ipcoContent.push(...uint32BE(n));
+    for (const d of baseOffsetD) ipcoContent.push(...uint32BE(d));
+    for (const n of alternateOffsetN) ipcoContent.push(...uint32BE(n));
+    for (const d of alternateOffsetD) ipcoContent.push(...uint32BE(d));
+
+    // Scalar headroom values
+    ipcoContent.push(...uint32BE(baseHdrHeadroomN));
+    ipcoContent.push(...uint32BE(baseHdrHeadroomD));
+    ipcoContent.push(...uint32BE(alternateHdrHeadroomN));
+    ipcoContent.push(...uint32BE(alternateHdrHeadroomD));
   }
 
   const ipcoSize = 8 + ipcoContent.length;
@@ -448,10 +506,13 @@ describe('AVIFGainmapDecoder', () => {
     });
 
     it('AGM-019: extracts headroom from tmap box when no XMP', () => {
-      // Include a tmap box with a valid headroom float (4.0 stops)
+      // Include a tmap box with alternateHdrHeadroom = 4/1 = 4.0 stops
       const buf = createTestAVIFGainmapBuffer({
         includeXMP: false,
-        tmapFloatValues: [4.0],
+        tmapData: {
+          alternateHdrHeadroomN: 4,
+          alternateHdrHeadroomD: 1,
+        },
       });
       const info = parseGainmapAVIF(buf);
 
@@ -464,7 +525,10 @@ describe('AVIFGainmapDecoder', () => {
       const buf = createTestAVIFGainmapBuffer({
         includeXMP: true,
         xmpHeadroom: 6.0,
-        tmapFloatValues: [3.0],
+        tmapData: {
+          alternateHdrHeadroomN: 3,
+          alternateHdrHeadroomD: 1,
+        },
       });
       const info = parseGainmapAVIF(buf);
 
@@ -539,65 +603,239 @@ describe('AVIFGainmapDecoder', () => {
     });
   });
 
-  describe('parseTmapHeadroom heuristic', () => {
-    it('AGM-030: tmap box with non-headroom float values does not produce false positive', () => {
-      // Create a buffer with a tmap box whose float values are outside 0.1-20 range.
-      // parseTmapHeadroom scans for float32 values > 0.1 && < 20; values outside this
-      // range (e.g. very large, very small, or NaN) should not match.
-      const buf = createTestAVIFGainmapBuffer({
-        includeXMP: false,
-        // These values are all outside the 0.1-20 range: 0.0, 100.0, -5.0
-        tmapFloatValues: [0.0, 100.0, -5.0],
+  describe('parseTmapBox (ISO 21496-1)', () => {
+    /**
+     * Build a raw tmap box payload (without box header) for direct parseTmapBox testing.
+     */
+    function buildTmapPayload(opts: {
+      version?: number;
+      channelCount?: number;
+      gainMapMinN?: number[];
+      gainMapMinD?: number[];
+      gainMapMaxN?: number[];
+      gainMapMaxD?: number[];
+      gainMapGammaN?: number[];
+      gainMapGammaD?: number[];
+      baseOffsetN?: number[];
+      baseOffsetD?: number[];
+      alternateOffsetN?: number[];
+      alternateOffsetD?: number[];
+      baseHdrHeadroomN?: number;
+      baseHdrHeadroomD?: number;
+      alternateHdrHeadroomN?: number;
+      alternateHdrHeadroomD?: number;
+    } = {}): ArrayBuffer {
+      const cc = opts.channelCount ?? 1;
+      const version = opts.version ?? 0;
+      const flagsByte = cc === 3 ? 1 : 0;
+      const defaults = (count: number, val: number) => Array(count).fill(val) as number[];
+
+      const gainMapMinN = opts.gainMapMinN ?? defaults(cc, 0);
+      const gainMapMinD = opts.gainMapMinD ?? defaults(cc, 1);
+      const gainMapMaxN = opts.gainMapMaxN ?? defaults(cc, 1);
+      const gainMapMaxD = opts.gainMapMaxD ?? defaults(cc, 1);
+      const gainMapGammaN = opts.gainMapGammaN ?? defaults(cc, 1);
+      const gainMapGammaD = opts.gainMapGammaD ?? defaults(cc, 1);
+      const baseOffsetN = opts.baseOffsetN ?? defaults(cc, 0);
+      const baseOffsetD = opts.baseOffsetD ?? defaults(cc, 1);
+      const alternateOffsetN = opts.alternateOffsetN ?? defaults(cc, 0);
+      const alternateOffsetD = opts.alternateOffsetD ?? defaults(cc, 1);
+      const baseHdrHeadroomN = opts.baseHdrHeadroomN ?? 0;
+      const baseHdrHeadroomD = opts.baseHdrHeadroomD ?? 1;
+      const alternateHdrHeadroomN = opts.alternateHdrHeadroomN ?? 0;
+      const alternateHdrHeadroomD = opts.alternateHdrHeadroomD ?? 1;
+
+      const size = 4 + (cc * 2 * 4 * 5) + (4 * 4);
+      const buf = new ArrayBuffer(size);
+      const view = new DataView(buf);
+      let pos = 0;
+
+      view.setUint8(pos, version); pos += 1;
+      view.setUint8(pos, 0); pos += 1;
+      view.setUint8(pos, 0); pos += 1;
+      view.setUint8(pos, flagsByte); pos += 1;
+
+      const writeArray = (arr: number[]) => {
+        for (const v of arr) { view.setUint32(pos, v); pos += 4; }
+      };
+
+      writeArray(gainMapMinN);
+      writeArray(gainMapMinD);
+      writeArray(gainMapMaxN);
+      writeArray(gainMapMaxD);
+      writeArray(gainMapGammaN);
+      writeArray(gainMapGammaD);
+      writeArray(baseOffsetN);
+      writeArray(baseOffsetD);
+      writeArray(alternateOffsetN);
+      writeArray(alternateOffsetD);
+
+      view.setUint32(pos, baseHdrHeadroomN); pos += 4;
+      view.setUint32(pos, baseHdrHeadroomD); pos += 4;
+      view.setUint32(pos, alternateHdrHeadroomN); pos += 4;
+      view.setUint32(pos, alternateHdrHeadroomD); pos += 4;
+
+      return buf;
+    }
+
+    it('AGM-030: parses single-channel tmap with alternateHdrHeadroom', () => {
+      const buf = buildTmapPayload({
+        channelCount: 1,
+        alternateHdrHeadroomN: 4,
+        alternateHdrHeadroomD: 1,
       });
-      const info = parseGainmapAVIF(buf);
-      expect(info).not.toBeNull();
-      // Should use the fallback headroom of 2.0 because no float matched the heuristic
-      expect(info!.headroom).toBe(2.0);
+      const view = new DataView(buf);
+      const result = parseTmapBox(view, 0, buf.byteLength);
+
+      expect(result).not.toBeNull();
+      expect(result!.channelCount).toBe(1);
+      expect(result!.alternateHdrHeadroom).toBe(4.0);
     });
 
-    it('AGM-031: tmap box with very small value (0.05) is not matched', () => {
-      // The check is val > 0.1, so 0.05 should NOT match
-      // Note: 0.1 as float32 is slightly above 0.1 (0.10000000149...) so it DOES match
-      const buf = createTestAVIFGainmapBuffer({
-        includeXMP: false,
-        tmapFloatValues: [0.05],
+    it('AGM-031: parses 3-channel tmap with per-channel gainMapMax', () => {
+      const buf = buildTmapPayload({
+        channelCount: 3,
+        gainMapMaxN: [3, 4, 5],
+        gainMapMaxD: [1, 1, 1],
+        alternateHdrHeadroomN: 6,
+        alternateHdrHeadroomD: 1,
       });
-      const info = parseGainmapAVIF(buf);
-      expect(info).not.toBeNull();
-      expect(info!.headroom).toBe(2.0);
+      const view = new DataView(buf);
+      const result = parseTmapBox(view, 0, buf.byteLength);
+
+      expect(result).not.toBeNull();
+      expect(result!.channelCount).toBe(3);
+      expect(result!.gainMapMax).toEqual([3, 4, 5]);
+      expect(result!.alternateHdrHeadroom).toBe(6.0);
     });
 
-    it('AGM-032: tmap box with value at upper boundary (20.0) is not matched', () => {
-      // The check is val < 20, so exactly 20.0 should NOT match
-      const buf = createTestAVIFGainmapBuffer({
-        includeXMP: false,
-        tmapFloatValues: [20.0],
+    it('AGM-032: computes fractional headroom from numerator/denominator', () => {
+      const buf = buildTmapPayload({
+        channelCount: 1,
+        alternateHdrHeadroomN: 7,
+        alternateHdrHeadroomD: 2,
       });
-      const info = parseGainmapAVIF(buf);
-      expect(info).not.toBeNull();
-      expect(info!.headroom).toBe(2.0);
+      const view = new DataView(buf);
+      const result = parseTmapBox(view, 0, buf.byteLength);
+
+      expect(result).not.toBeNull();
+      expect(result!.alternateHdrHeadroom).toBe(3.5);
     });
 
-    it('AGM-033: tmap box with value just inside range matches', () => {
-      const buf = createTestAVIFGainmapBuffer({
-        includeXMP: false,
-        tmapFloatValues: [0.2], // > 0.1 and < 20
-      });
-      const info = parseGainmapAVIF(buf);
-      expect(info).not.toBeNull();
-      expect(info!.headroom).toBeCloseTo(0.2, 2);
+    it('AGM-033: returns null for truncated tmap data', () => {
+      // Only 2 bytes - not enough for version + flags
+      const buf = new ArrayBuffer(2);
+      const view = new DataView(buf);
+      expect(parseTmapBox(view, 0, buf.byteLength)).toBeNull();
     });
 
-    it('AGM-034: tmap box scans in 4-byte increments, takes first match', () => {
-      // First value outside range, second inside range
+    it('AGM-034: returns null for unsupported version', () => {
+      const buf = buildTmapPayload({ channelCount: 1 });
+      const view = new DataView(buf);
+      // Override version to 1
+      view.setUint8(0, 1);
+      expect(parseTmapBox(view, 0, buf.byteLength)).toBeNull();
+    });
+
+    it('AGM-035: handles zero denominator gracefully (returns 0)', () => {
+      const buf = buildTmapPayload({
+        channelCount: 1,
+        alternateHdrHeadroomN: 5,
+        alternateHdrHeadroomD: 0,
+      });
+      const view = new DataView(buf);
+      const result = parseTmapBox(view, 0, buf.byteLength);
+
+      expect(result).not.toBeNull();
+      expect(result!.alternateHdrHeadroom).toBe(0);
+    });
+
+    it('AGM-036: parses all per-channel fields correctly for single channel', () => {
+      const buf = buildTmapPayload({
+        channelCount: 1,
+        gainMapMinN: [1],
+        gainMapMinD: [4],
+        gainMapMaxN: [10],
+        gainMapMaxD: [2],
+        gainMapGammaN: [3],
+        gainMapGammaD: [2],
+        baseOffsetN: [1],
+        baseOffsetD: [10],
+        alternateOffsetN: [2],
+        alternateOffsetD: [5],
+        baseHdrHeadroomN: 1,
+        baseHdrHeadroomD: 2,
+        alternateHdrHeadroomN: 8,
+        alternateHdrHeadroomD: 1,
+      });
+      const view = new DataView(buf);
+      const result = parseTmapBox(view, 0, buf.byteLength);
+
+      expect(result).not.toBeNull();
+      expect(result!.channelCount).toBe(1);
+      expect(result!.gainMapMin).toEqual([0.25]);
+      expect(result!.gainMapMax).toEqual([5]);
+      expect(result!.gainMapGamma).toEqual([1.5]);
+      expect(result!.baseOffset).toEqual([0.1]);
+      expect(result!.alternateOffset).toEqual([0.4]);
+      expect(result!.baseHdrHeadroom).toBe(0.5);
+      expect(result!.alternateHdrHeadroom).toBe(8);
+    });
+
+    it('AGM-037: parses all per-channel fields correctly for 3 channels', () => {
+      const buf = buildTmapPayload({
+        channelCount: 3,
+        gainMapMinN: [1, 2, 3],
+        gainMapMinD: [10, 10, 10],
+        gainMapMaxN: [5, 6, 7],
+        gainMapMaxD: [1, 1, 1],
+        gainMapGammaN: [1, 1, 1],
+        gainMapGammaD: [1, 1, 1],
+        baseOffsetN: [0, 0, 0],
+        baseOffsetD: [1, 1, 1],
+        alternateOffsetN: [0, 0, 0],
+        alternateOffsetD: [1, 1, 1],
+        baseHdrHeadroomN: 0,
+        baseHdrHeadroomD: 1,
+        alternateHdrHeadroomN: 3,
+        alternateHdrHeadroomD: 1,
+      });
+      const view = new DataView(buf);
+      const result = parseTmapBox(view, 0, buf.byteLength);
+
+      expect(result).not.toBeNull();
+      expect(result!.channelCount).toBe(3);
+      expect(result!.gainMapMin).toEqual([0.1, 0.2, 0.3]);
+      expect(result!.gainMapMax).toEqual([5, 6, 7]);
+      expect(result!.alternateHdrHeadroom).toBe(3);
+    });
+
+    it('AGM-038: returns null when tmap data is truncated mid-field', () => {
+      // Build valid payload, then truncate it
+      const fullBuf = buildTmapPayload({
+        channelCount: 1,
+        alternateHdrHeadroomN: 4,
+        alternateHdrHeadroomD: 1,
+      });
+      // Truncate to just past version+flags+some fields but before headroom
+      const truncated = fullBuf.slice(0, 20);
+      const view = new DataView(truncated);
+      expect(parseTmapBox(view, 0, truncated.byteLength)).toBeNull();
+    });
+
+    it('AGM-039: tmap with zero alternateHdrHeadroom falls back to gainMapMax', () => {
       const buf = createTestAVIFGainmapBuffer({
         includeXMP: false,
-        tmapFloatValues: [0.0, 5.5, 10.0],
+        tmapData: {
+          gainMapMaxN: [5],
+          gainMapMaxD: [1],
+          alternateHdrHeadroomN: 0,
+          alternateHdrHeadroomD: 1,
+        },
       });
       const info = parseGainmapAVIF(buf);
       expect(info).not.toBeNull();
-      // Should find 5.5 as the first matching float
-      expect(info!.headroom).toBeCloseTo(5.5, 1);
+      expect(info!.headroom).toBeCloseTo(5.0, 1);
     });
   });
 

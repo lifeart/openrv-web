@@ -53,6 +53,7 @@ import { PremultControl } from './ui/components/PremultControl';
 import { ReferenceManager } from './ui/components/ReferenceManager';
 import { SlateEditor } from './ui/components/SlateEditor';
 import { ConvergenceMeasure } from './ui/components/ConvergenceMeasure';
+import { FloatingWindowControl } from './ui/components/FloatingWindowControl';
 import { SphericalProjection } from './render/SphericalProjection';
 import { LUTPipelinePanel } from './ui/components/LUTPipelinePanel';
 import { HistoryPanel } from './ui/components/HistoryPanel';
@@ -151,6 +152,7 @@ export class AppControlRegistry {
   readonly stereoAlignControl: StereoAlignControl;
   readonly ghostFrameControl: GhostFrameControl;
   readonly convergenceMeasure: ConvergenceMeasure;
+  readonly floatingWindowControl: FloatingWindowControl;
 
   // View tab - 360 projection
   readonly sphericalProjection: SphericalProjection;
@@ -230,6 +232,7 @@ export class AppControlRegistry {
   private readonly timelineEditorPanel: Panel;
   private readonly slateEditorPanel: Panel;
   private convergenceButton: HTMLButtonElement | null = null;
+  private floatingWindowButton: HTMLButtonElement | null = null;
 
   constructor(deps: ControlRegistryDeps) {
     const { session, viewer, paintEngine, displayCapabilities } = deps;
@@ -262,6 +265,7 @@ export class AppControlRegistry {
     this.stereoAlignControl = new StereoAlignControl();
     this.ghostFrameControl = new GhostFrameControl();
     this.convergenceMeasure = new ConvergenceMeasure();
+    this.floatingWindowControl = new FloatingWindowControl();
     this.sphericalProjection = new SphericalProjection();
 
     // --- View tab - Monitoring ---
@@ -400,6 +404,26 @@ export class AppControlRegistry {
 
     this.registryUnsubscribers.push(this.convergenceMeasure.on('stateChanged', (state) => {
       setButtonActive(this.convergenceButton!, state.enabled, 'icon');
+    }));
+
+    // Floating window violation detection button (stereo QC)
+    this.floatingWindowButton = ContextToolbar.createIconButton('maximize', () => {
+      const pair = viewer.getStereoPair();
+      if (pair) {
+        const result = this.floatingWindowControl.detect(pair.left, pair.right);
+        if (this.floatingWindowButton) {
+          this.floatingWindowButton.title = this.floatingWindowControl.formatResult(result);
+        }
+      }
+    }, { title: 'Detect floating window violations' });
+    this.floatingWindowButton.dataset.testid = 'floating-window-detect-btn';
+    viewContent.appendChild(this.floatingWindowButton);
+
+    this.registryUnsubscribers.push(this.floatingWindowControl.on('stateChanged', (state) => {
+      if (this.floatingWindowButton) {
+        const hasViolation = state.lastResult?.hasViolation ?? false;
+        setButtonActive(this.floatingWindowButton, hasViolation, 'icon');
+      }
     }));
 
     viewContent.appendChild(this.ghostFrameControl.render());
@@ -1040,9 +1064,16 @@ export class AppControlRegistry {
     if (this.convergenceButton) {
       this.convergenceButton.style.display = isStereoActive ? 'inline-flex' : 'none';
     }
+    if (this.floatingWindowButton) {
+      this.floatingWindowButton.style.display = isStereoActive ? 'inline-flex' : 'none';
+    }
     // When stereo is turned off, disable convergence measurement
     if (!isStereoActive && this.convergenceMeasure.isEnabled()) {
       this.convergenceMeasure.setEnabled(false);
+    }
+    // When stereo is turned off, clear floating window detection result
+    if (!isStereoActive && this.floatingWindowControl.hasResult()) {
+      this.floatingWindowControl.clearResult();
     }
   }
 
@@ -1379,6 +1410,7 @@ export class AppControlRegistry {
     this.parControl.dispose();
     this.backgroundPatternControl.dispose();
     this.convergenceMeasure.dispose();
+    this.floatingWindowControl.dispose();
     this.stereoControl.dispose();
     this.stereoEyeTransformControl.dispose();
     this.stereoAlignControl.dispose();

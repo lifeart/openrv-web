@@ -334,28 +334,59 @@ export function stackCompositeToBlendMode(composite: StackCompositeType): BlendM
 }
 
 /**
- * Simple nearest-neighbor resize for ImageData
+ * Bilinear interpolation resize for ImageData.
+ *
+ * For each destination pixel, the corresponding source position is computed as
+ * a floating-point coordinate. The four surrounding source pixels are sampled
+ * and linearly interpolated to produce a smooth result, avoiding the aliasing
+ * artifacts of nearest-neighbor scaling.
  */
 function resizeImageData(source: ImageData, newWidth: number, newHeight: number): ImageData {
   const result = new ImageData(newWidth, newHeight);
   const srcData = source.data;
   const dstData = result.data;
+  const srcW = source.width;
+  const srcH = source.height;
 
-  const xRatio = source.width / newWidth;
-  const yRatio = source.height / newHeight;
+  const xRatio = srcW / newWidth;
+  const yRatio = srcH / newHeight;
 
-  for (let y = 0; y < newHeight; y++) {
-    for (let x = 0; x < newWidth; x++) {
-      const srcX = Math.floor(x * xRatio);
-      const srcY = Math.floor(y * yRatio);
+  for (let dy = 0; dy < newHeight; dy++) {
+    // Map destination pixel center to source pixel center
+    const srcY = (dy + 0.5) * yRatio - 0.5;
+    // Clamp the source coordinate to valid range, then derive integer and fractional parts
+    const clampedY = Math.max(0, Math.min(srcY, srcH - 1));
+    const y0 = Math.min(Math.floor(clampedY), srcH - 1);
+    const y1 = Math.min(y0 + 1, srcH - 1);
+    const fy = clampedY - y0;
 
-      const srcIdx = (srcY * source.width + srcX) * 4;
-      const dstIdx = (y * newWidth + x) * 4;
+    for (let dx = 0; dx < newWidth; dx++) {
+      const srcX = (dx + 0.5) * xRatio - 0.5;
+      const clampedX = Math.max(0, Math.min(srcX, srcW - 1));
+      const x0 = Math.min(Math.floor(clampedX), srcW - 1);
+      const x1 = Math.min(x0 + 1, srcW - 1);
+      const fx = clampedX - x0;
 
-      dstData[dstIdx] = srcData[srcIdx]!;
-      dstData[dstIdx + 1] = srcData[srcIdx + 1]!;
-      dstData[dstIdx + 2] = srcData[srcIdx + 2]!;
-      dstData[dstIdx + 3] = srcData[srcIdx + 3]!;
+      // Indices for the four surrounding source pixels
+      const idx00 = (y0 * srcW + x0) * 4;
+      const idx10 = (y0 * srcW + x1) * 4;
+      const idx01 = (y1 * srcW + x0) * 4;
+      const idx11 = (y1 * srcW + x1) * 4;
+
+      const dstIdx = (dy * newWidth + dx) * 4;
+
+      // Bilinear interpolation for each channel (R, G, B, A)
+      for (let c = 0; c < 4; c++) {
+        const v00 = srcData[idx00 + c]!;
+        const v10 = srcData[idx10 + c]!;
+        const v01 = srcData[idx01 + c]!;
+        const v11 = srcData[idx11 + c]!;
+
+        // Interpolate along x for both rows, then along y
+        const top = v00 + (v10 - v00) * fx;
+        const bottom = v01 + (v11 - v01) * fx;
+        dstData[dstIdx + c] = Math.round(top + (bottom - top) * fy);
+      }
     }
   }
 

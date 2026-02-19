@@ -103,8 +103,20 @@ describe('WipeControl', () => {
       expect(control.getMode()).toBe('vertical');
     });
 
-    it('WPE-014: cycles from vertical to off', () => {
+    it('WPE-014: cycles from vertical to splitscreen-h', () => {
       control.setMode('vertical');
+      control.cycleMode();
+      expect(control.getMode()).toBe('splitscreen-h');
+    });
+
+    it('WPE-014b: cycles from splitscreen-h to splitscreen-v', () => {
+      control.setMode('splitscreen-h');
+      control.cycleMode();
+      expect(control.getMode()).toBe('splitscreen-v');
+    });
+
+    it('WPE-014c: cycles from splitscreen-v to off', () => {
+      control.setMode('splitscreen-v');
       control.cycleMode();
       expect(control.getMode()).toBe('off');
     });
@@ -112,7 +124,9 @@ describe('WipeControl', () => {
     it('WPE-015: full cycle returns to off', () => {
       control.cycleMode(); // off -> horizontal
       control.cycleMode(); // horizontal -> vertical
-      control.cycleMode(); // vertical -> off
+      control.cycleMode(); // vertical -> splitscreen-h
+      control.cycleMode(); // splitscreen-h -> splitscreen-v
+      control.cycleMode(); // splitscreen-v -> off
       expect(control.getMode()).toBe('off');
     });
 

@@ -42,8 +42,8 @@ export type PaintTool = 'pen' | 'text' | 'eraser' | 'none' | 'rectangle' | 'elli
 export class PaintEngine extends EventEmitter<PaintEngineEvents> {
   private state: PaintState;
   private currentStroke: PenStroke | null = null;
-  private undoStack: Annotation[][] = [];
-  private redoStack: Annotation[][] = [];
+  private undoStack: Array<{ type: 'add' | 'clear'; frame: number; annotations: Annotation[] }> = [];
+  private redoStack: Array<{ type: 'add' | 'clear'; frame: number; annotations: Annotation[] }> = [];
 
   // Current tool settings
   private _tool: PaintTool = 'none';
@@ -487,7 +487,7 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
     this.state.annotations.get(frame)!.push(annotation);
 
     // Save to undo stack
-    this.undoStack.push([annotation]);
+    this.undoStack.push({ type: 'add', frame: annotation.frame, annotations: [annotation] });
     this.redoStack = [];
 
     this.emit('strokeAdded', annotation);
@@ -570,7 +570,7 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
     this.state.annotations.set(frame, []);
 
     // Save to undo stack
-    this.undoStack.push(removed);
+    this.undoStack.push({ type: 'clear', frame, annotations: removed });
     this.redoStack = [];
 
     this.emit('annotationsChanged', frame);
@@ -716,15 +716,21 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
     const lastAction = this.undoStack.pop();
     if (!lastAction) return false;
 
-    for (const annotation of lastAction) {
-      const annotations = this.state.annotations.get(annotation.frame);
-      if (annotations) {
-        const index = annotations.findIndex((a) => a.id === annotation.id);
-        if (index !== -1) {
-          annotations.splice(index, 1);
+    if (lastAction.type === 'add') {
+      for (const annotation of lastAction.annotations) {
+        const annotations = this.state.annotations.get(annotation.frame);
+        if (annotations) {
+          const index = annotations.findIndex((a) => a.id === annotation.id);
+          if (index !== -1) {
+            annotations.splice(index, 1);
+          }
         }
+        this.emit('annotationsChanged', annotation.frame);
       }
-      this.emit('annotationsChanged', annotation.frame);
+    } else if (lastAction.type === 'clear') {
+      const frameAnnotations = this.state.annotations.get(lastAction.frame) || [];
+      this.state.annotations.set(lastAction.frame, [...frameAnnotations, ...lastAction.annotations]);
+      this.emit('annotationsChanged', lastAction.frame);
     }
 
     this.redoStack.push(lastAction);
@@ -735,12 +741,17 @@ export class PaintEngine extends EventEmitter<PaintEngineEvents> {
     const lastAction = this.redoStack.pop();
     if (!lastAction) return false;
 
-    for (const annotation of lastAction) {
-      if (!this.state.annotations.has(annotation.frame)) {
-        this.state.annotations.set(annotation.frame, []);
+    if (lastAction.type === 'add') {
+      for (const annotation of lastAction.annotations) {
+        if (!this.state.annotations.has(annotation.frame)) {
+          this.state.annotations.set(annotation.frame, []);
+        }
+        this.state.annotations.get(annotation.frame)!.push(annotation);
+        this.emit('annotationsChanged', annotation.frame);
       }
-      this.state.annotations.get(annotation.frame)!.push(annotation);
-      this.emit('annotationsChanged', annotation.frame);
+    } else if (lastAction.type === 'clear') {
+      this.state.annotations.set(lastAction.frame, []);
+      this.emit('annotationsChanged', lastAction.frame);
     }
 
     this.undoStack.push(lastAction);

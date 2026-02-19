@@ -6,14 +6,14 @@
  * - RGBA, RGB, and Y (grayscale) channels
  * - Scanline and ONE_LEVEL tiled images
  * - Deep scanline images (deepscanline) with front-to-back Over compositing
- * - Uncompressed (NONE), RLE, ZIP, ZIPS, PIZ, DWAA, and DWAB compression
+ * - Uncompressed (NONE), RLE, ZIP, ZIPS, PIZ, PXR24, DWAA, and DWAB compression
  * - Data window / display window handling
  * - Multi-part EXR files (scanline and tiled parts; part selection via partIndex)
  *
  * Not yet supported:
  * - MIPMAP and RIPMAP tiled images
  * - Deep tiled images (deeptile)
- * - PXR24, B44, B44A compression
+ * - B44, B44A compression
  *
  * Based on the OpenEXR file format specification.
  */
@@ -740,6 +740,7 @@ function getLinesPerBlock(compression: EXRCompression): number {
     case EXRCompression.DWAA:
       return 32;
     case EXRCompression.ZIP:
+    case EXRCompression.PXR24:
       return 16;
     case EXRCompression.DWAB:
       return 256;
@@ -781,6 +782,19 @@ async function decompressData(
 
     case EXRCompression.RLE:
       return decompressRLE(compressedData, uncompressedSize);
+
+    case EXRCompression.PXR24: {
+      if (!pizContext) {
+        throw new DecoderError('EXR', 'PXR24 decompression requires channel context information');
+      }
+      return await decompressPXR24(
+        compressedData,
+        uncompressedSize,
+        pizContext.width,
+        pizContext.numLines,
+        pizContext.channelSizes,
+      );
+    }
 
     case EXRCompression.DWAA:
     case EXRCompression.DWAB: {
@@ -880,6 +894,111 @@ function reconstructPredictor(data: Uint8Array): Uint8Array {
   }
 
   return final;
+}
+
+/**
+ * Decompress PXR24 data
+ *
+ * PXR24 is a lossy compression for FLOAT channels (lossless for HALF):
+ * 1. Inflate with zlib deflate
+ * 2. Undo delta encoding (cumulative sum per byte plane)
+ * 3. Deinterleave byte planes back into pixel values
+ *    - FLOAT channels: 3 stored bytes become 4 (LSB is zero, lossy truncation)
+ *    - HALF channels: 2 stored bytes are reconstructed as-is
+ */
+async function decompressPXR24(
+  compressedData: Uint8Array,
+  uncompressedSize: number,
+  width: number,
+  numLines: number,
+  channelSizes: number[],
+): Promise<Uint8Array> {
+  // Step 1: Inflate compressed data
+  let inflated: Uint8Array;
+  if (typeof DecompressionStream !== 'undefined') {
+    const ds = new DecompressionStream('deflate');
+    const writer = ds.writable.getWriter();
+    const reader = ds.readable.getReader();
+
+    writer.write(new Uint8Array(compressedData));
+    writer.close();
+
+    const chunks: Uint8Array[] = [];
+    let totalLength = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      totalLength += value.length;
+    }
+
+    inflated = new Uint8Array(totalLength);
+    let off = 0;
+    for (const chunk of chunks) {
+      inflated.set(chunk, off);
+      off += chunk.length;
+    }
+  } else {
+    throw new DecoderError('EXR', 'PXR24 decompression requires DecompressionStream support');
+  }
+
+  // Step 2: Undo delta encoding (cumulative sum)
+  // PXR24 applies delta encoding across the entire inflated buffer
+  // as a single byte stream (not split per channel)
+  for (let i = 1; i < inflated.length; i++) {
+    inflated[i] = (inflated[i]! + inflated[i - 1]!) & 0xff;
+  }
+
+  // Step 3: Deinterleave byte planes into pixel data
+  // The inflated data is organized per-scanline, per-channel, with byte planes
+  // For each scanline and channel:
+  //   FLOAT (4 bytes/pixel): stored as 3 byte planes of width bytes each (MSB, mid, low; LSB=0)
+  //   HALF (2 bytes/pixel): stored as 2 byte planes of width bytes each
+  const result = new Uint8Array(uncompressedSize);
+  let srcOffset = 0;
+  let dstOffset = 0;
+
+  for (let line = 0; line < numLines; line++) {
+    for (const channelSize of channelSizes) {
+      if (channelSize === 4) {
+        // FLOAT channel: 3 byte planes stored, reconstruct 4 bytes per pixel
+        const plane0 = srcOffset;                 // byte 0 (MSB) of each pixel
+        const plane1 = srcOffset + width;          // byte 1 of each pixel
+        const plane2 = srcOffset + width * 2;      // byte 2 of each pixel
+        // byte 3 (LSB) is always 0 (truncated)
+
+        for (let x = 0; x < width; x++) {
+          // EXR is little-endian: byte 0 is least significant
+          // PXR24 stores: byte2 (MSB), byte1, byte0 in planes
+          // Reconstruct as little-endian float32: byte0, byte1, byte2, byte3=0
+          // The planes are ordered from most significant to least significant stored byte
+          result[dstOffset + x * 4 + 0] = 0;                        // LSB (truncated, always 0)
+          result[dstOffset + x * 4 + 1] = inflated[plane2 + x]!;    // low stored byte
+          result[dstOffset + x * 4 + 2] = inflated[plane1 + x]!;    // mid byte
+          result[dstOffset + x * 4 + 3] = inflated[plane0 + x]!;    // MSB (sign+exponent+mantissa high)
+        }
+
+        srcOffset += width * 3;  // 3 byte planes consumed
+        dstOffset += width * 4;  // 4 bytes per pixel produced
+      } else {
+        // HALF channel: 2 byte planes stored, reconstruct 2 bytes per pixel
+        const plane0 = srcOffset;                 // byte 0 (MSB) of each pixel
+        const plane1 = srcOffset + width;          // byte 1 (LSB) of each pixel
+
+        for (let x = 0; x < width; x++) {
+          // Little-endian: byte 0 is LSB, byte 1 is MSB
+          result[dstOffset + x * 2 + 0] = inflated[plane1 + x]!;    // LSB
+          result[dstOffset + x * 2 + 1] = inflated[plane0 + x]!;    // MSB
+        }
+
+        srcOffset += width * 2;  // 2 byte planes consumed
+        dstOffset += width * 2;  // 2 bytes per pixel produced
+      }
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -1021,6 +1140,7 @@ async function decodeScanlineImage(
     } else {
       const needsChannelCtx =
         header.compression === EXRCompression.PIZ ||
+        header.compression === EXRCompression.PXR24 ||
         header.compression === EXRCompression.DWAA ||
         header.compression === EXRCompression.DWAB;
       const channelCtx = needsChannelCtx
@@ -1189,6 +1309,7 @@ async function decodeTiledImage(
     } else {
       const needsChannelCtx =
         header.compression === EXRCompression.PIZ ||
+        header.compression === EXRCompression.PXR24 ||
         header.compression === EXRCompression.DWAA ||
         header.compression === EXRCompression.DWAB;
       const channelCtx = needsChannelCtx
@@ -1367,6 +1488,7 @@ async function decodeMultiPartTiledImage(
     } else {
       const needsChannelCtx =
         header.compression === EXRCompression.PIZ ||
+        header.compression === EXRCompression.PXR24 ||
         header.compression === EXRCompression.DWAA ||
         header.compression === EXRCompression.DWAB;
       const channelCtx = needsChannelCtx
@@ -1530,6 +1652,7 @@ async function decodeMultiPartScanlineImage(
     } else {
       const needsChannelCtx =
         header.compression === EXRCompression.PIZ ||
+        header.compression === EXRCompression.PXR24 ||
         header.compression === EXRCompression.DWAA ||
         header.compression === EXRCompression.DWAB;
       const channelCtx = needsChannelCtx
@@ -1595,6 +1718,7 @@ const SUPPORTED_COMPRESSION = [
   EXRCompression.ZIPS,
   EXRCompression.ZIP,
   EXRCompression.PIZ,
+  EXRCompression.PXR24,
   EXRCompression.DWAA,
   EXRCompression.DWAB,
 ];
@@ -1613,7 +1737,7 @@ function validateCompression(compression: EXRCompression, partLabel?: string): v
     const compressionName = EXRCompression[compression] || `unknown(${compression})`;
     const prefix = partLabel ? `Part '${partLabel}': ` : '';
     throw new DecoderError('EXR',
-      `${prefix}Unsupported EXR compression type: ${compressionName}. Supported types: NONE, RLE, ZIP, ZIPS, PIZ, DWAA, DWAB`
+      `${prefix}Unsupported EXR compression type: ${compressionName}. Supported types: NONE, RLE, ZIP, ZIPS, PIZ, PXR24, DWAA, DWAB`
     );
   }
 }
