@@ -1145,11 +1145,113 @@ export class AppControlRegistry {
       this.slateEditor.setFontSizeMultiplier(val);
     });
 
-    // Logo URL input
-    const logoUrlInput = createField('Logo URL', 'text', 'slate-logo-url');
-    logoUrlInput.addEventListener('input', () => {
-      this.slateEditor.setLogoUrl(logoUrlInput.value);
+    // Logo file upload
+    const logoSection = document.createElement('div');
+    logoSection.style.cssText = 'display: flex; flex-direction: column; gap: 4px;';
+
+    const logoHeader = document.createElement('div');
+    logoHeader.style.cssText = 'display: flex; align-items: center; justify-content: space-between;';
+
+    const logoLabel = document.createElement('div');
+    logoLabel.style.cssText = labelStyle;
+    logoLabel.textContent = 'Logo';
+    logoHeader.appendChild(logoLabel);
+
+    const logoButtonGroup = document.createElement('div');
+    logoButtonGroup.style.cssText = 'display: flex; gap: 4px;';
+
+    const logoFileInput = document.createElement('input');
+    logoFileInput.type = 'file';
+    logoFileInput.accept = 'image/png,image/jpeg,image/webp,image/svg+xml';
+    logoFileInput.dataset.testid = 'slate-logo-file-input';
+    logoFileInput.style.display = 'none';
+
+    const logoLoadButton = document.createElement('button');
+    logoLoadButton.type = 'button';
+    logoLoadButton.innerHTML = `${getIconSvg('upload', 'sm')} Upload`;
+    logoLoadButton.title = 'Upload logo image';
+    logoLoadButton.dataset.testid = 'slate-logo-upload';
+    logoLoadButton.style.cssText = `
+      background: transparent;
+      border: 1px solid var(--border-secondary);
+      color: var(--text-primary);
+      cursor: pointer;
+      padding: 3px 8px;
+      border-radius: 3px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+    `;
+    logoLoadButton.addEventListener('click', () => logoFileInput.click());
+
+    const logoRemoveButton = document.createElement('button');
+    logoRemoveButton.type = 'button';
+    logoRemoveButton.innerHTML = getIconSvg('trash', 'sm');
+    logoRemoveButton.title = 'Remove logo';
+    logoRemoveButton.dataset.testid = 'slate-logo-remove';
+    logoRemoveButton.style.cssText = `
+      background: transparent;
+      border: 1px solid var(--border-secondary);
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 3px 6px;
+      border-radius: 3px;
+      display: none;
+      align-items: center;
+    `;
+    logoRemoveButton.addEventListener('click', () => {
+      this.slateEditor.removeLogoImage();
     });
+
+    logoButtonGroup.appendChild(logoLoadButton);
+    logoButtonGroup.appendChild(logoRemoveButton);
+    logoButtonGroup.appendChild(logoFileInput);
+    logoHeader.appendChild(logoButtonGroup);
+    logoSection.appendChild(logoHeader);
+
+    const logoInfo = document.createElement('div');
+    logoInfo.dataset.testid = 'slate-logo-info';
+    logoInfo.style.cssText = 'font-size: 10px; color: var(--text-muted); display: none;';
+    logoSection.appendChild(logoInfo);
+
+    container.appendChild(logoSection);
+
+    logoFileInput.addEventListener('change', async () => {
+      const file = logoFileInput.files?.[0];
+      if (!file) return;
+      try {
+        await this.slateEditor.loadLogoFile(file);
+      } catch {
+        // Error emitted via logoError event
+      }
+      logoFileInput.value = '';
+    });
+
+    this.slateEditor.on('logoLoaded', (dims) => {
+      logoInfo.textContent = `${dims.width} \u00d7 ${dims.height}px`;
+      logoInfo.style.display = 'block';
+      logoRemoveButton.style.display = 'flex';
+    });
+
+    this.slateEditor.on('logoRemoved', () => {
+      logoInfo.style.display = 'none';
+      logoRemoveButton.style.display = 'none';
+    });
+
+    // Preview container
+    const previewContainer = document.createElement('div');
+    previewContainer.dataset.testid = 'slate-preview-container';
+    previewContainer.style.cssText = `
+      display: none;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-primary);
+      border-radius: 4px;
+      padding: 4px;
+      align-items: center;
+      justify-content: center;
+    `;
+    container.appendChild(previewContainer);
 
     // Generate Preview button
     const previewButton = document.createElement('button');
@@ -1168,7 +1270,13 @@ export class AppControlRegistry {
       margin-top: 4px;
     `;
     previewButton.addEventListener('click', () => {
-      this.slateEditor.generateConfig();
+      const canvas = this.slateEditor.generatePreview();
+      if (canvas) {
+        previewContainer.innerHTML = '';
+        canvas.style.cssText = 'max-width: 100%; height: auto; border-radius: 2px;';
+        previewContainer.appendChild(canvas);
+        previewContainer.style.display = 'flex';
+      }
     });
     container.appendChild(previewButton);
   }
