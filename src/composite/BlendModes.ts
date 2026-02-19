@@ -2,12 +2,24 @@
  * Blend Modes for Compositing
  *
  * Implements standard compositing blend modes for layering images.
- * All operations assume premultiplied alpha.
+ *
+ * NOTE: OpenRV's compositing pipeline assumes **premultiplied alpha**.
+ * Its Over2.glsl uses `i0.rgb + i1.rgb * (1 - i0.a)` (premultiplied over),
+ * and ImageRenderer.cpp sets `glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA)`
+ * with the comment "src is assumed premultiplied".
+ *
+ * This web implementation currently operates on straight (non-premultiplied)
+ * alpha for convenience with Canvas2D/ImageData. When compositing results
+ * differ from OpenRV, premultiply/unpremultiply conversion at the boundaries
+ * is the likely cause.
  */
+
+import type { StackCompositeType } from '../nodes/groups/StackGroupNode';
 
 export type BlendMode =
   | 'normal'      // Standard alpha over
   | 'add'         // Additive (Linear Dodge)
+  | 'minus'       // Subtractive: clamp(base - top, 0, 1)
   | 'multiply'    // Multiply
   | 'screen'      // Screen
   | 'overlay'     // Overlay
@@ -17,6 +29,7 @@ export type BlendMode =
 export const BLEND_MODES: BlendMode[] = [
   'normal',
   'add',
+  'minus',
   'multiply',
   'screen',
   'overlay',
@@ -27,6 +40,7 @@ export const BLEND_MODES: BlendMode[] = [
 export const BLEND_MODE_LABELS: Record<BlendMode, string> = {
   normal: 'Normal',
   add: 'Add',
+  minus: 'Minus',
   multiply: 'Multiply',
   screen: 'Screen',
   overlay: 'Overlay',
@@ -50,6 +64,9 @@ function blendChannel(a: number, b: number, mode: BlendMode): number {
       break;
     case 'add':
       result = Math.min(1, an + bn);
+      break;
+    case 'minus':
+      result = Math.max(0, an - bn);
       break;
     case 'multiply':
       result = an * bn;
@@ -203,6 +220,73 @@ export function compositeMultipleLayers(
   }
 
   return result;
+}
+
+/**
+ * Map a StackCompositeType to the corresponding BlendMode.
+ *
+ * OpenRV compatibility notes (from StackIPNode.cpp and IPImage.cpp):
+ *
+ * - 'replace': Maps to IPImage::Replace. glDisable(GL_BLEND) -- last input
+ *   overwrites framebuffer. We map to 'normal' which is close enough for
+ *   single-layer display.
+ *
+ * - 'over': Maps to IPImage::Over. Uses premultiplied alpha Over2.glsl:
+ *   `i0.rgb + i1.rgb * (1 - i0.a)`. We map to 'normal' (straight-alpha over).
+ *
+ * - 'add': Maps to IPImage::Add. glBlendFunc(GL_ONE, GL_ONE).
+ *
+ * - 'difference': Maps to IPImage::Difference. glBlendEquation(GL_FUNC_SUBTRACT)
+ *   with GL_ONE/GL_ONE. Uses Difference2.glsl: abs(i0 - i1).
+ *
+ * - 'dissolve': Maps to IPImage::Dissolve. In OpenRV, the InlineDissolve2.glsl
+ *   shader randomly selects either input per-pixel based on a noise function
+ *   with probability p=0.5. The blend mode at the GL level uses the same
+ *   premultiplied-over blending as 'over'. Currently falls back to 'normal'
+ *   because we lack the per-pixel noise implementation.
+ *   TODO: Implement per-pixel noise dissolve to match OpenRV InlineDissolve2.glsl.
+ *
+ * - 'topmost': In OpenRV, this maps to IPImage::Replace at the blend mode level,
+ *   but StackIPNode::evaluate() also sets `topmostOnly = true`, which causes it
+ *   to evaluate only the FIRST input (breaking after `haveOneImage` is set).
+ *   This means only the top-most layer is displayed, all others are skipped.
+ *   Currently falls back to 'normal'.
+ *   TODO: Implement topmost by evaluating only the first visible input.
+ *
+ * - 'minus': OpenRV maps '-difference' to IPImage::ReverseDifference, which uses
+ *   glBlendEquation(GL_FUNC_REVERSE_SUBTRACT). The ReverseDifference2.glsl
+ *   computes `clamp(i1 - i0, 0, 1)` (destination minus source). OpenRV does NOT
+ *   have a separate 'minus' composite type; the closest is '-difference'.
+ *   Our 'minus' blend mode computes `clamp(base - top, 0, 1)` which matches
+ *   the ReverseDifference behavior.
+ */
+export function stackCompositeToBlendMode(composite: StackCompositeType): BlendMode {
+  switch (composite) {
+    case 'replace':
+      return 'normal';
+    case 'over':
+      return 'normal';
+    case 'add':
+      return 'add';
+    case 'difference':
+      return 'difference';
+    case '-difference':
+      // OpenRV compatibility: ReverseDifference = clamp(dst - src, 0, 1)
+      return 'minus';
+    case 'minus':
+      // OpenRV compatibility: maps to ReverseDifference (clamp(dst - src, 0, 1))
+      return 'minus';
+    case 'dissolve':
+      // OpenRV: InlineDissolve2.glsl uses per-pixel noise to randomly pick input.
+      // Falling back to normal until per-pixel noise dissolve is implemented.
+      return 'normal';
+    case 'topmost':
+      // OpenRV: StackIPNode evaluates only the first input when topmost is set.
+      // Falling back to normal until topmost-only evaluation is implemented.
+      return 'normal';
+    default:
+      return 'normal';
+  }
 }
 
 /**

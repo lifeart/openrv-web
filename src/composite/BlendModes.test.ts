@@ -9,6 +9,7 @@ import {
   compositeImageData,
   compositeMultipleLayers,
   CompositeLayer,
+  stackCompositeToBlendMode,
 } from './BlendModes';
 import { createTestImageData } from '../../test/utils';
 
@@ -17,6 +18,7 @@ describe('BlendModes', () => {
     it('contains all expected blend modes', () => {
       expect(BLEND_MODES).toContain('normal');
       expect(BLEND_MODES).toContain('add');
+      expect(BLEND_MODES).toContain('minus');
       expect(BLEND_MODES).toContain('multiply');
       expect(BLEND_MODES).toContain('screen');
       expect(BLEND_MODES).toContain('overlay');
@@ -187,6 +189,37 @@ describe('BlendModes', () => {
       });
     });
 
+    describe('minus mode', () => {
+      it('subtracts top from base and clamps to zero', () => {
+        const base = createTestImageData(2, 2, { r: 200, g: 200, b: 200, a: 255 });
+        const top = createTestImageData(2, 2, { r: 100, g: 100, b: 100, a: 255 });
+
+        const result = compositeImageData(base, top, 'minus', 1);
+
+        // (200/255) - (100/255) ≈ 0.39 -> 100
+        expect(result.data[0]).toBeCloseTo(100, -1);
+      });
+
+      it('clamps to zero when top exceeds base', () => {
+        const base = createTestImageData(2, 2, { r: 50, g: 50, b: 50, a: 255 });
+        const top = createTestImageData(2, 2, { r: 200, g: 200, b: 200, a: 255 });
+
+        const result = compositeImageData(base, top, 'minus', 1);
+
+        // (50/255) - (200/255) < 0, clamped to 0
+        expect(result.data[0]).toBe(0);
+      });
+
+      it('minus with black produces original', () => {
+        const base = createTestImageData(2, 2, { r: 128, g: 128, b: 128, a: 255 });
+        const top = createTestImageData(2, 2, { r: 0, g: 0, b: 0, a: 255 });
+
+        const result = compositeImageData(base, top, 'minus', 1);
+
+        expect(result.data[0]).toBeCloseTo(128, -1);
+      });
+    });
+
     describe('alpha handling', () => {
       it('BLD-010: uses Porter-Duff over operation', () => {
         const base = createTestImageData(2, 2, { r: 255, g: 0, b: 0, a: 255 });
@@ -348,6 +381,40 @@ describe('BlendModes', () => {
 
       // Multiply should darken
       expect(result.data[0]).toBeLessThan(128);
+    });
+  });
+
+  describe('stackCompositeToBlendMode', () => {
+    it('maps replace to normal', () => {
+      expect(stackCompositeToBlendMode('replace')).toBe('normal');
+    });
+
+    it('maps over to normal', () => {
+      expect(stackCompositeToBlendMode('over')).toBe('normal');
+    });
+
+    it('maps add to add', () => {
+      expect(stackCompositeToBlendMode('add')).toBe('add');
+    });
+
+    it('maps difference to difference', () => {
+      expect(stackCompositeToBlendMode('difference')).toBe('difference');
+    });
+
+    it('maps minus to minus', () => {
+      expect(stackCompositeToBlendMode('minus')).toBe('minus');
+    });
+
+    it('maps dissolve to normal (fallback)', () => {
+      expect(stackCompositeToBlendMode('dissolve')).toBe('normal');
+    });
+
+    it('maps topmost to normal (fallback)', () => {
+      expect(stackCompositeToBlendMode('topmost')).toBe('normal');
+    });
+
+    it('maps unknown custom types to normal', () => {
+      expect(stackCompositeToBlendMode('custom-blend')).toBe('normal');
     });
   });
 });

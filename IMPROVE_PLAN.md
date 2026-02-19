@@ -143,7 +143,7 @@ Each section is organized by feature area with priority levels: **HIGH** (bugs/b
 ## 10. Network & Collaboration
 
 ### HIGH
-- [ ] **validateColorPayload checks only 3 of 7 fields** — `src/network/MessageProtocol.ts` line ~460: `validateColorPayload()` only validates `exposure`, `gamma`, `saturation` but `ColorSyncPayload` also has `contrast`, `hue`, `temperature`, `tint` fields that are not validated, allowing corrupt data through
+- [x] **validateColorPayload checks only 3 of 7 fields** — FIXED: `validateColorPayload()` now validates all 7 fields: `exposure`, `gamma`, `saturation`, `contrast`, `temperature`, `tint`, `brightness`
 - [ ] **No signaling server implementation** — WebRTC peer connection code exists but there is no signaling server to establish connections; collaboration feature cannot actually work
 - [ ] **Hardcoded TURN server credentials** — `src/network/types.ts` lines 412-418 contain hardcoded TURN credentials (`username: 'openrelayproject'`); these are public test credentials that will not work in production
 
@@ -202,7 +202,7 @@ Each section is organized by feature area with priority levels: **HIGH** (bugs/b
 
 ### Top 5 Most Impactful Items
 1. **Paint clearFrame undo bug** — Data loss: users lose annotations when undoing a clear
-2. **Network validateColorPayload bug** — Corrupt data can propagate in collaboration sessions
+2. ~~**Network validateColorPayload bug**~~ — FIXED: all 7 fields are now validated
 3. **AudioMixer dead code** — Entire audio mixing feature is non-functional
 4. **ContextualKeyboardManager not connected** — Contextual keyboard shortcuts silently fail
 5. **InfoPanel innerHTML XSS** — Security vulnerability with crafted file metadata

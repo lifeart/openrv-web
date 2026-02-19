@@ -45,7 +45,7 @@ export class LuminanceAnalyzer {
   // Double-buffered PBO for async readback
   private pbos: [WebGLBuffer | null, WebGLBuffer | null] = [null, null];
   private pboIndex = 0;
-  private pboFence: WebGLSync | null = null;
+  private pboFences: [WebGLSync | null, WebGLSync | null] = [null, null];
   private cachedResult: LuminanceStats = { avg: 0.18, linearAvg: 1.0 };
   private initialized = false;
   private firstFrame = true;
@@ -119,17 +119,17 @@ export class LuminanceAnalyzer {
       gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, 0);
       gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
 
-      // Insert fence for this readback
-      if (this.pboFence) {
-        gl.deleteSync(this.pboFence);
+      // Insert fence for this PBO's readback (one fence per PBO)
+      if (this.pboFences[this.pboIndex]) {
+        gl.deleteSync(this.pboFences[this.pboIndex]!);
       }
-      this.pboFence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+      this.pboFences[this.pboIndex] = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
     }
 
-    // Read previous frame's result from previous PBO
-    if (!this.firstFrame && prevPBO && this.pboFence) {
-      // Check if previous fence is signaled
-      const status = gl.clientWaitSync(this.pboFence, 0, 0);
+    // Read previous frame's result from previous PBO using its own fence
+    if (!this.firstFrame && prevPBO && this.pboFences[prevPBOIndex]) {
+      // Check if previous PBO's fence is signaled
+      const status = gl.clientWaitSync(this.pboFences[prevPBOIndex]!, 0, 0);
       if (status === gl.ALREADY_SIGNALED || status === gl.CONDITION_SATISFIED) {
         gl.bindBuffer(gl.PIXEL_PACK_BUFFER, prevPBO);
         const pixels = new Float32Array(4);
@@ -248,7 +248,8 @@ export class LuminanceAnalyzer {
     if (this.quadVBO) { gl.deleteBuffer(this.quadVBO); this.quadVBO = null; }
     if (this.pbos[0]) { gl.deleteBuffer(this.pbos[0]); this.pbos[0] = null; }
     if (this.pbos[1]) { gl.deleteBuffer(this.pbos[1]); this.pbos[1] = null; }
-    if (this.pboFence) { gl.deleteSync(this.pboFence); this.pboFence = null; }
+    if (this.pboFences[0]) { gl.deleteSync(this.pboFences[0]); this.pboFences[0] = null; }
+    if (this.pboFences[1]) { gl.deleteSync(this.pboFences[1]); this.pboFences[1] = null; }
     this.initialized = false;
     this.firstFrame = true;
   }

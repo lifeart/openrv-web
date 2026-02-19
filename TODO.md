@@ -159,10 +159,10 @@ Simple state container but tracks critical state for video frame fetching.
 
 ## Network & Collaboration
 
-### MEDIUM: simulateRoomCreated used in production code path
-`simulateRoomCreated()` and `simulateUserJoined()` are described as "for testing" but also called from the production WSS fallback path (`tryFallbackToLocalHostRoom()`). Blurs test/production boundary.
+### DONE: simulateRoomCreated renamed to _applyLocalRoomCreation
+`simulateRoomCreated()` and `simulateUserJoined()` have been renamed to `_applyLocalRoomCreation()` and `_applyLocalUserJoin()` to clarify their dual role in both WSS fallback and testing.
 - **File**: `src/network/NetworkSyncManager.ts`
-- **Action**: Rename to clarify dual role or split into internal production methods and test wrappers.
+- **Status**: Resolved.
 
 ### MEDIUM: Media transfer via chunked base64 is inefficient
 48KB base64-encoded chunks add ~33% overhead. For large media files (EXR sequences) this is very slow. Should use binary WebSocket frames or WebRTC data channel binary messages.
@@ -185,9 +185,10 @@ Only 4 tests. Missing: min/max PIN length, empty state, large objects, concurren
 4-10 digits only (max 10 billion combinations). PBKDF2 250K iterations provides some brute-force resistance but 4-digit PINs are weak.
 - **File**: `src/network/PinEncryption.ts`
 
-### LOW: validateColorPayload test does not catch the bug
-Test MPR-027 passes complete 7-field payload, so it passes even though validator only checks 3 fields. Need a test with partial payload.
+### DONE: validateColorPayload test now catches partial payloads
+Tests MPR-028b through MPR-028i verify that payloads with fewer than 7 fields are rejected.
 - **File**: `src/network/MessageProtocol.test.ts`
+- **Status**: Resolved.
 
 ---
 

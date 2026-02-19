@@ -481,6 +481,33 @@ describe('GTOGraphLoader - Node Types', () => {
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('stencilSoftEdge', 0.05);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('stencilRatio', 0.75);
     });
+
+    it('parses stencil.visibleBox float[4] (OpenRV native wipe format)', () => {
+      const mockNode = setupMockNode('RVTransform2D', 'transform');
+
+      const dto = createMockDTO({
+        sessions: [{ name: 'rv' }],
+        objects: [
+          {
+            name: 'transform',
+            protocol: 'RVTransform2D',
+            components: {
+              transform: { rotate: 0 },
+              stencil: {
+                visibleBox: [0.25, 0.75, 0.1, 0.9],
+              },
+            },
+          },
+        ],
+      });
+
+      loadGTOGraph(dto);
+
+      expect(mockNode.properties.setValue).toHaveBeenCalledWith(
+        'stencilVisibleBox',
+        [0.25, 0.75, 0.1, 0.9]
+      );
+    });
   });
 
   describe('RVLookLUT parsing', () => {

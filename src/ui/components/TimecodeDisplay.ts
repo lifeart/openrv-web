@@ -37,7 +37,7 @@ export function frameToTimecode(
   fps: number,
   startFrame: number = 0
 ): { hours: number; minutes: number; seconds: number; frames: number; dropFrame: boolean } {
-  const totalFrame = frame + startFrame - 1; // Convert to 0-based
+  const totalFrame = Math.max(0, frame + startFrame - 1); // Convert to 0-based, clamp negative
   const dropFrame = isDropFrame(fps);
 
   if (dropFrame) {

@@ -66,25 +66,15 @@ export function parseGainmapJPEG(buffer: ArrayBuffer): GainmapInfo | null {
   const baseImage = images[0]!;
   const gainmapImage = images[1]!;
 
-  console.log(`[GainmapJPEG] MPF found: ${images.length} images`);
-  console.log(`[GainmapJPEG] Base image: offset=${baseImage.offset}, size=${baseImage.size}`);
-  console.log(`[GainmapJPEG] Gainmap: offset=${gainmapImage.offset}, size=${gainmapImage.size}`);
-
   // Extract headroom from XMP metadata
   // First try the primary image's XMP (Apple format)
   let headroom = extractHeadroomFromXMP(buffer, 0, undefined);
-  let headroomSource = 'primary XMP';
   if (headroom === null && gainmapImage.offset > 0 && gainmapImage.size > 0) {
     // Try the gainmap image's own XMP (Google Ultra HDR format)
     headroom = extractHeadroomFromXMP(buffer, gainmapImage.offset, gainmapImage.offset + gainmapImage.size);
-    headroomSource = 'gainmap XMP';
-  }
-  if (headroom === null) {
-    headroomSource = 'default';
   }
 
   const finalHeadroom = headroom ?? 2.0;
-  console.log(`[GainmapJPEG] Headroom: ${finalHeadroom} (source: ${headroomSource})`);
 
   return {
     baseImageOffset: baseImage.offset,
@@ -155,22 +145,17 @@ export async function decodeGainmapToFloat32(
 
   // Gainmap may be smaller - scale up to base image size
   // Apply orientation transform so gainmap pixels align with the display-rotated base
-  const gainmapOrigWidth = gainmapBitmap.width;
-  const gainmapOrigHeight = gainmapBitmap.height;
   const gainCanvas = createCanvas(width, height);
   const gainCtx = gainCanvas.getContext('2d')! as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
   drawImageWithOrientation(gainCtx, gainmapBitmap, width, height, orientation);
   const gainData = gainCtx.getImageData(0, 0, width, height).data;
   gainmapBitmap.close();
 
-  console.log(`[GainmapJPEG] Decoding: base=${width}x${height}, gainmap=${gainmapOrigWidth}x${gainmapOrigHeight} (scaled to base), headroom=${info.headroom}`);
-
   // Apply HDR reconstruction per-pixel
   // HDR_linear = sRGB_to_linear(base) * exp2(gainmap_gray * headroom)
   const pixelCount = width * height;
   const result = new Float32Array(pixelCount * 4); // RGBA
   const headroom = info.headroom;
-  let maxValue = 0;
 
   // Pre-compute sRGB-to-linear LUT for uint8 values (0-255)
   const srgbLUT = new Float32Array(256);
@@ -203,12 +188,7 @@ export async function decodeGainmapToFloat32(
     result[dstIdx + 1] = g * gain;
     result[dstIdx + 2] = b * gain;
     result[dstIdx + 3] = 1.0; // Full alpha
-
-    const pixelMax = Math.max(r * gain, g * gain, b * gain);
-    if (pixelMax > maxValue) maxValue = pixelMax;
   }
-
-  console.log(`[GainmapJPEG] HDR reconstruction complete: ${pixelCount} pixels, peak value=${maxValue.toFixed(3)}`);
 
   return { width, height, data: result, channels: 4 };
 }

@@ -410,7 +410,7 @@ function renderAnaglyph(left: ImageData, right: ImageData, useLuminance: boolean
         result.data[idx + 1] = rightG;   // Green channel from right eye
         result.data[idx + 2] = rightB;   // Blue channel from right eye
       }
-      result.data[idx + 3] = 255;
+      result.data[idx + 3] = Math.max(left.data[idx + 3]!, scaledRight.data[idx + 3]!);
     }
   }
 

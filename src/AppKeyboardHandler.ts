@@ -27,6 +27,19 @@ export class AppKeyboardHandler {
   private customKeyBindingsManager: CustomKeyBindingsManager;
   private context: KeyboardHandlerContext;
 
+  /**
+   * Actions whose *default* combos conflict with higher-priority global shortcuts.
+   * These are only registered when the user has set a custom (non-conflicting) combo.
+   */
+  private static readonly CONFLICTING_DEFAULTS = new Set([
+    'paint.line',      // L key - handled by playback.faster
+    'paint.rectangle', // R key - handled by timeline.resetInOut
+    'paint.ellipse',   // O key - handled by timeline.setOutPoint
+    'channel.red',     // Shift+R is reserved for transform.rotateLeft
+    'channel.blue',    // Shift+B is reserved for view.cycleBackgroundPattern
+    'channel.none',    // Shift+N is reserved for network.togglePanel
+  ]);
+
   constructor(
     keyboardManager: KeyboardManager,
     customKeyBindingsManager: CustomKeyBindingsManager,
@@ -63,18 +76,6 @@ export class AppKeyboardHandler {
   private registerKeyboardShortcuts(): void {
     const actionHandlers = this.context.getActionHandlers();
 
-    // Actions whose *default* combos conflict with higher-priority global shortcuts.
-    // These are only skipped when still using their default combo; if the user has set
-    // a custom (non-conflicting) combo, we register them normally.
-    const conflictingDefaults = new Set([
-      'paint.line',      // L key - handled by playback.faster
-      'paint.rectangle', // R key - handled by timeline.resetInOut
-      'paint.ellipse',   // O key - handled by timeline.setOutPoint
-      'channel.red',     // Shift+R is reserved for transform.rotateLeft
-      'channel.blue',    // Shift+B is reserved for view.cycleBackgroundPattern
-      'channel.none',    // Shift+N is reserved for network.togglePanel
-    ]);
-
     // Register all keyboard shortcuts using effective combos (custom or default)
     for (const [action, defaultBinding] of Object.entries(DEFAULT_KEY_BINDINGS)) {
       const handler = actionHandlers[action];
@@ -89,7 +90,7 @@ export class AppKeyboardHandler {
           })();
 
       // Skip conflicting defaults only when still using the default combo
-      if (conflictingDefaults.has(action) && !this.customKeyBindingsManager?.hasCustomBinding(action)) {
+      if (AppKeyboardHandler.CONFLICTING_DEFAULTS.has(action) && !this.customKeyBindingsManager?.hasCustomBinding(action)) {
         continue;
       }
 
@@ -240,6 +241,7 @@ export class AppKeyboardHandler {
 
           const effectiveCombo = this.customKeyBindingsManager.getEffectiveCombo(actionKey);
           const isCustom = this.customKeyBindingsManager.hasCustomBinding(actionKey);
+          const isConflicting = AppKeyboardHandler.CONFLICTING_DEFAULTS.has(actionKey) && !isCustom;
 
           const shortcutDiv = document.createElement('div');
           shortcutDiv.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;';
@@ -248,14 +250,17 @@ export class AppKeyboardHandler {
           const keyText = describeKeyCombo(effectiveCombo);
           const keySpan = document.createElement('span');
           keySpan.textContent = keyText;
-          keySpan.style.cssText = `min-width: 120px; ${isCustom ? 'color: var(--accent-primary); font-weight: bold;' : 'color: var(--text-muted);'}`;
+          keySpan.style.cssText = `min-width: 120px; ${isCustom ? 'color: var(--accent-primary); font-weight: bold;' : isConflicting ? 'color: var(--text-muted); opacity: 0.5;' : 'color: var(--text-muted);'}`;
 
           const descSpan = document.createElement('span');
-          descSpan.textContent = defaultBinding.description;
-          descSpan.style.cssText = 'color: var(--text-primary); flex: 1;';
+          descSpan.textContent = defaultBinding.description + (isConflicting ? ' (requires custom binding)' : '');
+          descSpan.style.cssText = `flex: 1; ${isConflicting ? 'color: var(--text-muted); font-style: italic;' : 'color: var(--text-primary);'}`;
 
           shortcutDiv.setAttribute('data-shortcut-key', keyText.toLowerCase());
           shortcutDiv.setAttribute('data-shortcut-desc', defaultBinding.description.toLowerCase());
+          if (isConflicting) {
+            shortcutDiv.setAttribute('data-conflicting', 'true');
+          }
 
           const actionsDiv = document.createElement('div');
           actionsDiv.style.cssText = 'display: flex; gap: 4px;';

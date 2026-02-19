@@ -7,6 +7,16 @@
  *
  * The projection computes ray directions from the camera through each pixel,
  * then maps those rays to equirectangular UV coordinates for texture lookup.
+ *
+ * OpenRV compatibility: OpenRV's spherical projection lives in a separate plugin
+ * (rv-packages/lat_long_viewer/LatLongViewer.glsl) with different uniform names:
+ *   - hAperture, vAperture (physical aperture dimensions vs our u_sphericalFov)
+ *   - focalLength (lens focal length, controls FOV indirectly)
+ *   - rotateX, rotateY (rotation in degrees vs our u_sphericalYaw/u_sphericalPitch in radians)
+ * OpenRV does NOT use u_fov, u_aspect, u_yaw, u_pitch uniform names. Our uniform
+ * naming (u_sphericalFov, u_sphericalAspect, u_sphericalYaw, u_sphericalPitch) is a
+ * web-specific convention that matches our inline shader approach rather than OpenRV's
+ * plugin-based shader injection model.
  */
 
 import { clamp } from '../utils/math';
@@ -262,76 +272,6 @@ export function detect360Content(metadata: SphericalMetadata, width: number, hei
 
   return false;
 }
-
-// ---------------------------------------------------------------------------
-// GLSL shader code for spherical projection
-// ---------------------------------------------------------------------------
-
-/**
- * GLSL fragment shader code for equirectangular projection.
- *
- * This can be injected into the existing viewer fragment shader as an
- * optional pass. When u_sphericalEnabled is 1, the texture coordinates
- * are replaced with equirectangular-projected UVs computed from view
- * ray directions.
- */
-export const SPHERICAL_PROJECTION_GLSL = `
-// Spherical projection uniforms
-uniform int u_sphericalEnabled;
-uniform float u_fov;
-uniform float u_aspect;
-uniform float u_yaw;
-uniform float u_pitch;
-
-// Compute equirectangular UV from screen-space UV
-vec2 sphericalProject(vec2 screenUV) {
-  if (u_sphericalEnabled == 0) return screenUV;
-
-  // Map screen UV to NDC; flip y because screenUV.y=0 is top but NDC y=+1 is top
-  vec2 ndc = vec2(screenUV.x * 2.0 - 1.0, 1.0 - screenUV.y * 2.0);
-
-  // Compute ray direction in view space
-  float halfFov = u_fov * 0.5;
-  float tanHalfFov = tan(halfFov);
-  vec3 viewDir = normalize(vec3(
-    ndc.x * tanHalfFov * u_aspect,
-    ndc.y * tanHalfFov,
-    -1.0
-  ));
-
-  // Apply pitch rotation (around X axis)
-  float cp = cos(u_pitch);
-  float sp = sin(u_pitch);
-  vec3 pitchDir = vec3(
-    viewDir.x,
-    viewDir.y * cp - viewDir.z * sp,
-    viewDir.y * sp + viewDir.z * cp
-  );
-
-  // Apply yaw rotation (around Y axis)
-  float cy = cos(u_yaw);
-  float sy = sin(u_yaw);
-  vec3 worldDir = vec3(
-    pitchDir.x * cy + pitchDir.z * sy,
-    pitchDir.y,
-    -pitchDir.x * sy + pitchDir.z * cy
-  );
-
-  // Convert direction to equirectangular UV
-  float theta = atan(worldDir.z, worldDir.x);       // longitude
-  float phi = asin(clamp(worldDir.y, -1.0, 1.0));   // latitude
-
-  float u = 0.5 + theta / (2.0 * 3.14159265359);
-  float v = 0.5 - phi / 3.14159265359;
-
-  // Stabilize u near poles where atan2 is numerically unstable
-  float horizLen = length(vec2(worldDir.x, worldDir.z));
-  float poleStability = smoothstep(0.0, 0.05, horizLen);
-  u = mix(0.5, u, poleStability);
-
-  return vec2(u, v);
-}
-`;
 
 // ---------------------------------------------------------------------------
 // SphericalProjection class

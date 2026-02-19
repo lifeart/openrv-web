@@ -51,7 +51,6 @@ describe('StackGroupNode', () => {
     it('has wipe position properties', () => {
       expect(stackNode.properties.getValue('wipeX')).toBe(0.5);
       expect(stackNode.properties.getValue('wipeY')).toBe(0.5);
-      expect(stackNode.properties.getValue('wipeAngle')).toBe(0);
     });
   });
 
@@ -104,19 +103,16 @@ describe('StackGroupNode', () => {
 
       expect(position.x).toBe(0.5);
       expect(position.y).toBe(0.5);
-      expect(position.angle).toBe(0);
     });
 
     it('reflects property changes', () => {
       stackNode.properties.setValue('wipeX', 0.3);
       stackNode.properties.setValue('wipeY', 0.7);
-      stackNode.properties.setValue('wipeAngle', 45);
 
       const position = stackNode.getWipePosition();
 
       expect(position.x).toBe(0.3);
       expect(position.y).toBe(0.7);
-      expect(position.angle).toBe(45);
     });
   });
 

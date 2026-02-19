@@ -99,10 +99,6 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
     this.createDropdownContent();
     this.container.appendChild(this.dropdown);
 
-    // Close on outside click
-    document.addEventListener('click', this.handleOutsideClick);
-    document.addEventListener('keydown', this.handleDocumentKeydown);
-
     // Initial button state
     this.updateButtonState();
   }
@@ -343,6 +339,8 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
     this.isDropdownOpen = false;
     this.toggleButton.setAttribute('aria-expanded', 'false');
     this.dropdown.style.display = 'none';
+    document.removeEventListener('click', this.handleOutsideClick);
+    document.removeEventListener('keydown', this.handleDocumentKeydown);
     window.removeEventListener('resize', this.boundHandleReposition);
     window.removeEventListener('scroll', this.boundHandleReposition, true);
   }
@@ -428,6 +426,8 @@ export class DisplayProfileControl extends EventEmitter<DisplayProfileControlEve
       this.toggleButton.setAttribute('aria-expanded', 'true');
       this.dropdown.style.display = 'block';
       this.positionDropdown();
+      document.addEventListener('click', this.handleOutsideClick);
+      document.addEventListener('keydown', this.handleDocumentKeydown);
       window.addEventListener('resize', this.boundHandleReposition);
       window.addEventListener('scroll', this.boundHandleReposition, true);
     }

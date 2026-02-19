@@ -459,7 +459,11 @@ export function validateColorPayload(payload: unknown): payload is ColorSyncPayl
   return (
     typeof p.exposure === 'number' &&
     typeof p.gamma === 'number' &&
-    typeof p.saturation === 'number'
+    typeof p.saturation === 'number' &&
+    typeof p.contrast === 'number' &&
+    typeof p.temperature === 'number' &&
+    typeof p.tint === 'number' &&
+    typeof p.brightness === 'number'
   );
 }
 

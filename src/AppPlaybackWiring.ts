@@ -163,8 +163,8 @@ async function handleSequenceExport(
     startFrame = session.inPoint;
     endFrame = session.outPoint;
   } else {
-    startFrame = 0;
-    endFrame = session.frameCount - 1;
+    startFrame = 1;
+    endFrame = session.frameCount;
   }
 
   const totalFrames = endFrame - startFrame + 1;

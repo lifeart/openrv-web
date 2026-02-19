@@ -9,8 +9,14 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { clamp } from '../../utils/math';
 import { DifferenceMatteState, DEFAULT_DIFFERENCE_MATTE_STATE } from './DifferenceMatteControl';
+import type { WipeMode, StencilBox } from '../../core/types/wipe';
+import {
+  DEFAULT_STENCIL_BOX,
+  computeHorizontalWipeBoxes,
+  computeVerticalWipeBoxes,
+} from '../../core/types/wipe';
 
-export type WipeMode = 'off' | 'horizontal' | 'vertical' | 'splitscreen-h' | 'splitscreen-v';
+export type { WipeMode };
 export type ABSource = 'A' | 'B' | 'C' | 'D';
 export type BlendMode = 'off' | 'onionskin' | 'flicker' | 'blend';
 
@@ -455,6 +461,27 @@ export class ComparisonManager extends EventEmitter<ComparisonManagerEvents> {
     } else {
       this.setWipeMode('off');
     }
+  }
+
+  /**
+   * Compute stencil boxes for two inputs (A and B) based on the current wipe mode/position.
+   * Returns [boxA, boxB] where each is [xMin, xMax, yMin, yMax] in normalized 0-1 range.
+   * When wipe is off, both boxes cover the full image.
+   */
+  computeStencilBoxes(): [StencilBox, StencilBox] {
+    if (this.state.wipeMode === 'off') {
+      return [[...DEFAULT_STENCIL_BOX], [...DEFAULT_STENCIL_BOX]];
+    }
+
+    if (this.state.wipeMode === 'horizontal' || this.state.wipeMode === 'splitscreen-h') {
+      return computeHorizontalWipeBoxes(this.state.wipePosition);
+    }
+
+    if (this.state.wipeMode === 'vertical' || this.state.wipeMode === 'splitscreen-v') {
+      return computeVerticalWipeBoxes(this.state.wipePosition);
+    }
+
+    return [[...DEFAULT_STENCIL_BOX], [...DEFAULT_STENCIL_BOX]];
   }
 
   /**

@@ -136,8 +136,6 @@ export interface StackGroupSettings {
   wipeX?: number;
   /** Wipe Y position (0-1) */
   wipeY?: number;
-  /** Wipe angle in degrees */
-  wipeAngle?: number;
   /** Index of input to use for audio */
   chosenAudioInput?: number;
   /** Policy when frame is out of range: 'hold', 'black', 'error' */
@@ -691,7 +689,6 @@ export class SessionGTOExporter {
       .component('wipe')
       .float('x', settings?.wipeX ?? 0.5)
       .float('y', settings?.wipeY ?? 0.5)
-      .float('angle', settings?.wipeAngle ?? 0)
       .end();
 
     // Output component

@@ -44,6 +44,7 @@ import type { LensDistortionParams } from '../../transform/LensDistortion';
 import { ExportFormat, exportCanvas as doExportCanvas, copyCanvasToClipboard } from '../../utils/export/FrameExporter';
 import { StackLayer } from './StackControl';
 import { compositeImageData, BlendMode } from '../../composite/BlendModes';
+import { isStencilBoxActive } from '../../core/types/wipe';
 import { getIconSvg } from './shared/Icons';
 import { ChannelMode, applyChannelIsolation } from './ChannelSelect';
 import { DEFAULT_BLEND_MODE_STATE, type BlendModeState } from './ComparisonManager';
@@ -1928,63 +1929,44 @@ export class Viewer {
     displayHeight: number
   ): void {
     const ctx = this.imageCtx;
-    const pos = this.wipeManager.position;
 
     // Enable high-quality image smoothing for best picture quality
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
 
-    // For wipe, we need to render both with and without filters
-    // Since CSS filters apply to the whole container, we'll use canvas filter property
+    // Compute stencil boxes from wipe position/mode.
+    // boxA = original (no filter) region, boxB = adjusted (with filter) region.
+    const [boxA, boxB] = this.wipeManager.computeStencilBoxes();
 
     ctx.save();
 
-    if (this.wipeManager.mode === 'horizontal') {
-      // Left side: original (no filter)
-      // Right side: with color adjustments
-      const splitX = Math.floor(displayWidth * pos);
+    // Draw original region (boxA) without filters
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(
+      Math.floor(displayWidth * boxA[0]),
+      Math.floor(displayHeight * boxA[2]),
+      Math.ceil(displayWidth * (boxA[1] - boxA[0])),
+      Math.ceil(displayHeight * (boxA[3] - boxA[2]))
+    );
+    ctx.clip();
+    ctx.filter = 'none';
+    this.drawWithTransform(ctx, element, displayWidth, displayHeight);
+    ctx.restore();
 
-      // Draw original (left side)
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(0, 0, splitX, displayHeight);
-      ctx.clip();
-      ctx.filter = 'none';
-      this.drawWithTransform(ctx, element, displayWidth, displayHeight);
-      ctx.restore();
-
-      // Draw adjusted (right side)
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(splitX, 0, displayWidth - splitX, displayHeight);
-      ctx.clip();
-      ctx.filter = this.getCanvasFilterString();
-      this.drawWithTransform(ctx, element, displayWidth, displayHeight);
-      ctx.restore();
-
-    } else if (this.wipeManager.mode === 'vertical') {
-      // Top side: original (no filter)
-      // Bottom side: with color adjustments
-      const splitY = Math.floor(displayHeight * pos);
-
-      // Draw original (top side)
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(0, 0, displayWidth, splitY);
-      ctx.clip();
-      ctx.filter = 'none';
-      this.drawWithTransform(ctx, element, displayWidth, displayHeight);
-      ctx.restore();
-
-      // Draw adjusted (bottom side)
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(0, splitY, displayWidth, displayHeight - splitY);
-      ctx.clip();
-      ctx.filter = this.getCanvasFilterString();
-      this.drawWithTransform(ctx, element, displayWidth, displayHeight);
-      ctx.restore();
-    }
+    // Draw adjusted region (boxB) with color filters
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(
+      Math.floor(displayWidth * boxB[0]),
+      Math.floor(displayHeight * boxB[2]),
+      Math.ceil(displayWidth * (boxB[1] - boxB[0])),
+      Math.ceil(displayHeight * (boxB[3] - boxB[2]))
+    );
+    ctx.clip();
+    ctx.filter = this.getCanvasFilterString();
+    this.drawWithTransform(ctx, element, displayWidth, displayHeight);
+    ctx.restore();
 
     ctx.restore();
   }
@@ -3716,7 +3698,8 @@ export class Viewer {
   }
 
   /**
-   * Composite multiple stack layers together
+   * Composite multiple stack layers together.
+   * Applies per-layer stencilBox clipping when present.
    */
   private compositeStackLayers(width: number, height: number): ImageData | null {
     if (this.stackLayers.length === 0) return null;
@@ -3730,6 +3713,28 @@ export class Viewer {
 
       const layerData = this.renderSourceToImageData(layer.sourceIndex, width, height);
       if (!layerData) continue;
+
+      // Apply stencil box clipping: zero out pixels outside the visible region
+      if (layer.stencilBox && isStencilBoxActive(layer.stencilBox)) {
+        const [xMin, xMax, yMin, yMax] = layer.stencilBox;
+        const pxMinX = Math.floor(xMin * width);
+        const pxMaxX = Math.ceil(xMax * width);
+        const pxMinY = Math.floor(yMin * height);
+        const pxMaxY = Math.ceil(yMax * height);
+        const data = layerData.data;
+
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            if (x < pxMinX || x >= pxMaxX || y < pxMinY || y >= pxMaxY) {
+              const idx = (y * width + x) * 4;
+              data[idx] = 0;
+              data[idx + 1] = 0;
+              data[idx + 2] = 0;
+              data[idx + 3] = 0;
+            }
+          }
+        }
+      }
 
       // Composite this layer onto result
       result = compositeImageData(result, layerData, layer.blendMode as BlendMode, layer.opacity);

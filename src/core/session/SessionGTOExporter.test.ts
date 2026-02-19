@@ -585,7 +585,6 @@ describe('SessionGTOExporter.buildStackGroupObjects', () => {
             mode: 'wipe',
             wipeX: 0.3,
             wipeY: 0.7,
-            wipeAngle: 45,
         });
         const stack = objects[1]!;
         const components = stack.components as Record<string, any>;
@@ -597,7 +596,6 @@ describe('SessionGTOExporter.buildStackGroupObjects', () => {
         const wipeComp = components['wipe'];
         expect(wipeComp.properties.x.data).toEqual([0.3]);
         expect(wipeComp.properties.y.data).toEqual([0.7]);
-        expect(wipeComp.properties.angle.data).toEqual([45]);
     });
 
     it('creates RVStack with per-layer blend modes', () => {
@@ -2924,6 +2922,31 @@ describe('SessionGTOExporter.buildTransform2DObject', () => {
         const result = SessionGTOExporter.buildTransform2DObject('transformNode');
         const components = result.components as Record<string, any>;
         expect(components['stencil']).toBeUndefined();
+    });
+
+    it('creates stencil.visibleBox float[4] when stencil.visibleBox provided', () => {
+        const result = SessionGTOExporter.buildTransform2DObject('transformNode', {
+            stencil: {
+                active: true,
+                visibleBox: [0.25, 0.75, 0.1, 0.9],
+            },
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['stencil'].properties.active.data).toEqual([1]);
+        expect(components['stencil'].properties.visibleBox.data).toEqual([0.25, 0.75, 0.1, 0.9]);
+    });
+
+    it('does not write stencil.visibleBox when not provided in stencil settings', () => {
+        const result = SessionGTOExporter.buildTransform2DObject('transformNode', {
+            stencil: {
+                active: true,
+            },
+        });
+
+        const components = result.components as Record<string, any>;
+        expect(components['stencil'].properties.active.data).toEqual([1]);
+        expect(components['stencil'].properties.visibleBox).toBeUndefined();
     });
 });
 

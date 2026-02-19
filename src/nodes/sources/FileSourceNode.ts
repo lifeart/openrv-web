@@ -16,6 +16,7 @@ import type {
 } from '../../formats/EXRDecoder';
 import { decoderRegistry } from '../../formats/DecoderRegistry';
 import type { HEICGainmapInfo, HEICColorInfo } from '../../formats/HEICGainmapDecoder';
+import { isRAWExtension } from '../../formats/RAWPreviewDecoder';
 import type { RAWExifMetadata } from '../../formats/RAWPreviewDecoder';
 
 /**
@@ -93,12 +94,11 @@ function isHEICExtension(filename: string): boolean {
 }
 
 /**
- * Check if a filename has a camera RAW extension
+ * Check if a filename has a JPEG 2000 / HTJ2K extension
  */
-const RAW_EXTENSIONS = new Set(['cr2', 'cr3', 'nef', 'arw', 'dng', 'raf', 'orf', 'rw2', 'pef', 'srw']);
-function isRAWExtension(filename: string): boolean {
-  const ext = filename.split('.').pop()?.toLowerCase() ?? '';
-  return RAW_EXTENSIONS.has(ext);
+function isJP2Extension(filename: string): boolean {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  return ext === 'jp2' || ext === 'j2k' || ext === 'j2c' || ext === 'jph' || ext === 'jhc';
 }
 
 /**
@@ -811,6 +811,21 @@ export class FileSourceNode extends BaseSourceNode {
         }
       } catch (err) {
         console.warn('[FileSource] HEIC loading failed, falling back to standard loading:', err);
+        // Fall through to standard image loading
+      }
+    }
+
+    // Check if this is a JP2/J2K/JHC file - decode via WASM
+    if (isJP2Extension(filename)) {
+      try {
+        const response = await fetch(url);
+        if (response.ok) {
+          const buffer = await response.arrayBuffer();
+          await this.loadHDRFromBuffer(buffer, filename, url, originalUrl);
+          return;
+        }
+      } catch (err) {
+        console.warn('[FileSource] JP2 loading failed, falling back to standard loading:', err);
         // Fall through to standard image loading
       }
     }
@@ -1907,6 +1922,19 @@ export class FileSourceNode extends BaseSourceNode {
         }
       } catch (err) {
         console.warn('[FileSource] HEIC loading failed, falling back to standard loading:', err);
+        // Fall through to standard image loading
+      }
+    }
+
+    // Check if this is a JP2/J2K/JHC file - decode via WASM
+    if (isJP2Extension(file.name)) {
+      try {
+        const buffer = await file.arrayBuffer();
+        const url = URL.createObjectURL(file);
+        await this.loadHDRFromBuffer(buffer, file.name, url);
+        return;
+      } catch (err) {
+        console.warn('[FileSource] JP2 loading failed, falling back to standard loading:', err);
         // Fall through to standard image loading
       }
     }

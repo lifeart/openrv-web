@@ -265,7 +265,7 @@ describe('GTOGraphLoader - Property Parsing', () => {
         type: 'RVStackGroup',
         name: 'stackNode',
         properties: {
-          has: vi.fn((key: string) => ['composite', 'mode', 'wipeX', 'wipeY', 'wipeAngle'].includes(key)),
+          has: vi.fn((key: string) => ['composite', 'mode', 'wipeX', 'wipeY'].includes(key)),
           setValue: vi.fn(),
         },
         inputs: [],
@@ -295,7 +295,6 @@ describe('GTOGraphLoader - Property Parsing', () => {
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('mode', 'wipe');
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('wipeX', 0.5);
       expect(mockNode.properties.setValue).toHaveBeenCalledWith('wipeY', 0.5);
-      expect(mockNode.properties.setValue).toHaveBeenCalledWith('wipeAngle', 45);
     });
 
     it('parses switch properties', () => {

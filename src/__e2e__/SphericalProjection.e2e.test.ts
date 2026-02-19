@@ -17,7 +17,7 @@
  * - Missing interaction wiring (no drag/wheel in ViewerInputHandler)
  * - detect360Content auto-detection not wired to source load
  * - Redundant initial texture fetch when spherical is enabled
- * - SPHERICAL_PROJECTION_GLSL unused export (stale uniform names)
+ * - SPHERICAL_PROJECTION_GLSL was removed (stale unused export with wrong uniform names)
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -27,7 +27,6 @@ import {
   equirectUVToDirection,
   vec3Normalize,
   detect360Content,
-  SPHERICAL_PROJECTION_GLSL,
   type SphericalProjectionUniforms,
   type SphericalMetadata,
 } from '../render/SphericalProjection';
@@ -129,20 +128,12 @@ describe('SphericalProjection E2E Integration', () => {
       }
     });
 
-    it('SP-E2E-002: SPHERICAL_PROJECTION_GLSL export uses NON-prefixed names (stale/unused)', () => {
-      // BUG DETECTION: The exported GLSL string uses u_fov, u_aspect, u_yaw, u_pitch
-      // but the actual shader uses u_sphericalFov, u_sphericalAspect, etc.
-      // This means SPHERICAL_PROJECTION_GLSL is stale and not injected.
-      expect(SPHERICAL_PROJECTION_GLSL).toContain('uniform float u_fov;');
-      expect(SPHERICAL_PROJECTION_GLSL).toContain('uniform float u_aspect;');
-      expect(SPHERICAL_PROJECTION_GLSL).toContain('uniform float u_yaw;');
-      expect(SPHERICAL_PROJECTION_GLSL).toContain('uniform float u_pitch;');
-
-      // These prefixed names are NOT in the exported GLSL
-      expect(SPHERICAL_PROJECTION_GLSL).not.toContain('u_sphericalFov');
-      expect(SPHERICAL_PROJECTION_GLSL).not.toContain('u_sphericalAspect');
-      expect(SPHERICAL_PROJECTION_GLSL).not.toContain('u_sphericalYaw');
-      expect(SPHERICAL_PROJECTION_GLSL).not.toContain('u_sphericalPitch');
+    it('SP-E2E-002: SPHERICAL_PROJECTION_GLSL stale export has been removed', async () => {
+      // The stale GLSL constant with wrong uniform names (u_fov, u_aspect, u_yaw, u_pitch
+      // instead of u_sphericalFov, u_sphericalAspect, etc.) was removed from the module.
+      // Verify the export no longer exists.
+      const mod = await import('../render/SphericalProjection') as Record<string, unknown>;
+      expect(mod.SPHERICAL_PROJECTION_GLSL).toBeUndefined();
     });
 
     it('SP-E2E-003: SphericalProjectionUniforms interface uses u_fov/u_aspect (non-prefixed)', () => {

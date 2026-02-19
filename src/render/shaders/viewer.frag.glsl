@@ -1304,11 +1304,24 @@
           color.rgb = max(color.rgb + detail * u_sharpenAmount, 0.0);
         }
 
-        // 8. Display transfer function (replaces simple gamma, per-channel)
+        // 8. Creative gamma (always applied, regardless of display transfer mode).
+        // OpenRV compatibility: In OpenRV's DisplayIPNode.cpp, the display gamma
+        // (color.gamma property) is applied as `pow(color, 1.0 / displayGamma)` and
+        // it is applied AFTER the display transfer function (linear->sRGB or linear->Rec709)
+        // when no override colorspace is set. When an override colorspace IS set, gamma
+        // is NOT applied at all (only the override transfer is used).
+        // Our shader applies creative gamma BEFORE the display transfer to allow
+        // user gamma adjustments to operate in linear space. This ordering difference
+        // means our gamma adjustment has a slightly different visual effect than OpenRV's
+        // when a display transfer (sRGB/Rec.709) is active.
+        // When u_gammaRGB == vec3(1.0), pow() is identity so skip to avoid cost.
+        if (u_gammaRGB != vec3(1.0)) {
+          color.rgb = pow(max(color.rgb, vec3(0.0)), 1.0 / u_gammaRGB);
+        }
+
+        // 8a. Display transfer function (linear to display-encoded, per-channel)
         if (u_displayTransfer > 0) {
           color.rgb = applyDisplayTransfer(color.rgb, u_displayTransfer);
-        } else {
-          color.rgb = pow(max(color.rgb, 0.0), 1.0 / u_gammaRGB);
         }
 
         // 8b. Display gamma override

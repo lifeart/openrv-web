@@ -1,6 +1,9 @@
 import { EventEmitter, EventMap } from '../../utils/EventEmitter';
 import { BlendMode, BLEND_MODES, BLEND_MODE_LABELS } from '../../composite/BlendModes';
 import { getIconSvg } from './shared/Icons';
+import type { StencilBox } from '../../core/types/wipe';
+
+export type { StencilBox };
 
 export interface StackLayer {
   id: string;
@@ -9,6 +12,8 @@ export interface StackLayer {
   opacity: number;
   blendMode: BlendMode;
   sourceIndex: number; // Index in session sources array
+  /** Stencil box clipping region [xMin, xMax, yMin, yMax] in normalized 0-1 range */
+  stencilBox?: StencilBox;
 }
 
 export interface SourceInfo {

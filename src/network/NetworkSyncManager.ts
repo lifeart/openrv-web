@@ -1814,7 +1814,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       message: 'Signaling unavailable. Created local host room.',
       type: 'warning',
     });
-    this.simulateRoomCreated(undefined, 2);
+    this._applyLocalRoomCreation(undefined, 2);
     return true;
   }
 
@@ -1841,13 +1841,13 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     return candidates.some((url) => /^wss:\/\//i.test(url));
   }
 
-  // ---- Simulate Server Responses (for testing without a real server) ----
+  // ---- Local Room Lifecycle (used by WSS fallback and testing) ----
 
   /**
-   * Simulate a successful room creation response.
-   * Used for testing and mock scenarios.
+   * Apply a local room creation without a server round-trip.
+   * Used by the WSS fallback path and in tests.
    */
-  simulateRoomCreated(roomCode?: string, maxUsers = 10): void {
+  _applyLocalRoomCreation(roomCode?: string, maxUsers = 10): void {
     this._pendingRoomAction = null;
     this.clearCreateRoomFallbackTimer();
     const code = roomCode ?? generateRoomCode();
@@ -1876,9 +1876,10 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
   }
 
   /**
-   * Simulate a user joining the room.
+   * Apply a local user join without a server round-trip.
+   * Used by the WSS fallback path and in tests.
    */
-  simulateUserJoined(userName: string): SyncUser {
+  _applyLocalUserJoin(userName: string): SyncUser {
     if (!this._roomInfo) {
       throw new Error('No room to join');
     }

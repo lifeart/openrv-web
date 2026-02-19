@@ -60,7 +60,7 @@ class MockNetworkSyncManager extends EventEmitter {
   sendColorSync = vi.fn();
   sendNoteSync = vi.fn();
   sendSessionStateResponse = vi.fn();
-  simulateRoomCreated = vi.fn();
+  _applyLocalRoomCreation = vi.fn();
   joinRoom = vi.fn();
   leaveRoom = vi.fn();
   setSyncSettings = vi.fn();

@@ -52,25 +52,25 @@ describe('NetworkSyncManager', () => {
   });
 
   describe('room management', () => {
-    it('NSM-002: simulateRoomCreated generates valid room code', () => {
-      manager.simulateRoomCreated();
+    it('NSM-002: _applyLocalRoomCreation generates valid room code', () => {
+      manager._applyLocalRoomCreation();
       expect(manager.roomInfo).not.toBeNull();
       expect(manager.roomInfo!.roomCode).toMatch(/^[A-Z0-9]{4}-[A-Z0-9]{4}$/);
     });
 
-    it('NSM-003: simulateRoomCreated sets connected state', () => {
+    it('NSM-003: _applyLocalRoomCreation sets connected state', () => {
       const handler = vi.fn();
       manager.on('connectionStateChanged', handler);
 
-      manager.simulateRoomCreated();
+      manager._applyLocalRoomCreation();
 
       expect(manager.connectionState).toBe('connected');
       expect(manager.isConnected).toBe(true);
       expect(handler).toHaveBeenCalledWith('connected');
     });
 
-    it('NSM-003b: simulateRoomCreated makes user the host', () => {
-      manager.simulateRoomCreated();
+    it('NSM-003b: _applyLocalRoomCreation makes user the host', () => {
+      manager._applyLocalRoomCreation();
       expect(manager.isHost).toBe(true);
       expect(manager.users.length).toBe(1);
       expect(manager.users[0]!.isHost).toBe(true);
@@ -87,7 +87,7 @@ describe('NetworkSyncManager', () => {
     });
 
     it('NSM-006: leaveRoom sends leave message and disconnects', () => {
-      manager.simulateRoomCreated();
+      manager._applyLocalRoomCreation();
       expect(manager.isConnected).toBe(true);
 
       manager.leaveRoom();
@@ -100,7 +100,7 @@ describe('NetworkSyncManager', () => {
       const handler = vi.fn();
       manager.on('roomLeft', handler);
 
-      manager.simulateRoomCreated();
+      manager._applyLocalRoomCreation();
       manager.leaveRoom();
 
       expect(handler).toHaveBeenCalled();
@@ -112,13 +112,13 @@ describe('NetworkSyncManager', () => {
       const states: ConnectionState[] = [];
       manager.on('connectionStateChanged', (s) => states.push(s));
 
-      manager.simulateRoomCreated();
+      manager._applyLocalRoomCreation();
 
       expect(states).toContain('connected');
     });
 
     it('NSM-011: emits connectionStateChanged on disconnect', () => {
-      manager.simulateRoomCreated();
+      manager._applyLocalRoomCreation();
 
       const states: ConnectionState[] = [];
       manager.on('connectionStateChanged', (s) => states.push(s));
@@ -223,12 +223,12 @@ describe('NetworkSyncManager', () => {
 
   describe('user presence', () => {
     it('NSM-012: emits usersChanged when user joins', () => {
-      manager.simulateRoomCreated();
+      manager._applyLocalRoomCreation();
 
       const handler = vi.fn();
       manager.on('usersChanged', handler);
 
-      manager.simulateUserJoined('Alice');
+      manager._applyLocalUserJoin('Alice');
 
       expect(handler).toHaveBeenCalled();
       const users = handler.mock.calls[0]![0] as SyncUser[];
@@ -237,8 +237,8 @@ describe('NetworkSyncManager', () => {
     });
 
     it('NSM-013: emits usersChanged when user leaves', () => {
-      manager.simulateRoomCreated();
-      const alice = manager.simulateUserJoined('Alice');
+      manager._applyLocalRoomCreation();
+      const alice = manager._applyLocalUserJoin('Alice');
 
       const handler = vi.fn();
       manager.on('usersChanged', handler);
@@ -251,20 +251,20 @@ describe('NetworkSyncManager', () => {
     });
 
     it('NSM-014: emits userJoined event', () => {
-      manager.simulateRoomCreated();
+      manager._applyLocalRoomCreation();
 
       const handler = vi.fn();
       manager.on('userJoined', handler);
 
-      manager.simulateUserJoined('Bob');
+      manager._applyLocalUserJoin('Bob');
 
       expect(handler).toHaveBeenCalled();
       expect(handler.mock.calls[0]![0].name).toBe('Bob');
     });
 
     it('NSM-015: emits userLeft event', () => {
-      manager.simulateRoomCreated();
-      const bob = manager.simulateUserJoined('Bob');
+      manager._applyLocalRoomCreation();
+      const bob = manager._applyLocalUserJoin('Bob');
 
       const handler = vi.fn();
       manager.on('userLeft', handler);
@@ -276,12 +276,12 @@ describe('NetworkSyncManager', () => {
     });
 
     it('NSM-016: emits toast message on user join', () => {
-      manager.simulateRoomCreated();
+      manager._applyLocalRoomCreation();
 
       const handler = vi.fn();
       manager.on('toastMessage', handler);
 
-      manager.simulateUserJoined('Charlie');
+      manager._applyLocalUserJoin('Charlie');
 
       expect(handler).toHaveBeenCalled();
       expect(handler.mock.calls[0]![0].message).toContain('Charlie');
@@ -306,7 +306,7 @@ describe('NetworkSyncManager', () => {
 
   describe('playback sync', () => {
     it('NSM-021: sends sync message on playback change', () => {
-      manager.simulateRoomCreated();
+      manager._applyLocalRoomCreation();
 
       expect(() => manager.sendPlaybackSync({
         isPlaying: true,
@@ -319,7 +319,7 @@ describe('NetworkSyncManager', () => {
     });
 
     it('NSM-024: ignores local changes from sync messages', () => {
-      manager.simulateRoomCreated();
+      manager._applyLocalRoomCreation();
       const sm = manager.getSyncStateManager();
 
       sm.beginApplyRemote();
@@ -340,26 +340,26 @@ describe('NetworkSyncManager', () => {
 
   describe('frame sync', () => {
     it('NSM-025: sends frame sync message', () => {
-      manager.simulateRoomCreated();
+      manager._applyLocalRoomCreation();
       expect(() => manager.sendFrameSync(42)).not.toThrow();
     });
   });
 
   describe('view sync', () => {
     it('NSM-032: sends view sync message', () => {
-      manager.simulateRoomCreated();
+      manager._applyLocalRoomCreation();
       expect(() => manager.sendViewSync({ panX: 0, panY: 0, zoom: 2, channelMode: 'rgb' })).not.toThrow();
     });
   });
 
   describe('state sync request', () => {
     it('NSM-042: requests state sync', () => {
-      manager.simulateRoomCreated();
+      manager._applyLocalRoomCreation();
       expect(() => manager.requestStateSync()).not.toThrow();
     });
 
     it('NSM-042b: requestMediaSync returns transfer ID when connected', () => {
-      manager.simulateRoomCreated();
+      manager._applyLocalRoomCreation();
       const transferId = manager.requestMediaSync();
       expect(transferId).toBeTruthy();
     });
@@ -372,7 +372,7 @@ describe('NetworkSyncManager', () => {
 
   describe('dispose', () => {
     it('NSM-050: cleans up subscriptions', () => {
-      manager.simulateRoomCreated();
+      manager._applyLocalRoomCreation();
       manager.dispose();
 
       expect(manager.connectionState).toBe('disconnected');
@@ -394,9 +394,9 @@ describe('NetworkSyncManager', () => {
 
   describe('user colors', () => {
     it('NSM-070: assigns different colors to users', () => {
-      manager.simulateRoomCreated();
-      const alice = manager.simulateUserJoined('Alice');
-      const bob = manager.simulateUserJoined('Bob');
+      manager._applyLocalRoomCreation();
+      const alice = manager._applyLocalUserJoin('Alice');
+      const bob = manager._applyLocalUserJoin('Bob');
 
       expect(manager.users[0]!.color).toBeTruthy();
       expect(alice.color).toBeTruthy();
@@ -413,12 +413,12 @@ describe('NetworkSyncManager', () => {
       expect(manager.connectionState).toBe('disconnected');
     });
 
-    it('NSM-081: simulateUserJoined throws when no room exists', () => {
-      expect(() => manager.simulateUserJoined('Alice')).toThrow('No room to join');
+    it('NSM-081: _applyLocalUserJoin throws when no room exists', () => {
+      expect(() => manager._applyLocalUserJoin('Alice')).toThrow('No room to join');
     });
 
     it('NSM-082: simulateUserLeft is safe when user not found', () => {
-      manager.simulateRoomCreated();
+      manager._applyLocalRoomCreation();
       // Should not throw when user ID doesn't exist
       manager.simulateUserLeft('nonexistent-user');
       expect(manager.users.length).toBe(1);
@@ -436,7 +436,7 @@ describe('NetworkSyncManager', () => {
     });
 
     it('NSM-084: sendFrameSync is suppressed when playback sync disabled', () => {
-      manager.simulateRoomCreated();
+      manager._applyLocalRoomCreation();
       manager.setSyncSettings({
         playback: false,
         view: true,
@@ -449,7 +449,7 @@ describe('NetworkSyncManager', () => {
     });
 
     it('NSM-085: sendViewSync is suppressed when view sync disabled', () => {
-      manager.simulateRoomCreated();
+      manager._applyLocalRoomCreation();
       manager.setSyncSettings({
         playback: true,
         view: false,
@@ -467,15 +467,15 @@ describe('NetworkSyncManager', () => {
 
     it('NSM-087: createRoom from error state is allowed', () => {
       // Manually set to error state via simulation
-      manager.simulateRoomCreated();
+      manager._applyLocalRoomCreation();
       manager.leaveRoom(); // back to disconnected
       // Verify we can create room from disconnected
-      manager.simulateRoomCreated();
+      manager._applyLocalRoomCreation();
       expect(manager.isConnected).toBe(true);
     });
 
     it('NSM-088: getters return safe copies', () => {
-      manager.simulateRoomCreated();
+      manager._applyLocalRoomCreation();
       const users = manager.users;
       users.push({
         id: 'fake',
@@ -500,10 +500,10 @@ describe('NetworkSyncManager', () => {
 
   describe('multiple user operations', () => {
     it('NSM-090: handles rapid user join/leave', () => {
-      manager.simulateRoomCreated();
+      manager._applyLocalRoomCreation();
 
-      const alice = manager.simulateUserJoined('Alice');
-      const bob = manager.simulateUserJoined('Bob');
+      const alice = manager._applyLocalUserJoin('Alice');
+      const bob = manager._applyLocalUserJoin('Bob');
       expect(manager.users.length).toBe(3);
 
       manager.simulateUserLeft(alice.id);
@@ -517,12 +517,12 @@ describe('NetworkSyncManager', () => {
     });
 
     it('NSM-091: color wraps around when many users join', () => {
-      manager.simulateRoomCreated();
+      manager._applyLocalRoomCreation();
 
       // Join 10 users (more than the 8 available colors)
       const users = [];
       for (let i = 0; i < 10; i++) {
-        users.push(manager.simulateUserJoined(`User${i}`));
+        users.push(manager._applyLocalUserJoin(`User${i}`));
       }
 
       // All users should have colors assigned
@@ -534,7 +534,7 @@ describe('NetworkSyncManager', () => {
 
   describe('message deduplication', () => {
     it('NSM-100: duplicate message IDs are skipped', () => {
-      manager.simulateRoomCreated();
+      manager._applyLocalRoomCreation();
 
       const handler = vi.fn();
       manager.on('syncFrame', handler);
@@ -557,7 +557,7 @@ describe('NetworkSyncManager', () => {
     });
 
     it('NSM-101: evicts oldest message ID after 200', () => {
-      manager.simulateRoomCreated();
+      manager._applyLocalRoomCreation();
 
       const handler = vi.fn();
       manager.on('syncFrame', handler);
@@ -606,7 +606,7 @@ describe('NetworkSyncManager', () => {
 
   describe('sender identity validation', () => {
     it('NSM-110: annotation strokes have user overridden with sender ID', () => {
-      manager.simulateRoomCreated();
+      manager._applyLocalRoomCreation();
       manager.setSyncSettings({
         playback: true, view: true, color: true, annotations: true, cursor: true,
       });
@@ -641,7 +641,7 @@ describe('NetworkSyncManager', () => {
     });
 
     it('NSM-111: note has author overridden with sender ID', () => {
-      manager.simulateRoomCreated();
+      manager._applyLocalRoomCreation();
       manager.setSyncSettings({
         playback: true, view: true, color: true, annotations: true, cursor: true,
       });
@@ -687,7 +687,7 @@ describe('NetworkSyncManager', () => {
     });
 
     it('NSM-120: requestStateSync retries after timeout', () => {
-      manager.simulateRoomCreated();
+      manager._applyLocalRoomCreation();
 
       // Spy on dispatching
       const dispatchSpy = vi.spyOn(manager as any, 'sendStateRequest');
@@ -705,7 +705,7 @@ describe('NetworkSyncManager', () => {
     });
 
     it('NSM-121: emits warning after max retries', () => {
-      manager.simulateRoomCreated();
+      manager._applyLocalRoomCreation();
 
       const toastHandler = vi.fn();
       manager.on('toastMessage', toastHandler);
@@ -723,7 +723,7 @@ describe('NetworkSyncManager', () => {
     });
 
     it('NSM-122: handleStateResponse clears pending request', () => {
-      manager.simulateRoomCreated();
+      manager._applyLocalRoomCreation();
 
       manager.requestStateSync('host-1');
       expect((manager as any)._pendingStateRequest).not.toBeNull();

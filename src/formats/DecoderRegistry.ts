@@ -10,7 +10,7 @@
  * to initial bundle cost.
  */
 
-export type FormatName = 'exr' | 'dpx' | 'cineon' | 'tiff' | 'jpeg-gainmap' | 'heic-gainmap' | 'hdr' | 'jxl' | 'jp2' | 'mxf' | null;
+export type FormatName = 'exr' | 'dpx' | 'cineon' | 'tiff' | 'jpeg-gainmap' | 'heic-gainmap' | 'avif-gainmap' | 'raw-preview' | 'hdr' | 'jxl' | 'jp2' | 'mxf' | null;
 
 /** Result returned by FormatDecoder.decode() and detectAndDecode() */
 export interface DecodeResult {
@@ -182,6 +182,83 @@ function findMPFMarker(view: DataView): number {
     offset += 2 + segLen;
   }
   return -1;
+}
+
+// --- AVIF Gainmap detection ---
+
+function isGainmapAVIF(buffer: ArrayBuffer): boolean {
+  // Check AVIF file (ftyp with AVIF brands, excluding HEIC)
+  if (buffer.byteLength < 16) return false;
+  const view = new DataView(buffer);
+  if (readBoxTypeAt(view, 4) !== 'ftyp') return false;
+  const ftypSize = view.getUint32(0);
+  if (ftypSize < 16 || ftypSize > buffer.byteLength) return false;
+
+  const majorBrand = readBoxTypeAt(view, 8);
+  if (HEIC_BRANDS.has(majorBrand)) return false;
+
+  let isAVIF = AVIF_BRANDS.has(majorBrand);
+  if (!isAVIF && majorBrand === 'mif1') {
+    for (let offset = 16; offset + 4 <= ftypSize; offset += 4) {
+      const compat = readBoxTypeAt(view, offset);
+      if (HEIC_BRANDS.has(compat)) return false;
+      if (AVIF_BRANDS.has(compat)) { isAVIF = true; break; }
+    }
+  }
+  if (!isAVIF) return false;
+
+  // Look for gainmap auxC in meta -> iprp -> ipco
+  const meta = findBoxInRange(view, 'meta', ftypSize, buffer.byteLength, true);
+  if (!meta) return false;
+  const iprp = findBoxInRange(view, 'iprp', meta.dataStart, meta.dataEnd);
+  if (!iprp) return false;
+  const ipco = findBoxInRange(view, 'ipco', iprp.dataStart, iprp.dataEnd);
+  if (!ipco) return false;
+
+  // Scan ipco for auxC box with gainmap URN
+  let offset = ipco.dataStart;
+  while (offset + 8 <= ipco.dataEnd) {
+    const boxSize = view.getUint32(offset);
+    if (boxSize < 8 || offset + boxSize > ipco.dataEnd) break;
+    if (readBoxTypeAt(view, offset + 4) === 'auxC') {
+      // auxC is FullBox: header(8) + version+flags(4) then null-terminated URN
+      const urnStart = offset + 12;
+      const urnEnd = offset + boxSize;
+      if (urnStart < urnEnd) {
+        const chars: string[] = [];
+        for (let i = urnStart; i < urnEnd; i++) {
+          const c = view.getUint8(i);
+          if (c === 0) break;
+          chars.push(String.fromCharCode(c));
+        }
+        const urn = chars.join('');
+        if (urn === APPLE_GAINMAP_URN || urn === ISO_GAINMAP_URN) return true;
+      }
+    }
+    offset += boxSize;
+  }
+  return false;
+}
+
+// --- RAW Preview detection ---
+
+const RAW_TIFF_LE = 0x4949;
+const RAW_TIFF_BE = 0x4d4d;
+
+function isRAWPreviewFile(buffer: ArrayBuffer): boolean {
+  // RAW files use TIFF as container but are NOT float TIFFs.
+  // Check for TIFF header (II or MM + magic 42) and exclude float TIFFs.
+  if (buffer.byteLength < 8) return false;
+  const view = new DataView(buffer);
+  const byteOrder = view.getUint16(0, false);
+  if (byteOrder !== RAW_TIFF_LE && byteOrder !== RAW_TIFF_BE) return false;
+  const le = byteOrder === RAW_TIFF_LE;
+  if (view.getUint16(2, le) !== 42) return false;
+
+  // Exclude float TIFFs (already handled by tiffDecoder above in the chain)
+  if (isTIFFAndFloat(buffer)) return false;
+
+  return true;
 }
 
 // --- Radiance HDR detection ---
@@ -445,6 +522,82 @@ const heicGainmapDecoder: FormatDecoder = {
 };
 
 /**
+ * AVIF Gainmap format decoder adapter
+ */
+const avifGainmapDecoder: FormatDecoder = {
+  formatName: 'avif-gainmap',
+  canDecode: isGainmapAVIF,
+  async decode(buffer: ArrayBuffer) {
+    const { parseGainmapAVIF, decodeAVIFGainmapToFloat32 } = await import('./AVIFGainmapDecoder');
+    const info = parseGainmapAVIF(buffer);
+    if (!info) {
+      throw new Error('Failed to parse AVIF gainmap metadata');
+    }
+    const result = await decodeAVIFGainmapToFloat32(buffer, info);
+    return {
+      width: result.width,
+      height: result.height,
+      data: result.data,
+      channels: result.channels,
+      colorSpace: 'linear',
+      metadata: {
+        formatName: 'avif-gainmap',
+        headroom: info.headroom,
+      },
+    };
+  },
+};
+
+/**
+ * RAW Preview format decoder adapter.
+ * Extracts the largest embedded JPEG preview from camera RAW files
+ * (CR2, NEF, ARW, DNG, etc.) without decoding RAW sensor data.
+ * The returned image is the SDR JPEG preview decoded to float32.
+ */
+const rawPreviewDecoder: FormatDecoder = {
+  formatName: 'raw-preview',
+  canDecode: isRAWPreviewFile,
+  async decode(buffer: ArrayBuffer) {
+    const { extractRAWPreview } = await import('./RAWPreviewDecoder');
+    const preview = extractRAWPreview(buffer);
+    if (!preview) {
+      throw new Error('Failed to extract RAW preview JPEG');
+    }
+    // Decode the embedded JPEG preview to pixel data via createImageBitmap
+    const bitmap = await createImageBitmap(preview.jpegBlob);
+    const width = bitmap.width;
+    const height = bitmap.height;
+    const canvas = typeof OffscreenCanvas !== 'undefined'
+      ? new OffscreenCanvas(width, height)
+      : (() => { const c = document.createElement('canvas'); c.width = width; c.height = height; return c; })();
+    const ctx = canvas.getContext('2d')! as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
+    ctx.drawImage(bitmap, 0, 0);
+    bitmap.close();
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const pixels = imageData.data;
+    const float32 = new Float32Array(width * height * 4);
+    const scale = 1.0 / 255.0;
+    for (let i = 0; i < pixels.length; i++) {
+      float32[i] = (pixels[i] ?? 0) * scale;
+    }
+    return {
+      width,
+      height,
+      data: float32,
+      channels: 4,
+      colorSpace: 'srgb',
+      metadata: {
+        formatName: 'raw-preview',
+        make: preview.exif.make,
+        model: preview.exif.model,
+        iso: preview.exif.iso,
+        orientation: preview.exif.orientation,
+      },
+    };
+  },
+};
+
+/**
  * Radiance HDR format decoder adapter
  */
 const hdrDecoder: FormatDecoder = {
@@ -510,7 +663,20 @@ const jp2Decoder: FormatDecoder = {
 };
 
 /**
- * MXF container format adapter
+ * MXF container format adapter — METADATA-ONLY.
+ *
+ * MXF is a professional media container (SMPTE 377M) that wraps encoded video/audio
+ * essence. This adapter only parses the MXF header partition to extract structural
+ * metadata (codec, resolution, edit rate, duration, etc.). It does NOT decode video
+ * frames — the returned pixel data is a dummy 1x1 RGBA image.
+ *
+ * OpenRV compatibility: OpenRV CAN decode and display MXF frames via its FFmpeg
+ * backend (MovieFFMpeg.cpp registers MXF with full video capabilities). Our web
+ * implementation is metadata-only because WebCodecs does not directly support MXF
+ * containers — the essence must be extracted and re-wrapped or decoded separately.
+ *
+ * Consumers should inspect `metadata.mxfWidth` / `metadata.mxfHeight` for the actual
+ * frame dimensions and use a dedicated MXF essence decoder for pixel access.
  */
 const mxfDecoder: FormatDecoder = {
   formatName: 'mxf',
@@ -520,6 +686,7 @@ const mxfDecoder: FormatDecoder = {
     const meta = parseMXFHeader(buffer);
     const videoDesc = meta.essenceDescriptors.find(d => d.type === 'video');
     return {
+      // Dummy 1x1 pixel — MXF adapter is metadata-only, no pixel decoding is performed
       width: 1,
       height: 1,
       data: new Float32Array(4),
@@ -527,6 +694,8 @@ const mxfDecoder: FormatDecoder = {
       colorSpace: videoDesc?.colorSpace ?? 'unknown',
       metadata: {
         format: 'mxf',
+        /** True — this decode result contains only metadata, not real pixel data */
+        metadataOnly: true,
         mxfWidth: videoDesc?.width,
         mxfHeight: videoDesc?.height,
         operationalPattern: meta.operationalPattern,
@@ -547,14 +716,17 @@ export class DecoderRegistry {
   private decoders: FormatDecoder[] = [];
 
   constructor() {
-    // Register built-in decoders in detection order
-    // EXR first (most common in VFX), then DPX, Cineon, TIFF, JPEG Gainmap, HDR
+    // Register built-in decoders in detection order.
+    // EXR first (most common in VFX), then DPX, Cineon, TIFF (float only),
+    // RAW preview (TIFF-based but non-float), JPEG Gainmap, HEIC/AVIF Gainmap, HDR, etc.
     this.decoders.push(exrDecoder);
     this.decoders.push(dpxDecoder);
     this.decoders.push(cineonDecoder);
     this.decoders.push(tiffDecoder);
+    this.decoders.push(rawPreviewDecoder);
     this.decoders.push(jpegGainmapDecoder);
     this.decoders.push(heicGainmapDecoder);
+    this.decoders.push(avifGainmapDecoder);
     this.decoders.push(hdrDecoder);
     this.decoders.push(jxlDecoder);
     this.decoders.push(jp2Decoder);
