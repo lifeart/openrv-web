@@ -528,6 +528,15 @@ export class ViewerGLRenderer {
     PerfTrace.begin('buildRenderState');
     const state = this.buildRenderState();
     if (isHDROutput) {
+      // NOTE: Native WebGL2 HDR output (drawingBufferColorSpace = rec2100-hlg/pq).
+      // The browser compositor applies the HLG/PQ OETF after the shader, so we
+      // must output linear light. Applying the user's display transfer (sRGB,
+      // Rec.709, gamma, etc.) would double-encode the signal.
+      // displayGamma and displayBrightness are also forced to 1 because the HDR
+      // compositor manages display-referred luminance scaling.
+      // TODO: For 'extended' mode (SDR-range P3 drawing buffer), the user's
+      // display transfer, displayGamma, and displayBrightness should be preserved
+      // since that path does not go through HLG/PQ compositing.
       state.colorAdjustments = { ...state.colorAdjustments, gamma: 1 };
       state.displayColor = { ...state.displayColor, transferFunction: 0, displayGamma: 1, displayBrightness: 1 };
       // Only disable tone mapping for HLG/PQ content — the transfer function
@@ -710,6 +719,14 @@ export class ViewerGLRenderer {
     }
 
     // Build render state with minimal HDR overrides for linear-light output.
+    // The WebGPU HDR canvas receives linear-light float pixels and performs its
+    // own display-referred encoding (tone mapping, OETF). Applying the user's
+    // display transfer (sRGB, Rec.709, gamma) in the shader would double-encode.
+    // displayGamma and displayBrightness are also forced to 1 for the same reason —
+    // the WebGPU compositor handles luminance scaling.
+    // TODO: displayGamma and displayBrightness are calibration knobs that users
+    // expect to work for all content. Consider preserving them here and
+    // compensating in the WebGPU upload step.
     PerfTrace.begin('blit.buildRenderState');
     const state = this.buildRenderState();
     state.colorAdjustments = { ...state.colorAdjustments, gamma: 1 };
@@ -816,6 +833,12 @@ export class ViewerGLRenderer {
     }
 
     // Build render state with minimal HDR overrides for linear-light output.
+    // The Canvas2D HDR canvas receives linear-light float pixels and handles
+    // display-referred encoding itself. Same rationale as the WebGPU blit path:
+    // applying display transfer in the shader would double-encode the signal.
+    // TODO: displayGamma and displayBrightness are calibration knobs that users
+    // expect to work for all content. Consider preserving them here and
+    // compensating in the Canvas2D upload step.
     PerfTrace.begin('canvas2dBlit.buildRenderState');
     const state = this.buildRenderState();
     state.colorAdjustments = { ...state.colorAdjustments, gamma: 1 };
