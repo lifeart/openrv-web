@@ -52,7 +52,7 @@ function buildTestProfile(options?: {
 
   // Calculate offsets - align to 4 bytes
   const headerSize = 128;
-  const tagTableOffset = headerSize;
+  const _tagTableOffset = headerSize;
   const dataStart = headerSize + tagTableSize;
 
   // Pad each data block to 4-byte boundary
@@ -335,7 +335,7 @@ describe('invertMatrix3x3', () => {
     const inv = invertMatrix3x3(identity);
     expect(inv).not.toBeNull();
     for (let i = 0; i < 9; i++) {
-      expect(inv![i]).toBeCloseTo(identity[i], 10);
+      expect(inv![i as keyof Matrix3x3]).toBeCloseTo(identity[i as keyof Matrix3x3], 10);
     }
   });
 

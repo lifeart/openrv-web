@@ -259,7 +259,7 @@ export function downmixToStereo(
 export function generateWaveformData(
   left: Float32Array,
   right: Float32Array,
-  sampleRate: number,
+  _sampleRate: number,
   duration: number,
   peaksPerSecond: number = WAVEFORM_PEAKS_PER_SECOND,
 ): WaveformTextureData {

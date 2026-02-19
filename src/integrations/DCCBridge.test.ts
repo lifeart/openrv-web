@@ -5,7 +5,7 @@
  * Uses a mock WebSocket implementation to simulate all interactions.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   DCCBridge,
   type DCCBridgeConfig,
@@ -13,7 +13,6 @@ import {
   type LoadMediaMessage,
   type SyncFrameMessage,
   type SyncColorMessage,
-  type DCCInboundMessage,
   type DCCOutboundMessage,
 } from './DCCBridge';
 

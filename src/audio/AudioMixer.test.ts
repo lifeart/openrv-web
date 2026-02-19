@@ -11,8 +11,6 @@ import {
   downmixToStereo,
   generateWaveformData,
   DEFAULT_DOWNMIX_COEFFICIENTS,
-  type AudioTrackConfig,
-  type WaveformTextureData,
 } from './AudioMixer';
 
 // ---------------------------------------------------------------------------

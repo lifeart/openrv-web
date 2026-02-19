@@ -51,7 +51,8 @@ class MockNetworkSyncManager extends EventEmitter {
   getSyncStateManager = vi.fn(() => this._sm);
 
   // Override `on` to track unsubscribers while still wiring real events
-  on(event: string, handler: (...args: any[]) => void): () => void {
+  // @ts-expect-error -- override signature for testing
+  override on(event: string, handler: (...args: any[]) => void): () => void {
     const unsub = super.on(event as any, handler as any);
     const wrappedUnsub = vi.fn(() => unsub());
     managerUnsubscribers.add(wrappedUnsub);
@@ -315,7 +316,7 @@ describe('AppNetworkBridge', () => {
 
       const annotations = ctx._paintEngine.getAnnotationsForFrame(5);
       expect(annotations).toHaveLength(1);
-      expect(annotations[0].id).toBe('remote-1');
+      expect(annotations[0]!.id).toBe('remote-1');
     });
 
     it('ANB-041: incoming syncAnnotation remove deletes annotation from PaintEngine', () => {
