@@ -987,7 +987,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     if (!this.stateManager.shouldSyncAnnotations()) return;
     if (!payload || typeof payload !== 'object') return;
     const p = payload as NoteSyncPayload;
-    if (!['add', 'remove', 'update', 'clear'].includes(p.action)) return;
+    if (!['add', 'remove', 'update', 'clear', 'snapshot'].includes(p.action)) return;
     if (typeof p.timestamp !== 'number') return;
     if (!this.canUserSync(senderUserId)) return;
 

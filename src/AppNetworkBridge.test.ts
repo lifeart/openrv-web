@@ -531,14 +531,56 @@ describe('AppNetworkBridge', () => {
       expect(ctx._session.noteManager.getNotes()).toHaveLength(0);
     });
 
-    it('ANB-064: local notesChanged triggers sendNoteSync', () => {
+    it('ANB-064: local notesChanged triggers sendNoteSync with snapshot', () => {
       bridge.setup();
+
+      // Add a note directly (outside of bridge) to simulate local state
+      ctx._session.noteManager.addNote(0, 1, 5, 'Local note', 'me');
 
       // Trigger session notesChanged event (simulates NoteManager callback)
       ctx._session.emit('notesChanged', undefined);
 
-      // Should have been called (at minimum a clear message)
-      expect(ctx._networkSyncManager.sendNoteSync).toHaveBeenCalled();
+      expect(ctx._networkSyncManager.sendNoteSync).toHaveBeenCalledTimes(1);
+      expect(ctx._networkSyncManager.sendNoteSync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'snapshot',
+          notes: expect.arrayContaining([
+            expect.objectContaining({ text: 'Local note' }),
+          ]),
+        }),
+      );
+    });
+
+    it('ANB-065: incoming syncNote snapshot replaces all notes', () => {
+      bridge.setup();
+
+      // Add existing notes
+      ctx._session.noteManager.addNote(0, 1, 5, 'Old note', 'alice');
+      expect(ctx._session.noteManager.getNotes()).toHaveLength(1);
+
+      // Receive snapshot with different notes
+      ctx._networkSyncManager.emit('syncNote', {
+        action: 'snapshot',
+        notes: [
+          {
+            id: 'snap-1', sourceIndex: 0, frameStart: 10, frameEnd: 20,
+            text: 'Snapshot note 1', author: 'bob',
+            createdAt: new Date().toISOString(), modifiedAt: new Date().toISOString(),
+            status: 'open', parentId: null, color: '#00ff00',
+          },
+          {
+            id: 'snap-2', sourceIndex: 0, frameStart: 30, frameEnd: 40,
+            text: 'Snapshot note 2', author: 'charlie',
+            createdAt: new Date().toISOString(), modifiedAt: new Date().toISOString(),
+            status: 'resolved', parentId: null, color: '#0000ff',
+          },
+        ],
+        timestamp: Date.now(),
+      });
+
+      const notes = ctx._session.noteManager.getNotes();
+      expect(notes).toHaveLength(2);
+      expect(notes.map(n => n.text).sort()).toEqual(['Snapshot note 1', 'Snapshot note 2']);
     });
   });
 });

@@ -527,21 +527,7 @@ export class AppNetworkBridge {
           case 'add': {
             const note = payload.note as Note | undefined;
             if (note && note.id) {
-              // Check if already exists (idempotency)
-              if (!noteManager.getNote(note.id)) {
-                const created = noteManager.addNote(
-                  note.sourceIndex,
-                  note.frameStart,
-                  note.frameEnd,
-                  note.text,
-                  note.author,
-                  { parentId: note.parentId ?? undefined, color: note.color },
-                );
-                // Overwrite generated id with remote id for consistency
-                const internal = (noteManager as any)._notes as Map<string, Note>;
-                internal.delete(created.id);
-                internal.set(note.id, { ...created, id: note.id, status: note.status ?? 'open' });
-              }
+              noteManager.importNote(note);
             }
             break;
           }
@@ -564,6 +550,11 @@ export class AppNetworkBridge {
           case 'clear':
             noteManager.fromSerializable([]);
             break;
+          case 'snapshot':
+            if (Array.isArray(payload.notes)) {
+              noteManager.fromSerializable(payload.notes as Note[]);
+            }
+            break;
         }
       } finally {
         sm.endApplyRemote();
@@ -573,19 +564,11 @@ export class AppNetworkBridge {
     // Send outgoing note sync when notes change
     this.unsubscribers.push(session.on('notesChanged', () => {
       if (networkSyncManager.isConnected && !networkSyncManager.getSyncStateManager().isApplyingRemoteState) {
-        // Send full note state as a bulk update (simple and reliable)
-        const notes = session.noteManager.toSerializable();
         networkSyncManager.sendNoteSync({
-          action: 'clear',
+          action: 'snapshot',
+          notes: session.noteManager.toSerializable(),
           timestamp: Date.now(),
         });
-        for (const note of notes) {
-          networkSyncManager.sendNoteSync({
-            action: 'add',
-            note,
-            timestamp: Date.now(),
-          });
-        }
       }
     }));
 

@@ -179,8 +179,9 @@ export interface AnnotationSyncPayload {
 }
 
 export interface NoteSyncPayload {
-  action: 'add' | 'remove' | 'update' | 'clear';
+  action: 'add' | 'remove' | 'update' | 'clear' | 'snapshot';
   note?: unknown;
+  notes?: unknown[];
   noteId?: string;
   timestamp: number;
 }
