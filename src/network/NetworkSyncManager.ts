@@ -1060,9 +1060,9 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     // Override user field on all strokes with authenticated sender identity
     const sanitized = { ...payload };
     if (Array.isArray(sanitized.strokes)) {
-      sanitized.strokes = sanitized.strokes.map((stroke: Record<string, unknown>) =>
+      sanitized.strokes = sanitized.strokes.map((stroke: unknown) =>
         typeof stroke === 'object' && stroke !== null
-          ? { ...stroke, user: senderUserId }
+          ? { ...(stroke as Record<string, unknown>), user: senderUserId }
           : stroke
       );
     }
@@ -1142,6 +1142,8 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
       typeof responsePayload.sessionState === 'string' ||
       responsePayload.encryptedSessionState !== undefined;
     if (!hasState) return;
+
+    this.clearPendingStateRequest();
 
     this.emit('sessionStateReceived', {
       requestId: responsePayload.requestId,
@@ -1789,6 +1791,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     this._remoteCursors.clear();
     this._recentMessageIds.clear();
     this._recentMessageIdQueue = [];
+    this.clearPendingStateRequest();
     this.stateManager.reset();
   }
 
@@ -1941,6 +1944,7 @@ export class NetworkSyncManager extends EventEmitter<NetworkSyncEvents> implemen
     this._remoteCursors.clear();
     this._recentMessageIds.clear();
     this._recentMessageIdQueue = [];
+    this.clearPendingStateRequest();
     this.wsClient.dispose();
     this.stateManager.reset();
     this.removeAllListeners();

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AppNetworkBridge } from './AppNetworkBridge';
 import { EventEmitter } from './utils/EventEmitter';
 import { PaintEngine } from './paint/PaintEngine';
@@ -35,12 +35,15 @@ class MockNetworkSyncManager extends EventEmitter {
   sendAnnotationSync = vi.fn();
   sendColorSync = vi.fn();
   sendNoteSync = vi.fn();
+  sendSessionStateResponse = vi.fn();
   simulateRoomCreated = vi.fn();
   joinRoom = vi.fn();
   leaveRoom = vi.fn();
   setSyncSettings = vi.fn();
+  requestMediaSync = vi.fn(() => '');
   roomInfo = null;
   isHost = false;
+  userId = 'test-user-id';
 
   private _sm = {
     isApplyingRemoteState: false,
@@ -70,9 +73,15 @@ function createMockNetworkControl() {
     }),
     render: vi.fn(() => document.createElement('div')),
     setConnectionState: vi.fn(),
+    setIsHost: vi.fn(),
+    setShareLinkKind: vi.fn(),
+    setResponseToken: vi.fn(),
     setRoomInfo: vi.fn(),
     setUsers: vi.fn(),
     showError: vi.fn(),
+    hideError: vi.fn(),
+    showInfo: vi.fn(),
+    hideInfo: vi.fn(),
     setRTT: vi.fn(),
   };
 }
@@ -780,6 +789,175 @@ describe('AppNetworkBridge', () => {
       const notes = ctx._session.noteManager.getNotes();
       expect(notes).toHaveLength(2);
       expect(notes.map(n => n.text).sort()).toEqual(['Snapshot note 1', 'Snapshot note 2']);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Throttled color sync
+  // -----------------------------------------------------------------------
+  describe('throttled color sync', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('ANB-090: first color change fires immediately (leading edge)', () => {
+      bridge.setup();
+
+      ctx._colorControls.emit('adjustmentsChanged', {
+        exposure: 1.0, gamma: 1.0, saturation: 1.0, vibrance: 0,
+        vibranceSkinProtection: false, contrast: 1.0, clarity: 0,
+        hueRotation: 0, temperature: 0, tint: 0, brightness: 0,
+        highlights: 0, shadows: 0, whites: 0, blacks: 0,
+      });
+
+      expect(ctx._networkSyncManager.sendColorSync).toHaveBeenCalledTimes(1);
+    });
+
+    it('ANB-091: rapid color changes are throttled', () => {
+      bridge.setup();
+
+      // First call fires immediately
+      ctx._colorControls.emit('adjustmentsChanged', {
+        exposure: 1.0, gamma: 1.0, saturation: 1.0, vibrance: 0,
+        vibranceSkinProtection: false, contrast: 1.0, clarity: 0,
+        hueRotation: 0, temperature: 0, tint: 0, brightness: 0,
+        highlights: 0, shadows: 0, whites: 0, blacks: 0,
+      });
+
+      // Second call within interval is batched
+      ctx._colorControls.emit('adjustmentsChanged', {
+        exposure: 2.0, gamma: 1.0, saturation: 1.0, vibrance: 0,
+        vibranceSkinProtection: false, contrast: 1.0, clarity: 0,
+        hueRotation: 0, temperature: 0, tint: 0, brightness: 0,
+        highlights: 0, shadows: 0, whites: 0, blacks: 0,
+      });
+
+      expect(ctx._networkSyncManager.sendColorSync).toHaveBeenCalledTimes(1);
+
+      // After interval, trailing fires
+      vi.advanceTimersByTime(100);
+      expect(ctx._networkSyncManager.sendColorSync).toHaveBeenCalledTimes(2);
+      expect(ctx._networkSyncManager.sendColorSync).toHaveBeenLastCalledWith(
+        expect.objectContaining({ exposure: 2.0 }),
+      );
+    });
+
+    it('ANB-092: dispose cancels pending throttled color sync', () => {
+      bridge.setup();
+
+      ctx._colorControls.emit('adjustmentsChanged', {
+        exposure: 1.0, gamma: 1.0, saturation: 1.0, vibrance: 0,
+        vibranceSkinProtection: false, contrast: 1.0, clarity: 0,
+        hueRotation: 0, temperature: 0, tint: 0, brightness: 0,
+        highlights: 0, shadows: 0, whites: 0, blacks: 0,
+      });
+      ctx._colorControls.emit('adjustmentsChanged', {
+        exposure: 3.0, gamma: 1.0, saturation: 1.0, vibrance: 0,
+        vibranceSkinProtection: false, contrast: 1.0, clarity: 0,
+        hueRotation: 0, temperature: 0, tint: 0, brightness: 0,
+        highlights: 0, shadows: 0, whites: 0, blacks: 0,
+      });
+
+      bridge.dispose();
+      vi.advanceTimersByTime(200);
+
+      // Only the leading call should have fired, not the trailing
+      expect(ctx._networkSyncManager.sendColorSync).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Frame/playback dedup
+  // -----------------------------------------------------------------------
+  describe('frame/playback dedup', () => {
+    it('ANB-100: frame change immediately after playback change with same frame is skipped', () => {
+      bridge.setup();
+
+      // playbackChanged sends frame 1
+      ctx._session.emit('playbackChanged', true);
+      expect(ctx._networkSyncManager.sendPlaybackSync).toHaveBeenCalledTimes(1);
+
+      // frameChanged with same frame within 50ms should be skipped
+      ctx._session.emit('frameChanged', 1);
+      expect(ctx._networkSyncManager.sendFrameSync).not.toHaveBeenCalled();
+    });
+
+    it('ANB-101: frame change with different frame after playback change is NOT skipped', () => {
+      bridge.setup();
+
+      ctx._session.emit('playbackChanged', true);
+
+      // Different frame should pass through
+      ctx._session.emit('frameChanged', 42);
+      expect(ctx._networkSyncManager.sendFrameSync).toHaveBeenCalledTimes(1);
+      expect(ctx._networkSyncManager.sendFrameSync).toHaveBeenCalledWith(42);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Annotation prefix wiring
+  // -----------------------------------------------------------------------
+  describe('annotation prefix wiring', () => {
+    it('ANB-110: roomCreated sets paintEngine id prefix to userId', () => {
+      bridge.setup();
+
+      ctx._networkSyncManager.emit('roomCreated', {
+        roomId: 'r1', roomCode: 'ABCD-1234', hostId: 'h1',
+        users: [], createdAt: Date.now(), maxUsers: 10,
+      });
+
+      expect(ctx._paintEngine.idPrefix).toBe('test-user-id');
+    });
+
+    it('ANB-111: roomJoined sets paintEngine id prefix to userId', () => {
+      bridge.setup();
+
+      ctx._networkSyncManager.emit('roomJoined', {
+        roomId: 'r1', roomCode: 'ABCD-1234', hostId: 'h1',
+        users: [], createdAt: Date.now(), maxUsers: 10,
+      });
+
+      expect(ctx._paintEngine.idPrefix).toBe('test-user-id');
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // Annotations/notes in full state sync
+  // -----------------------------------------------------------------------
+  describe('annotations/notes in state sync', () => {
+    it('ANB-120: sessionStateRequested includes annotations and notes', async () => {
+      bridge.setup();
+      ctx._networkSyncManager.isHost = true;
+
+      // Add some annotations
+      ctx._paintEngine.tool = 'pen';
+      ctx._paintEngine.beginStroke(1, { x: 0.1, y: 0.1 });
+      ctx._paintEngine.endStroke();
+
+      // Add a note
+      ctx._session.noteManager.addNote(0, 1, 5, 'Test note', 'me');
+
+      // Trigger state request
+      ctx._networkSyncManager.emit('sessionStateRequested', {
+        requestId: 'req-1',
+        requesterUserId: 'user-2',
+      });
+
+      // Wait for async handler
+      await vi.waitFor(() => {
+        expect(ctx._networkSyncManager.sendSessionStateResponse).toHaveBeenCalled();
+      });
+
+      const call = ctx._networkSyncManager.sendSessionStateResponse.mock.calls[0]!;
+      const payload = call[2];
+      expect(payload.annotations).toBeInstanceOf(Array);
+      expect(payload.annotations.length).toBeGreaterThan(0);
+      expect(payload.notes).toBeInstanceOf(Array);
+      expect(payload.notes.length).toBeGreaterThan(0);
     });
   });
 });
