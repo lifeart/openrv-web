@@ -117,6 +117,8 @@ const REAL_CONTROL_FIELDS: Record<string, string> = {
   PresentationMode: 'presentationMode',
   NetworkSyncManager: 'networkSyncManager',
   AutoSaveManager: 'autoSaveManager',
+  ShotGridConfigUI: 'shotGridConfig',
+  ShotGridPanel: 'shotGridPanel',
 };
 
 /**
@@ -131,7 +133,7 @@ function installDisposeSpies(registry: AppControlRegistry) {
 
 function createMockDeps() {
   return {
-    session: { currentFrame: 1, frameCount: 1 } as any,
+    session: { currentFrame: 1, frameCount: 1, on: vi.fn(() => vi.fn()) } as any,
     viewer: {
       getSafeAreasOverlay: vi.fn(() => ({})),
       getFalseColor: vi.fn(() => ({})),
@@ -233,6 +235,8 @@ describe('AppControlRegistry', () => {
       'PresentationMode',
       'NetworkSyncManager',
       'NetworkControl',
+      'ShotGridConfigUI',
+      'ShotGridPanel',
       'AutoSaveManager',
     ];
 
@@ -323,7 +327,7 @@ describe('AppControlRegistry', () => {
       expect(panelsSlot.contains(panelTogglesArg)).toBe(true);
     });
 
-    it('ACR-005: panels slot contains exactly 3 toggle buttons (info, snapshots, playlist)', () => {
+    it('ACR-005: panels slot contains exactly 4 toggle buttons (info, snapshots, playlist, shotgrid)', () => {
       const deps = createMockDeps();
       const registry = new AppControlRegistry(deps);
       const { contextToolbar, viewer, sessionBridge, headerBar, panelsSlot } = createSetupDeps();
@@ -331,7 +335,7 @@ describe('AppControlRegistry', () => {
       registry.setupTabContents(contextToolbar, viewer, sessionBridge, headerBar);
 
       const buttons = panelsSlot.querySelectorAll('button');
-      expect(buttons.length).toBe(3);
+      expect(buttons.length).toBe(4);
     });
 
     it('ACR-006: each panel toggle button has the correct data-testid', () => {
@@ -341,7 +345,7 @@ describe('AppControlRegistry', () => {
 
       registry.setupTabContents(contextToolbar, viewer, sessionBridge, headerBar);
 
-      const expectedTestIds = ['info-panel-toggle', 'snapshot-panel-toggle', 'playlist-panel-toggle'];
+      const expectedTestIds = ['info-panel-toggle', 'snapshot-panel-toggle', 'playlist-panel-toggle', 'shotgrid-panel-toggle'];
       for (const testid of expectedTestIds) {
         const btn = panelsSlot.querySelector(`[data-testid="${testid}"]`);
         expect(btn, `button with data-testid="${testid}" should exist`).not.toBeNull();
@@ -361,9 +365,9 @@ describe('AppControlRegistry', () => {
       expect(panelTogglesContainer.style.display).toBe('flex');
       expect(panelTogglesContainer.style.alignItems).toBe('center');
 
-      // It should contain exactly the 3 buttons as direct children
+      // It should contain exactly the 4 buttons as direct children
       const childButtons = panelTogglesContainer.querySelectorAll(':scope > button');
-      expect(childButtons.length).toBe(3);
+      expect(childButtons.length).toBe(4);
     });
 
     it('ACR-008: missing-frame mode selector reflects viewer state and updates mode on change', () => {

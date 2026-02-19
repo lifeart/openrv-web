@@ -140,9 +140,6 @@ export class ShotGridConfigUI extends EventEmitter<ShotGridConfigEvents> {
       });
     }
 
-    // Load saved config
-    this.loadConfig();
-
     return this.container;
   }
 
@@ -185,6 +182,14 @@ export class ShotGridConfigUI extends EventEmitter<ShotGridConfigEvents> {
       apiKey: this.apiKeyInput.value.trim(),
       projectId: parseInt(this.projectIdInput.value.trim(), 10),
     };
+  }
+
+  /**
+   * Restore saved config from storage and emit configLoaded if available.
+   * Must be called after event listeners are attached.
+   */
+  restoreConfig(): void {
+    this.loadConfig();
   }
 
   dispose(): void {

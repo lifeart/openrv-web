@@ -86,6 +86,13 @@ export class ShotGridIntegrationBridge {
       }
     }));
 
+    // Config loaded from storage — pre-fill only (do not auto-connect)
+    this.unsubscribers.push(this.configUI.on('configLoaded', () => {
+      // Form fields are already populated by loadConfig().
+      // We intentionally don't auto-connect: the user must click Connect
+      // because the API key may not be stored (security default).
+    }));
+
     // Disconnect
     this.unsubscribers.push(this.configUI.on('disconnect', () => {
       this.generation++;
@@ -216,6 +223,9 @@ export class ShotGridIntegrationBridge {
         this.handleError(err);
       }
     }));
+
+    // Restore saved config after all listeners are wired
+    this.configUI.restoreConfig();
   }
 
   dispose(): void {

@@ -207,4 +207,55 @@ describe('ShotGridConfigUI', () => {
     const statusEl = container.querySelector('[data-testid="shotgrid-config-status"]')!;
     expect(statusEl.getAttribute('aria-live')).toBe('polite');
   });
+
+  it('SG-CFG-012: restoreConfig emits configLoaded with saved data', () => {
+    // Pre-populate localStorage
+    localStorage.setItem('openrv-sg-config', JSON.stringify({
+      serverUrl: 'https://saved.shotgrid.autodesk.com',
+      scriptName: 'saved-script',
+      projectId: 77,
+    }));
+
+    configUI.render();
+
+    const onConfigLoaded = vi.fn();
+    configUI.on('configLoaded', onConfigLoaded);
+
+    // configLoaded should NOT have fired during render (listeners not attached yet)
+    expect(onConfigLoaded).not.toHaveBeenCalled();
+
+    // Now explicitly restore
+    configUI.restoreConfig();
+
+    expect(onConfigLoaded).toHaveBeenCalledWith({
+      serverUrl: 'https://saved.shotgrid.autodesk.com',
+      scriptName: 'saved-script',
+      apiKey: '',
+      projectId: 77,
+    });
+
+    // Form fields should be populated
+    const container = configUI.render();
+    const serverUrl = container.querySelector<HTMLInputElement>('[data-testid="shotgrid-server-url"]')!;
+    expect(serverUrl.value).toBe('https://saved.shotgrid.autodesk.com');
+  });
+
+  it('SG-CFG-013: restoreConfig restores API key from sessionStorage', () => {
+    localStorage.setItem('openrv-sg-config', JSON.stringify({
+      serverUrl: 'https://studio.shotgrid.autodesk.com',
+      scriptName: 'test',
+      projectId: 42,
+    }));
+    sessionStorage.setItem('openrv-sg-config-key', 'restored-secret');
+
+    configUI.render();
+    configUI.restoreConfig();
+
+    const container = configUI.render();
+    const apiKey = container.querySelector<HTMLInputElement>('[data-testid="shotgrid-api-key"]')!;
+    expect(apiKey.value).toBe('restored-secret');
+
+    const rememberKey = container.querySelector<HTMLInputElement>('[data-testid="shotgrid-remember-key"]')!;
+    expect(rememberKey.checked).toBe(true);
+  });
 });

@@ -35,6 +35,7 @@ class MockConfigUI extends EventEmitter<ShotGridConfigEvents> {
   getState = vi.fn().mockReturnValue('disconnected');
   validate = vi.fn().mockReturnValue(null);
   getConfig = vi.fn();
+  restoreConfig = vi.fn();
   dispose = vi.fn();
 }
 
