@@ -5,19 +5,11 @@
  * (dodge, burn, clone, smudge) across the full stack:
  *
  *   PaintToolbar buttons -> PaintEngine.tool setter -> ViewerInputHandler cursor
- *     -> (MISSING) dispatch logic in ViewerInputHandler.onPointerDown
- *     -> (MISSING) AdvancedPaintTools instantiation
- *     -> (MISSING) PixelBuffer extraction from canvas
+ *     -> ViewerInputHandler.onPointerDown advanced tool dispatch
+ *     -> AdvancedPaintTools instantiation via PaintEngine.getAdvancedTool()
+ *     -> PixelBuffer extraction from image/GL canvas
  *
- * Critical findings documented via test expectations:
- * - BUG: PaintEngine accepts the tool types but has NO dispatch for them
- * - BUG: ViewerInputHandler has NO branch for advanced tools in onPointerDown;
- *         they fall through to the pan/grab else-branch, making them dead buttons
- * - BUG: AdvancedPaintTools classes are never instantiated outside unit tests
- * - BUG: No PixelBuffer extraction mechanism exists to feed pixel data to the tools
- * - BUG: No keyboard shortcuts for dodge/burn/clone/smudge in PaintToolbar.handleKeyboard
- * - UX:  Icon choices (sun=dodge, moon=burn, copy=clone, droplet=smudge) are acceptable
- *         but sun/moon may confuse users unfamiliar with darkroom terminology
+ * Keyboard shortcuts: D=dodge, U=burn, C=clone, M=smudge
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -213,16 +205,18 @@ describe('AdvancedPaintTools E2E - PaintToolbar buttons', () => {
   it('APT-E2E-015: advanced tool buttons have appropriate title attributes', () => {
     const el = toolbar.render();
 
-    const titles: Record<string, string> = {
-      dodge: 'Dodge (lighten)',
-      burn: 'Burn (darken)',
-      clone: 'Clone stamp',
-      smudge: 'Smudge',
+    const expectations: Record<string, string[]> = {
+      dodge: ['Dodge', 'Lighten', '(D)'],
+      burn: ['Burn', 'Darken', '(U)'],
+      clone: ['Clone', 'Alt-click', '(C)'],
+      smudge: ['Smudge', 'blend', '(M)'],
     };
 
-    for (const [tool, expectedTitle] of Object.entries(titles)) {
+    for (const [tool, keywords] of Object.entries(expectations)) {
       const btn = el.querySelector(`[data-testid="paint-tool-${tool}"]`) as HTMLButtonElement;
-      expect(btn.title).toBe(expectedTitle);
+      for (const keyword of keywords) {
+        expect(btn.title.toLowerCase()).toContain(keyword.toLowerCase());
+      }
     }
   });
 
@@ -240,15 +234,19 @@ describe('AdvancedPaintTools E2E - PaintToolbar buttons', () => {
     expect(engine.tool).toBe('dodge');
   });
 
-  it('APT-E2E-017: BUG - no keyboard shortcuts exist for advanced tools', () => {
-    // handleKeyboard returns false for all advanced tool letters,
-    // meaning there is no way to activate them via keyboard.
-    // Standard tools have shortcuts (V, P, E, T, R, O, L, A) but
-    // dodge/burn/clone/smudge have none.
-    expect(toolbar.handleKeyboard('d')).toBe(false);
-    expect(toolbar.handleKeyboard('u')).toBe(false);
-    expect(toolbar.handleKeyboard('c')).toBe(false);
-    expect(toolbar.handleKeyboard('s')).toBe(false);
+  it('APT-E2E-017: keyboard shortcuts activate advanced tools', () => {
+    // D = dodge, U = burn, C = clone, M = smudge
+    expect(toolbar.handleKeyboard('d')).toBe(true);
+    expect(engine.tool).toBe('dodge');
+
+    expect(toolbar.handleKeyboard('u')).toBe(true);
+    expect(engine.tool).toBe('burn');
+
+    expect(toolbar.handleKeyboard('c')).toBe(true);
+    expect(engine.tool).toBe('clone');
+
+    expect(toolbar.handleKeyboard('m')).toBe(true);
+    expect(engine.tool).toBe('smudge');
   });
 });
 
@@ -595,13 +593,13 @@ describe('AdvancedPaintTools E2E - UX icon and label assessment', () => {
   it('APT-E2E-070: dodge button has title explaining its function (lighten)', () => {
     const el = toolbar.render();
     const btn = el.querySelector('[data-testid="paint-tool-dodge"]') as HTMLButtonElement;
-    expect(btn.title).toContain('lighten');
+    expect(btn.title.toLowerCase()).toContain('lighten');
   });
 
   it('APT-E2E-071: burn button has title explaining its function (darken)', () => {
     const el = toolbar.render();
     const btn = el.querySelector('[data-testid="paint-tool-burn"]') as HTMLButtonElement;
-    expect(btn.title).toContain('darken');
+    expect(btn.title.toLowerCase()).toContain('darken');
   });
 
   it('APT-E2E-072: clone button has descriptive title', () => {
